@@ -13,7 +13,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { execFile } from 'child_process';
+import { spawn } from 'child_process';
 
 const LOCAL_STATE = path.join(
   os.homedir(), 'Library', 'Application Support', 'Google', 'Chrome', 'Local State',
@@ -95,20 +95,32 @@ export async function openUrlInProfile(profileDir, url) {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return { ok: false, error: 'Only http and https URLs are allowed' };
   }
+  // DETACHED spawn, resolve on 'spawn' (process started), NOT on exit. On a cold
+  // start the launched binary IS the browser and stays alive until the user
+  // quits Chrome, so waiting for exit (and worse, a timeout that KILLS it) would
+  // fail the common case and could close the window we just opened. detached +
+  // unref lets Chrome outlive Electron. Codex v1.0.41 r1 P1.
   return await new Promise((resolve) => {
-    execFile(
-      CHROME_BIN,
-      [`--profile-directory=${profileDir}`, parsed.href],
-      { timeout: 10000 },
-      (err) => {
-        if (err) {
-          // Do not surface err.message (may include the binary path / args).
-          console.warn('[chrome-profiles] launch failed:', err.code || 'unknown');
-          resolve({ ok: false, error: 'Could not launch Chrome' });
-        } else {
-          resolve({ ok: true });
-        }
-      },
-    );
+    let settled = false;
+    const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+    let child;
+    try {
+      child = spawn(CHROME_BIN, [`--profile-directory=${profileDir}`, parsed.href], {
+        detached: true,
+        stdio: 'ignore',
+      });
+    } catch (err) {
+      console.warn('[chrome-profiles] spawn threw:', err?.code || 'unknown');
+      return done({ ok: false, error: 'Could not launch Chrome' });
+    }
+    child.on('error', (err) => {
+      // Fires when the binary cannot be spawned (missing/not executable).
+      console.warn('[chrome-profiles] launch failed:', err?.code || 'unknown');
+      done({ ok: false, error: 'Could not launch Chrome' });
+    });
+    child.on('spawn', () => {
+      child.unref(); // let Chrome run independently of Electron
+      done({ ok: true });
+    });
   });
 }
