@@ -139,7 +139,11 @@ export async function writeProfile(id, creds) {
 // Returns { client_id, client_secret, refresh_token } or null.
 function gwsAuthExport() {
   return new Promise((resolve) => {
-    execFile('gws', ['auth', 'export'], { env: EXEC_ENV, timeout: 15000 }, (err, stdout) => {
+    // --unmasked is REQUIRED: without it current gws masks the refresh_token
+    // and client_secret (e.g. an 11-char placeholder), and every refresh-grant
+    // mint then fails invalid_grant, so no account could ever connect. Verified
+    // against the installed gws CLI. Codex v1.0.41 r4 P1.
+    execFile('gws', ['auth', 'export', '--unmasked'], { env: EXEC_ENV, timeout: 15000 }, (err, stdout) => {
       if (err) {
         console.warn('[gws-accounts] gws auth export failed:', err.code || 'unknown');
         return resolve(null);
