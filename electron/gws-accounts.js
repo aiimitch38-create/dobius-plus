@@ -37,6 +37,24 @@ const EXEC_ENV = { ...process.env, PATH: `${EXEC_PATH}:${process.env.PATH || ''}
 const tokenCache = new Map();
 
 function ensureProfilesDir() {
+  // The dir that holds refresh tokens must be a REAL directory we own, not a
+  // symlink: O_NOFOLLOW only guards the leaf <id>.json, so a symlinked
+  // ~/.gws-profiles would still land tokens in the link's target (possibly a
+  // less-protected or attacker-controlled dir). lstat (no-follow) and refuse if
+  // it is a symlink or not a directory. Codex v1.0.41 r3 P2.
+  let st = null;
+  try {
+    st = fsSync.lstatSync(PROFILES_DIR);
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  if (st) {
+    if (st.isSymbolicLink() || !st.isDirectory()) {
+      throw new Error('profiles_dir_unsafe');
+    }
+    try { fsSync.chmodSync(PROFILES_DIR, 0o700); } catch { /* best effort */ }
+    return;
+  }
   // 0700: only the user can enter the dir that holds refresh tokens.
   fsSync.mkdirSync(PROFILES_DIR, { recursive: true, mode: 0o700 });
   try { fsSync.chmodSync(PROFILES_DIR, 0o700); } catch { /* best effort */ }

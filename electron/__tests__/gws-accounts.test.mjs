@@ -84,6 +84,30 @@ check('registry empty after remove', gws.listGwsAccounts(), []);
   check('the symlink target is left untouched (no token written to it)', victimContent, 'DO NOT OVERWRITE');
 }
 
+// --- no-follow DIRECTORY (Codex r3 P2): if ~/.gws-profiles is itself a
+// symlink, writing a token must refuse rather than land it in the target. ---
+{
+  const home2 = await fs.mkdtemp(path.join(os.tmpdir(), 'dobius-gws-symdir-'));
+  const realElsewhere = path.join(home2, 'elsewhere');
+  await fs.mkdir(realElsewhere, { recursive: true });
+  // Re-point HOME so PROFILES_DIR resolves under home2, and make ~/.gws-profiles a symlink.
+  process.env.HOME = home2;
+  await fs.symlink(realElsewhere, path.join(home2, '.gws-profiles'));
+  // Re-import with the new HOME (module caches PROFILES_DIR at load).
+  const gws2 = await import(`../gws-accounts.js?symdir=${Date.now()}`);
+  let threw = false;
+  try {
+    await gws2.writeProfile('gws-symdirattack012345', { email: 'x@y.com', refresh_token: 'nope' });
+  } catch {
+    threw = true;
+  }
+  check('writeProfile refuses a symlinked profiles dir', threw, true);
+  const leaked = await fs.readdir(realElsewhere);
+  check('nothing written into the symlink target dir', leaked, []);
+  process.env.HOME = TMP_HOME; // restore for cleanup
+  await fs.rm(home2, { recursive: true, force: true });
+}
+
 await fs.rm(TMP_HOME, { recursive: true, force: true });
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);
