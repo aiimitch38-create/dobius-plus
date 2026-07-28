@@ -12,7 +12,7 @@ import {
   loadHistory, loadStats, loadSettings, loadBridgeServers, loadPlans, loadSkills,
   loadTranscript, readPlanFile, getActiveProcesses, listProjects,
   loadAllSessions, getLatestSession, getSessionSize, resolveFreshSessionsForTabs,
-  loadProjectTokens, searchTranscripts, estimateContextSize, deleteSession,
+  loadProjectTokens, searchTranscripts, estimateContextForSession, deleteSession,
   getLastAssistantMessage,
 } from './data-service.js';
 import {
@@ -391,7 +391,38 @@ function setupDataHandlers() {
   });
   ipcMain.handle('data:loadProjectTokens', () => loadProjectTokens());
   ipcMain.handle('data:searchTranscripts', (_event, query) => searchTranscripts(query));
-  ipcMain.handle('data:estimateContextSize', (_event, projectPath) => estimateContextSize(projectPath));
+  // Per-TAB context estimate (v1.0.40). Resolves the session ACTUALLY running in
+  // this tab, then estimates that transcript, so the status-bar ctx bar reflects
+  // the tab you are looking at rather than the project's newest session.
+  ipcMain.handle('data:estimateContextForTab', async (_event, tabId) => {
+    try {
+      if (!tabId || typeof tabId !== 'string') return null;
+      // Is a claude even running here? If not, the bar shows "--".
+      const info = await getTerminalClaudeInfo(tabId);
+      if (!info) return null;
+      const cwd = await getTerminalCwd(tabId);
+      if (!cwd) return null;
+      // A `--resume` tab names its session in argv, so read it live (no 15s
+      // wait for the capture tick). A fresh `claude` has no argv id; fall back
+      // to the tab-session map, taking the newest link for this tab id so a
+      // stale link left on a recycled tab id cannot win.
+      let sessionId = info.sessionId;
+      if (!sessionId) {
+        const map = getSessionTabMap() || {};
+        let best = null;
+        for (const [sid, entry] of Object.entries(map)) {
+          if (entry?.tabId !== tabId) continue;
+          const ran = entry.lastRunningAt || 0;
+          if (!best || ran > best.ran) best = { sid, ran };
+        }
+        sessionId = best?.sid || null;
+      }
+      if (!sessionId) return null;
+      return await estimateContextForSession(sessionId, cwd);
+    } catch {
+      return null;
+    }
+  });
   ipcMain.handle('data:deleteSession', async (_event, sessionId, projectPath) => {
     const result = await deleteSession(sessionId, projectPath);
     // Broadcast data:updated so other open windows refresh their session

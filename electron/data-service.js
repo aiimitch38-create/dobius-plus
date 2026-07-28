@@ -1536,69 +1536,63 @@ export async function searchTranscripts(query) {
  * Estimate context window usage for the most recent session of a project.
  * Returns { tokens, maxTokens, model } or null.
  */
-export async function estimateContextSize(projectPath) {
+/**
+ * Estimate context usage from ONE transcript file.
+ *
+ * BOUNDED tail read. The status-bar ctx bar fires every 30s (and on every tab
+ * switch), and a Claude transcript in this app is commonly 20-30MB, so reading
+ * the whole file each time stalls or OOMs main. Token usage lives on assistant
+ * messages and only the most-recent run matters for "how full is the window",
+ * so the last 200 entries is plenty. Codex PR#3 r7 P2.
+ *
+ * Returns { tokens, maxTokens, model } or null if the file carries no usage.
+ */
+async function estimateContextFromFile(filePath) {
+  const entries = await parseJsonl(filePath, 200);
+  let lastInputTokens = 0;
+  let lastModel = '';
+  for (const entry of entries) {
+    const usage = entry.message?.usage;
+    if (!usage) continue;
+    const total =
+      (usage.input_tokens || 0) +
+      (usage.cache_read_input_tokens || 0) +
+      (usage.cache_creation_input_tokens || 0);
+    if (total > lastInputTokens) {
+      lastInputTokens = total;
+      if (entry.message?.model) lastModel = entry.message.model;
+    }
+  }
+  if (!lastInputTokens) return null;
+  return { tokens: lastInputTokens, maxTokens: 200000, model: lastModel };
+}
+
+/**
+ * Estimate context usage for ONE SPECIFIC session, by id, in a project.
+ *
+ * This is the per-TAB context bar (v1.0.40). It replaced a project-level
+ * estimator that picked the project's newest-mtime transcript, so with several
+ * tabs open in one project the bar showed whichever session was written last,
+ * not the tab you were looking at. The status bar now resolves the active tab's
+ * own session (via argv or the tab-session map) and calls this. Probes both
+ * encoder forms, same as getSessionSize. Returns null when the transcript is
+ * missing or carries no usage yet (a brand-new session), rendered as "--".
+ */
+export async function estimateContextForSession(sessionId, projectPath) {
   try {
+    if (!sessionId || typeof sessionId !== 'string' || !/^[\w-]+$/.test(sessionId)) return null;
     if (!projectPath || typeof projectPath !== 'string') return null;
-    // Scan BOTH encoder forms (new + legacy slash-to-dash). Without this,
-    // any project whose transcripts still live in the legacy `(Code)` dir
-    // returned null and the status-bar context % was permanently missing.
-    // Same pattern as getLatestSession / loadAllSessions / getSessionSize.
-    // Codex Apple-grade audit r26 P2.
-    const encodings = [encodePathLikeClaude(projectPath), encodePathLikeClaudeLegacy(projectPath)];
-    const seenDirs = new Set();
-    const fileStats = [];
-    let activeProjectDir = null;
-    for (const enc of encodings) {
-      if (seenDirs.has(enc)) continue;
-      seenDirs.add(enc);
-      const projectDir = path.join(PROJECTS_DIR, enc);
-      if (!(await pathExists(projectDir))) continue;
-      let files;
-      try { files = (await fs.readdir(projectDir)).filter((f) => f.endsWith('.jsonl')); }
-      catch { continue; }
-      const localStats = await Promise.all(files.map(async (f) => {
-        try {
-          const stat = await fs.stat(path.join(projectDir, f));
-          return { file: f, mtime: stat.mtimeMs, projectDir };
-        } catch { return { file: f, mtime: 0, projectDir }; }
-      }));
-      for (const s of localStats) fileStats.push(s);
-      activeProjectDir = projectDir; // last non-empty seen, sort below picks the real latest
+    const seen = new Set();
+    for (const enc of [encodePathLikeClaude(projectPath), encodePathLikeClaudeLegacy(projectPath)]) {
+      if (seen.has(enc)) continue;
+      seen.add(enc);
+      const filePath = path.join(PROJECTS_DIR, enc, `${sessionId}.jsonl`);
+      if (!(await pathExists(filePath))) continue;
+      return await estimateContextFromFile(filePath);
     }
-    if (fileStats.length === 0) return null;
-    const latest = fileStats.reduce((a, b) => b.mtime > a.mtime ? b : a);
-
-    // Use the projectDir attached to the chosen file (its OWN dir), not the
-    // last-seen activeProjectDir, so the path resolves even when the newest
-    // session lives in a different encoding form than the last one scanned.
-    const filePath = path.join(latest.projectDir || activeProjectDir, latest.file);
-    // BOUNDED tail read. estimateContextSize fires every 30s while a project
-    // window is open. Reading the whole transcript each time stalls or OOMs
-    // main on the typical Claude transcript size in this app (20-30MB common).
-    // Token usage lives on assistant messages, which only need the most-recent
-    // run to estimate context. Last 50 entries is plenty since usage stamps
-    // appear every assistant turn. Codex PR#3 r7 P2.
-    const entries = await parseJsonl(filePath, 200);
-
-    let lastInputTokens = 0;
-    let lastModel = '';
-    for (const entry of entries) {
-      const usage = entry.message?.usage;
-      if (!usage) continue;
-      const total =
-        (usage.input_tokens || 0) +
-        (usage.cache_read_input_tokens || 0) +
-        (usage.cache_creation_input_tokens || 0);
-      if (total > lastInputTokens) {
-        lastInputTokens = total;
-        if (entry.message?.model) lastModel = entry.message.model;
-      }
-    }
-
-    if (!lastInputTokens) return null;
-    return { tokens: lastInputTokens, maxTokens: 200000, model: lastModel };
+    return null;
   } catch (err) {
-    console.warn('[data-service] Failed to estimate context size:', err.message);
+    console.warn('[data-service] Failed to estimate context for session:', err.message);
     return null;
   }
 }

@@ -56,28 +56,40 @@ function useAsanaMonitor() {
   return on;
 }
 
-function useContextSize(projectPath) {
+// Context usage for the ACTIVE TAB's own session (v1.0.40). Was per-project:
+// it estimated the project's newest-mtime transcript, so with several tabs open
+// in one project the bar showed the wrong session. Now it follows the tab you
+// are looking at. Re-fires immediately on tab switch (effect keyed on tabId),
+// and returns { ctx, loading } so the bar can tell "no session" from "not
+// checked yet" and avoid flashing "--" on every switch.
+function useContextSize(tabId) {
   const [ctx, setCtx] = useState(null);
+  const [loading, setLoading] = useState(!!tabId);
 
   useEffect(() => {
-    if (!projectPath || !window.electronAPI?.dataEstimateContextSize) return;
+    if (!tabId || !window.electronAPI?.dataEstimateContextForTab) {
+      setCtx(null);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
+    setLoading(true);
 
     const refresh = async () => {
       try {
-        const result = await window.electronAPI.dataEstimateContextSize(projectPath);
-        if (!cancelled) setCtx(result);
+        const result = await window.electronAPI.dataEstimateContextForTab(tabId);
+        if (!cancelled) { setCtx(result); setLoading(false); }
       } catch {
-        void 0;
+        if (!cancelled) { setCtx(null); setLoading(false); }
       }
     };
 
     refresh();
     const id = setInterval(refresh, 30000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [projectPath]);
+  }, [tabId]);
 
-  return ctx;
+  return { ctx, loading };
 }
 
 export default function StatusBar() {
@@ -102,7 +114,7 @@ export default function StatusBar() {
   const currentDetached = useStore((s) => s.currentDetached);
   const currentIsFork = useStore((s) => s.currentIsFork);
   const currentProjectPath = useStore((s) => s.currentProjectPath);
-  const ctx = useContextSize(currentProjectPath);
+  const { ctx, loading: ctxLoading } = useContextSize(activeTabId);
   const monitors = useMonitors();
   const asanaOn = useAsanaMonitor();
 
@@ -174,15 +186,13 @@ export default function StatusBar() {
         )}
       </div>
       <div className="flex items-center gap-3">
-        {ctx && (() => {
-          const pct = Math.round((ctx.tokens / ctx.maxTokens) * 100);
+        {ctx ? (() => {
+          const pct = Math.min(100, Math.round((ctx.tokens / ctx.maxTokens) * 100));
           const color = ctxColor(pct);
-          const tokStr = ctx.tokens >= 1000 ? `${(ctx.tokens / 1000).toFixed(0)}k` : ctx.tokens;
-          const maxStr = `${ctx.maxTokens / 1000}k`;
           return (
             <span
               className="flex items-center gap-1.5"
-              title={`Context window: ~${ctx.tokens.toLocaleString()} / ${ctx.maxTokens.toLocaleString()} tokens (${pct}%)\nModel: ${ctx.model || 'unknown'}`}
+              title={`This tab's Claude session\nContext window: ~${ctx.tokens.toLocaleString()} / ${ctx.maxTokens.toLocaleString()} tokens (${pct}%)\nModel: ${ctx.model || 'unknown'}`}
               style={{ cursor: 'default' }}
             >
               <span style={{ color, fontSize: 9 }}>ctx</span>
@@ -198,7 +208,19 @@ export default function StatusBar() {
               <span style={{ color, fontSize: 9, fontFamily: "'SF Mono', monospace" }}>{pct}%</span>
             </span>
           );
-        })()}
+        })() : (activeTabId && !ctxLoading && (
+          // A tab is active but has no live Claude session (bare shell, or a
+          // brand-new session with no usage yet). Show a placeholder so the
+          // bar's absence is not read as "context is empty". v1.0.40.
+          <span
+            className="flex items-center gap-1.5"
+            title="This tab has no active Claude session"
+            style={{ cursor: 'default', color: 'var(--dim)' }}
+          >
+            <span style={{ fontSize: 9 }}>ctx</span>
+            <span style={{ fontSize: 9, fontFamily: "'SF Mono', monospace" }}>--</span>
+          </span>
+        ))}
         <span>{appVersion ? `v${appVersion}` : ''}</span>
       </div>
     </div>
