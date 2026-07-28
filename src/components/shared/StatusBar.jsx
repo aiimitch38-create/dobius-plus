@@ -73,6 +73,11 @@ function useContextSize(tabId) {
       return;
     }
     let cancelled = false;
+    // Clear the previous tab's value immediately on switch, else the render
+    // (which shows ctx before considering loading) briefly labels the old tab's
+    // % as "this tab". The periodic refresh below does NOT clear, so a live tab
+    // does not blink every 30s. Codex v1.0.40 r5 P3.
+    setCtx(null);
     setLoading(true);
 
     const refresh = async () => {
