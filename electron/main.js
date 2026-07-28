@@ -404,15 +404,27 @@ function setupDataHandlers() {
       if (!cwd) return null;
       // A `--resume` tab names its session in argv, so read it live (no 15s
       // wait for the capture tick). A fresh `claude` has no argv id; fall back
-      // to the tab-session map, taking the newest link for this tab id so a
-      // stale link left on a recycled tab id cannot win.
+      // to the tab-session map, taking the newest ACTIVELY-RUNNING link for
+      // this tab id.
       let sessionId = info.sessionId;
       if (!sessionId) {
+        // Only trust a link whose session is currently running. When a claude
+        // exits, clearSessionTabRunning zeroes lastRunningAt; the capture tick
+        // stamps it every 15s while alive. So a stale link from a stopped
+        // session (ran=0, or an old timestamp on a recycled tab id) must be
+        // rejected, else stopping claude and starting a fresh one shows the
+        // OLD session's context until the next tick relinks. The recency
+        // window covers the 15s tick + 30s poll slack; a just-started fresh
+        // claude has no link yet and correctly yields "--" until it links.
+        // Codex v1.0.40 P2.
+        const RECENT_MS = 90 * 1000;
+        const now = Date.now();
         const map = getSessionTabMap() || {};
         let best = null;
         for (const [sid, entry] of Object.entries(map)) {
           if (entry?.tabId !== tabId) continue;
           const ran = entry.lastRunningAt || 0;
+          if (ran <= 0 || (now - ran) > RECENT_MS) continue;
           if (!best || ran > best.ran) best = { sid, ran };
         }
         sessionId = best?.sid || null;
