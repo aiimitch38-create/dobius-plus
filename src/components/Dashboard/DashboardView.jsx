@@ -23,6 +23,7 @@ import Notes from './Notes';
 import Costs from './Costs';
 import ChangeFeed from './ChangeFeed';
 import Search from './Search';
+import BrowserProfiles from './BrowserProfiles';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -43,6 +44,7 @@ const TABS = [
   { id: 'builds', label: 'Builds' },
   { id: 'git', label: 'Git' },
   { id: 'changes', label: 'Changes' },
+  { id: 'browser', label: 'Browser' },
   { id: 'claudemd', label: 'CLAUDE.md' },
   { id: 'updates', label: 'Updates' },
   { id: 'settings', label: 'Settings' },
@@ -67,6 +69,7 @@ const TAB_CONTENT = {
   builds: () => <BuildMonitorView />,
   git: () => <GitView />,
   changes: () => <ChangeFeed />,
+  browser: () => <BrowserProfiles />,
   claudemd: () => <ClaudeMdEditor />,
   updates: () => <Updates />,
   settings: () => <Settings />,

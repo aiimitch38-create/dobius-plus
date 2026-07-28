@@ -105,6 +105,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dataLoadProjectTokens: () => ipcRenderer.invoke('data:loadProjectTokens'),
   dataSearchTranscripts: (query) => ipcRenderer.invoke('data:searchTranscripts', query),
   dataEstimateContextForTab: (tabId) => ipcRenderer.invoke('data:estimateContextForTab', tabId),
+  // Chrome profile launcher (v1.0.41)
+  chromeListProfiles: () => ipcRenderer.invoke('chrome:listProfiles'),
+  chromeOpenUrl: (profileDir, url) => ipcRenderer.invoke('chrome:openUrl', profileDir, url),
   // v1.0.29 feature: Copy last Claude response from a tab (via TerminalTabBar
   // right-click). Returns the raw content of the most recent assistant turn.
   dataLastAssistantMessage: (sessionId, projectPath) => ipcRenderer.invoke('data:lastAssistantMessage', sessionId, projectPath),
