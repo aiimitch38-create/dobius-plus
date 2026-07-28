@@ -45,9 +45,14 @@ export default function GwsAccounts() {
 
   const handleRemove = async (id) => {
     try {
-      await window.electronAPI?.gwsRemove?.(id);
+      const res = await window.electronAPI?.gwsRemove?.(id);
       await reload();
-      flash('Account removed.');
+      // removeGwsAccount returns { ok:false } (without throwing) when it keeps
+      // the account because the token file could not be deleted. Honor it, or
+      // the UI would claim success while the credentials are still on disk.
+      // Codex v1.0.41 r6 P2.
+      if (res?.ok) flash('Account removed.');
+      else flash(res?.error || 'Could not remove.', true);
     } catch {
       flash('Could not remove.', true);
     }
