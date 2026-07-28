@@ -63,6 +63,27 @@ try { await fs.stat(p); } catch { gone = true; }
 check('profile file deleted after remove', gone, true);
 check('registry empty after remove', gws.listGwsAccounts(), []);
 
+// --- no-follow write (Codex r2 P2): a symlink at the profile path must NOT be
+// followed; the pointed-at file must stay untouched. ---
+{
+  const profDir = path.join(TMP_HOME, '.gws-profiles');
+  await fs.mkdir(profDir, { recursive: true, mode: 0o700 });
+  const victim = path.join(TMP_HOME, 'victim.txt');
+  await fs.writeFile(victim, 'DO NOT OVERWRITE');
+  const symId = 'gws-symlinkattack01234';
+  const symPath = gws.profilePathFor(symId);
+  await fs.symlink(victim, symPath); // attacker points the profile at victim
+  let threw = false;
+  try {
+    await gws.writeProfile(symId, { email: 'x@y.com', refresh_token: 'secret-should-not-land' });
+  } catch {
+    threw = true;
+  }
+  check('writeProfile refuses to follow a symlink', threw, true);
+  const victimContent = await fs.readFile(victim, 'utf8');
+  check('the symlink target is left untouched (no token written to it)', victimContent, 'DO NOT OVERWRITE');
+}
+
 await fs.rm(TMP_HOME, { recursive: true, force: true });
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

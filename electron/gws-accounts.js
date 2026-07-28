@@ -19,7 +19,7 @@
 // neither candidate client works it fails loudly with a redacted error.
 
 import fs from 'fs/promises';
-import fsSync from 'fs';
+import fsSync, { constants as FS } from 'fs';
 import path from 'path';
 import os from 'os';
 import { execFile } from 'child_process';
@@ -61,30 +61,60 @@ function newGwsId() {
   return `gws-${randomBytes(18).toString('base64url')}`;
 }
 
-// Read a profile file safely: must be a regular file (not a symlink) directly
-// under PROFILES_DIR, then parse. Returns the parsed creds or null.
+// Read a profile file safely: open with O_NOFOLLOW so the final component is
+// never followed through a symlink, verify the OPEN fd is a regular file
+// (fstat, closes the lstat/read TOCTOU window), then parse. Returns creds or
+// null. Codex v1.0.41 r2 P2.
 async function readProfile(id) {
   const p = profilePathFor(id);
   if (!p) return null;
+  let fh;
   try {
-    const st = await fs.lstat(p);
-    if (!st.isFile()) return null; // reject symlink/dir/etc (no-follow)
-    const raw = await fs.readFile(p, 'utf8');
+    fh = await fs.open(p, FS.O_RDONLY | FS.O_NOFOLLOW);
+  } catch {
+    return null; // ELOOP (symlink) / ENOENT / etc.
+  }
+  try {
+    const st = await fh.stat();
+    if (!st.isFile()) return null;
+    const raw = await fh.readFile('utf8');
     const j = JSON.parse(raw);
     if (!j || typeof j.refresh_token !== 'string') return null;
     return j;
   } catch {
     return null;
+  } finally {
+    await fh.close();
   }
 }
 
-async function writeProfile(id, creds) {
+// Write a profile with no-follow, exclusive-of-symlinks semantics so a stale or
+// malicious symlink at the target can NEVER redirect the refresh-token write
+// onto another file (which we would then chmod). O_NOFOLLOW fails with ELOOP if
+// the final component is a symlink; O_CREAT|O_TRUNC creates or replaces our own
+// regular file. We fstat the opened fd before writing and fchmod it (not the
+// path) so perms are set on the actual file. Exported for the no-follow test.
+// Codex v1.0.41 r2 P2.
+export async function writeProfile(id, creds) {
   ensureProfilesDir();
   const p = profilePathFor(id);
   if (!p) throw new Error('bad_id');
-  // Write 0600 so only the user can read the refresh token.
-  await fs.writeFile(p, JSON.stringify(creds), { mode: 0o600 });
-  try { await fs.chmod(p, 0o600); } catch { /* best effort */ }
+  const flags = FS.O_WRONLY | FS.O_CREAT | FS.O_TRUNC | FS.O_NOFOLLOW;
+  let fh;
+  try {
+    fh = await fs.open(p, flags, 0o600);
+  } catch {
+    // ELOOP means the path is a symlink: refuse rather than follow it.
+    throw new Error('profile_open_refused');
+  }
+  try {
+    const st = await fh.stat();
+    if (!st.isFile()) throw new Error('profile_not_regular_file');
+    await fh.chmod(0o600);
+    await fh.writeFile(JSON.stringify(creds));
+  } finally {
+    await fh.close();
+  }
 }
 
 // Run `gws auth export` for the CURRENTLY logged-in gws account. Read-only.
