@@ -50,6 +50,26 @@ const run = (env, args) => spawnSync(process.execPath, [SHIM, ...args], {
   check('unknown id does NOT run real gws', !r.stdout.includes('REAL'));
 }
 
+// 4. ID is AUTHORITATIVE (Codex holistic P2): a real profile exists for an
+//    email, but a bound ID that does NOT exist is set alongside it. The shim
+//    must NOT fall back to the matching email; it must error on the id.
+{
+  const profDir = path.join(home, '.gws-profiles');
+  await fs.mkdir(profDir, { recursive: true, mode: 0o700 });
+  await fs.writeFile(
+    path.join(profDir, 'gws-realprofileaaaaaaaa.json'),
+    JSON.stringify({ email: 'exists@example.com', client_id: 'c', client_secret: 's', refresh_token: 'r' }),
+    { mode: 0o600 },
+  );
+  const r = run(
+    { DOBIUS_GWS_ACCOUNT_ID: 'gws-boundbutmissing0000', DOBIUS_GWS_ACCOUNT: 'exists@example.com' },
+    ['gmail'],
+  );
+  check('bound id wins over a matching email (errors on the id, no email fallback)', /no connected/i.test(r.stderr));
+  check('authoritative-id case does NOT run real gws as the email account', !r.stdout.includes('REAL'));
+  await fs.rm(profDir, { recursive: true, force: true });
+}
+
 await fs.rm(home, { recursive: true, force: true });
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

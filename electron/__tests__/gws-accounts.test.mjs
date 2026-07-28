@@ -131,6 +131,22 @@ check('registry empty after remove', gws.listGwsAccounts(), []);
   check('retry removal succeeds once the dir is writable', res2.ok, true);
 }
 
+// --- clearShimTokenCache (Codex holistic P2): reconnect/remove must drop the
+// shim's on-disk token cache so a stale bearer token is not reused. ---
+{
+  const cid = 'gws-cacheclearcase01234';
+  const profDir = path.join(TMP_HOME, '.gws-profiles');
+  await fs.mkdir(profDir, { recursive: true, mode: 0o700 });
+  const cacheFile = path.join(profDir, `.token-${cid}.json`);
+  await fs.writeFile(cacheFile, JSON.stringify({ token: 'stale', expiresAt: Date.now() + 3600000 }), { mode: 0o600 });
+  let before = false; try { await fs.stat(cacheFile); before = true; } catch { /* */ }
+  check('shim token cache exists before clear', before, true);
+  await gws.clearShimTokenCache(cid);
+  let after = true; try { await fs.stat(cacheFile); } catch { after = false; }
+  check('clearShimTokenCache deletes the stale token cache', after, false);
+  check('clearShimTokenCache on a bad id is a no-op (no throw)', await gws.clearShimTokenCache('nope') ?? true, true);
+}
+
 await fs.rm(TMP_HOME, { recursive: true, force: true });
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

@@ -83,6 +83,14 @@ function newGwsId() {
   return `gws-${randomBytes(18).toString('base64url')}`;
 }
 
+// Delete the shim's on-disk token cache for an account. Called on reconnect
+// (creds/scopes may have changed, so an old cached bearer token must not be
+// reused for up to an hour) and on removal. Codex v1.0.41 holistic P2.
+export async function clearShimTokenCache(id) {
+  if (!isValidGwsId(id)) return;
+  try { await fs.unlink(path.join(PROFILES_DIR, `.token-${id}.json`)); } catch { /* none */ }
+}
+
 // Read a profile file safely: open with O_NOFOLLOW so the final component is
 // never followed through a symlink, verify the OPEN fd is a regular file
 // (fstat, closes the lstat/read TOCTOU window), then parse. Returns creds or
@@ -261,6 +269,10 @@ export async function connectGwsAccount() {
   if (!meta) {
     return { ok: false, error: 'Could not save the account.' };
   }
+  // Reconnect may have changed scopes or the client, so drop the shim's stale
+  // on-disk token cache; otherwise terminal `gws` keeps using the old bearer
+  // token for up to an hour. Codex v1.0.41 holistic P2.
+  await clearShimTokenCache(id);
   // Seed the token cache with the token we just minted.
   tokenCache.set(id, { token: minted.access_token, expiresAt: Date.now() + (minted.expires_in - 60) * 1000 });
   return { ok: true, account: { id: meta.id, email: meta.email, name: meta.name, scopes: meta.scopes } };
@@ -290,8 +302,7 @@ export async function removeGwsAccount(id) {
     }
   }
   tokenCache.delete(id);
-  // Also drop the shim's on-disk token cache for this account, if any.
-  try { await fs.unlink(path.join(PROFILES_DIR, `.token-${id}.json`)); } catch { /* none */ }
+  await clearShimTokenCache(id); // also drop the shim's on-disk token cache
   deleteGwsAccount(id);
   return { ok: true };
 }

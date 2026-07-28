@@ -71,7 +71,14 @@ function resolveProfile() {
     let j;
     try { j = JSON.parse(fs.readFileSync(path.join(PROFILES_DIR, f), 'utf8')); } catch { continue; }
     const id = f.slice(0, -'.json'.length);
-    if (wantId && id === wantId) return { id, creds: j };
+    // ID is AUTHORITATIVE: when a bound tab sets DOBIUS_GWS_ACCOUNT_ID, match
+    // ONLY by id and never fall back to email. Otherwise a stray
+    // DOBIUS_GWS_ACCOUNT in the user's shell could win by readdir order and run
+    // gws as the wrong Google account. Codex v1.0.41 holistic P2.
+    if (wantId) {
+      if (id === wantId) return { id, creds: j };
+      continue;
+    }
     if (wantEmail && typeof j.email === 'string' && j.email.toLowerCase() === wantEmail) return { id, creds: j };
   }
   return { error: `no connected gws account for ${process.env.DOBIUS_GWS_ACCOUNT_ID || process.env.DOBIUS_GWS_ACCOUNT}` };
