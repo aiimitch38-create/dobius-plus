@@ -428,12 +428,20 @@ function setupDataHandlers() {
         // covers the 15s tick + 30s poll slack; a just-started fresh claude has
         // no link yet and correctly yields "--" until it links. Codex v1.0.40 P2.
         const RECENT_MS = 90 * 1000;
+        // A link stamped BEFORE the current process started cannot belong to it
+        // (it was stamped for a prior claude in the same tab). This catches the
+        // Ctrl-C-then-restart-a-fresh-claude case that the recency window alone
+        // misses: the old link is still <90s old but predates the new process,
+        // so without this the bar shows the previous session. 10s slack because
+        // ps lstart is second-resolution. Codex v1.0.40 r3 P2.
+        const CLOCK_SLACK_MS = 10 * 1000;
         const now = Date.now();
         let best = null;
         for (const [sid, entry] of Object.entries(map)) {
           if (entry?.tabId !== tabId) continue;
           const ran = entry.lastRunningAt || 0;
           if (ran <= 0 || (now - ran) > RECENT_MS) continue;
+          if (info.startedAt && ran < info.startedAt - CLOCK_SLACK_MS) continue;
           if (!best || ran > best.ran) best = { sid, ran, projectPath: entry.projectPath };
         }
         sessionId = best?.sid || null;
