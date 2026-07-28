@@ -431,17 +431,23 @@ function setupDataHandlers() {
         // A link stamped BEFORE the current process started cannot belong to it
         // (it was stamped for a prior claude in the same tab). This catches the
         // Ctrl-C-then-restart-a-fresh-claude case that the recency window alone
-        // misses: the old link is still <90s old but predates the new process,
-        // so without this the bar shows the previous session. 10s slack because
-        // ps lstart is second-resolution. Codex v1.0.40 r3 P2.
-        const CLOCK_SLACK_MS = 10 * 1000;
+        // misses: the old link is still <90s old but predates the new process.
+        //
+        // No slack, deliberately (Codex v1.0.40 r4 P2): a 10s grace window let a
+        // link from a claude stopped <10s ago pass. It is not needed. The tick
+        // links a fresh session only AFTER its process is running, stamping
+        // lastRunningAt = Date.now() at link time, so the CURRENT process's own
+        // link is always stamped at or after its real start. info.startedAt is
+        // ps lstart floored to the second, i.e. <= the real start, so the
+        // current link's ran is always >= info.startedAt and survives, while any
+        // link from a prior process is strictly earlier and is dropped.
         const now = Date.now();
         let best = null;
         for (const [sid, entry] of Object.entries(map)) {
           if (entry?.tabId !== tabId) continue;
           const ran = entry.lastRunningAt || 0;
           if (ran <= 0 || (now - ran) > RECENT_MS) continue;
-          if (info.startedAt && ran < info.startedAt - CLOCK_SLACK_MS) continue;
+          if (info.startedAt && ran < info.startedAt) continue;
           if (!best || ran > best.ran) best = { sid, ran, projectPath: entry.projectPath };
         }
         sessionId = best?.sid || null;
