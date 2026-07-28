@@ -394,43 +394,61 @@ function setupDataHandlers() {
   // Per-TAB context estimate (v1.0.40). Resolves the session ACTUALLY running in
   // this tab, then estimates that transcript, so the status-bar ctx bar reflects
   // the tab you are looking at rather than the project's newest session.
-  ipcMain.handle('data:estimateContextForTab', async (_event, tabId) => {
+  ipcMain.handle('data:estimateContextForTab', async (event, tabId) => {
     try {
       if (!tabId || typeof tabId !== 'string') return null;
+      // Multi-window isolation: only the window that owns this terminal may
+      // inspect its running claude, same boundary as every other terminal IPC.
+      // Without this any renderer could probe another window's tab by its
+      // deterministic id and read its model/token context. Codex v1.0.40 P2.
+      if (!ownsTerminal(event.sender.id, tabId)) return null;
       // Is a claude even running here? If not, the bar shows "--".
       const info = await getTerminalClaudeInfo(tabId);
       if (!info) return null;
       const cwd = await getTerminalCwd(tabId);
-      if (!cwd) return null;
+      const map = getSessionTabMap() || {};
       // A `--resume` tab names its session in argv, so read it live (no 15s
       // wait for the capture tick). A fresh `claude` has no argv id; fall back
-      // to the tab-session map, taking the newest ACTIVELY-RUNNING link for
-      // this tab id.
+      // to the tab-session map, taking the newest ACTIVELY-RUNNING link.
       let sessionId = info.sessionId;
-      if (!sessionId) {
+      let sessionProject = null;
+      if (sessionId) {
+        // The transcript lives under the SESSION's project, not necessarily the
+        // tab's live cwd: a same-project resume from a subdir or worktree keeps
+        // the transcript under the original project path. Prefer the mapped
+        // project for this session, fall back to cwd below. Codex v1.0.40 P2.
+        sessionProject = map[sessionId]?.projectPath || null;
+      } else {
         // Only trust a link whose session is currently running. When a claude
         // exits, clearSessionTabRunning zeroes lastRunningAt; the capture tick
         // stamps it every 15s while alive. So a stale link from a stopped
         // session (ran=0, or an old timestamp on a recycled tab id) must be
         // rejected, else stopping claude and starting a fresh one shows the
-        // OLD session's context until the next tick relinks. The recency
-        // window covers the 15s tick + 30s poll slack; a just-started fresh
-        // claude has no link yet and correctly yields "--" until it links.
-        // Codex v1.0.40 P2.
+        // OLD session's context until the next tick relinks. The recency window
+        // covers the 15s tick + 30s poll slack; a just-started fresh claude has
+        // no link yet and correctly yields "--" until it links. Codex v1.0.40 P2.
         const RECENT_MS = 90 * 1000;
         const now = Date.now();
-        const map = getSessionTabMap() || {};
         let best = null;
         for (const [sid, entry] of Object.entries(map)) {
           if (entry?.tabId !== tabId) continue;
           const ran = entry.lastRunningAt || 0;
           if (ran <= 0 || (now - ran) > RECENT_MS) continue;
-          if (!best || ran > best.ran) best = { sid, ran };
+          if (!best || ran > best.ran) best = { sid, ran, projectPath: entry.projectPath };
         }
         sessionId = best?.sid || null;
+        sessionProject = best?.projectPath || null;
       }
       if (!sessionId) return null;
-      return await estimateContextForSession(sessionId, cwd);
+      // Prefer the session's own project; fall back to the live cwd only if the
+      // session has no mapped project or its transcript is not found there.
+      let result = sessionProject
+        ? await estimateContextForSession(sessionId, sessionProject)
+        : null;
+      if (!result && cwd && cwd !== sessionProject) {
+        result = await estimateContextForSession(sessionId, cwd);
+      }
+      return result;
     } catch {
       return null;
     }
