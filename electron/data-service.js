@@ -199,8 +199,9 @@ export async function loadAllSessions(projectFilter) {
             text = String(text).trim();
             // Skip system-injected pseudo-user messages (task notifications,
             // system reminders, slash-command echoes) so the preview shows
-            // what Sam actually typed. v1.0.37.
-            if (text && !isSyntheticUserText(text)) preview = text.slice(0, 200);
+            // what Sam actually typed. v1.0.37. Then turn any pasted-image temp
+            // path into "[image]" so a paste doesn't preview as clipboard-….png.
+            if (text && !isSyntheticUserText(text)) preview = sanitizePreviewText(text).slice(0, 200);
           }
           if (preview && timestamp && lastRole) break;
         }
@@ -507,6 +508,19 @@ function isSyntheticUserText(text) {
   return SYNTHETIC_USER_PREFIXES.some((p) => t.startsWith(p));
 }
 
+// A pasted image is saved by terminal:saveClipboardImage to
+// <temp>/dobius-clipboard/clipboard-<ts>.<ext> and that PATH is typed into the
+// terminal, so Claude records it as the user message and the sidebar previewed
+// the raw temp path ("this session is being called like clipboard-….png").
+// Same leak class as the v1.0.37 synthetic-message filter, different source.
+// Replace any such path with "[image]" so a paste reads as an image, keeping
+// whatever real text the user typed alongside it. v1.0.40 (Sam-reported).
+const CLIPBOARD_IMG_RE = /\S*dobius-clipboard[/\\]clipboard-\d+\.[A-Za-z0-9]+/g;
+export function sanitizePreviewText(text) {
+  if (!text) return text;
+  return text.replace(CLIPBOARD_IMG_RE, '[image]').replace(/\s+/g, ' ').trim();
+}
+
 function tsToEpochMs(v) {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
   if (typeof v === 'string') {
@@ -576,9 +590,10 @@ export async function getLatestSession(projectPath) {
               : (typeof e.message?.content === 'string' ? e.message.content
                 : (typeof e.content === 'string' ? e.content : ''));
             // Same synthetic-user filter as loadAllSessions: never preview a
-            // task-notification / system-reminder blob as the user's prompt.
-            // v1.0.37.
-            if (content && !isSyntheticUserText(content)) lastUserPreview = content.slice(0, 200);
+            // task-notification / system-reminder blob as the user's prompt
+            // (v1.0.37), and turn a pasted-image temp path into "[image]"
+            // rather than clipboard-….png (v1.0.40).
+            if (content && !isSyntheticUserText(content)) lastUserPreview = sanitizePreviewText(content).slice(0, 200);
           }
         }
       } catch { /* unparseable transcript, fall back to mtime */ }
