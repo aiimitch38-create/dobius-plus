@@ -108,6 +108,29 @@ check('registry empty after remove', gws.listGwsAccounts(), []);
   await fs.rm(home2, { recursive: true, force: true });
 }
 
+// --- removal must NOT claim success if the token file can't be deleted
+// (Codex r5 P2): keep the account so the orphaned token can be retried. ---
+{
+  const rid = 'gws-removalfailcase0123';
+  cfg.saveGwsAccount({ id: rid, email: 'keep@example.com', name: 'keep', scopes: [], addedAt: 1 });
+  const rp = gws.profilePathFor(rid);
+  const rdir = path.dirname(rp);
+  await fs.mkdir(rdir, { recursive: true, mode: 0o700 });
+  await fs.writeFile(rp, JSON.stringify({ email: 'keep@example.com', refresh_token: 'live' }), { mode: 0o600 });
+  await fs.chmod(rdir, 0o500); // remove write on the dir so unlink fails (EACCES/EPERM)
+  const res = await gws.removeGwsAccount(rid);
+  await fs.chmod(rdir, 0o700); // restore so cleanup + assertions can proceed
+  check('removeGwsAccount reports failure when the token file cannot be deleted', res.ok, false);
+  const stillListed = gws.listGwsAccounts().some((a) => a.id === rid);
+  check('the account stays in the registry after a failed delete', stillListed, true);
+  let fileStillThere = false;
+  try { await fs.stat(rp); fileStillThere = true; } catch { /* */ }
+  check('the token file is still on disk (not silently lost)', fileStillThere, true);
+  // now a real removal should succeed
+  const res2 = await gws.removeGwsAccount(rid);
+  check('retry removal succeeds once the dir is writable', res2.ok, true);
+}
+
 await fs.rm(TMP_HOME, { recursive: true, force: true });
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

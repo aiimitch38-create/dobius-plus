@@ -271,7 +271,20 @@ export function listGwsAccounts() {
 export async function removeGwsAccount(id) {
   if (!isValidGwsId(id)) return { ok: false, error: 'Invalid account' };
   const p = profilePathFor(id);
-  if (p) { try { await fs.unlink(p); } catch { /* already gone */ } }
+  if (p) {
+    try {
+      await fs.unlink(p);
+    } catch (e) {
+      // ENOENT (already gone) is fine. Any other failure means the refresh
+      // token is STILL on disk, so do NOT drop the registry entry and do NOT
+      // report success: keep the account visible so the user can retry rather
+      // than orphan a live token invisibly. Codex v1.0.41 r5 P2.
+      if (e?.code !== 'ENOENT') {
+        console.warn('[gws-accounts] could not delete profile:', e?.code || 'unknown');
+        return { ok: false, error: 'Could not delete the stored credentials. Try again.' };
+      }
+    }
+  }
   tokenCache.delete(id);
   deleteGwsAccount(id);
   return { ok: true };
