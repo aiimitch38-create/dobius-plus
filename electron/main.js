@@ -8,7 +8,7 @@ import { getQuittingForUpdate, setQuitting } from './quit-state.js';
 import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending as cancelAutoResumeTab, cancelTabsForProject as cancelAutoResumeProject, pendingCount as autoResumePending } from './auto-resume.js';
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
-import { connectGwsAccount, listGwsAccounts, removeGwsAccount } from './gws-accounts.js';
+import { connectGwsAccount, listGwsAccounts, removeGwsAccount, ensureShim } from './gws-accounts.js';
 import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalProcessArgv, getTerminalClaudeInfo, listTerminals, reassignTerminal, ensureSpawnHelperExecutable } from './terminal-manager.js';
 import {
   loadHistory, loadStats, loadSettings, loadBridgeServers, loadPlans, loadSkills,
@@ -166,6 +166,14 @@ const TERMINAL_WRITE_MAX_BYTES = 256 * 1024; // 256KB per write — plenty for a
 // excluded from renderer write access. Codex round-2 HIGH on main.js:118.
 const terminalOwners = new Map(); // id -> webContents.id
 
+// gws shim, staged once and reused for every terminal's env. Lazy so it only
+// runs when the first terminal is created. v1.0.41.
+let _gwsShim = null;
+function getGwsShim() {
+  if (!_gwsShim) _gwsShim = ensureShim();
+  return _gwsShim;
+}
+
 function ownsTerminal(senderId, id) {
   if (!terminalOwners.has(id)) return false; // tab not created via IPC by ANY window
   return terminalOwners.get(id) === senderId;
@@ -213,6 +221,16 @@ function setupTerminalHandlers() {
       if (account.cliPath) {
         accountEnv.DOBIUS_CLI_DIR = path.dirname(expandTilde(account.cliPath));
       }
+    }
+    // gws token-broker shim (v1.0.41): put the shim first on PATH as `gws` and
+    // tell it where the real gws is. Transparent passthrough until a caller sets
+    // DOBIUS_GWS_ACCOUNT=<email> (or a bound tab sets DOBIUS_GWS_ACCOUNT_ID), so
+    // ordinary `gws` is unchanged. This is what lets `DOBIUS_GWS_ACCOUNT=x@y.com
+    // gws ...` run as a chosen connected account.
+    const shim = getGwsShim();
+    if (shim.shimDir) {
+      accountEnv.DOBIUS_GWS_SHIM_DIR = shim.shimDir;
+      if (shim.realGws) accountEnv.DOBIUS_REAL_GWS = shim.realGws;
     }
     return createTerminal(id, cwd, event.sender, accountEnv);
   });

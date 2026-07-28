@@ -107,9 +107,15 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
   if (accountEnv.DOBIUS_CLI_DIR) {
     extraPaths.unshift(accountEnv.DOBIUS_CLI_DIR);
   }
+  // gws shim dir goes FIRST so `gws` resolves to the shim (v1.0.41). It sits
+  // ahead of the account CLI dir too; they never collide (different binaries).
+  if (accountEnv.DOBIUS_GWS_SHIM_DIR) {
+    extraPaths.unshift(accountEnv.DOBIUS_GWS_SHIM_DIR);
+  }
   const fullPath = [...extraPaths, process.env.PATH || '/usr/bin:/bin:/usr/sbin:/sbin'].join(':');
 
-  const { DOBIUS_CLI_DIR: _ignored, ...termEnv } = accountEnv;
+  // These two are consumed here (into PATH), not passed as literal env vars.
+  const { DOBIUS_CLI_DIR: _ignored, DOBIUS_GWS_SHIM_DIR: _ignored2, ...termEnv } = accountEnv;
 
   const shell = process.env.SHELL || '/bin/zsh';
   const term = pty.spawn(shell, ['-l'], {

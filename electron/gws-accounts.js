@@ -24,7 +24,11 @@ import path from 'path';
 import os from 'os';
 import { execFile } from 'child_process';
 import { randomBytes } from 'crypto';
+import { fileURLToPath } from 'url';
+import { app } from 'electron';
 import { getGwsAccounts, saveGwsAccount, deleteGwsAccount, isValidGwsId } from './config-manager.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PROFILES_DIR = path.join(os.homedir(), '.gws-profiles');
 const GWS_CLIENT_SECRET = path.join(os.homedir(), '.config', 'gws', 'client_secret.json');
@@ -286,6 +290,8 @@ export async function removeGwsAccount(id) {
     }
   }
   tokenCache.delete(id);
+  // Also drop the shim's on-disk token cache for this account, if any.
+  try { await fs.unlink(path.join(PROFILES_DIR, `.token-${id}.json`)); } catch { /* none */ }
   deleteGwsAccount(id);
   return { ok: true };
 }
@@ -322,4 +328,48 @@ export async function getAccessToken(id) {
 export async function getAccessTokenForEmail(email) {
   const id = idForEmail(email);
   return id ? getAccessToken(id) : null;
+}
+
+// --- Terminal token-broker shim (v1.0.41) ---
+
+/** Find the real gws binary (never the shim). Scans the standard dirs. */
+export function resolveRealGws(excludeDir = null) {
+  for (const dir of EXEC_PATH.split(':')) {
+    if (!dir || dir === excludeDir) continue;
+    const cand = path.join(dir, 'gws');
+    try { fsSync.accessSync(cand, FS.X_OK); return cand; } catch { /* next */ }
+  }
+  return null;
+}
+
+/**
+ * Materialize the gws shim into userData and return { shimDir, realGws }.
+ *
+ * Writes a wrapper `gws` that runs the bundled gws-shim.mjs under Dobius's own
+ * Electron binary in node mode (ELECTRON_RUN_AS_NODE), so the shim needs no
+ * node/python on the user's PATH. main.js prepends shimDir to each terminal's
+ * PATH and sets DOBIUS_REAL_GWS, so `gws` in a Dobius terminal is the shim
+ * (transparent passthrough unless DOBIUS_GWS_ACCOUNT[_ID] is set). Returns null
+ * shimDir if the source cannot be staged.
+ */
+export function ensureShim() {
+  const realGws = resolveRealGws();
+  let shimDir = null;
+  try {
+    shimDir = path.join(app.getPath('userData'), 'gws-shim');
+    fsSync.mkdirSync(shimDir, { recursive: true });
+    const srcJs = path.join(__dirname, 'gws-shim.mjs');
+    const destJs = path.join(shimDir, 'gws-shim.mjs');
+    // Copy the bundled shim source out of the asar so a plain node can run it.
+    fsSync.copyFileSync(srcJs, destJs);
+    const wrapperPath = path.join(shimDir, 'gws');
+    // execPath is the Electron binary; ELECTRON_RUN_AS_NODE makes it a node.
+    const wrapper = `#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexport DOBIUS_GWS_SHIM_SELF="${wrapperPath}"\nexec "${process.execPath}" "${destJs}" "$@"\n`;
+    fsSync.writeFileSync(wrapperPath, wrapper, { mode: 0o755 });
+    fsSync.chmodSync(wrapperPath, 0o755);
+  } catch (e) {
+    console.warn('[gws-accounts] could not stage gws shim:', e?.code || e?.message || 'unknown');
+    shimDir = null;
+  }
+  return { shimDir, realGws };
 }
