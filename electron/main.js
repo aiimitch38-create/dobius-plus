@@ -8,6 +8,7 @@ import { getQuittingForUpdate, setQuitting } from './quit-state.js';
 import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending as cancelAutoResumeTab, cancelTabsForProject as cancelAutoResumeProject, pendingCount as autoResumePending } from './auto-resume.js';
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
+import { connectGwsAccount, listGwsAccounts, removeGwsAccount } from './gws-accounts.js';
 import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalProcessArgv, getTerminalClaudeInfo, listTerminals, reassignTerminal, ensureSpawnHelperExecutable } from './terminal-manager.js';
 import {
   loadHistory, loadStats, loadSettings, loadBridgeServers, loadPlans, loadSkills,
@@ -393,6 +394,11 @@ function setupDataHandlers() {
   // Chrome profile launcher (v1.0.41): list profiles + open a URL in one.
   ipcMain.handle('chrome:listProfiles', () => listChromeProfiles());
   ipcMain.handle('chrome:openUrl', (_event, profileDir, url) => openUrlInProfile(profileDir, url));
+  // gws multi-account (v1.0.41): connect / list / remove. NO getToken handler
+  // is exposed: access tokens never cross to the renderer (Codex plan #1).
+  ipcMain.handle('gws:connect', () => connectGwsAccount());
+  ipcMain.handle('gws:list', () => listGwsAccounts());
+  ipcMain.handle('gws:remove', (_event, id) => removeGwsAccount(id));
   ipcMain.handle('data:loadProjectTokens', () => loadProjectTokens());
   ipcMain.handle('data:searchTranscripts', (_event, query) => searchTranscripts(query));
   // Per-TAB context estimate (v1.0.40). Resolves the session ACTUALLY running in

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../../store/store';
 import { THEMES } from '../../lib/themes';
 import AccountsSection from './AccountsSection';
+import GwsAccounts from './GwsAccounts';
 
 export default function Settings() {
   const themeIndex = useStore((s) => s.themeIndex);
@@ -205,6 +206,7 @@ export default function Settings() {
 
       {/* Accounts */}
       <AccountsSection />
+      <GwsAccounts />
 
       {/* Appearance */}
       <Section title="Appearance">

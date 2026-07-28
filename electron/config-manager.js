@@ -976,6 +976,63 @@ export function getProjectAccount(projectPath) {
   return (config.accounts || []).find((a) => a.id === accountId) || null;
 }
 
+// --- Google Workspace (gws) account registry (v1.0.41) ---
+//
+// SEPARATE from the claude/codex accounts above: different storage (refresh
+// tokens live in 0600 files under ~/.gws-profiles, NOT in config), different
+// id scheme (opaque, main-generated), and token minting. config.gwsAccounts
+// holds ONLY non-secret metadata: { id, email, name, scopes }. The profile
+// file that holds the refresh token is named `<id>.json` and its path is
+// DERIVED from the id on every use (never stored), so a config edit can never
+// point the reader at an arbitrary file (Codex plan r14 #3). gws-accounts.js
+// owns the files + tokens; this just persists the registry.
+
+// Opaque, main-generated id. The `gws-` prefix + fixed alphabet is the only
+// shape ever accepted downstream when deriving the profile path.
+const GWS_ID_RE = /^gws-[A-Za-z0-9_-]{16,}$/;
+
+export function getGwsAccounts() {
+  const list = loadConfig().gwsAccounts;
+  return Array.isArray(list) ? list : [];
+}
+
+// Persist ONLY metadata. Rejects anything with a bad id or non-string secrets
+// sneaking in (defense in depth: secrets never belong here).
+export function saveGwsAccount(meta) {
+  if (!meta || typeof meta !== 'object') return null;
+  if (typeof meta.id !== 'string' || !GWS_ID_RE.test(meta.id)) return null;
+  if (typeof meta.email !== 'string' || meta.email.length === 0 || meta.email.length > 254) return null;
+  const sanitized = {
+    id: meta.id,
+    email: meta.email.slice(0, 254),
+    name: typeof meta.name === 'string' ? meta.name.slice(0, 100) : meta.email,
+    // Granted OAuth scopes, so features can capability-check before calling
+    // (Codex plan r14 #5). Strings only, bounded.
+    scopes: Array.isArray(meta.scopes)
+      ? meta.scopes.filter((s) => typeof s === 'string').slice(0, 60).map((s) => s.slice(0, 200))
+      : [],
+    addedAt: Number.isFinite(meta.addedAt) ? meta.addedAt : Date.now(),
+  };
+  const config = loadConfig();
+  if (!Array.isArray(config.gwsAccounts)) config.gwsAccounts = [];
+  const idx = config.gwsAccounts.findIndex((a) => a.id === sanitized.id);
+  if (idx >= 0) config.gwsAccounts[idx] = sanitized;
+  else config.gwsAccounts.push(sanitized);
+  saveConfig(config);
+  return sanitized;
+}
+
+export function deleteGwsAccount(id) {
+  if (typeof id !== 'string' || !GWS_ID_RE.test(id)) return;
+  const config = loadConfig();
+  config.gwsAccounts = (config.gwsAccounts || []).filter((a) => a.id !== id);
+  saveConfig(config);
+}
+
+export function isValidGwsId(id) {
+  return typeof id === 'string' && GWS_ID_RE.test(id);
+}
+
 export function setProjectAccount(projectPath, accountId) {
   if (!projectPath || typeof projectPath !== 'string' || UNSAFE_KEYS.has(projectPath)) return;
   const config = loadConfig();

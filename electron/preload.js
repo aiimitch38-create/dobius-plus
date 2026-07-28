@@ -108,6 +108,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Chrome profile launcher (v1.0.41)
   chromeListProfiles: () => ipcRenderer.invoke('chrome:listProfiles'),
   chromeOpenUrl: (profileDir, url) => ipcRenderer.invoke('chrome:openUrl', profileDir, url),
+  // gws multi-account (v1.0.41). No token accessor by design: tokens stay in main.
+  gwsConnect: () => ipcRenderer.invoke('gws:connect'),
+  gwsList: () => ipcRenderer.invoke('gws:list'),
+  gwsRemove: (id) => ipcRenderer.invoke('gws:remove', id),
   // v1.0.29 feature: Copy last Claude response from a tab (via TerminalTabBar
   // right-click). Returns the raw content of the most recent assistant turn.
   dataLastAssistantMessage: (sessionId, projectPath) => ipcRenderer.invoke('data:lastAssistantMessage', sessionId, projectPath),

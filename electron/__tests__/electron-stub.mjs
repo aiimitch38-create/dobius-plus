@@ -2,7 +2,9 @@
 // plain Node for testing. config-manager.js calls app.getPath('userData') at
 // module load; nothing under test touches config.
 const app = {
-  getPath: () => '/private/tmp/dobius-freshtest-userdata',
+  // Honor a per-test userData dir so suites that write config are isolated from
+  // each other and from the real app config.
+  getPath: () => process.env.DOBIUS_TEST_USERDATA || '/private/tmp/dobius-freshtest-userdata',
   getVersion: () => '0.0.0-test',
   getName: () => 'dobius-test',
   setName: () => {},
