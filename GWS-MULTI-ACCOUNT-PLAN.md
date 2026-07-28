@@ -41,6 +41,57 @@ Tested against Sam's real gws install, read-only:
   the profile file PATH, never the refresh token itself.
 - **Sequencing:** this doc first, then build.
 
+## Codex design review (2026-07-28): folded in
+
+Codex reviewed this plan before any code. It confirmed the core model is
+OAuth-correct (refresh grant to `oauth2.googleapis.com/token`, cache
+`access_token` until `expires_in`, `0600` files acceptable IF paired with a
+`0700` dir, main-only path derivation, strict id validation, no token IPC).
+Six findings, all folded in below:
+
+1. **High: no generic `gws:getToken` IPC.** Exposing a "give me a bearer token"
+   IPC lets any renderer/devtools snippet pull a token and hit Google APIs
+   directly for ~1h, breaking the "tokens stay in main" posture. FIX: tokens
+   NEVER cross to the renderer. Expose only purpose-specific IPC
+   (`gws:listMail`, `gws:sendMail`, `gws:listEvents`, ...) that run the call in
+   main and return redacted/domain data.
+2. **High: env-injected `GOOGLE_WORKSPACE_CLI_TOKEN` goes stale for per-PROJECT
+   too, not just per-tab.** A shell lives for hours; a token injected at spawn
+   is dead in ~1h. So **Feature 1a is NOT near-free** as I claimed. ANY terminal
+   identity (per-project or per-tab) needs the token-broker shim: the shell
+   carries only `DOBIUS_GWS_ACCOUNT_ID` plus a `PATH` shim, and the shim mints a
+   fresh token per `gws` invocation from main. This is the real Feature 1, at
+   either granularity.
+3. **High: harden the profile path.** A pre-write realpath check is not enough
+   (file may not exist yet, can be symlink-swapped after the check). FIX:
+   generate opaque ids in MAIN only, matching `^gws-[A-Za-z0-9_-]{16,}$`; store
+   the `profileId` (or relative filename) in config, never a full path; derive
+   the absolute path on every use; `0700` profiles dir; create/open `0600` with
+   no-follow; `lstat`/`fstat`-verify a regular file under the profiles dir.
+4. **Medium: OAuth client binding is a hard phase-0 gate.** A refresh token is
+   bound to the client that issued it, so pairing export's `refresh_token` with
+   `client_secret.json`'s client may return `invalid_grant`/`unauthorized_client`.
+   The earlier CREDENTIALS_FILE failure does NOT prove which pair works for the
+   refresh grant. FIX: prove the live refresh-grant (redacted) as step zero,
+   store the exact working `client_id` alongside the refresh token, and if no
+   client can be proven, fall back to `gws` as the token broker (or a real
+   Dobius OAuth consent flow).
+5. **Medium: scopes are assumed, not proven.** The refresh grant can succeed
+   while Gmail/Calendar/Drive/send calls 403 with `insufficientPermissions`, and
+   a refresh token cannot silently gain scopes later. FIX: at connect, inspect
+   and store the granted scopes; capability-check per feature; the UI shows
+   unavailable capabilities and requires reconnect for the missing scope.
+6. **Medium: redact secrets on every error path.** `gws auth export` returns
+   secret-bearing stdout, and OAuth error bodies / `execFile` error objects /
+   `result.error` strings can carry `refresh_token`/`client_secret`/
+   `access_token`. FIX: centralize redaction; never return raw stdout/stderr or
+   OAuth bodies; surface generic codes + redacted diagnostics only.
+
+The biggest change is #2: the token-broker shim is the foundation for Feature 1
+at any granularity, so per-project vs per-tab is now only a binding-scope
+choice, not a "cheap vs expensive" one. The open question at the bottom is
+updated accordingly.
+
 ## Architecture
 
 ### One foundation, three thin features
@@ -162,7 +213,8 @@ send, consistent with the iMessage-bridge spawn gates.
 | File | Change |
 |---|---|
 | `electron/config-manager.js` | `google` account type; profile-path validation under `~/.gws-profiles` (mirror the `~/.claude-profiles` guard at line 924); CRUD. |
-| `electron/main.js` | IPC: `gws:connect`, `gws:list`, `gws:remove`, `gws:getToken`; extend `accountEnv` (feature 1a) to inject a minted `GOOGLE_WORKSPACE_CLI_TOKEN`. |
+| `electron/main.js` | IPC: `gws:connect`, `gws:list`, `gws:remove`, and PURPOSE-SPECIFIC calls (`gws:listMail`, `gws:sendMail`, `gws:listEvents`, ...) that run in main and return redacted data. NO generic `gws:getToken` to the renderer (Codex #1). Terminal identity uses the token-broker shim, not env injection (Codex #2). |
+| `electron/gws-shim` (NEW) | Tiny `PATH` shim named `gws`; reads `DOBIUS_GWS_ACCOUNT_ID`, asks main for a fresh token, execs the real gws. Keeps the ~1h token fresh in long-lived shells. |
 | `electron/preload.js` | Bridge the new IPC. |
 | `src/components/Dashboard/AccountsSection.jsx` | `google` account type in the add/list UI + Connect Google Account button. |
 | `electron/voice-bridge.js` / `voice-conductor.js` | Feature 3 send-mail tool (phase 3). |
@@ -195,11 +247,20 @@ nothing is auto-shipped without Sam's go (local-first rule).
 
 ## Open question for Sam (only one)
 
-Feature 1 identity scope: **1a per-project** (near-free, reuses the existing
-account-binding path, `gws` in a project's tabs runs as that project's Google
-account) vs **1b per-tab** (what you literally said, needs a per-tab picker and a
-gws shim to keep the ~1h token fresh). Recommendation: 1a first, add 1b later
-only if per-project is not enough.
+Feature 1 identity scope. Codex's review (#2 above) corrected my earlier claim:
+per-project is NOT cheaper than per-tab, because BOTH need the token-broker shim
+to keep the ~1h token fresh in a long-lived shell. So the only real difference
+is binding granularity:
+
+- **1a per-project:** `gws` in any tab of a project runs as that project's
+  Google account. Reuses the existing per-project account binding for the
+  picker; one shim.
+- **1b per-tab:** each tab can be a different account. Needs a per-tab picker
+  (tab context menu) and a tab -> account map; same shim.
+
+Recommendation: 1a per-project first (simpler picker, same shim work), add the
+per-tab picker later if per-project is not enough. Same shim underneath either
+way, so 1b is a small add-on, not a rebuild.
 
 ## What this plan does NOT do
 
