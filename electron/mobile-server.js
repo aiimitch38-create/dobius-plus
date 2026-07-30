@@ -30,6 +30,7 @@ import {
 import { loadAllSessions, loadTranscript } from './data-service.js';
 import { peekReply } from './voice-bridge.js';
 import { getVoiceConductorTabId } from './voice-conductor.js';
+import { snapshot as terminalStatusSnapshot } from './terminal-status.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -120,6 +121,62 @@ function wsSend(socket, obj) {
  * user, one tailnet, one Mac). If multi-user pairing is ever added, this needs
  * an attach-before-operate gate.
  */
+// Parse a terminal id into a friendly project + tab label (mirrors the mobile
+// Terminal.jsx parser and terminal-status.projectFromId).
+function parseTermLabel(id, cwd) {
+  const m = typeof id === 'string' && id.match(/^term-(.+)-(\d+)$/);
+  if (m && m[1] !== 'mobile') {
+    const projectPath = m[1];
+    return { projectPath, projectName: projectPath.split('/').filter(Boolean).pop() || projectPath, label: `Tab ${m[2]}` };
+  }
+  const projectPath = cwd || 'mobile';
+  return { projectPath, projectName: projectPath.split('/').filter(Boolean).pop() || 'mobile', label: 'new' };
+}
+
+// The status-rich terminals payload for the mobile board: live terminals merged
+// with the main-process status authority + the recent-exit cache. v1.0.43.
+function buildTerminalsPayload() {
+  const snap = terminalStatusSnapshot();
+  const list = listTerminals().map((t) => {
+    const meta = parseTermLabel(t.id, t.cwd);
+    const st = snap.live[t.id];
+    return {
+      id: t.id,
+      pid: t.pid,
+      cwd: t.cwd,
+      projectPath: meta.projectPath,
+      projectName: meta.projectName,
+      label: meta.label,
+      status: st?.status || 'idle',
+      lastActivityAt: st?.lastActivityAt || 0,
+    };
+  });
+  return { type: 'terminals', list, recentExits: snap.recentExits };
+}
+
+// A signature capturing what the BOARD cares about (which tabs exist, their
+// status, recent exits) but NOT lastActivityAt, so an actively-printing tab
+// does not trigger a push every second. We only push when this changes.
+// Codex remote-plan #2 (send deltas only when serialized status changes).
+function terminalsSignature(payload) {
+  const tabs = payload.list.map((t) => `${t.id}:${t.status}`).sort().join('|');
+  const exits = payload.recentExits.map((e) => `${e.id}:${e.exitCode}:${e.at}`).join('|');
+  return `${tabs}#${exits}`;
+}
+
+let statusBroadcastTimer = null;
+let lastTerminalsSig = null;
+function broadcastTerminalsIfChanged() {
+  if (activeSocketsByToken.size === 0) return; // nobody listening
+  const payload = buildTerminalsPayload();
+  const sig = terminalsSignature(payload);
+  if (sig === lastTerminalsSig) return;
+  lastTerminalsSig = sig;
+  for (const set of activeSocketsByToken.values()) {
+    for (const s of set) { try { wsSend(s, payload); } catch { /* dropped socket */ } }
+  }
+}
+
 function handleAuthedMessage(socket, msg, subs) {
   switch (msg.type) {
     case 'ping':
@@ -127,7 +184,7 @@ function handleAuthedMessage(socket, msg, subs) {
       break;
 
     case 'listTerminals':
-      wsSend(socket, { type: 'terminals', list: listTerminals() });
+      wsSend(socket, buildTerminalsPayload());
       break;
 
     case 'attach': {
@@ -472,6 +529,10 @@ export async function startMobileServer() {
       // Permanent handler so a later runtime socket error logs instead of crashing.
       httpServer.on('error', (err) => console.warn('[mobile-server]', err?.message || err));
       boundAddress = { host: ip, port };
+      // Push status changes to connected phones (change-driven, 1s poll of the
+      // status authority; only sends when the board-relevant signature moves).
+      lastTerminalsSig = null;
+      statusBroadcastTimer = setInterval(broadcastTerminalsIfChanged, 1000);
       updateMobileServerConfig({ enabled: true });
       resolve(getMobileServerStatus());
     });
@@ -490,6 +551,8 @@ export function stopMobileServer() {
     }
   }
   activeSocketsByToken.clear();
+  if (statusBroadcastTimer) { clearInterval(statusBroadcastTimer); statusBroadcastTimer = null; }
+  lastTerminalsSig = null;
   if (wss) { try { wss.close(); } catch { /* noop */ } wss = null; }
   if (httpServer) { try { httpServer.close(); } catch { /* noop */ } httpServer = null; }
   boundAddress = null;
