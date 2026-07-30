@@ -2,14 +2,17 @@ import { useState, useEffect, useMemo } from 'react';
 import SessionCard from './SessionCard';
 import { timeAgo } from './format';
 
-// Group terminals by project, preserving first-seen order (mirrors Terminal.jsx).
+// Group terminals by project PATH, preserving first-seen order. Keyed on path,
+// not name, so two projects that share a folder name (Sam runs several
+// `blueatlasbiologics.com` / `blueatlasusa.com` checkouts) stay separate
+// sections instead of merging with duplicate tab labels. Codex Phase 2 P2.
 function groupByProject(list) {
   const groups = [];
-  const byName = new Map();
+  const byPath = new Map();
   for (const t of list) {
-    const key = t.projectName || 'other';
-    let g = byName.get(key);
-    if (!g) { g = { projectName: key, terms: [] }; byName.set(key, g); groups.push(g); }
+    const key = t.projectPath || t.projectName || 'other';
+    let g = byPath.get(key);
+    if (!g) { g = { projectPath: key, projectName: t.projectName || key, terms: [] }; byPath.set(key, g); groups.push(g); }
     g.terms.push(t);
   }
   return groups;
@@ -31,6 +34,14 @@ function rank(g) {
 export default function Board({ connection, status, onOpen, onShowHistory }) {
   const [terminals, setTerminals] = useState([]);
   const [recentExits, setRecentExits] = useState([]);
+  // Tick so relative times ("3m") refresh on quiet sessions: the server omits
+  // lastActivityAt from its change signature, so without this the board only
+  // re-renders on a status change and a time could stay "just now". Codex P3.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const i = setInterval(() => setTick((n) => n + 1), 30000);
+    return () => clearInterval(i);
+  }, []);
 
   useEffect(() => {
     const off = connection.onMessage((msg) => {
@@ -86,7 +97,7 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
           </div>
         ) : (
           groups.map((g) => (
-            <section key={g.projectName} className="board-group">
+            <section key={g.projectPath} className="board-group">
               <div className="board-group-head">{g.projectName}</div>
               {g.terms.map((t) => (
                 <SessionCard key={t.id} term={t} onOpen={onOpen} />
