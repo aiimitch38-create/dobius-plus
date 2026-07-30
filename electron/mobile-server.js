@@ -21,7 +21,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { app } from 'electron';
+import { app, powerSaveBlocker } from 'electron';
 import { getMobileServerConfig, updateMobileServerConfig, setSessionTabLink } from './config-manager.js';
 import {
   listTerminals, subscribeTerminal, writeTerminal, terminalHasDesktopAttached,
@@ -43,6 +43,31 @@ let httpServer = null;
 let wss = null;
 let pairingCode = null;   // ephemeral, regenerated on each start
 let pairAttempts = 0;
+
+// Power assertion (v1.0.43 resilience): while the mobile server is up, keep the
+// Mac from suspending so a phone away from home does not lose the link to a
+// sleeping Mac. `prevent-app-suspension` keeps CPU/network alive but still lets
+// the DISPLAY sleep (this is a headless-remote scenario). Highest-leverage
+// disconnect fix (REMOTE-CONTROL-PLAN resilience section).
+let powerBlockerId = null;
+function startPowerAssertion() {
+  try {
+    if (powerBlockerId === null || !powerSaveBlocker.isStarted(powerBlockerId)) {
+      powerBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+    }
+  } catch (e) {
+    console.warn('[mobile-server] powerSaveBlocker start failed:', e?.message || e);
+    powerBlockerId = null;
+  }
+}
+function stopPowerAssertion() {
+  try {
+    if (powerBlockerId !== null && powerSaveBlocker.isStarted(powerBlockerId)) {
+      powerSaveBlocker.stop(powerBlockerId);
+    }
+  } catch { /* best effort */ }
+  powerBlockerId = null;
+}
 let boundAddress = null;  // { host, port }
 
 /** Find the Mac's Tailscale (CGNAT 100.64.0.0/10) IPv4 address, or null. */
@@ -533,6 +558,7 @@ export async function startMobileServer() {
       // status authority; only sends when the board-relevant signature moves).
       lastTerminalsSig = null;
       statusBroadcastTimer = setInterval(broadcastTerminalsIfChanged, 1000);
+      startPowerAssertion(); // keep the Mac awake for remote work while up
       updateMobileServerConfig({ enabled: true });
       resolve(getMobileServerStatus());
     });
@@ -553,6 +579,7 @@ export function stopMobileServer() {
   activeSocketsByToken.clear();
   if (statusBroadcastTimer) { clearInterval(statusBroadcastTimer); statusBroadcastTimer = null; }
   lastTerminalsSig = null;
+  stopPowerAssertion();
   if (wss) { try { wss.close(); } catch { /* noop */ } wss = null; }
   if (httpServer) { try { httpServer.close(); } catch { /* noop */ } httpServer = null; }
   boundAddress = null;

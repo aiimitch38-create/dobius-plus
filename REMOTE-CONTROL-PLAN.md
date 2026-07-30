@@ -199,9 +199,12 @@ and status currently lives in the renderer.
   (working/idle/needs-input) by parsing OSC 777 / prompt markers in the PTY
   data stream (the same signal the renderer parses today), plus resolves the
   running Claude session id.
-- Context/model: a NON-IPC helper equivalent to `estimateContextForTab` that
-  keeps the v1.0.40 stale-link safeguards, recomputed on a 15-30s debounce for
-  Claude tabs (context is transcript-derived, not PTY-evented).
+- Context/model: MOVED to Phase 2. It is tightly coupled to the board UI that
+  renders the ring, and doing it right means reusing the session-resolution
+  logic (argv -> sessionId -> estimate, with the v1.0.40 stale-link guards) as a
+  NON-IPC helper on a 15-30s debounce. Building it with its consumer avoids a
+  complex debounced recompute with no reader. Status + activity + exits (above)
+  are the Phase 1 core and are enough for a working board.
 - Bounded recent-exit cache: capture `{cwd, project, session, status, code,
   signal}` in `term.onExit` BEFORE the entry is deleted, so exit info survives
   for the board and push.
