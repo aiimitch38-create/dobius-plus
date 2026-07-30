@@ -13,10 +13,11 @@
     "start": "electron .",
     "test:fresh": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/fresh-session.test.mjs",
     "test:argv": "node ./electron/__tests__/claude-argv.test.mjs",
-    "test": "npm run test:argv && npm run test:fresh && npm run test:preview && npm run test:gws && npm run test:shim",
+    "test": "npm run test:argv && npm run test:fresh && npm run test:preview && npm run test:gws && npm run test:shim && npm run test:status",
     "test:preview": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/preview-sanitize.test.mjs",
     "test:gws": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/gws-accounts.test.mjs",
-    "test:shim": "node ./electron/__tests__/gws-shim.test.mjs"
+    "test:shim": "node ./electron/__tests__/gws-shim.test.mjs",
+    "test:status": "node ./electron/__tests__/terminal-status.test.mjs"
   },
   "keywords": [],
   "author": "Status Digital Marketing",

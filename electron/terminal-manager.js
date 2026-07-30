@@ -16,6 +16,16 @@ import { app } from 'electron';
 
 const terminals = new Map();
 
+// Global terminal observers (v1.0.43): sinks that see EVERY terminal's data +
+// exit, independent of window/mobile attachment. Used by the main-process
+// status authority. Each observer is { onData(id, data, cwd), onExit(id,
+// {exitCode, signal, cwd}) }.
+const terminalObservers = new Set();
+export function addTerminalObserver(observer) {
+  if (observer) terminalObservers.add(observer);
+  return () => terminalObservers.delete(observer);
+}
+
 /**
  * Defensive startup check: node-pty's `spawn-helper` MUST be executable or
  * every PTY opens blank (the helper is exec'd to launch the shell, and without
@@ -137,6 +147,13 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
   term.onData((data) => {
     const entry = terminals.get(id);
     if (!entry) return;
+    // Global observers (main-process status authority, v1.0.43): see EVERY
+    // terminal's output regardless of whether a window or mobile client is
+    // attached, so tab status is tracked centrally. Cheap: observers do a
+    // bounded string scan, no per-chunk allocation like the mobile buffer.
+    for (const obs of terminalObservers) {
+      try { obs.onData?.(id, data, entry.cwd); } catch { /* never let an observer break the PTY */ }
+    }
     // Desktop window (unchanged path).
     if (entry.webContents && !entry.webContents.isDestroyed()) {
       entry.webContents.send('terminal:data', id, data);
@@ -157,6 +174,11 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
     const entry = terminals.get(id);
     terminals.delete(id);
     if (!entry) return;
+    // Global observers get the exit + the cwd BEFORE the entry is gone, so the
+    // status authority can cache exit code/project for the mobile board.
+    for (const obs of terminalObservers) {
+      try { obs.onExit?.(id, { exitCode, signal, cwd: entry.cwd }); } catch { /* noop */ }
+    }
     if (entry.webContents && !entry.webContents.isDestroyed()) {
       entry.webContents.send('terminal:exit', id, exitCode, signal);
     }

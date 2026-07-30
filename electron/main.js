@@ -9,7 +9,8 @@ import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending a
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
 import { connectGwsAccount, listGwsAccounts, removeGwsAccount, ensureShim } from './gws-accounts.js';
-import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalProcessArgv, getTerminalClaudeInfo, listTerminals, reassignTerminal, ensureSpawnHelperExecutable } from './terminal-manager.js';
+import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalProcessArgv, getTerminalClaudeInfo, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver } from './terminal-manager.js';
+import * as terminalStatus from './terminal-status.js';
 import {
   loadHistory, loadStats, loadSettings, loadBridgeServers, loadPlans, loadSkills,
   loadTranscript, readPlanFile, getActiveProcesses, listProjects,
@@ -165,6 +166,9 @@ const TERMINAL_WRITE_MAX_BYTES = 256 * 1024; // 256KB per write — plenty for a
 // IPC (they go through createTerminal directly), so they're naturally
 // excluded from renderer write access. Codex round-2 HIGH on main.js:118.
 const terminalOwners = new Map(); // id -> webContents.id
+
+// Settle tick for the main-process terminal status authority (v1.0.43).
+let statusSettleTimer = null;
 
 // gws shim, staged once and reused for every terminal's env. Lazy so it only
 // runs when the first terminal is created. v1.0.41.
@@ -2258,6 +2262,15 @@ app.whenReady().then(() => {
   initAutoUpdater();
   maybeAutoStartMobileServer();
   setupSessionTabCapture();
+  // Main-process terminal status authority (v1.0.43, remote Phase 1): observe
+  // every PTY's output/exit so tab status (working/done/needs) + recent exits
+  // are tracked centrally for the mobile board, and settle idle tabs on a 1s
+  // tick like the renderer's useTabActivity.
+  addTerminalObserver({
+    onData: (id, data) => terminalStatus.ingest(id, data),
+    onExit: (id, info) => terminalStatus.noteExit(id, info),
+  });
+  statusSettleTimer = setInterval(() => terminalStatus.settle(), 1000);
   startVoiceBridge();
   // Hand the built-in agent list to voice-bridge so dobius-spawn can find
   // them by id (Code Reviewer, Bug Hunter, Voice Conductor, etc.).
@@ -2578,6 +2591,7 @@ app.on('will-quit', (e) => {
   stopAutoMode();
   stopMobileServer();
   stopSessionTabCapture();
+  if (statusSettleTimer) { clearInterval(statusSettleTimer); statusSettleTimer = null; }
   try { stopVoicePlayback(); } catch { /* noop */ }
   closeVisualWindow();
   void stopVisualServer();
