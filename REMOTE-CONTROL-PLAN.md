@@ -115,25 +115,31 @@ you can pocket the phone and get pulled back exactly when a session needs you.
 
 ### Design direction (committed)
 
-A tactile "cockpit / hardware remote" aesthetic, dark and calm, built for
-thumb reach and glanceability, deliberately NOT a generic dashboard:
+Cockpit/LED status semantics rendered in the CLAUDE MOBILE APP's visual
+language (Sam: "most modern, most like the Claude mobile app UI"). Calm, warm,
+composed, thumb-first and glanceable, NOT a neon arcade or a GitHub-blue dev
+tool (which is what it is today):
 
-- **Two type voices.** A characterful monospace (JetBrains Mono, bundled) for
-  everything that IS the machine (session ids, project names, context %, key
-  caps) and a clean geometric sans (e.g. Space Grotesk or Sora, bundled, pick
-  one and commit) for human-facing chrome. No system-font default, no Inter.
-- **Status as light.** Running = a soft breathing green glow; needs-input =
-  amber pulse; idle = dim; error = red. The board reads like a rack of LEDs.
-  Status color is the loudest thing on screen; everything else is quiet.
-- **Palette.** Near-black base (not pure black), one confident accent, semantic
-  status hues (green/amber/red) reserved ONLY for status so they always mean
-  something. Depth from layered translucency + a faint grain, not boxes.
-- **Motion with intent.** One orchestrated load (staggered card reveal), a
-  physical spring when you drop into a session and back, the breathing glow.
-  Nothing gratuitous. Big touch targets, safe-area aware, one-hand layout with
-  the primary controls in the bottom third.
-- **Tactile controls.** The special-keys bar and command bar feel like remote
-  buttons (press states, subtle travel), not web buttons.
+- **Palette: Claude, not GitHub.** Warm near-black in dark mode / off-white
+  cream in light mode, with the clay/terracotta accent (~#C15F3C) instead of
+  the current #58A6FF blue. Semantic status hues (green/amber/red) reserved
+  ONLY for status so a color always means something. Depth from soft shadows
+  and warm translucency, generous negative space, not hard boxes.
+- **Status as calm light.** Running = a soft breathing green ring; needs-input =
+  amber; idle = dim; error = red. The board reads like a quiet rack of
+  indicators, composed rather than loud. Status is the most saturated thing on
+  an otherwise warm, low-contrast screen.
+- **Type: the Claude register.** A refined humanist serif for display accents
+  (Tiempos-like) paired with a clean grotesque for UI (Styrene-like), plus a
+  mono only for the actual terminal + machine tokens (session id, context %,
+  key caps). Bundle open near-equivalents (the real Claude faces are
+  proprietary). No system-font default, no Inter, no GitHub mono chrome.
+- **Motion with intent.** One orchestrated load (staggered card reveal), a soft
+  spring when you drop into a session and back, the breathing status ring.
+  Restrained, in the Claude calm register. Big touch targets, safe-area aware,
+  primary controls in the bottom third for one-hand use.
+- **Tactile controls.** Special-keys and command bar have real press states and
+  subtle travel, but soft and rounded, not hardware-brutal.
 
 The frontend-design skill governs execution when we build; this locks the POV.
 
@@ -204,9 +210,13 @@ and status currently lives in the renderer.
   authority + recent-exit cache). Feature-detect `PushManager` /
   `isSecureContext` and degrade to in-app alerts otherwise. This is the reason
   the whole thing is a remote control and not a viewer.
-- **Voice**: hold-to-talk -> Web Speech, or (robust) record + existing
-  `/voice/intent` -> show the Conductor's reply (`/voice/reply` long-poll or a
-  WS `voiceReply`).
+- **Voice (decided: server-side whisper.cpp)**: hold-to-talk records audio on
+  the phone, streams it over the Tailscale WS to the Mac, which transcribes
+  locally with `whisper-cli` (whisper.cpp/Metal, the `audio-transcribe` engine),
+  then feeds the transcript into the existing `/voice/intent` -> Conductor flow
+  and returns the reply via `/voice/reply`. Audio never leaves the tailnet; no
+  cloud STT. Build phase resolves the `whisper-cli` path + model like
+  gws-accounts resolves the gws binary.
 
 ## Files
 
@@ -239,12 +249,28 @@ shipping, per the v1.0.42 lesson) + build + a real device/WS test. UI phases get
 a screenshot at a phone viewport. Ships as its own version, local-first, not
 released without Sam's go.
 
-## Open questions for Sam
-1. **Notifications**: is setting up Tailscale HTTPS (`tailscale cert`) acceptable
-   for real OS push? Without it, alerts are in-app only (must have the PWA
-   open). This is the one external setup the full experience needs.
-2. **Voice in-app**: hold-to-talk using the browser mic is easy but iOS Safari
-   Web Speech is flaky; the robust path is record audio -> send to the Mac ->
-   transcribe there. Cheap-and-flaky now, or robust-and-more-work?
-3. **Aesthetic check**: the cockpit/LED direction above, or do you want a
-   different flavor (e.g. ultra-minimal, or louder/maximalist)?
+## Decisions (resolved 2026-07-30 with Sam)
+
+1. **HTTPS + push: yes.** Use `tailscale cert` for a browser-trusted cert on
+   the MagicDNS name so Web Push and install work. This is the transport for
+   Phase 4/5.
+2. **Voice: server-side whisper.cpp (open source, already on this Mac).** Sam
+   asked to reuse an existing OSS piece rather than build STT. The phone records
+   audio and streams it over the Tailscale WS; the Mac transcribes locally with
+   `whisper-cli` (whisper.cpp, Metal), the same engine the `audio-transcribe`
+   skill uses (model at `~/.samknows/models/ggml-base.en.bin`; the build phase
+   resolves the exact `whisper-cli` path like gws-accounts resolves gws). The
+   transcript feeds the existing `/voice/intent` -> Conductor flow, and the
+   spoken/text reply comes back via `/voice/reply`. Fully private: audio never
+   leaves the tailnet, no cloud STT. This replaces the "cheap Web Speech"
+   option; it is robust AND reuses OSS already installed.
+3. **Aesthetic: cockpit/LED semantics rendered in the Claude mobile app's
+   visual language.** Sam: "most modern, most like the Claude mobile app UI."
+   So: a warm, calm palette (Claude's near-black warm dark + off-white/cream
+   light, the clay/terracotta accent ~#C15F3C rather than the GitHub blue used
+   today), generous spacing, soft large radii, quiet chrome, a refined
+   humanist-serif display accent paired with a clean grotesque for UI, all in
+   the Claude register. The "LED" status idea survives as calm colored status
+   glyphs/rings, not a loud arcade look: modern and composed, not neon. Bundle
+   close-to-Claude open fonts (e.g. a Tiempos-like serif + a Styrene-like
+   grotesque) since the real Claude fonts are proprietary.
