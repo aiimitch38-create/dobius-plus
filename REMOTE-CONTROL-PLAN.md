@@ -32,6 +32,55 @@ It works. It is not a remote control. The core gaps:
 - **Bare visuals.** GitHub-dark, no motion, plain "Loading...", no empty
   states, no settings/unpair screen, no service worker.
 
+## Codex design review (2026-07-30): folded in
+
+Codex reviewed this plan before any code and found six issues that would have
+caused real rework. All are folded into the phases below; the direction is
+sound, but Phase 1 and the push ordering needed rewrites.
+
+1. **HIGH: status is NOT "already computed" in a server-usable form.** I was
+   wrong that `getTerminalClaudeInfo` + the v1.0.40 context estimator can be
+   bridged directly. `getTerminalClaudeInfo` returns only `{sessionId,
+   startedAt}`. Model + context live behind a RENDERER IPC
+   (`data:estimateContextForTab`, which rejects non-owner callers), and the
+   working/idle/needs status is RENDERER Zustand state parsed from OSC/xterm
+   output (`useTerminal.js`, `useTabActivity.js`), NOT terminal-manager state.
+   So Phase 1 is not "bridge existing data," it is "build a MAIN-PROCESS status
+   authority": parse OSC 777 in main alongside the PTY stream, track
+   lastActivityAt/exitInfo/running, resolve the running session id, and add a
+   non-IPC context helper that keeps the v1.0.40 stale-link safeguards. This is
+   the biggest correction and the real cost of Phase 1.
+2. **HIGH: "push on change" is not free for context.** Context is derived from
+   the transcript FILE, not PTY events. Use a throttled aggregator: push
+   immediately on PTY create/exit/output/OSC marker, recompute context on a
+   15-30s debounce for Claude tabs, and send deltas only when the serialized
+   status actually changes. No pgrep/transcript read per output chunk.
+3. **HIGH: push phase order was wrong.** Web Push + service worker require a
+   secure context, and iOS only does Web Push for an installed Home Screen app.
+   So HTTPS (Tailscale cert) + service worker + manifest `id` + install flow +
+   permission UI must come BEFORE push, not after. Reordered below.
+4. **MEDIUM: Tailscale HTTPS needs the MagicDNS name, not the 100.x IP.** Certs
+   are issued for `<machine>.<tailnet>.ts.net`, not tailnet IPs. The pairing UI
+   must show/copy the `https://…ts.net:<port>/` URL, check
+   `window.isSecureContext`, and label raw-IP/HTTP mode as "terminal only, no
+   push or offline install."
+5. **MEDIUM: rich status + listProjects widen a stolen token's value.** Auth
+   already lets any paired token write/kill/create/read, so `kill` UI is not a
+   new privilege, but reconnaissance value grows. Add device revocation UX +
+   per-device name/lastSeen, and make `createTerminal` accept only a path that
+   came from `listProjects()`, never an arbitrary cwd.
+6. **HIGH: shared-PTY vs phone-spawned terminals.** Phone-created PTYs today are
+   headless `term-mobile-*` with no desktop tab (tab-sync is future work), which
+   contradicts "the same terminals the Mac shows." DECISION (folded in): for v1,
+   phone-spawned terminals are **headless remote-only and labeled as such** on
+   the board; they are not faked into desktop tabs. A future phase can add real
+   desktop tab-sync through a shared registry. Do not pretend they are desktop
+   tabs.
+7. **MEDIUM: nonzero-exit info is lost.** `term.onExit` deletes the terminal
+   entry immediately and `listTerminals()` only lists live ones, so exit
+   metadata is gone before the board/push can use it. Keep a bounded recent-exit
+   cache (cwd/project/session/status + code/signal) captured before deletion.
+
 ## The idea: a mission-control remote, not a tiny desktop
 
 The desktop is where you WORK. The phone is where you WATCH and INTERVENE. So
@@ -83,16 +132,24 @@ views, scheduled tasks. If Sam wants any later they are add-on phases.
 
 ## Phases
 
-### Phase 1: status over the bridge (backend, unblocks everything)
-The board is worthless without status, and the data already exists on the Mac.
-- Extend the WS `terminals` payload (and add a `terminalStatus` push) with, per
-  tab: `{ id, project, cwd, label, running, claude: { sessionId, model,
-  ctxPct } | null, lastActivityAt, exitInfo }`. Source it from
-  `getTerminalClaudeInfo` + the v1.0.40 per-tab context estimator +
-  terminal-manager activity.
-- Push a `terminalStatus` message on change (attach/exit/idle transitions), so
-  the board updates live without polling.
-- Server work only; no PWA change yet. Verify with a WS probe.
+### Phase 1: main-process status authority (backend, unblocks everything)
+Not a bridge, a build (Codex #1/#2/#7). The board is worthless without status,
+and status currently lives in the renderer.
+- New `electron/terminal-status.js`: a main-process authority that, per live
+  terminal, tracks `running`, `lastActivityAt`, and `status`
+  (working/idle/needs-input) by parsing OSC 777 / prompt markers in the PTY
+  data stream (the same signal the renderer parses today), plus resolves the
+  running Claude session id.
+- Context/model: a NON-IPC helper equivalent to `estimateContextForTab` that
+  keeps the v1.0.40 stale-link safeguards, recomputed on a 15-30s debounce for
+  Claude tabs (context is transcript-derived, not PTY-evented).
+- Bounded recent-exit cache: capture `{cwd, project, session, status, code,
+  signal}` in `term.onExit` BEFORE the entry is deleted, so exit info survives
+  for the board and push.
+- Bridge: extend the WS `terminals` payload and add a throttled
+  `terminalStatus` push (immediate on create/exit/OSC marker, debounced for
+  context), sending deltas only when serialized status changes.
+- Server + main only; no PWA change yet. Verify with a WS probe.
 
 ### Phase 2: the session board (the headline UI)
 - New default screen: a card per session, status-as-light, project + claude
@@ -102,23 +159,30 @@ The board is worthless without status, and the data already exists on the Mac.
 
 ### Phase 3: control affordances
 - From a card / open terminal: stop (send `kill`, already in protocol, add the
-  UI + a confirm), new terminal with a **project picker** (needs a small
-  `listProjects` WS message), rename (optional).
+  UI + a confirm), new terminal with a **project picker** (`listProjects` WS
+  message; `createTerminal` accepts ONLY a path returned by it, never an
+  arbitrary cwd, Codex #5). Phone-spawned terminals are labeled
+  **remote-only** on the board, not faked as desktop tabs (Codex #6).
 - Upgraded key bar: press states, add Ctrl-compose and paste.
 
-### Phase 4: notifications + in-app voice
-- **Push**: Web Push (VAPID) so the OS notifies even when the PWA is closed.
-  Server holds subscriptions per device; fires on session-finished /
-  needs-input / nonzero-exit. This is the reason the whole thing is a "remote
-  control" and not a viewer.
-- **Voice**: hold-to-talk button -> Web Speech (or record + existing
-  `/voice/intent`) -> show the Conductor's reply (reuse `/voice/reply`
-  long-poll or a WS `voiceReply`).
+### Phase 4: HTTPS + PWA maturity (MUST precede push, Codex #3/#4)
+- `https.createServer` using Tailscale cert material; pairing UI shows/copies
+  the `https://<machine>.<tailnet>.ts.net:<port>/` MagicDNS URL and checks
+  `window.isSecureContext`. Raw-IP/HTTP mode is labeled "terminal only, no push
+  or offline install."
+- Service worker (installable, offline shell), manifest `id` + full icon set,
+  install-to-Home-Screen flow (iOS requires it for push), settings screen
+  (unpair + per-device lastSeen/revoke, LAN/tailnet toggle, host), error toasts.
 
-### Phase 5: PWA maturity + polish pass
-- Service worker (installable, offline shell, cache the app), full icon set,
-  Tailscale HTTPS note (`tailscale cert` / MagicDNS) so Web Push + install work
-  cleanly, settings screen (unpair, LAN/tailnet toggle, host), error toasts.
+### Phase 5: notifications + in-app voice (needs Phase 4's secure context)
+- **Push**: Web Push (VAPID); server holds per-device subscriptions, fires on
+  session-finished / needs-input / nonzero-exit (from the Phase 1 status
+  authority + recent-exit cache). Feature-detect `PushManager` /
+  `isSecureContext` and degrade to in-app alerts otherwise. This is the reason
+  the whole thing is a remote control and not a viewer.
+- **Voice**: hold-to-talk -> Web Speech, or (robust) record + existing
+  `/voice/intent` -> show the Conductor's reply (`/voice/reply` long-poll or a
+  WS `voiceReply`).
 
 ## Files
 
