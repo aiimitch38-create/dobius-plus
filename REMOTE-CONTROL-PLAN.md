@@ -143,6 +143,35 @@ tool (which is what it is today):
 
 The frontend-design skill governs execution when we build; this locks the POV.
 
+## Resilience: uninterrupted mobile work when the link drops (Sam-flagged)
+
+Design principle: the WORK lives on the Mac (PTYs), the phone is a window. A
+dropped link never loses work; it only pauses visibility/control. Two channels:
+
+**Live channel (WS over Tailscale), degrade gracefully:**
+- **Power assertion.** Dobius holds a `powerSaveBlocker` (Electron) so the Mac
+  does NOT sleep while the mobile server is enabled or a tracked session is
+  running. A sleeping Mac is the #1 cause of "I was out and it dropped." This is
+  the single highest-leverage resilience item.
+- **Outbound input queue.** Buffer input/keys typed while disconnected and flush
+  in order on reconnect, so a command during a blip is delivered, not dropped.
+  Show an explicit reconnecting state (already have backoff + buffer replay +
+  foreground `wake()`).
+- **Offline app shell** (service worker, Phase 4): the PWA always opens to
+  last-known state + "reconnecting," never a dead page.
+- Tailscale already relays via DERP on NAT/cell changes as long as both ends
+  have some internet.
+
+**Async channel (survives full disconnects, store-and-forward):**
+- **Push** pulls you back for the moments that matter (needs-input / finished /
+  error) even if the PWA is closed or was offline (Phase 5).
+- Agents/Conductor keep running on the Mac during a gap; the existing iMessage
+  bridge can report async (Apple store-and-forward delivers when both are back).
+
+**Honest hard limit:** a Mac that is powered off or has zero internet cannot be
+reached from the phone (Dobius runs on the Mac). Mitigations are keep-awake +
+keep-online above; a future always-on node is out of scope here.
+
 ## Scope: the remote-control CORE (and what it is NOT)
 
 IN (this effort):
@@ -179,6 +208,10 @@ and status currently lives in the renderer.
 - Bridge: extend the WS `terminals` payload and add a throttled
   `terminalStatus` push (immediate on create/exit/OSC marker, debounced for
   context), sending deltas only when serialized status changes.
+- **Power assertion** (resilience): hold an Electron `powerSaveBlocker`
+  (`prevent-app-suspension`) while the mobile server is enabled OR a tracked
+  session is running, released when neither holds, so the Mac stays awake and
+  networked for remote work. Highest-leverage disconnect fix.
 - Server + main only; no PWA change yet. Verify with a WS probe.
 
 ### Phase 2: the session board (the headline UI)
@@ -194,6 +227,9 @@ and status currently lives in the renderer.
   arbitrary cwd, Codex #5). Phone-spawned terminals are labeled
   **remote-only** on the board, not faked as desktop tabs (Codex #6).
 - Upgraded key bar: press states, add Ctrl-compose and paste.
+- **Outbound input queue** (resilience): buffer input/keys sent while
+  disconnected and flush in order on reconnect, with a visible reconnecting
+  state, so a command typed during a blip is delivered rather than dropped.
 
 ### Phase 4: HTTPS + PWA maturity (MUST precede push, Codex #3/#4)
 - `https.createServer` using Tailscale cert material; pairing UI shows/copies
