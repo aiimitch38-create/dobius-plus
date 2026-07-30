@@ -52,9 +52,9 @@ function groupTerminals(terminals) {
   return groups;
 }
 
-export default function TerminalScreen({ connection, status, onShowHistory }) {
+export default function TerminalScreen({ connection, status, initialId, onBack, onShowHistory }) {
   const [terminals, setTerminals] = useState([]);
-  const [activeId, setActiveId] = useState(null);
+  const [activeId, setActiveId] = useState(initialId || null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
 
   const refreshList = useCallback(() => {
@@ -112,6 +112,9 @@ export default function TerminalScreen({ connection, status, onShowHistory }) {
   return (
     <div className="screen terminal-screen">
       <header className="top-bar">
+        {onBack && (
+          <button className="icon-btn back-btn" onClick={onBack} aria-label="Back to sessions">‹</button>
+        )}
         <button className="terminal-pick" onClick={() => setSwitcherOpen((v) => !v)}>
           <span className="status-dot" style={{ backgroundColor: statusColor }} />
           <span className="terminal-name">

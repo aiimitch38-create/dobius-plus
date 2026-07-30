@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Pairing from './Pairing';
+import Board from './Board';
 import TerminalScreen from './Terminal';
 import History from './History';
 import { Connection } from './connection';
@@ -10,7 +11,8 @@ export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || '');
   const [conn, setConn] = useState(null);
   const [status, setStatus] = useState('disconnected');
-  const [view, setView] = useState('terminal'); // 'terminal' | 'history'
+  const [view, setView] = useState('board'); // 'board' | 'terminal' | 'history'
+  const [openTabId, setOpenTabId] = useState(null); // terminal opened from the board
 
   useEffect(() => {
     if (!token) { setConn(null); return undefined; }
@@ -53,12 +55,25 @@ export default function App() {
     return <div className="screen center"><p className="muted">Connecting...</p></div>;
   }
   if (view === 'history') {
-    return <History connection={conn} onBack={() => setView('terminal')} />;
+    return <History connection={conn} onBack={() => setView('board')} />;
   }
+  if (view === 'terminal') {
+    return (
+      <TerminalScreen
+        connection={conn}
+        status={status}
+        initialId={openTabId}
+        onBack={() => setView('board')}
+        onShowHistory={() => setView('history')}
+      />
+    );
+  }
+  // Home: the session board.
   return (
-    <TerminalScreen
+    <Board
       connection={conn}
       status={status}
+      onOpen={(id) => { setOpenTabId(id); setView('terminal'); }}
       onShowHistory={() => setView('history')}
     />
   );

@@ -301,3 +301,113 @@ button.primary:disabled { opacity: 0.4; }
   border-radius: 8px;
   padding: 10px;
 }
+
+/* ===== Session board (v1.0.43 Phase 2b) ===== */
+.board-screen { background: var(--bg); }
+.back-btn { font-size: 24px; line-height: 1; }
+
+.board-header {
+  flex: 0 0 auto;
+  padding: calc(env(safe-area-inset-top) + 16px) 20px 12px;
+  background: var(--bg);
+}
+.board-title-row { display: flex; align-items: center; justify-content: space-between; }
+.board-title { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.board-summary { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.conn-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--dim);
+}
+.summary-chip {
+  font-size: 12px; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px;
+}
+.chip-needs { color: var(--status-needs); background: rgba(217, 96, 90, 0.14); }
+.chip-working { color: var(--status-working); background: rgba(208, 162, 76, 0.14); }
+
+.board-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; touch-action: pan-y;
+  padding: 4px 16px calc(env(safe-area-inset-bottom) + 24px);
+}
+.board-group { margin-top: 18px; }
+.board-group-head {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--dim);
+  padding: 0 6px 8px;
+}
+
+/* A session card: LED + label + status, whole card is the tap target. */
+.session-card {
+  width: 100%;
+  display: flex; align-items: center; gap: 14px;
+  padding: 15px 16px;
+  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.06s;
+}
+.session-card:active { background: var(--surface-2); transform: scale(0.99); }
+.card-led {
+  flex: 0 0 auto;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--status-idle);
+}
+.card-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.card-title {
+  font-size: 16px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card-sub { font-size: 13px; color: var(--dim); }
+.card-status { font-weight: 600; }
+.card-chevron { flex: 0 0 auto; color: var(--dim); font-size: 22px; opacity: 0.7; }
+
+/* Status LEDs: needs + working breathe; done + idle are calm/steady. */
+.led-idle .card-led { background: var(--status-idle); }
+.led-done .card-led {
+  background: var(--status-done);
+  box-shadow: 0 0 0 3px rgba(127, 160, 105, 0.15);
+}
+.led-done .card-status { color: var(--status-done); }
+.led-working .card-led {
+  background: var(--status-working);
+  box-shadow: 0 0 8px rgba(208, 162, 76, 0.55);
+  animation: breathe 2.2s ease-in-out infinite;
+}
+.led-working .card-status { color: var(--status-working); }
+.led-needs .card-led {
+  background: var(--status-needs);
+  box-shadow: 0 0 10px rgba(217, 96, 90, 0.7);
+  animation: breathe 1.3s ease-in-out infinite;
+}
+.led-needs .card-status { color: var(--status-needs); }
+.led-needs.session-card { border-color: rgba(217, 96, 90, 0.4); }
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-led { animation: none !important; }
+}
+
+/* Empty state with a bit of character. */
+.board-empty {
+  height: 100%; min-height: 60dvh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 10px; padding: 24px;
+}
+.board-empty-glyph { font-size: 46px; color: var(--border); }
+.board-empty-title { font-size: 17px; font-weight: 600; }
+
+/* Recently finished. */
+.board-exits { opacity: 0.9; }
+.exit-row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
+.exit-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
+.exit-dot.ok { background: var(--status-done); }
+.exit-dot.bad { background: var(--status-needs); }
+.exit-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
