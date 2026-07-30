@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { APP_SKIN_NAMES, APP_SKIN_NONE, applyAppSkin } from './app-skin'
+import { APP_SKIN_BUZZ, APP_SKIN_NAMES, APP_SKIN_NONE, applyAppSkin } from './app-skin'
 
 class FakeStyle {
   readonly props = new Map<string, string>()
@@ -25,8 +25,20 @@ class FakeClassList {
   }
 }
 
-function fakeRoot(): { style: FakeStyle; classList: FakeClassList } {
-  return { style: new FakeStyle(), classList: new FakeClassList() }
+class FakeRoot {
+  readonly style = new FakeStyle()
+  readonly classList = new FakeClassList()
+  readonly attributes = new Map<string, string>()
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value)
+  }
+  removeAttribute(name: string): void {
+    this.attributes.delete(name)
+  }
+}
+
+function fakeRoot(): FakeRoot {
+  return new FakeRoot()
 }
 
 describe('applyAppSkin', () => {
@@ -52,6 +64,23 @@ describe('applyAppSkin', () => {
     expect(root.style.props.size).toBeGreaterThan(0)
     applyAppSkin(APP_SKIN_NONE, root as unknown as HTMLElement)
     expect(root.style.props.size).toBe(0)
+  })
+
+  it('sets the buzz attribute without inline tokens and leaves theme classes alone', () => {
+    const root = fakeRoot()
+    applyAppSkin('Midnight', root as unknown as HTMLElement)
+    applyAppSkin(APP_SKIN_BUZZ, root as unknown as HTMLElement)
+    expect(root.attributes.has('data-buzz-skin')).toBe(true)
+    expect(root.style.props.size).toBe(0)
+    // Buzz has light+dark stylesheet variants; the theme effect owns the class.
+    expect(root.classList.tokens.has('dark')).toBe(true)
+  })
+
+  it('removes the buzz attribute when switching away', () => {
+    const root = fakeRoot()
+    applyAppSkin(APP_SKIN_BUZZ, root as unknown as HTMLElement)
+    applyAppSkin(APP_SKIN_NONE, root as unknown as HTMLElement)
+    expect(root.attributes.has('data-buzz-skin')).toBe(false)
   })
 
   it('exposes the 18 legacy skin names', () => {

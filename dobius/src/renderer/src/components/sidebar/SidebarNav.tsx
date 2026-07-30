@@ -3,6 +3,7 @@ import {
   Bell,
   Bot,
   CalendarClock,
+  Hexagon,
   Search,
   Smartphone,
   Sparkles
@@ -55,6 +56,7 @@ const SidebarNav = React.memo(function SidebarNav() {
   const showMobileButton = useAppStore((s) => shouldShowMobileButton(s.settings))
   const automationsActive = activeView === 'automations'
   const agentsActive = activeView === 'agents'
+  const buzzActive = activeView === 'buzz'
   const skillsActive = activeView === 'skills'
   const activityActive = activeView === 'activity'
   const mobileActive = activeView === 'mobile'
@@ -120,6 +122,25 @@ const SidebarNav = React.memo(function SidebarNav() {
         />
         <span className="flex-1">
           {translate('auto.components.sidebar.SidebarNav.9c95e1ce91', 'Agents')}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setActiveView('buzz')}
+        aria-current={buzzActive ? 'page' : undefined}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium tracking-tight transition-colors',
+          buzzActive
+            ? 'bg-worktree-sidebar-accent text-worktree-sidebar-accent-foreground'
+            : 'text-worktree-sidebar-foreground/60 hover:bg-worktree-sidebar-foreground/8'
+        )}
+      >
+        <Hexagon
+          className={cn('size-4 shrink-0', !buzzActive && 'text-worktree-sidebar-foreground/30')}
+          strokeWidth={buzzActive ? 2.25 : 1.75}
+        />
+        <span className="flex-1">
+          {translate('auto.components.sidebar.SidebarNav.buzzNav', 'Buzz')}
         </span>
       </button>
       <button

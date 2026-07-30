@@ -1,0 +1,135 @@
+/*
+ * Buzz skin — ported from Block's Buzz (github.com/block/buzz, Apache 2.0).
+ *
+ * The look: one vertical gradient painted across the whole app canvas, sidebar
+ * and titlebar chrome transparent so the gradient shows through, and the main
+ * content floating as a rounded card on top. Exact gradient stops, tint
+ * opacities, and the card edge shadow are traced from
+ * buzz/desktop/src/shared/styles/globals/theme.css.
+ *
+ * Everything is scoped under `:root[data-buzz-skin]` (toggled by applyAppSkin)
+ * so the skin is a pure overlay: with the attribute absent the app renders
+ * exactly as before.
+ */
+
+:root[data-buzz-skin] {
+  --buzz-gradient-top: #e6e6b6;
+  --buzz-gradient-bottom: #c4d0da;
+  --buzz-muted-foreground: rgb(0 0 0 / 40%);
+  --buzz-hover-surface: rgb(0 0 0 / 4%);
+  --buzz-active-surface: rgb(0 0 0 / 7%);
+  --buzz-hairline: rgb(0 0 0 / 8%);
+
+  /* Chrome surfaces go transparent; the body gradient below shows through. */
+  --worktree-sidebar: transparent;
+  --worktree-sidebar-foreground: var(--foreground);
+  --worktree-sidebar-accent: var(--buzz-hover-surface);
+  --worktree-sidebar-accent-foreground: var(--foreground);
+  --worktree-sidebar-border: var(--buzz-hairline);
+  --bg-titlebar: transparent;
+  --sidebar: transparent;
+  --sidebar-accent: var(--buzz-hover-surface);
+  --sidebar-border: var(--buzz-hairline);
+}
+
+:root[data-buzz-skin].dark {
+  --buzz-gradient-top: #4a4616;
+  --buzz-gradient-bottom: #0a1423;
+  --buzz-muted-foreground: rgb(255 255 255 / 40%);
+  --buzz-hover-surface: rgb(255 255 255 / 4%);
+  --buzz-active-surface: rgb(255 255 255 / 16%);
+  --buzz-hairline: rgb(255 255 255 / 8%);
+  /* Buzz Dark uses a warmer near-black for the content canvas (#1a1a1a). */
+  --background: #1a1a1a;
+  --editor-surface: #1a1a1a;
+}
+
+:root[data-buzz-skin] body {
+  background-color: transparent;
+  background-image: linear-gradient(
+    to bottom,
+    var(--buzz-gradient-top),
+    var(--buzz-gradient-bottom)
+  );
+  background-size: 100vw 100vh;
+  background-repeat: no-repeat;
+}
+
+/*
+ * The main content column becomes an inset floating card over the gradient.
+ * Edge treatment from Buzz: a 45%-border hairline on the exposed top/left
+ * edges plus a soft ambient shadow (light), heavier ambient in dark.
+ */
+:root[data-buzz-skin] [data-buzz-content-surface] {
+  margin: 0 6px 6px 6px;
+  border-radius: var(--radius);
+  background-color: var(--background);
+  box-shadow:
+    -1px -1px 0 0 color-mix(in srgb, var(--worktree-sidebar-border) 45%, transparent),
+    0 0 4px 0 rgb(0 0 0 / 7%);
+}
+
+:root[data-buzz-skin].dark [data-buzz-content-surface] {
+  box-shadow: 0 0 12px 0 rgb(0 0 0 / 35%);
+}
+
+/*
+ * Buzz page (the Buzz tab). Self-contained: the page carries its own gradient
+ * canvas and palette so it renders the full Buzz look no matter which app skin
+ * is active. Same traced values as the skin above.
+ */
+.buzz-page {
+  --buzz-gradient-top: #e6e6b6;
+  --buzz-gradient-bottom: #c4d0da;
+  --buzz-card: #ffffff;
+  --buzz-card-foreground: #1f2328;
+  --buzz-muted-foreground: rgb(0 0 0 / 40%);
+  --buzz-soft-foreground: rgb(0 0 0 / 60%);
+  --buzz-hover-surface: rgb(0 0 0 / 4%);
+  --buzz-active-surface: rgb(0 0 0 / 7%);
+  --buzz-hairline: rgb(0 0 0 / 8%);
+  --buzz-chip-surface: rgb(0 0 0 / 6%);
+  background-image: linear-gradient(
+    to bottom,
+    var(--buzz-gradient-top),
+    var(--buzz-gradient-bottom)
+  );
+}
+
+.dark .buzz-page {
+  --buzz-gradient-top: #4a4616;
+  --buzz-gradient-bottom: #0a1423;
+  --buzz-card: #1a1a1a;
+  --buzz-card-foreground: #e6edf3;
+  --buzz-muted-foreground: rgb(255 255 255 / 40%);
+  --buzz-soft-foreground: rgb(255 255 255 / 60%);
+  --buzz-hover-surface: rgb(255 255 255 / 4%);
+  --buzz-active-surface: rgb(255 255 255 / 16%);
+  --buzz-hairline: rgb(255 255 255 / 8%);
+  --buzz-chip-surface: rgb(255 255 255 / 8%);
+}
+
+.buzz-page .buzz-content-card {
+  border-radius: 0.625rem;
+  background-color: var(--buzz-card);
+  color: var(--buzz-card-foreground);
+  box-shadow:
+    -1px -1px 0 0 color-mix(in srgb, var(--buzz-hairline) 45%, transparent),
+    0 0 4px 0 rgb(0 0 0 / 7%);
+}
+
+.dark .buzz-page .buzz-content-card {
+  box-shadow: 0 0 12px 0 rgb(0 0 0 / 35%);
+}
+
+/* The titlebar sits on the gradient: drop its opaque fill and bottom border. */
+:root[data-buzz-skin] .titlebar {
+  background: transparent;
+  border-bottom-color: transparent;
+}
+
+:root[data-buzz-skin] .titlebar-left,
+:root[data-buzz-skin] .titlebar-left-floating {
+  background: transparent;
+  box-shadow: none;
+}

@@ -9,6 +9,13 @@ import { LEGACY_DOBIUS_TERMINAL_THEMES } from './terminal-themes/legacy-dobius'
 
 export const APP_SKIN_NONE = 'none'
 
+/*
+ * The Buzz skin (ported from Block's Buzz) is stylesheet-driven rather than
+ * token-derived: buzz-skin.css scopes the whole look under a root attribute,
+ * with distinct light and dark variants keyed off the existing theme class.
+ */
+export const APP_SKIN_BUZZ = 'Buzz'
+
 /** Names shown in the App Skin picker, in catalog order. */
 export const APP_SKIN_NAMES: readonly string[] = Object.keys(LEGACY_DOBIUS_TERMINAL_THEMES)
 
@@ -98,6 +105,17 @@ export function applyAppSkin(
   skinName: string | undefined,
   root: HTMLElement = document.documentElement
 ): void {
+  // Buzz never sets inline tokens and never forces dark/light — both variants
+  // exist in buzz-skin.css and follow the theme class the theme effect owns.
+  if (skinName === APP_SKIN_BUZZ) {
+    for (const key of SKIN_TOKEN_KEYS) {
+      root.style.removeProperty(key)
+    }
+    root.setAttribute('data-buzz-skin', '')
+    return
+  }
+  root.removeAttribute('data-buzz-skin')
+
   const theme = skinName && skinName !== APP_SKIN_NONE ? LEGACY_DOBIUS_TERMINAL_THEMES[skinName] : null
 
   if (!theme) {

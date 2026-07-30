@@ -282,6 +282,7 @@ const ActivityPrototypePage = lazy(() => import('./components/activity/ActivityP
 const Settings = lazy(() => import('./components/settings/Settings'))
 const SkillsPage = lazy(() => import('./components/skills/SkillsPage'))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage'))
+const BuzzPage = lazy(() => import('./components/buzz/BuzzPage'))
 const WorkspaceSpacePage = lazy(() => import('./components/workspace-space/WorkspaceSpacePage'))
 const MobilePage = lazy(() => import('./components/mobile/MobilePage'))
 const QuickOpen = lazy(() => import('./components/QuickOpen'))
@@ -2294,7 +2295,12 @@ function App(): React.JSX.Element {
                         </RecoverableRenderErrorBoundary>
                       )
                     ) : null}
-                    <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+                    {/* Why: under the Buzz skin this column renders as a rounded
+                        floating card over the gradient canvas (buzz-skin.css). */}
+                    <div
+                      data-buzz-content-surface
+                      className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden"
+                    >
                       {stackedSidebarOpen ? (
                         <div className="titlebar">{titlebarMainStrip}</div>
                       ) : null}
@@ -2369,6 +2375,7 @@ function App(): React.JSX.Element {
                               {activeView === 'settings' ? <Settings /> : null}
                               {activeView === 'skills' ? <SkillsPage /> : null}
                               {activeView === 'agents' ? <AgentsPage /> : null}
+                              {activeView === 'buzz' ? <BuzzPage /> : null}
                               {activeView === 'tasks' ? <TaskPage /> : null}
                               {activeView === 'automations' ? <AutomationsPage /> : null}
                               {activeView === 'activity' ? <ActivityPrototypePage /> : null}

@@ -562,6 +562,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'buzz'
   previousViewBeforeTasks:
     | 'terminal'
     | 'settings'
@@ -574,6 +575,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'buzz'
   previousViewBeforeSettings:
     | 'terminal'
     | 'tasks'
@@ -586,6 +588,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'buzz'
   previousViewBeforeActivity:
     | 'terminal'
     | 'settings'
@@ -598,6 +601,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'buzz'
   previousViewBeforeAutomations:
     | 'terminal'
     | 'settings'
@@ -610,6 +614,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'buzz'
   previousViewBeforeSpace:
     | 'terminal'
     | 'settings'
@@ -622,6 +627,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'buzz'
   previousViewBeforeSkills:
     | 'terminal'
     | 'settings'
@@ -634,6 +640,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'buzz'
   previousViewBeforeKnowledge:
     | 'terminal'
     | 'settings'
@@ -646,6 +653,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'buzz'
   previousViewBeforeMobile:
     | 'terminal'
     | 'settings'
@@ -658,6 +666,7 @@ export type UISlice = {
     | 'knowledge'
     | 'dashboard'
     | 'manager'
+    | 'buzz'
   setActiveView: (view: UISlice['activeView']) => void
   taskPageData: {
     preselectedRepoId?: string

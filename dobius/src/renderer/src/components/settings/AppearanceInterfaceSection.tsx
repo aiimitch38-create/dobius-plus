@@ -31,7 +31,7 @@ import {
 import { translate } from '@/i18n/i18n'
 import type { UiLanguage } from '../../../../shared/ui-language'
 import { matchesSettingsSearch, normalizeSettingsSearchQuery } from './settings-search'
-import { APP_SKIN_NAMES, APP_SKIN_NONE } from '../../lib/app-skin'
+import { APP_SKIN_BUZZ, APP_SKIN_NAMES, APP_SKIN_NONE } from '../../lib/app-skin'
 
 type AppearanceInterfaceSectionProps = {
   settings: GlobalSettings
@@ -118,7 +118,9 @@ export function AppearanceInterfaceSection({
               value={settings.appSkin ?? APP_SKIN_NONE}
               onValueChange={(value) =>
                 updateSettings(
-                  value === APP_SKIN_NONE
+                  // Why: Buzz is stylesheet-driven with no matching terminal
+                  // palette, so it must not overwrite the terminal themes.
+                  value === APP_SKIN_NONE || value === APP_SKIN_BUZZ
                     ? { appSkin: value }
                     : // Why: "change everything" — a skin colors the app chrome
                       // AND the terminal (same palette exists in both catalogs).
@@ -131,6 +133,7 @@ export function AppearanceInterfaceSection({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={APP_SKIN_NONE}>None</SelectItem>
+                <SelectItem value={APP_SKIN_BUZZ}>{APP_SKIN_BUZZ}</SelectItem>
                 {APP_SKIN_NAMES.map((name) => (
                   <SelectItem key={name} value={name}>
                     {name}
