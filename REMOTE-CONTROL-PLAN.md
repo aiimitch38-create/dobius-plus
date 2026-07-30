@@ -32,6 +32,30 @@ It works. It is not a remote control. The core gaps:
 - **Bare visuals.** GitHub-dark, no motion, plain "Loading...", no empty
   states, no settings/unpair screen, no service worker.
 
+## Visual review (2026-07-30): I rendered the current screens
+
+Not just read the code, actually built the mobile bundle, served it, and
+screenshotted every screen at a 390px iPhone viewport with a mock connection.
+What I saw confirms and sharpens the redesign:
+
+- **Terminal screen**: on anything short of a full session, roughly 70% of the
+  screen is dead black void below a few lines of output. The top bar
+  (`● project / Tab N ▾`, history, `+`) and the full-width key bar are fine but
+  utilitarian. It reads as "a raw xterm in a wrapper," not a controlled remote.
+- **Switcher** (tap the title): a plain project-grouped list of tab NAMES only
+  (Tab 1 / Tab 2 / + tab in project). Zero status, activity, model, or context.
+  This is the only "overview" of everything running, and it is inadequate. It is
+  exactly what the session board replaces.
+- **History**: flat full-width rows (not cards), project name + one-line preview
+  + age + a blue Resume. No search, no status, no live indicator, no grouping.
+- **Pairing**: a generic centered card (`Dobius+`, instructions, a 000000
+  field, a dimmed button) floating in a large empty field. No brand character.
+
+Takeaways folded into the design: kill the dead space (the board fills the
+screen with real content; a short terminal gets a compact toolbar + context,
+not a void), make the overview status-rich (the switcher becomes the board),
+and give Pairing + empty states actual character.
+
 ## Codex design review (2026-07-30): folded in
 
 Codex reviewed this plan before any code and found six issues that would have
