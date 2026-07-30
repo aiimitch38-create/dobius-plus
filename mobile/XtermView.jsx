@@ -18,7 +18,7 @@ export default function XtermView({ connection, activeId }) {
     const term = new Terminal({
       fontFamily: "'SF Mono', Menlo, Consolas, monospace",
       fontSize: 13,
-      theme: { background: '#0D1117', foreground: '#E6EDF3', cursor: '#58A6FF' },
+      theme: { background: '#1F1E1D', foreground: '#F4F3EE', cursor: '#C15F3C' },
       cursorBlink: true,
       scrollback: 12000,
     });

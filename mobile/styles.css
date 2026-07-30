@@ -1,11 +1,23 @@
 :root {
-  --bg: #0D1117;
-  --surface: #161B22;
-  --border: #30363D;
-  --fg: #E6EDF3;
-  --dim: #8B949E;
-  --accent: #58A6FF;
-  --danger: #F85149;
+  /* Claude mobile-app palette (v1.0.43): warm dark grey, off-white text, clay
+   * accent. Grounded in Anthropic's documented colors (Crail #C15F3C, Pampas
+   * #F4F3EE, Cloudy #B1ADA1) rather than the old cold GitHub blue. Almost
+   * everything reads these vars, so this restyles every screen at once. */
+  --bg: #1F1E1D;          /* warm near-black canvas */
+  --surface: #292826;     /* warm dark grey: bars, cards */
+  --surface-2: #33322F;   /* raised surface: pressed / hover / active */
+  --border: #3A3836;      /* subtle warm hairline */
+  --fg: #F4F3EE;          /* Pampas off-white, high-legibility text */
+  --dim: #B1ADA1;         /* Cloudy warm grey, secondary text */
+  --accent: #C15F3C;      /* Crail clay, the Claude accent */
+  --accent-soft: rgba(193, 95, 60, 0.14);
+  --danger: #CC6B62;      /* warm red */
+  /* Status semantics (calm, warm-toned, reserved ONLY for session status) */
+  --status-working: #D0A24C;  /* amber: output flowing */
+  --status-done: #7FA069;     /* sage green: settled/idle-done */
+  --status-needs: #D9605A;    /* red: needs your input */
+  --status-idle: #6E6B64;     /* dim: nothing running */
+  --on-accent: #FBF7F2;       /* text on the clay accent */
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -66,7 +78,7 @@ button.primary {
   font-size: 16px;
   font-weight: 600;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 12px;
   cursor: pointer;
@@ -148,7 +160,7 @@ button.primary:disabled { opacity: 0.4; }
   cursor: pointer;
 }
 .switcher-item.active {
-  background: rgba(88, 166, 255, 0.12);
+  background: var(--accent-soft);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 .switcher-subnew {
@@ -199,7 +211,7 @@ button.primary:disabled { opacity: 0.4; }
   border-radius: 8px;
   cursor: pointer;
 }
-.key:active { background: var(--accent); color: #fff; }
+.key:active { background: var(--accent); color: var(--on-accent); }
 
 /* History */
 .pad { padding: 24px; text-align: center; }
@@ -210,7 +222,7 @@ button.primary:disabled { opacity: 0.4; }
   font-size: 13px;
   font-weight: 600;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 8px;
   cursor: pointer;
