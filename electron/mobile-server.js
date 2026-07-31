@@ -718,9 +718,17 @@ export function stopMobileServer() {
   return new Promise((resolve) => {
     if (!server) return resolve(getMobileServerStatus());
     let done = false;
-    const finish = () => { if (!done) { done = true; resolve(getMobileServerStatus()); } };
+    let timer = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (timer) clearTimeout(timer); // don't leave a live timer after close
+      resolve(getMobileServerStatus());
+    };
     try { server.close(finish); } catch { finish(); }
-    setTimeout(finish, 3000); // safety: never hang the caller if close stalls
+    // Safety net if close stalls; unref so it never keeps the process alive.
+    timer = setTimeout(finish, 3000);
+    if (timer && typeof timer.unref === 'function') timer.unref();
   });
 }
 
