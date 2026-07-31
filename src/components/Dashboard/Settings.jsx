@@ -130,6 +130,16 @@ export default function Settings() {
 
   useEffect(() => { refreshMobile(); }, [refreshMobile]);
 
+  // Poll while the server runs so the displayed pairing code + device list stay
+  // current. The server rotates the pairing code on a wrong-guess flood (audit
+  // MED-8 / Codex), so without this the desktop could keep showing a stale code
+  // that the phone can no longer use. Cheap: one status read every 5s.
+  useEffect(() => {
+    if (!mobileStatus?.running) return undefined;
+    const i = setInterval(refreshMobile, 5000);
+    return () => clearInterval(i);
+  }, [mobileStatus?.running, refreshMobile]);
+
   const toggleMobileServer = useCallback(async (on) => {
     setMobileBusy(true);
     setMobileError('');
