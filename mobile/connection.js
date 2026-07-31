@@ -16,6 +16,12 @@ export class Connection {
     this.shouldReconnect = true;
     this._reconnectTimer = null;
     this._pingTimer = null;
+    // Outbound queue (v1.0.43 resilience): user actions typed during a
+    // reconnect blip are buffered and flushed once re-authed, so a command
+    // typed while the link drops is delivered, not silently lost. Only
+    // deliberate, id-addressed actions queue; ephemeral/re-sent messages
+    // (auth, ping, listTerminals, attach, ...) are not.
+    this._queue = [];
   }
 
   onMessage(cb) { this.listeners.add(cb); return () => this.listeners.delete(cb); }
@@ -63,6 +69,7 @@ export class Connection {
         this.reconnectDelay = 1000;
         this._setStatus('authed');
         this._startPing();
+        this._flushQueue();
       }
       this._emit(msg);
     };
@@ -110,9 +117,26 @@ export class Connection {
   }
 
   send(obj) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    const open = this.ws && this.ws.readyState === WebSocket.OPEN;
+    // Send once authed, and let the `auth` handshake through while merely
+    // connected (else we'd deadlock: auth is sent before we are authed).
+    if (open && (this.status === 'authed' || obj?.type === 'auth')) {
       this.ws.send(JSON.stringify(obj));
+      return;
     }
+    // Not ready: queue deliberate, id-addressed user actions so they survive a
+    // blip; drop ephemeral messages, which the screens re-send on re-auth.
+    if (obj && (obj.type === 'input' || obj.type === 'kill')) {
+      this._queue.push(obj);
+      if (this._queue.length > 200) this._queue.shift(); // bound the buffer
+    }
+  }
+
+  _flushQueue() {
+    if (this._queue.length === 0) return;
+    const pending = this._queue;
+    this._queue = [];
+    for (const obj of pending) this.send(obj); // now authed, so these go out
   }
 
   close() {
