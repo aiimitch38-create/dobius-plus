@@ -43,9 +43,16 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
 
   // Reflect an ACTUAL subscription, not just permission (Codex Phase 5b P2), so
   // the bell keeps showing if the subscription was cleared/pruned server-side.
+  // When one exists, re-register in the background so the server entry is bound
+  // to the current device token (migrates any pre-token subscription so device
+  // removal can revoke it). enablePush is idempotent and won't re-prompt.
   useEffect(() => {
     let cancelled = false;
-    pushActive().then((active) => { if (!cancelled && active) setAlerts('on'); });
+    pushActive().then((active) => {
+      if (cancelled || !active) return;
+      setAlerts('on');
+      enablePush().catch(() => { /* best-effort token rebind */ });
+    });
     return () => { cancelled = true; };
   }, []);
   // Tick so relative times ("3m") refresh on quiet sessions: the server omits
