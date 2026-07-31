@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useSessions } from '../../hooks/useSessions';
 import { useStore } from '../../store/store';
 import ConversationCard from './ConversationCard';
+import ProjectTabsView from './ProjectTabsView';
 import Preview from './Preview';
 
 function timeAgo(ts) {
@@ -20,14 +21,24 @@ export default function Sidebar({ pinnedIds = [], onTogglePin, onResumeSession, 
   // across reloads. Fetched once on mount; updated whenever the toggle fires.
   const currentProjectPath = useStore((s) => s.currentProjectPath);
   const [projectScoped, setProjectScoped] = useState(false);
+  // View mode: 'tabs' = all tabs grouped by project across every window (Brett's
+  // request, the default); 'history' = the existing session feed (unchanged).
+  const [viewMode, setViewMode] = useState('tabs');
 
   useEffect(() => {
     let cancelled = false;
     window.electronAPI?.configGetSettings?.().then((s) => {
       if (cancelled) return;
       if (s?.sidebarFilterToProject !== undefined) setProjectScoped(!!s.sidebarFilterToProject);
+      if (s?.sidebarViewMode === 'tabs' || s?.sidebarViewMode === 'history') setViewMode(s.sidebarViewMode);
     });
     return () => { cancelled = true; };
+  }, []);
+
+  const setMode = useCallback(async (mode) => {
+    setViewMode(mode);
+    try { await window.electronAPI?.configUpdateSettings?.({ sidebarViewMode: mode }); }
+    catch (err) { console.warn('[Sidebar] persist view mode failed:', err.message); }
   }, []);
 
   const toggleProjectScope = useCallback(async () => {
@@ -107,21 +118,32 @@ export default function Sidebar({ pinnedIds = [], onTogglePin, onResumeSession, 
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header + project-scope toggle */}
+      {/* Header: Tabs|History view toggle + (History-only) project-scope toggle */}
       <div className="px-3 pt-3 pb-1 shrink-0 flex items-center justify-between gap-2">
-        <span
-          className="text-xs font-semibold uppercase tracking-wider"
-          style={{ color: 'var(--fg)', fontSize: '11px', letterSpacing: '0.1em' }}
-        >
-          Sessions
-        </span>
+        <div className="flex rounded overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+          {[['tabs', 'Tabs'], ['history', 'History']].map(([mode, label]) => (
+            <button
+              key={mode}
+              onClick={() => setMode(mode)}
+              title={mode === 'tabs' ? 'All tabs, grouped by project, across every window' : 'Session history'}
+              style={{
+                padding: '2px 10px', fontSize: 10, fontFamily: "'SF Mono', monospace",
+                color: viewMode === mode ? 'var(--bg)' : 'var(--dim)',
+                backgroundColor: viewMode === mode ? 'var(--accent)' : 'transparent',
+                border: 'none', cursor: 'pointer',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-2">
-          {currentProjectPath && (
+          {viewMode === 'history' && currentProjectPath && (
             <button
               onClick={toggleProjectScope}
               title={projectScoped
-                ? 'Showing only sessions from this project — click to show all'
-                : 'Showing all sessions — click to filter to this project'}
+                ? 'Showing only sessions from this project, click to show all'
+                : 'Showing all sessions, click to filter to this project'}
               style={{
                 background: projectScoped ? 'var(--surface-hover)' : 'transparent',
                 color: projectScoped ? 'var(--accent)' : 'var(--dim)',
@@ -141,7 +163,7 @@ export default function Sidebar({ pinnedIds = [], onTogglePin, onResumeSession, 
             className="text-xs italic"
             style={{ color: 'var(--dim)', fontSize: '10px' }}
           >
-            dbl-click to resume
+            {viewMode === 'tabs' ? 'tap to open' : 'dbl-click to resume'}
           </span>
         </div>
       </div>
@@ -176,6 +198,10 @@ export default function Sidebar({ pinnedIds = [], onTogglePin, onResumeSession, 
         </div>
       </div>
 
+      {viewMode === 'tabs' ? (
+        <ProjectTabsView search={search} onResumeSession={onResumeSession} />
+      ) : (
+      <>
       {/* Closed tabs section */}
       {recentlyClosedTabs.length > 0 && (
         <div className="shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -318,6 +344,8 @@ export default function Sidebar({ pinnedIds = [], onTogglePin, onResumeSession, 
           </>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
