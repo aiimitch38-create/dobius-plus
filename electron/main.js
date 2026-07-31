@@ -1787,7 +1787,7 @@ function setupMobileServerHandlers() {
     // If the server is running, restart it so the new bind takes effect.
     const status = getMobileServerStatus();
     if (status.running) {
-      stopMobileServer();
+      await stopMobileServer(); // await close so the restart doesn't hit EADDRINUSE
       return startMobileServer();
     }
     return getMobileServerStatus();
@@ -1797,7 +1797,7 @@ function setupMobileServerHandlers() {
   ipcMain.handle('mobileServer:provisionCert', async () => {
     const res = await provisionCert();
     if (res.ok && getMobileServerStatus().running) {
-      stopMobileServer();
+      await stopMobileServer(); // await close so HTTPS restart doesn't hit EADDRINUSE
       await startMobileServer();
     }
     return { ...res, status: getMobileServerStatus() };

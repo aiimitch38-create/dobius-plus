@@ -705,13 +705,23 @@ export function stopMobileServer() {
   lastTerminalsSig = null;
   stopPowerAssertion();
   if (wss) { try { wss.close(); } catch { /* noop */ } wss = null; }
-  if (httpServer) { try { httpServer.close(); } catch { /* noop */ } httpServer = null; }
+  // Capture the server so we can AWAIT its close before a caller restarts on the
+  // same port. Sockets + wss are already closed above, so close() completes
+  // promptly rather than waiting on live connections. Codex v1.0.43 Phase 4 P2.
+  const server = httpServer;
+  httpServer = null;
   boundAddress = null;
   serveInfo = null;
   pairingCode = null;
   pairAttempts = 0;
   updateMobileServerConfig({ enabled: false });
-  return getMobileServerStatus();
+  return new Promise((resolve) => {
+    if (!server) return resolve(getMobileServerStatus());
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(getMobileServerStatus()); } };
+    try { server.close(finish); } catch { finish(); }
+    setTimeout(finish, 3000); // safety: never hang the caller if close stalls
+  });
 }
 
 /** Regenerate the pairing code (only meaningful while running). */
