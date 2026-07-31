@@ -7,7 +7,7 @@ import {
   HISTORY_PATH, STATS_PATH, SETTINGS_PATH, CLAUDE_JSON_PATH, MCP_BRIDGE_CONFIG, PLANS_DIR, SKILLS_DIR, PLUGINS_DIR, PROJECTS_DIR,
   parseJsonl, streamJsonl, timeAgo, pathExists, mapLimit,
 } from './data-utils.js';
-import { getSettings, getManualProjects, getProjectDisplayNames, getHiddenProjects } from './config-manager.js';
+import { getSettings, getManualProjects, getProjectDisplayNames, getHiddenProjects, getAllProjectsWithTabs, getSessionTabMap } from './config-manager.js';
 
 /**
  * Load session history from ~/.claude/history.jsonl
@@ -252,6 +252,66 @@ export async function loadAllSessions(projectFilter) {
   return sessions
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
     .slice(0, 500);
+}
+
+/**
+ * Cross-window "tabs by project" for the Cmd+B sidebar (Brett task). READ-ONLY
+ * and purely additive: it reuses the existing history/session machinery
+ * (loadAllSessions) and the existing session<->tab links (getSessionTabMap)
+ * without modifying either, and never writes config. Returns
+ *   [{ path, name, lastActiveAt, tabs: [{ id, label, kind, url?, sessionId?,
+ *      preview?, status?, lastActiveAt }] }]
+ * with projects and their tabs sorted most-recent-first. `label` is the tab's
+ * own persisted label (identical to the tab bar), so naming can't drift.
+ * Assembled from data that survives quit/restart (config.projects[*].tabs +
+ * sessionTabMap + transcripts).
+ */
+export async function getAllProjectTabs() {
+  // Respect the same hidden/removed-project suppression the project list uses, so
+  // a project the user deliberately hid doesn't reappear here. Codex.
+  const hidden = new Set(getHiddenProjects());
+  const projects = getAllProjectsWithTabs().filter((p) => !hidden.has(p.path)); // [{ path, tabs, tabCounter }]
+  if (projects.length === 0) return [];
+  const displayNames = getProjectDisplayNames() || {};
+
+  // Reverse the sessionTabMap to tabId -> { sessionId, at }. A tab id can be
+  // reused across sessions, so keep the most recent link per tab id.
+  const tabMap = getSessionTabMap() || {};
+  const byTab = new Map();
+  for (const [sessionId, link] of Object.entries(tabMap)) {
+    if (!link || typeof link !== 'object' || !link.tabId) continue;
+    const at = link.lastRunningAt || link.capturedAt || 0;
+    const prev = byTab.get(link.tabId);
+    if (!prev || at >= prev.at) byTab.set(link.tabId, { sessionId, at });
+  }
+
+  // One global session index. Currently-open tabs always link to recent
+  // sessions, so the 500 cap can't realistically miss one; a miss degrades
+  // gracefully to a label-only row (never an error). Codex design review.
+  const sessions = await loadAllSessions();
+  const sessionById = new Map(sessions.map((s) => [s.sessionId, s]));
+
+  const result = projects.map(({ path, tabs }) => {
+    const name = displayNames[path] || path.split('/').filter(Boolean).pop() || path;
+    const outTabs = (Array.isArray(tabs) ? tabs : []).map((t) => {
+      const link = t && t.id ? byTab.get(t.id) : null;
+      const sess = link ? sessionById.get(link.sessionId) : null;
+      const lastActiveAt = sess?.timestamp || link?.at || t?.createdAt || 0;
+      return {
+        id: t?.id,
+        label: t?.label || 'Tab',
+        kind: t?.kind || 'terminal',
+        url: t?.url || undefined,
+        sessionId: link?.sessionId || undefined,
+        preview: sess?.preview || undefined,
+        status: sess?.status || undefined,
+        lastActiveAt,
+      };
+    }).filter((t) => t.id).sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+    const projLastActive = outTabs.length ? outTabs[0].lastActiveAt : 0;
+    return { path, name, lastActiveAt: projLastActive, tabs: outTabs };
+  });
+  return result.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
 }
 
 /**

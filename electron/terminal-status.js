@@ -23,11 +23,12 @@
 
 const TAB_STATUS_VALUES = new Set(['working', 'done', 'needs']);
 const MARKER_RE = /\x1b\]777;dobius;(working|done|needs)\x07/g;
-const QUIET_MS = 1500;          // silence before a working tab settles to done
+const QUIET_MS = 1500;          // silence before a working tab settles to IDLE
+const DONE_GUARD_MS = 800;      // after a hook 'done', ignore its own trailing bytes
 const TAIL_KEEP = 64;           // bytes retained to catch a marker split across chunks
 const MAX_RECENT_EXITS = 50;
 
-// id -> { status, lastActivityAt, hookOwned, tail }
+// id -> { status, lastActivityAt, hookOwned, doneAt, tail }
 const live = new Map();
 // bounded FIFO of { id, cwd, project, exitCode, signal, status, at }
 const recentExits = [];
@@ -47,7 +48,7 @@ function projectFromId(id, cwd) {
 export function ingest(id, data, now = Date.now()) {
   if (!id || typeof data !== 'string') return null;
   let st = live.get(id);
-  if (!st) { st = { status: 'working', lastActivityAt: now, hookOwned: false, tail: '' }; live.set(id, st); }
+  if (!st) { st = { status: 'working', lastActivityAt: now, hookOwned: false, doneAt: 0, tail: '' }; live.set(id, st); }
   st.lastActivityAt = now;
 
   const combined = st.tail + data;
@@ -61,23 +62,29 @@ export function ingest(id, data, now = Date.now()) {
     const state = lastMatch[1];
     st.status = state;
     st.hookOwned = state !== 'done'; // working/needs own; done releases
+    st.doneAt = state === 'done' ? now : 0; // stamp so trailing bytes don't clobber green
     // Keep only what follows the processed marker so it is not re-matched.
     st.tail = combined.slice(lastMatch.index + lastMatch[0].length).slice(-TAIL_KEEP);
   } else {
-    // Output flowing with no marker -> working, unless the tab is needs-input
-    // or a hook currently owns the state (a long quiet tool call stays working
-    // without re-asserting). Mirrors useTabActivity's data handler.
-    if (st.status !== 'needs' && !st.hookOwned) st.status = 'working';
+    // Output flowing with no marker -> working, unless the tab is needs-input,
+    // a hook currently owns the state (a long quiet tool call stays working), OR
+    // a managed 'done' was just set and this is its own trailing output (guard,
+    // so a finished Claude turn stays green instead of settling to idle).
+    // Mirrors useTabActivity + the recentHookDone guard on the desktop.
+    const recentlyDone = st.status === 'done' && st.doneAt && now - st.doneAt < DONE_GUARD_MS;
+    if (st.status !== 'needs' && !st.hookOwned && !recentlyDone) st.status = 'working';
     st.tail = combined.slice(-TAIL_KEEP);
   }
   return st.status;
 }
 
-/** Settle tick: non-hook-owned working tabs go done after QUIET_MS of silence. */
+/** Settle tick: a non-hook-owned working tab (a plain shell) goes IDLE (gray)
+ * after QUIET_MS of silence, matching the desktop. Green ('done') only ever
+ * comes from a managed Claude/Codex hook marker, never from settling. */
 export function settle(now = Date.now()) {
   for (const st of live.values()) {
     if (st.status === 'working' && !st.hookOwned && now - st.lastActivityAt > QUIET_MS) {
-      st.status = 'done';
+      st.status = 'idle';
     }
   }
 }

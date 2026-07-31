@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store/store';
 import { useStats } from '../../hooks/useStats';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -86,6 +86,13 @@ export default function DashboardView() {
   const [sessionCount, setSessionCount] = useState(0);
   const runningCount = Object.keys(runningAgents).length;
 
+  // Keep the selected tab visible: with ~22 tabs the active one can sit off-screen
+  // in the horizontal scroller, so scroll it into view when it changes.
+  const activeTabRef = useRef(null);
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [dashboardTab]);
+
   // Clear board notification badge when user switches to Board tab
   useEffect(() => {
     if (dashboardTab === 'board' && boardNotification) {
@@ -136,8 +143,9 @@ export default function DashboardView() {
         {TABS.map((tab) => (
           <button
             key={tab.id}
+            ref={dashboardTab === tab.id ? activeTabRef : null}
             onClick={() => setDashboardTab(tab.id)}
-            className="relative px-3 py-2.5 text-xs transition-colors duration-150"
+            className="relative px-3 py-2.5 text-xs transition-colors duration-150 shrink-0"
             style={{
               color: dashboardTab === tab.id ? 'var(--fg)' : 'var(--dim)',
               fontWeight: dashboardTab === tab.id ? 500 : 400,

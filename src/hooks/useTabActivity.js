@@ -9,12 +9,14 @@ const TICK_MS = 1000;    // how often the settle check runs
  * deterministic Claude hook markers (see useTerminal's OSC 777 handler).
  *
  * - Output flowing  → 'working' (yellow)
- * - ~1.5s of quiet  → 'done' (green)
+ * - ~1.5s of quiet  → 'idle' (gray)
  *
  * It deliberately NEVER sets or clears 'needs' (red): that state is owned by the
  * managed Claude hook so a repainting permission dialog can't flip it, and it
  * persists until the user actually answers (which fires a working/done marker).
- * This layer also gives plain shell commands (e.g. a build) a yellow→green dot.
+ * This layer gives plain shell commands (e.g. a build) a yellow→gray dot. Green
+ * ('done') is reserved for a managed Claude/Codex turn finishing (set by the OSC
+ * hook in useTerminal), never a plain shell, per Brett's tab-status spec.
  *
  * Call once at the ProjectView level — a single onTerminalData listener routes
  * data to per-tab timers, mirroring useAgentActivity.
@@ -28,11 +30,17 @@ export function useTabActivity() {
 
     const removeDataListener = window.electronAPI.onTerminalData((termId) => {
       lastDataTs.current[termId] = Date.now();
-      // Output is flowing → working, unless the hook has flagged this tab as
-      // needing a response (red is hook-owned and must survive dialog repaints).
-      if (useStore.getState().tabStatus[termId] !== 'needs') {
-        useStore.getState().setTabStatus(termId, 'working');
-      }
+      const { tabStatus, recentHookDone, setTabStatus } = useStore.getState();
+      const st = tabStatus[termId];
+      // 'needs' (red) is hook-owned and must survive dialog repaints.
+      if (st === 'needs') return;
+      // Don't clobber a managed turn's green 'done' back to yellow: the 'done'
+      // OSC marker's own trailing bytes also arrive here (either listener order),
+      // and clobbering would let the settler turn a finished Claude turn gray.
+      // Real plain-shell activity after this brief window still flows yellow.
+      if (st === 'done' && recentHookDone[termId] && Date.now() - recentHookDone[termId] < 800) return;
+      // Output flowing → working (yellow).
+      setTabStatus(termId, 'working');
     });
 
     tickTimer.current = setInterval(() => {
@@ -50,7 +58,9 @@ export function useTabActivity() {
         if (tabStatus[termId] === 'working'
             && !hookOwnedTabs[termId]
             && now - ts > QUIET_MS) {
-          setTabStatus(termId, 'done');
+          // Plain shell settles to gray (idle), NOT green. Green is only for a
+          // managed Claude/Codex 'done' marker (hook-owned). Brett's spec.
+          setTabStatus(termId, 'idle');
         }
       }
     }, TICK_MS);

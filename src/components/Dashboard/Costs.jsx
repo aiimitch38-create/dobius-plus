@@ -88,7 +88,7 @@ export default function Costs() {
       className="px-2 py-1 rounded text-xs transition-colors"
       style={{
         backgroundColor: sortBy === id ? 'var(--accent)' : 'transparent',
-        color: sortBy === id ? '#000' : 'var(--dim)',
+        color: sortBy === id ? 'var(--bg)' : 'var(--dim)',
         border: sortBy === id ? 'none' : '1px solid var(--border)',
       }}
     >
