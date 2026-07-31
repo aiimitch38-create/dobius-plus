@@ -23,7 +23,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { app, powerSaveBlocker } from 'electron';
-import { getMobileServerConfig, updateMobileServerConfig, setSessionTabLink } from './config-manager.js';
+import { getMobileServerConfig, updateMobileServerConfig, setSessionTabLink, removePushSubscriptionsByToken } from './config-manager.js';
 import {
   listTerminals, subscribeTerminal, writeTerminal, terminalHasDesktopAttached,
   resizeTerminal, killTerminal, createTerminal,
@@ -534,6 +534,12 @@ export async function startMobileServer() {
     const m = h.match(/^Bearer\s+([0-9a-f]{64})$/i);
     return m && knownToken(m[1]);
   }
+  // The validated bearer token (or null), so push subscriptions can be bound to
+  // the paired device. Only call after bearerOk(req) has passed.
+  function bearerToken(req) {
+    const m = (req.headers.authorization || '').match(/^Bearer\s+([0-9a-f]{64})$/i);
+    return m ? m[1] : null;
+  }
 
   // POST /voice/intent  { transcript: string, tabId?: string }
   // Two modes:
@@ -604,7 +610,7 @@ export async function startMobileServer() {
   // PushSubscription so the Mac can notify it when a session needs input / fails.
   expApp.post('/push/subscribe', (req, res) => {
     if (!bearerOk(req)) return res.status(401).json({ ok: false, error: 'auth' });
-    const entry = subscribePush(req.body?.subscription);
+    const entry = subscribePush(req.body?.subscription, bearerToken(req));
     if (!entry) return res.status(400).json({ ok: false, error: 'invalid subscription' });
     res.json({ ok: true });
   });
@@ -846,6 +852,8 @@ export function removeMobileDevice(idOrToken) {
     }
     activeSocketsByToken.delete(removed.token);
   }
+  // Revoke push too, so the removed phone stops getting notifications. Codex P1.
+  removePushSubscriptionsByToken(removed.token);
   return getMobileServerStatus();
 }
 

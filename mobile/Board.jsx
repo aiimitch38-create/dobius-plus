@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import SessionCard from './SessionCard';
 import VoiceButton from './VoiceButton';
-import { pushSupported, pushGranted, enablePush } from './push-client';
+import { pushSupported, pushActive, enablePush } from './push-client';
 import { timeAgo } from './format';
 
 // Group terminals by project PATH, preserving first-seen order. Keyed on path,
@@ -38,8 +38,16 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
   const [recentExits, setRecentExits] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [projects, setProjects] = useState([]);
-  const [alerts, setAlerts] = useState(() => pushGranted() ? 'on' : 'off'); // off | on | error
+  const [alerts, setAlerts] = useState('off'); // off | on | error
   const [alertMsg, setAlertMsg] = useState('');
+
+  // Reflect an ACTUAL subscription, not just permission (Codex Phase 5b P2), so
+  // the bell keeps showing if the subscription was cleared/pruned server-side.
+  useEffect(() => {
+    let cancelled = false;
+    pushActive().then((active) => { if (!cancelled && active) setAlerts('on'); });
+    return () => { cancelled = true; };
+  }, []);
   // Tick so relative times ("3m") refresh on quiet sessions: the server omits
   // lastActivityAt from its change signature, so without this the board only
   // re-renders on a status change and a time could stay "just now". Codex P3.

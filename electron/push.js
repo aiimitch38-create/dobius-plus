@@ -28,9 +28,9 @@ export function getVapidPublicKey() {
   return ensureVapid().publicKey;
 }
 
-/** Store a phone's PushSubscription. Returns the stored entry or null. */
-export function subscribePush(sub) {
-  return addPushSubscription(sub);
+/** Store a phone's PushSubscription, bound to its paired device token. */
+export function subscribePush(sub, token) {
+  return addPushSubscription(sub, token);
 }
 
 /**

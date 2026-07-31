@@ -24,6 +24,18 @@ export function pushGranted() {
   return typeof Notification !== 'undefined' && Notification.permission === 'granted';
 }
 
+// True only if there is an ACTUAL active push subscription (permission alone is
+// not enough: it may have been cleared/pruned). Async. Codex Phase 5b P2.
+export async function pushActive() {
+  if (!pushSupported() || !pushGranted()) return false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    return !!(await reg.pushManager.getSubscription());
+  } catch {
+    return false;
+  }
+}
+
 /** Request permission (user gesture), subscribe, and register with the Mac. */
 export async function enablePush() {
   if (!pushSupported()) return { ok: false, error: 'Notifications need HTTPS (enable it in Dobius Settings) and an installed app.' };

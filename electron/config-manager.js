@@ -1054,12 +1054,15 @@ export function getPushSubscriptions() {
   return Array.isArray(list) ? list : [];
 }
 
-export function addPushSubscription(sub) {
+export function addPushSubscription(sub, token) {
   if (!sub || typeof sub.endpoint !== 'string' || !sub.endpoint.startsWith('https://')) return null;
   if (!sub.keys || typeof sub.keys.p256dh !== 'string' || typeof sub.keys.auth !== 'string') return null;
   const entry = {
     endpoint: sub.endpoint.slice(0, 1000),
     keys: { p256dh: sub.keys.p256dh.slice(0, 200), auth: sub.keys.auth.slice(0, 200) },
+    // Bind to the paired device's token so removing the device revokes push
+    // too (else a removed phone keeps getting notifications). Codex Phase 5b P1.
+    token: typeof token === 'string' ? token : null,
     addedAt: Date.now(),
   };
   const config = loadConfig();
@@ -1076,6 +1079,16 @@ export function removePushSubscription(endpoint) {
   const config = loadConfig();
   const before = (config.pushSubscriptions || []).length;
   config.pushSubscriptions = (config.pushSubscriptions || []).filter((s) => s.endpoint !== endpoint);
+  if (config.pushSubscriptions.length !== before) saveConfig(config);
+}
+
+// Remove every push subscription bound to a device token (called when a device
+// is unpaired, so it stops receiving notifications). Codex Phase 5b P1.
+export function removePushSubscriptionsByToken(token) {
+  if (typeof token !== 'string' || !token) return;
+  const config = loadConfig();
+  const before = (config.pushSubscriptions || []).length;
+  config.pushSubscriptions = (config.pushSubscriptions || []).filter((s) => s.token !== token);
   if (config.pushSubscriptions.length !== before) saveConfig(config);
 }
 
