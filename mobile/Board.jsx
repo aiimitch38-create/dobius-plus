@@ -34,6 +34,8 @@ function rank(g) {
 export default function Board({ connection, status, onOpen, onShowHistory }) {
   const [terminals, setTerminals] = useState([]);
   const [recentExits, setRecentExits] = useState([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [projects, setProjects] = useState([]);
   // Tick so relative times ("3m") refresh on quiet sessions: the server omits
   // lastActivityAt from its change signature, so without this the board only
   // re-renders on a status change and a time could stay "just now". Codex P3.
@@ -50,6 +52,11 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
       } else if (msg.type === 'terminals') {
         setTerminals(msg.list || []);
         setRecentExits(msg.recentExits || []);
+      } else if (msg.type === 'projects') {
+        setProjects(msg.list || []);
+      } else if (msg.type === 'terminalCreated') {
+        setPickerOpen(false);
+        onOpen(msg.id); // jump straight into the new session
       }
     });
     if (connection.status === 'authed') connection.send({ type: 'listTerminals' });
@@ -72,7 +79,14 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
       <header className="board-header">
         <div className="board-title-row">
           <h1 className="board-title">Sessions</h1>
-          <button className="icon-btn" onClick={onShowHistory} aria-label="Chat history">☷</button>
+          <div className="board-actions">
+            <button className="icon-btn" onClick={onShowHistory} aria-label="Chat history">☷</button>
+            <button
+              className="icon-btn"
+              onClick={() => { setPickerOpen(true); connection.send({ type: 'listProjects' }); }}
+              aria-label="New session"
+            >+</button>
+          </div>
         </div>
         <div className="board-summary">
           <span className="conn-pill">
@@ -124,6 +138,28 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
           </section>
         )}
       </main>
+
+      {pickerOpen && (
+        <div className="sheet-backdrop" onClick={() => setPickerOpen(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-handle" aria-hidden="true" />
+            <div className="sheet-title">New session in…</div>
+            <div className="sheet-list">
+              {projects.length === 0 && <div className="sheet-empty">Loading projects…</div>}
+              {projects.map((p) => (
+                <button
+                  key={p.path}
+                  className="sheet-item"
+                  onClick={() => connection.send({ type: 'createTerminal', cwd: p.path })}
+                >
+                  <span className="card-title">{p.name}</span>
+                  <span className="card-sub">{p.path}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

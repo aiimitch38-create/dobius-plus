@@ -411,3 +411,61 @@ button.primary:disabled { opacity: 0.4; }
 .exit-dot.ok { background: var(--status-done); }
 .exit-dot.bad { background: var(--status-needs); }
 .exit-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.board-actions { display: flex; gap: 8px; }
+
+/* New-session project picker (bottom sheet). */
+.sheet-backdrop {
+  position: fixed; inset: 0; z-index: 20;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex; align-items: flex-end;
+}
+.sheet {
+  width: 100%; max-height: 70dvh;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border-top-left-radius: 20px; border-top-right-radius: 20px;
+  border-top: 1px solid var(--border);
+  padding: 8px 12px calc(env(safe-area-inset-bottom) + 16px);
+  animation: sheet-up 0.22s ease-out;
+}
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
+.sheet-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--border); margin: 6px auto 12px;
+}
+.sheet-title {
+  font-size: 13px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--dim); padding: 0 8px 8px;
+}
+.sheet-list { overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.sheet-item {
+  width: 100%; display: flex; flex-direction: column; gap: 3px;
+  padding: 13px 12px; margin-bottom: 4px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+  color: var(--fg); text-align: left; cursor: pointer;
+}
+.sheet-item:active { background: var(--surface-2); }
+.sheet-item .card-sub {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-family: 'SF Mono', Menlo, monospace; font-size: 11px;
+}
+.sheet-empty { padding: 20px; text-align: center; color: var(--dim); font-size: 13px; }
+
+/* Stop control + confirm bar (terminal). */
+.stop-btn { color: var(--status-needs); font-size: 15px; }
+.confirm-bar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px;
+  background: rgba(217, 96, 90, 0.12);
+  border-bottom: 1px solid rgba(217, 96, 90, 0.3);
+  font-size: 13px;
+}
+.confirm-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.confirm-cancel, .confirm-stop {
+  padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.confirm-cancel { background: var(--surface-2); color: var(--fg); border: 1px solid var(--border); }
+.confirm-stop { background: var(--status-needs); color: var(--on-accent); border: none; }

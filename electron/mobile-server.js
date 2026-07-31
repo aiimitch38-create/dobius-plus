@@ -27,7 +27,7 @@ import {
   listTerminals, subscribeTerminal, writeTerminal, terminalHasDesktopAttached,
   resizeTerminal, killTerminal, createTerminal,
 } from './terminal-manager.js';
-import { loadAllSessions, loadTranscript } from './data-service.js';
+import { loadAllSessions, loadTranscript, listProjects } from './data-service.js';
 import { peekReply } from './voice-bridge.js';
 import { getVoiceConductorTabId } from './voice-conductor.js';
 import { snapshot as terminalStatusSnapshot } from './terminal-status.js';
@@ -202,6 +202,26 @@ function broadcastTerminalsIfChanged() {
   }
 }
 
+// Known projects the phone may spawn a terminal in: manual + session-bearing
+// projects (via listProjects().decodedPath). Used for the picker AND as the
+// createTerminal allowlist, so a paired token cannot spawn a shell in an
+// arbitrary cwd. Codex remote-plan #5.
+async function knownProjectList() {
+  try {
+    const projs = await listProjects();
+    return (projs || [])
+      .map((p) => p.decodedPath)
+      .filter((pth) => typeof pth === 'string' && pth)
+      .map((pth) => ({ path: pth, name: pth.split('/').filter(Boolean).pop() || pth }));
+  } catch {
+    return [];
+  }
+}
+async function isKnownProjectPath(pth) {
+  if (typeof pth !== 'string' || !pth) return false;
+  return (await knownProjectList()).some((p) => p.path === pth);
+}
+
 function handleAuthedMessage(socket, msg, subs) {
   switch (msg.type) {
     case 'ping':
@@ -265,16 +285,30 @@ function handleAuthedMessage(socket, msg, subs) {
       if (typeof msg.id === 'string') killTerminal(msg.id);
       break;
 
+    case 'listProjects':
+      knownProjectList()
+        .then((list) => wsSend(socket, { type: 'projects', list }))
+        .catch(() => wsSend(socket, { type: 'projects', list: [] }));
+      break;
+
     case 'createTerminal': {
-      // Phone-spawned PTY (no desktop tab). Desktop tab-sync is future work.
-      const cwd = typeof msg.cwd === 'string' ? msg.cwd : os.homedir();
-      const id = `term-mobile-${Date.now()}`;
-      try {
-        createTerminal(id, cwd, null);
-        wsSend(socket, { type: 'terminalCreated', id });
-      } catch (err) {
-        wsSend(socket, { type: 'error', message: String(err?.message || err) });
-      }
+      // Phone-spawned PTY (no desktop tab; labeled remote-only on the board).
+      // The cwd MUST be a known project (allowlist), never an arbitrary path,
+      // so a paired token cannot open a shell anywhere on disk. Codex #5.
+      const cwd = typeof msg.cwd === 'string' ? msg.cwd : '';
+      isKnownProjectPath(cwd).then((ok) => {
+        if (!ok) {
+          wsSend(socket, { type: 'error', message: 'Unknown project' });
+          return;
+        }
+        const id = `term-mobile-${Date.now()}`;
+        try {
+          createTerminal(id, cwd, null);
+          wsSend(socket, { type: 'terminalCreated', id });
+        } catch (err) {
+          wsSend(socket, { type: 'error', message: String(err?.message || err) });
+        }
+      });
       break;
     }
 

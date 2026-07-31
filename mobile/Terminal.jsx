@@ -56,6 +56,7 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
   const [terminals, setTerminals] = useState([]);
   const [activeId, setActiveId] = useState(initialId || null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
 
   const refreshList = useCallback(() => {
     connection.send({ type: 'listTerminals' });
@@ -122,9 +123,28 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
           </span>
           <span className="chevron">{switcherOpen ? '▴' : '▾'}</span>
         </button>
+        {activeId && (
+          <button className="icon-btn stop-btn" onClick={() => setConfirmStop(true)} aria-label="Stop session">■</button>
+        )}
         <button className="icon-btn" onClick={onShowHistory} aria-label="Chat history">☷</button>
         <button className="icon-btn" onClick={newTerminalHere} aria-label="New terminal">+</button>
       </header>
+
+      {confirmStop && (
+        <div className="confirm-bar">
+          <span>Stop {active ? `${active.projectName} / ${active.tabLabel}` : 'this session'}?</span>
+          <div className="confirm-actions">
+            <button className="confirm-cancel" onClick={() => setConfirmStop(false)}>Cancel</button>
+            <button
+              className="confirm-stop"
+              onClick={() => {
+                if (activeId) connection.send({ type: 'kill', id: activeId });
+                setConfirmStop(false);
+              }}
+            >Stop</button>
+          </div>
+        </div>
+      )}
 
       {switcherOpen && (
         <div className="switcher">
