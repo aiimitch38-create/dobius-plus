@@ -99,6 +99,14 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
     return off;
   }, [connection, refreshList]);
 
+  // Switch to a deep-linked session even when already mounted on the terminal
+  // screen: a push tapped while here updates initialId (the openTabId prop) but
+  // the useState initializer above only read it once, so without this the screen
+  // stayed on the old terminal. Audit MED-12 (Codex follow-up).
+  useEffect(() => {
+    if (initialId) setActiveId(initialId);
+  }, [initialId]);
+
   // Close the stop-confirm if the session it named has since exited/vanished.
   useEffect(() => {
     if (confirmStop && !terminals.some((t) => t.id === confirmStop.id)) setConfirmStop(null);
