@@ -65,13 +65,20 @@ export class Connection {
       if (this.ws !== ws) return;
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
+      let justAuthed = false;
       if (msg.type === 'authed') {
         this.reconnectDelay = 1000;
         this._setStatus('authed');
         this._startPing();
-        this._flushQueue();
+        justAuthed = true;
       }
+      // Emit FIRST so screens re-attach their terminal on `authed`, THEN flush
+      // queued input, so the server has the subscription back before the queued
+      // keystrokes replay (else the input would run unseen on the Mac). The
+      // XtermView attach handler runs synchronously during _emit, ahead of the
+      // flush. Codex v1.0.43 Phase 3c P2.
       this._emit(msg);
+      if (justAuthed) this._flushQueue();
     };
 
     ws.onclose = (e) => {

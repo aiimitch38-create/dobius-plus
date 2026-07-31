@@ -54,6 +54,23 @@ export default function XtermView({ connection, activeId }) {
     };
   }, [connection]);
 
+  // Re-subscribe to the active terminal (attach + a repaint resize). Shared by
+  // the activeId-change effect and the reconnect handler.
+  const reattach = () => {
+    if (!activeId) return;
+    connection.send({ type: 'attach', id: activeId });
+    const fit = fitRef.current;
+    const term = termRef.current;
+    if (fit && term) {
+      try {
+        fit.fit();
+        const { cols, rows } = term;
+        connection.send({ type: 'resize', id: activeId, cols, rows: Math.max(1, rows - 1) });
+        setTimeout(() => connection.send({ type: 'resize', id: activeId, cols, rows }), 80);
+      } catch { /* noop */ }
+    }
+  };
+
   // Stream server output for the active terminal.
   useEffect(() => {
     const off = connection.onMessage((msg) => {
@@ -61,12 +78,20 @@ export default function XtermView({ connection, activeId }) {
         termRef.current?.write(msg.data);
       } else if (msg.type === 'exit' && msg.id === activeId) {
         termRef.current?.write('\r\n\x1b[2m[process exited]\x1b[0m\r\n');
+      } else if (msg.type === 'authed') {
+        // Reconnected: the server dropped our subscription on close, and
+        // activeId is unchanged so the attach effect below won't re-run. Re-
+        // attach here so output resumes (and, per connection.js, this runs
+        // before queued input is flushed). Codex v1.0.43 Phase 3c P2.
+        reattach();
       }
     });
     return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection, activeId]);
 
-  // Attach/detach when the active terminal changes.
+  // Attach/detach when the active terminal changes. The two-resize repaint
+  // that forces a TUI (Claude Code) to redraw on attach lives in reattach().
   useEffect(() => {
     const prev = prevIdRef.current;
     if (prev && prev !== activeId) {
@@ -74,26 +99,11 @@ export default function XtermView({ connection, activeId }) {
     }
     if (activeId && activeId !== prev) {
       termRef.current?.reset();
-      connection.send({ type: 'attach', id: activeId });
-      const fit = fitRef.current;
-      const term = termRef.current;
-      if (fit && term) {
-        try {
-          fit.fit();
-          const { cols, rows } = term;
-          // Two resizes (rows-1 then rows) force a SIGWINCH so a TUI like
-          // Claude Code repaints its whole screen on attach. The server's
-          // replay buffer is empty for an idle or freshly-restored terminal,
-          // so without this the pane looks blank until the next keystroke.
-          connection.send({ type: 'resize', id: activeId, cols, rows: Math.max(1, rows - 1) });
-          setTimeout(() => {
-            connection.send({ type: 'resize', id: activeId, cols, rows });
-          }, 80);
-        } catch { /* noop */ }
-      }
+      reattach();
       termRef.current?.focus();
     }
     prevIdRef.current = activeId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection, activeId]);
 
   return <div className="xterm-host" ref={hostRef} />;
