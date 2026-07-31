@@ -529,13 +529,14 @@ export const useStore = create((set, get) => ({
     const session = typeof arg === 'string' ? { sessionId: arg } : (arg || {});
     const { sessionId, sizeMB } = session;
     if (!sessionId || sessionId.length > 100 || !/^[a-zA-Z0-9][\w-]*$/.test(sessionId)) return;
-    // Dead-session guard: transcripts past Claude's load ceiling hang silently.
-    if (sizeMB && sizeMB > 80) {
-      console.warn(`[resume] skipping ${sessionId} (${sizeMB.toFixed(0)}MB, too large to load)`);
-      if (typeof window !== 'undefined') {
-        window.alert(`Can't resume this session, transcript is ${sizeMB.toFixed(0)}MB, too large for Claude to load.\n\nStart a fresh session and use HANDOFF.md / git log to bring it up to speed.`);
-      }
-      return;
+    // Large-transcript heads-up, NOT a hard block. Sam: "we should always be
+    // able to resume a session." Big transcripts can be slow to load and may
+    // trigger compaction, so warn once, but always let the user proceed rather
+    // than refusing outright the way v1.0.28's dead-session guard did. A
+    // non-interactive caller (no window, e.g. tests) proceeds without asking.
+    if (sizeMB && sizeMB > 80 && typeof window !== 'undefined') {
+      const proceed = window.confirm(`This session's transcript is ${sizeMB.toFixed(0)}MB. Large transcripts can take a while for Claude to load and may get compacted.\n\nResume anyway?`);
+      if (!proceed) return;
     }
     set({ activeView: 'terminal' });
     const termId = get().activeTabId;
