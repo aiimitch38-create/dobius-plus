@@ -13,6 +13,7 @@ const STATUS = {
 // subline, and a chevron. The whole card is the tap target.
 export default function SessionCard({ term, onOpen }) {
   const s = STATUS[term.status] || STATUS.idle;
+  const hasCtx = typeof term.ctxPct === 'number';
   return (
     <button className={`session-card led-${s.cls}`} onClick={() => onOpen(term.id)}>
       <span className="card-led" aria-hidden="true" />
@@ -21,8 +22,14 @@ export default function SessionCard({ term, onOpen }) {
         <span className="card-sub">
           <span className="card-status">{s.label}</span>
           {term.lastActivityAt ? <span className="card-time"> · {timeAgo(term.lastActivityAt)}</span> : null}
+          {term.model ? <span className="card-time"> · {term.model}</span> : null}
         </span>
       </span>
+      {hasCtx && (
+        <span className="card-ctx" style={{ '--pct': term.ctxPct }} title={`context ${term.ctxPct}%`}>
+          <span className="card-ctx-num">{term.ctxPct}</span>
+        </span>
+      )}
       <span className="card-chevron" aria-hidden="true">›</span>
     </button>
   );

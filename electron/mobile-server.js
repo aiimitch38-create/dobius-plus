@@ -31,6 +31,7 @@ import { loadAllSessions, loadTranscript, listProjects } from './data-service.js
 import { peekReply } from './voice-bridge.js';
 import { getVoiceConductorTabId } from './voice-conductor.js';
 import { snapshot as terminalStatusSnapshot } from './terminal-status.js';
+import { estimateContextForTabId } from './tab-context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -158,13 +159,47 @@ function parseTermLabel(id, cwd) {
   return { projectPath, projectName: projectPath.split('/').filter(Boolean).pop() || 'mobile', label: 'new' };
 }
 
+// Per-tab context (model + ctx%) cache, refreshed on a slow debounce because it
+// is transcript-file derived, not PTY-evented. v1.0.43 Phase 3b.
+const tabContextCache = new Map(); // id -> { model, ctxPct }
+let contextRefreshTimer = null;
+async function refreshTabContexts() {
+  try {
+    const live = listTerminals();
+    const liveIds = new Set(live.map((t) => t.id));
+    for (const id of [...tabContextCache.keys()]) {
+      if (!liveIds.has(id)) tabContextCache.delete(id);
+    }
+    for (const t of live) {
+      const ctx = await estimateContextForTabId(t.id);
+      if (ctx && ctx.maxTokens > 0) {
+        tabContextCache.set(t.id, {
+          model: shortModel(ctx.model),
+          ctxPct: Math.min(100, Math.round((ctx.tokens / ctx.maxTokens) * 100)),
+        });
+      } else {
+        tabContextCache.delete(t.id);
+      }
+    }
+  } catch { /* best effort */ }
+}
+
+// Short, human model label (claude-opus-4-8 -> "opus", claude-sonnet-5 -> "sonnet").
+function shortModel(model) {
+  if (typeof model !== 'string') return '';
+  const m = model.match(/(opus|sonnet|haiku|fable)/i);
+  return m ? m[1].toLowerCase() : '';
+}
+
 // The status-rich terminals payload for the mobile board: live terminals merged
-// with the main-process status authority + the recent-exit cache. v1.0.43.
+// with the main-process status authority + the context cache + the recent-exit
+// cache. v1.0.43.
 function buildTerminalsPayload() {
   const snap = terminalStatusSnapshot();
   const list = listTerminals().map((t) => {
     const meta = parseTermLabel(t.id, t.cwd);
     const st = snap.live[t.id];
+    const ctx = tabContextCache.get(t.id);
     return {
       id: t.id,
       pid: t.pid,
@@ -174,6 +209,8 @@ function buildTerminalsPayload() {
       label: meta.label,
       status: st?.status || 'idle',
       lastActivityAt: st?.lastActivityAt || 0,
+      model: ctx?.model || '',
+      ctxPct: typeof ctx?.ctxPct === 'number' ? ctx.ctxPct : null,
     };
   });
   return { type: 'terminals', list, recentExits: snap.recentExits };
@@ -184,7 +221,11 @@ function buildTerminalsPayload() {
 // does not trigger a push every second. We only push when this changes.
 // Codex remote-plan #2 (send deltas only when serialized status changes).
 function terminalsSignature(payload) {
-  const tabs = payload.list.map((t) => `${t.id}:${t.status}`).sort().join('|');
+  // Bucket ctx% to 5% so a slowly-growing context does not push every refresh,
+  // but a meaningful move (and model changes) still updates the ring.
+  const tabs = payload.list
+    .map((t) => `${t.id}:${t.status}:${t.model}:${t.ctxPct == null ? '' : Math.round(t.ctxPct / 5)}`)
+    .sort().join('|');
   const exits = payload.recentExits.map((e) => `${e.id}:${e.exitCode}:${e.at}`).join('|');
   return `${tabs}#${exits}`;
 }
@@ -603,6 +644,10 @@ export async function startMobileServer() {
       // status authority; only sends when the board-relevant signature moves).
       lastTerminalsSig = null;
       statusBroadcastTimer = setInterval(broadcastTerminalsIfChanged, 1000);
+      // Context (model + ctx%) is transcript-derived, so recompute on a slow
+      // debounce, not every status tick. Runs once now, then every 20s.
+      refreshTabContexts();
+      contextRefreshTimer = setInterval(refreshTabContexts, 20000);
       startPowerAssertion(); // keep the Mac awake for remote work while up
       updateMobileServerConfig({ enabled: true });
       resolve(getMobileServerStatus());
@@ -623,6 +668,8 @@ export function stopMobileServer() {
   }
   activeSocketsByToken.clear();
   if (statusBroadcastTimer) { clearInterval(statusBroadcastTimer); statusBroadcastTimer = null; }
+  if (contextRefreshTimer) { clearInterval(contextRefreshTimer); contextRefreshTimer = null; }
+  tabContextCache.clear();
   lastTerminalsSig = null;
   stopPowerAssertion();
   if (wss) { try { wss.close(); } catch { /* noop */ } wss = null; }

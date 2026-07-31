@@ -11,11 +11,12 @@ import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
 import { connectGwsAccount, listGwsAccounts, removeGwsAccount, ensureShim } from './gws-accounts.js';
 import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalProcessArgv, getTerminalClaudeInfo, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver } from './terminal-manager.js';
 import * as terminalStatus from './terminal-status.js';
+import { estimateContextForTabId } from './tab-context.js';
 import {
   loadHistory, loadStats, loadSettings, loadBridgeServers, loadPlans, loadSkills,
   loadTranscript, readPlanFile, getActiveProcesses, listProjects,
   loadAllSessions, getLatestSession, getSessionSize, resolveFreshSessionsForTabs,
-  loadProjectTokens, searchTranscripts, estimateContextForSession, deleteSession,
+  loadProjectTokens, searchTranscripts, deleteSession,
   getLastAssistantMessage,
 } from './data-service.js';
 import {
@@ -427,77 +428,12 @@ function setupDataHandlers() {
   // this tab, then estimates that transcript, so the status-bar ctx bar reflects
   // the tab you are looking at rather than the project's newest session.
   ipcMain.handle('data:estimateContextForTab', async (event, tabId) => {
-    try {
-      if (!tabId || typeof tabId !== 'string') return null;
-      // Multi-window isolation: only the window that owns this terminal may
-      // inspect its running claude, same boundary as every other terminal IPC.
-      // Without this any renderer could probe another window's tab by its
-      // deterministic id and read its model/token context. Codex v1.0.40 P2.
-      if (!ownsTerminal(event.sender.id, tabId)) return null;
-      // Is a claude even running here? If not, the bar shows "--".
-      const info = await getTerminalClaudeInfo(tabId);
-      if (!info) return null;
-      const cwd = await getTerminalCwd(tabId);
-      const map = getSessionTabMap() || {};
-      // A `--resume` tab names its session in argv, so read it live (no 15s
-      // wait for the capture tick). A fresh `claude` has no argv id; fall back
-      // to the tab-session map, taking the newest ACTIVELY-RUNNING link.
-      let sessionId = info.sessionId;
-      let sessionProject = null;
-      if (sessionId) {
-        // The transcript lives under the SESSION's project, not necessarily the
-        // tab's live cwd: a same-project resume from a subdir or worktree keeps
-        // the transcript under the original project path. Prefer the mapped
-        // project for this session, fall back to cwd below. Codex v1.0.40 P2.
-        sessionProject = map[sessionId]?.projectPath || null;
-      } else {
-        // Only trust a link whose session is currently running. When a claude
-        // exits, clearSessionTabRunning zeroes lastRunningAt; the capture tick
-        // stamps it every 15s while alive. So a stale link from a stopped
-        // session (ran=0, or an old timestamp on a recycled tab id) must be
-        // rejected, else stopping claude and starting a fresh one shows the
-        // OLD session's context until the next tick relinks. The recency window
-        // covers the 15s tick + 30s poll slack; a just-started fresh claude has
-        // no link yet and correctly yields "--" until it links. Codex v1.0.40 P2.
-        const RECENT_MS = 90 * 1000;
-        // A link stamped BEFORE the current process started cannot belong to it
-        // (it was stamped for a prior claude in the same tab). This catches the
-        // Ctrl-C-then-restart-a-fresh-claude case that the recency window alone
-        // misses: the old link is still <90s old but predates the new process.
-        //
-        // No slack, deliberately (Codex v1.0.40 r4 P2): a 10s grace window let a
-        // link from a claude stopped <10s ago pass. It is not needed. The tick
-        // links a fresh session only AFTER its process is running, stamping
-        // lastRunningAt = Date.now() at link time, so the CURRENT process's own
-        // link is always stamped at or after its real start. info.startedAt is
-        // ps lstart floored to the second, i.e. <= the real start, so the
-        // current link's ran is always >= info.startedAt and survives, while any
-        // link from a prior process is strictly earlier and is dropped.
-        const now = Date.now();
-        let best = null;
-        for (const [sid, entry] of Object.entries(map)) {
-          if (entry?.tabId !== tabId) continue;
-          const ran = entry.lastRunningAt || 0;
-          if (ran <= 0 || (now - ran) > RECENT_MS) continue;
-          if (info.startedAt && ran < info.startedAt) continue;
-          if (!best || ran > best.ran) best = { sid, ran, projectPath: entry.projectPath };
-        }
-        sessionId = best?.sid || null;
-        sessionProject = best?.projectPath || null;
-      }
-      if (!sessionId) return null;
-      // Prefer the session's own project; fall back to the live cwd only if the
-      // session has no mapped project or its transcript is not found there.
-      let result = sessionProject
-        ? await estimateContextForSession(sessionId, sessionProject)
-        : null;
-      if (!result && cwd && cwd !== sessionProject) {
-        result = await estimateContextForSession(sessionId, cwd);
-      }
-      return result;
-    } catch {
-      return null;
-    }
+    // Multi-window isolation: only the window that owns this terminal may
+    // inspect its running claude, same boundary as every other terminal IPC.
+    // Codex v1.0.40 P2. The resolution + estimate itself lives in tab-context.js
+    // (shared with the mobile board, v1.0.43 Phase 3b).
+    if (typeof tabId !== 'string' || !ownsTerminal(event.sender.id, tabId)) return null;
+    return estimateContextForTabId(tabId);
   });
   ipcMain.handle('data:deleteSession', async (_event, sessionId, projectPath) => {
     const result = await deleteSession(sessionId, projectPath);
