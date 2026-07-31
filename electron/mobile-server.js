@@ -222,17 +222,16 @@ async function isKnownProjectPath(pth) {
   return (await knownProjectList()).some((p) => p.path === pth);
 }
 
-// Resolve the cwd for a phone-spawned terminal safely.
-//  - empty / a non-path sentinel ("main", "mobile") -> the home dir (a fixed,
-//    safe location; this is the desktop "main" tab / no-project case).
-//  - an ABSOLUTE path -> allowed only if it is a known project.
-//  - anything else -> rejected (null).
-// This keeps the arbitrary-absolute-path guard (Codex #5) while not breaking
-// new-tab-from-a-home/main-tab, which sends a non-path label. Codex r? P2.
+// The ONLY non-path cwd values that map to the home dir: the desktop main tab
+// and phone-tab sentinels (and empty = no project). Everything else that is not
+// a known absolute project path is rejected, so `.`, `~`, `foo`, etc. cannot
+// get a home shell. Codex Phase 3a P2 (tightened from "any non-absolute").
+const HOME_SENTINELS = new Set(['', 'main', 'mobile']);
 async function resolveCreateCwd(cwd) {
-  if (typeof cwd !== 'string' || cwd === '') return os.homedir();
-  if (!cwd.startsWith('/')) return os.homedir();
-  return (await isKnownProjectPath(cwd)) ? cwd : null;
+  const v = typeof cwd === 'string' ? cwd : '';
+  if (HOME_SENTINELS.has(v)) return os.homedir();
+  if (v.startsWith('/') && (await isKnownProjectPath(v))) return v;
+  return null;
 }
 
 function handleAuthedMessage(socket, msg, subs) {
