@@ -28,7 +28,10 @@ const DEFAULT_CONFIG = {
   mobileServer: {
     enabled: false,
     port: 8420,
-    bindMode: 'tailscale', // 'tailscale' (remote, private) or 'lan' (same Wi-Fi)
+    // Tailscale-only. LAN/plaintext mode was removed in v1.0.43: it bound to the
+    // LAN IP over http/ws, exposing the device bearer token to any same-subnet
+    // sniffer (RCE). Tailscale binds to the 100.x tailnet IP and WireGuard
+    // encrypts the transport, so the token is never on the wire in the clear.
     devices: [], // [{ token, name, pairedAt }] for paired phones
   },
   imessageBridge: {

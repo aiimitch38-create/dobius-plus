@@ -157,13 +157,6 @@ export default function Settings() {
     refreshMobile();
   }, [refreshMobile]);
 
-  const setMobileBindMode = useCallback(async (mode) => {
-    setMobileError('');
-    const status = await window.electronAPI.mobileServerSetBindMode(mode);
-    if (status?.error) setMobileError(status.error);
-    setMobileStatus(status);
-  }, []);
-
   const provisionMobileCert = useCallback(async () => {
     setMobileBusy(true);
     setMobileError('');
@@ -433,33 +426,6 @@ export default function Settings() {
           />
         </SettingRow>
 
-        <SettingRow
-          label="Network"
-          description={mobileStatus?.bindMode === 'lan'
-            ? 'LAN: same Wi-Fi only, simplest for testing'
-            : 'Tailscale: works anywhere, fully private'}
-        >
-          <div className="flex rounded overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            {['tailscale', 'lan'].map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setMobileBindMode(mode)}
-                style={{
-                  padding: '4px 12px',
-                  fontSize: 11,
-                  fontFamily: "'SF Mono', monospace",
-                  color: (mobileStatus?.bindMode || 'tailscale') === mode ? 'var(--bg)' : 'var(--dim)',
-                  backgroundColor: (mobileStatus?.bindMode || 'tailscale') === mode ? 'var(--accent)' : 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                {mode === 'lan' ? 'LAN' : 'Tailscale'}
-              </button>
-            ))}
-          </div>
-        </SettingRow>
-
         {mobileError && (
           <div
             className="text-xs px-3 py-2 rounded"
@@ -484,29 +450,27 @@ export default function Settings() {
               </code>
             </SettingRow>
 
-            {mobileStatus.bindMode !== 'lan' && (
-              <SettingRow
-                label="HTTPS"
-                description={mobileStatus.secure
-                  ? 'Secure: notifications and install are available'
-                  : 'HTTP only: terminal works, but push notifications and installing the app need HTTPS'}
-              >
-                {mobileStatus.secure ? (
-                  <span className="text-xs px-2 py-1 rounded" style={{ color: 'var(--accent)', backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
-                    Enabled
-                  </span>
-                ) : (
-                  <button
-                    onClick={provisionMobileCert}
-                    disabled={mobileBusy}
-                    className="text-xs px-3 py-1 rounded"
-                    style={{ color: 'var(--bg)', backgroundColor: 'var(--accent)', border: 'none', cursor: mobileBusy ? 'wait' : 'pointer' }}
-                  >
-                    {mobileBusy ? 'Enabling…' : 'Enable HTTPS'}
-                  </button>
-                )}
-              </SettingRow>
-            )}
+            <SettingRow
+              label="HTTPS"
+              description={mobileStatus.secure
+                ? 'Secure: notifications and install are available'
+                : 'HTTP only: terminal works, but push notifications and installing the app need HTTPS'}
+            >
+              {mobileStatus.secure ? (
+                <span className="text-xs px-2 py-1 rounded" style={{ color: 'var(--accent)', backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
+                  Enabled
+                </span>
+              ) : (
+                <button
+                  onClick={provisionMobileCert}
+                  disabled={mobileBusy}
+                  className="text-xs px-3 py-1 rounded"
+                  style={{ color: 'var(--bg)', backgroundColor: 'var(--accent)', border: 'none', cursor: mobileBusy ? 'wait' : 'pointer' }}
+                >
+                  {mobileBusy ? 'Enabling…' : 'Enable HTTPS'}
+                </button>
+              )}
+            </SettingRow>
 
             <SettingRow label="Pairing Code" description="Enter once on the phone to pair it">
               <div className="flex items-center gap-2">

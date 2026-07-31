@@ -90,24 +90,6 @@ function getTailnetIp() {
   return null;
 }
 
-/** Find the Mac's private LAN IPv4 (10/8, 172.16/12, 192.168/16), or null. */
-function getLanIp() {
-  const ifaces = os.networkInterfaces();
-  for (const addrs of Object.values(ifaces)) {
-    for (const a of addrs || []) {
-      if (a.family === 'IPv4' && !a.internal) {
-        const [o1, o2] = a.address.split('.').map(Number);
-        if (o1 === 100 && o2 >= 64 && o2 <= 127) continue; // skip tailnet
-        const isPrivate = o1 === 10
-          || (o1 === 172 && o2 >= 16 && o2 <= 31)
-          || (o1 === 192 && o2 === 168);
-        if (isPrivate) return a.address;
-      }
-    }
-  }
-  return null;
-}
-
 function genPairingCode() {
   return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 }
@@ -464,9 +446,7 @@ function handleAuthedMessage(socket, msg, subs) {
 export function getMobileServerStatus() {
   return {
     running: !!httpServer,
-    bindMode: getMobileServerConfig().bindMode || 'tailscale',
     tailnetIp: getTailnetIp(),
-    lanIp: getLanIp(),
     address: boundAddress,
     secure: serveInfo?.secure || false,
     url: serveInfo?.url || null,
@@ -480,14 +460,15 @@ export async function startMobileServer() {
   if (httpServer) return getMobileServerStatus();
 
   const cfg = getMobileServerConfig();
-  const mode = cfg.bindMode === 'lan' ? 'lan' : 'tailscale';
-  const ip = mode === 'lan' ? getLanIp() : getTailnetIp();
+  // Tailscale-only: bind to the 100.x tailnet IP so the server is reachable
+  // ONLY from tailnet peers (never the local subnet) and all traffic rides the
+  // WireGuard tunnel. This is what keeps the bearer token off the wire in the
+  // clear. LAN/plaintext mode was removed in v1.0.43 (it was an RCE path).
+  const ip = getTailnetIp();
   if (!ip) {
     return {
       running: false,
-      error: mode === 'lan'
-        ? 'No local network connection found. Connect the Mac to Wi-Fi and try again.'
-        : 'No Tailscale connection found. Open Tailscale, sign in, then try again.',
+      error: 'No Tailscale connection found. Open Tailscale, sign in, then try again.',
     };
   }
   const port = cfg.port || 8420;
@@ -666,24 +647,25 @@ export async function startMobileServer() {
   }
 
   // HTTPS when a tailnet cert exists for our MagicDNS name (Phase 4): required
-  // for service-worker install + Web Push. The client then uses the https
-  // MagicDNS URL (which resolves via MagicDNS to this tailnet IP). Otherwise
-  // plain HTTP, which is terminal-only (no push/install). LAN mode stays HTTP.
+  // for service-worker install + Web Push (a browser secure context). The client
+  // then uses the https MagicDNS URL (which resolves via MagicDNS to this tailnet
+  // IP). Without a cert we fall back to plain HTTP, which is terminal-only (no
+  // push/install). That HTTP fallback is safe here BECAUSE it rides the tailnet:
+  // WireGuard already encrypts the transport, so the bearer token is not exposed
+  // to a same-subnet sniffer the way the removed LAN/plaintext mode exposed it.
   let magicName = null;
   let secure = false;
-  if (mode === 'tailscale') {
-    magicName = await getMagicDNSName();
-    if (magicName && hasCertFor(magicName)) {
-      const cp = certPathsFor(magicName);
-      try {
-        httpServer = https.createServer(
-          { cert: fs.readFileSync(cp.certFile), key: fs.readFileSync(cp.keyFile) },
-          expApp,
-        );
-        secure = true;
-      } catch (e) {
-        console.warn('[mobile-server] cert unreadable, falling back to HTTP:', e?.message || e);
-      }
+  magicName = await getMagicDNSName();
+  if (magicName && hasCertFor(magicName)) {
+    const cp = certPathsFor(magicName);
+    try {
+      httpServer = https.createServer(
+        { cert: fs.readFileSync(cp.certFile), key: fs.readFileSync(cp.keyFile) },
+        expApp,
+      );
+      secure = true;
+    } catch (e) {
+      console.warn('[mobile-server] cert unreadable, falling back to HTTP:', e?.message || e);
     }
   }
   if (!httpServer) httpServer = http.createServer(expApp);

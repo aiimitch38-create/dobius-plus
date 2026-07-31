@@ -36,7 +36,7 @@ import {
   getSessionTabMap, setSessionTabLink, removeSessionTabLink, touchSessionTabLink, clearSessionTabRunning,
   getAgentMemory, setAgentMemory, appendJournalEntry, pruneOldMemory,
   getOrchestrationRuns, getOrchestrationRun, saveOrchestrationRun, deleteOrchestrationRun,
-  getMobileServerConfig, updateMobileServerConfig,
+  getMobileServerConfig,
   saveTerminalScrollback, loadTerminalScrollback,
   addManualProject, setProjectDisplayName, addHiddenProject,
   getAccounts, saveAccount, deleteAccount, getProjectAccount, setProjectAccount,
@@ -1781,17 +1781,6 @@ function setupMobileServerHandlers() {
     return getMobileServerStatus();
   });
   ipcMain.handle('mobileServer:removeDevice', (_event, token) => removeMobileDevice(token));
-  ipcMain.handle('mobileServer:setBindMode', async (_event, mode) => {
-    if (mode !== 'lan' && mode !== 'tailscale') return getMobileServerStatus();
-    updateMobileServerConfig({ bindMode: mode });
-    // If the server is running, restart it so the new bind takes effect.
-    const status = getMobileServerStatus();
-    if (status.running) {
-      await stopMobileServer(); // await close so the restart doesn't hit EADDRINUSE
-      return startMobileServer();
-    }
-    return getMobileServerStatus();
-  });
   // Provision the tailnet HTTPS cert (Phase 4): enables service-worker install
   // and Web Push. If the server is running, restart it so it picks up HTTPS.
   ipcMain.handle('mobileServer:provisionCert', async () => {
