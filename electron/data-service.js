@@ -267,7 +267,10 @@ export async function loadAllSessions(projectFilter) {
  * sessionTabMap + transcripts).
  */
 export async function getAllProjectTabs() {
-  const projects = getAllProjectsWithTabs(); // [{ path, tabs, tabCounter }]
+  // Respect the same hidden/removed-project suppression the project list uses, so
+  // a project the user deliberately hid doesn't reappear here. Codex.
+  const hidden = new Set(getHiddenProjects());
+  const projects = getAllProjectsWithTabs().filter((p) => !hidden.has(p.path)); // [{ path, tabs, tabCounter }]
   if (projects.length === 0) return [];
   const displayNames = getProjectDisplayNames() || {};
 
