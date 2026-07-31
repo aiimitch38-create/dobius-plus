@@ -121,6 +121,8 @@ export default function ProjectTabsView({ search = '', onResumeSession }) {
                 textTransform: 'uppercase', letterSpacing: '0.08em',
               }}
               title={g.path}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--surface-hover)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
             >
               <span className="truncate" style={{ fontWeight: isCurrent ? 700 : 500 }}>
                 {g.name}{isCurrent ? ' • here' : ''}

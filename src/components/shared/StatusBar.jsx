@@ -138,7 +138,7 @@ export default function StatusBar() {
         fontFamily: "'SF Mono', monospace",
       }}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 min-w-0 overflow-hidden">
         {asanaOn && (
           <span className="flex items-center gap-1.5" title="Auto Mode is polling Asana for new tasks" style={{ color: 'var(--fg)' }}>
             <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: '#3FB950', boxShadow: '0 0 4px #3FB950' }} />
@@ -184,7 +184,7 @@ export default function StatusBar() {
           {hasActive ? `${activeProcesses.length} active` : 'idle'}
         </span>
         {tabs.length > 0 && (
-          <span>
+          <span className="truncate min-w-0">
             {tabs.length} tab{tabs.length !== 1 ? 's' : ''}
             {activeTab ? ` \u00B7 ${activeTab.label}` : ''}
           </span>

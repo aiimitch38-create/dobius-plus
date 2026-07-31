@@ -248,7 +248,7 @@ export default function Sidebar({ pinnedIds = [], onTogglePin, onResumeSession, 
                     color: 'var(--fg)',
                     textAlign: 'left',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--border)'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--surface-hover)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                 >
                   <span className="truncate" style={{ flex: 1 }}>{closed.label || 'Tab'}</span>

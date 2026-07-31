@@ -84,7 +84,7 @@ function SkillEditor({ skill, onClose }) {
           </span>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {status && (
-              <span style={{ fontSize: '11px', color: status === 'Saved' ? '#4ade80' : '#f87171' }}>
+              <span style={{ fontSize: '11px', color: status === 'Saved' ? '#3FB950' : 'var(--danger)' }}>
                 {status}
               </span>
             )}
@@ -93,7 +93,7 @@ function SkillEditor({ skill, onClose }) {
               disabled={saving}
               style={{
                 fontSize: '11px', padding: '4px 12px', borderRadius: '6px',
-                backgroundColor: 'var(--accent, #6366f1)', color: '#fff',
+                backgroundColor: 'var(--accent)', color: 'var(--bg)',
                 border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
               }}
             >
@@ -229,6 +229,8 @@ export default function Skills({ skills }) {
                       cursor: (skill.path && !skill.path.includes('/.claude/plugins/')) ? 'pointer' : 'default',
                       transition: 'border-color 0.15s',
                     }}
+                    onMouseEnter={(e) => { if (skill.path && !skill.path.includes('/.claude/plugins/')) e.currentTarget.style.borderColor = 'var(--dim)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
                     // Plugin skills (under ~/.claude/plugins/) are owned by their
                     // plugin author; the main-process IPC only permits writes inside
                     // ~/.claude/skills/<one-level>, so opening the editor would show
