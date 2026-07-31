@@ -996,7 +996,7 @@ export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel })
                   {gridActive && gridSlots.map((slotTabId, idx) => {
                     const slotTab = tabs.find((t) => t.id === slotTabId);
                     if (!slotTab) return null;
-                    const status = tabStatus[slotTabId] || 'done';
+                    const status = tabStatus[slotTabId] || 'idle';
                     return (
                       <div
                         key={`gh-${slotTabId}`}

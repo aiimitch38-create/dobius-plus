@@ -11,6 +11,7 @@
  * Hex values mirror the theme's accent/success/danger tokens.
  */
 export const STATUS_COLORS = Object.freeze({
+  idle: 'var(--dim)', // gray, a plain terminal with no agent (Brett: not green)
   working: '#D29922', // yellow, Claude is actively streaming
   done: '#3FB950',    // green,  Claude finished its turn
   needs: '#F85149',   // red,    user needs to respond
@@ -18,6 +19,7 @@ export const STATUS_COLORS = Object.freeze({
 });
 
 export const STATUS_LABELS = Object.freeze({
+  idle: 'Idle',
   working: 'Working',
   done: 'Done',
   needs: 'Needs your response',

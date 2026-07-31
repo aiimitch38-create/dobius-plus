@@ -398,7 +398,7 @@ export default function TerminalTabBar() {
                   ◯
                 </span>
               ) : (() => {
-                const status = tabStatus[tab.id] || 'done';
+                const status = tabStatus[tab.id] || 'idle';
                 const color = STATUS_COLORS[status];
                 const proc = tabProcesses[tab.id];
                 const title = proc ? `${STATUS_LABELS[status]} · ${proc}` : STATUS_LABELS[status];
