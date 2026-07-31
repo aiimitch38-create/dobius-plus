@@ -30,11 +30,17 @@ export function useTabActivity() {
 
     const removeDataListener = window.electronAPI.onTerminalData((termId) => {
       lastDataTs.current[termId] = Date.now();
-      // Output is flowing → working, unless the hook has flagged this tab as
-      // needing a response (red is hook-owned and must survive dialog repaints).
-      if (useStore.getState().tabStatus[termId] !== 'needs') {
-        useStore.getState().setTabStatus(termId, 'working');
-      }
+      const { tabStatus, recentHookDone, setTabStatus } = useStore.getState();
+      const st = tabStatus[termId];
+      // 'needs' (red) is hook-owned and must survive dialog repaints.
+      if (st === 'needs') return;
+      // Don't clobber a managed turn's green 'done' back to yellow: the 'done'
+      // OSC marker's own trailing bytes also arrive here (either listener order),
+      // and clobbering would let the settler turn a finished Claude turn gray.
+      // Real plain-shell activity after this brief window still flows yellow.
+      if (st === 'done' && recentHookDone[termId] && Date.now() - recentHookDone[termId] < 800) return;
+      // Output flowing → working (yellow).
+      setTabStatus(termId, 'working');
     });
 
     tickTimer.current = setInterval(() => {

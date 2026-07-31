@@ -70,6 +70,12 @@ export const useStore = create((set, get) => ({
   // can clear hook-owned status, so a long quiet tool call no longer flips
   // 'working' → 'done' while Claude is mid-turn.
   hookOwnedTabs: {},
+  // tabId -> epoch ms the OSC hook last set 'done'. useTabActivity uses this to
+  // avoid clobbering a just-finished managed turn's green dot back to yellow:
+  // the 'done' marker's own trailing bytes also hit the output listener, and
+  // without this guard the quiet settler would then turn the tab gray. Genuine
+  // plain-shell activity after the window still flows yellow -> gray.
+  recentHookDone: {},
   setTabStatus: (tabId, status) => set((s) => {
     if (!tabId || s.tabStatus[tabId] === status) return {};
     return { tabStatus: { ...s.tabStatus, [tabId]: status } };
@@ -80,9 +86,10 @@ export const useStore = create((set, get) => ({
   markHookOwned: (tabId, status) => set((s) => {
     if (!tabId) return {};
     const next = { ...s.hookOwnedTabs };
-    if (status === 'working' || status === 'needs') next[tabId] = true;
-    else delete next[tabId]; // 'done' or anything else releases the claim
-    return { hookOwnedTabs: next };
+    const done = { ...s.recentHookDone };
+    if (status === 'working' || status === 'needs') { next[tabId] = true; delete done[tabId]; }
+    else { delete next[tabId]; if (status === 'done') done[tabId] = Date.now(); } // release + stamp
+    return { hookOwnedTabs: next, recentHookDone: done };
   }),
 
   // Activity timeline: chronological feed of agent actions (max 100)
@@ -171,6 +178,8 @@ export const useStore = create((set, get) => ({
     // Codex audit MED (store.js:159).
     const hot = { ...state.hookOwnedTabs };
     delete hot[tabId];
+    const rhd = { ...state.recentHookDone };
+    delete rhd[tabId];
     set({
       terminalTabs: tabs,
       activeTabId: newActive,
@@ -178,6 +187,7 @@ export const useStore = create((set, get) => ({
       agentActivity: aa,
       tabStatus: ts,
       hookOwnedTabs: hot,
+      recentHookDone: rhd,
       splitTabId: state.splitTabId === tabId ? null : state.splitTabId,
       gridSlots: pruneGrid(state.gridSlots, new Set(tabs.map((t) => t.id))),
       monitoredTabs: state.monitoredTabs.filter((id) => id !== tabId),
