@@ -31,14 +31,26 @@ check('needs marker sets needs', ts.statusFor(ID).status, 'needs');
 ts.ingest(ID, 'some repaint output', 2100);
 check('output does not override needs', ts.statusFor(ID).status, 'needs');
 
-// 4. `done` marker releases ownership; trailing output -> working -> settles.
+// 4. `done` marker releases ownership, but the green must survive the marker's
+// own trailing bytes (guard) AND the settle tick: a finished managed turn stays
+// green, it does NOT go gray.
 ts.ingest(ID, mk('done'), 3000);
 check('done marker sets done', ts.statusFor(ID).status, 'done');
 check('done releases hook ownership', ts.statusFor(ID).hookOwned, false);
-ts.ingest(ID, 'trailing line\r\n', 3100);
-check('trailing output after done -> working', ts.statusFor(ID).status, 'working');
+ts.ingest(ID, 'trailing line\r\n', 3100); // within the done guard window
+check('trailing bytes after done keep done (not working)', ts.statusFor(ID).status, 'done');
 ts.settle(3100 + 2000); // >1.5s quiet, not hook-owned
-check('non-hook-owned working settles to done', ts.statusFor(ID).status, 'done');
+check('managed done stays green after settle', ts.statusFor(ID).status, 'done');
+
+// 4b. A plain shell (no markers) settles to IDLE (gray), not done (green),
+// matching the desktop gray-dot behavior. Also: genuine output AFTER the done
+// guard is treated as new plain-shell activity (Claude exited), so it can go
+// yellow -> gray.
+ts._reset();
+ts.ingest(ID, 'ls -la\r\n', 5000);
+check('plain output -> working', ts.statusFor(ID).status, 'working');
+ts.settle(5000 + 2000); // >1.5s quiet, not hook-owned
+check('plain shell settles to idle (gray)', ts.statusFor(ID).status, 'idle');
 
 // 5. Marker split across two chunks is still detected.
 ts._reset();
