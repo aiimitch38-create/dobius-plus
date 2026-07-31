@@ -40,6 +40,7 @@ import { getVapidPublicKey, subscribePush, sendPush, hasPushSubscribers } from '
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const MAX_PAIR_ATTEMPTS = 5;
+const PAIR_LOCK_MS = 60000;  // cooldown after MAX_PAIR_ATTEMPTS, then re-arm
 const AUTH_TIMEOUT_MS = 5000;
 const MAX_INPUT_BYTES = 100 * 1024;   // cap a single input message (paste)
 const MAX_WS_PAYLOAD = 1024 * 1024;   // 1MB ws frame ceiling
@@ -51,6 +52,7 @@ let httpServer = null;
 let wss = null;
 let pairingCode = null;   // ephemeral, regenerated on each start
 let pairAttempts = 0;
+let pairLockedUntil = 0;  // epoch ms; refuse pairing until then after a flood
 let voiceInFlight = 0;    // concurrent /voice/audio transcriptions
 
 // Power assertion (v1.0.43 resilience): while the mobile server is up, keep the
@@ -225,6 +227,7 @@ let statusBroadcastTimer = null;
 let lastTerminalsSig = null;
 const prevStatusById = new Map(); // id -> last status, for push transitions
 const notifiedExits = new Set();  // `${id}:${at}` already push-notified
+const NOTIFIED_EXITS_CAP = 200;   // > MAX_RECENT_EXITS (50) so cached exits never evict
 
 // Fire push notifications for the moments worth pulling Sam back: a session
 // starts needing input, or a session exits nonzero. Runs even with no phone
@@ -241,7 +244,15 @@ function firePushForEvents(payload) {
     seen.add(t.id);
     const prev = prevStatusById.get(t.id);
     if (t.status === 'needs' && prev !== 'needs') {
-      sendPush({ title: t.projectName || 'Dobius+', body: `${t.label} needs your input`, tag: `needs:${t.id}` });
+      // url carries ?open=<id> so tapping the notification deep-links straight to
+      // the session that needs input, not just whatever screen was last open.
+      // Audit MED-12.
+      sendPush({
+        title: t.projectName || 'Dobius+',
+        body: `${t.label} needs your input`,
+        tag: `needs:${t.id}`,
+        url: `./?open=${encodeURIComponent(t.id)}`,
+      });
     }
     prevStatusById.set(t.id, t.status);
   }
@@ -255,7 +266,31 @@ function firePushForEvents(payload) {
       }
     }
   }
-  if (notifiedExits.size > 100) notifiedExits.clear(); // bound
+  // Bound notifiedExits WITHOUT dropping keys still present in recentExits: a
+  // full .clear() emptied the dedup set while terminal-status.recentExits (a
+  // 50-entry FIFO) still held those exits, so the next tick re-fired up to 50
+  // duplicate "session failed" pushes. Set is insertion-ordered, so evict oldest
+  // first and keep a window well above MAX_RECENT_EXITS (50), which guarantees
+  // the still-cached exits are never among the evicted. Audit MED-7.
+  while (notifiedExits.size > NOTIFIED_EXITS_CAP) {
+    notifiedExits.delete(notifiedExits.values().next().value);
+  }
+}
+
+// Seed the push dedup state from the CURRENT status snapshot so a server
+// (re)start does not re-notify sessions that already need input or already
+// exited. prevStatusById/notifiedExits are cleared on stop, but
+// terminal-status.recentExits (module-level, 50-entry FIFO) survives, so without
+// this the first tick after a restart (bind-mode change, cert provision) blasted
+// stale "session failed" + "needs input" pushes. Audit MED-6.
+function seedPushBaseline() {
+  const payload = buildTerminalsPayload();
+  prevStatusById.clear();
+  notifiedExits.clear();
+  for (const t of payload.list) prevStatusById.set(t.id, t.status);
+  for (const e of payload.recentExits) {
+    if (typeof e.exitCode === 'number' && e.exitCode !== 0) notifiedExits.add(`${e.id}:${e.at}`);
+  }
 }
 
 function pollStatusTick() {
@@ -356,7 +391,14 @@ function handleAuthedMessage(socket, msg, subs) {
           if (u) { u(); subs.delete(tid); }
         },
       };
-      const { unsubscribe, buffer } = subscribeTerminal(id, sink);
+      const { ok, unsubscribe, buffer } = subscribeTerminal(id, sink);
+      if (!ok) {
+        // The terminal exited between the board listing it and this attach. Tell
+        // the phone so it refreshes its list instead of showing a live-looking
+        // blank terminal that silently swallows keystrokes. Audit MED-9.
+        wsSend(socket, { type: 'terminalMissing', id });
+        break;
+      }
       subs.set(id, unsubscribe);
       // Replay recent output so the phone sees the current screen, not a blank.
       if (buffer) wsSend(socket, { type: 'output', id, data: buffer, replay: true });
@@ -432,7 +474,7 @@ function handleAuthedMessage(socket, msg, subs) {
       const { sessionId, projectPath } = msg;
       if (typeof sessionId !== 'string' || typeof projectPath !== 'string') break;
       loadTranscript(sessionId, projectPath)
-        .then((entries) => wsSend(socket, { type: 'transcript', sessionId, entries: entries || [] }))
+        .then((entries) => wsSend(socket, { type: 'transcript', sessionId, projectPath, entries: entries || [] }))
         .catch((err) => wsSend(socket, { type: 'error', message: String(err?.message || err) }));
       break;
     }
@@ -510,13 +552,26 @@ export async function startMobileServer() {
   });
 
   expApp.post('/pair', (req, res) => {
+    // Time-boxed cooldown after a wrong-guess flood, NOT a permanent lockout. The
+    // old code nulled pairingCode on the 5th miss, so any unauthenticated caller
+    // who could reach the server could deny pairing forever (and re-lock right
+    // after a manual regenerate). Now the code stays valid and we just refuse
+    // attempts for PAIR_LOCK_MS, then re-arm, so a flood can only stall pairing
+    // for a minute at a time. Audit MED-8.
+    const now = Date.now();
+    if (pairLockedUntil > now) {
+      return res.status(429).json({ ok: false, error: 'Too many attempts. Try again in a minute.' });
+    }
     if (!pairingCode) {
       return res.status(403).json({ ok: false, error: 'Pairing is locked. Regenerate the code on the desktop.' });
     }
     const { code, deviceName } = req.body || {};
     if (code !== pairingCode) {
       pairAttempts += 1;
-      if (pairAttempts >= MAX_PAIR_ATTEMPTS) pairingCode = null;
+      if (pairAttempts >= MAX_PAIR_ATTEMPTS) {
+        pairLockedUntil = now + PAIR_LOCK_MS;
+        pairAttempts = 0;
+      }
       return res.status(403).json({ ok: false, error: 'Invalid pairing code.' });
     }
     const token = crypto.randomBytes(32).toString('hex');
@@ -534,6 +589,7 @@ export async function startMobileServer() {
     // Consume the code after a successful pair so it can't be reused.
     pairingCode = genPairingCode();
     pairAttempts = 0;
+    pairLockedUntil = 0;
     res.json({ ok: true, token });
   });
 
@@ -767,6 +823,7 @@ export async function startMobileServer() {
 
   pairingCode = genPairingCode();
   pairAttempts = 0;
+  pairLockedUntil = 0;
 
   return new Promise((resolve) => {
     const onError = (err) => {
@@ -787,6 +844,10 @@ export async function startMobileServer() {
       // Push status changes to connected phones (change-driven, 1s poll of the
       // status authority; only sends when the board-relevant signature moves).
       lastTerminalsSig = null;
+      // Seed dedup state from the current snapshot so a (re)start does not blast
+      // stale needs/exit pushes for sessions that were already in that state
+      // before the server came up. Audit MED-6.
+      seedPushBaseline();
       statusBroadcastTimer = setInterval(pollStatusTick, 1000);
       // Context (model + ctx%) is transcript-derived, so recompute on a slow
       // debounce, not every status tick. Runs once now, then every 20s.
@@ -828,6 +889,7 @@ export function stopMobileServer() {
   serveInfo = null;
   pairingCode = null;
   pairAttempts = 0;
+  pairLockedUntil = 0;
   updateMobileServerConfig({ enabled: false });
   return new Promise((resolve) => {
     if (!server) return resolve(getMobileServerStatus());
@@ -851,6 +913,7 @@ export function regeneratePairingCode() {
   if (!httpServer) return null;
   pairingCode = genPairingCode();
   pairAttempts = 0;
+  pairLockedUntil = 0; // a manual regenerate should unblock pairing immediately
   return pairingCode;
 }
 

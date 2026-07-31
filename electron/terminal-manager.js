@@ -214,14 +214,17 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
 
 /**
  * Subscribe a sink to a terminal's output. The sink is { onData, onExit }.
- * Returns { unsubscribe, buffer }. The buffer is recent output for replay so
- * a freshly-attached client (e.g. a phone) doesn't see a blank screen.
+ * Returns { ok, unsubscribe, buffer }. `ok` is false when the terminal does not
+ * exist (already exited), so the caller can tell the client instead of
+ * pretending the attach succeeded. The buffer is recent output for replay so a
+ * freshly-attached client (e.g. a phone) doesn't see a blank screen.
  */
 export function subscribeTerminal(id, sink) {
   const entry = terminals.get(id);
-  if (!entry || !sink) return { unsubscribe: () => {}, buffer: '' };
+  if (!entry || !sink) return { ok: false, unsubscribe: () => {}, buffer: '' };
   entry.subscribers.add(sink);
   return {
+    ok: true,
     unsubscribe: () => { entry.subscribers.delete(sink); },
     buffer: entry.outputBuffer,
   };

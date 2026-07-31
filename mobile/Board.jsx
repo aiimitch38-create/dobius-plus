@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import SessionCard from './SessionCard';
 import VoiceButton from './VoiceButton';
 import { pushSupported, pushActive, enablePush } from './push-client';
@@ -40,6 +40,9 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
   const [projects, setProjects] = useState([]);
   const [alerts, setAlerts] = useState('off'); // off | on | error
   const [alertMsg, setAlertMsg] = useState('');
+  // Guards a createTerminal round-trip so a double-tap in the picker (Tailscale
+  // latency) can't spawn two orphan PTYs. Reset on the reply. Audit MED-10.
+  const creatingRef = useRef(false);
 
   // Reflect an ACTUAL subscription, not just permission (Codex Phase 5b P2), so
   // the bell keeps showing if the subscription was cleared/pruned server-side.
@@ -74,8 +77,15 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
       } else if (msg.type === 'projects') {
         setProjects(msg.list || []);
       } else if (msg.type === 'terminalCreated') {
+        creatingRef.current = false;
         setPickerOpen(false);
         onOpen(msg.id); // jump straight into the new session
+      } else if (msg.type === 'error') {
+        // A rejected create (e.g. Unknown project) must release the guard and
+        // surface, else the picker looks frozen. Audit MED-10.
+        creatingRef.current = false;
+        setAlertMsg(msg.message || 'Could not create session');
+        setTimeout(() => setAlertMsg(''), 5000);
       }
     });
     if (connection.status === 'authed') connection.send({ type: 'listTerminals' });
@@ -185,7 +195,12 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
                 <button
                   key={p.path}
                   className="sheet-item"
-                  onClick={() => connection.send({ type: 'createTerminal', cwd: p.path })}
+                  onClick={() => {
+                    if (creatingRef.current) return; // guard double-tap (MED-10)
+                    creatingRef.current = true;
+                    setPickerOpen(false); // close optimistically so a second tap can't fire
+                    connection.send({ type: 'createTerminal', cwd: p.path });
+                  }}
                 >
                   <span className="card-title">{p.name}</span>
                   <span className="card-sub">{p.path}</span>

@@ -28,7 +28,15 @@ export default function History({ connection, onBack }) {
         const list = [...(msg.list || [])].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         setSessions(list);
       } else if (msg.type === 'transcript') {
-        setTranscript(msg.entries || []);
+        // Only render a reply for the session that is CURRENTLY open. Tapping A
+        // then B could otherwise land A's slower reply after B's, showing B's
+        // header over A's messages. Match sessionId (+ projectPath, since ids
+        // could repeat across projects). Audit MED-13.
+        const open = openSessionRef.current;
+        if (open && msg.sessionId === open.sessionId
+            && (msg.projectPath == null || msg.projectPath === open.projectPath)) {
+          setTranscript(msg.entries || []);
+        }
       }
     });
     connection.send({ type: 'listSessions' });

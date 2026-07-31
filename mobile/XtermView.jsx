@@ -75,6 +75,11 @@ export default function XtermView({ connection, activeId }) {
   useEffect(() => {
     const off = connection.onMessage((msg) => {
       if (msg.type === 'output' && msg.id === activeId) {
+        // A replay carries the server's FULL rolling buffer. On reconnect the
+        // activeId is unchanged, so the switch effect's reset() doesn't run, and
+        // writing the replay verbatim appended a second copy of the whole screen
+        // every reconnect. Honor the flag: reset before repainting. Audit MED-11.
+        if (msg.replay) termRef.current?.reset();
         termRef.current?.write(msg.data);
       } else if (msg.type === 'exit' && msg.id === activeId) {
         termRef.current?.write('\r\n\x1b[2m[process exited]\x1b[0m\r\n');

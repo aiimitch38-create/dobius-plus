@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import XtermView from './XtermView';
 import SpecialKeys from './SpecialKeys';
 
@@ -60,6 +60,9 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
   // later activeId change (exit / reordered payload) can't make Stop kill the
   // wrong terminal. { id, label } or null. Codex Phase 3a P2.
   const [confirmStop, setConfirmStop] = useState(null);
+  // Guards a createTerminal round-trip so a double-tap over Tailscale latency
+  // can't spawn two orphan PTYs. Reset on the reply. Audit MED-10.
+  const creatingRef = useRef(false);
 
   const refreshList = useCallback(() => {
     connection.send({ type: 'listTerminals' });
@@ -76,11 +79,20 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
           return (msg.list || [])[0]?.id || null;
         });
       } else if (msg.type === 'terminalCreated') {
+        creatingRef.current = false;
         refreshList();
         setActiveId(msg.id);
         setSwitcherOpen(false);
+      } else if (msg.type === 'terminalMissing') {
+        // Attach was rejected: the terminal exited between the listing and the
+        // tap. Drop off it and refresh so we don't show a live-looking blank
+        // that swallows keystrokes. Audit MED-9.
+        refreshList();
+        setActiveId((cur) => (cur === msg.id ? null : cur));
       } else if (msg.type === 'exit') {
         refreshList();
+      } else if (msg.type === 'error') {
+        creatingRef.current = false; // let the user retry a failed create
       }
     });
     if (connection.status === 'authed') refreshList();
@@ -104,6 +116,9 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
 
   // New terminal in a specific project (matches the desktop's per-project tabs).
   const newTerminalIn = useCallback((projectPath) => {
+    if (creatingRef.current) return; // guard double-tap over latency (MED-10)
+    creatingRef.current = true;
+    setSwitcherOpen(false);
     connection.send({ type: 'createTerminal', cwd: projectPath });
   }, [connection]);
 

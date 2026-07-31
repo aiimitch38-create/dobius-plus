@@ -43,6 +43,23 @@ export default function App() {
     };
   }, [token]);
 
+  // Deep-link from a push tap: a cold start lands on ?open=<id>, and a warm app
+  // gets a postMessage {type:'open-session'} from the service worker. Either way,
+  // jump to that session instead of the last-shown screen. Audit MED-12.
+  useEffect(() => {
+    const openSession = (id) => { if (id) { setOpenTabId(id); setView('terminal'); } };
+    try {
+      const p = new URLSearchParams(window.location.search).get('open');
+      if (p) {
+        openSession(p);
+        window.history.replaceState(null, '', window.location.pathname); // don't re-trigger on refresh
+      }
+    } catch { /* noop */ }
+    const onSwMsg = (e) => { if (e.data?.type === 'open-session') openSession(e.data.id); };
+    navigator.serviceWorker?.addEventListener('message', onSwMsg);
+    return () => navigator.serviceWorker?.removeEventListener('message', onSwMsg);
+  }, []);
+
   const handlePaired = (newToken) => {
     localStorage.setItem(TOKEN_KEY, newToken);
     setToken(newToken);

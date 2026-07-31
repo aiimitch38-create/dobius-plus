@@ -26,9 +26,20 @@ self.addEventListener('push', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const url = e.notification.data?.url || './';
+  // The session to jump to is encoded in the url as ?open=<id>. Extract it so a
+  // warm client can be told to switch to it (focus() alone just brings the app
+  // forward on whatever screen it last showed). Audit MED-12.
+  let openId = null;
+  try { openId = new URL(url, self.location.origin).searchParams.get('open'); } catch { openId = null; }
   e.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const c of all) { if ('focus' in c) return c.focus(); }
+    for (const c of all) {
+      if ('focus' in c) {
+        if (openId) { try { c.postMessage({ type: 'open-session', id: openId }); } catch { /* noop */ } }
+        return c.focus();
+      }
+    }
+    // Cold start: open the url (carries ?open=<id> so App.jsx routes to it).
     if (self.clients.openWindow) return self.clients.openWindow(url);
     return undefined;
   })());
