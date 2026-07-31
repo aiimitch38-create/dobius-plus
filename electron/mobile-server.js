@@ -16,6 +16,7 @@
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import http from 'http';
+import https from 'https';
 import os from 'os';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -32,6 +33,7 @@ import { peekReply } from './voice-bridge.js';
 import { getVoiceConductorTabId } from './voice-conductor.js';
 import { snapshot as terminalStatusSnapshot } from './terminal-status.js';
 import { estimateContextForTabId } from './tab-context.js';
+import { getMagicDNSName, certPathsFor, hasCertFor } from './tailscale.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -70,6 +72,7 @@ function stopPowerAssertion() {
   powerBlockerId = null;
 }
 let boundAddress = null;  // { host, port }
+let serveInfo = null;     // { secure, url }: how clients should reach us (v1.0.43 Phase 4)
 
 /** Find the Mac's Tailscale (CGNAT 100.64.0.0/10) IPv4 address, or null. */
 function getTailnetIp() {
@@ -411,6 +414,8 @@ export function getMobileServerStatus() {
     tailnetIp: getTailnetIp(),
     lanIp: getLanIp(),
     address: boundAddress,
+    secure: serveInfo?.secure || false,
+    url: serveInfo?.url || null,
     pairingCode: httpServer ? pairingCode : null,
     deviceCount: getMobileServerConfig().devices.length,
   };
@@ -575,7 +580,32 @@ export async function startMobileServer() {
     });
   }
 
-  httpServer = http.createServer(expApp);
+  // HTTPS when a tailnet cert exists for our MagicDNS name (Phase 4): required
+  // for service-worker install + Web Push. The client then uses the https
+  // MagicDNS URL (which resolves via MagicDNS to this tailnet IP). Otherwise
+  // plain HTTP, which is terminal-only (no push/install). LAN mode stays HTTP.
+  let magicName = null;
+  let secure = false;
+  if (mode === 'tailscale') {
+    magicName = await getMagicDNSName();
+    if (magicName && hasCertFor(magicName)) {
+      const cp = certPathsFor(magicName);
+      try {
+        httpServer = https.createServer(
+          { cert: fs.readFileSync(cp.certFile), key: fs.readFileSync(cp.keyFile) },
+          expApp,
+        );
+        secure = true;
+      } catch (e) {
+        console.warn('[mobile-server] cert unreadable, falling back to HTTP:', e?.message || e);
+      }
+    }
+  }
+  if (!httpServer) httpServer = http.createServer(expApp);
+  const pendingServeInfo = {
+    secure,
+    url: secure ? `https://${magicName}:${port}/` : `http://${ip}:${port}/`,
+  };
 
   wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: MAX_WS_PAYLOAD });
   wss.on('connection', (socket) => {
@@ -631,6 +661,7 @@ export async function startMobileServer() {
       httpServer = null;
       wss = null;
       boundAddress = null;
+      serveInfo = null;
       pairingCode = null;
       resolve({ running: false, error: String(err?.message || err) });
     };
@@ -640,6 +671,7 @@ export async function startMobileServer() {
       // Permanent handler so a later runtime socket error logs instead of crashing.
       httpServer.on('error', (err) => console.warn('[mobile-server]', err?.message || err));
       boundAddress = { host: ip, port };
+      serveInfo = pendingServeInfo;
       // Push status changes to connected phones (change-driven, 1s poll of the
       // status authority; only sends when the board-relevant signature moves).
       lastTerminalsSig = null;
@@ -675,6 +707,7 @@ export function stopMobileServer() {
   if (wss) { try { wss.close(); } catch { /* noop */ } wss = null; }
   if (httpServer) { try { httpServer.close(); } catch { /* noop */ } httpServer = null; }
   boundAddress = null;
+  serveInfo = null;
   pairingCode = null;
   pairAttempts = 0;
   updateMobileServerConfig({ enabled: false });

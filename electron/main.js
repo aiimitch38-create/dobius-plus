@@ -46,6 +46,7 @@ import {
   openVisualWindow, closeVisualWindow,
 } from './window-manager.js';
 import { initAutoUpdater } from './auto-updater.js';
+import { provisionCert } from './tailscale.js';
 import {
   startMobileServer, stopMobileServer, getMobileServerStatus,
   regeneratePairingCode, removeMobileDevice, maybeAutoStartMobileServer,
@@ -1790,6 +1791,16 @@ function setupMobileServerHandlers() {
       return startMobileServer();
     }
     return getMobileServerStatus();
+  });
+  // Provision the tailnet HTTPS cert (Phase 4): enables service-worker install
+  // and Web Push. If the server is running, restart it so it picks up HTTPS.
+  ipcMain.handle('mobileServer:provisionCert', async () => {
+    const res = await provisionCert();
+    if (res.ok && getMobileServerStatus().running) {
+      stopMobileServer();
+      await startMobileServer();
+    }
+    return { ...res, status: getMobileServerStatus() };
   });
   // Device list — opaque deviceId only. Tokens stay server-side.
   // deriveDeviceId is the single source of truth shared with removeMobileDevice

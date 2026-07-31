@@ -164,6 +164,18 @@ export default function Settings() {
     setMobileStatus(status);
   }, []);
 
+  const provisionMobileCert = useCallback(async () => {
+    setMobileBusy(true);
+    setMobileError('');
+    try {
+      const res = await window.electronAPI.mobileServerProvisionCert();
+      if (!res?.ok) setMobileError(res?.error || 'Could not enable HTTPS.');
+      if (res?.status) setMobileStatus(res.status);
+    } finally {
+      setMobileBusy(false);
+    }
+  }, []);
+
   const updateSetting = useCallback((key, value) => {
     setSettings((prev) => {
       const next = { ...prev, [key]: value };
@@ -467,9 +479,34 @@ export default function Settings() {
                   border: '1px solid var(--border)', fontFamily: "'SF Mono', monospace",
                 }}
               >
-                {mobileStatus.address ? `http://${mobileStatus.address.host}:${mobileStatus.address.port}` : '...'}
+                {mobileStatus.url
+                  || (mobileStatus.address ? `http://${mobileStatus.address.host}:${mobileStatus.address.port}` : '...')}
               </code>
             </SettingRow>
+
+            {mobileStatus.bindMode !== 'lan' && (
+              <SettingRow
+                label="HTTPS"
+                description={mobileStatus.secure
+                  ? 'Secure: notifications and install are available'
+                  : 'HTTP only: terminal works, but push notifications and installing the app need HTTPS'}
+              >
+                {mobileStatus.secure ? (
+                  <span className="text-xs px-2 py-1 rounded" style={{ color: 'var(--accent)', backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
+                    Enabled
+                  </span>
+                ) : (
+                  <button
+                    onClick={provisionMobileCert}
+                    disabled={mobileBusy}
+                    className="text-xs px-3 py-1 rounded"
+                    style={{ color: 'var(--bg)', backgroundColor: 'var(--accent)', border: 'none', cursor: mobileBusy ? 'wait' : 'pointer' }}
+                  >
+                    {mobileBusy ? 'Enabling…' : 'Enable HTTPS'}
+                  </button>
+                )}
+              </SettingRow>
+            )}
 
             <SettingRow label="Pairing Code" description="Enter once on the phone to pair it">
               <div className="flex items-center gap-2">
