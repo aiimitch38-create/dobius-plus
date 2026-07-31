@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 /**
  * Chat history. Lists Claude Code sessions across all projects; tapping one
@@ -9,10 +9,22 @@ export default function History({ connection, onBack }) {
   const [sessions, setSessions] = useState(null);   // null = loading
   const [openSession, setOpenSession] = useState(null);
   const [transcript, setTranscript] = useState(null);
+  // Mirror of the open session so the onMessage handler (which closes over the
+  // initial state) can re-request its transcript on reconnect. Audit HIGH-5.
+  const openSessionRef = useRef(null);
 
   useEffect(() => {
     const off = connection.onMessage((msg) => {
-      if (msg.type === 'sessions') {
+      if (msg.type === 'authed') {
+        // Reconnect (iOS foreground kills the socket): re-issue our reads so a
+        // request dropped during the ~1-2s reconnect window doesn't leave us
+        // stuck on "Loading...". Matches Board/Terminal's re-issue-on-authed.
+        connection.send({ type: 'listSessions' });
+        const open = openSessionRef.current;
+        if (open) {
+          connection.send({ type: 'loadTranscript', sessionId: open.sessionId, projectPath: open.projectPath });
+        }
+      } else if (msg.type === 'sessions') {
         const list = [...(msg.list || [])].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         setSessions(list);
       } else if (msg.type === 'transcript') {
@@ -25,6 +37,7 @@ export default function History({ connection, onBack }) {
 
   const openTranscript = (s) => {
     setOpenSession(s);
+    openSessionRef.current = s;
     setTranscript(null);
     connection.send({ type: 'loadTranscript', sessionId: s.sessionId, projectPath: s.projectPath });
   };
@@ -38,7 +51,7 @@ export default function History({ connection, onBack }) {
     return (
       <div className="screen history">
         <header className="top-bar">
-          <button className="icon-btn" onClick={() => setOpenSession(null)} aria-label="Back">‹</button>
+          <button className="icon-btn" onClick={() => { setOpenSession(null); openSessionRef.current = null; }} aria-label="Back">‹</button>
           <span className="terminal-name">{openSession.projectName}</span>
           <button className="resume-btn" onClick={() => resume(openSession)}>Resume</button>
         </header>

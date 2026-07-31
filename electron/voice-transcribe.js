@@ -42,9 +42,11 @@ export function transcribeAvailable() {
   return !!(firstExecutable(WHISPER_CANDIDATES) && firstExecutable(FFMPEG_CANDIDATES) && firstFile(MODEL_CANDIDATES));
 }
 
-function run(bin, args, timeout) {
+function run(bin, args, timeout, signal) {
   return new Promise((resolve) => {
-    execFile(bin, args, { timeout, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+    // `signal` (from the caller's AbortController) kills the child if the phone
+    // drops the request mid-transcription, so ffmpeg/whisper don't orphan.
+    execFile(bin, args, { timeout, maxBuffer: 16 * 1024 * 1024, signal }, (err, stdout, stderr) => {
       resolve({ err, stdout: stdout || '', stderr: stderr || '' });
     });
   });
@@ -65,9 +67,10 @@ function extFor(mime) {
  * Transcribe a recorded audio buffer to text. Returns the transcript string, or
  * { error } (never throws). Writes only to a private temp dir, cleaned up after.
  */
-export async function transcribeAudio(buffer, mimeType) {
+export async function transcribeAudio(buffer, mimeType, signal) {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) return { error: 'empty audio' };
   if (buffer.length > MAX_AUDIO_BYTES) return { error: 'audio too large' };
+  if (signal?.aborted) return { error: 'aborted' };
   const whisper = firstExecutable(WHISPER_CANDIDATES);
   const ffmpeg = firstExecutable(FFMPEG_CANDIDATES);
   const model = firstFile(MODEL_CANDIDATES);
@@ -83,11 +86,13 @@ export async function transcribeAudio(buffer, mimeType) {
   try {
     await fs.writeFile(inFile, buffer, { mode: 0o600 });
     // Convert to what whisper.cpp wants: 16kHz mono signed-16 PCM WAV.
-    const conv = await run(ffmpeg, ['-y', '-i', inFile, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wavFile], 30000);
+    const conv = await run(ffmpeg, ['-y', '-i', inFile, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wavFile], 30000, signal);
+    if (signal?.aborted) return { error: 'aborted' };
     if (conv.err || !fsSync.existsSync(wavFile)) {
       return { error: 'could not decode the audio' };
     }
-    const tr = await run(whisper, ['-m', model, '-f', wavFile, '-otxt', '-nt', '-np', '-of', outPrefix], 120000);
+    const tr = await run(whisper, ['-m', model, '-f', wavFile, '-otxt', '-nt', '-np', '-of', outPrefix], 120000, signal);
+    if (signal?.aborted) return { error: 'aborted' };
     if (tr.err) return { error: 'transcription failed' };
     let text = '';
     try { text = (await fs.readFile(txtFile, 'utf8')).trim(); } catch { /* no output */ }

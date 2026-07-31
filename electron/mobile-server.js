@@ -43,11 +43,15 @@ const MAX_PAIR_ATTEMPTS = 5;
 const AUTH_TIMEOUT_MS = 5000;
 const MAX_INPUT_BYTES = 100 * 1024;   // cap a single input message (paste)
 const MAX_WS_PAYLOAD = 1024 * 1024;   // 1MB ws frame ceiling
+// whisper + ffmpeg are CPU-heavy; only run a couple at once so a retry loop or a
+// burst of uploads can't stack processes and starve the Mac. Audit HIGH-4.
+const MAX_VOICE_INFLIGHT = 2;
 
 let httpServer = null;
 let wss = null;
 let pairingCode = null;   // ephemeral, regenerated on each start
 let pairAttempts = 0;
+let voiceInFlight = 0;    // concurrent /voice/audio transcriptions
 
 // Power assertion (v1.0.43 resilience): while the mobile server is up, keep the
 // Mac from suspending so a phone away from home does not lose the link to a
@@ -314,6 +318,17 @@ function routeToConductor(transcript) {
   return requestId;
 }
 
+// Monotonic counter so two phone-spawned terminals created in the same
+// millisecond get distinct ids. `term-mobile-${Date.now()}` alone collides on a
+// double-tap, and terminal-manager kills an existing id on reuse, so the second
+// create would kill the first's live PTY. The trailing -<n> keeps the
+// `/^term-.+-\d+$/` shape the direct-voice path expects. Audit MED-10.
+let mobileTermCounter = 0;
+function mobileTermId() {
+  mobileTermCounter += 1;
+  return `term-mobile-${Date.now()}-${mobileTermCounter}`;
+}
+
 function handleAuthedMessage(socket, msg, subs) {
   switch (msg.type) {
     case 'ping':
@@ -392,7 +407,7 @@ function handleAuthedMessage(socket, msg, subs) {
           wsSend(socket, { type: 'error', message: 'Unknown project' });
           return;
         }
-        const id = `term-mobile-${Date.now()}`;
+        const id = mobileTermId();
         try {
           createTerminal(id, resolved, null);
           wsSend(socket, { type: 'terminalCreated', id });
@@ -422,18 +437,28 @@ function handleAuthedMessage(socket, msg, subs) {
       // Open a phone terminal in the session's project and resume Claude there.
       const { sessionId, projectPath } = msg;
       if (typeof sessionId !== 'string' || !/^[\w-]+$/.test(sessionId)) break;
-      const cwd = typeof projectPath === 'string' ? projectPath : os.homedir();
-      const id = `term-mobile-${Date.now()}`;
-      try {
-        createTerminal(id, cwd, null);
-        wsSend(socket, { type: 'terminalCreated', id });
-        // Link the session to this tab so the sidebar shows where it resumed.
-        setSessionTabLink(sessionId, id, cwd);
-        // Give the shell a beat to print its prompt before sending the command.
-        setTimeout(() => writeTerminal(id, `claude --resume ${sessionId}\r`), 700);
-      } catch (err) {
-        wsSend(socket, { type: 'error', message: String(err?.message || err) });
-      }
+      // Route the cwd through the SAME allowlist createTerminal uses. Without
+      // this, resumeSession took projectPath verbatim and spawned a login shell
+      // in any directory the phone named (audit HIGH-2), and an unknown path
+      // silently fell back to a home-dir shell + a blind `claude --resume` in
+      // the wrong place. Unknown project -> error, no shell.
+      resolveCreateCwd(projectPath).then((cwd) => {
+        if (cwd === null) {
+          wsSend(socket, { type: 'error', message: 'Unknown project' });
+          return;
+        }
+        const id = mobileTermId();
+        try {
+          createTerminal(id, cwd, null);
+          wsSend(socket, { type: 'terminalCreated', id });
+          // Link the session to this tab so the sidebar shows where it resumed.
+          setSessionTabLink(sessionId, id, cwd);
+          // Give the shell a beat to print its prompt before sending the command.
+          setTimeout(() => writeTerminal(id, `claude --resume ${sessionId}\r`), 700);
+        } catch (err) {
+          wsSend(socket, { type: 'error', message: String(err?.message || err) });
+        }
+      });
       break;
     }
 
@@ -571,13 +596,29 @@ export async function startMobileServer() {
     }
     const audio = Buffer.isBuffer(req.body) ? req.body : null;
     if (!audio || audio.length === 0) return res.status(400).json({ ok: false, error: 'no audio' });
-    const result = await transcribeAudio(audio, req.headers['content-type']);
-    if (result.error) return res.status(422).json({ ok: false, error: result.error });
-    const requestId = routeToConductor(result.text); // null if Conductor offline
-    // Transcription succeeded either way, but be honest about whether the
-    // command was actually routed, so the phone doesn't imply it was handled
-    // when the Conductor is down. Codex Phase 5a P2.
-    res.json({ ok: true, transcript: result.text, requestId, routed: !!requestId });
+    // Concurrency cap: reject rather than stack CPU-heavy transcriptions (audit HIGH-4).
+    if (voiceInFlight >= MAX_VOICE_INFLIGHT) {
+      return res.status(429).json({ ok: false, error: 'Busy transcribing, try again in a moment.' });
+    }
+    voiceInFlight += 1;
+    // Abort ffmpeg/whisper if the phone drops the request mid-transcription, so
+    // orphaned children don't keep burning CPU + holding temp files (audit HIGH-4).
+    const ac = new AbortController();
+    const onClose = () => { if (!res.writableEnded) ac.abort(); };
+    res.on('close', onClose);
+    try {
+      const result = await transcribeAudio(audio, req.headers['content-type'], ac.signal);
+      if (ac.signal.aborted) return; // client already gone; nothing to send
+      if (result.error) return res.status(422).json({ ok: false, error: result.error });
+      const requestId = routeToConductor(result.text); // null if Conductor offline
+      // Transcription succeeded either way, but be honest about whether the
+      // command was actually routed, so the phone doesn't imply it was handled
+      // when the Conductor is down. Codex Phase 5a P2.
+      res.json({ ok: true, transcript: result.text, requestId, routed: !!requestId });
+    } finally {
+      voiceInFlight -= 1;
+      res.off('close', onClose);
+    }
   });
 
   // GET /push/vapid -> { publicKey }  (Bearer). The phone needs this to

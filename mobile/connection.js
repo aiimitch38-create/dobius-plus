@@ -1,3 +1,8 @@
+// Deliberate one-shot actions that must survive a reconnect blip. Deliberately
+// excludes read requests (list*/loadTranscript), which screens re-issue on
+// `authed` themselves, so queuing them too would double-fire. Audit HIGH-5.
+const QUEUEABLE = new Set(['input', 'kill', 'resumeSession', 'createTerminal']);
+
 /**
  * WebSocket client for the Dobius+ mobile bridge.
  *
@@ -131,9 +136,13 @@ export class Connection {
       this.ws.send(JSON.stringify(obj));
       return;
     }
-    // Not ready: queue deliberate, id-addressed user actions so they survive a
-    // blip; drop ephemeral messages, which the screens re-send on re-auth.
-    if (obj && (obj.type === 'input' || obj.type === 'kill')) {
+    // Not ready: queue deliberate, one-shot user actions so they survive a
+    // reconnect blip. These are the actions NO screen re-issues on re-auth
+    // (input/kill keystrokes, and the resumeSession/createTerminal spawns that
+    // History/Board fire once). Read requests (listTerminals/listSessions/
+    // loadTranscript/listProjects) are NOT queued: their screens re-request them
+    // on `authed`, so queuing would just double-fire. Audit HIGH-5.
+    if (obj && QUEUEABLE.has(obj.type)) {
       this._queue.push(obj);
       if (this._queue.length > 200) this._queue.shift(); // bound the buffer
     }

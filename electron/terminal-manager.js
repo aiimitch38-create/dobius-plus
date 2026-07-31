@@ -69,6 +69,14 @@ export function ensureSpawnHelperExecutable() {
 // attached mobile client so it has real scrollback, not just the last screen.
 // 1MB is roughly 10-15k lines of terminal text.
 const OUTPUT_BUFFER_BYTES = 1024 * 1024;
+// Smaller cap kept even when NO mobile client is subscribed, so the FIRST phone
+// attach to a desktop-only or idle tab replays a real screen instead of a blank
+// one (audit HIGH-3: a desktop tab never had a subscriber, so its buffer stayed
+// empty and the phone got nothing). A screenful+ is enough to show the current
+// state; full 1MB scrollback still accrues once a phone is actually attached.
+// This 64KB slice is strictly cheaper than the 1MB slice already accepted for
+// the subscribed case, so it stays within the existing hot-path budget.
+const IDLE_BUFFER_BYTES = 64 * 1024;
 
 /**
  * Create a new terminal session.
@@ -158,15 +166,16 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
     if (entry.webContents && !entry.webContents.isDestroyed()) {
       entry.webContents.send('terminal:data', id, data);
     }
-    // Rolling buffer for late mobile subscribers, only maintained when a
-    // subscriber is actually attached. With no mobile client connected (the
-    // common case), the per-event string concat + slice is skipped entirely,
-    // which removes ~1MB-per-event allocation pressure from the hot path.
-    if (entry.subscribers.size > 0) {
-      entry.outputBuffer = (entry.outputBuffer + data).slice(-OUTPUT_BUFFER_BYTES);
-      for (const sub of entry.subscribers) {
-        try { sub.onData?.(id, data); } catch { /* drop bad subscriber silently */ }
-      }
+    // Rolling buffer for late mobile subscribers. Always maintained so the
+    // FIRST phone attach to a desktop-only/idle tab replays a real screen, not a
+    // blank one (audit HIGH-3). Keep only a screenful (64KB) when no phone is
+    // subscribed; grow to full 1MB scrollback once one is. The slice bounds the
+    // allocation either way, and the idle 64KB case is cheaper than the 1MB case
+    // that was already accepted for subscribed tabs.
+    const cap = entry.subscribers.size > 0 ? OUTPUT_BUFFER_BYTES : IDLE_BUFFER_BYTES;
+    entry.outputBuffer = (entry.outputBuffer + data).slice(-cap);
+    for (const sub of entry.subscribers) {
+      try { sub.onData?.(id, data); } catch { /* drop bad subscriber silently */ }
     }
   });
 
