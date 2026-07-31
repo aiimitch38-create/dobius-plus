@@ -56,7 +56,10 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
   const [terminals, setTerminals] = useState([]);
   const [activeId, setActiveId] = useState(initialId || null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
-  const [confirmStop, setConfirmStop] = useState(false);
+  // The specific session being confirmed for stop, captured at tap time, so a
+  // later activeId change (exit / reordered payload) can't make Stop kill the
+  // wrong terminal. { id, label } or null. Codex Phase 3a P2.
+  const [confirmStop, setConfirmStop] = useState(null);
 
   const refreshList = useCallback(() => {
     connection.send({ type: 'listTerminals' });
@@ -83,6 +86,11 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
     if (connection.status === 'authed') refreshList();
     return off;
   }, [connection, refreshList]);
+
+  // Close the stop-confirm if the session it named has since exited/vanished.
+  useEffect(() => {
+    if (confirmStop && !terminals.some((t) => t.id === confirmStop.id)) setConfirmStop(null);
+  }, [terminals, confirmStop]);
 
   const groups = useMemo(() => groupTerminals(terminals), [terminals]);
   const active = useMemo(
@@ -124,7 +132,11 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
           <span className="chevron">{switcherOpen ? '▴' : '▾'}</span>
         </button>
         {activeId && (
-          <button className="icon-btn stop-btn" onClick={() => setConfirmStop(true)} aria-label="Stop session">■</button>
+          <button
+            className="icon-btn stop-btn"
+            onClick={() => setConfirmStop({ id: activeId, label: active ? `${active.projectName} / ${active.tabLabel}` : 'this session' })}
+            aria-label="Stop session"
+          >■</button>
         )}
         <button className="icon-btn" onClick={onShowHistory} aria-label="Chat history">☷</button>
         <button className="icon-btn" onClick={newTerminalHere} aria-label="New terminal">+</button>
@@ -132,14 +144,14 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
 
       {confirmStop && (
         <div className="confirm-bar">
-          <span>Stop {active ? `${active.projectName} / ${active.tabLabel}` : 'this session'}?</span>
+          <span>Stop {confirmStop.label}?</span>
           <div className="confirm-actions">
-            <button className="confirm-cancel" onClick={() => setConfirmStop(false)}>Cancel</button>
+            <button className="confirm-cancel" onClick={() => setConfirmStop(null)}>Cancel</button>
             <button
               className="confirm-stop"
               onClick={() => {
-                if (activeId) connection.send({ type: 'kill', id: activeId });
-                setConfirmStop(false);
+                connection.send({ type: 'kill', id: confirmStop.id });
+                setConfirmStop(null);
               }}
             >Stop</button>
           </div>

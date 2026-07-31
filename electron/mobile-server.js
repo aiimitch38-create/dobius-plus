@@ -222,6 +222,19 @@ async function isKnownProjectPath(pth) {
   return (await knownProjectList()).some((p) => p.path === pth);
 }
 
+// Resolve the cwd for a phone-spawned terminal safely.
+//  - empty / a non-path sentinel ("main", "mobile") -> the home dir (a fixed,
+//    safe location; this is the desktop "main" tab / no-project case).
+//  - an ABSOLUTE path -> allowed only if it is a known project.
+//  - anything else -> rejected (null).
+// This keeps the arbitrary-absolute-path guard (Codex #5) while not breaking
+// new-tab-from-a-home/main-tab, which sends a non-path label. Codex r? P2.
+async function resolveCreateCwd(cwd) {
+  if (typeof cwd !== 'string' || cwd === '') return os.homedir();
+  if (!cwd.startsWith('/')) return os.homedir();
+  return (await isKnownProjectPath(cwd)) ? cwd : null;
+}
+
 function handleAuthedMessage(socket, msg, subs) {
   switch (msg.type) {
     case 'ping':
@@ -295,15 +308,14 @@ function handleAuthedMessage(socket, msg, subs) {
       // Phone-spawned PTY (no desktop tab; labeled remote-only on the board).
       // The cwd MUST be a known project (allowlist), never an arbitrary path,
       // so a paired token cannot open a shell anywhere on disk. Codex #5.
-      const cwd = typeof msg.cwd === 'string' ? msg.cwd : '';
-      isKnownProjectPath(cwd).then((ok) => {
-        if (!ok) {
+      resolveCreateCwd(msg.cwd).then((resolved) => {
+        if (resolved === null) {
           wsSend(socket, { type: 'error', message: 'Unknown project' });
           return;
         }
         const id = `term-mobile-${Date.now()}`;
         try {
-          createTerminal(id, cwd, null);
+          createTerminal(id, resolved, null);
           wsSend(socket, { type: 'terminalCreated', id });
         } catch (err) {
           wsSend(socket, { type: 'error', message: String(err?.message || err) });
