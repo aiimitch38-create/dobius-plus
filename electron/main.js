@@ -17,7 +17,7 @@ import {
   loadTranscript, readPlanFile, getActiveProcesses, listProjects,
   loadAllSessions, getLatestSession, getSessionSize, resolveFreshSessionsForTabs,
   loadProjectTokens, searchTranscripts, deleteSession,
-  getLastAssistantMessage,
+  getLastAssistantMessage, getAllProjectTabs,
 } from './data-service.js';
 import {
   loadBuildProgress, loadSupervisorLog, loadHandoff, detectActiveBuilds,
@@ -394,6 +394,7 @@ function setupDataHandlers() {
   ipcMain.handle('data:getActiveProcesses', () => getActiveProcesses());
   ipcMain.handle('data:listProjects', () => listProjects());
   ipcMain.handle('data:loadAllSessions', (_event, projectFilter) => loadAllSessions(typeof projectFilter === 'string' ? projectFilter : undefined));
+  ipcMain.handle('data:getAllProjectTabs', () => getAllProjectTabs());
   ipcMain.handle('data:getLatestSession', (_event, projectPath) => getLatestSession(projectPath));
   ipcMain.handle('data:getSessionSize', (_event, sessionId, projectPath) => getSessionSize(sessionId, projectPath));
   ipcMain.handle('data:killProcess', async (_event, pid) => {

@@ -372,6 +372,25 @@ export function getProjectConfig(projectPath) {
 }
 
 /**
+ * Read-only: every project that has persisted terminal tabs, as
+ * [{ path, tabs, tabCounter }]. Used by the cross-window "tabs by project"
+ * sidebar. Purely additive; touches nothing about how tabs are written. `tabs`
+ * is the currently-open set per project (closed tabs live in the separate
+ * recentlyClosedTabs store), and survives quit/restart via the debounced config.
+ */
+export function getAllProjectsWithTabs() {
+  const config = loadConfig();
+  const out = [];
+  for (const [path, proj] of Object.entries(config.projects || {})) {
+    if (UNSAFE_KEYS.has(path)) continue;
+    const tabs = Array.isArray(proj?.tabs) ? proj.tabs : [];
+    if (tabs.length === 0) continue;
+    out.push({ path, tabs, tabCounter: proj.tabCounter || 0 });
+  }
+  return out;
+}
+
+/**
  * Set per-project config (merge with prototype pollution guard).
  */
 export function setProjectConfig(projectPath, settings) {
