@@ -25,6 +25,17 @@ c.send({ type: 'ping' });
 check('input queued while disconnected', c._queue.length === 1);
 check('ephemeral (listTerminals/ping) not queued', c._queue.every((m) => m.type === 'input'));
 
+// 1b. One-shot write actions queue too (audit HIGH-5), but reads (re-issued by
+// screens on authed) do not, so they can't double-fire.
+const q = new Connection('tok');
+q.send({ type: 'resumeSession', sessionId: 's', projectPath: '/p' });
+q.send({ type: 'createTerminal', cwd: '/p' });
+q.send({ type: 'loadTranscript', sessionId: 's', projectPath: '/p' });
+q.send({ type: 'listSessions' });
+check('resumeSession/createTerminal queued while disconnected', q._queue.length === 2);
+check('read requests (loadTranscript/listSessions) NOT queued',
+  !q._queue.some((m) => m.type === 'loadTranscript' || m.type === 'listSessions'));
+
 // 2. Connect + open: the auth handshake goes out even though not yet authed.
 c.connect();
 const ws = instances[instances.length - 1];
