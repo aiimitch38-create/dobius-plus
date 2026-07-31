@@ -318,15 +318,19 @@ function routeToConductor(transcript) {
   return requestId;
 }
 
-// Monotonic counter so two phone-spawned terminals created in the same
-// millisecond get distinct ids. `term-mobile-${Date.now()}` alone collides on a
-// double-tap, and terminal-manager kills an existing id on reuse, so the second
-// create would kill the first's live PTY. The trailing -<n> keeps the
-// `/^term-.+-\d+$/` shape the direct-voice path expects. Audit MED-10.
+// Monotonic per-session counter for phone-spawned terminal ids. Must stay the
+// shape `term-mobile-<n>` (a single trailing digit run) because every parser
+// (parseTermLabel, terminal-status.projectFromId, mobile/Terminal.jsx) matches
+// `/^term-(.+)-(\d+)$/` and treats the terminal as mobile ONLY when the middle
+// group is exactly "mobile" (a `term-mobile-<ts>-<n>` shape would break that,
+// grouping it under a fake project). A plain incrementing counter is unique
+// within a session (PTYs never survive a restart) and never reuses an id, which
+// fixes the `Date.now()` collision that let two same-millisecond spawns kill
+// each other's PTY. Audit MED-10 + Codex.
 let mobileTermCounter = 0;
 function mobileTermId() {
   mobileTermCounter += 1;
-  return `term-mobile-${Date.now()}-${mobileTermCounter}`;
+  return `term-mobile-${mobileTermCounter}`;
 }
 
 function handleAuthedMessage(socket, msg, subs) {
