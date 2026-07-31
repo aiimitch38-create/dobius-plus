@@ -13,6 +13,7 @@ export default function VoiceButton() {
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
   const resetRef = useRef(null);
+  const wantStopRef = useRef(false); // set if released before the recorder started
 
   const secure = typeof window !== 'undefined' && window.isSecureContext;
   const supported = secure
@@ -26,8 +27,10 @@ export default function VoiceButton() {
   };
 
   const start = async () => {
-    if (!supported || state === 'recording' || state === 'working') return;
+    if (!supported || state === 'working') return;
+    if (mrRef.current && mrRef.current.state === 'recording') return;
     clearTimeout(resetRef.current);
+    wantStopRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -39,6 +42,9 @@ export default function VoiceButton() {
       mr.start();
       setState('recording');
       setLine('Listening…');
+      // The user may have released the button while getUserMedia was resolving;
+      // if so, stop immediately so we don't leave the recorder running.
+      if (wantStopRef.current) stop();
     } catch {
       setState('error');
       setLine('Microphone permission denied');
@@ -46,9 +52,13 @@ export default function VoiceButton() {
     }
   };
 
+  // Stop based on the RECORDER's own state, not React state, so a release that
+  // beats the setState('recording') render still stops it. Codex Phase 5a P2.
   const stop = () => {
-    if (mrRef.current && state === 'recording') {
-      try { mrRef.current.stop(); } catch { /* noop */ }
+    wantStopRef.current = true;
+    const mr = mrRef.current;
+    if (mr && mr.state === 'recording') {
+      try { mr.stop(); } catch { /* noop */ }
     }
   };
 
@@ -69,9 +79,8 @@ export default function VoiceButton() {
       });
       const j = await res.json();
       if (!j.ok) { setState('error'); setLine(j.error || 'Transcription failed'); resetSoon(5000); return; }
-      setLine(`“${j.transcript}”`);
-      if (j.requestId) { setState('working'); pollReply(j.requestId, token); }
-      else { setState('done'); resetSoon(7000); } // heard it, but no Conductor to answer
+      if (j.requestId) { setLine(`“${j.transcript}”`); setState('working'); pollReply(j.requestId, token); }
+      else { setState('done'); setLine(`“${j.transcript}”\n(Conductor offline, not sent)`); resetSoon(8000); }
     } catch {
       setState('error'); setLine('Upload failed'); resetSoon(4000);
     }

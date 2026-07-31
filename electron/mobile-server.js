@@ -548,7 +548,10 @@ export async function startMobileServer() {
     const result = await transcribeAudio(audio, req.headers['content-type']);
     if (result.error) return res.status(422).json({ ok: false, error: result.error });
     const requestId = routeToConductor(result.text); // null if Conductor offline
-    res.json({ ok: true, transcript: result.text, requestId });
+    // Transcription succeeded either way, but be honest about whether the
+    // command was actually routed, so the phone doesn't imply it was handled
+    // when the Conductor is down. Codex Phase 5a P2.
+    res.json({ ok: true, transcript: result.text, requestId, routed: !!requestId });
   });
 
   // GET /voice/tabs
