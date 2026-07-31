@@ -35,6 +35,7 @@ import { snapshot as terminalStatusSnapshot } from './terminal-status.js';
 import { estimateContextForTabId } from './tab-context.js';
 import { getMagicDNSName, certPathsFor, hasCertFor } from './tailscale.js';
 import { transcribeAudio, transcribeAvailable } from './voice-transcribe.js';
+import { getVapidPublicKey, subscribePush, sendPush, hasPushSubscribers } from './push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -236,9 +237,47 @@ function terminalsSignature(payload) {
 
 let statusBroadcastTimer = null;
 let lastTerminalsSig = null;
-function broadcastTerminalsIfChanged() {
-  if (activeSocketsByToken.size === 0) return; // nobody listening
+const prevStatusById = new Map(); // id -> last status, for push transitions
+const notifiedExits = new Set();  // `${id}:${at}` already push-notified
+
+// Fire push notifications for the moments worth pulling Sam back: a session
+// starts needing input, or a session exits nonzero. Runs even with no phone
+// connected (that is the point of push), but only when there are subscribers.
+// v1.0.43 Phase 5b.
+function firePushForEvents(payload) {
+  if (!hasPushSubscribers()) {
+    // Still track state so we don't blast a backlog the moment someone subscribes.
+    for (const t of payload.list) prevStatusById.set(t.id, t.status);
+    return;
+  }
+  const seen = new Set();
+  for (const t of payload.list) {
+    seen.add(t.id);
+    const prev = prevStatusById.get(t.id);
+    if (t.status === 'needs' && prev !== 'needs') {
+      sendPush({ title: t.projectName || 'Dobius+', body: `${t.label} needs your input`, tag: `needs:${t.id}` });
+    }
+    prevStatusById.set(t.id, t.status);
+  }
+  for (const id of [...prevStatusById.keys()]) if (!seen.has(id)) prevStatusById.delete(id);
+  for (const e of payload.recentExits) {
+    if (typeof e.exitCode === 'number' && e.exitCode !== 0) {
+      const key = `${e.id}:${e.at}`;
+      if (!notifiedExits.has(key)) {
+        notifiedExits.add(key);
+        sendPush({ title: e.projectName || 'Dobius+', body: `session failed (exit ${e.exitCode})`, tag: `exit:${key}` });
+      }
+    }
+  }
+  if (notifiedExits.size > 100) notifiedExits.clear(); // bound
+}
+
+function pollStatusTick() {
   const payload = buildTerminalsPayload();
+  // Push events fire regardless of connected sockets (phone may be closed).
+  try { firePushForEvents(payload); } catch { /* best effort */ }
+  // WS broadcast only when a phone is connected and the board-relevant state moved.
+  if (activeSocketsByToken.size === 0) return;
   const sig = terminalsSignature(payload);
   if (sig === lastTerminalsSig) return;
   lastTerminalsSig = sig;
@@ -554,6 +593,22 @@ export async function startMobileServer() {
     res.json({ ok: true, transcript: result.text, requestId, routed: !!requestId });
   });
 
+  // GET /push/vapid -> { publicKey }  (Bearer). The phone needs this to
+  // subscribe to Web Push. v1.0.43 Phase 5b.
+  expApp.get('/push/vapid', (req, res) => {
+    if (!bearerOk(req)) return res.status(401).json({ ok: false, error: 'auth' });
+    res.json({ ok: true, publicKey: getVapidPublicKey() });
+  });
+
+  // POST /push/subscribe { subscription }  (Bearer). Stores the phone's
+  // PushSubscription so the Mac can notify it when a session needs input / fails.
+  expApp.post('/push/subscribe', (req, res) => {
+    if (!bearerOk(req)) return res.status(401).json({ ok: false, error: 'auth' });
+    const entry = subscribePush(req.body?.subscription);
+    if (!entry) return res.status(400).json({ ok: false, error: 'invalid subscription' });
+    res.json({ ok: true });
+  });
+
   // GET /voice/tabs
   // Returns the live Dobius+ terminal tab list for the iPhone Shortcut's
   // "Choose From List" step when the user wants direct-to-tab mode.
@@ -699,7 +754,7 @@ export async function startMobileServer() {
       // Push status changes to connected phones (change-driven, 1s poll of the
       // status authority; only sends when the board-relevant signature moves).
       lastTerminalsSig = null;
-      statusBroadcastTimer = setInterval(broadcastTerminalsIfChanged, 1000);
+      statusBroadcastTimer = setInterval(pollStatusTick, 1000);
       // Context (model + ctx%) is transcript-derived, so recompute on a slow
       // debounce, not every status tick. Runs once now, then every 20s.
       refreshTabContexts();
@@ -727,6 +782,8 @@ export function stopMobileServer() {
   if (contextRefreshTimer) { clearInterval(contextRefreshTimer); contextRefreshTimer = null; }
   tabContextCache.clear();
   lastTerminalsSig = null;
+  prevStatusById.clear();
+  notifiedExits.clear();
   stopPowerAssertion();
   if (wss) { try { wss.close(); } catch { /* noop */ } wss = null; }
   // Capture the server so we can AWAIT its close before a caller restarts on the

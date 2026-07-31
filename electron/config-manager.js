@@ -1033,6 +1033,52 @@ export function isValidGwsId(id) {
   return typeof id === 'string' && GWS_ID_RE.test(id);
 }
 
+// --- Web Push (v1.0.43 Phase 5b) ---
+// VAPID keypair (generated once) + the phones' push subscriptions. Subscriptions
+// are keyed/deduped by endpoint so a re-subscribe replaces the old one.
+
+export function getPushVapid() {
+  const v = loadConfig().pushVapid;
+  return v && typeof v.publicKey === 'string' && typeof v.privateKey === 'string' ? v : null;
+}
+
+export function setPushVapid(vapid) {
+  if (!vapid || typeof vapid.publicKey !== 'string' || typeof vapid.privateKey !== 'string') return;
+  const config = loadConfig();
+  config.pushVapid = { publicKey: vapid.publicKey, privateKey: vapid.privateKey };
+  saveConfig(config);
+}
+
+export function getPushSubscriptions() {
+  const list = loadConfig().pushSubscriptions;
+  return Array.isArray(list) ? list : [];
+}
+
+export function addPushSubscription(sub) {
+  if (!sub || typeof sub.endpoint !== 'string' || !sub.endpoint.startsWith('https://')) return null;
+  if (!sub.keys || typeof sub.keys.p256dh !== 'string' || typeof sub.keys.auth !== 'string') return null;
+  const entry = {
+    endpoint: sub.endpoint.slice(0, 1000),
+    keys: { p256dh: sub.keys.p256dh.slice(0, 200), auth: sub.keys.auth.slice(0, 200) },
+    addedAt: Date.now(),
+  };
+  const config = loadConfig();
+  if (!Array.isArray(config.pushSubscriptions)) config.pushSubscriptions = [];
+  config.pushSubscriptions = config.pushSubscriptions.filter((s) => s.endpoint !== entry.endpoint);
+  config.pushSubscriptions.push(entry);
+  if (config.pushSubscriptions.length > 20) config.pushSubscriptions.shift(); // bound
+  saveConfig(config);
+  return entry;
+}
+
+export function removePushSubscription(endpoint) {
+  if (typeof endpoint !== 'string') return;
+  const config = loadConfig();
+  const before = (config.pushSubscriptions || []).length;
+  config.pushSubscriptions = (config.pushSubscriptions || []).filter((s) => s.endpoint !== endpoint);
+  if (config.pushSubscriptions.length !== before) saveConfig(config);
+}
+
 export function setProjectAccount(projectPath, accountId) {
   if (!projectPath || typeof projectPath !== 'string' || UNSAFE_KEYS.has(projectPath)) return;
   const config = loadConfig();

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import SessionCard from './SessionCard';
 import VoiceButton from './VoiceButton';
+import { pushSupported, pushGranted, enablePush } from './push-client';
 import { timeAgo } from './format';
 
 // Group terminals by project PATH, preserving first-seen order. Keyed on path,
@@ -37,6 +38,8 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
   const [recentExits, setRecentExits] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [projects, setProjects] = useState([]);
+  const [alerts, setAlerts] = useState(() => pushGranted() ? 'on' : 'off'); // off | on | error
+  const [alertMsg, setAlertMsg] = useState('');
   // Tick so relative times ("3m") refresh on quiet sessions: the server omits
   // lastActivityAt from its change signature, so without this the board only
   // re-renders on a status change and a time could stay "just now". Codex P3.
@@ -81,6 +84,19 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
         <div className="board-title-row">
           <h1 className="board-title">Sessions</h1>
           <div className="board-actions">
+            {pushSupported() && alerts !== 'on' && (
+              <button
+                className="icon-btn"
+                onClick={async () => {
+                  const r = await enablePush();
+                  setAlerts(r.ok ? 'on' : 'error');
+                  setAlertMsg(r.ok ? '' : (r.error || 'Could not enable alerts'));
+                  if (!r.ok) setTimeout(() => setAlertMsg(''), 5000);
+                }}
+                aria-label="Enable notifications"
+                title="Get notified when a session needs you"
+              >🔔</button>
+            )}
             <button className="icon-btn" onClick={onShowHistory} aria-label="Chat history">☷</button>
             <button
               className="icon-btn"
@@ -97,6 +113,7 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
           {needsCount > 0 && <span className="summary-chip chip-needs">{needsCount} needs you</span>}
           {workingCount > 0 && <span className="summary-chip chip-working">{workingCount} working</span>}
         </div>
+        {alertMsg && <div className="board-alert">{alertMsg}</div>}
       </header>
 
       <main className="board-body">

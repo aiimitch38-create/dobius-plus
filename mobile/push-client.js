@@ -1,0 +1,58 @@
+// Web Push subscription flow for the mobile app (v1.0.43 Phase 5b). Needs a
+// secure context (Phase 4 HTTPS) + an installed PWA on iOS. Fetches the VAPID
+// public key, subscribes, and registers the subscription with the Mac.
+const TOKEN_KEY = 'dobius-mobile-token';
+
+function urlB64ToUint8Array(base64) {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+export function pushSupported() {
+  return typeof navigator !== 'undefined'
+    && 'serviceWorker' in navigator
+    && typeof window !== 'undefined'
+    && 'PushManager' in window
+    && window.isSecureContext;
+}
+
+export function pushGranted() {
+  return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+}
+
+/** Request permission (user gesture), subscribe, and register with the Mac. */
+export async function enablePush() {
+  if (!pushSupported()) return { ok: false, error: 'Notifications need HTTPS (enable it in Dobius Settings) and an installed app.' };
+  let perm = Notification.permission;
+  if (perm !== 'granted') perm = await Notification.requestPermission();
+  if (perm !== 'granted') return { ok: false, error: 'Notification permission denied' };
+
+  const token = localStorage.getItem(TOKEN_KEY) || '';
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const vres = await fetch('./push/vapid', { headers: { Authorization: `Bearer ${token}` } });
+    const vj = await vres.json();
+    if (!vj.ok || !vj.publicKey) return { ok: false, error: 'Server has no push key' };
+
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(vj.publicKey),
+      });
+    }
+    const sres = await fetch('./push/subscribe', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub.toJSON() }),
+    });
+    const sj = await sres.json();
+    return sj.ok ? { ok: true } : { ok: false, error: sj.error || 'Could not register for notifications' };
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Could not enable notifications' };
+  }
+}
