@@ -34,6 +34,7 @@ import { getVoiceConductorTabId } from './voice-conductor.js';
 import { snapshot as terminalStatusSnapshot } from './terminal-status.js';
 import { estimateContextForTabId } from './tab-context.js';
 import { getMagicDNSName, certPathsFor, hasCertFor } from './tailscale.js';
+import { transcribeAudio, transcribeAvailable } from './voice-transcribe.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -278,6 +279,20 @@ async function resolveCreateCwd(cwd) {
   return null;
 }
 
+// Route a transcript to the Voice Conductor, tagged with a per-request id so
+// /voice/reply can match the spoken reply. Returns the requestId, or null if
+// the Conductor is offline. Shared by /voice/intent and /voice/audio.
+function routeToConductor(transcript) {
+  const conductorId = getVoiceConductorTabId();
+  if (!conductorId || !listTerminals().some((t) => t.id === conductorId)) return null;
+  const requestId = `req-${crypto.randomBytes(6).toString('hex')}`;
+  const tagged = `[${requestId}] ${transcript.slice(0, 4000).replace(/[\r\n]+/g, ' ')}`;
+  const CHUNK = 256;
+  for (let i = 0; i < tagged.length; i += CHUNK) writeTerminal(conductorId, tagged.slice(i, i + CHUNK));
+  writeTerminal(conductorId, '\r');
+  return requestId;
+}
+
 function handleAuthedMessage(socket, msg, subs) {
   switch (msg.type) {
     case 'ping':
@@ -511,23 +526,29 @@ export async function startMobileServer() {
       // No requestId for direct mode — there's no Conductor to reply.
       return res.json({ ok: true, mode: 'direct', tabId: directTabId });
     }
-    // Conductor mode (default) — tagged with a per-request id so /voice/reply
-    // can match the right reply when multiple intents are in flight.
-    const conductorId = getVoiceConductorTabId();
-    // The Conductor tab id is a constant; writeTerminal silently no-ops if that
-    // PTY isn't alive. Without this check the phone gets a requestId and a fake
-    // ok:true, then waits 25s for a reply that never comes. Mirror auto-mode's guard.
-    if (!conductorId || !listTerminals().some((t) => t.id === conductorId)) {
-      return res.status(503).json({ ok: false, error: 'conductor offline' });
-    }
-    const requestId = `req-${crypto.randomBytes(6).toString('hex')}`;
-    const tagged = `[${requestId}] ${transcript.slice(0, 4000).replace(/[\r\n]+/g, ' ')}`;
-    const CHUNK = 256;
-    for (let i = 0; i < tagged.length; i += CHUNK) {
-      writeTerminal(conductorId, tagged.slice(i, i + CHUNK));
-    }
-    writeTerminal(conductorId, '\r');
+    // Conductor mode (default): route via the shared helper, tagged with a
+    // per-request id so /voice/reply can match the reply. 503 if offline.
+    const requestId = routeToConductor(transcript);
+    if (!requestId) return res.status(503).json({ ok: false, error: 'conductor offline' });
     res.json({ ok: true, mode: 'conductor', requestId });
+  });
+
+  // POST /voice/audio  (raw recorded audio body; Bearer auth)
+  // The in-app voice path (v1.0.43 Phase 5): the phone records a command, uploads
+  // it here, the Mac transcribes locally with whisper.cpp, and the text routes to
+  // the Voice Conductor. Returns the transcript (so the phone shows what was
+  // heard) plus a requestId to poll /voice/reply. Audio never leaves the Mac.
+  expApp.post('/voice/audio', express.raw({ type: () => true, limit: '8mb' }), async (req, res) => {
+    if (!bearerOk(req)) return res.status(401).json({ ok: false, error: 'auth' });
+    if (!transcribeAvailable()) {
+      return res.status(503).json({ ok: false, error: 'Local transcription is not set up on the Mac (whisper-cli / ffmpeg missing).' });
+    }
+    const audio = Buffer.isBuffer(req.body) ? req.body : null;
+    if (!audio || audio.length === 0) return res.status(400).json({ ok: false, error: 'no audio' });
+    const result = await transcribeAudio(audio, req.headers['content-type']);
+    if (result.error) return res.status(422).json({ ok: false, error: result.error });
+    const requestId = routeToConductor(result.text); // null if Conductor offline
+    res.json({ ok: true, transcript: result.text, requestId });
   });
 
   // GET /voice/tabs

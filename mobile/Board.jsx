@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import SessionCard from './SessionCard';
+import VoiceButton from './VoiceButton';
 import { timeAgo } from './format';
 
 // Group terminals by project PATH, preserving first-seen order. Keyed on path,
@@ -138,6 +139,8 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
           </section>
         )}
       </main>
+
+      <VoiceButton />
 
       {pickerOpen && (
         <div className="sheet-backdrop" onClick={() => setPickerOpen(false)}>

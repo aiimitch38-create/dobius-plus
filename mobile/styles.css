@@ -432,6 +432,40 @@ button.primary:disabled { opacity: 0.4; }
 
 .board-actions { display: flex; gap: 8px; }
 
+/* Hold-to-talk mic (Phase 5). */
+.voice-fab {
+  position: fixed;
+  right: 20px; bottom: calc(env(safe-area-inset-bottom) + 20px);
+  z-index: 15;
+  width: 60px; height: 60px; border-radius: 50%;
+  border: none; cursor: pointer;
+  background: var(--accent); color: var(--on-accent);
+  font-size: 26px; line-height: 1;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  display: grid; place-items: center;
+  transition: transform 0.1s, box-shadow 0.2s, background 0.2s;
+  -webkit-user-select: none; user-select: none; touch-action: none;
+}
+.voice-fab:active { transform: scale(0.94); }
+.voice-fab.voice-recording {
+  background: var(--status-needs);
+  box-shadow: 0 0 0 8px rgba(217, 96, 90, 0.25), 0 6px 20px rgba(0, 0, 0, 0.45);
+  animation: breathe 1.2s ease-in-out infinite;
+}
+.voice-fab.voice-working { background: var(--status-working); }
+.voice-fab.disabled { background: var(--surface-2); color: var(--dim); box-shadow: none; cursor: default; }
+.voice-bubble {
+  position: fixed;
+  right: 20px; bottom: calc(env(safe-area-inset-bottom) + 92px);
+  z-index: 15; max-width: 78%;
+  background: var(--surface); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 14px;
+  padding: 10px 14px; font-size: 14px; line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  white-space: pre-wrap; word-break: break-word;
+}
+.voice-bubble.voice-error { border-color: rgba(217, 96, 90, 0.4); color: var(--status-needs); }
+
 /* New-session project picker (bottom sheet). */
 .sheet-backdrop {
   position: fixed; inset: 0; z-index: 20;
