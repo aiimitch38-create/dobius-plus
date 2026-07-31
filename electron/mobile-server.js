@@ -569,8 +569,14 @@ export async function startMobileServer() {
     if (code !== pairingCode) {
       pairAttempts += 1;
       if (pairAttempts >= MAX_PAIR_ATTEMPTS) {
+        // Cooldown (rate limit) AND rotate the code. The rate limit caps guesses
+        // to 5/min; rotating a fresh code each cycle means those guesses can't
+        // accumulate against one fixed target (which would eventually be brute-
+        // forced), while pairing still works with the current desktop-shown code
+        // once the cooldown passes. Not a permanent lockout. Audit MED-8 + Codex.
         pairLockedUntil = now + PAIR_LOCK_MS;
         pairAttempts = 0;
+        pairingCode = genPairingCode();
       }
       return res.status(403).json({ ok: false, error: 'Invalid pairing code.' });
     }
