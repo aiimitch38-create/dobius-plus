@@ -1623,9 +1623,14 @@ export async function searchTranscripts(query) {
  * Returns { tokens, maxTokens, model } or null if the file carries no usage.
  */
 async function estimateContextFromFile(filePath) {
-  const entries = await parseJsonl(filePath, 200);
+  const entries = await parseJsonl(filePath, 200); // chronological (readTail): oldest -> newest
   let lastInputTokens = 0;
   let lastModel = '';
+  // Use the MOST RECENT usage-bearing message's total, NOT the max over the tail.
+  // The max stuck at a historical peak: after a /compact (or /clear) the live
+  // context drops but the earlier peak, often ~100%, remained, so the bar was
+  // pinned at 100% for a tab that was no longer full (Sam-reported). The latest
+  // assistant turn's input total IS the current window occupancy.
   for (const entry of entries) {
     const usage = entry.message?.usage;
     if (!usage) continue;
@@ -1633,8 +1638,8 @@ async function estimateContextFromFile(filePath) {
       (usage.input_tokens || 0) +
       (usage.cache_read_input_tokens || 0) +
       (usage.cache_creation_input_tokens || 0);
-    if (total > lastInputTokens) {
-      lastInputTokens = total;
+    if (total > 0) {
+      lastInputTokens = total; // last assignment wins = newest turn
       if (entry.message?.model) lastModel = entry.message.model;
     }
   }
