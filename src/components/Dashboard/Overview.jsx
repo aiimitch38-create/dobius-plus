@@ -26,10 +26,10 @@ export default function Overview({ stats, settings }) {
       <div className="grid grid-cols-4 gap-3">
         <StatCard label="Sessions" value={totalSessions.toLocaleString()} />
         <StatCard label="Messages" value={totalMessages.toLocaleString()} />
-        {totalTools > 0 ? (
-          <StatCard label="Tool Calls" value={totalTools.toLocaleString()} />
-        ) : (
+        {stats?.derived ? (
           <StatCard label="Projects" value={(stats?.projectCount || 0).toLocaleString()} />
+        ) : (
+          <StatCard label="Tool Calls" value={totalTools.toLocaleString()} />
         )}
         <StatCard label="Recent" value={sessions.length} />
       </div>
