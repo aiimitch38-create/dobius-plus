@@ -1197,3 +1197,44 @@ function flushConfigSyncTail() {
     }
   }
 }
+
+/**
+ * Snapshot the current config to `config.json.pre-update-<version>.bak` right
+ * before an auto-update replaces the app bundle. Pure belt-and-suspenders: the
+ * update path never touches userData, so config already survives, but this makes
+ * a bad future build instantly recoverable (accounts, Asana PAT, gws + CLI
+ * paths, tokens). Snapshots the IN-MEMORY cache so even unflushed pending edits
+ * are captured; falls back to copying the on-disk file. Keeps the 3 most recent
+ * pre-update backups so they don't accumulate. Returns the backup path or null.
+ */
+export function backupConfigForUpdate(version) {
+  try {
+    const safeVer = String(version == null ? 'unknown' : version).replace(/[^\w.-]/g, '_').slice(0, 40) || 'unknown';
+    const backupPath = `${CONFIG_PATH}.pre-update-${safeVer}.bak`;
+    if (configCache) {
+      if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+      atomicWriteSync(backupPath, JSON.stringify(configCache, null, 2));
+    } else if (fs.existsSync(CONFIG_PATH)) {
+      fs.copyFileSync(CONFIG_PATH, backupPath);
+    } else {
+      return null; // nothing to back up
+    }
+    pruneUpdateBackups(3);
+    return backupPath;
+  } catch (err) {
+    console.warn('[config-manager] pre-update backup failed:', err.message);
+    return null;
+  }
+}
+
+function pruneUpdateBackups(keep) {
+  try {
+    const backups = fs.readdirSync(CONFIG_DIR)
+      .filter((f) => /^config\.json\.pre-update-.+\.bak$/.test(f))
+      .map((f) => ({ f, m: fs.statSync(path.join(CONFIG_DIR, f)).mtimeMs }))
+      .sort((a, b) => b.m - a.m);
+    for (const { f } of backups.slice(keep)) {
+      try { fs.unlinkSync(path.join(CONFIG_DIR, f)); } catch { /* best effort */ }
+    }
+  } catch { /* best effort */ }
+}

@@ -5,7 +5,7 @@ import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { getQuittingForUpdate, setQuitting } from './quit-state.js';
-import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending as cancelAutoResumeTab, cancelTabsForProject as cancelAutoResumeProject, pendingCount as autoResumePending } from './auto-resume.js';
+import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending as cancelAutoResumeTab, cancelTabsForProject as cancelAutoResumeProject } from './auto-resume.js';
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
 import { connectGwsAccount, listGwsAccounts, removeGwsAccount, ensureShim } from './gws-accounts.js';
@@ -24,7 +24,7 @@ import {
 } from './build-monitor-service.js';
 import {
   getGitStatus, getCommitLog, getBranches, getCommitDiff,
-  checkGhAvailable, getPullRequests, getIssues, getPrDetails, getIssueDetails,
+  checkGhAvailable, getPullRequests, getIssues,
 } from './git-service.js';
 import { watchFiles, stopWatching } from './watcher-service.js';
 import { watchProjectDir, unwatchProjectDir, getProjectEvents, stopAllFileWatchers } from './file-change-service.js';
@@ -35,7 +35,7 @@ import {
   getSessionTags, setSessionTag, removeSessionTag,
   getSessionTabMap, setSessionTabLink, removeSessionTabLink, touchSessionTabLink, clearSessionTabRunning,
   getAgentMemory, setAgentMemory, appendJournalEntry, pruneOldMemory,
-  getOrchestrationRuns, getOrchestrationRun, saveOrchestrationRun, deleteOrchestrationRun,
+  getOrchestrationRuns, saveOrchestrationRun, deleteOrchestrationRun,
   getMobileServerConfig,
   saveTerminalScrollback, loadTerminalScrollback,
   addManualProject, setProjectDisplayName, addHiddenProject,
@@ -63,7 +63,7 @@ import {
 import { startScheduledTasks, stopScheduledTasks } from './scheduled-tasks.js';
 import { startAutoMode, stopAutoMode, getAutoMode, setAutoModeEnabled } from './auto-mode.js';
 import { listTasks, addTask, updateTask, deleteTask, syncAsanaTasks, advanceTask, blockTask, unblockTask, completeTaskByRef, reopenTask } from './tasks-service.js';
-import { getImessageBridge, updateImessageBridge, getAsanaQueue, updateAsanaQueue, getAutoResume, updateAutoResume } from './config-manager.js';
+import { getImessageBridge, updateImessageBridge, getAsanaQueue, updateAsanaQueue } from './config-manager.js';
 import { startVisualServer, stopVisualServer, getVisualPort, listVisualPages, getVisualProjectPath } from './visual-server.js';
 import { deployStatus, deployPreview, promote } from './deploy-service.js';
 
@@ -836,11 +836,6 @@ function setupAgentMemoryHandlers() {
 
 function setupOrchestrationHandlers() {
   ipcMain.handle('orchestration:list', () => getOrchestrationRuns());
-
-  ipcMain.handle('orchestration:get', (_event, runId) => {
-    if (!runId || typeof runId !== 'string' || runId.length > 200) return null;
-    return getOrchestrationRun(runId);
-  });
 
   ipcMain.handle('orchestration:save', (_event, run) => {
     if (!run || typeof run !== 'object') return null;
@@ -1822,14 +1817,11 @@ function setupMobileServerHandlers() {
 }
 
 function setupAutoResumeHandlers() {
-  // Settings UI getter + toggle/tuning setter for the autoResume bucket.
-  ipcMain.handle('autoResume:get', () => getAutoResume());
-  ipcMain.handle('autoResume:update', (_event, updates) => updateAutoResume(updates || {}));
   // Cmd+Shift+R cancellation entry point: cancels every pending tab. Returns
   // how many were in flight so the UI can show a tiny "cancelled N queued
-  // resumes" toast.
+  // resumes" toast. (The get/update/pendingCount handlers were never called
+  // from the renderer and were removed.)
   ipcMain.handle('autoResume:cancelAll', () => ({ ok: true, cancelled: cancelAllAutoResume() }));
-  ipcMain.handle('autoResume:pendingCount', () => autoResumePending());
 }
 
 function setupVoicePlaybackHandlers() {
@@ -2030,8 +2022,6 @@ function setupGitHandlers() {
   ipcMain.handle('git:ghAvailable', () => checkGhAvailable());
   ipcMain.handle('git:pullRequests', (_event, projectDir) => getPullRequests(projectDir));
   ipcMain.handle('git:issues', (_event, projectDir) => getIssues(projectDir));
-  ipcMain.handle('git:prDetails', (_event, projectDir, prNumber) => getPrDetails(projectDir, prNumber));
-  ipcMain.handle('git:issueDetails', (_event, projectDir, issueNumber) => getIssueDetails(projectDir, issueNumber));
 
   ipcMain.handle('prompt:improve', (_event, rawPrompt) => {
     return new Promise((resolve, reject) => {

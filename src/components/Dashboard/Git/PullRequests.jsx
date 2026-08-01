@@ -36,11 +36,19 @@ export default function PullRequests({ pullRequests, ghAvailable }) {
         const passing = checks.filter((c) => c.conclusion === 'SUCCESS').length;
         const total = checks.length;
 
+        const open = () => pr.url && window.electronAPI?.openExternal?.(pr.url);
         return (
-          <div
+          <button
             key={pr.number}
-            className="px-4 py-3 flex items-start gap-3"
-            style={{ borderBottom: '1px solid var(--border)' }}
+            type="button"
+            onClick={open}
+            disabled={!pr.url}
+            title={pr.url ? 'Open on GitHub' : undefined}
+            aria-label={`Pull request #${pr.number}: ${pr.title}. Open on GitHub.`}
+            className="w-full text-left px-4 py-3 flex items-start gap-3"
+            style={{ borderBottom: '1px solid var(--border)', background: 'transparent', cursor: pr.url ? 'pointer' : 'default' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--surface-hover)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             {/* State badge */}
             <span
@@ -79,7 +87,7 @@ export default function PullRequests({ pullRequests, ghAvailable }) {
                 <span>{timeAgo(new Date(pr.createdAt).getTime())}</span>
               </div>
             </div>
-          </div>
+          </button>
         );
       })}
     </div>

@@ -1,6 +1,9 @@
 /**
- * 10 dark themes ported from claude-terminal/themes.sh
- * Each theme has: name, bg, fg, cursor, accent1-4, and xtermTheme
+ * Color themes (dark + light) originally ported from claude-terminal/themes.sh,
+ * expanded since. Author only the 8 base keys per theme (name, bg, fg, cursor,
+ * accent1-4); xtermTheme (22 keys) and cssVars (11 keys) are derived below.
+ * Themes are referenced BY INDEX and persisted per project, so only APPEND new
+ * themes to the end of the array, never insert in the middle.
  */
 
 function lighten(hex, amount = 0.2) {
@@ -128,6 +131,79 @@ const themes = [
     bg: '#FFD1B8', fg: '#3D1F0F', cursor: '#6B3D24',
     accent1: '#C45A2B', accent2: '#5F7A3D', accent3: '#B8860B', accent4: '#8B2D2D',
   },
+  // --- v1.0.47 additions: crimson, royal, and muted tones (appended so saved
+  //     per-project themeIndex values keep pointing at the same theme). ---
+  {
+    name: 'Crimson',
+    bg: '#160A0D', fg: '#F6DADF', cursor: '#E23E52',
+    accent1: '#DC2E43', accent2: '#4FB477', accent3: '#E0A93A', accent4: '#FF6470',
+  },
+  {
+    name: 'Royal',
+    bg: '#0B1030', fg: '#E7ECFF', cursor: '#D4AF37',
+    accent1: '#5570FF', accent2: '#3FB985', accent3: '#E3B341', accent4: '#F2617A',
+  },
+  {
+    name: 'Amethyst',
+    bg: '#150A24', fg: '#ECDCFF', cursor: '#B266FF',
+    accent1: '#9D4EDD', accent2: '#57C89C', accent3: '#E0B341', accent4: '#FF5D8F',
+  },
+  {
+    name: 'Driftwood',
+    bg: '#17161A', fg: '#CBC5BD', cursor: '#9A9187',
+    accent1: '#8FA6B6', accent2: '#93B089', accent3: '#CCA96C', accent4: '#C68178',
+  },
+  {
+    name: 'Slate',
+    bg: '#14181D', fg: '#BAC4CE', cursor: '#7E8C99',
+    accent1: '#6E96B8', accent2: '#7FAF97', accent3: '#C4AB6B', accent4: '#C48C8C',
+  },
+  {
+    name: 'Nebula',
+    bg: '#0E0B1A', fg: '#E6DCF8', cursor: '#C77DFF',
+    accent1: '#9D7CFF', accent2: '#4FD6C4', accent3: '#F5C561', accent4: '#FF6FA5',
+  },
+  // --- v1.0.47 creative pack: recognizable, distinctive palettes ---
+  {
+    name: 'Synthwave',
+    bg: '#1A1030', fg: '#F5E6FF', cursor: '#FF6AD5',
+    accent1: '#FF6AD5', accent2: '#05D9E8', accent3: '#FFD319', accent4: '#FF3860',
+  },
+  {
+    name: 'Gruvbox',
+    bg: '#282828', fg: '#EBDBB2', cursor: '#FE8019',
+    accent1: '#83A598', accent2: '#B8BB26', accent3: '#FABD2F', accent4: '#FB4934',
+  },
+  {
+    name: 'Tokyo Night',
+    bg: '#1A1B26', fg: '#C0CAF5', cursor: '#7AA2F7',
+    accent1: '#7AA2F7', accent2: '#9ECE6A', accent3: '#E0AF68', accent4: '#F7768E',
+  },
+  {
+    name: 'Rose Pine',
+    bg: '#191724', fg: '#E0DEF4', cursor: '#EBBCBA',
+    accent1: '#C4A7E7', accent2: '#9CCFD8', accent3: '#F6C177', accent4: '#EB6F92',
+  },
+  {
+    name: 'Solarized',
+    bg: '#002B36', fg: '#93A1A1', cursor: '#839496',
+    accent1: '#268BD2', accent2: '#859900', accent3: '#B58900', accent4: '#DC322F',
+  },
+  {
+    name: 'Cyberpunk',
+    bg: '#0A0A12', fg: '#F0F0FF', cursor: '#FCEE0A',
+    accent1: '#00F0FF', accent2: '#00FF9F', accent3: '#FCEE0A', accent4: '#FF003C',
+  },
+  {
+    name: 'Aurora',
+    bg: '#0A1428', fg: '#D6F5E3', cursor: '#64FFDA',
+    accent1: '#64FFDA', accent2: '#7CFF6B', accent3: '#E4C989', accent4: '#FF6B9D',
+  },
+  {
+    name: 'Molten',
+    bg: '#140A08', fg: '#FFE0C2', cursor: '#FF6B1A',
+    accent1: '#FF6B1A', accent2: '#6BA368', accent3: '#FFB627', accent4: '#FF3B1F',
+  },
 ];
 
 // Add xtermTheme and CSS variables to each theme
@@ -142,7 +218,10 @@ export const THEMES = themes.map((t) => ({
     '--border': `${t.fg}22`,
     '--surface': mixColor(t.bg, t.fg, 0.05),
     '--surface-hover': mixColor(t.bg, t.fg, 0.08),
-    '--dim': `${t.fg}88`,
+    // Secondary/"dim" text. On LIGHT backgrounds a 53% alpha (0x88) dark fg is
+    // too faint for WCAG AA, so use a stronger 78% (0xC7); dark themes keep the
+    // softer 53%. Accessibility fix.
+    '--dim': isLightBg(t.bg) ? `${t.fg}c7` : `${t.fg}88`,
     '--danger': t.accent4,
     '--warning': t.accent3,
     // Worktree indicator: teal, tuned so it stays legible on both dark and

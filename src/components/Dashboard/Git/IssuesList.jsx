@@ -25,10 +25,17 @@ export default function IssuesList({ issues, ghAvailable }) {
   return (
     <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
       {issues.map((issue) => (
-        <div
+        <button
           key={issue.number}
-          className="px-4 py-3 flex items-start gap-3"
-          style={{ borderBottom: '1px solid var(--border)' }}
+          type="button"
+          onClick={() => issue.url && window.electronAPI?.openExternal?.(issue.url)}
+          disabled={!issue.url}
+          title={issue.url ? 'Open on GitHub' : undefined}
+          aria-label={`Issue #${issue.number}: ${issue.title}. Open on GitHub.`}
+          className="w-full text-left px-4 py-3 flex items-start gap-3"
+          style={{ borderBottom: '1px solid var(--border)', background: 'transparent', cursor: issue.url ? 'pointer' : 'default' }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--surface-hover)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
           {/* State dot */}
           <span
@@ -71,7 +78,7 @@ export default function IssuesList({ issues, ghAvailable }) {
               )}
             </div>
           </div>
-        </div>
+        </button>
       ))}
     </div>
   );

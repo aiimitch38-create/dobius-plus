@@ -1,7 +1,7 @@
 import electronUpdater from 'electron-updater';
 import { app, BrowserWindow, Notification, ipcMain } from 'electron';
 import { setQuittingForUpdate } from './quit-state.js';
-import { drainConfigWrites } from './config-manager.js';
+import { drainConfigWrites, backupConfigForUpdate } from './config-manager.js';
 
 const { autoUpdater } = electronUpdater;
 
@@ -65,6 +65,11 @@ async function performInstall() {
     return false;
   }
   setQuittingForUpdate(true);
+  // Belt-and-suspenders: snapshot config.json before the bundle is replaced, so
+  // a bad future build that somehow wiped accounts/auth on first launch is
+  // instantly recoverable from config.json.pre-update-<version>.bak. The update
+  // never touches userData, so this is insurance, not a fix.
+  try { backupConfigForUpdate(pendingUpdate.version); } catch { /* best effort */ }
   try {
     await Promise.race([
       drainConfigWrites(), // v1.0.33: non-latching, so if quitAndInstall throws we can still persist
@@ -101,15 +106,6 @@ export function initAutoUpdater() {
   });
   ipcMain.handle('updater:getStatus', () => lastStatus);
   ipcMain.handle('updater:getCurrentVersion', () => app.getVersion());
-  // Used by the renderer to persist "I acknowledged version X" so the toast
-  // does not re-appear every 4h check. Renderer reads this on mount.
-  ipcMain.handle('updater:isDismissed', () => {
-    if (!pendingUpdate) return true;
-    try {
-      return lastReadyNotifiedVersion === pendingUpdate.version
-        && pendingUpdate.__dismissed === true;
-    } catch { return false; }
-  });
   ipcMain.handle('updater:dismiss', (_event, version) => {
     if (pendingUpdate && pendingUpdate.version === version) {
       pendingUpdate.__dismissed = true;

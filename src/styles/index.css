@@ -55,6 +55,21 @@ button {
   transition: all 150ms ease;
 }
 
+/* Keyboard focus ring (a11y). :focus-visible fires only for keyboard/AT
+   navigation, never for mouse clicks, so pointer users see no extra outline
+   while keyboard users always get a clear, theme-tinted focus indicator. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* xterm manages its own focus via an off-screen helper textarea; a ring there
+   would be meaningless, so suppress it. The terminal itself shows its cursor. */
+.xterm-helper-textarea:focus-visible,
+.xterm:focus-visible {
+  outline: none;
+}
+
 /* macOS traffic light padding */
 .drag-region {
   -webkit-app-region: drag;

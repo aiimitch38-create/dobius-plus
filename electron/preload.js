@@ -55,7 +55,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Orchestration
   orchestrationDecompose: (args) => ipcRenderer.invoke('orchestration:decompose', args),
   orchestrationList: () => ipcRenderer.invoke('orchestration:list'),
-  orchestrationGet: (runId) => ipcRenderer.invoke('orchestration:get', runId),
   orchestrationSave: (run) => ipcRenderer.invoke('orchestration:save', run),
   orchestrationDelete: (runId) => ipcRenderer.invoke('orchestration:delete', runId),
 
@@ -181,10 +180,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Auto-resume queue (v1.0.30): re-engage previously-active Claude sessions
   // on app launch, staggered. Settings UI + Cmd+Shift+R cancel hook.
-  autoResumeGet: () => ipcRenderer.invoke('autoResume:get'),
-  autoResumeUpdate: (updates) => ipcRenderer.invoke('autoResume:update', updates),
   autoResumeCancelAll: () => ipcRenderer.invoke('autoResume:cancelAll'),
-  autoResumePendingCount: () => ipcRenderer.invoke('autoResume:pendingCount'),
 
   // Voice playback (v1.0.32): read out Claude's last response via macOS say.
   voiceSpeakLast: (args) => ipcRenderer.invoke('voice:speakLast', args),
@@ -308,8 +304,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitGhAvailable: () => ipcRenderer.invoke('git:ghAvailable'),
   gitPullRequests: (projectDir) => ipcRenderer.invoke('git:pullRequests', projectDir),
   gitIssues: (projectDir) => ipcRenderer.invoke('git:issues', projectDir),
-  gitPrDetails: (projectDir, prNumber) => ipcRenderer.invoke('git:prDetails', projectDir, prNumber),
-  gitIssueDetails: (projectDir, issueNumber) => ipcRenderer.invoke('git:issueDetails', projectDir, issueNumber),
   improvePrompt: (rawPrompt) => ipcRenderer.invoke('prompt:improve', rawPrompt),
 
   // Project tasks (to-do list dropdown)

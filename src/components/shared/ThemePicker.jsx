@@ -7,12 +7,17 @@ export default function ThemePicker({ currentIndex, onChange }) {
   const ref = useRef(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     const handleClick = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
+    const handleKey = (e) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, [open]);
 
   const current = THEMES[currentIndex];
@@ -26,7 +31,10 @@ export default function ThemePicker({ currentIndex, onChange }) {
           backgroundColor: current.bg,
           borderColor: current.accent1,
         }}
-        title={current.name}
+        title={`Theme: ${current.name}`}
+        aria-label={`Change theme (current: ${current.name})`}
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         <span
           className="block w-2.5 h-2.5 rounded-full mx-auto"
@@ -41,19 +49,24 @@ export default function ThemePicker({ currentIndex, onChange }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 p-2 rounded-lg z-50"
+            className="absolute right-0 top-full mt-2 p-2 rounded-lg z-50 overflow-y-auto"
             style={{
               backgroundColor: 'var(--surface)',
               border: '1px solid var(--border)',
               backdropFilter: 'blur(12px)',
               minWidth: '140px',
+              maxHeight: '60vh',
             }}
+            role="menu"
+            aria-label="Theme"
           >
             {THEMES.map((theme, i) => (
               <button
                 key={theme.name}
                 onClick={() => { onChange(i); setOpen(false); }}
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors duration-100"
+                role="menuitemradio"
+                aria-checked={i === currentIndex}
                 style={{
                   color: i === currentIndex ? 'var(--fg)' : 'var(--dim)',
                   backgroundColor: i === currentIndex ? 'var(--bg)' : 'transparent',

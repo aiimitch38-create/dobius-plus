@@ -42,6 +42,7 @@ export default function TopBar({ projectName }) {
           className="px-2 py-1 text-xs rounded transition-colors duration-150"
           style={{ color: 'var(--dim)' }}
           title="Home, back to project list"
+          aria-label="Home, back to project list"
           onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--fg)'; e.currentTarget.style.backgroundColor = 'var(--surface-hover)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--dim)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
@@ -54,6 +55,7 @@ export default function TopBar({ projectName }) {
           className="px-2 py-1 text-xs rounded transition-colors duration-150"
           style={{ color: 'var(--dim)' }}
           title="Toggle Sidebar (Cmd+B)"
+          aria-label="Toggle sidebar"
           onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--fg)'; e.currentTarget.style.backgroundColor = 'var(--surface-hover)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--dim)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
@@ -118,7 +120,8 @@ export default function TopBar({ projectName }) {
         <button
           onClick={() => currentProjectPath && window.electronAPI?.visualOpenWindow?.(currentProjectPath)}
           disabled={!currentProjectPath}
-          title="Visual Preview — open a phone preview that updates as Claude edits"
+          title="Visual Preview, open a phone preview that updates as Claude edits"
+          aria-label="Open visual preview"
           className="no-drag"
           style={{
             display: 'flex',

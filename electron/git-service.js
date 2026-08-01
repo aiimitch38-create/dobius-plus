@@ -3,7 +3,6 @@ import path from 'path';
 
 const EXEC_TIMEOUT = 10_000;
 const HASH_RE = /^[a-f0-9]{4,40}$/;
-const NUMBER_RE = /^\d+$/;
 
 let ghAvailableCache = null;
 
@@ -197,7 +196,7 @@ export async function getPullRequests(projectDir) {
   if (!dir) return [];
   try {
     const stdout = await run('gh', [
-      'pr', 'list', '--json', 'number,title,state,author,createdAt,headRefName,statusCheckRollup,reviewRequests',
+      'pr', 'list', '--json', 'number,title,state,author,createdAt,headRefName,statusCheckRollup,reviewRequests,url',
       '--limit', '20',
     ], dir);
     return JSON.parse(stdout);
@@ -214,7 +213,7 @@ export async function getIssues(projectDir) {
   if (!dir) return [];
   try {
     const stdout = await run('gh', [
-      'issue', 'list', '--json', 'number,title,state,author,createdAt,labels,assignees',
+      'issue', 'list', '--json', 'number,title,state,author,createdAt,labels,assignees,url',
       '--limit', '30',
     ], dir);
     return JSON.parse(stdout);
@@ -223,36 +222,6 @@ export async function getIssues(projectDir) {
   }
 }
 
-/**
- * Get details for a specific PR.
- */
-export async function getPrDetails(projectDir, prNumber) {
-  const dir = validateDir(projectDir);
-  if (!dir || !NUMBER_RE.test(String(prNumber))) return null;
-  try {
-    const stdout = await run('gh', [
-      'pr', 'view', String(prNumber), '--json',
-      'number,title,state,body,author,createdAt,headRefName,baseRefName,additions,deletions,commits,reviews,statusCheckRollup',
-    ], dir);
-    return JSON.parse(stdout);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Get details for a specific issue.
- */
-export async function getIssueDetails(projectDir, issueNumber) {
-  const dir = validateDir(projectDir);
-  if (!dir || !NUMBER_RE.test(String(issueNumber))) return null;
-  try {
-    const stdout = await run('gh', [
-      'issue', 'view', String(issueNumber), '--json',
-      'number,title,state,body,author,createdAt,labels,assignees,comments',
-    ], dir);
-    return JSON.parse(stdout);
-  } catch {
-    return null;
-  }
-}
+// Per-PR / per-issue detail fetch (getPrDetails / getIssueDetails) was removed
+// in v1.0.47: the detail UI was never wired, so the handlers were dead. The
+// Git tab's PR/Issue rows now open on GitHub directly (shell.openExternal).
