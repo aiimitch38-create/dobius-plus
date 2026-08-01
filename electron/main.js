@@ -2229,24 +2229,45 @@ app.whenReady().then(() => {
 
   // Restore previously open project windows (Chrome-style tab restore)
   const config = loadConfig();
+  let restoreStaggerMs = 0; // wall-clock the staggered reopen takes, for auto-resume timing
   if (Array.isArray(config.lastOpenProjects) && config.lastOpenProjects.length > 0) {
-    // Small delay to let launcher window finish loading first
-    setTimeout(() => {
-      for (const projectPath of config.lastOpenProjects) {
-        if (typeof projectPath === 'string' && projectPath.startsWith('/') && fs.existsSync(projectPath)) {
+    const toRestore = config.lastOpenProjects.filter(
+      (p) => typeof p === 'string' && p.startsWith('/') && fs.existsSync(p),
+    );
+    const missing = config.lastOpenProjects.length - toRestore.length;
+    // Log what we're restoring so an incomplete reopen (Sam-reported after an
+    // update-restart, v1.0.44) is diagnosable: this line reveals whether the
+    // saved list itself was short (a save-side problem) vs windows failing to
+    // open (a restore-side problem).
+    console.log(`[restore] lastOpenProjects=${config.lastOpenProjects.length} reopening=${toRestore.length}${missing ? ` skipped(missing path)=${missing}` : ''}`, toRestore);
+    // Open one at a time with a stagger. Creating several BrowserWindows (each
+    // with a webview-enabled preload) in a single synchronous burst raced on
+    // macOS and some windows silently never appeared after an update-restart.
+    // A small per-window gap makes the reopen reliable. First opens after 500ms
+    // (let the launcher settle), then every 250ms.
+    toRestore.forEach((projectPath, i) => {
+      setTimeout(() => {
+        try {
           openProjectWindow(projectPath);
+        } catch (err) {
+          console.warn(`[restore] failed to reopen ${projectPath}:`, err?.message || err);
         }
-      }
-    }, 500);
+      }, 500 + i * 250);
+    });
+    // The last window opens at 500 + (n-1)*250ms; auto-resume must not conclude
+    // before then (it stops once the live-tab count is stable), or late-opening
+    // windows' sessions never resume. Codex.
+    if (toRestore.length > 0) restoreStaggerMs = 500 + (toRestore.length - 1) * 250;
   }
 
   // Auto-resume queue (v1.0.30): after the project windows above mount and
   // their terminals come up, walk every live tab's prior sessionTabMap entry
   // and stagger-write `claude --resume <id>` into each. Default ON; per-tab
   // cancel on user-input; Cmd+Shift+R cancels the whole queue. See
-  // electron/auto-resume.js. startAutoResume waits an internal startupDelay
-  // for terminals to be ready, so no separate setTimeout needed here.
-  void startAutoResume();
+  // electron/auto-resume.js. Its startupDelay is extended by the restore
+  // stagger so it waits for the LAST reopened window before deciding the live
+  // set is complete.
+  void startAutoResume({ startupDelayMs: 1500 + restoreStaggerMs });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

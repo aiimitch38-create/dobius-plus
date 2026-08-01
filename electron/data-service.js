@@ -691,11 +691,53 @@ export async function getLatestSession(projectPath) {
 export async function loadStats() {
   try {
     const content = await fs.readFile(STATS_PATH, 'utf8');
-    return JSON.parse(content);
-  } catch (err) {
-    console.warn('[data-service] Failed to load stats:', err.message);
-    return { version: 2, dailyActivity: [], modelUsage: {}, hourCounts: {} };
+    const parsed = JSON.parse(content);
+    // Use the CLI's cache only if it actually carries activity. Current Claude
+    // Code no longer writes ~/.claude/stats-cache.json, so an empty/absent cache
+    // must fall through to history-derived stats instead of leaving the Stats +
+    // Overview tabs blank (audit finding: both were BROKEN).
+    if (parsed && Array.isArray(parsed.dailyActivity) && parsed.dailyActivity.length > 0) {
+      return parsed;
+    }
+  } catch { /* no cache present, derive from history below */ }
+  return computeStatsFromHistory();
+}
+
+/**
+ * Derive dashboard stats from ~/.claude/history.jsonl (each line is one user
+ * prompt: { display, timestamp, project, sessionId }). Gives real
+ * messages/sessions per day and hour-of-day distribution. Model usage and
+ * tool-call counts live only in the per-session transcripts (GBs across all
+ * projects), too heavy to parse on a dashboard open, so those stay empty and
+ * their sections render their graceful hidden/empty state. Replaces the vanished
+ * stats-cache.json as the source. Main-process only.
+ */
+async function computeStatsFromHistory() {
+  const empty = { version: 2, dailyActivity: [], modelUsage: {}, hourCounts: {}, derived: true };
+  let entries;
+  try { entries = await parseJsonl(HISTORY_PATH); } catch { return empty; }
+  if (!Array.isArray(entries) || entries.length === 0) return empty;
+  const byDay = new Map(); // 'YYYY-MM-DD' -> { messageCount, sessions:Set }
+  const hourCounts = {};
+  const projects = new Set();
+  for (const e of entries) {
+    const ts = typeof e?.timestamp === 'number' ? e.timestamp : 0;
+    if (!ts) continue;
+    const d = new Date(ts);
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    let day = byDay.get(date);
+    if (!day) { day = { messageCount: 0, sessions: new Set() }; byDay.set(date, day); }
+    day.messageCount += 1;
+    if (e.sessionId) day.sessions.add(e.sessionId);
+    if (e.project) projects.add(e.project);
+    hourCounts[d.getHours()] = (hourCounts[d.getHours()] || 0) + 1;
   }
+  const dailyActivity = Array.from(byDay.entries())
+    .sort((a, b) => a[0].localeCompare(b[0])) // chronological; chart slices last 14
+    .map(([date, v]) => ({ date, messageCount: v.messageCount, sessionCount: v.sessions.size, toolCallCount: 0 }));
+  // projectCount is a real derived metric the Overview shows in place of the
+  // (transcript-only, unavailable) Tool Calls total when stats are derived.
+  return { version: 2, dailyActivity, modelUsage: {}, hourCounts, projectCount: projects.size, derived: true };
 }
 
 /**
@@ -903,7 +945,7 @@ export async function deleteSession(sessionId, projectPath) {
 /**
  * Load a transcript for a specific session.
  */
-export async function loadTranscript(sessionId, projectPath) {
+export async function loadTranscript(sessionId, projectPath, limit) {
   try {
     if (!/^[\w-]+$/.test(sessionId)) return [];
     if (typeof projectPath !== 'string' || !projectPath) return [];
@@ -935,7 +977,11 @@ export async function loadTranscript(sessionId, projectPath) {
       if (!enc || seen.has(enc)) continue;
       seen.add(enc);
       const p = path.join(PROJECTS_DIR, enc, `${sessionId}.jsonl`);
-      if (await pathExists(p)) return parseTranscriptFile(p);
+      if (await pathExists(p)) {
+        // A positive limit does a cheap tail read (mobile Chat poll); no limit
+        // streams the full transcript (History view). Codex.
+        return (typeof limit === 'number' && limit > 0) ? parseTranscriptTail(p, limit) : parseTranscriptFile(p);
+      }
     }
     return [];
   } catch (err) {
@@ -1014,40 +1060,75 @@ function extractAssistantText(entry) {
   return null;
 }
 
+// Map ONE raw JSONL entry to a { role, content } chat message, or null if it is
+// not a user/assistant text turn (tool calls, meta, empty). Shared by the full
+// stream and the bounded tail so the two can never diverge.
+function entryToMessage(entry) {
+  let role = null;
+  if (entry.type === 'human' || entry.role === 'user' || entry.message?.role === 'user') role = 'user';
+  else if (entry.type === 'assistant' || entry.role === 'assistant' || entry.message?.role === 'assistant') role = 'assistant';
+  if (!role) return null;
+  let content = '';
+  const msgContent = entry.message?.content;
+  if (typeof msgContent === 'string') {
+    content = msgContent;
+  } else if (Array.isArray(msgContent)) {
+    content = msgContent.map((c) => c.text || c.thinking || '').filter(Boolean).join('\n');
+  } else if (typeof entry.message === 'string') {
+    content = entry.message;
+  } else if (typeof entry.content === 'string') {
+    content = entry.content;
+  }
+  if (!content) return null;
+  if (content.length > MAX_MESSAGE_CHARS) {
+    content = content.slice(0, MAX_MESSAGE_CHARS) + `\n\n[message truncated at ${MAX_MESSAGE_CHARS} chars]`;
+  }
+  return { role, content };
+}
+
 async function parseTranscriptFile(filePath) {
   const messages = [];
   let payloadBytes = 0;
   let truncated = false;
   await streamJsonl(filePath, (entry) => {
     if (truncated) return;
-    let role = null;
-    if (entry.type === 'human' || entry.role === 'user' || entry.message?.role === 'user') role = 'user';
-    else if (entry.type === 'assistant' || entry.role === 'assistant' || entry.message?.role === 'assistant') role = 'assistant';
-    if (!role) return;
-    let content = '';
-    const msgContent = entry.message?.content;
-    if (typeof msgContent === 'string') {
-      content = msgContent;
-    } else if (Array.isArray(msgContent)) {
-      content = msgContent.map((c) => c.text || c.thinking || '').filter(Boolean).join('\n');
-    } else if (typeof entry.message === 'string') {
-      content = entry.message;
-    } else if (typeof entry.content === 'string') {
-      content = entry.content;
-    }
-    if (!content) return;
-    if (content.length > MAX_MESSAGE_CHARS) {
-      content = content.slice(0, MAX_MESSAGE_CHARS) + `\n\n[message truncated at ${MAX_MESSAGE_CHARS} chars]`;
-    }
-    payloadBytes += content.length + 64; // rough overhead for the wrapper object
+    const m = entryToMessage(entry);
+    if (!m) return;
+    payloadBytes += m.content.length + 64; // rough overhead for the wrapper object
     if (payloadBytes > MAX_PAYLOAD_BYTES) {
       truncated = true;
       messages.push({ role: 'system', content: `[transcript preview truncated: payload exceeded ${MAX_PAYLOAD_BYTES} bytes]`, timestamp: null });
       return;
     }
-    messages.push({ role, content, timestamp: entry.timestamp || null });
+    messages.push({ ...m, timestamp: entry.timestamp || null });
   });
   return messages;
+}
+
+// Bounded tail read for the mobile Chat poll: reads only the tail of the JSONL
+// (parseJsonl uses readTail), so re-polling every few seconds stays cheap even on
+// a 100MB transcript. `messageLimit` is the number of VISIBLE user/assistant
+// messages to return; we OVERSCAN raw lines because an agentic run's tail can be
+// mostly tool/meta records, so limiting raw lines before filtering could return
+// few or zero messages (Codex). The same aggregate payload cap as the full path
+// is enforced by trimming oldest-first, so a tail of huge pasted turns can't blow
+// past MAX_PAYLOAD_BYTES per poll (Codex).
+async function parseTranscriptTail(filePath, messageLimit) {
+  const want = Math.max(1, Math.min(messageLimit, 500));
+  const rawBudget = Math.min(want * 8, 8000); // overscan raw lines to find enough visible turns
+  const entries = await parseJsonl(filePath, rawBudget);
+  const msgs = [];
+  for (const entry of entries) {
+    const m = entryToMessage(entry);
+    if (m) msgs.push({ ...m, timestamp: entry.timestamp || null });
+  }
+  let tail = msgs.slice(-want);
+  let bytes = tail.reduce((n, m) => n + m.content.length + 64, 0);
+  while (tail.length > 1 && bytes > MAX_PAYLOAD_BYTES) {
+    bytes -= tail[0].content.length + 64;
+    tail = tail.slice(1);
+  }
+  return tail;
 }
 
 /**
@@ -1623,9 +1704,14 @@ export async function searchTranscripts(query) {
  * Returns { tokens, maxTokens, model } or null if the file carries no usage.
  */
 async function estimateContextFromFile(filePath) {
-  const entries = await parseJsonl(filePath, 200);
+  const entries = await parseJsonl(filePath, 200); // chronological (readTail): oldest -> newest
   let lastInputTokens = 0;
   let lastModel = '';
+  // Use the MOST RECENT usage-bearing message's total, NOT the max over the tail.
+  // The max stuck at a historical peak: after a /compact (or /clear) the live
+  // context drops but the earlier peak, often ~100%, remained, so the bar was
+  // pinned at 100% for a tab that was no longer full (Sam-reported). The latest
+  // assistant turn's input total IS the current window occupancy.
   for (const entry of entries) {
     const usage = entry.message?.usage;
     if (!usage) continue;
@@ -1633,8 +1719,8 @@ async function estimateContextFromFile(filePath) {
       (usage.input_tokens || 0) +
       (usage.cache_read_input_tokens || 0) +
       (usage.cache_creation_input_tokens || 0);
-    if (total > lastInputTokens) {
-      lastInputTokens = total;
+    if (total > 0) {
+      lastInputTokens = total; // last assignment wins = newest turn
       if (entry.message?.model) lastModel = entry.message.model;
     }
   }

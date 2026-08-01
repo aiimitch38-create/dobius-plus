@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import XtermView from './XtermView';
+import ChatView from './ChatView';
 import SpecialKeys from './SpecialKeys';
 
 /** Last path segment, for a short folder label. */
@@ -63,6 +64,19 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
   // Guards a createTerminal round-trip so a double-tap over Tailscale latency
   // can't spawn two orphan PTYs. Reset on the reply. Audit MED-10.
   const creatingRef = useRef(false);
+  // 'chat' (responsive transcript, default) vs 'terminal' (raw PTY mirror). The
+  // raw mirror is width-locked to the desktop and unreadable for wide TUIs, so
+  // Chat is the default; the toggle is persisted.
+  const [mode, setMode] = useState(() => {
+    try { return localStorage.getItem('dobius-mobile-view') === 'terminal' ? 'terminal' : 'chat'; } catch { return 'chat'; }
+  });
+  const toggleMode = useCallback(() => {
+    setMode((m) => {
+      const next = m === 'chat' ? 'terminal' : 'chat';
+      try { localStorage.setItem('dobius-mobile-view', next); } catch { /* noop */ }
+      return next;
+    });
+  }, []);
 
   const refreshList = useCallback(() => {
     connection.send({ type: 'listTerminals' });
@@ -161,6 +175,16 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
             aria-label="Stop session"
           >■</button>
         )}
+        {activeId && (
+          <button
+            className="icon-btn view-toggle"
+            onClick={toggleMode}
+            title={mode === 'chat' ? 'Switch to raw Terminal view' : 'Switch to Chat view'}
+            aria-label="Toggle chat/terminal view"
+          >
+            {mode === 'chat' ? 'Term' : 'Chat'}
+          </button>
+        )}
         <button className="icon-btn" onClick={onShowHistory} aria-label="Chat history">☷</button>
         <button className="icon-btn" onClick={newTerminalHere} aria-label="New terminal">+</button>
       </header>
@@ -208,17 +232,21 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
       )}
 
       <main className="terminal-body">
-        {activeId ? (
-          <XtermView connection={connection} activeId={activeId} />
-        ) : (
+        {!activeId ? (
           <div className="empty-state">
             <p className="muted">No terminal selected.</p>
             <p className="muted small">Tap the title bar to pick one.</p>
           </div>
+        ) : mode === 'chat' ? (
+          <ChatView connection={connection} tab={active} />
+        ) : (
+          <XtermView connection={connection} activeId={activeId} />
         )}
       </main>
 
-      {activeId && <SpecialKeys onKey={sendKey} />}
+      {/* Raw-terminal helper keys only apply to the terminal mirror; the chat
+          view has its own input. */}
+      {activeId && mode === 'terminal' && <SpecialKeys onKey={sendKey} />}
     </div>
   );
 }
