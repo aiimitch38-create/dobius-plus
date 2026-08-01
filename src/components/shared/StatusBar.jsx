@@ -1,5 +1,6 @@
 import { useStore } from '../../store/store';
 import { useState, useEffect } from 'react';
+import { modelLabel } from '../../lib/model-label';
 
 function ctxColor(pct) {
   if (pct >= 95) return '#f85149';
@@ -200,6 +201,16 @@ export default function StatusBar() {
               title={`This tab's Claude session\nContext window: ~${ctx.tokens.toLocaleString()} / ${ctx.maxTokens.toLocaleString()} tokens (${pct}%)\nModel: ${ctx.model || 'unknown'}`}
               style={{ cursor: 'default' }}
             >
+              {ctx.model && (
+                <span
+                  style={{
+                    fontSize: 9, fontFamily: "'SF Mono', monospace", color: 'var(--accent)',
+                    padding: '1px 5px', borderRadius: 4, backgroundColor: 'var(--accent-muted)',
+                  }}
+                >
+                  {modelLabel(ctx.model)}
+                </span>
+              )}
               <span style={{ color, fontSize: 9 }}>ctx</span>
               <span
                 className="relative h-1.5 rounded-full overflow-hidden"

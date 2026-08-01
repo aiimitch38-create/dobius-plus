@@ -1,14 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../../store/store';
 import { motion, AnimatePresence } from 'framer-motion';
+import { modelLabel } from '../../lib/model-label';
 
 const ALLOWED_MODELS = ['claude-opus-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'];
-
-const MODEL_LABELS = {
-  'claude-opus-4-6': 'Opus',
-  'claude-sonnet-4-5-20250929': 'Sonnet',
-  'claude-haiku-4-5-20251001': 'Haiku',
-};
 
 function StatCard({ label, value, subtitle, accent, index = 0, onClick }) {
   return (
@@ -345,7 +340,7 @@ function AgentCard({ agent, isRunning, memory, onLaunch, onChat, onEdit, onDelet
         />
         {agent.model && (
           <Badge
-            label={MODEL_LABELS[agent.model] || agent.model}
+            label={modelLabel(agent.model)}
             bg="rgba(88,166,255,0.15)"
             color="var(--accent)"
           />

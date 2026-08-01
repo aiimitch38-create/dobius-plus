@@ -1,14 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../../../store/store';
 import { motion, AnimatePresence } from 'framer-motion';
+import { modelLabel } from '../../../lib/model-label';
 
 const ALLOWED_MODELS = ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
-
-const MODEL_LABELS = {
-  'claude-opus-4-8': 'Opus',
-  'claude-sonnet-4-6': 'Sonnet',
-  'claude-haiku-4-5-20251001': 'Haiku',
-};
 
 export default function OrchestratorView() {
   const activeOrchestration = useStore((s) => s.activeOrchestration);
@@ -246,7 +241,7 @@ Respond with ONLY valid JSON (no markdown, no explanation):
                   {agent.name}
                   {agent.model && (
                     <span style={{ marginLeft: 4, fontSize: 8, opacity: 0.6 }}>
-                      {MODEL_LABELS[agent.model] || ''}
+                      {modelLabel(agent.model)}
                     </span>
                   )}
                 </button>
