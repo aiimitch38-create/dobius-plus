@@ -40,11 +40,10 @@ export default function ChatView({ connection, tab }) {
     const off = connection.onMessage((msg) => {
       if (msg.type === 'transcript' && msg.sessionId === wantRef.current
           && (msg.projectPath == null || msg.projectPath === projectPath)) {
-        const next = msg.entries || [];
-        // Don't let a transient empty poll blank out a conversation that was
-        // showing turns; keep the last non-empty result until real content
-        // arrives. First load still shows the empty state.
-        setMessages((prev) => (next.length || !prev || prev.length === 0 ? next : prev));
+        // Trust the server result. The overscanning tail read already prevents
+        // spurious empties from a tool-heavy tail, so an empty reply now means the
+        // transcript is genuinely empty/reset and should clear the view. Codex.
+        setMessages(msg.entries || []);
       }
     });
     return off;
