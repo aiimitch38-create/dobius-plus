@@ -203,6 +203,14 @@ export async function saveTerminalScrollback(projectPath, tabId, state) {
  */
 export async function loadTerminalScrollback(projectPath, tabId) {
   if (!projectPath || !tabId) return null;
+  // Only return scrollback for a tab that is actually in this project's persisted
+  // tabs. A brand-new tab that happens to REUSE a prior tab's id (e.g. after a
+  // corrupt-config reset restarts tabCounter at 0, so config.projects is empty)
+  // must NOT load the old tab's output into a blank terminal. Restored tabs are
+  // already in configCache.projects[path].tabs, so they still load. Audit Medium.
+  if (!configCache) loadConfig();
+  const tabs = configCache?.projects?.[projectPath]?.tabs;
+  if (!Array.isArray(tabs) || !tabs.some((t) => t && t.id === tabId)) return null;
   try {
     const content = await fsp.readFile(getScrollbackPath(projectPath, tabId), 'utf8');
     return JSON.parse(content);
@@ -603,6 +611,14 @@ export function addHiddenProject(projectPath) {
     // Also remove from manual projects if present
     config.manualProjects = (config.manualProjects || []).filter((p) => p !== projectPath);
     saveConfig(config);
+    // Reclaim the project's per-tab scrollback files (never unlinked otherwise,
+    // so they accumulate on disk forever). Best-effort. Audit Medium.
+    try {
+      if (typeof projectPath === 'string' && projectPath) {
+        const dir = path.join(SCROLLBACK_DIR, Buffer.from(projectPath).toString('base64url'));
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    } catch { /* best-effort */ }
   }
 }
 
@@ -1178,6 +1194,25 @@ export function flushConfig() {
   // flushConfigAsync() instead. Kept here for the brief startup paths that
   // still need a non-blocking sync flush.
   return flushConfigSyncTail();
+}
+
+/**
+ * Persist the current cache to disk SYNCHRONOUSLY and immediately, WITHOUT
+ * latching. Unlike flushConfig()/flushConfigSyncTail (quit-only: they set the
+ * `flushed` flag that permanently disarms every later debounced write for the
+ * session), this leaves runtime persistence fully intact. Use for a one-off
+ * startup write that must land before later code reads config.json. Audit High:
+ * the startup tear-off dedupe used to call flushConfig() and silently killed all
+ * config writes for the rest of the session.
+ */
+export function persistConfigNow() {
+  if (!configCache) return;
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    atomicWriteSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
+  } catch (err) {
+    console.warn('[config-manager] persistConfigNow failed:', err.message);
+  }
 }
 
 function flushConfigSyncTail() {

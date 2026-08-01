@@ -43,7 +43,10 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     wantRef.current = sessionId;
     // limit = number of recent messages; the server does a cheap overscanning
     // tail read, so polling a huge transcript stays light.
-    connection.send({ type: 'loadTranscript', sessionId, projectPath, limit: 200 });
+    // tabId authorizes this socket to send input to the tab (server gates
+    // input/kill on the socket's touched-tab set, and the Chat view never
+    // attaches). Audit Medium.
+    connection.send({ type: 'loadTranscript', sessionId, projectPath, tabId, limit: 200 });
   }, [connection, sessionId, projectPath]);
 
   // Ask the server whether the tab's live PTY is showing a selection prompt.

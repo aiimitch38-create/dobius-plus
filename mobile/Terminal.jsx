@@ -142,6 +142,17 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
     if (activeId) connection.send({ type: 'input', id: activeId, data: seq });
   }, [connection, activeId]);
 
+  // Authorize the tab the user is actively viewing so input/resize/kill work in
+  // BOTH modes, including the Stop button on a sessionless terminal in Chat mode
+  // (the Chat view otherwise never sends loadTranscript to authorize it). The
+  // server gate still blocks a socket that never references a tab. Audit Medium.
+  // Gate on status==='authed' and depend on it so a WS reconnect (fresh server
+  // socket with an empty _authedTabs) re-authorizes the active tab; without this,
+  // Stop silently no-ops after any reconnect. Codex follow-up.
+  useEffect(() => {
+    if (activeId && status === 'authed') connection.send({ type: 'authorizeTab', id: activeId });
+  }, [connection, activeId, status]);
+
   // New terminal in a specific project (matches the desktop's per-project tabs).
   const newTerminalIn = useCallback((projectPath) => {
     if (creatingRef.current) return; // guard double-tap over latency (MED-10)

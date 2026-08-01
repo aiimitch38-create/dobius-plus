@@ -20,6 +20,7 @@ export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel, t
   const setActiveView = useStore((s) => s.setActiveView);
   const sidebarVisible = useStore((s) => s.sidebarVisible);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
+  const setSidebarVisible = useStore((s) => s.setSidebarVisible);
   const themeIndex = useStore((s) => s.themeIndex);
   const setThemeIndex = useStore((s) => s.setThemeIndex);
   const toggleGitPanel = useStore((s) => s.toggleGitPanel);
@@ -128,6 +129,16 @@ export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel, t
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Honor the "Sidebar Default" setting on mount (it was persisted but never
+  // read, so the toggle did nothing). One-shot: the user can still toggle it
+  // afterward with Cmd+B. Audit Medium.
+  useEffect(() => {
+    if (!window.electronAPI?.configGetSettings) return;
+    window.electronAPI.configGetSettings()
+      .then((settings) => { if (settings?.sidebarDefaultOpen) setSidebarVisible(true); })
+      .catch(() => {});
+  }, [setSidebarVisible]);
 
   // Load config on mount (pinned sessions + theme + tabs)
   useEffect(() => {

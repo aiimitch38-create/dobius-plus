@@ -154,7 +154,10 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
 
   term.onData((data) => {
     const entry = terminals.get(id);
-    if (!entry) return;
+    // Identity guard: if this id was re-created (createTerminal killed the old
+    // PTY and spawned a new one under the same id), the OLD pty's late onData
+    // must not be routed as the replacement's output. Audit High.
+    if (!entry || entry.pty !== term) return;
     // Global observers (main-process status authority, v1.0.43): see EVERY
     // terminal's output regardless of whether a window or mobile client is
     // attached, so tab status is tracked centrally. Cheap: observers do a
@@ -181,8 +184,13 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
 
   term.onExit(({ exitCode, signal }) => {
     const entry = terminals.get(id);
+    // Identity guard: a killed PTY's onExit fires asynchronously. If the id was
+    // already re-created (createTerminal kills old -> spawns new under same id),
+    // entry.pty is the NEW live pty; deleting it here would kill the live
+    // replacement and emit a bogus exit. Only act when this IS the current pty.
+    // Audit High.
+    if (!entry || entry.pty !== term) return;
     terminals.delete(id);
-    if (!entry) return;
     // Global observers get the exit + the cwd BEFORE the entry is gone, so the
     // status authority can cache exit code/project for the mobile board.
     for (const obs of terminalObservers) {
@@ -199,6 +207,13 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
   terminals.set(id, {
     pty: term,
     webContents,
+    // True once this PTY has ever been bound to a desktop window (created with a
+    // webContents, or later claimed by one). Headless PTYs (voice-conductor
+    // background agents, phone-spawned terminals) are created with webContents
+    // null and never claimed, so this stays false. A project window's close/kill
+    // only reaps WINDOW-owned PTYs, so closing a window never terminates a
+    // deliberately-headless background agent. Audit High.
+    everWindowOwned: !!webContents,
     subscribers: new Set(),
     outputBuffer: '',
     cwd: safeCwd,
@@ -482,7 +497,17 @@ export function reassignTerminal(id, newWebContents) {
   const entry = terminals.get(id);
   if (!entry) return false;
   entry.webContents = newWebContents;
+  if (newWebContents) entry.everWindowOwned = true; // a window claim binds it. Audit High.
   return true;
+}
+
+/**
+ * True if this terminal was ever bound to a desktop window. False for headless
+ * (voice-conductor background agents) and phone-spawned PTYs, which a window's
+ * close must never Ctrl+C or kill. Audit High.
+ */
+export function wasWindowOwned(id) {
+  return !!terminals.get(id)?.everWindowOwned;
 }
 
 /**

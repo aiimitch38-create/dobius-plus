@@ -11,6 +11,18 @@ function pruneGrid(gridSlots, keptIds) {
   return pruned.length ? pruned : null;
 }
 
+// Resolve the tab that terminal writes (inject prompt, resume, restore) should
+// target. The active tab may be a BROWSER tab, which has no PTY, so a write to
+// it is silently dropped. Return the active tab when it's a terminal, else fall
+// back to the most recent terminal tab, else null. Audit Medium.
+function resolveActiveTerminalTabId(state) {
+  const tabs = state.terminalTabs || [];
+  const active = tabs.find((t) => t.id === state.activeTabId);
+  if (active && (active.kind || 'terminal') === 'terminal') return active.id;
+  const terms = tabs.filter((t) => (t.kind || 'terminal') === 'terminal');
+  return terms.length ? terms[terms.length - 1].id : null;
+}
+
 export const useStore = create((set, get) => ({
   // View state
   activeView: 'terminal', // 'terminal' | 'dashboard'
@@ -377,6 +389,7 @@ export const useStore = create((set, get) => ({
   // Actions
   setActiveView: (view) => set({ activeView: view }),
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
+  setSidebarVisible: (v) => set({ sidebarVisible: !!v }),
   toggleGitPanel: () => set((s) => ({ gitPanelVisible: !s.gitPanelVisible })),
   setDashboardTab: (tab) => set({ dashboardTab: tab }),
 
@@ -535,6 +548,11 @@ export const useStore = create((set, get) => ({
   // the in-Project resume path. ResumeBanner + Sessions dashboard both call
   // this and previously dropped the project, putting Claude in the wrong cwd
   // for the session. Fix: cd to project first, then run --resume.
+  // The tab a terminal write should target (active tab if a terminal, else the
+  // nearest terminal tab, else null). Used by resume/inject/restore so they
+  // don't silently no-op when a browser tab is active. Audit Medium.
+  getActiveTerminalTabId: () => resolveActiveTerminalTabId(get()),
+
   resumeSession: (arg) => {
     const session = typeof arg === 'string' ? { sessionId: arg } : (arg || {});
     const { sessionId, sizeMB } = session;
@@ -549,8 +567,11 @@ export const useStore = create((set, get) => ({
       if (!proceed) return;
     }
     set({ activeView: 'terminal' });
-    const termId = get().activeTabId;
+    // Target a terminal tab, not a browser tab (which would drop the command).
+    // Focus it too so the resume is visible. Audit Medium.
+    const termId = resolveActiveTerminalTabId(get());
     if (!window.electronAPI || !termId) return;
+    if (termId !== get().activeTabId) set({ activeTabId: termId });
     // cd BEFORE resume only for CROSS-project resumes (Sessions dashboard /
     // Search into a tab belonging to a different project), where wrong-cwd
     // is guaranteed. For SAME-project resumes (Cmd+R, ResumeBanner, sidebar

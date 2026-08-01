@@ -1,7 +1,7 @@
 import { BrowserWindow, app, screen } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { killTerminal, getActiveTerminals, gracefulCloseTerminals, getTerminalsForProject, getTerminalWebContentsId } from './terminal-manager.js';
+import { killTerminal, getActiveTerminals, gracefulCloseTerminals, getTerminalsForProject, getTerminalWebContentsId, wasWindowOwned } from './terminal-manager.js';
 import { watchFiles } from './watcher-service.js';
 import { getProjectConfig, setProjectConfig, loadConfig, saveConfig } from './config-manager.js';
 import { getQuittingForUpdate, getQuitting } from './quit-state.js';
@@ -325,11 +325,14 @@ function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId =
     //    the new window, so no interrupt) or failing (it is then killed with no
     //    window to save from anyway). The KILL decision below is ownership-based
     //    so a failed tear-off's tab is still cleaned up. Codex.
+    // wasWindowOwned excludes deliberately-headless PTYs (voice-conductor
+    // background agents, phone-spawned terminals) so closing a window never
+    // Ctrl+C's a mid-task headless agent. Audit High.
     const termIds = isTearOff && tearOffTabId
       ? (getTerminalWebContentsId(tearOffTabId) === myWcId ? [tearOffTabId] : [])
       : (() => {
           const beingTornOff = getTearOffTabIdsForProject(projectPath);
-          return getTerminalsForProject(projectPath).filter((id) => !beingTornOff.has(id));
+          return getTerminalsForProject(projectPath).filter((id) => !beingTornOff.has(id) && wasWindowOwned(id));
         })();
 
     // Send Ctrl+C twice, wait for Claude to print resume ID, save scrollback, then close
@@ -397,8 +400,11 @@ function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId =
     // a tear-off has CLAIMED reads that live window's id and is SPARED (H1); an
     // in-flight tear-off's tab, still bound here, reads null and is killed
     // immediately rather than orphaned until the tear-off's timeout. Codex.
+    // wasWindowOwned excludes deliberately-headless PTYs (voice-conductor
+    // background agents, phone-spawned terminals) that were never bound to a
+    // window, so closing a window can't reap a live background agent. Audit High.
     for (const id of getTerminalsForProject(projectPath)) {
-      if (getTerminalWebContentsId(id) === null) killTerminal(id);
+      if (getTerminalWebContentsId(id) === null && wasWindowOwned(id)) killTerminal(id);
     }
   });
 

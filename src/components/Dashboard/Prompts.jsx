@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 const BLANK = { title: '', text: '' };
 
 export default function Prompts() {
-  const activeTabId = useStore((s) => s.activeTabId);
+  const getActiveTerminalTabId = useStore((s) => s.getActiveTerminalTabId);
+  const setActiveTab = useStore((s) => s.setActiveTab);
   const setActiveView = useStore((s) => s.setActiveView);
 
   const [prompts, setPrompts] = useState([]);
@@ -27,9 +28,13 @@ export default function Prompts() {
   };
 
   const injectPrompt = (prompt) => {
-    if (!activeTabId || !window.electronAPI?.terminalWrite) return;
+    // Target a terminal tab: the active tab may be a browser tab, whose write is
+    // silently dropped. Fall back to the nearest terminal tab and focus it. Audit.
+    const termId = getActiveTerminalTabId();
+    if (!termId || !window.electronAPI?.terminalWrite) return;
+    setActiveTab(termId);
     // Write text without Enter so the user can review / edit before submitting
-    window.electronAPI.terminalWrite(activeTabId, prompt.text);
+    window.electronAPI.terminalWrite(termId, prompt.text);
     setFlash(prompt.id);
     setTimeout(() => setFlash(null), 800);
     setActiveView('terminal');

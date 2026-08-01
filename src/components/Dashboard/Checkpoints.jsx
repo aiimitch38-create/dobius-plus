@@ -5,7 +5,9 @@ export default function Checkpoints() {
   const currentProjectPath = useStore((s) => s.currentProjectPath);
   const addTab = useStore((s) => s.addTab);
   const setActiveView = useStore((s) => s.setActiveView);
+  const setActiveTab = useStore((s) => s.setActiveTab);
   const activeTabId = useStore((s) => s.activeTabId);
+  const getActiveTerminalTabId = useStore((s) => s.getActiveTerminalTabId);
 
   const [checkpoints, setCheckpoints] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,17 +63,21 @@ export default function Checkpoints() {
   }, [editValue, currentProjectPath, loadCheckpoints]);
 
   const handleRestore = useCallback((cp) => {
-    if (!window.electronAPI || !activeTabId) return;
-    // Write checkpoint scrollback as dimmed text to active terminal
+    // Target a terminal tab (the active tab may be a browser tab, which drops
+    // the write) and focus it so the restored scrollback is visible. Audit.
+    const termId = getActiveTerminalTabId();
+    if (!window.electronAPI || !termId) return;
+    setActiveTab(termId);
+    // Write checkpoint scrollback as dimmed text to the terminal
     if (cp.scrollback?.length > 0) {
       for (const line of cp.scrollback) {
         const safeLine = String(line).replace(/\x1b/g, '');
-        window.electronAPI.terminalWrite(activeTabId, '\x1b[2m' + safeLine + '\x1b[0m\r\n');
+        window.electronAPI.terminalWrite(termId, '\x1b[2m' + safeLine + '\x1b[0m\r\n');
       }
-      window.electronAPI.terminalWrite(activeTabId, '\x1b[2m\x1b[38;5;240m── restored checkpoint ──\x1b[0m\r\n\r\n');
+      window.electronAPI.terminalWrite(termId, '\x1b[2m\x1b[38;5;240m── restored checkpoint ──\x1b[0m\r\n\r\n');
     }
     setActiveView('terminal');
-  }, [activeTabId, setActiveView]);
+  }, [getActiveTerminalTabId, setActiveTab, setActiveView]);
 
   const handleFork = useCallback((cp) => {
     if (!currentProjectPath || !window.electronAPI) return;

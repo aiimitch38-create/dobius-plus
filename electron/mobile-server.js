@@ -45,6 +45,8 @@ const PAIR_LOCK_MS = 60000;  // cooldown after MAX_PAIR_ATTEMPTS, then re-arm
 const AUTH_TIMEOUT_MS = 5000;
 const MAX_INPUT_BYTES = 100 * 1024;   // cap a single input message (paste)
 const MAX_WS_PAYLOAD = 1024 * 1024;   // 1MB ws frame ceiling
+const MAX_WS_BUFFERED = 8 * 1024 * 1024; // drop a socket whose send buffer exceeds 8MB (dead/half-open phone)
+const HEARTBEAT_MS = 30000;           // ping every 30s; a client that misses a pong is terminated
 // whisper + ffmpeg are CPU-heavy; only run a couple at once so a retry loop or a
 // burst of uploads can't stack processes and starve the Mac. Audit HIGH-4.
 const MAX_VOICE_INFLIGHT = 2;
@@ -126,9 +128,16 @@ const activeSocketsByToken = new Map(); // token -> Set<WebSocket>
 
 /** Send a JSON message on a WebSocket if it's still open. */
 function wsSend(socket, obj) {
-  if (socket.readyState === 1) {
-    try { socket.send(JSON.stringify(obj)); } catch { /* noop */ }
+  if (socket.readyState !== 1) return;
+  // Backpressure: a half-open phone (network dropped, socket still OPEN) never
+  // drains, so PTY output would queue in main-process memory unbounded. Once the
+  // send buffer exceeds the cap, terminate the socket instead of buffering more.
+  // Audit Medium (cost-reliability).
+  if (socket.bufferedAmount > MAX_WS_BUFFERED) {
+    try { socket.terminate(); } catch { /* noop */ }
+    return;
   }
+  try { socket.send(JSON.stringify(obj)); } catch { /* noop */ }
 }
 
 /**
@@ -136,10 +145,11 @@ function wsSend(socket, obj) {
  * the phone attaches to live PTYs, streams their output, and writes input
  * back to the same shells the desktop uses.
  *
- * Access policy: any paired device may input/resize/kill any terminal without
- * a prior attach. This is intentional for a single-user personal tool (one
- * user, one tailnet, one Mac). If multi-user pairing is ever added, this needs
- * an attach-before-operate gate.
+ * Access policy: input/resize/kill require the socket to have first interacted
+ * with the terminal id (attach, createTerminal, or a Chat-view loadTranscript /
+ * selectorSnapshot for that tab), tracked in socket._authedTabs. A paired but
+ * leaked/stale token therefore can't blind-write to or kill a terminal in a
+ * project it never touched. Audit Medium (security).
  */
 // Parse a terminal id into a friendly project + tab label (mirrors the mobile
 // Terminal.jsx parser and terminal-status.projectFromId).
@@ -239,6 +249,7 @@ function terminalsSignature(payload) {
 }
 
 let statusBroadcastTimer = null;
+let heartbeatTimer = null;
 let lastTerminalsSig = null;
 const prevStatusById = new Map(); // id -> last status, for push transitions
 const notifiedExits = new Set();  // `${id}:${at}` already push-notified
@@ -393,6 +404,13 @@ function handleAuthedMessage(socket, msg, subs) {
       wsSend(socket, buildTerminalsPayload());
       break;
 
+    case 'authorizeTab':
+      // The client is actively viewing this tab (e.g. the Chat view, including a
+      // sessionless tab that never loads a transcript, or the Stop button). Mark
+      // it interacted-with so input/resize/kill are allowed. Audit Medium.
+      if (typeof msg.id === 'string') socket._authedTabs.add(msg.id);
+      break;
+
     case 'attach': {
       const id = msg.id;
       if (typeof id !== 'string' || subs.has(id)) break;
@@ -415,6 +433,7 @@ function handleAuthedMessage(socket, msg, subs) {
         break;
       }
       subs.set(id, unsubscribe);
+      socket._authedTabs.add(id); // attaching authorizes input/resize/kill. Audit Medium.
       // Replay recent output so the phone sees the current screen, not a blank.
       if (buffer) wsSend(socket, { type: 'output', id, data: buffer, replay: true });
       wsSend(socket, { type: 'attached', id });
@@ -428,8 +447,8 @@ function handleAuthedMessage(socket, msg, subs) {
     }
 
     case 'input':
-      if (typeof msg.id === 'string' && typeof msg.data === 'string'
-          && msg.data.length <= MAX_INPUT_BYTES) {
+      if (typeof msg.id === 'string' && socket._authedTabs.has(msg.id)
+          && typeof msg.data === 'string' && msg.data.length <= MAX_INPUT_BYTES) {
         writeTerminal(msg.id, msg.data);
       }
       break;
@@ -441,6 +460,7 @@ function handleAuthedMessage(socket, msg, subs) {
       // the Chat view can surface tappable option buttons. Cheap (strip + regex
       // over the rolling tail); returns selector=null when none is showing.
       if (typeof msg.id !== 'string') break;
+      socket._authedTabs.add(msg.id); // the Chat view probes its own tab. Audit Medium.
       const selector = parseSelector(getTerminalBuffer(msg.id));
       wsSend(socket, { type: 'selector', id: msg.id, selector: selector || null });
       break;
@@ -455,14 +475,14 @@ function handleAuthedMessage(socket, msg, subs) {
         // smaller geometry, which mangles the desktop xterm. Phone-only PTYs
         // (e.g. ones created via `createTerminal` from mobile) still get
         // resized normally.
-        if (!terminalHasDesktopAttached(msg.id)) {
+        if (socket._authedTabs.has(msg.id) && !terminalHasDesktopAttached(msg.id)) {
           resizeTerminal(msg.id, msg.cols, msg.rows);
         }
       }
       break;
 
     case 'kill':
-      if (typeof msg.id === 'string') killTerminal(msg.id);
+      if (typeof msg.id === 'string' && socket._authedTabs.has(msg.id)) killTerminal(msg.id);
       break;
 
     case 'listProjects':
@@ -483,6 +503,7 @@ function handleAuthedMessage(socket, msg, subs) {
         const id = mobileTermId();
         try {
           createTerminal(id, resolved, null);
+          socket._authedTabs.add(id); // the creator may drive its own PTY. Audit Medium.
           wsSend(socket, { type: 'terminalCreated', id });
         } catch (err) {
           wsSend(socket, { type: 'error', message: String(err?.message || err) });
@@ -500,6 +521,9 @@ function handleAuthedMessage(socket, msg, subs) {
     case 'loadTranscript': {
       const { sessionId, projectPath } = msg;
       if (typeof sessionId !== 'string' || typeof projectPath !== 'string') break;
+      // The Chat view is working with this tab and sends input to it without a
+      // raw 'attach', so authorize it here. Audit Medium.
+      if (typeof msg.tabId === 'string') socket._authedTabs.add(msg.tabId);
       // A positive limit makes the server do a cheap tail read (the Chat view
       // polls this every few seconds); History omits it for the full transcript.
       const limit = typeof msg.limit === 'number' && msg.limit > 0 ? Math.min(msg.limit, 2000) : undefined;
@@ -828,15 +852,38 @@ export async function startMobileServer() {
   };
 
   wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: MAX_WS_PAYLOAD });
+  // Heartbeat: ping every client every HEARTBEAT_MS; a client that hasn't ponged
+  // since the last ping is a dead/half-open socket (network dropped while OPEN)
+  // and is terminated, so it stops accumulating a send buffer and its cleanup
+  // runs. Audit Medium (cost-reliability).
+  heartbeatTimer = setInterval(() => {
+    for (const s of wss.clients) {
+      if (s.isAlive === false) { try { s.terminate(); } catch { /* noop */ } continue; }
+      s.isAlive = false;
+      try { s.ping(); } catch { /* noop */ }
+    }
+  }, HEARTBEAT_MS);
   wss.on('connection', (socket) => {
+    socket.isAlive = true;
+    socket.on('pong', () => { socket.isAlive = true; });
     let authed = false;
     let authedToken = null; // remembered so cleanup + revocation lookup work
     const subs = new Map(); // terminalId -> unsubscribe fn
+    // Terminal ids this socket has legitimately interacted with (attached,
+    // created, or loaded/probed for the Chat view). input/resize/kill require
+    // the id to be in here, so a paired-but-leaked token can't write to or kill
+    // a terminal in a project it never touched. Audit Medium (security).
+    socket._authedTabs = new Set();
     const authTimer = setTimeout(() => { if (!authed) socket.close(4001, 'auth timeout'); }, AUTH_TIMEOUT_MS);
 
     socket.on('message', (raw) => {
       let msg;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
+      // Reject non-object frames BEFORE touching msg.type. JSON.parse('null')
+      // (a valid 4-byte frame) returns null, and any primitive would throw on
+      // property access here, pre-auth, crashing the whole app (uncaughtException
+      // -> process.exit). Audit Critical.
+      if (!msg || typeof msg !== 'object') return;
       if (!authed) {
         if (msg.type === 'auth' && knownToken(msg.token)) {
           authed = true;
@@ -913,7 +960,7 @@ export async function startMobileServer() {
 }
 
 /** Stop the server. Resolves to a status object. */
-export function stopMobileServer() {
+export function stopMobileServer({ persistDisabled = false } = {}) {
   // Close every authenticated client socket explicitly. wss.close() rejects
   // new connections but leaves existing ones alive until they drop on their
   // own — phones could keep streaming PTY data after stopMobileServer.
@@ -926,6 +973,7 @@ export function stopMobileServer() {
   activeSocketsByToken.clear();
   if (statusBroadcastTimer) { clearInterval(statusBroadcastTimer); statusBroadcastTimer = null; }
   if (contextRefreshTimer) { clearInterval(contextRefreshTimer); contextRefreshTimer = null; }
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
   tabContextCache.clear();
   lastTerminalsSig = null;
   prevStatusById.clear();
@@ -942,7 +990,10 @@ export function stopMobileServer() {
   pairingCode = null;
   pairAttempts = 0;
   pairLockedUntil = 0;
-  updateMobileServerConfig({ enabled: false });
+  // Persist enabled:false ONLY on an explicit user "turn off" (Settings toggle).
+  // Quit / update / restart teardown must NOT persist it, or mobile auto-start
+  // would be permanently disabled after the first session. Audit High.
+  if (persistDisabled) updateMobileServerConfig({ enabled: false });
   return new Promise((resolve) => {
     if (!server) return resolve(getMobileServerStatus());
     let done = false;

@@ -31,7 +31,7 @@ import { watchProjectDir, unwatchProjectDir, getProjectEvents, stopAllFileWatche
 import { watchBuildDir, unwatchBuildDir, stopAllBuildWatchers } from './build-monitor-watcher.js';
 import {
   loadConfig, saveConfig, getProjectConfig, setProjectConfig,
-  getPinnedSessions, setPinnedSessions, getPinnedProjects, setPinnedProjects, getSettings, updateSettings, flushConfig, flushConfigAsync,
+  getPinnedSessions, setPinnedSessions, getPinnedProjects, setPinnedProjects, getSettings, updateSettings, flushConfig, flushConfigAsync, persistConfigNow,
   getSessionTags, setSessionTag, removeSessionTag,
   getSessionTabMap, setSessionTabLink, removeSessionTabLink, touchSessionTabLink, clearSessionTabRunning,
   getAgentMemory, setAgentMemory, appendJournalEntry, pruneOldMemory,
@@ -1611,17 +1611,13 @@ function setupSessionTabCapture() {
   if (sessionTabCaptureInterval) return;
   sessionTabCaptureInterval = setInterval(async () => {
     try {
-      const map = getSessionTabMap();
-      const liveTabIds = new Set(listTerminals().map((t) => t.id));
-      // Step 1: purge map entries for dead tabs.
-      for (const [sid, entry] of Object.entries(map || {})) {
-        if (!entry?.tabId) continue;
-        if (!liveTabIds.has(entry.tabId)) {
-          removeSessionTabLink(sid);
-        }
-      }
-      // Step 2 + 3: walk every live terminal and reconcile.
-      // Use the freshest map after the purge.
+      // Recycled tab ids (a live tab now running a DIFFERENT session than the map
+      // records) are fixed in the live-tab reconcile loop below, which does
+      // removeSessionTabLink on the mismatch. We deliberately do NOT purge a link
+      // just because its tab isn't currently live: those belong to projects not
+      // open this session and must be preserved for the cross-window Tabs sidebar
+      // and the 30-day retention. The old blanket purge here evicted every link
+      // for any unopened project on the first tick. Audit Medium.
       const fresh = getSessionTabMap();
       const tabToSessionId = new Map();
       for (const [sid, entry] of Object.entries(fresh || {})) {
@@ -1787,7 +1783,7 @@ function setupShellHandlers() {
 
 function setupMobileServerHandlers() {
   ipcMain.handle('mobileServer:start', () => startMobileServer());
-  ipcMain.handle('mobileServer:stop', () => stopMobileServer());
+  ipcMain.handle('mobileServer:stop', () => stopMobileServer({ persistDisabled: true }));
   ipcMain.handle('mobileServer:status', () => getMobileServerStatus());
   ipcMain.handle('mobileServer:regenerateCode', () => {
     regeneratePairingCode();
@@ -2015,13 +2011,18 @@ function setupWindowHandlers() {
 }
 
 function setupGitHandlers() {
-  ipcMain.handle('git:status', (_event, projectDir) => getGitStatus(projectDir));
-  ipcMain.handle('git:log', (_event, projectDir, count) => getCommitLog(projectDir, count));
-  ipcMain.handle('git:branches', (_event, projectDir) => getBranches(projectDir));
-  ipcMain.handle('git:diff', (_event, projectDir, hash) => getCommitDiff(projectDir, hash));
+  // Every git/gh query runs in projectDir with the user's shell + gh auth, so a
+  // renderer surface (incl. webview content) could otherwise read git history or
+  // run `gh pr list` against ANY absolute path (private client repos Dobius never
+  // opened). Gate each on isKnownProject and return an empty result otherwise.
+  // Audit Medium (security).
+  ipcMain.handle('git:status', async (_event, projectDir) => (await isKnownProject(projectDir)) ? getGitStatus(projectDir) : null);
+  ipcMain.handle('git:log', async (_event, projectDir, count) => (await isKnownProject(projectDir)) ? getCommitLog(projectDir, count) : []);
+  ipcMain.handle('git:branches', async (_event, projectDir) => (await isKnownProject(projectDir)) ? getBranches(projectDir) : []);
+  ipcMain.handle('git:diff', async (_event, projectDir, hash) => (await isKnownProject(projectDir)) ? getCommitDiff(projectDir, hash) : null);
   ipcMain.handle('git:ghAvailable', () => checkGhAvailable());
-  ipcMain.handle('git:pullRequests', (_event, projectDir) => getPullRequests(projectDir));
-  ipcMain.handle('git:issues', (_event, projectDir) => getIssues(projectDir));
+  ipcMain.handle('git:pullRequests', async (_event, projectDir) => (await isKnownProject(projectDir)) ? getPullRequests(projectDir) : []);
+  ipcMain.handle('git:issues', async (_event, projectDir) => (await isKnownProject(projectDir)) ? getIssues(projectDir) : []);
 
   ipcMain.handle('prompt:improve', (_event, rawPrompt) => {
     return new Promise((resolve, reject) => {
@@ -2299,7 +2300,11 @@ app.whenReady().then(() => {
         const kept = proj.tabs.filter((t) => !tornIds.has(t?.id));
         if (kept.length !== proj.tabs.length) { proj.tabs = kept; changed = true; }
       }
-      if (changed) { try { saveConfig(config); flushConfig(); } catch { /* best-effort */ } }
+      // persistConfigNow (non-latching sync write), NOT flushConfig(): the
+      // quit-only flushConfig latches `flushed=true` for the whole session,
+      // which would silently no-op every later config write (tabs, accounts,
+      // PAT, settings). Audit High regression fix.
+      if (changed) { try { persistConfigNow(); } catch { /* best-effort */ } }
     }
   }
   let restoreStaggerMs = 0; // wall-clock the staggered reopen takes, for auto-resume timing
