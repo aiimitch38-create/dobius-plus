@@ -480,9 +480,18 @@ export function getOpenProjects() {
  * @param {string} projectPath
  */
 export function closeProjectWindow(projectPath) {
-  const win = getWindowForProject(projectPath);
+  const win = getWindowForProject(projectPath); // primary only
   if (win && !win.isDestroyed()) {
     win.close();
+    return;
+  }
+  // No primary window (e.g. only a restored tear-off remains): close whatever
+  // windows the project still has, so the launcher "Close Window" action stays
+  // functional instead of no-opping. Codex.
+  for (const [, entry] of projectWindows) {
+    if (entry.projectPath === projectPath && entry.win && !entry.win.isDestroyed()) {
+      entry.win.close();
+    }
   }
 }
 
