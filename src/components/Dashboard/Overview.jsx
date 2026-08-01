@@ -20,11 +20,17 @@ export default function Overview({ stats, settings }) {
 
   return (
     <div className="p-4 space-y-5">
-      {/* Quick stats */}
+      {/* Quick stats. Tool-call totals only exist in the CLI's stats-cache, which
+          current Claude Code no longer writes; when stats are history-derived we
+          show a real Projects count instead of a misleading 0. */}
       <div className="grid grid-cols-4 gap-3">
         <StatCard label="Sessions" value={totalSessions.toLocaleString()} />
         <StatCard label="Messages" value={totalMessages.toLocaleString()} />
-        <StatCard label="Tool Calls" value={totalTools.toLocaleString()} />
+        {totalTools > 0 ? (
+          <StatCard label="Tool Calls" value={totalTools.toLocaleString()} />
+        ) : (
+          <StatCard label="Projects" value={(stats?.projectCount || 0).toLocaleString()} />
+        )}
         <StatCard label="Recent" value={sessions.length} />
       </div>
 

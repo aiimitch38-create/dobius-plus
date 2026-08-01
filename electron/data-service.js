@@ -691,11 +691,53 @@ export async function getLatestSession(projectPath) {
 export async function loadStats() {
   try {
     const content = await fs.readFile(STATS_PATH, 'utf8');
-    return JSON.parse(content);
-  } catch (err) {
-    console.warn('[data-service] Failed to load stats:', err.message);
-    return { version: 2, dailyActivity: [], modelUsage: {}, hourCounts: {} };
+    const parsed = JSON.parse(content);
+    // Use the CLI's cache only if it actually carries activity. Current Claude
+    // Code no longer writes ~/.claude/stats-cache.json, so an empty/absent cache
+    // must fall through to history-derived stats instead of leaving the Stats +
+    // Overview tabs blank (audit finding: both were BROKEN).
+    if (parsed && Array.isArray(parsed.dailyActivity) && parsed.dailyActivity.length > 0) {
+      return parsed;
+    }
+  } catch { /* no cache present, derive from history below */ }
+  return computeStatsFromHistory();
+}
+
+/**
+ * Derive dashboard stats from ~/.claude/history.jsonl (each line is one user
+ * prompt: { display, timestamp, project, sessionId }). Gives real
+ * messages/sessions per day and hour-of-day distribution. Model usage and
+ * tool-call counts live only in the per-session transcripts (GBs across all
+ * projects), too heavy to parse on a dashboard open, so those stay empty and
+ * their sections render their graceful hidden/empty state. Replaces the vanished
+ * stats-cache.json as the source. Main-process only.
+ */
+async function computeStatsFromHistory() {
+  const empty = { version: 2, dailyActivity: [], modelUsage: {}, hourCounts: {}, derived: true };
+  let entries;
+  try { entries = await parseJsonl(HISTORY_PATH); } catch { return empty; }
+  if (!Array.isArray(entries) || entries.length === 0) return empty;
+  const byDay = new Map(); // 'YYYY-MM-DD' -> { messageCount, sessions:Set }
+  const hourCounts = {};
+  const projects = new Set();
+  for (const e of entries) {
+    const ts = typeof e?.timestamp === 'number' ? e.timestamp : 0;
+    if (!ts) continue;
+    const d = new Date(ts);
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    let day = byDay.get(date);
+    if (!day) { day = { messageCount: 0, sessions: new Set() }; byDay.set(date, day); }
+    day.messageCount += 1;
+    if (e.sessionId) day.sessions.add(e.sessionId);
+    if (e.project) projects.add(e.project);
+    hourCounts[d.getHours()] = (hourCounts[d.getHours()] || 0) + 1;
   }
+  const dailyActivity = Array.from(byDay.entries())
+    .sort((a, b) => a[0].localeCompare(b[0])) // chronological; chart slices last 14
+    .map(([date, v]) => ({ date, messageCount: v.messageCount, sessionCount: v.sessions.size, toolCallCount: 0 }));
+  // projectCount is a real derived metric the Overview shows in place of the
+  // (transcript-only, unavailable) Tool Calls total when stats are derived.
+  return { version: 2, dailyActivity, modelUsage: {}, hourCounts, projectCount: projects.size, derived: true };
 }
 
 /**
