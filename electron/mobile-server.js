@@ -487,7 +487,10 @@ function handleAuthedMessage(socket, msg, subs) {
     case 'loadTranscript': {
       const { sessionId, projectPath } = msg;
       if (typeof sessionId !== 'string' || typeof projectPath !== 'string') break;
-      loadTranscript(sessionId, projectPath)
+      // A positive limit makes the server do a cheap tail read (the Chat view
+      // polls this every few seconds); History omits it for the full transcript.
+      const limit = typeof msg.limit === 'number' && msg.limit > 0 ? Math.min(msg.limit, 2000) : undefined;
+      loadTranscript(sessionId, projectPath, limit)
         .then((entries) => wsSend(socket, { type: 'transcript', sessionId, projectPath, entries: entries || [] }))
         .catch((err) => wsSend(socket, { type: 'error', message: String(err?.message || err) }));
       break;

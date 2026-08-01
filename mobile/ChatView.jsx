@@ -23,7 +23,9 @@ export default function ChatView({ connection, tab }) {
   const request = useCallback(() => {
     if (!sessionId || !projectPath) return;
     wantRef.current = sessionId;
-    connection.send({ type: 'loadTranscript', sessionId, projectPath });
+    // limit => the server does a cheap tail read, so polling a huge transcript
+    // stays light. 600 lines is plenty of recent conversation for a phone.
+    connection.send({ type: 'loadTranscript', sessionId, projectPath, limit: 600 });
   }, [connection, sessionId, projectPath]);
 
   useEffect(() => {

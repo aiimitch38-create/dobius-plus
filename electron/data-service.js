@@ -945,7 +945,7 @@ export async function deleteSession(sessionId, projectPath) {
 /**
  * Load a transcript for a specific session.
  */
-export async function loadTranscript(sessionId, projectPath) {
+export async function loadTranscript(sessionId, projectPath, limit) {
   try {
     if (!/^[\w-]+$/.test(sessionId)) return [];
     if (typeof projectPath !== 'string' || !projectPath) return [];
@@ -977,7 +977,11 @@ export async function loadTranscript(sessionId, projectPath) {
       if (!enc || seen.has(enc)) continue;
       seen.add(enc);
       const p = path.join(PROJECTS_DIR, enc, `${sessionId}.jsonl`);
-      if (await pathExists(p)) return parseTranscriptFile(p);
+      if (await pathExists(p)) {
+        // A positive limit does a cheap tail read (mobile Chat poll); no limit
+        // streams the full transcript (History view). Codex.
+        return (typeof limit === 'number' && limit > 0) ? parseTranscriptTail(p, limit) : parseTranscriptFile(p);
+      }
     }
     return [];
   } catch (err) {
@@ -1056,39 +1060,62 @@ function extractAssistantText(entry) {
   return null;
 }
 
+// Map ONE raw JSONL entry to a { role, content } chat message, or null if it is
+// not a user/assistant text turn (tool calls, meta, empty). Shared by the full
+// stream and the bounded tail so the two can never diverge.
+function entryToMessage(entry) {
+  let role = null;
+  if (entry.type === 'human' || entry.role === 'user' || entry.message?.role === 'user') role = 'user';
+  else if (entry.type === 'assistant' || entry.role === 'assistant' || entry.message?.role === 'assistant') role = 'assistant';
+  if (!role) return null;
+  let content = '';
+  const msgContent = entry.message?.content;
+  if (typeof msgContent === 'string') {
+    content = msgContent;
+  } else if (Array.isArray(msgContent)) {
+    content = msgContent.map((c) => c.text || c.thinking || '').filter(Boolean).join('\n');
+  } else if (typeof entry.message === 'string') {
+    content = entry.message;
+  } else if (typeof entry.content === 'string') {
+    content = entry.content;
+  }
+  if (!content) return null;
+  if (content.length > MAX_MESSAGE_CHARS) {
+    content = content.slice(0, MAX_MESSAGE_CHARS) + `\n\n[message truncated at ${MAX_MESSAGE_CHARS} chars]`;
+  }
+  return { role, content };
+}
+
 async function parseTranscriptFile(filePath) {
   const messages = [];
   let payloadBytes = 0;
   let truncated = false;
   await streamJsonl(filePath, (entry) => {
     if (truncated) return;
-    let role = null;
-    if (entry.type === 'human' || entry.role === 'user' || entry.message?.role === 'user') role = 'user';
-    else if (entry.type === 'assistant' || entry.role === 'assistant' || entry.message?.role === 'assistant') role = 'assistant';
-    if (!role) return;
-    let content = '';
-    const msgContent = entry.message?.content;
-    if (typeof msgContent === 'string') {
-      content = msgContent;
-    } else if (Array.isArray(msgContent)) {
-      content = msgContent.map((c) => c.text || c.thinking || '').filter(Boolean).join('\n');
-    } else if (typeof entry.message === 'string') {
-      content = entry.message;
-    } else if (typeof entry.content === 'string') {
-      content = entry.content;
-    }
-    if (!content) return;
-    if (content.length > MAX_MESSAGE_CHARS) {
-      content = content.slice(0, MAX_MESSAGE_CHARS) + `\n\n[message truncated at ${MAX_MESSAGE_CHARS} chars]`;
-    }
-    payloadBytes += content.length + 64; // rough overhead for the wrapper object
+    const m = entryToMessage(entry);
+    if (!m) return;
+    payloadBytes += m.content.length + 64; // rough overhead for the wrapper object
     if (payloadBytes > MAX_PAYLOAD_BYTES) {
       truncated = true;
       messages.push({ role: 'system', content: `[transcript preview truncated: payload exceeded ${MAX_PAYLOAD_BYTES} bytes]`, timestamp: null });
       return;
     }
-    messages.push({ role, content, timestamp: entry.timestamp || null });
+    messages.push({ ...m, timestamp: entry.timestamp || null });
   });
+  return messages;
+}
+
+// Bounded tail read for the mobile Chat poll: reads only the last `limit` JSONL
+// lines (parseJsonl uses readTail), so re-polling every few seconds stays cheap
+// even on a 100MB transcript. Returns the recent turns, which is what the chat
+// shows. Codex.
+async function parseTranscriptTail(filePath, limit) {
+  const entries = await parseJsonl(filePath, limit);
+  const messages = [];
+  for (const entry of entries) {
+    const m = entryToMessage(entry);
+    if (m) messages.push({ ...m, timestamp: entry.timestamp || null });
+  }
   return messages;
 }
 
