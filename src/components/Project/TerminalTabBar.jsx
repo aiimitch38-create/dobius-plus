@@ -1,7 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore } from '../../store/store';
-import { markDoNotKill } from '../../hooks/useTerminal';
+import { markDoNotKill, unmarkDoNotKill } from '../../hooks/useTerminal';
 import { STATUS_COLORS, STATUS_LABELS } from '../../lib/status-colors';
+
+// Tab ids with a tear-off gesture already in flight. A tab stays in this window's
+// tab bar until its tear-off confirms (H5), so a rapid SECOND drag of the same
+// tab would spawn a duplicate tear-off, overwrite the first's grant/waiter in
+// main, and let markTearOffConfirmed mark the wrong window. This module-level
+// guard drops the duplicate drag before it mutates any state. Codex.
+const tearingOffTabs = new Set();
 
 // Text-message-style tab status. NOTE: this intentionally differs from the app's
 // other surfaces (Board/Mission Control), where green = working. On the terminal
@@ -244,35 +251,64 @@ export default function TerminalTabBar() {
 
     const tab = tabs.find((t) => t.id === tabId);
     if (!tab) return;
+    // Only terminal tabs have a PTY to hand to a new window; browser tabs have
+    // no owner and the main-process tear-off would reject them anyway. H5.
+    if (tab.kind && tab.kind !== 'terminal') return;
 
-    // Mark this terminal as "do not kill" BEFORE removing the tab.
-    // This prevents useTerminal's cleanup from killing the PTY when React
-    // unmounts the TerminalPane in the old window.
-    markDoNotKill(tabId);
+    // Drop a duplicate tear-off gesture for a tab already being torn off. Codex.
+    if (tearingOffTabs.has(tabId)) return;
+    tearingOffTabs.add(tabId);
+    try {
+      // Mark this terminal as "do not kill" BEFORE removing the tab.
+      // This prevents useTerminal's cleanup from killing the PTY when React
+      // unmounts the TerminalPane in the old window.
+      markDoNotKill(tabId);
 
-    // Save terminal state so the new window can restore scrollback.
-    // Await + small delay to ensure the IPC roundtrip completes (same pattern
-    // as handleCloseTab's checkpoint save).
-    await window.electronAPI?.terminalRequestSaveNow?.();
-    await new Promise((r) => setTimeout(r, 200));
+      // Save terminal state so the new window can restore scrollback.
+      // Await + small delay to ensure the IPC roundtrip completes (same pattern
+      // as handleCloseTab's checkpoint save).
+      await window.electronAPI?.terminalRequestSaveNow?.();
+      await new Promise((r) => setTimeout(r, 200));
 
-    // Re-check that the tab still exists after the async wait (it could have
-    // been closed by Cmd+W or another action during the delay)
-    if (!useStore.getState().terminalTabs.find((t) => t.id === tabId)) {
-      return;
+      // Re-check that the tab still exists after the async wait (it could have
+      // been closed by Cmd+W or another action during the delay). If it was
+      // closed, that close's cleanup SKIPPED killing the PTY because we already
+      // marked it do-not-kill above, so it is now orphaned (no tab, no tear-off).
+      // Undo the mark and kill it explicitly. Codex.
+      if (!useStore.getState().terminalTabs.find((t) => t.id === tabId)) {
+        unmarkDoNotKill(tabId);
+        window.electronAPI?.terminalKill?.(tabId);
+        return;
+      }
+
+      // Create the new window for the torn-off tab. AWAIT the result: if the
+      // main process rejected the tear-off (bad id, owner mismatch, etc.), the
+      // new window was NOT created. Removing the tab anyway would orphan the PTY
+      // (do-not-kill keeps it alive but no window shows it). So only remove on
+      // success; on failure, clear do-not-kill so the tab stays fully usable
+      // here and closes normally later. H5.
+      let ok = false;
+      try {
+        const res = await window.electronAPI?.windowTearOffTab(
+          currentProjectPath,
+          tabId,
+          tab.label,
+          sx,
+          sy
+        );
+        ok = !!res?.ok;
+      } catch {
+        ok = false;
+      }
+
+      if (ok) {
+        removeTab(tabId); // remove from this window without killing the PTY
+      } else {
+        unmarkDoNotKill(tabId); // tear-off failed: keep the tab live here
+      }
+    } finally {
+      tearingOffTabs.delete(tabId);
     }
-
-    // Create new window for the torn-off tab.
-    window.electronAPI?.windowTearOffTab(
-      currentProjectPath,
-      tabId,
-      tab.label,
-      sx,
-      sy
-    );
-
-    // Remove tab from this window without killing the PTY
-    removeTab(tabId);
   }, [dragTabId, tabs, currentProjectPath, removeTab, setDraggingTabId]);
 
   // Poll active process for each tab (for status badges)

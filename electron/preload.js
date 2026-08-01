@@ -163,6 +163,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Window management
   windowOpenProject: (projectPath) => ipcRenderer.invoke('window:openProject', projectPath),
+  windowFocusTabOwner: (projectPath, tabId) => ipcRenderer.invoke('window:focusTabOwner', projectPath, tabId),
   windowGetOpen: () => ipcRenderer.invoke('window:getOpen'),
   windowClose: (projectPath) => ipcRenderer.invoke('window:close', projectPath),
   windowSetTitle: (title) => ipcRenderer.invoke('window:setTitle', title),

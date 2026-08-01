@@ -485,6 +485,20 @@ export function reassignTerminal(id, newWebContents) {
   return true;
 }
 
+/**
+ * The webContents.id that currently owns a terminal's output (the last window to
+ * create or claim it), or null if the terminal or its owner is gone. Lets a
+ * closing window kill a PTY ONLY when it is the real owner, so an aborted /
+ * never-claimed tear-off window closing can't kill a PTY still bound to the
+ * source window. Codex.
+ */
+export function getTerminalWebContentsId(id) {
+  const entry = terminals.get(id);
+  const wc = entry?.webContents;
+  if (!wc || wc.isDestroyed?.()) return null;
+  return wc.id;
+}
+
 
 /**
  * Get all active terminal IDs.

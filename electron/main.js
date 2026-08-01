@@ -9,7 +9,7 @@ import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending a
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
 import { connectGwsAccount, listGwsAccounts, removeGwsAccount, ensureShim } from './gws-accounts.js';
-import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalProcessArgv, getTerminalClaudeInfo, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver } from './terminal-manager.js';
+import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalProcessArgv, getTerminalClaudeInfo, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver, getTerminalsForProject } from './terminal-manager.js';
 import * as terminalStatus from './terminal-status.js';
 import { estimateContextForTabId } from './tab-context.js';
 import {
@@ -43,7 +43,8 @@ import {
 } from './config-manager.js';
 import {
   openProjectWindow, openTornOffWindow, getOpenProjects, getOpenProjectsForRestore, closeProjectWindow, closeAllProjectWindows,
-  getOpenTearOffsForRestore, restoreTornOffWindow,
+  getOpenTearOffsForRestore, restoreTornOffWindow, setRestoring, persistOpenProjectsNow,
+  markTearOffConfirmed, computeRestoreLists, focusTearOffWindowForTab, focusPrimaryWindowForProject,
   openVisualWindow, closeVisualWindow,
 } from './window-manager.js';
 import { initAutoUpdater } from './auto-updater.js';
@@ -395,7 +396,22 @@ function setupDataHandlers() {
   ipcMain.handle('data:getActiveProcesses', () => getActiveProcesses());
   ipcMain.handle('data:listProjects', () => listProjects());
   ipcMain.handle('data:loadAllSessions', (_event, projectFilter) => loadAllSessions(typeof projectFilter === 'string' ? projectFilter : undefined));
-  ipcMain.handle('data:getAllProjectTabs', () => getAllProjectTabs());
+  ipcMain.handle('data:getAllProjectTabs', () => {
+    // Feed live-PTY ids (so the sidebar can tell a still-running cross-window tab
+    // from a resumable one, H3) and open tear-off windows (so their torn tab,
+    // which is stripped from the primary's persisted tabs, still appears, M4).
+    const liveTabIds = new Set(listTerminals().map((t) => t.id));
+    const tearOffTabs = getOpenTearOffsForRestore();
+    return getAllProjectTabs({ liveTabIds, tearOffTabs });
+  });
+  // Focus the window that currently owns a live tab (a tear-off window if the id
+  // is torn off, otherwise the project's primary window). Lets the sidebar reveal
+  // a cross-window live session instead of resuming a duplicate. H3.
+  ipcMain.handle('window:focusTabOwner', (_event, projectPath, tabId) => {
+    if (typeof tabId === 'string' && focusTearOffWindowForTab(tabId)) return true;
+    if (typeof projectPath === 'string') return focusPrimaryWindowForProject(projectPath);
+    return false;
+  });
   ipcMain.handle('data:getLatestSession', (_event, projectPath) => getLatestSession(projectPath));
   ipcMain.handle('data:getSessionSize', (_event, sessionId, projectPath) => getSessionSize(sessionId, projectPath));
   ipcMain.handle('data:killProcess', async (_event, pid) => {
@@ -1915,6 +1931,18 @@ function setupWindowHandlers() {
   // Codex round-4 HIGH on main.js:1039.
   // Map cleared once the grant is consumed (or its target window is destroyed).
   const tearOffGrants = new Map(); // tabId -> webContents.id
+  // tabId -> { resolve, timer } for an in-flight tear-off whose new window has
+  // not yet confirmed it claimed the PTY. window:tearOffTab resolves ok:true
+  // ONLY once terminal:claimPty succeeds, so the source window never removes the
+  // tab while the PTY is unowned (which orphaned the session). Codex High.
+  const tearOffClaimWaiters = new Map();
+  const settleTearOff = (tabId, result) => {
+    const w = tearOffClaimWaiters.get(tabId);
+    if (!w) return;
+    tearOffClaimWaiters.delete(tabId);
+    clearTimeout(w.timer);
+    w.resolve(result);
+  };
 
   // Tab tear-off: create a new window for a dragged-out tab.
   // ONLY the current renderer owner may tear off a tab. This intentionally
@@ -1928,16 +1956,37 @@ function setupWindowHandlers() {
     if (!projectPath || !tabId) return { ok: false };
     if (!TERMINAL_ID_RE.test(tabId)) return { ok: false };
     if (terminalOwners.get(tabId) !== event.sender.id) return { ok: false };
+    // The tab must actually belong to the CLAIMED project (its PTY's project
+    // path). Without this, a caller could tear off a /A tab under project /B, so
+    // the tear-off is persisted + restored under the wrong project and H4 strips
+    // it from /A's real primary tabs. Codex.
+    if (!getTerminalsForProject(projectPath).includes(tabId)) return { ok: false };
     const label = typeof tabLabel === 'string' ? tabLabel.slice(0, 100) : 'Tab';
     const win = openTornOffWindow(projectPath, tabId, label, screenX || 200, screenY || 200);
     // Record the grant against the new window's webContents.id. The new
     // window's renderer will call terminal:claimPty once it mounts.
     tearOffGrants.set(tabId, win.webContents.id);
-    win.webContents.once('destroyed', () => {
-      // If the target never claimed, drop the grant.
-      if (tearOffGrants.get(tabId) === win.webContents.id) tearOffGrants.delete(tabId);
+    // Resolve ok:true ONLY after the new window actually claims the PTY. If it
+    // never mounts, crashes, or the claim fails (PTY exited in the gap), resolve
+    // ok:false so the source keeps the tab instead of orphaning the PTY. Codex.
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        // Timed out waiting for the claim. REVOKE the grant so a late claim
+        // can't later reassign the PTY into a window the source no longer
+        // expects (which would leave the kept source tab silently outputless),
+        // and close the stuck/empty tear-off window. Source keeps the tab +
+        // PTY. Codex.
+        if (tearOffGrants.get(tabId) === win.webContents.id) tearOffGrants.delete(tabId);
+        if (win && !win.isDestroyed()) win.destroy();
+        settleTearOff(tabId, { ok: false });
+      }, 10000);
+      tearOffClaimWaiters.set(tabId, { resolve, timer, id: win.id });
+      win.webContents.once('destroyed', () => {
+        // If the target never claimed, drop the grant and fail the tear-off.
+        if (tearOffGrants.get(tabId) === win.webContents.id) tearOffGrants.delete(tabId);
+        settleTearOff(tabId, { ok: false });
+      });
     });
-    return { ok: true, id: win.id };
   });
 
   // Claim an existing PTY for a new window (used after tear-off). Requires
@@ -1949,11 +1998,26 @@ function setupWindowHandlers() {
     if (success) {
       tearOffGrants.delete(tabId);
       terminalOwners.set(tabId, event.sender.id);
+      // The drag tear-off now truly owns the PTY: mark it confirmed so it is
+      // persisted to lastTearOffs (an unclaimed one never is). Match by the
+      // claiming window's webContents id so the right window is confirmed. Codex.
+      markTearOffConfirmed(tabId, event.sender.id);
       const ownerId = event.sender.id;
       event.sender.once('destroyed', () => {
         if (terminalOwners.get(tabId) === ownerId) terminalOwners.delete(tabId);
       });
+    } else {
+      // Claim failed (the PTY exited between window creation and claim, so
+      // reassignTerminal found no entry). Revoke the grant and close the now
+      // blank/dead tear-off window so it doesn't linger. The source keeps the
+      // tab (ok:false below). Codex.
+      if (tearOffGrants.get(tabId) === event.sender.id) tearOffGrants.delete(tabId);
+      const deadWin = BrowserWindow.fromWebContents(event.sender);
+      if (deadWin && !deadWin.isDestroyed()) deadWin.destroy();
     }
+    // Tell window:tearOffTab whether the claim landed; only ok:true lets the
+    // source window drop the tab. A failed claim leaves the source owner intact.
+    settleTearOff(tabId, { ok: success, id: tearOffClaimWaiters.get(tabId)?.id });
     return { ok: success };
   });
 }
@@ -2230,17 +2294,57 @@ app.whenReady().then(() => {
 
   // Restore previously open project windows (Chrome-style tab restore)
   const config = loadConfig();
+  // H4: a crash/update within the 500ms config save-debounce can leave a torn
+  // tab in BOTH config.projects[p].tabs AND lastTearOffs, so on relaunch the
+  // primary window and the tear-off would both create the same tab id (the
+  // second create is rejected -> dead window + wrong-window auto-resume). The
+  // tear-off owns the id, so strip it from every primary project's persisted
+  // tabs before restoring, guaranteeing each id is created exactly once.
+  if (Array.isArray(config.lastTearOffs) && config.lastTearOffs.length > 0) {
+    const tornIds = new Set(config.lastTearOffs.map((t) => t && t.tabId).filter(Boolean));
+    if (tornIds.size > 0) {
+      let changed = false;
+      for (const proj of Object.values(config.projects || {})) {
+        if (!Array.isArray(proj?.tabs)) continue;
+        const kept = proj.tabs.filter((t) => !tornIds.has(t?.id));
+        if (kept.length !== proj.tabs.length) { proj.tabs = kept; changed = true; }
+      }
+      if (changed) { try { saveConfig(config); flushConfig(); } catch { /* best-effort */ } }
+    }
+  }
   let restoreStaggerMs = 0; // wall-clock the staggered reopen takes, for auto-resume timing
-  if (Array.isArray(config.lastOpenProjects) && config.lastOpenProjects.length > 0) {
-    const toRestore = config.lastOpenProjects.filter(
-      (p) => typeof p === 'string' && p.startsWith('/') && fs.existsSync(p),
-    );
-    const missing = config.lastOpenProjects.length - toRestore.length;
+  // Compute what will ACTUALLY reopen (paths that still exist) BEFORE latching.
+  // The latch must engage only when there is real restore work: if every saved
+  // entry points at a now-missing path (e.g. an unmounted drive), nothing
+  // reopens, and latching would still suppress persistOpenProjects for ~1.5s, so
+  // a project the user opens in that window would be dropped on a crash. Codex.
+  const savedProjects = Array.isArray(config.lastOpenProjects) ? config.lastOpenProjects : [];
+  const toRestore = [...new Set(savedProjects.filter(
+    (p) => typeof p === 'string' && p.startsWith('/') && fs.existsSync(p),
+  ))]; // dedupe: never open two primary windows for one path. Codex
+  const savedTears = Array.isArray(config.lastTearOffs) ? config.lastTearOffs : [];
+  const seenTearIds = new Set();
+  const tears = savedTears.filter((t) => {
+    if (!t || typeof t.projectPath !== 'string' || !t.projectPath.startsWith('/')
+      || !fs.existsSync(t.projectPath) || typeof t.tabId !== 'string' || !t.tabId) return false;
+    if (seenTearIds.has(t.tabId)) return false; // dedupe: one window per torn tab id. Codex
+    seenTearIds.add(t.tabId);
+    return true;
+  });
+  // M2: freeze the open-projects snapshot for the duration of the staggered
+  // restore. Each restored window fires persistOpenProjects as it mounts, and
+  // mid-restore that snapshot is PARTIAL (only the windows opened so far), so
+  // without this latch a crash between two window opens would persist a
+  // truncated lastOpenProjects and drop the not-yet-reopened windows.
+  const willRestore = toRestore.length > 0 || tears.length > 0;
+  if (willRestore) setRestoring(true);
+  if (toRestore.length > 0) {
+    const missing = savedProjects.length - toRestore.length;
     // Log what we're restoring so an incomplete reopen (Sam-reported after an
     // update-restart, v1.0.44) is diagnosable: this line reveals whether the
     // saved list itself was short (a save-side problem) vs windows failing to
     // open (a restore-side problem).
-    console.log(`[restore] lastOpenProjects=${config.lastOpenProjects.length} reopening=${toRestore.length}${missing ? ` skipped(missing path)=${missing}` : ''}`, toRestore);
+    console.log(`[restore] lastOpenProjects=${savedProjects.length} reopening=${toRestore.length}${missing ? ` skipped(missing path)=${missing}` : ''}`, toRestore);
     // Open one at a time with a stagger. Creating several BrowserWindows (each
     // with a webview-enabled preload) in a single synchronous burst raced on
     // macOS and some windows silently never appeared after an update-restart.
@@ -2258,19 +2362,15 @@ app.whenReady().then(() => {
     // The last window opens at 500 + (n-1)*250ms; auto-resume must not conclude
     // before then (it stops once the live-tab count is stable), or late-opening
     // windows' sessions never resume. Codex.
-    if (toRestore.length > 0) restoreStaggerMs = 500 + (toRestore.length - 1) * 250;
+    restoreStaggerMs = 500 + (toRestore.length - 1) * 250;
   }
 
   // Restore torn-off tab windows too (Brett's "Fix updating": his lost windows
   // were tear-offs, which used to be dropped on every restart/update). Open them
   // AFTER the primary windows, continuing the same stagger, each recreating its
   // tab so auto-resume can revive the session. v1.0.46.
-  if (Array.isArray(config.lastTearOffs) && config.lastTearOffs.length > 0) {
-    const tears = config.lastTearOffs.filter(
-      (t) => t && typeof t.projectPath === 'string' && t.projectPath.startsWith('/')
-        && fs.existsSync(t.projectPath) && typeof t.tabId === 'string' && t.tabId,
-    );
-    console.log(`[restore] lastTearOffs=${config.lastTearOffs.length} reopening=${tears.length}`);
+  if (tears.length > 0) {
+    console.log(`[restore] lastTearOffs=${savedTears.length} reopening=${tears.length}`);
     const base = restoreStaggerMs ? restoreStaggerMs + 250 : 500;
     tears.forEach((t, i) => {
       setTimeout(() => {
@@ -2281,7 +2381,16 @@ app.whenReady().then(() => {
         }
       }, base + i * 250);
     });
-    if (tears.length > 0) restoreStaggerMs = base + (tears.length - 1) * 250;
+    restoreStaggerMs = base + (tears.length - 1) * 250;
+  }
+
+  // M2: lift the restore latch once the LAST staggered window has opened (plus a
+  // small buffer for its mount + first persist), then persist immediately so any
+  // window the user opened DURING the latch (whose own persist was suppressed) is
+  // captured. Skipped entirely when nothing was restored, so the latch is never
+  // held over an idle launch (Codex).
+  if (willRestore) {
+    setTimeout(() => { setRestoring(false); persistOpenProjectsNow(); }, restoreStaggerMs + 1500);
   }
 
   // Auto-resume queue (v1.0.30): after the project windows above mount and
@@ -2350,8 +2459,11 @@ app.on('before-quit', (e) => {
     // not flush in time and performInstall's drain already ran.
     try {
       const cfgUp = loadConfig();
-      cfgUp.lastOpenProjects = openForUpdate;
-      cfgUp.lastTearOffs = tearOffsForUpdate;
+      // Merge-preserve missing-path entries (unmounted drive) like the live
+      // persist does, so an update-restart doesn't drop them. Codex.
+      const mergedUp = computeRestoreLists(cfgUp, openForUpdate, tearOffsForUpdate);
+      cfgUp.lastOpenProjects = mergedUp.lastOpenProjects;
+      cfgUp.lastTearOffs = mergedUp.lastTearOffs;
       cfgUp.lastQuitAt = Date.now();
       saveConfig(cfgUp);
       flushConfig();
@@ -2384,8 +2496,11 @@ app.on('before-quit', (e) => {
     // it to [] and wipe the restore state. v1.0.38.
     setQuitting(true);
     const config = loadConfig();
-    config.lastOpenProjects = openProjects;
-    config.lastTearOffs = tearOffs;
+    // Merge-preserve missing-path entries (unmounted drive) like the live
+    // persist does, so a normal quit doesn't drop them. Codex.
+    const merged = computeRestoreLists(config, openProjects, tearOffs);
+    config.lastOpenProjects = merged.lastOpenProjects;
+    config.lastTearOffs = merged.lastTearOffs;
     // Quit timestamp: auto-resume compares each link's lastRunningAt against
     // this to only revive sessions that were ACTUALLY running at quit
     // (v1.0.35 stale-link fix).

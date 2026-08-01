@@ -19,9 +19,11 @@ function timeAgo(ts) {
  *
  * Click behavior is deliberately safe across windows (no duplicate live
  * sessions):
- *   - a tab live in THIS window          -> switch to it
- *   - a tab in ANOTHER project           -> open/focus that project's window
- *   - a tab in THIS project, not live    -> resume its session here (if linked)
+ *   - a tab live in THIS window                   -> switch to it
+ *   - a tab live in ANOTHER window (tear-off /     -> focus that owning window
+ *     other same-project primary)                     (never resume: it's alive)
+ *   - a tab in ANOTHER project (not live)          -> open/focus that project's window
+ *   - a tab in THIS project, not live anywhere     -> resume its session here (if linked)
  */
 export default function ProjectTabsView({ search = '', onResumeSession }) {
   const [groups, setGroups] = useState(null); // null = loading
@@ -58,11 +60,18 @@ export default function ProjectTabsView({ search = '', onResumeSession }) {
       setActiveView('terminal');
       return;
     }
+    // Live in ANOTHER window (a tear-off, or another primary of this project):
+    // the PTY is still running there, so resuming would spawn a duplicate
+    // session. Reveal the owning window instead. H3.
+    if (tab.live) {
+      window.electronAPI?.windowFocusTabOwner?.(projectPath, tab.id);
+      return;
+    }
     if (projectPath !== currentProjectPath) {
       window.electronAPI?.windowOpenProject?.(projectPath);
       return;
     }
-    // This project, tab not live: resume its linked session in this window.
+    // This project, tab not live anywhere: resume its linked session here.
     if (tab.sessionId) onResumeSession?.({ sessionId: tab.sessionId, project: projectPath });
   }, [liveHere, currentProjectPath, setActiveTab, setActiveView, onResumeSession]);
 
@@ -149,7 +158,11 @@ export default function ProjectTabsView({ search = '', onResumeSession }) {
                       }}
                       onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--surface-hover, var(--border))'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                      title={live ? 'Switch to this tab' : (g.path === currentProjectPath ? 'Resume this session' : 'Open this project window')}
+                      title={live
+                        ? 'Switch to this tab'
+                        : t.live
+                          ? 'Focus the window running this tab'
+                          : (g.path === currentProjectPath ? 'Resume this session' : 'Open this project window')}
                     >
                       <span
                         title={STATUS_LABELS[status] || status}

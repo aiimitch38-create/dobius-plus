@@ -28,7 +28,7 @@ import {
   listTerminals, subscribeTerminal, writeTerminal, terminalHasDesktopAttached,
   resizeTerminal, killTerminal, createTerminal,
 } from './terminal-manager.js';
-import { loadAllSessions, loadTranscript, listProjects } from './data-service.js';
+import { loadAllSessions, loadTranscript, listProjects, getTranscriptSig } from './data-service.js';
 import { peekReply } from './voice-bridge.js';
 import { getVoiceConductorTabId } from './voice-conductor.js';
 import { snapshot as terminalStatusSnapshot } from './terminal-status.js';
@@ -490,7 +490,23 @@ function handleAuthedMessage(socket, msg, subs) {
       // A positive limit makes the server do a cheap tail read (the Chat view
       // polls this every few seconds); History omits it for the full transcript.
       const limit = typeof msg.limit === 'number' && msg.limit > 0 ? Math.min(msg.limit, 2000) : undefined;
-      loadTranscript(sessionId, projectPath, limit)
+      // Audit M3: the Chat view polls this every ~3.5s. Skip the tail-read +
+      // parse when the transcript file is byte-identical to what we last sent
+      // this socket (same mtime + size), and just re-send the cached entries so
+      // the client still gets a response (and a fresh mount still loads). Keyed
+      // per (sessionId + projectPath + limit): two projects can hold the same
+      // sessionId (and could coincidentally share an mtime+size signature), and
+      // History's no-limit full read must not be served a limited cache. Codex.
+      const cacheKey = `${sessionId}:${projectPath}:${limit || 0}`;
+      const txCache = socket._txCache || (socket._txCache = new Map());
+      getTranscriptSig(sessionId, projectPath)
+        .then(async (sig) => {
+          const hit = txCache.get(cacheKey);
+          if (sig && hit && hit.sig === sig) return hit.entries;
+          const entries = (await loadTranscript(sessionId, projectPath, limit)) || [];
+          if (sig) txCache.set(cacheKey, { sig, entries });
+          return entries;
+        })
         .then((entries) => wsSend(socket, { type: 'transcript', sessionId, projectPath, entries: entries || [] }))
         .catch((err) => wsSend(socket, { type: 'error', message: String(err?.message || err) }));
       break;

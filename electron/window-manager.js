@@ -1,7 +1,7 @@
 import { BrowserWindow, app, screen } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { killTerminal, getActiveTerminals, gracefulCloseTerminals, getTerminalsForProject } from './terminal-manager.js';
+import { killTerminal, getActiveTerminals, gracefulCloseTerminals, getTerminalsForProject, getTerminalWebContentsId } from './terminal-manager.js';
 import { watchFiles } from './watcher-service.js';
 import { getProjectConfig, setProjectConfig, loadConfig, saveConfig } from './config-manager.js';
 import { getQuittingForUpdate, getQuitting } from './quit-state.js';
@@ -30,15 +30,72 @@ const projectWindows = new Map();
  * cheap. Tear-off windows are excluded (they're ephemeral, not a project's
  * primary window).
  */
+// Set true for the duration of launch-time restore so the per-window
+// persistOpenProjects calls (fired as each restored window mounts) can't
+// overwrite the saved restore state with a PARTIAL set mid-restore. Audit M2.
+let restoring = false;
+export function setRestoring(v) { restoring = !!v; }
+
+// Projects / tear-off tabs that have actually had a window OPEN this session.
+// Merge-preserve (below) keeps a saved entry whose path is currently missing so
+// an unmounted-drive project isn't lost, BUT only if it was never opened this
+// session: once the user has opened it and then deliberately closed it, it must
+// be dropped even if its path happens to be missing at close time (otherwise it
+// reopens on the next launch after the drive returns). Codex.
+const openedProjectPathsThisSession = new Set();
+const openedTearOffTabIdsThisSession = new Set();
+
+/**
+ * Compute the lastOpenProjects / lastTearOffs to persist, merging the currently
+ * open windows with saved entries that should NOT be lost. The preserve signal
+ * is "never opened a window this session": that single condition covers a
+ * missing-path entry (unmounted drive), a still-pending staggered restore that
+ * hasn't opened yet, and a restore that failed to open, while an entry the user
+ * actually opened and then closed (opened-this-session, now not open) is a
+ * deliberate close and is dropped. Shared by persistOpenProjects AND the quit
+ * paths (which write config directly, bypassing the getQuitting guard) so all
+ * three apply the same rule. Audit M2 + Codex.
+ * @param {object} config current config (read for prev lists)
+ * @param {string[]} openNow getOpenProjectsForRestore()
+ * @param {Array} tearsNow getOpenTearOffsForRestore()
+ */
+export function computeRestoreLists(config, openNow, tearsNow) {
+  const prevProjects = Array.isArray(config?.lastOpenProjects) ? config.lastOpenProjects : [];
+  const preservedProjects = prevProjects.filter((p) => typeof p === 'string'
+    && !openNow.includes(p) && !openedProjectPathsThisSession.has(p));
+  const openTearTabIds = new Set(tearsNow.map((t) => t.tabId));
+  const prevTears = Array.isArray(config?.lastTearOffs) ? config.lastTearOffs : [];
+  const preservedTears = prevTears.filter((t) => t && t.tabId && t.projectPath
+    && !openTearTabIds.has(t.tabId) && !openedTearOffTabIdsThisSession.has(t.tabId));
+  // Dedupe both lists so a pre-existing duplicate in config (or two windows that
+  // briefly shared an id) can't persist twice and open two windows for one id on
+  // restore. First occurrence wins. Codex.
+  const seenPaths = new Set();
+  const lastOpenProjects = [...openNow, ...preservedProjects].filter((p) => {
+    if (seenPaths.has(p)) return false; seenPaths.add(p); return true;
+  });
+  const seenTabIds = new Set();
+  const lastTearOffs = [...tearsNow, ...preservedTears].filter((t) => {
+    if (seenTabIds.has(t.tabId)) return false; seenTabIds.add(t.tabId); return true;
+  });
+  return { lastOpenProjects, lastTearOffs };
+}
+
 function persistOpenProjects() {
-  if (getQuitting()) return; // snapshot frozen: quit in progress
+  if (getQuitting() || restoring) return; // snapshot frozen: quit or restore in progress
   try {
     const config = loadConfig();
-    config.lastOpenProjects = getOpenProjectsForRestore();
-    config.lastTearOffs = getOpenTearOffsForRestore();
+    const merged = computeRestoreLists(config, getOpenProjectsForRestore(), getOpenTearOffsForRestore());
+    config.lastOpenProjects = merged.lastOpenProjects;
+    config.lastTearOffs = merged.lastTearOffs;
     saveConfig(config);
   } catch { /* best-effort */ }
 }
+
+// Persist the open-projects snapshot on demand. Called right after the restore
+// latch lifts so any window the user opened DURING restore is written out even
+// though its own persistOpenProjects was suppressed by the latch. Codex.
+export function persistOpenProjectsNow() { persistOpenProjects(); }
 
 /**
  * Tear-off windows that should be recreated on next launch: [{ projectPath,
@@ -50,14 +107,21 @@ function persistOpenProjects() {
 export function getOpenTearOffsForRestore() {
   const out = [];
   for (const [, entry] of projectWindows) {
-    if (entry.isTearOff && entry.tearOffTabId && entry.win && !entry.win.isDestroyed()) {
-      out.push({
-        projectPath: entry.projectPath,
-        tabId: entry.tearOffTabId,
-        label: entry.tearOffLabel || '',
-        bounds: entry.bounds || (entry.win.isDestroyed() ? null : entry.win.getBounds()),
-      });
-    }
+    if (!entry.isTearOff || !entry.tearOffTabId || !entry.win || entry.win.isDestroyed()) continue;
+    // Only persist a CONFIRMED tear-off (a restored one, or a drag one whose
+    // claim succeeded). An in-flight/unconfirmed drag tear-off is never written,
+    // so even if its source window closes and its PTY reads null, a crash can't
+    // strip the tab from the primary and resurrect a tear-off that never took
+    // ownership. Ownership alone can't tell "restored, PTY not created yet" from
+    // "in-flight drag whose source closed" (both read null), so we track
+    // confirmation explicitly. Codex.
+    if (!entry.tearOffConfirmed) continue;
+    out.push({
+      projectPath: entry.projectPath,
+      tabId: entry.tearOffTabId,
+      label: entry.tearOffLabel || '',
+      bounds: entry.bounds || entry.win.getBounds(),
+    });
   }
   return out;
 }
@@ -114,13 +178,92 @@ function getWindowIdsForProject(projectPath) {
   return ids;
 }
 
+// PRIMARY (non-tear-off) windows for a project. The primary window owns the
+// project's shared terminals; a tear-off owns only its one torn tab. Used so a
+// still-open tear-off does NOT count as "another window owns these terminals"
+// when the primary closes (which would leak the primary's PTYs). Audit H1.
+function getPrimaryWindowIdsForProject(projectPath) {
+  const ids = [];
+  for (const [winId, entry] of projectWindows) {
+    if (entry.projectPath === projectPath && !entry.isTearOff && !entry.win.isDestroyed()) {
+      ids.push(winId);
+    }
+  }
+  return ids;
+}
+
+// Tab ids that have a tear-off window (claimed OR still in-flight/unclaimed). A
+// tab being torn off is MOVING to its own window, so the source window's
+// graceful close must NOT Ctrl+C it (that would interrupt a tab that is just
+// relocating). Distinct from the KILL decision, which is ownership-based
+// (getTerminalWebContentsId) so an in-flight tear-off that later fails is still
+// cleaned up. Codex.
+function getTearOffTabIdsForProject(projectPath) {
+  const ids = new Set();
+  for (const [, entry] of projectWindows) {
+    if (entry.isTearOff && entry.projectPath === projectPath && entry.tearOffTabId && !entry.win.isDestroyed()) {
+      ids.add(entry.tearOffTabId);
+    }
+  }
+  return ids;
+}
+
+// Mark a drag tear-off as confirmed once its renderer has successfully claimed
+// the source PTY (called from terminal:claimPty success). Matched by BOTH tabId
+// and the claiming window's webContents id, so if two tear-offs of the same tab
+// ever coexist the RIGHT (claiming) window is confirmed. Only confirmed tear-offs
+// are persisted to lastTearOffs. Codex.
+export function markTearOffConfirmed(tabId, webContentsId) {
+  for (const [, entry] of projectWindows) {
+    if (entry.isTearOff && entry.tearOffTabId === tabId && entry.win && !entry.win.isDestroyed()
+        && (webContentsId == null || entry.win.webContents.id === webContentsId)) {
+      entry.tearOffConfirmed = true;
+      persistOpenProjects(); // capture the now-confirmed tear-off immediately
+      return;
+    }
+  }
+}
+
+// Focus the tear-off window that owns a given tab id, if one is open. Lets the
+// sidebar reveal a torn-off live tab rather than resume a duplicate. Audit H3.
+export function focusTearOffWindowForTab(tabId) {
+  for (const [, entry] of projectWindows) {
+    if (entry.isTearOff && entry.tearOffTabId === tabId && entry.win && !entry.win.isDestroyed()) {
+      if (entry.win.isMinimized()) entry.win.restore();
+      entry.win.show();
+      entry.win.focus();
+      return true;
+    }
+  }
+  return false;
+}
+
+// Focus a project's already-open primary window (does NOT create one). Used when
+// a sidebar tab is live in another same-project primary window. Audit H3.
+export function focusPrimaryWindowForProject(projectPath) {
+  const win = getWindowForProject(projectPath);
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    return true;
+  }
+  return false;
+}
+
 /**
  * Set up common window event handlers (bounds saving, close cleanup, etc.)
  * @param {BrowserWindow} win
  * @param {string} projectPath
  * @param {{ isTearOff?: boolean, tearOffTabId?: string }} options
  */
-function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId = null, tearOffLabel = null } = {}) {
+function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId = null, tearOffLabel = null, tearOffConfirmed = false } = {}) {
+  // This window's webContents id, used to decide which PTYs it actually OWNS on
+  // close. Ownership (entry.webContents.id, set on createTerminal + claim) is the
+  // real predicate; registration ("a tear-off window exists for tab T") is not,
+  // because an in-flight tear-off is registered BEFORE it claims T, so T is still
+  // owned by this (source) window until the claim lands. Audit / Codex.
+  const myWcId = win.webContents.id;
   // Keep window title after page sets <title>
   win.on('page-title-updated', (e) => {
     e.preventDefault();
@@ -172,10 +315,22 @@ function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId =
       win.webContents.send('terminal:requestSave');
     }
 
-    // Determine which terminals this window owns
+    // Determine which terminals to gracefully close (Ctrl+C for resume-ID +
+    // scrollback):
+    //  - tear-off: its one tab, but only if this window actually owns it (an
+    //    aborted tear-off must not Ctrl+C the source window's live tab).
+    //  - primary: its project terminals EXCEPT any that have a tear-off window.
+    //    A tab being torn off is MOVING to its own window, so interrupting it
+    //    here is wrong whether the tear-off ends up succeeding (it survives in
+    //    the new window, so no interrupt) or failing (it is then killed with no
+    //    window to save from anyway). The KILL decision below is ownership-based
+    //    so a failed tear-off's tab is still cleaned up. Codex.
     const termIds = isTearOff && tearOffTabId
-      ? [tearOffTabId]
-      : getTerminalsForProject(projectPath);
+      ? (getTerminalWebContentsId(tearOffTabId) === myWcId ? [tearOffTabId] : [])
+      : (() => {
+          const beingTornOff = getTearOffTabIdsForProject(projectPath);
+          return getTerminalsForProject(projectPath).filter((id) => !beingTornOff.has(id));
+        })();
 
     // Send Ctrl+C twice, wait for Claude to print resume ID, save scrollback, then close
     gracefulCloseTerminals(termIds).then(() => {
@@ -200,33 +355,57 @@ function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId =
     // restore list. v1.0.38.
     persistOpenProjects();
 
-    // Auto-resume cancel: drop any pending queue entries for this project
-    // since the tabs are about to die. Dynamic import avoids a hard
-    // circular dep on the orchestrator module.
+    // Auto-resume cancel: drop pending queue entries. A tear-off owns only its
+    // torn tab, so cancel just that one; cancelling the whole project here would
+    // silently kill the primary window's still-queued resumes. Audit M1.
     try {
       // eslint-disable-next-line global-require, import/no-extraneous-dependencies
       import('./auto-resume.js').then((m) => {
-        if (m?.cancelTabsForProject) m.cancelTabsForProject(projectPath);
+        if (isTearOff && tearOffTabId) {
+          if (m?.cancelTabIfPending) m.cancelTabIfPending(tearOffTabId);
+          else if (m?.cancelTabsForProject && getPrimaryWindowIdsForProject(projectPath).length === 0) m.cancelTabsForProject(projectPath);
+        } else if (m?.cancelTabsForProject) {
+          m.cancelTabsForProject(projectPath);
+        }
       }).catch(() => {});
     } catch { /* noop */ }
 
-    // If this is a tear-off window, only kill the specific torn-off terminal
+    // If this is a tear-off window, kill the torn PTY ONLY if no LIVE window
+    // still owns it (getTerminalWebContentsId returns the owner's webContents id,
+    // or null once that webContents is destroyed). This one predicate covers:
+    //  - normal tear-off close: this window owned it, now destroyed -> null -> kill
+    //  - restored tear-off close: it created the PTY, now destroyed -> null -> kill
+    //  - aborted/failed tear-off while the SOURCE window is still open: source
+    //    still owns it -> non-null -> spared (must not kill the source's tab)
+    //  - orphan (claim never happened AND the source window has since closed too):
+    //    no live owner -> null -> kill, so an in-flight tear-off + source-close
+    //    race can't leak a windowless PTY. Codex.
     if (isTearOff && tearOffTabId) {
-      killTerminal(tearOffTabId);
+      if (getTerminalWebContentsId(tearOffTabId) === null) killTerminal(tearOffTabId);
       return;
     }
 
-    // For primary windows: check if another window for this project exists.
-    // If so, don't kill any terminals (the other window owns them).
-    const otherWindowIds = getWindowIdsForProject(projectPath);
-    if (otherWindowIds.length > 0) return;
+    // For primary windows: if ANOTHER PRIMARY window of this project is still
+    // open, leave the shared terminals alone (that other window owns/renders
+    // them). Audit H1.
+    const otherPrimaryIds = getPrimaryWindowIdsForProject(projectPath);
+    if (otherPrimaryIds.length > 0) return;
 
-    // No other windows, kill all terminals for this project
-    const termIds = getTerminalsForProject(projectPath);
-    for (const id of termIds) {
-      killTerminal(id);
+    // Otherwise kill every project terminal that no LIVE window still owns
+    // (getTerminalWebContentsId === null). At this point our webContents is
+    // destroyed, so terminals we owned now read null and are killed; a terminal
+    // a tear-off has CLAIMED reads that live window's id and is SPARED (H1); an
+    // in-flight tear-off's tab, still bound here, reads null and is killed
+    // immediately rather than orphaned until the tear-off's timeout. Codex.
+    for (const id of getTerminalsForProject(projectPath)) {
+      if (getTerminalWebContentsId(id) === null) killTerminal(id);
     }
   });
+
+  // Record that this project/tear-off actually opened a window this session, so
+  // merge-preserve won't resurrect it after a deliberate close (see above). Codex.
+  if (isTearOff) { if (tearOffTabId) openedTearOffTabIdsThisSession.add(tearOffTabId); }
+  else { openedProjectPathsThisSession.add(projectPath); }
 
   projectWindows.set(win.id, {
     projectPath, win, isTearOff,
@@ -234,6 +413,13 @@ function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId =
     // exactly this window (project + tab) after a restart/update. v1.0.46.
     tearOffTabId: isTearOff ? tearOffTabId : null,
     tearOffLabel: isTearOff ? tearOffLabel : null,
+    // A tear-off is "confirmed" once it truly owns its PTY: a RESTORED tear-off
+    // creates its own PTY (confirmed from creation), and a DRAG tear-off becomes
+    // confirmed when its terminal:claimPty succeeds (markTearOffConfirmed). Only
+    // confirmed tear-offs are written to lastTearOffs, so an in-flight/unclaimed
+    // drag tear-off (even after its source window closes and its PTY reads null)
+    // is never resurrected as authoritative on next launch. Codex.
+    tearOffConfirmed: isTearOff ? tearOffConfirmed : false,
     bounds: isTearOff && !win.isDestroyed() ? win.getBounds() : null,
   });
   // Record the new window immediately so any exit path can restore it.
@@ -350,7 +536,10 @@ function createTornOffWindow(projectPath, tabId, tabLabel, bounds = {}, restore 
     win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), { query });
   }
 
-  setupWindowEvents(win, projectPath, { isTearOff: true, tearOffTabId: tabId, tearOffLabel: tabLabel });
+  // A restored tear-off creates its OWN PTY on mount, so it owns its tab from
+  // the start (confirmed). A drag tear-off must claim the source's PTY first, so
+  // it stays unconfirmed until markTearOffConfirmed() on a successful claim. Codex.
+  setupWindowEvents(win, projectPath, { isTearOff: true, tearOffTabId: tabId, tearOffLabel: tabLabel, tearOffConfirmed: restore });
   return win;
 }
 

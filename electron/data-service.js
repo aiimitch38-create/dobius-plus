@@ -266,12 +266,22 @@ export async function loadAllSessions(projectFilter) {
  * Assembled from data that survives quit/restart (config.projects[*].tabs +
  * sessionTabMap + transcripts).
  */
-export async function getAllProjectTabs() {
+/**
+ * @param {object} [opts]
+ * @param {Set<string>} [opts.liveTabIds] tab ids with a live PTY right now (from
+ *   terminal-manager). Used to mark rows `live` so the sidebar focuses the
+ *   owning window instead of resuming (which would duplicate the session). H3.
+ * @param {Array<{projectPath:string,tabId:string,label?:string}>} [opts.tearOffTabs]
+ *   currently-open tear-off windows. Their torn tab is removed from the primary
+ *   window's persisted tabs, so without this the aggregate omits it entirely. M4.
+ */
+export async function getAllProjectTabs({ liveTabIds = null, tearOffTabs = [] } = {}) {
   // Respect the same hidden/removed-project suppression the project list uses, so
   // a project the user deliberately hid doesn't reappear here. Codex.
   const hidden = new Set(getHiddenProjects());
   const projects = getAllProjectsWithTabs().filter((p) => !hidden.has(p.path)); // [{ path, tabs, tabCounter }]
-  if (projects.length === 0) return [];
+  const tornOffIds = new Set((Array.isArray(tearOffTabs) ? tearOffTabs : []).map((t) => t && t.tabId).filter(Boolean));
+  if (projects.length === 0 && tornOffIds.size === 0) return [];
   const displayNames = getProjectDisplayNames() || {};
 
   // Reverse the sessionTabMap to tabId -> { sessionId, at }. A tab id can be
@@ -291,26 +301,64 @@ export async function getAllProjectTabs() {
   const sessions = await loadAllSessions();
   const sessionById = new Map(sessions.map((s) => [s.sessionId, s]));
 
+  // Shape one output row from a persisted tab (or a synthetic tear-off tab).
+  const toRow = (t, tornOff) => {
+    const link = t && t.id ? byTab.get(t.id) : null;
+    const sess = link ? sessionById.get(link.sessionId) : null;
+    const lastActiveAt = sess?.timestamp || link?.at || t?.createdAt || 0;
+    return {
+      id: t?.id,
+      label: t?.label || 'Tab',
+      kind: t?.kind || 'terminal',
+      url: t?.url || undefined,
+      sessionId: link?.sessionId || undefined,
+      preview: sess?.preview || undefined,
+      status: sess?.status || undefined,
+      // live = a PTY is running for this tab id in SOME window. The sidebar uses
+      // this to focus the owning window instead of resuming a still-live session
+      // (which would spawn a duplicate). H3. Null liveTabIds => unknown => false.
+      live: liveTabIds ? liveTabIds.has(t?.id) : false,
+      tornOff: !!tornOff,
+      lastActiveAt,
+    };
+  };
+
+  // Group tear-off tabs by their project so they can be appended to the matching
+  // project (or seed a project row that has no other persisted tabs). M4.
+  const tearsByProject = new Map();
+  for (const to of (Array.isArray(tearOffTabs) ? tearOffTabs : [])) {
+    if (!to || !to.tabId || !to.projectPath || hidden.has(to.projectPath)) continue;
+    if (!tearsByProject.has(to.projectPath)) tearsByProject.set(to.projectPath, []);
+    tearsByProject.get(to.projectPath).push(to);
+  }
+
+  const knownPaths = new Set(projects.map((p) => p.path));
+  const rowsFor = (path, tabs) => {
+    const persisted = (Array.isArray(tabs) ? tabs : []).map((t) => toRow(t, tornOffIds.has(t?.id)));
+    const seen = new Set(persisted.map((r) => r.id));
+    const torn = (tearsByProject.get(path) || [])
+      .filter((to) => !seen.has(to.tabId))
+      .map((to) => toRow({ id: to.tabId, label: to.label || 'Tab', kind: 'terminal' }, true));
+    return [...persisted, ...torn].filter((t) => t.id).sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+  };
+
   const result = projects.map(({ path, tabs }) => {
     const name = displayNames[path] || path.split('/').filter(Boolean).pop() || path;
-    const outTabs = (Array.isArray(tabs) ? tabs : []).map((t) => {
-      const link = t && t.id ? byTab.get(t.id) : null;
-      const sess = link ? sessionById.get(link.sessionId) : null;
-      const lastActiveAt = sess?.timestamp || link?.at || t?.createdAt || 0;
-      return {
-        id: t?.id,
-        label: t?.label || 'Tab',
-        kind: t?.kind || 'terminal',
-        url: t?.url || undefined,
-        sessionId: link?.sessionId || undefined,
-        preview: sess?.preview || undefined,
-        status: sess?.status || undefined,
-        lastActiveAt,
-      };
-    }).filter((t) => t.id).sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+    const outTabs = rowsFor(path, tabs);
     const projLastActive = outTabs.length ? outTabs[0].lastActiveAt : 0;
     return { path, name, lastActiveAt: projLastActive, tabs: outTabs };
   });
+
+  // A tear-off whose primary project window is closed (path not in `projects`)
+  // would otherwise vanish from the aggregate; surface it as its own group. M4.
+  for (const [path, tears] of tearsByProject) {
+    if (knownPaths.has(path)) continue;
+    const name = displayNames[path] || path.split('/').filter(Boolean).pop() || path;
+    const outTabs = rowsFor(path, []);
+    if (outTabs.length === 0) continue;
+    result.push({ path, name, lastActiveAt: outTabs[0].lastActiveAt, tabs: outTabs });
+  }
+
   return result.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
 }
 
@@ -945,45 +993,65 @@ export async function deleteSession(sessionId, projectPath) {
 /**
  * Load a transcript for a specific session.
  */
+/**
+ * Resolve a session's transcript file path, scoped to the supplied project and
+ * probing both encoder forms. The old global fallback scanned EVERY project
+ * dir and returned the first sessionId match, so a stale/wrong projectPath
+ * could show a transcript from a completely different project (Codex v1.0.35
+ * P1, same class as the deleteSession fix in v1.0.33).
+ * Third candidate: the stripped-leading-dash form this function's old naive
+ * encoder produced. No such dir exists on any known machine (Claude CLI always
+ * writes leading-dash), but probing it is free and closes the theoretical gap
+ * Codex flagged when the global fallback was removed. Codex v1.0.35 r4 P2.
+ *
+ * NOTE (r8 false-positive proof): probe #3 ALSO exactly round-trips the lossy
+ * fallback projectPath loadAllSessions emits for UNRESOLVED dirs
+ * ('/'+dir.replace(/-/g,'/')): dashes->slashes->dashes restores dir.name and
+ * .replace(/^-/,'') strips the doubled leading dash. Verified for new-encoding,
+ * legacy-(Code), and deleted-project dir names, so previews for sessions of
+ * deleted/unscanned projects still load.
+ */
+async function resolveTranscriptPath(sessionId, projectPath) {
+  if (!/^[\w-]+$/.test(sessionId)) return null;
+  if (typeof projectPath !== 'string' || !projectPath) return null;
+  const encodings = [
+    encodePathLikeClaude(projectPath),
+    encodePathLikeClaudeLegacy(projectPath),
+    projectPath.replace(/\//g, '-').replace(/^-/, ''),
+  ];
+  const seen = new Set();
+  for (const enc of encodings) {
+    if (!enc || seen.has(enc)) continue;
+    seen.add(enc);
+    const p = path.join(PROJECTS_DIR, enc, `${sessionId}.jsonl`);
+    if (await pathExists(p)) return p;
+  }
+  return null;
+}
+
+/**
+ * Cheap change-signature (mtime + size) for a session's transcript file, so a
+ * poller (mobile Chat view) can skip the tail-read + parse when nothing has
+ * changed. Returns null if the file can't be resolved. Audit M3.
+ */
+export async function getTranscriptSig(sessionId, projectPath) {
+  try {
+    const p = await resolveTranscriptPath(sessionId, projectPath);
+    if (!p) return null;
+    const st = await fs.stat(p);
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadTranscript(sessionId, projectPath, limit) {
   try {
-    if (!/^[\w-]+$/.test(sessionId)) return [];
-    if (typeof projectPath !== 'string' || !projectPath) return [];
-
-    // Scoped to the supplied project, both encoder forms. The old global
-    // fallback scanned EVERY project dir and returned the first sessionId
-    // match, so a stale/wrong projectPath could show a transcript from a
-    // completely different project (Codex v1.0.35 P1, same class as the
-    // deleteSession fix in v1.0.33).
-    // Third candidate: the stripped-leading-dash form this function's old
-    // naive encoder produced. No such dir exists on any known machine
-    // (Claude CLI always writes leading-dash), but probing it is free and
-    // closes the theoretical gap Codex flagged when the global fallback
-    // was removed. Codex v1.0.35 r4 P2.
-    //
-    // NOTE (r8 false-positive proof): probe #3 ALSO exactly round-trips the
-    // lossy fallback projectPath loadAllSessions emits for UNRESOLVED dirs
-    // ('/'+dir.replace(/-/g,'/')): dashes->slashes->dashes restores dir.name
-    // and .replace(/^-/,'') strips the doubled leading dash. Verified for
-    // new-encoding, legacy-(Code), and deleted-project dir names, so
-    // previews for sessions of deleted/unscanned projects still load.
-    const encodings = [
-      encodePathLikeClaude(projectPath),
-      encodePathLikeClaudeLegacy(projectPath),
-      projectPath.replace(/\//g, '-').replace(/^-/, ''),
-    ];
-    const seen = new Set();
-    for (const enc of encodings) {
-      if (!enc || seen.has(enc)) continue;
-      seen.add(enc);
-      const p = path.join(PROJECTS_DIR, enc, `${sessionId}.jsonl`);
-      if (await pathExists(p)) {
-        // A positive limit does a cheap tail read (mobile Chat poll); no limit
-        // streams the full transcript (History view). Codex.
-        return (typeof limit === 'number' && limit > 0) ? parseTranscriptTail(p, limit) : parseTranscriptFile(p);
-      }
-    }
-    return [];
+    const p = await resolveTranscriptPath(sessionId, projectPath);
+    if (!p) return [];
+    // A positive limit does a cheap tail read (mobile Chat poll); no limit
+    // streams the full transcript (History view). Codex.
+    return (typeof limit === 'number' && limit > 0) ? parseTranscriptTail(p, limit) : parseTranscriptFile(p);
   } catch (err) {
     console.warn('[data-service] Failed to load transcript:', err.message);
     return [];

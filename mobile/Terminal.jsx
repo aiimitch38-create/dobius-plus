@@ -238,7 +238,7 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
             <p className="muted small">Tap the title bar to pick one.</p>
           </div>
         ) : mode === 'chat' ? (
-          <ChatView connection={connection} tab={active} />
+          <ChatView key={activeId} connection={connection} tab={active} />
         ) : (
           <XtermView connection={connection} activeId={activeId} />
         )}
