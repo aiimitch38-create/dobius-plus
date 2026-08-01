@@ -301,7 +301,7 @@ export function openProjectWindow(projectPath) {
 // Shared creator for a torn-off tab window at explicit bounds. Used by the
 // cursor-drag tear-off AND the launch-time tear-off restore (v1.0.46), so the
 // two can't drift.
-function createTornOffWindow(projectPath, tabId, tabLabel, bounds = {}) {
+function createTornOffWindow(projectPath, tabId, tabLabel, bounds = {}, restore = false) {
   const folderName = path.basename(projectPath);
   // Count existing windows for this project to generate "folder (2)" style title
   const windowNumber = getWindowIdsForProject(projectPath).length + 1;
@@ -332,13 +332,18 @@ function createTornOffWindow(projectPath, tabId, tabLabel, bounds = {}) {
   });
 
   const isDev = !app.isPackaged;
+  // restore=true (launch-time recreate) tells the renderer to CREATE a fresh PTY
+  // for this tab rather than CLAIM a live one: after a cold start there is no
+  // torn-off PTY to claim, so a claim would leave a dead terminal. With create,
+  // auto-resume then revives the session. v1.0.46 (Codex).
   if (isDev) {
-    const query = `project=${encodeURIComponent(projectPath)}&tearOffTab=${encodeURIComponent(tabId)}&tearOffLabel=${encodeURIComponent(tabLabel)}`;
+    let query = `project=${encodeURIComponent(projectPath)}&tearOffTab=${encodeURIComponent(tabId)}&tearOffLabel=${encodeURIComponent(tabLabel)}`;
+    if (restore) query += '&tearOffRestore=1';
     win.loadURL(`http://localhost:5173?${query}`);
   } else {
-    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), {
-      query: { project: projectPath, tearOffTab: tabId, tearOffLabel: tabLabel },
-    });
+    const query = { project: projectPath, tearOffTab: tabId, tearOffLabel: tabLabel };
+    if (restore) query.tearOffRestore = '1';
+    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), { query });
   }
 
   setupWindowEvents(win, projectPath, { isTearOff: true, tearOffTabId: tabId, tearOffLabel: tabLabel });
@@ -364,7 +369,7 @@ export function openTornOffWindow(projectPath, tabId, tabLabel, screenX, screenY
  * terminal for tabId and auto-resume revives the session via the sessionTabMap.
  */
 export function restoreTornOffWindow(projectPath, tabId, tabLabel, bounds) {
-  return createTornOffWindow(projectPath, tabId, tabLabel, bounds || {});
+  return createTornOffWindow(projectPath, tabId, tabLabel, bounds || {}, true);
 }
 
 /** Single Visual preview window (phone-shaped, its own window so it never covers the terminal). */

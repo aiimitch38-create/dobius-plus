@@ -10,6 +10,8 @@ export default function App() {
   const projectPath = params.get('project') || undefined;
   const tearOffTabId = params.get('tearOffTab') || undefined;
   const tearOffLabel = params.get('tearOffLabel') || undefined;
+  // Restored tear-off (launch-time recreate): create a fresh PTY, don't claim.
+  const tearOffRestore = params.get('tearOffRestore') === '1';
   const isVisual = params.get('visual') === '1';
 
   // Handle file drag-and-drop globally.
@@ -71,7 +73,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <ProjectView projectPath={projectPath} tearOffTabId={tearOffTabId} tearOffLabel={tearOffLabel} />
+      <ProjectView projectPath={projectPath} tearOffTabId={tearOffTabId} tearOffLabel={tearOffLabel} tearOffRestore={tearOffRestore} />
       <UpdateBanner />
     </ErrorBoundary>
   );

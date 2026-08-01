@@ -15,7 +15,7 @@ import { useAgentActivity } from '../../hooks/useAgentActivity';
 import { useTabActivity } from '../../hooks/useTabActivity';
 import { STATUS_COLORS, STATUS_LABELS } from '../../lib/status-colors';
 
-export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel }) {
+export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel, tearOffRestore = false }) {
   const activeView = useStore((s) => s.activeView);
   const setActiveView = useStore((s) => s.setActiveView);
   const sidebarVisible = useStore((s) => s.sidebarVisible);
@@ -919,7 +919,7 @@ export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel })
                           id={tab.id}
                           cwd={tab.projectPath}
                           theme={theme.xtermTheme}
-                          claimExisting={tab.id === tearOffTabId}
+                          claimExisting={tab.id === tearOffTabId && !tearOffRestore}
                         />
                       )}
                     </div>
