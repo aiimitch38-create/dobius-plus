@@ -23,7 +23,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { app, powerSaveBlocker } from 'electron';
-import { getMobileServerConfig, updateMobileServerConfig, setSessionTabLink, removePushSubscriptionsByToken } from './config-manager.js';
+import { getMobileServerConfig, updateMobileServerConfig, setSessionTabLink, removePushSubscriptionsByToken, getSessionTabMap } from './config-manager.js';
 import {
   listTerminals, subscribeTerminal, writeTerminal, terminalHasDesktopAttached,
   resizeTerminal, killTerminal, createTerminal,
@@ -189,10 +189,22 @@ function shortModel(model) {
 // cache. v1.0.43.
 function buildTerminalsPayload() {
   const snap = terminalStatusSnapshot();
+  // Reverse the session<->tab map (cheap, sync) so each tab carries its linked
+  // session. The mobile Chat view loads that session's transcript to show a
+  // responsive conversation instead of the width-locked raw terminal mirror.
+  const tabMap = getSessionTabMap() || {};
+  const sessionByTab = new Map();
+  for (const [sid, link] of Object.entries(tabMap)) {
+    if (!link || typeof link !== 'object' || !link.tabId) continue;
+    const at = link.lastRunningAt || link.capturedAt || 0;
+    const prev = sessionByTab.get(link.tabId);
+    if (!prev || at >= prev.at) sessionByTab.set(link.tabId, { sessionId: sid, projectPath: link.projectPath, at });
+  }
   const list = listTerminals().map((t) => {
     const meta = parseTermLabel(t.id, t.cwd);
     const st = snap.live[t.id];
     const ctx = tabContextCache.get(t.id);
+    const link = sessionByTab.get(t.id);
     return {
       id: t.id,
       pid: t.pid,
@@ -204,6 +216,8 @@ function buildTerminalsPayload() {
       lastActivityAt: st?.lastActivityAt || 0,
       model: ctx?.model || '',
       ctxPct: typeof ctx?.ctxPct === 'number' ? ctx.ctxPct : null,
+      sessionId: link?.sessionId || null,
+      sessionProject: link?.projectPath || null,
     };
   });
   return { type: 'terminals', list, recentExits: snap.recentExits };
@@ -217,7 +231,7 @@ function terminalsSignature(payload) {
   // Bucket ctx% to 5% so a slowly-growing context does not push every refresh,
   // but a meaningful move (and model changes) still updates the ring.
   const tabs = payload.list
-    .map((t) => `${t.id}:${t.status}:${t.model}:${t.ctxPct == null ? '' : Math.round(t.ctxPct / 5)}`)
+    .map((t) => `${t.id}:${t.status}:${t.model}:${t.sessionId || ''}:${t.ctxPct == null ? '' : Math.round(t.ctxPct / 5)}`)
     .sort().join('|');
   const exits = payload.recentExits.map((e) => `${e.id}:${e.exitCode}:${e.at}`).join('|');
   return `${tabs}#${exits}`;
