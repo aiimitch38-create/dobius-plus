@@ -19,6 +19,10 @@ export default function ChatView({ connection, tab }) {
   // Track the session we asked for so an out-of-order reply for a different
   // session (or a stale poll after switching tabs) can't render here.
   const wantRef = useRef(null);
+  // Consecutive empty replies, to debounce clearing: a single transient empty
+  // shouldn't blank a live conversation, but a persistent empty (transcript
+  // reset/deleted) should. Resolves the transient-vs-real tension.
+  const emptyStreakRef = useRef(0);
 
   const request = useCallback(() => {
     if (!sessionId || !projectPath) return;
@@ -30,6 +34,7 @@ export default function ChatView({ connection, tab }) {
 
   useEffect(() => {
     setMessages(null);
+    emptyStreakRef.current = 0;
     if (!sessionId || !projectPath) return undefined;
     request();
     const poll = setInterval(request, 3500); // live-ish: pick up new turns
@@ -40,10 +45,17 @@ export default function ChatView({ connection, tab }) {
     const off = connection.onMessage((msg) => {
       if (msg.type === 'transcript' && msg.sessionId === wantRef.current
           && (msg.projectPath == null || msg.projectPath === projectPath)) {
-        // Trust the server result. The overscanning tail read already prevents
-        // spurious empties from a tool-heavy tail, so an empty reply now means the
-        // transcript is genuinely empty/reset and should clear the view. Codex.
-        setMessages(msg.entries || []);
+        const next = msg.entries || [];
+        if (next.length > 0) {
+          emptyStreakRef.current = 0;
+          setMessages(next);
+        } else {
+          emptyStreakRef.current += 1;
+          // Clear on first load / already-empty, or once an empty PERSISTS (a
+          // real reset). A single transient empty after real content is kept, so
+          // the chat doesn't flicker to "No messages yet". Codex.
+          setMessages((prev) => (!prev || prev.length === 0 || emptyStreakRef.current >= 2 ? [] : prev));
+        }
       }
     });
     return off;
