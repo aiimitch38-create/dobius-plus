@@ -160,7 +160,11 @@ export default function ProjectTabsView({ search = '', onResumeSession }) {
                           <span className="truncate" style={{ fontSize: 12, fontWeight: 600 }}>
                             {t.label}{t.kind === 'browser' ? ' ○' : ''}
                           </span>
-                          {live && <span style={{ fontSize: 9, color: 'var(--accent)', flexShrink: 0 }}>live</span>}
+                          {/* No "live" badge: it only ever showed in the current
+                              ("HERE") project group where every tab is already
+                              open, so it was redundant and it contradicted the
+                              gray idle dot on an open-but-idle tab (Sam). The
+                              status dot conveys activity; HERE conveys the window. */}
                           <span style={{ fontSize: 9, color: 'var(--dim)', marginLeft: 'auto', flexShrink: 0 }}>
                             {timeAgo(t.lastActiveAt)}
                           </span>

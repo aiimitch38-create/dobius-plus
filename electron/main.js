@@ -43,6 +43,7 @@ import {
 } from './config-manager.js';
 import {
   openProjectWindow, openTornOffWindow, getOpenProjects, getOpenProjectsForRestore, closeProjectWindow, closeAllProjectWindows,
+  getOpenTearOffsForRestore, restoreTornOffWindow,
   openVisualWindow, closeVisualWindow,
 } from './window-manager.js';
 import { initAutoUpdater } from './auto-updater.js';
@@ -2260,6 +2261,29 @@ app.whenReady().then(() => {
     if (toRestore.length > 0) restoreStaggerMs = 500 + (toRestore.length - 1) * 250;
   }
 
+  // Restore torn-off tab windows too (Brett's "Fix updating": his lost windows
+  // were tear-offs, which used to be dropped on every restart/update). Open them
+  // AFTER the primary windows, continuing the same stagger, each recreating its
+  // tab so auto-resume can revive the session. v1.0.46.
+  if (Array.isArray(config.lastTearOffs) && config.lastTearOffs.length > 0) {
+    const tears = config.lastTearOffs.filter(
+      (t) => t && typeof t.projectPath === 'string' && t.projectPath.startsWith('/')
+        && fs.existsSync(t.projectPath) && typeof t.tabId === 'string' && t.tabId,
+    );
+    console.log(`[restore] lastTearOffs=${config.lastTearOffs.length} reopening=${tears.length}`);
+    const base = restoreStaggerMs ? restoreStaggerMs + 250 : 500;
+    tears.forEach((t, i) => {
+      setTimeout(() => {
+        try {
+          restoreTornOffWindow(t.projectPath, t.tabId, t.label || '', t.bounds || null);
+        } catch (err) {
+          console.warn(`[restore] failed to reopen tear-off ${t.tabId}:`, err?.message || err);
+        }
+      }, base + i * 250);
+    });
+    if (tears.length > 0) restoreStaggerMs = base + (tears.length - 1) * 250;
+  }
+
   // Auto-resume queue (v1.0.30): after the project windows above mount and
   // their terminals come up, walk every live tab's prior sessionTabMap entry
   // and stagger-write `claude --resume <id>` into each. Default ON; per-tab
@@ -2307,6 +2331,7 @@ app.on('before-quit', (e) => {
     // the Phase-3 Cmd+Q branch below), so hitting the update Restart button
     // relaunched into a bare launcher with every window gone.
     const openForUpdate = getOpenProjectsForRestore();
+    const tearOffsForUpdate = getOpenTearOffsForRestore(); // Brett's tear-off restore
     setQuitting(true);
     // Best-effort scrollback flush; do NOT await, squirrel.mac needs a fast
     // exit or the bundle replace can corrupt. Tabs themselves are already
@@ -2326,6 +2351,7 @@ app.on('before-quit', (e) => {
     try {
       const cfgUp = loadConfig();
       cfgUp.lastOpenProjects = openForUpdate;
+      cfgUp.lastTearOffs = tearOffsForUpdate;
       cfgUp.lastQuitAt = Date.now();
       saveConfig(cfgUp);
       flushConfig();
@@ -2352,12 +2378,14 @@ app.on('before-quit', (e) => {
     phase3Draining = true;
     e.preventDefault();
     const openProjects = getOpenProjectsForRestore();
+    const tearOffs = getOpenTearOffsForRestore(); // Brett's tear-off restore
     // Freeze the live snapshot BEFORE closeAllProjectWindows() below: each
     // window 'closed' persists the open list, and that cascade would rewrite
     // it to [] and wipe the restore state. v1.0.38.
     setQuitting(true);
     const config = loadConfig();
     config.lastOpenProjects = openProjects;
+    config.lastTearOffs = tearOffs;
     // Quit timestamp: auto-resume compares each link's lastRunningAt against
     // this to only revive sessions that were ACTUALLY running at quit
     // (v1.0.35 stale-link fix).

@@ -35,8 +35,31 @@ function persistOpenProjects() {
   try {
     const config = loadConfig();
     config.lastOpenProjects = getOpenProjectsForRestore();
+    config.lastTearOffs = getOpenTearOffsForRestore();
     saveConfig(config);
   } catch { /* best-effort */ }
+}
+
+/**
+ * Tear-off windows that should be recreated on next launch: [{ projectPath,
+ * tabId, label, bounds }]. Kept separate from getOpenProjectsForRestore (primary
+ * windows) because a tear-off is one torn tab in its own window, not a project's
+ * primary window. Brett's "Fix updating": his lost windows were tear-offs, which
+ * used to be dropped on every restart/update. v1.0.46.
+ */
+export function getOpenTearOffsForRestore() {
+  const out = [];
+  for (const [, entry] of projectWindows) {
+    if (entry.isTearOff && entry.tearOffTabId && entry.win && !entry.win.isDestroyed()) {
+      out.push({
+        projectPath: entry.projectPath,
+        tabId: entry.tearOffTabId,
+        label: entry.tearOffLabel || '',
+        bounds: entry.bounds || (entry.win.isDestroyed() ? null : entry.win.getBounds()),
+      });
+    }
+  }
+  return out;
 }
 
 /**
@@ -93,7 +116,7 @@ function getWindowIdsForProject(projectPath) {
  * @param {string} projectPath
  * @param {{ isTearOff?: boolean, tearOffTabId?: string }} options
  */
-function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId = null } = {}) {
+function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId = null, tearOffLabel = null } = {}) {
   // Keep window title after page sets <title>
   win.on('page-title-updated', (e) => {
     e.preventDefault();
@@ -102,22 +125,26 @@ function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId =
   // Start file watchers for this window
   watchFiles(win.webContents);
 
-  // Save window bounds on move/resize (debounced)
-  if (!isTearOff) {
-    let boundsTimer;
-    const saveBounds = () => {
-      clearTimeout(boundsTimer);
-      boundsTimer = setTimeout(() => {
-        if (win && !win.isDestroyed()) {
-          const config = getProjectConfig(projectPath) || {};
-          config.windowBounds = win.getBounds();
-          setProjectConfig(projectPath, config);
-        }
-      }, 300);
-    };
-    win.on('resize', saveBounds);
-    win.on('move', saveBounds);
-  }
+  // Save window bounds on move/resize (debounced). Primary windows persist to
+  // per-project config; tear-offs stash bounds on their projectWindows entry so
+  // the tear-off restore reopens them in place (v1.0.46).
+  let boundsTimer;
+  const saveBounds = () => {
+    clearTimeout(boundsTimer);
+    boundsTimer = setTimeout(() => {
+      if (!win || win.isDestroyed()) return;
+      if (isTearOff) {
+        const entry = projectWindows.get(win.id);
+        if (entry) { entry.bounds = win.getBounds(); persistOpenProjects(); }
+      } else {
+        const config = getProjectConfig(projectPath) || {};
+        config.windowBounds = win.getBounds();
+        setProjectConfig(projectPath, config);
+      }
+    }, 300);
+  };
+  win.on('resize', saveBounds);
+  win.on('move', saveBounds);
 
   // Graceful close: send Ctrl+C twice to Claude sessions so they print resume IDs,
   // save scrollback, then kill terminals. Prevents immediate PTY death on window X.
@@ -197,7 +224,14 @@ function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId =
     }
   });
 
-  projectWindows.set(win.id, { projectPath, win, isTearOff });
+  projectWindows.set(win.id, {
+    projectPath, win, isTearOff,
+    // Tear-offs carry the torn tab + label so the tear-off restore can recreate
+    // exactly this window (project + tab) after a restart/update. v1.0.46.
+    tearOffTabId: isTearOff ? tearOffTabId : null,
+    tearOffLabel: isTearOff ? tearOffLabel : null,
+    bounds: isTearOff && !win.isDestroyed() ? win.getBounds() : null,
+  });
   // Record the new window immediately so any exit path can restore it.
   persistOpenProjects();
 }
@@ -264,26 +298,22 @@ export function openProjectWindow(projectPath) {
  * @param {number} screenY — cursor Y position (screen coords)
  * @returns {BrowserWindow}
  */
-export function openTornOffWindow(projectPath, tabId, tabLabel, screenX, screenY) {
+// Shared creator for a torn-off tab window at explicit bounds. Used by the
+// cursor-drag tear-off AND the launch-time tear-off restore (v1.0.46), so the
+// two can't drift.
+function createTornOffWindow(projectPath, tabId, tabLabel, bounds = {}) {
   const folderName = path.basename(projectPath);
-
   // Count existing windows for this project to generate "folder (2)" style title
-  const existingCount = getWindowIdsForProject(projectPath).length;
-  const windowNumber = existingCount + 1;
+  const windowNumber = getWindowIdsForProject(projectPath).length + 1;
   const title = windowNumber > 1
     ? `${folderName} (${windowNumber}) | Dobius+`
     : `${folderName} | Dobius+`;
 
-  // Position window near the cursor, offset so title bar is under cursor
-  const display = screen.getDisplayNearestPoint({ x: screenX, y: screenY });
-  const x = Math.max(display.bounds.x, screenX - 200);
-  const y = Math.max(display.bounds.y, screenY - 30);
-
   const win = new BrowserWindow({
-    width: 1100,
-    height: 720,
-    x,
-    y,
+    width: bounds.width || 1100,
+    height: bounds.height || 720,
+    x: bounds.x,
+    y: bounds.y,
     minWidth: 600,
     minHeight: 400,
     title,
@@ -302,12 +332,8 @@ export function openTornOffWindow(projectPath, tabId, tabLabel, screenX, screenY
   });
 
   const isDev = !app.isPackaged;
-  const encodedProject = encodeURIComponent(projectPath);
-  const encodedTabId = encodeURIComponent(tabId);
-  const encodedLabel = encodeURIComponent(tabLabel);
-  const query = `project=${encodedProject}&tearOffTab=${encodedTabId}&tearOffLabel=${encodedLabel}`;
-
   if (isDev) {
+    const query = `project=${encodeURIComponent(projectPath)}&tearOffTab=${encodeURIComponent(tabId)}&tearOffLabel=${encodeURIComponent(tabLabel)}`;
     win.loadURL(`http://localhost:5173?${query}`);
   } else {
     win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), {
@@ -315,8 +341,30 @@ export function openTornOffWindow(projectPath, tabId, tabLabel, screenX, screenY
     });
   }
 
-  setupWindowEvents(win, projectPath, { isTearOff: true, tearOffTabId: tabId });
+  setupWindowEvents(win, projectPath, { isTearOff: true, tearOffTabId: tabId, tearOffLabel: tabLabel });
   return win;
+}
+
+/**
+ * Open a torn-off tab in its own window (cursor drag).
+ * projectPath, tabId (terminal tab id being torn off), tabLabel (display label),
+ * screenX / screenY (cursor position in screen coords). Returns the window.
+ */
+export function openTornOffWindow(projectPath, tabId, tabLabel, screenX, screenY) {
+  // Position window near the cursor, offset so the title bar is under the cursor.
+  const display = screen.getDisplayNearestPoint({ x: screenX, y: screenY });
+  const x = Math.max(display.bounds.x, screenX - 200);
+  const y = Math.max(display.bounds.y, screenY - 30);
+  return createTornOffWindow(projectPath, tabId, tabLabel, { x, y, width: 1100, height: 720 });
+}
+
+/**
+ * Recreate a torn-off tab window on launch from persisted state (Brett's
+ * "Fix updating"). Positioned at its saved bounds. The renderer creates a fresh
+ * terminal for tabId and auto-resume revives the session via the sessionTabMap.
+ */
+export function restoreTornOffWindow(projectPath, tabId, tabLabel, bounds) {
+  return createTornOffWindow(projectPath, tabId, tabLabel, bounds || {});
 }
 
 /** Single Visual preview window (phone-shaped, its own window so it never covers the terminal). */
