@@ -23,9 +23,9 @@ export default function ChatView({ connection, tab }) {
   const request = useCallback(() => {
     if (!sessionId || !projectPath) return;
     wantRef.current = sessionId;
-    // limit => the server does a cheap tail read, so polling a huge transcript
-    // stays light. 600 lines is plenty of recent conversation for a phone.
-    connection.send({ type: 'loadTranscript', sessionId, projectPath, limit: 600 });
+    // limit = number of recent messages; the server does a cheap overscanning
+    // tail read, so polling a huge transcript stays light.
+    connection.send({ type: 'loadTranscript', sessionId, projectPath, limit: 200 });
   }, [connection, sessionId, projectPath]);
 
   useEffect(() => {
@@ -40,7 +40,11 @@ export default function ChatView({ connection, tab }) {
     const off = connection.onMessage((msg) => {
       if (msg.type === 'transcript' && msg.sessionId === wantRef.current
           && (msg.projectPath == null || msg.projectPath === projectPath)) {
-        setMessages(msg.entries || []);
+        const next = msg.entries || [];
+        // Don't let a transient empty poll blank out a conversation that was
+        // showing turns; keep the last non-empty result until real content
+        // arrives. First load still shows the empty state.
+        setMessages((prev) => (next.length || !prev || prev.length === 0 ? next : prev));
       }
     });
     return off;

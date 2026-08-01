@@ -1105,18 +1105,30 @@ async function parseTranscriptFile(filePath) {
   return messages;
 }
 
-// Bounded tail read for the mobile Chat poll: reads only the last `limit` JSONL
-// lines (parseJsonl uses readTail), so re-polling every few seconds stays cheap
-// even on a 100MB transcript. Returns the recent turns, which is what the chat
-// shows. Codex.
-async function parseTranscriptTail(filePath, limit) {
-  const entries = await parseJsonl(filePath, limit);
-  const messages = [];
+// Bounded tail read for the mobile Chat poll: reads only the tail of the JSONL
+// (parseJsonl uses readTail), so re-polling every few seconds stays cheap even on
+// a 100MB transcript. `messageLimit` is the number of VISIBLE user/assistant
+// messages to return; we OVERSCAN raw lines because an agentic run's tail can be
+// mostly tool/meta records, so limiting raw lines before filtering could return
+// few or zero messages (Codex). The same aggregate payload cap as the full path
+// is enforced by trimming oldest-first, so a tail of huge pasted turns can't blow
+// past MAX_PAYLOAD_BYTES per poll (Codex).
+async function parseTranscriptTail(filePath, messageLimit) {
+  const want = Math.max(1, Math.min(messageLimit, 500));
+  const rawBudget = Math.min(want * 8, 8000); // overscan raw lines to find enough visible turns
+  const entries = await parseJsonl(filePath, rawBudget);
+  const msgs = [];
   for (const entry of entries) {
     const m = entryToMessage(entry);
-    if (m) messages.push({ ...m, timestamp: entry.timestamp || null });
+    if (m) msgs.push({ ...m, timestamp: entry.timestamp || null });
   }
-  return messages;
+  let tail = msgs.slice(-want);
+  let bytes = tail.reduce((n, m) => n + m.content.length + 64, 0);
+  while (tail.length > 1 && bytes > MAX_PAYLOAD_BYTES) {
+    bytes -= tail[0].content.length + 64;
+    tail = tail.slice(1);
+  }
+  return tail;
 }
 
 /**
