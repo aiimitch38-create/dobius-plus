@@ -82,13 +82,17 @@ export function getOpenProjectsForRestore() {
 }
 
 /**
- * Find the first open window for a project path.
+ * Find the first open PRIMARY (non-tear-off) window for a project path. Excludes
+ * tear-offs so openProjectWindow opens the full project window even when only a
+ * restored tear-off exists (Codex: otherwise it would focus the tear-off and the
+ * user could never get the primary back), and so closeProjectWindow closes the
+ * primary rather than a floating torn-off tab.
  * @param {string} projectPath
  * @returns {BrowserWindow|null}
  */
 function getWindowForProject(projectPath) {
   for (const [, entry] of projectWindows) {
-    if (entry.projectPath === projectPath && !entry.win.isDestroyed()) {
+    if (entry.projectPath === projectPath && !entry.isTearOff && !entry.win.isDestroyed()) {
       return entry.win;
     }
   }
