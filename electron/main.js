@@ -2229,6 +2229,7 @@ app.whenReady().then(() => {
 
   // Restore previously open project windows (Chrome-style tab restore)
   const config = loadConfig();
+  let restoreStaggerMs = 0; // wall-clock the staggered reopen takes, for auto-resume timing
   if (Array.isArray(config.lastOpenProjects) && config.lastOpenProjects.length > 0) {
     const toRestore = config.lastOpenProjects.filter(
       (p) => typeof p === 'string' && p.startsWith('/') && fs.existsSync(p),
@@ -2253,15 +2254,20 @@ app.whenReady().then(() => {
         }
       }, 500 + i * 250);
     });
+    // The last window opens at 500 + (n-1)*250ms; auto-resume must not conclude
+    // before then (it stops once the live-tab count is stable), or late-opening
+    // windows' sessions never resume. Codex.
+    if (toRestore.length > 0) restoreStaggerMs = 500 + (toRestore.length - 1) * 250;
   }
 
   // Auto-resume queue (v1.0.30): after the project windows above mount and
   // their terminals come up, walk every live tab's prior sessionTabMap entry
   // and stagger-write `claude --resume <id>` into each. Default ON; per-tab
   // cancel on user-input; Cmd+Shift+R cancels the whole queue. See
-  // electron/auto-resume.js. startAutoResume waits an internal startupDelay
-  // for terminals to be ready, so no separate setTimeout needed here.
-  void startAutoResume();
+  // electron/auto-resume.js. Its startupDelay is extended by the restore
+  // stagger so it waits for the LAST reopened window before deciding the live
+  // set is complete.
+  void startAutoResume({ startupDelayMs: 1500 + restoreStaggerMs });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
