@@ -77,6 +77,12 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
       return next;
     });
   }, []);
+  // Force the raw terminal (used by the Chat view's selector "answer manually"
+  // escape hatch when a selection prompt can't be tapped through).
+  const openTerminal = useCallback(() => {
+    setMode('terminal');
+    try { localStorage.setItem('dobius-mobile-view', 'terminal'); } catch { /* noop */ }
+  }, []);
 
   const refreshList = useCallback(() => {
     connection.send({ type: 'listTerminals' });
@@ -238,7 +244,7 @@ export default function TerminalScreen({ connection, status, initialId, onBack, 
             <p className="muted small">Tap the title bar to pick one.</p>
           </div>
         ) : mode === 'chat' ? (
-          <ChatView key={activeId} connection={connection} tab={active} />
+          <ChatView key={activeId} connection={connection} tab={active} onOpenTerminal={openTerminal} />
         ) : (
           <XtermView connection={connection} activeId={activeId} />
         )}

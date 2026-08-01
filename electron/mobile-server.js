@@ -26,8 +26,9 @@ import { app, powerSaveBlocker } from 'electron';
 import { getMobileServerConfig, updateMobileServerConfig, setSessionTabLink, removePushSubscriptionsByToken, getSessionTabMap } from './config-manager.js';
 import {
   listTerminals, subscribeTerminal, writeTerminal, terminalHasDesktopAttached,
-  resizeTerminal, killTerminal, createTerminal,
+  resizeTerminal, killTerminal, createTerminal, getTerminalBuffer,
 } from './terminal-manager.js';
+import { parseSelector } from './selector-parser.js';
 import { loadAllSessions, loadTranscript, listProjects, getTranscriptSig } from './data-service.js';
 import { peekReply } from './voice-bridge.js';
 import { getVoiceConductorTabId } from './voice-conductor.js';
@@ -432,6 +433,18 @@ function handleAuthedMessage(socket, msg, subs) {
         writeTerminal(msg.id, msg.data);
       }
       break;
+
+    case 'selectorSnapshot': {
+      // The mobile Chat view renders transcript text, which can't show Claude's
+      // interactive selection prompts (they're live TUI overlays, not in the
+      // transcript). Parse the tab's live PTY buffer for a numbered selector so
+      // the Chat view can surface tappable option buttons. Cheap (strip + regex
+      // over the rolling tail); returns selector=null when none is showing.
+      if (typeof msg.id !== 'string') break;
+      const selector = parseSelector(getTerminalBuffer(msg.id));
+      wsSend(socket, { type: 'selector', id: msg.id, selector: selector || null });
+      break;
+    }
 
     case 'resize':
       if (typeof msg.id === 'string'

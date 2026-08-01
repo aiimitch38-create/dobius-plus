@@ -506,3 +506,14 @@ export function getTerminalWebContentsId(id) {
 export function getActiveTerminals() {
   return Array.from(terminals.keys());
 }
+
+/**
+ * Recent RAW output (ANSI included) for a terminal, or '' if unknown. Used by
+ * the mobile selector probe to detect an interactive selection prompt in the
+ * live screen. The buffer is a rolling tail (64KB idle / 1MB when subscribed),
+ * which is more than a screenful, so a current selector is always within it.
+ */
+export function getTerminalBuffer(id) {
+  const entry = terminals.get(id);
+  return entry ? entry.outputBuffer : '';
+}
