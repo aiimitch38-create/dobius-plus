@@ -2230,14 +2230,29 @@ app.whenReady().then(() => {
   // Restore previously open project windows (Chrome-style tab restore)
   const config = loadConfig();
   if (Array.isArray(config.lastOpenProjects) && config.lastOpenProjects.length > 0) {
-    // Small delay to let launcher window finish loading first
-    setTimeout(() => {
-      for (const projectPath of config.lastOpenProjects) {
-        if (typeof projectPath === 'string' && projectPath.startsWith('/') && fs.existsSync(projectPath)) {
+    const toRestore = config.lastOpenProjects.filter(
+      (p) => typeof p === 'string' && p.startsWith('/') && fs.existsSync(p),
+    );
+    const missing = config.lastOpenProjects.length - toRestore.length;
+    // Log what we're restoring so an incomplete reopen (Sam-reported after an
+    // update-restart, v1.0.44) is diagnosable: this line reveals whether the
+    // saved list itself was short (a save-side problem) vs windows failing to
+    // open (a restore-side problem).
+    console.log(`[restore] lastOpenProjects=${config.lastOpenProjects.length} reopening=${toRestore.length}${missing ? ` skipped(missing path)=${missing}` : ''}`, toRestore);
+    // Open one at a time with a stagger. Creating several BrowserWindows (each
+    // with a webview-enabled preload) in a single synchronous burst raced on
+    // macOS and some windows silently never appeared after an update-restart.
+    // A small per-window gap makes the reopen reliable. First opens after 500ms
+    // (let the launcher settle), then every 250ms.
+    toRestore.forEach((projectPath, i) => {
+      setTimeout(() => {
+        try {
           openProjectWindow(projectPath);
+        } catch (err) {
+          console.warn(`[restore] failed to reopen ${projectPath}:`, err?.message || err);
         }
-      }
-    }, 500);
+      }, 500 + i * 250);
+    });
   }
 
   // Auto-resume queue (v1.0.30): after the project windows above mount and
