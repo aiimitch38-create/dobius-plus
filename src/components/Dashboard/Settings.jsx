@@ -366,6 +366,45 @@ export default function Settings() {
             />
           </div>
         </SettingRow>
+
+        {Array.isArray(settings.hiddenSessionPaths) && settings.hiddenSessionPaths.length > 0 && (
+          <SettingRow
+            label="Hidden session sources"
+            description="Paths hidden from the Sessions history list (via the Hide button on a project group)"
+          >
+            <div className="flex flex-col items-end gap-1" style={{ maxWidth: 320 }}>
+              {settings.hiddenSessionPaths.map((p) => (
+                <div key={p} className="flex items-center gap-2" style={{ maxWidth: '100%' }}>
+                  <span
+                    className="truncate"
+                    title={p}
+                    style={{ color: 'var(--dim)', fontSize: 10, fontFamily: "'SF Mono', monospace" }}
+                  >
+                    {p}
+                  </span>
+                  <button
+                    onClick={() => updateSetting('hiddenSessionPaths', settings.hiddenSessionPaths.filter((x) => x !== p))}
+                    title="Unhide: show this source's sessions again"
+                    aria-label={`Unhide sessions from ${p}`}
+                    style={{
+                      padding: '2px 8px',
+                      fontSize: 10,
+                      fontFamily: "'SF Mono', monospace",
+                      color: 'var(--fg)',
+                      backgroundColor: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                  >
+                    Unhide
+                  </button>
+                </div>
+              ))}
+            </div>
+          </SettingRow>
+        )}
       </Section>
 
       {/* Integrations */}

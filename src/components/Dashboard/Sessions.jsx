@@ -31,16 +31,20 @@ export default function Sessions() {
   const [searchText, setSearchText] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [sortBy, setSortBy] = useState('recent'); // 'recent' | 'alpha'
+  const [hiddenCount, setHiddenCount] = useState(0); // hidden session sources (paths)
 
   const loadData = useCallback(async () => {
     if (!window.electronAPI?.dataLoadAllSessions) return;
     try {
-      const [allSessions, sessionTags] = await Promise.all([
+      const [allSessions, sessionTags, cfgSettings] = await Promise.all([
         window.electronAPI.dataLoadAllSessions(),
         window.electronAPI.configGetSessionTags?.() || {},
+        window.electronAPI.configGetSettings?.() || {},
       ]);
       setSessions(allSessions || []);
       setTags(sessionTags || {});
+      const hp = cfgSettings?.hiddenSessionPaths;
+      setHiddenCount(Array.isArray(hp) ? hp.length : 0);
     } catch {
       setSessions([]);
       setTags({});
@@ -48,6 +52,20 @@ export default function Sessions() {
       setLoading(false);
     }
   }, []);
+
+  // Hide every source path in a name-group from the global history list.
+  // Reversible from Settings > Sessions > Hidden session sources.
+  const hideGroup = useCallback(async (group) => {
+    try {
+      const cfgSettings = await window.electronAPI.configGetSettings?.();
+      const cur = Array.isArray(cfgSettings?.hiddenSessionPaths) ? cfgSettings.hiddenSessionPaths : [];
+      const next = [...new Set([...cur, ...group.projectPaths])];
+      if (next.length !== cur.length) {
+        await window.electronAPI.configUpdateSettings?.({ hiddenSessionPaths: next });
+      }
+      loadData();
+    } catch { /* config unavailable; the list simply stays as-is */ }
+  }, [loadData]);
 
   useEffect(() => {
     loadData();
@@ -89,8 +107,12 @@ export default function Sessions() {
   for (const s of filtered) {
     const key = s.projectName || 'Unknown';
     if (!groups[key]) {
-      groups[key] = { projectName: key, projectPath: s.projectPath, sessions: [], latestTimestamp: 0 };
+      // projectPaths (Set): distinct real paths in this name-group. Two dirs
+      // can share a basename (e.g. two different `backend` dirs), so Hide must
+      // hide every path in the group, not just the first one seen.
+      groups[key] = { projectName: key, projectPath: s.projectPath, projectPaths: new Set(), sessions: [], latestTimestamp: 0 };
     }
+    if (s.projectPath) groups[key].projectPaths.add(s.projectPath);
     groups[key].sessions.push(s);
     if (s.timestamp > groups[key].latestTimestamp) {
       groups[key].latestTimestamp = s.timestamp;
@@ -145,6 +167,11 @@ export default function Sessions() {
           {sessions.length >= SESSION_CAP && (
             <span style={{ color: STATUS_COLORS.working, marginLeft: 6 }} title={`Showing the ${SESSION_CAP} most recent sessions; older ones are not listed.`}>
               (showing newest {SESSION_CAP})
+            </span>
+          )}
+          {hiddenCount > 0 && (
+            <span style={{ marginLeft: 6 }} title="Some session sources are hidden. Unhide them in Settings.">
+              ({hiddenCount} source{hiddenCount !== 1 ? 's' : ''} hidden)
             </span>
           )}
         </span>
@@ -211,10 +238,12 @@ export default function Sessions() {
         ) : (
           sortedGroups.map((group) => (
             <div key={group.projectName}>
-              {/* Project group header */}
+              {/* Project group header. Wrapper div (not one big button) so the
+                  Hide control is a sibling, never a nested button. */}
+              <div className="flex items-center gap-2 w-full mb-1.5 group">
               <button
                 onClick={() => toggleCollapsed(group.projectName)}
-                className="flex items-center gap-2 w-full text-left mb-1.5 group"
+                className="flex items-center gap-2 flex-1 min-w-0 text-left"
                 style={{ padding: '2px 0' }}
               >
                 <span
@@ -258,6 +287,25 @@ export default function Sessions() {
                   {timeAgo(group.latestTimestamp)}
                 </span>
               </button>
+              <button
+                onClick={() => hideGroup(group)}
+                className="text-xs shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-100"
+                style={{
+                  color: 'var(--dim)',
+                  fontFamily: "'SF Mono', monospace",
+                  fontSize: 10,
+                  padding: '2px 6px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  backgroundColor: 'transparent',
+                }}
+                title={`Hide ${group.projectName} sessions from this list (unhide in Settings)`}
+                aria-label={`Hide ${group.projectName} sessions from history`}
+              >
+                Hide
+              </button>
+              </div>
 
               {/* Session cards */}
               {!collapsed[group.projectName] && (

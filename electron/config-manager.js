@@ -24,6 +24,11 @@ const DEFAULT_CONFIG = {
     scrollbackLines: 1000,
     terminalFontSize: 13,
     sidebarDefaultOpen: false,
+    // Session sources (real project paths) hidden from the Sessions history
+    // list. Lets the user mute headless-CLI spam (e.g. an app running
+    // `claude -p` in a loop) without deleting transcripts. Managed from the
+    // Sessions tab (Hide) + Settings (unhide).
+    hiddenSessionPaths: [],
   },
   mobileServer: {
     enabled: false,

@@ -106,6 +106,15 @@ export async function loadAllSessions(projectFilter) {
       encodedToReal.set(encodePathLikeClaude(manualPath), manualPath);
     }
 
+    // Session sources the user hid from history (Sessions tab > Hide). An
+    // explicit projectFilter wins: a project window's own sidebar still shows
+    // that project's sessions even if it was hidden from the global list.
+    let hiddenPaths = new Set();
+    try {
+      const hp = getSettings().hiddenSessionPaths;
+      if (Array.isArray(hp)) hiddenPaths = new Set(hp.filter((p) => typeof p === 'string'));
+    } catch { void 0; }
+
     // Flatten every transcript across every project into one task list, then
     // process it with a bounded worker pool. The previous nested Promise.all
     // fanned out across all projects AND all files at once, opening thousands
@@ -120,6 +129,9 @@ export async function loadAllSessions(projectFilter) {
       // Pre-filter by project so the global 500-cap applies to the matching
       // set, not to everything-then-trimmed. Codex PR#3 r8 P2.
       if (projectFilter && projectPath !== projectFilter) continue;
+      // Skip user-hidden sources (before any file reads, so 260 headless spam
+      // transcripts cost zero I/O). projectFilter above already bypasses this.
+      if (!projectFilter && hiddenPaths.has(projectPath)) continue;
       const projectName = realPath
         ? realPath.split('/').filter(Boolean).pop()
         : dir.name.split('-').filter(Boolean).pop() || dir.name;
