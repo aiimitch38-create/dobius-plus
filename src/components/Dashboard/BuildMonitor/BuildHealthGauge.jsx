@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 
 /**
@@ -16,17 +15,12 @@ export default function BuildHealthGauge({ progress }) {
   const completed = progress.tasks_completed?.length || 0;
   const total = completed + (progress.tasks_remaining?.length || 0);
 
-  // Health score: base 100, -10 per failure, -5 per restart
-  const score = useMemo(() => {
-    return Math.max(0, Math.min(100, 100 - failures * 10 - restarts * 5));
-  }, [failures, restarts]);
-
-  // Color based on score
-  const color = useMemo(() => {
-    if (score >= 70) return 'var(--accent)';
-    if (score >= 40) return 'var(--warning)';
-    return 'var(--danger)';
-  }, [score]);
+  // Health score: base 100, -10 per failure, -5 per restart. Plain math, no
+  // memo: the old useMemo pair sat BELOW the `if (!progress) return null`
+  // early return, so the hook count changed whenever progress flipped
+  // null<->non-null and React threw (rules-of-hooks). ESLint pass v1.0.50.
+  const score = Math.max(0, Math.min(100, 100 - failures * 10 - restarts * 5));
+  const color = score >= 70 ? 'var(--accent)' : score >= 40 ? 'var(--warning)' : 'var(--danger)';
 
   // SVG arc params for semi-circle
   const radius = 60;

@@ -177,8 +177,8 @@ export async function startVisualServer(projectPath) {
 }
 
 export async function stopVisualServer() {
-  if (_watcher) { try { await _watcher.close(); } catch {} _watcher = null; }
-  if (_wss) { try { _wss.close(); } catch {} _wss = null; }
+  if (_watcher) { try { await _watcher.close(); } catch { /* already closed */ } _watcher = null; }
+  if (_wss) { try { _wss.close(); } catch { /* already closed */ } _wss = null; }
   if (_server) { await new Promise((r) => _server.close(r)); _server = null; }
   _port = null;
   _projectPath = null;

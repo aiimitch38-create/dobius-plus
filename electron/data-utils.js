@@ -128,7 +128,7 @@ export async function streamJsonl(filePath, onEntry) {
     });
     rl.on('close', () => resolve(count));
     rl.on('error', () => resolve(count));
-    stream.on('error', () => { try { rl.close(); } catch {} resolve(count); });
+    stream.on('error', () => { try { rl.close(); } catch { /* already closed */ } resolve(count); });
   });
 }
 

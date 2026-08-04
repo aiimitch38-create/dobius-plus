@@ -15,11 +15,6 @@ function timeStr(ts) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-function ext(p) {
-  const m = p.match(/\.([^./]+)$/);
-  return m ? m[1].toLowerCase() : '';
-}
-
 export default function ChangeFeed() {
   const currentProjectPath = useStore((s) => s.currentProjectPath);
   const [events, setEvents] = useState([]);

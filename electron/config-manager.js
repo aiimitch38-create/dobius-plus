@@ -10,6 +10,10 @@ const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 // stays tiny. Before this, scrollback was inlined into config.projects[*].terminalStates
 // and every per-tab auto-save serialized + sync-wrote the entire config (12+ MB).
 const SCROLLBACK_DIR = path.join(CONFIG_DIR, 'terminal-history');
+// Checkpoints (with their scrollback payloads) live in one file per project,
+// same reason: inlined under config.projects[*].checkpoints they ballooned
+// config.json back to 11MB and every debounced save rewrote all of it.
+const CHECKPOINTS_DIR = path.join(CONFIG_DIR, 'checkpoints');
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -267,6 +271,91 @@ function migrateScrollbackOutOfConfig(cfg) {
   return configChanged;
 }
 
+/** Resolve the checkpoints file for a project (same base64url scheme). */
+function getCheckpointsPath(projectPath) {
+  return path.join(CHECKPOINTS_DIR, `${Buffer.from(projectPath).toString('base64url')}.json`);
+}
+
+/**
+ * Read a project's checkpoints from its own file. [] when missing/corrupt.
+ */
+export async function getCheckpoints(projectPath) {
+  if (!projectPath || typeof projectPath !== 'string') return [];
+  try {
+    const parsed = JSON.parse(await fsp.readFile(getCheckpointsPath(projectPath), 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Write a project's checkpoints array atomically (tmp + rename, same pattern
+ * as saveTerminalScrollback). Checkpoint ops are user-initiated and rare.
+ */
+export async function saveCheckpoints(projectPath, checkpoints) {
+  if (!projectPath || typeof projectPath !== 'string') return;
+  if (UNSAFE_KEYS.has(projectPath)) return;
+  if (!Array.isArray(checkpoints)) return;
+  const filePath = getCheckpointsPath(projectPath);
+  const tmpPath = `${filePath}.${Date.now()}-${Math.floor(Math.random() * 1e6)}.tmp`;
+  try {
+    await fsp.mkdir(path.dirname(filePath), { recursive: true });
+    await fsp.writeFile(tmpPath, JSON.stringify(checkpoints));
+    await fsp.rename(tmpPath, filePath);
+  } catch (err) {
+    console.warn(`[config-manager] saveCheckpoints failed for ${projectPath}: ${err.message}`);
+    try { await fsp.unlink(tmpPath); } catch { /* nothing to do */ }
+  }
+}
+
+/**
+ * One-time migration (v1.0.50): move config.projects[*].checkpoints into
+ * per-project files, and trim closedTabs to 10 entries x 200 scrollback lines
+ * (was 20 x 500). Together these were 8.5MB of an 11MB config.json.
+ */
+function migrateCheckpointsAndClosedTabs(cfg) {
+  if (!cfg || typeof cfg !== 'object' || !cfg.projects) return false;
+  let configChanged = false;
+  for (const [projectPath, proj] of Object.entries(cfg.projects)) {
+    if (!proj || typeof proj !== 'object') continue;
+    if (Array.isArray(proj.checkpoints)) {
+      if (proj.checkpoints.length > 0) {
+        try {
+          // Atomic write; on failure keep the inline copy so next boot retries
+          // (same crash-safety contract as migrateScrollbackOutOfConfig).
+          const filePath = getCheckpointsPath(projectPath);
+          const tmpPath = `${filePath}.migrate.${Date.now()}-${Math.floor(Math.random() * 1e6)}.tmp`;
+          fs.mkdirSync(path.dirname(filePath), { recursive: true });
+          fs.writeFileSync(tmpPath, JSON.stringify(proj.checkpoints));
+          fs.renameSync(tmpPath, filePath);
+          delete proj.checkpoints;
+          configChanged = true;
+          console.log(`[config-manager] migrated checkpoints to file for ${projectPath}`);
+        } catch (err) {
+          console.warn(`[config-manager] checkpoint migrate failed for ${projectPath}: ${err.message}`);
+        }
+      } else {
+        delete proj.checkpoints;
+        configChanged = true;
+      }
+    }
+    if (Array.isArray(proj.closedTabs) && proj.closedTabs.length > 0) {
+      const needsTrim = proj.closedTabs.length > 10
+        || proj.closedTabs.some((t) => Array.isArray(t?.scrollback) && t.scrollback.length > 200);
+      if (needsTrim) {
+        proj.closedTabs = proj.closedTabs.slice(0, 10).map((t) => (
+          (t && Array.isArray(t.scrollback) && t.scrollback.length > 200)
+            ? { ...t, scrollback: t.scrollback.slice(-200) }
+            : t
+        ));
+        configChanged = true;
+      }
+    }
+  }
+  return configChanged;
+}
+
 /**
  * Load config from disk or return defaults.
  */
@@ -307,7 +396,8 @@ export function loadConfig() {
       }
       configCache = { ...DEFAULT_CONFIG, ...loaded };
       pruneOrphanTerminalStates(configCache);
-      const migrated = migrateScrollbackOutOfConfig(configCache);
+      const migratedScrollback = migrateScrollbackOutOfConfig(configCache);
+      const migrated = migrateCheckpointsAndClosedTabs(configCache) || migratedScrollback;
       if (migrated) {
         try {
           atomicWriteSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
@@ -622,6 +712,8 @@ export function addHiddenProject(projectPath) {
       if (typeof projectPath === 'string' && projectPath) {
         const dir = path.join(SCROLLBACK_DIR, Buffer.from(projectPath).toString('base64url'));
         fs.rmSync(dir, { recursive: true, force: true });
+        // Same parity for the project's checkpoints file (v1.0.50 config diet).
+        fs.rmSync(getCheckpointsPath(projectPath), { force: true });
       }
     } catch { /* best-effort */ }
   }

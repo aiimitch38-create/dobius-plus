@@ -165,7 +165,6 @@ export default function BrowserPane({ id, url: initialUrl, theme }) {
 
       {/* Live region */}
       <div className="flex-1 min-h-0 relative" style={{ backgroundColor: '#fff' }}>
-        {/* eslint-disable-next-line react/no-unknown-property -- <webview> is Electron-specific */}
         <webview
           ref={webviewRef}
           src={url}

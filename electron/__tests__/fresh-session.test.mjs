@@ -18,7 +18,7 @@ const { resolveFreshSessionsForTabs } = await import('../data-service.js');
 // apart so they sit outside the resolver's 10s clock slack and each start time
 // maps to exactly one candidate. All of it lives under TMP_HOME.
 const PROJ = '/private/tmp/dobius-freshtest-proj';
-const enc = PROJ.replace(/[^a-zA-Z0-9.\-]/g, '-');
+const enc = PROJ.replace(/[^a-zA-Z0-9.-]/g, '-');
 const dir = path.join(TMP_HOME, '.claude', 'projects', enc);
 const X = 'aaaaaaaa-1111-1111-1111-111111111111';
 const Y = 'bbbbbbbb-2222-2222-2222-222222222222';

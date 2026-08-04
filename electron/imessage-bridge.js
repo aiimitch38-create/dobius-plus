@@ -18,7 +18,6 @@
  *   - Rate limit: max 10 outbound iMessages/min (queue overflow rejected)
  *   - lastSeenRowid persisted → restart doesn't re-process history
  */
-import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execFile } from 'child_process';

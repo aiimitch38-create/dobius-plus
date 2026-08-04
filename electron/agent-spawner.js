@@ -21,7 +21,6 @@
  */
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { app } from 'electron';
 import { createTerminal, writeTerminal, listTerminals } from './terminal-manager.js';
 import { askSam } from './conversation-router.js';

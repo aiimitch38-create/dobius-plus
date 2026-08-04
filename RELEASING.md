@@ -2,6 +2,20 @@
 
 How to ship a signed, notarized, auto-updating release of Dobius+ to users.
 
+## TL;DR: use the script
+
+```bash
+./release.sh            # patch bump (1.0.49 -> 1.0.50)
+./release.sh minor      # minor bump
+```
+
+`release.sh` runs the ENTIRE flow below in the right order: preflight
+(clean main, creds in Keychain, tests green), version bump, push-main-first,
+electron-builder publish, DMG codesign/notarize/staple, latest-mac.yml DMG
+hash regen, re-uploads, and end-to-end verification (published + 5 assets +
+served manifest + tag == main HEAD). The sections below document what it
+does and remain the reference for debugging a failed step.
+
 ## Architecture (one-time read)
 
 - **Code signing** uses the `Developer ID Application: Status Consulting Firm LLC` certificate (already in this Mac's Keychain). Identity hash: `E95B5A61D673D466CCDA22615C9BF0F061BB9F2B`. Team ID: `Z349CC556Z`.

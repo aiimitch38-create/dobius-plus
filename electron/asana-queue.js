@@ -27,7 +27,6 @@ import { loadConfig, saveConfig, getAsanaQueue } from './config-manager.js';
 
 const ASANA_BASE = 'app.asana.com';
 const ASANA_TIMEOUT_MS = 10_000;
-const MAX_TASKS_PER_FETCH = 25;
 
 // --- Allowlist -----------------------------------------------------------
 

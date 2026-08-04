@@ -93,7 +93,7 @@ export default function UpdateBanner() {
     if (isReady && status.version) {
       saveDismissedVersion(status.version);
       setDismissed(loadDismissedVersions());
-      try { window.electronAPI?.updaterDismiss?.(status.version); } catch {}
+      try { window.electronAPI?.updaterDismiss?.(status.version); } catch { /* IPC unavailable */ }
     }
     setStatus(null);
   };

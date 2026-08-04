@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../../store/store';
 import { THEMES } from '../../lib/themes';
 import AccountsSection from './AccountsSection';

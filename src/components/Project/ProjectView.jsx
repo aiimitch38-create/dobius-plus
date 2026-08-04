@@ -603,17 +603,6 @@ export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel, t
     });
   }, [projectPath, handleResumeSession]);
 
-  const handleCdToProject = useCallback((sessionProject) => {
-    if (!sessionProject || !sessionProject.startsWith('/') || /[;&|`$\x00-\x1F\x7F]/.test(sessionProject)) return;
-    setActiveView('terminal');
-    const safePath = sessionProject.replace(/'/g, "'\\''");
-    const cmd = `cd '${safePath}'\r`;
-    const termId = useStore.getState().activeTabId;
-    if (window.electronAPI && termId) {
-      window.electronAPI.terminalWrite(termId, cmd);
-    }
-  }, [setActiveView]);
-
   // Close active tab with process confirmation
   const closeActiveTab = useCallback(async () => {
     const state = useStore.getState();
@@ -832,7 +821,6 @@ export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel, t
               pinnedIds={pinnedIds}
               onTogglePin={handleTogglePin}
               onResumeSession={handleResumeSession}
-              onCdToProject={handleCdToProject}
             />
           </div>
         )}

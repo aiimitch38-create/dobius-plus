@@ -206,7 +206,6 @@ export default function VisualView({ projectPath }) {
   }, [projectPath, prodBranch, prodUrl, urlForSrc, currentPage, setWebviewSrc]);
 
   const showFrame = !!url && !status && !loading;
-  const editingLabel = editing === 'prod' ? 'production' : 'preview';
 
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg)', overflow: 'hidden' }}>
@@ -314,7 +313,6 @@ export default function VisualView({ projectPath }) {
           border: 'none', boxShadow: 'none',
           flexShrink: 0, position: 'relative', display: showFrame ? 'block' : 'none',
         }}>
-          {/* eslint-disable-next-line react/no-unknown-property -- <webview> is Electron-specific */}
           <webview
             ref={webviewRef}
             src={(url && /^https?:\/\//i.test(url)) ? url : 'about:blank'}

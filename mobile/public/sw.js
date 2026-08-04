@@ -11,7 +11,7 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 // Web Push (Phase 5b): show the notification the Mac sent, and focus/open the
 // app when it's tapped.
 self.addEventListener('push', (e) => {
-  let data = {};
+  let data;
   try { data = e.data ? e.data.json() : {}; } catch { data = {}; }
   const title = data.title || 'Dobius+';
   e.waitUntil(self.registration.showNotification(title, {

@@ -401,7 +401,6 @@ function OrchestrationProgress() {
   const addTab = useStore((s) => s.addTab);
   const renameTab = useStore((s) => s.renameTab);
   const registerRunningAgent = useStore((s) => s.registerRunningAgent);
-  const setActiveView = useStore((s) => s.setActiveView);
   const currentProjectPath = useStore((s) => s.currentProjectPath);
   const setDashboardTab = useStore((s) => s.setDashboardTab);
   const [agents, setAgents] = useState([]);
@@ -427,7 +426,7 @@ function OrchestrationProgress() {
 
   if (!activeOrchestration) return null;
 
-  const { description, subtasks, status } = activeOrchestration;
+  const { description, subtasks } = activeOrchestration;
   const completedCount = subtasks.filter((st) => st.status === 'completed').length;
   const failedCount = subtasks.filter((st) => st.status === 'failed').length;
   const totalCount = subtasks.length;

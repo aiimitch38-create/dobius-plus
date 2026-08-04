@@ -1,7 +1,7 @@
 import { BrowserWindow, app, screen } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { killTerminal, getActiveTerminals, gracefulCloseTerminals, getTerminalsForProject, getTerminalWebContentsId, wasWindowOwned } from './terminal-manager.js';
+import { killTerminal, gracefulCloseTerminals, getTerminalsForProject, getTerminalWebContentsId, wasWindowOwned } from './terminal-manager.js';
 import { watchFiles } from './watcher-service.js';
 import { getProjectConfig, setProjectConfig, loadConfig, saveConfig } from './config-manager.js';
 import { getQuittingForUpdate, getQuitting } from './quit-state.js';
@@ -362,7 +362,6 @@ function setupWindowEvents(win, projectPath, { isTearOff = false, tearOffTabId =
     // torn tab, so cancel just that one; cancelling the whole project here would
     // silently kill the primary window's still-queued resumes. Audit M1.
     try {
-      // eslint-disable-next-line global-require, import/no-extraneous-dependencies
       import('./auto-resume.js').then((m) => {
         if (isTearOff && tearOffTabId) {
           if (m?.cancelTabIfPending) m.cancelTabIfPending(tearOffTabId);

@@ -830,7 +830,7 @@ export async function startMobileServer() {
   // push/install). That HTTP fallback is safe here BECAUSE it rides the tailnet:
   // WireGuard already encrypts the transport, so the bearer token is not exposed
   // to a same-subnet sniffer the way the removed LAN/plaintext mode exposed it.
-  let magicName = null;
+  let magicName;
   let secure = false;
   magicName = await getMagicDNSName();
   if (magicName && hasCertFor(magicName)) {

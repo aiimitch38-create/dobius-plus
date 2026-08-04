@@ -15,7 +15,7 @@ function timeAgo(ts) {
   return `${Math.floor(diff / 86400000)}d ago`;
 }
 
-export default function Sidebar({ pinnedIds = [], onTogglePin, onResumeSession, onCdToProject }) {
+export default function Sidebar({ pinnedIds = [], onTogglePin, onResumeSession }) {
   // v1.0.26: sidebar can scope to the current project via a toggle in the
   // header. Persisted in config.settings.sidebarFilterToProject so it sticks
   // across reloads. Fetched once on mount; updated whenever the toggle fires.

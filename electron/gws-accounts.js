@@ -365,7 +365,7 @@ export function resolveRealGws(excludeDir = null) {
  */
 export function ensureShim() {
   const realGws = resolveRealGws();
-  let shimDir = null;
+  let shimDir;
   try {
     shimDir = path.join(app.getPath('userData'), 'gws-shim');
     fsSync.mkdirSync(shimDir, { recursive: true });

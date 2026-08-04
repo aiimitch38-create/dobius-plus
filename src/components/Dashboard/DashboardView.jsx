@@ -1,11 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useStore } from '../../store/store';
 import { useStats } from '../../hooks/useStats';
 import { AnimatePresence, motion } from 'framer-motion';
 import Overview from './Overview';
 import MCPServers from './MCPServers';
 import Skills from './Skills';
-import Stats from './Stats';
+// Lazy: Stats is the only recharts consumer, and recharts is ~475KB minified.
+// Splitting it keeps every window's initial bundle (launcher included) light;
+// the chunk loads on first visit to the Stats tab.
+const Stats = lazy(() => import('./Stats'));
 import Sessions from './Sessions';
 import Plans from './Plans';
 import BuildMonitorView from './BuildMonitor/BuildMonitorView';
@@ -54,7 +57,11 @@ const TAB_CONTENT = {
   overview: (props) => <Overview {...props} />,
   mcp: (props) => <MCPServers settings={props.settings} bridgeServers={props.bridgeServers} />,
   skills: (props) => <Skills skills={props.skills} />,
-  stats: (props) => <Stats stats={props.stats} />,
+  stats: (props) => (
+    <Suspense fallback={<div className="p-6 text-xs" style={{ color: 'var(--dim)' }}>Loading charts...</div>}>
+      <Stats stats={props.stats} />
+    </Suspense>
+  ),
   costs: () => <Costs />,
   sessions: () => <Sessions />,
   search: () => <Search />,

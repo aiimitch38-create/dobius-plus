@@ -22,7 +22,6 @@ export default function ConversationCard({
   pinned,
   tabLabel,
   onSelect,
-  onTogglePin,
   onRename,
   onClearRename,
   hasCustomLabel,

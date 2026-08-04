@@ -35,7 +35,7 @@ export default function TerminalPane({ id, cwd, theme, className = '', claimExis
     });
   }, []);
 
-  const { containerRef, termRef, searchAddonRef } = useTerminal({ id, cwd, theme, fontSize: termFontSize, maxScrollbackLines: scrollbackLines, claimExisting });
+  const { containerRef, searchAddonRef } = useTerminal({ id, cwd, theme, fontSize: termFontSize, maxScrollbackLines: scrollbackLines, claimExisting });
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const mountedRef = useRef(true);

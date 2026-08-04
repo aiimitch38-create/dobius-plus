@@ -363,7 +363,7 @@ export async function getAllProjectTabs({ liveTabIds = null, tearOffTabs = [] } 
 
   // A tear-off whose primary project window is closed (path not in `projects`)
   // would otherwise vanish from the aggregate; surface it as its own group. M4.
-  for (const [path, tears] of tearsByProject) {
+  for (const [path] of tearsByProject) {
     if (knownPaths.has(path)) continue;
     const name = displayNames[path] || path.split('/').filter(Boolean).pop() || path;
     const outTabs = rowsFor(path, []);
@@ -429,7 +429,7 @@ export async function resolveFreshSessionId(projectPath, startedAt, claimed = ne
     for (const f of files) {
       const sessionId = f.replace('.jsonl', '');
       if (claimed.has(sessionId)) continue;
-      let birth = 0;
+      let birth;
       try {
         const st = await fs.stat(path.join(projectDir, f));
         // birthtimeMs is real on APFS. Fall back to ctime if it's absent/0.
@@ -683,8 +683,8 @@ export async function getLatestSession(projectPath) {
     // mtime is the fallback only when no parseable timestamp exists in the file.
     const enriched = await Promise.all(candidates.map(async ({ projectDir, file }) => {
       const filePath = path.join(projectDir, file);
-      let mtime = 0;
-      let size = 0;
+      let mtime;
+      let size;
       try {
         const st = await fs.stat(filePath);
         mtime = st.mtimeMs;
@@ -882,7 +882,7 @@ export async function loadPlans() {
  */
 export async function readPlanFile(planName) {
   try {
-    if (!/^[\w\s\-]+$/.test(planName)) return '';
+    if (!/^[\w\s-]+$/.test(planName)) return '';
     const filePath = path.join(PLANS_DIR, `${planName}.md`);
     // Ensure resolved path stays within PLANS_DIR (prevent traversal)
     if (!path.resolve(filePath).startsWith(path.resolve(PLANS_DIR))) return '';
@@ -901,7 +901,7 @@ async function readSkillDescription(skillDir) {
     const raw = await fs.readFile(skillJson, 'utf8');
     const parsed = JSON.parse(raw);
     if (parsed.description) return parsed.description;
-  } catch {}
+  } catch { /* optional file absent */ }
 
   // Fallback: SKILL.md frontmatter
   const skillMd = path.join(skillDir, 'SKILL.md');
@@ -1239,7 +1239,7 @@ export function getActiveProcesses() {
  * Every non-alphanumeric character (except . and -) becomes a dash.
  */
 function encodePathLikeClaude(p) {
-  return p.replace(/[^a-zA-Z0-9.\-]/g, '-');
+  return p.replace(/[^a-zA-Z0-9.-]/g, '-');
 }
 
 /**
@@ -1700,7 +1700,7 @@ export async function searchTranscripts(query) {
       // Capture size so a resume-from-search can hit the >80MB dead-session
       // guard. Without sizeMB on each match, Search bypassed the block and
       // oversized transcripts still hung Claude. Codex PR#3 r22 P2.
-      let sizeMB = 0;
+      let sizeMB;
       try {
         const st = await fs.stat(filePath);
         sizeMB = st.size / (1024 * 1024);

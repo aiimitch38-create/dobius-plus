@@ -55,11 +55,10 @@ export default function Overview({ stats, settings }) {
                 </tr>
               </thead>
               <tbody>
-                {activeProcesses.map((p, i) => (
+                {activeProcesses.map((p) => (
                   <ProcessRow
                     key={p.pid}
                     process={p}
-                    isLast={i === activeProcesses.length - 1}
                     onKilled={() => setActiveProcesses(activeProcesses.filter((x) => x.pid !== p.pid))}
                   />
                 ))}
@@ -80,7 +79,7 @@ export default function Overview({ stats, settings }) {
   );
 }
 
-function ProcessRow({ process: p, isLast, onKilled }) {
+function ProcessRow({ process: p, onKilled }) {
   const [confirm, setConfirm] = useState(false);
   const [killing, setKilling] = useState(false);
 

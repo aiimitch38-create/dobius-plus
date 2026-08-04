@@ -446,8 +446,6 @@ function RecentCompletions() {
       </div>
       <div className="rounded-lg" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
         {recentRuns.map((run, i) => {
-          const time = new Date(run.timestamp);
-          const timeStr = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
           const dur = run.duration ? formatDuration(run.duration) : '—';
           const exitColor = run.exitCode === 0 ? '#3FB950' : run.exitCode != null ? '#F85149' : 'var(--dim)';
           const exitIcon = run.exitCode === 0 ? '\u2713' : run.exitCode != null ? '\u2717' : '\u2022';

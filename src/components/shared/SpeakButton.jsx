@@ -61,7 +61,7 @@ export default function SpeakButton() {
   const doSpeak = async () => {
     if (!enabled) return;
     if (isSpeaking) {
-      try { await window.electronAPI?.voiceStop?.(); } catch {}
+      try { await window.electronAPI?.voiceStop?.(); } catch { /* voice bridge gone */ }
       setIsSpeaking(false);
       return;
     }

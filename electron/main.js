@@ -5,11 +5,11 @@ import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { getQuittingForUpdate, setQuitting } from './quit-state.js';
-import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending as cancelAutoResumeTab, cancelTabsForProject as cancelAutoResumeProject } from './auto-resume.js';
+import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending as cancelAutoResumeTab } from './auto-resume.js';
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
 import { connectGwsAccount, listGwsAccounts, removeGwsAccount, ensureShim } from './gws-accounts.js';
-import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalProcessArgv, getTerminalClaudeInfo, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver, getTerminalsForProject } from './terminal-manager.js';
+import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalClaudeInfo, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver, getTerminalsForProject } from './terminal-manager.js';
 import * as terminalStatus from './terminal-status.js';
 import { estimateContextForTabId } from './tab-context.js';
 import {
@@ -30,11 +30,11 @@ import { watchFiles, stopWatching } from './watcher-service.js';
 import { watchProjectDir, unwatchProjectDir, getProjectEvents, stopAllFileWatchers } from './file-change-service.js';
 import { watchBuildDir, unwatchBuildDir, stopAllBuildWatchers } from './build-monitor-watcher.js';
 import {
-  loadConfig, saveConfig, getProjectConfig, setProjectConfig,
+  loadConfig, saveConfig, getProjectConfig, setProjectConfig, getCheckpoints, saveCheckpoints,
   getPinnedSessions, setPinnedSessions, getPinnedProjects, setPinnedProjects, getSettings, updateSettings, flushConfig, flushConfigAsync, persistConfigNow,
   getSessionTags, setSessionTag, removeSessionTag,
   getSessionTabMap, setSessionTabLink, removeSessionTabLink, touchSessionTabLink, clearSessionTabRunning,
-  getAgentMemory, setAgentMemory, appendJournalEntry, pruneOldMemory,
+  getAgentMemory, setAgentMemory, appendJournalEntry,
   getOrchestrationRuns, saveOrchestrationRun, deleteOrchestrationRun,
   getMobileServerConfig,
   saveTerminalScrollback, loadTerminalScrollback,
@@ -55,7 +55,7 @@ import {
   deriveDeviceId,
 } from './mobile-server.js';
 import { startVoiceBridge, stopVoiceBridge, setBuiltinAgents } from './voice-bridge.js';
-import { ensureVoiceConductor, getVoiceConductorTabId } from './voice-conductor.js';
+import { ensureVoiceConductor } from './voice-conductor.js';
 import {
   startImessageBridge, stopImessageBridge, restartImessageBridge,
   sendImessageToSelf, getBridgeStatus as getImessageBridgeStatus,
@@ -340,15 +340,17 @@ function setupTerminalHandlers() {
   // Save/load recently closed tabs per project (persisted across window sessions)
   ipcMain.handle('terminal:saveClosedTabs', (_event, projectPath, closedTabs) => {
     if (!projectPath || !Array.isArray(closedTabs)) return;
-    // Keep max 20 closed tabs, strip scrollback over 500 lines to limit
-    // config size. Also persist kind+url for browser tabs so cross-session
-    // Cmd+Shift+T resurrects a browser as a browser (not a blank terminal).
+    // Keep max 10 closed tabs, strip scrollback over 200 lines to limit
+    // config size (was 20 x 500: at ~200KB/project it was a top config.json
+    // bloater; 200 dimmed context lines is plenty for a Cmd+Shift+T reopen).
+    // Also persist kind+url for browser tabs so cross-session Cmd+Shift+T
+    // resurrects a browser as a browser (not a blank terminal).
     // Codex PR#3 r7 P3, completes the R1 H5 fix end-to-end.
-    const trimmed = closedTabs.slice(0, 20).map((t) => {
+    const trimmed = closedTabs.slice(0, 10).map((t) => {
       const out = {
         label: typeof t.label === 'string' ? t.label.slice(0, 100) : 'Tab',
         projectPath: t.projectPath || projectPath,
-        scrollback: Array.isArray(t.scrollback) ? t.scrollback.slice(-500) : null,
+        scrollback: Array.isArray(t.scrollback) ? t.scrollback.slice(-200) : null,
         closedAt: t.closedAt || Date.now(),
       };
       if (typeof t.kind === 'string' && t.kind) out.kind = t.kind;
@@ -430,7 +432,7 @@ function setupDataHandlers() {
       process.kill(n, 'SIGTERM');
       return true;
     } catch (err) {
-      throw new Error(err.message);
+      throw new Error(err.message, { cause: err });
     }
   });
   // Chrome profile launcher (v1.0.41): list profiles + open a URL in one.
@@ -522,10 +524,12 @@ function setupFileWatcherHandlers() {
 }
 
 function setupCheckpointHandlers() {
-  ipcMain.handle('checkpoint:save', (_event, projectPath, checkpoint) => {
+  // Checkpoints live in one file per project (config-manager getCheckpoints /
+  // saveCheckpoints), NOT in config.json. Their scrollback payloads were the
+  // bulk of an 11MB config that got rewritten on every debounced save.
+  ipcMain.handle('checkpoint:save', async (_event, projectPath, checkpoint) => {
     if (!projectPath || !checkpoint) return null;
-    const config = getProjectConfig(projectPath);
-    const checkpoints = Array.isArray(config?.checkpoints) ? config.checkpoints : [];
+    const checkpoints = await getCheckpoints(projectPath);
     const id = `cp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const entry = {
       id,
@@ -537,31 +541,28 @@ function setupCheckpointHandlers() {
       rows: checkpoint.rows || 24,
     };
     checkpoints.push(entry);
-    setProjectConfig(projectPath, { checkpoints });
+    await saveCheckpoints(projectPath, checkpoints);
     return entry;
   });
 
   ipcMain.handle('checkpoint:list', (_event, projectPath) => {
     if (!projectPath) return [];
-    const config = getProjectConfig(projectPath);
-    return Array.isArray(config?.checkpoints) ? config.checkpoints : [];
+    return getCheckpoints(projectPath);
   });
 
-  ipcMain.handle('checkpoint:delete', (_event, projectPath, checkpointId) => {
+  ipcMain.handle('checkpoint:delete', async (_event, projectPath, checkpointId) => {
     if (!projectPath || !checkpointId) return;
-    const config = getProjectConfig(projectPath);
-    const checkpoints = Array.isArray(config?.checkpoints) ? config.checkpoints : [];
-    setProjectConfig(projectPath, { checkpoints: checkpoints.filter((c) => c.id !== checkpointId) });
+    const checkpoints = await getCheckpoints(projectPath);
+    await saveCheckpoints(projectPath, checkpoints.filter((c) => c.id !== checkpointId));
   });
 
-  ipcMain.handle('checkpoint:rename', (_event, projectPath, checkpointId, newLabel) => {
+  ipcMain.handle('checkpoint:rename', async (_event, projectPath, checkpointId, newLabel) => {
     if (!projectPath || !checkpointId || !newLabel) return;
-    const config = getProjectConfig(projectPath);
-    const checkpoints = Array.isArray(config?.checkpoints) ? config.checkpoints : [];
+    const checkpoints = await getCheckpoints(projectPath);
     const cp = checkpoints.find((c) => c.id === checkpointId);
     if (cp) {
       cp.label = String(newLabel).slice(0, 100);
-      setProjectConfig(projectPath, { checkpoints });
+      await saveCheckpoints(projectPath, checkpoints);
     }
   });
 }
@@ -884,11 +885,11 @@ function setupOrchestrationHandlers() {
         if (err.length < 16 * 1024) err += d.toString();
       });
       proc.on('close', (code) => {
-        try { fs.unlinkSync(sysPath); } catch {}
+        try { fs.unlinkSync(sysPath); } catch { /* temp file already gone */ }
         if (code !== 0 && !truncated) return reject(new Error(`Decomposition failed (exit ${code}): ${err.slice(0, 300)}`));
         resolve(out.trim() + (truncated ? '\n\n[output truncated at 512KB]' : ''));
       });
-      proc.on('error', (e) => { try { fs.unlinkSync(sysPath); } catch {} reject(e); });
+      proc.on('error', (e) => { try { fs.unlinkSync(sysPath); } catch { /* temp file already gone */ } reject(e); });
       setTimeout(() => { proc.kill(); reject(new Error('Decomposition timed out after 60s')); }, 60000);
     });
   });
@@ -2463,18 +2464,18 @@ app.on('before-quit', (e) => {
       saveConfig(cfgUp);
       flushConfig();
     } catch { /* best-effort */ }
-    try { stopSessionTabCapture(); } catch {}
-    try { killAll(); } catch {}
-    try { stopWatching(); } catch {}
-    try { stopAllBuildWatchers(); } catch {}
-    try { stopAllFileWatchers(); } catch {}
-    try { stopVoiceBridge(); } catch {}
-    try { stopImessageBridge(); } catch {}
-    try { stopScheduledTasks(); } catch {}
-    try { stopAutoMode(); } catch {}
-    try { stopMobileServer(); } catch {}
-    try { closeVisualWindow(); } catch {}
-    try { void stopVisualServer(); } catch {}
+    try { stopSessionTabCapture(); } catch { /* best-effort shutdown */ }
+    try { killAll(); } catch { /* best-effort shutdown */ }
+    try { stopWatching(); } catch { /* best-effort shutdown */ }
+    try { stopAllBuildWatchers(); } catch { /* best-effort shutdown */ }
+    try { stopAllFileWatchers(); } catch { /* best-effort shutdown */ }
+    try { stopVoiceBridge(); } catch { /* best-effort shutdown */ }
+    try { stopImessageBridge(); } catch { /* best-effort shutdown */ }
+    try { stopScheduledTasks(); } catch { /* best-effort shutdown */ }
+    try { stopAutoMode(); } catch { /* best-effort shutdown */ }
+    try { stopMobileServer(); } catch { /* best-effort shutdown */ }
+    try { closeVisualWindow(); } catch { /* best-effort shutdown */ }
+    try { void stopVisualServer(); } catch { /* best-effort shutdown */ }
     return; // do NOT preventDefault, let the quit proceed
   }
   if (quitConfirmed && savedBeforeQuit) {
