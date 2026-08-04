@@ -1,0 +1,2333 @@
+{
+  "generatedFrom": "config/scripts/check-communications-command-coverage.mjs",
+  "totalCommands": 258,
+  "counts": {
+    "removed-pending": 24,
+    "pending": 195,
+    "implemented": 39
+  },
+  "entries": [
+    {
+      "command": "acknowledge_pending_community_deep_link",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "shared/deep-link.ts:80",
+      "implemented": false
+    },
+    {
+      "command": "add_agent_to_huddle",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/components/HuddleBar.tsx:608",
+      "implemented": false
+    },
+    {
+      "command": "add_channel_members",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:398",
+      "implemented": false
+    },
+    {
+      "command": "add_reaction",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:661",
+      "implemented": true
+    },
+    {
+      "command": "add_relay_member",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:830",
+      "implemented": false
+    },
+    {
+      "command": "agent_metric_archive_default_enabled",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-provider-config",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:110",
+      "implemented": false
+    },
+    {
+      "command": "apply_workspace",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:1166",
+      "implemented": true
+    },
+    {
+      "command": "archive_builderlab_community",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/settings/ui/HostedCommunitiesSettingsCard.tsx:261",
+      "implemented": false
+    },
+    {
+      "command": "archive_channel",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:164",
+      "implemented": false
+    },
+    {
+      "command": "archive_events",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:212",
+      "implemented": false
+    },
+    {
+      "command": "archive_identity",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentityArchive.ts:55",
+      "implemented": false
+    },
+    {
+      "command": "auto_connect_default_relay_enabled",
+      "disposition": "communications-service",
+      "package": 1,
+      "feature": "relay-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:380",
+      "implemented": false
+    },
+    {
+      "command": "bind_builderlab_nostr_identity",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/communities/hostedCommunityApi.ts:143",
+      "implemented": false
+    },
+    {
+      "command": "build_observer_control_event",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriObserver.ts:16",
+      "implemented": false
+    },
+    {
+      "command": "cancel_builderlab_login",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/communities/hostedCommunityApi.ts:98",
+      "implemented": false
+    },
+    {
+      "command": "cancel_pairing",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-mobile-pairing",
+      "status": "removed-pending",
+      "callSite": "shared/api/tauri.ts:1156",
+      "implemented": false
+    },
+    {
+      "command": "change_channel_member_role",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:413",
+      "implemented": false
+    },
+    {
+      "command": "change_relay_member_role",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:841",
+      "implemented": false
+    },
+    {
+      "command": "check_builderlab_community_name",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/communities/hostedCommunityApi.ts:151",
+      "implemented": false
+    },
+    {
+      "command": "check_pipeline_hotstart",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:524",
+      "implemented": false
+    },
+    {
+      "command": "clear_builderlab_auth",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/communities/hostedCommunityApi.ts:102",
+      "implemented": false
+    },
+    {
+      "command": "clear_tray_agent_activity",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "native-ux",
+      "status": "pending",
+      "callSite": "shared/api/trayMenu.ts:5",
+      "implemented": false
+    },
+    {
+      "command": "clone_project_repository",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:433",
+      "implemented": false
+    },
+    {
+      "command": "confirm_agent_snapshot_import",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriPersonas.ts:307",
+      "implemented": false
+    },
+    {
+      "command": "confirm_huddle_active",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:405",
+      "implemented": false
+    },
+    {
+      "command": "confirm_pairing_sas",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-mobile-pairing",
+      "status": "removed-pending",
+      "callSite": "shared/api/tauri.ts:1152",
+      "implemented": false
+    },
+    {
+      "command": "confirm_team_snapshot_import",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriTeams.ts:192",
+      "implemented": false
+    },
+    {
+      "command": "connect_acp_runtime",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriAgentAuth.ts:52",
+      "implemented": false
+    },
+    {
+      "command": "copy_image_to_clipboard",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "media-native",
+      "status": "pending",
+      "callSite": "shared/ui/markdown.tsx:1163",
+      "implemented": false
+    },
+    {
+      "command": "copy_text_to_clipboard",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "media-native",
+      "status": "pending",
+      "callSite": "shared/api/tauriMedia.ts:35",
+      "implemented": false
+    },
+    {
+      "command": "create_auth_event",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:685",
+      "implemented": true
+    },
+    {
+      "command": "create_builderlab_community",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/communities/hostedCommunityApi.ts:158",
+      "implemented": false
+    },
+    {
+      "command": "create_channel",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:116",
+      "implemented": false
+    },
+    {
+      "command": "create_channel_template",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "channel-templates",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannelTemplates.ts:74",
+      "implemented": false
+    },
+    {
+      "command": "create_managed_agent",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:856",
+      "implemented": true
+    },
+    {
+      "command": "create_ncryptsec_backup",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentity.ts:77",
+      "implemented": false
+    },
+    {
+      "command": "create_persona",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauriPersonas.ts:75",
+      "implemented": true
+    },
+    {
+      "command": "create_project_remote_branch",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:447",
+      "implemented": false
+    },
+    {
+      "command": "create_save_subscription",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:157",
+      "implemented": false
+    },
+    {
+      "command": "create_team",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriTeams.ts:46",
+      "implemented": false
+    },
+    {
+      "command": "create_workflow",
+      "disposition": "communications-service",
+      "package": 5,
+      "feature": "workflows",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:197",
+      "implemented": false
+    },
+    {
+      "command": "decrypt_observer_event",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriObserver.ts:7",
+      "implemented": false
+    },
+    {
+      "command": "delete_builderlab_nostr_identity",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/communities/hostedCommunityApi.ts:147",
+      "implemented": false
+    },
+    {
+      "command": "delete_channel",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:172",
+      "implemented": false
+    },
+    {
+      "command": "delete_channel_template",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "channel-templates",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannelTemplates.ts:106",
+      "implemented": false
+    },
+    {
+      "command": "delete_custom_harness",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:976",
+      "implemented": false
+    },
+    {
+      "command": "delete_managed_agent",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:899",
+      "implemented": false
+    },
+    {
+      "command": "delete_message",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:653",
+      "implemented": true
+    },
+    {
+      "command": "delete_persona",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauriPersonas.ts:162",
+      "implemented": true
+    },
+    {
+      "command": "delete_project_remote_branch",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:463",
+      "implemented": false
+    },
+    {
+      "command": "delete_save_subscription",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:184",
+      "implemented": false
+    },
+    {
+      "command": "delete_team",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriTeams.ts:72",
+      "implemented": false
+    },
+    {
+      "command": "delete_workflow",
+      "disposition": "communications-service",
+      "package": 5,
+      "feature": "workflows",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:216",
+      "implemented": false
+    },
+    {
+      "command": "deny_approval",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-approvals",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:266",
+      "implemented": false
+    },
+    {
+      "command": "discover_acp_auth_methods",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-provider-config",
+      "status": "pending",
+      "callSite": "shared/api/tauriAgentAuth.ts:41",
+      "implemented": false
+    },
+    {
+      "command": "discover_acp_providers",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:936",
+      "implemented": true
+    },
+    {
+      "command": "discover_agent_models",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/agentModels.ts:15",
+      "implemented": true
+    },
+    {
+      "command": "discover_backend_providers",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-provider-config",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1122",
+      "implemented": false
+    },
+    {
+      "command": "discover_git_bash_prerequisite",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:921",
+      "implemented": false
+    },
+    {
+      "command": "discover_managed_agent_prereqs",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:993",
+      "implemented": false
+    },
+    {
+      "command": "download_file",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "media-native",
+      "status": "pending",
+      "callSite": "shared/ui/markdown/AgentSnapshotCard.tsx:103",
+      "implemented": false
+    },
+    {
+      "command": "download_image",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "media-native",
+      "status": "pending",
+      "callSite": "shared/ui/markdown.tsx:1177",
+      "implemented": false
+    },
+    {
+      "command": "duplicate_channel_template",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "channel-templates",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannelTemplates.ts:113",
+      "implemented": false
+    },
+    {
+      "command": "edit_message",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:639",
+      "implemented": true
+    },
+    {
+      "command": "encode_agent_snapshot_for_send",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriPersonas.ts:234",
+      "implemented": false
+    },
+    {
+      "command": "encode_team_snapshot_for_send",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriTeams.ts:166",
+      "implemented": false
+    },
+    {
+      "command": "end_huddle",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:323",
+      "implemented": false
+    },
+    {
+      "command": "ensure_starter_channels",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:120",
+      "implemented": false
+    },
+    {
+      "command": "export_agent_snapshot",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriPersonas.ts:202",
+      "implemented": false
+    },
+    {
+      "command": "export_team_snapshot",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriTeams.ts:154",
+      "implemented": false
+    },
+    {
+      "command": "fetch_join_policy",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/invites.ts:143",
+      "implemented": false
+    },
+    {
+      "command": "fetch_link_preview_title",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "pending",
+      "callSite": "shared/lib/useResolvedLinkPreviews.ts:18",
+      "implemented": false
+    },
+    {
+      "command": "fetch_media_bytes",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "media-service",
+      "status": "pending",
+      "callSite": "shared/api/tauriMedia.ts:26",
+      "implemented": false
+    },
+    {
+      "command": "fetch_snapshot_bytes",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriMedia.ts:55",
+      "implemented": false
+    },
+    {
+      "command": "fetch_workspace_icon",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/communityProfile.ts:29",
+      "implemented": false
+    },
+    {
+      "command": "generate_backup_passphrase",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentity.ts:69",
+      "implemented": false
+    },
+    {
+      "command": "get_agent_config_surface",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1018",
+      "implemented": false
+    },
+    {
+      "command": "get_agent_memory",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriEngrams.ts:51",
+      "implemented": false
+    },
+    {
+      "command": "get_agent_models",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1012",
+      "implemented": false
+    },
+    {
+      "command": "get_audio_output_device",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:163",
+      "implemented": false
+    },
+    {
+      "command": "get_baked_build_env",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-provider-config",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1096",
+      "implemented": false
+    },
+    {
+      "command": "get_baked_build_env_keys",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-provider-config",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1066",
+      "implemented": false
+    },
+    {
+      "command": "get_builderlab_auth",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/communities/hostedCommunityApi.ts:94",
+      "implemented": false
+    },
+    {
+      "command": "get_builderlab_nostr_identity",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/communities/hostedCommunityApi.ts:111",
+      "implemented": false
+    },
+    {
+      "command": "get_canvas",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:425",
+      "implemented": false
+    },
+    {
+      "command": "get_channel_details",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:136",
+      "implemented": false
+    },
+    {
+      "command": "get_channel_members",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "implemented",
+      "callSite": "shared/api/tauriChannels.ts:221",
+      "implemented": true
+    },
+    {
+      "command": "get_channel_messages_before",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:197",
+      "implemented": false
+    },
+    {
+      "command": "get_channel_window",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/channelWindow.ts:10",
+      "implemented": false
+    },
+    {
+      "command": "get_channel_workflows",
+      "disposition": "communications-service",
+      "package": 5,
+      "feature": "workflows",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:166",
+      "implemented": false
+    },
+    {
+      "command": "get_channels",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "implemented",
+      "callSite": "shared/api/tauriChannels.ts:109",
+      "implemented": true
+    },
+    {
+      "command": "get_channels_workflows",
+      "disposition": "communications-service",
+      "package": 5,
+      "feature": "workflows",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:182",
+      "implemented": false
+    },
+    {
+      "command": "get_contact_list",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "pending",
+      "callSite": "shared/api/social.ts:130",
+      "implemented": false
+    },
+    {
+      "command": "get_default_relay_url",
+      "disposition": "communications-service",
+      "package": 1,
+      "feature": "relay-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:376",
+      "implemented": false
+    },
+    {
+      "command": "get_event",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:490",
+      "implemented": true
+    },
+    {
+      "command": "get_feed",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:454",
+      "implemented": true
+    },
+    {
+      "command": "get_forum_posts",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "pending",
+      "callSite": "shared/api/forum.ts:129",
+      "implemented": false
+    },
+    {
+      "command": "get_forum_thread",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "pending",
+      "callSite": "shared/api/forum.ts:150",
+      "implemented": false
+    },
+    {
+      "command": "get_git_identity",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:156",
+      "implemented": false
+    },
+    {
+      "command": "get_global_agent_config",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriGlobalAgentConfig.ts:13",
+      "implemented": false
+    },
+    {
+      "command": "get_global_notes",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/social.ts:196",
+      "implemented": false
+    },
+    {
+      "command": "get_huddle_agent_pubkeys",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/lib/useTtsSubscription.ts:38",
+      "implemented": false
+    },
+    {
+      "command": "get_huddle_state",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/components/HuddleBar.tsx:225",
+      "implemented": false
+    },
+    {
+      "command": "get_identity",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "implemented",
+      "callSite": "features/huddle/HuddleContext.tsx:355",
+      "implemented": true
+    },
+    {
+      "command": "get_legacy_workspace_storage",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "features/communities/legacyCommunityStorage.ts:134",
+      "implemented": false
+    },
+    {
+      "command": "get_liked_notes",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/social.ts:175",
+      "implemented": false
+    },
+    {
+      "command": "get_managed_agent_log",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:906",
+      "implemented": false
+    },
+    {
+      "command": "get_media_proxy_port",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "media-service",
+      "status": "pending",
+      "callSite": "shared/lib/mediaUrl.ts:206",
+      "implemented": false
+    },
+    {
+      "command": "get_model_status",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-provider-config",
+      "status": "pending",
+      "callSite": "features/huddle/components/HuddleBar.tsx:286",
+      "implemented": false
+    },
+    {
+      "command": "get_my_relay_membership",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:810",
+      "implemented": false
+    },
+    {
+      "command": "get_note",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/social.ts:70",
+      "implemented": false
+    },
+    {
+      "command": "get_note_reactions",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/social.ts:57",
+      "implemented": false
+    },
+    {
+      "command": "get_notes_timeline",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/social.ts:217",
+      "implemented": false
+    },
+    {
+      "command": "get_nsec",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentity.ts:29",
+      "implemented": false
+    },
+    {
+      "command": "get_os_idle_seconds",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "native-ux",
+      "status": "pending",
+      "callSite": "shared/api/osIdle.ts:6",
+      "implemented": false
+    },
+    {
+      "command": "get_presence",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:363",
+      "implemented": false
+    },
+    {
+      "command": "get_profile",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauriProfiles.ts:75",
+      "implemented": true
+    },
+    {
+      "command": "get_project_local_repo_diff",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:216",
+      "implemented": false
+    },
+    {
+      "command": "get_project_local_repo_snapshot",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:250",
+      "implemented": false
+    },
+    {
+      "command": "get_project_repo_diff",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:186",
+      "implemented": false
+    },
+    {
+      "command": "get_project_repo_snapshot",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:166",
+      "implemented": false
+    },
+    {
+      "command": "get_project_repo_sync_status",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:313",
+      "implemented": false
+    },
+    {
+      "command": "get_relay_http_url",
+      "disposition": "communications-service",
+      "package": 1,
+      "feature": "relay-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:392",
+      "implemented": true
+    },
+    {
+      "command": "get_relay_self",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "pending",
+      "callSite": "features/moderation/lib/relaySelf.ts:10",
+      "implemented": false
+    },
+    {
+      "command": "get_relay_ws_url",
+      "disposition": "communications-service",
+      "package": 1,
+      "feature": "relay-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:388",
+      "implemented": true
+    },
+    {
+      "command": "get_run_approvals",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-approvals",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:234",
+      "implemented": false
+    },
+    {
+      "command": "get_runtime_file_config",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-provider-config",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1048",
+      "implemented": false
+    },
+    {
+      "command": "get_thread_replies",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:529",
+      "implemented": true
+    },
+    {
+      "command": "get_user_notes",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/social.ts:84",
+      "implemented": false
+    },
+    {
+      "command": "get_user_profile",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauriProfiles.ts:100",
+      "implemented": true
+    },
+    {
+      "command": "get_users_batch",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauriProfiles.ts:107",
+      "implemented": true
+    },
+    {
+      "command": "get_voice_input_mode",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:188",
+      "implemented": false
+    },
+    {
+      "command": "get_workflow",
+      "disposition": "communications-service",
+      "package": 5,
+      "feature": "workflows",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:189",
+      "implemented": false
+    },
+    {
+      "command": "get_workflow_runs",
+      "disposition": "communications-service",
+      "package": 5,
+      "feature": "workflows",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:223",
+      "implemented": false
+    },
+    {
+      "command": "grant_approval",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-approvals",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:255",
+      "implemented": false
+    },
+    {
+      "command": "has_managed_agent_channel_message_marker",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriManagedAgentMessageMarkers.ts:9",
+      "implemented": false
+    },
+    {
+      "command": "hide_dm",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:130",
+      "implemented": false
+    },
+    {
+      "command": "import_identity",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentity.ts:37",
+      "implemented": false
+    },
+    {
+      "command": "index_observer_channel_id",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:281",
+      "implemented": false
+    },
+    {
+      "command": "install_acp_runtime",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:982",
+      "implemented": false
+    },
+    {
+      "command": "is_auto_update_supported",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "updater-delegate",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1191",
+      "implemented": false
+    },
+    {
+      "command": "is_shared_identity",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:384",
+      "implemented": true
+    },
+    {
+      "command": "join_channel",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:417",
+      "implemented": false
+    },
+    {
+      "command": "join_huddle",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:482",
+      "implemented": false
+    },
+    {
+      "command": "leave_channel",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:421",
+      "implemented": false
+    },
+    {
+      "command": "leave_huddle",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:295",
+      "implemented": false
+    },
+    {
+      "command": "list_archived_identities",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentityArchive.ts:72",
+      "implemented": false
+    },
+    {
+      "command": "list_audio_output_devices",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:154",
+      "implemented": false
+    },
+    {
+      "command": "list_builderlab_communities",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/communities/hostedCommunityApi.ts:112",
+      "implemented": false
+    },
+    {
+      "command": "list_channel_templates",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "channel-templates",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannelTemplates.ts:66",
+      "implemented": false
+    },
+    {
+      "command": "list_managed_agent_runtimes",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauriManagedAgents.ts:56",
+      "implemented": true
+    },
+    {
+      "command": "list_managed_agents",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "features/huddle/components/AddAgentDialog.tsx:44",
+      "implemented": true
+    },
+    {
+      "command": "list_personas",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauriPersonas.ts:68",
+      "implemented": true
+    },
+    {
+      "command": "list_project_local_repositories",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:270",
+      "implemented": false
+    },
+    {
+      "command": "list_relay_agents",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:845",
+      "implemented": false
+    },
+    {
+      "command": "list_relay_members",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:804",
+      "implemented": false
+    },
+    {
+      "command": "list_save_subscriptions",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:170",
+      "implemented": false
+    },
+    {
+      "command": "list_teams",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "implemented",
+      "callSite": "shared/api/tauriTeams.ts:41",
+      "implemented": true
+    },
+    {
+      "command": "merge_project_pull_request",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:572",
+      "implemented": false
+    },
+    {
+      "command": "merge_save_subscription_kinds",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:125",
+      "implemented": false
+    },
+    {
+      "command": "mesh_installed_models",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-relay-mesh",
+      "status": "removed-pending",
+      "callSite": "shared/api/tauriMesh.ts:77",
+      "implemented": false
+    },
+    {
+      "command": "mesh_model_catalog",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-relay-mesh",
+      "status": "removed-pending",
+      "callSite": "shared/api/tauriMesh.ts:113",
+      "implemented": false
+    },
+    {
+      "command": "mesh_node_status",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-relay-mesh",
+      "status": "removed-pending",
+      "callSite": "shared/api/tauriMesh.ts:52",
+      "implemented": false
+    },
+    {
+      "command": "mesh_serving_usage",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-relay-mesh",
+      "status": "removed-pending",
+      "callSite": "shared/api/tauriMesh.ts:73",
+      "implemented": false
+    },
+    {
+      "command": "mesh_start_node",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-relay-mesh",
+      "status": "removed-pending",
+      "callSite": "shared/api/tauriMesh.ts:44",
+      "implemented": false
+    },
+    {
+      "command": "mesh_stop_node",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-relay-mesh",
+      "status": "removed-pending",
+      "callSite": "shared/api/tauriMesh.ts:48",
+      "implemented": false
+    },
+    {
+      "command": "nip44_decrypt_from_self",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1142",
+      "implemented": false
+    },
+    {
+      "command": "nip44_encrypt_to_self",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1136",
+      "implemented": false
+    },
+    {
+      "command": "observer_archive_default_enabled",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-provider-config",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:98",
+      "implemented": false
+    },
+    {
+      "command": "open_dm",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauriChannels.ts:126",
+      "implemented": true
+    },
+    {
+      "command": "open_project_merge_recovery_terminal",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:366",
+      "implemented": false
+    },
+    {
+      "command": "open_project_terminal",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:337",
+      "implemented": false
+    },
+    {
+      "command": "perform_sidebar_default_haptic",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "native-ux",
+      "status": "pending",
+      "callSite": "shared/lib/haptics.ts:8",
+      "implemented": false
+    },
+    {
+      "command": "persist_current_identity",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentity.ts:43",
+      "implemented": false
+    },
+    {
+      "command": "pick_and_upload_image",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "media-service",
+      "status": "pending",
+      "callSite": "shared/api/tauriMedia.ts:10",
+      "implemented": false
+    },
+    {
+      "command": "pick_and_upload_media",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "media-service",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:615",
+      "implemented": false
+    },
+    {
+      "command": "preview_agent_snapshot_import",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriPersonas.ts:293",
+      "implemented": false
+    },
+    {
+      "command": "preview_team_snapshot_import",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriTeams.ts:180",
+      "implemented": false
+    },
+    {
+      "command": "probe_backend_provider",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-provider-config",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1128",
+      "implemented": false
+    },
+    {
+      "command": "publish_note",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/social.ts:114",
+      "implemented": false
+    },
+    {
+      "command": "publish_project_pull_request_merged_status",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:616",
+      "implemented": false
+    },
+    {
+      "command": "pull_project_local_repository",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:412",
+      "implemented": false
+    },
+    {
+      "command": "push_project_local_repository",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:387",
+      "implemented": false
+    },
+    {
+      "command": "put_agent_session_config",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1027",
+      "implemented": false
+    },
+    {
+      "command": "put_managed_agent_runtime_lifecycle",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriManagedAgents.ts:86",
+      "implemented": false
+    },
+    {
+      "command": "read_archived_events",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:331",
+      "implemented": false
+    },
+    {
+      "command": "read_archived_observer_events_for_channel",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:239",
+      "implemented": false
+    },
+    {
+      "command": "reconcile_inbound_persona_event",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriPersonas.ts:322",
+      "implemented": false
+    },
+    {
+      "command": "reconcile_managed_agent_runtimes",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauriManagedAgents.ts:95",
+      "implemented": true
+    },
+    {
+      "command": "reconnect_huddle_audio",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:639",
+      "implemented": false
+    },
+    {
+      "command": "relay_reconnect_hook",
+      "disposition": "communications-service",
+      "package": 1,
+      "feature": "relay-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/useReconnectRelay.ts:26",
+      "implemented": false
+    },
+    {
+      "command": "relay_reconnect_hook_configured",
+      "disposition": "communications-service",
+      "package": 1,
+      "feature": "relay-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/useReconnectRelay.ts:25",
+      "implemented": false
+    },
+    {
+      "command": "relay_requires_membership",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/relayMembers.ts:131",
+      "implemented": false
+    },
+    {
+      "command": "remove_channel_member",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "features/huddle/components/HuddleBar.tsx:695",
+      "implemented": false
+    },
+    {
+      "command": "remove_reaction",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:668",
+      "implemented": true
+    },
+    {
+      "command": "remove_relay_member",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:834",
+      "implemented": false
+    },
+    {
+      "command": "remove_save_subscription_kind",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/tauriArchive.ts:143",
+      "implemented": false
+    },
+    {
+      "command": "requeue_tray_actions",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "native-ux",
+      "status": "pending",
+      "callSite": "app/useTrayMenu.ts:130",
+      "implemented": false
+    },
+    {
+      "command": "resolve_oa_owner",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentityArchive.ts:40",
+      "implemented": false
+    },
+    {
+      "command": "restart_managed_agent_runtime",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriManagedAgents.ts:79",
+      "implemented": false
+    },
+    {
+      "command": "save_custom_harness",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:956",
+      "implemented": false
+    },
+    {
+      "command": "save_ncryptsec_copy",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentity.ts:85",
+      "implemented": false
+    },
+    {
+      "command": "search_messages",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:474",
+      "implemented": true
+    },
+    {
+      "command": "search_users",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauriProfiles.ts:127",
+      "implemented": true
+    },
+    {
+      "command": "send_channel_message",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:566",
+      "implemented": true
+    },
+    {
+      "command": "send_managed_agent_channel_message",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriManagedAgentMessages.ts:22",
+      "implemented": false
+    },
+    {
+      "command": "set_agent_managed_profiles",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-provider-config",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1185",
+      "implemented": false
+    },
+    {
+      "command": "set_audio_output_device",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:146",
+      "implemented": false
+    },
+    {
+      "command": "set_canvas",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "canvas-notes",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:441",
+      "implemented": false
+    },
+    {
+      "command": "set_channel_purpose",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:160",
+      "implemented": false
+    },
+    {
+      "command": "set_channel_topic",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:154",
+      "implemented": false
+    },
+    {
+      "command": "set_contact_list",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "pending",
+      "callSite": "shared/api/social.ts:157",
+      "implemented": false
+    },
+    {
+      "command": "set_global_agent_config",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriGlobalAgentConfig.ts:28",
+      "implemented": false
+    },
+    {
+      "command": "set_huddle_transcription_enabled",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/components/HuddleBar.tsx:520",
+      "implemented": false
+    },
+    {
+      "command": "set_managed_agent_auto_restart",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriManagedAgents.ts:43",
+      "implemented": false
+    },
+    {
+      "command": "set_managed_agent_start_on_app_launch",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriManagedAgents.ts:29",
+      "implemented": false
+    },
+    {
+      "command": "set_persona_active",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriPersonas.ts:170",
+      "implemented": false
+    },
+    {
+      "command": "set_persona_shared",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriPersonas.ts:179",
+      "implemented": false
+    },
+    {
+      "command": "set_prevent_sleep_active",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "native-ux",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:1182",
+      "implemented": true
+    },
+    {
+      "command": "set_tts_enabled",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/components/HuddleBar.tsx:651",
+      "implemented": false
+    },
+    {
+      "command": "set_voice_input_mode",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:261",
+      "implemented": false
+    },
+    {
+      "command": "set_window_vibrancy",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "native-ux",
+      "status": "pending",
+      "callSite": "shared/theme/ThemeProvider.tsx:373",
+      "implemented": false
+    },
+    {
+      "command": "show_native_notification",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "native-ux",
+      "status": "pending",
+      "callSite": "features/notifications/lib/desktop.ts:302",
+      "implemented": false
+    },
+    {
+      "command": "sign_event",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:677",
+      "implemented": true
+    },
+    {
+      "command": "sign_nostr_identity_binding",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "features/profile/lib/nostrIdentityBinding.ts:14",
+      "implemented": false
+    },
+    {
+      "command": "sign_out",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentity.ts:55",
+      "implemented": false
+    },
+    {
+      "command": "sign_project_pull_request_review_request",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:596",
+      "implemented": false
+    },
+    {
+      "command": "sign_project_pull_request_status",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "pending",
+      "callSite": "shared/api/projectGit.ts:609",
+      "implemented": false
+    },
+    {
+      "command": "speak_agent_message",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/lib/useTtsSubscription.ts:89",
+      "implemented": false
+    },
+    {
+      "command": "start_builderlab_login",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/communities/hostedCommunityApi.ts:106",
+      "implemented": false
+    },
+    {
+      "command": "start_huddle",
+      "disposition": "communications-service",
+      "package": 6,
+      "feature": "voice-huddles",
+      "status": "pending",
+      "callSite": "features/huddle/HuddleContext.tsx:436",
+      "implemented": false
+    },
+    {
+      "command": "start_managed_agent",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauriManagedAgents.ts:12",
+      "implemented": true
+    },
+    {
+      "command": "start_managed_agent_runtime",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriManagedAgents.ts:65",
+      "implemented": false
+    },
+    {
+      "command": "start_pairing",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-mobile-pairing",
+      "status": "removed-pending",
+      "callSite": "shared/api/tauri.ts:1148",
+      "implemented": false
+    },
+    {
+      "command": "stop_managed_agent",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauriManagedAgents.ts:19",
+      "implemented": true
+    },
+    {
+      "command": "stop_managed_agent_runtime",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriManagedAgents.ts:72",
+      "implemented": false
+    },
+    {
+      "command": "take_pending_community_deep_link",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "shared/deep-link.ts:88",
+      "implemented": false
+    },
+    {
+      "command": "take_tray_actions",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "native-ux",
+      "status": "pending",
+      "callSite": "app/useTrayMenu.ts:127",
+      "implemented": false
+    },
+    {
+      "command": "title_bar_double_click",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "native-ux",
+      "status": "pending",
+      "callSite": "shared/lib/titleBarActions.ts:18",
+      "implemented": false
+    },
+    {
+      "command": "transfer_builderlab_community",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/settings/ui/HostedCommunitiesSettingsCard.tsx:302",
+      "implemented": false
+    },
+    {
+      "command": "trigger_workflow",
+      "disposition": "communications-service",
+      "package": 5,
+      "feature": "workflows",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:244",
+      "implemented": false
+    },
+    {
+      "command": "unarchive_builderlab_community",
+      "disposition": "removed",
+      "package": 7,
+      "feature": "block-builderlab",
+      "status": "removed-pending",
+      "callSite": "features/settings/ui/HostedCommunitiesSettingsCard.tsx:283",
+      "implemented": false
+    },
+    {
+      "command": "unarchive_channel",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:168",
+      "implemented": false
+    },
+    {
+      "command": "unarchive_identity",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentityArchive.ts:64",
+      "implemented": false
+    },
+    {
+      "command": "update_channel",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "channels-membership",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannels.ts:145",
+      "implemented": false
+    },
+    {
+      "command": "update_channel_template",
+      "disposition": "communications-service",
+      "package": 2,
+      "feature": "channel-templates",
+      "status": "pending",
+      "callSite": "shared/api/tauriChannelTemplates.ts:91",
+      "implemented": false
+    },
+    {
+      "command": "update_managed_agent",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:1107",
+      "implemented": false
+    },
+    {
+      "command": "update_persona",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "implemented",
+      "callSite": "shared/api/tauriPersonas.ts:115",
+      "implemented": true
+    },
+    {
+      "command": "update_persona_and_publish",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "agent-lifecycle",
+      "status": "pending",
+      "callSite": "shared/api/tauriPersonas.ts:138",
+      "implemented": false
+    },
+    {
+      "command": "update_profile",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "implemented",
+      "callSite": "shared/api/tauriProfiles.ts:82",
+      "implemented": true
+    },
+    {
+      "command": "update_profile_at_relay",
+      "disposition": "relay",
+      "package": 2,
+      "feature": "messages-dm",
+      "status": "pending",
+      "callSite": "shared/api/tauriProfiles.ts:92",
+      "implemented": false
+    },
+    {
+      "command": "update_team",
+      "disposition": "dobius-rpc",
+      "package": 3,
+      "feature": "teams-snapshots",
+      "status": "pending",
+      "callSite": "shared/api/tauriTeams.ts:59",
+      "implemented": false
+    },
+    {
+      "command": "update_tray_agent_activity",
+      "disposition": "native-electron",
+      "package": 4,
+      "feature": "native-ux",
+      "status": "pending",
+      "callSite": "app/useTrayMenu.ts:111",
+      "implemented": false
+    },
+    {
+      "command": "update_workflow",
+      "disposition": "communications-service",
+      "package": 5,
+      "feature": "workflows",
+      "status": "pending",
+      "callSite": "shared/api/tauriWorkflows.ts:208",
+      "implemented": false
+    },
+    {
+      "command": "upload_media",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "media-service",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:608",
+      "implemented": false
+    },
+    {
+      "command": "upload_media_bytes",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "media-service",
+      "status": "pending",
+      "callSite": "shared/api/tauri.ts:624",
+      "implemented": false
+    },
+    {
+      "command": "validate_repos_dir",
+      "disposition": "dobius-rpc",
+      "package": 4,
+      "feature": "workstation-git",
+      "status": "implemented",
+      "callSite": "shared/api/tauri.ts:1178",
+      "implemented": true
+    },
+    {
+      "command": "verify_ncryptsec_backup",
+      "disposition": "dobius-rpc",
+      "package": 1,
+      "feature": "identity-keychain",
+      "status": "pending",
+      "callSite": "shared/api/tauriIdentity.ts:101",
+      "implemented": false
+    }
+  ]
+}
