@@ -3,8 +3,8 @@
   "totalCommands": 258,
   "counts": {
     "removed-pending": 24,
-    "pending": 195,
-    "implemented": 39
+    "pending": 180,
+    "implemented": 54
   },
   "entries": [
     {
@@ -30,9 +30,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauri.ts:398",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "add_reaction",
@@ -84,9 +84,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauriChannels.ts:164",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "archive_events",
@@ -156,9 +156,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauri.ts:413",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "change_relay_member_role",
@@ -300,9 +300,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauriChannels.ts:116",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "create_channel_template",
@@ -399,9 +399,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauriChannels.ts:172",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "delete_channel_template",
@@ -615,9 +615,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauriChannels.ts:120",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "export_agent_snapshot",
@@ -777,9 +777,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauriChannels.ts:136",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "get_channel_members",
@@ -804,9 +804,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/channelWindow.ts:10",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "get_channel_workflows",
@@ -1290,9 +1290,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauri.ts:417",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "join_huddle",
@@ -1308,9 +1308,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauri.ts:421",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "leave_huddle",
@@ -1749,9 +1749,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "features/huddle/components/HuddleBar.tsx:695",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "remove_reaction",
@@ -1893,18 +1893,18 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauriChannels.ts:160",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "set_channel_topic",
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauriChannels.ts:154",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "set_contact_list",
@@ -2190,9 +2190,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauriChannels.ts:168",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "unarchive_identity",
@@ -2208,9 +2208,9 @@
       "disposition": "relay",
       "package": 2,
       "feature": "channels-membership",
-      "status": "pending",
+      "status": "implemented",
       "callSite": "shared/api/tauriChannels.ts:145",
-      "implemented": false
+      "implemented": true
     },
     {
       "command": "update_channel_template",
