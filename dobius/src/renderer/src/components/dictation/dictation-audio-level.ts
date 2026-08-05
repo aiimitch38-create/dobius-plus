@@ -6,9 +6,11 @@
 // puts ordinary talking across the 0..1 range the orb animates over.
 const RMS_TO_LEVEL_SCALE = 8
 
-// Capture chunks land ~85ms apart, so a level held flat between them keeps the
-// orb agitated after speech stops. Fade the last reading out over this window.
-const LEVEL_DECAY_MS = 400
+// Capture chunks land ~85ms apart. Hold the last reading until well past that
+// so the orb sees a steady value between chunks; ramping it down here produced
+// a ~12Hz sawtooth that read as jitter. Smoothing belongs in the render loop,
+// which runs per frame and can shape attack and release independently.
+const LEVEL_STALE_MS = 500
 
 export function audioLevelFromSamples(samples: Float32Array): number {
   if (samples.length === 0) {
@@ -22,9 +24,7 @@ export function audioLevelFromSamples(samples: Float32Array): number {
   return Math.min(rms * RMS_TO_LEVEL_SCALE, 1)
 }
 
-export function decayAudioLevel(level: number, elapsedMs: number): number {
-  if (elapsedMs >= LEVEL_DECAY_MS) {
-    return 0
-  }
-  return level * Math.max(0, 1 - elapsedMs / LEVEL_DECAY_MS)
+/** Hold the last measured level, but treat a stalled capture as silence. */
+export function holdAudioLevel(level: number, elapsedMs: number): number {
+  return elapsedMs > LEVEL_STALE_MS ? 0 : level
 }

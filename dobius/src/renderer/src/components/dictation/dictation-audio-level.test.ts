@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { audioLevelFromSamples, decayAudioLevel } from './dictation-audio-level'
+import { audioLevelFromSamples, holdAudioLevel } from './dictation-audio-level'
 
 describe('audioLevelFromSamples', () => {
   it('reports zero for silence', () => {
@@ -21,17 +21,17 @@ describe('audioLevelFromSamples', () => {
   })
 })
 
-describe('decayAudioLevel', () => {
-  it('returns the full level at the moment it was measured', () => {
-    expect(decayAudioLevel(0.8, 0)).toBeCloseTo(0.8)
+describe('holdAudioLevel', () => {
+  it('holds the level flat between capture chunks', () => {
+    // Chunks arrive ~85ms apart; every reading in that gap must be identical,
+    // otherwise the orb sees a sawtooth and visibly jitters.
+    expect(holdAudioLevel(0.8, 0)).toBe(0.8)
+    expect(holdAudioLevel(0.8, 85)).toBe(0.8)
+    expect(holdAudioLevel(0.8, 400)).toBe(0.8)
   })
 
-  it('fades partway through the decay window', () => {
-    expect(decayAudioLevel(0.8, 200)).toBeCloseTo(0.4)
-  })
-
-  it('reaches zero once the window has passed', () => {
-    expect(decayAudioLevel(0.8, 400)).toBe(0)
-    expect(decayAudioLevel(0.8, 5000)).toBe(0)
+  it('falls back to silence when capture has stalled', () => {
+    expect(holdAudioLevel(0.8, 501)).toBe(0)
+    expect(holdAudioLevel(0.8, 5000)).toBe(0)
   })
 })

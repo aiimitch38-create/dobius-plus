@@ -14,6 +14,25 @@ const BASE_ROTATION_SPEED = 0.3
 const MAX_ROTATION_SPEED = 1.2
 const MAX_HOVER_INTENSITY = 0.8
 
+// Asymmetric smoothing, the way an audio meter behaves: rise quickly enough to
+// feel responsive to a syllable, fall slowly so pauses between words glide
+// instead of snapping back. Seconds to close ~63% of the gap.
+const LEVEL_ATTACK_SECONDS = 0.06
+const LEVEL_RELEASE_SECONDS = 0.4
+
+// Idle "breath": with no voice the shader's displacement drops to zero and the
+// ring goes glassy and inert. Keep a small floor that swells and settles on a
+// slow cycle, well under speech level, so silence reads as alive rather than
+// frozen. Period ~10s — slow enough that it's felt more than seen.
+const IDLE_HOVER_MIN = 0.06
+const IDLE_HOVER_MAX = 0.2
+const IDLE_BREATH_RATE = 0.0006
+
+/** Frame-rate independent approach toward `target`. */
+function approach(current: number, target: number, dt: number, tau: number): number {
+  return current + (target - current) * (1 - Math.exp(-dt / tau))
+}
+
 function compile(gl: WebGLRenderingContext, type: number, source: string): WebGLShader | null {
   const shader = gl.createShader(type)
   if (!shader) {
@@ -114,20 +133,39 @@ export function VoiceOrb({ size, getLevel, className }: VoiceOrbProps) {
     let frame = 0
     let lastTime = 0
     let rotation = 0
+    let smoothedLevel = 0
 
     const draw = (time: number) => {
-      const dt = lastTime === 0 ? 0 : (time - lastTime) * 0.001
+      // Clamp dt: a backgrounded tab can hand back a multi-second gap, which
+      // would snap the smoothing and jump the rotation.
+      const dt = lastTime === 0 ? 0 : Math.min((time - lastTime) * 0.001, 0.1)
       lastTime = time
-      const level = Math.max(0, Math.min(1, getLevelRef.current()))
 
-      if (level > 0.05) {
-        rotation += dt * (BASE_ROTATION_SPEED + level * MAX_ROTATION_SPEED * 2)
-      }
+      const rawLevel = Math.max(0, Math.min(1, getLevelRef.current()))
+      smoothedLevel = approach(
+        smoothedLevel,
+        rawLevel,
+        dt,
+        rawLevel > smoothedLevel ? LEVEL_ATTACK_SECONDS : LEVEL_RELEASE_SECONDS
+      )
+
+      // Always rotating. Gating rotation on a level threshold made the orb
+      // freeze dead in the pauses between words.
+      rotation += dt * (BASE_ROTATION_SPEED + smoothedLevel * MAX_ROTATION_SPEED * 2)
+
+      // Speech overrides the breath rather than adding to it, so the idle floor
+      // can never inflate how loud you look.
+      const breath = 0.5 + 0.5 * Math.sin(time * IDLE_BREATH_RATE)
+      const idleFloor = IDLE_HOVER_MIN + (IDLE_HOVER_MAX - IDLE_HOVER_MIN) * breath
+      const activity = Math.max(smoothedLevel, idleFloor)
 
       gl.uniform1f(uniforms.iTime, time * 0.001)
       gl.uniform1f(uniforms.rot, rotation)
-      gl.uniform1f(uniforms.hover, Math.min(level * 2, 1))
-      gl.uniform1f(uniforms.hoverIntensity, Math.min(level * MAX_HOVER_INTENSITY * 0.8, MAX_HOVER_INTENSITY))
+      gl.uniform1f(uniforms.hover, Math.min(activity * 2, 1))
+      gl.uniform1f(
+        uniforms.hoverIntensity,
+        Math.min(activity * MAX_HOVER_INTENSITY * 0.8, MAX_HOVER_INTENSITY)
+      )
       gl.clear(gl.COLOR_BUFFER_BIT)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
 
