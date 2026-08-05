@@ -1,3 +1,4 @@
+import './dev-userdata.js'; // MUST stay first: userData override before config-manager loads
 import { app, BrowserWindow, ipcMain, Menu, dialog, Notification, shell, webContents } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
@@ -25,7 +26,13 @@ import {
 import {
   getGitStatus, getCommitLog, getBranches, getCommitDiff,
   checkGhAvailable, getPullRequests, getIssues,
+  getRemoteInfo, getCommitGraph, checkoutBranch, createBranch, gitFetch,
 } from './git-service.js';
+import {
+  listDir as fmListDir, readPreview as fmReadPreview, createEntry as fmCreateEntry,
+  renameEntry as fmRenameEntry, trashEntry as fmTrashEntry, revealEntry as fmRevealEntry,
+  openEntry as fmOpenEntry,
+} from './file-manager-service.js';
 import { watchFiles, stopWatching } from './watcher-service.js';
 import { watchProjectDir, unwatchProjectDir, getProjectEvents, stopAllFileWatchers } from './file-change-service.js';
 import { watchBuildDir, unwatchBuildDir, stopAllBuildWatchers } from './build-monitor-watcher.js';
@@ -2024,6 +2031,24 @@ function setupGitHandlers() {
   ipcMain.handle('git:ghAvailable', () => checkGhAvailable());
   ipcMain.handle('git:pullRequests', async (_event, projectDir) => (await isKnownProject(projectDir)) ? getPullRequests(projectDir) : []);
   ipcMain.handle('git:issues', async (_event, projectDir) => (await isKnownProject(projectDir)) ? getIssues(projectDir) : []);
+
+  // Git tree panel (v1.0.52). Same isKnownProject gate; branch names are
+  // re-validated inside git-service (isSafeBranchName).
+  ipcMain.handle('git:remoteInfo', async (_event, projectDir) => (await isKnownProject(projectDir)) ? getRemoteInfo(projectDir) : { remoteUrl: '', github: null });
+  ipcMain.handle('git:graph', async (_event, projectDir, count) => (await isKnownProject(projectDir)) ? getCommitGraph(projectDir, count) : { commits: [], head: '' });
+  ipcMain.handle('git:checkout', async (_event, projectDir, branch) => (await isKnownProject(projectDir)) ? checkoutBranch(projectDir, branch) : { ok: false, error: 'Unknown project' });
+  ipcMain.handle('git:createBranch', async (_event, projectDir, branch) => (await isKnownProject(projectDir)) ? createBranch(projectDir, branch) : { ok: false, error: 'Unknown project' });
+  ipcMain.handle('git:fetch', async (_event, projectDir) => (await isKnownProject(projectDir)) ? gitFetch(projectDir) : { ok: false, error: 'Unknown project' });
+
+  // Files side panel (v1.0.52). All paths resolve through the service's
+  // realpath containment; the project itself must be known.
+  ipcMain.handle('files:list', async (_event, projectDir, relPath) => (await isKnownProject(projectDir)) ? fmListDir(projectDir, relPath) : { relPath: '', entries: [], error: 'Unknown project' });
+  ipcMain.handle('files:preview', async (_event, projectDir, relPath) => (await isKnownProject(projectDir)) ? fmReadPreview(projectDir, relPath) : { kind: 'error', error: 'Unknown project' });
+  ipcMain.handle('files:create', async (_event, projectDir, relDir, name, kind) => (await isKnownProject(projectDir)) ? fmCreateEntry(projectDir, relDir, name, kind) : { ok: false, error: 'Unknown project' });
+  ipcMain.handle('files:rename', async (_event, projectDir, relPath, newName) => (await isKnownProject(projectDir)) ? fmRenameEntry(projectDir, relPath, newName) : { ok: false, error: 'Unknown project' });
+  ipcMain.handle('files:trash', async (_event, projectDir, relPath) => (await isKnownProject(projectDir)) ? fmTrashEntry(projectDir, relPath) : { ok: false, error: 'Unknown project' });
+  ipcMain.handle('files:reveal', async (_event, projectDir, relPath) => { if (await isKnownProject(projectDir)) await fmRevealEntry(projectDir, relPath); });
+  ipcMain.handle('files:open', async (_event, projectDir, relPath) => { if (await isKnownProject(projectDir)) await fmOpenEntry(projectDir, relPath); });
 
   ipcMain.handle('prompt:improve', (_event, rawPrompt) => {
     return new Promise((resolve, reject) => {

@@ -6,6 +6,8 @@ import StatusBar from '../shared/StatusBar';
 import TerminalPane from './TerminalPane';
 import BrowserPane from './BrowserPane';
 import TerminalTabBar from './TerminalTabBar';
+import FilesPanel from './FilesPanel';
+import GitTreePanel from './GitTreePanel';
 import Sidebar from './Sidebar';
 import DashboardView from '../Dashboard/DashboardView';
 import GitSidePanel from '../shared/GitSidePanel';
@@ -1104,6 +1106,12 @@ export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel, t
 
         {activeView === 'terminal' && (
           <GitSidePanel projectDir={projectPath} />
+        )}
+        {activeView === 'terminal' && (
+          <>
+            <FilesPanel projectDir={projectPath} />
+            <GitTreePanel projectDir={projectPath} />
+          </>
         )}
       </div>
 

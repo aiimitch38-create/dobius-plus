@@ -13,7 +13,7 @@
     "start": "electron .",
     "test:fresh": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/fresh-session.test.mjs",
     "test:argv": "node ./electron/__tests__/claude-argv.test.mjs",
-    "test": "npm run test:argv && npm run test:fresh && npm run test:preview && npm run test:gws && npm run test:shim && npm run test:status && npm run test:conn && npm run test:selector && npm run test:modellabel && npm run test:checkpoints",
+    "test": "npm run test:argv && npm run test:fresh && npm run test:preview && npm run test:gws && npm run test:shim && npm run test:status && npm run test:conn && npm run test:selector && npm run test:modellabel && npm run test:checkpoints && npm run test:gitgraph && npm run test:filemanager",
     "test:preview": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/preview-sanitize.test.mjs",
     "test:gws": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/gws-accounts.test.mjs",
     "test:shim": "node ./electron/__tests__/gws-shim.test.mjs",
@@ -22,7 +22,9 @@
     "test:selector": "node ./electron/__tests__/selector-parser.test.mjs",
     "test:modellabel": "node ./electron/__tests__/model-label.test.mjs",
     "test:checkpoints": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/checkpoint-migration.test.mjs",
-    "lint": "eslint electron src mobile"
+    "lint": "eslint electron src mobile",
+    "test:gitgraph": "node ./electron/__tests__/git-graph.test.mjs",
+    "test:filemanager": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/file-manager.test.mjs"
   },
   "keywords": [],
   "author": "Status Digital Marketing",
@@ -61,6 +63,7 @@
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.9.0",
+    "playwright-core": "^1.62.1",
     "tailwindcss": "^4.2.0",
     "vite": "^7.3.1",
     "wait-on": "^9.0.4"

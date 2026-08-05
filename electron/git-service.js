@@ -225,3 +225,125 @@ export async function getIssues(projectDir) {
 // Per-PR / per-issue detail fetch (getPrDetails / getIssueDetails) was removed
 // in v1.0.47: the detail UI was never wired, so the handlers were dead. The
 // Git tab's PR/Issue rows now open on GitHub directly (shell.openExternal).
+
+// ---------------------------------------------------------------------------
+// Git tree panel (v1.0.52): commit graph, GitHub remote resolution, branch ops.
+// ---------------------------------------------------------------------------
+
+// Strict-enough branch name gate: git's own rules are looser, but every name a
+// human actually creates passes this, and it excludes option injection (leading
+// '-'), traversal ('..'), refs tricks ('.lock', '@{', trailing '/').
+const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$/;
+export function isSafeBranchName(name) {
+  return typeof name === 'string'
+    && BRANCH_RE.test(name)
+    && !name.includes('..')
+    && !name.includes('@{')
+    && !name.endsWith('/')
+    && !name.endsWith('.lock');
+}
+
+/**
+ * Parse a git remote URL into a GitHub web base URL. Handles:
+ *   https://github.com/owner/repo(.git)
+ *   git@github.com:owner/repo(.git)
+ *   ssh://git@github.com/owner/repo(.git)
+ * Returns { owner, repo, githubUrl } or null for non-GitHub remotes.
+ * Exported for unit tests (pure).
+ */
+export function parseGithubRemote(url) {
+  if (!url || typeof url !== 'string') return null;
+  const m = url.trim().match(
+    /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/
+  );
+  if (!m) return null;
+  const [, owner, repo] = m;
+  return { owner, repo, githubUrl: `https://github.com/${owner}/${repo}` };
+}
+
+/**
+ * The project's origin remote, resolved to GitHub web links when applicable.
+ * Falls back to the FIRST remote when origin is absent.
+ */
+export async function getRemoteInfo(projectDir) {
+  const dir = validateDir(projectDir);
+  if (!dir) return { remoteUrl: '', github: null };
+  let remoteUrl = '';
+  try {
+    remoteUrl = (await run('git', ['remote', 'get-url', 'origin'], dir)).trim();
+  } catch {
+    try {
+      const names = (await run('git', ['remote'], dir)).trim().split('\n').filter(Boolean);
+      if (names[0]) remoteUrl = (await run('git', ['remote', 'get-url', names[0]], dir)).trim();
+    } catch { /* no remotes at all */ }
+  }
+  return { remoteUrl, github: parseGithubRemote(remoteUrl) };
+}
+
+/**
+ * Structured commit graph data for the tree panel: every ref reachable
+ * commit (capped), with parent hashes and decorations, topo-ordered so the
+ * renderer's lane assignment works row by row.
+ */
+export async function getCommitGraph(projectDir, count = 150) {
+  const dir = validateDir(projectDir);
+  if (!dir) return { commits: [], head: '' };
+  try {
+    const sep = '||SEP||';
+    const format = ['%H', '%P', '%D', '%an', '%ct', '%s'].join(sep);
+    const [stdout, headOut] = await Promise.all([
+      run('git', ['log', '--all', '--topo-order', `--max-count=${Math.min(Math.max(count, 1), 400)}`, `--format=${format}`], dir),
+      run('git', ['rev-parse', 'HEAD'], dir).catch(() => ''),
+    ]);
+    const commits = stdout.trim().split('\n').filter(Boolean).map((line) => {
+      const [hash, parents, refs, author, time, ...rest] = line.split(sep);
+      return {
+        hash,
+        parents: parents ? parents.split(' ').filter(Boolean) : [],
+        // "HEAD -> main, origin/main, tag: v1.0.51" -> trimmed ref names
+        refs: refs ? refs.split(',').map((r) => r.trim()).filter(Boolean) : [],
+        author,
+        time: Number(time) * 1000 || 0,
+        subject: rest.join(sep),
+      };
+    });
+    return { commits, head: headOut.trim() };
+  } catch {
+    return { commits: [], head: '' };
+  }
+}
+
+/** Checkout an existing branch. Returns { ok, error? } with git's own message. */
+export async function checkoutBranch(projectDir, branch) {
+  const dir = validateDir(projectDir);
+  if (!dir || !isSafeBranchName(branch)) return { ok: false, error: 'Invalid branch name' };
+  try {
+    await run('git', ['checkout', branch], dir);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err.stderr || err.message || 'checkout failed').slice(0, 400) };
+  }
+}
+
+/** Create + switch to a new branch from HEAD. */
+export async function createBranch(projectDir, branch) {
+  const dir = validateDir(projectDir);
+  if (!dir || !isSafeBranchName(branch)) return { ok: false, error: 'Invalid branch name' };
+  try {
+    await run('git', ['checkout', '-b', branch], dir);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err.stderr || err.message || 'create failed').slice(0, 400) };
+  }
+}
+
+/** Fetch all remotes (30s timeout: network-bound, unlike the local ops). */
+export async function gitFetch(projectDir) {
+  const dir = validateDir(projectDir);
+  if (!dir) return { ok: false, error: 'Invalid project dir' };
+  return new Promise((resolve) => {
+    execFile('git', ['fetch', '--all', '--prune'], { cwd: dir, timeout: 30_000, maxBuffer: 1024 * 1024 }, (err) => {
+      resolve(err ? { ok: false, error: String(err.stderr || err.message || 'fetch failed').slice(0, 400) } : { ok: true });
+    });
+  });
+}

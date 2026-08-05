@@ -304,6 +304,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitGhAvailable: () => ipcRenderer.invoke('git:ghAvailable'),
   gitPullRequests: (projectDir) => ipcRenderer.invoke('git:pullRequests', projectDir),
   gitIssues: (projectDir) => ipcRenderer.invoke('git:issues', projectDir),
+  // Git tree panel (v1.0.52)
+  gitRemoteInfo: (projectDir) => ipcRenderer.invoke('git:remoteInfo', projectDir),
+  gitGraph: (projectDir, count) => ipcRenderer.invoke('git:graph', projectDir, count),
+  gitCheckout: (projectDir, branch) => ipcRenderer.invoke('git:checkout', projectDir, branch),
+  gitCreateBranch: (projectDir, branch) => ipcRenderer.invoke('git:createBranch', projectDir, branch),
+  gitFetch: (projectDir) => ipcRenderer.invoke('git:fetch', projectDir),
+  // Files side panel (v1.0.52)
+  filesList: (projectDir, relPath) => ipcRenderer.invoke('files:list', projectDir, relPath),
+  filesPreview: (projectDir, relPath) => ipcRenderer.invoke('files:preview', projectDir, relPath),
+  filesCreate: (projectDir, relDir, name, kind) => ipcRenderer.invoke('files:create', projectDir, relDir, name, kind),
+  filesRename: (projectDir, relPath, newName) => ipcRenderer.invoke('files:rename', projectDir, relPath, newName),
+  filesTrash: (projectDir, relPath) => ipcRenderer.invoke('files:trash', projectDir, relPath),
+  filesReveal: (projectDir, relPath) => ipcRenderer.invoke('files:reveal', projectDir, relPath),
+  filesOpen: (projectDir, relPath) => ipcRenderer.invoke('files:open', projectDir, relPath),
   improvePrompt: (rawPrompt) => ipcRenderer.invoke('prompt:improve', rawPrompt),
 
   // Project tasks (to-do list dropdown)

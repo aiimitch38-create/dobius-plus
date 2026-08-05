@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store/store';
 import ThemePicker from './ThemePicker';
 import TasksDropdown from './TasksDropdown';
@@ -68,6 +69,7 @@ export default function TopBar({ projectName }) {
           active={activeView === 'terminal'}
           onClick={() => setActiveView('terminal')}
         />
+        <ToolPanelDropdown setActiveView={setActiveView} />
         <ViewTab
           label="Dashboard"
           active={activeView === 'dashboard'}
@@ -153,6 +155,73 @@ export default function TopBar({ projectName }) {
       </div>
     </div>
     </>
+  );
+}
+
+/**
+ * Chevron dropdown beside the Terminal tab (v1.0.52): opens the Files or
+ * Git Tree SIDE PANEL. Panels live in the terminal view, so selecting one
+ * also switches there. The active panel shows a check.
+ */
+function ToolPanelDropdown({ setActiveView }) {
+  const toolPanel = useStore((s) => s.toolPanel);
+  const toggleToolPanel = useStore((s) => s.toggleToolPanel);
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const pick = (panel) => {
+    setOpen(false);
+    setActiveView('terminal');
+    toggleToolPanel(panel);
+  };
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="px-0.5 py-2.5 text-xs transition-colors duration-150"
+        style={{ color: toolPanel ? 'var(--accent)' : 'var(--dim)' }}
+        title="Terminal side panels (Files, Git Tree)"
+        aria-label="Terminal side panels"
+        aria-expanded={open}
+      >
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 120ms' }}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          className="absolute left-0 top-full z-50 rounded shadow-lg py-1"
+          style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', minWidth: 140 }}
+        >
+          {[['files', 'Files'], ['gittree', 'Git Tree']].map(([panel, label]) => (
+            <button
+              key={panel}
+              onClick={() => pick(panel)}
+              className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2"
+              style={{ color: 'var(--fg)', cursor: 'pointer' }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--border)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+            >
+              <span className="flex-1">{label}</span>
+              {toolPanel === panel && <span style={{ color: 'var(--accent)' }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

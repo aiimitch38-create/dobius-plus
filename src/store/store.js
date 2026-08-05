@@ -28,6 +28,9 @@ export const useStore = create((set, get) => ({
   activeView: 'terminal', // 'terminal' | 'dashboard'
   sidebarVisible: false,
   gitPanelVisible: false,
+  // Right-side tool panel opened from the TopBar Terminal dropdown (v1.0.52):
+  // null | 'files' | 'gittree'. One at a time; independent of the Cmd+G panel.
+  toolPanel: null,
   dashboardTab: 'overview',
 
   // Theme
@@ -391,6 +394,7 @@ export const useStore = create((set, get) => ({
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   setSidebarVisible: (v) => set({ sidebarVisible: !!v }),
   toggleGitPanel: () => set((s) => ({ gitPanelVisible: !s.gitPanelVisible })),
+  toggleToolPanel: (panel) => set((s) => ({ toolPanel: s.toolPanel === panel ? null : panel })),
   setDashboardTab: (tab) => set({ dashboardTab: tab }),
 
   setThemeIndex: (index) => {
