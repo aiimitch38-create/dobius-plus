@@ -1,7 +1,7 @@
 import { useAppStore } from '@/store'
 import { VoiceOrb } from './VoiceOrb'
 
-const ORB_SIZE = 160
+const ORB_SIZE = 128
 
 type DictationIndicatorProps = {
   /** Current mic level, 0..1, polled by the orb once per frame. */
@@ -34,7 +34,7 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
       aria-live="polite"
     >
       <VoiceOrb size={ORB_SIZE} getLevel={getAudioLevel} />
-      <span className="max-w-md truncate rounded-lg bg-foreground/90 px-3 py-1.5 text-sm text-background shadow-lg">
+      <span className="max-w-md truncate rounded-md bg-foreground/90 px-2.5 py-1 text-xs text-background shadow-lg">
         {label}
       </span>
     </div>
