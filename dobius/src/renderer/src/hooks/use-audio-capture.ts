@@ -1,4 +1,8 @@
 import { useRef, useCallback } from 'react'
+import {
+  audioLevelFromSamples,
+  decayAudioLevel
+} from '@/components/dictation/dictation-audio-level'
 
 type BufferedAudioChunk = {
   samples: Float32Array
@@ -32,6 +36,8 @@ export function useAudioCapture() {
   const bufferedAudioSecondsRef = useRef(0)
   const capturedChunkCountRef = useRef(0)
   const sessionIdRef = useRef('desktop')
+  const audioLevelRef = useRef(0)
+  const audioLevelAtRef = useRef(0)
 
   const cleanupCaptureResources = useCallback(() => {
     processorRef.current?.disconnect()
@@ -95,6 +101,7 @@ export function useAudioCapture() {
       bufferAudioRef.current = options.bufferAudio ?? false
       resetBufferedAudio()
       capturedChunkCountRef.current = 0
+      audioLevelRef.current = 0
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -159,6 +166,8 @@ export function useAudioCapture() {
           }
           const samples = new Float32Array(e.inputBuffer.getChannelData(0))
           capturedChunkCountRef.current += 1
+          audioLevelRef.current = audioLevelFromSamples(samples)
+          audioLevelAtRef.current = performance.now()
           if (bufferAudioRef.current) {
             appendBufferedAudioChunk({
               samples,
@@ -241,11 +250,19 @@ export function useAudioCapture() {
 
   const getCapturedChunkCount = useCallback(() => capturedChunkCountRef.current, [])
 
+  const getAudioLevel = useCallback(() => {
+    if (!isCapturingRef.current) {
+      return 0
+    }
+    return decayAudioLevel(audioLevelRef.current, performance.now() - audioLevelAtRef.current)
+  }, [])
+
   const stop = useCallback(
     (options: StopAudioCaptureOptions = {}) => {
       startRequestRef.current += 1
       isCapturingRef.current = false
       bufferAudioRef.current = false
+      audioLevelRef.current = 0
       if (!options.preserveBufferedAudio) {
         resetBufferedAudio()
       }
@@ -260,6 +277,7 @@ export function useAudioCapture() {
     flushBufferedAudio,
     discardBufferedAudio,
     getCapturedChunkCount,
+    getAudioLevel,
     isCapturingRef
   }
 }

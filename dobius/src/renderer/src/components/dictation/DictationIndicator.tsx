@@ -1,7 +1,14 @@
 import { useAppStore } from '@/store'
-import { Mic } from 'lucide-react'
+import { VoiceOrb } from './VoiceOrb'
 
-export function DictationIndicator() {
+const ORB_SIZE = 160
+
+type DictationIndicatorProps = {
+  /** Current mic level, 0..1, polled by the orb once per frame. */
+  getAudioLevel: () => number
+}
+
+export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   const dictationState = useAppStore((s) => s.dictationState)
   const partialTranscript = useAppStore((s) => s.partialTranscript)
 
@@ -21,9 +28,15 @@ export function DictationIndicator() {
         : partialTranscript || 'Listening...'
 
   return (
-    <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-lg bg-foreground/90 px-3 py-1.5 text-background text-sm shadow-lg">
-      <Mic className={`h-4 w-4 ${dictationState === 'listening' ? 'animate-pulse' : ''}`} />
-      <span>{label}</span>
+    <div
+      className="pointer-events-none fixed bottom-12 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2"
+      role="status"
+      aria-live="polite"
+    >
+      <VoiceOrb size={ORB_SIZE} getLevel={getAudioLevel} />
+      <span className="max-w-md truncate rounded-lg bg-foreground/90 px-3 py-1.5 text-sm text-background shadow-lg">
+        {label}
+      </span>
     </div>
   )
 }

@@ -28,7 +28,8 @@ export function DictationController() {
     stop: stopCapture,
     flushBufferedAudio,
     discardBufferedAudio,
-    getCapturedChunkCount
+    getCapturedChunkCount,
+    getAudioLevel
   } = useAudioCapture()
 
   const dictationStateRef = useRef(dictationState)
@@ -403,5 +404,5 @@ export function DictationController() {
     }
   }, [setPartialTranscript, setDictationState, stopCapture, discardBufferedAudio])
 
-  return <DictationIndicator />
+  return <DictationIndicator getAudioLevel={getAudioLevel} />
 }
