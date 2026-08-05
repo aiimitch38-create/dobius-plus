@@ -537,6 +537,14 @@ button.primary:disabled { opacity: 0.4; }
 .chat-msg.assistant .chat-role { color: var(--dim); }
 .chat-content { font-size: 14px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-empty { padding: 28px 24px; text-align: center; }
+/* "Start Claude" launcher in the sessionless empty state (v1.0.51 bug 2). */
+.chat-start {
+  display: inline-block; margin: 14px auto 10px;
+  background: var(--accent); color: var(--on-accent); border: none;
+  border-radius: 10px; padding: 12px 22px; font-size: 15px; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+}
+.chat-start:active { opacity: 0.85; }
 .chat-input-row { display: flex; align-items: flex-end; gap: 8px; padding: 8px; border-top: 1px solid var(--border); background: var(--surface); }
 .chat-input {
   flex: 1; resize: none; max-height: 120px; min-height: 20px;

@@ -99,5 +99,59 @@ const longHint =
   'Proceed?\n❯ 1. Yes\n  2. No\nLet me select the right approach and refactor everything now.\n';
 check('long hint-word line -> null', parseSelector(longHint), null);
 
+// 18. AskUserQuestion shape: description lines INDENTED under each option
+// (including the last one). The old contiguous scan broke on these, so
+// question popups never parsed on mobile (v1.0.51 bug 1).
+const askUser =
+  'Which polish items should I do?\n' +
+  '❯ 1. Config diet + housekeeping\n' +
+  '     The 11MB config.json shrink with migration.\n' +
+  '  2. Release autopilot script\n' +
+  '     One-command release.sh wrapping build and sign.\n' +
+  '  3. Keep local for now\n' +
+  '     Stays committed on the feature branch.\n';
+check('AskUserQuestion w/ descriptions parses', parseSelector(askUser), {
+  prompt: 'Which polish items should I do?',
+  options: [
+    { num: 1, label: 'Config diet + housekeeping' },
+    { num: 2, label: 'Release autopilot script' },
+    { num: 3, label: 'Keep local for now' },
+  ],
+  selectedIndex: 0,
+});
+
+// 19. Descriptions + nav hint chrome after the last option -> still parses.
+const askUserHint = askUser + '  ↑/↓ to select · enter to confirm\n';
+check('descriptions + hint chrome parses', parseSelector(askUserHint)?.options?.length, 3);
+
+// 20. ANSWERED AskUserQuestion: flush-left response prose after the block -> null.
+const askUserStale = askUser + 'Great choice, starting with the config diet.\n';
+check('answered AskUserQuestion -> null', parseSelector(askUserStale), null);
+
+// 21. Flush-left prose BETWEEN two numbered fragments does NOT glue them into
+// one selector (indent rule): the lower fragment alone lacks a cursor -> null.
+const glued =
+  'Steps:\n  1. First do this\nThen a whole paragraph of explanation text.\n  2. Second thing\n> \n';
+check('flush-left prose does not glue blocks', parseSelector(glued), null);
+
+// 22. Deep-indented continuation cap: >4 description lines between options ends
+// the block, leaving a single option below -> null (bounded, not greedy).
+const tooManyCont =
+  'Q?\n  1. Alpha\n     d1\n     d2\n     d3\n     d4\n     d5\n❯ 2. Beta\n';
+check('continuation cap bounds the block', parseSelector(tooManyCont), null);
+
+// 23. STALE plain selector answered from desktop, followed only by INDENTED
+// response lines (code): must be null. Codex found the first continuation rule
+// treated these as a trailing description; the sawInBlockDesc gate fixes it.
+const staleIndented =
+  'Proceed?\n❯ 1. Yes\n  2. No\n    const ok = true;\n    return ok;\n> \n';
+check('stale selector + indented code -> null', parseSelector(staleIndented), null);
+
+// 24. Indented lines AFTER hint chrome are response text, not description,
+// even for an AskUserQuestion-style block (desc phase ends at chrome).
+const descThenChromeThenCode =
+  'Q?\n❯ 1. A\n     desc a\n  2. B\n     desc b\n  ↑/↓ select\n     indented response\n';
+check('indented after chrome -> null', parseSelector(descThenChromeThenCode), null);
+
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

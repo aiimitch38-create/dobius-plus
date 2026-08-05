@@ -12,22 +12,17 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   const sessionId = tab?.sessionId || null;
   const projectPath = tab?.sessionProject || null;
   const tabId = tab?.id || null;
-  // Hook-confirmed "Claude is waiting on a prompt right now" (the same signal as
-  // the red tab dot). Selector buttons only show while this holds, so a stale
-  // selector lingering in the append-only PTY buffer after being answered can't
-  // resurface (status flips to working/done the moment it's answered). Codex.
-  const tabStatus = tab?.status || null;
   const [messages, setMessages] = useState(null); // null = loading
   const [input, setInput] = useState('');
   // Interactive selector Claude is currently showing (permission prompt, plan
-  // approval, pick-one menu). null = none. Detected server-side from the live
-  // PTY buffer because these TUI prompts are NOT in the transcript.
+  // approval, AskUserQuestion). null = none. Detected server-side from the live
+  // PTY buffer because these TUI prompts are NOT in the transcript. Display is
+  // parser-driven, NOT gated on the hook-driven 'needs' status: AskUserQuestion
+  // doesn't reliably fire the Notification hook, so the old status gate kept
+  // question popups from ever appearing (Sam's v1.0.51 bug 1). Staleness is the
+  // parser's job (trailing-prose rejection) plus the server's post-answer
+  // re-push and the optimistic clear in chooseOption.
   const [selector, setSelector] = useState(null);
-  // Live mirror of tabStatus for the message handler: a selector reply that
-  // arrives AFTER status left 'needs' (in-flight when the prompt was answered)
-  // must be dropped, or it would be stored and briefly shown when the tab next
-  // enters 'needs' for a different (non-selector) prompt. Codex.
-  const statusRef = useRef(tabStatus);
   const bodyRef = useRef(null);
   const atBottomRef = useRef(true);
   // Track the session we asked for so an out-of-order reply for a different
@@ -63,19 +58,16 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     return () => clearInterval(poll);
   }, [sessionId, projectPath, request]);
 
-  useEffect(() => { statusRef.current = tabStatus; }, [tabStatus]);
-
-  // Probe for a selector ONLY while Claude is waiting on a prompt (status
-  // 'needs'). Always clear first: entering 'needs' for a NEW prompt must not
-  // show a previous prompt's buttons until the fresh probe confirms, and
-  // leaving 'needs' hides them immediately. Re-runs when tabStatus flips.
+  // Probe for a selector on a steady interval while this tab's chat is open.
+  // Cheap server-side (strip + regex over the rolling PTY tail). Clear on tab
+  // switch so another tab's buttons never flash here.
   useEffect(() => {
     setSelector(null);
-    if (tabStatus !== 'needs') return undefined;
+    if (!tabId) return undefined;
     probeSelector();
-    const iv = setInterval(probeSelector, 2000);
+    const iv = setInterval(probeSelector, 2500);
     return () => clearInterval(iv);
-  }, [tabStatus, probeSelector]);
+  }, [tabId, probeSelector]);
 
   useEffect(() => {
     const off = connection.onMessage((msg) => {
@@ -93,8 +85,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
           setMessages((prev) => (!prev || prev.length === 0 || emptyStreakRef.current >= 2 ? [] : prev));
         }
       } else if (msg.type === 'selector' && msg.id === tabId) {
-        // Drop a reply that raced past the prompt being answered. Codex.
-        setSelector(statusRef.current === 'needs' ? (msg.selector || null) : null);
+        setSelector(msg.selector || null);
       }
     });
     return off;
@@ -116,9 +107,11 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   const send = () => {
     const text = input.trim();
     if (!text || !tabId) return;
-    // Input is width-independent, so it goes straight to the live PTY; the reply
-    // shows up on the next transcript poll.
-    connection.send({ type: 'input', id: tabId, data: `${text}\r` });
+    // submitPrompt: the server bracketed-pastes the text, then presses Enter as
+    // a DISCRETE keypress after the paste settles. Sending `text\r` in one
+    // chunk made Claude's Ink TUI treat the \r as pasted newline, so messages
+    // sat in the input box unsubmitted (Sam's v1.0.51 bug 3).
+    connection.send({ type: 'submitPrompt', id: tabId, text });
     setInput('');
     atBottomRef.current = true;
   };
@@ -135,11 +128,21 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     atBottomRef.current = true;
   };
 
+  // No session linked yet: offer to launch Claude in this tab's shell (the
+  // paced submitPrompt path types `claude` + Enter at the prompt). The session
+  // link + transcript appear via the normal capture loop once Claude starts.
+  // Previously this state was a dead end on mobile (Sam's v1.0.51 bug 2).
+  const startClaude = () => {
+    if (!tabId) return;
+    connection.send({ type: 'submitPrompt', id: tabId, text: 'claude' });
+  };
+
   if (!sessionId) {
     return (
       <div className="chat-empty">
         <p className="muted">No Claude conversation in this tab yet.</p>
-        <p className="muted small">Switch to Terminal to see raw output, or start Claude here.</p>
+        <button className="chat-start" onClick={startClaude}>Start Claude</button>
+        <p className="muted small">Runs `claude` in this tab's shell. Or switch to Term for raw output.</p>
       </div>
     );
   }
@@ -156,7 +159,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
           </div>
         ))}
       </main>
-      {tabStatus === 'needs' && selector && selector.options && selector.options.length > 0 && (
+      {selector && selector.options && selector.options.length > 0 && (
         <div className="chat-selector">
           <div className="chat-selector-title">
             {selector.prompt || 'Claude is waiting for you to choose:'}

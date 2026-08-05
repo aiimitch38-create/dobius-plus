@@ -450,8 +450,42 @@ function handleAuthedMessage(socket, msg, subs) {
       if (typeof msg.id === 'string' && socket._authedTabs.has(msg.id)
           && typeof msg.data === 'string' && msg.data.length <= MAX_INPUT_BYTES) {
         writeTerminal(msg.id, msg.data);
+        // A short write is how the Chat view answers a selector (a bare option
+        // digit). Re-parse after the TUI repaints and push the (likely cleared)
+        // selector state so the phone's buttons drop off immediately instead of
+        // waiting out the 2.5s probe. v1.0.51 mobile kinks.
+        if (msg.data.length <= 4) {
+          const id = msg.id;
+          setTimeout(() => {
+            wsSend(socket, { type: 'selector', id, selector: parseSelector(getTerminalBuffer(id)) || null });
+          }, 700);
+        }
       }
       break;
+
+    case 'submitPrompt': {
+      // Type a chat message into the tab the way a human would. The old client
+      // path sent `text\r` in ONE chunk; Claude's Ink TUI treats a fast chunk
+      // as a paste, so the trailing \r became a newline INSIDE the input box
+      // and the message sat there unsubmitted (Sam's v1.0.51 mobile bug 3).
+      // Bracketed-paste the text, then press Enter as a DISCRETE keypress after
+      // the paste settles. Works at a bare shell prompt too (zsh honors
+      // bracketed paste + delayed CR), which is how "Start Claude" launches.
+      if (typeof msg.id !== 'string' || !socket._authedTabs.has(msg.id)) break;
+      if (typeof msg.text !== 'string' || !msg.text.trim()
+          || Buffer.byteLength(msg.text, 'utf8') > MAX_INPUT_BYTES) break; // real BYTE cap (Codex: .length undercounts multibyte)
+      // Strip control chars except \t and \n (multi-line paste is legitimate);
+      // \r is stripped so the only Enter is the discrete one we send.
+      const text = msg.text.replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '');
+      const id = msg.id;
+      writeTerminal(id, `\x1b[200~${text}\x1b[201~`);
+      setTimeout(() => { writeTerminal(id, '\r'); }, 250);
+      // If this answered a selector (or started Claude), refresh selector state.
+      setTimeout(() => {
+        wsSend(socket, { type: 'selector', id, selector: parseSelector(getTerminalBuffer(id)) || null });
+      }, 900);
+      break;
+    }
 
     case 'selectorSnapshot': {
       // The mobile Chat view renders transcript text, which can't show Claude's
