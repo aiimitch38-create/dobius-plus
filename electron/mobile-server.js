@@ -649,6 +649,43 @@ export async function startMobileServer() {
   const port = cfg.port || 8420;
 
   const expApp = express();
+
+  // POST /upload?name=<filename>  (raw file body; Bearer auth). v1.0.53.
+  // Registered BEFORE the json middleware: a JSON-typed file (someone attaches
+  // a package.json) must reach the raw parser, not get consumed/413'd by
+  // express.json (Codex). Phone screenshots / files land as temp files on the
+  // Mac; the returned absolute path gets typed into Claude's prompt (same
+  // contract as the desktop dobius-clipboard flow). Files live in
+  // tmpdir/dobius-mobile-uploads; entries older than 24h are pruned on the
+  // next upload, so the dir never grows unbounded. bearerOk hoists.
+  const UPLOAD_DIR = path.join(os.tmpdir(), 'dobius-mobile-uploads');
+  const MAX_UPLOAD_AGE_MS = 24 * 60 * 60 * 1000;
+  expApp.post('/upload', express.raw({ type: () => true, limit: '25mb' }), (req, res) => {
+    if (!bearerOk(req)) return res.status(401).json({ ok: false, error: 'auth' });
+    const body = Buffer.isBuffer(req.body) ? req.body : null;
+    if (!body || body.length === 0) return res.status(400).json({ ok: false, error: 'empty upload' });
+    // Basename-only, control/separator chars stripped, length-capped. The
+    // unique prefix guarantees no collision/overwrite regardless of the name.
+    const rawName = typeof req.query.name === 'string' ? req.query.name : 'upload';
+    const safeName = path.basename(rawName).replace(/[^\w.@-]+/g, '_').slice(0, 80) || 'upload';
+    try {
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      // Best-effort prune of stale uploads (cheap: one readdir per upload).
+      try {
+        const now = Date.now();
+        for (const f of fs.readdirSync(UPLOAD_DIR)) {
+          const fp = path.join(UPLOAD_DIR, f);
+          try { if (now - fs.statSync(fp).mtimeMs > MAX_UPLOAD_AGE_MS) fs.rmSync(fp, { force: true }); } catch { /* raced */ }
+        }
+      } catch { /* prune is best-effort */ }
+      const dest = path.join(UPLOAD_DIR, `up-${Date.now()}-${crypto.randomBytes(3).toString('hex')}-${safeName}`);
+      fs.writeFileSync(dest, body);
+      res.json({ ok: true, path: dest, size: body.length });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.code || 'write failed' });
+    }
+  });
+
   expApp.use(express.json({ limit: '64kb' }));
 
   expApp.get('/health', (_req, res) => {

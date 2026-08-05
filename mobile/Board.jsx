@@ -33,11 +33,37 @@ function rank(g) {
  * terminal on the Mac, one tap into any of them. Consumes the status-rich
  * `terminals` payload the server pushes on change (v1.0.43 Phase 1b).
  */
+// Device-local board preferences (v1.0.53): pinned tab ids + collapsed project
+// paths. localStorage so they survive PWA restarts without a server round-trip.
+const PINS_KEY = 'dobius-mobile-pins';
+const COLLAPSED_KEY = 'dobius-mobile-collapsed';
+const loadList = (key) => {
+  try { const v = JSON.parse(localStorage.getItem(key)); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
+};
+const saveList = (key, list) => { try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* private mode */ } };
+
 export default function Board({ connection, status, onOpen, onShowHistory }) {
   const [terminals, setTerminals] = useState([]);
   const [recentExits, setRecentExits] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [projects, setProjects] = useState([]);
+  const [pins, setPins] = useState(() => loadList(PINS_KEY));
+  const [collapsed, setCollapsed] = useState(() => loadList(COLLAPSED_KEY));
+
+  const togglePin = (id) => {
+    setPins((cur) => {
+      const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+      saveList(PINS_KEY, next);
+      return next;
+    });
+  };
+  const toggleCollapsed = (projectPath) => {
+    setCollapsed((cur) => {
+      const next = cur.includes(projectPath) ? cur.filter((x) => x !== projectPath) : [...cur, projectPath];
+      saveList(COLLAPSED_KEY, next);
+      return next;
+    });
+  };
   const [alerts, setAlerts] = useState('off'); // off | on | error
   const [alertMsg, setAlertMsg] = useState('');
   // Guards a createTerminal round-trip so a double-tap in the picker (Tailscale
@@ -97,6 +123,14 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
     return g.map((grp, i) => ({ ...grp, _i: i })).sort((a, b) => rank(a) - rank(b) || a._i - b._i);
   }, [terminals]);
 
+  // Pinned rows in PIN order (the order Sam pinned them), only for tabs that
+  // are currently alive; a dead pin silently waits (same tab id comes back on
+  // app restart, since tab ids persist in the desktop config).
+  const pinnedTerms = useMemo(() => {
+    const byId = new Map(terminals.map((t) => [t.id, t]));
+    return pins.map((id) => byId.get(id)).filter(Boolean);
+  }, [terminals, pins]);
+
   const needsCount = terminals.filter((t) => t.status === 'needs').length;
   const workingCount = terminals.filter((t) => t.status === 'working').length;
 
@@ -153,14 +187,52 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
             </p>
           </div>
         ) : (
-          groups.map((g) => (
-            <section key={g.projectPath} className="board-group">
-              <div className="board-group-head">{g.projectName}</div>
-              {g.terms.map((t) => (
-                <SessionCard key={t.id} term={t} onOpen={onOpen} />
-              ))}
-            </section>
-          ))
+          <>
+            {pinnedTerms.length > 0 && (
+              <section className="board-group board-pinned">
+                <div className="board-group-head">
+                  <span className="board-group-name">★ Pinned</span>
+                </div>
+                {pinnedTerms.map((t) => (
+                  <SessionCard
+                    key={`pin-${t.id}`}
+                    term={t}
+                    onOpen={onOpen}
+                    pinned
+                    onTogglePin={togglePin}
+                    titlePrefix={t.projectName || ''}
+                  />
+                ))}
+              </section>
+            )}
+            {groups.map((g) => {
+              const isCollapsed = collapsed.includes(g.projectPath);
+              const needs = g.terms.filter((t) => t.status === 'needs').length;
+              return (
+                <section key={g.projectPath} className="board-group">
+                  {/* Tap the project name to collapse/expand its tabs (v1.0.53). */}
+                  <button className="board-group-head board-group-toggle" onClick={() => toggleCollapsed(g.projectPath)}>
+                    <span className="board-group-caret">{isCollapsed ? '▸' : '▾'}</span>
+                    <span className="board-group-name">{g.projectName}</span>
+                    {isCollapsed && (
+                      <span className="board-group-count">
+                        {g.terms.length} tab{g.terms.length !== 1 ? 's' : ''}{needs > 0 ? ` · ${needs} needs you` : ''}
+                      </span>
+                    )}
+                  </button>
+                  {!isCollapsed && g.terms.map((t) => (
+                    <SessionCard
+                      key={t.id}
+                      term={t}
+                      onOpen={onOpen}
+                      pinned={pins.includes(t.id)}
+                      onTogglePin={togglePin}
+                    />
+                  ))}
+                </section>
+              );
+            })}
+          </>
         )}
 
         {recentExits.length > 0 && (

@@ -23,6 +23,9 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   // parser's job (trailing-prose rejection) plus the server's post-answer
   // re-push and the optimistic clear in chooseOption.
   const [selector, setSelector] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState('');
+  const fileInputRef = useRef(null);
   const bodyRef = useRef(null);
   const atBottomRef = useRef(true);
   // Track the session we asked for so an out-of-order reply for a different
@@ -128,6 +131,50 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     atBottomRef.current = true;
   };
 
+  // Fine-control keys for the selector (v1.0.53 UX): multiSelect prompts need
+  // arrows to move, space to toggle, Enter to confirm, Esc to cancel; tapping a
+  // digit alone can't finish those. Enter/Esc optimistically clear the popup
+  // (the server re-push + probe restore it if a chained prompt follows).
+  const SELECTOR_KEYS = [
+    ['↑', '\x1b[A', false], ['↓', '\x1b[B', false], ['space', ' ', false],
+    ['esc', '\x1b', true], ['enter', '\r', true],
+  ];
+  const sendSelectorKey = (seq, closes) => {
+    if (!tabId) return;
+    connection.send({ type: 'input', id: tabId, data: seq });
+    if (closes) setSelector(null);
+  };
+
+  // Upload a screenshot / file from the phone: POST the bytes, get back an
+  // absolute temp path on the Mac, and append that path to the input so it
+  // rides the normal submitPrompt (Claude Code reads local file paths, same
+  // contract as the desktop clipboard-image flow). v1.0.53.
+  const uploadFiles = async (files) => {
+    if (!files?.length || uploading) return;
+    setUploading(true);
+    setUploadMsg(''); // clear a stale error from a previous attempt (Codex Low)
+    try {
+      const paths = [];
+      for (const f of [...files].slice(0, 5)) {
+        // Always octet-stream: the server's raw parser accepts everything, and
+        // a real JSON mime would otherwise be consumed by express.json (Codex).
+        const res = await fetch(`./upload?name=${encodeURIComponent(f.name || 'upload')}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${connection.token}`, 'Content-Type': 'application/octet-stream' },
+          body: f,
+        });
+        const data = await res.json().catch(() => null);
+        if (data?.ok && data.path) paths.push(data.path);
+        else setUploadMsg(data?.error || `Upload failed (${res.status})`);
+      }
+      if (paths.length) setInput((cur) => `${cur}${cur && !cur.endsWith(' ') ? ' ' : ''}${paths.join(' ')} `);
+    } catch {
+      setUploadMsg('Upload failed (offline?)');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // No session linked yet: offer to launch Claude in this tab's shell (the
   // paced submitPrompt path types `claude` + Enter at the prompt). The session
   // link + transcript appear via the normal capture loop once Claude starts.
@@ -154,7 +201,10 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
         {messages && messages.length === 0 && <p className="muted pad">No messages yet.</p>}
         {messages && messages.map((m, i) => (
           <div key={i} className={`chat-msg ${m.role === 'assistant' ? 'assistant' : 'user'}`}>
-            <div className="chat-role">{m.role === 'assistant' ? 'Claude' : 'You'}</div>
+            <div className="chat-role">
+              {m.role === 'assistant' ? 'Claude' : 'You'}
+              {m.timestamp && <span className="chat-time">{fmtMsgTime(m.timestamp)}</span>}
+            </div>
             <div className="chat-content">{m.content}</div>
           </div>
         ))}
@@ -174,6 +224,15 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
               <span className="chat-selector-label">{opt.label}</span>
             </button>
           ))}
+          {/* Fine-control row: arrows/space for multiSelect movement + toggle,
+              enter/esc to confirm/cancel, without leaving Chat. v1.0.53. */}
+          <div className="chat-selector-keys">
+            {SELECTOR_KEYS.map(([label, seq, closes]) => (
+              <button key={label} className="chat-selector-key" onClick={() => sendSelectorKey(seq, closes)}>
+                {label}
+              </button>
+            ))}
+          </div>
           {onOpenTerminal && (
             <button className="chat-selector-term" onClick={onOpenTerminal}>
               Open terminal to answer manually
@@ -181,12 +240,35 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
           )}
         </div>
       )}
+      {uploadMsg && <div className="chat-upload-msg">{uploadMsg}</div>}
       <div className="chat-input-row">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => { uploadFiles(e.target.files); e.target.value = ''; }}
+        />
+        <button
+          className="chat-attach"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          aria-label="Attach a screenshot or file"
+          title="Attach a screenshot or file (uploads to the Mac, path goes into the prompt)"
+        >
+          {uploading ? '…' : '+'}
+        </button>
         <textarea
           className="chat-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+          onPaste={(e) => {
+            // Pasting an image (iOS long-press paste of a screenshot) uploads
+            // it like the attach button; text pastes fall through untouched.
+            const files = e.clipboardData?.files;
+            if (files && files.length > 0) { e.preventDefault(); uploadFiles(files); }
+          }}
           placeholder="Message Claude..."
           rows={1}
         />
@@ -194,4 +276,14 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
       </div>
     </div>
   );
+}
+
+// "15:42" today, "Aug 4 15:42" earlier. Transcript timestamps are ISO strings.
+function fmtMsgTime(ts) {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '';
+  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return hm;
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${hm}`;
 }
