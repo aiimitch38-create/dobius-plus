@@ -94,3 +94,98 @@
 - Tried: restoring `~/.Trash/DobiusPlus` to `~/` via `mv`, then Finder AppleScript (`tell application "Finder" to move ...`), then `ditto` — all with sandbox disabled.
 - Failed because: macOS TCC protects `~/.Trash` from terminal/automation processes without Full Disk Access; Finder automation also needs a user-granted Apple Events permission the host process lacks. Sandbox off ≠ TCC granted. (Reads of a known subpath partially work — `ls`/`stat` on `~/.Trash/<dir>` succeeded — but directory listing, rename, and copy are denied, so discovery via `ls ~/.Trash` silently returns empty with `2>/dev/null`.)
 - Works instead: detect trashed items via `lsof | grep -i <name>` (system daemons like StorageManagement hold handles) or `stat ~/.Trash/<expected-name>` directly; then have the USER restore: Finder → Trash → right-click → Put Back. Don't burn attempts on mv/osascript/ditto.
+
+## 2026-07-12 — Reading macOS plists: never pipe through `plutil -convert json`
+- Tried: `defaults export com.apple.dock - | plutil -convert json -o - -` to inspect Dock recents, then a hacky `/tmp/../private/...` scratchpad path as fallback.
+- Failed because: system plists carry binary `<data>` blobs that JSON cannot represent, so `plutil -convert json` exits non-zero; the fallback then died on the malformed path.
+- Works instead: `defaults export <domain> "$FILE"` (plain absolute path) then Python `plistlib.load()` — it parses binary plists and `<data>` natively. For targeted edits use `/usr/libexec/PlistBuddy -c "Delete :key:index"`.
+
+## 2026-07-12 — Repeated the documented `echo ==` zsh failure while chaining probes with &&
+- Tried: separator-labelled compound probes like `git grep ... && echo == && git grep ...` and `grep ... && ls vitest*` during the daemon debug session.
+- Failed because: (a) bare `==` hits zsh's `=command` expansion (`= not found`) — ALREADY documented in learned-macos-shell-quoting, ignored in the moment; (b) joining probes with `&&` makes a legitimate no-match exit (grep/ls returning 1) kill every later command in the chain, so one empty probe costs the whole call.
+- Works instead: separators are quoted plain words (`echo "== label =="` or `echo '--'`), and exploratory probes are joined with `;` (or run as separate calls) so a no-match can't cascade. `&&` is only for steps that truly depend on the previous one succeeding.
+
+## 2026-07-12 — Install script's pkill murdered the terminal daemon (all sessions lost)
+- Tried: `pkill -f "/Applications/Dobius\+\.app"` in install-dobius-v2.sh to stop the app before replacing it (and build-and-install.sh's `pkill -f "Dobius+"` had the same flaw).
+- Failed because: `pkill -f` matches the FULL command line — and the detached session daemon runs from inside the bundle (`Dobius+ Helper … daemon-entry.js`), so the "stop the app" kill also executed the daemon. Every live session got endedAt-stamped in the same millisecond; on relaunch nothing restored. Compounding it, the daemon's SIGTERM path marked sessions "cleanly ended", which suppresses cold-restore.
+- Works instead: kill by exact process name only — `pkill -x "Dobius+"` for the main app plus `pkill -f "Dobius\+ Helper.*--type="` for Chromium helpers (renderer/GPU have `--type=`; the daemon doesn't). And signal-driven shutdown must NOT mark sessions ended (fixed in daemon-server: `{ markSessionsEnded: false }`), so the next launch restores.
+
+## 2026-07-12 — Validate generated HTML/CSS before publishing an Artifact
+- Tried: wrote a large machine-map artifact and moved straight toward publishing it.
+- Failed because: a stray hallucinated token slipped into a CSS value (`--warn: #d3a martingale, ;`) followed by a duplicate `--warn:` redefinition — nonsense/duplicate custom-property defs are a real generation failure mode in big inline-CSS files. Also wasted an Edit: trusted remembered whitespace on a just-written (auto-reformatted) file instead of re-reading the exact region first.
+- Works instead: before calling Artifact/publish, grep the file for duplicate `--custom-property:` defs and obviously-non-token words in values; fix, THEN publish. For any Edit on a large just-generated file, Read the exact target lines first — don't reconstruct whitespace from memory.
+
+## 2026-07-12 — Concurrent agent builds clobber each other in this shared checkout
+- Tried: verifying my finished `dist/mac-arm64` artifact right after my background build exited 0.
+- Failed because: another agent had started its own `rm -rf out dist && pnpm run build:unpack` in the same checkout — its clean step deleted my finished artifact between build-exit and verify.
+- Works instead: before ANY dobius build, `pgrep -f "run-electron-vite-build|electron-builder"` — if a build is live, wait and adopt its artifact instead of racing. Verify/install the artifact IMMEDIATELY after build exit, and treat build→verify→install as one uninterruptible sequence.
+
+## 2026-07-14 — Duplicate Dobius+.app bundles (same bundle ID) → double Dock icon / wrong app opens
+- Tried: relaunching + reinstalling to clear a "two D+ icons in Dock / keeps opening the wrong app" problem; also launched the app via its raw binary (`/Applications/Dobius+.app/Contents/MacOS/Dobius+`) to capture ELECTRON_ENABLE_LOGGING renderer output.
+- Failed because: TWO app bundles carried the identical `CFBundleIdentifier` `com.statusdigitalmarketing.dobius-plus` — `/Applications/Dobius+.app` (canonical) and a handoff copy `~/dobius-handoff/Dobius+.app`. macOS keys apps by bundle ID, so LaunchServices registered both and the Dock could not match the running process to the pinned tile → duplicate icon + ambiguous launch. Separately, launching by the RAW BINARY gives the process its own Dock tile distinct from the normal bundle launch, which ADDED a spurious second icon and looked like a new bug to the user.
+- Works instead: keep exactly one bundle. `lsregister -u <stale.app>` ; `lsregister -f /Applications/Dobius+.app` ; quit the app (kill only `/Applications/Dobius+.app/Contents/MacOS/Dobius+`, never the detached daemon Helper running `daemon-entry.js`) ; relaunch via `open -a "/Applications/Dobius+.app"` (NOT the raw binary) ; `killall Dock`. Durable: move/trash the stale copy so it can't re-register (a `*.noindex` containing folder blocks Spotlight/LS re-registration). Verify: `lsregister -dump | grep 'Dobius+.app'` shows ONLY `/Applications`. An `.app` is program code only — user data lives in `~/Library/Application Support/dobius-plus/`, so moving/trashing a duplicate `.app` loses nothing.
+
+## 2026-07-15 — `git add <path>` fails "pathspec did not match" when the path was already `git rm`'d
+- Tried: staging a commit with one `git add <a> <b> <deleted.ts> ...` list (chained `&& git commit`) that included a file already removed earlier in the same sequence with `git rm` — happened twice (`engine-parity-checklist.ts`, then `shared/manager.ts`).
+- Failed because: `git rm` STAGES the deletion immediately. A later `git add` of that now-nonexistent path errors `fatal: pathspec '...' did not match any files` (exit 128), which aborts the whole `git add` AND the chained `git commit`. Nothing gets committed.
+- Works instead: files removed with `git rm` are already staged — never re-list them in a subsequent `git add`. Stage only the still-present modified/new paths; the deletion rides along into the commit. When unsure, `git status --short` first: a `D ` prefix means already staged for deletion, so leave it out of `git add`.
+
+## 2026-07-15 — Line-number `sed -i '' 'A,Bd'` to delete a code block over-deleted and broke JSX
+- Tried: removing a nav-button JSX block from `SidebarNav.tsx` with `sed -i '' '78,98d'` using line numbers from an earlier grep.
+- Failed because: the block's true end had shifted vs the grep, so the range ate two extra lines (`<SidebarTaskNavButton />` and a `{cond ? (` opener), leaving a dangling `) : null}` — a compile error typecheck caught but the raw diff hid.
+- Works instead: for deleting a code block, prefer `Edit` with the block's exact text (content-anchored, not line-anchored). If using line-range `sed`, re-`sed -n 'A,Bp'` to PRINT the exact range and eyeball both boundaries immediately before deleting, then re-run typecheck.
+
+## 2026-07-15 — AI-slop capability dumps to a human stakeholder got rejected as "essay / AI slop"
+- Tried: answering Sam's Asana pushback by posting several long, bold-headed, bulleted "here's everything V2 does better" capability lists (engine, UI, automations, folder grouping), each AI-written and exhaustive.
+- Failed because: to a real person it read as AI slop — too long, listy, symmetrical, defensive, obviously machine-generated. Sam: "i need tldr this is an essay... AI slop is the opposite of what we're going for." The verbosity buried the point; rebutting every feature read as defensive; the length dwarfed his two-line message.
+- Works instead: when writing to a HUMAN (Asana/Slack/email/PR-for-reviewers), lead with the one point, keep it to a few plain sentences roughly the length of what they wrote, concede first, drop exhaustive feature lists and bold-header bullet walls, pick only the 1–2 things that matter to THAT reader, and end with a concrete next step. If the content genuinely wants to be a 7-item list, it belongs in a doc/PR body you link, not pasted as a message.
+
+## 2026-08-05 — Ad-hoc Playwright script burned 3 runs on setup a skill already documented
+- Tried: writing a scratchpad `.mjs` to headlessly render and screenshot a WebGL shader, using a bare `import { chromium } from 'playwright'` and a plain `chromium.launch()`.
+- Failed because: (a) ESM resolves imports from the SCRIPT's directory, so a scratchpad script sees no `node_modules` → `ERR_MODULE_NOT_FOUND`; (b) `dobius/`'s playwright 1.59.1 wants `chromium_headless_shell-1217` but the cache only has `chromium-1228` (headed) → "Executable doesn't exist"; (c) an escaped `"\$S"` inside a `perl -0pi -e` one-liner reached perl as a literal `$S` instead of the shell var. Root cause for (a) and (b): `learned-playwright-standalone` already documents both and was not read before writing the script — the skill-matching default was skipped because the script "looked trivial".
+- Works instead: check `ls ~/.claude/skills/ | grep learned-` BEFORE writing any ad-hoc tooling script, not after it fails. For this repo specifically: keep the script in the scratchpad and resolve the package with `createRequire('<repo>/dobius/package.json')`, then launch with an explicit `executablePath` pointing at the headed `chromium-1228` build in `~/Library/Caches/ms-playwright`. For (c), pass shell variables via `perl -e '...' "$VAR"` / `@ARGV` or just use the Edit tool — never interpolate an escaped `\$VAR` into a quoted perl program.
+
+## Never ship to the installed app what you haven't watched run
+_2026-08-05 · claude_
+
+Three failures in one night, all the same root cause: shipping code verified only by
+typecheck/tests to `/Applications/Dobius+.app`.
+
+1. **Replaced the whole Communications UI with one screen.** The native port implemented
+   only the DM inbox; switching `BuzzPage.tsx` from the webview to it silently deleted
+   every other Buzz screen (channels, agents, search) from the tab. Typecheck was clean.
+   Never swap a tab's implementation wholesale — add the new surface alongside and switch
+   only when it is provably better.
+2. **No error path = a silent hang.** `startDmWithAgent` had no `catch` and rendered no
+   error, so a failing relay publish showed "opening…" forever with nothing in the UI.
+   Every command needs a defined failure render. This is already a rule in the
+   `reverse-engineer-repo` skill (C3 item 6) and it got skipped.
+3. **`git checkout --` reverted TWO stacked uncommitted layers, not one.** `BuzzPage.tsx`
+   had an uncommitted webview-loader fix UNDER the uncommitted native switch. Reverting
+   landed on a much older committed version that reads `VITE_BUZZ_UI_URL` and renders a
+   fallback page when unset — i.e. the "restore" would have shipped a placeholder.
+   **Before `git checkout` on a dirty file, diff it against HEAD and read what HEAD
+   actually contains** — do not assume the committed version is the last good one.
+
+Caught #3 only by grepping the BUILT bundle for the URL it must contain
+(`asar extract` → `grep buzz/index.html`) and finding zero. Verify the artifact, not the
+build's exit code.
+
+## Process-name matching lied three times in one session
+_2026-08-05 · claude_
+
+`pgrep -f "daemon-entry"` returned nothing while `ps aux | grep daemon-entry.js` found
+PID 1102 alive. Same class as the known `Dobius+` regex trap (NOTES 2026-08-02). Also hit
+it with a single-line `grep "ipcMain.handle('x'"` that missed multi-line registrations and
+produced a false "NO HANDLER" alarm.
+
+Rule: a negative result from a process/code pattern match is not evidence of absence.
+Confirm with a second, differently-shaped query before reporting anything as missing.
+
+## The daemon genuinely survives install (verified)
+_2026-08-05 · claude_
+
+Two full install cycles tonight: quit → `rm -rf` the app → `ditto` the new one → relaunch.
+Daemon stayed **PID 1102** both times, socket and token intact. Carson was right; the
+`pkill -x "Dobius\+"` + `pkill -f "Dobius\+ Helper.*--type="` pattern does not touch it.
+Installing is safe for live terminal sessions.
