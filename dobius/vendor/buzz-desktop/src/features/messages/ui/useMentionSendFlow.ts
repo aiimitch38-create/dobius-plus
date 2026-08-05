@@ -542,7 +542,15 @@ export function useMentionSendFlow({
               [...draft.savedSpoileredAttachmentUrls],
             );
           }
-        } catch {
+        } catch (error) {
+          // Why: this catch was empty, so a failed send was indistinguishable
+          // from no send at all — the composer silently refilled and the message
+          // vanished. That hid a total send outage (plain text was routed to a
+          // Tauri-only WebSocket that does not exist under Electron) for hours.
+          // A send that fails must always say so.
+          const message = error instanceof Error ? error.message : String(error);
+          console.error("[communications] send failed:", error);
+          toast.error(`Message not sent: ${message}`);
           // Only restore the composer content if the user is still on the
           // channel that originated the send.
           if (draft.capturedChannelId === channelIdRef.current) {

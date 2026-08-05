@@ -465,10 +465,15 @@ export function useSendMessageMutation(
         mentionPubkeys,
       );
 
-      // Messages carrying media OR custom-emoji tags MUST go through REST so
-      // the relay's tag validation runs. The WebSocket path emits no extra
-      // tags, so emoji-only messages would otherwise lose their emoji tag.
-      if (parentEventId || imetaTags.length > 0 || emojiTags.length > 0) {
+      // EVERY message goes through REST. Upstream sent plain text over a
+      // WebSocket opened with Tauri's `plugin:websocket|connect`
+      // (shared/api/relayClientSession.ts) — a runtime that does not exist under
+      // Electron, so plain sends threw before reaching the relay and the empty
+      // catch in ui/useMentionSendFlow.ts hid it. Replies/media/emoji already
+      // took this path, which is why only they worked.
+      // The block below already handles the non-reply case (see `baseTags`), and
+      // empty imeta/emoji arrays spread to nothing.
+      {
         const cachedMessages =
           queryClient.getQueryData<RelayEvent[]>(
             channelMessagesKey(effectiveChannel.id),
@@ -524,13 +529,6 @@ export function useSendMessageMutation(
           sig: "",
         };
       }
-
-      return relayClient.sendMessage(
-        effectiveChannel.id,
-        content,
-        recipientPubkeys,
-        mentionTags,
-      );
     },
     onMutate: async ({
       channelId: capturedChannelId,
