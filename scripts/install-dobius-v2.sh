@@ -32,8 +32,15 @@ esac
 # Staleness: list every source file newer than the packaged app. This repo routinely
 # carries in-flight edits unrelated to the build, so a hard block would stop legitimate
 # installs; instead it fails loudly and requires an explicit, conscious override.
+# Why: `find … 2>/dev/null || true` would turn a missing/unreadable source tree into an
+# empty result — i.e. a silent "nothing is stale" false pass. Assert the trees exist and
+# let find's own failures abort instead of hiding them.
+for SRC_DIR in "$REPO/dobius/src" "$REPO/dobius/vendor/buzz-desktop/src"; do
+  [ -d "$SRC_DIR" ] || { echo "ERROR: source tree missing, cannot check staleness: $SRC_DIR" >&2; exit 1; }
+  [ -r "$SRC_DIR" ] || { echo "ERROR: source tree unreadable: $SRC_DIR" >&2; exit 1; }
+done
 STALE="$(find "$REPO/dobius/src" "$REPO/dobius/vendor/buzz-desktop/src" \
-  -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.css' \) -newer "$ASAR" 2>/dev/null || true)"
+  -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.css' \) -newer "$ASAR")"
 if [ -n "$STALE" ]; then
   COUNT="$(printf '%s\n' "$STALE" | wc -l | tr -d ' ')"
   echo "WARNING: $COUNT source file(s) are NEWER than the packaged app — these changes are NOT in this build:" >&2
