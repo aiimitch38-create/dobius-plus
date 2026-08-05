@@ -1143,7 +1143,35 @@ function extractAssistantText(entry) {
 // Map ONE raw JSONL entry to a { role, content } chat message, or null if it is
 // not a user/assistant text turn (tool calls, meta, empty). Shared by the full
 // stream and the bounded tail so the two can never diverge.
-function entryToMessage(entry) {
+export function entryToMessage(entry) {
+  // A message sent while Claude is mid-turn is recorded as a queue-operation
+  // enqueue, NOT as a user message, until the turn ends and it is actually
+  // submitted. Surfacing it (flagged `queued`) is what makes a mid-turn send
+  // from the phone show up in the mobile Chat instead of vanishing (Sam's
+  // v1.0.53 report). dedupeQueuedMessages drops it once the real user message
+  // lands in the transcript.
+  if (entry.type === 'queue-operation') {
+    let content = typeof entry.content === 'string' ? entry.content : '';
+    if (content.length > MAX_MESSAGE_CHARS) content = content.slice(0, MAX_MESSAGE_CHARS) + `\n\n[message truncated at ${MAX_MESSAGE_CHARS} chars]`;
+    if (entry.operation === 'enqueue') {
+      return content.trim() ? { role: 'user', content, queued: true } : null;
+    }
+    // remove/dequeue: a marker row (never rendered) that clears a pending
+    // enqueue during replay. Without this, a prompt the user deleted from the
+    // TUI queue rendered as "queued" forever (Codex P2). REAL transcripts
+    // usually emit these WITHOUT content (only type/operation/timestamp), so
+    // an empty-content marker is meaningful: the queue is FIFO, it clears the
+    // oldest pending row (Codex round 2, real repro in pocket-cologne 530/531).
+    if (entry.operation === 'remove' || entry.operation === 'dequeue') {
+      return { role: 'user', content, queueRemove: true };
+    }
+    // popAll (and any future queue op we don't know): the whole queue flushed,
+    // clear EVERY pending row. Ignoring popAll left a stale pending row that
+    // made a later contentless dequeue clear the WRONG entry (Codex round 3,
+    // pocket-cologne 28520/28521 + 31314/31315). Over-clearing merely hides a
+    // "queued" chip early; under-clearing is the recurring stale-row bug.
+    return { role: 'user', content, queueClearAll: true };
+  }
   let role = null;
   if (entry.type === 'human' || entry.role === 'user' || entry.message?.role === 'user') role = 'user';
   else if (entry.type === 'assistant' || entry.role === 'assistant' || entry.message?.role === 'assistant') role = 'assistant';
@@ -1166,6 +1194,42 @@ function entryToMessage(entry) {
   return { role, content };
 }
 
+// Queue replay: an enqueue makes a pending `queued` row; a LATER real user
+// message with the same text (the queue flushed) or a remove/dequeue marker
+// (the user deleted it from the TUI queue) clears the OLDEST matching pending
+// row. Marker rows themselves never render. A still-pending enqueue keeps its
+// row, which is honest: it is sitting in the TUI's queue right now.
+export function dedupeQueuedMessages(messages) {
+  const pending = []; // indices of queued rows not yet cleared, in order
+  const drop = new Set();
+  for (let i = 0; i < messages.length; i += 1) {
+    const m = messages[i];
+    if (m.queued) { pending.push(i); continue; }
+    if (m.queueClearAll) {
+      drop.add(i);
+      for (const p of pending) drop.add(p);
+      pending.length = 0;
+      continue;
+    }
+    const isRemove = !!m.queueRemove;
+    if (isRemove) drop.add(i); // markers are bookkeeping, never displayed
+    if (isRemove || m.role === 'user') {
+      const t = m.content.trim();
+      // Contentless remove/dequeue (the common real shape) clears the OLDEST
+      // pending row (FIFO queue); contentful ones and real user messages clear
+      // the oldest row with MATCHING text.
+      const idx = (isRemove && !t)
+        ? (pending.length ? 0 : -1)
+        : pending.findIndex((p) => messages[p].content.trim() === t);
+      if (idx !== -1) { drop.add(pending[idx]); pending.splice(idx, 1); }
+    }
+  }
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (drop.has(i)) messages.splice(i, 1);
+  }
+  return messages;
+}
+
 async function parseTranscriptFile(filePath) {
   const messages = [];
   let payloadBytes = 0;
@@ -1182,7 +1246,7 @@ async function parseTranscriptFile(filePath) {
     }
     messages.push({ ...m, timestamp: entry.timestamp || null });
   });
-  return messages;
+  return dedupeQueuedMessages(messages);
 }
 
 // Bounded tail read for the mobile Chat poll: reads only the tail of the JSONL
@@ -1202,6 +1266,7 @@ async function parseTranscriptTail(filePath, messageLimit) {
     const m = entryToMessage(entry);
     if (m) msgs.push({ ...m, timestamp: entry.timestamp || null });
   }
+  dedupeQueuedMessages(msgs);
   let tail = msgs.slice(-want);
   let bytes = tail.reduce((n, m) => n + m.content.length + 64, 0);
   while (tail.length > 1 && bytes > MAX_PAYLOAD_BYTES) {

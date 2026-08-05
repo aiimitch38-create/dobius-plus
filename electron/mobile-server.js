@@ -279,6 +279,16 @@ function firePushForEvents(payload) {
         tag: `needs:${t.id}`,
         url: `./?open=${encodeURIComponent(t.id)}`,
       });
+    } else if (t.status === 'done' && prev === 'working') {
+      // Finished-a-turn push (Sam's v1.0.53 ask). Only on the working->done
+      // transition (hook-driven), and tagged per tab so rapid turns replace
+      // the previous banner instead of stacking.
+      sendPush({
+        title: t.projectName || 'Dobius+',
+        body: `${t.label} finished its turn`,
+        tag: `done:${t.id}`,
+        url: `./?open=${encodeURIComponent(t.id)}`,
+      });
     }
     prevStatusById.set(t.id, t.status);
   }

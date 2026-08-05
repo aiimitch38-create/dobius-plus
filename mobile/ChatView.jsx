@@ -1,4 +1,39 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
+// One chat bubble. Assistant messages render as MARKDOWN (tables, code
+// blocks, lists were showing as raw pipes/asterisks: Sam's v1.0.53 report);
+// user messages stay literal text so pasted code/paths are never mangled.
+// memo'd so the 3.5s transcript poll only re-parses bubbles whose content
+// actually changed, not all 200.
+const Bubble = memo(function Bubble({ role, content, timestamp, queued, sending }) {
+  return (
+    <div className={`chat-msg ${role === 'assistant' ? 'assistant' : 'user'}${sending ? ' chat-echo' : ''}`}>
+      <div className="chat-role">
+        {role === 'assistant' ? 'Claude' : 'You'}
+        {timestamp != null && <span className="chat-time">{fmtMsgTime(timestamp)}</span>}
+        {queued && <span className="chat-queued">queued</span>}
+        {sending && <span className="chat-queued">sending…</span>}
+      </div>
+      <div className="chat-content">
+        {role === 'assistant' ? (
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              // Wide tables scroll inside their own container on a phone.
+              table: ({ node: _node, ...props }) => (
+                <div className="md-table-wrap"><table {...props} /></div>
+              ),
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        ) : content}
+      </div>
+    </div>
+  );
+});
 
 /**
  * Responsive conversation view for a session on mobile. Instead of mirroring the
@@ -25,6 +60,12 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   const [selector, setSelector] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
+  // Local echoes: a just-sent message renders IMMEDIATELY instead of waiting
+  // for the transcript poll (a mid-turn send used to look eaten: it sat in
+  // Claude's queue and never appeared here; the server now also surfaces
+  // queued entries). An echo drops once the transcript shows the same text,
+  // or after 90s (e.g. the tab was a bare shell that ran it as a command).
+  const [echoes, setEchoes] = useState([]);
   const fileInputRef = useRef(null);
   const bodyRef = useRef(null);
   const atBottomRef = useRef(true);
@@ -77,6 +118,15 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
       if (msg.type === 'transcript' && msg.sessionId === wantRef.current
           && (msg.projectPath == null || msg.projectPath === projectPath)) {
         const next = msg.entries || [];
+        // Prune echoes the transcript now covers (same trimmed text, queued or
+        // real) and any older than 90s.
+        setEchoes((cur) => {
+          if (cur.length === 0) return cur;
+          const seen = new Set(next.filter((m) => m.role === 'user').map((m) => m.content.trim()));
+          const now = Date.now();
+          const kept = cur.filter((e) => !seen.has(e.content.trim()) && now - e.at < 90_000);
+          return kept.length === cur.length ? cur : kept;
+        });
         if (next.length > 0) {
           emptyStreakRef.current = 0;
           setMessages(next);
@@ -99,7 +149,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   useEffect(() => {
     const el = bodyRef.current;
     if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages, echoes]);
 
   const onScroll = () => {
     const el = bodyRef.current;
@@ -115,6 +165,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     // chunk made Claude's Ink TUI treat the \r as pasted newline, so messages
     // sat in the input box unsubmitted (Sam's v1.0.51 bug 3).
     connection.send({ type: 'submitPrompt', id: tabId, text });
+    setEchoes((cur) => [...cur, { content: text, at: Date.now() }]);
     setInput('');
     atBottomRef.current = true;
   };
@@ -200,13 +251,10 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
         {messages === null && <p className="muted pad">Loading conversation...</p>}
         {messages && messages.length === 0 && <p className="muted pad">No messages yet.</p>}
         {messages && messages.map((m, i) => (
-          <div key={i} className={`chat-msg ${m.role === 'assistant' ? 'assistant' : 'user'}`}>
-            <div className="chat-role">
-              {m.role === 'assistant' ? 'Claude' : 'You'}
-              {m.timestamp && <span className="chat-time">{fmtMsgTime(m.timestamp)}</span>}
-            </div>
-            <div className="chat-content">{m.content}</div>
-          </div>
+          <Bubble key={i} role={m.role} content={m.content} timestamp={m.timestamp || null} queued={!!m.queued} />
+        ))}
+        {echoes.map((e) => (
+          <Bubble key={`echo-${e.at}`} role="user" content={e.content} timestamp={e.at} sending />
         ))}
       </main>
       {selector && selector.options && selector.options.length > 0 && (
@@ -242,6 +290,18 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
       )}
       {uploadMsg && <div className="chat-upload-msg">{uploadMsg}</div>}
       <div className="chat-input-row">
+        {/* Interrupt/cancel from Chat (v1.0.53, Sam: "no way to cancel").
+            One tap = ESC to the TUI: interrupts the running turn AND pops any
+            queued messages back into Claude's input (the popAll op); a second
+            tap clears that input. Red while the tab is actively working. */}
+        <button
+          className={`chat-esc${tab?.status === 'working' ? ' working' : ''}`}
+          onClick={() => { if (tabId) connection.send({ type: 'input', id: tabId, data: '\x1b' }); }}
+          aria-label="Interrupt Claude (escape)"
+          title="Interrupt Claude / cancel queued messages. Tap again to clear its input."
+        >
+          esc
+        </button>
         <input
           ref={fileInputRef}
           type="file"
