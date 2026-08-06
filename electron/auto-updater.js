@@ -1,9 +1,33 @@
 import electronUpdater from 'electron-updater';
 import { app, BrowserWindow, Notification, ipcMain } from 'electron';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { setQuittingForUpdate } from './quit-state.js';
 import { drainConfigWrites, backupConfigForUpdate } from './config-manager.js';
 
 const { autoUpdater } = electronUpdater;
+
+// electron-updater's cache on macOS (this app is mac-only). A wedged cache is
+// the failure mode that stranded Sam on 1.0.48 for 5 releases: a stale pending
+// zip made every differential download fail, silently, every 4 hours, forever.
+const UPDATER_CACHE_DIR = path.join(os.homedir(), 'Library', 'Caches', 'dobius-plus-updater');
+
+// Purge the updater cache after a download error so the NEXT periodic check
+// starts clean instead of re-wedging against the same stale state. Rate-limited
+// to once per 10 minutes so an offline burst doesn't thrash the disk.
+let lastCachePurgeAt = 0;
+function purgeUpdaterCache() {
+  const now = Date.now();
+  if (now - lastCachePurgeAt < 10 * 60 * 1000) return;
+  lastCachePurgeAt = now;
+  try {
+    fs.rmSync(UPDATER_CACHE_DIR, { recursive: true, force: true });
+    console.log('[updater] purged wedged updater cache');
+  } catch (err) {
+    console.warn('[updater] cache purge failed:', err.message);
+  }
+}
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const QUIT_INSTALL_FLUSH_TIMEOUT_MS = 2500;
@@ -70,6 +94,15 @@ async function performInstall() {
   // instantly recoverable from config.json.pre-update-<version>.bak. The update
   // never touches userData, so this is insurance, not a fix.
   try { backupConfigForUpdate(pendingUpdate.version); } catch { /* best effort */ }
+  // Ask every window's terminals to flush scrollback NOW. The update quit
+  // bypasses the graceful 3-phase Cmd+Q save, so without this the restored
+  // buffers were up to 60s stale (the autosave cadence). The session-tab links
+  // that drive `claude --resume` on relaunch are captured continuously (15s),
+  // and Claude's own transcript is the source of truth for the conversation,
+  // so this only affects the restored VISUAL scrollback. v1.0.54 (Sam's
+  // "seamless restart" question).
+  broadcast('terminal:requestSave');
+  await new Promise((resolve) => setTimeout(resolve, 600)); // let renderer save IPCs land
   try {
     await Promise.race([
       drainConfigWrites(), // v1.0.33: non-latching, so if quitAndInstall throws we can still persist
@@ -121,6 +154,11 @@ export function initAutoUpdater() {
   // run mid-teardown and either fail or race. We force install through the
   // explicit Restart button (performInstall) instead.
   autoUpdater.autoInstallOnAppQuit = false;
+  // Full downloads only. Differential patching against the cached previous zip
+  // is what wedged (stale pending zip -> every diff failed -> no banner, no
+  // install, for days). The full zip is ~120MB on a fast connection; the delta
+  // saves seconds and cost us five releases of updates. v1.0.54.
+  autoUpdater.disableDifferentialDownload = true;
 
   autoUpdater.on('update-available', (info) => {
     // Only surface as "downloading" if it's actually newer than what's
@@ -173,6 +211,14 @@ export function initAutoUpdater() {
 
   autoUpdater.on('error', (err) => {
     broadcast('updater:status', { state: 'error', message: String(err?.message || err) });
+    // Self-heal: a failed download usually means wedged cache state (partial
+    // zip, stale pending). Purge so the next check starts clean. v1.0.54.
+    // ONLY when no valid downloaded update is pending: a transient CHECK-stage
+    // error (offline, GitHub hiccup) must not delete a good pending zip out
+    // from under the Restart button (Codex: quitAndInstall would then have no
+    // file to hand Squirrel). The wedge scenario this heals is exactly the
+    // no-pendingUpdate state: downloads failing before update-downloaded fires.
+    if (!pendingUpdate) purgeUpdaterCache();
   });
 
   setTimeout(safeCheck, 30000);
