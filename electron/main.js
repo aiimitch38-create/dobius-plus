@@ -47,6 +47,7 @@ import {
   saveTerminalScrollback, loadTerminalScrollback,
   addManualProject, setProjectDisplayName, addHiddenProject,
   getAccounts, saveAccount, deleteAccount, getProjectAccount, setProjectAccount,
+  getTearOffWindowState, setTearOffWindowState,
 } from './config-manager.js';
 import {
   openProjectWindow, openTornOffWindow, getOpenProjects, getOpenProjectsForRestore, closeProjectWindow, closeAllProjectWindows,
@@ -342,6 +343,21 @@ function setupTerminalHandlers() {
       return { tabs: config.tabs, tabCounter: config.tabCounter || 0 };
     }
     return null;
+  });
+
+  // Tear-off windows persist their tab set under config.tearOffWindows (keyed
+  // by the torn tab's id), NOT config.projects[*].tabs, which belongs to the
+  // primary window. Without this, restore brought a tear-off back with only
+  // its original tab and dropped every tab added inside it (Asana
+  // 1217079763770509 "Fix updating").
+  ipcMain.handle('tearoff:saveTabs', (_event, tearOffTabId, tabs, counter, activeTabId) => {
+    if (typeof tearOffTabId !== 'string' || !Array.isArray(tabs)) return;
+    setTearOffWindowState(tearOffTabId, { tabs, tabCounter: counter, activeTabId });
+  });
+
+  ipcMain.handle('tearoff:loadTabs', (_event, tearOffTabId) => {
+    if (typeof tearOffTabId !== 'string') return null;
+    return getTearOffWindowState(tearOffTabId);
   });
 
   // Save/load recently closed tabs per project (persisted across window sessions)

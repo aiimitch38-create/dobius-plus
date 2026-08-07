@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   terminalLoadState: (id) => ipcRenderer.invoke('terminal:loadState', id),
   terminalSaveTabs: (projectPath, tabs, counter) => ipcRenderer.invoke('terminal:saveTabs', projectPath, tabs, counter),
   terminalLoadTabs: (projectPath) => ipcRenderer.invoke('terminal:loadTabs', projectPath),
+  tearOffSaveTabs: (tearOffTabId, tabs, counter, activeTabId) => ipcRenderer.invoke('tearoff:saveTabs', tearOffTabId, tabs, counter, activeTabId),
+  tearOffLoadTabs: (tearOffTabId) => ipcRenderer.invoke('tearoff:loadTabs', tearOffTabId),
   terminalSaveClosedTabs: (projectPath, closedTabs) => ipcRenderer.invoke('terminal:saveClosedTabs', projectPath, closedTabs),
   terminalLoadClosedTabs: (projectPath) => ipcRenderer.invoke('terminal:loadClosedTabs', projectPath),
   terminalRequestSaveNow: () => ipcRenderer.invoke('terminal:requestSaveNow'),

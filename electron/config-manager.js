@@ -127,6 +127,26 @@ function pruneOrphanTerminalStates(cfg) {
 }
 
 /**
+ * Drop tearOffWindows entries whose window is no longer coming back: not in
+ * lastTearOffs (the only restore path) means nothing will ever read the entry
+ * again. Called once on config load, next to the terminalStates prune.
+ */
+function pruneOrphanTearOffWindows(cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  const bucket = cfg.tearOffWindows;
+  if (!bucket || typeof bucket !== 'object') return;
+  const live = new Set((Array.isArray(cfg.lastTearOffs) ? cfg.lastTearOffs : [])
+    .map((t) => t?.tabId).filter(Boolean));
+  let pruned = 0;
+  for (const key of Object.keys(bucket)) {
+    if (!live.has(key)) { delete bucket[key]; pruned += 1; }
+  }
+  if (pruned > 0) {
+    console.log(`[config-manager] pruned ${pruned} orphaned tearOffWindows entries`);
+  }
+}
+
+/**
  * Atomic write (async) — write to a unique tmp then rename. Does not block the
  * main thread, which matters because writes can hit 100KB+ and they used to
  * stall every IPC round-trip while the renderer waited.
@@ -396,6 +416,7 @@ export function loadConfig() {
       }
       configCache = { ...DEFAULT_CONFIG, ...loaded };
       pruneOrphanTerminalStates(configCache);
+      pruneOrphanTearOffWindows(configCache);
       const migratedScrollback = migrateScrollbackOutOfConfig(configCache);
       const migrated = migrateCheckpointsAndClosedTabs(configCache) || migratedScrollback;
       if (migrated) {
@@ -508,6 +529,36 @@ export function setProjectConfig(projectPath, settings) {
     }
   }
   config.projects[projectPath] = { ...existing, ...sanitized };
+  saveConfig(config);
+}
+
+/**
+ * Per-tear-off-window tab state, keyed by the torn tab's id (stable across
+ * restarts: lastTearOffs restores the window under the same tearOffTabId).
+ * Tear-off windows grow extra tabs via their tab bar but never write to
+ * config.projects[*].tabs (that would collide with the primary window), so
+ * before this bucket an update/quit restore brought a tear-off back with ONLY
+ * its original tab and silently dropped the rest (Asana 1217079763770509).
+ * Shape: { tabs: [...], tabCounter, activeTabId }.
+ */
+export function getTearOffWindowState(tearOffTabId) {
+  if (!tearOffTabId || UNSAFE_KEYS.has(tearOffTabId)) return null;
+  const config = loadConfig();
+  const entry = config.tearOffWindows?.[tearOffTabId];
+  return (entry && typeof entry === 'object' && Array.isArray(entry.tabs) && entry.tabs.length > 0)
+    ? entry : null;
+}
+
+export function setTearOffWindowState(tearOffTabId, state) {
+  if (!tearOffTabId || UNSAFE_KEYS.has(tearOffTabId)) return;
+  if (!state || typeof state !== 'object' || !Array.isArray(state.tabs)) return;
+  const config = loadConfig();
+  if (!config.tearOffWindows || typeof config.tearOffWindows !== 'object') config.tearOffWindows = {};
+  config.tearOffWindows[tearOffTabId] = {
+    tabs: state.tabs,
+    tabCounter: typeof state.tabCounter === 'number' ? state.tabCounter : 0,
+    activeTabId: typeof state.activeTabId === 'string' ? state.activeTabId : null,
+  };
   saveConfig(config);
 }
 

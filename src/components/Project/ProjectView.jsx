@@ -147,11 +147,28 @@ export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel, t
     if (!window.electronAPI?.configGetPinned) return;
     window.electronAPI.configGetPinned().then(setPinnedIds);
 
-    // Tear-off window: initialize with the single torn-off tab
+    // Tear-off window: initialize with the single torn-off tab. On a RESTORED
+    // tear-off, first try the persisted tab set (config.tearOffWindows): tabs
+    // added inside the tear-off used to vanish on every quit/update restart
+    // because tear-offs never write config.projects[*].tabs (Asana
+    // 1217079763770509). A fresh drag tear-off always starts with just the
+    // torn tab (any same-id saved state is stale by definition).
     if (tearOffTabId && projectPath) {
-      window.electronAPI.configGetProject(projectPath).then((config) => {
+      window.electronAPI.configGetProject(projectPath).then(async (config) => {
         if (config && typeof config.themeIndex === 'number') {
           setThemeIndex(config.themeIndex);
+        }
+        if (tearOffRestore && window.electronAPI.tearOffLoadTabs) {
+          const saved = await window.electronAPI.tearOffLoadTabs(tearOffTabId).catch(() => null);
+          if (saved?.tabs?.length > 0) {
+            initTabs(saved.tabs, saved.tabCounter || saved.tabs.length + 1);
+            if (typeof saved.activeTabId === 'string'
+                && saved.tabs.some((t) => t.id === saved.activeTabId)) {
+              setActiveTab(saved.activeTabId);
+            }
+            setTabsInitialized(true);
+            return;
+          }
         }
         const tab = {
           id: tearOffTabId,
@@ -210,7 +227,7 @@ export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel, t
       }
       setTabsInitialized(true);
     }
-  }, [projectPath, setThemeIndex, setSplitRatio, setGridColumnRatio, setGridRowRatios, tearOffTabId, tearOffLabel]);
+  }, [projectPath, setThemeIndex, setSplitRatio, setGridColumnRatio, setGridRowRatios, tearOffTabId, tearOffLabel, tearOffRestore]);
 
   const startSplitResize = useCallback((e) => {
     e.preventDefault();
@@ -340,21 +357,35 @@ export default function ProjectView({ projectPath, tearOffTabId, tearOffLabel, t
     useStore.getState().setGridSlots(null);
   }, [activeTabId, gridSlots]);
 
-  // Save tabs to config whenever they change (skip for tear-off windows to avoid conflicts)
+  // Save tabs to config whenever they change. Tear-off windows write to their
+  // OWN bucket (config.tearOffWindows, keyed by the torn tab id) so restore
+  // brings back every tab added inside them; writing to the project key would
+  // conflict with the primary window (Asana 1217079763770509).
   useEffect(() => {
-    if (tearOffTabId) return; // Tear-off windows don't persist tabs
-    if (!tabsInitialized || !projectPath || !window.electronAPI?.terminalSaveTabs) return;
-    if (tabs.length > 0) {
-      window.electronAPI.terminalSaveTabs(projectPath, tabs, useStore.getState().tabCounter);
+    if (!tabsInitialized || !projectPath || tabs.length === 0) return;
+    if (tearOffTabId) {
+      window.electronAPI?.tearOffSaveTabs?.(
+        tearOffTabId, tabs, useStore.getState().tabCounter, useStore.getState().activeTabId
+      );
+      return;
     }
+    if (!window.electronAPI?.terminalSaveTabs) return;
+    window.electronAPI.terminalSaveTabs(projectPath, tabs, useStore.getState().tabCounter);
   }, [tabs, tabsInitialized, projectPath, tearOffTabId]);
 
   // Persist active tab id so quit-on-tab-4 returns to tab-4 instead of tab-1.
   // configSetProject is merge-only so this won't disturb other project state.
-  // Apple-grade audit P2 (state loss on quit).
+  // Apple-grade audit P2 (state loss on quit). Tear-offs refresh their own
+  // bucket instead so a restored tear-off also lands on the right tab.
   useEffect(() => {
-    if (tearOffTabId) return;
     if (!tabsInitialized || !projectPath || !activeTabId) return;
+    if (tearOffTabId) {
+      const s = useStore.getState();
+      if (s.terminalTabs.length > 0) {
+        window.electronAPI?.tearOffSaveTabs?.(tearOffTabId, s.terminalTabs, s.tabCounter, activeTabId);
+      }
+      return;
+    }
     if (!window.electronAPI?.configSetProject) return;
     window.electronAPI.configSetProject(projectPath, { activeTabId });
   }, [activeTabId, tabsInitialized, projectPath, tearOffTabId]);
