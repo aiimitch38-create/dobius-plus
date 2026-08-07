@@ -1848,6 +1848,25 @@ export async function searchTranscripts(query) {
  *
  * Returns { tokens, maxTokens, model } or null if the file carries no usage.
  */
+// Context-window size by model. The old hardcoded 200000 pinned the meter at
+// 100% for every Fable session (real probe: 696k input tokens / 200k = 348%,
+// clamped), which read as "the context checker doesn't work at all" (Sam,
+// v1.0.55). Per current Anthropic model specs: the whole Claude 5 family
+// (fable/mythos/opus-5/sonnet-5) AND opus-4.6+/sonnet-4.6 are 1M-context;
+// haiku-4.5, sonnet-4.5, and older are 200k (Codex round 2 vs the docs).
+// Self-calibrating: if OBSERVED tokens exceed the assumed window, snap up to
+// the next standard size, so an unknown future model can degrade the estimate
+// but never pin the meter.
+const WIDE_WINDOW_RE = /fable|mythos|opus-(?:5|4-[6-9])|sonnet-(?:5|4-[6-9])/i;
+const STANDARD_WINDOWS = [200_000, 500_000, 1_000_000, 2_000_000];
+export function windowForModel(model, observedTokens = 0) {
+  let win = WIDE_WINDOW_RE.test(String(model || '')) ? 1_000_000 : 200_000;
+  if (observedTokens > win) {
+    win = STANDARD_WINDOWS.find((w) => w >= observedTokens) || observedTokens;
+  }
+  return win;
+}
+
 async function estimateContextFromFile(filePath) {
   const entries = await parseJsonl(filePath, 200); // chronological (readTail): oldest -> newest
   let lastInputTokens = 0;
@@ -1870,7 +1889,7 @@ async function estimateContextFromFile(filePath) {
     }
   }
   if (!lastInputTokens) return null;
-  return { tokens: lastInputTokens, maxTokens: 200000, model: lastModel };
+  return { tokens: lastInputTokens, maxTokens: windowForModel(lastModel, lastInputTokens), model: lastModel };
 }
 
 /**
