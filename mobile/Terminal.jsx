@@ -24,7 +24,9 @@ function parseTerminal(t) {
       ...t,
       projectPath,
       projectName: lastSeg(projectPath),
-      tabLabel: `Tab ${m[2]}`,
+      // Server sends the user's RENAMED desktop label ("Email"); the id-derived
+      // "Tab N" is only the fallback (Codex: this parser used to clobber it).
+      tabLabel: t.label || `Tab ${m[2]}`,
     };
   }
   const projectPath = t.cwd || 'mobile';
@@ -32,7 +34,7 @@ function parseTerminal(t) {
     ...t,
     projectPath,
     projectName: lastSeg(projectPath) || 'mobile',
-    tabLabel: 'new',
+    tabLabel: t.label || 'new',
   };
 }
 

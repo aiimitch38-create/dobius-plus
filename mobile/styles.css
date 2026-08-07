@@ -559,8 +559,7 @@ button.primary:disabled { opacity: 0.4; }
 .chat-msg.user .chat-role { color: var(--accent); }
 .chat-msg.assistant .chat-role { color: var(--dim); }
 .chat-content { font-size: 14px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
-.chat-empty { padding: 28px 24px; text-align: center; }
-/* "Start Claude" launcher in the sessionless empty state (v1.0.51 bug 2). */
+/* "Start Claude" launcher in the sessionless state (v1.0.51 bug 2). */
 .chat-start {
   display: inline-block; margin: 14px auto 10px;
   background: var(--accent); color: var(--on-accent); border: none;
@@ -568,6 +567,17 @@ button.primary:disabled { opacity: 0.4; }
   font-family: inherit; cursor: pointer;
 }
 .chat-start:active { opacity: 0.85; }
+.chat-start.alt { background: var(--surface); color: var(--fg); border: 1px solid var(--border); }
+/* Sessionless Chat: live PTY tail + launch buttons (Asana 1217257328849820). */
+.chat-shell-tail {
+  margin: 4px 10px; padding: 10px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; line-height: 1.45; color: var(--fg);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.chat-shell-actions { display: flex; gap: 10px; justify-content: center; padding: 4px 10px 14px; }
+.chat-shell-actions .chat-start { margin: 0; }
 .chat-input-row { display: flex; align-items: flex-end; gap: 8px; padding: 8px; border-top: 1px solid var(--border); background: var(--surface); }
 .chat-input {
   flex: 1; resize: none; max-height: 120px; min-height: 20px;

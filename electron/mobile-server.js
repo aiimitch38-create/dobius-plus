@@ -23,12 +23,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { app, powerSaveBlocker } from 'electron';
-import { getMobileServerConfig, updateMobileServerConfig, setSessionTabLink, removePushSubscriptionsByToken, getSessionTabMap } from './config-manager.js';
+import { getMobileServerConfig, updateMobileServerConfig, setSessionTabLink, removePushSubscriptionsByToken, getSessionTabMap, getAllProjectsWithTabs } from './config-manager.js';
 import {
   listTerminals, subscribeTerminal, writeTerminal, terminalHasDesktopAttached,
   resizeTerminal, killTerminal, createTerminal, getTerminalBuffer,
 } from './terminal-manager.js';
-import { parseSelector } from './selector-parser.js';
+import { parseSelector, stripAnsi } from './selector-parser.js';
 import { loadAllSessions, loadTranscript, listProjects, getTranscriptSig } from './data-service.js';
 import { peekReply } from './voice-bridge.js';
 import { getVoiceConductorTabId } from './voice-conductor.js';
@@ -153,6 +153,26 @@ function wsSend(socket, obj) {
  */
 // Parse a terminal id into a friendly project + tab label (mirrors the mobile
 // Terminal.jsx parser and terminal-status.projectFromId).
+// The USER'S tab labels (renames like "Email" / "refund commish") live in
+// config.projects[*].tabs, not in the terminal id. Id-derived "Tab <counter>"
+// made every renamed tab unrecognizable on the phone, which read as "my tabs
+// aren't popping up" (Asana 1217257328849820: all six desktop tabs WERE
+// listed, as Tab 104/109/...). Map tab id -> persisted label; callers fall
+// back to the id-derived label when a tab has no (or a blank) rename.
+function configTabLabels() {
+  const labelByTabId = new Map();
+  try {
+    for (const proj of getAllProjectsWithTabs()) {
+      for (const tab of (Array.isArray(proj.tabs) ? proj.tabs : [])) {
+        if (tab && typeof tab.id === 'string' && typeof tab.label === 'string' && tab.label.trim()) {
+          labelByTabId.set(tab.id, tab.label);
+        }
+      }
+    }
+  } catch { /* config unavailable; id-derived labels still work */ }
+  return labelByTabId;
+}
+
 function parseTermLabel(id, cwd) {
   const m = typeof id === 'string' && id.match(/^term-(.+)-(\d+)$/);
   if (m && m[1] !== 'mobile') {
@@ -211,6 +231,7 @@ function buildTerminalsPayload() {
     const prev = sessionByTab.get(link.tabId);
     if (!prev || at >= prev.at) sessionByTab.set(link.tabId, { sessionId: sid, projectPath: link.projectPath, at });
   }
+  const labelByTabId = configTabLabels();
   const list = listTerminals().map((t) => {
     const meta = parseTermLabel(t.id, t.cwd);
     const st = snap.live[t.id];
@@ -222,7 +243,7 @@ function buildTerminalsPayload() {
       cwd: t.cwd,
       projectPath: meta.projectPath,
       projectName: meta.projectName,
-      label: meta.label,
+      label: labelByTabId.get(t.id) || meta.label,
       status: st?.status || 'idle',
       lastActivityAt: st?.lastActivityAt || 0,
       model: ctx?.model || '',
@@ -242,7 +263,7 @@ function terminalsSignature(payload) {
   // Bucket ctx% to 5% so a slowly-growing context does not push every refresh,
   // but a meaningful move (and model changes) still updates the ring.
   const tabs = payload.list
-    .map((t) => `${t.id}:${t.status}:${t.model}:${t.sessionId || ''}:${t.ctxPct == null ? '' : Math.round(t.ctxPct / 5)}`)
+    .map((t) => `${t.id}:${t.label}:${t.status}:${t.model}:${t.sessionId || ''}:${t.ctxPct == null ? '' : Math.round(t.ctxPct / 5)}`)
     .sort().join('|');
   const exits = payload.recentExits.map((e) => `${e.id}:${e.exitCode}:${e.at}`).join('|');
   return `${tabs}#${exits}`;
@@ -507,6 +528,23 @@ function handleAuthedMessage(socket, msg, subs) {
       socket._authedTabs.add(msg.id); // the Chat view probes its own tab. Audit Medium.
       const selector = parseSelector(getTerminalBuffer(msg.id));
       wsSend(socket, { type: 'selector', id: msg.id, selector: selector || null });
+      break;
+    }
+
+    case 'terminalText': {
+      // Sessionless tabs (plain shells, or tabs whose Claude was reset) have no
+      // transcript for the Chat view to render. Return a plain-text tail of the
+      // live PTY buffer so the phone can at least SHOW what the terminal says
+      // (Asana 1217257328849820: "some tabs are just terminals... at least see
+      // what the text is"). Read-only, same auth posture as selectorSnapshot.
+      if (typeof msg.id !== 'string') break;
+      socket._authedTabs.add(msg.id);
+      const raw = stripAnsi(getTerminalBuffer(msg.id) || '');
+      // Trim trailing blank padding per line, drop the all-blank tail, keep the
+      // last ~60 lines so the payload stays small on a 1s-ish poll.
+      const lines = raw.split('\n').map((l) => l.replace(/\s+$/, ''));
+      while (lines.length && !lines[lines.length - 1]) lines.pop();
+      wsSend(socket, { type: 'terminalText', id: msg.id, text: lines.slice(-60).join('\n') });
       break;
     }
 
@@ -859,13 +897,16 @@ export async function startMobileServer() {
   // "Choose From List" step when the user wants direct-to-tab mode.
   expApp.get('/voice/tabs', (req, res) => {
     if (!bearerOk(req)) return res.status(401).json({ ok: false, error: 'auth' });
-    // Strip term-/path/N → friendly label so the Shortcut shows readable names.
+    // Friendly names for the Shortcut list: the user's renamed desktop label
+    // when one exists (Codex round 2), else project + tab number from the id.
+    const configLabels = configTabLabels();
     const tabs = listTerminals().map((t) => {
       const m = t.id.match(/^term-(.+)-(\d+)$/);
       const projectPath = m ? m[1] : '';
       const tabNum = m ? m[2] : '';
       const projName = projectPath.split('/').filter(Boolean).pop() || 'unknown';
-      return { id: t.id, label: `${projName} • ${tabNum}`, cwd: t.cwd };
+      const renamed = configLabels.get(t.id);
+      return { id: t.id, label: renamed ? `${projName} / ${renamed}` : `${projName} • ${tabNum}`, cwd: t.cwd };
     });
     res.json({ ok: true, tabs });
   });
