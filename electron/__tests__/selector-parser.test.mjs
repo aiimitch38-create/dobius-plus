@@ -153,5 +153,58 @@ const descThenChromeThenCode =
   'Q?\n❯ 1. A\n     desc a\n  2. B\n     desc b\n  ↑/↓ select\n     indented response\n';
 check('indented after chrome -> null', parseSelector(descThenChromeThenCode), null);
 
+// 25. REAL AskUserQuestion frame shape from Claude Code 2.1.224 (captured live
+// 2026-08-07, Sam: "make sure the interactive stuff works well on mobile").
+// Three things broke it before: rows separated by bare \r (not \n), spacing
+// drawn with cursor-forward (CSI n C) so stripping glued "2." to "Blue", a
+// horizontal-rule divider inside the block before "Chat about this", and the
+// 50-char footer exceeding the old 40-char chrome cap.
+const rule25 = '─'.repeat(80);
+const realAskQ = [
+  rule25, ' ☐ Color ', 'Pick a color', '', '❯ 1. Red', '\x1b[3CThe color red',
+].join('\r') + '\n' + [
+  '2.\x1b[1CBlue', '\x1b[3CThe color blue', '3.\x1b[1CGreen', '\x1b[3CThe color green',
+  '4.\x1b[1CType something.', rule25, '5.\x1b[1CChat about this', '',
+  'Enter to select · ↑/↓ to navigate · Esc to cancel',
+].join('\n');
+check('real 2.1.x AskUserQuestion frame parses', parseSelector(realAskQ), {
+  prompt: 'Pick a color',
+  options: [
+    { num: 1, label: 'Red' }, { num: 2, label: 'Blue' }, { num: 3, label: 'Green' },
+    { num: 4, label: 'Type something.' }, { num: 5, label: 'Chat about this' },
+  ],
+  selectedIndex: 0,
+});
+
+// 26. The GOLD fixture: verbatim raw PTY bytes of a Claude Code 2.1.224
+// AskUserQuestion frame (captured over the mobile WS attach on 2026-08-07).
+// SGR colors mid-line, \r\r\n row endings, CHA column layout, CUD row moves.
+// If Ink's renderer changes shape again, THIS is the case that should break.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const fixDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
+const rawFrame = fs.readFileSync(path.join(fixDir, 'askq-2.1.224-raw.txt'), 'utf8');
+check('raw captured 2.1.224 frame parses', parseSelector(rawFrame), {
+  prompt: 'Pick a color',
+  options: [
+    { num: 1, label: 'Red' }, { num: 2, label: 'Blue' }, { num: 3, label: 'Green' },
+    { num: 4, label: 'Type something.' }, { num: 5, label: 'Chat about this' },
+  ],
+  selectedIndex: 0,
+});
+
+// 27. INTENTIONAL residual (Codex adjudicated "Accept the residual"): a rule
+// row after the footer stays LIVE, because a live boxed prompt's bottom
+// border after its hints is the same shape. This locks the decision so a
+// future "fix" of the stale case knows it trades away boxed prompts.
+const ruleAfterFooter =
+  'Q?\n❯ 1. A\n     desc a\n  2. B\n     desc b\n'
+  + 'Enter to select · ↑/↓ to navigate · Esc to cancel\n'
+  + '────────────────\n';
+check('rule after footer stays live (accepted residual)',
+  parseSelector(ruleAfterFooter),
+  { prompt: 'Q?', options: [{ num: 1, label: 'A' }, { num: 2, label: 'B' }], selectedIndex: 0 });
+
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

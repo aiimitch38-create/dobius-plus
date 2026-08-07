@@ -14,16 +14,73 @@
 // error in the cursor position can never select a DIFFERENT option than the
 // label. selectedIndex is returned for display only.
 
-const ANSI_PATTERNS = [
-  /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, // OSC ... (BEL or ST terminated)
-  /\x1b[PX^_][^\x1b]*\x1b\\/g,          // DCS/PM/APC/SOS ... ST
-  /\x1b\[[0-9;?]*[ -/]*[@-~]/g,         // CSI (colors, cursor moves, etc.)
-  /\x1b[@-Z\\-_]/g,                     // 2-char escapes
-];
+const CSI_RE = /^\x1b\[([0-9;?]*)([ -/]*)([@-~])/;
 
+// Linear scanner, not regex passes: Ink lays text out with CURSOR MOTION, not
+// spaces. Real AskUserQuestion frames position every word with CHA (CSI n G)
+// and rows with CUD (CSI n B), so deleting escapes glued words ("2.Blue",
+// "Thecolorblue") and option matching never fired: interactive prompts simply
+// never appeared on the phone (Sam's report). The scanner tracks an
+// approximate column (escapes don't count) and renders cursor motion as the
+// whitespace it visually produces:
+//   CSI n C (forward)        -> n spaces
+//   CSI n G (column, ahead)  -> pad spaces up to that column
+//   CSI n G (column 1)       -> line restart (\r)
+//   CSI n G (column, behind) -> single space (word boundary, approx col)
+//   CSI n B / E (down)       -> newline, indented back to the current column
+// Everything else (SGR colors, erases, OSC/DCS, 2-char escapes) is dropped.
 export function stripAnsi(s) {
-  let out = String(s == null ? '' : s);
-  for (const re of ANSI_PATTERNS) out = out.replace(re, '');
+  const src = String(s == null ? '' : s);
+  let out = '';
+  let col = 0;
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === '\x1b') {
+      const next = src[i + 1];
+      if (next === ']') { // OSC ... (BEL or ST terminated)
+        const bel = src.indexOf('\x07', i + 2);
+        const st = src.indexOf('\x1b\\', i + 2);
+        const end = Math.min(bel === -1 ? Infinity : bel + 1, st === -1 ? Infinity : st + 2);
+        i = end === Infinity ? src.length : end;
+        continue;
+      }
+      if (next === 'P' || next === 'X' || next === '^' || next === '_') { // DCS/SOS/PM/APC ... ST
+        const st = src.indexOf('\x1b\\', i + 2);
+        i = st === -1 ? src.length : st + 2;
+        continue;
+      }
+      if (next === '[') {
+        const m = CSI_RE.exec(src.slice(i, i + 32));
+        if (m) {
+          const n = parseInt(m[1].split(';')[0] || '', 10);
+          const fin = m[3];
+          if (fin === 'C') {
+            const k = Math.min(n || 1, 400);
+            out += ' '.repeat(k); col += k;
+          } else if (fin === 'G') {
+            const target = Math.max(1, n || 1) - 1;
+            if (target > col) { out += ' '.repeat(Math.min(target - col, 400)); col = target; }
+            else if (target === 0 && col > 0) { out += '\r'; col = 0; }
+            else if (target < col) { out += ' '; col = target; }
+          } else if (fin === 'B' || fin === 'E') {
+            out += `\n${' '.repeat(Math.min(fin === 'B' ? col : 0, 400))}`;
+            if (fin === 'E') col = 0;
+          }
+          i += m[0].length;
+          continue;
+        }
+        i += 2; // malformed CSI: drop the ESC[ and continue
+        continue;
+      }
+      i += 2; // 2-char escape
+      continue;
+    }
+    if (ch === '\n' || ch === '\r') { out += ch; col = 0; i += 1; continue; }
+    out += ch;
+    col += 1;
+    i += 1;
+  }
   return out;
 }
 
@@ -48,6 +105,10 @@ function leadingWs(line) {
 // Trailing lines allowed after the options (selector navigation chrome, not
 // prose): arrow glyphs or common hint words.
 const HINT_RE = /[↑↓←→]|\b(enter|esc|escape|select|selection|confirm|cancel|navigate|arrows?|space|tab|toggle|use|choose|press|return|move)\b/i;
+// A horizontal-rule row (box-drawing dashes). Claude Code 2.1.x draws one
+// INSIDE AskUserQuestion blocks (between the answers and "Chat about this")
+// and as frame borders, so a rule is layout chrome, never prose.
+const RULE_RE = /^\s*[─-╿]{3,}\s*$/;
 
 /**
  * @param {string} rawBuf recent raw terminal output (a screenful+ is enough)
@@ -55,7 +116,12 @@ const HINT_RE = /[↑↓←→]|\b(enter|esc|escape|select|selection|confirm|can
  */
 export function parseSelector(rawBuf) {
   if (!rawBuf || typeof rawBuf !== 'string') return null;
-  const lines = stripAnsi(rawBuf).replace(/\r/g, '').split('\n');
+  // Treat a bare \r as a line break too: Ink positions rows with lone
+  // carriage returns (no \n), so deleting \r used to fuse an option line with
+  // its description line ("❯ 1. Red   The color red") and hide the block.
+  // A \r RUN and \r+\n collapse to ONE break: Ink ends rows with "\r\r\n",
+  // and splitting that into phantom blank lines broke the block scan.
+  const lines = stripAnsi(rawBuf).split(/\r*\n|\r+/);
 
   // Find the LAST block of option lines (scan from the bottom). One blank line
   // inside the block is tolerated, and so are short runs of DESCRIPTION lines
@@ -83,6 +149,7 @@ export function parseSelector(rawBuf) {
       belowCol = numberCol(lines[i]);
     } else if (end !== -1) {
       const t = lines[i].trim();
+      if (RULE_RE.test(lines[i])) continue; // in-block divider (AskUserQuestion 2.1.x)
       if (t === '' && !sawBlank) { sawBlank = true; continue; }
       if (t !== '' && contRun < MAX_CONT && belowCol >= 0 && leadingWs(lines[i]) > belowCol) {
         contRun += 1;
@@ -143,12 +210,20 @@ export function parseSelector(rawBuf) {
   for (const l of lines.slice(end + 1)) {
     const t = l.trim();
     if (t === '') { descPhase = false; continue; }                      // blank
+    // Frame border / divider. Accepted residual (Codex, Low): an ANSWERED
+    // selector followed by a rule row reads live until the next output line,
+    // because a LIVE boxed prompt's bottom border after its footer is the
+    // same shape; nulling rules here would break boxed prompts entirely.
+    if (RULE_RE.test(l)) { descPhase = false; continue; }
     if (/^[>❯›»▶$#%*.·:\s]+$/.test(t)) { descPhase = false; continue; } // bare caret / punctuation
     if (descPhase && trailCont < MAX_CONT && endCol >= 0 && leadingWs(l) > endCol) { trailCont += 1; continue; }
     // Otherwise allow only SHORT navigation-hint chrome (arrows or hint words).
     // A longer line, or any line without a hint token (e.g. "OK", a response),
     // means the selector was answered and is stale, so return null. Codex.
-    if (t.length <= 40 && HINT_RE.test(t)) { descPhase = false; continue; }
+    // 60, not 40: the real AskUserQuestion footer "Enter to select · ↑/↓ to
+    // navigate · Esc to cancel" is 50 chars once cursor-forward spacing is
+    // restored, and the old cap read it as prose (popup never appeared).
+    if (t.length <= 60 && HINT_RE.test(t)) { descPhase = false; continue; }
     return null;
   }
 

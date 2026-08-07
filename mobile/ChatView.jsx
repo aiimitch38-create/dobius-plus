@@ -7,6 +7,32 @@ import remarkGfm from 'remark-gfm';
 // user messages stay literal text so pasted code/paths are never mangled.
 // memo'd so the 3.5s transcript poll only re-parses bubbles whose content
 // actually changed, not all 200.
+// Per-tab input drafts, persisted so navigating Board -> tab -> Board -> tab
+// never eats typed-but-unsent text (Sam's report). One localStorage key holds
+// a { tabId: { text, at } } map, pruned to 40 entries / 7 days on write.
+const DRAFTS_KEY = 'dobius-mobile-drafts';
+function loadDraft(tabId) {
+  if (!tabId) return '';
+  try {
+    const map = JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}');
+    return typeof map[tabId]?.text === 'string' ? map[tabId].text : '';
+  } catch { return ''; }
+}
+function storeDraft(tabId, text) {
+  if (!tabId) return;
+  try {
+    const map = JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}');
+    if (text) map[tabId] = { text, at: Date.now() };
+    else delete map[tabId];
+    const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
+    const entries = Object.entries(map)
+      .filter(([, v]) => v && typeof v.text === 'string' && (v.at || 0) > cutoff)
+      .sort((a, b) => (b[1].at || 0) - (a[1].at || 0))
+      .slice(0, 40);
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch { /* private mode / quota: drafts just stay session-local */ }
+}
+
 const Bubble = memo(function Bubble({ role, content, timestamp, queued, sending }) {
   return (
     <div className={`chat-msg ${role === 'assistant' ? 'assistant' : 'user'}${sending ? ' chat-echo' : ''}`}>
@@ -48,7 +74,17 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   const projectPath = tab?.sessionProject || null;
   const tabId = tab?.id || null;
   const [messages, setMessages] = useState(null); // null = loading
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => loadDraft(tabId));
+  // Draft-aware setter: accepts a value or updater fn, mirrors to localStorage.
+  const setDraft = useCallback((next) => {
+    setInput((cur) => {
+      const v = typeof next === 'function' ? next(cur) : next;
+      storeDraft(tabId, v);
+      return v;
+    });
+  }, [tabId]);
+  // Rehydrate when this view is reused for a DIFFERENT tab (tabId prop swap).
+  useEffect(() => { setInput(loadDraft(tabId)); }, [tabId]);
   // Interactive selector Claude is currently showing (permission prompt, plan
   // approval, AskUserQuestion). null = none. Detected server-side from the live
   // PTY buffer because these TUI prompts are NOT in the transcript. Display is
@@ -182,7 +218,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     // sat in the input box unsubmitted (Sam's v1.0.51 bug 3).
     connection.send({ type: 'submitPrompt', id: tabId, text });
     setEchoes((cur) => [...cur, { content: text, at: Date.now() }]);
-    setInput('');
+    setDraft('');
     atBottomRef.current = true;
   };
 
@@ -234,7 +270,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
         if (data?.ok && data.path) paths.push(data.path);
         else setUploadMsg(data?.error || `Upload failed (${res.status})`);
       }
-      if (paths.length) setInput((cur) => `${cur}${cur && !cur.endsWith(' ') ? ' ' : ''}${paths.join(' ')} `);
+      if (paths.length) setDraft((cur) => `${cur}${cur && !cur.endsWith(' ') ? ' ' : ''}${paths.join(' ')} `);
     } catch {
       setUploadMsg('Upload failed (offline?)');
     } finally {
@@ -326,7 +362,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
         <textarea
           className="chat-input"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           onPaste={(e) => {
             // Pasting an image (iOS long-press paste of a screenshot) uploads
