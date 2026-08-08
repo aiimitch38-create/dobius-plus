@@ -47,6 +47,7 @@ import {
   saveTerminalScrollback, loadTerminalScrollback,
   addManualProject, setProjectDisplayName, addHiddenProject,
   getAccounts, saveAccount, deleteAccount, getProjectAccount, setProjectAccount,
+  getTearOffWindowState, setTearOffWindowState,
 } from './config-manager.js';
 import {
   openProjectWindow, openTornOffWindow, getOpenProjects, getOpenProjectsForRestore, closeProjectWindow, closeAllProjectWindows,
@@ -344,6 +345,21 @@ function setupTerminalHandlers() {
     return null;
   });
 
+  // Tear-off windows persist their tab set under config.tearOffWindows (keyed
+  // by the torn tab's id), NOT config.projects[*].tabs, which belongs to the
+  // primary window. Without this, restore brought a tear-off back with only
+  // its original tab and dropped every tab added inside it (Asana
+  // 1217079763770509 "Fix updating").
+  ipcMain.handle('tearoff:saveTabs', (_event, tearOffTabId, tabs, counter, activeTabId) => {
+    if (typeof tearOffTabId !== 'string' || !Array.isArray(tabs)) return;
+    setTearOffWindowState(tearOffTabId, { tabs, tabCounter: counter, activeTabId });
+  });
+
+  ipcMain.handle('tearoff:loadTabs', (_event, tearOffTabId) => {
+    if (typeof tearOffTabId !== 'string') return null;
+    return getTearOffWindowState(tearOffTabId);
+  });
+
   // Save/load recently closed tabs per project (persisted across window sessions)
   ipcMain.handle('terminal:saveClosedTabs', (_event, projectPath, closedTabs) => {
     if (!projectPath || !Array.isArray(closedTabs)) return;
@@ -410,7 +426,17 @@ function setupDataHandlers() {
     // from a resumable one, H3) and open tear-off windows (so their torn tab,
     // which is stripped from the primary's persisted tabs, still appears, M4).
     const liveTabIds = new Set(listTerminals().map((t) => t.id));
-    const tearOffTabs = getOpenTearOffsForRestore();
+    // Expand each open tear-off window into its FULL persisted tab set
+    // (config.tearOffWindows): tabs added inside a tear-off never reach
+    // config.projects[*].tabs, so the aggregate used to show only the torn tab
+    // (Asana 1217038024225884 asks for ALL tabs across every window).
+    const tearOffTabs = getOpenTearOffsForRestore().flatMap((w) => {
+      const saved = getTearOffWindowState(w.tabId);
+      if (saved?.tabs?.length) {
+        return saved.tabs.map((t) => ({ projectPath: w.projectPath, tabId: t.id, label: t.label }));
+      }
+      return [w];
+    });
     return getAllProjectTabs({ liveTabIds, tearOffTabs });
   });
   // Focus the window that currently owns a live tab (a tear-off window if the id
