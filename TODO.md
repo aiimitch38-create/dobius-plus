@@ -10,6 +10,11 @@ the version or branch that shipped them. Sam triggers releases.
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
 
+## Done (stacked for next release)
+
+- [x] Mobile chat: skill/command invocations collapse to one-liners
+      (branch fix/mobile-skill-spam, awaiting ship word)
+
 ## Done (shipped in v1.0.55)
 
 - [x] Context meter model-aware 1M windows (branch fix/context-window)
