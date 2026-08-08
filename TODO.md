@@ -5,10 +5,24 @@ the version or branch that shipped them. Sam triggers releases.
 
 ## Queue
 
+- [ ] Multi PRIMARY window per project (Brett, Asana 1217283122193749):
+      openProjectWindow focuses the existing window and lastOpenProjects
+      dedupes by path, so a project can only ever have one main window plus
+      tear-offs. Needs a real "New Window" feature if Brett wants two
+      independent primaries. Sized only after he confirms how he made his.
+- [ ] Repair stale/missing sessionTabMap links after a resume (Brett
+      1217296245359720 second half): mobile now degrades gracefully to the
+      live terminal, but the chat still cannot find those conversations.
+
 - [ ] Selector-parser accepted residuals (revisit only if Sam reports ghost
       popups): answered AskUserQuestion + <=3 indented response lines briefly
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
+
+## Done (stacked for next release)
+
+- [x] Mobile: trust the PTY not the session link for "is Claude running"
+      (branch fix/mobile-live-claude-detect, Brett 1217296245359720)
 
 ## Done (shipped in v1.0.56)
 
