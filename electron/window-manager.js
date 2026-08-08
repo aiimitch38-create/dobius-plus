@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { killTerminal, gracefulCloseTerminals, getTerminalsForProject, getTerminalWebContentsId, wasWindowOwned } from './terminal-manager.js';
 import { watchFiles } from './watcher-service.js';
-import { getProjectConfig, setProjectConfig, loadConfig, saveConfig } from './config-manager.js';
+import { getProjectConfig, setProjectConfig, loadConfig, saveConfig, getTearOffWindowState } from './config-manager.js';
 import { getQuittingForUpdate, getQuitting } from './quit-state.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -228,7 +228,15 @@ export function markTearOffConfirmed(tabId, webContentsId) {
 // sidebar reveal a torn-off live tab rather than resume a duplicate. Audit H3.
 export function focusTearOffWindowForTab(tabId) {
   for (const [, entry] of projectWindows) {
-    if (entry.isTearOff && entry.tearOffTabId === tabId && entry.win && !entry.win.isDestroyed()) {
+    if (!entry.isTearOff || !entry.win || entry.win.isDestroyed()) continue;
+    // Match the torn tab OR any tab the tear-off window has grown since (its
+    // persisted bucket). Without the bucket check, sidebar clicks on a live
+    // extra tear-off tab fell through to the primary window or no-op'd
+    // (Codex integration round, High).
+    const owns = entry.tearOffTabId === tabId
+      || (entry.tearOffTabId
+          && (getTearOffWindowState(entry.tearOffTabId)?.tabs || []).some((t) => t.id === tabId));
+    if (owns) {
       if (entry.win.isMinimized()) entry.win.restore();
       entry.win.show();
       entry.win.focus();

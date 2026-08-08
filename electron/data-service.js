@@ -350,7 +350,10 @@ export async function getAllProjectTabs({ liveTabIds = null, tearOffTabs = [] } 
     const seen = new Set(persisted.map((r) => r.id));
     const torn = (tearsByProject.get(path) || [])
       .filter((to) => !seen.has(to.tabId))
-      .map((to) => toRow({ id: to.tabId, label: to.label || 'Tab', kind: 'terminal' }, true));
+      // Pass kind/url/createdAt through: tear-off buckets carry full tab
+      // entries, and dropping them rendered a browser tab in a tear-off as a
+      // dateless terminal row (Codex integration round, Medium).
+      .map((to) => toRow({ id: to.tabId, label: to.label || 'Tab', kind: to.kind || 'terminal', url: to.url, createdAt: to.createdAt }, true));
     return [...persisted, ...torn].filter((t) => t.id).sort((a, b) => b.lastActiveAt - a.lastActiveAt);
   };
 

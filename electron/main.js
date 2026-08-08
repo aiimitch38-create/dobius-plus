@@ -433,7 +433,12 @@ function setupDataHandlers() {
     const tearOffTabs = getOpenTearOffsForRestore().flatMap((w) => {
       const saved = getTearOffWindowState(w.tabId);
       if (saved?.tabs?.length) {
-        return saved.tabs.map((t) => ({ projectPath: w.projectPath, tabId: t.id, label: t.label }));
+        // Full pass-through: kind/url/createdAt matter downstream (a browser
+        // tab in a tear-off must not render as a dateless terminal row).
+        return saved.tabs.map((t) => ({
+          projectPath: w.projectPath, tabId: t.id, label: t.label,
+          kind: t.kind, url: t.url, createdAt: t.createdAt,
+        }));
       }
       return [w];
     });
