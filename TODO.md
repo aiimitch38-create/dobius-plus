@@ -10,7 +10,7 @@ the version or branch that shipped them. Sam triggers releases.
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
 
-## Done (stacked, awaiting release)
+## Done (shipped in v1.0.55)
 
 - [x] Context meter model-aware 1M windows (branch fix/context-window)
 - [x] Mobile: renamed tab labels everywhere + sessionless tab polish
