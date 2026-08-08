@@ -7,6 +7,32 @@ import remarkGfm from 'remark-gfm';
 // user messages stay literal text so pasted code/paths are never mangled.
 // memo'd so the 3.5s transcript poll only re-parses bubbles whose content
 // actually changed, not all 200.
+// Per-tab input drafts, persisted so navigating Board -> tab -> Board -> tab
+// never eats typed-but-unsent text (Sam's report). One localStorage key holds
+// a { tabId: { text, at } } map, pruned to 40 entries / 7 days on write.
+const DRAFTS_KEY = 'dobius-mobile-drafts';
+function loadDraft(tabId) {
+  if (!tabId) return '';
+  try {
+    const map = JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}');
+    return typeof map[tabId]?.text === 'string' ? map[tabId].text : '';
+  } catch { return ''; }
+}
+function storeDraft(tabId, text) {
+  if (!tabId) return;
+  try {
+    const map = JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}');
+    if (text) map[tabId] = { text, at: Date.now() };
+    else delete map[tabId];
+    const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
+    const entries = Object.entries(map)
+      .filter(([, v]) => v && typeof v.text === 'string' && (v.at || 0) > cutoff)
+      .sort((a, b) => (b[1].at || 0) - (a[1].at || 0))
+      .slice(0, 40);
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch { /* private mode / quota: drafts just stay session-local */ }
+}
+
 const Bubble = memo(function Bubble({ role, content, timestamp, queued, sending }) {
   return (
     <div className={`chat-msg ${role === 'assistant' ? 'assistant' : 'user'}${sending ? ' chat-echo' : ''}`}>
@@ -48,7 +74,17 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   const projectPath = tab?.sessionProject || null;
   const tabId = tab?.id || null;
   const [messages, setMessages] = useState(null); // null = loading
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => loadDraft(tabId));
+  // Draft-aware setter: accepts a value or updater fn, mirrors to localStorage.
+  const setDraft = useCallback((next) => {
+    setInput((cur) => {
+      const v = typeof next === 'function' ? next(cur) : next;
+      storeDraft(tabId, v);
+      return v;
+    });
+  }, [tabId]);
+  // Rehydrate when this view is reused for a DIFFERENT tab (tabId prop swap).
+  useEffect(() => { setInput(loadDraft(tabId)); }, [tabId]);
   // Interactive selector Claude is currently showing (permission prompt, plan
   // approval, AskUserQuestion). null = none. Detected server-side from the live
   // PTY buffer because these TUI prompts are NOT in the transcript. Display is
@@ -58,6 +94,8 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   // parser's job (trailing-prose rejection) plus the server's post-answer
   // re-push and the optimistic clear in chooseOption.
   const [selector, setSelector] = useState(null);
+  // Sessionless tabs only: plain-text tail of the live PTY (null = loading).
+  const [shellText, setShellText] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
   // Local echoes: a just-sent message renders IMMEDIATELY instead of waiting
@@ -113,6 +151,18 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     return () => clearInterval(iv);
   }, [tabId, probeSelector]);
 
+  // Sessionless tabs: poll a plain-text tail of the live PTY so the phone can
+  // SEE what the shell says and type into it, instead of the old dead end
+  // (Asana 1217257328849820). Stops as soon as a session links up.
+  useEffect(() => {
+    setShellText(null);
+    if (sessionId || !tabId) return undefined;
+    const ask = () => connection.send({ type: 'terminalText', id: tabId });
+    ask();
+    const iv = setInterval(ask, 3000);
+    return () => clearInterval(iv);
+  }, [connection, sessionId, tabId]);
+
   useEffect(() => {
     const off = connection.onMessage((msg) => {
       if (msg.type === 'transcript' && msg.sessionId === wantRef.current
@@ -139,6 +189,8 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
         }
       } else if (msg.type === 'selector' && msg.id === tabId) {
         setSelector(msg.selector || null);
+      } else if (msg.type === 'terminalText' && msg.id === tabId) {
+        setShellText(typeof msg.text === 'string' ? msg.text : '');
       }
     });
     return off;
@@ -149,7 +201,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   useEffect(() => {
     const el = bodyRef.current;
     if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages, echoes]);
+  }, [messages, echoes, shellText]);
 
   const onScroll = () => {
     const el = bodyRef.current;
@@ -166,7 +218,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     // sat in the input box unsubmitted (Sam's v1.0.51 bug 3).
     connection.send({ type: 'submitPrompt', id: tabId, text });
     setEchoes((cur) => [...cur, { content: text, at: Date.now() }]);
-    setInput('');
+    setDraft('');
     atBottomRef.current = true;
   };
 
@@ -218,7 +270,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
         if (data?.ok && data.path) paths.push(data.path);
         else setUploadMsg(data?.error || `Upload failed (${res.status})`);
       }
-      if (paths.length) setInput((cur) => `${cur}${cur && !cur.endsWith(' ') ? ' ' : ''}${paths.join(' ')} `);
+      if (paths.length) setDraft((cur) => `${cur}${cur && !cur.endsWith(' ') ? ' ' : ''}${paths.join(' ')} `);
     } catch {
       setUploadMsg('Upload failed (offline?)');
     } finally {
@@ -226,38 +278,24 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     }
   };
 
-  // No session linked yet: offer to launch Claude in this tab's shell (the
-  // paced submitPrompt path types `claude` + Enter at the prompt). The session
-  // link + transcript appear via the normal capture loop once Claude starts.
-  // Previously this state was a dead end on mobile (Sam's v1.0.51 bug 2).
+  // No session linked yet: launch Claude in this tab's shell, or resume the
+  // most recent conversation for this project (`claude --continue`). The
+  // session link + transcript appear via the normal capture loop once Claude
+  // starts. Previously this state was a dead end on mobile (Sam's v1.0.51
+  // bug 2 + Asana 1217257328849820).
   const startClaude = () => {
     if (!tabId) return;
     connection.send({ type: 'submitPrompt', id: tabId, text: 'claude' });
   };
+  const resumeClaude = () => {
+    if (!tabId) return;
+    connection.send({ type: 'submitPrompt', id: tabId, text: 'claude --continue' });
+  };
 
-  if (!sessionId) {
-    return (
-      <div className="chat-empty">
-        <p className="muted">No Claude conversation in this tab yet.</p>
-        <button className="chat-start" onClick={startClaude}>Start Claude</button>
-        <p className="muted small">Runs `claude` in this tab's shell. Or switch to Term for raw output.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="chat-view">
-      <main className="chat-body" ref={bodyRef} onScroll={onScroll}>
-        {messages === null && <p className="muted pad">Loading conversation...</p>}
-        {messages && messages.length === 0 && <p className="muted pad">No messages yet.</p>}
-        {messages && messages.map((m, i) => (
-          <Bubble key={i} role={m.role} content={m.content} timestamp={m.timestamp || null} queued={!!m.queued} />
-        ))}
-        {echoes.map((e) => (
-          <Bubble key={`echo-${e.at}`} role="user" content={e.content} timestamp={e.at} sending />
-        ))}
-      </main>
-      {selector && selector.options && selector.options.length > 0 && (
+  // Selector popup + input row are shared by BOTH states below: a sessionless
+  // tab that just ran `claude` immediately shows the trust-folder prompt, so
+  // the selector buttons must work there too.
+  const selectorPopup = selector && selector.options && selector.options.length > 0 && (
         <div className="chat-selector">
           <div className="chat-selector-title">
             {selector.prompt || 'Claude is waiting for you to choose:'}
@@ -286,8 +324,11 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
               Open terminal to answer manually
             </button>
           )}
-        </div>
-      )}
+    </div>
+  );
+
+  const inputRow = (
+    <>
       {uploadMsg && <div className="chat-upload-msg">{uploadMsg}</div>}
       <div className="chat-input-row">
         {/* Interrupt/cancel from Chat (v1.0.53, Sam: "no way to cancel").
@@ -321,7 +362,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
         <textarea
           className="chat-input"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           onPaste={(e) => {
             // Pasting an image (iOS long-press paste of a screenshot) uploads
@@ -329,11 +370,52 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
             const files = e.clipboardData?.files;
             if (files && files.length > 0) { e.preventDefault(); uploadFiles(files); }
           }}
-          placeholder="Message Claude..."
+          placeholder={sessionId ? 'Message Claude...' : 'Type into the terminal...'}
           rows={1}
         />
         <button className="chat-send" onClick={send} aria-label="Send" disabled={!input.trim()}>↑</button>
       </div>
+    </>
+  );
+
+  // Sessionless: live shell tail + Start/Resume, with the same selector popup
+  // and input row so the tab is fully usable before Claude ever runs.
+  if (!sessionId) {
+    return (
+      <div className="chat-view">
+        <main className="chat-body" ref={bodyRef} onScroll={onScroll}>
+          <p className="muted pad small">
+            No Claude conversation in this tab yet. Live terminal:
+          </p>
+          {shellText === null && <p className="muted pad">Reading terminal...</p>}
+          {shellText !== null && (
+            <pre className="chat-shell-tail">{shellText || '(terminal is empty)'}</pre>
+          )}
+          <div className="chat-shell-actions">
+            <button className="chat-start" onClick={startClaude}>Start Claude</button>
+            <button className="chat-start alt" onClick={resumeClaude}>Resume last session</button>
+          </div>
+        </main>
+        {selectorPopup}
+        {inputRow}
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-view">
+      <main className="chat-body" ref={bodyRef} onScroll={onScroll}>
+        {messages === null && <p className="muted pad">Loading conversation...</p>}
+        {messages && messages.length === 0 && <p className="muted pad">No messages yet.</p>}
+        {messages && messages.map((m, i) => (
+          <Bubble key={i} role={m.role} content={m.content} timestamp={m.timestamp || null} queued={!!m.queued} />
+        ))}
+        {echoes.map((e) => (
+          <Bubble key={`echo-${e.at}`} role="user" content={e.content} timestamp={e.at} sending />
+        ))}
+      </main>
+      {selectorPopup}
+      {inputRow}
     </div>
   );
 }
