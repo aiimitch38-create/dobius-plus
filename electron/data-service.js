@@ -1146,6 +1146,49 @@ function extractAssistantText(entry) {
 // Map ONE raw JSONL entry to a { role, content } chat message, or null if it is
 // not a user/assistant text turn (tool calls, meta, empty). Shared by the full
 // stream and the bounded tail so the two can never diverge.
+// A slash-command or skill invocation is recorded as a USER turn carrying
+// either raw <command-*> tags or an entire skill markdown body ("Base
+// directory for this skill: ..."). Rendering that verbatim buried the mobile
+// chat under pages of skill text on every invocation (Sam's report). Collapse
+// to the one-liner the user actually typed; local-command stdout keeps only
+// its inner text. Returns null when the text is not a command shape.
+export function collapseCommandContent(text) {
+  const t0 = text.trimStart();
+  // Anchor to the wrapper shape: genuine command turns START with the tags
+  // (Codex corpus check: 3,295 real command turns, zero with leading prose;
+  // either <command-name> first or <command-message> before it). A user
+  // PASTING a transcript excerpt mid-message must not get their whole
+  // message collapsed to the command one-liner.
+  const anchored = t0.startsWith('<command-name>') || t0.startsWith('<command-message>');
+  const nameM = anchored ? text.match(/<command-name>([\s\S]*?)<\/command-name>/) : null;
+  if (nameM) {
+    // Second discriminator (Codex round 3): a paste can START with the tags
+    // too. In a GENUINE command turn, what remains after removing the tag
+    // blocks is either nothing or the skill body; trailing prose means the
+    // user pasted an excerpt, so leave their message alone.
+    const remainder = text
+      .replace(/<command-(name|message|args)>[\s\S]*?<\/command-\1>/g, '')
+      .trim();
+    if (remainder === '' || remainder.startsWith('Base directory for this skill:')) {
+      const name = nameM[1].trim();
+      const argsM = text.match(/<command-args>([\s\S]*?)<\/command-args>/);
+      const args = argsM ? argsM[1].trim() : '';
+      const slash = name.startsWith('/') ? name : `/${name}`;
+      return args ? `${slash} ${args}` : slash;
+    }
+    return null;
+  }
+  if (t0.startsWith('Base directory for this skill:')) {
+    const nl = t0.indexOf('\n');
+    const firstLine = nl === -1 ? t0 : t0.slice(0, nl);
+    const base = firstLine.split('/').filter(Boolean).pop() || 'skill';
+    return `/${base.trim()} (skill)`;
+  }
+  const stdoutM = text.match(/^\s*<local-command-stdout>([\s\S]*?)<\/local-command-stdout>\s*$/);
+  if (stdoutM) return stdoutM[1].trim();
+  return null;
+}
+
 export function entryToMessage(entry) {
   // A message sent while Claude is mid-turn is recorded as a queue-operation
   // enqueue, NOT as a user message, until the turn ends and it is actually
@@ -1191,6 +1234,17 @@ export function entryToMessage(entry) {
     content = entry.content;
   }
   if (!content) return null;
+  if (role === 'user') {
+    // Harness plumbing recorded as user turns (background-task notifications)
+    // is not conversation: hide it entirely instead of rendering raw XML.
+    const tp = content.trimStart();
+    if (tp.startsWith('<task-notification>') || tp.startsWith('[SYSTEM NOTIFICATION')) return null;
+    const collapsed = collapseCommandContent(content);
+    if (collapsed !== null) {
+      // Empty after collapse (e.g. blank command stdout): nothing to render.
+      return collapsed ? { role, content: collapsed, command: true } : null;
+    }
+  }
   if (content.length > MAX_MESSAGE_CHARS) {
     content = content.slice(0, MAX_MESSAGE_CHARS) + `\n\n[message truncated at ${MAX_MESSAGE_CHARS} chars]`;
   }

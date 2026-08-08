@@ -151,5 +151,47 @@ const chain = dedupeQueuedMessages([
 ]);
 assert.deepEqual(chain.map((m) => [m.role, !!m.queued]), [['user', false]]);
 
+// 17. Slash-command turn (REAL shape from a live transcript, 2026-08-07):
+// raw <command-*> tags collapse to the one-liner the user typed.
+const cmd = entryToMessage({ type: 'user', message: { role: 'user', content:
+  '<command-name>/permissions</command-name>\n            <command-message>permissions</command-message>\n            <command-args></command-args>' } });
+assert.deepEqual(cmd, { role: 'user', content: '/permissions', command: true });
+const cmdArgs = entryToMessage({ type: 'user', message: { role: 'user', content:
+  '<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args>fable</command-args>' } });
+assert.equal(cmdArgs.content, '/model fable');
+
+// 18. Skill invocation turn: the ENTIRE skill markdown used to render as a
+// giant user bubble on mobile (Sam's report). Collapses to "/name (skill)".
+const skill = entryToMessage({ type: 'user', message: { role: 'user', content:
+  'Base directory for this skill: /Users/x/.claude/skills/review-audit\n\n# review-audit\n\nTwo independent reviewers catch what one misses.\n'.repeat(50) } });
+assert.deepEqual(skill, { role: 'user', content: '/review-audit (skill)', command: true });
+
+// 19. local-command-stdout keeps only its inner text; blank stdout renders
+// nothing at all. Assistant turns are never collapsed even if they quote tags.
+const stdout = entryToMessage({ type: 'user', message: { role: 'user', content:
+  '<local-command-stdout>Set model to fable</local-command-stdout>' } });
+assert.equal(stdout.content, 'Set model to fable');
+assert.equal(entryToMessage({ type: 'user', message: { role: 'user', content:
+  '<local-command-stdout></local-command-stdout>' } }), null);
+const quoted = entryToMessage({ type: 'assistant', message: { role: 'assistant', content:
+  'the transcript records <command-name>/model</command-name> turns' } });
+assert.ok(quoted.content.includes('<command-name>'));
+// A USER message that quotes command tags mid-prose (pasted transcript
+// excerpt) is NOT collapsed: genuine command turns start with the tags
+// (Codex corpus check: 3,295 real command turns, zero with leading prose).
+const pasted = entryToMessage({ type: 'user', message: { role: 'user', content:
+  'Here is the excerpt:\n<command-name>/model</command-name>\n<command-args>fable</command-args>\nWhat happened?' } });
+assert.ok(pasted.content.startsWith('Here is the excerpt:'));
+assert.equal(pasted.command, undefined);
+// Paste starting at byte 0 with the tags but carrying trailing prose is ALSO
+// left alone (Codex round 3); a genuine skill invocation (tags + skill body)
+// still collapses to the command one-liner.
+const pastedAtZero = entryToMessage({ type: 'user', message: { role: 'user', content:
+  '<command-name>/model</command-name>\n<command-args>fable</command-args>\nWhat happened?' } });
+assert.ok(pastedAtZero.content.endsWith('What happened?'));
+const skillCombined = entryToMessage({ type: 'user', message: { role: 'user', content:
+  '<command-message>machine</command-message>\n<command-name>/machine</command-name>\nBase directory for this skill: /Users/x/.claude/skills/machine\n\n# machine\n\nbody\n' } });
+assert.deepEqual(skillCombined, { role: 'user', content: '/machine', command: true });
+
 fs.rmSync(process.env.DOBIUS_TEST_USERDATA, { recursive: true, force: true });
-console.log('queued-messages: 16 groups pass');
+console.log('queued-messages: 19 groups pass');
