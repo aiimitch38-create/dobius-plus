@@ -151,17 +151,19 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     return () => clearInterval(iv);
   }, [tabId, probeSelector]);
 
-  // Sessionless tabs: poll a plain-text tail of the live PTY so the phone can
-  // SEE what the shell says and type into it, instead of the old dead end
-  // (Asana 1217257328849820). Stops as soon as a session links up.
+  // Poll a plain-text tail of the live PTY whenever we have no conversation to
+  // render: a bare shell (Asana 1217257328849820) OR a tab whose Claude is
+  // live but whose transcript we cannot resolve (Brett v1.0.56: "No messages
+  // yet" on tabs that clearly had chats). Stops once messages exist.
+  const needShell = !sessionId || (messages !== null && messages.length === 0);
   useEffect(() => {
     setShellText(null);
-    if (sessionId || !tabId) return undefined;
+    if (!needShell || !tabId) return undefined;
     const ask = () => connection.send({ type: 'terminalText', id: tabId });
     ask();
     const iv = setInterval(ask, 3000);
     return () => clearInterval(iv);
-  }, [connection, sessionId, tabId]);
+  }, [connection, needShell, tabId]);
 
   useEffect(() => {
     const off = connection.onMessage((msg) => {
@@ -381,20 +383,30 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   // Sessionless: live shell tail + Start/Resume, with the same selector popup
   // and input row so the tab is fully usable before Claude ever runs.
   if (!sessionId) {
+    // A LIVE Claude with no resolvable session link must NEVER get the
+    // Start/Resume launcher: those type `claude` into Claude's own prompt box
+    // (Brett v1.0.56, screenshot showed `claude --continue` queued twice
+    // inside a running session). Show the live screen and let typing through,
+    // which is exactly what a running Claude wants.
+    const live = !!tab?.claudeLive;
     return (
       <div className="chat-view">
         <main className="chat-body" ref={bodyRef} onScroll={onScroll}>
           <p className="muted pad small">
-            No Claude conversation in this tab yet. Live terminal:
+            {live
+              ? 'Claude is running here, but its conversation is not linked yet. Live terminal (your messages still go through):'
+              : 'No Claude conversation in this tab yet. Live terminal:'}
           </p>
           {shellText === null && <p className="muted pad">Reading terminal...</p>}
           {shellText !== null && (
             <pre className="chat-shell-tail">{shellText || '(terminal is empty)'}</pre>
           )}
-          <div className="chat-shell-actions">
-            <button className="chat-start" onClick={startClaude}>Start Claude</button>
-            <button className="chat-start alt" onClick={resumeClaude}>Resume last session</button>
-          </div>
+          {!live && (
+            <div className="chat-shell-actions">
+              <button className="chat-start" onClick={startClaude}>Start Claude</button>
+              <button className="chat-start alt" onClick={resumeClaude}>Resume last session</button>
+            </div>
+          )}
         </main>
         {selectorPopup}
         {inputRow}
@@ -406,7 +418,23 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     <div className="chat-view">
       <main className="chat-body" ref={bodyRef} onScroll={onScroll}>
         {messages === null && <p className="muted pad">Loading conversation...</p>}
-        {messages && messages.length === 0 && <p className="muted pad">No messages yet.</p>}
+        {messages && messages.length === 0 && (
+          // A linked session whose transcript resolves to nothing used to be a
+          // dead end reading "No messages yet" on tabs that plainly had a
+          // conversation (Brett v1.0.56, after a reset + update + resume left
+          // stale links). Fall back to the live terminal so the tab stays
+          // usable and the user can SEE what is actually on screen.
+          <>
+            <p className="muted pad small">
+              {tab?.claudeLive
+                ? 'Claude is running here, but this tab is linked to a conversation with no messages. Live terminal:'
+                : 'No messages yet. Live terminal:'}
+            </p>
+            {shellText === null
+              ? <p className="muted pad">Reading terminal...</p>
+              : <pre className="chat-shell-tail">{shellText || '(terminal is empty)'}</pre>}
+          </>
+        )}
         {messages && messages.map((m, i) => (
           <Bubble key={i} role={m.role} content={m.content} timestamp={m.timestamp || null} queued={!!m.queued} />
         ))}

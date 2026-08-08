@@ -182,6 +182,71 @@ function configTabLabels() {
   return labelByTabId;
 }
 
+// Chrome that only Claude Code's interactive TUI draws at the bottom of the
+// screen. Presence in the PTY tail means a Claude is LIVE in that tab right
+// now, independent of whether a session link exists in config.
+// Distinctive footer strings Claude draws while its TUI owns the screen. Kept
+// tight on purpose: a FALSE positive hides the Start/Resume launcher on a
+// genuinely sessionless tab, which is the v1.0.51 dead end returning. The
+// shortcuts/mode hints are LINE-ANCHORED (Claude renders them as their own
+// footer row) so ordinary prose like "press ? for shortcuts" or "see docs for
+// shortcuts" scrolling past in a shell cannot trip them (Codex, Medium).
+const CLAUDE_TUI_RE = new RegExp([
+  'esc to interrupt',
+  'shift\\+tab to cycle',
+  'Press up to edit queued messages',
+  '^\\s*\\? for shortcuts',
+  '^\\s*(?:>>\\s*)?(?:auto-accept edits|bypass permissions|plan mode) on\\b',
+].join('|'), 'im');
+
+/**
+ * Is a Claude TUI on screen in this tab? Cheap tail sniff (last ~4KB of the
+ * rolling buffer, stripped). Brett's v1.0.56 report: the phone decided a tab
+ * was "sessionless" purely from the session link, and when that link was
+ * missing/stale it showed the Start/Resume launcher over a RUNNING Claude, so
+ * tapping Resume typed `claude --continue` into Claude's own prompt box.
+ * Never trust the link alone: the PTY is the ground truth.
+ */
+// A returned shell prompt as the LAST thing on screen. Claude's TUI keeps its
+// input box + footer pinned to the bottom, so a trailing prompt means the
+// shell has control even if Claude chrome scrolled past above (Codex round 2:
+// `claude --help`, a pager showing Claude docs, or catting this repo's source
+// would otherwise read as live and hide the launcher).
+// Prompt SHAPE, not just a trailing symbol: it must carry a host/path marker
+// (@, ~ or /) as well. Testing only the final character false-negatived a live
+// Claude whose own bottom line ended in `$` (e.g. an `echo $` in its input
+// box), which would put the launcher back over a running session (Codex
+// round 3, Medium). Matches "bigfuckingdog@Mac dobius-plus % ".
+//
+// Accepted residual (Codex round 4, Medium): a LIVE Claude whose bottom line
+// both carries a path marker and ends in a shell symbol ("cd ~/project $")
+// still reads as a returned prompt, so the launcher can reappear over it.
+// Tightening further (demanding a user@host shape) would false-negative real
+// prompts on other shell configs, and the failure is bounded: it needs an
+// unlinked session AND that exact bottom line, and the worst outcome is text
+// landing in Claude's input box, which is where v1.0.56 put it unconditionally.
+const SHELL_PROMPT_TAIL_RE = /[@~/][^\s]*.*[%$#]\s*$/;
+
+export function claudeTuiPresent(text) {
+  // STRIP FIRST, then window. Slicing raw bytes and stripping after left only
+  // a line or two of visible text on a repainting TUI (a single Claude frame
+  // is many KB of escapes), so the footer fell outside the window and a
+  // plainly-running Claude read as dead. Caught in the live harness, not by
+  // the plain-text unit tests. The raw cap bounds the per-tick strip cost.
+  const tail = stripAnsi(String(text || '').slice(-262144)).slice(-4096);
+  if (!CLAUDE_TUI_RE.test(tail)) return false;
+  const lines = tail.split(/\r\n|\r|\n/).map((l) => l.replace(/\s+$/, ''));
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  const last = lines[lines.length - 1] || '';
+  return !SHELL_PROMPT_TAIL_RE.test(last);
+}
+
+function claudeIsLive(id) {
+  try {
+    return claudeTuiPresent(getTerminalBuffer(id));
+  } catch { return false; }
+}
+
 function parseTermLabel(id, cwd) {
   const m = typeof id === 'string' && id.match(/^term-(.+)-(\d+)$/);
   if (m && m[1] !== 'mobile') {
@@ -258,6 +323,8 @@ function buildTerminalsPayload() {
       model: ctx?.model || '',
       ctxPct: typeof ctx?.ctxPct === 'number' ? ctx.ctxPct : null,
       sessionId: link?.sessionId || null,
+      // Ground truth from the PTY, not from the session link (Brett v1.0.56).
+      claudeLive: claudeIsLive(t.id),
       sessionProject: link?.projectPath || null,
     };
   });
@@ -272,7 +339,7 @@ function terminalsSignature(payload) {
   // Bucket ctx% to 5% so a slowly-growing context does not push every refresh,
   // but a meaningful move (and model changes) still updates the ring.
   const tabs = payload.list
-    .map((t) => `${t.id}:${t.label}:${t.status}:${t.model}:${t.sessionId || ''}:${t.ctxPct == null ? '' : Math.round(t.ctxPct / 5)}`)
+    .map((t) => `${t.id}:${t.label}:${t.status}:${t.model}:${t.sessionId || ''}:${t.claudeLive ? 1 : 0}:${t.ctxPct == null ? '' : Math.round(t.ctxPct / 5)}`)
     .sort().join('|');
   const exits = payload.recentExits.map((e) => `${e.id}:${e.exitCode}:${e.at}`).join('|');
   return `${tabs}#${exits}`;

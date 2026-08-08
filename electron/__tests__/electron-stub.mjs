@@ -19,4 +19,10 @@ export const dialog = {};
 export const Notification = class {};
 export const powerMonitor = { on: () => {} };
 export const nativeTheme = { on: () => {} };
-export default { app, ipcMain, BrowserWindow, shell, dialog, Notification, powerMonitor, nativeTheme };
+// mobile-server.js imports this at module load (it holds a power assertion
+// while the phone bridge is up); the pure helpers under test never call it.
+export const powerSaveBlocker = { start: () => 0, stop: () => {}, isStarted: () => false };
+export default {
+  app, ipcMain, BrowserWindow, shell, dialog, Notification,
+  powerMonitor, nativeTheme, powerSaveBlocker,
+};
