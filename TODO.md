@@ -20,6 +20,11 @@ the version or branch that shipped them. Sam triggers releases.
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
 
+## Done (shipped in v1.0.58)
+
+- [x] Link continued sessions: `claude --continue` tabs find their
+      conversation (Brett 1217296245359720, the "No messages yet" half)
+
 ## Done (shipped in v1.0.57)
 
 - [x] Mobile: trust the PTY not the session link for "is Claude running"
