@@ -12,6 +12,12 @@ export default function GitSidePanel({ projectDir }) {
   // v1.0.29: commit history with right-click context menu (copy hash,
   // view diff, copy subject).
   const [contextMenu, setContextMenu] = useState(null);
+  // Hash of the commit whose full message is expanded. The panel is 224px
+  // wide and every row was truncated with no way to read the rest (Sam:
+  // "why can't I click the things and read the full description"), so a row
+  // is now a toggle: collapsed shows one line, expanded shows the whole
+  // subject wrapped plus the commit body.
+  const [openHash, setOpenHash] = useState(null);
 
   const onCommitContext = useCallback((e, commit) => {
     e.preventDefault();
@@ -159,31 +165,72 @@ export default function GitSidePanel({ projectDir }) {
                   <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
                     {commits.slice(0, 20).map((c, i) => {
                       const unpushed = i < status.ahead;
+                      const open = openHash === c.hash;
+                      const full = c.body ? `${c.subject}\n\n${c.body}` : c.subject;
                       return (
                         <div
                           key={c.hash}
                           onContextMenu={(e) => onCommitContext(e, c)}
-                          title={`${c.hash.slice(0, 7)} by ${c.author}. Right-click for actions.`}
+                          onClick={() => setOpenHash(open ? null : c.hash)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setOpenHash(open ? null : c.hash);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={open}
+                          // Hover fallback for the collapsed row: the full
+                          // message without having to click at all.
+                          title={`${full}\n\n${c.hash.slice(0, 7)} by ${c.author}, ${fullDate(c.date)}\nClick to ${open ? 'collapse' : 'expand'}. Right-click for actions.`}
                           style={{
                             padding: '4px 6px',
                             borderRadius: 3,
-                            backgroundColor: 'var(--bg)',
+                            backgroundColor: open ? 'var(--surface-hover)' : 'var(--bg)',
                             borderLeft: unpushed ? '2px solid var(--accent)' : '2px solid transparent',
-                            cursor: 'context-menu',
+                            cursor: 'pointer',
                           }}
                         >
                           <p
-                            className="text-xs truncate"
-                            style={{ color: 'var(--fg)', lineHeight: 1.3 }}
+                            className={`text-xs${open ? '' : ' truncate'}`}
+                            style={{
+                              color: 'var(--fg)',
+                              lineHeight: 1.3,
+                              ...(open ? { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } : null),
+                            }}
                           >
                             {c.subject}
                           </p>
+                          {open && c.body && (
+                            <p
+                              className="text-xs"
+                              style={{
+                                color: 'var(--dim)',
+                                marginTop: 4,
+                                lineHeight: 1.4,
+                                whiteSpace: 'pre-wrap',
+                                overflowWrap: 'anywhere',
+                              }}
+                            >
+                              {c.body}
+                            </p>
+                          )}
                           <p
                             className="text-xs truncate"
-                            style={{ color: 'var(--dim)', fontSize: 9, fontFamily: "'SF Mono', monospace" }}
+                            style={{
+                              color: 'var(--dim)', fontSize: 9,
+                              fontFamily: "'SF Mono', monospace",
+                              marginTop: open ? 4 : 0,
+                            }}
                           >
                             {c.hash.slice(0, 7)} by {c.author?.split(' ')[0] || 'unknown'}, {timeAgo(new Date(c.date).getTime())}
                           </p>
+                          {open && (
+                            <p className="text-xs" style={{ color: 'var(--dim)', fontSize: 9, marginTop: 2 }}>
+                              {fullDate(c.date)}
+                            </p>
+                          )}
                         </div>
                       );
                     })}
@@ -191,13 +238,34 @@ export default function GitSidePanel({ projectDir }) {
                 </div>
               )}
 
-              {/* Active PR */}
+              {/* Active PR: a dead truncated line before. Now it opens on
+                  GitHub and shows its full title on hover. */}
               {pullRequests.length > 0 && (
                 <div>
                   <p className="text-xs mb-0.5" style={{ color: 'var(--dim)' }}>Active PR</p>
-                  <p className="text-xs truncate" style={{ color: 'var(--fg)' }}>
-                    #{pullRequests[0].number} {pullRequests[0].title}
-                  </p>
+                  {pullRequests.slice(0, 3).map((pr) => (
+                    <button
+                      key={pr.number}
+                      onClick={() => { if (pr.url) window.electronAPI?.openExternal?.(pr.url); }}
+                      title={`#${pr.number} ${pr.title}${pr.url ? '\nClick to open on GitHub' : ''}`}
+                      disabled={!pr.url}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        background: 'transparent',
+                        border: 'none',
+                        padding: '2px 0',
+                        color: pr.url ? 'var(--accent)' : 'var(--fg)',
+                        cursor: pr.url ? 'pointer' : 'default',
+                        fontSize: 11,
+                      }}
+                    >
+                      <span className="truncate" style={{ display: 'block' }}>
+                        #{pr.number} {pr.title}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -240,6 +308,11 @@ export default function GitSidePanel({ projectDir }) {
                 <MenuItem onClick={() => copyToClipboard(`${commit.hash.slice(0, 7)} ${commit.subject}`)}>
                   Copy hash + subject
                 </MenuItem>
+                {commit.body && (
+                  <MenuItem onClick={() => copyToClipboard(`${commit.subject}\n\n${commit.body}`)}>
+                    Copy full message
+                  </MenuItem>
+                )}
               </div>
             );
           })()}
@@ -247,6 +320,16 @@ export default function GitSidePanel({ projectDir }) {
       )}
     </AnimatePresence>
   );
+}
+
+// Absolute timestamp for the expanded row and the hover tooltip. timeAgo
+// alone ("3d ago") cannot answer "which commit was that exactly".
+function fullDate(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString([], {
+    month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
 }
 
 function MenuItem({ onClick, children }) {

@@ -27,6 +27,26 @@ export default function GitTreePanel({ projectDir }) {
   const [errMsg, setErrMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [newBranch, setNewBranch] = useState(null); // { value } | null
+  // Full commit message popover. Rows are fixed-height with an SVG graph
+  // aligned to them, so expanding a row inline would desync the graph lines.
+  // A popover reads the whole description without touching row layout.
+  const [detail, setDetail] = useState(null); // { x, y, commit } | null
+
+  // Dismiss on outside mousedown / Escape, the same pattern the GitSidePanel
+  // context menu uses. A full-screen click-away DIV was the first attempt and
+  // it SWALLOWED the click (closing the popover consumed the press meant for
+  // the panel's own close button, Codex).
+  useEffect(() => {
+    if (!detail) return undefined;
+    const onDown = () => setDetail(null);
+    const onKey = (e) => { if (e.key === 'Escape') setDetail(null); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [detail]);
   const seqRef = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -253,9 +273,17 @@ export default function GitTreePanel({ projectDir }) {
                         {b.label}
                       </button>
                     ))}
-                    <span className="text-xs truncate flex-1" style={{ color: 'var(--fg)', fontSize: 11 }} title={`${c.subject}\n${c.author}`}>
+                    <button
+                      className="text-xs truncate flex-1"
+                      style={{
+                        color: 'var(--fg)', fontSize: 11, textAlign: 'left',
+                        background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                      }}
+                      onClick={(e) => setDetail({ x: e.clientX, y: e.clientY, commit: c })}
+                      title={`${c.subject}${c.body ? `\n\n${c.body}` : ''}\n\n${c.author}\nClick for the full message`}
+                    >
                       {c.subject}
-                    </span>
+                    </button>
                     <button
                       onClick={() => {
                         if (remote.github) openGh(`/commit/${c.hash}`);
@@ -273,6 +301,68 @@ export default function GitTreePanel({ projectDir }) {
               </div>
             </div>
           </div>
+
+          {/* Full commit message popover. Clamped to the viewport like the
+              GitSidePanel context menu so it never renders off-screen. */}
+          {detail && (() => {
+            // Fit the viewport before clamping: a fixed 420 ran off-screen on
+            // a narrow window (Codex, 320px wide left 108px unreachable).
+            const W = Math.min(420, Math.max(200, window.innerWidth - 16));
+            const H = Math.min(320, Math.max(160, window.innerHeight - 16));
+            const x = Math.max(8, Math.min(detail.x, window.innerWidth - W - 8));
+            const y = Math.max(8, Math.min(detail.y, window.innerHeight - H - 8));
+            const c = detail.commit;
+            return (
+              <>
+                <div
+                  style={{
+                    position: 'fixed', top: y, left: x, width: W, maxHeight: H,
+                    overflowY: 'auto', zIndex: 1001, padding: 10,
+                    backgroundColor: 'var(--surface)',
+                    border: '1px solid var(--border)', borderRadius: 6,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <p className="text-xs" style={{ color: 'var(--fg)', fontWeight: 600, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                    {c.subject}
+                  </p>
+                  {c.body && (
+                    <p
+                      className="text-xs"
+                      style={{
+                        color: 'var(--fg)', marginTop: 8, lineHeight: 1.45,
+                        whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {c.body}
+                    </p>
+                  )}
+                  <p className="text-xs" style={{ color: 'var(--dim)', marginTop: 8, fontSize: 10, fontFamily: "'SF Mono', monospace" }}>
+                    {c.hash.slice(0, 7)} by {c.author}, {new Date(c.time).toLocaleString()}
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(`${c.subject}${c.body ? `\n\n${c.body}` : ''}`).catch(() => {}); setDetail(null); }}
+                      className="text-xs"
+                      style={{ color: 'var(--accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+                    >
+                      Copy message
+                    </button>
+                    {remote.github && (
+                      <button
+                        onClick={() => { openGh(`/commit/${c.hash}`); setDetail(null); }}
+                        className="text-xs"
+                        style={{ color: 'var(--accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        Open on GitHub
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </motion.div>
       )}
     </AnimatePresence>

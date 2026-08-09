@@ -2,6 +2,8 @@ import { execFile } from 'child_process';
 import path from 'path';
 
 const EXEC_TIMEOUT = 10_000;
+// Per-commit description cap for the Git panel payload (polled every refresh).
+const MAX_BODY_CHARS = 4000;
 const HASH_RE = /^[a-f0-9]{4,40}$/;
 
 let ghAvailableCache = null;
@@ -19,9 +21,9 @@ function validateDir(dir) {
 /**
  * Run a command and return stdout as a string.
  */
-function run(cmd, args, cwd) {
+function run(cmd, args, cwd, maxBuffer = 1024 * 1024) {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { cwd, timeout: EXEC_TIMEOUT, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+    execFile(cmd, args, { cwd, timeout: EXEC_TIMEOUT, maxBuffer }, (err, stdout) => {
       if (err) return reject(err);
       resolve(stdout);
     });
@@ -113,19 +115,76 @@ export async function getGitStatus(projectDir) {
 }
 
 /**
- * Get commit log with hash, author, date, subject.
+ * Get commit log with hash, author, date, subject, and BODY.
+ *
+ * The body (%b) is the full commit description. It was never fetched, so the
+ * Git panel had nothing to show beyond a truncated one-line subject and no
+ * amount of UI work could reveal more (Sam: "why can't I click the things in
+ * the git side panel and read the full description").
+ *
+ * A body is multi-line, so a line-per-commit parse no longer works: records
+ * need an explicit delimiter. Text markers are NOT safe here, because a body
+ * is arbitrary user text that can contain them (a commit describing this very
+ * parser would) and that forged a phantom commit, caught by commit-log.test.
+ * git's %x00 / %x1f expand to bytes a commit message cannot contain, so the
+ * framing is unforgeable.
+ *
+ * This does NOT violate the null-byte rule in CLAUDE.md: the argument passed
+ * to execFile is the four ASCII characters "%x00", not a NUL byte. git expands
+ * it in its own OUTPUT, which is only ever parsed, never passed back as an arg.
  */
 export async function getCommitLog(projectDir, count = 50) {
   const dir = validateDir(projectDir);
   if (!dir) return [];
   try {
-    const sep = '||SEP||';
-    const format = ['%H', '%an', '%aI', '%s'].join(sep);
-    const stdout = await run('git', ['log', `--max-count=${Math.min(count, 200)}`, `--format=${format}`], dir);
-    return stdout.trim().split('\n').filter(Boolean).map((line) => {
-      const [hash, author, date, ...rest] = line.split(sep);
-      return { hash, author, date, subject: rest.join(sep) };
-    });
+    const n = Math.min(count, 200);
+    // NUL is the ONLY framing byte, and every field is NUL-TERMINATED, so a
+    // record is just "the next 5 fields". A commit message can legitimately
+    // contain \x1f (Codex round 2: a subject with one shifted the body into
+    // the wrong field), but it can never contain a NUL, so this framing cannot
+    // be forged by any commit content.
+    const FIELDS = 5;
+    const withBody = ['%H', '%an', '%aI', '%s', '%b'].map((f) => `${f}%x00`).join('');
+    // Bodies are unbounded user text, so the 1MB default could now be blown by
+    // a single pathological commit and the catch below would blank the whole
+    // panel (Codex, Medium). Give the body query room, and if it still fails,
+    // fall back to the subject-only query rather than returning nothing: a
+    // list without descriptions beats an empty Recent commits section.
+    let stdout;
+    let fields = FIELDS;
+    try {
+      stdout = await run('git', ['log', `--max-count=${n}`, `--format=${withBody}`], dir, 16 * 1024 * 1024);
+    } catch {
+      const subjectOnly = ['%H', '%an', '%aI', '%s'].map((f) => `${f}%x00`).join('');
+      stdout = await run('git', ['log', `--max-count=${n}`, `--format=${subjectOnly}`], dir);
+      fields = 4;
+    }
+    // Every field is NUL-terminated, so the trailing split fragment (git's
+    // newline between records) is discarded by the group loop below.
+    const parts = stdout.split('\0');
+    const out = [];
+    for (let i = 0; i + fields <= parts.length; i += fields) {
+      // git separates records with a newline, which lands at the head of the
+      // next record's first field.
+      const hash = (parts[i] || '').trim();
+      const author = parts[i + 1];
+      const date = parts[i + 2];
+      const subject = (parts[i + 3] || '').trim();
+      // Trailing whitespace only: git always appends a newline to %b, and the
+      // panel would render it as dead space. LEADING whitespace is preserved,
+      // because a `--cleanup=verbatim` body can indent its first line
+      // meaningfully and trimming it silently rewrote the message (Codex Low).
+      let body = fields === FIELDS ? (parts[i + 4] || '').replace(/\s+$/, '') : '';
+      // Cap what crosses the IPC boundary on every poll. A commit description
+      // longer than this is not something the 224px panel can usefully show,
+      // and the full text is always available via `git show`.
+      if (body.length > MAX_BODY_CHARS) {
+        body = `${body.slice(0, MAX_BODY_CHARS)}\n\n[truncated, run git show ${hash.slice(0, 7)} for the rest]`;
+      }
+      if (!HASH_RE.test(hash)) continue; // never emit a half-parsed record
+      out.push({ hash, author, date, subject, body });
+    }
+    return out;
   } catch {
     return [];
   }
@@ -289,24 +348,51 @@ export async function getCommitGraph(projectDir, count = 150) {
   const dir = validateDir(projectDir);
   if (!dir) return { commits: [], head: '' };
   try {
-    const sep = '||SEP||';
-    const format = ['%H', '%P', '%D', '%an', '%ct', '%s'].join(sep);
-    const [stdout, headOut] = await Promise.all([
-      run('git', ['log', '--all', '--topo-order', `--max-count=${Math.min(Math.max(count, 1), 400)}`, `--format=${format}`], dir),
-      run('git', ['rev-parse', 'HEAD'], dir).catch(() => ''),
-    ]);
-    const commits = stdout.trim().split('\n').filter(Boolean).map((line) => {
-      const [hash, parents, refs, author, time, ...rest] = line.split(sep);
-      return {
+    // NUL-terminated fields, same unforgeable framing as getCommitLog: text
+    // markers were breakable by a commit body containing them, and %b is
+    // multi-line so a line-per-commit parse cannot work either.
+    const GRAPH_FIELDS = 7;
+    const base = ['%H', '%P', '%D', '%an', '%ct', '%s'];
+    const format = [...base, '%b'].map((f) => `${f}%x00`).join('');
+    const max = Math.min(Math.max(count, 1), 400);
+    const logArgs = (fmt) => ['log', '--all', '--topo-order', `--max-count=${max}`, `--format=${fmt}`];
+    const headOut = await run('git', ['rev-parse', 'HEAD'], dir).catch(() => '');
+    // Same subject-only fallback as getCommitLog: without it a single
+    // pathological body blanks the whole Git Tree instead of merely dropping
+    // the descriptions (Codex round 5, Medium: the two functions had drifted).
+    let stdout;
+    let fields = GRAPH_FIELDS;
+    try {
+      stdout = await run('git', logArgs(format), dir, 16 * 1024 * 1024);
+    } catch {
+      stdout = await run('git', logArgs(base.map((f) => `${f}%x00`).join('')), dir);
+      fields = base.length;
+    }
+    const parts = stdout.split('\0');
+    const commits = [];
+    for (let i = 0; i + fields <= parts.length; i += fields) {
+      const hash = (parts[i] || '').trim();
+      if (!HASH_RE.test(hash)) continue;
+      const parents = parts[i + 1];
+      const refs = parts[i + 2];
+      let body = fields === GRAPH_FIELDS ? (parts[i + 6] || '').replace(/\s+$/, '') : '';
+      if (body.length > MAX_BODY_CHARS) {
+        body = `${body.slice(0, MAX_BODY_CHARS)}\n\n[truncated, run git show ${hash.slice(0, 7)} for the rest]`;
+      }
+      commits.push({
         hash,
         parents: parents ? parents.split(' ').filter(Boolean) : [],
         // "HEAD -> main, origin/main, tag: v1.0.51" -> trimmed ref names
-        refs: refs ? refs.split(',').map((r) => r.trim()).filter(Boolean) : [],
-        author,
-        time: Number(time) * 1000 || 0,
-        subject: rest.join(sep),
-      };
-    });
+        // git separates %D entries with ", " exactly. Splitting on a bare
+        // comma broke branch names that legitimately contain one (Codex:
+        // "feat/a,b" became two badges linking to two wrong refs).
+        refs: refs ? refs.split(', ').map((r) => r.trim()).filter(Boolean) : [],
+        author: parts[i + 3],
+        time: Number(parts[i + 4]) * 1000 || 0,
+        subject: (parts[i + 5] || '').trim(),
+        body,
+      });
+    }
     return { commits, head: headOut.trim() };
   } catch {
     return { commits: [], head: '' };
