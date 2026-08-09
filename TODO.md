@@ -20,6 +20,11 @@ the version or branch that shipped them. Sam triggers releases.
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
 
+## Done (shipped in v1.0.59)
+
+- [x] Git panels: full commit descriptions (click to expand in the Cmd+G
+      panel, click for a popover in Git Tree, hover shows the whole message)
+
 ## Done (shipped in v1.0.58)
 
 - [x] Link continued sessions: `claude --continue` tabs find their
