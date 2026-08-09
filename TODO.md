@@ -19,10 +19,10 @@ the version or branch that shipped them. Sam triggers releases.
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
 
-## Done (stacked for next release)
+## Done (shipped in v1.0.57)
 
 - [x] Mobile: trust the PTY not the session link for "is Claude running"
-      (branch fix/mobile-live-claude-detect, Brett 1217296245359720)
+      (Brett 1217296245359720)
 
 ## Done (shipped in v1.0.56)
 
