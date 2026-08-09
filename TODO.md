@@ -10,9 +10,10 @@ the version or branch that shipped them. Sam triggers releases.
       dedupes by path, so a project can only ever have one main window plus
       tear-offs. Needs a real "New Window" feature if Brett wants two
       independent primaries. Sized only after he confirms how he made his.
-- [ ] Repair stale/missing sessionTabMap links after a resume (Brett
-      1217296245359720 second half): mobile now degrades gracefully to the
-      live terminal, but the chat still cannot find those conversations.
+- [ ] Exclude headless `claude -p` transcripts (SamKnows.app, every ~40s)
+      from continued-session resolution: accepted residual documented at
+      resolveContinuedSessionId. Needs transcript-content inspection to spot
+      a one-shot run; the link is tagged 'fresh' so auto-resume ignores it.
 
 - [ ] Selector-parser accepted residuals (revisit only if Sam reports ghost
       popups): answered AskUserQuestion + <=3 indented response lines briefly

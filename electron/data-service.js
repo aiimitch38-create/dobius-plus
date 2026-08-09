@@ -469,6 +469,74 @@ export async function resolveFreshSessionId(projectPath, startedAt, claimed = ne
 }
 
 /**
+ * Resolve a CONTINUED session: `claude --continue` (and any resume whose id is
+ * not in the argv) keeps writing a transcript that ALREADY EXISTED, so
+ * resolveFreshSessionId's born-after-start test rejects it and the tab is
+ * never linked at all.
+ *
+ * That is the bug behind Brett's v1.0.56 report: after a reset + update + a
+ * desktop resume, his tabs had a live Claude but no link, so the phone showed
+ * "No messages yet" on real conversations and offered Start/Resume over a
+ * running session. Dobius's own mobile "Resume last session" button sends
+ * `claude --continue`, so it created the very state it could not resolve.
+ *
+ * Evidence used here is a WRITE, not a birth: a transcript in this project
+ * whose mtime advanced after the process started is being appended to by
+ * something, and on a single-claude project that something is this process.
+ * Same conservative posture as the fresh resolver: unclaimed only, and
+ * decline outright when another unlinked Claude in the same project could
+ * equally be the writer, because a mislink makes auto-resume type
+ * `claude --resume <wrong-id>` into a terminal.
+ *
+ * Accepted residual (Codex round 2, Medium): a HEADLESS `claude -p` run in the
+ * same project (SamKnows.app fires one every ~40s, see .dobius/NOTES.md) is
+ * not a live tab, so it never enters the ambiguity set, and its transcript can
+ * win on mtime. Bounded: the resulting link is tagged 'fresh', which the
+ * auto-resume gate does not act on, so the cost is the phone showing the wrong
+ * conversation for that tab until the next tick corrects it. Excluding
+ * headless runs needs transcript-content inspection (reading entries to spot a
+ * one-shot run), which is a bigger change than this fix and is tracked in
+ * TODO.md rather than bolted on here.
+ */
+export async function resolveContinuedSessionId(
+  projectPath, startedAt, claimed = new Set(), otherFreshStarts = [],
+) {
+  if (!projectPath || typeof projectPath !== 'string') return null;
+  if (!Number.isFinite(startedAt) || startedAt <= 0) return null;
+  // Any other unlinked Claude in this project could be the writer instead.
+  // Unlike the birth test there is no per-candidate discriminator to fall back
+  // on, so decline as soon as a rival exists at all.
+  if (otherFreshStarts.some((t) => Number.isFinite(t))) return null;
+  const encodings = [encodePathLikeClaude(projectPath), encodePathLikeClaudeLegacy(projectPath)];
+  const seenDirs = new Set();
+  let best = null;
+  for (const enc of encodings) {
+    if (seenDirs.has(enc)) continue;
+    seenDirs.add(enc);
+    const projectDir = path.join(PROJECTS_DIR, enc);
+    if (!(await pathExists(projectDir))) continue;
+    let files;
+    try { files = (await fs.readdir(projectDir)).filter((f) => f.endsWith('.jsonl')); }
+    catch { continue; }
+    for (const f of files) {
+      const sessionId = f.replace('.jsonl', '');
+      if (claimed.has(sessionId)) continue;
+      let st;
+      try { st = await fs.stat(path.join(projectDir, f)); } catch { continue; }
+      const mtime = st.mtimeMs || 0;
+      // Written AFTER this process started: that write is the evidence. A
+      // transcript last touched before the process existed cannot be its work.
+      if (!mtime || mtime < startedAt - FRESH_CLOCK_SLACK_MS) continue;
+      // Empty files are not a conversation; linking one reproduces the exact
+      // "No messages yet" dead end this fix exists to remove.
+      if (!st.size) continue;
+      if (!best || mtime > best.mtime) best = { sessionId, mtime };
+    }
+  }
+  return best ? best.sessionId : null;
+}
+
+/**
  * Birth time (epoch ms) of a session's transcript within a project, checking
  * both encoder forms. 0 when the file is not found under either.
  */
@@ -511,6 +579,25 @@ export async function resolveFreshSessionsForTabs(
   liveTabs, infoByTab, cwdByTab, tabToSessionId, claimedIds, isAborted,
 ) {
   const out = new Map();
+  // Claim every id a LIVE tab names in its OWN argv before any inference runs.
+  // Callers seed claimedIds from the persisted map only, so a tab running
+  // `claude --resume X` whose link is not written yet leaves X unclaimed, and
+  // an inferring tab in the same project could take it: a mislink that points
+  // the phone at someone else's conversation and can make auto-resume type
+  // `--resume X` into the wrong terminal. Done HERE, not in the callers, so
+  // the periodic tick and the quit-time reconcile cannot drift apart.
+  // Codex High (Brett v1.0.56 follow-up).
+  const argvByTab = new Map();
+  for (const t of liveTabs) {
+    const argvSid = infoByTab.get(t.id)?.sessionId;
+    if (argvSid) { claimedIds.add(argvSid); argvByTab.set(t.id, argvSid); }
+  }
+  // Ids named in the argv of every live tab EXCEPT the given one.
+  const argvOwnedByOthers = (tabId) => {
+    const s = new Set();
+    for (const [id, sid] of argvByTab) if (id !== tabId) s.add(sid);
+    return s;
+  };
   // Earliest-started first. The earliest bare `claude` in a project owns the
   // earliest unclaimed transcript, so resolving in start order lets each link
   // drop that tab out of the NEXT tab's ambiguity set. That ordering is what
@@ -551,7 +638,12 @@ export async function resolveFreshSessionsForTabs(
     // Codex v1.0.39 r2 P2.
     const ownSid = tabToSessionId.get(t.id);
     const claimedByOthers = new Set(claimedIds);
-    if (ownSid) claimedByOthers.delete(ownSid);
+    // Un-claim this tab's own mapped id so it can re-resolve its own
+    // transcript, BUT never when another live tab names that id in its argv:
+    // a stale map entry pointing this tab at X while tab B actually runs
+    // `--resume X` would otherwise re-expose X and hand B's conversation to
+    // this tab. Codex round 2 (mislink class).
+    if (ownSid && !argvOwnedByOthers(t.id).has(ownSid)) claimedByOthers.delete(ownSid);
     // Ambiguity set: ONLY the other fresh claudes in this same project that are
     // not yet linked. An already-linked one owns its own transcript and so
     // cannot also own this candidate. Counting it (as we did) declined every
@@ -563,7 +655,13 @@ export async function resolveFreshSessionsForTabs(
       if (o.id === t.id || linkedTabs.has(o.id) || cwdByTab.get(o.id) !== cwd) continue;
       otherFreshStarts.push(infoByTab.get(o.id).startedAt);
     }
-    const sid = await resolveFreshSessionId(cwd, info.startedAt, claimedByOthers, otherFreshStarts);
+    let sid = await resolveFreshSessionId(cwd, info.startedAt, claimedByOthers, otherFreshStarts);
+    // Nothing born after this process started: it is very likely a CONTINUED
+    // session (`claude --continue`), which appends to a transcript that
+    // already existed. Fall back to write evidence. Brett v1.0.56.
+    if (!sid) {
+      sid = await resolveContinuedSessionId(cwd, info.startedAt, claimedByOthers, otherFreshStarts);
+    }
     if (sid) {
       out.set(t.id, sid);
       claimedIds.add(sid);
