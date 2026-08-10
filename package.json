@@ -13,7 +13,7 @@
     "start": "electron .",
     "test:fresh": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/fresh-session.test.mjs",
     "test:argv": "node ./electron/__tests__/claude-argv.test.mjs",
-    "test": "npm run test:argv && npm run test:fresh && npm run test:preview && npm run test:gws && npm run test:shim && npm run test:status && npm run test:conn && npm run test:selector && npm run test:modellabel && npm run test:checkpoints && npm run test:gitgraph && npm run test:filemanager && npm run test:queued && npm run test:ctxwindow && npm run test:tearoff && npm run test:clive && npm run test:contsess && npm run test:commitlog && npm run test:ptyshutdown && npm run test:looseends && npm run test:boardorder",
+    "test": "npm run test:argv && npm run test:fresh && npm run test:preview && npm run test:gws && npm run test:shim && npm run test:status && npm run test:conn && npm run test:selector && npm run test:modellabel && npm run test:checkpoints && npm run test:gitgraph && npm run test:filemanager && npm run test:queued && npm run test:ctxwindow && npm run test:tearoff && npm run test:clive && npm run test:contsess && npm run test:commitlog && npm run test:ptyshutdown && npm run test:looseends && npm run test:boardorder && npm run test:livesess && npm run test:loosedismiss",
     "test:preview": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/preview-sanitize.test.mjs",
     "test:gws": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/gws-accounts.test.mjs",
     "test:shim": "node ./electron/__tests__/gws-shim.test.mjs",
@@ -23,7 +23,7 @@
     "test:modellabel": "node ./electron/__tests__/model-label.test.mjs",
     "test:checkpoints": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/checkpoint-migration.test.mjs",
     "test:tearoff": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/tearoff-tabs.test.mjs",
-    "lint": "eslint electron src mobile",
+    "lint": "eslint electron src mobile shared",
     "test:gitgraph": "node ./electron/__tests__/git-graph.test.mjs",
     "test:filemanager": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/file-manager.test.mjs",
     "test:queued": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/queued-messages.test.mjs",
@@ -33,7 +33,9 @@
     "test:commitlog": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/commit-log.test.mjs",
     "test:ptyshutdown": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/pty-shutdown.test.mjs",
     "test:looseends": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/loose-ends.test.mjs",
-    "test:boardorder": "node ./electron/__tests__/board-order.test.mjs"
+    "test:boardorder": "node ./electron/__tests__/board-order.test.mjs",
+    "test:livesess": "node --import ./electron/__tests__/register.mjs ./electron/__tests__/live-sessions.test.mjs",
+    "test:loosedismiss": "node ./electron/__tests__/loose-dismiss.test.mjs"
   },
   "keywords": [],
   "author": "Status Digital Marketing",

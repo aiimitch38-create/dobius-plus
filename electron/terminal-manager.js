@@ -13,6 +13,7 @@ import { promisify } from 'util';
 // pgrep calls per second across many tabs).
 const execFileP = promisify(execFile);
 import { app } from 'electron';
+import { getSessionTabMap } from './config-manager.js';
 
 const terminals = new Map();
 
@@ -388,6 +389,227 @@ export async function getTerminalClaudeInfo(id) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Session ids that a LIVE terminal is running Claude on right now.
+ *
+ * Callers that reason about "abandoned" or "resumable" work need this, and
+ * data-service cannot see the terminal manager. Being wrong costs real work in
+ * both directions: name a session that is not running and offering Resume
+ * double-runs one transcript under two processes; miss one that is, and
+ * genuinely abandoned work is suppressed and never resurfaces.
+ *
+ * The truth is the PROCESS, in two parts:
+ *   - argv `--resume <id>` names the session directly. Authoritative.
+ *   - a FRESH claude generates its id at runtime, so its argv has no id at
+ *     all. Only the saved sessionId -> tabId map can name that one.
+ *
+ * The map is a cache and it lies in ways that matter (Codex, High):
+ *   - the tab may be gone entirely, so require it to be live
+ *   - claude may have EXITED inside a tab that is still open, which is exactly
+ *     the abandoned case the feature exists to surface, so require a running
+ *     claude in that tab
+ *   - the tab may have moved on to a different session, and the link stays
+ *     stale until the 15s reconcile tick. If argv names an id, argv wins and
+ *     the map has nothing to add for that tab
+ *   - several old links can point at one tab, and at most one can be current,
+ *     so take only the most recently captured
+ * Best effort: never throws.
+ */
+async function processSessionIds() {
+  const ids = new Set();
+  try {
+    const terms = listTerminals();
+    const infoByTab = new Map();
+    await Promise.all(terms.map(async (t) => {
+      try { infoByTab.set(t.id, await getTerminalClaudeInfo(t.id)); }
+      catch { infoByTab.set(t.id, null); }
+    }));
+
+    // Tabs running a claude whose session id we CANNOT read from argv. These
+    // are the only tabs the saved map can tell us anything useful about, and
+    // the process start time is what decides whether a link is current.
+    const freshTabs = new Map(); // tabId -> claude startedAt (may be null)
+    for (const [tabId, info] of infoByTab) {
+      if (info && !info.sessionId) freshTabs.set(tabId, info.startedAt);
+      if (info?.sessionId) ids.add(info.sessionId);
+    }
+
+    if (freshTabs.size > 0) {
+      const newestPerTab = new Map(); // tabId -> { sid, capturedAt }
+      for (const [sid, link] of Object.entries(getSessionTabMap() || {})) {
+        if (!link?.tabId || !freshTabs.has(link.tabId)) continue;
+        const at = typeof link.capturedAt === 'number' ? link.capturedAt : 0;
+        // The link must postdate the claude process it claims to describe.
+        // Stop `old`, start a bare `claude` in the SAME tab, and for up to 15s
+        // (until the next capture tick) the link still names `old` while the
+        // tab is running something else entirely, which hid `old` from loose
+        // ends even though it was genuinely abandoned. Codex High, round 3.
+        //
+        // STRICTLY after, plus a second. `ps lstart` truncates DOWN to the
+        // second, so startedAt is already up to 999ms EARLIER than the real
+        // start; slack in that direction lets the stale link back through
+        // (Codex High, round 4). Being strict costs nothing real: the capture
+        // tick is 15s, so a genuine link is never written within a second of
+        // the process starting, and the worst case is a live fresh session not
+        // being excluded, which findLooseEnds drops anyway on its 45-minute
+        // idle rule.
+        const startedAt = freshTabs.get(link.tabId);
+        if (Number.isFinite(startedAt) && at < startedAt + 1000) continue;
+        const best = newestPerTab.get(link.tabId);
+        if (!best || at > best.capturedAt) newestPerTab.set(link.tabId, { sid, capturedAt: at });
+      }
+      for (const { sid } of newestPerTab.values()) ids.add(sid);
+    }
+  } catch { /* best effort */ }
+  return ids;
+}
+
+/**
+ * Everything that must not be resumed again right now: sessions a real process
+ * is on, PLUS sessions somebody has claimed and is about to start.
+ */
+export async function liveClaudeSessionIds() {
+  const ids = await processSessionIds();
+  for (const sid of activeReservations()) ids.add(sid);
+  return [...ids];
+}
+
+// A resume is not visible in the process table for a second or two: the shell
+// has to print a prompt, the command has to be typed in, and claude has to
+// start. Two surfaces checking "is it live" inside that window both got `no`
+// and both resumed, which is the double-run this is all meant to prevent
+// (Codex Critical, round 3). A claim reserves the id for that window.
+const resumeReservations = new Map(); // sessionId -> { tabId, expiry }
+// Un-tabbed reservations are placeholders held for the moment between "the
+// user clicked resume" and "we know which tab it landed in", so they expire
+// fast. A tab-bound one has to outlive the whole startup path: shell profile,
+// then claude itself. A fixed 30s was NOT enough (a slow .zshrc alone can eat
+// it), and letting it lapse early re-opens the double-run. Codex Critical,
+// round 4. The tab check below is what actually ends these; the timeout is
+// only a backstop for a tab that lives forever after a failed resume.
+const RESERVATION_MS = 30_000;
+const TAB_RESERVATION_MS = 600_000;
+/**
+ * Should this reservation be forgotten? Pure, so every branch is testable
+ * without waiting out real timeouts.
+ *
+ * Deliberately does NOT try to detect a FAILED resume by looking for a claude
+ * process after a grace period. That was tried and it re-opened the very
+ * double-run this exists to prevent (Codex Critical, round 6): a shell profile
+ * slower than the grace looks identical to a resume that failed, so the
+ * reservation was dropped while the resume was still legitimately on its way,
+ * and a second surface was cleared to run the same transcript. No timeout can
+ * separate "slow" from "failed"; only the process appearing can, and waiting
+ * for that IS the window. So the rule stays on facts: the tab is alive, or it
+ * is not. Retrying a failed resume is handled by ownership in
+ * claimSessionResume instead, which needs no timing guess at all.
+ *
+ * @param r {{tabId: string|null, reservedAt: number, expiry: number}}
+ * @param ctx {{now: number, tabLive: boolean}}
+ */
+export function shouldDropReservation(r, { now, tabLive }) {
+  if (!r || r.expiry <= now) return true;
+  if (!r.tabId) return false;   // placeholder, rides its short expiry
+  return !tabLive;              // the resume died with its tab
+}
+
+function activeReservations() {
+  const now = Date.now();
+  let live = null;
+  for (const [sid, r] of resumeReservations) {
+    if (r.tabId && !live) live = new Set(listTerminals().map((t) => t.id));
+    if (shouldDropReservation(r, { now, tabLive: !r.tabId || live.has(r.tabId) })) {
+      resumeReservations.delete(sid);
+    }
+  }
+  return resumeReservations.keys();
+}
+
+/**
+ * Take the slot. INTERNAL: an unconditional reserve is a footgun, because it
+ * silently overwrites somebody else's legitimate claim (auto-resume did
+ * exactly that to a resume the phone had already started, and both ran.
+ * Codex Critical, round 9). Everything outside this module goes through
+ * claimSessionResume, which can refuse.
+ */
+function reserve(sessionId, tabId = null) {
+  if (typeof sessionId !== 'string' || !sessionId) return;
+  const bound = typeof tabId === 'string' && tabId ? tabId : null;
+  const now = Date.now();
+  resumeReservations.set(sessionId, {
+    tabId: bound,
+    reservedAt: now,
+    expiry: now + (bound ? TAB_RESERVATION_MS : RESERVATION_MS),
+  });
+}
+
+/**
+ * Give back a reservation YOU hold, for a resume that was claimed and then
+ * abandoned (a spawn that threw, a queued auto-resume that got cancelled).
+ *
+ * Ownership-checked, exactly like the claim. Releasing by session id alone was
+ * a footgun in the same shape as the unconditional reserve: a stale
+ * auto-resume timer, giving up on a session the PHONE had since claimed,
+ * deleted the phone's reservation and re-opened the double-run window while
+ * the phone's own `claude --resume` was still on its way (Codex Critical,
+ * round 10). Pass the tab you claimed with; pass nothing only to release a
+ * placeholder that never got a tab.
+ *
+ * @returns true if a reservation was actually released.
+ */
+export function releaseSessionResume(sessionId, tabId = null) {
+  if (typeof sessionId !== 'string' || !sessionId) return false;
+  const held = resumeReservations.get(sessionId);
+  if (!held) return false;
+  if ((held.tabId || null) !== (tabId || null)) return false; // not yours
+  resumeReservations.delete(sessionId);
+  return true;
+}
+
+/**
+ * Ask permission to resume, and take the slot in the same step.
+ * Check-then-act split across two calls is exactly what let two surfaces
+ * through, so this is one call: it returns false when the session is already
+ * running or already claimed, and otherwise reserves it before returning true.
+ * Single-threaded main process, so this is atomic by construction.
+ */
+export async function claimSessionResume(sessionId, tabId = null) {
+  if (typeof sessionId !== 'string' || !sessionId) return false;
+  // A real process on this session beats everything, including ownership: if
+  // claude is genuinely running it, nobody may start a second one, not even
+  // the tab that reserved it.
+  if ((await processSessionIds()).has(sessionId)) return false;
+  // Prune FIRST, then read: everything from here down is synchronous, so a
+  // concurrent claim that is still inside the await above cannot interleave,
+  // and whichever caller reaches this line first takes the slot.
+  activeReservations();
+  const held = resumeReservations.get(sessionId);
+  if (held) {
+    // Retrying in the tab that already owns this session is always allowed.
+    // Without this, a resume that failed outright (claude not on PATH, the CLI
+    // exiting at once) would hold the session until its tab closed, refusing
+    // the obvious retry. Ownership answers that without any timing guess, and
+    // it still refuses a DIFFERENT tab, which is the case that corrupts a
+    // transcript. Codex round 5 Medium, round 6 Critical.
+    if (!tabId || held?.tabId !== tabId) return false;
+  }
+  reserve(sessionId, tabId);
+  return true;
+}
+
+/**
+ * Attach a tab to a reservation you ALREADY hold, once you know which tab the
+ * resume landed in. A no-op when no reservation exists, so it can never take a
+ * session, and it refuses to move one that belongs to a different tab.
+ */
+export function bindReservationTab(sessionId, tabId) {
+  const held = resumeReservations.get(sessionId);
+  if (!held || !tabId) return false;
+  if (held.tabId && held.tabId !== tabId) return false;
+  reserve(sessionId, tabId);
+  return true;
 }
 
 /**

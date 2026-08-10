@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useStore } from '../../store/store';
 import { timeAgo } from '../../lib/time-ago';
+import { parseDismissed, visibleLooseEnds, withDismissal } from '../../../shared/loose-dismiss.js';
 
 /**
  * Loose ends: work you started and walked away from.
@@ -20,9 +21,12 @@ import { timeAgo } from '../../lib/time-ago';
 export default function LooseEnds() {
   const [items, setItems] = useState(null); // null = loading
   const [err, setErr] = useState('');
+  // "Not important" covers the session AS IT STOOD, so re-abandoned work comes
+  // back. The rule is shared with the phone board (shared/loose-dismiss.js) to
+  // stop the two copies drifting; keying on sessionId alone hid it forever.
   const [dismissed, setDismissed] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('dobius-loose-dismissed') || '[]')); }
-    catch { return new Set(); }
+    try { return parseDismissed(localStorage.getItem('dobius-loose-dismissed')); }
+    catch { return {}; }
   });
   const resumeSession = useStore((s) => s.resumeSession);
 
@@ -35,16 +39,40 @@ export default function LooseEnds() {
 
   useEffect(() => { load(); }, [load]);
 
-  const dismiss = (sessionId) => {
+  // Refresh when the window comes back. The list goes stale in ways that
+  // matter: resuming from the phone (or another window) makes a row here a
+  // duplicate-run waiting to happen. The scan is 36-87ms over a 21-day
+  // history, so this is cheap enough to just do. Codex Critical.
+  useEffect(() => {
+    window.addEventListener('focus', load);
+    return () => window.removeEventListener('focus', load);
+  }, [load]);
+
+  const dismiss = (item) => {
     setDismissed((cur) => {
-      const next = new Set(cur);
-      next.add(sessionId);
-      try { localStorage.setItem('dobius-loose-dismissed', JSON.stringify([...next])); } catch { /* private mode */ }
+      const next = withDismissal(cur, item);
+      try { localStorage.setItem('dobius-loose-dismissed', JSON.stringify(next)); } catch { /* private mode */ }
       return next;
     });
   };
 
-  const visible = (items || []).filter((i) => !dismissed.has(i.sessionId));
+  // Refusing a session that is already running lives in the store's
+  // resumeSession, not here: EVERY desktop resume path goes through it, so one
+  // atomic claim there covers Cmd+R, the sidebar, Sessions and this list at
+  // once. A guard only on this button left the others able to start a second
+  // `claude --resume` on the same transcript (Codex Critical).
+  //
+  // `project` is REQUIRED: without it the store falls through to its legacy
+  // bare-sessionId branch and resumes in whatever window is currently focused,
+  // so a loose end from project A would start inside project B and link the
+  // session to the wrong project (Codex High).
+  const pickBackUp = (item) => resumeSession({
+    sessionId: item.sessionId,
+    project: item.projectPath,
+    sizeMB: item.sizeMB,
+  });
+
+  const visible = visibleLooseEnds(items, dismissed);
 
   return (
     <div className="p-4 space-y-3">
@@ -114,23 +142,14 @@ export default function LooseEnds() {
 
           <div className="flex gap-3 mt-2">
             <button
-              // `project` is REQUIRED: without it the store falls through to
-              // its legacy bare-sessionId branch and resumes in whatever
-              // window is currently focused, so a loose end from project A
-              // would start inside project B and link the session to the
-              // wrong project (Codex High).
-              onClick={() => resumeSession({
-                sessionId: item.sessionId,
-                project: item.projectPath,
-                sizeMB: item.sizeMB,
-              })}
+              onClick={() => pickBackUp(item)}
               className="text-xs"
               style={{ color: 'var(--accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
             >
               Pick it back up
             </button>
             <button
-              onClick={() => dismiss(item.sessionId)}
+              onClick={() => dismiss(item)}
               className="text-xs"
               style={{ color: 'var(--dim)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
               title="Hide this one. It stays hidden on this machine."

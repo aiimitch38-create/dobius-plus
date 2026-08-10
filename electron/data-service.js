@@ -2040,7 +2040,16 @@ async function estimateContextFromFile(filePath) {
       (usage.cache_creation_input_tokens || 0);
     if (total > 0) {
       lastInputTokens = total; // last assignment wins = newest turn
-      if (entry.message?.model) lastModel = entry.message.model;
+      // Only a REAL model id updates the badge. Claude Code stamps some turns
+      // `<synthetic>` (its own internal messages, e.g. an interrupt notice),
+      // and those carry usage like any other, so taking the last model
+      // verbatim rendered the status bar as the literal string "<synthetic>".
+      // Measured on this Mac: 8 of 112 recent sessions ended that way, so it
+      // is roughly a 1-in-14 chance of the badge reading as broken. A
+      // synthetic turn is not a model change; keep the last real one, which
+      // also gives windowForModel the right context window to size against.
+      const m = entry.message?.model;
+      if (typeof m === 'string' && m.startsWith('claude-')) lastModel = m;
     }
   }
   if (!lastInputTokens) return null;

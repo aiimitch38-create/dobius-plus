@@ -102,6 +102,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dataGetAllProjectTabs: () => ipcRenderer.invoke('data:getAllProjectTabs'),
   dataGetSessionSize: (sessionId, projectPath) => ipcRenderer.invoke('data:getSessionSize', sessionId, projectPath),
   dataGetLooseEnds: (opts) => ipcRenderer.invoke('data:getLooseEnds', opts),
+  dataClaimSessionResume: (sessionId, tabId) => ipcRenderer.invoke('data:claimSessionResume', sessionId, tabId),
   dataGetLatestSession: (projectPath) => ipcRenderer.invoke('data:getLatestSession', projectPath),
   dataDeleteSession: (sessionId, projectPath) => ipcRenderer.invoke('data:deleteSession', sessionId, projectPath),
   dataKillProcess: (pid) => ipcRenderer.invoke('data:killProcess', pid),

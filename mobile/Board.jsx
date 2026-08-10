@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import SessionCard from './SessionCard';
+import LooseEnds from './LooseEnds';
 import { sortTermsByAttention, groupSummary, summaryLabel, isGroupCollapsed } from './board-order.js';
 import VoiceButton from './VoiceButton';
 import { pushSupported, pushActive, enablePush } from './push-client';
@@ -261,6 +262,10 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
             })}
           </>
         )}
+
+        {/* Outside the live-sessions branch above: with nothing running, the
+            work you abandoned is the ONLY thing left worth showing. */}
+        <LooseEnds connection={connection} />
 
         {recentExits.length > 0 && (
           <section className="board-group board-exits">

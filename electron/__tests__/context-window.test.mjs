@@ -7,7 +7,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 process.env.DOBIUS_TEST_USERDATA = fs.mkdtempSync(path.join(os.tmpdir(), 'dobius-ctxtest-'));
-const { windowForModel } = await import('../data-service.js');
+const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'dobius-ctxhome-'));
+process.env.HOME = HOME;
+const { windowForModel, estimateContextForSession } = await import('../data-service.js');
 
 // 1. 200k models: haiku 4.5, sonnet 4.5 (incl. dated ids), and unknowns.
 assert.equal(windowForModel('claude-haiku-4-5-20251001', 120_000), 200_000);
@@ -37,5 +39,44 @@ assert.equal(windowForModel('claude-fable-5', 1_200_000), 2_000_000);
 // (pct reads 100, honestly, instead of >100 nonsense).
 assert.equal(windowForModel('claude-fable-5', 3_000_000), 3_000_000);
 
+// 5. The model the status bar SHOWS. Claude Code stamps some turns
+// `<synthetic>` (its own internal messages), and those carry usage like any
+// other turn, so taking the last model verbatim rendered the badge as the
+// literal string "<synthetic>". Measured on this Mac before the fix: 8 of 112
+// recent sessions ended on a synthetic turn, so the badge read as broken
+// roughly 1 session in 14. A synthetic turn is not a model change.
+const PROJ = path.join(HOME, 'Projects (Code)', 'ctx-model-project');
+fs.mkdirSync(PROJ, { recursive: true });
+const projDir = path.join(HOME, '.claude', 'projects', PROJ.replace(/[^a-zA-Z0-9.-]/g, '-'));
+fs.mkdirSync(projDir, { recursive: true });
+
+const turn = (model, tokens) => JSON.stringify({
+  message: { role: 'assistant', model, usage: { input_tokens: tokens } },
+});
+const writeSession = (id, lines) => fs.writeFileSync(path.join(projDir, `${id}.jsonl`), `${lines.join('\n')}\n`);
+
+// A real mid-session model switch MUST be reflected: this is the whole point
+// of reading the model off the transcript instead of a config value.
+writeSession('sess-switch-0001', [turn('claude-fable-5', 1000), turn('claude-opus-5', 2000)]);
+let r = await estimateContextForSession('sess-switch-0001', PROJ);
+assert.equal(r.model, 'claude-opus-5', 'the badge follows a mid-session switch');
+assert.equal(r.tokens, 2000);
+
+// A trailing synthetic turn must NOT overwrite it.
+writeSession('sess-synth-0002', [turn('claude-opus-5', 1000), turn('<synthetic>', 1500)]);
+r = await estimateContextForSession('sess-synth-0002', PROJ);
+assert.equal(r.model, 'claude-opus-5', 'a synthetic turn is not a model change');
+// Its token count is still the newest reading; only the attribution is kept.
+assert.equal(r.tokens, 1500);
+// And the window is sized for the REAL model, not for an unknown id.
+assert.equal(r.maxTokens, 1_000_000, 'sized for the real model, not the synthetic');
+
+// Nothing but synthetic turns: no model rather than a fake one. The status bar
+// hides the badge on an empty model, which is the honest outcome.
+writeSession('sess-onlysynth-0003', [turn('<synthetic>', 900)]);
+r = await estimateContextForSession('sess-onlysynth-0003', PROJ);
+assert.equal(r.model, '', 'no real model seen means no badge');
+
+fs.rmSync(HOME, { recursive: true, force: true });
 fs.rmSync(process.env.DOBIUS_TEST_USERDATA, { recursive: true, force: true });
-console.log('context-window: 4 groups pass');
+console.log('context-window: 5 groups pass');

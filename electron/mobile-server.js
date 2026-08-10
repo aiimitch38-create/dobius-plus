@@ -27,9 +27,10 @@ import { getMobileServerConfig, updateMobileServerConfig, setSessionTabLink, rem
 import {
   listTerminals, subscribeTerminal, writeTerminal, terminalHasDesktopAttached,
   resizeTerminal, killTerminal, createTerminal, getTerminalBuffer,
+  liveClaudeSessionIds, claimSessionResume, bindReservationTab, releaseSessionResume,
 } from './terminal-manager.js';
 import { parseSelector, stripAnsi } from './selector-parser.js';
-import { loadAllSessions, loadTranscript, listProjects, getTranscriptSig } from './data-service.js';
+import { loadAllSessions, loadTranscript, listProjects, getTranscriptSig, findLooseEnds } from './data-service.js';
 import { peekReply } from './voice-bridge.js';
 import { getVoiceConductorTabId } from './voice-conductor.js';
 import { snapshot as terminalStatusSnapshot } from './terminal-status.js';
@@ -676,6 +677,19 @@ function handleAuthedMessage(socket, msg, subs) {
         .catch((err) => wsSend(socket, { type: 'error', message: String(err?.message || err) }));
       break;
 
+    // Work abandoned mid-flight. The board re-issues this on every re-auth
+    // (iOS kills the socket whenever the PWA backgrounds), so it has to be
+    // cheap: measured at 36-87ms over the real 21-day history on this Mac,
+    // which is why there is no cache here.
+    case 'listLooseEnds':
+      liveClaudeSessionIds()
+        .then((excludeSessionIds) => findLooseEnds({ maxAgeDays: 30, limit: 25, excludeSessionIds }))
+        .then((list) => wsSend(socket, { type: 'looseEnds', list: list || [] }))
+        // A failed scan must not leave the phone stuck on "Loading": send an
+        // empty list, matching how listSessions/listProjects degrade.
+        .catch(() => wsSend(socket, { type: 'looseEnds', list: [] }));
+      break;
+
     case 'loadTranscript': {
       const { sessionId, projectPath } = msg;
       if (typeof sessionId !== 'string' || typeof projectPath !== 'string') break;
@@ -716,20 +730,50 @@ function handleAuthedMessage(socket, msg, subs) {
       // in any directory the phone named (audit HIGH-2), and an unknown path
       // silently fell back to a home-dir shell + a blind `claude --resume` in
       // the wrong place. Unknown project -> error, no shell.
-      resolveCreateCwd(projectPath).then((cwd) => {
+      resolveCreateCwd(projectPath).then(async (cwd) => {
         if (cwd === null) {
           wsSend(socket, { type: 'error', message: 'Unknown project' });
+          return;
+        }
+        // Refuse a session that is ALREADY running somewhere. The phone's list
+        // can be minutes stale (the desktop can resume from its own Loose Ends
+        // tab or the sidebar in between), and two `claude --resume` processes
+        // appending to one transcript corrupts the user's own history. Checked
+        // here rather than in the client because this is the one place every
+        // phone-initiated resume passes through. Codex Critical.
+        //
+        // claim, not a bare check: the resume below is only visible in the
+        // process table a second or two later, so a plain check leaves a
+        // window where a second surface also gets "not running".
+        let claimed = true;
+        try { claimed = await claimSessionResume(sessionId); }
+        catch { /* if we cannot tell, fall through and resume */ }
+        if (!claimed) {
+          wsSend(socket, { type: 'error', message: 'That session is already running on your Mac' });
           return;
         }
         const id = mobileTermId();
         try {
           createTerminal(id, cwd, null);
           wsSend(socket, { type: 'terminalCreated', id });
+          // Attach the tab to the claim we already hold, so the reservation
+          // lives as long as the tab does instead of lapsing while a slow shell
+          // profile and claude start up. Kill the tab and the session is free
+          // again. A bind cannot TAKE a session, only annotate our own.
+          bindReservationTab(sessionId, id);
           // Link the session to this tab so the sidebar shows where it resumed.
           setSessionTabLink(sessionId, id, cwd);
           // Give the shell a beat to print its prompt before sending the command.
           setTimeout(() => writeTerminal(id, `claude --resume ${sessionId}\r`), 700);
         } catch (err) {
+          // The claim was taken before the terminal existed, so a failed spawn
+          // has to hand it back. Otherwise a resume that never happened leaves
+          // the session looking busy, and the next attempt is refused. Try the
+          // tab-bound form first (createTerminal may have succeeded and a later
+          // line thrown), then the placeholder. Release is ownership-checked,
+          // so the wrong one is simply a no-op and neither can touch somebody
+          // else's claim.
+          if (!releaseSessionResume(sessionId, id)) releaseSessionResume(sessionId);
           wsSend(socket, { type: 'error', message: String(err?.message || err) });
         }
       });
