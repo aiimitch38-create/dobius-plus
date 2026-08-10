@@ -20,6 +20,21 @@ the version or branch that shipped them. Sam triggers releases.
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
 
+## Ready on feat/tab-organization (awaiting Sam's ship word, v1.0.61)
+
+- [x] Loose Ends: sessions abandoned mid-flight (interrupted / cut off
+      mid-tool, idle 45m+), desktop dashboard tab AND mobile board section.
+      Dismissals are activity-stamped (shared/loose-dismiss.js), so
+      re-abandoned work resurfaces.
+- [x] One owner per resumed session: claim/bind/release ownership in
+      terminal-manager, wired through the store, mobile resumeSession, and
+      auto-resume. Kills the two-claude-processes-one-transcript class
+      (13 Codex rounds, 22 findings, final round clean).
+- [x] Tabs stacked by attention on mobile and desktop (needs > working >
+      done > idle, dormant projects auto-collapse).
+- [x] Status bar no longer renders "<synthetic>" as the model (~1 in 14
+      sessions) and sizes the context window off the real model.
+
 ## Done (shipped in v1.0.60)
 
 - [x] Update Restart no longer crashes with many windows open (node-pty
