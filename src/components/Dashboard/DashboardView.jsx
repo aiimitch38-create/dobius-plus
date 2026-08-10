@@ -10,6 +10,7 @@ import Skills from './Skills';
 // the chunk loads on first visit to the Stats tab.
 const Stats = lazy(() => import('./Stats'));
 import Sessions from './Sessions';
+import LooseEnds from './LooseEnds';
 import Plans from './Plans';
 import BuildMonitorView from './BuildMonitor/BuildMonitorView';
 import GitView from './Git/GitView';
@@ -35,6 +36,7 @@ const TABS = [
   { id: 'stats', label: 'Stats' },
   { id: 'costs', label: 'Costs' },
   { id: 'sessions', label: 'Sessions' },
+  { id: 'looseends', label: 'Loose Ends' },
   { id: 'search', label: 'Search' },
   { id: 'checkpoints', label: 'Checkpoints' },
   { id: 'plans', label: 'Plans' },
@@ -64,6 +66,7 @@ const TAB_CONTENT = {
   ),
   costs: () => <Costs />,
   sessions: () => <Sessions />,
+  looseends: () => <LooseEnds />,
   search: () => <Search />,
   checkpoints: () => <Checkpoints />,
   agents: () => <Agents />,

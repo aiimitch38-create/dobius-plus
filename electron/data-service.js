@@ -2183,14 +2183,14 @@ export async function findLooseEnds({
     if (Array.isArray(hp)) hidden = new Set(hp.filter((p) => typeof p === 'string'));
   } catch { void 0; }
 
-  let dirs = [];
+  let dirs;
   try { dirs = await fs.readdir(PROJECTS_DIR); } catch { return []; }
 
   const candidates = [];
   for (const dir of dirs) {
     const projectPath = tryReconstructPath(dir) || dir;
     if (hidden.has(projectPath)) continue;
-    let names = [];
+    let names;
     try { names = await fs.readdir(path.join(PROJECTS_DIR, dir)); } catch { continue; }
     for (const name of names) {
       if (!name.endsWith('.jsonl')) continue;

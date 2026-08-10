@@ -458,11 +458,23 @@ function setupDataHandlers() {
   ipcMain.handle('data:getLooseEnds', async (_event, opts) => {
     const liveIds = [];
     try {
+      const terms = listTerminals();
+      const liveTabs = new Set(terms.map((t) => t.id));
       const map = getSessionTabMap() || {};
-      const liveTabs = new Set(listTerminals().map((t) => t.id));
       for (const [sid, link] of Object.entries(map)) {
         if (link?.tabId && liveTabs.has(link.tabId)) liveIds.push(sid);
       }
+      // The saved map can be STALE: a tab that has since started
+      // `claude --resume B` still reads as A until the 15s reconcile tick.
+      // That would offer Resume on a session already running and double-run
+      // it, so also take the id straight out of each live process's argv.
+      // Same lesson as the mobile "is Claude running" fix: the process is the
+      // truth, the link is a cache. Codex Medium.
+      const argvIds = await Promise.all(terms.map(async (t) => {
+        try { return (await getTerminalClaudeInfo(t.id))?.sessionId || null; }
+        catch { return null; }
+      }));
+      for (const sid of argvIds) if (sid) liveIds.push(sid);
     } catch { /* best effort */ }
     return findLooseEnds({ ...(opts || {}), excludeSessionIds: liveIds });
   });
