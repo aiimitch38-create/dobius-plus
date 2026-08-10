@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import SessionCard from './SessionCard';
+import { sortTermsByAttention, groupSummary, summaryLabel, isGroupCollapsed } from './board-order.js';
 import VoiceButton from './VoiceButton';
 import { pushSupported, pushActive, enablePush } from './push-client';
 import { timeAgo } from './format';
@@ -36,6 +37,7 @@ function rank(g) {
 // Device-local board preferences (v1.0.53): pinned tab ids + collapsed project
 // paths. localStorage so they survive PWA restarts without a server round-trip.
 const PINS_KEY = 'dobius-mobile-pins';
+const EXPANDED_KEY = 'dobius-mobile-expanded';
 const COLLAPSED_KEY = 'dobius-mobile-collapsed';
 const loadList = (key) => {
   try { const v = JSON.parse(localStorage.getItem(key)); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
@@ -49,6 +51,11 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
   const [projects, setProjects] = useState([]);
   const [pins, setPins] = useState(() => loadList(PINS_KEY));
   const [collapsed, setCollapsed] = useState(() => loadList(COLLAPSED_KEY));
+  // Explicit EXPANSIONS are tracked separately from collapses. Dormant
+  // projects hide themselves by default (32 of 39 tabs on this account are
+  // idle shells), and without this a group the user just opened would be
+  // re-hidden on the next render. isGroupCollapsed resolves the three-way.
+  const [expanded, setExpanded] = useState(() => loadList(EXPANDED_KEY));
 
   const togglePin = (id) => {
     setPins((cur) => {
@@ -57,12 +64,20 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
       return next;
     });
   };
-  const toggleCollapsed = (projectPath) => {
-    setCollapsed((cur) => {
-      const next = cur.includes(projectPath) ? cur.filter((x) => x !== projectPath) : [...cur, projectPath];
-      saveList(COLLAPSED_KEY, next);
-      return next;
-    });
+  const toggleCollapsed = (projectPath, terms) => {
+    // Toggle against what is ACTUALLY showing, not against the collapsed list:
+    // a dormant group is hidden by default while absent from that list, so the
+    // old logic made the first tap "collapse" an already-hidden group and the
+    // user had to tap twice to open it.
+    const showingNow = !isGroupCollapsed(projectPath, terms, { collapsed, expanded });
+    const nextCollapsed = showingNow
+      ? [...collapsed.filter((x) => x !== projectPath), projectPath]
+      : collapsed.filter((x) => x !== projectPath);
+    const nextExpanded = showingNow
+      ? expanded.filter((x) => x !== projectPath)
+      : [...expanded.filter((x) => x !== projectPath), projectPath];
+    setCollapsed(nextCollapsed); saveList(COLLAPSED_KEY, nextCollapsed);
+    setExpanded(nextExpanded); saveList(EXPANDED_KEY, nextExpanded);
   };
   const [alerts, setAlerts] = useState('off'); // off | on | error
   const [alertMsg, setAlertMsg] = useState('');
@@ -120,7 +135,9 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
 
   const groups = useMemo(() => {
     const g = groupByProject(terminals);
-    return g.map((grp, i) => ({ ...grp, _i: i })).sort((a, b) => rank(a) - rank(b) || a._i - b._i);
+    return g
+      .map((grp, i) => ({ ...grp, terms: sortTermsByAttention(grp.terms), _i: i }))
+      .sort((a, b) => rank(a) - rank(b) || a._i - b._i);
   }, [terminals]);
 
   // Pinned rows in PIN order (the order Sam pinned them), only for tabs that
@@ -131,6 +148,7 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
     return pins.map((id) => byId.get(id)).filter(Boolean);
   }, [terminals, pins]);
 
+  const totals = groupSummary(terminals);
   const needsCount = terminals.filter((t) => t.status === 'needs').length;
   const workingCount = terminals.filter((t) => t.status === 'working').length;
 
@@ -171,6 +189,15 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
           </span>
           {needsCount > 0 && <span className="summary-chip chip-needs">{needsCount} needs you</span>}
           {workingCount > 0 && <span className="summary-chip chip-working">{workingCount} working</span>}
+          {/* With every project dormant the board is nothing but collapsed
+              headers, which reads as broken rather than as "all quiet". Say
+              so explicitly. */}
+          {terminals.length > 0 && totals.active === 0 && (
+            <span className="summary-chip">all quiet · {totals.idle} idle</span>
+          )}
+          {totals.done > 0 && totals.needs === 0 && totals.working === 0 && (
+            <span className="summary-chip">{totals.done} just finished</span>
+          )}
         </div>
         {alertMsg && <div className="board-alert">{alertMsg}</div>}
       </header>
@@ -206,19 +233,19 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
               </section>
             )}
             {groups.map((g) => {
-              const isCollapsed = collapsed.includes(g.projectPath);
-              const needs = g.terms.filter((t) => t.status === 'needs').length;
+              const isCollapsed = isGroupCollapsed(g.projectPath, g.terms, { collapsed, expanded });
+              const sum = groupSummary(g.terms);
               return (
                 <section key={g.projectPath} className="board-group">
                   {/* Tap the project name to collapse/expand its tabs (v1.0.53). */}
-                  <button className="board-group-head board-group-toggle" onClick={() => toggleCollapsed(g.projectPath)}>
+                  <button className="board-group-head board-group-toggle" onClick={() => toggleCollapsed(g.projectPath, g.terms)}>
                     <span className="board-group-caret">{isCollapsed ? '▸' : '▾'}</span>
                     <span className="board-group-name">{g.projectName}</span>
-                    {isCollapsed && (
-                      <span className="board-group-count">
-                        {g.terms.length} tab{g.terms.length !== 1 ? 's' : ''}{needs > 0 ? ` · ${needs} needs you` : ''}
-                      </span>
-                    )}
+                    {/* Counts show whether the group is open or shut, so a
+                        collapsed project still tells you what is inside. */}
+                    <span className={`board-group-count${sum.needs > 0 ? ' board-count-needs' : ''}`}>
+                      {summaryLabel(sum)}
+                    </span>
                   </button>
                   {!isCollapsed && g.terms.map((t) => (
                     <SessionCard

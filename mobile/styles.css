@@ -346,6 +346,8 @@ button.primary:disabled { opacity: 0.4; }
 .board-group-caret { width: 12px; flex-shrink: 0; }
 .board-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-group-count { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 11px; flex-shrink: 0; }
+/* "needs you" is the one count worth colouring: it is the reason to tap in. */
+.board-count-needs { color: var(--accent); font-weight: 600; }
 .board-pinned .board-group-head { color: var(--status-working); }
 /* Pin toggle overlays the card's right side, before the chevron; the card
    reserves room via .has-pin so text never runs underneath it. */
