@@ -82,7 +82,17 @@ export function computeRestoreLists(config, openNow, tearsNow) {
 }
 
 function persistOpenProjects() {
-  if (getQuitting() || restoring) return; // snapshot frozen: quit or restore in progress
+  // Also frozen while an update install is armed. The window-close bypass at
+  // the 'close' handler lets windows close instantly during quitAndInstall
+  // (Electron closes them BEFORE before-quit on that path, so gating that
+  // bypass on getQuitting is not an option). But if the install defers or
+  // silently fails, getQuitting stays false while windows close, and each
+  // 'closed' wrote a SHRINKING open-window list, so a Restart that did not
+  // take could rewrite lastOpenProjects to empty and wipe the restore
+  // snapshot: the exact "it didn't reopen my windows" failure Brett reported.
+  // A slightly stale snapshot is always the better error here.
+  // Codex blast-radius review (pre-existing on main, fixed with this batch).
+  if (getQuitting() || restoring || getQuittingForUpdate()) return;
   try {
     const config = loadConfig();
     const merged = computeRestoreLists(config, getOpenProjectsForRestore(), getOpenTearOffsForRestore());

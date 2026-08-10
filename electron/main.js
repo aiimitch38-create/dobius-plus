@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { getQuittingForUpdate, setQuitting } from './quit-state.js';
+import { getQuittingForUpdate, setQuitting, getQuitting } from './quit-state.js';
 import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending as cancelAutoResumeTab } from './auto-resume.js';
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
@@ -2277,7 +2277,13 @@ function setupCrashLogging() {
     // Sam's SIGABRT reports. Log it and let the quit finish.
     // This is the single place that decides, so the updater does not have to
     // race this listener by registering its own ahead of it (Codex High).
-    if (getQuittingForUpdate()) return;
+    // BOTH conditions: an update is installing AND a quit has actually begun
+    // (before-quit sets getQuitting). quitAndInstall can return without
+    // quitting on macOS, and gating on the update flag alone left fatal errors
+    // suppressed for up to 60s in a still-running app (Codex blast-radius
+    // review). The abort this protects against happens in Node's teardown,
+    // long after before-quit, so it is always inside this narrower window.
+    if (getQuittingForUpdate() && getQuitting()) return;
     // Preserve Node's default fatal behavior (adding a handler suppresses the
     // automatic exit, which would otherwise leave the app in an unknown state).
     process.exit(1);
@@ -2522,8 +2528,21 @@ app.on('before-quit', (e) => {
       // Merge-preserve missing-path entries (unmounted drive) like the live
       // persist does, so an update-restart doesn't drop them. Codex.
       const mergedUp = computeRestoreLists(cfgUp, openForUpdate, tearOffsForUpdate);
-      cfgUp.lastOpenProjects = mergedUp.lastOpenProjects;
-      cfgUp.lastTearOffs = mergedUp.lastTearOffs;
+      // An update restart must never REDUCE the restore snapshot to nothing.
+      // If the install deferred and the user closed their windows while it was
+      // pending, the live set is empty here and computeRestoreLists treats
+      // those as deliberate closes, so the app would relaunch into a bare
+      // launcher: precisely the "it didn't reopen my windows" report. Keeping
+      // the previous non-empty snapshot restores too much at worst, which is
+      // strictly the better failure. Codex blast-radius review.
+      const hadSomething = (cfgUp.lastOpenProjects?.length || 0) > 0
+        || (cfgUp.lastTearOffs?.length || 0) > 0;
+      const wouldWipe = mergedUp.lastOpenProjects.length === 0
+        && mergedUp.lastTearOffs.length === 0;
+      if (!(hadSomething && wouldWipe)) {
+        cfgUp.lastOpenProjects = mergedUp.lastOpenProjects;
+        cfgUp.lastTearOffs = mergedUp.lastTearOffs;
+      }
       cfgUp.lastQuitAt = Date.now();
       saveConfig(cfgUp);
       flushConfig();
