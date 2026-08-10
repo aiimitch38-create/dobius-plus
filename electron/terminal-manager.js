@@ -152,7 +152,7 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
     },
   });
 
-  term.onData((data) => {
+  const dataSub = term.onData((data) => {
     const entry = terminals.get(id);
     // Identity guard: if this id was re-created (createTerminal killed the old
     // PTY and spawned a new one under the same id), the OLD pty's late onData
@@ -182,7 +182,7 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
     }
   });
 
-  term.onExit(({ exitCode, signal }) => {
+  const exitSub = term.onExit(({ exitCode, signal }) => {
     const entry = terminals.get(id);
     // Identity guard: a killed PTY's onExit fires asynchronously. If the id was
     // already re-created (createTerminal kills old -> spawns new under same id),
@@ -206,6 +206,15 @@ export function createTerminal(id, cwd, webContents, accountEnv = {}) {
 
   terminals.set(id, {
     pty: term,
+    // node-pty routes onData/onExit through a NAPI ThreadSafeFunction. If a
+    // callback lands while Node is freeing its environment at quit, the throw
+    // has no handler and the process dies with SIGABRT ("Dobius+ quit
+    // unexpectedly"), which is exactly what the Restart button produced with
+    // several windows open (crash reports 2026-08-10: pty.node ->
+    // ThrowAsJavaScriptException inside node::Environment::CleanupHandles).
+    // Keeping the disposables lets shutdown UNREGISTER the JS callbacks before
+    // killing the PTYs, so the late callbacks have nothing to call into.
+    disposables: [dataSub, exitSub],
     webContents,
     // True once this PTY has ever been bound to a desktop window (created with a
     // webContents, or later claimed by one). Headless PTYs (voice-conductor
@@ -413,6 +422,10 @@ export function killTerminal(id) {
   const entry = terminals.get(id);
   if (entry) {
     try {
+      // Behaviour-neutral (the onExit handler's identity guard already no-ops
+      // once the entry is gone) but it frees the ThreadSafeFunction now instead
+      // of leaving a late callback that could land during a quit.
+      disposeListeners(entry);
       entry.pty.kill();
     } catch (err) {
       console.error(`[terminal-manager] kill error for ${id}:`, err.message);
@@ -475,9 +488,25 @@ export function getTerminalsForProject(projectPath) {
 /**
  * Kill all terminals — called on app quit.
  */
+/**
+ * Detach a PTY's JS callbacks. MUST run before kill() on any shutdown path:
+ * kill() is asynchronous, so node-pty's final data/exit callbacks arrive later,
+ * and if that is after Node starts tearing down its environment the NAPI throw
+ * aborts the process. Safe to call twice.
+ */
+function disposeListeners(entry) {
+  for (const d of (entry?.disposables || [])) {
+    try { d?.dispose?.(); } catch { /* already disposed */ }
+  }
+  if (entry) entry.disposables = [];
+}
+
 export function killAll() {
   for (const [id, entry] of terminals) {
     try {
+      // Unregister FIRST, then kill: the reverse order is what crashed the
+      // app on the update-Restart path (SIGABRT in CleanupHandles).
+      disposeListeners(entry);
       entry.pty.kill();
     } catch (err) {
       console.error(`[terminal-manager] killAll error for ${id}:`, err.message);

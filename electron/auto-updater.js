@@ -88,7 +88,6 @@ async function performInstall() {
     broadcast('updater:status', { state: 'error', message: 'No update is pending.' });
     return false;
   }
-  setQuittingForUpdate(true);
   // Belt-and-suspenders: snapshot config.json before the bundle is replaced, so
   // a bad future build that somehow wiped accounts/auth on first launch is
   // instantly recoverable from config.json.pre-update-<version>.bak. The update
@@ -102,15 +101,57 @@ async function performInstall() {
   // so this only affects the restored VISUAL scrollback. v1.0.54 (Sam's
   // "seamless restart" question).
   broadcast('terminal:requestSave');
-  await new Promise((resolve) => setTimeout(resolve, 600)); // let renderer save IPCs land
+  // Scale the wait with how much there is to save. A flat 600ms was tuned on a
+  // single window; with several windows of tabs the save IPCs had not landed
+  // before the quit, so the restored scrollback was stale (Sam: "I have a
+  // bunch of windows open when I click restart"). Bounded so a wedged renderer
+  // cannot stall the install.
+  const windowCount = Math.max(1, BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed()).length);
+  await new Promise((resolve) => setTimeout(resolve, Math.min(600 + 200 * windowCount, 3000)));
   try {
     await Promise.race([
       drainConfigWrites(), // v1.0.33: non-latching, so if quitAndInstall throws we can still persist
       new Promise((resolve) => setTimeout(resolve, QUIT_INSTALL_FLUSH_TIMEOUT_MS)),
     ]);
   } catch { /* best effort */ }
+  // A late throw from a native callback during teardown is what turned a
+  // successful install into "Dobius+ quit unexpectedly". That is handled in
+  // ONE place: setupCrashLogging's uncaughtException handler logs and returns
+  // instead of process.exit(1) while getQuittingForUpdate() is true. Adding a
+  // second listener here would never run anyway, because the crash logger is
+  // registered first and exits (Codex High). setQuittingForUpdate(false) in
+  // the catch below therefore also restores normal fatal-error behaviour.
+  // Arm the updater bypass at the LAST possible moment. Setting it at the top
+  // of this function left ~5s of prep (save wait + config drain) during which
+  // an unrelated crash was suppressed and a user-initiated quit would take the
+  // updater bypass path even though no install had started (Codex, Medium).
+  setQuittingForUpdate(true);
   try {
     autoUpdater.quitAndInstall(true, true);
+    // quitAndInstall does not throw when the install simply fails to take, so
+    // without this the app keeps running with fatal-error handling suppressed
+    // forever (Codex). If we are still alive well past a normal exit, put the
+    // app back into its normal state and say so.
+    //
+    // But on macOS quitAndInstall can DEFER the quit: when Squirrel has not
+    // finished staging the local zip it registers a native listener and
+    // returns, quitting only on a later event. Disarming the bypass while that
+    // quit is still coming would reintroduce the graceful-close race this
+    // whole fix exists to remove (Codex round 3). So the reset is cancelled
+    // the moment a quit actually begins.
+    const cancelReset = () => clearTimeout(resetTimer);
+    const resetTimer = setTimeout(() => {
+      // Drop the listener too, or a repeated Restart accumulates one per
+      // attempt (Codex round 4).
+      app.off('before-quit', cancelReset);
+      setQuittingForUpdate(false);
+      broadcast('updater:status', {
+        state: 'error',
+        message: 'The update did not install. Quit and reopen Dobius+ to try again.',
+      });
+    }, 60000);
+    resetTimer.unref?.();
+    app.once('before-quit', cancelReset);
     return true;
   } catch (err) {
     // Reset the flag so a later normal quit isn't silently broken.

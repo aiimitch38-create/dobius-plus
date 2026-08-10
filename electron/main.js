@@ -2270,6 +2270,14 @@ function setupCrashLogging() {
   };
   process.on('uncaughtException', (err) => {
     write('uncaughtException', (err && err.stack) || String(err));
+    // During an update quit the process is ALREADY on its way out and squirrel
+    // is waiting to swap the bundle. Exiting non-zero here turns a successful
+    // install into "Dobius+ quit unexpectedly" for the user, and a late throw
+    // from a native callback in teardown is exactly the shape that produced
+    // Sam's SIGABRT reports. Log it and let the quit finish.
+    // This is the single place that decides, so the updater does not have to
+    // race this listener by registering its own ahead of it (Codex High).
+    if (getQuittingForUpdate()) return;
     // Preserve Node's default fatal behavior (adding a handler suppresses the
     // automatic exit, which would otherwise leave the app in an unknown state).
     process.exit(1);
