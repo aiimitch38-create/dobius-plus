@@ -2076,3 +2076,172 @@ export async function estimateContextForSession(sessionId, projectPath) {
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Loose ends (v1.0.61): work you started and never came back to.
+//
+// Grounded in a read-only analysis of this Mac's own ~/.claude history rather
+// than intuition. Two things that analysis established:
+//   - ZERO of 102 substantive sessions in 21 days ended with Claude asking an
+//     unanswered question, so "which tab is waiting on an answer" is NOT the
+//     real attention problem, despite being the obvious guess.
+//   - 15 of those sessions died mid-flight instead: either an explicit
+//     "[Request interrupted by user]" or a turn cut off during tool use. Some
+//     were 12 to 20 days stale, and nothing in the app ever surfaced them.
+// That is the gap this fills: the app should remember what you abandoned.
+// ---------------------------------------------------------------------------
+
+const LOOSE_END_TAIL_BYTES = 64 * 1024; // enough for the closing turns
+const INTERRUPT_RE = /\[Request interrupted by user/i;
+
+/** The last entry that is a real conversational turn, ignoring meta rows. */
+function lastConversationalEntry(entries) {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const role = entries[i]?.message?.role;
+    if (role === 'user' || role === 'assistant') return entries[i];
+  }
+  return null;
+}
+
+/** Plain text of a message, ignoring tool blocks. */
+function entryText(entry) {
+  const c = entry?.message?.content;
+  if (typeof c === 'string') return c;
+  if (Array.isArray(c)) {
+    return c.filter((b) => b && b.type === 'text').map((b) => b.text || '').join('\n');
+  }
+  return '';
+}
+
+function contentTypes(entry) {
+  const c = entry?.message?.content;
+  if (!Array.isArray(c)) return new Set(typeof c === 'string' ? ['text'] : []);
+  return new Set(c.map((b) => b && b.type).filter(Boolean));
+}
+
+/**
+ * Classify how a session ENDED. Exported for tests.
+ *   'interrupted'  you stopped it (Esc / interrupt marker)
+ *   'mid-tool'     cut off while a tool call was in flight
+ *   'delivered'    Claude finished its turn normally
+ *   'unknown'      nothing conversational to judge
+ * Only the first two are loose ends; 'delivered' is a finished thought and
+ * must never be nagged about, or the feature becomes noise.
+ */
+export function classifySessionEnding(entries) {
+  const last = lastConversationalEntry(entries);
+  if (!last) return 'unknown';
+  const role = last.message.role;
+  const types = contentTypes(last);
+  const text = entryText(last);
+  if (INTERRUPT_RE.test(text)) return 'interrupted';
+  if (role === 'assistant' && types.has('tool_use')) return 'mid-tool';
+  // A trailing tool_result means the tool answered but Claude never spoke
+  // again: the turn was killed between the result and the reply.
+  if (role === 'user' && types.has('tool_result') && !types.has('text')) return 'mid-tool';
+  if (role === 'assistant') return 'delivered';
+  return 'unknown';
+}
+
+/** The last thing Claude actually SAID, so the user recognises the thread. */
+function lastAssistantSnippet(entries, max = 220) {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const e = entries[i];
+    if (e?.message?.role !== 'assistant') continue;
+    const t = entryText(e).trim();
+    if (!t || INTERRUPT_RE.test(t)) continue;
+    const oneLine = t.replace(/\s+/g, ' ');
+    return oneLine.length > max ? `${oneLine.slice(0, max)}...` : oneLine;
+  }
+  return '';
+}
+
+/**
+ * Sessions you walked away from, newest first.
+ * Read-only, tail-reads only, and skips hidden sources (the Sessions "Hide"
+ * list) because 84% of the transcript store on this Mac is headless
+ * `claude -p` noise from another app; without that filter every derived
+ * feature learns from garbage.
+ */
+export async function findLooseEnds({
+  maxAgeDays = 30, limit = 20, minBytes = 20_000,
+  // A session touched moments ago is not abandoned, it is IN PLAY. Scanning
+  // live work found this session itself mid-tool-call and called it a loose
+  // end. Nothing counts until it has gone quiet.
+  minIdleMinutes = 45,
+  // Sessions the caller knows are attached to a live Claude right now. main.js
+  // passes these from the terminal manager, which data-service cannot see.
+  excludeSessionIds = [],
+} = {}) {
+  const now = Date.now();
+  const cutoff = now - maxAgeDays * 86400_000;
+  const idleBefore = now - minIdleMinutes * 60_000;
+  const excluded = new Set(excludeSessionIds);
+  let hidden = new Set();
+  try {
+    const hp = getSettings().hiddenSessionPaths;
+    if (Array.isArray(hp)) hidden = new Set(hp.filter((p) => typeof p === 'string'));
+  } catch { void 0; }
+
+  let dirs = [];
+  try { dirs = await fs.readdir(PROJECTS_DIR); } catch { return []; }
+
+  const candidates = [];
+  for (const dir of dirs) {
+    const projectPath = tryReconstructPath(dir) || dir;
+    if (hidden.has(projectPath)) continue;
+    let names = [];
+    try { names = await fs.readdir(path.join(PROJECTS_DIR, dir)); } catch { continue; }
+    for (const name of names) {
+      if (!name.endsWith('.jsonl')) continue;
+      const full = path.join(PROJECTS_DIR, dir, name);
+      try {
+        const st = await fs.stat(full);
+        if (st.mtimeMs < cutoff || st.mtimeMs > idleBefore || st.size < minBytes) continue;
+        const sessionId = name.replace(/\.jsonl$/, '');
+        if (excluded.has(sessionId)) continue;
+        candidates.push({ full, projectPath, sessionId, mtimeMs: st.mtimeMs, size: st.size });
+      } catch { /* vanished mid-scan */ }
+    }
+  }
+  // Newest first, and cap the work: this runs on a dashboard refresh.
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const scanned = candidates.slice(0, 200);
+
+  const out = [];
+  for (const c of scanned) {
+    let entries = [];
+    try {
+      const handle = await fs.open(c.full, 'r');
+      try {
+        const st = await handle.stat();
+        const start = Math.max(0, st.size - LOOSE_END_TAIL_BYTES);
+        const buf = Buffer.alloc(Math.min(st.size, LOOSE_END_TAIL_BYTES));
+        await handle.read(buf, 0, buf.length, start);
+        const text = buf.toString('utf8');
+        // Drop the first fragment: a mid-line seek almost always splits one.
+        const lines = text.split('\n').slice(start > 0 ? 1 : 0);
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t) continue;
+          try { entries.push(JSON.parse(t)); } catch { /* partial line */ }
+        }
+      } finally { await handle.close(); }
+    } catch { continue; }
+
+    const ending = classifySessionEnding(entries);
+    if (ending !== 'interrupted' && ending !== 'mid-tool') continue;
+    out.push({
+      sessionId: c.sessionId,
+      projectPath: c.projectPath,
+      projectName: c.projectPath.split('/').filter(Boolean).pop() || c.projectPath,
+      ending,
+      lastActivityAt: c.mtimeMs,
+      ageHours: Math.round((now - c.mtimeMs) / 3600_000),
+      snippet: lastAssistantSnippet(entries),
+      sizeMB: +(c.size / 1e6).toFixed(1),
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}

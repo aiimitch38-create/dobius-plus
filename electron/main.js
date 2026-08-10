@@ -16,7 +16,7 @@ import { estimateContextForTabId } from './tab-context.js';
 import {
   loadHistory, loadStats, loadSettings, loadBridgeServers, loadPlans, loadSkills,
   loadTranscript, readPlanFile, getActiveProcesses, listProjects,
-  loadAllSessions, getLatestSession, getSessionSize, resolveFreshSessionsForTabs,
+  loadAllSessions, getLatestSession, getSessionSize, resolveFreshSessionsForTabs, findLooseEnds,
   loadProjectTokens, searchTranscripts, deleteSession,
   getLastAssistantMessage, getAllProjectTabs,
 } from './data-service.js';
@@ -451,6 +451,20 @@ function setupDataHandlers() {
     if (typeof tabId === 'string' && focusTearOffWindowForTab(tabId)) return true;
     if (typeof projectPath === 'string') return focusPrimaryWindowForProject(projectPath);
     return false;
+  });
+  // Loose ends: sessions you abandoned mid-flight. Sessions attached to a LIVE
+  // Claude are excluded here rather than in data-service, which cannot see the
+  // terminal manager; without that, work in progress reads as abandoned.
+  ipcMain.handle('data:getLooseEnds', async (_event, opts) => {
+    const liveIds = [];
+    try {
+      const map = getSessionTabMap() || {};
+      const liveTabs = new Set(listTerminals().map((t) => t.id));
+      for (const [sid, link] of Object.entries(map)) {
+        if (link?.tabId && liveTabs.has(link.tabId)) liveIds.push(sid);
+      }
+    } catch { /* best effort */ }
+    return findLooseEnds({ ...(opts || {}), excludeSessionIds: liveIds });
   });
   ipcMain.handle('data:getLatestSession', (_event, projectPath) => getLatestSession(projectPath));
   ipcMain.handle('data:getSessionSize', (_event, sessionId, projectPath) => getSessionSize(sessionId, projectPath));
