@@ -20,6 +20,13 @@ the version or branch that shipped them. Sam triggers releases.
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
 
+## Done (shipped in v1.0.60)
+
+- [x] Update Restart no longer crashes with many windows open (node-pty
+      listeners disposed before kill; SIGABRT in Node teardown)
+- [x] Deferred/failed install can no longer wipe the saved window list
+      (persist frozen while armed; updater writer refuses an empty snapshot)
+
 ## Done (shipped in v1.0.59)
 
 - [x] Git panels: full commit descriptions (click to expand in the Cmd+G
