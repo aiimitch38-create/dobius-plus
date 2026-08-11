@@ -34,6 +34,13 @@ the version or branch that shipped them. Sam triggers releases.
       done > idle, dormant projects auto-collapse).
 - [x] Status bar no longer renders "<synthetic>" as the model (~1 in 14
       sessions) and sizes the context window off the real model.
+- [x] Loose Ends accuracy audit (Sam: "did you really thoroughly look into
+      that?"): new 'unanswered' ending (recovered a real lost prompt from
+      12 days back), synthetic trailing rows no longer mask endings, and a
+      session continued in a forked file is no longer called abandoned
+      (uuid-linked, streamed scan, per-file cache).
+- [x] Mobile board shows Claude's spinner word ("Cultivating…") on working
+      tabs instead of flat "working" (Sam-requested; live-verified).
 
 ## Done (shipped in v1.0.60)
 
