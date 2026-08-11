@@ -20,7 +20,7 @@ the version or branch that shipped them. Sam triggers releases.
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
 
-## Ready on feat/tab-organization (awaiting Sam's ship word, v1.0.61)
+## Done (shipped in v1.0.61)
 
 - [x] Loose Ends: sessions abandoned mid-flight (interrupted / cut off
       mid-tool, idle 45m+), desktop dashboard tab AND mobile board section.
