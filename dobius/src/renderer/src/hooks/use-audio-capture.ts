@@ -1,7 +1,7 @@
 import { useRef, useCallback } from 'react'
 import {
   audioLevelFromSamples,
-  holdAudioLevel
+  decayAudioLevel
 } from '@/components/dictation/dictation-audio-level'
 
 type BufferedAudioChunk = {
@@ -254,7 +254,7 @@ export function useAudioCapture() {
     if (!isCapturingRef.current) {
       return 0
     }
-    return holdAudioLevel(audioLevelRef.current, performance.now() - audioLevelAtRef.current)
+    return decayAudioLevel(audioLevelRef.current, performance.now() - audioLevelAtRef.current)
   }, [])
 
   const stop = useCallback(
