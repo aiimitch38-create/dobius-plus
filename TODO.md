@@ -41,6 +41,12 @@ the version or branch that shipped them. Sam triggers releases.
       (uuid-linked, streamed scan, per-file cache).
 - [x] Mobile board shows Claude's spinner word ("Cultivating…") on working
       tabs instead of flat "working" (Sam-requested; live-verified).
+- [x] Terminal font picker (Sam: "friendlier font"): curated Mac monospaces
+      + custom entry, live apply, always-monospace fallback. Fixed the latent
+      hidden-pane 2x1 PTY squeeze every font-size change has had since
+      v1.0.28.
+- [x] Release hardening sweep: no CDP switch, no debug leftovers, suite run
+      twice for flakes (285 x2 green), both bundles building.
 
 ## Done (shipped in v1.0.60)
 
