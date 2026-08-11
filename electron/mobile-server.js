@@ -29,7 +29,7 @@ import {
   resizeTerminal, killTerminal, createTerminal, getTerminalBuffer,
   liveClaudeSessionIds, claimSessionResume, bindReservationTab, releaseSessionResume,
 } from './terminal-manager.js';
-import { parseSelector, stripAnsi } from './selector-parser.js';
+import { parseSelector, stripAnsi, spinnerVerb } from './selector-parser.js';
 import { loadAllSessions, loadTranscript, listProjects, getTranscriptSig, findLooseEnds } from './data-service.js';
 import { peekReply } from './voice-bridge.js';
 import { getVoiceConductorTabId } from './voice-conductor.js';
@@ -320,6 +320,11 @@ function buildTerminalsPayload() {
       projectName: meta.projectName,
       label: labelByTabId.get(t.id) || meta.label,
       status: st?.status || 'idle',
+      // The spinner's whimsical gerund ("Flibbertigibbeting"), Sam-requested:
+      // it is the most alive thing on the desktop screen and the phone showed
+      // a flat "working" instead. Only read for tabs that are actually
+      // working; one strip of a 4KB tail per working tab per push is cheap.
+      verb: st?.status === 'working' ? spinnerVerb(getTerminalBuffer(t.id)) : '',
       lastActivityAt: st?.lastActivityAt || 0,
       model: ctx?.model || '',
       ctxPct: typeof ctx?.ctxPct === 'number' ? ctx.ctxPct : null,
@@ -340,7 +345,7 @@ function terminalsSignature(payload) {
   // Bucket ctx% to 5% so a slowly-growing context does not push every refresh,
   // but a meaningful move (and model changes) still updates the ring.
   const tabs = payload.list
-    .map((t) => `${t.id}:${t.label}:${t.status}:${t.model}:${t.sessionId || ''}:${t.claudeLive ? 1 : 0}:${t.ctxPct == null ? '' : Math.round(t.ctxPct / 5)}`)
+    .map((t) => `${t.id}:${t.label}:${t.status}:${t.verb}:${t.model}:${t.sessionId || ''}:${t.claudeLive ? 1 : 0}:${t.ctxPct == null ? '' : Math.round(t.ctxPct / 5)}`)
     .sort().join('|');
   const exits = payload.recentExits.map((e) => `${e.id}:${e.exitCode}:${e.at}`).join('|');
   return `${tabs}#${exits}`;

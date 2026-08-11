@@ -27,7 +27,12 @@ export default function SessionCard({ term, onOpen, pinned, onTogglePin, titlePr
             {term.label || 'terminal'}
           </span>
           <span className="card-sub">
-            <span className="card-status">{s.label}</span>
+            {/* While working, Claude's own spinner word ("Flibbertigibbeting…")
+                beats a flat "working": it is what the desktop shows and it
+                tells you the session is genuinely mid-thought. */}
+            <span className="card-status">
+              {term.status === 'working' && term.verb ? `${term.verb}…` : s.label}
+            </span>
             {term.lastActivityAt ? <span className="card-time"> · {timeAgo(term.lastActivityAt)}</span> : null}
             {term.model ? <span className="card-time"> · {term.model}</span> : null}
           </span>

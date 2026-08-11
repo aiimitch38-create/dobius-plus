@@ -130,10 +130,16 @@ export default function LooseEnds({ connection }) {
               <span className="muted small">{timeAgo(item.lastActivityAt)}</span>
             </div>
             <div className="card-sub">
-              {item.ending === 'interrupted' ? 'you interrupted it' : 'stopped mid-task'}
+              {item.ending === 'interrupted' ? 'you interrupted it'
+                : item.ending === 'unanswered' ? 'never answered you' : 'stopped mid-task'}
               {item.sizeMB > 80 && ` · ${Math.round(item.sizeMB)}MB`}
             </div>
-            {item.snippet && <div className="loose-snippet">{item.snippet}</div>}
+            {/* For an unanswered ending the snippet IS your hanging prompt. */}
+            {item.snippet && (
+              <div className="loose-snippet">
+                {item.ending === 'unanswered' ? `You asked: ${item.snippet}` : item.snippet}
+              </div>
+            )}
             {confirming === item.sessionId && (
               <div className="loose-warn">
                 {Math.round(item.sizeMB)}MB transcript. Claude can take a while to load

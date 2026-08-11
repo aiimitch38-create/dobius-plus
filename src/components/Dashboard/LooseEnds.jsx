@@ -80,7 +80,7 @@ export default function LooseEnds() {
         <div>
           <h2 className="text-sm font-medium" style={{ color: 'var(--fg)' }}>Loose ends</h2>
           <p className="text-xs mt-0.5" style={{ color: 'var(--dim)' }}>
-            Sessions you interrupted or that stopped mid-task, and never came back to.
+            Sessions you interrupted, that stopped mid-task, or that never answered you.
           </p>
         </div>
         <button
@@ -114,11 +114,13 @@ export default function LooseEnds() {
               className="text-xs px-1.5 py-0.5 rounded"
               style={{
                 fontSize: 9,
-                color: item.ending === 'interrupted' ? '#d29922' : '#58a6ff',
+                color: item.ending === 'interrupted' ? '#d29922'
+                  : item.ending === 'unanswered' ? '#f85149' : '#58a6ff',
                 backgroundColor: 'var(--bg)',
               }}
             >
-              {item.ending === 'interrupted' ? 'you interrupted it' : 'stopped mid-task'}
+              {item.ending === 'interrupted' ? 'you interrupted it'
+                : item.ending === 'unanswered' ? 'never answered you' : 'stopped mid-task'}
             </span>
             <span className="text-xs font-medium" style={{ color: 'var(--fg)' }}>{item.projectName}</span>
             <span className="text-xs" style={{ color: 'var(--dim)' }}>
@@ -136,7 +138,7 @@ export default function LooseEnds() {
               className="text-xs mt-1.5"
               style={{ color: 'var(--dim)', lineHeight: 1.45, overflowWrap: 'anywhere' }}
             >
-              Last said: {item.snippet}
+              {item.ending === 'unanswered' ? 'You asked' : 'Last said'}: {item.snippet}
             </p>
           )}
 
