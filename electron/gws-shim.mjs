@@ -142,6 +142,16 @@ if (!target) {
   let token = readCachedToken(target.id);
   if (!token) {
     const m = await mint(target.creds);
+    // invalid_grant means GOOGLE revoked the stored refresh token; nothing on
+    // this machine can fix it and retrying forever is the ve-CLI login loop
+    // all over again. Say what actually happened and the one action that
+    // works. Live audit 2026-08-10: 4 of Sam's 5 connected accounts were in
+    // exactly this state and the bare "(invalid_grant)" gave no way out.
+    if (m.error === 'invalid_grant') {
+      fail(`Google has revoked the stored grant for ${target.creds.email || 'this account'}.`
+        + ' Re-logging in or retrying cannot fix it. Reconnect the account in'
+        + ' Dobius Settings > Google Accounts (takes one browser approval).');
+    }
     if (m.error) fail(`could not get an access token (${m.error})`);
     token = m.token;
     writeCachedToken(target.id, m.token, m.expiresIn);
