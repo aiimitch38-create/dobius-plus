@@ -47,6 +47,9 @@ the version or branch that shipped them. Sam triggers releases.
       v1.0.28.
 - [x] Release hardening sweep: no CDP switch, no debug leftovers, suite run
       twice for flakes (285 x2 green), both bundles building.
+- [x] Codex final release gate over the cumulative v1.0.60..HEAD diff:
+      1 Medium fixed (fork-scan cache half-eviction); the version-bump
+      finding is the ship-time flow working as designed.
 
 ## Done (shipped in v1.0.60)
 
