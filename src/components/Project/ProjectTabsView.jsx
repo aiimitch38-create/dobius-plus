@@ -77,11 +77,30 @@ export default function ProjectTabsView({ search = '', onResumeSession }) {
 
   // Filter by search across tab label + preview + project name. Keep a project
   // only if it still has matching tabs.
-  const filtered = useMemo(() => {
+  // Attention-first WITHIN each project, matching the mobile board: a live
+  // tab, then the most recently active, then the rest. The aggregate can run
+  // to dozens of rows (39 tabs on this account, only 10 with Claude running),
+  // and project order alone buries the ones that matter.
+  const ordered = useMemo(() => {
     if (!groups) return null;
+    return groups.map((g) => ({
+      ...g,
+      tabs: [...(g.tabs || [])]
+        .map((t, i) => ({ t, i }))
+        .sort((a, b) => (
+          (b.t.live ? 1 : 0) - (a.t.live ? 1 : 0)
+          || (b.t.lastActiveAt || 0) - (a.t.lastActiveAt || 0)
+          || a.i - b.i
+        ))
+        .map((x) => x.t),
+    }));
+  }, [groups]);
+
+  const filtered = useMemo(() => {
+    if (!ordered) return null;
     const q = search.trim().toLowerCase();
-    if (!q) return groups;
-    return groups
+    if (!q) return ordered;
+    return ordered
       .map((g) => {
         const nameHit = (g.name || '').toLowerCase().includes(q);
         const tabs = g.tabs.filter((t) => nameHit
@@ -90,7 +109,7 @@ export default function ProjectTabsView({ search = '', onResumeSession }) {
         return { ...g, tabs };
       })
       .filter((g) => g.tabs.length > 0);
-  }, [groups, search]);
+  }, [ordered, search]);
 
   if (filtered === null) {
     return (

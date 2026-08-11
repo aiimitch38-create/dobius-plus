@@ -30,7 +30,10 @@
  */
 
 import { getAutoResume, getSessionTabMap, loadConfig } from './config-manager.js';
-import { listTerminals, writeTerminal } from './terminal-manager.js';
+import {
+  listTerminals, writeTerminal, releaseSessionResume, claimSessionResume,
+  getTerminalWebContentsId,
+} from './terminal-manager.js';
 import { getSessionSize } from './data-service.js';
 import { BrowserWindow } from 'electron';
 
@@ -246,24 +249,69 @@ export async function startAutoResume({ startupDelayMs = 1500 } = {}) {
   for (let i = 0; i < eligible.length; i += 1) {
     const e = eligible[i];
     const delayMs = i * cfg.staggerMs;
+    // CLAIM at queue time, not write time, and not a bare reserve. The stagger
+    // means a tab sits scheduled for many seconds: reserving only at the write
+    // left that window open for another surface to take the session (Codex
+    // Critical, round 8), and reserving UNCONDITIONALLY stole the session from
+    // a resume the phone had legitimately started while the app was still
+    // booting (Codex Critical, round 9). A claim does neither.
+    let claimed = true;
+    try { claimed = await claimSessionResume(e.sessionId, e.tabId); } catch { /* proceed */ }
+    if (!claimed) {
+      console.log(`[auto-resume] ${e.tabId}: ${e.sessionId} is already running or claimed, skipping`);
+      broadcastStatus(e.tabId, 'done');
+      continue;
+    }
     broadcastStatus(e.tabId, 'queued');
-    const timer = setTimeout(() => {
+    // Pin the entry to the PTY that exists RIGHT NOW. Tab ids are
+    // deterministic per-project counters, so a window closed and reopened
+    // during the stagger recycles the same id for a brand-new shell, and a
+    // write keyed on id alone would type `claude --resume` into it (Codex
+    // High, round 11). The pid distinguishes the two.
+    const pidAtQueue = listTerminals().find((t) => t.id === e.tabId)?.pid ?? null;
+    // The entry is created BEFORE the timer so the callback can consult its own
+    // `cancelled` flag. The callback awaits, and a cancel arriving during that
+    // await used to be a no-op (the entry had already been removed from the
+    // queue), so the user typing at exactly the wrong moment got the resume
+    // typed at them anyway. The flag closes that window.
+    const entry = { sessionId: e.sessionId, projectPath: e.projectPath, timer: null, cancelled: false };
+    const giveUp = (why) => {
       queue.delete(e.tabId);
+      releaseSessionResume(e.sessionId, e.tabId);
+      if (why) console.log(`[auto-resume] ${e.tabId}: ${why}`);
+      broadcastStatus(e.tabId, 'done');
+    };
+    entry.timer = setTimeout(async () => {
       const cmd = buildResumeCommand(e.projectPath, e.sessionId, e.tabId);
-      if (!cmd) {
-        console.log(`[auto-resume] ${e.tabId}: command build failed, skipping`);
-        broadcastStatus(e.tabId, 'done');
+      if (!cmd) { giveUp('command build failed, skipping'); return; }
+      // Re-check at the moment of writing. Ownership makes this a no-op for
+      // our own reservation; it only refuses if something else took the
+      // session in the meantime (a real claude actually started it).
+      let ok = true;
+      try { ok = await claimSessionResume(e.sessionId, e.tabId); } catch { /* proceed */ }
+      // Cancelled while we were awaiting: the cancel path already released and
+      // dequeued, so just do not write.
+      if (entry.cancelled) return;
+      if (!ok) { giveUp(`${e.sessionId} is already running elsewhere, skipping`); return; }
+      // Same tab id, same SHELL? A window closed and reopened during the
+      // stagger recycles the id for a new PTY that has nothing to do with
+      // this resume.
+      const pidNow = listTerminals().find((t) => t.id === e.tabId)?.pid ?? null;
+      if (pidNow === null || pidNow !== pidAtQueue) {
+        giveUp('tab was closed (or replaced) before the write, skipping');
         return;
       }
+      queue.delete(e.tabId);
       try {
         writeTerminal(e.tabId, cmd);
         broadcastStatus(e.tabId, 'working');
       } catch (err) {
         console.warn(`[auto-resume] ${e.tabId}: write failed: ${err.message}`);
+        releaseSessionResume(e.sessionId, e.tabId);
         broadcastStatus(e.tabId, 'done');
       }
     }, delayMs);
-    queue.set(e.tabId, { sessionId: e.sessionId, projectPath: e.projectPath, timer });
+    queue.set(e.tabId, entry);
   }
 }
 
@@ -275,8 +323,10 @@ export async function startAutoResume({ startupDelayMs = 1500 } = {}) {
 export function cancelTabIfPending(tabId) {
   const entry = queue.get(tabId);
   if (!entry) return false;
+  entry.cancelled = true;
   clearTimeout(entry.timer);
   queue.delete(tabId);
+  releaseSessionResume(entry.sessionId, tabId);
   broadcastStatus(tabId, 'done');
   return true;
 }
@@ -289,9 +339,26 @@ export function cancelTabsForProject(projectPath) {
   if (!projectPath) return 0;
   let cancelled = 0;
   for (const [tabId, entry] of queue) {
-    if (entry.projectPath === projectPath) {
+    // Two projects can be in play per entry: the tab id embeds the WINDOW's
+    // project (`term-<path>-N`), while entry.projectPath is the SESSION's,
+    // and a cross-project resume makes them differ. Closing the window must
+    // cancel by the window's project or the entry survives, its reservation
+    // wedges the session, and the timer later types into whatever new shell
+    // recycled the tab id (Codex High, round 11).
+    const tabProject = (tabId.match(/^term-(\/.+)-\d+$/) || [])[1] || null;
+    if (entry.projectPath !== projectPath && tabProject !== projectPath) continue;
+    // But a project match is not proof the tab died with the closing window:
+    // a TEAR-OFF of the same project can still own this PTY (this fires from
+    // `closed`, so the closing window's webContents is already destroyed and
+    // reads as no-owner, while a live tear-off reads as its owner). Cancelling
+    // then would silently drop a legitimate queued resume into a tab that is
+    // alive and well. Codex Medium, round 12.
+    if (getTerminalWebContentsId(tabId) !== null) continue;
+    {
+      entry.cancelled = true;
       clearTimeout(entry.timer);
       queue.delete(tabId);
+      releaseSessionResume(entry.sessionId, tabId);
       broadcastStatus(tabId, 'done');
       cancelled += 1;
     }
@@ -305,7 +372,9 @@ export function cancelTabsForProject(projectPath) {
 export function cancelAll() {
   let cancelled = 0;
   for (const [tabId, entry] of queue) {
+    entry.cancelled = true;
     clearTimeout(entry.timer);
+    releaseSessionResume(entry.sessionId, tabId);
     broadcastStatus(tabId, 'done');
     cancelled += 1;
   }

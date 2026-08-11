@@ -235,3 +235,44 @@ export function parseSelector(rawBuf) {
   }
   return { prompt, options, selectedIndex };
 }
+
+/**
+ * The whimsical gerund Claude Code's spinner shows while working: the
+ * "Flibbertigibbeting…" / "Discombobulating…" / "Frolicking…" line. Sam asked
+ * for these on the phone board because they are half the fun of watching a
+ * session think.
+ *
+ * No word list: the CLI ships hundreds (its 2.1.227 binary carries a
+ * length-prefixed table: "Flambéing", "Fiddle-faddling", "Gallivanting", ...)
+ * and it grows per release. Match the LINE SHAPE instead, taken from a REAL
+ * captured frame on this machine (do not trust the docs or memory; the first
+ * version anchored on "esc to interrupt" being on the same line, and on
+ * 2.1.227 it is not, it lives on a separate footer row):
+ *
+ *     ✳ Proofing… (3s · ↓ 95 tokens)
+ *     · Burrowing…
+ *
+ * So the anchor is the SPINNER GLYPH opening the line (the CLI animates
+ * through · ✢ ✳ ✶ ✻ ✽, older builds used *), then the capitalized gerund,
+ * then the ellipsis. The glyph is what keeps ordinary prose ending in "ing…"
+ * from counting.
+ *
+ * Verb charset covers the real table: letters (accented: Flambéing),
+ * hyphens (Fiddle-faddling), apostrophes, spaces (multi-word entries). The
+ * LAST match in the tail wins, because the buffer is a rolling scrollback
+ * where earlier repaints (and earlier turns) linger above.
+ *
+ * @param raw ANSI terminal buffer (tail is enough; caller slices)
+ * @returns the gerund ("Flibbertigibbeting") or '' when no spinner is on screen
+ */
+const SPINNER_LINE_RE = /^\s*[·✢✳✶✻✽*]\s+([A-Z][A-Za-zÀ-ɏ' -]{1,40}ing)(?:…|\.\.\.)/gm;
+export function spinnerVerb(raw) {
+  if (!raw) return '';
+  // Strip first, then window: a repainting TUI is mostly escape bytes, so a
+  // raw slice holds almost no text (the claudeTuiPresent lesson, v1.0.56).
+  const tail = stripAnsi(String(raw).slice(-65536)).slice(-4096);
+  let verb = '';
+  SPINNER_LINE_RE.lastIndex = 0;
+  for (const m of tail.matchAll(SPINNER_LINE_RE)) verb = m[1];
+  return verb.trim();
+}

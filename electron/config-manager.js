@@ -27,6 +27,7 @@ const DEFAULT_CONFIG = {
     projectScanDir: '',
     scrollbackLines: 1000,
     terminalFontSize: 13,
+    terminalFontFamily: '',   // '' = default SF Mono stack; see src/lib/terminal-font.js
     sidebarDefaultOpen: false,
     // Session sources (real project paths) hidden from the Sessions history
     // list. Lets the user mute headless-CLI spam (e.g. an app running

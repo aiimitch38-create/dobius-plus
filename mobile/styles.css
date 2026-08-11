@@ -346,6 +346,8 @@ button.primary:disabled { opacity: 0.4; }
 .board-group-caret { width: 12px; flex-shrink: 0; }
 .board-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-group-count { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 11px; flex-shrink: 0; }
+/* "needs you" is the one count worth colouring: it is the reason to tap in. */
+.board-count-needs { color: var(--accent); font-weight: 600; }
 .board-pinned .board-group-head { color: var(--status-working); }
 /* Pin toggle overlays the card's right side, before the chevron; the card
    reserves room via .has-pin so text never runs underneath it. */
@@ -444,6 +446,32 @@ button.primary:disabled { opacity: 0.4; }
 }
 .board-empty-glyph { font-size: 46px; color: var(--border); }
 .board-empty-title { font-size: 17px; font-weight: 600; }
+
+/* Loose ends: abandoned work, collapsed by default under the live sessions. */
+.loose-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.loose-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.loose-head { display: flex; align-items: baseline; gap: 8px; }
+.loose-head .card-title { flex: 1 1 auto; }
+.loose-snippet {
+  font-size: 12px; color: var(--dim); margin-top: 2px;
+  /* Two lines: enough to recognise the thread, not enough to bury the next
+     row on a phone. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.loose-warn {
+  margin-top: 6px; font-size: 12px; line-height: 1.4;
+  color: var(--status-working);
+}
+.loose-actions { flex: 0 0 auto; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.loose-actions .resume-btn:disabled { opacity: 0.5; }
+.loose-dismiss {
+  background: none; border: none; cursor: pointer;
+  color: var(--dim); font-size: 11px; padding: 2px 4px;
+}
 
 /* Recently finished. */
 .board-exits { opacity: 0.9; }

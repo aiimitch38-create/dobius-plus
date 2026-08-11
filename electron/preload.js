@@ -102,6 +102,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dataGetAllProjectTabs: () => ipcRenderer.invoke('data:getAllProjectTabs'),
   dataGetSessionSize: (sessionId, projectPath) => ipcRenderer.invoke('data:getSessionSize', sessionId, projectPath),
   dataGetLooseEnds: (opts) => ipcRenderer.invoke('data:getLooseEnds', opts),
+  dataClaimSessionResume: (sessionId, tabId) => ipcRenderer.invoke('data:claimSessionResume', sessionId, tabId),
   dataGetLatestSession: (projectPath) => ipcRenderer.invoke('data:getLatestSession', projectPath),
   dataDeleteSession: (sessionId, projectPath) => ipcRenderer.invoke('data:deleteSession', sessionId, projectPath),
   dataKillProcess: (pid) => ipcRenderer.invoke('data:killProcess', pid),
@@ -115,6 +116,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gwsConnect: () => ipcRenderer.invoke('gws:connect'),
   gwsList: () => ipcRenderer.invoke('gws:list'),
   gwsRemove: (id) => ipcRenderer.invoke('gws:remove', id),
+  gwsVerify: (opts) => ipcRenderer.invoke('gws:verify', opts),
+  gwsReconnect: (id) => ipcRenderer.invoke('gws:reconnect', id),
   // v1.0.29 feature: Copy last Claude response from a tab (via TerminalTabBar
   // right-click). Returns the raw content of the most recent assistant turn.
   dataLastAssistantMessage: (sessionId, projectPath) => ipcRenderer.invoke('data:lastAssistantMessage', sessionId, projectPath),

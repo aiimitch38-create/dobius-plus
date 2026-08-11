@@ -206,5 +206,37 @@ check('rule after footer stays live (accepted residual)',
   parseSelector(ruleAfterFooter),
   { prompt: 'Q?', options: [{ num: 1, label: 'A' }, { num: 2, label: 'B' }], selectedIndex: 0 });
 
+// --- spinnerVerb (v1.0.61, Sam-requested) -----------------------------------
+// The whimsical working word for the phone board. Anchored on the spinner
+// GLYPH opening the line, not on "esc to interrupt": a real captured 2.1.227
+// frame puts that hint on a separate footer row, which is exactly the kind of
+// assumption only a live capture settles.
+import { spinnerVerb } from '../selector-parser.js';
+const sv = (name, raw, want) => {
+  const got = spinnerVerb(raw);
+  if (got === want) { console.log(`PASS  ${name}`); pass += 1; }
+  else { console.log(`FAIL  ${name}: got ${JSON.stringify(got)} want ${JSON.stringify(want)}`); fail += 1; }
+};
+
+// REAL lines captured live from Claude Code 2.1.227 on this machine.
+sv('real frame: verb with stats', '\u2733 Proofing\u2026 (3s \u00b7 \u2193 95 tokens)', 'Proofing');
+sv('real frame: bare verb line', '\u00b7 Burrowing\u2026', 'Burrowing');
+sv('real frame: full footer context',
+  'haiku text above\n\u2733 Proofing\u2026 (3s \u00b7 \u2193 95 tokens)\n  \u23f5\u23f5 auto mode on (shift+tab to cycle) \u00b7 esc to interrupt \u00b7 \u2190 for agents\n',
+  'Proofing');
+// Older CLI shape (verb + esc-to-interrupt inline) still matches on the glyph.
+sv('older inline shape', '\u273b Flibbertigibbeting\u2026 (esc to interrupt)', 'Flibbertigibbeting');
+sv('accented + hyphenated words', '\u273b Fiddle-faddling\u2026 (esc to interrupt)', 'Fiddle-faddling');
+sv('flambeing', '* Flamb\u00e9ing... (2s)', 'Flamb\u00e9ing');
+// The buffer is rolling scrollback: the LAST spinner wins, not the first.
+sv('last spinner wins', '\u2733 Noodling\u2026\nassistant text\n\u00b7 Cogitating\u2026 (5s)\n', 'Cogitating');
+// Prose ending in "ing\u2026" with no glyph is NOT a spinner, even mid-line.
+sv('prose is not a spinner', 'I kept processing\u2026 and then stopped. Working\u2026 hard.', '');
+// A glyph line whose status is not a gerund yields nothing, not a wrong word.
+sv('non-gerund status yields nothing', '\u2733 Compacting conversation\u2026 (3s)', '');
+// ANSI chrome: colors around glyph and verb still parse after the strip.
+sv('ansi-wrapped spinner', '\u001b[38;5;174m\u2733\u001b[39m \u001b[1mGallivanting\u001b[22m\u2026 \u001b[2m(4s)\u001b[22m', 'Gallivanting');
+sv('empty and junk are safe', '', '');
+
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

@@ -9,8 +9,8 @@ import { getQuittingForUpdate, setQuitting, getQuitting } from './quit-state.js'
 import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending as cancelAutoResumeTab } from './auto-resume.js';
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
-import { connectGwsAccount, listGwsAccounts, removeGwsAccount, ensureShim } from './gws-accounts.js';
-import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalClaudeInfo, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver, getTerminalsForProject } from './terminal-manager.js';
+import { connectGwsAccount, listGwsAccounts, removeGwsAccount, verifyGwsAccounts, reconnectGwsAccount, ensureShim } from './gws-accounts.js';
+import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalClaudeInfo, liveClaudeSessionIds, claimSessionResume, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver, getTerminalsForProject } from './terminal-manager.js';
 import * as terminalStatus from './terminal-status.js';
 import { estimateContextForTabId } from './tab-context.js';
 import {
@@ -455,29 +455,18 @@ function setupDataHandlers() {
   // Loose ends: sessions you abandoned mid-flight. Sessions attached to a LIVE
   // Claude are excluded here rather than in data-service, which cannot see the
   // terminal manager; without that, work in progress reads as abandoned.
-  ipcMain.handle('data:getLooseEnds', async (_event, opts) => {
-    const liveIds = [];
-    try {
-      const terms = listTerminals();
-      const liveTabs = new Set(terms.map((t) => t.id));
-      const map = getSessionTabMap() || {};
-      for (const [sid, link] of Object.entries(map)) {
-        if (link?.tabId && liveTabs.has(link.tabId)) liveIds.push(sid);
-      }
-      // The saved map can be STALE: a tab that has since started
-      // `claude --resume B` still reads as A until the 15s reconcile tick.
-      // That would offer Resume on a session already running and double-run
-      // it, so also take the id straight out of each live process's argv.
-      // Same lesson as the mobile "is Claude running" fix: the process is the
-      // truth, the link is a cache. Codex Medium.
-      const argvIds = await Promise.all(terms.map(async (t) => {
-        try { return (await getTerminalClaudeInfo(t.id))?.sessionId || null; }
-        catch { return null; }
-      }));
-      for (const sid of argvIds) if (sid) liveIds.push(sid);
-    } catch { /* best effort */ }
-    return findLooseEnds({ ...(opts || {}), excludeSessionIds: liveIds });
-  });
+  ipcMain.handle('data:getLooseEnds', async (_event, opts) => (
+    findLooseEnds({ ...(opts || {}), excludeSessionIds: await liveClaudeSessionIds() })
+  ));
+  // Re-checked at CLICK time, not just when the list was built. A Loose Ends
+  // list minutes old can offer a session the phone has since resumed, and two
+  // `claude --resume` processes appending to one transcript corrupts the
+  // user's history. Codex Critical.
+  //
+  // A claim rather than a check: a resume takes a second or two to become
+  // visible as a process, and a plain check leaves both surfaces seeing "not
+  // running" inside that window.
+  ipcMain.handle('data:claimSessionResume', (_event, sessionId, tabId) => claimSessionResume(sessionId, tabId));
   ipcMain.handle('data:getLatestSession', (_event, projectPath) => getLatestSession(projectPath));
   ipcMain.handle('data:getSessionSize', (_event, sessionId, projectPath) => getSessionSize(sessionId, projectPath));
   ipcMain.handle('data:killProcess', async (_event, pid) => {
@@ -507,6 +496,10 @@ function setupDataHandlers() {
   ipcMain.handle('gws:connect', () => connectGwsAccount());
   ipcMain.handle('gws:list', () => listGwsAccounts());
   ipcMain.handle('gws:remove', (_event, id) => removeGwsAccount(id));
+  // Health probe + one-button reconnect (v1.0.61): 4 of 5 grants were found
+  // revoked with no UI surface saying so.
+  ipcMain.handle('gws:verify', (_event, opts) => verifyGwsAccounts({ force: !!(opts && opts.force) }));
+  ipcMain.handle('gws:reconnect', (_event, id) => reconnectGwsAccount(id));
   ipcMain.handle('data:loadProjectTokens', () => loadProjectTokens());
   ipcMain.handle('data:searchTranscripts', (_event, query) => searchTranscripts(query));
   // Per-TAB context estimate (v1.0.40). Resolves the session ACTUALLY running in

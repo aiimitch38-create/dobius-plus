@@ -602,20 +602,51 @@ export const useStore = create((set, get) => ({
       }
       return;
     }
-    // Tier 1 capture: link session to the tab AFTER validation so an aborted
-    // resume never persists a bad session-tab link. Codex v1.0.35 P2.
     const projectForLink = projectPath || get().currentProjectPath;
-    window.electronAPI.configSetSessionTabLink?.(sessionId, termId, projectForLink);
-    const chars = cmd.split('');
-    chars.push('\r');
-    let i = 0;
-    const sendNext = () => {
-      if (i < chars.length) {
-        window.electronAPI.terminalWrite(termId, chars[i]);
-        i++;
-        if (i < chars.length) setTimeout(sendNext, 8);
-      }
+
+    const typeIt = () => {
+      // Tier 1 capture: link the session to the tab only once the resume is
+      // actually GOING to happen, so neither an aborted nor a refused resume
+      // persists a bad link (Codex v1.0.35 P2, extended in round 8). A link
+      // written for a refused resume is not inert: if that tab is running some
+      // other fresh claude, liveClaudeSessionIds would believe the link and
+      // suppress this session from loose ends entirely.
+      window.electronAPI.configSetSessionTabLink?.(sessionId, termId, projectForLink);
+      const chars = cmd.split('');
+      chars.push('\r');
+      let i = 0;
+      const sendNext = () => {
+        if (i < chars.length) {
+          window.electronAPI.terminalWrite(termId, chars[i]);
+          i++;
+          if (i < chars.length) setTimeout(sendNext, 8);
+        }
+      };
+      setTimeout(sendNext, 15);
     };
-    setTimeout(sendNext, 15);
+
+    // CLAIM the session before typing. `claude --resume` is not visible as a
+    // process for a second or two, and inside that window a second surface
+    // (the phone, another window, another tab) would be told the session is
+    // free and resume it too, leaving two processes appending to one
+    // transcript. Every desktop resume path (Cmd+R, ResumeBanner, Sessions,
+    // Search, sidebar, Loose Ends) funnels through here, so this one call
+    // covers all of them. An earlier version merely RESERVED, which cannot
+    // refuse: a second tab silently took ownership and both ran. Codex
+    // Critical, round 7.
+    //
+    // The claim is bound to this tab, so retrying here after a failed resume
+    // is granted, and killing the tab frees the session at once.
+    const claim = window.electronAPI.dataClaimSessionResume?.(sessionId, termId);
+    if (!claim?.then) { typeIt(); return; } // older preload: behave as before
+    claim.then((okToRun) => {
+      if (okToRun === false) {
+        if (typeof window !== 'undefined') {
+          window.alert('That session is already running somewhere else.\n\nSwitch to the tab (or the phone) that has it rather than starting a second copy.');
+        }
+        return;
+      }
+      typeIt();
+    }).catch(() => typeIt()); // if we cannot tell, do what the user asked
   },
 }));

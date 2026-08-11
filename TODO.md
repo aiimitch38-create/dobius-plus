@@ -20,6 +20,44 @@ the version or branch that shipped them. Sam triggers releases.
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
 
+## Ready on feat/tab-organization (awaiting Sam's ship word, v1.0.61)
+
+- [x] Loose Ends: sessions abandoned mid-flight (interrupted / cut off
+      mid-tool, idle 45m+), desktop dashboard tab AND mobile board section.
+      Dismissals are activity-stamped (shared/loose-dismiss.js), so
+      re-abandoned work resurfaces.
+- [x] One owner per resumed session: claim/bind/release ownership in
+      terminal-manager, wired through the store, mobile resumeSession, and
+      auto-resume. Kills the two-claude-processes-one-transcript class
+      (13 Codex rounds, 22 findings, final round clean).
+- [x] Tabs stacked by attention on mobile and desktop (needs > working >
+      done > idle, dormant projects auto-collapse).
+- [x] Status bar no longer renders "<synthetic>" as the model (~1 in 14
+      sessions) and sizes the context window off the real model.
+- [x] Loose Ends accuracy audit (Sam: "did you really thoroughly look into
+      that?"): new 'unanswered' ending (recovered a real lost prompt from
+      12 days back), synthetic trailing rows no longer mask endings, and a
+      session continued in a forked file is no longer called abandoned
+      (uuid-linked, streamed scan, per-file cache).
+- [x] Mobile board shows Claude's spinner word ("Cultivating…") on working
+      tabs instead of flat "working" (Sam-requested; live-verified).
+- [x] Terminal font picker (Sam: "friendlier font"): curated Mac monospaces
+      + custom entry, live apply, always-monospace fallback. Fixed the latent
+      hidden-pane 2x1 PTY squeeze every font-size change has had since
+      v1.0.28.
+- [x] Release hardening sweep: no CDP switch, no debug leftovers, suite run
+      twice for flakes (285 x2 green), both bundles building.
+- [x] Codex final release gate over the cumulative v1.0.60..HEAD diff:
+      1 Medium fixed (fork-scan cache half-eviction); the version-bump
+      finding is the ship-time flow working as designed.
+- [x] gws account health + one-button Reconnect in Settings (Sam-requested
+      after the 4/5-revoked audit): status dots, browser-approval reconnect,
+      identity-mismatch fail-safes at every token consumer.
+- [x] gws shim: invalid_grant explains itself and points at Reconnect.
+- [x] Context meter resets on /compact via compactMetadata.postTokens
+      (was stuck at the pre-compact figure until the next turn; measured
+      886k shown vs 34k real for 17 minutes on a live compact).
+
 ## Done (shipped in v1.0.60)
 
 - [x] Update Restart no longer crashes with many windows open (node-pty

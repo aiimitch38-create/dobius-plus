@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { buildTerminalFontFamily } from '../lib/terminal-font';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import { useStore } from '../store/store';
@@ -74,7 +75,7 @@ function getScrollback(term, maxLines = MAX_SCROLLBACK_LINES) {
  * @param {boolean} [options.claimExisting] — if true, claim an existing PTY (for tab tear-off)
  * @returns {{ containerRef: React.RefObject, termRef: React.RefObject, searchAddonRef: React.RefObject }}
  */
-export function useTerminal({ id, cwd, theme, fontSize = 13, maxScrollbackLines = MAX_SCROLLBACK_LINES, claimExisting = false }) {
+export function useTerminal({ id, cwd, theme, fontSize = 13, fontFamily = '', maxScrollbackLines = MAX_SCROLLBACK_LINES, claimExisting = false }) {
   const containerRef = useRef(null);
   const termRef = useRef(null);
   const fitAddonRef = useRef(null);
@@ -82,6 +83,14 @@ export function useTerminal({ id, cwd, theme, fontSize = 13, maxScrollbackLines 
 
   const fit = useCallback(() => {
     if (fitAddonRef.current && termRef.current && containerRef.current) {
+      // A HIDDEN pane must never fit. Every tab stays mounted with
+      // display:none, so its container has no layout box, and the fit addon
+      // clamps that to cols=2 rows=1 rather than failing; the `> 0` guard
+      // below happily forwarded that, squeezing the hidden tab's PTY to 2x1
+      // and rewrapping whatever ran in it (Codex High, latent for every
+      // font-SIZE change too; surfaced by the font-family effect). The tab
+      // refits on becoming visible, so skipping here loses nothing.
+      if (!containerRef.current.offsetWidth || !containerRef.current.offsetHeight) return;
       try {
         fitAddonRef.current.fit();
         const { cols, rows } = termRef.current;
@@ -108,7 +117,7 @@ export function useTerminal({ id, cwd, theme, fontSize = 13, maxScrollbackLines 
 
     const term = new Terminal({
       theme: theme || DEFAULT_THEME,
-      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
+      fontFamily: buildTerminalFontFamily(fontFamily),
       fontSize,
       lineHeight: 1.2,
       cursorBlink: true,
@@ -326,6 +335,18 @@ export function useTerminal({ id, cwd, theme, fontSize = 13, maxScrollbackLines 
       requestAnimationFrame(() => fit());
     }
   }, [fontSize, fit]);
+
+  // Separate effect: update font family without recreating terminal. Cell
+  // metrics change with the face, so re-fit exactly like a size change.
+  // buildTerminalFontFamily always ends the stack in `monospace`, so a font
+  // that does not exist on this machine degrades to the default look rather
+  // than a broken grid.
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.fontFamily = buildTerminalFontFamily(fontFamily);
+      requestAnimationFrame(() => fit());
+    }
+  }, [fontFamily, fit]);
 
   return { containerRef, termRef, searchAddonRef };
 }
