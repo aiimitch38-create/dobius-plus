@@ -50,6 +50,10 @@ the version or branch that shipped them. Sam triggers releases.
 - [x] Codex final release gate over the cumulative v1.0.60..HEAD diff:
       1 Medium fixed (fork-scan cache half-eviction); the version-bump
       finding is the ship-time flow working as designed.
+- [x] gws account health + one-button Reconnect in Settings (Sam-requested
+      after the 4/5-revoked audit): status dots, browser-approval reconnect,
+      identity-mismatch fail-safes at every token consumer.
+- [x] gws shim: invalid_grant explains itself and points at Reconnect.
 
 ## Done (shipped in v1.0.60)
 
