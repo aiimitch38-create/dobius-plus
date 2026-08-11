@@ -77,6 +77,36 @@ writeSession('sess-onlysynth-0003', [turn('<synthetic>', 900)]);
 r = await estimateContextForSession('sess-onlysynth-0003', PROJ);
 assert.equal(r.model, '', 'no real model seen means no badge');
 
+// 6. Compact reset. Between /compact and the next reply there is no fresh
+// usage entry, so the meter showed the pre-compact figure (886,585 for 17
+// minutes on a real 2026-08-10 compact of the dev session, and forever if
+// you compact and walk away). The boundary row's compactMetadata.postTokens
+// is the CLI's own measurement of what survived; a boundary NEWER than every
+// turn must win, and the next real turn must supersede it.
+const boundary = (postTokens) => JSON.stringify({
+  type: 'system', subtype: 'compact_boundary',
+  compactMetadata: postTokens == null
+    ? { trigger: 'manual', preTokens: 887235 }
+    : { trigger: 'manual', preTokens: 887235, postTokens },
+  content: 'Conversation compacted',
+});
+const writeRaw = (id, lines) => fs.writeFileSync(path.join(projDir, `${id}.jsonl`), `${lines.join('\n')}\n`);
+
+writeRaw('sess-compacted-0004', [turn('claude-opus-5', 886585), boundary(34526)]);
+r = await estimateContextForSession('sess-compacted-0004', PROJ);
+assert.equal(r.tokens, 34526, 'a trailing compact resets to the CLI-measured survivor count');
+assert.equal(r.model, 'claude-opus-5', 'the model survives the reset');
+
+// The first post-compact turn supersedes the boundary figure.
+writeRaw('sess-postcompact-0005', [turn('claude-opus-5', 886585), boundary(34526), turn('claude-opus-5', 109346)]);
+r = await estimateContextForSession('sess-postcompact-0005', PROJ);
+assert.equal(r.tokens, 109346, 'a turn after the boundary wins');
+
+// Old-CLI boundary without postTokens: no guessing, keep the last reading.
+writeRaw('sess-oldcompact-0006', [turn('claude-opus-5', 500000), boundary(null)]);
+r = await estimateContextForSession('sess-oldcompact-0006', PROJ);
+assert.equal(r.tokens, 500000, 'a boundary without postTokens changes nothing');
+
 fs.rmSync(HOME, { recursive: true, force: true });
 fs.rmSync(process.env.DOBIUS_TEST_USERDATA, { recursive: true, force: true });
-console.log('context-window: 5 groups pass');
+console.log('context-window: 6 groups pass');

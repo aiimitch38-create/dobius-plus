@@ -2039,12 +2039,29 @@ async function estimateContextFromFile(filePath) {
   const entries = await parseJsonl(filePath, 200); // chronological (readTail): oldest -> newest
   let lastInputTokens = 0;
   let lastModel = '';
+  // A compact that happened AFTER the newest turn. Between /compact and the
+  // next reply there is no fresh usage entry, so "latest usage" kept showing
+  // the pre-compact figure, for 17 minutes on this session's own 2026-08-10
+  // compact (886,585 shown while the real context was ~34k), and forever if
+  // you compact and walk away (Sam-reported: "the context tracker doesn't
+  // reset upon compact"). The boundary row Claude Code writes carries the
+  // answer: compactMetadata.postTokens is the surviving context, measured by
+  // the CLI itself (preTokens 887,235 -> postTokens 34,526 on that compact).
+  let pendingCompactTokens = 0;
   // Use the MOST RECENT usage-bearing message's total, NOT the max over the tail.
   // The max stuck at a historical peak: after a /compact (or /clear) the live
   // context drops but the earlier peak, often ~100%, remained, so the bar was
   // pinned at 100% for a tab that was no longer full (Sam-reported). The latest
   // assistant turn's input total IS the current window occupancy.
   for (const entry of entries) {
+    if (entry.type === 'system' && entry.subtype === 'compact_boundary') {
+      const post = entry.compactMetadata?.postTokens;
+      // Older CLIs wrote boundaries without postTokens (this session's
+      // 2026-05-25 boundary has none); those keep the old stale-until-next-
+      // turn behavior rather than guessing.
+      pendingCompactTokens = Number.isFinite(post) && post > 0 ? post : 0;
+      continue;
+    }
     const usage = entry.message?.usage;
     if (!usage) continue;
     const total =
@@ -2053,6 +2070,7 @@ async function estimateContextFromFile(filePath) {
       (usage.cache_creation_input_tokens || 0);
     if (total > 0) {
       lastInputTokens = total; // last assignment wins = newest turn
+      pendingCompactTokens = 0; // a real turn after the boundary supersedes it
       // Only a REAL model id updates the badge. Claude Code stamps some turns
       // `<synthetic>` (its own internal messages, e.g. an interrupt notice),
       // and those carry usage like any other, so taking the last model
@@ -2065,6 +2083,11 @@ async function estimateContextFromFile(filePath) {
       if (typeof m === 'string' && m.startsWith('claude-')) lastModel = m;
     }
   }
+  // The boundary is newer than every turn: the CLI's own post-compact count
+  // is the truth right now. Slightly under the next turn's reading (the next
+  // prompt re-adds CLAUDE.md, reminders, skills), but 3% honest beats 89%
+  // stale, and the first real turn corrects it.
+  if (pendingCompactTokens > 0) lastInputTokens = pendingCompactTokens;
   if (!lastInputTokens) return null;
   return { tokens: lastInputTokens, maxTokens: windowForModel(lastModel, lastInputTokens), model: lastModel };
 }
