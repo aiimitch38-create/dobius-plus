@@ -60,7 +60,17 @@ DMG="dist-electron/dobius-plus-${V}.dmg"
 codesign --sign "$IDENTITY" --timestamp "$DMG"
 xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait
 xcrun stapler staple "$DMG"
-spctl -a -vvv -t install "$DMG" 2>&1 | grep -q "Notarized Developer ID" || { echo "ERROR: DMG failed spctl verify" >&2; exit 1; }
+# Retry: right after stapling, Gatekeeper's ticket lookup can transiently
+# fail (v1.0.61 release: stapler said "validate action worked" and spctl
+# rejected anyway, then accepted on manual re-run a minute later, leaving the
+# manifest/re-upload steps unrun). Give propagation up to a minute.
+SPCTL_OK=""
+for i in 1 2 3 4; do
+  if spctl -a -vvv -t install "$DMG" 2>&1 | grep -q "Notarized Developer ID"; then SPCTL_OK=1; break; fi
+  echo "spctl not accepting yet (attempt $i), waiting 15s..."
+  sleep 15
+done
+[ -n "$SPCTL_OK" ] || { echo "ERROR: DMG failed spctl verify after 4 attempts" >&2; exit 1; }
 echo "DMG verified: Notarized Developer ID"
 
 step "Regenerate manifest DMG hash + re-upload"
