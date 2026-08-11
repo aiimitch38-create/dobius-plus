@@ -54,6 +54,9 @@ the version or branch that shipped them. Sam triggers releases.
       after the 4/5-revoked audit): status dots, browser-approval reconnect,
       identity-mismatch fail-safes at every token consumer.
 - [x] gws shim: invalid_grant explains itself and points at Reconnect.
+- [x] Context meter resets on /compact via compactMetadata.postTokens
+      (was stuck at the pre-compact figure until the next turn; measured
+      886k shown vs 34k real for 17 minutes on a live compact).
 
 ## Done (shipped in v1.0.60)
 
