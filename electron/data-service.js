@@ -2322,12 +2322,24 @@ function lastUserSnippet(entries, max = 220) {
 // restart. Both Codex lenses found that one independently. A file whose stat
 // is unchanged is never re-read; a fork verdict follows the file's content.
 const forkScanCache = new Map(); // filePath -> { size, mtimeMs, uuid }
-// One entry per transcript ever scanned; this store holds thousands. A dumb
-// wholesale reset at the cap beats an LRU here: re-scans are cheap (non-forks
-// stop at their first human line) and only dirs with candidates are scanned.
-const FORK_SCAN_CACHE_MAX = 5000;
+// One entry per transcript ever scanned; this store holds thousands, so the
+// cache is bounded. Eviction drops the OLDEST HALF (Map iteration = insertion
+// order), never everything: a wholesale clear() thrashed when a single
+// monster dir alone exceeded the cap, rescanning every unchanged file on
+// every refresh (Codex release gate, Medium). Half-eviction keeps the newest
+// half warm, so even the pathological dir rescans at most half per call.
+const FORK_SCAN_CACHE_MAX = 20_000;
+function evictForkScanCache() {
+  if (forkScanCache.size <= FORK_SCAN_CACHE_MAX) return;
+  let toDrop = Math.floor(forkScanCache.size / 2);
+  for (const key of forkScanCache.keys()) {
+    if (toDrop <= 0) break;
+    forkScanCache.delete(key);
+    toDrop -= 1;
+  }
+}
 async function continuationParentUuids(dir) {
-  if (forkScanCache.size > FORK_SCAN_CACHE_MAX) forkScanCache.clear();
+  evictForkScanCache();
   let names;
   try { names = (await fs.readdir(dir)).filter((n) => n.endsWith('.jsonl')); } catch { return new Set(); }
   const uuids = new Set();
