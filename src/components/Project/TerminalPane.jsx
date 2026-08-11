@@ -25,17 +25,29 @@ function arrayBufferToBase64(buffer) {
  */
 export default function TerminalPane({ id, cwd, theme, className = '', claimExisting = false }) {
   const [termFontSize, setTermFontSize] = useState(13);
+  const [termFontFamily, setTermFontFamily] = useState('');
   const [scrollbackLines, setScrollbackLines] = useState(1000);
 
   // Load terminal settings from config
   useEffect(() => {
     window.electronAPI?.configGetSettings?.().then((s) => {
       if (s?.terminalFontSize) setTermFontSize(s.terminalFontSize);
+      if (typeof s?.terminalFontFamily === 'string') setTermFontFamily(s.terminalFontFamily);
       if (s?.scrollbackLines) setScrollbackLines(s.scrollbackLines);
     });
   }, []);
 
-  const { containerRef, searchAddonRef } = useTerminal({ id, cwd, theme, fontSize: termFontSize, maxScrollbackLines: scrollbackLines, claimExisting });
+  // Same-window live apply: Settings dispatches this when the font changes,
+  // because config settings are otherwise only read at pane mount and every
+  // tab stays mounted for the life of the window. Other windows pick the new
+  // font up on their next mount (same behavior font size has always had).
+  useEffect(() => {
+    const onFont = (e) => setTermFontFamily(typeof e.detail === 'string' ? e.detail : '');
+    window.addEventListener('dobius:terminal-font', onFont);
+    return () => window.removeEventListener('dobius:terminal-font', onFont);
+  }, []);
+
+  const { containerRef, searchAddonRef } = useTerminal({ id, cwd, theme, fontSize: termFontSize, fontFamily: termFontFamily, maxScrollbackLines: scrollbackLines, claimExisting });
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const mountedRef = useRef(true);

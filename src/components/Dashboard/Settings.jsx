@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../../store/store';
+import { CURATED_TERMINAL_FONTS, buildTerminalFontFamily } from '../../lib/terminal-font';
 import { THEMES } from '../../lib/themes';
 import AccountsSection from './AccountsSection';
 import GwsAccounts from './GwsAccounts';
@@ -12,6 +13,7 @@ export default function Settings() {
     projectScanDir: '',
     scrollbackLines: 1000,
     terminalFontSize: 13,
+    terminalFontFamily: '',
     sidebarDefaultOpen: false,
   });
   const [loaded, setLoaded] = useState(false);
@@ -179,6 +181,11 @@ export default function Settings() {
     }
   }, []);
 
+  // Custom terminal font entry is OPEN (select shows "Custom…") even while
+  // the saved value is still a curated name; cleared when a curated font is
+  // picked again.
+  const [customFontMode, setCustomFontMode] = useState(false);
+
   const updateSetting = useCallback((key, value) => {
     setSettings((prev) => {
       const next = { ...prev, [key]: value };
@@ -263,6 +270,55 @@ export default function Settings() {
                 />
               ))}
             </div>
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          label="Terminal Font"
+          description={(CURATED_TERMINAL_FONTS.find((f) => f.id === settings.terminalFontFamily)?.hint)
+            || 'Any installed MONOSPACE font. Proportional faces (Helvetica, Arial) break the terminal grid: boxes and tables stop lining up.'}
+        >
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <select
+              value={(customFontMode || !CURATED_TERMINAL_FONTS.some((f) => f.id === settings.terminalFontFamily)) ? '__custom__' : settings.terminalFontFamily}
+              onChange={(e) => {
+                if (e.target.value === '__custom__') {
+                  // Open the text field without touching the setting: writing a
+                  // placeholder here changed the font before the user typed
+                  // anything, and writing the CURRENT value back snapped the
+                  // select shut so Custom was unreachable from a curated
+                  // choice (Codex, Medium).
+                  setCustomFontMode(true);
+                  return;
+                }
+                setCustomFontMode(false);
+                updateSetting('terminalFontFamily', e.target.value);
+                window.dispatchEvent(new CustomEvent('dobius:terminal-font', { detail: e.target.value }));
+              }}
+              style={{
+                backgroundColor: 'var(--bg)', color: 'var(--fg)', border: '1px solid var(--border)',
+                borderRadius: 6, padding: '4px 8px', fontSize: 12, outline: 'none',
+                fontFamily: buildTerminalFontFamily(settings.terminalFontFamily),
+              }}
+            >
+              {CURATED_TERMINAL_FONTS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              <option value="__custom__">Custom…</option>
+            </select>
+            {(customFontMode || !CURATED_TERMINAL_FONTS.some((f) => f.id === settings.terminalFontFamily)) && (
+              <input
+                type="text"
+                value={settings.terminalFontFamily || ''}
+                placeholder="Font name"
+                onChange={(e) => {
+                  updateSetting('terminalFontFamily', e.target.value);
+                  window.dispatchEvent(new CustomEvent('dobius:terminal-font', { detail: e.target.value }));
+                }}
+                style={{
+                  backgroundColor: 'var(--bg)', color: 'var(--fg)', border: '1px solid var(--border)',
+                  borderRadius: 6, padding: '4px 8px', fontSize: 12, width: 130, outline: 'none',
+                }}
+              />
+            )}
           </div>
         </SettingRow>
 
