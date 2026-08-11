@@ -116,6 +116,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gwsConnect: () => ipcRenderer.invoke('gws:connect'),
   gwsList: () => ipcRenderer.invoke('gws:list'),
   gwsRemove: (id) => ipcRenderer.invoke('gws:remove', id),
+  gwsVerify: (opts) => ipcRenderer.invoke('gws:verify', opts),
+  gwsReconnect: (id) => ipcRenderer.invoke('gws:reconnect', id),
   // v1.0.29 feature: Copy last Claude response from a tab (via TerminalTabBar
   // right-click). Returns the raw content of the most recent assistant turn.
   dataLastAssistantMessage: (sessionId, projectPath) => ipcRenderer.invoke('data:lastAssistantMessage', sessionId, projectPath),

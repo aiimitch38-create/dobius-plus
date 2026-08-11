@@ -283,6 +283,172 @@ export function listGwsAccounts() {
   return getGwsAccounts().map((a) => ({ id: a.id, email: a.email, name: a.name, scopes: a.scopes || [] }));
 }
 
+// ---------------------------------------------------------------------------
+// Health + one-button reconnect (v1.0.61). A live audit found 4 of 5 stored
+// grants revoked by Google (invalid_grant) with nothing in the UI saying so:
+// every Claude attempt through those accounts just failed. Sam: "when we need
+// to reconnect gws, it should be an easy way to do it from the settings".
+// ---------------------------------------------------------------------------
+
+// Verify results are cached briefly: Settings re-renders must not hammer
+// Google's token endpoint. A successful probe seeds the runtime token cache,
+// so verifying is never wasted work.
+const verifyCache = new Map(); // id -> { at, status, error }
+const VERIFY_CACHE_MS = 5 * 60_000;
+
+/**
+ * Probe every connected account's stored grant against Google.
+ * status: 'ok' (mints), 'revoked' (invalid_grant: only a reconnect fixes it),
+ * 'error' (transient/other; the account may still be fine).
+ */
+export async function verifyGwsAccounts({ force = false } = {}) {
+  const out = [];
+  for (const a of getGwsAccounts()) {
+    const hit = verifyCache.get(a.id);
+    if (!force && hit && Date.now() - hit.at < VERIFY_CACHE_MS) {
+      out.push({ id: a.id, email: a.email, status: hit.status, error: hit.error });
+      continue;
+    }
+    let status = 'error';
+    let error = null;
+    const prof = await readProfile(a.id);
+    if (!prof) {
+      error = 'profile_unreadable';
+    } else {
+      const res = await refreshGrant(prof.client_id, prof.client_secret, prof.refresh_token);
+      if (res.access_token) {
+        // The mint proves the GRANT lives; it does not prove it belongs to
+        // the email this row claims. A swapped or stale profile file would
+        // otherwise get its token cached under the registry id, and
+        // getAccessTokenForEmail(alice) could then act as bob (Codex P1).
+        // Ask Google whose token this is before trusting it, AND require the
+        // profile file's own email to agree with the registry: a token that
+        // is provably the right person's inside a profile whose email field
+        // lies still means the file is corrupted or tampered, and the two
+        // consumers (this cache seed and getAccessToken's mint path) must
+        // reach the same verdict on it or one bypasses the other via the
+        // cache (Codex P1, final round).
+        const profileAgrees = !prof?.email || !a.email
+          || String(prof.email).toLowerCase() === String(a.email).toLowerCase();
+        const who = await tokenEmail(res.access_token);
+        if (profileAgrees && who && a.email && who.toLowerCase() === String(a.email).toLowerCase()) {
+          status = 'ok';
+          tokenCache.set(a.id, { token: res.access_token, expiresAt: Date.now() + (res.expires_in - 60) * 1000 });
+        } else if (who) {
+          error = 'email_mismatch'; // grant works but is not this account's
+        } else {
+          error = 'userinfo_failed'; // cannot prove ownership: do not cache
+        }
+      } else if (res.error === 'invalid_grant') {
+        status = 'revoked';
+      } else {
+        error = res.error; // network_error, http_5xx, ...: not proof of death
+      }
+    }
+    verifyCache.set(a.id, { at: Date.now(), status, error });
+    out.push({ id: a.id, email: a.email, status, error });
+  }
+  return out;
+}
+
+/** Whose access token is this? Email from Google userinfo, or null. */
+async function tokenEmail(accessToken) {
+  try {
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const j = await r.json().catch(() => ({}));
+    return typeof j.email === 'string' ? j.email : null;
+  } catch { return null; }
+}
+
+/** The email the BASE gws login currently acts as, or null. */
+function baseAuthUser() {
+  return new Promise((resolve) => {
+    execFile('gws', ['auth', 'status'], { env: EXEC_ENV, timeout: 15000 }, (err, stdout) => {
+      if (err) return resolve(null);
+      try {
+        // Output is a banner line then JSON; parse from the first brace.
+        const i = stdout.indexOf('{');
+        const j = JSON.parse(stdout.slice(i));
+        resolve(typeof j.user === 'string' ? j.user : null);
+      } catch { resolve(null); }
+    });
+  });
+}
+
+// Only one browser approval can meaningfully run at a time; a second click
+// while one is pending would stack OAuth flows and confuse whose approval
+// landed where.
+let reconnectInFlight = false;
+
+/**
+ * One-button reconnect: run `gws auth login` (opens the browser; the user
+ * picks the account and approves), then capture whatever was approved via the
+ * normal connect flow, which refreshes the matching account IN PLACE by
+ * email.
+ *
+ * Two honest limits, both surfaced to the UI rather than papered over:
+ * - `gws auth login` has no account hint, so the user can approve a
+ *   DIFFERENT account than the row they clicked. That other account gets
+ *   refreshed (harmless, correct by email-keying) and the result says so.
+ * - Logging in switches the BASE terminal identity to the approved account.
+ *   The result reports what it changed from, and the UI's guidance is to
+ *   reconnect the daily-driver account LAST, which both revives it and puts
+ *   the terminal identity back.
+ */
+export async function reconnectGwsAccount(id) {
+  if (!isValidGwsId(id)) return { ok: false, error: 'Unknown account.' };
+  const target = getGwsAccounts().find((a) => a.id === id);
+  if (!target) return { ok: false, error: 'Unknown account.' };
+  if (reconnectInFlight) return { ok: false, error: 'A reconnect is already waiting on a browser approval. Finish or cancel that one first.' };
+  reconnectInFlight = true;
+  try {
+    const baseBefore = await baseAuthUser();
+    // Reuse the scopes this account was connected with so the login skips the
+    // interactive scope picker (which would hang a spawn with no TTY). Allow
+    // only URL-ish scope charset; anything odd falls back to the service set.
+    const scopes = (Array.isArray(target.scopes) ? target.scopes : [])
+      .filter((s) => typeof s === 'string' && /^[A-Za-z0-9.:/_-]+$/.test(s));
+    const args = ['auth', 'login'];
+    if (scopes.length > 0) args.push('--scopes', scopes.join(','));
+    else args.push('--services', 'gmail,drive,calendar,sheets,docs');
+    const login = await new Promise((resolve) => {
+      // 5 minutes: the human is in a browser consent screen. Never inherit
+      // stdio; the picker is skipped by the flags above and any other prompt
+      // must fail rather than hang forever.
+      execFile('gws', args, { env: EXEC_ENV, timeout: 5 * 60_000 }, (err) => resolve(err || null));
+    });
+    if (login) {
+      return {
+        ok: false,
+        error: login.killed
+          ? 'The browser approval was not completed within 5 minutes. Nothing was changed.'
+          : 'gws auth login failed. Try `gws auth login` in a terminal to see why.',
+      };
+    }
+    const res = await connectGwsAccount();
+    if (!res.ok) return res;
+    // Fresh grant: yesterday's verdicts for both the requested row and the
+    // approved account are stale.
+    verifyCache.delete(id);
+    verifyCache.delete(res.account.id);
+    const approvedEmail = res.account.email;
+    const result = {
+      ...res,
+      requestedEmail: target.email,
+      approvedEmail,
+      baseChangedFrom: baseBefore && baseBefore !== approvedEmail ? baseBefore : null,
+    };
+    if (approvedEmail !== target.email) {
+      result.warning = `You approved ${approvedEmail} in the browser, so THAT account was refreshed instead. Hit Reconnect on ${target.email} again and pick it this time.`;
+    }
+    return result;
+  } finally {
+    reconnectInFlight = false;
+  }
+}
+
 /** Remove an account: delete its 0600 profile file + registry entry + cache. */
 export async function removeGwsAccount(id) {
   if (!isValidGwsId(id)) return { ok: false, error: 'Invalid account' };
@@ -326,6 +492,16 @@ export async function getAccessToken(id) {
   if (cached && cached.expiresAt - Date.now() > 60 * 1000) return cached.token;
   const prof = await readProfile(id);
   if (!prof) return null;
+  // Ownership cross-check, no network needed: connect writes the email into
+  // the profile from the SAME minted token that named the registry row, so a
+  // profile whose email differs from its registry row is a swapped or
+  // corrupted file, and minting from it would hand out some OTHER account's
+  // token under this row's identity (Codex P1). Refuse instead.
+  const row = getGwsAccounts().find((a) => a.id === id);
+  if (row?.email && prof.email && String(row.email).toLowerCase() !== String(prof.email).toLowerCase()) {
+    console.warn('[gws-accounts] profile/registry email mismatch for', id, '- refusing to mint');
+    return null;
+  }
   const res = await refreshGrant(prof.client_id, prof.client_secret, prof.refresh_token);
   if (!res.access_token) {
     console.warn('[gws-accounts] token refresh failed:', res.error || 'unknown');

@@ -76,8 +76,15 @@ function resolveProfile() {
     // DOBIUS_GWS_ACCOUNT in the user's shell could win by readdir order and run
     // gws as the wrong Google account. Codex v1.0.41 holistic P2.
     if (wantId) {
-      if (id === wantId) return { id, creds: j };
-      continue;
+      if (id !== wantId) continue;
+      // When the binder ALSO names the email, the profile must corroborate
+      // it: id selects, email verifies. A swapped profile file would
+      // otherwise run gws as whoever's token is inside (Codex P1). Any
+      // future bound-tab feature must inject BOTH env vars for this reason.
+      if (wantEmail && (typeof j.email !== 'string' || j.email.toLowerCase() !== wantEmail)) {
+        return { error: `account identity mismatch: profile ${id} is not ${process.env.DOBIUS_GWS_ACCOUNT}` };
+      }
+      return { id, creds: j };
     }
     if (wantEmail && typeof j.email === 'string' && j.email.toLowerCase() === wantEmail) return { id, creds: j };
   }

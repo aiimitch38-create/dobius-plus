@@ -9,7 +9,7 @@ import { getQuittingForUpdate, setQuitting, getQuitting } from './quit-state.js'
 import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending as cancelAutoResumeTab } from './auto-resume.js';
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
-import { connectGwsAccount, listGwsAccounts, removeGwsAccount, ensureShim } from './gws-accounts.js';
+import { connectGwsAccount, listGwsAccounts, removeGwsAccount, verifyGwsAccounts, reconnectGwsAccount, ensureShim } from './gws-accounts.js';
 import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalClaudeInfo, liveClaudeSessionIds, claimSessionResume, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver, getTerminalsForProject } from './terminal-manager.js';
 import * as terminalStatus from './terminal-status.js';
 import { estimateContextForTabId } from './tab-context.js';
@@ -496,6 +496,10 @@ function setupDataHandlers() {
   ipcMain.handle('gws:connect', () => connectGwsAccount());
   ipcMain.handle('gws:list', () => listGwsAccounts());
   ipcMain.handle('gws:remove', (_event, id) => removeGwsAccount(id));
+  // Health probe + one-button reconnect (v1.0.61): 4 of 5 grants were found
+  // revoked with no UI surface saying so.
+  ipcMain.handle('gws:verify', (_event, opts) => verifyGwsAccounts({ force: !!(opts && opts.force) }));
+  ipcMain.handle('gws:reconnect', (_event, id) => reconnectGwsAccount(id));
   ipcMain.handle('data:loadProjectTokens', () => loadProjectTokens());
   ipcMain.handle('data:searchTranscripts', (_event, query) => searchTranscripts(query));
   // Per-TAB context estimate (v1.0.40). Resolves the session ACTUALLY running in
