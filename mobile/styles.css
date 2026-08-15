@@ -693,3 +693,45 @@ button.primary:disabled { opacity: 0.4; }
 .chat-esc.working { border-color: var(--status-needs); color: var(--status-needs); }
 .chat-esc:active { background: var(--border); }
 .chat-upload-msg { padding: 6px 12px; font-size: 12px; color: #F85149; background: var(--surface); border-top: 1px solid var(--border); }
+
+/* v1.0.62 chat additions: copy chips, skill autocomplete, keys toggle. */
+.md-pre-wrap { position: relative; }
+/* Reserve the button's corner so it never sits ON the first line of code
+   (Codex Medium: a long one-liner is exactly what gets copied). */
+.md-pre-wrap pre { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-top: 30px; }
+.md-copy {
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  font-size: 10px; padding: 3px 8px; border-radius: 6px;
+  background: var(--surface); color: var(--dim);
+  border: 1px solid var(--border); cursor: pointer;
+}
+.md-copy.done { color: var(--status-done); border-color: var(--status-done); }
+.chat-content p code, .chat-content li code {
+  /* A long inline command must be readable and selectable, not truncated
+     (the screenshot that filed this bug was a one-line command cut off
+     mid-flag). Scroll it; fenced blocks carry the copy button. */
+  display: inline-block; max-width: 100%; overflow-x: auto;
+  white-space: pre; vertical-align: bottom; -webkit-overflow-scrolling: touch;
+}
+
+.chat-skill-suggest {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  max-height: 40vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+.chat-skill-row {
+  display: flex; flex-direction: column; gap: 2px; width: 100%;
+  text-align: left; padding: 9px 14px; background: none; border: none;
+  border-bottom: 1px solid var(--border); cursor: pointer; color: var(--fg);
+}
+.chat-skill-name { font-family: 'SF Mono', monospace; font-size: 13px; color: var(--accent); }
+.chat-skill-desc {
+  font-size: 11px; color: var(--dim);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.chat-keys-toggle {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 8px;
+  background: var(--surface); color: var(--dim);
+  border: 1px solid var(--border); cursor: pointer; font-size: 15px; line-height: 1;
+}
+.chat-keys-toggle.on { color: var(--accent); border-color: var(--accent); }

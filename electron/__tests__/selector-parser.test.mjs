@@ -238,5 +238,55 @@ sv('non-gerund status yields nothing', '\u2733 Compacting conversation\u2026 (3s
 sv('ansi-wrapped spinner', '\u001b[38;5;174m\u2733\u001b[39m \u001b[1mGallivanting\u001b[22m\u2026 \u001b[2m(4s)\u001b[22m', 'Gallivanting');
 sv('empty and junk are safe', '', '');
 
+// --- parseSelectorFromScreen on REAL captured multi-question frames ---------
+// Fixtures captured live from Claude Code 2.1.233 over the mobile attach
+// stream (fix/mobile-chat-bugs): a two-question AskUserQuestion call. The old
+// strip path parsed Q1 but returned null on Q2 (incremental repaint) and on
+// the submit screen; the emulator + screen parser must get all three.
+import { parseSelectorFromScreen } from '../selector-parser.js';
+import { renderScreenLines } from '../screen-render.js';
+const screenSel = async (name) => {
+  const raw = new Uint8Array(fs.readFileSync(path.join(fixDir, name)));
+  const lines = await renderScreenLines(raw);
+  if (!lines) return 'RENDER_FAILED';
+  return parseSelectorFromScreen(lines);
+};
+const sv2 = (name, got, want) => {
+  const g = JSON.stringify(got), w = JSON.stringify(want);
+  if (g === w) { console.log(`PASS  ${name}`); pass += 1; }
+  else { console.log(`FAIL  ${name}:\n  got  ${g}\n  want ${w}`); fail += 1; }
+};
+
+sv2('screen: multi-question Q1', await screenSel('askq-multi-q1-2.1.233-raw.bin'), {
+  prompt: 'Pick a color',
+  options: [{ num: 1, label: 'Red' }, { num: 2, label: 'Blue' }, { num: 3, label: 'Type something.' }, { num: 4, label: 'Chat about this' }],
+  selectedIndex: 0,
+});
+sv2('screen: multi-question Q2 (the bug)', await screenSel('askq-multi-q2-2.1.233-raw.bin'), {
+  prompt: 'Pick a size',
+  options: [{ num: 1, label: 'Small' }, { num: 2, label: 'Large' }, { num: 3, label: 'Type something.' }, { num: 4, label: 'Chat about this' }],
+  selectedIndex: 0,
+});
+sv2('screen: submit step is a popup too', await screenSel('askq-multi-submit-2.1.233-raw.bin'), {
+  prompt: 'Ready to submit your answers?',
+  options: [{ num: 1, label: 'Submit answers' }, { num: 2, label: 'Cancel' }],
+  selectedIndex: 0,
+});
+// Erase honored: a screen with NO hint footer (nothing live) yields null,
+// whatever numbered prose is lying around.
+sv2('screen: no hint footer means no popup',
+  parseSelectorFromScreen(['notes', '1. first thing', '2. second thing', 'done']), null);
+// Codex High: Claude QUOTING a selector at the end of a message (cursor glyph
+// and all) must never become tappable fake options. Only the multi-question
+// tab bar legitimizes a footerless cursor block.
+sv2('screen: quoted selector prose is not a popup',
+  parseSelectorFromScreen(['quoted shell output:', '\u276f 1. foo', '  2. bar']), null);
+// Codex High #2: a numbered list in Claude's ANSWER followed by prose that
+// trips the hint regex ("Press Enter to confirm when ready") has no cursor
+// row, so it is not a selector.
+sv2('screen: numbered prose + hint-like sentence is not a popup',
+  parseSelectorFromScreen(['Claude says:', '1. Run tests', '2. Deploy', 'Press Enter to confirm when ready']), null);
+sv2('screen: null input safe', parseSelectorFromScreen(null), null);
+
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

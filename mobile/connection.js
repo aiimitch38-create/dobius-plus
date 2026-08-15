@@ -1,7 +1,12 @@
 // Deliberate one-shot actions that must survive a reconnect blip. Deliberately
 // excludes read requests (list*/loadTranscript), which screens re-issue on
 // `authed` themselves, so queuing them too would double-fire. Audit HIGH-5.
-const QUEUEABLE = new Set(['input', 'kill', 'resumeSession', 'createTerminal']);
+// submitPrompt joined in v1.0.62: it was NOT queueable, so a chat message
+// typed during the reconnect blip iOS causes on every app foreground was
+// silently dropped. That is Sam's "it swallows up messages once in a while":
+// the echo bubble appeared (local state), the send went nowhere, and the
+// 90s echo pruner eventually erased the evidence.
+const QUEUEABLE = new Set(['input', 'submitPrompt', 'kill', 'resumeSession', 'createTerminal']);
 
 /**
  * WebSocket client for the Dobius+ mobile bridge.

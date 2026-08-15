@@ -193,5 +193,27 @@ const skillCombined = entryToMessage({ type: 'user', message: { role: 'user', co
   '<command-message>machine</command-message>\n<command-name>/machine</command-name>\nBase directory for this skill: /Users/x/.claude/skills/machine\n\n# machine\n\nbody\n' } });
 assert.deepEqual(skillCombined, { role: 'user', content: '/machine', command: true });
 
+
+// --- v1.0.62 chat-noise batch (Sam's mobile bug list, 8/14) -----------------
+const ESC = String.fromCharCode(27);
+// A `!` composer command: transcript wraps it as <bash-input>; the chat must
+// show the composer form (which also lets the mobile echo pruner match it and
+// clear "sending…").
+assert.deepEqual(entryToMessage({ type: 'user', message: { role: 'user', content: '<bash-input>cd /tmp && ls</bash-input>' } }),
+  { role: 'user', content: '! cd /tmp && ls', command: true });
+// Its output rows render as the output itself, ANSI stripped, stderr kept.
+assert.deepEqual(entryToMessage({ type: 'user', message: { role: 'user', content: `<bash-stdout>ok ${ESC}[32mgreen${ESC}[39m</bash-stdout><bash-stderr>warn</bash-stderr>` } }),
+  { role: 'user', content: 'ok green\nwarn', command: true });
+// local-command-stdout carries bold/reset escapes in real transcripts
+// ("Set model to \x1b[1mFable 5\x1b[22m..."); bubbles are not terminals.
+assert.deepEqual(entryToMessage({ type: 'user', message: { role: 'user', content: `<local-command-stdout>Set model to ${ESC}[1mFable 5${ESC}[22m and saved</local-command-stdout>` } }),
+  { role: 'user', content: 'Set model to Fable 5 and saved', command: true });
+// System-injected reminder blocks are hidden outright: the human never typed
+// them and the terminal never shows them ("breakdowns of things I
+// traditionally wouldn't see").
+assert.equal(entryToMessage({ type: 'user', message: { role: 'user', content: '<system-reminder>skill listing wall of text</system-reminder>' } }), null);
+// Prose that merely MENTIONS the tags stays untouched.
+assert.ok(entryToMessage({ type: 'user', message: { role: 'user', content: 'the <bash-input> tag is neat' } }).content.includes('tag is neat'));
+
 fs.rmSync(process.env.DOBIUS_TEST_USERDATA, { recursive: true, force: true });
-console.log('queued-messages: 19 groups pass');
+console.log('queued-messages: 20 groups pass');

@@ -1296,8 +1296,37 @@ export function collapseCommandContent(text) {
     return `/${base.trim()} (skill)`;
   }
   const stdoutM = text.match(/^\s*<local-command-stdout>([\s\S]*?)<\/local-command-stdout>\s*$/);
-  if (stdoutM) return stdoutM[1].trim();
+  // Strip ANSI: real rows carry bold/reset escapes ("Set model to \x1b[1mFable
+  // 5\x1b[22m...") which rendered as garbage glyphs in the chat bubble.
+  if (stdoutM) return stripAnsiText(stdoutM[1]).trim();
+  // A `!` bash command from the composer. The transcript wraps it as
+  // <bash-input>cmd</bash-input>, so the chat both rendered raw XML (Sam:
+  // "I still see bash commands... I wouldn't normally see") AND the mobile
+  // echo pruner never matched what was typed, leaving "sending…" stuck on a
+  // command that already ran. Collapse to the exact composer form `! cmd`.
+  const bashIn = text.match(/^\s*<bash-input>([\s\S]*?)<\/bash-input>\s*$/);
+  if (bashIn) return `! ${stripAnsiText(bashIn[1]).trim()}`;
+  // Its output rows: show the output itself (the user ran the command on
+  // purpose), stripped of tags and escapes. stderr appended after stdout.
+  if (/^\s*<bash-(stdout|stderr)>/.test(text)) {
+    const out = [];
+    const so = text.match(/<bash-stdout>([\s\S]*?)<\/bash-stdout>/);
+    const se = text.match(/<bash-stderr>([\s\S]*?)<\/bash-stderr>/);
+    if (so && so[1].trim()) out.push(stripAnsiText(so[1]).trim());
+    if (se && se[1].trim()) out.push(stripAnsiText(se[1]).trim());
+    return out.join('\n');
+  }
   return null;
+}
+
+// Minimal ANSI escape strip for chat text (CSI + OSC + single ESC forms).
+// The transcript records what the terminal PRINTED, escapes included; a chat
+// bubble is not a terminal.
+function stripAnsiText(s) {
+  return String(s)
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, '')
+    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    .replace(/\u001b./g, '');
 }
 
 export function entryToMessage(entry) {
@@ -1350,6 +1379,10 @@ export function entryToMessage(entry) {
     // is not conversation: hide it entirely instead of rendering raw XML.
     const tp = content.trimStart();
     if (tp.startsWith('<task-notification>') || tp.startsWith('[SYSTEM NOTIFICATION')) return null;
+    // System-injected reminder blocks (skill listings, hook chatter) are the
+    // "breakdowns of things I traditionally wouldn't see" leaking into the
+    // phone chat: the human never typed them, the terminal never shows them.
+    if (tp.startsWith('<system-reminder>')) return null;
     const collapsed = collapseCommandContent(content);
     if (collapsed !== null) {
       // Empty after collapse (e.g. blank command stdout): nothing to render.

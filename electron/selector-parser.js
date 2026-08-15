@@ -276,3 +276,104 @@ export function spinnerVerb(raw) {
   for (const m of tail.matchAll(SPINNER_LINE_RE)) verb = m[1];
   return verb.trim();
 }
+
+/**
+ * Parse a selector from RENDERED SCREEN LINES (v1.0.62), the output of
+ * electron/screen-render.js's headless-xterm replay. This is the primary
+ * mobile popup path now; the strip-and-regex parseSelector above remains as
+ * the fallback when the emulator fails.
+ *
+ * Why a separate parser: rendered screens are CLEAN. Ink's incremental
+ * repaints (which drop cells of new text into an old frame, invisible to a
+ * linear strip: the multi-question AskUserQuestion bug) have already been
+ * applied, and its erase sequences have already REMOVED answered prompts.
+ * So this parser needs none of the contamination heuristics above; its one
+ * liveness rule is that a live prompt always shows its hint footer
+ * ("Enter to select · ... · Esc to cancel") near the block.
+ *
+ * Shapes verified against captured 2.1.233 frames (fixtures
+ * askq-multi-*.bin): single question, question 2 of a multi-question call
+ * (tab bar "← ☒ Color ☐ Size ✔ Submit →" above), and the final
+ * "Ready to submit your answers?" screen, which is itself a numbered block.
+ */
+const SCREEN_OPTION_RE = /^\s*(❯\s*)?(\d{1,2})\.\s+(.+?)\s*$/;
+const SCREEN_HINT_RE = /Enter to (?:select|confirm)|Esc to cancel|to navigate/i;
+const SCREEN_RULE_RE = /^[\s─━-]{6,}$/;
+const SCREEN_CHROME_RE = /[☐☒]|^\s*←|^\s*→\s*$/;
+
+export function parseSelectorFromScreen(lines) {
+  if (!Array.isArray(lines) || lines.length === 0) return null;
+  // Liveness anchor, two forms:
+  //  a) the hint footer ("Enter to select · ... · Esc to cancel"): find the
+  //     LAST one on screen;
+  //  b) no footer, but the screen ENDS with a ❯-cursor numbered block AND
+  //     the multi-question tab bar (☐/☒ checkboxes) is on screen above it:
+  //     the wizard's "Ready to submit your answers?" step draws no footer at
+  //     all (captured 2.1.233 fixture), and the tab bar is what separates it
+  //     from Claude QUOTING a selector in prose at the end of a message,
+  //     which must never become tappable fake options (Codex High). The
+  //     emulator honoring Ink's erases already removed any ANSWERED block.
+  let hintIdx = -1;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (SCREEN_HINT_RE.test(lines[i])) { hintIdx = i; break; }
+  }
+  if (hintIdx === -1) {
+    let last = lines.length - 1;
+    while (last >= 0 && !lines[last].trim()) last -= 1;
+    const hasTabBar = last >= 0 && lines.slice(0, last).some((l) => /[☐☒]/.test(l));
+    if (last >= 0 && hasTabBar && SCREEN_OPTION_RE.test(lines[last])) {
+      hintIdx = last + 1;
+    }
+  }
+  if (hintIdx === -1) return null;
+
+  // Walk upward from the hint collecting the numbered block. Rules and blank
+  // lines may sit between the hint and the options (the frame draws a rule
+  // above the escape-hatch options), and desc lines sit under their option.
+  const options = [];
+  let blockTop = -1;
+  for (let i = hintIdx - 1; i >= 0; i -= 1) {
+    const line = lines[i];
+    const t = line.trim();
+    if (t === '' || SCREEN_RULE_RE.test(t)) continue;
+    const m = line.match(SCREEN_OPTION_RE);
+    if (m) {
+      options.unshift({ num: Number(m[2]), label: m[3].trim() });
+      blockTop = i;
+      continue;
+    }
+    // Non-numbered line: a description under an option (indented) keeps the
+    // walk going while we are inside the block; anything else above the
+    // topmost option ends the block.
+    if (options.length === 0) continue; // hint chrome between hint and block
+    if (/^\s{3,}\S/.test(line)) continue; // option description
+    break;
+  }
+  if (options.length === 0) return null;
+  // Numbering must start at 1 and ascend; a random numbered list in prose
+  // lacks the hint footer anyway, but keep the shape check.
+  for (let i = 0; i < options.length; i += 1) {
+    if (options[i].num !== i + 1) return null;
+  }
+  // The ❯ cursor row, read directly off the block's screen rows. It is
+  // REQUIRED in every form: a real Claude Code selector always renders one,
+  // and a numbered list in prose (even one followed by "Press Enter to
+  // confirm when ready", which trips the hint regex: Codex High) never does.
+  let sel = -1;
+  for (let i = blockTop; i < hintIdx; i += 1) {
+    const m = lines[i]?.match(SCREEN_OPTION_RE);
+    if (m && m[1]) { sel = Number(m[2]) - 1; break; }
+  }
+  if (sel === -1) return null;
+
+  // Prompt: nearest meaningful line above the block, skipping rules, blanks,
+  // and the multi-question tab bar.
+  let prompt = '';
+  for (let i = blockTop - 1; i >= 0; i -= 1) {
+    const t = lines[i].trim();
+    if (!t || SCREEN_RULE_RE.test(t) || SCREEN_CHROME_RE.test(t)) continue;
+    prompt = t;
+    break;
+  }
+  return { prompt, options, selectedIndex: sel };
+}

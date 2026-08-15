@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import SpecialKeys from './SpecialKeys';
 import remarkGfm from 'remark-gfm';
 
 // One chat bubble. Assistant messages render as MARKDOWN (tables, code
@@ -33,6 +34,57 @@ function storeDraft(tabId, text) {
   } catch { /* private mode / quota: drafts just stay session-local */ }
 }
 
+// Copy text on a phone. navigator.clipboard needs a secure context (the PWA
+// is https over Tailscale when the cert exists); the execCommand fallback
+// covers the plain-http tailnet mode.
+function copyText(text) {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text).then(() => true, () => legacyCopy(text));
+  return Promise.resolve(legacyCopy(text));
+}
+function legacyCopy(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch { return false; }
+}
+
+// A copy affordance on code boxes (Sam, 8/14: "anything that shows up in this
+// box ... I need a little copy button so I can just copy that line").
+function CopyBtn({ text }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      className={`md-copy${done ? ' done' : ''}`}
+      onClick={async (e) => {
+        e.stopPropagation();
+        const ok = await copyText(text);
+        setDone(!!ok);
+        setTimeout(() => setDone(false), 1500);
+      }}
+      aria-label="Copy"
+    >
+      {done ? 'copied' : 'copy'}
+    </button>
+  );
+}
+
+// Plain text of a react-markdown node's children (what the user sees, which
+// is what copy should copy).
+function nodeText(node) {
+  if (node == null) return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(nodeText).join('');
+  if (node.props?.children != null) return nodeText(node.props.children);
+  return '';
+}
+
 const Bubble = memo(function Bubble({ role, content, timestamp, queued, sending }) {
   return (
     <div className={`chat-msg ${role === 'assistant' ? 'assistant' : 'user'}${sending ? ' chat-echo' : ''}`}>
@@ -51,6 +103,19 @@ const Bubble = memo(function Bubble({ role, content, timestamp, queued, sending 
               table: ({ node: _node, ...props }) => (
                 <div className="md-table-wrap"><table {...props} /></div>
               ),
+              // Fenced blocks get a copy button; the box scrolls sideways
+              // instead of truncating a long one-liner.
+              pre: ({ node: _node, children, ...props }) => (
+                <div className="md-pre-wrap">
+                  <CopyBtn text={nodeText(children)} />
+                  <pre {...props}>{children}</pre>
+                </div>
+              ),
+              // Inline code deliberately gets NO chip: react-markdown v10
+              // exposes no reliable inline test (a no-language fenced block
+              // also has no className, and wrapping it doubled the copy
+              // button inside its own pre: Codex High). Long inline spans
+              // scroll via CSS instead; fenced blocks carry the button.
             }}
           >
             {content}
@@ -104,6 +169,8 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   // queued entries). An echo drops once the transcript shows the same text,
   // or after 90s (e.g. the tab was a bare shell that ran it as a command).
   const [echoes, setEchoes] = useState([]);
+  // On-screen terminal keys row (esc/tab/arrows/^C) for full-TUI dialogs.
+  const [showKeys, setShowKeys] = useState(false);
   const fileInputRef = useRef(null);
   const bodyRef = useRef(null);
   const atBottomRef = useRef(true);
@@ -165,18 +232,47 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     return () => clearInterval(iv);
   }, [connection, needShell, tabId]);
 
+  // Track the skills catalog in a ref too: the authed handler below lives in
+  // an effect keyed on [connection] and must not close over stale state.
+  const skillsRef = useRef(null);
+  const skillsRequestedRef = useRef(false);
+
   useEffect(() => {
     const off = connection.onMessage((msg) => {
-      if (msg.type === 'transcript' && msg.sessionId === wantRef.current
+      if (msg.type === 'authed') {
+        // Reconnect (iOS kills the socket on every backgrounding). Two jobs,
+        // both BEFORE the connection's queued-send flush (emit runs listeners
+        // synchronously, then flushes):
+        // 1. Re-authorize this tab server-side: the fresh socket has an empty
+        //    _authedTabs, so a queued submitPrompt/input flushed first would
+        //    hit the server's tab guard and vanish, which is the swallow bug
+        //    wearing a new hat (Codex High). selectorSnapshot both authorizes
+        //    and refreshes the popup state.
+        // 2. Re-request the skills catalog if the first request died with the
+        //    old socket (listSkills is a read, deliberately not queueable).
+        if (tabId) connection.send({ type: 'selectorSnapshot', id: tabId });
+        if (skillsRequestedRef.current && skillsRef.current === null) {
+          connection.send({ type: 'listSkills' });
+        }
+      } else if (msg.type === 'transcript' && msg.sessionId === wantRef.current
           && (msg.projectPath == null || msg.projectPath === projectPath)) {
         const next = msg.entries || [];
         // Prune echoes the transcript now covers (same trimmed text, queued or
         // real) and any older than 90s.
         setEchoes((cur) => {
           if (cur.length === 0) return cur;
-          const seen = new Set(next.filter((m) => m.role === 'user').map((m) => m.content.trim()));
+          // Normalize the `!` composer prefix on BOTH sides: the transcript
+          // records a bash command as <bash-input>cmd</bash-input>, which the
+          // server collapses to "! cmd", while the user may have typed
+          // "!cmd" or "!  cmd". Without this the echo never matched and the
+          // bubble sat on "sending…" for a command that had already run.
+          const norm = (t) => {
+            const s2 = String(t).trim();
+            return s2.startsWith('!') ? `! ${s2.slice(1).trim()}` : s2;
+          };
+          const seen = new Set(next.filter((m) => m.role === 'user').map((m) => norm(m.content)));
           const now = Date.now();
-          const kept = cur.filter((e) => !seen.has(e.content.trim()) && now - e.at < 90_000);
+          const kept = cur.filter((e) => !seen.has(norm(e.content)) && now - e.at < 90_000);
           return kept.length === cur.length ? cur : kept;
         });
         if (next.length > 0) {
@@ -210,6 +306,37 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     if (!el) return;
     atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
   };
+
+  // `/` skill autocomplete (v1.0.62): while the input is exactly a slash
+  // command being typed, show matching skills with their descriptions; a tap
+  // autofills. The catalog loads lazily on the first `/`.
+  const [skills, setSkills] = useState(null); // null = no catalog yet
+  useEffect(() => {
+    const off = connection.onMessage((msg) => {
+      if (msg.type === 'skills') {
+        const list = Array.isArray(msg.list) ? msg.list : [];
+        skillsRef.current = list;
+        setSkills(list);
+      }
+    });
+    return off;
+  }, [connection]);
+  useEffect(() => {
+    // Request once per mount, and only on a live socket: a send fired while
+    // disconnected is dropped (reads are deliberately not queueable), and the
+    // old sentinel then blocked every retry, permanently disabling the picker
+    // until remount (Codex Medium). The authed handler above retries.
+    if (!skillsRequestedRef.current && /^\//.test(input) && connection.status === 'authed') {
+      skillsRequestedRef.current = true;
+      connection.send({ type: 'listSkills' });
+    }
+  }, [input, connection]);
+  const slashMatch = input.match(/^\/([\w:-]*)$/);
+  const suggestions = slashMatch && skills
+    ? skills
+      .filter((sk) => sk.name.toLowerCase().includes(slashMatch[1].toLowerCase()))
+      .slice(0, 6)
+    : [];
 
   const send = () => {
     const text = input.trim();
@@ -332,7 +459,30 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   const inputRow = (
     <>
       {uploadMsg && <div className="chat-upload-msg">{uploadMsg}</div>}
+      {suggestions.length > 0 && (
+        <div className="chat-skill-suggest">
+          {suggestions.map((sk) => (
+            <button key={`${sk.source}:${sk.name}`} className="chat-skill-row" onClick={() => { setDraft(`/${sk.name} `); }}>
+              <span className="chat-skill-name">/{sk.name}</span>
+              {sk.description && <span className="chat-skill-desc">{sk.description}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* On-screen terminal keys, for the full-TUI dialogs a popup cannot
+          drive (/permissions and friends need arrows + enter + tab). */}
+      {showKeys && tabId && (
+        <SpecialKeys onKey={(seq) => connection.send({ type: 'input', id: tabId, data: seq })} />
+      )}
       <div className="chat-input-row">
+        <button
+          className={`chat-keys-toggle${showKeys ? ' on' : ''}`}
+          onClick={() => setShowKeys((v) => !v)}
+          aria-label="Toggle terminal keys"
+          title="Arrow/Enter/Esc/Tab keys for interactive dialogs like /permissions"
+        >
+          ⌨
+        </button>
         {/* Interrupt/cancel from Chat (v1.0.53, Sam: "no way to cancel").
             One tap = ESC to the TUI: interrupts the running turn AND pops any
             queued messages back into Claude's input (the popAll op); a second

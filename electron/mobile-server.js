@@ -29,8 +29,9 @@ import {
   resizeTerminal, killTerminal, createTerminal, getTerminalBuffer,
   liveClaudeSessionIds, claimSessionResume, bindReservationTab, releaseSessionResume,
 } from './terminal-manager.js';
-import { parseSelector, stripAnsi, spinnerVerb } from './selector-parser.js';
-import { loadAllSessions, loadTranscript, listProjects, getTranscriptSig, findLooseEnds } from './data-service.js';
+import { parseSelector, parseSelectorFromScreen, stripAnsi, spinnerVerb } from './selector-parser.js';
+import { renderScreenLines } from './screen-render.js';
+import { loadAllSessions, loadTranscript, listProjects, getTranscriptSig, findLooseEnds, loadSkills } from './data-service.js';
 import { peekReply } from './voice-bridge.js';
 import { getVoiceConductorTabId } from './voice-conductor.js';
 import { snapshot as terminalStatusSnapshot } from './terminal-status.js';
@@ -40,6 +41,21 @@ import { transcribeAudio, transcribeAvailable } from './voice-transcribe.js';
 import { getVapidPublicKey, subscribePush, sendPush, hasPushSubscribers } from './push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// The live selector for a tab, via the headless-xterm SCREEN render (v1.0.62).
+// The old strip-and-regex path missed Ink's incremental repaints entirely: on
+// a multi-question AskUserQuestion, question two never formed complete lines
+// in a linear strip, so its popup never appeared on the phone (Sam, 8/14).
+// The emulator's verdict is authoritative when it renders (including "no
+// selector": it honors the erase sequences that REMOVE answered prompts, so
+// it also kills the stale-popup class); the regex path remains only for a
+// render failure.
+async function liveSelectorForTab(id) {
+  const raw = getTerminalBuffer(id) || '';
+  const lines = await renderScreenLines(raw.slice(-262144));
+  if (lines) return parseSelectorFromScreen(lines);
+  return parseSelector(raw);
+}
 
 const MAX_PAIR_ATTEMPTS = 5;
 const PAIR_LOCK_MS = 60000;  // cooldown after MAX_PAIR_ATTEMPTS, then re-arm
@@ -569,8 +585,8 @@ function handleAuthedMessage(socket, msg, subs) {
         // waiting out the 2.5s probe. v1.0.51 mobile kinks.
         if (msg.data.length <= 4) {
           const id = msg.id;
-          setTimeout(() => {
-            wsSend(socket, { type: 'selector', id, selector: parseSelector(getTerminalBuffer(id)) || null });
+          setTimeout(async () => {
+            wsSend(socket, { type: 'selector', id, selector: await liveSelectorForTab(id) || null });
           }, 700);
         }
       }
@@ -594,8 +610,8 @@ function handleAuthedMessage(socket, msg, subs) {
       writeTerminal(id, `\x1b[200~${text}\x1b[201~`);
       setTimeout(() => { writeTerminal(id, '\r'); }, 250);
       // If this answered a selector (or started Claude), refresh selector state.
-      setTimeout(() => {
-        wsSend(socket, { type: 'selector', id, selector: parseSelector(getTerminalBuffer(id)) || null });
+      setTimeout(async () => {
+        wsSend(socket, { type: 'selector', id, selector: await liveSelectorForTab(id) || null });
       }, 900);
       break;
     }
@@ -608,8 +624,9 @@ function handleAuthedMessage(socket, msg, subs) {
       // over the rolling tail); returns selector=null when none is showing.
       if (typeof msg.id !== 'string') break;
       socket._authedTabs.add(msg.id); // the Chat view probes its own tab. Audit Medium.
-      const selector = parseSelector(getTerminalBuffer(msg.id));
-      wsSend(socket, { type: 'selector', id: msg.id, selector: selector || null });
+      liveSelectorForTab(msg.id)
+        .then((selector) => wsSend(socket, { type: 'selector', id: msg.id, selector: selector || null }))
+        .catch(() => wsSend(socket, { type: 'selector', id: msg.id, selector: null }));
       break;
     }
 
@@ -675,6 +692,22 @@ function handleAuthedMessage(socket, msg, subs) {
       });
       break;
     }
+
+    // Skill catalog for the chat composer's `/` autocomplete (v1.0.62, Sam:
+    // "when I type / I wanna see the preview of my skills ... click and
+    // autofill"). Names + descriptions only; paths stay on the Mac.
+    case 'listSkills':
+      loadSkills()
+        .then((list) => wsSend(socket, {
+          type: 'skills',
+          list: (list || [])
+            // Underscore-prefixed dirs (_shared and friends) are skill
+            // plumbing, not invokable skills; they are noise in a picker.
+            .filter((sk) => sk.name && !sk.name.startsWith('_'))
+            .map((sk) => ({ name: sk.name, description: sk.description || '', source: sk.source || '' })),
+        }))
+        .catch(() => wsSend(socket, { type: 'skills', list: [] }));
+      break;
 
     case 'listSessions':
       loadAllSessions()

@@ -19,6 +19,38 @@ the version or branch that shipped them. Sam triggers releases.
       popups): answered AskUserQuestion + <=3 indented response lines briefly
       reads live; a rule row after the footer reads live (boxed-prompt border
       is the same shape, locked by test 27).
+- [ ] Watch item: one ship-test run left an orphaned "sending..." echo bubble
+      in the mobile chat DOM while React state showed echoes=[] (TTL prune
+      had run correctly). Not reproduced in a clean flow; fresh clients render
+      clean. If a stuck "sending..." ever survives past 90s in real use,
+      suspect a commit-phase exception around session relink and start here.
+
+## Staged on fix/mobile-chat-bugs (unreleased, next ship = v1.0.62)
+
+- [x] Sam's 8/14 mobile bug list (Asana 1215862050698923), all 7 items:
+      1. `!` prompts no longer stick at "sending..." (echo pruner normalizes
+         the `!` prefix on both sides).
+      2. Messages sent mid-reconnect no longer swallowed (submitPrompt is
+         queueable + the authed handler re-authorizes the tab BEFORE the
+         queue flush).
+      3. Multi-question AskUserQuestion popups load past question 1: raw PTY
+         bytes are replayed through @xterm/headless (electron/screen-render.js)
+         and the true screen is parsed (parseSelectorFromScreen), replacing
+         the linear ANSI-strip regex that could not see Ink's incremental
+         repaints. Live-captured 2.1.233 fixtures lock it.
+      4. Raw bash commands / skill contents no longer leak into chat
+         (bash-input/stdout/stderr collapsed, system-reminders dropped,
+         ANSI stripped from local-command-stdout).
+      5. Copy button on fenced code blocks (execCommand fallback works on
+         the http origin; button sits clear of line 1).
+      6. Typing `/` previews skills with descriptions + tap-to-autofill
+         (new listSkills WS op; underscore plumbing dirs filtered).
+      7. Terminal keys row (esc / arrows / space / enter / ^C) for
+         /permissions-class TUIs, and those popups now parse via the
+         emulator path too.
+      3 Codex rounds; 293 unit assertions; live ship-tested on the phone
+      view (copy tap observed flipping to "copied", real 3-option dialog
+      answered by tap, autocomplete filtered).
 
 ## Done (shipped in v1.0.61)
 

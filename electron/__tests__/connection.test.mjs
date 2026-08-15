@@ -25,6 +25,13 @@ c.send({ type: 'ping' });
 check('input queued while disconnected', c._queue.length === 1);
 check('ephemeral (listTerminals/ping) not queued', c._queue.every((m) => m.type === 'input'));
 
+// 1a-v1.0.62: submitPrompt is the CHAT send. It was not queueable, so a
+// message typed during the reconnect blip iOS causes on every foreground was
+// silently dropped ("it swallows up messages once in a while"). The echo
+// bubble made it LOOK sent, which is the worst version of lost.
+c.send({ type: 'submitPrompt', id: 't1', text: 'hello from the phone' });
+check('submitPrompt queued while disconnected', c._queue.some((m) => m.type === 'submitPrompt'));
+
 // 1b. One-shot write actions queue too (audit HIGH-5), but reads (re-issued by
 // screens on authed) do not, so they can't double-fire.
 const q = new Connection('tok');
