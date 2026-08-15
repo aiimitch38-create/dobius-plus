@@ -147,6 +147,29 @@ check('registry empty after remove', gws.listGwsAccounts(), []);
   check('clearShimTokenCache on a bad id is a no-op (no throw)', await gws.clearShimTokenCache('nope') ?? true, true);
 }
 
+// --- extractGoogleAuthUrl: reconnect must open the URL gws prints (no TTY
+// means gws never opens the browser itself; v1.0.61 discarded the output and
+// the button hung on "Waiting for browser..."). ---
+{
+  const real = 'Open this URL in your browser to authenticate:\n\n  https://accounts.google.com/o/oauth2/auth?scope=x%20y&redirect_uri=http://localhost:59383&response_type=code&client_id=abc.apps.googleusercontent.com&prompt=select_account+consent\n\n';
+  check('real gws stderr yields the full URL',
+    gws.extractGoogleAuthUrl(real),
+    'https://accounts.google.com/o/oauth2/auth?scope=x%20y&redirect_uri=http://localhost:59383&response_type=code&client_id=abc.apps.googleusercontent.com&prompt=select_account+consent');
+  check('URL split across chunks: first half alone is not a match',
+    gws.extractGoogleAuthUrl('Open this URL in your browser:\n\n  https://accounts.goog'), null);
+  check('a URL that runs to the end of the buffer waits for its terminator (chunk boundary, Codex High)',
+    gws.extractGoogleAuthUrl('  https://accounts.google.com/o/oauth2/auth?scope=x&redirect_uri=http://localhost:593'), null);
+  check('the same URL followed by a newline is complete',
+    gws.extractGoogleAuthUrl('  https://accounts.google.com/o/oauth2/auth?scope=x&redirect_uri=http://localhost:59383\n'),
+    'https://accounts.google.com/o/oauth2/auth?scope=x&redirect_uri=http://localhost:59383');
+  check('non-Google origins are never eligible for openExternal',
+    gws.extractGoogleAuthUrl('visit https://evil.example.com/accounts.google.com/phish now'), null);
+  check('a Google-looking hostname prefix on another domain is rejected',
+    gws.extractGoogleAuthUrl('https://accounts.google.com.evil.example/o/oauth2/auth'), null);
+  check('plain text yields null', gws.extractGoogleAuthUrl('no url here'), null);
+  check('non-string input is safe', gws.extractGoogleAuthUrl(undefined), null);
+}
+
 await fs.rm(TMP_HOME, { recursive: true, force: true });
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

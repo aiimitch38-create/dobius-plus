@@ -25,7 +25,7 @@ import os from 'os';
 import { execFile } from 'child_process';
 import { randomBytes } from 'crypto';
 import { fileURLToPath } from 'url';
-import { app } from 'electron';
+import { app, shell, BrowserWindow } from 'electron';
 import { getGwsAccounts, saveGwsAccount, deleteGwsAccount, isValidGwsId } from './config-manager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -377,6 +377,22 @@ function baseAuthUser() {
   });
 }
 
+/**
+ * Pull Google's OAuth consent URL out of accumulated child output, or null.
+ * Only Google's own OAuth origin is ever eligible: this feeds
+ * shell.openExternal, and arbitrary child output must never pick what opens.
+ * The URL only counts once something follows it (gws prints a blank line
+ * after): a match that runs to the end of the buffer may be a chunk boundary
+ * mid-URL, and opening that prefix would send the browser to a broken auth
+ * request while the full URL arrives one chunk too late (Codex High).
+ */
+export function extractGoogleAuthUrl(text) {
+  const s = String(text);
+  const m = s.match(/https:\/\/accounts\.google\.com\/\S+/);
+  if (!m) return null;
+  return m.index + m[0].length < s.length ? m[0] : null;
+}
+
 // Only one browser approval can meaningfully run at a time; a second click
 // while one is pending would stack OAuth flows and confuse whose approval
 // landed where.
@@ -405,27 +421,58 @@ export async function reconnectGwsAccount(id) {
   reconnectInFlight = true;
   try {
     const baseBefore = await baseAuthUser();
-    // Reuse the scopes this account was connected with so the login skips the
-    // interactive scope picker (which would hang a spawn with no TTY). Allow
-    // only URL-ish scope charset; anything odd falls back to the service set.
-    const scopes = (Array.isArray(target.scopes) ? target.scopes : [])
-      .filter((s) => typeof s === 'string' && /^[A-Za-z0-9.:/_-]+$/.test(s));
-    const args = ['auth', 'login'];
-    if (scopes.length > 0) args.push('--scopes', scopes.join(','));
-    else args.push('--services', 'gmail,drive,calendar,sheets,docs');
+    // Always request the FULL scope set (Sam, 8/15: "gws should have full
+    // permissions"): a reconnect must never come back weaker than the CLI's
+    // own `gws auth login --full`, and --full is also the only mode proven
+    // prompt-free under a no-TTY spawn (--services can open the interactive
+    // scope picker, which would hang here).
+    const args = ['auth', 'login', '--full'];
+    // Spawned without a TTY, `gws auth login` does NOT open the browser: it
+    // prints "Open this URL in your browser" to stderr and waits on its
+    // localhost redirect listener. v1.0.61 discarded that output, so the
+    // button sat on "Waiting for browser..." doing nothing (Sam, 8/15). Watch
+    // the child's output for the Google auth URL and open it ourselves.
+    let authUrl = null;
+    let openFailed = false;
     const login = await new Promise((resolve) => {
       // 5 minutes: the human is in a browser consent screen. Never inherit
       // stdio; the picker is skipped by the flags above and any other prompt
       // must fail rather than hang forever.
-      execFile('gws', args, { env: EXEC_ENV, timeout: 5 * 60_000 }, (err) => resolve(err || null));
+      const child = execFile('gws', args, { env: EXEC_ENV, timeout: 5 * 60_000 }, (err) => resolve(err || null));
+      let seen = '';
+      const watch = (chunk) => {
+        if (authUrl) return;
+        seen += String(chunk);
+        const url = extractGoogleAuthUrl(seen);
+        if (url) {
+          authUrl = url;
+          try { shell.openExternal(url).catch(() => { openFailed = true; }); }
+          catch { openFailed = true; }
+          // Also hand the URL to the UI: openExternal lands in the default
+          // browser's LAST-ACTIVE profile, which can be the wrong Google
+          // identity entirely (Sam, 8/15: it opened in someone else's Chrome
+          // profile). The panel shows a copyable link a few seconds after the
+          // browser opens. The URL is a public consent link, not a secret.
+          for (const w of (BrowserWindow.getAllWindows?.() || [])) {
+            try { w.webContents.send('gws:reconnect-url', { id, url }); } catch { /* window mid-close */ }
+          }
+        }
+      };
+      child.stdout?.on('data', watch);
+      child.stderr?.on('data', watch);
     });
     if (login) {
-      return {
-        ok: false,
-        error: login.killed
-          ? 'The browser approval was not completed within 5 minutes. Nothing was changed.'
-          : 'gws auth login failed. Try `gws auth login` in a terminal to see why.',
-      };
+      let error;
+      if (login.killed) {
+        error = 'The browser approval was not completed within 5 minutes. Nothing was changed.';
+        if (!authUrl) error = 'gws never produced a Google sign-in URL. Try `gws auth login` in a terminal to see why.';
+        // The URL is single-use and its local listener died with the timeout,
+        // so never tell the user to paste it now: it can only fail.
+        else if (openFailed) error = 'The sign-in page could not be opened automatically and the approval window expired. Run `gws auth login` in a terminal instead.';
+      } else {
+        error = 'gws auth login failed. Try `gws auth login` in a terminal to see why.';
+      }
+      return { ok: false, error };
     }
     const res = await connectGwsAccount();
     if (!res.ok) return res;

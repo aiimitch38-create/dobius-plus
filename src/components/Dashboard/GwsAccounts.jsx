@@ -22,8 +22,25 @@ export default function GwsAccounts() {
   const [health, setHealth] = useState({});      // id -> 'ok' | 'revoked' | 'error'
   const [reconnecting, setReconnecting] = useState(''); // account id mid-flow
   const [feedback, setFeedback] = useState('');
+  // Fallback consent link, shown a few seconds AFTER the browser opens: the
+  // default browser opens its last-active profile, which can be the wrong
+  // Google identity entirely (Sam, 8/15). Spec: open first, then offer the
+  // copyable link.
+  const [authLink, setAuthLink] = useState(null); // { id, url }
+  const authLinkTimer = useRef(null);
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
+
+  useEffect(() => {
+    const off = window.electronAPI?.onGwsReconnectUrl?.((data) => {
+      if (!data?.id || !data?.url) return;
+      clearTimeout(authLinkTimer.current);
+      authLinkTimer.current = setTimeout(() => {
+        if (mountedRef.current) setAuthLink({ id: data.id, url: data.url });
+      }, 3000);
+    });
+    return () => { clearTimeout(authLinkTimer.current); off?.(); };
+  }, []);
 
   const verify = async (force = false) => {
     try {
@@ -74,8 +91,24 @@ export default function GwsAccounts() {
     }
   };
 
+  const copyAuthLink = async () => {
+    if (!authLink?.url) return;
+    if (!navigator.clipboard?.writeText) {
+      window.prompt('Copy this sign-in link:', authLink.url);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(authLink.url);
+      flash('Sign-in link copied. Paste it into the right browser profile.');
+    } catch {
+      window.prompt('Copy this sign-in link:', authLink.url);
+    }
+  };
+
   const handleReconnect = async (a) => {
     setReconnecting(a.id);
+    clearTimeout(authLinkTimer.current);
+    setAuthLink(null);
     flash(`Approve ${a.email} in the browser window that just opened…`);
     try {
       const res = await window.electronAPI?.gwsReconnect?.(a.id);
@@ -96,7 +129,8 @@ export default function GwsAccounts() {
     } catch {
       flash('Reconnect failed.', true);
     } finally {
-      if (mountedRef.current) setReconnecting('');
+      clearTimeout(authLinkTimer.current);
+      if (mountedRef.current) { setReconnecting(''); setAuthLink(null); }
     }
   };
 
@@ -205,6 +239,13 @@ export default function GwsAccounts() {
         <p className="text-xs mt-2" style={{ color: feedback.isError ? '#f87171' : 'var(--dim)' }}>
           {feedback.msg}
         </p>
+      )}
+
+      {authLink && reconnecting === authLink.id && (
+        <div className="text-xs mt-2 flex items-center gap-2" style={{ color: 'var(--dim)' }}>
+          <span>Browser opened in the wrong profile? Paste the sign-in link into the right one:</span>
+          <button style={btn('default', { flexShrink: 0 })} onClick={copyAuthLink}>Copy link</button>
+        </div>
       )}
 
       {anyRevoked && (

@@ -118,6 +118,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gwsRemove: (id) => ipcRenderer.invoke('gws:remove', id),
   gwsVerify: (opts) => ipcRenderer.invoke('gws:verify', opts),
   gwsReconnect: (id) => ipcRenderer.invoke('gws:reconnect', id),
+  // Mid-reconnect: main pushes the Google consent URL so the panel can offer
+  // a copyable link when the browser opened in the wrong profile.
+  onGwsReconnectUrl: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('gws:reconnect-url', handler);
+    return () => ipcRenderer.removeListener('gws:reconnect-url', handler);
+  },
   // v1.0.29 feature: Copy last Claude response from a tab (via TerminalTabBar
   // right-click). Returns the raw content of the most recent assistant turn.
   dataLastAssistantMessage: (sessionId, projectPath) => ipcRenderer.invoke('data:lastAssistantMessage', sessionId, projectPath),

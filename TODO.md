@@ -27,6 +27,17 @@ the version or branch that shipped them. Sam triggers releases.
 
 ## Staged on fix/mobile-chat-bugs (unreleased, next ship = v1.0.62)
 
+- [x] gws Reconnect actually opens the browser (Sam 8/15: "it just says
+      authenticating and doesn't do anything"). Root cause: with no TTY,
+      `gws auth login` prints the consent URL to stderr and waits; v1.0.61
+      discarded that output. Now the URL is extracted (terminator-checked,
+      Codex High: a chunk boundary mid-URL must not open a truncated link)
+      and opened via shell.openExternal, the login always requests --full
+      scopes (Sam: "gws should have full permissions"), and 3 seconds after
+      the browser opens the panel offers a Copy link fallback because the
+      default browser can open the wrong Chrome profile (Sam hit exactly
+      that). 2 Codex rounds clean; live-verified in the harness end to end.
+
 - [x] Sam's 8/14 mobile bug list (Asana 1215862050698923), all 7 items:
       1. `!` prompts no longer stick at "sending..." (echo pruner normalizes
          the `!` prefix on both sides).
