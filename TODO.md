@@ -27,6 +27,17 @@ the version or branch that shipped them. Sam triggers releases.
 
 ## Staged on fix/mobile-chat-bugs (unreleased, next ship = v1.0.62)
 
+- [x] Push-based selector popups (Sam 8/16: "did you get rid of the poll
+      latency?"): the server watches every PTY's output and, 350ms after the
+      drawing goes quiet (a waiting dialog IS quiet output), renders the
+      screen once and pushes the popup to sockets with fresh probe interest.
+      Q2-of-N and spontaneous dialogs now pop in well under a second instead
+      of up to 2.5s; the client poll stays as reconnect fallback. Dedupe
+      invalidated on mobile input (identical redrawn dialog still pushes),
+      interest hard-capped at 64 tabs. Live-verified: a real TUI dialog
+      arrived as an unsolicited push 640ms after the last poll, and the
+      post-answer state pushed too. 4 Codex rounds (2 Medium + 1 Medium
+      found and fixed, final clean).
 - [x] Mobile hardening round (Codex fresh-eyes sweep, 3 confirmed + 3
       round-2 findings on the fixes themselves, all fixed and re-verified):
       selector renders serialized on the shared headless terminal (two tabs'

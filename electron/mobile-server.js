@@ -28,6 +28,7 @@ import {
   listTerminals, subscribeTerminal, writeTerminal, terminalHasDesktopAttached,
   resizeTerminal, killTerminal, createTerminal, getTerminalBuffer,
   liveClaudeSessionIds, claimSessionResume, bindReservationTab, releaseSessionResume,
+  addTerminalObserver,
 } from './terminal-manager.js';
 import { parseSelector, parseSelectorFromScreen, stripAnsi, spinnerVerb } from './selector-parser.js';
 import { renderScreenLines } from './screen-render.js';
@@ -55,6 +56,85 @@ async function liveSelectorForTab(id) {
   const lines = await renderScreenLines(raw.slice(-262144));
   if (lines) return parseSelectorFromScreen(lines);
   return parseSelector(raw);
+}
+
+// Push selector popups the moment they appear instead of waiting out the
+// phone's 2.5s poll (Sam, 8/16: "did you get rid of the poll latency?").
+// A dialog waiting for input is exactly "output went quiet", so a trailing
+// debounce on each tab's PTY output fires ~350ms after the drawing stops,
+// renders the screen once, and pushes the popup (or its disappearance) to
+// every socket authorized for that tab. During continuous streaming the
+// timer keeps deferring, so generation costs no renders at all. The client
+// poll stays as the reconnect/fallback path.
+const SELECTOR_PUSH_QUIET_MS = 350;
+const selectorWatch = new Map(); // tabId -> { timer, lastPushedJson }
+// Push only for tabs someone is ACTIVELY looking at: an open chat probes
+// selectorSnapshot every 2.5s, so fresh interest means an open popup surface.
+// Gating on this (not on _authedTabs, which accumulates every tab a socket
+// ever touched) keeps N background tabs from queueing render storms through
+// the serialized emulator and delaying the active tab (Codex Medium).
+const SELECTOR_INTEREST_MS = 10_000;
+const selectorInterest = new Map(); // tabId -> last selectorSnapshot epoch ms
+let selectorObserverOff = null;
+
+function noteSelectorInterest(id) {
+  selectorInterest.set(id, Date.now());
+  if (selectorInterest.size > 64) {
+    const cutoff = Date.now() - 60_000;
+    for (const [k, at] of selectorInterest) { if (at < cutoff) selectorInterest.delete(k); }
+    // Still over cap (65+ tabs probed inside 60s): evict oldest-first so the
+    // bound is HARD, not advisory (Codex round 2).
+    if (selectorInterest.size > 64) {
+      const oldestFirst = [...selectorInterest.entries()].sort((a, b) => a[1] - b[1]);
+      for (const [k] of oldestFirst.slice(0, selectorInterest.size - 64)) selectorInterest.delete(k);
+    }
+  }
+}
+
+// A mobile-originated keystroke invalidates the dedupe: the phone clears its
+// popup optimistically on tap, so if Claude redraws the IDENTICAL dialog next,
+// the "same state already pushed" shortcut would leave the phone cleared until
+// its fallback poll (Codex Medium).
+function invalidateSelectorPush(id) {
+  const w = selectorWatch.get(id);
+  if (w) w.lastPushedJson = null;
+}
+
+function socketsForTab(id) {
+  const out = [];
+  // activeSocketsByToken only ever holds sockets that passed auth, so
+  // membership IS the authed marker.
+  for (const sockets of activeSocketsByToken.values()) {
+    for (const s of sockets) {
+      if (s.readyState === 1 && s._authedTabs?.has(id)) out.push(s);
+    }
+  }
+  return out;
+}
+
+function scheduleSelectorPush(id) {
+  const at = selectorInterest.get(id);
+  if (!at || Date.now() - at > SELECTOR_INTEREST_MS) return; // no open popup surface
+  if (socketsForTab(id).length === 0) return; // nobody is watching this tab
+  let w = selectorWatch.get(id);
+  if (!w) { w = { timer: null, lastPushedJson: null }; selectorWatch.set(id, w); }
+  clearTimeout(w.timer);
+  w.timer = setTimeout(async () => {
+    w.timer = null;
+    const targets = socketsForTab(id);
+    if (targets.length === 0) return;
+    let sel;
+    try { sel = await liveSelectorForTab(id); } catch { sel = null; }
+    const j = JSON.stringify(sel || null);
+    if (j === w.lastPushedJson) return; // same popup state already pushed
+    w.lastPushedJson = j;
+    for (const s of targets) wsSend(s, { type: 'selector', id, selector: sel || null });
+  }, SELECTOR_PUSH_QUIET_MS);
+}
+
+function dropSelectorWatch(id) {
+  const w = selectorWatch.get(id);
+  if (w) { clearTimeout(w.timer); selectorWatch.delete(id); }
 }
 
 const MAX_PAIR_ATTEMPTS = 5;
@@ -579,6 +659,7 @@ function handleAuthedMessage(socket, msg, subs) {
       if (typeof msg.id === 'string' && socket._authedTabs.has(msg.id)
           && typeof msg.data === 'string' && msg.data.length <= MAX_INPUT_BYTES) {
         writeTerminal(msg.id, msg.data);
+        invalidateSelectorPush(msg.id); // the phone cleared its popup on tap
         // A short write is how the Chat view answers a selector (a bare option
         // digit). Re-parse after the TUI repaints and push the (likely cleared)
         // selector state so the phone's buttons drop off immediately instead of
@@ -607,6 +688,7 @@ function handleAuthedMessage(socket, msg, subs) {
       // \r is stripped so the only Enter is the discrete one we send.
       const text = msg.text.replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '');
       const id = msg.id;
+      invalidateSelectorPush(id); // the phone may have cleared a popup for this
       writeTerminal(id, `\x1b[200~${text}\x1b[201~`);
       setTimeout(() => { writeTerminal(id, '\r'); }, 250);
       // If this answered a selector (or started Claude), refresh selector state.
@@ -624,6 +706,7 @@ function handleAuthedMessage(socket, msg, subs) {
       // over the rolling tail); returns selector=null when none is showing.
       if (typeof msg.id !== 'string') break;
       socket._authedTabs.add(msg.id); // the Chat view probes its own tab. Audit Medium.
+      noteSelectorInterest(msg.id); // fresh probe = an open popup surface: enable pushes
       liveSelectorForTab(msg.id)
         .then((selector) => wsSend(socket, { type: 'selector', id: msg.id, selector: selector || null }))
         .catch(() => wsSend(socket, { type: 'selector', id: msg.id, selector: null }));
@@ -1255,6 +1338,13 @@ export async function startMobileServer() {
       refreshTabContexts();
       contextRefreshTimer = setInterval(refreshTabContexts, 20000);
       startPowerAssertion(); // keep the Mac awake for remote work while up
+      // Instant selector popups: watch every PTY's output and push the
+      // dialog when the drawing goes quiet, instead of waiting out the
+      // phone's poll.
+      selectorObserverOff = addTerminalObserver({
+        onData: (tid) => scheduleSelectorPush(tid),
+        onExit: (tid) => dropSelectorWatch(tid),
+      });
       updateMobileServerConfig({ enabled: true });
       resolve(getMobileServerStatus());
     });
@@ -1276,6 +1366,9 @@ export function stopMobileServer({ persistDisabled = false } = {}) {
   if (statusBroadcastTimer) { clearInterval(statusBroadcastTimer); statusBroadcastTimer = null; }
   if (contextRefreshTimer) { clearInterval(contextRefreshTimer); contextRefreshTimer = null; }
   if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+  if (selectorObserverOff) { selectorObserverOff(); selectorObserverOff = null; }
+  for (const id of [...selectorWatch.keys()]) dropSelectorWatch(id);
+  selectorInterest.clear();
   tabContextCache.clear();
   lastTerminalsSig = null;
   prevStatusById.clear();
