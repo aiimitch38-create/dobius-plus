@@ -66,5 +66,59 @@ for (let i = 0; i < 500; i++) c2.send({ type: 'input', id: 't', data: `${i}` });
 check('queue bounded at 200', c2._queue.length === 200);
 check('bounded queue keeps the NEWEST', c2._queue[c2._queue.length - 1].data === '499');
 
+// 6. Liveness probe (v1.0.62, Codex High): iOS can kill the network path
+// while the socket still reports OPEN. wake() while authed must park
+// queueable sends until the path proves itself, so a message typed right
+// after foregrounding can never vanish into a zombie socket.
+{
+  const c3 = new Connection('tok');
+  c3.connect();
+  const w = instances[instances.length - 1];
+  w.readyState = 1;
+  w.onopen();
+  w.onmessage({ data: JSON.stringify({ type: 'authed' }) });
+  const sentBeforeWake = w.sent.length;
+
+  c3.wake(); // suspect mode: a ping went straight out to probe
+  check('probe ping bypasses the park (sent directly)', w.sent.some((m, i) => i >= sentBeforeWake && m.type === 'ping'));
+  c3.send({ type: 'submitPrompt', id: 't1', text: 'ship it' });
+  check('send during a pending probe is PARKED, not trusted to the socket',
+    !w.sent.some((m) => m.type === 'submitPrompt') && c3._queue.some((m) => m.type === 'submitPrompt'));
+  // Reads/subscriptions are NOT parked: they self-heal (polls re-fire, attach
+  // re-issues on authed), and parking them starved screens that never
+  // re-request outside authed (Codex round 2 High).
+  c3.send({ type: 'selectorSnapshot', id: 't1' });
+  check('reads still go out best-effort during the probe', w.sent.some((m) => m.type === 'selectorSnapshot'));
+
+  // The path proves alive (any frame): parked sends flush on the SAME socket.
+  w.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+  check('parked send flushes when the probe hears back', w.sent.some((m) => m.type === 'submitPrompt'));
+  check('suspect cleared after proof of life', c3._suspect === false && c3._queue.length === 0);
+  clearTimeout(c3._probeTimer);
+
+  // Zombie case: probe times out silently. Force the timer's callback path by
+  // waiting it out with fake time is overkill here; instead verify the timer
+  // is armed and the state is suspect until something arrives.
+  const c4 = new Connection('tok');
+  c4.connect();
+  const w2 = instances[instances.length - 1];
+  w2.readyState = 1;
+  w2.onopen();
+  w2.onmessage({ data: JSON.stringify({ type: 'authed' }) });
+  c4.wake();
+  check('probe timer armed while suspect', !!c4._probeTimer && c4._suspect === true);
+  c4.send({ type: 'input', id: 't', data: 'x' });
+  check('zombie socket never receives the parked input', !w2.sent.some((m) => m.type === 'input'));
+  // A reconnect (new socket) resets probe state so the fresh socket is trusted.
+  c4._open();
+  check('fresh socket clears suspect state', c4._suspect === false && c4._probeTimer === null);
+  const w3 = instances[instances.length - 1];
+  w3.readyState = 1;
+  w3.onopen();
+  w3.onmessage({ data: JSON.stringify({ type: 'authed' }) });
+  check('parked input flushes after the reconnect auths', w3.sent.some((m) => m.type === 'input' && m.data === 'x'));
+  clearTimeout(c4._probeTimer);
+}
+
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

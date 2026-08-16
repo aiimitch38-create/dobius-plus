@@ -29,6 +29,14 @@ const ROWS = 120;
 
 let pooled = null;
 
+// Renders share ONE pooled terminal, so they must run one at a time: two
+// concurrent selector probes (tab A and tab B, or two phones) would otherwise
+// interleave reset/write on the same grid and tab A's probe could read tab
+// B's screen, surfacing B's dialog on A's chat where a tap answers the wrong
+// prompt (Codex High). A render is fast (<50ms typical, 750ms worst), so a
+// simple promise chain is enough.
+let renderChain = Promise.resolve();
+
 /**
  * @param raw string | Uint8Array of raw PTY output (a rolling-buffer tail)
  * @returns Promise<string[] | null> the ROWS screen lines (right-trimmed),
@@ -36,7 +44,14 @@ let pooled = null;
  *          strip-and-regex path so a headless bug can never LOSE a popup
  *          that path would have found.
  */
-export function renderScreenLines(raw, { timeoutMs = 750 } = {}) {
+export function renderScreenLines(raw, opts) {
+  const run = renderChain.then(() => renderScreenLinesNow(raw, opts));
+  // renderScreenLinesNow never rejects, but keep the chain unbreakable anyway.
+  renderChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+function renderScreenLinesNow(raw, { timeoutMs = 750 } = {}) {
   return new Promise((resolve) => {
     let term;
     try {
@@ -64,7 +79,15 @@ export function renderScreenLines(raw, { timeoutMs = 750 } = {}) {
       }
     };
     // A hung write must not wedge the caller; the fallback path takes over.
-    const t = setTimeout(() => finish(false), timeoutMs);
+    // Dispose the pooled instance on timeout: the chain advances when this
+    // promise settles, and a still-running write from THIS render would
+    // otherwise keep mutating the shared grid under the next render's feet
+    // (Codex round 2). The next call constructs a fresh terminal.
+    const t = setTimeout(() => {
+      try { pooled?.dispose(); } catch { /* already broken */ }
+      pooled = null;
+      finish(false);
+    }, timeoutMs);
     try {
       term.write(raw, () => { clearTimeout(t); finish(true); });
     } catch {

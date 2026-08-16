@@ -27,6 +27,19 @@ the version or branch that shipped them. Sam triggers releases.
 
 ## Staged on fix/mobile-chat-bugs (unreleased, next ship = v1.0.62)
 
+- [x] Mobile hardening round (Codex fresh-eyes sweep, 3 confirmed + 3
+      round-2 findings on the fixes themselves, all fixed and re-verified):
+      selector renders serialized on the shared headless terminal (two tabs'
+      probes could interleave and surface tab B's dialog on tab A, where a
+      tap answers the wrong prompt; timeout now disposes the pooled instance
+      so a hung render can't contaminate the next); wake() liveness probe
+      (iOS leaves zombie sockets that still report OPEN, so the first send
+      after foregrounding vanished: queueables park until a pong proves the
+      path, reads stay best-effort); Board create guard correlated by a
+      server-echoed nonce (an unrelated error or a Loose Ends resume's
+      terminalCreated no longer unblocks a double-tap into a second PTY),
+      time-bounded at 15s for lost replies. Nonce echo live-verified on
+      both reply shapes; 21 connection assertions.
 - [x] Mobile chat perf + honesty batch (all live-observed 8/15):
       readTail was quadratic per 64KB chunk (whole-buffer newline recount +
       re-concat; ~0.5GB of work per call at the 8MB cap, benchmarked 10.8x

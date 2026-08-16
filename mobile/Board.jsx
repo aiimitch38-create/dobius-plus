@@ -84,7 +84,7 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
   const [alertMsg, setAlertMsg] = useState('');
   // Guards a createTerminal round-trip so a double-tap in the picker (Tailscale
   // latency) can't spawn two orphan PTYs. Reset on the reply. Audit MED-10.
-  const creatingRef = useRef(false);
+  const creatingRef = useRef(null); // { at, nonce } while a create is in flight
 
   // Reflect an ACTUAL subscription, not just permission (Codex Phase 5b P2), so
   // the bell keeps showing if the subscription was cleared/pruned server-side.
@@ -119,13 +119,26 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
       } else if (msg.type === 'projects') {
         setProjects(msg.list || []);
       } else if (msg.type === 'terminalCreated') {
-        creatingRef.current = false;
+        // Navigate for ANY terminalCreated (a Loose Ends resume emits it too
+        // and wants the same jump), but release the create guard only for the
+        // Board's own create (echoed nonce): an unrelated resume completing
+        // mid-create must not unblock a second tap (Codex round 2).
+        if (creatingRef.current && msg.nonce === creatingRef.current.nonce) {
+          creatingRef.current = null;
+        }
         setPickerOpen(false);
         onOpen(msg.id); // jump straight into the new session
       } else if (msg.type === 'error') {
         // A rejected create (e.g. Unknown project) must release the guard and
-        // surface, else the picker looks frozen. Audit MED-10.
-        creatingRef.current = false;
+        // surface, else the picker looks frozen (Audit MED-10). But ONLY the
+        // create's own error (matched by echoed nonce) releases it: an
+        // unrelated error on the shared socket (a failed Loose Ends resume,
+        // for example) used to clear the guard mid-create and a second tap
+        // spawned a second PTY (Codex Medium). A lost reply is bounded by
+        // the 15s timestamp on the guard itself.
+        if (creatingRef.current && msg.nonce === creatingRef.current.nonce) {
+          creatingRef.current = null;
+        }
         setAlertMsg(msg.message || 'Could not create session');
         setTimeout(() => setAlertMsg(''), 5000);
       }
@@ -300,10 +313,13 @@ export default function Board({ connection, status, onOpen, onShowHistory }) {
                   key={p.path}
                   className="sheet-item"
                   onClick={() => {
-                    if (creatingRef.current) return; // guard double-tap (MED-10)
-                    creatingRef.current = true;
+                    // Guard double-tap (MED-10). Time-stamped: a guard older
+                    // than 15s means the reply was lost, not in flight.
+                    if (creatingRef.current && Date.now() - creatingRef.current.at < 15000) return;
+                    const nonce = `cr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                    creatingRef.current = { at: Date.now(), nonce };
                     setPickerOpen(false); // close optimistically so a second tap can't fire
-                    connection.send({ type: 'createTerminal', cwd: p.path });
+                    connection.send({ type: 'createTerminal', cwd: p.path, nonce });
                   }}
                 >
                   <span className="card-title">{p.name}</span>

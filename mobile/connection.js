@@ -32,6 +32,12 @@ export class Connection {
     // deliberate, id-addressed actions queue; ephemeral/re-sent messages
     // (auth, ping, listTerminals, attach, ...) are not.
     this._queue = [];
+    // Liveness probe (v1.0.62): iOS can kill the network path while the
+    // browser socket still reports OPEN, so a send right after foregrounding
+    // vanished with no error (Codex High). While _suspect, queueable sends
+    // queue instead of trusting the socket; ANY inbound frame clears it.
+    this._suspect = false;
+    this._probeTimer = null;
   }
 
   onMessage(cb) { this.listeners.add(cb); return () => this.listeners.delete(cb); }
@@ -54,6 +60,10 @@ export class Connection {
   _open() {
     clearTimeout(this._reconnectTimer);
     this._stopPing();
+    // Fresh socket: any pending liveness probe belonged to the old one.
+    this._suspect = false;
+    clearTimeout(this._probeTimer);
+    this._probeTimer = null;
     this._setStatus('connecting');
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     let ws;
@@ -73,6 +83,14 @@ export class Connection {
 
     ws.onmessage = (e) => {
       if (this.ws !== ws) return;
+      // Any frame proves the path is alive: end a pending liveness probe and
+      // release the sends it parked.
+      if (this._suspect) {
+        this._suspect = false;
+        clearTimeout(this._probeTimer);
+        this._probeTimer = null;
+        if (this.status === 'authed') this._flushQueue();
+      }
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
       let justAuthed = false;
@@ -128,16 +146,54 @@ export class Connection {
 
   /** Force an immediate reconnect (e.g. on PWA foreground). */
   wake() {
-    if (this.status === 'authed' || this.status === 'connecting') return;
+    if (this.status === 'connecting') return;
+    if (this.status === 'authed') {
+      // The socket LOOKS open, but after an iOS backgrounding the network
+      // path underneath may be gone and readyState still says OPEN. Probe:
+      // park queueable sends, ping, and force a reconnect if nothing comes
+      // back fast. If the path is fine the pong lands in ~RTT and the parked
+      // sends flush immediately.
+      this._probeLiveness();
+      return;
+    }
     this.reconnectDelay = 1000;
     this._open();
+  }
+
+  _probeLiveness() {
+    if (this._probeTimer) return; // a probe is already in flight
+    const ws = this.ws;
+    this._suspect = true;
+    try { ws.send(JSON.stringify({ type: 'ping' })); } catch { /* dead: timer handles it */ }
+    this._probeTimer = setTimeout(() => {
+      this._probeTimer = null;
+      if (!this._suspect || this.ws !== ws) return;
+      // Silence: the socket is a zombie. Reconnect; queued sends flush on
+      // the fresh socket's authed.
+      this._suspect = false;
+      try { ws.close(); } catch { /* noop */ }
+      if (this.ws === ws && this.status === 'authed') {
+        // Some zombie sockets never fire onclose; drive the state machine.
+        this._stopPing();
+        this._setStatus('disconnected');
+        this.reconnectDelay = 1000;
+        this._open();
+      }
+    }, 2500);
   }
 
   send(obj) {
     const open = this.ws && this.ws.readyState === WebSocket.OPEN;
     // Send once authed, and let the `auth` handshake through while merely
     // connected (else we'd deadlock: auth is sent before we are authed).
-    if (open && (this.status === 'authed' || obj?.type === 'auth')) {
+    // While a liveness probe is pending (_suspect), only QUEUEABLE actions
+    // are parked (they are one-shot and must not be lost); reads and
+    // subscriptions still go out best-effort, because they self-heal: polls
+    // re-fire in seconds and attach/list* re-issue on `authed` if the probe
+    // ends in a reconnect. Parking them instead silently starved screens
+    // that never re-request outside `authed` (Codex round 2 High).
+    const park = this._suspect && obj && QUEUEABLE.has(obj.type);
+    if (open && !park && (this.status === 'authed' || obj?.type === 'auth')) {
       this.ws.send(JSON.stringify(obj));
       return;
     }
@@ -163,6 +219,9 @@ export class Connection {
   close() {
     this.shouldReconnect = false;
     clearTimeout(this._reconnectTimer);
+    clearTimeout(this._probeTimer);
+    this._probeTimer = null;
+    this._suspect = false;
     this._stopPing();
     if (this.ws) { try { this.ws.close(); } catch { /* noop */ } }
   }

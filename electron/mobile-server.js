@@ -676,18 +676,23 @@ function handleAuthedMessage(socket, msg, subs) {
       // Phone-spawned PTY (no desktop tab; labeled remote-only on the board).
       // The cwd MUST be a known project (allowlist), never an arbitrary path,
       // so a paired token cannot open a shell anywhere on disk. Codex #5.
+      // Echo the client's nonce (bounded) so the Board can tell THIS create's
+      // error apart from unrelated errors on the shared socket: an
+      // uncorrelated error used to release the double-tap guard and let a
+      // second tap spawn a second PTY (Codex Medium).
+      const crNonce = typeof msg.nonce === 'string' ? msg.nonce.slice(0, 64) : undefined;
       resolveCreateCwd(msg.cwd).then((resolved) => {
         if (resolved === null) {
-          wsSend(socket, { type: 'error', message: 'Unknown project' });
+          wsSend(socket, { type: 'error', message: 'Unknown project', nonce: crNonce });
           return;
         }
         const id = mobileTermId();
         try {
           createTerminal(id, resolved, null);
           socket._authedTabs.add(id); // the creator may drive its own PTY. Audit Medium.
-          wsSend(socket, { type: 'terminalCreated', id });
+          wsSend(socket, { type: 'terminalCreated', id, nonce: crNonce });
         } catch (err) {
-          wsSend(socket, { type: 'error', message: String(err?.message || err) });
+          wsSend(socket, { type: 'error', message: String(err?.message || err), nonce: crNonce });
         }
       });
       break;
