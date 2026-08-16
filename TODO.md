@@ -27,6 +27,17 @@ the version or branch that shipped them. Sam triggers releases.
 
 ## Staged on fix/mobile-chat-bugs (unreleased, next ship = v1.0.62)
 
+- [x] Mobile chat perf + honesty batch (all live-observed 8/15):
+      readTail was quadratic per 64KB chunk (whole-buffer newline recount +
+      re-concat; ~0.5GB of work per call at the 8MB cap, benchmarked 10.8x
+      after the fix, byte-identical on the real 93MB transcript); the chat
+      poll re-shipped the full payload every 3.5s even when nothing changed
+      (now a sig handshake: unchanged replies are ~190 bytes, verified live;
+      client only claims a sig for non-empty payloads and the server only
+      honors sigs its own socket cache has parsed, both Codex findings); and
+      a session-linked chat whose Claude exited now says input goes to the
+      terminal instead of "Message Claude..." (typed text executes in zsh).
+      New tail-read suite: chunk boundaries, giant lines, UTF-8 straddling.
 - [x] gws Reconnect actually opens the browser (Sam 8/15: "it just says
       authenticating and doesn't do anything"). Root cause: with no TTY,
       `gws auth login` prints the consent URL to stderr and waits; v1.0.61

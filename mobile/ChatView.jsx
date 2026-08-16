@@ -182,6 +182,10 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   // reset/deleted) should. Resolves the transient-vs-real tension.
   const emptyStreakRef = useRef(0);
 
+  // Sig of the transcript payload we already hold; echoed to the server so an
+  // unchanged file gets a ~100-byte reply instead of the full payload again.
+  const sigRef = useRef(null);
+
   const request = useCallback(() => {
     if (!sessionId || !projectPath) return;
     wantRef.current = sessionId;
@@ -190,7 +194,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
     // tabId authorizes this socket to send input to the tab (server gates
     // input/kill on the socket's touched-tab set, and the Chat view never
     // attaches). Audit Medium.
-    connection.send({ type: 'loadTranscript', sessionId, projectPath, tabId, limit: 200 });
+    connection.send({ type: 'loadTranscript', sessionId, projectPath, tabId, limit: 200, sig: sigRef.current || undefined });
   }, [connection, sessionId, projectPath]);
 
   // Ask the server whether the tab's live PTY is showing a selection prompt.
@@ -201,6 +205,7 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
   useEffect(() => {
     setMessages(null);
     emptyStreakRef.current = 0;
+    sigRef.current = null; // new session: never claim we hold its payload
     if (!sessionId || !projectPath) return undefined;
     request();
     const poll = setInterval(request, 3500); // live-ish: pick up new turns
@@ -256,6 +261,22 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
         }
       } else if (msg.type === 'transcript' && msg.sessionId === wantRef.current
           && (msg.projectPath == null || msg.projectPath === projectPath)) {
+        if (msg.unchanged) {
+          // File identical to what we hold: keep messages as-is, but still
+          // age out echo bubbles (their 90s TTL must not depend on the
+          // transcript changing).
+          setEchoes((cur) => {
+            if (cur.length === 0) return cur;
+            const now = Date.now();
+            const kept = cur.filter((e) => now - e.at < 90_000);
+            return kept.length === cur.length ? cur : kept;
+          });
+          return;
+        }
+        // Claim the sig ONLY for a non-empty payload (below): claiming it for
+        // an empty parse would freeze the empty-streak debounce (server says
+        // unchanged forever, streak never reaches 2, stale messages pinned;
+        // Codex High).
         const next = msg.entries || [];
         // Prune echoes the transcript now covers (same trimmed text, queued or
         // real) and any older than 90s.
@@ -277,9 +298,11 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
         });
         if (next.length > 0) {
           emptyStreakRef.current = 0;
+          sigRef.current = msg.sig || null;
           setMessages(next);
         } else {
           emptyStreakRef.current += 1;
+          sigRef.current = null;
           // Clear on first load / already-empty, or once an empty PERSISTS (a
           // real reset). A single transient empty after real content is kept, so
           // the chat doesn't flicker to "No messages yet". Codex.
@@ -511,6 +534,11 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
         >
           {uploading ? '…' : '+'}
         </button>
+        {/* Placeholder truth: a session-linked chat whose Claude has EXITED
+            still sends input to the underlying shell, where it executes as a
+            command (observed live 8/15: a prompt ran in zsh as `Reply ...`).
+            Never claim "Message Claude" unless a Claude is actually attached;
+            claudeLive comes from the tab's live process detection. */}
         <textarea
           className="chat-input"
           value={input}
@@ -522,7 +550,11 @@ export default function ChatView({ connection, tab, onOpenTerminal }) {
             const files = e.clipboardData?.files;
             if (files && files.length > 0) { e.preventDefault(); uploadFiles(files); }
           }}
-          placeholder={sessionId ? 'Message Claude...' : 'Type into the terminal...'}
+          placeholder={sessionId
+            ? (tab && !tab.claudeLive
+              ? 'Claude exited. Input goes to the terminal...'
+              : 'Message Claude...')
+            : 'Type into the terminal...'}
           rows={1}
         />
         <button className="chat-send" onClick={send} aria-label="Send" disabled={!input.trim()}>↑</button>

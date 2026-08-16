@@ -748,13 +748,30 @@ function handleAuthedMessage(socket, msg, subs) {
       const txCache = socket._txCache || (socket._txCache = new Map());
       getTranscriptSig(sessionId, projectPath)
         .then(async (sig) => {
+          // The client echoes back the sig of the payload it already holds.
+          // When the file has not changed, reply with a ~100-byte "unchanged"
+          // instead of re-shipping the full message payload: a chat sitting
+          // open used to receive (and JSON.parse) up to several MB every
+          // 3.5s poll, which is what made the phone UI crawl on big live
+          // transcripts (observed 8/15). Honor the claim only when THIS
+          // socket's cache has independently parsed that sig: a fresh
+          // connection (server restart, reconnect) always re-ships once, so
+          // a client sig from a previous life can never pin stale content
+          // the server never verified (Codex Medium).
           const hit = txCache.get(cacheKey);
-          if (sig && hit && hit.sig === sig) return hit.entries;
+          if (sig && typeof msg.sig === 'string' && msg.sig === sig && hit && hit.sig === sig) {
+            wsSend(socket, { type: 'transcript', sessionId, projectPath, sig, unchanged: true });
+            return null;
+          }
+          if (sig && hit && hit.sig === sig) return { entries: hit.entries, sig };
           const entries = (await loadTranscript(sessionId, projectPath, limit)) || [];
           if (sig) txCache.set(cacheKey, { sig, entries });
-          return entries;
+          return { entries, sig };
         })
-        .then((entries) => wsSend(socket, { type: 'transcript', sessionId, projectPath, entries: entries || [] }))
+        .then((res) => {
+          if (!res) return; // unchanged reply already sent
+          wsSend(socket, { type: 'transcript', sessionId, projectPath, sig: res.sig || null, entries: res.entries || [] });
+        })
         .catch((err) => wsSend(socket, { type: 'error', message: String(err?.message || err) }));
       break;
     }

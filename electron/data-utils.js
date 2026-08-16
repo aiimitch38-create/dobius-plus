@@ -44,22 +44,30 @@ async function readTail(filePath, minLines) {
       return buf.toString('utf8');
     }
     let pos = size;
-    let buf = Buffer.alloc(0);
+    const chunks = [];
+    let buffered = 0;
     let newlines = 0;
     // Stop once we have more newlines than requested (so we own minLines full
     // lines after dropping the partial first one), or we hit the byte cap.
-    while (pos > 0 && newlines <= minLines && buf.length < TAIL_CAP_BYTES) {
+    // Count newlines per CHUNK and concat ONCE at the end: the old loop
+    // re-counted the whole accumulated buffer and re-concatenated it on every
+    // chunk, which is quadratic. A fat-lined transcript that runs to the 8MB
+    // cap (128 chunks) cost ~0.5GB of scanning + memcpy per call, and the
+    // mobile Chat polls this every 3.5s on an ACTIVE session (the sig cache
+    // only saves idle ones), which is why chat lagged minutes behind on a
+    // large live transcript (observed live, 8/15).
+    while (pos > 0 && newlines <= minLines && buffered < TAIL_CAP_BYTES) {
       const readSize = Math.min(TAIL_CHUNK_BYTES, pos);
       pos -= readSize;
       const chunk = Buffer.alloc(readSize);
       await handle.read(chunk, 0, readSize, pos);
-      buf = Buffer.concat([chunk, buf]);
-      newlines = 0;
-      for (let i = 0; i < buf.length; i++) {
-        if (buf[i] === 0x0a) newlines++;
+      chunks.unshift(chunk);
+      buffered += readSize;
+      for (let i = 0; i < chunk.length; i++) {
+        if (chunk[i] === 0x0a) newlines++;
       }
     }
-    return buf.toString('utf8');
+    return Buffer.concat(chunks).toString('utf8');
   } finally {
     await handle.close();
   }
