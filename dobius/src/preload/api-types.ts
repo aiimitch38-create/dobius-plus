@@ -456,6 +456,25 @@ import type {
 } from '../shared/workspace-cleanup'
 import type { KeybindingActionId, KeybindingFileSnapshot } from '../shared/keybindings'
 
+// Standalone (not imported from main-process code, which isn't bundled for
+// the renderer) mirror of participant-identity-store.ts's event shapes.
+export type CommunicationsUnsignedEvent = {
+  kind: number
+  content: string
+  tags: string[][]
+  createdAt?: number
+}
+
+export type CommunicationsSignedEvent = {
+  id: string
+  pubkey: string
+  created_at: number
+  kind: number
+  tags: string[][]
+  content: string
+  sig: string
+}
+
 export type BrowserApi = {
   registerGuest: (args: {
     browserPageId: string
@@ -1357,6 +1376,17 @@ export type PreloadApi = {
     onNotificationsChanged: (callback: () => void) => () => void
     onBriefingChanged: (callback: () => void) => () => void
     onDraftsChanged: (callback: () => void) => () => void
+  }
+  communications: {
+    getIdentity: () => Promise<{ pubkey: string; username: string }>
+    signEvent: (
+      unsigned: CommunicationsUnsignedEvent
+    ) => Promise<CommunicationsSignedEvent>
+    getAgentIdentity: (agentId: string) => Promise<{ pubkey: string }>
+    signEventAsAgent: (
+      agentId: string,
+      unsigned: CommunicationsUnsignedEvent
+    ) => Promise<CommunicationsSignedEvent>
   }
   prompts: {
     list: () => Promise<DobiusPrompt[]>

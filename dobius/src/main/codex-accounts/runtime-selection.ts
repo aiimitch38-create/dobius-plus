@@ -7,6 +7,7 @@ import type {
 export type CodexAccountSelectionTarget = {
   runtime?: 'host' | 'wsl'
   wslDistro?: string | null
+  accountId?: string | null
 }
 
 export type NormalizedCodexAccountSelectionTarget = {
@@ -48,6 +49,9 @@ export function getSelectedCodexAccountIdForTarget(
   >,
   target?: CodexAccountSelectionTarget | null
 ): string | null {
+  if (target?.accountId !== undefined) {
+    return target.accountId
+  }
   const selection = normalizeCodexRuntimeSelection(settings)
   const normalizedTarget = normalizeCodexAccountSelectionTarget(target)
   if (normalizedTarget.runtime === 'host') {

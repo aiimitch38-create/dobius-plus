@@ -37,6 +37,8 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { getInheritedAgentDefaults } from "./bakedEnvHelpers";
+import { isDobiusCommunicationsAvailable } from "@/shared/api/dobiusCommunications";
+import { DobiusWorkstationSection } from "./DobiusWorkstationSection";
 
 export function AgentsView() {
   const { openPersonaProfilePanel, openProfilePanel } = useProfilePanel();
@@ -212,6 +214,9 @@ export function AgentsView() {
             title="Agents"
           />
           <div className="flex flex-col gap-8">
+            {isDobiusCommunicationsAvailable() ? (
+              <DobiusWorkstationSection />
+            ) : null}
             <UnifiedAgentsSection
               defaultModel={inheritedDefaults.model.value}
               actionErrorMessage={agents.actionErrorMessage}

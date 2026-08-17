@@ -21,6 +21,8 @@ export function formatAgentShow(result: { agent: CustomAgent | undefined }): str
     `id: ${agent.id}`,
     `name: ${agent.name}`,
     `description: ${agent.description || '(none)'}`,
+    `engine: ${agent.engine ?? 'claude'}`,
+    `accountId: ${agent.accountId ?? '(active account)'}`,
     `model: ${agent.model}`,
     `tools: ${agent.allowedTools.join(', ')}`,
     `skills: ${agent.skills.join(', ') || 'none'}`,

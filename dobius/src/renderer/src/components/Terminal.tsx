@@ -84,7 +84,10 @@ import {
 } from '@/runtime/web-runtime-session'
 import { openMobileEmulatorTab } from '@/lib/open-mobile-emulator-tab'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
-import { resumeSleepingAgentSessionsForWorktree } from '@/lib/resume-sleeping-agent-session'
+import {
+  getWorktreeIdsNeedingStartupResume,
+  resumeSleepingAgentSessionsForWorktree
+} from '@/lib/resume-sleeping-agent-session'
 import { listBoundAgentTabActions, resolveDefaultAgentForNewTab } from '@/lib/agent-tab-shortcuts'
 import {
   createFloatingWorkspaceBrowserTab,
@@ -804,14 +807,26 @@ function Terminal(): React.JSX.Element | null {
     if (!workspaceSessionReady || !hydrationSucceeded || !activeWorktreeId) {
       return
     }
-    if (startupResumeWorktreeIdsRef.current.has(activeWorktreeId)) {
-      return
-    }
-    startupResumeWorktreeIdsRef.current.add(activeWorktreeId)
     // Why: startup hydration restores the active worktree without calling
     // activateAndRevealWorktree, so orphaned live/quit records need a terminal
     // surface pass after pane-level cold restore had first chance.
-    resumeSleepingAgentSessionsForWorktree(activeWorktreeId)
+    //
+    // Why every worktree, not just the active one: sleeping-agent records are
+    // captured per pane across ALL projects, but this pass used to run only for
+    // activeWorktreeId. Every other project's agent then stayed dead until the
+    // user happened to click that worktree, which reads as "Dobius restarted and
+    // nothing resumed". The set is bounded by real agent records (not by
+    // worktree count), and resumeSleepingAgentSessionsForWorktree is idempotent
+    // and re-reads store state per record, so a sweep is safe.
+    const worktreeIds = getWorktreeIdsNeedingStartupResume(
+      useAppStore.getState().sleepingAgentSessionsByPaneKey,
+      activeWorktreeId,
+      startupResumeWorktreeIdsRef.current
+    )
+    for (const worktreeId of worktreeIds) {
+      startupResumeWorktreeIdsRef.current.add(worktreeId)
+      resumeSleepingAgentSessionsForWorktree(worktreeId)
+    }
   }, [activeWorktreeId, hydrationSucceeded, workspaceSessionReady])
 
   const handleNewTab = useCallback(

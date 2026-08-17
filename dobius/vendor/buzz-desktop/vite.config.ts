@@ -8,6 +8,9 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
+  // Why: Dobius+ packages this renderer under a nested app resource path.
+  // Relative asset URLs keep the same build portable in dev and release.
+  base: "./",
   plugins: [
     tanstackRouter({
       target: "react",
@@ -25,7 +28,7 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "@": "/src",
-      "@features-manifest": path.resolve(__dirname, "../preview-features.json"),
+      "@features-manifest": path.resolve(__dirname, "preview-features.json"),
     },
   },
 

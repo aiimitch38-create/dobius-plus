@@ -28,6 +28,7 @@ const {
   setTrustedUIRendererWebContentsIdMock,
   registerFilesystemHandlersMock,
   registerRuntimeHandlersMock,
+  registerCommunicationsGatewayMock,
   registerRuntimeEnvironmentHandlersMock,
   registerEphemeralVmHandlersMock,
   registerAiVaultHandlersMock,
@@ -60,6 +61,8 @@ const {
   registerWorkspacePortHandlersMock,
   registerLocalhostWorktreeLabelHandlersMock,
   registerNativeChatHandlersMock,
+  registerProjectFilesHandlersMock,
+  registerDestinationHandlersMock,
   registerEmulatorFrameStreamHandlersMock,
   registerEmulatorVideoStreamHandlersMock,
   setBuildDispatcherMock,
@@ -90,6 +93,7 @@ const {
   setTrustedUIRendererWebContentsIdMock: vi.fn(),
   registerFilesystemHandlersMock: vi.fn(),
   registerRuntimeHandlersMock: vi.fn(),
+  registerCommunicationsGatewayMock: vi.fn(),
   registerRuntimeEnvironmentHandlersMock: vi.fn(),
   registerEphemeralVmHandlersMock: vi.fn(),
   registerAiVaultHandlersMock: vi.fn(),
@@ -122,6 +126,8 @@ const {
   registerWorkspacePortHandlersMock: vi.fn(),
   registerLocalhostWorktreeLabelHandlersMock: vi.fn(),
   registerNativeChatHandlersMock: vi.fn(),
+  registerProjectFilesHandlersMock: vi.fn(),
+  registerDestinationHandlersMock: vi.fn(),
   registerEmulatorFrameStreamHandlersMock: vi.fn(),
   registerEmulatorVideoStreamHandlersMock: vi.fn(),
   setBuildDispatcherMock: vi.fn(),
@@ -130,6 +136,14 @@ const {
 
 vi.mock('./onboarding', () => ({
   registerOnboardingHandlers: registerOnboardingHandlersMock
+}))
+
+vi.mock('./project-files', () => ({
+  registerProjectFilesHandlers: registerProjectFilesHandlersMock
+}))
+
+vi.mock('./destinations', () => ({
+  registerDestinationHandlers: registerDestinationHandlersMock
 }))
 
 vi.mock('./speech', () => ({
@@ -269,6 +283,14 @@ vi.mock('./runtime', () => ({
   registerRuntimeHandlers: registerRuntimeHandlersMock
 }))
 
+vi.mock('../communications/communications-gateway', () => ({
+  registerCommunicationsGateway: registerCommunicationsGatewayMock
+}))
+
+vi.mock('./communications-identity', () => ({
+  registerCommunicationsIdentityHandlers: vi.fn()
+}))
+
 vi.mock('./runtime-environments', () => ({
   registerRuntimeEnvironmentHandlers: registerRuntimeEnvironmentHandlersMock
 }))
@@ -386,6 +408,7 @@ describe('registerCoreHandlers', () => {
     setTrustedUIRendererWebContentsIdMock.mockReset()
     registerFilesystemHandlersMock.mockReset()
     registerRuntimeHandlersMock.mockReset()
+    registerCommunicationsGatewayMock.mockReset()
     registerRuntimeEnvironmentHandlersMock.mockReset()
     registerEphemeralVmHandlersMock.mockReset()
     registerAiVaultHandlersMock.mockReset()
@@ -417,6 +440,8 @@ describe('registerCoreHandlers', () => {
     registerWorkspacePortHandlersMock.mockReset()
     registerLocalhostWorktreeLabelHandlersMock.mockReset()
     registerNativeChatHandlersMock.mockReset()
+    registerProjectFilesHandlersMock.mockReset()
+    registerDestinationHandlersMock.mockReset()
     registerEmulatorFrameStreamHandlersMock.mockReset()
     registerEmulatorVideoStreamHandlersMock.mockReset()
     setBuildDispatcherMock.mockReset()
@@ -494,12 +519,15 @@ describe('registerCoreHandlers', () => {
     expect(registerEmulatorVideoStreamHandlersMock).toHaveBeenCalled()
     expect(registerFilesystemHandlersMock).toHaveBeenCalledWith(store)
     expect(registerRuntimeHandlersMock).toHaveBeenCalledWith(runtime)
+    expect(registerCommunicationsGatewayMock).toHaveBeenCalledWith(runtime)
     expect(registerRuntimeEnvironmentHandlersMock).toHaveBeenCalledWith(store)
     expect(registerEphemeralVmHandlersMock).toHaveBeenCalledWith(store)
     expect(registerAiVaultHandlersMock).toHaveBeenCalledWith({
       getAdditionalCodexHomePaths: getAdditionalAiVaultCodexHomePaths
     })
     expect(registerNativeChatHandlersMock).toHaveBeenCalled()
+    expect(registerProjectFilesHandlersMock).toHaveBeenCalledWith(store)
+    expect(registerDestinationHandlersMock).toHaveBeenCalled()
     expect(registerCliHandlersMock).toHaveBeenCalled()
     expect(registerPreflightHandlersMock).toHaveBeenCalled()
     expect(registerShellHandlersMock).toHaveBeenCalled()

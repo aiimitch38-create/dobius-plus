@@ -1,4 +1,4 @@
-import type { AgentRun, CustomAgent } from '../../shared/agents'
+import type { AgentEngine, AgentRun, CustomAgent } from '../../shared/agents'
 import type { CommandHandler } from '../dispatch'
 import {
   formatAgentList,
@@ -25,6 +25,8 @@ function getCommaListFlag(
 }
 
 function collectAgentFields(flags: Map<string, string | boolean>): {
+  engine?: AgentEngine
+  accountId?: string
   description?: string
   systemPrompt?: string
   model?: string
@@ -32,7 +34,13 @@ function collectAgentFields(flags: Map<string, string | boolean>): {
   skills?: string[]
   cwd?: string
 } {
+  const engine = getOptionalStringFlag(flags, 'engine')
+  if (engine !== undefined && engine !== 'claude' && engine !== 'codex') {
+    throw new Error('--engine must be claude or codex')
+  }
   return {
+    engine,
+    accountId: getOptionalStringFlag(flags, 'account'),
     description: getOptionalStringFlag(flags, 'description'),
     systemPrompt: getOptionalStringFlag(flags, 'system-prompt'),
     model: getOptionalStringFlag(flags, 'model'),

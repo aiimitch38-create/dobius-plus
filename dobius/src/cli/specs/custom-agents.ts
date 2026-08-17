@@ -5,6 +5,8 @@ const AGENT_FIELD_FLAGS = [
   'name',
   'description',
   'system-prompt',
+  'engine',
+  'account',
   'model',
   'tools',
   'skills',
@@ -12,12 +14,12 @@ const AGENT_FIELD_FLAGS = [
 ]
 
 const AGENT_VS_AUTOMATION_NOTE =
-  'Agents are the persistent Claude SDK personas shown in the Agents tab. For scheduled terminal runs (the Automations tab), use `automations create` instead.'
+  'Agents are persistent Claude or Codex personas shown in Communications and the Agents tab. For scheduled terminal runs (the Automations tab), use `automations create` instead.'
 
 export const CUSTOM_AGENT_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['agents', 'list'],
-    summary: 'List Agents-tab agents (persistent Claude SDK agents)',
+    summary: 'List persistent Communications agents',
     usage: 'dobius agents list [--json]',
     allowedFlags: [...GLOBAL_FLAGS],
     notes: [AGENT_VS_AUTOMATION_NOTE],
@@ -35,16 +37,18 @@ export const CUSTOM_AGENT_COMMAND_SPECS: CommandSpec[] = [
     path: ['agents', 'create'],
     summary: 'Create an agent in the Agents tab',
     usage:
-      'dobius agents create --name <name> [--description <text>] [--system-prompt <text>] [--model <id>] [--tools <a,b>] [--skills <a,b>] [--cwd <path>] [--json]',
+      'dobius agents create --name <name> [--engine <claude|codex>] [--account <id>] [--description <text>] [--system-prompt <text>] [--model <id>] [--tools <a,b>] [--skills <a,b>] [--cwd <path>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, ...AGENT_FIELD_FLAGS],
     notes: [
       AGENT_VS_AUTOMATION_NOTE,
+      'Engine defaults to Claude. Account selects an existing Dobius-managed OAuth account.',
       'Tools and skills accept comma-separated lists; tools default to Read, Grep, Glob.',
       'Icon, color, heartbeat, notification, and permission-bypass settings are editable only in the app UI.'
     ],
     examples: [
       'dobius agents create --name "Code Reviewer" --system-prompt "Review diffs for bugs" --tools "Read,Grep,Glob,Bash"',
-      'dobius agents create --name "Docs Writer" --model claude-fable-5 --cwd ~/Projects --json'
+      'dobius agents create --name "Docs Writer" --model claude-fable-5 --cwd ~/Projects --json',
+      'dobius agents create --name "Codex Reviewer" --engine codex --cwd ~/Projects --json'
     ]
   },
   {
@@ -72,7 +76,7 @@ export const CUSTOM_AGENT_COMMAND_SPECS: CommandSpec[] = [
     usage: 'dobius agents run <id> --prompt <text> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'prompt'],
     positionalArgs: ['id'],
-    notes: ['Requires the Dobius+ app to be running; the run executes via the Claude Agent SDK.'],
+    notes: ['Requires the Dobius+ app to be running; the run uses the agent\'s saved Claude or Codex engine and OAuth account.'],
     examples: ['dobius agents run 2f9e... --prompt "Summarize open PRs"']
   },
   {

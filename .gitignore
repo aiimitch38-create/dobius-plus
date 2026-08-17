@@ -10,6 +10,8 @@ mobile-pairing-smoketest.png
 AUTONOMOUS-REPAIR.md
 scripts/supervisor.log
 .playwright-mcp/
+.playwright-cli/
+dobius/output/
 .dobius/
 
 # Parallel git worktrees / sibling clones that live inside the repo dir

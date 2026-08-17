@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
+import type { ChildProcess } from 'node:child_process'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { Options, Query, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentRun, AgentRunSource, CustomAgent } from '../../shared/agents'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
+import { resolveClaudeCommand } from '../codex-cli/command'
 import { getAgent, updateAgentSession } from './agents-store'
 import {
   broadcastRunEvent,
@@ -22,6 +24,11 @@ import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runne
 import { buildDobiusRunMcpServer, withDobiusToolAllowRule } from './agent-runner-dobius-tools'
 import { buildSystemPrompt } from './agent-run-prompt'
 import {
+  getDefaultPrepareCodexLaunch,
+  type PrepareCodexLaunch
+} from './default-codex-launch'
+import { startCodexAgentProcess } from './codex-agent-execution'
+import {
   addStoredAgentRun,
   getStoredAgentRun,
   listStoredAgentRuns,
@@ -35,7 +42,9 @@ const MAX_CONCURRENT_RUNS = 3
 let reservedRuns = 0
 const reservedAgentIds = new Set<string>()
 
-export type PrepareClaudeLaunch = () => Promise<ClaudeRuntimeAuthPreparation>
+export type PrepareClaudeLaunch = (target?: {
+  accountId?: string | null
+}) => Promise<ClaudeRuntimeAuthPreparation>
 
 type AgentRunOptions = {
   source?: AgentRunSource
@@ -57,6 +66,7 @@ type LiveRun = {
 }
 
 const liveRuns = new Map<string, LiveRun>()
+const liveCodexRuns = new Map<string, ChildProcess>()
 
 setDecisionBypassRunHandler(async (runId) => {
   const liveRun = liveRuns.get(runId)
@@ -206,6 +216,7 @@ export async function startAgentRun(args: {
   prompt: string
   cwd?: string
   prepareClaudeLaunch: PrepareClaudeLaunch
+  prepareCodexLaunch?: PrepareCodexLaunch
   options?: AgentRunOptions
 }): Promise<string> {
   if (reservedRuns >= MAX_CONCURRENT_RUNS) {
@@ -224,7 +235,38 @@ export async function startAgentRun(args: {
   const runId = randomUUID()
   let runAdded = false
   try {
-    const preparation = await args.prepareClaudeLaunch()
+    if (agent.engine === 'codex') {
+      const prepareCodexLaunch = args.prepareCodexLaunch ?? getDefaultPrepareCodexLaunch()
+      if (!prepareCodexLaunch) {
+        throw new Error('Codex account preparation is unavailable')
+      }
+      const codexHome = prepareCodexLaunch(
+        agent.accountId ? { accountId: agent.accountId } : undefined
+      )
+      const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
+      const run: AgentRun = {
+        id: runId,
+        agentId: agent.id,
+        prompt,
+        source: args.options?.source ?? 'manual',
+        startedAt: Date.now(),
+        status: 'running'
+      }
+      addRun(run)
+      runAdded = true
+      startCodexRun({
+        runId,
+        agent,
+        prompt,
+        resolvedCwd,
+        codexHome,
+        onRunEnded: args.options?.onRunEnded
+      })
+      return runId
+    }
+    const preparation = await args.prepareClaudeLaunch(
+      agent.accountId ? { accountId: agent.accountId } : undefined
+    )
     const abortController = new AbortController()
     const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
     const branch = currentGitBranch(resolvedCwd)
@@ -252,6 +294,10 @@ export async function startAgentRun(args: {
       maxBudgetUsd: args.options?.maxBudgetUsd,
       outputFormat: args.options?.outputFormat
     }
+    // Why: the SDK's bundled CLI lives inside app.asar after packaging and cannot
+    // be spawned as a real file. Resolve the user's installed Claude CLI so native
+    // Communications agents reuse the same OAuth account as Dobius terminals.
+    options.pathToClaudeCodeExecutable = resolveClaudeCommand()
     options.mcpServers = { dobius: buildDobiusRunMcpServer(agent.id, runId) }
     options.strictMcpConfig = true
     options.hooks = buildAgentHardRailHooks({ agentId: agent.id })
@@ -300,7 +346,66 @@ export async function startAgentRun(args: {
   }
 }
 
+function startCodexRun(args: {
+  runId: string
+  agent: CustomAgent
+  prompt: string
+  resolvedCwd: string
+  codexHome: string | null
+  onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
+}): void {
+  const child = startCodexAgentProcess({
+    agent: args.agent,
+    prompt: args.prompt,
+    cwd: args.resolvedCwd,
+    codexHome: args.codexHome,
+    isCancelled: () => getStoredAgentRun(args.runId)?.status === 'cancelled',
+    onAssistantText: (text) => {
+      broadcastRunEvent({
+        ...eventBase(args.runId, args.agent.id),
+        kind: 'assistant-text',
+        text
+      })
+    },
+    onFinish: (status, summary) => finishCodexRun(args, status, summary)
+  })
+  liveCodexRuns.set(args.runId, child)
+}
+
+function finishCodexRun(
+  args: {
+    runId: string
+    agent: CustomAgent
+    onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
+  },
+  status: 'success' | 'error' | 'cancelled',
+  summary: string
+): void {
+  if (!liveCodexRuns.has(args.runId)) {
+    return
+  }
+  liveCodexRuns.delete(args.runId)
+  updateRun(args.runId, { endedAt: Date.now(), status, summary })
+  const run = getStoredAgentRun(args.runId)
+  if (run) {
+    appendAgentRunNotification(args.agent, run)
+  }
+  if (status !== 'success') {
+    args.onRunEnded?.(status, summary)
+  }
+  appendRunProgress(args.agent.id, status, summary)
+  reservedAgentIds.delete(args.agent.id)
+  reservedRuns -= 1
+  broadcastRunsChanged()
+}
+
 export async function stopAgentRun(runId: string): Promise<void> {
+  const codexRun = liveCodexRuns.get(runId)
+  if (codexRun) {
+    updateRun(runId, { endedAt: Date.now(), status: 'cancelled', summary: 'cancelled' })
+    codexRun.kill('SIGTERM')
+    return
+  }
   const liveRun = liveRuns.get(runId)
   if (!liveRun) {
     return

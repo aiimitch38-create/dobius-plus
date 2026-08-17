@@ -256,7 +256,9 @@ export function usePersonaActions() {
             );
           } else {
             setPersonaNoticeMessage(
-              `Created and started ${created.agent.name}.`,
+              created.agent.runtime === "dobius"
+                ? `Created ${created.agent.name} in Dobius.`
+                : `Created and started ${created.agent.name}.`,
             );
           }
           if (created.profileSyncError) {

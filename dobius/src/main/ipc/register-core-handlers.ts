@@ -25,6 +25,9 @@ import { registerStatsHandlers } from './stats'
 import { registerMemoryHandlers } from './memory'
 import { registerRateLimitHandlers } from './rate-limits'
 import { registerRuntimeHandlers } from './runtime'
+import { registerCommunicationsGateway } from '../communications/communications-gateway'
+import { startCommunicationsRelay } from '../communications/relay/relay-lifecycle'
+import { registerCommunicationsIdentityHandlers } from './communications-identity'
 import { registerRuntimeEnvironmentHandlers } from './runtime-environments'
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
 import { registerAiVaultHandlers } from './ai-vault'
@@ -157,12 +160,21 @@ export function registerCoreHandlers(
   registerJiraHandlers()
   registerFeedbackHandlers()
   registerAsanaHandlers()
-  registerAgentsHandlers(async () => {
-    if (!commitMessageAgentEnv?.prepareForClaudeLaunch) {
-      throw new Error('Claude account preparation is unavailable')
-    }
-    return commitMessageAgentEnv.prepareForClaudeLaunch()
-  }, store)
+  registerAgentsHandlers(
+    async (target) => {
+      if (!commitMessageAgentEnv?.prepareForClaudeLaunch) {
+        throw new Error('Claude account preparation is unavailable')
+      }
+      return commitMessageAgentEnv.prepareForClaudeLaunch(target)
+    },
+    (target) => {
+      if (!commitMessageAgentEnv?.prepareForCodexLaunch) {
+        throw new Error('Codex account preparation is unavailable')
+      }
+      return commitMessageAgentEnv.prepareForCodexLaunch(target)
+    },
+    store
+  )
   registerImessageBridgeHandlers()
   if (crashReports) {
     registerCrashReportingHandlers(crashReports)
@@ -209,6 +221,12 @@ export function registerCoreHandlers(
   }
   registerFilesystemWatcherHandlers()
   registerRuntimeHandlers(runtime)
+  registerCommunicationsGateway(runtime)
+  // Why here: the gateway exposes the Buzz bridge, but the bundled client also
+  // talks straight to localhost:3300 over HTTP/WebSocket. Both halves have to
+  // come up together or the UI renders "Can't reach the relay".
+  startCommunicationsRelay()
+  registerCommunicationsIdentityHandlers()
   registerRuntimeEnvironmentHandlers(store)
   registerEphemeralVmHandlers(store)
   registerAiVaultHandlers({

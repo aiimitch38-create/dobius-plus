@@ -140,7 +140,7 @@ const SidebarNav = React.memo(function SidebarNav() {
           strokeWidth={buzzActive ? 2.25 : 1.75}
         />
         <span className="flex-1">
-          {translate('auto.components.sidebar.SidebarNav.buzzNav', 'Buzz')}
+          {translate('auto.components.sidebar.SidebarNav.buzzNav', 'Communications')}
         </span>
       </button>
       <button

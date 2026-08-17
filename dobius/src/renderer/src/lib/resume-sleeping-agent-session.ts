@@ -306,3 +306,26 @@ export function resumeSleepingAgentSessionsForWorktree(worktreeId: string): numb
   }
   return launched
 }
+
+/**
+ * Worktrees that still need a one-time startup resume sweep.
+ *
+ * Why this exists: the startup pass in Terminal.tsx used to sweep only
+ * `activeWorktreeId`, so an agent in any other project stayed dead until the
+ * user clicked that worktree — the "Dobius restarted and nothing resumed"
+ * symptom. Sleeping-agent records are captured per pane across every project,
+ * so the sweep set is every worktree that owns a record (plus the active one,
+ * which must always get its pass even with no records yet), minus the ones
+ * already swept this process.
+ */
+export function getWorktreeIdsNeedingStartupResume(
+  sleepingAgentSessionsByPaneKey: Readonly<Record<string, SleepingAgentSessionRecord>>,
+  activeWorktreeId: string,
+  alreadySwept: ReadonlySet<string>
+): string[] {
+  const candidates = new Set<string>([
+    activeWorktreeId,
+    ...Object.values(sleepingAgentSessionsByPaneKey).map((record) => record.worktreeId)
+  ])
+  return [...candidates].filter((worktreeId) => !alreadySwept.has(worktreeId))
+}

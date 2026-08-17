@@ -3,7 +3,10 @@ import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-r
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { parseWorkspaceSession } from '../../../shared/workspace-session-schema'
 import { useAppStore } from '@/store'
-import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
+import {
+  getWorktreeIdsNeedingStartupResume,
+  resumeSleepingAgentSessionsForWorktree
+} from './resume-sleeping-agent-session'
 
 const initialAppStoreState = useAppStore.getState()
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
@@ -885,5 +888,38 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.pendingStartupByTabId[resumedTab!.id]?.command).toContain(
       "'--resume' 'sess-1'\\''s'"
     )
+  })
+})
+
+describe('getWorktreeIdsNeedingStartupResume', () => {
+  it('sweeps every worktree that owns a sleeping record, not just the active one', () => {
+    const records = {
+      'tab-1:leaf-1': makeRecord({ paneKey: 'tab-1:leaf-1', worktreeId: 'wt-active' }),
+      'tab-2:leaf-1': makeRecord({ paneKey: 'tab-2:leaf-1', worktreeId: 'wt-background' }),
+      'tab-3:leaf-1': makeRecord({ paneKey: 'tab-3:leaf-1', worktreeId: 'wt-other' })
+    }
+    const result = getWorktreeIdsNeedingStartupResume(records, 'wt-active', new Set())
+    expect([...result].sort()).toEqual(['wt-active', 'wt-background', 'wt-other'])
+  })
+
+  it('always includes the active worktree even with no records', () => {
+    expect(getWorktreeIdsNeedingStartupResume({}, 'wt-active', new Set())).toEqual(['wt-active'])
+  })
+
+  it('deduplicates worktrees that own several panes', () => {
+    const records = {
+      'tab-1:leaf-1': makeRecord({ paneKey: 'tab-1:leaf-1', worktreeId: 'wt-background' }),
+      'tab-2:leaf-1': makeRecord({ paneKey: 'tab-2:leaf-1', worktreeId: 'wt-background' })
+    }
+    const result = getWorktreeIdsNeedingStartupResume(records, 'wt-active', new Set())
+    expect([...result].sort()).toEqual(['wt-active', 'wt-background'])
+  })
+
+  it('skips worktrees already swept so the pass stays once-per-process', () => {
+    const records = {
+      'tab-2:leaf-1': makeRecord({ paneKey: 'tab-2:leaf-1', worktreeId: 'wt-background' })
+    }
+    const alreadySwept = new Set(['wt-active', 'wt-background'])
+    expect(getWorktreeIdsNeedingStartupResume(records, 'wt-active', alreadySwept)).toEqual([])
   })
 })

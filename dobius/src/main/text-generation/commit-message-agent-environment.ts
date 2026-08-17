@@ -13,6 +13,7 @@ export type CommitMessageAgentEnvironmentResolvers = {
 export type CommitMessageAgentRuntimeTarget = {
   runtime?: 'host' | 'wsl'
   wslDistro?: string | null
+  accountId?: string | null
 }
 
 function cloneProcessEnv(): Record<string, string> {

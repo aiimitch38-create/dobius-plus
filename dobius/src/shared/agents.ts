@@ -49,6 +49,8 @@ export type AgentChannels = {
   imessage: boolean
 }
 
+export type AgentEngine = 'claude' | 'codex'
+
 export type CustomAgent = {
   id: string
   name: string
@@ -56,6 +58,10 @@ export type CustomAgent = {
   icon: AgentIcon
   color: AgentColor
   systemPrompt: string
+  /** Missing on legacy records; execution treats it as Claude. */
+  engine?: AgentEngine
+  /** Null/absent follows the active managed account for the selected engine. */
+  accountId?: string | null
   model: string
   allowedTools: string[]
   skills: string[]
@@ -188,6 +194,8 @@ export type CustomAgentInput = {
   icon?: AgentIcon
   color?: AgentColor
   systemPrompt?: string
+  engine?: AgentEngine
+  accountId?: string | null
   model?: string
   allowedTools?: string[]
   skills?: string[]

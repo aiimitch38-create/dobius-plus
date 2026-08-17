@@ -7,6 +7,7 @@ import type {
 export type ClaudeAccountSelectionTarget = {
   runtime?: 'host' | 'wsl'
   wslDistro?: string | null
+  accountId?: string | null
 }
 
 export type NormalizedClaudeAccountSelectionTarget = {
@@ -48,6 +49,9 @@ export function getSelectedClaudeAccountIdForTarget(
   >,
   target?: ClaudeAccountSelectionTarget | null
 ): string | null {
+  if (target?.accountId !== undefined) {
+    return target.accountId
+  }
   const selection = normalizeClaudeRuntimeSelection(settings)
   const normalizedTarget = normalizeClaudeAccountSelectionTarget(target)
   if (normalizedTarget.runtime === 'host') {

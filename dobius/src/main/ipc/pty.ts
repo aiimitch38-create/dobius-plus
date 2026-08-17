@@ -2658,10 +2658,16 @@ export function registerPtyHandlers(
       // absent — lifting the mint here gives pty.ts the id up-front without
       // changing daemon semantics (the daemon still honors opts.sessionId ?? mint()).
       //
-      // Note: the sessionId is STABLE across daemon restarts by design —
-      // DaemonPtyAdapter.reconcileOnStartup reuses it so that users' live
-      // shells survive crashes. Do NOT "simplify" id allocation back to a
-      // fresh UUID per spawn; that would orphan reconnectable terminal state.
+      // Note: the sessionId is STABLE across restarts by design — the renderer
+      // persists it per pane in workspaceSession and passes it back as
+      // args.sessionId, which is what lets cold restore find the matching
+      // terminal-history dir. Do NOT "simplify" id allocation back to a fresh
+      // UUID per spawn; that would orphan reconnectable terminal state.
+      //
+      // Do NOT cite DaemonPtyAdapter.reconcileOnStartup as the mechanism here:
+      // it has no production caller (see its own docstring), so it reuses
+      // nothing at runtime. Persistence in workspaceSession is the real reason
+      // ids survive.
       // Why: only state for ids we minted in THIS request should be cleared on
       // spawn failure. If the caller supplied args.sessionId it may refer to
       // an existing PTY whose state (OpenCode hooks, legacy Pi overlay cleanup,

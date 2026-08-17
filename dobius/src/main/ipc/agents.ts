@@ -19,6 +19,10 @@ import {
 } from '../agents/agents-store'
 import { listAgentRuns, startAgentRun, stopAgentRun } from '../agents/agent-runner'
 import { setDefaultPrepareClaudeLaunch } from '../agents/default-claude-launch'
+import {
+  setDefaultPrepareCodexLaunch,
+  type PrepareCodexLaunch
+} from '../agents/default-codex-launch'
 import { listAgentDecisions, resolveAgentDecision } from '../agents/agent-decision-queue'
 import {
   listAgentNotifications,
@@ -38,14 +42,18 @@ import {
   writeCrewFile
 } from '../agents/agent-identity-files'
 
-type PrepareClaudeLaunch = () => Promise<ClaudeRuntimeAuthPreparation>
+type PrepareClaudeLaunch = (target?: {
+  accountId?: string | null
+}) => Promise<ClaudeRuntimeAuthPreparation>
 
 export function registerAgentsHandlers(
   prepareClaudeLaunch: PrepareClaudeLaunch,
+  prepareCodexLaunch: PrepareCodexLaunch,
   store: Store
 ): void {
   setDobiusToolKnowledgeStore(store)
   setDefaultPrepareClaudeLaunch(prepareClaudeLaunch)
+  setDefaultPrepareCodexLaunch(prepareCodexLaunch)
   startAgentHeartbeats(prepareClaudeLaunch)
   startAsanaAutoMode(prepareClaudeLaunch)
 
@@ -98,7 +106,7 @@ export function registerAgentsHandlers(
 
   ipcMain.removeHandler('agents:run')
   ipcMain.handle('agents:run', (_event, args: { agentId: string; prompt: string }) =>
-    startAgentRun({ ...args, prepareClaudeLaunch })
+    startAgentRun({ ...args, prepareClaudeLaunch, prepareCodexLaunch })
   )
 
   ipcMain.removeHandler('agents:stop')

@@ -67,6 +67,16 @@ describe('Claude runtime account selection', () => {
     expect(getSelectedClaudeAccountIdForTarget(settings, { runtime: 'host' })).toBe('host-account')
   })
 
+  it('lets an agent pin a connected account without changing the global selection', () => {
+    const settings = createSettings({ activeClaudeManagedAccountId: 'global-account' })
+    expect(
+      getSelectedClaudeAccountIdForTarget(settings, {
+        runtime: 'host',
+        accountId: 'agent-account'
+      })
+    ).toBe('agent-account')
+  })
+
   it('clears WSL selections without clearing the host selection for a WSL default target', () => {
     const next = setSelectedClaudeAccountIdForTarget(
       {

@@ -288,7 +288,7 @@ export async function resolveProfileCheckAction(
   scheduleTimeout: (
     fn: () => void,
     ms: number,
-  ) => ReturnType<typeof setTimeout> = (fn, ms) => window.setTimeout(fn, ms),
+  ) => ReturnType<typeof setTimeout> = (fn, ms) => setTimeout(fn, ms),
 ): Promise<ProfileCheckAction> {
   let timerId: ReturnType<typeof setTimeout> | undefined;
   try {

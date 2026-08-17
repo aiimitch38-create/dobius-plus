@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
-import type { CustomAgent, CustomAgentInput, CustomAgentUpdate } from '../../shared/agents'
+import type {
+  AgentEngine,
+  CustomAgent,
+  CustomAgentInput,
+  CustomAgentUpdate
+} from '../../shared/agents'
 import {
   normalizeColor,
   normalizeChannels,
@@ -15,6 +20,14 @@ import {
 const FILE_NAME = 'agents.json'
 const DEFAULT_MODEL = 'claude-opus-4-8'
 const DEFAULT_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob']
+
+function normalizeEngine(value: unknown): AgentEngine {
+  return value === 'codex' ? 'codex' : 'claude'
+}
+
+function normalizeModel(value: unknown, engine: AgentEngine): string {
+  return typeof value === 'string' && value ? value : engine === 'codex' ? '' : DEFAULT_MODEL
+}
 
 let cached: CustomAgent[] | null = null
 
@@ -46,6 +59,7 @@ function sanitize(raw: unknown): CustomAgent[] {
     if (!id || !name) {
       return []
     }
+    const engine = normalizeEngine(record.engine)
     return [
       {
         id,
@@ -54,7 +68,9 @@ function sanitize(raw: unknown): CustomAgent[] {
         icon: normalizeIcon(record.icon),
         color: normalizeColor(record.color),
         systemPrompt: typeof record.systemPrompt === 'string' ? record.systemPrompt : '',
-        model: typeof record.model === 'string' && record.model ? record.model : DEFAULT_MODEL,
+        engine,
+        accountId: typeof record.accountId === 'string' && record.accountId ? record.accountId : null,
+        model: normalizeModel(record.model, engine),
         allowedTools: Array.isArray(record.allowedTools)
           ? record.allowedTools.filter((tool): tool is string => typeof tool === 'string' && !!tool)
           : [...DEFAULT_ALLOWED_TOOLS],
@@ -150,6 +166,7 @@ export function createAgent(input: CustomAgentInput): CustomAgent[] {
   assertValidCwd(cwd)
   const now = Date.now()
   const agents = load()
+  const engine = normalizeEngine(input.engine)
   agents.push({
     id: randomUUID(),
     name,
@@ -157,7 +174,9 @@ export function createAgent(input: CustomAgentInput): CustomAgent[] {
     icon: normalizeIcon(input.icon),
     color: normalizeColor(input.color),
     systemPrompt: input.systemPrompt ?? '',
-    model: input.model || DEFAULT_MODEL,
+    engine,
+    accountId: input.accountId?.trim() || null,
+    model: normalizeModel(input.model, engine),
     allowedTools: normalizeAllowedTools(input.allowedTools),
     skills: normalizeSkills(input.skills),
     cwd,
@@ -200,8 +219,18 @@ export function updateAgent(id: string, updates: CustomAgentUpdate): CustomAgent
   if (updates.systemPrompt !== undefined) {
     agent.systemPrompt = updates.systemPrompt
   }
+  if (updates.engine !== undefined) {
+    const previousEngine = agent.engine ?? 'claude'
+    agent.engine = normalizeEngine(updates.engine)
+    if (updates.model === undefined && agent.engine !== previousEngine) {
+      agent.model = normalizeModel(undefined, agent.engine)
+    }
+  }
+  if (updates.accountId !== undefined) {
+    agent.accountId = updates.accountId?.trim() || null
+  }
   if (updates.model !== undefined) {
-    agent.model = updates.model || DEFAULT_MODEL
+    agent.model = normalizeModel(updates.model, agent.engine ?? 'claude')
   }
   if (updates.allowedTools !== undefined) {
     agent.allowedTools = normalizeAllowedTools(updates.allowedTools)

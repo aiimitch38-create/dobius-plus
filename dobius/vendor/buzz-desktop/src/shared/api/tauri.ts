@@ -1,5 +1,9 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import {
+  isDobiusCommunicationsAvailable,
+  invokeDobiusBackedTauriCommand,
+} from "@/shared/api/dobiusCommunications";
+import {
   activateRateLimit,
   parseRateLimitHint,
 } from "@/shared/api/relayRateLimitGate";
@@ -304,6 +308,16 @@ export async function invokeTauri<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   try {
+    const dobiusCommand = await invokeDobiusBackedTauriCommand(command, args);
+    if (dobiusCommand.handled) {
+      return dobiusCommand.result as T;
+    }
+    if (isDobiusCommunicationsAvailable()) {
+      // The upstream E2E bridge is a test oracle, never a production backend.
+      // Failing here keeps incomplete takeover commands visible and prevents
+      // fixture data from masquerading as real Dobius state.
+      throw new Error(`Dobius Communications command is not implemented: ${command}`);
+    }
     return await tauriInvoke<T>(command, args);
   } catch (error) {
     const err = toTauriError(error);

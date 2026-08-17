@@ -23,6 +23,16 @@ export type DobiusCliDispatcher = {
     terminals: { handle: string; title: string | null; worktreePath?: string }[]
   }>
   sendTerminal: (handle: string, action: { text?: string; enter?: boolean }) => Promise<unknown>
+  // Optional richer control (ADAM orchestration, 2026-07-29): present on the real
+  // runtime, optional here so existing tests/mocks keep compiling.
+  // Method syntax (not arrow properties): keeps parameter checks bivariant so the
+  // concrete runtime's narrower TerminalCreateOptions stays assignable.
+  createTerminal?(
+    worktreeSelector?: string,
+    opts?: { presentation?: 'focused' | 'background'; rendererBacked?: boolean; focus?: boolean }
+  ): Promise<unknown>
+  focusTerminal?(handle: string): Promise<unknown>
+  readTerminal?(handle: string, opts?: { cursor?: number; limit?: number }): Promise<unknown>
 }
 
 let server: http.Server | null = null
@@ -131,6 +141,89 @@ async function handleTabSend(body: Record<string, unknown>): Promise<unknown> {
   return { ok: true, sent: message.length }
 }
 
+async function withTimeout<T>(work: Promise<T>, ms = 10_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timed out')), ms)
+      })
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function knownHandle(id: string): Promise<boolean> {
+  if (!dispatcher) return false
+  const listed = await withTimeout(dispatcher.listTerminals(), 5_000)
+  return listed.terminals.some((t) => t.handle === id)
+}
+
+async function handleTabSendTo(body: Record<string, unknown>): Promise<unknown> {
+  const id = typeof body.id === 'string' ? body.id.trim() : ''
+  const message = typeof body.message === 'string' ? body.message : ''
+  if (!id || !message.trim()) {
+    return { ok: false, error: 'id and message required' }
+  }
+  if (!dispatcher) {
+    return { ok: false, error: 'runtime unavailable' }
+  }
+  if (!(await knownHandle(id))) {
+    return { ok: false, error: `unknown tab: ${id}` }
+  }
+  await withTimeout(dispatcher.sendTerminal(id, { text: message, enter: true }))
+  return { ok: true, id, sent: message.length }
+}
+
+async function handleTabFocus(body: Record<string, unknown>): Promise<unknown> {
+  const id = typeof body.id === 'string' ? body.id.trim() : ''
+  if (!id) {
+    return { ok: false, error: 'id required' }
+  }
+  if (!dispatcher?.focusTerminal) {
+    return { ok: false, error: 'focus unavailable in this runtime' }
+  }
+  if (!(await knownHandle(id))) {
+    return { ok: false, error: `unknown tab: ${id}` }
+  }
+  await withTimeout(dispatcher.focusTerminal(id))
+  return { ok: true, id }
+}
+
+async function handleTabRead(body: Record<string, unknown>): Promise<unknown> {
+  const id = typeof body.id === 'string' ? body.id.trim() : ''
+  if (!id) {
+    return { ok: false, error: 'id required' }
+  }
+  if (!dispatcher?.readTerminal) {
+    return { ok: false, error: 'read unavailable in this runtime' }
+  }
+  if (!(await knownHandle(id))) {
+    return { ok: false, error: `unknown tab: ${id}` }
+  }
+  const limit = typeof body.limit === 'number' ? body.limit : 200
+  const result = await withTimeout(dispatcher.readTerminal(id, { limit }))
+  return { ok: true, id, result }
+}
+
+async function handleTabOpen(body: Record<string, unknown>): Promise<unknown> {
+  const project = typeof body.project === 'string' ? body.project.trim() : ''
+  if (!project) {
+    return { ok: false, error: 'project (absolute path) required' }
+  }
+  if (!dispatcher?.createTerminal) {
+    return { ok: false, error: 'open unavailable in this runtime' }
+  }
+  const result = await withTimeout(dispatcher.createTerminal(`path:${project}`, {
+    presentation: 'focused',
+    rendererBacked: true,
+    focus: true
+  }))
+  return { ok: true, project, result }
+}
+
 function handleTaskDone(body: Record<string, unknown>): unknown {
   const ref = typeof body.ref === 'string' ? body.ref.trim() : ''
   if (!ref) {
@@ -186,6 +279,22 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse): Promi
     }
     if (req.url === '/taskDone') {
       sendJson(res, 200, handleTaskDone(body))
+      return
+    }
+    if (req.url === '/tabSendTo') {
+      sendJson(res, 200, await handleTabSendTo(body))
+      return
+    }
+    if (req.url === '/tabFocus') {
+      sendJson(res, 200, await handleTabFocus(body))
+      return
+    }
+    if (req.url === '/tabRead') {
+      sendJson(res, 200, await handleTabRead(body))
+      return
+    }
+    if (req.url === '/tabOpen') {
+      sendJson(res, 200, await handleTabOpen(body))
       return
     }
     if (req.url === '/tabList') {

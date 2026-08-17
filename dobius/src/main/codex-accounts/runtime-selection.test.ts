@@ -67,6 +67,16 @@ describe('Codex runtime account selection', () => {
     expect(getSelectedCodexAccountIdForTarget(settings, { runtime: 'host' })).toBe('host-account')
   })
 
+  it('lets an agent pin a connected account without changing the global selection', () => {
+    const settings = createSettings({ activeCodexManagedAccountId: 'global-account' })
+    expect(
+      getSelectedCodexAccountIdForTarget(settings, {
+        runtime: 'host',
+        accountId: 'agent-account'
+      })
+    ).toBe('agent-account')
+  })
+
   it('clears WSL selections without clearing the host selection for a WSL default target', () => {
     const next = setSelectedCodexAccountIdForTarget(
       {

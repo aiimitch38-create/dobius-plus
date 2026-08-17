@@ -1097,6 +1097,15 @@ const api = {
     }
   } satisfies PreloadApi['asana'],
 
+  communications: {
+    getIdentity: () => ipcRenderer.invoke('communications:getIdentity'),
+    signEvent: (unsigned) => ipcRenderer.invoke('communications:signEvent', unsigned),
+    getAgentIdentity: (agentId: string) =>
+      ipcRenderer.invoke('communications:getAgentIdentity', agentId),
+    signEventAsAgent: (agentId: string, unsigned) =>
+      ipcRenderer.invoke('communications:signEventAsAgent', agentId, unsigned)
+  } satisfies PreloadApi['communications'],
+
   agents: {
     list: (): Promise<CustomAgent[]> => ipcRenderer.invoke('agents:list'),
     create: (input: CustomAgentInput): Promise<CustomAgent[]> =>
