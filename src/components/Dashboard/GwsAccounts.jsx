@@ -91,6 +91,28 @@ export default function GwsAccounts() {
     }
   };
 
+  // Claude Desktop MCP setup row (v1.0.63): status on mount, one-click install.
+  const [mcpStatus, setMcpStatus] = useState(null);
+  const [mcpBusy, setMcpBusy] = useState(false);
+  useEffect(() => {
+    window.electronAPI?.gwsMcpStatus?.()
+      .then((s) => { if (mountedRef.current) setMcpStatus(s || {}); })
+      .catch(() => { if (mountedRef.current) setMcpStatus({}); });
+  }, []);
+  const handleMcpInstall = async () => {
+    setMcpBusy(true);
+    try {
+      const res = await window.electronAPI?.gwsMcpInstall?.();
+      flash(res?.message || (res?.ok ? 'Added to Claude Desktop.' : 'Setup failed.'), !res?.ok);
+      const s = await window.electronAPI?.gwsMcpStatus?.();
+      if (mountedRef.current) setMcpStatus(s || {});
+    } catch {
+      flash('Setup failed.', true);
+    } finally {
+      if (mountedRef.current) setMcpBusy(false);
+    }
+  };
+
   const copyAuthLink = async () => {
     if (!authLink?.url) return;
     if (!navigator.clipboard?.writeText) {
@@ -257,6 +279,25 @@ export default function GwsAccounts() {
       <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>
         Connect snapshots the account currently logged into gws. Tokens are stored per account in <code style={{ fontFamily: 'monospace' }}>~/.gws-profiles</code> (0600) and never leave the main process.
       </p>
+
+      <div className="mt-4 flex items-center justify-between px-3 py-2.5 rounded-lg" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <div className="min-w-0">
+          <div className="text-sm font-medium" style={{ color: 'var(--fg)' }}>Claude Desktop</div>
+          <div className="text-xs mt-0.5" style={{ color: 'var(--dim)' }}>
+            {mcpStatus === null && 'Checking…'}
+            {mcpStatus && mcpStatus.entryCurrent && 'Set up: Claude Desktop can use these accounts (all Workspace APIs, any account by email).'}
+            {mcpStatus && !mcpStatus.entryCurrent && 'One click gives Claude Desktop all of these Google accounts (every Workspace API, any account by email).'}
+            {mcpStatus && !mcpStatus.gwsCliPresent && ' gws CLI missing: npm i -g @googleworkspace/cli'}
+          </div>
+        </div>
+        <button
+          style={btn('primary', { flexShrink: 0, marginLeft: 10, opacity: mcpBusy ? 0.6 : 1 })}
+          disabled={mcpBusy}
+          onClick={handleMcpInstall}
+        >
+          {mcpBusy ? 'Setting up…' : (mcpStatus?.entryCurrent ? 'Re-run setup' : 'Add to Claude Desktop')}
+        </button>
+      </div>
     </div>
   );
 }

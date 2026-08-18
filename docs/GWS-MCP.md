@@ -1,6 +1,6 @@
 # gws-mcp: multi-account Google Workspace for Claude Desktop / Claude Code
 
-`scripts/gws-mcp.mjs` is a zero-dependency MCP (stdio) server that exposes the
+`electron/gws-mcp.mjs` is a zero-dependency MCP (stdio) server that exposes the
 entire Google Workspace API surface through the `gws` CLI, as ANY Google
 account connected in Dobius+. It exists because Claude Desktop's native Gmail
 connector is one account at a time, and community Workspace MCP servers
@@ -19,30 +19,44 @@ local filesystem on the model's behalf).
 - `gws` CLI installed (`/opt/homebrew/bin/gws`) and logged in at least once.
 - Accounts connected in Dobius+ Settings (they live in `~/.gws-profiles`,
   one 0600 file per account, written by the Connect flow).
-- node on the machine (the server is a single ESM file, no npm install).
+- Nothing else: the Settings button runs the server under Dobius's own binary (no node needed).
 
-## Register in Claude Desktop
+## Register in Claude Desktop (the button)
 
-`~/Library/Application Support/Claude/claude_desktop_config.json`:
+Settings > Google Workspace accounts > **Add to Claude Desktop**. One click:
+
+- copies the bundled server into `<userData>/gws-mcp/` and writes a wrapper
+  that runs it under Dobius's own binary with `ELECTRON_RUN_AS_NODE=1`, so
+  the Mac needs NO node install;
+- merges an `mcpServers.gws` entry into
+  `~/Library/Application Support/Claude/claude_desktop_config.json` (same
+  per-user path on every Mac). Other servers and hand-written keys survive,
+  a timestamped backup is written first, and a malformed existing config is
+  refused rather than clobbered;
+- re-running is an upsert, so the entry self-heals after app moves/updates.
+
+Restart Claude Desktop after clicking. New-machine recipe (the brother's
+house scenario): install Dobius+, install the gws CLI
+(`npm i -g @googleworkspace/cli`) and `gws auth login`, connect accounts in
+Settings, click Add to Claude Desktop.
+
+### Manual fallback (any MCP client)
+
+The wrapper the button writes is a plain executable; point anything at it:
 
 ```json
-{
-  "mcpServers": {
-    "gws": {
-      "command": "/opt/homebrew/bin/node",
-      "args": ["/Users/bigfuckingdog/Projects (Code)/dobius-plus/scripts/gws-mcp.mjs"]
-    }
-  }
-}
+{ "mcpServers": { "gws": {
+    "command": "/Users/<you>/Library/Application Support/dobius-plus/gws-mcp/gws-mcp" } } }
 ```
-
-Restart Claude Desktop after editing. On another Mac, adjust both paths.
 
 ## Register in Claude Code
 
 ```bash
-claude mcp add gws -- /opt/homebrew/bin/node "/Users/bigfuckingdog/Projects (Code)/dobius-plus/scripts/gws-mcp.mjs"
+claude mcp add gws -- "$HOME/Library/Application Support/dobius-plus/gws-mcp/gws-mcp"
 ```
+
+(Run the Settings button once first so the wrapper exists. From a dev
+checkout you can also run `electron/gws-mcp.mjs` directly under node.)
 
 ## Tools
 
@@ -103,6 +117,6 @@ unfamiliar: `gws_schema` first, then `gws_call`.
 ## Testing
 
 Unit: `npm run test:gwsmcp` (argv building + smuggle guards).
-Live: speak newline-delimited JSON-RPC to `node scripts/gws-mcp.mjs`
+Live: speak newline-delimited JSON-RPC to the wrapper (or `node electron/gws-mcp.mjs`)
 (initialize, tools/list, tools/call), which is exactly what the ship-test in
 the v1.0.63 cycle did, including a real per-account Gmail call.

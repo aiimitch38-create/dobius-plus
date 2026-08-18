@@ -10,6 +10,7 @@ import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending a
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
 import { connectGwsAccount, listGwsAccounts, removeGwsAccount, verifyGwsAccounts, reconnectGwsAccount, ensureShim } from './gws-accounts.js';
+import { gwsMcpStatus, installGwsMcp, healGwsMcpIfInstalled } from './gws-mcp-install.js';
 import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalClaudeInfo, liveClaudeSessionIds, claimSessionResume, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver, getTerminalsForProject } from './terminal-manager.js';
 import * as terminalStatus from './terminal-status.js';
 import { estimateContextForTabId } from './tab-context.js';
@@ -500,6 +501,12 @@ function setupDataHandlers() {
   // revoked with no UI surface saying so.
   ipcMain.handle('gws:verify', (_event, opts) => verifyGwsAccounts({ force: !!(opts && opts.force) }));
   ipcMain.handle('gws:reconnect', (_event, id) => reconnectGwsAccount(id));
+  // One-click Claude Desktop MCP setup (v1.0.63): bundles the gws-mcp server
+  // into userData and upserts the mcpServers.gws entry in Claude Desktop's
+  // per-user config. Works on any Mac Dobius is installed on (no node needed:
+  // the wrapper runs under our own binary).
+  ipcMain.handle('gwsMcp:status', () => gwsMcpStatus());
+  ipcMain.handle('gwsMcp:install', () => installGwsMcp());
   ipcMain.handle('data:loadProjectTokens', () => loadProjectTokens());
   ipcMain.handle('data:searchTranscripts', (_event, query) => searchTranscripts(query));
   // Per-TAB context estimate (v1.0.40). Resolves the session ACTUALLY running in
@@ -2322,6 +2329,9 @@ app.whenReady().then(() => {
   setupCrashLogging();
   // Make sure node-pty can actually launch shells before any tab is created.
   ensureSpawnHelperExecutable();
+  // Self-heal an existing Claude Desktop MCP install: the wrapper must track
+  // the CURRENT app binary across moves/updates (never creates an install).
+  healGwsMcpIfInstalled();
   cleanClipboardTemp();
   setupTerminalHandlers();
   setupDataHandlers();

@@ -25,6 +25,25 @@ the version or branch that shipped them. Sam triggers releases.
       clean. If a stuck "sending..." ever survives past 90s in real use,
       suspect a commit-phase exception around session relink and start here.
 
+## Staged on main (unreleased, next ship = v1.0.63)
+
+- [x] gws-mcp: multi-account Google Workspace MCP server (Claude Desktop's
+      native Gmail connector is one account at a time). Three generic tools
+      (gws_accounts / gws_call / gws_schema) over the gws CLI's full API
+      surface, account chosen by email per call from ~/.gws-profiles.
+      Fail-loud identity, flag-smuggle allowlist, env hygiene, no file
+      tools. Live-tested over real stdio JSON-RPC incl. a per-account
+      Gmail call. docs/GWS-MCP.md.
+- [x] One-click "Add to Claude Desktop" button in Settings (Sam 8/17:
+      works on ANY Mac Dobius is installed on, e.g. the brother's-house
+      scenario): bundles the server into userData, wrapper runs under
+      Dobius's own binary (no node needed), merges mcpServers.gws into
+      Claude Desktop's per-user config with backup + atomic write +
+      refuse-on-malformed, upsert re-runs, self-heals on app launch when
+      the app moves. POSIX single-quoted wrapper (hostile paths tested
+      through real /bin/sh). 2 Codex rounds (2 Medium + 1 Low fixed).
+      Prereq on a fresh Mac: gws CLI + accounts connected in Settings.
+
 ## Done (shipped in v1.0.62)
 
 - [x] Push-based selector popups (Sam 8/16: "did you get rid of the poll

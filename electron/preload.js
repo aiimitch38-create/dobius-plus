@@ -118,6 +118,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gwsRemove: (id) => ipcRenderer.invoke('gws:remove', id),
   gwsVerify: (opts) => ipcRenderer.invoke('gws:verify', opts),
   gwsReconnect: (id) => ipcRenderer.invoke('gws:reconnect', id),
+  // Claude Desktop MCP setup (v1.0.63): status + one-click install.
+  gwsMcpStatus: () => ipcRenderer.invoke('gwsMcp:status'),
+  gwsMcpInstall: () => ipcRenderer.invoke('gwsMcp:install'),
   // Mid-reconnect: main pushes the Google consent URL so the panel can offer
   // a copyable link when the browser opened in the wrong profile.
   onGwsReconnectUrl: (callback) => {

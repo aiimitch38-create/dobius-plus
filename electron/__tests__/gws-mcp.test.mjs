@@ -2,7 +2,7 @@
 // hands model-controlled strings to execFile, so the positional allowlist is
 // a security boundary: a tool call must never be able to inject gws flags
 // like --upload or --output.
-import { buildArgv, findGws } from '../../scripts/gws-mcp.mjs';
+import { buildArgv, findGws } from '../gws-mcp.mjs';
 
 let pass = 0, fail = 0;
 const check = (label, got, want) => {
