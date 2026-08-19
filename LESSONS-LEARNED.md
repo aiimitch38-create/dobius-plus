@@ -189,3 +189,22 @@ Two full install cycles tonight: quit → `rm -rf` the app → `ditto` the new o
 Daemon stayed **PID 1102** both times, socket and token intact. Carson was right; the
 `pkill -x "Dobius\+"` + `pkill -f "Dobius\+ Helper.*--type="` pattern does not touch it.
 Installing is safe for live terminal sessions.
+
+## 2026-08-18 — zsh nomatch killed 3 read commands; the skill that prevents it already existed
+- Tried: `grep -rn ... --include=*.ts`, `grep -rn ... --include=*.tsx`, and `ls vitest.config* vite.config*` — all unquoted globs.
+- Failed because: zsh's `nomatch` option ABORTS the entire command when a glob matches nothing, unlike bash which passes the pattern through. The command dies with "(eval):N: no matches found: <pattern>" and every other part of the compound command silently never runs — so it reads as "that file/setting doesn't exist" when in fact nothing was checked.
+- Works instead: quote every glob — `--include='*.ts'`, `ls vitest.config* 2>/dev/null || true`, or use `find`. `2>/dev/null` alone does NOT help: zsh aborts before the command runs.
+- Real cost this session: two FALSE regression reports. `ls vitest.config*` aborting made me conclude the vendored Buzz app had no test config, which fed a wrong "the tests are broken" status to the user. It has its own runner (`node --import ./test-loader.mjs --test`), not vitest.
+- Meta-lesson (the important one): `~/.claude/skills/learned-macos-shell-quoting` ALREADY documents this exact failure, including `--include=*.tsx` and "no matches found" as trigger phrases. The skill did not fail — it was never consulted. Countermeasure is a sharper trigger on the skill, not a new skill.
+
+## 2026-08-18 — verify a test command before believing its failures
+- Tried: `npx vitest run vendor/buzz-desktop/src/shared/api/` and `npx vitest run src/main/communications/`.
+- Failed because: neither path is served by the config being used. The vendored Buzz app does not use vitest at all, and `src/main/communications/` sweeps in `verify/`, which needs its own config for the `@` alias. Both produced import errors that LOOK like code regressions.
+- Works instead: read the owning `package.json` scripts / vitest config BEFORE running a suite in unfamiliar territory, and scope the run to the directory that config actually owns.
+- Rule: when a suite fails with "Cannot find package" or a whole test FILE fails to load (rather than assertions failing), suspect the runner/config, not the code.
+
+## 2026-08-18 — subagents burn turns on blocked foreground `sleep` because the brief never warns them
+- Tried: (subagents) `sleep 8; cat /tmp/rcs-test.out`, `sleep 6; cat ...`, `sleep 5; cat ...` — 3 blocked calls across 2 agents in one session.
+- Failed because: this harness refuses foreground `sleep`. Subagents inherit the restriction but not the knowledge of it, so each one burns a turn rediscovering it. My briefs listed the vitest version and the right config paths but never mentioned sleep.
+- Works instead: put the whole wait loop inside a `run_in_background` command, or poll on a later turn. And add to EVERY subagent brief that runs a suite: "Foreground `sleep` is blocked — use run_in_background and poll on a later turn."
+- Root cause is briefing quality, not agent quality. A subagent knows only what its prompt says; every environment quirk I know and don't write down costs a wasted turn. Covered by an addendum to ~/.claude/skills/learned-background-long-checks (no new skill minted).

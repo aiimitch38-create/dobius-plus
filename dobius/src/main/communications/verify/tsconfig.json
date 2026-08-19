@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true,
+    "composite": false,
+    "skipLibCheck": true,
+    // Why DOM: this directory imports the vendored Buzz renderer's real
+    // dispatch seam (tauri.ts / dobiusCommunications.ts) to drive commands
+    // through production code rather than a mock — see run-verification.test.ts.
+    // Those files are written for a browser-like renderer (window,
+    // localStorage, fetch) and are normally typechecked under
+    // vendor/buzz-desktop/tsconfig.json, which sets this same lib list; the
+    // parent dobius/config/tsconfig.node.json (Node/Electron main) does not,
+    // which is why this directory needs its own project instead of being
+    // swept into that one (see config/tsconfig.node.json's exclude entry).
+    // ESNext (not ES2022): DobiusRuntimeService (imported as a type below)
+    // transitively reaches main-process files using ES2023 array methods
+    // (toReversed, findLastIndex) that the rest of dobius/ main typechecks
+    // against esnext via the inherited electron-toolkit base — matching that
+    // here avoids a spurious "lib" mismatch on code this project doesn't own.
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    // Mirrors vendor/buzz-desktop/tsconfig.json's own "@/*": ["./src/*"], so
+    // the vendored files' `@/shared/api/...` imports resolve the same way
+    // here as they do under their own project (and the same way
+    // vitest.config.ts's `resolve.alias` resolves them at runtime).
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["../../../../vendor/buzz-desktop/src/*"]
+    }
+  },
+  // This glob only needs to seed tsc with a starting root set, NOT enumerate
+  // every file that ends up typechecked: "composite": false above means TS's
+  // strict "every reachable file must be in the file list" rule (TS6307,
+  // the error that forced this project to exist in the first place — see
+  // config/tsconfig.node.json's exclude entry) does not apply here. tsc
+  // freely follows imports outside this glob (verified with --listFiles:
+  // auth-handshake-integration.test.ts pulls in relayClientSession.ts,
+  // which reaches out to vendor/buzz-desktop/src/features/messages/lib/
+  // threading.ts — well outside shared/api/ — and it's genuinely
+  // typechecked, not silently skipped). Kept narrow anyway, for speed: the
+  // full vendor src tree is the entire React renderer app, thousands of
+  // unrelated .tsx files that would make this project painfully slow to
+  // typecheck for no benefit (confirmed by trying it first and killing tsc
+  // after 70+ CPU-seconds with no end in sight).
+  "include": [
+    "**/*.ts",
+    "../../../../vendor/buzz-desktop/src/shared/api/**/*.ts",
+    // DobiusRuntimeService (dobius-runtime.ts, imported as a type below)
+    // transitively reaches main-process files that reference the build-time
+    // globals declared here (DOBIUS_BUILD_IDENTITY etc., injected via Vite's
+    // `define` at build time) — config/tsconfig.node.json includes this same
+    // path for the same reason.
+    "../../../types/**/*.d.ts"
+  ]
+}
