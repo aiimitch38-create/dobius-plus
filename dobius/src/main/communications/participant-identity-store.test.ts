@@ -13,12 +13,23 @@ const safeStorageMock = vi.hoisted(() => ({
 
 let tempHome = ''
 
-async function loadStoreModule() {
+async function loadStoreModule(options: { brokenUserInfo?: boolean } = {}) {
   vi.resetModules()
   vi.doMock('electron', () => ({ safeStorage: safeStorageMock }))
   vi.doMock('os', async () => {
     const actual = await vi.importActual<typeof Os>('os')
-    return { ...actual, homedir: () => tempHome }
+    return {
+      ...actual,
+      homedir: () => tempHome,
+      // Regression coverage for a real sandbox failure mode: getpwuid
+      // (what os.userInfo() calls) can throw instead of returning an empty
+      // username when the OS's directory-services lookup is unreachable.
+      userInfo: options.brokenUserInfo
+        ? () => {
+            throw new Error('uv_os_get_passwd returned ENOENT (no such file or directory)')
+          }
+        : actual.userInfo
+    }
   })
   return import('./participant-identity-store')
 }
@@ -138,5 +149,23 @@ describe('participant identity store', () => {
 
     const second = store.ensureParticipantIdentity()
     expect(second.pubkey).not.toBe(first.pubkey)
+  })
+
+  it('falls back to a default username instead of throwing when os.userInfo() fails', async () => {
+    const store = await loadStoreModule({ brokenUserInfo: true })
+
+    const identity = store.ensureParticipantIdentity()
+
+    expect(identity.username).toBe('dobius')
+    expect(identity.pubkey).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('importParticipantPrivateKey also falls back to a default username when os.userInfo() fails', async () => {
+    const store = await loadStoreModule({ brokenUserInfo: true })
+    const privateKeyHex = Buffer.from(schnorr.utils.randomPrivateKey()).toString('hex')
+
+    const identity = store.importParticipantPrivateKey(privateKeyHex)
+
+    expect(identity.username).toBe('dobius')
   })
 })

@@ -110,13 +110,29 @@ function writeStoredIdentity(identity: StoredParticipantIdentity): void {
   cachedIdentity = identity
 }
 
+/**
+ * `os.userInfo()` calls into the OS's directory-services lookup
+ * (getpwuid on POSIX), which can throw rather than return an empty string
+ * when that service is unreachable — sandboxed/containerized environments
+ * with no matching passwd entry hit this in practice. A username is
+ * cosmetic here, so any failure falls back to the same 'dobius' default the
+ * existing `|| 'dobius'` already covered for the empty-string case.
+ */
+function resolveDefaultUsername(): string {
+  try {
+    return userInfo().username || 'dobius'
+  } catch {
+    return 'dobius'
+  }
+}
+
 function generateIdentity(): StoredParticipantIdentity {
   const privateKeyBytes = schnorr.utils.randomPrivateKey()
   const pubkeyHex = bytesToHex(schnorr.getPublicKey(privateKeyBytes))
   return {
     privateKeyHex: bytesToHex(privateKeyBytes),
     pubkeyHex,
-    username: userInfo().username || 'dobius'
+    username: resolveDefaultUsername()
   }
 }
 
@@ -143,6 +159,57 @@ export function getParticipantPublicIdentity(): ParticipantPublicIdentity {
   const identity = readStoredIdentity()
   if (!identity) {throw new Error('Communications participant identity is not configured')}
   return toPublicIdentity(identity)
+}
+
+/**
+ * True when Electron's OS-level key encryption backed this identity's
+ * on-disk file. Surfaced to the UI (Identity.storage) so it can tell the
+ * user their key is protected by Keychain/DPAPI/libsecret vs. a plaintext
+ * fallback — never used to gate any security decision in this module.
+ */
+export function getParticipantStorageBackend(): 'system-keyring' | 'local-file' {
+  return safeStorage.isEncryptionAvailable() ? 'system-keyring' : 'local-file'
+}
+
+/**
+ * Overwrites the stored identity with a caller-supplied private key (the
+ * NIP-49/nsec import path). `privateKeyHex` must already be validated by the
+ * caller — this function does not touch the renderer and is only ever
+ * reached from a main-process-owned flow (see identity/secure-key-entry-window.ts).
+ */
+export function importParticipantPrivateKey(
+  privateKeyHex: string,
+  username?: string
+): ParticipantPublicIdentity {
+  if (!/^[0-9a-f]{64}$/.test(privateKeyHex)) {
+    throw new Error('importParticipantPrivateKey: private key must be 64 lowercase hex characters')
+  }
+  const pubkeyHex = bytesToHex(schnorr.getPublicKey(hexToBytes(privateKeyHex)))
+  const existing = readStoredIdentity()
+  const identity: StoredParticipantIdentity = {
+    privateKeyHex,
+    pubkeyHex,
+    username: username ?? existing?.username ?? resolveDefaultUsername()
+  }
+  writeStoredIdentity(identity)
+  return toPublicIdentity(identity)
+}
+
+/**
+ * INTERNAL — the only sanctioned way to read the raw private key out of this
+ * store. Reserved for main-process crypto modules that need the actual key
+ * bytes to do their job (NIP-44 self-encryption, NIP-49 backup encryption,
+ * the secure key-entry/export window). The returned value must NEVER be
+ * placed on an IPC reply, logged, or otherwise allowed to reach a renderer —
+ * every caller of this function is responsible for upholding that on its own.
+ */
+export function unsafeGetParticipantPrivateKeyForCrypto(): {
+  privateKeyHex: string
+  pubkeyHex: string
+} {
+  const identity = readStoredIdentity()
+  if (!identity) {throw new Error('Communications participant identity is not configured')}
+  return { privateKeyHex: identity.privateKeyHex, pubkeyHex: identity.pubkeyHex }
 }
 
 // NIP-01 event id: sha256 of the compact JSON array [0, pubkey, created_at,

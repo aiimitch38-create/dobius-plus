@@ -2,6 +2,7 @@ import type { RpcAnyMethod } from '../core'
 import { STATUS_METHODS } from './status'
 import { AUTOMATION_METHODS } from './automations'
 import { CUSTOM_AGENT_METHODS } from './custom-agents'
+import { TEAM_METHODS } from './teams'
 import { REPO_METHODS } from './repo'
 import { WORKTREE_METHODS } from './worktree'
 import { TERMINAL_METHODS } from './terminal'
@@ -35,6 +36,25 @@ import { CLIPBOARD_METHODS } from './clipboard'
 import { HOST_CAPABILITY_METHODS } from './host-capabilities'
 import { EMULATOR_METHODS } from './emulator'
 import { VOICE_CONDUCTOR_METHODS } from './voice-conductor'
+import { CHANNEL_TEMPLATE_METHODS } from './channel-templates'
+import { SAVE_SUBSCRIPTION_METHODS } from './save-subscriptions'
+// Communications-specific method groups. Not part of ALL_RPC_METHODS by
+// default until this pass — each backs a family of vendor/buzz-desktop
+// dispatch cases in dobiusCommunications.ts (see COMMUNICATIONS_RUNTIME_METHODS
+// in src/shared/communications-bridge.ts for the matching allowlist).
+import { COMMUNICATIONS_AGENT_METHODS } from '../../../communications/agents/communications-agent-methods'
+import { IDENTITY_RPC_METHODS } from '../../../communications/identity/identity-rpc-methods'
+import { HUDDLE_METHODS } from '../../../communications/huddles'
+import { NATIVE_UX_RPC_METHODS } from '../../../communications/native/rpc-methods'
+// Registered for reachability (RpcDispatcher registration is inert data
+// until a caller dispatches a method — see runtime-bridge-harness.ts's own
+// doc comment on this). No vendor/buzz-desktop switch case calls these
+// method names yet — that is a separate, larger integration pass this
+// task does not cover (no build report to transcribe cases from). See this
+// task's THREE_WAY_AUDIT for the full accounting.
+import { SNAPSHOT_METHODS } from '../../../communications/snapshots/snapshot-rpc-methods'
+import { WORKFLOW_METHODS } from '../../../communications/workflows/workflow-rpc-methods'
+import { WORKSTATION_METHODS } from '../../../communications/workstation/rpc-methods'
 
 // Why: a flat manifest keeps registration order explicit and provides one
 // grep-point for "what methods does the RPC server expose?" — useful when
@@ -43,6 +63,7 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...STATUS_METHODS,
   ...AUTOMATION_METHODS,
   ...CUSTOM_AGENT_METHODS,
+  ...TEAM_METHODS,
   ...REPO_METHODS,
   ...WORKTREE_METHODS,
   ...TERMINAL_METHODS,
@@ -76,4 +97,13 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...CLIENT_UI_METHODS,
   ...EMULATOR_METHODS,
   ...VOICE_CONDUCTOR_METHODS,
+  ...CHANNEL_TEMPLATE_METHODS,
+  ...SAVE_SUBSCRIPTION_METHODS,
+  ...COMMUNICATIONS_AGENT_METHODS,
+  ...IDENTITY_RPC_METHODS,
+  ...HUDDLE_METHODS,
+  ...NATIVE_UX_RPC_METHODS,
+  ...SNAPSHOT_METHODS,
+  ...WORKFLOW_METHODS,
+  ...WORKSTATION_METHODS,
 ]

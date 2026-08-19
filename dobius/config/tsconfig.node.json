@@ -8,6 +8,15 @@
     "../src/relay/**/*",
     "../src/types/**/*"
   ],
+  // Why excluded here: src/main/communications/verify/ imports the vendored
+  // Buzz renderer's real dispatch seam (vendor/buzz-desktop/src/shared/api/
+  // tauri.ts) to drive commands through production code instead of a mock.
+  // That file lies outside this project's file list, which TS reports as
+  // TS6307 rather than silently resolving it. verify/ has its own
+  // src/main/communications/verify/tsconfig.json (paths alias + DOM lib for
+  // the vendored files) — typecheck it with:
+  //   npx tsc --noEmit -p src/main/communications/verify/tsconfig.json
+  "exclude": ["../src/main/communications/verify/**/*"],
   "compilerOptions": {
     "composite": true,
     "types": ["electron-vite/node"]

@@ -70,18 +70,34 @@ function post(base: string, path: string, body: unknown): Promise<Response> {
   })
 }
 
-/** Queue-backed frame reader so tests can await frames in order without sleeps. */
+/**
+ * Queue-backed frame reader so tests can await frames in order without sleeps.
+ *
+ * The relay now challenges every connection with an unsolicited `["AUTH",
+ * challenge]` frame as soon as it opens (NIP-42). That frame is captured into
+ * `authChallenge` instead of the `next()` queue, so every pre-existing test
+ * here — none of which cares about auth — keeps seeing exactly the frame
+ * sequence it always did.
+ */
 function openSocketReader(
   port: number
-): Promise<{ socket: WebSocket; next: () => Promise<unknown[]> }> {
+): Promise<{ socket: WebSocket; next: () => Promise<unknown[]>; authChallenge: Promise<string> }> {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(`ws://127.0.0.1:${port}`)
     openSockets.push(socket)
     const queue: unknown[][] = []
     const waiters: ((frame: unknown[]) => void)[] = []
+    let resolveAuthChallenge: (challenge: string) => void
+    const authChallenge = new Promise<string>((res) => {
+      resolveAuthChallenge = res
+    })
 
     socket.on('message', (data: Buffer) => {
       const frame = JSON.parse(data.toString()) as unknown[]
+      if (frame[0] === 'AUTH' && typeof frame[1] === 'string') {
+        resolveAuthChallenge(frame[1])
+        return
+      }
       const waiter = waiters.shift()
       if (waiter) {
         waiter(frame)
@@ -93,6 +109,7 @@ function openSocketReader(
     socket.on('open', () => {
       resolve({
         socket,
+        authChallenge,
         next: () => {
           const queued = queue.shift()
           return queued
@@ -427,5 +444,190 @@ describe('relay lifecycle', () => {
 
     expect(response.status).toBe(413)
     expect(await response.text()).toBe('request body too large')
+  })
+})
+
+describe('relay NIP-42 AUTH', () => {
+  /** A kind-22242 event carrying the two tags NIP-42 requires. */
+  function signAuthEvent(
+    keys: Keypair,
+    challenge: string,
+    overrides: { kind?: number; created_at?: number } = {}
+  ): RelayEvent {
+    return signEvent(keys, {
+      kind: overrides.kind ?? 22242,
+      tags: [
+        ['relay', 'ws://127.0.0.1:0/'],
+        ['challenge', challenge]
+      ],
+      created_at: overrides.created_at ?? Math.floor(Date.now() / 1000),
+      content: ''
+    })
+  }
+
+  it('sends an AUTH challenge on connect and accepts a correctly signed response', async () => {
+    const { port } = await startTestRelay()
+    const { socket, next, authChallenge } = await openSocketReader(port)
+
+    const challenge = await authChallenge
+    expect(typeof challenge).toBe('string')
+    expect(challenge.length).toBeGreaterThan(0)
+
+    const authEvent = signAuthEvent(makeKeypair(), challenge)
+    socket.send(JSON.stringify(['AUTH', authEvent]))
+
+    expect(await next()).toEqual(['OK', authEvent.id, true, ''])
+  })
+
+  it('rejects an AUTH event carrying the wrong challenge', async () => {
+    const { port } = await startTestRelay()
+    const { socket, next, authChallenge } = await openSocketReader(port)
+    await authChallenge
+
+    const authEvent = signAuthEvent(makeKeypair(), 'not-the-issued-challenge')
+    socket.send(JSON.stringify(['AUTH', authEvent]))
+
+    expect(await next()).toEqual([
+      'OK',
+      authEvent.id,
+      false,
+      'invalid: AUTH event challenge does not match'
+    ])
+  })
+
+  it('rejects an AUTH event of the wrong kind', async () => {
+    const { port } = await startTestRelay()
+    const { socket, next, authChallenge } = await openSocketReader(port)
+    const challenge = await authChallenge
+
+    const authEvent = signAuthEvent(makeKeypair(), challenge, { kind: 1 })
+    socket.send(JSON.stringify(['AUTH', authEvent]))
+
+    expect(await next()).toEqual([
+      'OK',
+      authEvent.id,
+      false,
+      'invalid: AUTH event must be kind 22242'
+    ])
+  })
+
+  it('rejects an AUTH event with a bad signature', async () => {
+    const { port } = await startTestRelay()
+    const { socket, next, authChallenge } = await openSocketReader(port)
+    const challenge = await authChallenge
+
+    const forged = { ...signAuthEvent(makeKeypair(), challenge), sig: 'a'.repeat(128) }
+    socket.send(JSON.stringify(['AUTH', forged]))
+
+    expect(await next()).toEqual([
+      'OK',
+      forged.id,
+      false,
+      'invalid: event signature verification failed'
+    ])
+  })
+
+  it('rejects a stale AUTH event', async () => {
+    const { port } = await startTestRelay()
+    const { socket, next, authChallenge } = await openSocketReader(port)
+    const challenge = await authChallenge
+
+    const authEvent = signAuthEvent(makeKeypair(), challenge, {
+      created_at: Math.floor(Date.now() / 1000) - 3600
+    })
+    socket.send(JSON.stringify(['AUTH', authEvent]))
+
+    expect(await next()).toEqual(['OK', authEvent.id, false, 'invalid: AUTH event is too old'])
+  })
+
+  it('keeps serving REQ and EVENT on a socket that never authenticates', async () => {
+    const { base, port } = await startTestRelay()
+    const { socket, next, authChallenge } = await openSocketReader(port)
+    // Challenge arrives but is deliberately ignored, like relay-client.ts does today.
+    await authChallenge
+
+    socket.send(JSON.stringify(['REQ', 'no-auth', { kinds: [1] }]))
+    expect(await next()).toEqual(['EOSE', 'no-auth'])
+
+    const event = signEvent(makeKeypair(), { content: 'unauthenticated still works' })
+    socket.send(JSON.stringify(['EVENT', event]))
+    expect(await next()).toEqual(['OK', event.id, true, ''])
+
+    const query = await post(base, '/query', [{ ids: [event.id] }])
+    expect(await query.json()).toEqual([event])
+  })
+})
+
+describe('relay DM channel provisioning', () => {
+  /** A kind-41010 "open a DM" request naming `others` as the other participants. */
+  function signDmOpenEvent(author: Keypair, others: Keypair[]): RelayEvent {
+    return signEvent(author, { kind: 41010, tags: others.map((keys) => ['p', keys.pubkey]) })
+  }
+
+  function channelIdFrom(message: string | undefined): string {
+    expect(message?.startsWith('response:')).toBe(true)
+    const payload = JSON.parse((message as string).slice('response:'.length)) as {
+      channel_id: string
+    }
+    expect(typeof payload.channel_id).toBe('string')
+    expect(payload.channel_id.length).toBeGreaterThan(0)
+    return payload.channel_id
+  }
+
+  it('provisions a kind-39000 channel naming every participant and returns its id', async () => {
+    const { base } = await startTestRelay()
+    const author = makeKeypair()
+    const other = makeKeypair()
+
+    const submission = await post(base, '/events', signDmOpenEvent(author, [other]))
+    expect(submission.status).toBe(200)
+    const body = (await submission.json()) as { message?: string }
+    const channelId = channelIdFrom(body.message)
+
+    const metadata = await post(base, '/query', [{ kinds: [39000], '#d': [channelId] }])
+    const channels = (await metadata.json()) as RelayEvent[]
+    expect(channels).toHaveLength(1)
+    const participantTags = channels[0].tags.filter((tag) => tag[0] === 'p').map((tag) => tag[1])
+    expect(new Set(participantTags)).toEqual(new Set([author.pubkey, other.pubkey]))
+  })
+
+  it('resolves the same participant set to the same channel, whoever opens it and in whatever tag order', async () => {
+    const { base } = await startTestRelay()
+    const a = makeKeypair()
+    const b = makeKeypair()
+    const c = makeKeypair()
+
+    const first = await post(base, '/events', signDmOpenEvent(a, [b, c]))
+    const firstId = channelIdFrom(((await first.json()) as { message?: string }).message)
+
+    // Re-opened by a DIFFERENT participant, with the other two pubkeys in the opposite order.
+    const second = await post(base, '/events', signDmOpenEvent(b, [c, a]))
+    const secondId = channelIdFrom(((await second.json()) as { message?: string }).message)
+
+    // Re-opened again by the original participant — must still resolve, not duplicate.
+    const third = await post(base, '/events', signDmOpenEvent(a, [b, c]))
+    const thirdId = channelIdFrom(((await third.json()) as { message?: string }).message)
+
+    expect(secondId).toBe(firstId)
+    expect(thirdId).toBe(firstId)
+
+    const metadata = await post(base, '/query', [{ kinds: [39000], '#d': [firstId], limit: 10 }])
+    expect(await metadata.json()).toHaveLength(1)
+  })
+
+  it('rejects a DM open event with no other participants instead of creating a degenerate channel', async () => {
+    const { base } = await startTestRelay()
+
+    const before = await post(base, '/query', [{ kinds: [39000], limit: 1000 }])
+    const beforeCount = ((await before.json()) as RelayEvent[]).length
+
+    const response = await post(base, '/events', signDmOpenEvent(makeKeypair(), []))
+    expect(response.status).toBe(400)
+    expect(await response.text()).toBe(
+      'invalid: DM open event needs at least one other participant'
+    )
+
+    const after = await post(base, '/query', [{ kinds: [39000], limit: 1000 }])
+    expect(((await after.json()) as RelayEvent[]).length).toBe(beforeCount)
   })
 })

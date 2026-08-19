@@ -8,11 +8,14 @@
  */
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { WebSocket, WebSocketServer } from 'ws'
+import { WebSocketServer, type WebSocket } from 'ws'
+import { beginAuthChallenge, handleAuthVerb, type ConnectionAuthState } from './relay-auth'
+import { DM_OPEN_KIND, openDmChannel } from './relay-dm'
 import { parseRelayEvent, verifyRelayEvent } from './relay-event'
 import { eventMatchesAnyFilter, parseRelayFilters, selectMatchingEvents } from './relay-filters'
 import type { RelayStore } from './relay-store'
 import { RELAY_HOST, RELAY_PORT, type RelayEvent, type RelayFilter } from './relay-types'
+import { sendFrame } from './relay-wire'
 
 /** Cap on a single HTTP body or WS frame, so a local client cannot spend all our memory. */
 const MAX_BODY_BYTES = 1024 * 1024
@@ -51,6 +54,8 @@ type RelaySubscriptions = Map<WebSocket, Map<string, RelayFilter[]>>
 type RelayContext = {
   store: RelayStore
   subscriptions: RelaySubscriptions
+  /** NIP-42 challenge + authenticated pubkey per connection, keyed like `subscriptions`. */
+  auth: Map<WebSocket, ConnectionAuthState>
 }
 
 type RequestBody = { ok: true; text: string } | { ok: false; reason: 'too-large' | 'aborted' }
@@ -142,6 +147,12 @@ function submitEvent(
     return { status: 400, event, accepted: false, message: verification.reason }
   }
 
+  if (event.kind === DM_OPEN_KIND) {
+    const now = Math.floor(Date.now() / 1000)
+    const outcome = openDmChannel(ctx.store, event, now, (created) => broadcast(ctx, created, origin))
+    return { status: outcome.ok ? 200 : 400, event, accepted: outcome.ok, message: outcome.message }
+  }
+
   const result = ctx.store.insert(event)
   if (result.accepted && result.message === undefined) {
     broadcast(ctx, event, origin)
@@ -227,18 +238,6 @@ async function routeRequest(
   handleEvents(ctx, body.text, res)
 }
 
-function sendFrame(socket: WebSocket, frame: unknown[]): void {
-  if (socket.readyState !== WebSocket.OPEN) {
-    return
-  }
-  try {
-    socket.send(JSON.stringify(frame))
-  } catch {
-    // A socket torn down between the readyState check and the write is a normal
-    // disconnect race, not an error worth surfacing; 'close' cleans up after it.
-  }
-}
-
 function handleReq(ctx: RelayContext, socket: WebSocket, frame: unknown[]): void {
   const subId = frame[1]
   if (typeof subId !== 'string') {
@@ -293,11 +292,22 @@ function handleFrame(ctx: RelayContext, socket: WebSocket, raw: string): void {
     handleWsEvent(ctx, socket, frame)
     return
   }
+  if (verb === 'AUTH') {
+    handleAuthVerb(ctx.auth, socket, frame[1])
+    return
+  }
   sendFrame(socket, ['NOTICE', `invalid: unsupported verb ${verb}`])
 }
 
+/**
+ * Every connection is challenged immediately: the vendored client blocks its
+ * whole `connect()` on receiving this unsolicited frame and never sends one
+ * to request it (see relay-auth.ts). Unauthenticated sockets are otherwise
+ * unaffected — nothing here gates REQ or EVENT on `authenticatedPubkey`.
+ */
 function attachConnection(ctx: RelayContext, socket: WebSocket): void {
   ctx.subscriptions.set(socket, new Map())
+  sendFrame(socket, ['AUTH', beginAuthChallenge(ctx.auth, socket)])
 
   socket.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
     // One malformed frame must never take down the connection or the process.
@@ -309,6 +319,7 @@ function attachConnection(ctx: RelayContext, socket: WebSocket): void {
   })
   const drop = (): void => {
     ctx.subscriptions.delete(socket)
+    ctx.auth.delete(socket)
   }
   socket.on('close', drop)
   socket.on('error', drop)
@@ -325,7 +336,7 @@ function attachConnection(ctx: RelayContext, socket: WebSocket): void {
 export async function startRelayServer(options: RelayServerOptions): Promise<RelayServerHandle> {
   const host = options.host ?? RELAY_HOST
   const requestedPort = options.port ?? RELAY_PORT
-  const ctx: RelayContext = { store: options.store, subscriptions: new Map() }
+  const ctx: RelayContext = { store: options.store, subscriptions: new Map(), auth: new Map() }
 
   const server = createServer((req, res) => {
     routeRequest(ctx, req, res).catch((err: Error) => {
@@ -378,6 +389,7 @@ async function closeServer(server: Server, wss: WebSocketServer, ctx: RelayConte
     socket.terminate()
   }
   ctx.subscriptions.clear()
+  ctx.auth.clear()
   await new Promise<void>((resolve) => wss.close(() => resolve()))
   // Idle keep-alive sockets (every `fetch` leaves one) keep `close` pending
   // forever otherwise, so the process would never exit.
