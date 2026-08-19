@@ -29,6 +29,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createRuntimeBridge } from './runtime-bridge-harness'
 import { startVerificationRelay, stopVerificationRelay, type RelayHarness } from './relay-test-harness'
 import { InMemoryLocalStorage, makeIdentityKeypair, seedIdentity } from './identity-fixture'
+import type * as RelayWebSocketClose from '@/shared/api/relayWebSocketClose'
 
 /**
  * Fault-injection switch for the negative test. `vi.hoisted` so the value
@@ -59,7 +60,7 @@ const authFault = vi.hoisted(() => ({ corruptNextChallenge: false }))
  * attacker) would look like on the wire.
  */
 vi.mock('@/shared/api/relayWebSocketClose', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api/relayWebSocketClose')>()
+  const actual = await importOriginal<typeof RelayWebSocketClose>()
   return {
     ...actual,
     openWebSocket: (url: string, onMessage: (message: unknown) => void) => {

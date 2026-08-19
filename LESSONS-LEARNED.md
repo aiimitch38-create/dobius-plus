@@ -208,3 +208,27 @@ Installing is safe for live terminal sessions.
 - Failed because: this harness refuses foreground `sleep`. Subagents inherit the restriction but not the knowledge of it, so each one burns a turn rediscovering it. My briefs listed the vitest version and the right config paths but never mentioned sleep.
 - Works instead: put the whole wait loop inside a `run_in_background` command, or poll on a later turn. And add to EVERY subagent brief that runs a suite: "Foreground `sleep` is blocked — use run_in_background and poll on a later turn."
 - Root cause is briefing quality, not agent quality. A subagent knows only what its prompt says; every environment quirk I know and don't write down costs a wasted turn. Covered by an addendum to ~/.claude/skills/learned-background-long-checks (no new skill minted).
+
+## Backgrounding a check does not mean it passed — and `| tail` is not the result
+_2026-08-19 · claude_
+
+Committed 190 files across three commits, reported the work as done, THEN the
+backgrounded `oxlint` came back red on code inside those same commits. The gate
+had passed, so "green" felt earned; typecheck and lint were still running.
+Backgrounding a check is a scheduling decision, not a verdict. **Nothing gets
+committed or reported complete until every backgrounded check has returned its
+real exit code.** If that means waiting, wait.
+
+Compounding it: read the lint output as `npx oxlint ... | tail -3`, saw three
+`curly` errors, and treated three as the total. There were **16**, across five
+rules including a `max-lines` violation needing a file split. Same family as the
+already-recorded `| tail` exit-code trap — a pipe into a truncating command
+returns a fragment, and a fragment read as a whole is a false all-clear.
+Count first (`grep -c "error "`), group by rule, THEN look at samples.
+
+Third, smaller: guessed at the shape of the gate's `reports/latest.json` twice
+(`len()` on an int, then `e['status']` when the field is `verdict`) instead of
+printing `list(entry.keys())` once. Two wasted round-trips for a one-line probe.
+
+Cheap remedies, in order: `npx oxlint <dir> > /tmp/lint.txt 2>&1; echo "exit=$?"`
+then `grep -c`, then read. Never pipe a verification command into `head`/`tail`.

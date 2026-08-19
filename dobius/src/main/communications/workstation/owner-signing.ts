@@ -22,7 +22,7 @@ async function findManagedAgentIdByPubkey(pubkey: string): Promise<string | null
   const target = normalizePubkey(pubkey)
   for (const agent of listAgents()) {
     const identity = ensureAgentIdentity(agent.id)
-    if (normalizePubkey(identity.pubkey) === target) return agent.id
+    if (normalizePubkey(identity.pubkey) === target) {return agent.id}
   }
   return null
 }

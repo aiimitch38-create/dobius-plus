@@ -72,7 +72,8 @@ describe('media-commands', () => {
   })
 
   it('uploadMediaBytes rejects a payload over the size limit without storing it', async () => {
-    const tooBig = new Array(200 * 1024 * 1024 + 1) // sparse — length check only, never iterated
+    // Length-only fixture: the size guard reads .length and must reject before any read.
+    const tooBig = { length: 200 * 1024 * 1024 + 1 } as unknown as number[]
     await expect(uploadMediaBytes(tooBig, 'huge.bin')).rejects.toThrow(/too large/)
     expect(storeBlobMock).not.toHaveBeenCalled()
   })

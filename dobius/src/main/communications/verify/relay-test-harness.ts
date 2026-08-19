@@ -109,8 +109,8 @@ async function verifyOwnRelay(store: RelayStore): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify([{ ids: [event.id] }])
     })
-    if (!response.ok) return false
-    const results = (await response.json()) as Array<{ id: string }>
+    if (!response.ok) {return false}
+    const results = (await response.json()) as { id: string }[]
     return results.some((candidate) => candidate.id === event.id)
   } catch {
     return false
@@ -118,7 +118,7 @@ async function verifyOwnRelay(store: RelayStore): Promise<boolean> {
 }
 
 export async function stopVerificationRelay(harness: RelayHarness): Promise<void> {
-  if (!harness.available) return
+  if (!harness.available) {return}
   await harness.handle.close()
   harness.store.close()
 }

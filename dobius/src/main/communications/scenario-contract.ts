@@ -27,7 +27,7 @@
  * directly in src/main/communications/ like teams.scenarios.ts does) so
  * `config/tsconfig.node.json` typechecks them without TS6307.
  */
-import { randomBytes } from 'node:crypto'
+import { schnorr } from '@noble/curves/secp256k1'
 
 export type ShapeOutcome = { ok: true } | { ok: false; reason: string }
 
@@ -120,6 +120,16 @@ export function expectArray(result: unknown): ShapeOutcome {
   return Array.isArray(result) ? ok() : fail(`expected an array, got ${typeof result}`)
 }
 
+/**
+ * A random x-only pubkey that is a REAL point on secp256k1.
+ *
+ * `randomBytes(32)` is not good enough: only about half of all 32-byte
+ * values are valid x-coordinates, so any step that actually does curve
+ * maths with the result (NIP-44 encryption in
+ * `build_observer_control_event`) failed with "bad point: is not on curve"
+ * on roughly half of runs — a fixture flake that read as an intermittent
+ * product bug. Deriving from a private key makes it valid every time.
+ */
 export function randomHexPubkey(): string {
-  return randomBytes(32).toString('hex')
+  return Buffer.from(schnorr.getPublicKey(schnorr.utils.randomPrivateKey())).toString('hex')
 }

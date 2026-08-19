@@ -231,7 +231,7 @@ describe('communications command verification', () => {
     // fields. fixtureSource: 'empty-fallback' flags that ambiguity in the
     // report instead of silently conflating it with a Pass-1 finding.
     for (const entry of manifest.entries) {
-      if (SCENARIO_COMMANDS.has(entry.command)) continue
+      if (SCENARIO_COMMANDS.has(entry.command)) {continue}
 
       if (entry.disposition === 'removed') {
         entries.push({

@@ -4,7 +4,10 @@ import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const execFileMock = vi.fn((_cmd: string, _args: string[], cb: (err: Error | null) => void) => cb(null))
-vi.mock('node:child_process', () => ({ execFile: (...args: unknown[]) => (execFileMock as any)(...args) }))
+vi.mock('node:child_process', () => ({
+  execFile: (...args: unknown[]) =>
+    (execFileMock as unknown as (...a: unknown[]) => void)(...args)
+}))
 
 const { openNativeTerminalAt } = await import('./terminal-launch')
 

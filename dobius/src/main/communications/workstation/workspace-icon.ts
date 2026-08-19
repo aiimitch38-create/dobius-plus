@@ -32,7 +32,7 @@ export async function fetchWorkspaceIcon(relayUrl: string): Promise<string | nul
       headers: { Accept: 'application/nostr+json' },
       signal: controller.signal
     })
-    if (!response.ok) return null
+    if (!response.ok) {return null}
     const document = (await response.json()) as { icon?: unknown }
     return typeof document.icon === 'string' && document.icon.length > 0 ? document.icon : null
   } catch {
