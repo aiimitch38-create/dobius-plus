@@ -25,7 +25,7 @@ the version or branch that shipped them. Sam triggers releases.
       clean. If a stuck "sending..." ever survives past 90s in real use,
       suspect a commit-phase exception around session relink and start here.
 
-## Staged on main (unreleased, next ship = v1.0.63)
+## Done (shipped in v1.0.63)
 
 - [x] gws-mcp: multi-account Google Workspace MCP server (Claude Desktop's
       native Gmail connector is one account at a time). Three generic tools
