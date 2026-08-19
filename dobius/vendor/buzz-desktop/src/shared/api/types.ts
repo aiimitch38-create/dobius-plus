@@ -800,6 +800,8 @@ export type AgentTeam = {
   description: string | null;
   instructions: string | null;
   personaIds: string[];
+  /** Dobius-connected Claude/Codex account ids this team's agents run under (never a credential). */
+  accountIds: string[];
   isBuiltin: boolean;
   /** Absolute path to the team's backing directory (if directory-backed). */
   sourceDir: string | null;
@@ -818,6 +820,8 @@ export type CreateTeamInput = {
   description?: string;
   instructions?: string;
   personaIds: string[];
+  /** Optional — omitted/empty means the team has no bound accounts yet. */
+  accountIds?: string[];
 };
 
 export type UpdateTeamInput = {
@@ -826,6 +830,15 @@ export type UpdateTeamInput = {
   description?: string;
   instructions?: string;
   personaIds: string[];
+  /** Optional — omitted/empty means the team has no bound accounts yet. */
+  accountIds?: string[];
+};
+
+/** A Dobius-connected Claude/Codex account a team can be bound to. Sourced
+ *  from accounts.list; id is a randomUUID, never a credential. */
+export type ConnectedDobiusAccount = {
+  id: string;
+  label: string;
 };
 // ── Channel Template types ─────────────────────────────────────────────────────
 

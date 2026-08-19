@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createTeam,
   deleteTeam,
+  listConnectedAccounts,
   listTeams,
   updateTeam,
 } from "@/shared/api/tauriTeams";
@@ -13,6 +14,16 @@ import type {
 } from "@/shared/api/types";
 
 export const teamsQueryKey = ["teams"] as const;
+export const connectedAccountsQueryKey = ["dobius-connected-accounts"] as const;
+
+/** Connected Claude/Codex accounts available to bind a team to (see tauriTeams.listConnectedAccounts). */
+export function useConnectedAccountsQuery() {
+  return useQuery({
+    queryKey: connectedAccountsQueryKey,
+    queryFn: listConnectedAccounts,
+    staleTime: 30_000,
+  });
+}
 
 export function useTeamsQuery() {
   return useQuery({

@@ -1,4 +1,3 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
 import {
   createAuthEvent,
   getRelayWsUrl,
@@ -53,7 +52,11 @@ import {
 } from "@/shared/api/relayReconnectPolicy";
 import { RelayReconnectWaiters } from "@/shared/api/relayReconnectWaiters";
 import { RelayStallWatchdog } from "@/shared/api/relayStallWatchdog";
-import { closeWebSocket } from "@/shared/api/relayWebSocketClose";
+import {
+  closeWebSocket,
+  openWebSocket,
+  sendOnWebSocket,
+} from "@/shared/api/relayWebSocketClose";
 import { buildThreadReferenceTags } from "@/features/messages/lib/threading";
 const RECONNECT_BASE_DELAY_MS = 1_000,
   RECONNECT_MAX_DELAY_MS = 30_000,
@@ -89,7 +92,6 @@ export class RelayClient {
   private reconnectListeners = new Set<() => void>();
   private hasConnectedOnce = false;
   private notifyReconnectListeners = false;
-  private onMessageChannel: Channel<unknown> | null = null;
   private connectionGeneration = 0;
   private stabilityTimer: number | null = null;
   private visibleChannelId: string | null = null;
@@ -168,7 +170,6 @@ export class RelayClient {
     this.eventBuffer = [];
     this.reconnectListeners.clear();
     this.connectionStateEmitter.clear();
-    this.onMessageChannel = null;
     this.reconnectDelayMs = RECONNECT_BASE_DELAY_MS;
   }
 
@@ -521,24 +522,20 @@ export class RelayClient {
     );
 
     const generation = ++this.connectionGeneration;
-    this.onMessageChannel = new Channel<unknown>((message) => {
+    const handleMessage = (message: unknown) => {
       void this.handleWsMessage(message, generation).catch((error) => {
         if (generation !== this.connectionGeneration) return;
         this.resetConnection(
           this.normalizeRelayError(error, "Relay connection errored."),
         );
       });
-    });
+    };
 
     try {
       if (!this.relayUrl) {
         this.relayUrl = await getRelayWsUrl();
       }
-      const wsId = await invoke<number>("plugin:websocket|connect", {
-        url: this.relayUrl,
-        onMessage: this.onMessageChannel,
-        config: {},
-      });
+      const wsId = await openWebSocket(this.relayUrl, handleMessage);
       if (generation !== this.connectionGeneration) {
         void closeWebSocket(wsId, "stale connection attempt");
         throw new Error("Relay connection attempt was superseded.");
@@ -638,13 +635,7 @@ export class RelayClient {
       throw new Error("Relay socket is not connected.");
     }
 
-    await invoke("plugin:websocket|send", {
-      id: this.wsId,
-      message: {
-        type: "Text",
-        data: JSON.stringify(payload),
-      },
-    });
+    await sendOnWebSocket(this.wsId, JSON.stringify(payload));
   }
 
   private normalizeRelayError(error: unknown, fallbackMessage: string) {
@@ -1018,7 +1009,6 @@ export class RelayClient {
       reconnect?: boolean;
     },
   ) {
-    this.onMessageChannel = null;
     this.stallWatchdog.stop();
     this.connectionGeneration++;
     if (this.stabilityTimer !== null) {

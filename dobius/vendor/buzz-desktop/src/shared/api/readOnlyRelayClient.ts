@@ -1,5 +1,3 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
-
 import { createAuthEvent } from "@/shared/api/tauri";
 import type { RelayEvent } from "@/shared/api/types";
 import {
@@ -7,7 +5,11 @@ import {
   sortEvents,
   type RelaySubscriptionFilter,
 } from "@/shared/api/relayClientShared";
-import { closeWebSocket } from "@/shared/api/relayWebSocketClose";
+import {
+  closeWebSocket,
+  openWebSocket,
+  sendOnWebSocket,
+} from "@/shared/api/relayWebSocketClose";
 import {
   AUTH_TIMEOUT_MS,
   HISTORY_TIMEOUT_MS,
@@ -35,7 +37,6 @@ type PendingPublish = {
  */
 export class ReadOnlyRelayClient {
   private wsId: number | null = null;
-  private onMessageChannel: Channel<unknown> | null = null;
   private connectPromise: Promise<void> | null = null;
   private authRequest: {
     pendingEventId: string;
@@ -95,7 +96,6 @@ export class ReadOnlyRelayClient {
       this.publishes.delete(eventId);
     }
 
-    this.onMessageChannel = null;
     this.connectPromise = null;
   }
 
@@ -132,15 +132,11 @@ export class ReadOnlyRelayClient {
 
   private async openConnection(): Promise<void> {
     const generation = ++this.generation;
-    this.onMessageChannel = new Channel<unknown>((message) => {
+    const handleMessage = (message: unknown) => {
       void this.handleWsMessage(message, generation);
-    });
+    };
 
-    this.wsId = await invoke<number>("plugin:websocket|connect", {
-      url: this.relayUrl,
-      onMessage: this.onMessageChannel,
-      config: {},
-    });
+    this.wsId = await openWebSocket(this.relayUrl, handleMessage);
 
     await new Promise<void>((resolve, reject) => {
       const timeout = window.setTimeout(() => {
@@ -194,13 +190,7 @@ export class ReadOnlyRelayClient {
       throw new Error("Read-only relay socket is not connected.");
     }
 
-    await invoke("plugin:websocket|send", {
-      id: this.wsId,
-      message: {
-        type: "Text",
-        data: JSON.stringify(payload),
-      },
-    });
+    await sendOnWebSocket(this.wsId, JSON.stringify(payload));
   }
 
   private async handleWsMessage(

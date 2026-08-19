@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { ProfileAvatar } from "@/features/profile/ui/ProfileAvatar";
+import { useConnectedAccountsQuery } from "@/features/agents/teamHooks";
 import type {
   AgentPersona,
   CreateTeamInput,
@@ -64,7 +65,12 @@ export function TeamDialog({
     initialSelectedPersonaIdsForSort,
     setInitialSelectedPersonaIdsForSort,
   ] = React.useState<string[]>([]);
+  const [selectedAccountIds, setSelectedAccountIds] = React.useState<
+    string[]
+  >([]);
   const [confirmRemovalOpen, setConfirmRemovalOpen] = React.useState(false);
+  const accountsQuery = useConnectedAccountsQuery();
+  const accounts = accountsQuery.data ?? [];
   const isEditMode = Boolean(initialValues && "id" in initialValues);
   const missingInitialPersonaCount = React.useMemo(() => {
     if (!initialValues) {
@@ -86,6 +92,7 @@ export function TeamDialog({
     setInitialSelectedPersonaIdsForSort(
       copySelectedPersonaIds(initialValues.personaIds),
     );
+    setSelectedAccountIds([...(initialValues.accountIds ?? [])]);
   }, [initialValues, open]);
 
   function handleOpenChange(next: boolean) {
@@ -95,6 +102,7 @@ export function TeamDialog({
       setInstructions("");
       setSelectedPersonaIds([]);
       setInitialSelectedPersonaIdsForSort([]);
+      setSelectedAccountIds([]);
       setConfirmRemovalOpen(false);
     }
 
@@ -106,6 +114,14 @@ export function TeamDialog({
       current.includes(personaId)
         ? current.filter((id) => id !== personaId)
         : [...current, personaId],
+    );
+  }
+
+  function toggleAccount(accountId: string) {
+    setSelectedAccountIds((current) =>
+      current.includes(accountId)
+        ? current.filter((id) => id !== accountId)
+        : [...current, accountId],
     );
   }
 
@@ -126,11 +142,21 @@ export function TeamDialog({
   );
 
   function buildSubmitInput(): CreateTeamInput | UpdateTeamInput {
+    // Drop any selected id for an account that's no longer connected — same
+    // stale-reference guard filterAvailablePersonaIds applies to personas.
+    // Only filter once the accounts list has actually loaded — an empty
+    // list from a still-pending query must never be read as "nothing is
+    // connected" and wipe out a team's existing account bindings.
+    const availableAccountIds = new Set(accounts.map((account) => account.id));
+    const accountIds = accountsQuery.isSuccess
+      ? selectedAccountIds.filter((id) => availableAccountIds.has(id))
+      : selectedAccountIds;
     const baseInput = {
       name,
       description: teamDescription.trim() || undefined,
       instructions: instructions.trim() || undefined,
       personaIds: filterAvailablePersonaIds(selectedPersonaIds, personas),
+      accountIds,
     };
 
     if (initialValues && "id" in initialValues) {
@@ -300,6 +326,69 @@ export function TeamDialog({
                           {persona.isBuiltIn ? (
                             <Badge variant="secondary">Built-in</Badge>
                           ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-sm font-medium">Accounts</span>
+                <p className="text-xs text-muted-foreground">
+                  Choose which of your connected Dobius accounts this team's
+                  agents run under.
+                </p>
+                {accountsQuery.isPending ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    Loading connected accounts…
+                  </p>
+                ) : accounts.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No connected accounts found. Connect a Claude or Codex
+                    account in Dobius first.
+                  </p>
+                ) : (
+                  <div
+                    className="max-h-60 space-y-1 overflow-y-auto rounded-lg border border-border/70 p-2"
+                    role="listbox"
+                    aria-label="Accounts"
+                    aria-multiselectable="true"
+                  >
+                    {accounts.map((account) => {
+                      const isSelected = selectedAccountIds.includes(
+                        account.id,
+                      );
+
+                      return (
+                        <div
+                          className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50"
+                          key={account.id}
+                          onClick={() => {
+                            if (!isPending) {
+                              toggleAccount(account.id);
+                            }
+                          }}
+                          onKeyDown={(event) => {
+                            if (
+                              !isPending &&
+                              (event.key === "Enter" || event.key === " ")
+                            ) {
+                              event.preventDefault();
+                              toggleAccount(account.id);
+                            }
+                          }}
+                          role="option"
+                          aria-selected={isSelected}
+                          tabIndex={0}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            className="pointer-events-none"
+                            disabled={isPending}
+                            tabIndex={-1}
+                          />
+                          <span className="text-sm">{account.label}</span>
                         </div>
                       );
                     })}

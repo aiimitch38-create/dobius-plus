@@ -1,6 +1,11 @@
 import { invokeTauri } from "@/shared/api/tauri";
+import {
+  invokeDobiusRuntime,
+  isDobiusCommunicationsAvailable,
+} from "@/shared/api/dobiusCommunications";
 import type {
   AgentTeam,
+  ConnectedDobiusAccount,
   CreateTeamInput,
   UpdateTeamInput,
 } from "@/shared/api/types";
@@ -11,6 +16,8 @@ type RawTeam = {
   description: string | null;
   instructions?: string | null;
   persona_ids: string[];
+  /** Optional for back-compat with a wire payload from before this field existed. */
+  account_ids?: string[];
   is_builtin?: boolean;
   source_dir?: string | null;
   is_symlink?: boolean;
@@ -20,13 +27,14 @@ type RawTeam = {
   updated_at: string;
 };
 
-function fromRawTeam(team: RawTeam): AgentTeam {
+export function fromRawTeam(team: RawTeam): AgentTeam {
   return {
     id: team.id,
     name: team.name,
     description: team.description,
     instructions: team.instructions ?? null,
     personaIds: team.persona_ids,
+    accountIds: team.account_ids ?? [],
     isBuiltin: team.is_builtin ?? false,
     sourceDir: team.source_dir ?? null,
     isSymlink: team.is_symlink ?? false,
@@ -49,6 +57,7 @@ export async function createTeam(input: CreateTeamInput): Promise<AgentTeam> {
         description: input.description,
         instructions: input.instructions,
         personaIds: input.personaIds,
+        accountIds: input.accountIds,
       },
     }),
   );
@@ -63,9 +72,60 @@ export async function updateTeam(input: UpdateTeamInput): Promise<AgentTeam> {
         description: input.description,
         instructions: input.instructions,
         personaIds: input.personaIds,
+        accountIds: input.accountIds,
       },
     }),
   );
+}
+
+function labelForEngineAccount(engineLabel: string, email: string | null) {
+  return email ? `${engineLabel} · ${email}` : `${engineLabel} account`;
+}
+
+/** Reads one engine's slice of the accounts.list snapshot (`{ accounts: [...] }`). */
+function connectedAccountsForEngine(
+  engineLabel: string,
+  engineState: unknown,
+): ConnectedDobiusAccount[] {
+  if (!engineState || typeof engineState !== "object") return [];
+  const accounts = (engineState as Record<string, unknown>).accounts;
+  if (!Array.isArray(accounts)) return [];
+
+  const result: ConnectedDobiusAccount[] = [];
+  for (const candidate of accounts) {
+    if (!candidate || typeof candidate !== "object") continue;
+    const account = candidate as Record<string, unknown>;
+    if (typeof account.id !== "string") continue;
+    const email = typeof account.email === "string" ? account.email : null;
+    result.push({ id: account.id, label: labelForEngineAccount(engineLabel, email) });
+  }
+  return result;
+}
+
+/**
+ * Connected Claude/Codex accounts a team's agents can run under. Reads the
+ * same `accounts.list` RPC method dobiusCommunications.ts's ACP runtime
+ * catalog projection uses, but takes the raw `ClaudeManagedAccountSummary`/
+ * `CodexManagedAccountSummary.id` (a randomUUID, see src/shared/types.ts)
+ * directly — team.accountIds must hold that same bare id (what
+ * team-store.ts's normalizeAccountIds() expects), not the catalog's
+ * composite `dobius:<engine>:<accountId>` runtime-selection id, which is a
+ * different namespace used for persona harness selection. Only id + email
+ * ever cross this boundary — never a credential.
+ */
+export async function listConnectedAccounts(): Promise<
+  ConnectedDobiusAccount[]
+> {
+  if (!isDobiusCommunicationsAvailable()) {
+    return [];
+  }
+  const snapshot = await invokeDobiusRuntime("accounts.list");
+  if (!snapshot || typeof snapshot !== "object") return [];
+  const record = snapshot as Record<string, unknown>;
+  return [
+    ...connectedAccountsForEngine("Claude", record.claude),
+    ...connectedAccountsForEngine("Codex", record.codex),
+  ];
 }
 
 export async function deleteTeam(id: string): Promise<void> {

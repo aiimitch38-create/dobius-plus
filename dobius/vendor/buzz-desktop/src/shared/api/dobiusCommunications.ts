@@ -1,5 +1,7 @@
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
+import { nip44 } from "nostr-tools";
+import { KIND_AGENT_OBSERVER_FRAME } from "@/shared/constants/kinds";
 
 type DobiusBridgeResponse =
   | { version: 1; id: string; ok: true; result: unknown }
@@ -108,6 +110,37 @@ export type DobiusPersonaProjection = {
   respond_to: "owner-only";
   respond_to_allowlist: string[];
   parallelism: number;
+  created_at: string;
+  updated_at: string;
+};
+
+// Why: a "team" (RawTeam in tauriTeams.ts) is a named group of persona ids.
+// Dobius persists it as a small standalone record (team-store.ts) that only
+// references custom-agent ids — it never owns or clones agent data. Fields
+// the Buzz UI declares but Dobius has no concept of (builtin/source-dir/
+// symlink/version) are honest, stable defaults, never fabricated values.
+//
+// account_ids: which Dobius-connected Claude/Codex accounts (opaque ids from
+// accounts.list — see discoverDobiusAgentRuntimes above — never a token)
+// back this team's agents. RawTeam in tauriTeams.ts has no slot for this —
+// it's an ADDITIONAL key on the wire object, not a repurposed existing one,
+// so old Buzz builds parsing RawTeam just ignore the extra key (fromRawTeam
+// only reads the fields it declares) rather than breaking. Buzz's own
+// RawTeam/AgentTeam types would need to grow this field before its UI can
+// display it — that's vendor/buzz-desktop/.../tauriTeams.ts, outside what
+// this team-cases patch owns.
+export type DobiusTeamProjection = {
+  id: string;
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  persona_ids: string[];
+  account_ids: string[];
+  is_builtin: false;
+  source_dir: null;
+  is_symlink: false;
+  symlink_target: null;
+  version: null;
   created_at: string;
   updated_at: string;
 };
@@ -1298,6 +1331,26 @@ function isDobiusAgentRunRecord(value: unknown): value is DobiusAgentRunRecord {
   );
 }
 
+// Why: wire shape of the main-process Team record (team-store.ts) — camelCase,
+// as returned by the team.* RPC methods. teamFromRecord below maps it to the
+// snake_case RawTeam shape tauriTeams.ts expects.
+type DobiusTeamRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  personaIds: string[];
+  accountIds: string[];
+  createdAt: number;
+  updatedAt: number;
+};
+
+function isDobiusTeamRecord(value: unknown): value is DobiusTeamRecord {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<DobiusTeamRecord>;
+  return typeof candidate.id === "string" && typeof candidate.name === "string";
+}
+
 type DobiusAgentIdentity = { privateKey: string; pubkey: string };
 
 function loadAgentIdentityRegistry(): Record<string, DobiusAgentIdentity> {
@@ -1520,6 +1573,85 @@ async function updateDobiusPersona(args: unknown): Promise<DobiusPersonaProjecti
   return personaFromAgent(agent);
 }
 
+function teamFromRecord(team: DobiusTeamRecord): DobiusTeamProjection {
+  return {
+    id: team.id,
+    name: team.name,
+    description: team.description ?? null,
+    instructions: team.instructions ?? null,
+    persona_ids: Array.isArray(team.personaIds) ? team.personaIds : [],
+    account_ids: Array.isArray(team.accountIds) ? team.accountIds : [],
+    is_builtin: false,
+    source_dir: null,
+    is_symlink: false,
+    symlink_target: null,
+    version: null,
+    created_at: timestampIso(team.createdAt),
+    updated_at: timestampIso(team.updatedAt),
+  };
+}
+
+export async function loadDobiusTeams(): Promise<DobiusTeamProjection[]> {
+  const response = await invokeDobiusRuntime("team.list");
+  return recordsAt(response, "teams").filter(isDobiusTeamRecord).map(teamFromRecord);
+}
+
+async function createDobiusTeam(args: unknown): Promise<DobiusTeamProjection> {
+  const input = objectAt(args, "input");
+  const response = await invokeDobiusRuntime("team.create", {
+    name: requiredText(input.name, "team name"),
+    description: typeof input.description === "string" ? input.description : undefined,
+    instructions: typeof input.instructions === "string" ? input.instructions : undefined,
+    personaIds: Array.isArray(input.personaIds)
+      ? input.personaIds.filter((personaId): personaId is string => typeof personaId === "string")
+      : undefined,
+    // Why optional/undefined rather than []: tauriTeams.ts's CreateTeamInput
+    // has no accountIds field yet, so a real Buzz UI call never sends this
+    // key — team.create's own zod schema treats an absent key as "no
+    // accounts bound" (matches personaIds' same undefined-means-omitted
+    // convention), not as "clear to empty".
+    accountIds: Array.isArray(input.accountIds)
+      ? input.accountIds.filter((accountId): accountId is string => typeof accountId === "string")
+      : undefined,
+  });
+  const team = objectAt(response, "team");
+  if (!isDobiusTeamRecord(team)) {
+    throw new Error("Dobius returned an invalid created team");
+  }
+  return teamFromRecord(team);
+}
+
+async function updateDobiusTeam(args: unknown): Promise<DobiusTeamProjection> {
+  const input = objectAt(args, "input");
+  const id = requiredText(input.id, "team id");
+  const updates: Record<string, unknown> = {};
+  if (typeof input.name === "string") updates.name = input.name.trim();
+  if (typeof input.description === "string") updates.description = input.description;
+  if (typeof input.instructions === "string") updates.instructions = input.instructions;
+  if (Array.isArray(input.personaIds)) {
+    updates.personaIds = input.personaIds.filter(
+      (personaId): personaId is string => typeof personaId === "string",
+    );
+  }
+  if (Array.isArray(input.accountIds)) {
+    updates.accountIds = input.accountIds.filter(
+      (accountId): accountId is string => typeof accountId === "string",
+    );
+  }
+  const response = await invokeDobiusRuntime("team.update", { id, updates });
+  const team = objectAt(response, "team");
+  if (!isDobiusTeamRecord(team)) {
+    throw new Error("Dobius returned an invalid updated team");
+  }
+  return teamFromRecord(team);
+}
+
+async function deleteDobiusTeam(args: unknown): Promise<void> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const id = requiredText(input.id, "team id");
+  await invokeDobiusRuntime("team.delete", { id });
+}
+
 async function createDobiusManagedAgent(args: unknown): Promise<unknown> {
   const input = objectAt(args, "input");
   const personaId = requiredText(input.personaId, "persona id");
@@ -1535,6 +1667,478 @@ async function createDobiusManagedAgent(args: unknown): Promise<unknown> {
     spawn_error: null,
   };
 }
+
+// ── agent-lifecycle / agent-provider-config / agent-approvals helpers ──────
+
+function managedAgentRuntimeStatus(agent: DobiusManagedAgentProjection): unknown {
+  return {
+    pubkey: agent.pubkey,
+    relayUrl: agent.relay_url,
+    localSetup: true,
+    lifecycle: agent.status === "running" ? "running" : "stopped",
+    pid: null,
+    error: null,
+    logPath: null,
+  };
+}
+
+async function sendDobiusManagedAgentChannelMessage(args: unknown): Promise<unknown> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const agentPubkey = requiredText(input.agentPubkey, "agent pubkey").toLowerCase();
+  const channelId = requiredText(input.channelId, "channel id");
+  const content = typeof input.content === "string" ? input.content : "";
+  const marker = typeof input.marker === "string" ? input.marker : null;
+  const markerScope = input.markerScope === "channel" ? "channel" : "agent";
+  const mentionPubkeys = normalizedParticipantPubkeys(input.mentionPubkeys);
+  const parentEventId =
+    typeof input.parentEventId === "string" && input.parentEventId.trim()
+      ? input.parentEventId.trim()
+      : null;
+  const additionalMarkers = Array.isArray(input.additionalMarkers)
+    ? input.additionalMarkers.filter((m): m is string => typeof m === "string")
+    : [];
+
+  const response = await invokeDobiusRuntime("agent.list");
+  const agents = recordsAt(response, "agents").filter(isDobiusAgentRecord);
+  const agent = agents.find(
+    (candidate) => agentIdentity(candidate.id).pubkey.toLowerCase() === agentPubkey,
+  );
+  if (!agent) throw new Error(`Dobius agent not found for ${agentPubkey}`);
+  const identity = agentIdentity(agent.id);
+
+  const tags: string[][] = [["h", channelId]];
+  for (const pubkey of mentionPubkeys) tags.push(["p", pubkey]);
+  if (marker) tags.push(["marker", marker, markerScope]);
+  for (const extra of additionalMarkers) tags.push(["marker", extra, markerScope]);
+  let rootEventId: string | null = null;
+  if (parentEventId) {
+    const [parent] = await queryRelay([{ ids: [parentEventId], limit: 1 }]);
+    rootEventId =
+      parent?.tags.find((tag) => tag[0] === "e" && tag[3] === "root")?.[1] ?? parentEventId;
+    if (rootEventId !== parentEventId) tags.push(["e", rootEventId, "", "root"]);
+    tags.push(["e", parentEventId, "", "reply"]);
+  }
+
+  const createdAt = Math.floor(Date.now() / 1000);
+  const submission = await submitRelayEvent(
+    signedEventWithPrivateKey({ kind: 9, content, tags, createdAt }, identity.privateKey),
+    identity.pubkey,
+  );
+  if (submission.accepted === false) {
+    throw new Error(submission.message || "The relay rejected the agent message.");
+  }
+  const eventId = requiredText(submission.event_id, "message event id");
+  return {
+    event_id: eventId,
+    parent_event_id: parentEventId,
+    root_event_id: rootEventId,
+    depth: parentEventId ? (rootEventId === parentEventId ? 1 : 2) : 0,
+    created_at: createdAt,
+  };
+}
+
+async function hasDobiusManagedAgentChannelMessageMarker(args: unknown): Promise<boolean> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const channelId = requiredText(input.channelId, "channel id");
+  const marker = requiredText(input.marker, "marker");
+  const agentPubkey = typeof input.agentPubkey === "string" ? input.agentPubkey.toLowerCase() : null;
+  const events = await queryRelay([{ kinds: [9], "#h": [channelId], "#marker": [marker], limit: 50 }]);
+  if (!agentPubkey) return events.length > 0;
+  return events.some((event) => event.pubkey.toLowerCase() === agentPubkey);
+}
+
+// ── chat helpers: relay-wide membership (kind 13534 snapshot; 9030/9031/9032 admin actions) ──
+// Parsing logic is unit-tested in
+// src/main/communications/chat/relay-membership-projection.ts — duplicated
+// here because this vendor bundle cannot import from dobius/src/main.
+const DOBIUS_RELAY_MEMBERSHIP_SNAPSHOT_KIND = 13534;
+const DOBIUS_RELAY_MEMBER_ADD_KIND = 9030;
+const DOBIUS_RELAY_MEMBER_REMOVE_KIND = 9031;
+const DOBIUS_RELAY_MEMBER_ROLE_CHANGE_KIND = 9032;
+
+function relayMemberRoleFromTag(name: string, maybeRoleOrRelay?: string, maybePTagRole?: string): string {
+  const rawRole = name === "member" ? maybeRoleOrRelay : maybePTagRole;
+  return rawRole === "owner" || rawRole === "admin" || rawRole === "member" ? rawRole : "member";
+}
+
+function relayMembersFromSnapshot(snapshot: RelayEventRecord | null): unknown[] {
+  if (!snapshot) return [];
+  const createdAtIso = new Date(snapshot.created_at * 1000).toISOString();
+  const seen = new Set<string>();
+  const members: unknown[] = [];
+  for (const tag of snapshot.tags) {
+    const [name, rawPubkey, maybeRoleOrRelay, maybePTagRole] = tag;
+    if (name !== "member" && name !== "p") continue;
+    if (!rawPubkey) continue;
+    const pubkey = rawPubkey.toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(pubkey) || seen.has(pubkey)) continue;
+    seen.add(pubkey);
+    members.push({
+      pubkey,
+      role: relayMemberRoleFromTag(name, maybeRoleOrRelay, maybePTagRole),
+      added_by: null,
+      created_at: createdAtIso,
+    });
+  }
+  return members;
+}
+
+async function latestRelayMembershipSnapshot(): Promise<RelayEventRecord | null> {
+  const events = await queryRelay([{ kinds: [DOBIUS_RELAY_MEMBERSHIP_SNAPSHOT_KIND], limit: 20 }]);
+  return events.sort((a, b) => b.created_at - a.created_at)[0] ?? null;
+}
+
+async function publishDobiusRelayAdminEvent(kind: number, targetPubkey: string, role?: string): Promise<void> {
+  const tags: string[][] = [["p", requiredText(targetPubkey, "target pubkey").trim().toLowerCase()]];
+  if (role) tags.push(["role", role]);
+  const submission = await submitRelayEvent(signedEvent({ kind, content: "", tags }));
+  if (submission.accepted === false) {
+    throw new Error(submission.message || "The relay rejected the membership update.");
+  }
+}
+
+// ── chat helpers: presence (get_presence) ──────────────────────────────────
+// Bucketing tested in src/main/communications/chat/presence-projection.ts.
+const DOBIUS_PRESENCE_ONLINE_WINDOW_SECONDS = 5 * 60;
+const DOBIUS_PRESENCE_AWAY_WINDOW_SECONDS = 30 * 60;
+
+function presenceStatusFromLastSeen(lastSeenCreatedAt: number | null, nowSeconds: number): string {
+  if (lastSeenCreatedAt === null) return "offline";
+  const age = nowSeconds - lastSeenCreatedAt;
+  if (age <= DOBIUS_PRESENCE_ONLINE_WINDOW_SECONDS) return "online";
+  if (age <= DOBIUS_PRESENCE_AWAY_WINDOW_SECONDS) return "away";
+  return "offline";
+}
+
+// ── chat helpers: DM visibility (hide_dm; reader already shipped in loadRelayChannels) ──
+// Tested in src/main/communications/chat/dm-visibility-projection.ts.
+function buildHiddenDmSnapshotTags(selfPubkey: string, existingTags: string[][], channelIdToHide: string): string[][] {
+  const hidden = new Set(existingTags.filter((tag) => tag[0] === "h" && tag[1]).map((tag) => tag[1]));
+  hidden.add(channelIdToHide);
+  return [["p", selfPubkey], ...[...hidden].sort().map((id) => ["h", id])];
+}
+
+// ── chat helpers: forum posts/threads (kind 45001 posts, kind 45003 comments) ──
+// Linkage/summary logic tested in src/main/communications/chat/forum-thread-projection.ts.
+const DOBIUS_FORUM_POST_KIND = 45001;
+const DOBIUS_FORUM_COMMENT_KIND = 45003;
+
+function forumReplyLinkage(event: RelayEventRecord): { parentEventId: string | null; rootEventId: string | null; depth: number } {
+  const rootTag = event.tags.find((tag) => tag[0] === "e" && tag[3] === "root");
+  const replyTag = event.tags.find((tag) => tag[0] === "e" && tag[3] === "reply");
+  const parentEventId = replyTag?.[1] ?? rootTag?.[1] ?? null;
+  const rootEventId = rootTag?.[1] ?? replyTag?.[1] ?? null;
+  const depth = parentEventId ? (rootEventId === parentEventId ? 1 : 2) : 0;
+  return { parentEventId, rootEventId, depth };
+}
+
+async function forumThreadSummary(rootEventId: string): Promise<unknown | null> {
+  const replies = await queryRelay([{ kinds: [DOBIUS_FORUM_COMMENT_KIND], "#e": [rootEventId], limit: 5000 }]);
+  if (replies.length === 0) return null;
+  return {
+    reply_count: replies.length,
+    descendant_count: replies.length,
+    last_reply_at: replies.reduce((max, reply) => Math.max(max, reply.created_at), 0),
+    participants: [...new Set(replies.map((reply) => reply.pubkey))],
+  };
+}
+
+async function forumPostFromEvent(post: RelayEventRecord): Promise<unknown> {
+  return {
+    event_id: post.id,
+    pubkey: post.pubkey,
+    content: post.content,
+    kind: post.kind,
+    created_at: post.created_at,
+    channel_id: eventTag(post, "h") ?? "",
+    tags: post.tags,
+    sig: "",
+    thread_summary: await forumThreadSummary(post.id),
+    reactions: null,
+  };
+}
+
+// ── chat command handlers ───────────────────────────────────────────────────
+
+async function getDobiusChannelMessagesBefore(args: unknown): Promise<unknown> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const channelId = requiredText(input.channelId, "channel id");
+  const before = typeof input.before === "number" ? input.before : Number.POSITIVE_INFINITY;
+  const beforeId = typeof input.beforeId === "string" ? input.beforeId : "";
+  const limit = typeof input.limit === "number" ? Math.max(1, Math.min(input.limit, 200)) : 50;
+
+  // The relay has no server-side `until` cursor (see relay-filters.ts), so
+  // pagination is computed client-side over the channel's recent window.
+  // Tested in src/main/communications/chat/channel-message-pagination.ts.
+  const events = await queryRelay([{ kinds: DOBIUS_CHANNEL_MESSAGE_KINDS, "#h": [channelId], limit: 5000 }]);
+  const olderNewestFirst = events.filter(
+    (event) => event.created_at < before || (event.created_at === before && event.id > beforeId),
+  );
+  const page = olderNewestFirst.slice(0, limit);
+  const oldest = page[page.length - 1];
+  return {
+    events: [...page].reverse(),
+    next_cursor: page.length === limit && oldest ? { created_at: oldest.created_at, event_id: oldest.id } : null,
+  };
+}
+
+/**
+ * A fresh Dobius relay has no 13534 snapshot at all (nothing turns
+ * 9030/9031/9032 into one — see the const block above). That is not "zero
+ * members": a local, single-owner relay's own identity is definitionally
+ * its owner from the moment it exists. Once a real snapshot has been
+ * published, it is the source of truth and this bootstrap row is not used.
+ * Tested as `bootstrapOwnerMember` in
+ * src/main/communications/chat/relay-membership-projection.ts.
+ */
+function bootstrapOwnerMemberRow(selfPubkey: string): unknown {
+  return { pubkey: selfPubkey, role: "owner", added_by: null, created_at: new Date(0).toISOString() };
+}
+
+async function listDobiusRelayMembers(): Promise<unknown> {
+  const snapshot = await latestRelayMembershipSnapshot();
+  if (!snapshot) {
+    return { members: [bootstrapOwnerMemberRow(localIdentity().pubkey.toLowerCase())] };
+  }
+  return { members: relayMembersFromSnapshot(snapshot) };
+}
+
+async function getMyDobiusRelayMembership(): Promise<unknown> {
+  const selfPubkey = localIdentity().pubkey.toLowerCase();
+  const snapshot = await latestRelayMembershipSnapshot();
+  if (!snapshot) {
+    return bootstrapOwnerMemberRow(selfPubkey);
+  }
+  const members = relayMembersFromSnapshot(snapshot) as Array<{ pubkey: string }>;
+  const mine = members.find((member) => member.pubkey === selfPubkey);
+  if (!mine) {
+    // A snapshot exists and explicitly does not include this pubkey — matches
+    // the 404 contract `getMyRelayMembership` (tauri.ts) expects.
+    throw new Error("relay returned 404: no relay membership recorded for this pubkey");
+  }
+  return mine;
+}
+
+async function getDobiusContactList(args: unknown): Promise<unknown> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const pubkey = requiredText(input.pubkey, "pubkey").toLowerCase();
+  const [event] = await queryRelay([{ kinds: [3], authors: [pubkey], limit: 1 }]);
+  return {
+    id: event?.id ?? "",
+    pubkey,
+    created_at: event?.created_at ?? 0,
+    tags: event?.tags ?? [],
+    content: event?.content ?? "",
+  };
+}
+
+async function setDobiusContactList(args: unknown): Promise<unknown> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const rawContacts = Array.isArray(input.contacts) ? input.contacts : [];
+  const tags = rawContacts
+    .filter((contact): contact is Record<string, unknown> => Boolean(contact) && typeof contact === "object")
+    .map((contact) => [
+      "p",
+      requiredText(contact.pubkey, "contact pubkey").toLowerCase(),
+      typeof contact.relay_url === "string" ? contact.relay_url : "",
+      typeof contact.petname === "string" ? contact.petname : "",
+    ]);
+  const submission = await submitRelayEvent(signedEvent({ kind: 3, content: "", tags }));
+  if (submission.accepted === false) {
+    throw new Error(submission.message || "The relay rejected the contact list update.");
+  }
+  return { event_id: submission.event_id ?? "", accepted: submission.accepted ?? true, message: submission.message ?? "" };
+}
+
+async function getDobiusForumPosts(args: unknown): Promise<unknown> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const channelId = requiredText(input.channelId, "channel id");
+  const limit = typeof input.limit === "number" ? Math.max(1, Math.min(input.limit, 200)) : 50;
+  const before = typeof input.before === "number" ? input.before : null;
+
+  const events = await queryRelay([{ kinds: [DOBIUS_FORUM_POST_KIND], "#h": [channelId], limit: 5000 }]);
+  const filtered = before === null ? events : events.filter((event) => event.created_at < before);
+  const page = filtered.slice(0, limit);
+  const messages = await Promise.all(page.map((post) => forumPostFromEvent(post)));
+  const oldest = page[page.length - 1];
+  return {
+    messages,
+    next_cursor: page.length === limit && oldest ? oldest.created_at : null,
+  };
+}
+
+async function getDobiusForumThread(args: unknown): Promise<unknown> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const eventId = requiredText(input.eventId, "event id");
+  const limit = typeof input.limit === "number" ? Math.max(1, Math.min(input.limit, 500)) : 100;
+
+  const [root] = await queryRelay([{ ids: [eventId], limit: 1 }]);
+  if (!root) throw new Error(`Forum post not found: ${eventId}`);
+
+  const replyEvents = (
+    await queryRelay([{ kinds: [DOBIUS_FORUM_COMMENT_KIND], "#e": [eventId], limit: 5000 }])
+  ).sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));
+  const page = replyEvents.slice(0, limit);
+
+  return {
+    root: await forumPostFromEvent(root),
+    replies: page.map((reply) => {
+      const linkage = forumReplyLinkage(reply);
+      return {
+        event_id: reply.id,
+        pubkey: reply.pubkey,
+        content: reply.content,
+        kind: reply.kind,
+        created_at: reply.created_at,
+        channel_id: eventTag(reply, "h") ?? "",
+        tags: reply.tags,
+        sig: "",
+        parent_event_id: linkage.parentEventId,
+        root_event_id: linkage.rootEventId,
+        depth: linkage.depth,
+        broadcast: false,
+        reactions: null,
+      };
+    }),
+    total_replies: replyEvents.length,
+    next_cursor: null,
+  };
+}
+
+async function getDobiusPresence(args: unknown): Promise<unknown> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const pubkeys = normalizedParticipantPubkeys(input.pubkeys);
+  const selfPubkey = localIdentity().pubkey.toLowerCase();
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const result: Record<string, string> = {};
+  await Promise.all(
+    pubkeys.map(async (pubkey) => {
+      if (pubkey === selfPubkey) {
+        result[pubkey] = "online";
+        return;
+      }
+      const [latest] = await queryRelay([{ authors: [pubkey], limit: 1 }]);
+      result[pubkey] = presenceStatusFromLastSeen(latest?.created_at ?? null, nowSeconds);
+    }),
+  );
+  return result;
+}
+
+async function hideDobiusDm(args: unknown): Promise<void> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const channelId = requiredText(input.channelId, "channel id");
+  const selfPubkey = localIdentity().pubkey.toLowerCase();
+  const [existing] = await queryRelay([{ kinds: [30622], authors: [selfPubkey], limit: 1 }]);
+  const submission = await submitRelayEvent(
+    signedEvent({ kind: 30622, content: "", tags: buildHiddenDmSnapshotTags(selfPubkey, existing?.tags ?? [], channelId) }),
+  );
+  if (submission.accepted === false) {
+    throw new Error(submission.message || "The relay rejected hiding the DM.");
+  }
+}
+
+async function listDobiusRelayAgents(): Promise<unknown> {
+  const [agentResponse, runResponse, memberships] = await Promise.all([
+    invokeDobiusRuntime("agent.list"),
+    invokeDobiusRuntime("agent.runs"),
+    queryRelay([{ kinds: [DOBIUS_CHANNEL_MEMBERSHIP_KIND], limit: 1000 }]),
+  ]);
+  const agents = recordsAt(agentResponse, "agents").filter(isDobiusAgentRecord);
+  const runs = recordsAt(runResponse, "runs").filter(isDobiusAgentRunRecord);
+  const runningAgentIds = new Set(runs.filter((run) => run.status === "running").map((run) => run.agentId));
+
+  const latestByChannel = new Map<string, RelayEventRecord>();
+  for (const event of memberships) {
+    const channelId = eventTag(event, "d");
+    if (!channelId) continue;
+    const existing = latestByChannel.get(channelId);
+    if (!existing || event.created_at > existing.created_at) latestByChannel.set(channelId, event);
+  }
+
+  return Promise.all(
+    agents.map(async (agent) => {
+      const pubkey = await projectionPubkey(agent.id);
+      const channelIds = [...latestByChannel.entries()]
+        .filter(([, event]) => event.tags.some((tag) => tag[0] === "p" && tag[1]?.toLowerCase() === pubkey))
+        .map(([channelId]) => channelId);
+      return {
+        pubkey,
+        name: agent.name,
+        agent_type: agent.engine === "codex" ? "codex" : "claude",
+        channels: channelIds,
+        channel_ids: channelIds,
+        capabilities: [],
+        status: runningAgentIds.has(agent.id) ? "online" : "offline",
+        respond_to: "owner-only",
+        respond_to_allowlist: [],
+      };
+    }),
+  );
+}
+
+async function fetchDobiusLinkPreviewTitle(args: unknown): Promise<string | null> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const href = typeof input.href === "string" ? input.href : "";
+  if (!href) return null;
+  try {
+    const response = await fetch(href);
+    if (!response.ok) return null;
+    const html = await response.text();
+    const title = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim();
+    return title || null;
+  } catch {
+    // Network failure, or a CORS-blocked read (most third-party pages don't
+    // send Access-Control-Allow-Origin) — callers already treat `null` as
+    // "keep the generic fallback title".
+    return null;
+  }
+}
+
+async function updateDobiusProfileAtRelay(args: unknown): Promise<DobiusRelayProfile> {
+  const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+  const expectedPubkey = requiredText(input.expectedPubkey, "expected pubkey").toLowerCase();
+  const avatarUrl = requiredText(input.avatarUrl, "avatar url");
+  const identity = localIdentity();
+  if (identity.pubkey.toLowerCase() !== expectedPubkey) {
+    // The active identity changed since this sync was queued — refuse the
+    // stale write, matching the guard `avatarProfileSync.ts` relies on.
+    throw new Error("Active identity no longer matches the expected pubkey for this avatar sync.");
+  }
+  // Dobius only ever talks to its own embedded relay (DOBIUS_RELAY_HTTP_URL);
+  // `input.relayUrl` is accepted for signature parity with hosted Buzz but unused.
+  const current = await loadDobiusProfile();
+  const content = JSON.stringify({
+    display_name: current.display_name ?? undefined,
+    name: current.display_name ?? undefined,
+    picture: avatarUrl,
+    about: current.about ?? undefined,
+    nip05: current.nip05_handle ?? undefined,
+  });
+  await submitRelayEvent(signedEvent({ kind: 0, content, tags: [] }));
+  return profileFromEvent({
+    id: "pending-profile",
+    pubkey: identity.pubkey,
+    created_at: Math.floor(Date.now() / 1000),
+    kind: 0,
+    tags: [],
+    content,
+  });
+}
+
+// ── huddles helpers ─────────────────────────────────────────────────────────
+// huddle.* RPC methods throw plain Errors (no .code) for expected conditions
+// like "already in phase X". The dispatcher wraps those as
+// `runtime_error: <message>` when they cross invokeDobiusRuntime.
+// HuddleContext.tsx's isRedundantHuddlePhaseError regex matches against the
+// raw message with no prefix, so strip the stable "runtime_error: " prefix
+// before re-throwing — otherwise the redundant-start/join UI suppression
+// silently breaks.
+function unwrapHuddleRuntimeError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(message.replace(/^runtime_error: /, ""));
+}
+
+const DOBIUS_HUDDLE_OUTPUT_DEVICE_KEY = "dobius-huddle-output-device";
 
 export async function invokeDobiusBackedTauriCommand(
   command: string,
@@ -1692,9 +2296,14 @@ export async function invokeDobiusBackedTauriCommand(
       return { handled: true, result: undefined };
     }
     case "list_teams":
-      // Dobius has no persistent team entity yet. Return the authoritative
-      // empty state so upstream E2E fixtures can never leak into production.
-      return { handled: true, result: [] };
+      return { handled: true, result: await loadDobiusTeams() };
+    case "create_team":
+      return { handled: true, result: await createDobiusTeam(args) };
+    case "update_team":
+      return { handled: true, result: await updateDobiusTeam(args) };
+    case "delete_team":
+      await deleteDobiusTeam(args);
+      return { handled: true, result: undefined };
     case "create_channel":
       return { handled: true, result: await createDobiusChannel(args) };
     case "get_channel_details":
@@ -1734,6 +2343,878 @@ export async function invokeDobiusBackedTauriCommand(
       return { handled: true, result: await ensureDobiusStarterChannels() };
     case "get_channel_window":
       return { handled: true, result: await getDobiusChannelWindow(args) };
+
+    // ── chat: channels-membership / messages-dm / relay-lifecycle ──────────
+    case "get_default_relay_url":
+      return { handled: true, result: DOBIUS_RELAY_WEBSOCKET_URL };
+    case "auto_connect_default_relay_enabled":
+      return { handled: true, result: true };
+    case "relay_reconnect_hook_configured":
+      // No browser-based transport-recovery hook exists for a local
+      // embedded relay (see relayReconnectController.ts phase 2) — matches
+      // the e2e test bridge's own default (testing/e2eBridge.ts).
+      return { handled: true, result: false };
+    case "relay_reconnect_hook":
+      // Matches the void-return convention of every other fire-and-forget
+      // case in this switch (e.g. "leave_channel", "set_channel_topic"):
+      // `result: undefined`, not `null`.
+      return { handled: true, result: undefined };
+    case "get_channel_messages_before":
+      return { handled: true, result: await getDobiusChannelMessagesBefore(args) };
+    case "list_relay_members":
+      return { handled: true, result: await listDobiusRelayMembers() };
+    case "get_my_relay_membership":
+      return { handled: true, result: await getMyDobiusRelayMembership() };
+    case "add_relay_member": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await publishDobiusRelayAdminEvent(
+        DOBIUS_RELAY_MEMBER_ADD_KIND,
+        requiredText(input.targetPubkey, "target pubkey"),
+        typeof input.role === "string" ? input.role : undefined,
+      );
+      return { handled: true, result: undefined };
+    }
+    case "remove_relay_member": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await publishDobiusRelayAdminEvent(DOBIUS_RELAY_MEMBER_REMOVE_KIND, requiredText(input.targetPubkey, "target pubkey"));
+      return { handled: true, result: undefined };
+    }
+    case "change_relay_member_role": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await publishDobiusRelayAdminEvent(
+        DOBIUS_RELAY_MEMBER_ROLE_CHANGE_KIND,
+        requiredText(input.targetPubkey, "target pubkey"),
+        requiredText(input.newRole, "new role"),
+      );
+      return { handled: true, result: undefined };
+    }
+    case "relay_requires_membership":
+      // Dobius's relay is single-owner and never publishes a kind:13534
+      // snapshot (see relayMembers.ts: "Open relays do not publish
+      // kind:13534") — there is no membership gate to enforce.
+      return { handled: true, result: false };
+    case "get_contact_list":
+      return { handled: true, result: await getDobiusContactList(args) };
+    case "set_contact_list":
+      return { handled: true, result: await setDobiusContactList(args) };
+    case "get_forum_posts":
+      return { handled: true, result: await getDobiusForumPosts(args) };
+    case "get_forum_thread":
+      return { handled: true, result: await getDobiusForumThread(args) };
+    case "get_presence":
+      return { handled: true, result: await getDobiusPresence(args) };
+    case "get_relay_self":
+      // Dobius's relay has no NIP-11 info document, so it advertises no
+      // "self" pubkey — see relay-server.ts KNOWN_PATHS (only POST /query,
+      // POST /events; no GET route at all). `null` is the documented
+      // "relay advertises none" answer.
+      return { handled: true, result: null };
+    case "hide_dm":
+      await hideDobiusDm(args);
+      return { handled: true, result: undefined };
+    case "list_relay_agents":
+      return { handled: true, result: await listDobiusRelayAgents() };
+    case "fetch_join_policy":
+      // Dobius's relay has no /api/join-policy route and no invite feature
+      // — the documented answer for "relay predates join-policy support"
+      // (see invites.ts getJoinPolicy's 404 → null branch).
+      return { handled: true, result: null };
+    case "fetch_link_preview_title":
+      return { handled: true, result: await fetchDobiusLinkPreviewTitle(args) };
+    case "update_profile_at_relay":
+      return { handled: true, result: await updateDobiusProfileAtRelay(args) };
+
+    // ── identity-keychain ────────────────────────────────────────────────
+    case "archive_events": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const rawCandidates = Array.isArray(input.candidates) ? input.candidates : [];
+      const candidates = rawCandidates.map((c: Record<string, unknown>) => {
+        const matchedScope = c.matched_scope && typeof c.matched_scope === "object"
+          ? (c.matched_scope as Record<string, unknown>)
+          : {};
+        return {
+          rawEventJson: c.raw_event_json,
+          matchedScope: {
+            scopeType: matchedScope.scope_type,
+            scopeValue: matchedScope.scope_value,
+          },
+        };
+      });
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("communications.identity.archiveEvents", { candidates }),
+      };
+    }
+    case "read_archived_events": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const events = (await invokeDobiusRuntime("communications.identity.readArchivedEvents", {
+        scopeType: input.scopeType,
+        scopeValue: input.scopeValue,
+        kinds: input.kinds ?? null,
+        before:
+          input.beforeCreatedAt != null && input.beforeId != null
+            ? { createdAt: input.beforeCreatedAt, id: input.beforeId }
+            : null,
+        limit: input.limit ?? undefined,
+      })) as unknown[];
+      return { handled: true, result: events.map((e) => JSON.stringify(e)) };
+    }
+    case "archive_identity": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("communications.identity.archiveIdentity", input.req);
+      return { handled: true, result: undefined };
+    }
+    case "unarchive_identity": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("communications.identity.unarchiveIdentity", input.req);
+      return { handled: true, result: undefined };
+    }
+    case "list_archived_identities":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("communications.identity.listArchivedIdentities"),
+      };
+    case "resolve_oa_owner": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const owner = (await invokeDobiusRuntime("communications.identity.resolveOaOwner", {
+        targetPubkey: input.targetPubkey,
+      })) as { owner: string; isMe: boolean } | null;
+      return {
+        handled: true,
+        result: owner ? { owner: owner.owner, is_me: owner.isMe } : null,
+      };
+    }
+    case "persist_current_identity": {
+      const identity = (await invokeDobiusRuntime("communications.identity.persistCurrentIdentity")) as {
+        pubkey: string;
+        displayName: string;
+        storage?: string;
+        lost?: boolean;
+        locked?: boolean;
+        resetFailed?: boolean;
+      };
+      return {
+        handled: true,
+        result: {
+          pubkey: identity.pubkey,
+          display_name: identity.displayName,
+          storage: identity.storage,
+          lost: identity.lost,
+          locked: identity.locked,
+          reset_failed: identity.resetFailed,
+        },
+      };
+    }
+    case "sign_out":
+      await invokeDobiusRuntime("communications.identity.signOut");
+      return { handled: true, result: undefined };
+    case "get_legacy_workspace_storage":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("communications.identity.getLegacyWorkspaceStorage"),
+      };
+    case "sign_nostr_identity_binding":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("communications.identity.signNostrIdentityBinding", args),
+      };
+    // get_nsec / import_identity: deliberately ignore any nsec/password in
+    // `args` — the secret is collected/shown by a trusted main-process
+    // window, never by this webview. See the build report's KEY_SAFETY notes.
+    case "get_nsec":
+      await invokeDobiusRuntime("communications.identity.exportNsec");
+      // Contract change from upstream Buzz: this used to resolve to the raw
+      // nsec string. It no longer can — update any caller that expected a
+      // string here to just await this call for its side effect instead.
+      return { handled: true, result: undefined };
+    case "import_identity": {
+      const identity = (await invokeDobiusRuntime("communications.identity.importIdentity")) as
+        | { cancelled: true }
+        | {
+            cancelled: false;
+            identity: { pubkey: string; displayName: string; storage?: string; lost?: boolean; locked?: boolean; resetFailed?: boolean };
+          };
+      if (identity.cancelled) {
+        throw new Error("Identity import was cancelled");
+      }
+      return {
+        handled: true,
+        result: {
+          pubkey: identity.identity.pubkey,
+          display_name: identity.identity.displayName,
+          storage: identity.identity.storage,
+          lost: identity.identity.lost,
+          locked: identity.identity.locked,
+          reset_failed: identity.identity.resetFailed,
+        },
+      };
+    }
+    case "create_ncryptsec_backup": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("communications.identity.createNcryptsecBackup", {
+          password: input.password,
+        }),
+      };
+    }
+    case "save_ncryptsec_copy": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("communications.identity.saveNcryptsecCopy", {
+          ncryptsec: input.ncryptsec,
+        }),
+      };
+    }
+    case "verify_ncryptsec_backup": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("communications.identity.verifyNcryptsecBackup", {
+          ncryptsec: input.ncryptsec,
+          password: input.password,
+        }),
+      };
+    }
+    case "generate_backup_passphrase":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("communications.identity.generateBackupPassphrase", args ?? {}),
+      };
+    case "nip44_encrypt_to_self": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("communications.identity.nip44EncryptToSelf", {
+          plaintext: input.plaintext,
+        }),
+      };
+    }
+    case "nip44_decrypt_from_self": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("communications.identity.nip44DecryptFromSelf", {
+          payload: input.ciphertext,
+        }),
+      };
+    }
+
+    // ── agent-lifecycle / agent-provider-config / agent-approvals ──────────
+    case "decrypt_observer_event": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const eventJson = requiredText(input.eventJson, "observer event");
+      const event = JSON.parse(eventJson) as RelayEventRecord;
+      const me = localIdentity();
+      const conversationKey = nip44.v2.utils.getConversationKey(
+        hexToBytes(me.privateKey),
+        event.pubkey,
+      );
+      const plaintext = nip44.v2.decrypt(event.content, conversationKey);
+      return { handled: true, result: JSON.parse(plaintext) };
+    }
+    case "build_observer_control_event": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const agentPubkey = requiredText(input.agentPubkey, "agent pubkey").toLowerCase();
+      const me = localIdentity();
+      const conversationKey = nip44.v2.utils.getConversationKey(
+        hexToBytes(me.privateKey),
+        agentPubkey,
+      );
+      const content = nip44.v2.encrypt(JSON.stringify(input.payload ?? {}), conversationKey);
+      const event = finalizeEvent(
+        {
+          kind: KIND_AGENT_OBSERVER_FRAME,
+          content,
+          tags: [["p", agentPubkey], ["frame", "control"]],
+          created_at: Math.floor(Date.now() / 1000),
+        },
+        hexToBytes(me.privateKey),
+      );
+      return { handled: true, result: JSON.stringify(event) };
+    }
+    case "index_observer_channel_id": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const entries = Array.isArray(input.entries) ? input.entries : [];
+      await invokeDobiusRuntime("agentObserverIndex.write", { entries });
+      return { handled: true, result: undefined };
+    }
+    case "read_archived_observer_events_for_channel": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const channelId = requiredText(input.channelId, "channel id");
+      const before =
+        typeof input.beforeCreatedAt === "number" && typeof input.beforeId === "string"
+          ? { createdAt: input.beforeCreatedAt, id: input.beforeId }
+          : null;
+      const limit = typeof input.limit === "number" ? input.limit : undefined;
+      await invokeDobiusRuntime("agentObserverIndex.readForChannel", { channelId, before, limit });
+      // Content hydration blocked on the identity-keychain raw archive (no
+      // raw event body is stored by the index — see the build report's
+      // OBSERVER section for the follow-up this depends on).
+      return { handled: true, result: [] };
+    }
+    case "agent_metric_archive_default_enabled":
+      return { handled: true, result: false };
+    case "observer_archive_default_enabled":
+      return { handled: true, result: false };
+    case "get_baked_build_env":
+      return { handled: true, result: [] };
+    case "get_baked_build_env_keys":
+      return { handled: true, result: [] };
+    case "get_runtime_file_config":
+      return { handled: true, result: null };
+    case "discover_backend_providers":
+      return { handled: true, result: [] };
+    case "probe_backend_provider":
+      return {
+        handled: true,
+        result: {
+          ok: false,
+          description:
+            "Dobius does not support external backend-provider binaries. Connect a Claude or Codex account in Settings instead.",
+        },
+      };
+    case "discover_acp_auth_methods":
+      return { handled: true, result: { methods: [] } };
+    case "connect_acp_runtime": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const request =
+        input.request && typeof input.request === "object"
+          ? (input.request as Record<string, unknown>)
+          : {};
+      const runtime = parseRuntimeSelection(request.runtimeId);
+      await invokeDobiusRuntime(
+        runtime.engine === "codex" ? "accounts.selectCodex" : "accounts.selectClaude",
+        { accountId: runtime.accountId },
+      );
+      return { handled: true, result: { launched: true } };
+    }
+    case "discover_managed_agent_prereqs": {
+      const outer = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const input =
+        outer.input && typeof outer.input === "object"
+          ? (outer.input as Record<string, unknown>)
+          : {};
+      const acpCommand = typeof input.acpCommand === "string" && input.acpCommand ? input.acpCommand : "claude";
+      const mcpCommand = typeof input.mcpCommand === "string" ? input.mcpCommand : "";
+      return {
+        handled: true,
+        result: {
+          acp: { command: acpCommand, resolved_path: acpCommand, available: true },
+          mcp: { command: mcpCommand, resolved_path: null, available: true },
+        },
+      };
+    }
+    case "get_agent_models": {
+      await managedAgentByPubkey(args);
+      return {
+        handled: true,
+        result: {
+          agentName: "Dobius native agent",
+          agentVersion: "1",
+          models: [],
+          agentDefaultModel: null,
+          selectedModel: null,
+          supportsSwitching: false,
+        },
+      };
+    }
+    case "get_model_status": {
+      const response = await invokeDobiusRuntime("speech.models.list");
+      const record = response as Record<string, unknown>;
+      const models = Array.isArray(record.models) ? (record.models as Record<string, unknown>[]) : [];
+      const selectedId = typeof record.selectedModelId === "string" ? record.selectedModelId : "";
+      const selected = models.find((m) => m.id === selectedId) ?? models[0];
+      const sttStatus = (): unknown => {
+        if (!selected) return "unavailable";
+        if (selected.status === "ready") return "ready";
+        if (selected.status === "downloading") {
+          const progress = typeof selected.progress === "number" ? selected.progress : 0;
+          return { downloading: { progress_percent: Math.round(progress * 100) } };
+        }
+        if (selected.status === "error") return { error: "download failed" };
+        return "pending";
+      };
+      return { handled: true, result: { stt: sttStatus(), tts: "unavailable" } };
+    }
+    case "get_agent_config_surface": {
+      const agent = await managedAgentByPubkey(args);
+      return {
+        handled: true,
+        result: {
+          runtimeId: agent.runtime,
+          runtimeLabel: agent.runtime === "codex" ? "Codex" : "Claude SDK",
+          isPreSpawn: agent.status !== "running",
+          normalized: { model: agent.model, provider: agent.provider },
+          advanced: [],
+          extensions: [],
+          sources: {},
+        },
+      };
+    }
+    case "get_agent_memory": {
+      await managedAgentByPubkey(args);
+      return {
+        handled: true,
+        result: { core: null, memories: [], truncated: false, fetchedAt: Math.floor(Date.now() / 1000) },
+      };
+    }
+    case "get_managed_agent_log": {
+      const agent = await managedAgentByPubkey(args);
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const lineCount = typeof input.lineCount === "number" ? input.lineCount : 200;
+      const runsResponse = await invokeDobiusRuntime("agent.runs", { agentId: agent.backend_agent_id });
+      const runs = recordsAt(runsResponse, "runs") as Record<string, unknown>[];
+      const lines = runs
+        .slice()
+        .sort((a, b) => (Number(b.startedAt) || 0) - (Number(a.startedAt) || 0))
+        .map((run) => {
+          const started = new Date(Number(run.startedAt) || 0).toISOString();
+          const status = typeof run.status === "string" ? run.status : "unknown";
+          const summary = typeof run.summary === "string" ? run.summary : "";
+          return `[${started}] ${status}${summary ? `: ${summary}` : ""}`;
+        })
+        .slice(0, lineCount);
+      return {
+        handled: true,
+        result: {
+          content: lines.length > 0 ? lines.join("\n") : "No runs recorded yet for this agent.",
+          log_path: "",
+        },
+      };
+    }
+    case "put_agent_session_config": {
+      const agent = await managedAgentByPubkey(args);
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const payload =
+        input.payload && typeof input.payload === "object"
+          ? (input.payload as Record<string, unknown>)
+          : {};
+      const updates: Record<string, unknown> = {};
+      if (typeof payload.model === "string") updates.model = payload.model;
+      if (typeof payload.systemPrompt === "string") updates.systemPrompt = payload.systemPrompt;
+      if (typeof payload.provider === "string") updates.accountId = payload.provider;
+      if (Object.keys(updates).length > 0) {
+        await invokeDobiusRuntime("agent.update", { id: agent.backend_agent_id, updates });
+      }
+      return { handled: true, result: undefined };
+    }
+    case "update_managed_agent": {
+      const outer = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const input =
+        outer.input && typeof outer.input === "object" ? (outer.input as Record<string, unknown>) : {};
+      const pubkey = requiredText(input.pubkey, "agent pubkey").toLowerCase();
+      const agent = await managedAgentByPubkey({ pubkey });
+      const updates: Record<string, unknown> = {};
+      if (typeof input.name === "string") updates.name = input.name;
+      if (typeof input.model === "string") updates.model = input.model;
+      if (typeof input.provider === "string") updates.accountId = input.provider;
+      if (typeof input.systemPrompt === "string") updates.systemPrompt = input.systemPrompt;
+      const response = await invokeDobiusRuntime("agent.update", {
+        id: agent.backend_agent_id,
+        updates,
+      });
+      const updatedAgent = objectAt(response, "agent");
+      if (!isDobiusAgentRecord(updatedAgent)) {
+        throw new Error("Dobius returned an invalid updated agent");
+      }
+      const projected = (await loadDobiusManagedAgents()).find(
+        (candidate) => candidate.backend_agent_id === updatedAgent.id,
+      );
+      return { handled: true, result: { agent: projected ?? agent, profile_sync_error: null } };
+    }
+    case "delete_managed_agent": {
+      const agent = await managedAgentByPubkey(args);
+      await invokeDobiusRuntime("agent.delete", { id: agent.backend_agent_id });
+      return { handled: true, result: undefined };
+    }
+    case "start_managed_agent_runtime":
+    case "restart_managed_agent_runtime": {
+      const agent = await startDobiusManagedAgent(args);
+      return { handled: true, result: managedAgentRuntimeStatus(agent) };
+    }
+    case "stop_managed_agent_runtime": {
+      const agent = await stopDobiusManagedAgent(args);
+      return { handled: true, result: managedAgentRuntimeStatus(agent) };
+    }
+    case "send_managed_agent_channel_message":
+      return { handled: true, result: await sendDobiusManagedAgentChannelMessage(args) };
+    case "has_managed_agent_channel_message_marker":
+      return { handled: true, result: await hasDobiusManagedAgentChannelMessageMarker(args) };
+    case "save_custom_harness": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = await invokeDobiusRuntime("agentHarness.save", {
+        definition: input.definition,
+        originalId: input.originalId ?? null,
+      });
+      const harness = objectAt(response, "harness") as Record<string, unknown>;
+      return {
+        handled: true,
+        result: {
+          id: harness.id,
+          label: harness.label,
+          avatar_url: "",
+          availability: "available",
+          command: harness.command,
+          binary_path: harness.command,
+          default_args: harness.args ?? [],
+          mcp_command: null,
+          model_env_var: null,
+          provider_env_var: null,
+          thinking_env_var: null,
+          install_hint: harness.installHint ?? "",
+          install_instructions_url: harness.installInstructionsUrl ?? "",
+          can_auto_install: false,
+          requires_external_cli: true,
+          underlying_cli_path: null,
+          node_required: false,
+          auth_status: { status: "not_applicable" },
+          login_hint: null,
+          source: "custom",
+        },
+      };
+    }
+    case "delete_custom_harness": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const id = requiredText(input.id, "harness id");
+      await invokeDobiusRuntime("agentHarness.delete", { id });
+      return { handled: true, result: undefined };
+    }
+    case "get_global_agent_config": {
+      const response = await invokeDobiusRuntime("agentConfig.get");
+      return { handled: true, result: objectAt(response, "config") };
+    }
+    case "set_global_agent_config": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = await invokeDobiusRuntime("agentConfig.set", input.config ?? {});
+      const record = response as Record<string, unknown>;
+      return {
+        handled: true,
+        result: {
+          config: objectAt(response, "config"),
+          restarted_count: typeof record.restarted_count === "number" ? record.restarted_count : 0,
+          failed_restart_count:
+            typeof record.failed_restart_count === "number" ? record.failed_restart_count : 0,
+        },
+      };
+    }
+    case "set_agent_managed_profiles": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("agentManagedProfiles.set", { enabled: input.enabled === true });
+      return { handled: true, result: undefined };
+    }
+    case "set_managed_agent_auto_restart": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const agent = await managedAgentByPubkey(args);
+      const enabled = input.autoRestartOnConfigChange === true;
+      await invokeDobiusRuntime("agentLocalOverrides.set", {
+        agentId: agent.backend_agent_id,
+        key: "autoRestartOnConfigChange",
+        value: enabled,
+      });
+      return { handled: true, result: { ...agent, auto_restart_on_config_change: enabled } };
+    }
+    case "set_managed_agent_start_on_app_launch": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const agent = await managedAgentByPubkey(args);
+      const enabled = input.startOnAppLaunch === true;
+      await invokeDobiusRuntime("agentLocalOverrides.set", {
+        agentId: agent.backend_agent_id,
+        key: "startOnAppLaunch",
+        value: enabled,
+      });
+      return { handled: true, result: { ...agent, start_on_app_launch: enabled } };
+    }
+    case "set_persona_active": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const id = requiredText(input.id, "agent id");
+      const active = input.active === true;
+      await invokeDobiusRuntime("agentLocalOverrides.set", { agentId: id, key: "active", value: active });
+      const response = await invokeDobiusRuntime("agent.show", { id });
+      const agent = objectAt(response, "agent");
+      if (!isDobiusAgentRecord(agent)) throw new Error("Dobius returned an invalid agent");
+      return { handled: true, result: { ...personaFromAgent(agent), is_active: active } };
+    }
+    case "set_persona_shared": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const id = requiredText(input.id, "agent id");
+      const response = await invokeDobiusRuntime("agent.show", { id });
+      const agent = objectAt(response, "agent");
+      if (!isDobiusAgentRecord(agent)) throw new Error("Dobius returned an invalid agent");
+      return {
+        handled: true,
+        result: {
+          persona: personaFromAgent(agent),
+          publicationStatus: "queued",
+          relayMessage:
+            "Dobius agents are local to this device; there is no community catalog to publish to.",
+        },
+      };
+    }
+    case "update_persona_and_publish": {
+      const persona = await updateDobiusPersona(args);
+      return {
+        handled: true,
+        result: {
+          persona,
+          publicationStatus: "queued",
+          relayMessage:
+            "Saved locally. Dobius agents are local to this device; there is no community catalog to publish to.",
+        },
+      };
+    }
+    case "get_run_approvals": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const runId = requiredText(input.runId, "run id");
+      const response = await invokeDobiusRuntime("agentApprovals.listForRun", { runId });
+      const record = response as Record<string, unknown>;
+      const approvals = Array.isArray(record.approvals)
+        ? (record.approvals as Record<string, unknown>[])
+        : [];
+      return {
+        handled: true,
+        result: approvals.map((approval) => ({
+          token: approval.token,
+          workflow_id: approval.workflowId,
+          run_id: approval.runId,
+          step_id: approval.stepId,
+          step_index: approval.stepIndex,
+          approver_spec: approval.approverSpec,
+          status: approval.status,
+          approver_pubkey: approval.approverPubkey,
+          note: approval.note,
+          expires_at: approval.expiresAt,
+          created_at: approval.createdAt,
+        })),
+      };
+    }
+    case "grant_approval": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const token = requiredText(input.token, "approval token");
+      const response = await invokeDobiusRuntime("agentApprovals.grant", { token });
+      const approval = objectAt(response, "approval") as Record<string, unknown>;
+      return {
+        handled: true,
+        result: {
+          token: approval.token,
+          status: approval.status,
+          run_id: approval.runId,
+          workflow_id: approval.workflowId,
+        },
+      };
+    }
+    case "deny_approval": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const token = requiredText(input.token, "approval token");
+      const note = typeof input.note === "string" ? input.note : undefined;
+      const response = await invokeDobiusRuntime("agentApprovals.deny", { token, note });
+      const approval = objectAt(response, "approval") as Record<string, unknown>;
+      return {
+        handled: true,
+        result: {
+          token: approval.token,
+          status: approval.status,
+          run_id: approval.runId,
+          workflow_id: approval.workflowId,
+        },
+      };
+    }
+    case "install_acp_runtime":
+      throw new Error(
+        "Dobius does not install external agent runtimes. Connect a Claude or Codex account in Settings instead.",
+      );
+    case "put_managed_agent_runtime_lifecycle":
+      throw new Error(
+        "Dobius agents do not run as a separate relay-mesh runtime process; there is no lifecycle to set here.",
+      );
+    case "reconcile_inbound_persona_event":
+      throw new Error(
+        "Dobius agents are local to this device; there is no inbound multi-device persona sync to reconcile.",
+      );
+
+    // ── voice huddles ────────────────────────────────────────────────────
+    case "start_huddle": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const parentChannelId = requiredText(input.parentChannelId, "parent channel id");
+      const memberPubkeys = Array.isArray(input.memberPubkeys)
+        ? input.memberPubkeys.filter((v): v is string => typeof v === "string")
+        : [];
+      const channelName = typeof input.channelName === "string" ? input.channelName : undefined;
+      try {
+        const result = await invokeDobiusRuntime("huddle.start", {
+          parentChannelId,
+          memberPubkeys,
+          channelName,
+          callerPubkey: localIdentity().pubkey,
+        });
+        return { handled: true, result };
+      } catch (e) {
+        throw unwrapHuddleRuntimeError(e);
+      }
+    }
+    case "join_huddle": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const parentChannelId = requiredText(input.parentChannelId, "parent channel id");
+      const ephemeralChannelId = requiredText(input.ephemeralChannelId, "ephemeral channel id");
+      try {
+        const result = await invokeDobiusRuntime("huddle.join", {
+          parentChannelId,
+          ephemeralChannelId,
+          callerPubkey: localIdentity().pubkey,
+        });
+        return { handled: true, result };
+      } catch (e) {
+        throw unwrapHuddleRuntimeError(e);
+      }
+    }
+    case "confirm_huddle_active": {
+      try {
+        return { handled: true, result: await invokeDobiusRuntime("huddle.confirmActive") };
+      } catch (e) {
+        throw unwrapHuddleRuntimeError(e);
+      }
+    }
+    case "leave_huddle":
+      return { handled: true, result: await invokeDobiusRuntime("huddle.leave") };
+    case "end_huddle":
+      return { handled: true, result: await invokeDobiusRuntime("huddle.end") };
+    case "get_huddle_state":
+      return { handled: true, result: await invokeDobiusRuntime("huddle.getState") };
+    case "add_agent_to_huddle": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const pubkey = requiredText(input.agentPubkey, "agent pubkey");
+      try {
+        await invokeDobiusRuntime("huddle.addAgent", { pubkey });
+      } catch (e) {
+        throw unwrapHuddleRuntimeError(e);
+      }
+      // Best-effort: also add the agent to the PARENT channel's persistent
+      // membership. Failure here does not undo the ephemeral add.
+      let parentAdded = false;
+      let parentError: string | null = null;
+      const state = (await invokeDobiusRuntime("huddle.getState")) as {
+        parent_channel_id: string | null;
+      };
+      if (state.parent_channel_id) {
+        try {
+          await addDobiusChannelMembers({ channelId: state.parent_channel_id, pubkeys: [pubkey] });
+          parentAdded = true;
+        } catch (e) {
+          parentError = e instanceof Error ? e.message : String(e);
+        }
+      }
+      return {
+        handled: true,
+        result: { ephemeral_added: true, parent_added: parentAdded, parent_error: parentError },
+      };
+    }
+    case "get_huddle_agent_pubkeys":
+      return { handled: true, result: await invokeDobiusRuntime("huddle.getAgentPubkeys") };
+    case "get_voice_input_mode":
+      return { handled: true, result: await invokeDobiusRuntime("huddle.getVoiceInputMode") };
+    case "set_voice_input_mode": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const mode = input.mode === "push_to_talk" ? "push_to_talk" : "voice_activity";
+      return { handled: true, result: await invokeDobiusRuntime("huddle.setVoiceInputMode", { mode }) };
+    }
+    case "set_huddle_transcription_enabled": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const enabled = input.enabled === true;
+      try {
+        return {
+          handled: true,
+          result: await invokeDobiusRuntime("huddle.setTranscriptionEnabled", { enabled }),
+        };
+      } catch (e) {
+        throw unwrapHuddleRuntimeError(e);
+      }
+    }
+    case "set_tts_enabled": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const enabled = input.enabled === true;
+      try {
+        return { handled: true, result: await invokeDobiusRuntime("huddle.setTtsEnabled", { enabled }) };
+      } catch (e) {
+        throw unwrapHuddleRuntimeError(e);
+      }
+    }
+    case "reconnect_huddle_audio": {
+      try {
+        return { handled: true, result: await invokeDobiusRuntime("huddle.reconnectAudio") };
+      } catch (e) {
+        throw unwrapHuddleRuntimeError(e);
+      }
+    }
+    case "speak_agent_message": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const text = requiredText(input.text, "text to speak");
+      return { handled: true, result: await invokeDobiusRuntime("huddle.speak", { text }) };
+    }
+    case "list_audio_output_devices": {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const outputs = devices.filter((d) => d.kind === "audiooutput");
+      return {
+        handled: true,
+        result: outputs.map((d) => ({
+          name: d.label || (d.deviceId === "default" ? "System Default" : d.deviceId),
+          is_default: d.deviceId === "default",
+        })),
+      };
+    }
+    case "get_audio_output_device":
+      return {
+        handled: true,
+        result: window.localStorage.getItem(DOBIUS_HUDDLE_OUTPUT_DEVICE_KEY) ?? "",
+      };
+    case "set_audio_output_device": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const name = typeof input.name === "string" ? input.name : "";
+      window.localStorage.setItem(DOBIUS_HUDDLE_OUTPUT_DEVICE_KEY, name);
+      return { handled: true, result: undefined };
+    }
+
+    // ── native-ux ────────────────────────────────────────────────────────
+    case "get_os_idle_seconds":
+      return { handled: true, result: await invokeDobiusRuntime("nativeUx.getIdleSeconds") };
+    case "perform_sidebar_default_haptic":
+      await invokeDobiusRuntime("nativeUx.performSidebarHaptic");
+      return { handled: true, result: undefined };
+    case "title_bar_double_click":
+      await invokeDobiusRuntime("nativeUx.titleBarDoubleClick");
+      return { handled: true, result: undefined };
+    case "set_window_vibrancy":
+      await invokeDobiusRuntime("nativeUx.setWindowVibrancy", args);
+      return { handled: true, result: undefined };
+    case "take_tray_actions":
+      return { handled: true, result: await invokeDobiusRuntime("nativeUx.trayTakeActions") };
+    case "requeue_tray_actions":
+      await invokeDobiusRuntime("nativeUx.trayRequeueActions", args);
+      return { handled: true, result: undefined };
+    case "update_tray_agent_activity":
+      await invokeDobiusRuntime("nativeUx.trayUpdateAgentActivity", args);
+      return { handled: true, result: undefined };
+    case "clear_tray_agent_activity":
+      await invokeDobiusRuntime("nativeUx.trayClearAgentActivity");
+      return { handled: true, result: undefined };
+    case "show_native_notification":
+      await invokeDobiusRuntime("nativeUx.showNotification", args);
+      return { handled: true, result: undefined };
+    case "copy_text_to_clipboard":
+      await invokeDobiusRuntime("media.copyTextToClipboard", args);
+      return { handled: true, result: undefined };
+    case "copy_image_to_clipboard":
+      await invokeDobiusRuntime("media.copyImageToClipboard", args);
+      return { handled: true, result: undefined };
+    case "download_file":
+      await invokeDobiusRuntime("media.downloadFile", args);
+      return { handled: true, result: undefined };
+    case "download_image":
+      await invokeDobiusRuntime("media.downloadImage", args);
+      return { handled: true, result: undefined };
+    case "is_auto_update_supported":
+      return { handled: true, result: await invokeDobiusRuntime("updater.isAutoUpdateSupported") };
+
     default:
       return { handled: false };
   }

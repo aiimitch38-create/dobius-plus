@@ -171,6 +171,7 @@ export function useTeamActions(
         name: "",
         description: "",
         personaIds: [],
+        accountIds: [],
       },
     });
   }
@@ -186,6 +187,7 @@ export function useTeamActions(
         name: `${team.name} copy`,
         description: team.description ?? "",
         personaIds: [...team.personaIds],
+        accountIds: [...team.accountIds],
       },
     });
   }
@@ -217,6 +219,7 @@ export function useTeamActions(
         description: team.description ?? "",
         instructions: team.instructions ?? undefined,
         personaIds: [...team.personaIds],
+        accountIds: [...team.accountIds],
       },
     });
   }
