@@ -5,6 +5,11 @@ the version or branch that shipped them. Sam triggers releases.
 
 ## Queue
 
+- [ ] Verify the RAPT fix end to end: after Sam's v1.0.64 reconnect round
+      (standard scopes, checkbox off), re-run the all-account mint check
+      16+ hours later. All five OK past the 16h mark = the invalid_rapt
+      loop is closed for good; any DEAD account means a scope in the
+      standard set still triggers session control and needs hunting.
 - [ ] Multi PRIMARY window per project (Brett, Asana 1217283122193749):
       openProjectWindow focuses the existing window and lastOpenProjects
       dedupes by path, so a project can only ever have one main window plus
