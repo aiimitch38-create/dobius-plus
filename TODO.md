@@ -45,6 +45,22 @@ the version or branch that shipped them. Sam triggers releases.
       released before death, unref'd cleanup timers). Live-verified:
       kill mid-flow -> honest error, button re-enabled, zero orphans.
 
+- [x] gws-mcp runs on Windows without Dobius (Sam 8/18: "my brother runs
+      on windows"). The one file is now cross-platform: win32 runs the gws
+      CLI's JS entry under the server's own node (resolved from the
+      package's bin map: layouts drifted across releases, Codex High),
+      PATH joined with the platform delimiter, and three standalone
+      commands make the whole setup terminal-only: --capture (snapshot the
+      logged-in identity into ~/.gws-profiles, email-proven via userinfo,
+      refresh-in-place by email), --setup (merge the Claude Desktop entry:
+      %APPDATA%\Claude on win32, same preserve/backup/refuse semantics),
+      --doctor (one-look health report for phone-call debugging). Second
+      Codex High: a failed export can no longer echo unmasked credentials.
+      26 unit assertions; live on macOS: capture revived the last dead
+      profile (all 5 accounts now mint), setup merge verified, doctor
+      clean, MCP handshake regression green. Honest caveat: no live
+      Windows machine here; --doctor is the first command if it misbehaves.
+
 ## Done (shipped in v1.0.63)
 
 - [x] gws-mcp: multi-account Google Workspace MCP server (Claude Desktop's

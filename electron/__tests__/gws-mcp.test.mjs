@@ -2,7 +2,10 @@
 // hands model-controlled strings to execFile, so the positional allowlist is
 // a security boundary: a tool call must never be able to inject gws flags
 // like --upload or --output.
-import { buildArgv, findGws } from '../gws-mcp.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { buildArgv, findGws, gwsInvocation, claudeDesktopDirFor, mergeClaudeConfig } from '../gws-mcp.mjs';
 
 let pass = 0, fail = 0;
 const check = (label, got, want) => {
@@ -48,6 +51,54 @@ check('apiVersion with a dash-prefix rejected', buildArgv({ command: ['a', 'b'],
 // must never resolve into a Dobius shim dir (those live under userData).
 const gwsPath = findGws();
 check('findGws avoids Dobius shim dirs', gwsPath.includes('dobius') || gwsPath.includes('Application Support'), false);
+
+// --- Windows support (v1.0.64): invocation resolution + config paths. gws on
+// Windows is a .cmd shim Node cannot execFile, so the CLI's JS entry must run
+// under our own node; the config dir comes from APPDATA. ---
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gwsmcp-win-'));
+  const fakeCliDir = path.join(tmp, 'npm', 'node_modules', '@googleworkspace', 'cli', 'bin');
+  fs.mkdirSync(fakeCliDir, { recursive: true });
+  fs.writeFileSync(path.join(fakeCliDir, 'gws'), '// fake cli entry');
+
+  const inv2 = gwsInvocation('win32', { APPDATA: tmp });
+  check('win32 resolves the CLI js under APPDATA npm prefix and runs it under our node',
+    inv2.argsPrefix?.[0] === path.join(tmp, 'npm', 'node_modules', '@googleworkspace', 'cli', 'bin', 'gws')
+      && inv2.file === process.execPath, true);
+  check('win32 with no CLI installed reports an actionable error',
+    typeof gwsInvocation('win32', { APPDATA: path.join(tmp, 'nope') }).error, 'string');
+  check('GWS_MCP_GWS_JS override wins',
+    gwsInvocation('win32', { GWS_MCP_GWS_JS: path.join(fakeCliDir, 'gws') }).argsPrefix?.[0],
+    path.join(fakeCliDir, 'gws'));
+  // Current releases publish bin as run.js at the package ROOT (Codex High):
+  // the package's own bin map must win over any literal guess.
+  const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'gwsmcp-win2-'));
+  const pkgDir2 = path.join(tmp2, 'npm', 'node_modules', '@googleworkspace', 'cli');
+  fs.mkdirSync(pkgDir2, { recursive: true });
+  fs.writeFileSync(path.join(pkgDir2, 'package.json'), JSON.stringify({ bin: { gws: 'run.js' } }));
+  fs.writeFileSync(path.join(pkgDir2, 'run.js'), '// entry');
+  check('win32 resolves the entry from the package bin map (run.js layout)',
+    gwsInvocation('win32', { APPDATA: tmp2 }).argsPrefix?.[0], path.join(pkgDir2, 'run.js'));
+  fs.rmSync(tmp2, { recursive: true, force: true });
+  check('posix path untouched by win32 logic', gwsInvocation('darwin', {}).argsPrefix, []);
+
+  check('claude dir on win32 comes from APPDATA',
+    claudeDesktopDirFor('win32', { APPDATA: 'C:\\Users\\b\\AppData\\Roaming' }, '/h'),
+    path.join('C:\\Users\\b\\AppData\\Roaming', 'Claude'));
+  check('claude dir on win32 without APPDATA is null (setup must refuse)',
+    claudeDesktopDirFor('win32', {}, '/h'), null);
+  check('claude dir on darwin is the Library path',
+    claudeDesktopDirFor('darwin', {}, '/Users/b'),
+    '/Users/b/Library/Application Support/Claude');
+  check('GWS_MCP_CLAUDE_DIR override wins on any platform',
+    claudeDesktopDirFor('win32', { GWS_MCP_CLAUDE_DIR: '/tmp/x' }, '/h'), '/tmp/x');
+
+  check('config merge preserves other servers',
+    mergeClaudeConfig('{"mcpServers":{"a":{"command":"/x"}}}', { command: 'node', args: ['/s'] }).next.mcpServers.a,
+    { command: '/x' });
+  check('config merge refuses malformed', typeof mergeClaudeConfig('{oops', {}).error, 'string');
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
 
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

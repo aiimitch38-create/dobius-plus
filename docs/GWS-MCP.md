@@ -50,6 +50,43 @@ The wrapper the button writes is a plain executable; point anything at it:
     "command": "/Users/<you>/Library/Application Support/dobius-plus/gws-mcp/gws-mcp" } } }
 ```
 
+## Windows (no Dobius needed)
+
+The server itself is cross-platform: a Windows Claude Desktop user needs
+node, the gws CLI, and this one file. Recipe (PowerShell):
+
+```powershell
+# 1. Install node from nodejs.org, then the gws CLI:
+npm i -g @googleworkspace/cli
+
+# 2. Grab the server (single file, no dependencies):
+iwr -OutFile gws-mcp.mjs https://raw.githubusercontent.com/statusdigitalmarketing/dobius-plus/main/electron/gws-mcp.mjs
+
+# 3. Per Google account: log in (opens the browser), then capture it:
+gws auth login
+node gws-mcp.mjs --capture
+# repeat login + --capture for each additional account
+
+# 4. Register in Claude Desktop (%APPDATA%\Claude), then restart it:
+node gws-mcp.mjs --setup
+
+# Any time something is off:
+node gws-mcp.mjs --doctor
+```
+
+`--capture` snapshots the currently-logged-in gws identity into
+`~/.gws-profiles` (refreshing in place when the email already has a profile),
+`--setup` merges the `mcpServers.gws` entry (same preserve/backup/refuse
+semantics as the Mac button), and `--doctor` prints a one-look health report
+(node, gws, login identity, captured accounts, config entry). On Windows the
+CLI's JS entry runs under the same node as the server (a `.cmd` shim cannot
+be exec'd directly), resolved from `%APPDATA%\npm` or the `GWS_MCP_GWS_JS`
+override. The three commands work on macOS too.
+
+Caveat: the gws CLI itself on Windows is upstream's territory; the recipe is
+unit-tested here but had no live Windows machine to run on. `--doctor` is the
+first thing to run if anything misbehaves.
+
 ## Register in Claude Code
 
 ```bash
