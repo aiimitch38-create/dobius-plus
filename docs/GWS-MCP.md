@@ -16,9 +16,10 @@ local filesystem on the model's behalf).
 
 ## Requirements
 
-- `gws` CLI installed (`/opt/homebrew/bin/gws`) and logged in at least once.
-- Accounts connected in Dobius+ Settings (they live in `~/.gws-profiles`,
-  one 0600 file per account, written by the Connect flow).
+- `gws` CLI installed (`npm i -g @googleworkspace/cli`).
+- Accounts added in Dobius+ Settings via "+ Add Google Account" (browser
+  approval, no terminal needed; they live in `~/.gws-profiles`, one 0600
+  file per account).
 - Nothing else: the Settings button runs the server under Dobius's own binary (no node needed).
 
 ## Register in Claude Desktop (the button)
@@ -37,8 +38,8 @@ Settings > Google Workspace accounts > **Add to Claude Desktop**. One click:
 
 Restart Claude Desktop after clicking. New-machine recipe (the brother's
 house scenario): install Dobius+, install the gws CLI
-(`npm i -g @googleworkspace/cli`) and `gws auth login`, connect accounts in
-Settings, click Add to Claude Desktop.
+(`npm i -g @googleworkspace/cli`), add accounts in Settings with
+"+ Add Google Account" (all in-app), click Add to Claude Desktop.
 
 ### Manual fallback (any MCP client)
 

@@ -25,6 +25,26 @@ the version or branch that shipped them. Sam triggers releases.
       clean. If a stuck "sending..." ever survives past 90s in real use,
       suspect a commit-phase exception around session relink and start here.
 
+## Staged on main (unreleased, next ship = v1.0.64)
+
+- [x] Add a Google account entirely in-app (Sam 8/18: no more terminal
+      `gws auth login` dance). "+ Add Google Account" opens the browser
+      approval with full permissions and captures whatever account is
+      picked (new email = new row); the wrong-profile copy-link fallback
+      works here too. Double-click race on both browser flows closed with
+      a synchronous single-flight ref (Codex). Dead gws:connect IPC
+      removed.
+- [x] Browser-login spawns hardened: gws re-execs itself, and a dead
+      wrapper left an orphan holding the pipes, so execFile's callback
+      never fired and the flow hung on "Waiting for browser..." forever
+      with the guard stuck (latent in v1.0.62 reconnect; reproduced
+      live). Now spawned detached in its own process group, resolving on
+      exit, with SIGTERM->SIGKILL group reaping on timeout/failure: no
+      more orphaned OAuth listeners. 3 more Codex findings on the
+      timeout ordering fixed (last-instant success mislabel, guard
+      released before death, unref'd cleanup timers). Live-verified:
+      kill mid-flow -> honest error, button re-enabled, zero orphans.
+
 ## Done (shipped in v1.0.63)
 
 - [x] gws-mcp: multi-account Google Workspace MCP server (Claude Desktop's

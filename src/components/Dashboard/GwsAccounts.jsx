@@ -18,7 +18,6 @@ const STATUS_META = {
 export default function GwsAccounts() {
   const [accounts, setAccounts] = useState([]);
   const [loaded, setLoaded] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [health, setHealth] = useState({});      // id -> 'ok' | 'revoked' | 'error'
   const [reconnecting, setReconnecting] = useState(''); // account id mid-flow
   const [feedback, setFeedback] = useState('');
@@ -28,6 +27,10 @@ export default function GwsAccounts() {
   // copyable link.
   const [authLink, setAuthLink] = useState(null); // { id, url }
   const authLinkTimer = useRef(null);
+  // Synchronous single-flight for the browser flows: two clicks can land
+  // before React re-renders the disabled button, and the loser's finally
+  // would clear the LIVE flow's reconnecting/authLink state (Codex Medium).
+  const flowBusyRef = useRef(false);
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
@@ -73,21 +76,36 @@ export default function GwsAccounts() {
     setTimeout(() => { if (mountedRef.current) setFeedback(''); }, 8000);
   };
 
-  const handleConnect = async () => {
-    setBusy(true);
+  // Add an account fully in-app (v1.0.64, Sam 8/18: no terminal login dance).
+  // Opens a Google approval in the browser (pick ANY account, new or known),
+  // then captures it. Uses the reconnecting state ('__add__') so the shared
+  // wrong-profile copy-link fallback works here too.
+  const handleAdd = async () => {
+    if (flowBusyRef.current) return;
+    flowBusyRef.current = true;
+    setReconnecting('__add__');
+    clearTimeout(authLinkTimer.current);
+    setAuthLink(null);
+    flash('Pick the Google account in the browser tab that just opened…');
     try {
-      const res = await window.electronAPI?.gwsConnect?.();
+      const res = await window.electronAPI?.gwsAddViaBrowser?.();
       if (res?.ok) {
-        flash(`Connected ${res.account?.email || 'account'}.`);
+        let msg = `Connected ${res.approvedEmail}.`;
+        if (res.baseChangedFrom) {
+          msg += ` Heads up: your terminal's bare gws identity moved from ${res.baseChangedFrom} to ${res.approvedEmail}.`;
+        }
+        flash(msg);
         await reload();
         await verify(true);
       } else {
-        flash(res?.error || 'Could not connect.', true);
+        flash(res?.error || 'Could not add the account.', true);
       }
     } catch {
-      flash('Could not connect.', true);
+      flash('Could not add the account.', true);
     } finally {
-      if (mountedRef.current) setBusy(false);
+      flowBusyRef.current = false;
+      clearTimeout(authLinkTimer.current);
+      if (mountedRef.current) { setReconnecting(''); setAuthLink(null); }
     }
   };
 
@@ -128,6 +146,8 @@ export default function GwsAccounts() {
   };
 
   const handleReconnect = async (a) => {
+    if (flowBusyRef.current) return;
+    flowBusyRef.current = true;
     setReconnecting(a.id);
     clearTimeout(authLinkTimer.current);
     setAuthLink(null);
@@ -151,6 +171,7 @@ export default function GwsAccounts() {
     } catch {
       flash('Reconnect failed.', true);
     } finally {
+      flowBusyRef.current = false;
       clearTimeout(authLinkTimer.current);
       if (mountedRef.current) { setReconnecting(''); setAuthLink(null); }
     }
@@ -176,7 +197,7 @@ export default function GwsAccounts() {
     borderRadius: '6px',
     fontSize: '12px',
     fontWeight: 500,
-    cursor: busy || reconnecting ? 'wait' : 'pointer',
+    cursor: reconnecting ? 'wait' : 'pointer',
     backgroundColor: variant === 'primary' ? 'var(--accent)' : 'var(--surface)',
     color: variant === 'primary' ? '#fff' : 'var(--fg)',
     border: variant === 'primary' ? '1px solid var(--accent)' : '1px solid var(--border)',
@@ -203,7 +224,7 @@ export default function GwsAccounts() {
 
       {loaded && accounts.length === 0 && (
         <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
-          No Google accounts connected. Log into an account with <code style={{ fontFamily: 'monospace' }}>gws auth login</code> in a terminal, then click Connect. Repeat (logout, log into the next account, Connect) to add more.
+          No Google accounts connected. Click Add Google Account: a Google approval opens in your browser, you pick the account, and it lands here. Repeat for as many accounts as you want.
         </p>
       )}
 
@@ -253,8 +274,12 @@ export default function GwsAccounts() {
         })}
       </div>
 
-      <button style={btn('primary', { opacity: busy ? 0.6 : 1 })} disabled={busy || !!reconnecting} onClick={handleConnect}>
-        {busy ? 'Connecting…' : '+ Connect Google Account'}
+      <button
+        style={btn('primary', { opacity: reconnecting === '__add__' ? 0.7 : 1 })}
+        disabled={!!reconnecting}
+        onClick={handleAdd}
+      >
+        {reconnecting === '__add__' ? 'Waiting for browser…' : '+ Add Google Account'}
       </button>
 
       {feedback && (
@@ -277,7 +302,7 @@ export default function GwsAccounts() {
       )}
 
       <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>
-        Connect snapshots the account currently logged into gws. Tokens are stored per account in <code style={{ fontFamily: 'monospace' }}>~/.gws-profiles</code> (0600) and never leave the main process.
+        Adding an account also switches which account a bare <code style={{ fontFamily: 'monospace' }}>gws</code> acts as in terminals, so add your main account last. Tokens are stored per account in <code style={{ fontFamily: 'monospace' }}>~/.gws-profiles</code> (0600) and never leave the main process.
       </p>
 
       <div className="mt-4 flex items-center justify-between px-3 py-2.5 rounded-lg" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>

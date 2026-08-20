@@ -113,11 +113,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   chromeListProfiles: () => ipcRenderer.invoke('chrome:listProfiles'),
   chromeOpenUrl: (profileDir, url) => ipcRenderer.invoke('chrome:openUrl', profileDir, url),
   // gws multi-account (v1.0.41). No token accessor by design: tokens stay in main.
-  gwsConnect: () => ipcRenderer.invoke('gws:connect'),
   gwsList: () => ipcRenderer.invoke('gws:list'),
   gwsRemove: (id) => ipcRenderer.invoke('gws:remove', id),
   gwsVerify: (opts) => ipcRenderer.invoke('gws:verify', opts),
   gwsReconnect: (id) => ipcRenderer.invoke('gws:reconnect', id),
+  gwsAddViaBrowser: () => ipcRenderer.invoke('gws:addViaBrowser'),
   // Claude Desktop MCP setup (v1.0.63): status + one-click install.
   gwsMcpStatus: () => ipcRenderer.invoke('gwsMcp:status'),
   gwsMcpInstall: () => ipcRenderer.invoke('gwsMcp:install'),

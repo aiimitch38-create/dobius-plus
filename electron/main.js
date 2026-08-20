@@ -9,7 +9,7 @@ import { getQuittingForUpdate, setQuitting, getQuitting } from './quit-state.js'
 import { startAutoResume, cancelAll as cancelAllAutoResume, cancelTabIfPending as cancelAutoResumeTab } from './auto-resume.js';
 import { speakLastResponse, stopVoicePlayback, isVoicePlaybackActive } from './voice-playback.js';
 import { listChromeProfiles, openUrlInProfile } from './chrome-profiles.js';
-import { connectGwsAccount, listGwsAccounts, removeGwsAccount, verifyGwsAccounts, reconnectGwsAccount, ensureShim } from './gws-accounts.js';
+import { listGwsAccounts, removeGwsAccount, verifyGwsAccounts, reconnectGwsAccount, addGwsAccountViaBrowser, ensureShim } from './gws-accounts.js';
 import { gwsMcpStatus, installGwsMcp, healGwsMcpIfInstalled } from './gws-mcp-install.js';
 import { createTerminal, writeTerminal, resizeTerminal, killTerminal, killAll, gracefulCloseAll, getTerminalProcess, getTerminalCwd, getTerminalClaudeInfo, liveClaudeSessionIds, claimSessionResume, listTerminals, reassignTerminal, ensureSpawnHelperExecutable, addTerminalObserver, getTerminalsForProject } from './terminal-manager.js';
 import * as terminalStatus from './terminal-status.js';
@@ -494,13 +494,15 @@ function setupDataHandlers() {
   ipcMain.handle('chrome:openUrl', (_event, profileDir, url) => openUrlInProfile(profileDir, url));
   // gws multi-account (v1.0.41): connect / list / remove. NO getToken handler
   // is exposed: access tokens never cross to the renderer (Codex plan #1).
-  ipcMain.handle('gws:connect', () => connectGwsAccount());
   ipcMain.handle('gws:list', () => listGwsAccounts());
   ipcMain.handle('gws:remove', (_event, id) => removeGwsAccount(id));
   // Health probe + one-button reconnect (v1.0.61): 4 of 5 grants were found
   // revoked with no UI surface saying so.
   ipcMain.handle('gws:verify', (_event, opts) => verifyGwsAccounts({ force: !!(opts && opts.force) }));
   ipcMain.handle('gws:reconnect', (_event, id) => reconnectGwsAccount(id));
+  // Add an account fully in-app (v1.0.64): browser approval + capture, no
+  // terminal login dance.
+  ipcMain.handle('gws:addViaBrowser', () => addGwsAccountViaBrowser());
   // One-click Claude Desktop MCP setup (v1.0.63): bundles the gws-mcp server
   // into userData and upserts the mcpServers.gws entry in Claude Desktop's
   // per-user config. Works on any Mac Dobius is installed on (no node needed:

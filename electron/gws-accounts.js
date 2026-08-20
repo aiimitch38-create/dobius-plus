@@ -22,7 +22,7 @@ import fs from 'fs/promises';
 import fsSync, { constants as FS } from 'fs';
 import path from 'path';
 import os from 'os';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { randomBytes } from 'crypto';
 import { fileURLToPath } from 'url';
 import { app, shell, BrowserWindow } from 'electron';
@@ -413,6 +413,106 @@ let reconnectInFlight = false;
  *   reconnect the daily-driver account LAST, which both revives it and puts
  *   the terminal identity back.
  */
+/**
+ * Spawn `gws auth login --full`, open the consent URL in the browser (gws
+ * never opens it itself without a TTY), broadcast the URL to the UI for the
+ * wrong-profile copy-link fallback, and wait for the approval. `uiId` tags
+ * the broadcast: an account id for Reconnect, '__add__' for Add.
+ * Returns null on success or a user-facing error string.
+ *
+ * Always requests the FULL scope set (Sam, 8/15: "gws should have full
+ * permissions"); --full is also the only mode proven prompt-free under a
+ * no-TTY spawn (--services can open the interactive scope picker, which
+ * would hang here).
+ */
+async function runBrowserLogin(uiId) {
+  let authUrl = null;
+  let openFailed = false;
+  // spawn (not execFile) in its OWN process group, resolving on exit: `gws`
+  // on PATH is a node wrapper that re-execs the real binary, so a dead
+  // wrapper leaves an orphan grandchild holding the inherited pipes, and
+  // execFile only fires its callback when those streams close. The flow hung
+  // on "Waiting for browser..." forever with the single-flight guard stuck
+  // (observed live 8/18; latent in the v1.0.62 reconnect too). The group id
+  // also lets timeout/failure paths reap the whole tree, so orphaned
+  // localhost listeners stop accumulating.
+  const login = await new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn('gws', ['auth', 'login', '--full'], { env: EXEC_ENV, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (e) {
+      resolve({ code: -1, startError: e });
+      return;
+    }
+    let settled = false;
+    const killGroup = (sig) => {
+      try { process.kill(-child.pid, sig); } catch { try { child.kill(sig); } catch { /* gone */ } }
+    };
+    const settle = (outcome) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(outcome);
+    };
+    // 5 minutes: the human is in a browser consent screen. The timeout path
+    // must not release the single-flight guard until the tree is actually
+    // dead (or provably unkillable), or a retry could race the old OAuth
+    // listener (Codex P2): SIGTERM, escalate to SIGKILL, and settle on the
+    // resulting exit, with a hard 3s bound for the unkillable case.
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup('SIGTERM');
+      const k = setTimeout(() => killGroup('SIGKILL'), 2000);
+      k.unref?.(); // never keep the app alive just for cleanup (Codex P3)
+      const h = setTimeout(() => settle({ killed: true }), 3000);
+      h.unref?.();
+    }, 5 * 60_000);
+    child.on('error', (e) => settle({ code: -1, startError: e }));
+    child.on('exit', (code) => {
+      // Disarm the timeout FIRST: an approval landing in the last instant
+      // must never be re-labeled "not completed" by a timer firing during
+      // the output grace below (Codex P2).
+      clearTimeout(timer);
+      // A non-clean end can leave group members behind (the re-exec'd real
+      // binary); reap them so no orphan keeps the OAuth listener alive.
+      if (timedOut || code !== 0) killGroup('SIGTERM');
+      // Tiny grace so trailing output already in flight still lands.
+      setTimeout(() => settle(timedOut ? { killed: true } : (code === 0 ? null : { code })), 150);
+    });
+    let seen = '';
+    const watch = (chunk) => {
+      if (authUrl) return;
+      seen += String(chunk);
+      const url = extractGoogleAuthUrl(seen);
+      if (url) {
+        authUrl = url;
+        try { shell.openExternal(url).catch(() => { openFailed = true; }); }
+        catch { openFailed = true; }
+        // Also hand the URL to the UI: openExternal lands in the default
+        // browser's LAST-ACTIVE profile, which can be the wrong Google
+        // identity entirely (Sam, 8/15: it opened in someone else's Chrome
+        // profile). The panel shows a copyable link a few seconds after the
+        // browser opens. The URL is a public consent link, not a secret.
+        for (const w of (BrowserWindow.getAllWindows?.() || [])) {
+          try { w.webContents.send('gws:reconnect-url', { id: uiId, url }); } catch { /* window mid-close */ }
+        }
+      }
+    };
+    child.stdout?.on('data', watch);
+    child.stderr?.on('data', watch);
+  });
+  if (!login) return null;
+  if (login.killed) {
+    if (!authUrl) return 'gws never produced a Google sign-in URL. Try `gws auth login` in a terminal to see why.';
+    // The URL is single-use and its local listener died with the timeout,
+    // so never tell the user to paste it now: it can only fail.
+    if (openFailed) return 'The sign-in page could not be opened automatically and the approval window expired. Run `gws auth login` in a terminal instead.';
+    return 'The browser approval was not completed within 5 minutes. Nothing was changed.';
+  }
+  return 'gws auth login failed. Try `gws auth login` in a terminal to see why.';
+}
+
 export async function reconnectGwsAccount(id) {
   if (!isValidGwsId(id)) return { ok: false, error: 'Unknown account.' };
   const target = getGwsAccounts().find((a) => a.id === id);
@@ -421,59 +521,8 @@ export async function reconnectGwsAccount(id) {
   reconnectInFlight = true;
   try {
     const baseBefore = await baseAuthUser();
-    // Always request the FULL scope set (Sam, 8/15: "gws should have full
-    // permissions"): a reconnect must never come back weaker than the CLI's
-    // own `gws auth login --full`, and --full is also the only mode proven
-    // prompt-free under a no-TTY spawn (--services can open the interactive
-    // scope picker, which would hang here).
-    const args = ['auth', 'login', '--full'];
-    // Spawned without a TTY, `gws auth login` does NOT open the browser: it
-    // prints "Open this URL in your browser" to stderr and waits on its
-    // localhost redirect listener. v1.0.61 discarded that output, so the
-    // button sat on "Waiting for browser..." doing nothing (Sam, 8/15). Watch
-    // the child's output for the Google auth URL and open it ourselves.
-    let authUrl = null;
-    let openFailed = false;
-    const login = await new Promise((resolve) => {
-      // 5 minutes: the human is in a browser consent screen. Never inherit
-      // stdio; the picker is skipped by the flags above and any other prompt
-      // must fail rather than hang forever.
-      const child = execFile('gws', args, { env: EXEC_ENV, timeout: 5 * 60_000 }, (err) => resolve(err || null));
-      let seen = '';
-      const watch = (chunk) => {
-        if (authUrl) return;
-        seen += String(chunk);
-        const url = extractGoogleAuthUrl(seen);
-        if (url) {
-          authUrl = url;
-          try { shell.openExternal(url).catch(() => { openFailed = true; }); }
-          catch { openFailed = true; }
-          // Also hand the URL to the UI: openExternal lands in the default
-          // browser's LAST-ACTIVE profile, which can be the wrong Google
-          // identity entirely (Sam, 8/15: it opened in someone else's Chrome
-          // profile). The panel shows a copyable link a few seconds after the
-          // browser opens. The URL is a public consent link, not a secret.
-          for (const w of (BrowserWindow.getAllWindows?.() || [])) {
-            try { w.webContents.send('gws:reconnect-url', { id, url }); } catch { /* window mid-close */ }
-          }
-        }
-      };
-      child.stdout?.on('data', watch);
-      child.stderr?.on('data', watch);
-    });
-    if (login) {
-      let error;
-      if (login.killed) {
-        error = 'The browser approval was not completed within 5 minutes. Nothing was changed.';
-        if (!authUrl) error = 'gws never produced a Google sign-in URL. Try `gws auth login` in a terminal to see why.';
-        // The URL is single-use and its local listener died with the timeout,
-        // so never tell the user to paste it now: it can only fail.
-        else if (openFailed) error = 'The sign-in page could not be opened automatically and the approval window expired. Run `gws auth login` in a terminal instead.';
-      } else {
-        error = 'gws auth login failed. Try `gws auth login` in a terminal to see why.';
-      }
-      return { ok: false, error };
-    }
+    const loginError = await runBrowserLogin(id);
+    if (loginError) return { ok: false, error: loginError };
     const res = await connectGwsAccount();
     if (!res.ok) return res;
     // Fresh grant: yesterday's verdicts for both the requested row and the
@@ -491,6 +540,34 @@ export async function reconnectGwsAccount(id) {
       result.warning = `You approved ${approvedEmail} in the browser, so THAT account was refreshed instead. Hit Reconnect on ${target.email} again and pick it this time.`;
     }
     return result;
+  } finally {
+    reconnectInFlight = false;
+  }
+}
+
+/**
+ * Add a Google account entirely from Settings (Sam, 8/18: no more terminal
+ * `gws auth login` dance). Same browser flow as Reconnect, minus a target
+ * row: whatever account is approved gets captured; a NEW email creates a new
+ * row and an existing one refreshes in place (connectGwsAccount is
+ * email-keyed either way). Note the base-identity switch honestly.
+ */
+export async function addGwsAccountViaBrowser() {
+  if (reconnectInFlight) return { ok: false, error: 'Another browser approval is already pending. Finish or cancel that one first.' };
+  reconnectInFlight = true;
+  try {
+    const baseBefore = await baseAuthUser();
+    const loginError = await runBrowserLogin('__add__');
+    if (loginError) return { ok: false, error: loginError };
+    const res = await connectGwsAccount();
+    if (!res.ok) return res;
+    verifyCache.delete(res.account.id); // fresh grant: any cached verdict is stale
+    const approvedEmail = res.account.email;
+    return {
+      ...res,
+      approvedEmail,
+      baseChangedFrom: baseBefore && baseBefore !== approvedEmail ? baseBefore : null,
+    };
   } finally {
     reconnectInFlight = false;
   }
