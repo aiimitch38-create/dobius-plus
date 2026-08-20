@@ -25,7 +25,7 @@ the version or branch that shipped them. Sam triggers releases.
       clean. If a stuck "sending..." ever survives past 90s in real use,
       suspect a commit-phase exception around session relink and start here.
 
-## Staged on main (unreleased, next ship = v1.0.64)
+## Done (shipped in v1.0.64)
 
 - [x] Add a Google account entirely in-app (Sam 8/18: no more terminal
       `gws auth login` dance). "+ Add Google Account" opens the browser
