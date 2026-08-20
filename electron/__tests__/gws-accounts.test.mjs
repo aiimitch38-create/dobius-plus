@@ -170,6 +170,23 @@ check('registry empty after remove', gws.listGwsAccounts(), []);
   check('non-string input is safe', gws.extractGoogleAuthUrl(undefined), null);
 }
 
+// --- scope modes (v1.0.64, Sam: "options like full or w/o gcp so the auth
+// never dies"): standard must carry every productivity scope and NEITHER
+// Google Cloud scope, or Workspace grants die with invalid_rapt in ~16h. ---
+{
+  const std = gws.loginArgsFor('standard');
+  check('standard uses --scopes', std.slice(0, 3), ['auth', 'login', '--scopes']);
+  const scopes = std[3].split(',');
+  check('standard has NO cloud-platform', scopes.some((x) => x.includes('cloud-platform')), false);
+  check('standard has NO pubsub', scopes.some((x) => x.includes('pubsub')), false);
+  for (const need of ['gmail.modify', 'drive', 'calendar', 'documents', 'presentations', 'spreadsheets', 'tasks', 'userinfo.email']) {
+    check(`standard keeps ${need}`, scopes.some((x) => x.includes(need)), true);
+  }
+  check('full is gws --full', gws.loginArgsFor('full'), ['auth', 'login', '--full']);
+  check('unknown mode falls back to standard (never silently full)',
+    gws.loginArgsFor('bogus')[2], '--scopes');
+}
+
 await fs.rm(TMP_HOME, { recursive: true, force: true });
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}  (${pass} passed)`);
 process.exit(fail === 0 ? 0 : 1);

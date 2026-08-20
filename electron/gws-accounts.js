@@ -425,7 +425,38 @@ let reconnectInFlight = false;
  * no-TTY spawn (--services can open the interactive scope picker, which
  * would hang here).
  */
-async function runBrowserLogin(uiId) {
+// The two scope modes (Sam, 8/20: "options like full or w/o gcp scope or
+// something so the auth never dies"):
+// - 'standard' (default): every Workspace productivity scope `--full` grants
+//   MINUS the two Google Cloud scopes (cloud-platform, pubsub). On Workspace
+//   accounts, grants carrying GCP scopes fall under Google Cloud session
+//   control and die with invalid_rapt every ~16h; without them the grant
+//   lives until revoked. Proven by the two long-lived grants on this Mac
+//   (gmail-only and workspace-only scoped), while every --full reconnect
+//   died within a day.
+// - 'full': gws's own --full (adds cloud-platform + pubsub). Only worth it
+//   for actual GCP work, and on Workspace accounts only with the admin
+//   console's session control set to never reauthenticate.
+const STANDARD_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/calendar',
+  'https://www.googleapis.com/auth/documents',
+  'https://www.googleapis.com/auth/presentations',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/tasks',
+  'openid',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+];
+
+/** Login argv for a scope mode. Pure, for tests. */
+export function loginArgsFor(scopeMode) {
+  if (scopeMode === 'full') return ['auth', 'login', '--full'];
+  return ['auth', 'login', '--scopes', STANDARD_SCOPES.join(',')];
+}
+
+async function runBrowserLogin(uiId, scopeMode = 'standard') {
   let authUrl = null;
   let openFailed = false;
   // spawn (not execFile) in its OWN process group, resolving on exit: `gws`
@@ -439,7 +470,7 @@ async function runBrowserLogin(uiId) {
   const login = await new Promise((resolve) => {
     let child;
     try {
-      child = spawn('gws', ['auth', 'login', '--full'], { env: EXEC_ENV, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn('gws', loginArgsFor(scopeMode), { env: EXEC_ENV, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     } catch (e) {
       resolve({ code: -1, startError: e });
       return;
@@ -513,7 +544,7 @@ async function runBrowserLogin(uiId) {
   return 'gws auth login failed. Try `gws auth login` in a terminal to see why.';
 }
 
-export async function reconnectGwsAccount(id) {
+export async function reconnectGwsAccount(id, opts = {}) {
   if (!isValidGwsId(id)) return { ok: false, error: 'Unknown account.' };
   const target = getGwsAccounts().find((a) => a.id === id);
   if (!target) return { ok: false, error: 'Unknown account.' };
@@ -521,7 +552,7 @@ export async function reconnectGwsAccount(id) {
   reconnectInFlight = true;
   try {
     const baseBefore = await baseAuthUser();
-    const loginError = await runBrowserLogin(id);
+    const loginError = await runBrowserLogin(id, opts.scopeMode === 'full' ? 'full' : 'standard');
     if (loginError) return { ok: false, error: loginError };
     const res = await connectGwsAccount();
     if (!res.ok) return res;
@@ -552,12 +583,12 @@ export async function reconnectGwsAccount(id) {
  * row and an existing one refreshes in place (connectGwsAccount is
  * email-keyed either way). Note the base-identity switch honestly.
  */
-export async function addGwsAccountViaBrowser() {
+export async function addGwsAccountViaBrowser(opts = {}) {
   if (reconnectInFlight) return { ok: false, error: 'Another browser approval is already pending. Finish or cancel that one first.' };
   reconnectInFlight = true;
   try {
     const baseBefore = await baseAuthUser();
-    const loginError = await runBrowserLogin('__add__');
+    const loginError = await runBrowserLogin('__add__', opts.scopeMode === 'full' ? 'full' : 'standard');
     if (loginError) return { ok: false, error: loginError };
     const res = await connectGwsAccount();
     if (!res.ok) return res;

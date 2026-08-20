@@ -499,10 +499,10 @@ function setupDataHandlers() {
   // Health probe + one-button reconnect (v1.0.61): 4 of 5 grants were found
   // revoked with no UI surface saying so.
   ipcMain.handle('gws:verify', (_event, opts) => verifyGwsAccounts({ force: !!(opts && opts.force) }));
-  ipcMain.handle('gws:reconnect', (_event, id) => reconnectGwsAccount(id));
+  ipcMain.handle('gws:reconnect', (_event, id, opts) => reconnectGwsAccount(id, opts || {}));
   // Add an account fully in-app (v1.0.64): browser approval + capture, no
   // terminal login dance.
-  ipcMain.handle('gws:addViaBrowser', () => addGwsAccountViaBrowser());
+  ipcMain.handle('gws:addViaBrowser', (_event, opts) => addGwsAccountViaBrowser(opts || {}));
   // One-click Claude Desktop MCP setup (v1.0.63): bundles the gws-mcp server
   // into userData and upserts the mcpServers.gws entry in Claude Desktop's
   // per-user config. Works on any Mac Dobius is installed on (no node needed:

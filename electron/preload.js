@@ -116,8 +116,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gwsList: () => ipcRenderer.invoke('gws:list'),
   gwsRemove: (id) => ipcRenderer.invoke('gws:remove', id),
   gwsVerify: (opts) => ipcRenderer.invoke('gws:verify', opts),
-  gwsReconnect: (id) => ipcRenderer.invoke('gws:reconnect', id),
-  gwsAddViaBrowser: () => ipcRenderer.invoke('gws:addViaBrowser'),
+  gwsReconnect: (id, opts) => ipcRenderer.invoke('gws:reconnect', id, opts),
+  gwsAddViaBrowser: (opts) => ipcRenderer.invoke('gws:addViaBrowser', opts),
   // Claude Desktop MCP setup (v1.0.63): status + one-click install.
   gwsMcpStatus: () => ipcRenderer.invoke('gwsMcp:status'),
   gwsMcpInstall: () => ipcRenderer.invoke('gwsMcp:install'),

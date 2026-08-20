@@ -61,6 +61,17 @@ the version or branch that shipped them. Sam triggers releases.
       clean, MCP handshake regression green. Honest caveat: no live
       Windows machine here; --doctor is the first command if it misbehaves.
 
+- [x] Scope modes for Google logins (Sam 8/20: "options like full or w/o
+      gcp scope so the auth never dies"). Root cause found: --full includes
+      cloud-platform + pubsub, and Workspace grants carrying GCP scopes fall
+      under Google Cloud session control: invalid_rapt kills them every
+      ~16h (all four --full reconnects died twice; the two grants WITHOUT
+      GCP scopes have lived for months). Default is now STANDARD (every
+      productivity scope, no GCP: permanent), with a per-connect checkbox
+      for full + an honest explainer of the 16h tradeoff; unknown modes
+      fall back to standard, never silently full. 12 scope assertions;
+      live-verified both argv shapes through the real button. Codex clean.
+
 ## Done (shipped in v1.0.63)
 
 - [x] gws-mcp: multi-account Google Workspace MCP server (Claude Desktop's

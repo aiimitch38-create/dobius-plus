@@ -26,6 +26,11 @@ export default function GwsAccounts() {
   // Google identity entirely (Sam, 8/15). Spec: open first, then offer the
   // copyable link.
   const [authLink, setAuthLink] = useState(null); // { id, url }
+  // Scope mode (Sam 8/20): default STANDARD (all Workspace scopes, no Google
+  // Cloud scopes) because GCP scopes put Workspace grants under session
+  // control and they die with invalid_rapt every ~16h. Full is opt-in per
+  // connect for actual GCP work.
+  const [fullScopes, setFullScopes] = useState(false);
   const authLinkTimer = useRef(null);
   // Synchronous single-flight for the browser flows: two clicks can land
   // before React re-renders the disabled button, and the loser's finally
@@ -88,7 +93,7 @@ export default function GwsAccounts() {
     setAuthLink(null);
     flash('Pick the Google account in the browser tab that just opened…');
     try {
-      const res = await window.electronAPI?.gwsAddViaBrowser?.();
+      const res = await window.electronAPI?.gwsAddViaBrowser?.({ scopeMode: fullScopes ? 'full' : 'standard' });
       if (res?.ok) {
         let msg = `Connected ${res.approvedEmail}.`;
         if (res.baseChangedFrom) {
@@ -153,7 +158,7 @@ export default function GwsAccounts() {
     setAuthLink(null);
     flash(`Approve ${a.email} in the browser window that just opened…`);
     try {
-      const res = await window.electronAPI?.gwsReconnect?.(a.id);
+      const res = await window.electronAPI?.gwsReconnect?.(a.id, { scopeMode: fullScopes ? 'full' : 'standard' });
       if (res?.ok) {
         // The flow may have refreshed a DIFFERENT account (the browser has no
         // account hint), and it switches the terminal's base gws identity to
@@ -273,6 +278,13 @@ export default function GwsAccounts() {
           );
         })}
       </div>
+
+      <label className="flex items-center gap-2 text-xs mb-2" style={{ color: 'var(--dim)', cursor: 'pointer' }}>
+        <input type="checkbox" checked={fullScopes} onChange={(e) => setFullScopes(e.target.checked)} disabled={!!reconnecting} />
+        <span>
+          Also request Google Cloud scopes (pubsub, cloud-platform). Off = the connection never expires. On = Workspace accounts re-ask for approval every ~16h unless the domain admin disables Google Cloud session control.
+        </span>
+      </label>
 
       <button
         style={btn('primary', { opacity: reconnecting === '__add__' ? 0.7 : 1 })}
