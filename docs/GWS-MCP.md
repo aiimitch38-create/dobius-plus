@@ -56,6 +56,15 @@ The server itself is cross-platform: a Windows Claude Desktop user needs
 node, the gws CLI, and this one file. Recipe (PowerShell):
 
 ```powershell
+# 0. gws needs a Google OAuth client (Desktop app type). Get the
+#    client_secret.json (share the one from an existing setup, or create one
+#    at console.cloud.google.com: APIs & Services > Credentials > Create
+#    OAuth client ID > Desktop app) and install it:
+#      mkdir $HOME\.config\gws  (if needed)
+#      copy client_secret.json $HOME\.config\gws\client_secret.json
+#    If the client's consent screen is in Testing mode, the Google account
+#    logging in must be listed as a test user on that consent screen.
+
 # 1. Install node from nodejs.org, then the gws CLI:
 npm i -g @googleworkspace/cli
 
