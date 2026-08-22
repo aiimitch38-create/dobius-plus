@@ -40,4 +40,8 @@ publish:
   provider: github
   owner: statusdigitalmarketing
   repo: dobius-plus
-  releaseType: release
+  # Draft-then-publish: assets (incl. the stapled DMG + stable-named copy)
+  # all land on an INVISIBLE draft, then release.sh flips it live atomically.
+  # 'latest' never points at a half-built release, so the permanent download
+  # link and the auto-updater never see a publish window. Codex Medium.
+  releaseType: draft

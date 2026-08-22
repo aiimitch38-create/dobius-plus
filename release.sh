@@ -12,7 +12,7 @@
 #   5. codesign + notarize + staple the DMG container
 #   6. regenerate latest-mac.yml's DMG hash (stapling changes the file)
 #   7. re-upload manifest + signed DMG
-#   8. verify: published, 5 assets, served manifest, tag == main HEAD
+#   8. verify: published, 6 assets, served manifest, tag == main HEAD
 #
 # Credentials: notary password from Keychain (service dobius-notary-password),
 # GH token from `gh auth token`. Nothing is echoed.
@@ -87,11 +87,19 @@ console.log("patched dmg entry -> size="+size);
 ' "$V" )
 gh release upload "v$V" dist-electron/latest-mac.yml --clobber
 gh release upload "v$V" "$DMG" --clobber
+# Stable-named copy of the SAME signed+stapled DMG, so the permanent link
+# github.com/<repo>/releases/latest/download/Dobius-Plus.dmg survives every
+# release (version-stamped names rot in buttons/emails; this one never does).
+cp "$DMG" dist-electron/Dobius-Plus.dmg
+gh release upload "v$V" dist-electron/Dobius-Plus.dmg --clobber
+
+step "Publish the draft (atomic go-live with all 6 assets)"
+gh release edit "v$V" --draft=false
 
 step "Verify release"
 STATUS="$(gh release view "v$V" --json isDraft,isPrerelease,assets --jq '"draft=\(.isDraft) prerelease=\(.isPrerelease) assets=\(.assets|length)"')"
 echo "$STATUS"
-echo "$STATUS" | grep -q "draft=false prerelease=false assets=5" || { echo "ERROR: release not fully published with 5 assets" >&2; exit 1; }
+echo "$STATUS" | grep -q "draft=false prerelease=false assets=6" || { echo "ERROR: release not fully published with 6 assets" >&2; exit 1; }
 SERVED="$(curl -sL "https://github.com/${REPO}/releases/latest/download/latest-mac.yml" | head -1)"
 echo "served manifest: $SERVED"
 [ "$SERVED" = "version: $V" ] || { echo "ERROR: served manifest is not $V (CDN lag? re-check in 1 min)" >&2; exit 1; }

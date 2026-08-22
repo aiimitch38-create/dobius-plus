@@ -9,6 +9,14 @@ How to ship a signed, notarized, auto-updating release of Dobius+ to users.
 ./release.sh minor      # minor bump
 ```
 
+Since v1.0.65 the flow is DRAFT-then-publish: electron-builder uploads to an
+invisible draft release, the DMG is stapled and the stable-named
+`Dobius-Plus.dmg` copy attached there too, and only then does
+`gh release edit --draft=false` flip it live with all 6 assets present. So
+`releases/latest` (and the permanent download link
+`releases/latest/download/Dobius-Plus.dmg`) never points at a half-built
+release, and the auto-updater can never fetch an unstapled DMG mid-publish.
+
 `release.sh` runs the ENTIRE flow below in the right order: preflight
 (clean main, creds in Keychain, tests green), version bump, push-main-first,
 electron-builder publish, DMG codesign/notarize/staple, latest-mac.yml DMG
