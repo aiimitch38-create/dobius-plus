@@ -1,6 +1,18 @@
 import { join } from 'node:path'
-import { app } from 'electron'
+import { app, ipcMain } from 'electron'
+import {
+  COMMUNICATIONS_RELAY_STATUS_CHANNEL,
+  type CommunicationsRelayStatus
+} from '../../../shared/communications-relay-status'
 import { RelayStore } from './relay-store'
+import {
+  getRelayStartupStatus,
+  recordRelayBindFailure,
+  recordRelayRunning,
+  recordRelayStartError,
+  recordRelayStarting,
+  recordRelayStopped
+} from './relay-startup-status'
 import { startRelayServer } from './relay-server'
 import type { RelayServerHandle } from './relay-server'
 
@@ -26,13 +38,16 @@ let store: RelayStore | null = null
  *
  * Fire-and-forget by design: the caller is synchronous IPC registration, and
  * a relay that fails to bind must never block app startup — startRelayServer
- * already resolves (rather than rejects) on EADDRINUSE.
+ * already resolves (rather than rejects) on EADDRINUSE. The failure reason is
+ * still recorded (relay-startup-status) so the UI can show WHY instead of a
+ * bare "can't reach the relay".
  */
 export function startCommunicationsRelay(): void {
   if (started) {
     return
   }
   started = true
+  recordRelayStarting()
   void (async () => {
     try {
       store = new RelayStore(join(app.getPath('userData'), 'relay.db'))
@@ -40,12 +55,17 @@ export function startCommunicationsRelay(): void {
     } catch (err) {
       // Why swallow: Communications degrading to "can't reach the relay" is a
       // feature outage, not a reason to take the whole app down on launch.
-      console.warn(
-        '[relay] failed to start:',
-        err instanceof Error ? err.message : String(err)
-      )
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn('[relay] failed to start:', message)
+      recordRelayStartError(message)
       store?.close()
       store = null
+      return
+    }
+    if (handle.bound) {
+      recordRelayRunning(handle.port)
+    } else {
+      recordRelayBindFailure(handle.bindError ?? 'unknown bind failure', handle.port)
     }
   })()
 }
@@ -57,4 +77,19 @@ export async function stopCommunicationsRelay(): Promise<void> {
   store?.close()
   store = null
   started = false
+  recordRelayStopped()
+}
+
+/**
+ * Read-only status read for the Communications renderer's connection card.
+ *
+ * Why its own channel: it is an app-health read owned by main, not a runtime
+ * command, so it stays outside the communications-bridge allowlist.
+ */
+export function registerRelayStatusHandler(): void {
+  ipcMain.removeHandler(COMMUNICATIONS_RELAY_STATUS_CHANNEL)
+  ipcMain.handle(
+    COMMUNICATIONS_RELAY_STATUS_CHANNEL,
+    (): CommunicationsRelayStatus => getRelayStartupStatus()
+  )
 }

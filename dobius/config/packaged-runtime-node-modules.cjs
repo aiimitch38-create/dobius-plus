@@ -50,7 +50,13 @@ const VERSIONED_ONNXRUNTIME_DYLIB_RE = /^libonnxruntime\.\d[\d.]*\.dylib$/
 
 const NODE_BUILTINS = new Set([
   ...builtinModules,
-  ...builtinModules.map((moduleName) => `node:${moduleName}`)
+  ...builtinModules.map((moduleName) => `node:${moduleName}`),
+  // Why: node:sqlite is a real Node >=22.5 builtin but is absent from
+  // builtinModules on the Nodes probed (22.22.3 / 26.0.0), so the verifier
+  // flagged the main bundle's sqlite import as an unmet dependency. Safe in
+  // production: the installed app's main bundle already ships node:sqlite.
+  'sqlite',
+  'node:sqlite'
 ])
 
 function packageNameFromSpecifier(specifier) {

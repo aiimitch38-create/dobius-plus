@@ -45,6 +45,10 @@ export type RelayServerOptions = {
 export type RelayServerHandle = {
   /** The port actually bound, or the requested one when the bind was refused. */
   port: number
+  /** False when the bind was refused; the handle is then inert but still safe to close. */
+  bound: boolean
+  /** Plain-language reason the bind was refused; present only when `bound` is false. */
+  bindError?: string
   close: () => Promise<void>
 }
 
@@ -331,7 +335,8 @@ function attachConnection(ctx: RelayContext, socket: WebSocket): void {
  * A failed bind (usually a second Dobius instance already holding the port) is
  * logged and swallowed: the relay is a feature, not a precondition of the app, so
  * it must never reject and block Electron startup. The returned handle is inert
- * in that case and `close()` on it is still safe.
+ * in that case (`bound: false`, with `bindError` carrying the plain-language
+ * reason) and `close()` on it is still safe.
  */
 export async function startRelayServer(options: RelayServerOptions): Promise<RelayServerHandle> {
   const host = options.host ?? RELAY_HOST
@@ -349,8 +354,8 @@ export async function startRelayServer(options: RelayServerOptions): Promise<Rel
   })
 
   const listening = await listen(server, requestedPort, host)
-  if (!listening) {
-    return { port: requestedPort, close: async () => {} }
+  if (!listening.ok) {
+    return { port: requestedPort, bound: false, bindError: listening.detail, close: async () => {} }
   }
 
   // Attached only after a successful listen: a WebSocketServer bound to a server
@@ -364,20 +369,24 @@ export async function startRelayServer(options: RelayServerOptions): Promise<Rel
   const port = typeof address === 'object' && address !== null ? address.port : requestedPort
   console.log(`[relay] listening on http://${host}:${port}`)
 
-  return { port, close: () => closeServer(server, wss, ctx) }
+  return { port, bound: true, close: () => closeServer(server, wss, ctx) }
 }
 
-function listen(server: Server, port: number, host: string): Promise<boolean> {
+function listen(
+  server: Server,
+  port: number,
+  host: string
+): Promise<{ ok: true } | { ok: false; detail: string }> {
   return new Promise((resolve) => {
     const onError = (err: NodeJS.ErrnoException): void => {
       const detail = err.code === 'EADDRINUSE' ? `port ${port} is already in use` : err.message
       console.warn(`[relay] not started: ${detail}`)
-      resolve(false)
+      resolve({ ok: false, detail })
     }
     server.once('error', onError)
     server.listen(port, host, () => {
       server.off('error', onError)
-      resolve(true)
+      resolve({ ok: true })
     })
   })
 }

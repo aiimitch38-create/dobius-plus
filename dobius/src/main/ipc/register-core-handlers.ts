@@ -26,7 +26,10 @@ import { registerMemoryHandlers } from './memory'
 import { registerRateLimitHandlers } from './rate-limits'
 import { registerRuntimeHandlers } from './runtime'
 import { registerCommunicationsGateway } from '../communications/communications-gateway'
-import { startCommunicationsRelay } from '../communications/relay/relay-lifecycle'
+import {
+  registerRelayStatusHandler,
+  startCommunicationsRelay
+} from '../communications/relay/relay-lifecycle'
 import { registerCommunicationsIdentityHandlers } from './communications-identity'
 import { registerRuntimeEnvironmentHandlers } from './runtime-environments'
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
@@ -222,6 +225,7 @@ export function registerCoreHandlers(
   registerFilesystemWatcherHandlers()
   registerRuntimeHandlers(runtime)
   registerCommunicationsGateway(runtime)
+  registerRelayStatusHandler()
   // Why here: the gateway exposes the Buzz bridge, but the bundled client also
   // talks straight to localhost:3300 over HTTP/WebSocket. Both halves have to
   // come up together or the UI renders "Can't reach the relay".

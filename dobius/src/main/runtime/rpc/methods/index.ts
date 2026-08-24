@@ -55,6 +55,7 @@ import { NATIVE_UX_RPC_METHODS } from '../../../communications/native/rpc-method
 import { SNAPSHOT_METHODS } from '../../../communications/snapshots/snapshot-rpc-methods'
 import { WORKFLOW_METHODS } from '../../../communications/workflows/workflow-rpc-methods'
 import { WORKSTATION_METHODS } from '../../../communications/workstation/rpc-methods'
+import { CANVAS_NOTES_METHODS } from '../../../communications/canvas/canvas-rpc-methods'
 
 // Why: a flat manifest keeps registration order explicit and provides one
 // grep-point for "what methods does the RPC server expose?" — useful when
@@ -106,4 +107,5 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...SNAPSHOT_METHODS,
   ...WORKFLOW_METHODS,
   ...WORKSTATION_METHODS,
+  ...CANVAS_NOTES_METHODS,
 ]

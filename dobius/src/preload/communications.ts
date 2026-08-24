@@ -5,6 +5,10 @@ import {
   type CommunicationsBridgeRequest,
   type CommunicationsBridgeResponse
 } from '../shared/communications-bridge'
+import {
+  COMMUNICATIONS_RELAY_STATUS_CHANNEL,
+  type CommunicationsRelayStatus
+} from '../shared/communications-relay-status'
 
 let requestSequence = 0
 
@@ -18,6 +22,9 @@ contextBridge.exposeInMainWorld('dobiusCommunications', {
       args
     }
     return ipcRenderer.invoke(COMMUNICATIONS_BRIDGE_REQUEST_CHANNEL, request)
+  },
+  relayStatus(): Promise<CommunicationsRelayStatus> {
+    return ipcRenderer.invoke(COMMUNICATIONS_RELAY_STATUS_CHANNEL)
   }
 })
 

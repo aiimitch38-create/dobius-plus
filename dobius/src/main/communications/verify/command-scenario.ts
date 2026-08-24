@@ -119,6 +119,8 @@ import { SCENARIO_STEPS as workflowsSteps } from '../workflows/workflows.scenari
 import { SCENARIO_STEPS as channelTemplatesSteps } from '../../runtime/rpc/methods/channel-templates.scenarios'
 // Landed: save-subscription lifecycle (method seam, same as workstation).
 import { SCENARIO_STEPS as saveSubscriptionsSteps } from '../../runtime/rpc/methods/save-subscriptions.scenarios'
+// Landed: canvas + social notes (method seam, same as workstation).
+import { SCENARIO_STEPS as canvasSteps } from '../canvas/canvas.scenarios'
 // ---------------------------------------------------------------------
 
 /**
@@ -156,6 +158,7 @@ export const SCENARIO: ScenarioStep[] = [
   ...workflowsSteps,
   ...channelTemplatesSteps,
   ...saveSubscriptionsSteps,
+  ...canvasSteps,
   // , ...identitySteps
   ...CORE_TEARDOWN_STEPS
 ]

@@ -5,7 +5,9 @@
 # Assumes `pnpm run build:unpack` already succeeded (build first, install second).
 set -euo pipefail
 
-REPO="/Users/bayou/Projects (Code)/dobius-plus"
+# Why derived, not hardcoded: the repo moved to .../Dobius/dobius-plus and the old
+# absolute path silently pointed the installer at a tree that no longer exists.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILT_APP="$REPO/dobius/dist/mac-arm64/Dobius+.app"
 INSTALLED="/Applications/Dobius+.app"
 APPDATA="$HOME/Library/Application Support/dobius-plus"
