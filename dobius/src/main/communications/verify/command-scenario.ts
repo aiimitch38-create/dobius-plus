@@ -107,6 +107,18 @@ import { SCENARIO_STEPS as chatSteps } from '../chat/chat.scenarios'
 import { SCENARIO_STEPS as nativeSteps } from '../native/native.scenarios'
 // Landed: agent-lifecycle / agent-provider-config / agent-approvals.
 import { SCENARIO_STEPS as agentsSteps } from '../agents/agents.scenarios'
+// Landed: workstation-git + media (method seam — the vendor switch has no
+// cases for this family; every step dispatches the RPC method name through
+// the real gateway handler via via:'method').
+import { SCENARIO_STEPS as workstationSteps } from '../workstation/workstation.scenarios'
+// Landed: agent/team snapshots (method seam, same as workstation).
+import { SCENARIO_STEPS as snapshotsSteps } from '../snapshots/snapshots.scenarios'
+// Landed: workflow lifecycle (method seam, same as workstation).
+import { SCENARIO_STEPS as workflowsSteps } from '../workflows/workflows.scenarios'
+// Landed: channel-template lifecycle (method seam, same as workstation).
+import { SCENARIO_STEPS as channelTemplatesSteps } from '../../runtime/rpc/methods/channel-templates.scenarios'
+// Landed: save-subscription lifecycle (method seam, same as workstation).
+import { SCENARIO_STEPS as saveSubscriptionsSteps } from '../../runtime/rpc/methods/save-subscriptions.scenarios'
 // ---------------------------------------------------------------------
 
 /**
@@ -136,6 +148,14 @@ export const SCENARIO: ScenarioStep[] = [
   ...chatSteps,
   ...nativeSteps,
   ...agentsSteps,
+  // Method-seam families (via:'method' — dispatched by RPC method name
+  // through the real gateway handler; see run-verification.test.ts's
+  // methodEntries tests for their stricter gate).
+  ...workstationSteps,
+  ...snapshotsSteps,
+  ...workflowsSteps,
+  ...channelTemplatesSteps,
+  ...saveSubscriptionsSteps,
   // , ...identitySteps
   ...CORE_TEARDOWN_STEPS
 ]

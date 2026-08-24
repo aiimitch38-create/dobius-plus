@@ -1,235 +1,286 @@
 /**
- * Scenario fixtures for the workflow.* commands (create_workflow/
- * update_workflow/delete_workflow/get_workflow/get_channel_workflows/
- * get_channels_workflows/trigger_workflow/get_workflow_runs) for the
- * communications command verification harness's composable scenario
- * registry (src/main/communications/verify/command-scenario.ts's
- * `SCENARIO_STEPS` family contract). The harness owner splices this in with
- * one import + one array-spread in that file; this module never edits
- * verify/ itself.
+ * Verification-harness fixtures for the workflow.* RPC family
+ * (workflow-rpc-methods.ts). Composed into the shared SCENARIO array by
+ * ../verify/command-scenario.ts (the harness owner splices this in with one
+ * import + one array-spread); this module never edits verify/ itself.
  *
- * Local structural copies of ShapeOutcome/ScenarioContext/ScenarioStep
- * instead of importing them: verify/ has its own tsconfig
- * (composite:true, excluded from config/tsconfig.node.json — see
- * teams.scenarios.ts's identical doc comment) so a real cross-project
- * import fails with TS6307. TypeScript's structural typing still makes this
- * assignable to the real `ScenarioStep[]` wherever the harness owner
- * imports it.
+ * SEAM — every step here sets via: 'method' and dispatches by RPC METHOD
+ * name ('workflow.create', ...). The vendored Buzz client reaches these same
+ * features through snake_case Tauri commands (create_workflow,
+ * get_channel_workflows, ... in vendor/buzz-desktop/src/shared/api/
+ * tauriWorkflows.ts), so the camelCase workflow.* names have no case in the
+ * vendor switch at all — the gateway seam (sender-trust + allowlist +
+ * dispatcher) is the only real path they can be exercised over. All eight
+ * names are already in COMMUNICATIONS_RUNTIME_METHODS (src/shared/
+ * communications-bridge.ts), so a missing-allowlist regression surfaces as a
+ * loud ERROR, not a silent skip.
  *
- * Deliberately does NOT cover trigger_workflow with a step that would spawn
- * a real agent — it doesn't need to: workflow-executor.ts's step
- * vocabulary (log/delay/noop) never contacts a live model account (see that
- * file's own doc comment), so exercising trigger_workflow here is safe.
- * Not covered: get_run_approvals/grant_approval/deny_approval — those
- * commands are out of this feature's 17-command scope (still
- * removed-pending/pending under a different owner per the manifest).
+ * NO requiresSecondBoundary anywhere: create/update persist to the local
+ * userData JSON store only (workflows.json via workflow-store.ts) and never
+ * publish relay events of any kind, so there is no addressable-event
+ * created_at tie-break race for the runner's second-boundary wait to guard.
+ *
+ * TRIGGER DETERMINISM: triggerWorkflow executes steps in-process with a
+ * deliberately small supported vocabulary (log/delay/noop — see
+ * workflow-executor.ts) and never spawns a real agent run, so a definition
+ * containing only those step types deterministically completes headless.
+ * This fixture uses exactly such a definition; no managed agent or runnable
+ * target is needed.
+ *
+ * CLEANUP: the final step deletes the workflow it created. deleteWorkflow
+ * also removes that workflow's run history (removeRunsForWorkflow in
+ * workflow-service.ts), so nothing this file minted outlives its last step.
  */
+import { fail, hasStringField, isRecord, ok, type ScenarioStep } from '../scenario-contract'
 
-type ShapeOutcome = { ok: true } | { ok: false; reason: string }
+const WORKFLOW_ID_KEY = 'workflowsVerifyWorkflowId'
+const RUN_ID_KEY = 'workflowsVerifyRunId'
 
-type WorkflowScenarioContext = {
-  channelId?: string
-  family: Record<string, unknown>
+const CREATE_NAME = 'Workflows Verify Probe'
+const UPDATED_NAME = 'Workflows Verify Probe (updated)'
+
+// Only executor-supported step types (log/noop), so workflow.trigger's
+// verdict reflects the real execution path rather than honest-skip behavior.
+const CREATE_YAML = [
+  'name: Workflows Verify Probe',
+  'steps:',
+  '  - id: greet',
+  '    type: log',
+  '    with:',
+  '      message: workflows verification probe'
+].join('\n')
+
+const UPDATE_YAML = [
+  'name: Workflows Verify Probe (updated)',
+  'steps:',
+  '  - id: greet',
+  '    type: log',
+  '    with:',
+  '      message: workflows verification probe',
+  '  - id: settle',
+  '    type: noop'
+].join('\n')
+
+function capturedWorkflowId(ctx: { family: Record<string, unknown> }): unknown {
+  return ctx.family[WORKFLOW_ID_KEY]
 }
 
-type WorkflowScenarioStep = {
-  command: string
-  args: (ctx: WorkflowScenarioContext) => unknown
-  shapeCheck: (result: unknown, ctx: WorkflowScenarioContext) => ShapeOutcome
-  capture?: (result: unknown, ctx: WorkflowScenarioContext) => void
-  requiresSecondBoundary?: boolean
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function ok(): ShapeOutcome {
-  return { ok: true }
-}
-
-function fail(reason: string): ShapeOutcome {
-  return { ok: false, reason }
-}
-
-/**
- * Full RawWorkflow shape check (tauriWorkflows.ts's RawWorkflow, lines
- * 14-22): id/name/owner_pubkey/channel_id/definition/status/created_at/
- * updated_at, all snake_case, created_at/updated_at as NUMBERS (unlike
- * RawTeam's ISO-string timestamps) — this is the exact shape the paste-ready
- * dobiusCommunications.ts `workflowFromRecord` mapping in the build report
- * must produce, not just "it's an object".
- */
-function isRawWorkflowShape(value: unknown): ShapeOutcome {
-  if (!isRecord(value)) {
-    return fail(`expected a workflow object, got ${typeof value}`)
-  }
-  if (typeof value.id !== 'string' || !value.id) {
-    return fail('missing id')
-  }
-  if (typeof value.name !== 'string' || !value.name) {
-    return fail('missing name')
-  }
-  if (typeof value.owner_pubkey !== 'string' || !value.owner_pubkey) {
-    return fail('missing owner_pubkey')
-  }
-  if (value.channel_id !== null && typeof value.channel_id !== 'string') {
-    return fail(`channel_id should be string|null, got ${JSON.stringify(value.channel_id)}`)
-  }
-  if (!isRecord(value.definition)) {
-    return fail(`definition should be an object, got ${JSON.stringify(value.definition)}`)
-  }
-  if (!['active', 'disabled', 'archived'].includes(value.status as string)) {
-    return fail(`unexpected status: ${JSON.stringify(value.status)}`)
-  }
-  if (typeof value.created_at !== 'number') {
-    return fail(`created_at should be a number, got ${JSON.stringify(value.created_at)}`)
-  }
-  if (typeof value.updated_at !== 'number') {
-    return fail(`updated_at should be a number, got ${JSON.stringify(value.updated_at)}`)
-  }
-  return ok()
-}
-
-const WORKFLOW_YAML = 'name: Verify Workflow\nsteps:\n  - id: greet\n    type: log\n    with:\n      message: hi\n'
-const WORKFLOW_YAML_UPDATED =
-  'name: Verify Workflow Updated\nstatus: disabled\nsteps:\n  - id: greet\n    type: log\n    with:\n      message: bye\n'
-
-export const SCENARIO_STEPS: WorkflowScenarioStep[] = [
+export const SCENARIO_STEPS: ScenarioStep[] = [
   {
-    command: 'create_workflow',
-    args: (ctx) => ({ channelId: ctx.channelId, yamlDefinition: WORKFLOW_YAML }),
-    shapeCheck: (result) => {
-      const shape = isRawWorkflowShape(result)
-      if (!shape.ok) {
-        return shape
+    // Asserts the full Workflow record the store actually returns (see
+    // WorkflowCreateInput -> createWorkflow in workflow-store.ts), not just
+    // "returned something": parsed name/steps from the YAML, channel scoping,
+    // owner, generated webhook secret, active default status, timestamps.
+    command: 'workflow.create',
+    via: 'method',
+    args: (ctx) => ({
+      ownerPubkey: ctx.selfPubkey,
+      channelId: ctx.channelId,
+      yamlDefinition: CREATE_YAML
+    }),
+    shapeCheck: (r, ctx) => {
+      if (!isRecord(r) || !isRecord(r.workflow)) {
+        return fail(`expected { workflow }, got ${JSON.stringify(r)}`)
       }
-      const record = result as Record<string, unknown>
-      if (record.name !== 'Verify Workflow') {
-        return fail(`name not set from YAML: ${JSON.stringify(record.name)}`)
+      const wf = r.workflow
+      if (!hasStringField(wf, 'id')) {
+        return fail('missing workflow.id')
       }
-      if (record.status !== 'active') {
-        return fail(`expected default status active, got ${JSON.stringify(record.status)}`)
+      if (wf.name !== CREATE_NAME) {
+        return fail(`expected YAML-derived name ${JSON.stringify(CREATE_NAME)}, got ${JSON.stringify(wf.name)}`)
       }
-      // RawWorkflowSaveResponse (tauriWorkflows.ts) is RawWorkflow FLATTENED
-      // with an optional webhook_secret field, not a nested { workflow,
-      // webhookSecret } — that nesting only happens in fromRawWorkflowSave,
-      // the frontend wrapper this harness bypasses. isRawWorkflowShape
-      // matching directly against `result` is therefore correct here.
-      return ok()
+      if (wf.ownerPubkey !== ctx.selfPubkey) {
+        return fail(`owner mismatch: ${JSON.stringify(wf.ownerPubkey)}`)
+      }
+      if (wf.channelId !== ctx.channelId) {
+        return fail(`channelId mismatch: expected ${JSON.stringify(ctx.channelId)}, got ${JSON.stringify(wf.channelId)}`)
+      }
+      if (wf.definitionYaml !== CREATE_YAML) {
+        return fail('definitionYaml did not round-trip verbatim')
+      }
+      if (!isRecord(wf.definition)) {
+        return fail('missing parsed definition object')
+      }
+      if (!Array.isArray(wf.steps) || wf.steps.length !== 1) {
+        return fail(`expected one parsed step, got ${JSON.stringify(wf.steps)}`)
+      }
+      const [step] = wf.steps
+      if (!isRecord(step) || step.id !== 'greet' || step.type !== 'log' || !isRecord(step.with)) {
+        return fail(`unexpected parsed step shape: ${JSON.stringify(step)}`)
+      }
+      if (wf.status !== 'active') {
+        return fail(`expected default status 'active', got ${JSON.stringify(wf.status)}`)
+      }
+      if (!hasStringField(wf, 'webhookSecret')) {
+        return fail('missing generated webhookSecret')
+      }
+      return typeof wf.createdAt === 'number' && typeof wf.updatedAt === 'number'
+        ? ok()
+        : fail('missing numeric createdAt/updatedAt')
     },
-    capture: (result, ctx) => {
-      if (isRecord(result) && typeof result.id === 'string') {
-        ctx.family.workflowId = result.id
+    capture: (r, ctx) => {
+      if (isRecord(r) && isRecord(r.workflow) && typeof r.workflow.id === 'string') {
+        ctx.family[WORKFLOW_ID_KEY] = r.workflow.id
       }
     }
   },
   {
-    command: 'get_channel_workflows',
+    command: 'workflow.show',
+    via: 'method',
+    args: (ctx) => ({ workflowId: capturedWorkflowId(ctx) }),
+    shapeCheck: (r, ctx) => {
+      if (!isRecord(r) || !isRecord(r.workflow)) {
+        return fail(`expected { workflow }, got ${JSON.stringify(r)}`)
+      }
+      const wf = r.workflow
+      return wf.id === ctx.family[WORKFLOW_ID_KEY] && wf.name === CREATE_NAME && wf.channelId === ctx.channelId
+        ? ok()
+        : fail(`showed a different workflow than the one created: ${JSON.stringify({ id: wf.id, name: wf.name })}`)
+    }
+  },
+  {
+    // Renames + adds a second step via new YAML; the store keeps id,
+    // channelId, and owner stable across updates and bumps updatedAt only.
+    command: 'workflow.update',
+    via: 'method',
+    args: (ctx) => ({ workflowId: capturedWorkflowId(ctx), yamlDefinition: UPDATE_YAML }),
+    shapeCheck: (r, ctx) => {
+      if (!isRecord(r) || !isRecord(r.workflow)) {
+        return fail(`expected { workflow }, got ${JSON.stringify(r)}`)
+      }
+      const wf = r.workflow
+      if (wf.id !== ctx.family[WORKFLOW_ID_KEY]) {
+        return fail('update changed the workflow id')
+      }
+      if (wf.name !== UPDATED_NAME) {
+        return fail(`expected updated name, got ${JSON.stringify(wf.name)}`)
+      }
+      if (wf.definitionYaml !== UPDATE_YAML) {
+        return fail('updated definitionYaml did not round-trip verbatim')
+      }
+      if (!Array.isArray(wf.steps) || wf.steps.length !== 2) {
+        return fail(`expected two parsed steps after update, got ${JSON.stringify(wf.steps)}`)
+      }
+      if (
+        !isRecord(wf.steps[0]) || wf.steps[0].id !== 'greet' ||
+        !isRecord(wf.steps[1]) || wf.steps[1].id !== 'settle'
+      ) {
+        return fail(`unexpected step ids after update: ${JSON.stringify(wf.steps)}`)
+      }
+      return typeof wf.createdAt === 'number' && typeof wf.updatedAt === 'number' && wf.updatedAt >= wf.createdAt
+        ? ok()
+        : fail(`updatedAt not bumped past createdAt: ${JSON.stringify({ createdAt: wf.createdAt, updatedAt: wf.updatedAt })}`)
+    }
+  },
+  {
+    command: 'workflow.listByChannel',
+    via: 'method',
     args: (ctx) => ({ channelId: ctx.channelId }),
-    shapeCheck: (result, ctx) => {
-      if (!Array.isArray(result)) {
-        return fail('expected an array')
+    shapeCheck: (r, ctx) => {
+      if (!isRecord(r) || !Array.isArray(r.workflows)) {
+        return fail(`expected { workflows: [...] }, got ${JSON.stringify(r)}`)
       }
-      const mine = result.find((w) => isRecord(w) && w.id === ctx.family.workflowId)
-      return mine ? ok() : fail('created workflow did not appear in get_channel_workflows')
+      const ours = r.workflows.find((entry) => isRecord(entry) && entry.id === ctx.family[WORKFLOW_ID_KEY])
+      if (!isRecord(ours)) {
+        return fail('created workflow missing from its own channel listing')
+      }
+      if (ours.name !== UPDATED_NAME) {
+        return fail(`listing served a stale name: ${JSON.stringify(ours.name)}`)
+      }
+      const foreign = r.workflows.filter((entry) => isRecord(entry) && entry.channelId !== ctx.channelId)
+      return foreign.length === 0
+        ? ok()
+        : fail(`listing leaked workflows from other channels: ${JSON.stringify(foreign.map((w) => (isRecord(w) ? w.id : w)))}`)
     }
   },
   {
-    command: 'get_channels_workflows',
-    args: (ctx) => ({ channelIds: [ctx.channelId] }),
-    shapeCheck: (result, ctx) => {
-      if (!Array.isArray(result)) {
-        return fail('expected an array')
+    // The unrelated second id proves multi-channel filtering still matches
+    // our channel rather than merely echoing everything back.
+    command: 'workflow.listByChannels',
+    via: 'method',
+    args: (ctx) => ({ channelIds: [ctx.channelId, 'workflows-verify-unrelated-channel'] }),
+    shapeCheck: (r, ctx) => {
+      if (!isRecord(r) || !Array.isArray(r.workflows)) {
+        return fail(`expected { workflows: [...] }, got ${JSON.stringify(r)}`)
       }
-      const mine = result.find((w) => isRecord(w) && w.id === ctx.family.workflowId)
-      return mine ? ok() : fail('created workflow did not appear in get_channels_workflows')
+      if (!r.workflows.some((entry) => isRecord(entry) && entry.id === ctx.family[WORKFLOW_ID_KEY])) {
+        return fail('created workflow missing from multi-channel listing')
+      }
+      // ctx.channelId is CORE-guaranteed by this point; the fallback only
+      // satisfies the Set<string> type if a broken upstream ever left it unset.
+      const requested = new Set<string>([ctx.channelId ?? '', 'workflows-verify-unrelated-channel'])
+      const outside = r.workflows.filter(
+        (entry) => isRecord(entry) && (typeof entry.channelId !== 'string' || !requested.has(entry.channelId))
+      )
+      return outside.length === 0
+        ? ok()
+        : fail(`multi-channel listing returned rows outside the requested set: ${JSON.stringify(outside.map((w) => (isRecord(w) ? w.id : w)))}`)
     }
   },
   {
-    command: 'get_workflow',
-    args: (ctx) => ({ workflowId: ctx.family.workflowId }),
-    shapeCheck: (result, ctx) => {
-      const shape = isRawWorkflowShape(result)
-      if (!shape.ok) {
-        return shape
-      }
-      const record = result as Record<string, unknown>
-      return record.id === ctx.family.workflowId ? ok() : fail('get_workflow returned a different workflow id')
-    }
-  },
-  {
-    command: 'update_workflow',
-    args: (ctx) => ({ workflowId: ctx.family.workflowId, yamlDefinition: WORKFLOW_YAML_UPDATED }),
-    shapeCheck: (result, ctx) => {
-      const shape = isRawWorkflowShape(result)
-      if (!shape.ok) {
-        return shape
-      }
-      const record = result as Record<string, unknown>
-      if (record.id !== ctx.family.workflowId) {
-        return fail('update_workflow returned a different workflow id')
-      }
-      if (record.name !== 'Verify Workflow Updated') {
-        return fail(`name change did not take: ${JSON.stringify(record.name)}`)
-      }
-      if (record.status !== 'disabled') {
-        return fail(`status change did not take: ${JSON.stringify(record.status)}`)
-      }
-      return ok()
-    }
-  },
-  {
-    command: 'trigger_workflow',
-    args: (ctx) => ({ workflowId: ctx.family.workflowId }),
-    shapeCheck: (result, ctx) => {
-      if (!isRecord(result)) {
-        return fail('expected a TriggerWorkflowResponse object')
-      }
-      if (result.workflow_id !== ctx.family.workflowId) {
-        return fail(`workflow_id mismatch: ${JSON.stringify(result.workflow_id)}`)
-      }
-      if (typeof result.run_id !== 'string' || !result.run_id) {
-        return fail('missing run_id')
-      }
-      if (typeof result.status !== 'string') {
-        return fail('missing status')
-      }
-      return ok()
-    },
-    capture: (result, ctx) => {
-      if (isRecord(result) && typeof result.run_id === 'string') {
-        ctx.family.workflowRunId = result.run_id
+    // Both fixture steps are executor-supported types, so the run must land
+    // 'completed' — an honest skipped-step trace would show up as a FAIL
+    // here. No agent/runnable target is involved (see module doc).
+    command: 'workflow.trigger',
+    via: 'method',
+    args: (ctx) => ({ workflowId: capturedWorkflowId(ctx) }),
+    shapeCheck: (r, ctx) =>
+      isRecord(r) && hasStringField(r, 'runId') && r.workflowId === ctx.family[WORKFLOW_ID_KEY] && r.status === 'completed'
+        ? ok()
+        : fail(`unexpected trigger result: ${JSON.stringify(r)}`),
+    capture: (r, ctx) => {
+      if (isRecord(r) && typeof r.runId === 'string') {
+        ctx.family[RUN_ID_KEY] = r.runId
       }
     }
   },
   {
-    command: 'get_workflow_runs',
-    args: (ctx) => ({ workflowId: ctx.family.workflowId, limit: 10 }),
-    shapeCheck: (result, ctx) => {
-      if (!Array.isArray(result)) {
-        return fail('expected an array')
+    // Runs come back newest-first (workflow-run-store.ts listRuns); the
+    // single run this scenario triggered must therefore sit first, carrying
+    // the real per-step trace for greet/settle.
+    command: 'workflow.runs',
+    via: 'method',
+    args: (ctx) => ({ workflowId: capturedWorkflowId(ctx), limit: 10 }),
+    shapeCheck: (r, ctx) => {
+      if (!isRecord(r) || !Array.isArray(r.runs)) {
+        return fail(`expected { runs: [...] }, got ${JSON.stringify(r)}`)
       }
-      const run = result.find((r) => isRecord(r) && r.id === ctx.family.workflowRunId)
-      if (!run || !isRecord(run)) {
-        return fail('triggered run did not appear in get_workflow_runs')
+      if (r.runs.length < 1) {
+        return fail('triggered workflow has no recorded runs')
       }
-      if (run.workflow_id !== ctx.family.workflowId) {
-        return fail('run workflow_id mismatch')
+      const [first] = r.runs
+      if (!isRecord(first)) {
+        return fail(`first run row was not an object: ${JSON.stringify(first)}`)
       }
-      if (!Array.isArray(run.execution_trace) || run.execution_trace.length === 0) {
-        return fail('expected a non-empty execution_trace for the "log" step')
+      if (first.id !== ctx.family[RUN_ID_KEY]) {
+        return fail(`newest-first ordering violated: top run ${JSON.stringify(first.id)} != triggered ${JSON.stringify(ctx.family[RUN_ID_KEY])}`)
       }
-      const firstStep = run.execution_trace[0]
-      if (!isRecord(firstStep) || firstStep.step_id !== 'greet' || firstStep.status !== 'completed') {
-        return fail(`unexpected first trace entry: ${JSON.stringify(firstStep)}`)
+      if (first.status !== 'completed') {
+        return fail(`run status ${JSON.stringify(first.status)}, expected completed`)
       }
-      return ok()
+      if (first.errorMessage !== null) {
+        return fail(`completed run carried an error message: ${JSON.stringify(first.errorMessage)}`)
+      }
+      if (!Array.isArray(first.executionTrace)) {
+        return fail('run missing executionTrace array')
+      }
+      const traced = first.executionTrace.map(
+        (entry) => (isRecord(entry) && entry.status === 'completed' && typeof entry.stepId === 'string' ? entry.stepId : null)
+      )
+      return traced.join(',') === 'greet,settle'
+        ? ok()
+        : fail(`trace did not complete both steps in order: ${JSON.stringify(traced)}`)
     }
   },
   {
-    command: 'delete_workflow',
-    args: (ctx) => ({ workflowId: ctx.family.workflowId }),
-    shapeCheck: (result) => (result === undefined ? ok() : fail(`expected undefined, got ${JSON.stringify(result)}`))
+    // Cleanup: removes the workflow AND its run history
+    // (removeRunsForWorkflow), leaving nothing behind for a later run.
+    command: 'workflow.delete',
+    via: 'method',
+    args: (ctx) => ({ workflowId: capturedWorkflowId(ctx) }),
+    shapeCheck: (r, ctx) =>
+      isRecord(r) && r.removed === true && r.workflowId === ctx.family[WORKFLOW_ID_KEY]
+        ? ok()
+        : fail(`unexpected delete result: ${JSON.stringify(r)}`)
   }
 ]

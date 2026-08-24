@@ -56,6 +56,12 @@ export const COMMUNICATIONS_RUNTIME_METHODS = [
   // Communications — the bridge rejected the call as command_not_allowed.
   'agent.run',
   'agent.runs',
+  // Snapshot family (snapshots/snapshot-rpc-methods.ts) — registered in
+  // ALL_RPC_METHODS but previously unreachable from Communications.
+  'agent.snapshot.confirmImport',
+  'agent.snapshot.encode',
+  'agent.snapshot.export',
+  'agent.snapshot.previewImport',
   // Why: set_persona_active/set_persona_shared re-read the agent record after
   // mutating a local override, to project it back into the Persona shape.
   'agent.show',
@@ -91,6 +97,13 @@ export const COMMUNICATIONS_RUNTIME_METHODS = [
   'communications.identity.signOut',
   'communications.identity.unarchiveIdentity',
   'communications.identity.verifyNcryptsecBackup',
+  // Channel-template family (runtime/rpc/methods/channel-templates.ts).
+  'channelTemplate.create',
+  'channelTemplate.delete',
+  'channelTemplate.duplicate',
+  'channelTemplate.list',
+  'channelTemplate.show',
+  'channelTemplate.update',
   'huddle.addAgent',
   'huddle.confirmActive',
   'huddle.end',
@@ -109,6 +122,12 @@ export const COMMUNICATIONS_RUNTIME_METHODS = [
   'media.copyTextToClipboard',
   'media.downloadFile',
   'media.downloadImage',
+  'media.fetchBytes',
+  'media.getProxyPort',
+  'media.pickAndUploadImage',
+  'media.pickAndUploadMedia',
+  'media.upload',
+  'media.uploadBytes',
   'nativeUx.getIdleSeconds',
   'nativeUx.performSidebarHaptic',
   'nativeUx.setWindowVibrancy',
@@ -118,6 +137,13 @@ export const COMMUNICATIONS_RUNTIME_METHODS = [
   'nativeUx.trayRequeueActions',
   'nativeUx.trayTakeActions',
   'nativeUx.trayUpdateAgentActivity',
+  // Save-subscription family (runtime/rpc/methods/save-subscriptions.ts).
+  'saveSubscription.create',
+  'saveSubscription.delete',
+  'saveSubscription.list',
+  'saveSubscription.mergeKind',
+  'saveSubscription.removeKind',
+  'snapshot.fetchBytes',
   'repo.list',
   // Why: get_model_status projects the existing STT model-download state
   // into Buzz's model-status shape; already implemented, just unreachable.
@@ -126,9 +152,44 @@ export const COMMUNICATIONS_RUNTIME_METHODS = [
   'team.create',
   'team.delete',
   'team.list',
+  'team.snapshot.confirmImport',
+  'team.snapshot.encode',
+  'team.snapshot.export',
+  'team.snapshot.previewImport',
   'team.update',
   'terminal.list',
   'updater.isAutoUpdateSupported',
+  // Workflow family (workflows/workflow-rpc-methods.ts).
+  'workflow.create',
+  'workflow.delete',
+  'workflow.listByChannel',
+  'workflow.listByChannels',
+  'workflow.runs',
+  'workflow.show',
+  'workflow.trigger',
+  'workflow.update',
+  // Workstation family (workstation/rpc-methods.ts).
+  'workstationGit.checkPipelineHotstart',
+  'workstationGit.cloneRepository',
+  'workstationGit.createRemoteBranch',
+  'workstationGit.deleteRemoteBranch',
+  'workstationGit.discoverGitBashPrerequisite',
+  'workstationGit.fetchWorkspaceIcon',
+  'workstationGit.getIdentity',
+  'workstationGit.getLocalDiff',
+  'workstationGit.getLocalSnapshot',
+  'workstationGit.getRemoteDiff',
+  'workstationGit.getRemoteSnapshot',
+  'workstationGit.getSyncStatus',
+  'workstationGit.listLocalRepositories',
+  'workstationGit.mergePullRequest',
+  'workstationGit.openMergeRecoveryTerminal',
+  'workstationGit.openTerminal',
+  'workstationGit.publishPullRequestMergedStatus',
+  'workstationGit.pull',
+  'workstationGit.push',
+  'workstationGit.signPullRequestReviewRequest',
+  'workstationGit.signPullRequestStatus',
   'worktree.ps'
 ] as const
 

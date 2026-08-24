@@ -33,6 +33,30 @@ export const ISOLATED_USER_DATA_DIR = mkdtempSync(
   path.join(tmpdir(), 'dobius-comms-verify-userdata-')
 )
 
+// Why: not every main-process store persists under app.getPath('userData').
+// The communications participant-identity store (and its agent sibling) use
+// ~/.dobius via os.homedir() — a REAL path in the user's home. Without this
+// override the harness READS the user's live safeStorage-encrypted identity
+// (then dies JSON-parsing the ciphertext) and, if the file were missing,
+// would WRITE a plaintext harness identity over the user's real one. Same
+// isolation contract as the userData mock below: a verification run must
+// never touch the real machine's state.
+//
+// Why a deterministic path and not the mkdtemp dir: ssh config resolution
+// calls homedir() at MODULE-IMPORT time, before this file's top-level consts
+// exist — a factory closure over mutable state dies on TDZ there. The fixed
+// tmp path needs nothing from this module's scope. Stores mkdir -p on write,
+// so the dir not existing yet is fine; a leftover sandbox identity from a
+// previous run is throwaway state in tmp, never the user's real ~/.dobius.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  const { join } = await import('node:path')
+  return {
+    ...actual,
+    homedir: () => join(actual.tmpdir(), 'dobius-comms-verify-home')
+  }
+})
+
 // Why `vi.hoisted`: vi.mock('electron', ...) is hoisted above this file's own
 // imports by Vitest's transform, but the factory closure still needs a value
 // that exists at hoist time — vi.hoisted guarantees ISOLATED_USER_DATA_DIR-
@@ -53,6 +77,19 @@ const electronMock = vi.hoisted(() => ({
     removeHandler: () => {},
     on: () => {},
     removeListener: () => {}
+  },
+  // Why: the workstation PR-signing path reads credentials through
+  // safeStorage (integration-credential-file.ts). Without this export the
+  // handler dies with a vitest mock artifact instead of its real
+  // no-credential/no-identity error. Honest headless behavior: no keychain.
+  safeStorage: {
+    isEncryptionAvailable: () => false,
+    encryptString: () => {
+      throw new Error('safeStorage is not available in the verification harness')
+    },
+    decryptString: () => {
+      throw new Error('safeStorage is not available in the verification harness')
+    }
   },
   BrowserWindow: { fromId: () => null },
   webContents: { fromId: () => null }
@@ -81,6 +118,7 @@ installElectronMock()
 // `vi.mock` call above them within this same file, which is what makes this
 // ordering safe — see https://vitest.dev/api/vi.html#vi-mock).
 import { RpcDispatcher } from '../../runtime/rpc/dispatcher'
+import { createCommunicationsBridgeHandler } from '../communications-gateway'
 import type { DobiusRuntimeService } from '../../runtime/dobius-runtime'
 // The full main-app RPC registry (agent.*, accounts.*, team.*, git/GitHub/
 // SSH/terminal/... — everything). Registering all of it is safe: methods are
@@ -169,6 +207,40 @@ export function createRuntimeBridge(): { invoke: (command: string, args?: unknow
         ok: false,
         error: { code: response.error.code, message: response.error.message }
       }
+    }
+  }
+}
+
+/**
+ * Sender URL the gateway's trust check accepts for method-seam invocations.
+ * `isTrustedCommunicationsGuestUrl` takes its dev-mode origin from
+ * ELECTRON_RENDERER_URL, so the runner must set that env var (see
+ * METHOD_SEAM_RENDERER_URL) before any method-seam step runs — the check is
+ * the real one, not a mock.
+ */
+export const METHOD_SEAM_RENDERER_URL = 'http://127.0.0.1:5173'
+export const METHOD_SEAM_SENDER_URL = `${METHOD_SEAM_RENDERER_URL}/buzz/index.html?embed=dobius`
+
+/**
+ * Invokes RPC methods through the REAL communications gateway pipeline —
+ * `createCommunicationsBridgeHandler` with its sender-trust check, request
+ * validation, COMMUNICATIONS_RUNTIME_METHODS allowlist, and the
+ * 'communications-guest' auth token — instead of bypassing the gateway like
+ * `createRuntimeBridge` does. This is the seam Dobius's own client uses, and
+ * the one methods with no vendor/buzz-desktop switch case can only be
+ * verified through.
+ */
+export function createGatewayMethodInvoker(): {
+  invoke: (command: string, args?: unknown) => Promise<BridgeInvokeResult>
+} {
+  const dispatcher = new RpcDispatcher({ runtime: makeUnconfiguredRuntimeStub(), methods: ALL_RPC_METHODS })
+  const handleBridgeRequest = createCommunicationsBridgeHandler(dispatcher)
+
+  return {
+    async invoke(command, args) {
+      requestCounter += 1
+      const id = `verify-gw-${requestCounter}`
+      return handleBridgeRequest(METHOD_SEAM_SENDER_URL, { version: 1, id, command, args })
     }
   }
 }

@@ -53,6 +53,17 @@ export type ScenarioStep = {
   command: string
   args: (ctx: ScenarioContext) => unknown
   /**
+   * Which dispatch seam runs this step. 'vendor' (default) goes through the
+   * vendored Buzz client's Tauri-command switch (invokeTauri) — the seam the
+   * vendored UI uses. 'method' goes through the REAL communications gateway
+   * handler (sender-trust check + request validation + allowlist +
+   * dispatcher) with the RPC method name — the seam Dobius's own client
+   * uses. Methods the vendor switch has no case for can only be exercised
+   * with 'method'; a missing allowlist entry there surfaces as ERROR, not
+   * the vendor seam's UNIMPLEMENTED.
+   */
+  via?: 'vendor' | 'method'
+  /**
    * Runs only when the command did not throw. Required even on a step that
    * also sets `expectedError` (which never reaches this in practice, since
    * such a command always throws) — kept required rather than optional so

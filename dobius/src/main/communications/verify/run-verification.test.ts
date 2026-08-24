@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createRuntimeBridge } from './runtime-bridge-harness'
+import { createRuntimeBridge, createGatewayMethodInvoker, METHOD_SEAM_RENDERER_URL } from './runtime-bridge-harness'
 import { startVerificationRelay, stopVerificationRelay, type RelayHarness } from './relay-test-harness'
 import { classifyOutcome, skipped, type InvokeOutcome } from './classify'
 import { SCENARIO, SCENARIO_COMMANDS, randomHexPubkey, type ScenarioContext } from './command-scenario'
@@ -128,14 +128,50 @@ async function invoke(command: string, args: unknown): Promise<InvokeOutcome> {
   }
 }
 
+/**
+ * Method-seam invocation: through the REAL communications gateway handler
+ * (sender-trust check, request validation, COMMUNICATIONS_RUNTIME_METHODS
+ * allowlist, dispatcher) — see runtime-bridge-harness.ts's
+ * createGatewayMethodInvoker. `command` is the RPC METHOD name. A missing
+ * allowlist entry surfaces here as a thrown 'Unsupported command: …', which
+ * classifies as ERROR — deliberately loud, unlike the vendor seam's
+ * UNIMPLEMENTED.
+ */
+async function invokeViaGateway(
+  gatewayInvoke: (command: string, args?: unknown) => Promise<{ ok: true; result: unknown } | { ok: false; error: { code: string; message: string } }>,
+  command: string,
+  args: unknown
+): Promise<InvokeOutcome> {
+  try {
+    const response = await gatewayInvoke(command, args)
+    if (response.ok) {
+      return { threw: false, result: response.result }
+    }
+    return { threw: true, message: response.error.message }
+  } catch (error) {
+    return { threw: true, message: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 describe('communications command verification', () => {
   let relay: RelayHarness
   let manifest: Manifest
   let entries: CommandReportEntry[]
+  // Method-seam entries (steps with via:'method'), kept OUT of `entries` so
+  // the manifest-coverage tests — which count VENDOR-seam verdicts for all
+  // 258 manifest command names — stay exact. See the method-seam `it` blocks
+  // below for the (stricter) bar these steps must clear.
+  let methodEntries: CommandReportEntry[]
 
   beforeAll(async () => {
     relay = await startVerificationRelay()
     manifest = loadManifest()
+
+    // The gateway's sender-trust check reads ELECTRON_RENDERER_URL at call
+    // time in dev-mode; point it at the method seam's synthetic origin so the
+    // REAL check (not a mock) accepts the harness's sender URL.
+    process.env.ELECTRON_RENDERER_URL = METHOD_SEAM_RENDERER_URL
+    const { invoke: gatewayInvoke } = createGatewayMethodInvoker()
 
     const identity = await makeIdentityKeypair()
     const localStorage = new InMemoryLocalStorage()
@@ -157,6 +193,7 @@ describe('communications command verification', () => {
     }
 
     entries = []
+    methodEntries = []
     const byCommand = new Map(manifest.entries.map((entry) => [entry.command, entry]))
     const ctx: ScenarioContext = {
       selfPubkey: identity.pubkeyHex,
@@ -199,7 +236,10 @@ describe('communications command verification', () => {
           // See ScenarioStep.requiresSecondBoundary's doc in command-scenario.ts.
           await sleep(1100)
         }
-        const outcome = await invoke(step.command, step.args(ctx))
+        const isMethodSeam = step.via === 'method'
+        const outcome = isMethodSeam
+          ? await invokeViaGateway(gatewayInvoke, step.command, step.args(ctx))
+          : await invoke(step.command, step.args(ctx))
         const classified = classifyOutcome(
           outcome,
           (result) => step.shapeCheck(result, ctx),
@@ -208,16 +248,32 @@ describe('communications command verification', () => {
         if (classified.verdict === 'PASS' && !outcome.threw && step.capture) {
           step.capture(outcome.result, ctx)
         }
-        entries.push({ command: step.command, manifestStatus, disposition, fixtureSource: 'scenario', ...classified })
+        const entry = {
+          command: step.command,
+          manifestStatus,
+          disposition,
+          fixtureSource: 'scenario' as const,
+          ...classified
+        }
+        if (isMethodSeam) {
+          methodEntries.push(entry)
+        } else {
+          entries.push(entry)
+        }
       } catch (error) {
-        entries.push({
+        const entry = {
           command: step.command,
           manifestStatus,
           disposition,
           fixtureSource: 'scenario',
-          verdict: 'ERROR',
+          verdict: 'ERROR' as const,
           detail: `fixture itself threw (not the dispatched command): ${error instanceof Error ? error.message : String(error)}`
-        })
+        }
+        if (step.via === 'method') {
+          methodEntries.push(entry)
+        } else {
+          entries.push(entry)
+        }
       }
     }
 
@@ -259,6 +315,7 @@ describe('communications command verification', () => {
 
   afterAll(async () => {
     await stopVerificationRelay(relay)
+    delete process.env.ELECTRON_RENDERER_URL
   })
 
   it('every manifest command was verified exactly once', () => {
@@ -289,5 +346,26 @@ describe('communications command verification', () => {
       .map((entry) => `${entry?.command}: ${entry?.verdict}${entry?.detail ? ` (${entry.detail})` : ''}`)
       .join('\n')
     expect(unexplained, detail ? `Regressions:\n${detail}` : undefined).toEqual([])
+  })
+
+  it('every method-seam scenario step produced exactly one verdict', () => {
+    const methodSteps = SCENARIO.filter((step) => step.via === 'method')
+    expect(methodEntries).toHaveLength(methodSteps.length)
+    const seen = new Set(methodEntries.map((entry) => entry.command))
+    expect(seen.size).toBe(methodEntries.length)
+  })
+
+  it('every method-seam step PASSes over the real gateway (install-gate)', () => {
+    // Stricter than the vendor seam's install-gate: these steps exercise
+    // methods Dobius's own client depends on, through the real gateway
+    // pipeline (trust check + allowlist + dispatcher), with hand-built
+    // fixtures. There is no KNOWN_HARNESS_LIMITATIONS escape hatch here —
+    // a step that cannot deterministically PASS headless does not belong
+    // in SCENARIO with via:'method'.
+    const failures = methodEntries.filter((entry) => entry.verdict !== 'PASS')
+    const detail = failures
+      .map((entry) => `${entry.command}: ${entry.verdict}${entry.detail ? ` (${entry.detail})` : ''}`)
+      .join('\n')
+    expect(failures, detail ? `Method-seam non-PASS:\n${detail}` : undefined).toEqual([])
   })
 })
