@@ -165,6 +165,9 @@ import type {
 } from '../shared/agent-status-types'
 import type { AgentInterruptInferenceRequest } from '../shared/agent-interrupt-intent'
 import type {
+  JarvisAskResult,
+  JarvisSpeakOutcome,
+  JarvisStateEvent,
   SpeechErrorEvent,
   SpeechLifecycleEvent,
   SpeechModelManifest,
@@ -4400,6 +4403,32 @@ const api = {
         callback(data)
       ipcRenderer.on('speech:error', listener)
       return () => ipcRenderer.removeListener('speech:error', listener)
+    }
+  },
+
+  jarvis: {
+    setMode: (on: boolean): Promise<{ ok: boolean }> => ipcRenderer.invoke('jarvis:setMode', on),
+    ask: (utterance: string): Promise<JarvisAskResult> =>
+      ipcRenderer.invoke('jarvis:ask', utterance),
+    speak: (text: string): Promise<JarvisSpeakOutcome> => ipcRenderer.invoke('jarvis:speak', text),
+    openOrb: (): Promise<{ ok: boolean; windowId?: number }> => ipcRenderer.invoke('jarvis:openOrb'),
+    onState: (callback: (event: JarvisStateEvent) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: JarvisStateEvent): void =>
+        callback(data)
+      ipcRenderer.on('jarvis:state', listener)
+      return () => ipcRenderer.removeListener('jarvis:state', listener)
+    },
+    onPttPressed: (callback: (data: { at: number }) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: { at: number }): void =>
+        callback(data)
+      ipcRenderer.on('jarvis:ptt-pressed', listener)
+      return () => ipcRenderer.removeListener('jarvis:ptt-pressed', listener)
+    },
+    onPttReleased: (callback: (data: { at: number }) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: { at: number }): void =>
+        callback(data)
+      ipcRenderer.on('jarvis:ptt-released', listener)
+      return () => ipcRenderer.removeListener('jarvis:ptt-released', listener)
     }
   }
 }

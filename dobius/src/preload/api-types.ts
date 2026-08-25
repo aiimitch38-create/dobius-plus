@@ -369,6 +369,9 @@ import type {
   RateLimitState
 } from '../shared/rate-limit-types'
 import type {
+  JarvisAskResult,
+  JarvisSpeakOutcome,
+  JarvisStateEvent,
   SpeechErrorEvent,
   SpeechLifecycleEvent,
   SpeechModelManifest,
@@ -3153,6 +3156,16 @@ export type PreloadApi = {
     onReady: (callback: (data: SpeechLifecycleEvent) => void) => () => void
     onStopped: (callback: (data: SpeechLifecycleEvent) => void) => () => void
     onError: (callback: (data: SpeechErrorEvent) => void) => () => void
+  }
+  jarvis: {
+    /** Toggles system-wide ⌘T Jarvis mode; persists voice.jarvisEnabled on success. */
+    setMode: (on: boolean) => Promise<{ ok: boolean }>
+    ask: (utterance: string) => Promise<JarvisAskResult>
+    speak: (text: string) => Promise<JarvisSpeakOutcome>
+    openOrb: () => Promise<{ ok: boolean; windowId?: number }>
+    onState: (callback: (event: JarvisStateEvent) => void) => () => void
+    onPttPressed: (callback: (data: { at: number }) => void) => () => void
+    onPttReleased: (callback: (data: { at: number }) => void) => () => void
   }
 }
 

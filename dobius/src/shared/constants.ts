@@ -395,6 +395,8 @@ export function getDefaultSettings(homedir: string): GlobalSettings {
   }
 }
 
+export const DEFAULT_ADAM_ENDPOINT = 'http://127.0.0.1:8791'
+
 export function getDefaultVoiceSettings(): VoiceSettings {
   return {
     enabled: false,
@@ -405,7 +407,10 @@ export function getDefaultVoiceSettings(): VoiceSettings {
     terminalConfirmBeforeInsert: false,
     userModels: [],
     openAiApiKeyConfigured: false,
-    conductorEnabled: false
+    conductorEnabled: false,
+    jarvisEnabled: false,
+    jarvisWakeWord: false,
+    adamEndpoint: DEFAULT_ADAM_ENDPOINT
   }
 }
 

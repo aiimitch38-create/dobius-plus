@@ -66,4 +66,35 @@ export type VoiceSettings = {
   openAiApiKeyConfigured: boolean
   /** When on, run the background Voice Conductor session (routes voice/dispatched work). */
   conductorEnabled: boolean
+  /**
+   * When on, ⌘T is captured system-wide (Electron globalShortcut) for Jarvis
+   * push-to-talk; off leaves ⌘T untouched for every other app.
+   */
+  jarvisEnabled?: boolean
+  /**
+   * Experimental: watch dictation finals for a "Hey Adam" wake phrase and route
+   * the remainder to ADAM. Costs CPU only while a dictation session is active.
+   */
+  jarvisWakeWord?: boolean
+  /** Base URL of the local ADAM agent service. */
+  adamEndpoint?: string
+}
+
+/** HUD-facing conversation phase for the Jarvis voice loop. */
+export type JarvisConversationPhase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error'
+
+export type JarvisStateEvent = {
+  state: JarvisConversationPhase
+  reason?: string
+}
+
+/** Result of asking ADAM a spoken utterance via POST /v1/converse. */
+export type JarvisAskResult =
+  | { kind: 'answer'; text: string }
+  | { kind: 'job'; text: string; jobId?: string }
+  | { kind: 'error'; text: string }
+
+export type JarvisSpeakOutcome = {
+  played: boolean
+  reason?: string
 }

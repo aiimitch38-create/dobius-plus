@@ -9,6 +9,7 @@ import { OpenAiTranscriptionKeyDialog } from './OpenAiTranscriptionKeyDialog'
 import { OpenAiTranscriptionSettingsRow } from './OpenAiTranscriptionSettingsRow'
 import { handleVoiceDictationToggle } from './voice-dictation-toggle'
 import { VoiceDictationSettingsSection } from './VoiceDictationSettingsSection'
+import { JarvisSettingsSection } from './JarvisSettingsSection'
 import { VoiceConductorSection } from './VoiceConductorSection'
 import { VoiceSpeechModelSection } from './VoiceSpeechModelSection'
 import { matchesSettingsSearch } from './settings-search'
@@ -124,6 +125,53 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
     })
   }
 
+  const toggleJarvis = async (): Promise<void> => {
+    if (voiceSettings.jarvisEnabled) {
+      await window.api.jarvis.setMode(false)
+      updateVoiceSettings({ jarvisEnabled: false })
+      return
+    }
+    // Why: same mic-permission-first flow as dictation — the macOS prompt
+    // belongs to the enable click, not the first failed capture.
+    setPermissionPending(true)
+    try {
+      const result = await window.api.developerPermissions.request({ id: 'microphone' })
+      if (result.status !== 'granted' && result.status !== 'unsupported') {
+        if (result.openedSystemSettings) {
+          toast.message(
+            translate(
+              'auto.components.settings.VoicePane.1eac933202',
+              'Opened macOS Privacy & Security. Enable dictation again after granting access.'
+            )
+          )
+        } else {
+          toast.message(
+            translate(
+              'auto.components.settings.VoicePane.f9a9cf6928',
+              'Microphone permission is required before enabling voice dictation.'
+            )
+          )
+        }
+        return
+      }
+      // Why setMode first: main persists jarvisEnabled only on a successful
+      // shortcut grab, so a refused grab must not leave the toggle on.
+      const mode = await window.api.jarvis.setMode(true)
+      if (!mode.ok) {
+        toast.error('Could not claim ⌘T for Jarvis; it may be used by another app.')
+        return
+      }
+      updateVoiceSettings({ jarvisEnabled: true })
+      await window.api.jarvis.openOrb()
+    } catch {
+      toast.error('Could not request microphone permission. Jarvis was not enabled.')
+    } finally {
+      if (mountedRef.current) {
+        setPermissionPending(false)
+      }
+    }
+  }
+
   const selectedModel = catalog.find((m) => m.id === voiceSettings.sttModel)
   const showOpenAiSettingsRow =
     voiceSettings.openAiApiKeyConfigured ||
@@ -210,6 +258,13 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
 
       <VoiceConductorSection
         voiceSettings={voiceSettings}
+        onUpdateVoiceSettings={updateVoiceSettings}
+      />
+
+      <JarvisSettingsSection
+        voiceSettings={voiceSettings}
+        permissionPending={permissionPending}
+        onToggleJarvis={() => void toggleJarvis()}
         onUpdateVoiceSettings={updateVoiceSettings}
       />
 
