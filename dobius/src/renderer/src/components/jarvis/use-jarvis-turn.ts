@@ -28,6 +28,8 @@ export type JarvisTurn = {
   ambientActive: boolean
   /** Click handler for the orb: same toggle as a ⌘T press. */
   toggleTurn: () => void
+  /** Called when plain dictation needs the mic; Jarvis steps aside. */
+  micRequest: () => void
 }
 
 /**

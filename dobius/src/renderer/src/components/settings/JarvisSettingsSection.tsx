@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { VoiceSettings } from '../../../../shared/speech-types'
 import { Label } from '../ui/label'
 import { Separator } from '../ui/separator'
@@ -73,27 +74,83 @@ export function JarvisSettingsSection({
           />
         </button>
       </div>
-      <div className="space-y-2 py-2">
-        <Label>ElevenLabs voice (optional)</Label>
-        <p className="text-xs text-muted-foreground">
-          Paste your API key and a voice ID to give Jarvis a premium voice. Left empty, the built-in
-          Mac voice speaks instead. Saved locally, never synced.
-        </p>
-        <input
-          type="password"
-          value={voiceSettings.elevenlabsApiKey ?? ''}
-          placeholder="ElevenLabs API key"
-          autoComplete="off"
-          onChange={(event) => onUpdateVoiceSettings({ elevenlabsApiKey: event.target.value.trim() || undefined })}
-          className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
-        />
-        <input
-          type="text"
-          value={voiceSettings.elevenlabsVoiceId ?? ''}
-          placeholder="Voice ID (e.g. 21m00Tcm4TlvDq8ikWAM)"
-          autoComplete="off"
-          onChange={(event) => onUpdateVoiceSettings({ elevenlabsVoiceId: event.target.value.trim() || undefined })}
-          className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
-        />
-      </div>
+      <ElevenLabsVoiceSettings
+        apiKey={voiceSettings.elevenlabsApiKey ?? ''}
+        voiceId={voiceSettings.elevenlabsVoiceId ?? ''}
+        onSave={(apiKey, voiceId) =>
+          onUpdateVoiceSettings({
+            elevenlabsApiKey: apiKey.trim() || undefined,
+            elevenlabsVoiceId: voiceId.trim() || undefined
+          })
+        }
+      />
       <Separator />
+      <Separator />
+    </>
+  )
+}
+
+function ElevenLabsVoiceSettings({
+  apiKey,
+  voiceId,
+  onSave
+}: {
+  apiKey: string
+  voiceId: string
+  onSave: (apiKey: string, voiceId: string) => void
+}): React.JSX.Element {
+  const [draftKey, setDraftKey] = useState(apiKey)
+  const [draftVoice, setDraftVoice] = useState(voiceId)
+  const [savedTick, setSavedTick] = useState(false)
+  const dirty = draftKey !== apiKey || draftVoice !== voiceId
+
+  const save = (): void => {
+    onSave(draftKey, draftVoice)
+    setSavedTick(true)
+    window.setTimeout(() => setSavedTick(false), 3_000)
+  }
+
+  return (
+    <div className="space-y-2 py-2">
+      <Label>ElevenLabs voice (optional)</Label>
+      <p className="text-xs text-muted-foreground">
+        Paste your API key and a voice ID to give Jarvis a premium voice. Left empty, the built-in
+        Mac voice speaks instead. Requires ElevenLabs account credit. Saved locally, never synced.
+      </p>
+      <input
+        type="password"
+        value={draftKey}
+        placeholder="ElevenLabs API key"
+        autoComplete="off"
+        onChange={(event) => setDraftKey(event.target.value)}
+        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+      />
+      <input
+        type="text"
+        value={draftVoice}
+        placeholder="Voice ID (e.g. 21m00Tcm4TlvDq8ikWAM)"
+        autoComplete="off"
+        onChange={(event) => setDraftVoice(event.target.value)}
+        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+      />
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          disabled={!dirty}
+          onClick={save}
+          className={`h-7 rounded-md border border-input px-3 text-xs font-medium ${
+            dirty ? 'cursor-pointer bg-foreground text-background' : 'cursor-not-allowed bg-muted opacity-50'
+          }`}
+        >
+          Save voice
+        </button>
+        {savedTick ? (
+          <span className="text-xs text-muted-foreground">Saved ✓</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">Applies from the next spoken reply.</span>
+        )}
+      </div>
+    </div>
+  )
+}
+

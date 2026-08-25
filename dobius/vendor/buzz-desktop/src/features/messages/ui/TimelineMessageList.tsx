@@ -14,8 +14,7 @@ import {
 import {
   buildVirtualizedItems,
   didPrependVirtualizedTimeline,
-  estimateVirtualizedTimelineItemHeight,
-  type VirtualizedTimelineItem,
+  
   virtualizedItemKey,
 } from "@/features/messages/lib/virtualizedTimelineItems";
 import { THREAD_REPLY_ROW_MARGIN_INLINE_REM } from "@/features/messages/lib/threadTreeLayout";
@@ -412,19 +411,7 @@ function VirtualizedTimelineRows({
   );
   const hasInitialPositionedRef = React.useRef(false);
   const estimateCallCountRef = React.useRef(0);
-  const estimateItemSize = React.useCallback(
-    (item: VirtualizedTimelineItem) => {
-      estimateCallCountRef.current += 1;
-      const scroller = hostRef.current?.firstElementChild;
-      if (scroller instanceof HTMLDivElement) {
-        scroller.dataset.virtuaEstimateCallCount = String(
-          estimateCallCountRef.current,
-        );
-      }
-      return estimateVirtualizedTimelineItemHeight(item);
-    },
-    [],
-  );
+
   const items = React.useMemo(
     () => buildVirtualizedItems(dayGroups, leadingContent, historyExhausted),
     [dayGroups, historyExhausted, leadingContent],
@@ -567,7 +554,7 @@ function VirtualizedTimelineRows({
           className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-contain px-2 pt-[var(--channel-top-chrome-height,4.5rem)]"
           data={items}
           item={VirtualizedTimelineItemShell}
-          itemSize={estimateItemSize}
+          itemSize={72} // throwaway constant: upstream WIP mid-refactor; see dobius-plus feat/jarvis-voice-loop build note
           bufferSize={offscreenBufferSize}
           keepMounted={retainedIndices}
           style={{ overflowAnchor: "none" }}

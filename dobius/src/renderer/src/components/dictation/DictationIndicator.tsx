@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useAppStore } from '@/store'
 import { VoiceOrb } from './VoiceOrb'
-import type { JarvisStateEvent } from '../../../shared/speech-types'
+import type { JarvisStateEvent } from '../../../../shared/speech-types'
 
 const ORB_SIZE = 128
 const ORB_OFFSET_STORAGE_KEY = 'dobius.orb-offset.v1'
