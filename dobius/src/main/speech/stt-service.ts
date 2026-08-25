@@ -43,6 +43,11 @@ export class SttService {
     this.modelManager = modelManager
   }
 
+  /** Owner string of whichever dictation session currently holds the worker. */
+  getActiveOwner(): string | null {
+    return this.activeOwner
+  }
+
   async startDictation(
     modelId: string,
     sink: SttEventSink,

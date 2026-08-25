@@ -17,6 +17,9 @@ export type OrbHudState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'erro
 // the renderer-side armed hint expires on the same schedule without extra IPC.
 const WAKE_WORD_WINDOW_MS = 12_000
 const ERROR_STATE_CLEAR_MS = 4_000
+// Cadence for re-attempting the ambient wake session after a failed start
+// (mic busy with dictation). Matches the old post-dictation grace period.
+const AMBIENT_RETRY_MS = 8_000
 
 type TurnSubPhase = 'idle' | 'starting' | 'listening'
 
@@ -50,6 +53,10 @@ export function useJarvisTurn(): JarvisTurn {
   const registryRef = useRef(createJarvisSessionRegistry())
   const trackerRef = useRef(createStoppedSessionTracker())
   const turnPhaseRef = useRef<TurnSubPhase>('idle')
+  // Why mirrored: toggleTurn needs the current HUD phase synchronously (a ⌘T
+  // press during thinking/speaking must not open a mic that would hear ADAM's
+  // own reply), and state updates are not readable in the same tick.
+  const hudStateRef = useRef<OrbHudState>('idle')
   const turnCancelRef = useRef<(() => void) | null>(null)
   const ambientHandleRef = useRef<JarvisAmbientSessionHandle | null>(null)
   const armedTimerRef = useRef<number | null>(null)
@@ -73,6 +80,7 @@ export function useJarvisTurn(): JarvisTurn {
         setHudState('idle')
       }, ERROR_STATE_CLEAR_MS)
     }
+    hudStateRef.current = phase
     setHudState(phase)
   }, [])
 
@@ -252,6 +260,12 @@ export function useJarvisTurn(): JarvisTurn {
    * semantics: press toggles, and an active press cancels the open turn.
    */
   const toggleTurn = useCallback((): void => {
+    // Why refuse: while ADAM is thinking/speaking there is no barge-in yet —
+    // opening a mic now would capture ADAM's own spoken reply and fight the
+    // still-running turn. The press becomes a no-op instead of a collision.
+    if (hudStateRef.current === 'thinking' || hudStateRef.current === 'speaking') {
+      return
+    }
     if (registry.kind.current === 'turn') {
       if (turnPhaseRef.current === 'starting') {
         turnCancelRef.current?.()
@@ -276,12 +290,21 @@ export function useJarvisTurn(): JarvisTurn {
   // Main-process state events own their phases verbatim (including idle):
   // wake-word turns are fired entirely by main, so its idle broadcast is the
   // only signal that such a turn finished speaking.
+  // Why the guard: main's phase machine is stateless (every signal wins), so
+  // a STALE turn-finished/idle from a previous reply can arrive after a fresh
+  // manual turn started listening and would snap the orb back to idle
+  // mid-listen. While a local turn session is live, only non-idle phases pass.
   useEffect(
     () =>
       window.api.jarvis.onState((event) => {
+        const localTurnLive =
+          registry.kind.current === 'turn' || turnPhaseRef.current !== 'idle'
+        if (localTurnLive && event.state === 'idle') {
+          return
+        }
         setPhase(event.state)
       }),
-    [setPhase]
+    [registry, setPhase]
   )
 
   // Global ⌘T push-to-talk: press starts or cancels a turn.
@@ -320,6 +343,33 @@ export function useJarvisTurn(): JarvisTurn {
     }
     // Why sessionEpoch: re-check after a manual turn released the mic.
   }, [ambientDesired, capture, flagsRef, registry, sessionEpoch, tracker])
+
+  // Why the retry loop: a failed ambient start (mic held by ⌘E dictation —
+  // same window via yield or another window via main's eviction) used to leave
+  // the wake word dead until an unrelated epoch bump happened to run. While
+  // wake word is desired but not capturing, re-attempt on a slow cadence; each
+  // failed attempt is benign (starter cleans up after itself).
+  useEffect(() => {
+    if (!ambientDesired || ambientActive) {
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setSessionEpoch((epoch) => epoch + 1)
+    }, AMBIENT_RETRY_MS)
+    return () => window.clearTimeout(timer)
+  }, [ambientDesired, ambientActive, sessionEpoch])
+
+  // Why: flipping Jarvis off (Settings toggle) must also kill any live mic
+  // session. The ambient handle is disposed by the desired-effect cleanup, but
+  // a manual turn in 'starting'/'listening' would otherwise keep capturing.
+  const jarvisEnabledRef = useRef(flags.jarvisEnabled)
+  useEffect(() => {
+    const wasEnabled = jarvisEnabledRef.current
+    jarvisEnabledRef.current = flags.jarvisEnabled
+    if (wasEnabled && !flags.jarvisEnabled && registry.kind.current !== null) {
+      void stopSessionCleanly()
+    }
+  }, [flags.jarvisEnabled, registry, stopSessionCleanly])
 
   useEffect(
     () => () => {

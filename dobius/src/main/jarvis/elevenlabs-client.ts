@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { writeFile as writeFileAsync } from 'node:fs/promises'
+import { writeFile as writeFileAsync, unlink as unlinkAsync, rmdir as rmdirAsync } from 'node:fs/promises'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -56,6 +56,13 @@ export async function speakWithElevenLabs(text: string, config: ElevenLabsConfig
   const mp3 = await synthesizeToMp3(text, config)
   const dir = mkdtempSync(join(tmpdir(), 'jarvis-tts-'))
   const file = join(dir, 'reply.mp3')
-  await writeFileAsync(file, mp3)
-  await playMp3(file)
+  // Why cleanup in finally: every spoken reply otherwise leaks a temp dir with
+  // an MP3 inside for the life of the disk.
+  try {
+    await writeFileAsync(file, mp3)
+    await playMp3(file)
+  } finally {
+    await unlinkAsync(file).catch(() => undefined)
+    await rmdirAsync(dir).catch(() => undefined)
+  }
 }

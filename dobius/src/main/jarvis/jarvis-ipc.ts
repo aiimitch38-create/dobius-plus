@@ -1,11 +1,14 @@
-import { BrowserWindow, globalShortcut, ipcMain } from 'electron'
+import { BrowserWindow, app, globalShortcut, ipcMain } from 'electron'
 import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import {
+  JARVIS_PTT_PRESSED_CHANNEL,
+  JARVIS_PTT_RELEASED_CHANNEL,
   JARVIS_SHORTCUT_ACCELERATOR,
   getJarvisService,
+  isWakeSessionOwner,
   tapSttFinalTranscripts
 } from './jarvis-service'
 import type {
@@ -22,12 +25,40 @@ function createGlobalShortcutPort(): JarvisShortcutPort {
   }
 }
 
+// Why track focus: ⌘T works system-wide, so at press time the focused window
+// may belong to another app. The PTT signal must reach exactly ONE Dobius
+// window (focused now, else the last one that was focused); broadcasting to
+// all windows made every mounted voice controller start a competing mic
+// session — N-1 of which failed with error flashes.
+let lastFocusedJarvisWindowId: number | null = null
+
+function electPttWindow(): BrowserWindow | null {
+  const focused = BrowserWindow.getFocusedWindow()
+  if (focused && !focused.isDestroyed()) {
+    lastFocusedJarvisWindowId = focused.id
+    return focused
+  }
+  if (lastFocusedJarvisWindowId !== null) {
+    const remembered = BrowserWindow.getAllWindows().find(
+      (win) => win.id === lastFocusedJarvisWindowId && !win.isDestroyed()
+    )
+    if (remembered) {
+      return remembered
+    }
+  }
+  return BrowserWindow.getAllWindows().find((win) => !win.isDestroyed()) ?? null
+}
+
 function createBroadcastPort(): JarvisBroadcastPort {
-  // Why all windows: ⌘T is global, so the main window can be unfocused when a
-  // press lands — the renderer voice controller must hear it regardless.
+  // State broadcasts go to ALL windows so every orb mirrors the phase; PTT
+  // presses go to exactly one elected window so only one controller reacts.
   return (channel, payload) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
+    const targets =
+      channel === JARVIS_PTT_PRESSED_CHANNEL || channel === JARVIS_PTT_RELEASED_CHANNEL
+        ? [electPttWindow()]
+        : BrowserWindow.getAllWindows()
+    for (const win of targets) {
+      if (win && !win.isDestroyed()) {
         win.webContents.send(channel, payload)
       }
     }
@@ -48,6 +79,11 @@ function persistVoicePatch(store: Store, patch: Partial<VoiceSettings>): void {
 }
 
 export function registerJarvisIpcHandlers(store: Store): void {
+  // Why: focus tracking must span the app lifetime, not one registration pass
+  // (macOS recreates the main window on re-activation).
+  app.on('browser-window-focus', (_event, win) => {
+    lastFocusedJarvisWindowId = win.id
+  })
   const service = getJarvisService(createJarvisDeps(store))
   registerHandlers(store, service)
   wireWakeWordObservation(store, service)
@@ -78,8 +114,11 @@ function registerHandlers(store: Store, service: JarvisService): void {
 function wireWakeWordObservation(store: Store, service: JarvisService): void {
   // The matcher inside the service no-ops unless voice.jarvisWakeWord is on,
   // so the tap stays permanently installed and cheap while dictation is idle.
-  tapSttFinalTranscripts(getSpeechSttService(store), (text) =>
-    service.handleAmbientTranscript(text)
+  // The owner filter keeps ordinary ⌘E dictation text from arming it.
+  tapSttFinalTranscripts(
+    getSpeechSttService(store),
+    (text) => service.handleAmbientTranscript(text),
+    { ownerFilter: isWakeSessionOwner }
   )
 }
 

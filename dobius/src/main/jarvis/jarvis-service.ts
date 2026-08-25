@@ -43,6 +43,19 @@ export type JarvisServiceDeps = {
 }
 
 /**
+ * Only finals from the dedicated wake-word session may arm the matcher. Without
+ * this filter a dictated "Hey Adam ..." inside an ordinary ⌘E session would
+ * fire ADAM mid-dictation — exactly the crossover the two shortcuts must never
+ * have. Owners look like `desktop:<webContentsId>:<sessionId>` (speech IPC) or
+ * `mobile:<dictationId>` (runtime); only the desktop wake session qualifies.
+ */
+const WAKE_SESSION_OWNER_PATTERN = /^desktop:\d+:wake$/
+
+export function isWakeSessionOwner(owner: string | undefined): boolean {
+  return typeof owner === 'string' && WAKE_SESSION_OWNER_PATTERN.test(owner)
+}
+
+/**
  * Main-process brain of the Jarvis voice loop. The renderer drives mic capture
  * and STT through the existing speech IPC; this service owns everything that
  * must live in main: the system-wide ⌘T grab, the ADAM round-trip, spoken
@@ -52,6 +65,10 @@ export class JarvisService {
   private phase: JarvisConversationPhase = 'idle'
   private shortcutActive = false
   private pttReleaseTimer: NodeJS.Timeout | null = null
+  // Why: the ElevenLabs path plays audio directly instead of through the
+  // shared huddle queue, so without this chain a wake-word ask landing during
+  // a spoken reply would overlap audio. Every speak() queues behind the last.
+  private speakChain: Promise<unknown> = Promise.resolve()
   private readonly deps: JarvisServiceDeps
   private readonly wakeMatcher: WakeWordMatcher
 
@@ -126,11 +143,17 @@ export class JarvisService {
   }
 
   /**
-   * Speaks through the shared huddle speech queue, so Jarvis utterances are
-   * serialized against each other AND against huddle agent replies — neither
-   * can overlap the other's audio.
+   * Speaks through a serialized chain so Jarvis utterances can never overlap
+   * each other (ElevenLabs bypasses the huddle queue) and each reply queues
+   * behind the previous one's audio.
    */
   async speak(text: string): Promise<JarvisSpeakOutcome> {
+    const queued = this.speakChain.then(() => this.speakOnce(text))
+    this.speakChain = queued.catch(() => undefined)
+    return queued
+  }
+
+  private async speakOnce(text: string): Promise<JarvisSpeakOutcome> {
     if (typeof text !== 'string' || !text.trim()) {
       return { played: false, reason: 'empty text' }
     }
@@ -248,17 +271,21 @@ const tappedSttServices = new WeakSet<object>()
  */
 export function tapSttFinalTranscripts(
   stt: { startDictation: SttDictationStarter },
-  onFinal: (text: string) => void
-): () => void {
+  onFinal: (text: string) => void,
+  options: { ownerFilter?: (owner: string | undefined) => boolean } = {}
+): () => undefined {
   if (tappedSttServices.has(stt)) {
     return () => undefined
   }
   tappedSttServices.add(stt)
+  const ownerFilter = options.ownerFilter
   const original = stt.startDictation.bind(stt)
   stt.startDictation = async (...args: Parameters<SttDictationStarter>) => {
     const [modelId, sink, ...rest] = args
+    const feedFinal =
+      !ownerFilter || ownerFilter(rest[rest.length - 1] as string | undefined)
     const tappedSink: SttEventSink = (event) => {
-      if (event.type === 'final') {
+      if (event.type === 'final' && feedFinal) {
         onFinal(event.text ?? '')
       }
       sink(event)

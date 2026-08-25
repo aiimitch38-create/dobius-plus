@@ -88,6 +88,30 @@ export function registerSpeechHandlers(store: Store): void {
   const getDesktopOwner = (senderId: number, sessionId: string): string =>
     `desktop:${senderId}:${sessionId}`
 
+  // Why: the wake-word ambient session can be owned by a DIFFERENT window than
+  // the one pressing ⌘E, and the renderer-side mic-yield handshake cannot cross
+  // windows. When ordinary dictation wants the mic and the only holder is an
+  // idle ambient session, evict it here and tell the owning window so it tears
+  // down cleanly (and re-arms on its own retry loop later).
+  const evictStaleAmbientSession = async (nextOwner: string): Promise<void> => {
+    const stt = getSpeechSttService(store)
+    const active = stt.getActiveOwner()
+    if (!active || active === nextOwner || !/^desktop:\d+:wake$/.test(active)) {
+      return
+    }
+    await stt.stopDictation(active).catch(() => undefined)
+    const match = /^desktop:(\d+):wake$/.exec(active)
+    const ownerWindow = match
+      ? BrowserWindow.getAllWindows().find(
+          (candidate) => candidate.webContents.id === Number(match[1]) && !candidate.isDestroyed()
+        )
+      : undefined
+    ownerWindow?.webContents.send('speech:error', {
+      sessionId: 'wake',
+      error: 'ambient-evicted-for-dictation'
+    })
+  }
+
   ipcMain.handle(
     'speech:startDictation',
     async (event, modelId: string, hotwords?: string[], sessionId = 'desktop') => {
@@ -147,6 +171,8 @@ export function registerSpeechHandlers(store: Store): void {
           }
           return
         }
+
+        await evictStaleAmbientSession(owner)
 
         await getSpeechSttService(store).startDictation(
           modelId,

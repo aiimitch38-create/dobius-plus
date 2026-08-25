@@ -11,6 +11,7 @@ import {
   JARVIS_PTT_RELEASED_CHANNEL,
   JARVIS_STATE_CHANNEL,
   JarvisService,
+  isWakeSessionOwner,
   tapSttFinalTranscripts
 } from './jarvis-service'
 import type { JarvisBroadcastPort, JarvisShortcutPort } from './jarvis-service'
@@ -316,5 +317,26 @@ describe('tapSttFinalTranscripts', () => {
 
     expect(seen).toEqual(['first:once'])
     untapFirst()
+  })
+
+  it('ownerFilter keeps ordinary dictation finals from arming the wake matcher', async () => {
+    const { stt, emit } = makeFakeStt()
+    const seen: string[] = []
+    tapSttFinalTranscripts(stt, (text) => seen.push(text), {
+      ownerFilter: isWakeSessionOwner
+    })
+
+    const ownerSink = (event: SttEvent): void => undefined
+    // Ordinary ⌘E session: owner `desktop:<id>:<n>` — must NOT feed the matcher.
+    await stt.startDictation('model-a', ownerSink, undefined, 'desktop:42:3')
+    emit({ type: 'final', text: 'hey adam write a poem' })
+    // Wake ambient session: `desktop:<id>:wake` — must feed it.
+    await stt.startDictation('model-a', ownerSink, undefined, 'desktop:42:wake')
+    emit({ type: 'final', text: 'hey adam status' })
+    // Mobile runtime session must never feed either.
+    await stt.startDictation('model-a', ownerSink, undefined, 'mobile:wake')
+    emit({ type: 'final', text: 'hey adam again' })
+
+    expect(seen).toEqual(['hey adam status'])
   })
 })
