@@ -4411,7 +4411,6 @@ const api = {
     ask: (utterance: string): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:ask', utterance),
     speak: (text: string): Promise<JarvisSpeakOutcome> => ipcRenderer.invoke('jarvis:speak', text),
-    openOrb: (): Promise<{ ok: boolean; windowId?: number }> => ipcRenderer.invoke('jarvis:openOrb'),
     onState: (callback: (event: JarvisStateEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: JarvisStateEvent): void =>
         callback(data)

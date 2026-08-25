@@ -3162,7 +3162,6 @@ export type PreloadApi = {
     setMode: (on: boolean) => Promise<{ ok: boolean }>
     ask: (utterance: string) => Promise<JarvisAskResult>
     speak: (text: string) => Promise<JarvisSpeakOutcome>
-    openOrb: () => Promise<{ ok: boolean; windowId?: number }>
     onState: (callback: (event: JarvisStateEvent) => void) => () => void
     onPttPressed: (callback: (data: { at: number }) => void) => () => void
     onPttReleased: (callback: (data: { at: number }) => void) => () => void

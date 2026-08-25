@@ -52,6 +52,7 @@ export function useJarvisTurn(): JarvisTurn {
   const ambientHandleRef = useRef<JarvisAmbientSessionHandle | null>(null)
   const armedTimerRef = useRef<number | null>(null)
   const errorTimerRef = useRef<number | null>(null)
+  const ambientRestartTimerRef = useRef<number | null>(null)
   // Why bumped: after a manual turn ends, the ambient session may need to be
   // restarted (it was deferred while the turn owned the mic).
   const [sessionEpoch, setSessionEpoch] = useState(0)
@@ -211,6 +212,39 @@ export function useJarvisTurn(): JarvisTurn {
   }, [capture, flagsRef, registry, setPhase, tracker])
 
   /**
+   * Called when ordinary dictation (⌘E) wants the mic: step aside completely.
+   * Ambient restarts on a delay via the session-epoch effect once the mic is
+   * free again — if dictation still holds it, start fails benignly and the
+   * next epoch retries.
+   */
+  const micRequest = useCallback((): void => {
+    if (registry.kind.current === 'turn') {
+      if (turnPhaseRef.current === 'starting') {
+        turnCancelRef.current?.()
+        return
+      }
+      void stopSessionCleanly().then(() => {
+        setSessionEpoch((epoch) => epoch + 1)
+        setPhase('idle')
+      })
+      return
+    }
+    if (registry.kind.current === 'ambient' && ambientHandleRef.current) {
+      ambientHandleRef.current.dispose()
+      ambientHandleRef.current = null
+      setAmbientActive(false)
+      setPhase('idle')
+      if (ambientRestartTimerRef.current !== null) {
+        window.clearTimeout(ambientRestartTimerRef.current)
+      }
+      ambientRestartTimerRef.current = window.setTimeout(() => {
+        ambientRestartTimerRef.current = null
+        setSessionEpoch((epoch) => epoch + 1)
+      }, 8_000)
+    }
+  }, [registry, setPhase, stopSessionCleanly])
+
+  /**
    * Press/click behavior. Main synthesizes `released` ~50ms after every press
    * (JARVIS_PTT_AUTO_RELEASE_MS), so release cannot carry hold-to-talk
    * semantics: press toggles, and an active press cancels the open turn.
@@ -293,6 +327,9 @@ export function useJarvisTurn(): JarvisTurn {
       if (errorTimerRef.current !== null) {
         window.clearTimeout(errorTimerRef.current)
       }
+      if (ambientRestartTimerRef.current !== null) {
+        window.clearTimeout(ambientRestartTimerRef.current)
+      }
       ambientHandleRef.current?.dispose()
       ambientHandleRef.current = null
       void stopSessionCleanly()
@@ -300,5 +337,5 @@ export function useJarvisTurn(): JarvisTurn {
     [stopSessionCleanly]
   )
 
-  return { hudState, wakeArmed, ambientActive, toggleTurn }
+  return { hudState, wakeArmed, ambientActive, toggleTurn, micRequest }
 }

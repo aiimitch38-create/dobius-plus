@@ -25,7 +25,7 @@ export function JarvisSettingsSection({
         <div className="space-y-0.5">
           <Label>Jarvis voice loop</Label>
           <p className="text-xs text-muted-foreground">
-            Speak to ADAM hands-free. Press ⌘T anywhere to start a turn, or click the floating orb.
+            Speak to ADAM hands-free. Press ⌘T anywhere to talk to ADAM; ⌘E keeps its normal dictation. The voice orb shows what Jarvis is doing.
           </p>
         </div>
         <button
@@ -49,9 +49,9 @@ export function JarvisSettingsSection({
 
       <div className="flex items-center justify-between gap-4 py-2">
         <div className="space-y-0.5">
-          <Label>Wake word (experimental — orb must stay open)</Label>
+          <Label>Wake word (experimental)</Label>
           <p className="text-xs text-muted-foreground">
-            Say “Hey Adam” while the orb is open to start a turn without pressing anything.
+            Say “Hey Adam” to start a turn without pressing anything. It steps aside whenever you use ⌘E.
           </p>
         </div>
         <button
@@ -73,7 +73,27 @@ export function JarvisSettingsSection({
           />
         </button>
       </div>
+      <div className="space-y-2 py-2">
+        <Label>ElevenLabs voice (optional)</Label>
+        <p className="text-xs text-muted-foreground">
+          Paste your API key and a voice ID to give Jarvis a premium voice. Left empty, the built-in
+          Mac voice speaks instead. Saved locally, never synced.
+        </p>
+        <input
+          type="password"
+          value={voiceSettings.elevenlabsApiKey ?? ''}
+          placeholder="ElevenLabs API key"
+          autoComplete="off"
+          onChange={(event) => onUpdateVoiceSettings({ elevenlabsApiKey: event.target.value.trim() || undefined })}
+          className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+        />
+        <input
+          type="text"
+          value={voiceSettings.elevenlabsVoiceId ?? ''}
+          placeholder="Voice ID (e.g. 21m00Tcm4TlvDq8ikWAM)"
+          autoComplete="off"
+          onChange={(event) => onUpdateVoiceSettings({ elevenlabsVoiceId: event.target.value.trim() || undefined })}
+          className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+        />
+      </div>
       <Separator />
-    </>
-  )
-}

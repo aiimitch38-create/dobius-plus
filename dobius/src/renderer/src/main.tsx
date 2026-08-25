@@ -18,8 +18,6 @@ import { I18nProvider } from './i18n/I18nProvider'
 import { translate } from './i18n/i18n'
 import { parseTornOffTerminalHash } from './torn-off-terminal-entry'
 import { parseFloatingPhoneHash } from './floating-phone-entry'
-import { parseOrbHash } from './orb-entry'
-import { OrbView } from './components/jarvis/OrbView'
 
 recordRendererCrashBreadcrumb('renderer_bootstrap_started', { dev: import.meta.env.DEV })
 installRendererCrashDiagnostics()
@@ -45,7 +43,6 @@ if (!rootElement) {
 
 const tornOffTerminal = parseTornOffTerminalHash(window.location.hash)
 const floatingPhone = tornOffTerminal ? null : parseFloatingPhoneHash(window.location.hash)
-const jarvisOrb = tornOffTerminal || floatingPhone ? null : parseOrbHash(window.location.hash)
 
 function RendererRoot(): React.JSX.Element {
   useTranslation()
@@ -76,18 +73,6 @@ function RendererRoot(): React.JSX.Element {
         )}
       >
         <FloatingPhoneRoot {...floatingPhone} />
-      </RecoverableRenderErrorBoundary>
-    )
-  }
-  if (jarvisOrb) {
-    return (
-      <RecoverableRenderErrorBoundary
-        boundaryId="jarvis.orb-root"
-        surface="app-root"
-        title="Dobius+ hit a voice orb error."
-        description="The Jarvis orb could not finish rendering. Close it and reopen it from Settings if the error persists."
-      >
-        <OrbView />
       </RecoverableRenderErrorBoundary>
     )
   }

@@ -12,7 +12,7 @@ import {
   converseWithAdam,
   loadAdamServiceToken
 } from './adam-client'
-import { resolveElevenLabsConfig, speakWithElevenLabs } from './elevenlabs-client'
+import { resolveElevenLabsConfigFromSettings, speakWithElevenLabs } from './elevenlabs-client'
 import { JARVIS_PTT_AUTO_RELEASE_MS, applyJarvisSignal, type JarvisSignal } from './jarvis-state'
 import { createWakeWordMatcher, type WakeWordMatcher } from './wake-word-matcher'
 
@@ -137,7 +137,9 @@ export class JarvisService {
     this.transition({ type: 'speak-started' })
     // ElevenLabs when Carson's key+voice are configured; local engine stays the
     // fallback so a network/key failure never silences a reply.
-    const eleven = resolveElevenLabsConfig()
+    // Read per call: a key pasted into Settings takes effect on the next
+    // reply without an app restart.
+    const eleven = resolveElevenLabsConfigFromSettings(this.deps.store.getSettings().voice)
     if (eleven) {
       try {
         await speakWithElevenLabs(text.trim(), eleven)

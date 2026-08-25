@@ -3,7 +3,6 @@ import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
-import { getFloatingOrbWindow, openFloatingOrbWindow } from '../window/floating-orb-window'
 import {
   JARVIS_SHORTCUT_ACCELERATOR,
   getJarvisService,
@@ -24,14 +23,13 @@ function createGlobalShortcutPort(): JarvisShortcutPort {
 }
 
 function createBroadcastPort(): JarvisBroadcastPort {
+  // Why all windows: ⌘T is global, so the main window can be unfocused when a
+  // press lands — the renderer voice controller must hear it regardless.
   return (channel, payload) => {
-    const orb = getFloatingOrbWindow()
-    if (orb && !orb.isDestroyed()) {
-      orb.webContents.send(channel, payload)
-    }
-    const focused = BrowserWindow.getFocusedWindow()
-    if (focused && !focused.isDestroyed()) {
-      focused.webContents.send(channel, payload)
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(channel, payload)
+      }
     }
   }
 }
@@ -75,8 +73,6 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.removeHandler('jarvis:speak')
   ipcMain.handle('jarvis:speak', (_event, text: string) => service.speak(text))
 
-  ipcMain.removeHandler('jarvis:openOrb')
-  ipcMain.handle('jarvis:openOrb', () => openFloatingOrbWindow())
 }
 
 function wireWakeWordObservation(store: Store, service: JarvisService): void {

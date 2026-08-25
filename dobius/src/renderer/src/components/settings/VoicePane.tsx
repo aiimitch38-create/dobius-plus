@@ -162,7 +162,6 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
         return
       }
       updateVoiceSettings({ jarvisEnabled: true })
-      await window.api.jarvis.openOrb()
     } catch {
       toast.error('Could not request microphone permission. Jarvis was not enabled.')
     } finally {

@@ -48,7 +48,6 @@ import {
 import { logStartupMilestone } from '../startup/startup-diagnostics'
 import { registerTearOffWindowHandlers } from './tear-off-window'
 import { registerFloatingPhoneWindowHandlers } from './floating-phone-window'
-import { registerFloatingOrbWindowHandlers } from './floating-orb-window'
 import { registerJarvisIpcHandlers } from '../jarvis/jarvis-ipc'
 
 const UPDATER_SETUP_FALLBACK_MS = 15_000
@@ -141,9 +140,7 @@ export function attachMainWindowServices(
   registerRemoteWorkspaceHandlers(store, () => mainWindow)
   registerTearOffWindowHandlers()
   registerFloatingPhoneWindowHandlers()
-  registerFloatingOrbWindowHandlers()
-  // Why here: Jarvis IPC needs the settings store and the orb window module,
-  // both of which are wired in this main-window attach pass.
+  // Why here: Jarvis IPC needs the settings store, wired in this attach pass.
   registerJarvisIpcHandlers(store)
   registerFileDropRelay(mainWindow)
   // Why: setupAutoUpdater's first getAutoUpdater() call synchronously

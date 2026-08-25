@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/store'
 import { useAudioCapture } from '@/hooks/use-audio-capture'
+import { yieldJarvisMic } from '@/components/jarvis/jarvis-mic-yield'
 import { toast } from 'sonner'
 import { DictationIndicator } from './DictationIndicator'
 import {
@@ -111,6 +112,9 @@ export function DictationController() {
     if (dictationStateRef.current !== 'idle') {
       return
     }
+    // Jarvis's ambient wake-word session may own the STT worker; it steps
+    // aside (and re-arms later) so ⌘E always wins the mic.
+    yieldJarvisMic()
 
     const modelId = settings?.voice?.sttModel
     if (!modelId) {

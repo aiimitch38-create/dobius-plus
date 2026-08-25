@@ -309,6 +309,11 @@ const DictationController = lazy(() =>
     default: module.DictationController
   }))
 )
+const JarvisVoiceController = lazy(() =>
+  import('./components/jarvis/JarvisVoiceController').then((module) => ({
+    default: module.JarvisVoiceController
+  }))
+)
 const SshPassphraseDialog = lazy(() =>
   import('./components/settings/SshPassphraseDialog').then((module) => ({
     default: module.SshPassphraseDialog
@@ -2732,6 +2737,7 @@ function App(): React.JSX.Element {
                   compact
                 >
                   <DictationController />
+                  <JarvisVoiceController />
                 </RecoverableRenderErrorBoundary>
               </Suspense>
             ) : null}

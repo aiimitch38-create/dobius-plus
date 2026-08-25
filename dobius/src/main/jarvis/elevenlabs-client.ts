@@ -19,6 +19,20 @@ export function resolveElevenLabsConfig(env: NodeJS.ProcessEnv = process.env): E
   return { apiKey, voiceId, modelId: env.ELEVENLABS_MODEL_ID?.trim() || 'eleven_turbo_v2_5' }
 }
 
+/**
+ * Settings-entered credentials (Settings → Voice) win over env vars so Carson
+ * can change voice without touching a terminal; env remains the fallback.
+ */
+export function resolveElevenLabsConfigFromSettings(
+  settings: { elevenlabsApiKey?: string; elevenlabsVoiceId?: string } | undefined,
+  env: NodeJS.ProcessEnv = process.env
+): ElevenLabsConfig | null {
+  const apiKey = settings?.elevenlabsApiKey?.trim() || env.ELEVENLABS_API_KEY?.trim()
+  const voiceId = settings?.elevenlabsVoiceId?.trim() || env.ELEVENLABS_VOICE_ID?.trim()
+  if (!apiKey || !voiceId) return null
+  return { apiKey, voiceId, modelId: env.ELEVENLABS_MODEL_ID?.trim() || 'eleven_turbo_v2_5' }
+}
+
 export async function synthesizeToMp3(text: string, config: ElevenLabsConfig, fetchImpl: typeof fetch = fetch): Promise<Buffer> {
   const response = await fetchImpl(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(config.voiceId)}`, {
     method: 'POST',
