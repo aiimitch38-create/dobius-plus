@@ -24,19 +24,27 @@ const defaultTokenReader: TokenReader = (path) => readFileSync(path, 'utf-8')
 
 let cachedToken: string | null = null
 
-/** Reads once per process; later calls reuse the cache so ask() stays cheap. */
+/**
+ * Reads once per process; later calls reuse the cache so ask() stays cheap.
+ * Why empty results are never cached: a read that lands while the token file
+ * is momentarily missing/empty would otherwise poison EVERY future ask with a
+ * 401 until relaunch — surfacing as a permanent "ADAM unreachable" orb.
+ */
 export function loadAdamServiceToken(reader: TokenReader = defaultTokenReader): string {
-  if (cachedToken !== null) {
+  if (cachedToken !== null && cachedToken !== '') {
     return cachedToken
   }
   try {
-    cachedToken = reader(adamServiceTokenPath()).trim()
+    const token = reader(adamServiceTokenPath()).trim()
+    if (token) {
+      cachedToken = token
+    }
+    return token
   } catch {
-    // Unreadable/missing token still yields an empty Bearer value; the request
-    // then fails like any other unreachable case instead of throwing here.
-    cachedToken = ''
+    // Unreadable/missing token yields an empty Bearer; the request then fails
+    // like any other unreachable case, and the next call retries the read.
+    return ''
   }
-  return cachedToken
 }
 
 export function resetAdamServiceTokenCacheForTests(): void {
