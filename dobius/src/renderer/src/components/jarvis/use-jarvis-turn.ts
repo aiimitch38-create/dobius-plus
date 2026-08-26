@@ -303,10 +303,19 @@ export function useJarvisTurn(): JarvisTurn {
       return
     }
     if (registry.kind.current === 'ambient') {
-      // Ambient capture already feeds the STT worker — mark the next final as
-      // ours rather than starting a competing session.
-      registry.grabActive.current = !registry.grabActive.current
-      setPhase(registry.grabActive.current ? 'listening' : 'idle')
+      // The ambient grab path was unreliable — the ambient session constantly
+      // restarts/dies, and finals arrive as random background fragments that
+      // often miss the grab window. Instead, stop ambient cleanly and start a
+      // dedicated turn session so the full ask→speak pipeline runs reliably.
+      if (ambientHandleRef.current) {
+        ambientHandleRef.current.dispose()
+        ambientHandleRef.current = null
+      }
+      setAmbientActive(false)
+      void stopSessionCleanly().then(() => {
+        setSessionEpoch((epoch) => epoch + 1)
+        startTurn()
+      })
       return
     }
     startTurn()
