@@ -1,11 +1,21 @@
 /**
- * Scenario fixtures for the team.* commands (list_teams/create_team/
- * update_team/delete_team), for the communications command verification
- * harness's composable scenario registry
- * (src/main/communications/verify/command-scenario.ts's `SCENARIO_STEPS`
- * family contract — see that file's top doc comment). The harness owner
- * splices this in with one import + one array-spread in that file; this
- * module never edits verify/ itself.
+ * Scenario fixtures for the team.* RPC family (team.create/team.update/
+ * team.delete — src/main/runtime/rpc/methods/teams.ts), for the
+ * communications command verification harness's composable scenario
+ * registry (src/main/communications/verify/command-scenario.ts's
+ * SCENARIO_STEPS family contract — see that file's top doc comment). The
+ * harness owner splices this in with one import + one array-spread in that
+ * file; this module never edits verify/ itself.
+ *
+ * SEAM — every step sets via: 'method' and dispatches by RPC METHOD name.
+ * The vendored Buzz client reached these features through snake_case Tauri
+ * commands (create_team/update_team/delete_team in tauriTeams.ts), whose
+ * switch wrapped the same operations as { input: {...} } and projected the
+ * result to a snake_case RawTeam. The real handlers take flat params
+ * (create) or { id, updates } (update), return { team } wrapping the
+ * camelCase Team store record, and team.delete returns { removed, id }
+ * rather than undefined — so this file's fixtures assert THAT wire shape,
+ * not the retired projection.
  *
  * Types and pure helpers come from './scenario-contract' (NOT
  * '../verify/command-scenario' — that path lives under the excluded verify/
@@ -23,54 +33,49 @@ function isStringArrayEqual(actual: unknown, expected: string[]): boolean {
 }
 
 /**
- * Full RawTeam shape check (tauriTeams.ts lines 8-21), including the
- * Buzz-only fields Dobius has no concept of — asserting them as the honest
- * false/null defaults documented in dobiusCommunications.ts's
- * DobiusTeamProjection, never left unchecked. A shapeCheck that only
- * confirms "it's an array" is exactly how the old hardcoded `[]` stub passed
- * unnoticed.
+ * Full Team record shape check (team-store.ts's exported Team type — the
+ * exact object the team.* handlers read/write through teams.json), including
+ * the accountIds slot the retired vendor projection never surfaced. A
+ * shapeCheck that only confirms "it's an object" is exactly how a stubbed
+ * response would pass unnoticed.
  */
-function isRawTeamShape(value: unknown): ShapeOutcome {
-  if (!isRecord(value)) {
-    return fail(`expected a team object, got ${typeof value}`)
+function isTeamRecordShape(team: unknown): ShapeOutcome {
+  if (!isRecord(team)) {
+    return fail(`expected a team record, got ${typeof team}`)
   }
-  if (typeof value.id !== 'string' || !value.id) {
+  if (typeof team.id !== 'string' || !team.id) {
     return fail('missing id')
   }
-  if (typeof value.name !== 'string' || !value.name) {
+  if (typeof team.name !== 'string' || !team.name) {
     return fail('missing name')
   }
-  if (value.description !== null && typeof value.description !== 'string') {
-    return fail(`description should be string|null, got ${JSON.stringify(value.description)}`)
+  if (team.description !== null && typeof team.description !== 'string') {
+    return fail(`description should be string|null, got ${JSON.stringify(team.description)}`)
   }
-  if (value.instructions !== null && typeof value.instructions !== 'string') {
-    return fail(`instructions should be string|null, got ${JSON.stringify(value.instructions)}`)
+  if (team.instructions !== null && typeof team.instructions !== 'string') {
+    return fail(`instructions should be string|null, got ${JSON.stringify(team.instructions)}`)
   }
-  if (!Array.isArray(value.persona_ids) || value.persona_ids.some((id) => typeof id !== 'string')) {
-    return fail(`persona_ids should be string[], got ${JSON.stringify(value.persona_ids)}`)
+  if (!Array.isArray(team.personaIds) || team.personaIds.some((id) => typeof id !== 'string')) {
+    return fail(`personaIds should be string[], got ${JSON.stringify(team.personaIds)}`)
   }
-  if (value.is_builtin !== false) {
-    return fail(`is_builtin should be the honest default false, got ${JSON.stringify(value.is_builtin)}`)
+  if (!Array.isArray(team.accountIds) || team.accountIds.some((id) => typeof id !== 'string')) {
+    return fail(`accountIds should be string[], got ${JSON.stringify(team.accountIds)}`)
   }
-  if (value.source_dir !== null) {
-    return fail(`source_dir should be the honest default null, got ${JSON.stringify(value.source_dir)}`)
+  if (typeof team.createdAt !== 'number') {
+    return fail(`createdAt should be a number, got ${JSON.stringify(team.createdAt)}`)
   }
-  if (value.is_symlink !== false) {
-    return fail(`is_symlink should be the honest default false, got ${JSON.stringify(value.is_symlink)}`)
-  }
-  if (value.symlink_target !== null) {
-    return fail(`symlink_target should be the honest default null, got ${JSON.stringify(value.symlink_target)}`)
-  }
-  if (value.version !== null) {
-    return fail(`version should be the honest default null, got ${JSON.stringify(value.version)}`)
-  }
-  if (typeof value.created_at !== 'string' || !value.created_at) {
-    return fail('missing created_at')
-  }
-  if (typeof value.updated_at !== 'string' || !value.updated_at) {
-    return fail('missing updated_at')
+  if (typeof team.updatedAt !== 'number') {
+    return fail(`updatedAt should be a number, got ${JSON.stringify(team.updatedAt)}`)
   }
   return ok()
+}
+
+/** Unwraps { team }, returning the record or a failed ShapeOutcome. */
+function unwrapTeamResult(result: unknown): { team: Record<string, unknown> } | ShapeOutcome {
+  if (!isRecord(result) || !isRecord(result.team)) {
+    return fail(`expected { team }, got ${JSON.stringify(result)}`)
+  }
+  return { team: result.team }
 }
 
 const CREATE_PERSONA_IDS = ['verify-team-agent-1', 'verify-team-agent-2']
@@ -78,51 +83,74 @@ const UPDATE_PERSONA_IDS = ['verify-team-agent-3']
 
 export const SCENARIO_STEPS: ScenarioStep[] = [
   {
-    command: 'create_team',
+    // Flat params here: team.create's zod schema takes the fields at top
+    // level — the { input: {...} } wrapper was the vendor switch's own
+    // reshape, not part of the real contract.
+    command: 'team.create',
+    via: 'method',
     args: () => ({
-      input: {
-        name: 'Verify Team',
-        description: 'verification department',
-        instructions: 'Be helpful',
-        personaIds: CREATE_PERSONA_IDS
-      }
+      name: 'Verify Team',
+      description: 'verification department',
+      instructions: 'Be helpful',
+      personaIds: CREATE_PERSONA_IDS
     }),
     shapeCheck: (result) => {
-      const shape = isRawTeamShape(result)
+      const unwrapped = unwrapTeamResult(result)
+      if ('ok' in unwrapped) {
+        return unwrapped
+      }
+      const team = unwrapped.team
+      const shape = isTeamRecordShape(team)
       if (!shape.ok) {
         return shape
       }
-      const record = result as Record<string, unknown>
-      if (record.name !== 'Verify Team') {
-        return fail(`name not set: ${JSON.stringify(record.name)}`)
+      if (team.name !== 'Verify Team') {
+        return fail(`name not set: ${JSON.stringify(team.name)}`)
       }
-      if (!isStringArrayEqual(record.persona_ids, CREATE_PERSONA_IDS)) {
-        return fail(`persona_ids did not round-trip: ${JSON.stringify(record.persona_ids)}`)
+      if (team.description !== 'verification department') {
+        return fail(`description did not round-trip: ${JSON.stringify(team.description)}`)
+      }
+      if (team.instructions !== 'Be helpful') {
+        return fail(`instructions did not round-trip: ${JSON.stringify(team.instructions)}`)
+      }
+      if (!isStringArrayEqual(team.personaIds, CREATE_PERSONA_IDS)) {
+        return fail(`personaIds did not round-trip: ${JSON.stringify(team.personaIds)}`)
+      }
+      // No accountIds were sent, so the store must persist the honest empty
+      // default rather than fabricated account bindings.
+      if (Array.isArray(team.accountIds) && team.accountIds.length !== 0) {
+        return fail(`accountIds should default to [], got ${JSON.stringify(team.accountIds)}`)
       }
       return ok()
     },
     capture: (result, ctx) => {
-      if (isRecord(result) && typeof result.id === 'string') {
-        ctx.teamId = result.id
+      if (
+        isRecord(result) &&
+        isRecord(result.team) &&
+        typeof result.team.id === 'string'
+      ) {
+        ctx.teamId = result.team.id
       }
     }
   },
-  // Why no 'list_teams' step here: CORE_SCENARIO_STEPS already declares one
-  // (command-scenario.ts:192) and run-verification.test.ts's own invariant
-  // test requires every command to appear in SCENARIO exactly once — a
-  // second 'list_teams' entry would break that test the moment this array
-  // gets spliced in. It also wouldn't prove anything useful positioned here:
-  // core steps run before every family's steps (see command-scenario.ts's
-  // ORDERING comment), so core's 'list_teams' always fires before this
-  // family creates a team at all. Persistence and round-tripping are instead
+  // Why no 'team.list' step here: the core scenario steps already cover
+  // roster reads before any family's steps run (see command-scenario.ts's
+  // ORDERING comment), so a second listing here positioned after create
+  // would prove nothing about persistence ordering — and run-verification's
+  // method-seam invariant requires each dispatched method to appear exactly
+  // once across SCENARIO. Persistence and round-tripping are instead
   // verified directly off each command's own returned record below — full
-  // RawTeam shape plus exact field values, which the RPC only returns by
+  // Team shape plus exact field values, which the RPC only returns by
   // reading back through the real store, not an echo of the input.
   {
-    command: 'update_team',
+    // Reshape note: team.update takes { id, updates } — the vendor switch
+    // built that same pair by unpacking its { input: { id, ...fields } }
+    // wrapper; here we send the handler's actual schema shape directly.
+    command: 'team.update',
+    via: 'method',
     args: (ctx) => ({
-      input: {
-        id: ctx.teamId,
+      id: ctx.teamId,
+      updates: {
         name: 'Verify Team Updated',
         description: 'updated department',
         instructions: 'Be kind',
@@ -130,26 +158,42 @@ export const SCENARIO_STEPS: ScenarioStep[] = [
       }
     }),
     shapeCheck: (result, ctx) => {
-      const shape = isRawTeamShape(result)
+      const unwrapped = unwrapTeamResult(result)
+      if ('ok' in unwrapped) {
+        return unwrapped
+      }
+      const team = unwrapped.team
+      const shape = isTeamRecordShape(team)
       if (!shape.ok) {
         return shape
       }
-      const record = result as Record<string, unknown>
-      if (record.id !== ctx.teamId) {
-        return fail('update_team returned a different team id')
+      if (team.id !== ctx.teamId) {
+        return fail('update returned a different team id')
       }
-      if (record.name !== 'Verify Team Updated') {
-        return fail(`name change did not take: ${JSON.stringify(record.name)}`)
+      if (team.name !== 'Verify Team Updated') {
+        return fail(`name change did not take: ${JSON.stringify(team.name)}`)
       }
-      if (!isStringArrayEqual(record.persona_ids, UPDATE_PERSONA_IDS)) {
-        return fail(`persona_ids change did not take: ${JSON.stringify(record.persona_ids)}`)
+      if (team.description !== 'updated department') {
+        return fail(`description change did not take: ${JSON.stringify(team.description)}`)
+      }
+      if (team.instructions !== 'Be kind') {
+        return fail(`instructions change did not take: ${JSON.stringify(team.instructions)}`)
+      }
+      if (!isStringArrayEqual(team.personaIds, UPDATE_PERSONA_IDS)) {
+        return fail(`personaIds change did not take: ${JSON.stringify(team.personaIds)}`)
       }
       return ok()
     }
   },
   {
-    command: 'delete_team',
+    // Unlike the retired vendor seam (which resolved delete_team to bare
+    // undefined), the handler confirms what it removed.
+    command: 'team.delete',
+    via: 'method',
     args: (ctx) => ({ id: ctx.teamId }),
-    shapeCheck: (result) => (result === undefined ? ok() : fail(`expected undefined, got ${JSON.stringify(result)}`))
+    shapeCheck: (result, ctx) =>
+      isRecord(result) && result.removed === true && result.id === ctx.teamId
+        ? ok()
+        : fail(`unexpected delete result: ${JSON.stringify(result)}`)
   }
 ]

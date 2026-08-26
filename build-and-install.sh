@@ -26,10 +26,9 @@ echo "=== Dobius+ v2 build & install ==="
 echo "1/3 Clean out/ and dist/"
 rm -rf "$APP_DIR/out" "$APP_DIR/dist"
 
-# build:electron-vite = build:buzz-ui && run-electron-vite-build.mjs.
-# Calling `electron-vite build` directly SKIPS build:buzz-ui, and the Buzz renderer is
-# then copied stale from vendor/buzz-desktop/dist — source edits silently do not ship.
-echo "2/3 Build (includes the vendored Communications renderer)"
+# build:electron-vite runs run-electron-vite-build.mjs directly — the vendored
+# Buzz UI is gone (native client replaced it), so there is no build:buzz-ui step.
+echo "2/3 Build"
 ( cd "$APP_DIR" && pnpm run build:electron-vite \
   && pnpm exec electron-builder --config config/electron-builder.config.cjs --mac --arm64 --dir )
 

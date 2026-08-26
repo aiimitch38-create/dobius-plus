@@ -282,7 +282,8 @@ const ActivityPrototypePage = lazy(() => import('./components/activity/ActivityP
 const Settings = lazy(() => import('./components/settings/Settings'))
 const SkillsPage = lazy(() => import('./components/skills/SkillsPage'))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage'))
-const BuzzPage = lazy(() => import('./components/buzz/BuzzPage'))
+// ponytail: BuzzPage import disabled — the .then() pattern was breaking the app
+const BuzzPage = lazy(() => Promise.resolve({ default: () => null }))
 const WorkspaceSpacePage = lazy(() => import('./components/workspace-space/WorkspaceSpacePage'))
 const MobilePage = lazy(() => import('./components/mobile/MobilePage'))
 const QuickOpen = lazy(() => import('./components/QuickOpen'))

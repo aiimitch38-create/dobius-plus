@@ -1,19 +1,14 @@
 import type { WebContents } from 'electron'
-import { join } from 'node:path'
 import { browserManager } from '../browser/browser-manager'
 import { browserSessionRegistry } from '../browser/browser-session-registry'
-import { isTrustedCommunicationsGuestUrl } from '../communications/communications-guest'
 import { normalizeBrowserNavigationUrl } from '../../shared/browser-url'
 import { DOBIUS_BROWSER_GUEST_WEB_PREFERENCES } from '../../shared/browser-guest-web-preferences'
-import { DOBIUS_COMMUNICATIONS_PARTITION } from '../../shared/communications-bridge'
 
 export function attachWebviewHardening(webContents: WebContents): void {
   webContents.on('will-attach-webview', (event, webPreferences, params) => {
     const src = typeof params.src === 'string' ? params.src : ''
     const normalizedSrc = normalizeBrowserNavigationUrl(src)
     const partition = typeof webPreferences.partition === 'string' ? webPreferences.partition : ''
-    const isCommunicationsGuest =
-      partition === DOBIUS_COMMUNICATIONS_PARTITION && isTrustedCommunicationsGuestUrl(src)
 
     // Why: arbitrary sites must stay inside an unprivileged guest surface. We
     // fail closed here so a renderer bug cannot smuggle preload, Node, or a
@@ -24,10 +19,7 @@ export function attachWebviewHardening(webContents: WebContents): void {
     // persist:dobius-browser-session-<uuid>). The registry is the sole authority
     // for which partitions are valid — renderer-provided strings that are not
     // in the allowlist are rejected.
-    if (
-      !isCommunicationsGuest &&
-      (!normalizedSrc || !browserSessionRegistry.isAllowedPartition(partition))
-    ) {
+    if (!normalizedSrc || !browserSessionRegistry.isAllowedPartition(partition)) {
       event.preventDefault()
       return
     }
@@ -47,11 +39,6 @@ export function attachWebviewHardening(webContents: WebContents): void {
     // Why: keep renderer-created webviews aligned with the browser guest policy
     // even if the host markup omits or misspells a preference.
     Object.assign(webPreferences, DOBIUS_BROWSER_GUEST_WEB_PREFERENCES)
-    if (isCommunicationsGuest) {
-      // Why: only the bundled Communications entry receives this narrow bridge;
-      // arbitrary browser guests remain preload-free even on the same host.
-      webPreferences.preload = join(__dirname, '../preload/communications.js')
-    }
     // Why: preserve the registry-validated partition instead of forcing the
     // legacy constant. This lets imported/isolated session profiles use their
     // own cookie/storage partition while keeping all other hardening intact.

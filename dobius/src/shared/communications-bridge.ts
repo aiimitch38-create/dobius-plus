@@ -77,6 +77,8 @@ export const COMMUNICATIONS_RUNTIME_METHODS = [
   'agentLocalOverrides.set',
   'agentManagedProfiles.get',
   'agentManagedProfiles.set',
+  'agentObserver.buildControlEvent',
+  'agentObserver.decryptEvent',
   'agentObserverIndex.readForChannel',
   'agentObserverIndex.write',
   // Canvas-notes family (communications/canvas/canvas-rpc-methods.ts).

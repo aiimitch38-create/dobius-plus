@@ -12,7 +12,16 @@ import {
 
 let requestSequence = 0
 
-contextBridge.exposeInMainWorld('dobiusCommunications', {
+/**
+ * Idempotent exposure: the guest webview entry runs this at import time and
+ * the main-window preload calls it explicitly, so the same bundled module
+ * must tolerate both paths without re-exposing in one context.
+ */
+export function exposeCommunicationsBridge(): void {
+  if ('dobiusCommunications' in window) {
+    return
+  }
+  contextBridge.exposeInMainWorld('dobiusCommunications', {
   invoke(command: string, args: unknown = {}): Promise<CommunicationsBridgeResponse> {
     requestSequence += 1
     const request: CommunicationsBridgeRequest = {
@@ -26,5 +35,8 @@ contextBridge.exposeInMainWorld('dobiusCommunications', {
   relayStatus(): Promise<CommunicationsRelayStatus> {
     return ipcRenderer.invoke(COMMUNICATIONS_RELAY_STATUS_CHANNEL)
   }
-})
+  })
+}
+
+exposeCommunicationsBridge()
 

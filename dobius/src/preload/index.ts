@@ -4449,3 +4449,9 @@ if (process.contextIsolated) {
   // @ts-ignore (define in dts)
   window.api = api
 }
+
+// Native Communications surface runs in this main window, so the bridge that
+// used to be guest-webview-only must be exposed here too (idempotent).
+import { exposeCommunicationsBridge } from './communications'
+
+exposeCommunicationsBridge()

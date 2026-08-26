@@ -3,102 +3,134 @@ import type { ScenarioContext } from './scenario-contract'
 import { SCENARIO_STEPS } from './teams.scenarios'
 
 // Why: exercises the fixtures' own args/shapeCheck/capture logic against
-// fabricated RawTeam-shaped results, standing in for what the real
-// team.* RPC methods (behind the harness's real dispatch seam) would return.
-// This does not replace the real harness run — see the report's
-// HARNESS_EFFECT section for that — it guards the fixture logic itself, so a
-// typo in isRawTeamShape can't silently start passing malformed shapes.
+// fabricated { team }-wrapped camelCase Team results (team-store.ts's
+// record shape), standing in for what the real team.* RPC methods return
+// over the gateway. This does not replace the real harness run — see
+// run-verification's HARNESS_EFFECT reporting for that — it guards the
+// fixture logic itself, so a typo in isTeamRecordShape can't silently start
+// passing malformed shapes.
 function makeCtx(overrides: Partial<ScenarioContext> = {}): ScenarioContext {
   return { selfPubkey: 'self', otherPubkey: 'other', family: {}, ...overrides }
 }
 
-function makeRawTeam(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function makeTeamResult(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    id: 'team-1',
-    name: 'Verify Team',
-    description: 'verification department',
-    instructions: 'Be helpful',
-    persona_ids: ['verify-team-agent-1', 'verify-team-agent-2'],
-    is_builtin: false,
-    source_dir: null,
-    is_symlink: false,
-    symlink_target: null,
-    version: null,
-    created_at: '2026-01-01T00:00:00.000Z',
-    updated_at: '2026-01-01T00:00:00.000Z',
-    ...overrides
+    team: {
+      id: 'team-1',
+      name: 'Verify Team',
+      description: 'verification department',
+      instructions: 'Be helpful',
+      personaIds: ['verify-team-agent-1', 'verify-team-agent-2'],
+      accountIds: [],
+      createdAt: 1767225600000,
+      updatedAt: 1767225600000,
+      ...overrides
+    }
   }
 }
 
 describe('team scenario fixtures', () => {
-  it('orders steps create -> update -> delete (no list_teams — already core-owned)', () => {
-    expect(SCENARIO_STEPS.map((step) => step.command)).toEqual(['create_team', 'update_team', 'delete_team'])
+  it('orders steps team.create -> team.update -> team.delete (no team.list — already core-owned)', () => {
+    expect(SCENARIO_STEPS.map((step) => step.command)).toEqual([
+      'team.create',
+      'team.update',
+      'team.delete'
+    ])
+    expect(SCENARIO_STEPS.every((step) => step.via === 'method')).toBe(true)
   })
 
-  it('create_team sends the tauriTeams.ts input wrapper and passes on a matching honest shape', () => {
+  it('team.create sends flat params and passes on a matching full record', () => {
     const [createStep] = SCENARIO_STEPS
-    const args = createStep.args(makeCtx()) as { input: Record<string, unknown> }
-    expect(args.input).toMatchObject({ name: 'Verify Team', personaIds: expect.any(Array) })
+    const args = createStep.args(makeCtx()) as Record<string, unknown>
+    expect(args).toMatchObject({ name: 'Verify Team', personaIds: expect.any(Array) })
+    // The vendor switch's { input } wrapper is retired — params are top-level.
+    expect(args.input).toBeUndefined()
 
-    const result = makeRawTeam()
+    const result = makeTeamResult()
     expect(createStep.shapeCheck(result, makeCtx())).toEqual({ ok: true })
     createStep.capture?.(result, makeCtx())
   })
 
-  it('create_team rejects a fabricated is_builtin/source_dir instead of the honest default', () => {
+  it('team.create rejects a non-{team} wrapper and missing/ill-typed fields', () => {
     const [createStep] = SCENARIO_STEPS
-    const badResult = makeRawTeam({ is_builtin: true })
-    expect(createStep.shapeCheck(badResult, makeCtx())).toMatchObject({ ok: false })
-
-    const badSourceDir = makeRawTeam({ source_dir: '/some/fabricated/path' })
-    expect(createStep.shapeCheck(badSourceDir, makeCtx())).toMatchObject({ ok: false })
+    expect(createStep.shapeCheck({ id: 'team-1' }, makeCtx())).toMatchObject({ ok: false })
+    expect(createStep.shapeCheck(makeTeamResult({ createdAt: 'not-a-number' }), makeCtx())).toMatchObject({
+      ok: false
+    })
+    const noAccounts = makeTeamResult()
+    if (!('team' in noAccounts) || typeof noAccounts.team !== 'object' || noAccounts.team === null) {
+      throw new Error('fixture lost its team record')
+    }
+    delete (noAccounts.team as Record<string, unknown>).accountIds
+    expect(createStep.shapeCheck(noAccounts, makeCtx())).toMatchObject({ ok: false })
   })
 
-  it('create_team rejects persona_ids that did not round-trip', () => {
+  it('team.create rejects personaIds that did not round-trip', () => {
     const [createStep] = SCENARIO_STEPS
-    const wrongPersonas = makeRawTeam({ persona_ids: ['unexpected-id'] })
+    const wrongPersonas = makeTeamResult({
+      personaIds: ['unexpected-id']
+    })
     expect(createStep.shapeCheck(wrongPersonas, makeCtx())).toMatchObject({ ok: false })
   })
 
-  it('create_team captures the new id onto ctx.teamId for later steps', () => {
+  it('team.create captures the new id onto ctx.teamId for later steps', () => {
     const [createStep] = SCENARIO_STEPS
     const ctx = makeCtx()
-    createStep.capture?.(makeRawTeam({ id: 'team-captured' }), ctx)
+    createStep.capture?.(makeTeamResult({ id: 'team-captured' }), ctx)
     expect(ctx.teamId).toBe('team-captured')
   })
 
-  it('update_team asserts the name and persona_ids change actually took', () => {
+  it('team.update sends {id, updates} and asserts every change actually took', () => {
     const [, updateStep] = SCENARIO_STEPS
     const ctx = makeCtx({ teamId: 'team-update-check' })
 
-    const args = updateStep.args(ctx) as { input: Record<string, unknown> }
-    expect(args.input.id).toBe('team-update-check')
+    const args = updateStep.args(ctx) as { id: string; updates: Record<string, unknown> }
+    expect(args.id).toBe('team-update-check')
+    expect(args.updates).toMatchObject({ name: 'Verify Team Updated', personaIds: expect.any(Array) })
 
-    const unchanged = makeRawTeam({ id: 'team-update-check', name: 'Verify Team' })
+    const unchanged = makeTeamResult({ id: 'team-update-check', name: 'Verify Team' })
     expect(updateStep.shapeCheck(unchanged, ctx)).toMatchObject({ ok: false })
 
-    const changed = makeRawTeam({
+    const changed = makeTeamResult({
       id: 'team-update-check',
       name: 'Verify Team Updated',
-      persona_ids: ['verify-team-agent-3']
+      description: 'updated department',
+      instructions: 'Be kind',
+      personaIds: ['verify-team-agent-3']
     })
     expect(updateStep.shapeCheck(changed, ctx)).toEqual({ ok: true })
   })
 
-  it('update_team rejects a result carrying a different team id', () => {
+  it('team.update rejects a result carrying a different team id or stale fields', () => {
     const [, updateStep] = SCENARIO_STEPS
     const ctx = makeCtx({ teamId: 'team-a' })
-    const wrongId = makeRawTeam({ id: 'team-b', name: 'Verify Team Updated', persona_ids: ['verify-team-agent-3'] })
+    const wrongId = makeTeamResult({
+      id: 'team-b',
+      name: 'Verify Team Updated',
+      description: 'updated department',
+      instructions: 'Be kind',
+      personaIds: ['verify-team-agent-3']
+    })
     expect(updateStep.shapeCheck(wrongId, ctx)).toMatchObject({ ok: false })
+
+    const stalePersonas = makeTeamResult({
+      id: 'team-a',
+      name: 'Verify Team Updated',
+      description: 'updated department',
+      instructions: 'Be kind',
+      personaIds: ['verify-team-agent-1']
+    })
+    expect(updateStep.shapeCheck(stalePersonas, ctx)).toMatchObject({ ok: false })
   })
 
-  it('delete_team sends the bare {id} shape and expects undefined back', () => {
+  it('team.delete sends bare {id} and expects {removed:true,id} back', () => {
     const [, , deleteStep] = SCENARIO_STEPS
     const ctx = makeCtx({ teamId: 'team-delete-check' })
 
     const deleteArgs = deleteStep.args(ctx) as { id: string }
     expect(deleteArgs.id).toBe('team-delete-check')
-    expect(deleteStep.shapeCheck(undefined, ctx)).toEqual({ ok: true })
-    expect(deleteStep.shapeCheck({ id: 'team-delete-check' }, ctx)).toMatchObject({ ok: false })
+    expect(deleteStep.shapeCheck({ removed: true, id: 'team-delete-check' }, ctx)).toEqual({ ok: true })
+    expect(deleteStep.shapeCheck(undefined, ctx)).toMatchObject({ ok: false })
+    expect(deleteStep.shapeCheck({ removed: true, id: 'other-team' }, ctx)).toMatchObject({ ok: false })
   })
 })

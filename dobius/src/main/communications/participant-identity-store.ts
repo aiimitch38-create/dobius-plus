@@ -49,6 +49,22 @@ export type SignedCommunicationsEvent = {
 
 let cachedIdentity: StoredParticipantIdentity | null = null
 
+export type ParticipantIdentityCreatedListener = (identity: ParticipantPublicIdentity) => void
+
+// Single-slot listener set by participant-identity-buzz-migration.ts so a
+// freshly generated identity can get its kind-0 profile published without
+// this module growing network code.
+let identityCreatedListener: ParticipantIdentityCreatedListener | null = null
+
+/**
+ * Registers the callback fired when `ensureParticipantIdentity` generates a
+ * brand-new identity. Never fires for reads of an existing identity or for
+ * explicit imports (those flows publish profiles themselves).
+ */
+export function onParticipantIdentityCreated(listener: ParticipantIdentityCreatedListener): void {
+  identityCreatedListener = listener
+}
+
 function getDobiusDir(): string {
   return join(homedir(), '.dobius')
 }
@@ -151,7 +167,22 @@ export function ensureParticipantIdentity(): ParticipantPublicIdentity {
 
   const generated = generateIdentity()
   writeStoredIdentity(generated)
-  return toPublicIdentity(generated)
+  const publicIdentity = toPublicIdentity(generated)
+  notifyIdentityCreated(publicIdentity)
+  return publicIdentity
+}
+
+function notifyIdentityCreated(identity: ParticipantPublicIdentity): void {
+  if (!identityCreatedListener) {return}
+  try {
+    identityCreatedListener(identity)
+  } catch (err) {
+    console.warn(
+      `[communications] participant identity created listener failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    )
+  }
 }
 
 /** Public identity only — throws if `ensureParticipantIdentity` has never run. */

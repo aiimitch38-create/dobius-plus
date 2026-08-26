@@ -37,11 +37,11 @@ esac
 # Why: `find … 2>/dev/null || true` would turn a missing/unreadable source tree into an
 # empty result — i.e. a silent "nothing is stale" false pass. Assert the trees exist and
 # let find's own failures abort instead of hiding them.
-for SRC_DIR in "$REPO/dobius/src" "$REPO/dobius/vendor/buzz-desktop/src"; do
+for SRC_DIR in "$REPO/dobius/src"; do
   [ -d "$SRC_DIR" ] || { echo "ERROR: source tree missing, cannot check staleness: $SRC_DIR" >&2; exit 1; }
   [ -r "$SRC_DIR" ] || { echo "ERROR: source tree unreadable: $SRC_DIR" >&2; exit 1; }
 done
-STALE="$(find "$REPO/dobius/src" "$REPO/dobius/vendor/buzz-desktop/src" \
+STALE="$(find "$REPO/dobius/src" \
   -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.css' \) -newer "$ASAR")"
 if [ -n "$STALE" ]; then
   COUNT="$(printf '%s\n' "$STALE" | wc -l | tr -d ' ')"
@@ -76,6 +76,12 @@ rm -rf "$APPDATA/Cache" "$APPDATA/Code Cache" "$APPDATA/GPUCache" \
 
 echo "3/4 Copy new build (ditto preserves signature/xattrs)"
 ditto "$BUILT_APP" "$INSTALLED"
+
+# Why: the build output copy carries the same bundle ID as the installed app.
+# If it stays on disk it can register with LaunchServices (e.g. when opened
+# or scanned) and macOS then shows TWO Dock icons for one app. It is a
+# regenerable build artifact — delete it after install, every time.
+rm -rf "$REPO/dobius/dist/mac-arm64"
 
 echo "4/4 Relaunch"
 open "$INSTALLED"

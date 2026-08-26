@@ -9,7 +9,7 @@ import {
 } from '../../shared/communications-bridge'
 import type { DobiusRuntimeService } from '../runtime/dobius-runtime'
 import { RpcDispatcher } from '../runtime/rpc/dispatcher'
-import { isTrustedCommunicationsGuestUrl } from './communications-guest'
+import { isTrustedCommunicationsSurfaceUrl } from './communications-surface'
 
 function failure(id: string, code: string, message: string): CommunicationsBridgeFailure {
   return {
@@ -33,9 +33,10 @@ export function createCommunicationsBridgeHandler(
 ): (senderUrl: string, value: unknown) => Promise<CommunicationsBridgeResponse> {
   return async (senderUrl, value) => {
     // Why: this bridge can control real workstation state. Validate both the
-    // immutable bundled entry URL and every request even though the preload
-    // also constructs a typed envelope.
-    if (!isTrustedCommunicationsGuestUrl(senderUrl)) {
+    // sender URL and every request even though the preload also constructs a
+    // typed envelope. The one trusted surface is the app's own main-window
+    // renderer (the native Communications client).
+    if (!isTrustedCommunicationsSurfaceUrl(senderUrl)) {
       return failure('unknown', 'untrusted_sender', 'Communications bridge access denied')
     }
     if (!isCommunicationsBridgeRequest(value)) {

@@ -53,6 +53,16 @@ export type ScenarioStep = {
   command: string
   args: (ctx: ScenarioContext) => unknown
   /**
+   * Direct in-process step: the runner calls this function (instead of
+   * dispatching `command` through any seam) and feeds the resolved value
+   * through the same shapeCheck/capture pipeline. Used by the core world
+   * steps whose capabilities are relay-protocol operations (channel/message/
+   * profile event publishing) with no RPC method behind them — the helpers
+   * live in verify/relay-world-ops.ts and sign via the main-process
+   * participant identity. `command` is kept for reporting/uniqueness only.
+   */
+  direct?: (ctx: ScenarioContext) => Promise<unknown>
+  /**
    * Which dispatch seam runs this step. 'vendor' (default) goes through the
    * vendored Buzz client's Tauri-command switch (invokeTauri) — the seam the
    * vendored UI uses. 'method' goes through the REAL communications gateway

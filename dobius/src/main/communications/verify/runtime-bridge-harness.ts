@@ -28,6 +28,10 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { vi } from 'vitest'
+// Type-only: lets the node:os mock factory type its original without an
+// import() type annotation (oxlint consistent-type-imports). Types are
+// erased at runtime, so this cannot affect the mock's hoisting.
+import type * as NodeOsModule from 'node:os'
 
 export const ISOLATED_USER_DATA_DIR = mkdtempSync(
   path.join(tmpdir(), 'dobius-comms-verify-userdata-')
@@ -49,7 +53,7 @@ export const ISOLATED_USER_DATA_DIR = mkdtempSync(
 // so the dir not existing yet is fine; a leftover sandbox identity from a
 // previous run is throwaway state in tmp, never the user's real ~/.dobius.
 vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>()
+  const actual = await importOriginal<typeof NodeOsModule>()
   const { join } = await import('node:path')
   return {
     ...actual,
@@ -213,13 +217,13 @@ export function createRuntimeBridge(): { invoke: (command: string, args?: unknow
 
 /**
  * Sender URL the gateway's trust check accepts for method-seam invocations.
- * `isTrustedCommunicationsGuestUrl` takes its dev-mode origin from
+ * `isTrustedCommunicationsSurfaceUrl` takes its dev-mode origin from
  * ELECTRON_RENDERER_URL, so the runner must set that env var (see
  * METHOD_SEAM_RENDERER_URL) before any method-seam step runs — the check is
  * the real one, not a mock.
  */
 export const METHOD_SEAM_RENDERER_URL = 'http://127.0.0.1:5173'
-export const METHOD_SEAM_SENDER_URL = `${METHOD_SEAM_RENDERER_URL}/buzz/index.html?embed=dobius`
+export const METHOD_SEAM_SENDER_URL = METHOD_SEAM_RENDERER_URL
 
 /**
  * Invokes RPC methods through the REAL communications gateway pipeline —

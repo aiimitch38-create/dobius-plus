@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { ScenarioContext } from '../scenario-contract'
 import { SCENARIO_STEPS } from './agents.scenarios'
 
-// Why: exercises this family's own args/shapeCheck/capture logic against
-// fabricated results standing in for what the real vendor case blocks (see
-// the handoff report's SWITCH_CASES) would return — mirrors
-// teams.scenarios.test.ts's precedent. Does not replace a real harness run;
-// guards the fixture logic itself so a typo in a shapeCheck can't silently
-// start passing malformed shapes.
+// Why: exercises this family's own args/shapeCheck logic against fabricated
+// results standing in for what the real gateway handlers return (see
+// communications-agent-methods.ts) — mirrors workflows/workflows style. Does
+// not replace a real harness run; guards the fixture logic itself so a typo
+// in a shapeCheck can't silently start passing malformed shapes.
 function makeCtx(overrides: Partial<ScenarioContext> = {}): ScenarioContext {
   return { selfPubkey: 'self-pubkey', otherPubkey: 'other-pubkey', family: {}, ...overrides }
 }
@@ -26,108 +25,124 @@ describe('agents family scenario fixtures', () => {
     expect(new Set(commands).size).toBe(commands.length)
   })
 
-  it('build_observer_control_event addresses the event to otherPubkey and rejects an unencrypted passthrough', () => {
-    const step = findStep('build_observer_control_event')
-    const ctx = makeCtx()
-    const args = step.args(ctx) as { agentPubkey: string; payload: unknown }
-    expect(args.agentPubkey).toBe(ctx.otherPubkey)
+  it('every step dispatches an RPC method name over the gateway seam (no vendor names left)', () => {
+    for (const step of SCENARIO_STEPS) {
+      expect(step.via).toBe('method')
+      // Vendor Tauri commands were snake_case; RPC methods are dot-namespaced
+      // camelCase — a leftover underscore means an unported step.
+      expect(step.command).not.toMatch(/_/)
+    }
+  })
 
-    const plaintext = JSON.stringify(args.payload)
-    const fakePassthrough = JSON.stringify({
-      kind: 24200,
-      content: plaintext,
-      tags: [['p', ctx.otherPubkey]],
-      sig: 'a'.repeat(64),
-      id: 'b'.repeat(64)
+  it('agentObserverIndex.write asserts the honest indexed count', () => {
+    const ctx = makeCtx()
+    const step = findStep('agentObserverIndex.write')
+    const args = step.args(ctx) as { entries: unknown[] }
+    expect(args.entries).toHaveLength(1)
+    expect(step.shapeCheck({ indexed: 1 }, ctx)).toEqual({ ok: true })
+    expect(step.shapeCheck({ indexed: 2 }, ctx)).toMatchObject({ ok: false })
+    expect(step.shapeCheck(undefined, ctx)).toMatchObject({ ok: false })
+  })
+
+  it('the observer index steps share one synthesized channel/event id and use the structured cursor', () => {
+    const ctx = makeCtx()
+    const writeArgs = findStep('agentObserverIndex.write').args(ctx) as {
+      entries: { eventId: string; channelId: string }[]
+    }
+    const readStep = findStep('agentObserverIndex.readForChannel')
+    const readArgs = readStep.args(ctx) as { channelId: string; before: unknown; limit: number }
+    expect(readArgs.channelId).toBe(writeArgs.entries[0].channelId)
+    expect(readArgs.before).toBeNull()
+    expect(readArgs.limit).toBe(10)
+
+    const row = {
+      eventId: writeArgs.entries[0].eventId,
+      channelId: writeArgs.entries[0].channelId,
+      createdAt: 1234
+    }
+    expect(readStep.shapeCheck({ entries: [row] }, ctx)).toEqual({ ok: true })
+    expect(readStep.shapeCheck({ entries: [] }, ctx)).toMatchObject({ ok: false })
+    expect(readStep.shapeCheck({ entries: [{ ...row, eventId: 'other-event' }] }, ctx)).toMatchObject({ ok: false })
+    expect(readStep.shapeCheck({ entries: [{ ...row, channelId: 'other-channel' }] }, ctx)).toMatchObject({
+      ok: false
     })
-    expect(step.shapeCheck(fakePassthrough, ctx)).toMatchObject({ ok: false })
-
-    const realish = JSON.stringify({
-      kind: 24200,
-      content: 'ciphertext-not-the-plaintext',
-      tags: [['p', ctx.otherPubkey]],
-      sig: 'a'.repeat(64),
-      id: 'b'.repeat(64)
-    })
-    expect(step.shapeCheck(realish, ctx)).toEqual({ ok: true })
+    expect(readStep.shapeCheck({}, ctx)).toMatchObject({ ok: false })
   })
 
-  it('build_observer_control_event rejects the wrong kind or a missing p-tag', () => {
-    const step = findStep('build_observer_control_event')
+  it('agentApprovals.listForRun expects the { approvals } envelope', () => {
     const ctx = makeCtx()
-    const wrongKind = JSON.stringify({
-      kind: 1,
-      content: 'ciphertext',
-      tags: [['p', ctx.otherPubkey]],
-      sig: 'a'.repeat(64),
-      id: 'b'.repeat(64)
-    })
-    expect(step.shapeCheck(wrongKind, ctx)).toMatchObject({ ok: false })
-
-    const noTag = JSON.stringify({ kind: 24200, content: 'ciphertext', tags: [], sig: 'a'.repeat(64), id: 'b'.repeat(64) })
-    expect(step.shapeCheck(noTag, ctx)).toMatchObject({ ok: false })
+    const step = findStep('agentApprovals.listForRun')
+    expect(step.args(ctx)).toEqual({ runId: 'agents-verify-run' })
+    expect(step.shapeCheck({ approvals: [] }, ctx)).toEqual({ ok: true })
+    expect(step.shapeCheck([], ctx)).toMatchObject({ ok: false })
   })
 
-  it('build_observer_control_event captures the raw event JSON onto ctx.family for decrypt to consume', () => {
-    const step = findStep('build_observer_control_event')
+  it('agentConfig.get asserts the { config } wrapper and its four-field contract', () => {
     const ctx = makeCtx()
-    step.capture?.('{"kind":24200}', ctx)
-    expect(ctx.family.agentsObserverControlEventJson).toBe('{"kind":24200}')
-  })
-
-  it('decrypt_observer_event reads the captured event JSON and checks the round-tripped payload', () => {
-    const step = findStep('decrypt_observer_event')
-    const ctx = makeCtx({ family: { agentsObserverControlEventJson: 'captured-json' } })
-    const args = step.args(ctx) as { eventJson: string }
-    expect(args.eventJson).toBe('captured-json')
-
-    expect(step.shapeCheck({ type: 'verify_probe', nonce: 'agents-scenario-observer' }, ctx)).toEqual({ ok: true })
-    expect(step.shapeCheck({ type: 'wrong' }, ctx)).toMatchObject({ ok: false })
-  })
-
-  it('has_managed_agent_channel_message_marker expects false for an unsent marker', () => {
-    const step = findStep('has_managed_agent_channel_message_marker')
-    const ctx = makeCtx()
-    expect(step.shapeCheck(false, ctx)).toEqual({ ok: true })
-    expect(step.shapeCheck(true, ctx)).toMatchObject({ ok: false })
-  })
-
-  it('the constant-returning provider/config steps assert the exact honest values', () => {
-    const ctx = makeCtx()
-    expect(findStep('get_baked_build_env').shapeCheck([], ctx)).toEqual({ ok: true })
-    expect(findStep('get_baked_build_env_keys').shapeCheck(['LEAK'], ctx)).toMatchObject({ ok: false })
-    expect(findStep('get_runtime_file_config').shapeCheck(null, ctx)).toEqual({ ok: true })
-    expect(findStep('get_runtime_file_config').shapeCheck({}, ctx)).toMatchObject({ ok: false })
-    expect(findStep('observer_archive_default_enabled').shapeCheck(false, ctx)).toEqual({ ok: true })
-    expect(findStep('observer_archive_default_enabled').shapeCheck(true, ctx)).toMatchObject({ ok: false })
-    expect(findStep('agent_metric_archive_default_enabled').shapeCheck(false, ctx)).toEqual({ ok: true })
-  })
-
-  it('save_custom_harness asserts the real persisted id/source rather than any object', () => {
-    const step = findStep('save_custom_harness')
-    const ctx = makeCtx()
-    expect(step.shapeCheck({ id: 'agents-verify-harness', source: 'custom' }, ctx)).toEqual({ ok: true })
-    expect(step.shapeCheck({ id: 'agents-verify-harness', source: 'builtin' }, ctx)).toMatchObject({ ok: false })
-    expect(step.shapeCheck({}, ctx)).toMatchObject({ ok: false })
-  })
-
-  it('set_global_agent_config asserts the sent env var actually persisted', () => {
-    const step = findStep('set_global_agent_config')
-    const ctx = makeCtx()
+    const step = findStep('agentConfig.get')
+    expect(step.args(ctx)).toEqual({})
     expect(
-      step.shapeCheck({ config: { env_vars: { AGENTS_VERIFY: 'probe' } }, restarted_count: 0 }, ctx)
+      step.shapeCheck({ config: { env_vars: {}, provider: null, model: null, preferred_runtime: null } }, ctx)
     ).toEqual({ ok: true })
+    expect(step.shapeCheck({ env_vars: {} }, ctx)).toMatchObject({ ok: false })
     expect(
-      step.shapeCheck({ config: { env_vars: {} }, restarted_count: 0 }, ctx)
+      step.shapeCheck({ config: { env_vars: 'nope', provider: null, model: null, preferred_runtime: null } }, ctx)
     ).toMatchObject({ ok: false })
   })
 
-  it('index_observer_channel_id and read_archived_observer_events_for_channel reuse the same synthesized channel id', () => {
+  it('agentConfig.set sends the flattened config and asserts persistence plus honest restart counts', () => {
     const ctx = makeCtx()
-    const indexArgs = findStep('index_observer_channel_id').args(ctx) as {
-      entries: { channelId: string }[]
+    const step = findStep('agentConfig.set')
+    expect(step.args(ctx)).toEqual({
+      env_vars: { AGENTS_VERIFY: 'probe' },
+      provider: 'anthropic',
+      model: null,
+      preferred_runtime: 'claude'
+    })
+    expect(
+      step.shapeCheck({ config: { env_vars: { AGENTS_VERIFY: 'probe' } }, restarted_count: 0, failed_restart_count: 0 }, ctx)
+    ).toEqual({ ok: true })
+    expect(
+      step.shapeCheck({ config: { env_vars: {} }, restarted_count: 0, failed_restart_count: 0 }, ctx)
+    ).toMatchObject({ ok: false })
+    expect(
+      step.shapeCheck({ config: { env_vars: { AGENTS_VERIFY: 'probe' } }, restarted_count: 3, failed_restart_count: 0 }, ctx)
+    ).toMatchObject({ ok: false })
+  })
+
+  it('agentManagedProfiles set/get round-trip the stored boolean through both envelopes', () => {
+    const ctx = makeCtx()
+    const set = findStep('agentManagedProfiles.set')
+    expect(set.args(ctx)).toEqual({ enabled: true })
+    expect(set.shapeCheck({ enabled: true }, ctx)).toEqual({ ok: true })
+    expect(set.shapeCheck(undefined, ctx)).toMatchObject({ ok: false })
+
+    const get = findStep('agentManagedProfiles.get')
+    expect(get.args(ctx)).toEqual({})
+    expect(get.shapeCheck({ enabled: true }, ctx)).toEqual({ ok: true })
+    expect(get.shapeCheck({ enabled: false }, ctx)).toMatchObject({ ok: false })
+  })
+
+  it('agentHarness.save asserts the persisted definition fields rather than any object', () => {
+    const ctx = makeCtx()
+    const step = findStep('agentHarness.save')
+    const args = step.args(ctx) as { definition: { id: string }; originalId: unknown }
+    expect(args.definition.id).toBe('agents-verify-harness')
+
+    const saved = {
+      harness: { id: 'agents-verify-harness', label: 'Agents Verify Harness', command: 'agents-verify-harness-cli' }
     }
-    const readArgs = findStep('read_archived_observer_events_for_channel').args(ctx) as { channelId: string }
-    expect(indexArgs.entries[0].channelId).toBe(readArgs.channelId)
+    expect(step.shapeCheck(saved, ctx)).toEqual({ ok: true })
+    expect(step.shapeCheck({ harness: { ...saved.harness, command: 'other-cli' } }, ctx)).toMatchObject({ ok: false })
+    expect(step.shapeCheck({ id: 'agents-verify-harness' }, ctx)).toMatchObject({ ok: false })
+  })
+
+  it('agentHarness.delete asserts what the store removed', () => {
+    const ctx = makeCtx()
+    const step = findStep('agentHarness.delete')
+    expect(step.args(ctx)).toEqual({ id: 'agents-verify-harness' })
+    expect(step.shapeCheck({ removed: true, id: 'agents-verify-harness' }, ctx)).toEqual({ ok: true })
+    expect(step.shapeCheck({ removed: true, id: 'other' }, ctx)).toMatchObject({ ok: false })
+    expect(step.shapeCheck(undefined, ctx)).toMatchObject({ ok: false })
   })
 })

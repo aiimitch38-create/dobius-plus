@@ -31,6 +31,7 @@ import {
   startCommunicationsRelay
 } from '../communications/relay/relay-lifecycle'
 import { registerCommunicationsIdentityHandlers } from './communications-identity'
+import { runCommunicationsBuzzIdentityMigration } from '../communications/participant-identity-buzz-migration'
 import { registerRuntimeEnvironmentHandlers } from './runtime-environments'
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
 import { registerAiVaultHandlers } from './ai-vault'
@@ -230,6 +231,9 @@ export function registerCoreHandlers(
   // talks straight to localhost:3300 over HTTP/WebSocket. Both halves have to
   // come up together or the UI renders "Can't reach the relay".
   startCommunicationsRelay()
+  // Why: imports the legacy webview identity before any RPC can generate a
+  // fresh one, so existing channels/DMs keep their author pubkey visible.
+  runCommunicationsBuzzIdentityMigration()
   registerCommunicationsIdentityHandlers()
   registerRuntimeEnvironmentHandlers(store)
   registerEphemeralVmHandlers(store)

@@ -94,14 +94,9 @@ import { CORE_SETUP_STEPS, CORE_TEARDOWN_STEPS } from './core.scenarios'
 // subdirectory like the others, since team-store.ts's family lives
 // directly in src/main/communications/, so its scenario module does too.
 import { SCENARIO_STEPS as teamsSteps } from '../teams.scenarios'
-// Landed: huddles (voice-huddles lifecycle commands). Still imports the
-// contract from '../verify/command-scenario' (this file re-exports it, so
-// that keeps resolving at runtime) rather than the new '../scenario-contract'
-// — reported to the harness's coordinator to have huddles.scenarios.ts's
-// import line updated; not edited here (out of this composer's write scope).
+// Landed: huddles (voice-huddles lifecycle commands), ported to the method
+// seam (the vendor seam retired with vendor/buzz-desktop).
 import { SCENARIO_STEPS as huddlesSteps } from '../huddles/huddles.scenarios'
-// Landed: chat (channels-membership/messages-dm/relay-lifecycle families).
-import { SCENARIO_STEPS as chatSteps } from '../chat/chat.scenarios'
 // Landed: native-ux (5 of 14 commands are headless-testable; see that
 // file's own doc comment for which 9 are intentionally excluded).
 import { SCENARIO_STEPS as nativeSteps } from '../native/native.scenarios'
@@ -147,7 +142,6 @@ export const SCENARIO: ScenarioStep[] = [
   ...CORE_SETUP_STEPS,
   ...teamsSteps,
   ...huddlesSteps,
-  ...chatSteps,
   ...nativeSteps,
   ...agentsSteps,
   // Method-seam families (via:'method' — dispatched by RPC method name

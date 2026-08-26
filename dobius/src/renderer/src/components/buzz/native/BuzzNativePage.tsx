@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CustomAgent } from '../../../../../shared/agents'
 import { BuzzInboxSidebar } from './BuzzInboxSidebar'
 import { BuzzConversationThread } from './BuzzConversationThread'
+import { RelayStatusNotice } from './RelayStatusNotice'
 import { loadDmChannels, openDmWithPeer, withResolvedLabels, type DmChannelWithLabel } from './channels'
 import { loadChannelMessages, sendDmMessage, type ThreadMessage } from './messages'
 import { dispatchIfAgentDm, isAgentWorking, loadAgentDirectory, type AgentDirectory } from './agent-dispatch'
@@ -23,6 +24,9 @@ export function BuzzNativePage(): React.JSX.Element {
   const [workingAgent, setWorkingAgent] = useState<CustomAgent | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerBusy, setPickerBusy] = useState<string | null>(null)
+  // Bumped by RelayStatusNotice's retry so a failed first load (relay down at
+  // mount) can re-run the whole data load once the relay is reachable again.
+  const [dataLoadEpoch, setDataLoadEpoch] = useState(0)
   const directoryRef = useRef<AgentDirectory>({ byPubkey: new Map() })
 
   // Agents keyed by their relay pubkey; the picker needs the reverse view.
@@ -40,16 +44,22 @@ export function BuzzNativePage(): React.JSX.Element {
     let cancelled = false
     async function init(): Promise<void> {
       setChannelsLoading(true)
-      const [, directory] = await Promise.all([refreshChannels(), loadAgentDirectory()])
-      if (cancelled) {return}
-      directoryRef.current = directory
-      setChannelsLoading(false)
+      try {
+        const [, directory] = await Promise.all([refreshChannels(), loadAgentDirectory()])
+        if (cancelled) {return}
+        directoryRef.current = directory
+      } catch {
+        // Why swallow: an unreachable relay is surfaced by RelayStatusNotice,
+        // so the failed load must not also become an unhandled rejection.
+      } finally {
+        if (!cancelled) {setChannelsLoading(false)}
+      }
     }
     void init()
     return () => {
       cancelled = true
     }
-  }, [refreshChannels])
+  }, [refreshChannels, dataLoadEpoch])
 
   const startDmWithAgent = useCallback(
     async (pubkey: string) => {
@@ -190,17 +200,22 @@ export function BuzzNativePage(): React.JSX.Element {
           </div>
         </div>
       ) : null}
-      <BuzzConversationThread
-        channelId={selectedChannel?.id ?? null}
-        displayName={selectedChannel?.label ?? ''}
-        otherProfile={selectedChannel?.otherProfile ?? null}
-        messages={messages}
-        loading={messagesLoading}
-        workingAgent={workingAgent}
-        onSend={(content) => {
-          void handleSend(content)
-        }}
-      />
+      {/* Column wrapper: the relay notice sits above the thread without
+          disturbing the thread's own flex-1 fill. min-w-0 keeps truncation. */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <RelayStatusNotice onConnected={() => setDataLoadEpoch((epoch) => epoch + 1)} />
+        <BuzzConversationThread
+          channelId={selectedChannel?.id ?? null}
+          displayName={selectedChannel?.label ?? ''}
+          otherProfile={selectedChannel?.otherProfile ?? null}
+          messages={messages}
+          loading={messagesLoading}
+          workingAgent={workingAgent}
+          onSend={(content) => {
+            void handleSend(content)
+          }}
+        />
+      </div>
     </div>
   )
 }

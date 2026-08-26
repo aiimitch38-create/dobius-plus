@@ -1,5 +1,4 @@
-import { createReadStream, cpSync, existsSync, statSync } from 'node:fs'
-import { extname, join, normalize, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -165,53 +164,6 @@ function createStartupDiagnosticsBootstrapPlugin() {
   }
 }
 
-function buzzRendererPlugin() {
-  const buzzDist = resolve('vendor/buzz-desktop/dist')
-  const contentTypes: Record<string, string> = {
-    '.css': 'text/css',
-    '.gif': 'image/gif',
-    '.html': 'text/html',
-    '.ico': 'image/x-icon',
-    '.jpeg': 'image/jpeg',
-    '.jpg': 'image/jpeg',
-    '.js': 'text/javascript',
-    '.json': 'application/json',
-    '.png': 'image/png',
-    '.svg': 'image/svg+xml',
-    '.wasm': 'application/wasm',
-    '.webp': 'image/webp',
-    '.woff': 'font/woff',
-    '.woff2': 'font/woff2'
-  }
-  let rendererOutDir = resolve('out/renderer')
-
-  return {
-    name: 'dobius-buzz-renderer',
-    configResolved(config) {
-      rendererOutDir = config.build.outDir
-    },
-    configureServer(server) {
-      server.middlewares.use('/buzz', (request, response, next) => {
-        const requestPath = decodeURIComponent((request.url ?? '/').split('?')[0])
-        const relativePath = requestPath === '/' ? 'index.html' : requestPath.replace(/^\/+/, '')
-        const filePath = normalize(join(buzzDist, relativePath))
-        if (!filePath.startsWith(`${buzzDist}/`) || !existsSync(filePath) || !statSync(filePath).isFile()) {
-          next()
-          return
-        }
-        response.setHeader('Content-Type', contentTypes[extname(filePath)] ?? 'application/octet-stream')
-        createReadStream(filePath).pipe(response)
-      })
-    },
-    closeBundle() {
-      if (!existsSync(buzzDist)) {
-        throw new Error('Buzz renderer is missing. Run pnpm build:buzz-ui first.')
-      }
-      cpSync(buzzDist, join(rendererOutDir, 'buzz'), { recursive: true })
-    }
-  }
-}
-
 export default defineConfig({
   main: {
     build: {
@@ -278,7 +230,7 @@ export default defineConfig({
         '@': resolve('src/renderer/src')
       }
     },
-    plugins: [react(), tailwindcss(), buzzRendererPlugin()],
+    plugins: [react(), tailwindcss()],
     worker: {
       format: 'es'
     }
