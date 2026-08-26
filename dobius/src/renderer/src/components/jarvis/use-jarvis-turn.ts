@@ -7,6 +7,7 @@ import {
   type JarvisCaptureControls
 } from './jarvis-capture-controls'
 import { createStoppedSessionTracker } from './jarvis-stopped-sessions-tracker'
+import { registerJarvisAudioLevel } from './jarvis-audio-level'
 import { useJarvisVoiceSettings } from './use-jarvis-voice-settings'
 import { useJarvisSpeechEvents } from './use-jarvis-speech-events'
 import { startJarvisTurnSession } from './start-jarvis-turn-session'
@@ -133,9 +134,11 @@ export function useJarvisTurn(): JarvisTurn {
 
   const runAskFlow = useCallback(
     async (utterance: string): Promise<void> => {
+      console.log('[jarvis] ask ->', utterance.slice(0, 60))
       setPhase('thinking')
       try {
         const result = await window.api.jarvis.ask(utterance)
+        console.log('[jarvis] ask result', result.kind)
         // Why only errors: main's ask() already speaks answer/job replies
         // internally (jarvis-service.ts), so speaking those again here would
         // duplicate the audio. Error results are never spoken by main.
@@ -190,6 +193,13 @@ export function useJarvisTurn(): JarvisTurn {
     })()
   }, [setPhase, stopSessionCleanly])
 
+  // Why: the orb needs Jarvis's own mic level so it pulses while ⌘T listening
+  // (dictation's level is 0 whenever a Jarvis session owns the capture).
+  useEffect(() => {
+    registerJarvisAudioLevel(capture.getAudioLevel)
+    return () => registerJarvisAudioLevel(null)
+  }, [capture])
+
   useJarvisSpeechEvents({
     registry,
     tracker,
@@ -206,6 +216,7 @@ export function useJarvisTurn(): JarvisTurn {
       return
     }
     turnPhaseRef.current = 'starting'
+    console.log('[jarvis] startTurn', { modelId })
     startJarvisTurnSession({
       modelId,
       registry,
@@ -215,6 +226,7 @@ export function useJarvisTurn(): JarvisTurn {
         turnCancelRef.current = handle.cancel
       },
       onListening: () => {
+        console.log('[jarvis] turn listening (mic+stt up)')
         turnPhaseRef.current = 'listening'
         setPhase('listening')
       },
@@ -270,6 +282,7 @@ export function useJarvisTurn(): JarvisTurn {
    * semantics: press toggles, and an active press cancels the open turn.
    */
   const toggleTurn = useCallback((): void => {
+    console.log('[jarvis] toggleTurn', { kind: registry.kind.current, phase: turnPhaseRef.current, hud: hudStateRef.current })
     // Why: while ADAM is thinking/speaking, ⌘T means "stop talking" — cancel
     // the in-flight reply's audio and drop back to idle. (Before this, the
     // press was ignored and there was no way to silence a long answer.)

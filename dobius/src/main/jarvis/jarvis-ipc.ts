@@ -104,7 +104,12 @@ function registerHandlers(store: Store, service: JarvisService): void {
   })
 
   ipcMain.removeHandler('jarvis:ask')
-  ipcMain.handle('jarvis:ask', (_event, utterance: string) => service.ask(utterance))
+  ipcMain.handle('jarvis:ask', async (_event, utterance: string) => {
+    console.log('[jarvis:main] ask received', typeof utterance === 'string' ? utterance.slice(0, 60) : typeof utterance)
+    const result = await service.ask(utterance)
+    console.log('[jarvis:main] ask result', result.kind)
+    return result
+  })
 
   ipcMain.removeHandler('jarvis:speak')
   ipcMain.handle('jarvis:speak', (_event, text: string) => service.speak(text))

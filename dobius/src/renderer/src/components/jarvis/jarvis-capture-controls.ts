@@ -6,7 +6,7 @@ export const AMBIENT_SESSION_ID = 'wake'
 /** Capture surface the Jarvis session starters need from useAudioCapture. */
 export type JarvisCaptureControls = Pick<
   ReturnType<typeof useAudioCapture>,
-  'start' | 'stop' | 'flushBufferedAudio' | 'discardBufferedAudio'
+  'start' | 'stop' | 'flushBufferedAudio' | 'discardBufferedAudio' | 'getAudioLevel'
 >
 
 /** Shared identity of the single live Jarvis dictation session. */

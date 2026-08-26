@@ -2,6 +2,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useAppStore } from '@/store'
 import { VoiceOrb } from './VoiceOrb'
 import { requestJarvisToggle } from '../jarvis/jarvis-toggle-registry'
+import { getJarvisAudioLevel } from '../jarvis/jarvis-audio-level'
 
 const ORB_SIZE = 128
 const ORB_OFFSET_STORAGE_KEY = 'dobius.orb-offset.v1'
@@ -32,17 +33,18 @@ const CLICK_SLOP_PX = 5
 const CLICK_MAX_MS = 400
 
 /**
- * THE single voice orb. Renders for ordinary ⌘E dictation AND for Jarvis
- * turns (⌘T / "Hey Adam"); stays pinned while Jarvis talk mode is enabled so
- * there is always something to look at and click. Jarvis phases come from the
- * store mirror the voice controller writes — including manual ⌘T listening,
- * which main never broadcasts. Drag anywhere; offset persists per install.
+ * THE single voice orb. Pops up for ordinary ⌘E dictation and for Jarvis
+ * turns (⌘T / "Hey Adam"); hidden when both are idle. Jarvis phases come from
+ * the store mirror the voice controller writes — including manual ⌘T
+ * listening, which main never broadcasts. The orb MOVES with whoever is
+ * talking: your mic level during listening, a synthetic pulse while ADAM
+ * speaks, so a live voice is never a stale ring. Drag anywhere; the offset
+ * persists per install.
  */
 export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   const dictationState = useAppStore((s) => s.dictationState)
   const partialTranscript = useAppStore((s) => s.partialTranscript)
   const jarvisHud = useAppStore((s) => s.jarvisHud)
-  const jarvisEnabled = useAppStore((s) => s.settings?.voice?.jarvisEnabled === true)
   const [offset, setOffset] = useState<OrbOffset>(loadOffset)
   const gestureRef = useRef<{
     startX: number
@@ -58,7 +60,7 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
     dictationState === 'starting' ||
     dictationState === 'stopping'
   const jarvisActive = jarvisHud.state !== 'idle'
-  if (!dictationActive && !jarvisActive && !jarvisEnabled) {
+  if (!dictationActive && !jarvisActive) {
     return null
   }
 
@@ -74,9 +76,25 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
         ? 'Speaking...'
         : jarvisHud.state === 'listening'
           ? 'Listening...'
-          : jarvisHud.state === 'error'
-            ? (jarvisHud.reason ?? 'ADAM unreachable')
-            : 'Hey Adam'
+          : (jarvisHud.reason ?? 'ADAM unreachable')
+
+  // Whoever is talking drives the orb: dictation mic first, then the Jarvis
+  // session's mic, then a synthetic pulse while ADAM's reply audio plays.
+  const getEffectiveAudioLevel = (): number => {
+    const dictationLevel = getAudioLevel()
+    if (dictationLevel > 0.01) {
+      return dictationLevel
+    }
+    const jarvisLevel = getJarvisAudioLevel()
+    if (jarvisLevel > 0.01) {
+      return jarvisLevel
+    }
+    if (jarvisHud.state === 'speaking') {
+      const t = performance.now() / 170
+      return 0.3 + 0.22 * Math.abs(Math.sin(t))
+    }
+    return 0
+  }
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     event.preventDefault()
@@ -128,7 +146,7 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       >
-        <VoiceOrb size={ORB_SIZE} getLevel={getAudioLevel} error={jarvisHud.state === 'error'} />
+        <VoiceOrb size={ORB_SIZE} getLevel={getEffectiveAudioLevel} error={jarvisHud.state === 'error'} />
       </div>
       {label ? (
         <span className="max-w-md truncate rounded-md bg-foreground/90 px-2.5 py-1 text-xs text-background shadow-lg">
