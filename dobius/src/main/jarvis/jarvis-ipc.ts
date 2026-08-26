@@ -109,6 +109,12 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.removeHandler('jarvis:speak')
   ipcMain.handle('jarvis:speak', (_event, text: string) => service.speak(text))
 
+  ipcMain.removeHandler('jarvis:cancelSpeak')
+  ipcMain.handle('jarvis:cancelSpeak', () => {
+    service.cancelSpeaking()
+    return { ok: true }
+  })
+
 }
 
 function wireWakeWordObservation(store: Store, service: JarvisService): void {

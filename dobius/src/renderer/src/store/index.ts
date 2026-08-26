@@ -29,6 +29,7 @@ import { createDiffCommentsSlice } from './slices/diffComments'
 import { createDetectedAgentsSlice } from './slices/detected-agents'
 import { createWorktreeNavHistorySlice } from './slices/worktree-nav-history'
 import { createDictationSlice } from './slices/dictation'
+import { createJarvisSlice } from './slices/jarvis'
 import { createWorkspaceCleanupSlice } from './slices/workspace-cleanup'
 import { createRuntimeStatusSlice } from './slices/runtime-status'
 import { createPullRequestGenerationSlice } from './slices/pull-request-generation'
@@ -67,6 +68,7 @@ export const useAppStore = create<AppState>()((...a) => ({
   ...createDetectedAgentsSlice(...a),
   ...createWorktreeNavHistorySlice(...a),
   ...createDictationSlice(...a),
+  ...createJarvisSlice(...a),
   ...createWorkspaceCleanupSlice(...a),
   ...createRuntimeStatusSlice(...a),
   ...createPullRequestGenerationSlice(...a),

@@ -3162,6 +3162,8 @@ export type PreloadApi = {
     setMode: (on: boolean) => Promise<{ ok: boolean }>
     ask: (utterance: string) => Promise<JarvisAskResult>
     speak: (text: string) => Promise<JarvisSpeakOutcome>
+    /** Silences the reply currently playing and drops anything queued. */
+    cancelSpeak: () => Promise<{ ok: boolean }>
     onState: (callback: (event: JarvisStateEvent) => void) => () => void
     onPttPressed: (callback: (data: { at: number }) => void) => () => void
     onPttReleased: (callback: (data: { at: number }) => void) => () => void

@@ -12,7 +12,7 @@ import {
   converseWithAdam,
   loadAdamServiceToken
 } from './adam-client'
-import { resolveElevenLabsConfigFromSettings, speakWithElevenLabs } from './elevenlabs-client'
+import { resolveElevenLabsConfigFromSettings, speakWithElevenLabs, stopElevenLabsPlayback } from './elevenlabs-client'
 import { JARVIS_PTT_AUTO_RELEASE_MS, applyJarvisSignal, type JarvisSignal } from './jarvis-state'
 import { createWakeWordMatcher, type WakeWordMatcher } from './wake-word-matcher'
 
@@ -69,6 +69,9 @@ export class JarvisService {
   // shared huddle queue, so without this chain a wake-word ask landing during
   // a spoken reply would overlap audio. Every speak() queues behind the last.
   private speakChain: Promise<unknown> = Promise.resolve()
+  // Why a generation counter: cancelSpeaking() must also invalidate replies
+  // still queued in speakChain, not just the audio currently playing.
+  private speakGeneration = 0
   private readonly deps: JarvisServiceDeps
   private readonly wakeMatcher: WakeWordMatcher
 
@@ -148,9 +151,21 @@ export class JarvisService {
    * behind the previous one's audio.
    */
   async speak(text: string): Promise<JarvisSpeakOutcome> {
-    const queued = this.speakChain.then(() => this.speakOnce(text))
+    const generation = this.speakGeneration
+    const queued = this.speakChain.then(() => {
+      if (generation !== this.speakGeneration) {
+        return { played: false, reason: 'canceled' } as JarvisSpeakOutcome
+      }
+      return this.speakOnce(text)
+    })
     this.speakChain = queued.catch(() => undefined)
     return queued
+  }
+
+  /** ⌘T "turn him off": kill current audio and drop everything still queued. */
+  cancelSpeaking(): void {
+    this.speakGeneration += 1
+    stopElevenLabsPlayback()
   }
 
   private async speakOnce(text: string): Promise<JarvisSpeakOutcome> {

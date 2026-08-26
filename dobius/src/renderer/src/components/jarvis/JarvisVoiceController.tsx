@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useJarvisTurn } from './use-jarvis-turn'
 import { registerJarvisMicYield } from './jarvis-mic-yield'
+import { registerJarvisToggle } from './jarvis-toggle-registry'
 
 /**
  * Headless owner of the Jarvis voice loop in the main window: ⌘T turns, the
@@ -9,12 +10,17 @@ import { registerJarvisMicYield } from './jarvis-mic-yield'
  * Jarvis phases (see DictationIndicator).
  */
 export function JarvisVoiceController(): null {
-  const { micRequest } = useJarvisTurn()
+  const { micRequest, toggleTurn } = useJarvisTurn()
 
   useEffect(() => {
     registerJarvisMicYield(micRequest)
     return () => registerJarvisMicYield(null)
   }, [micRequest])
+
+  useEffect(() => {
+    registerJarvisToggle(toggleTurn)
+    return () => registerJarvisToggle(null)
+  }, [toggleTurn])
 
   return null
 }

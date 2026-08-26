@@ -1,8 +1,22 @@
-import { execFile } from 'node:child_process'
+import { execFile, type ChildProcess } from 'node:child_process'
 import { writeFile as writeFileAsync, unlink as unlinkAsync, rmdir as rmdirAsync } from 'node:fs/promises'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
+// Why tracked: ⌘T during a spoken reply must be able to silence it. afplay
+// has no client API, so keep the live child around to terminate on demand.
+let activePlayChild: ChildProcess | null = null
+
+/** Terminates any in-flight ElevenLabs audio playback. Returns true if one was playing. */
+export function stopElevenLabsPlayback(): boolean {
+  const child = activePlayChild
+  if (!child || child.killed) {
+    return false
+  }
+  child.kill()
+  return true
+}
 
 export type ElevenLabsConfig = {
   apiKey: string
@@ -48,7 +62,17 @@ export async function synthesizeToMp3(text: string, config: ElevenLabsConfig, fe
 
 export function playMp3(filePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    execFile('/usr/bin/afplay', [filePath], {}, (error) => error ? reject(error) : resolve())
+    const child = execFile('/usr/bin/afplay', [filePath], {}, (error) => {
+      if (activePlayChild === child) {
+        activePlayChild = null
+      }
+      if (error) {
+        reject(error)
+      } else {
+        resolve()
+      }
+    })
+    activePlayChild = child
   })
 }
 

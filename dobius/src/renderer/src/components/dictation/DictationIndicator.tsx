@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useAppStore } from '@/store'
 import { VoiceOrb } from './VoiceOrb'
-import type { JarvisStateEvent } from '../../../../shared/speech-types'
+import { requestJarvisToggle } from '../jarvis/jarvis-toggle-registry'
 
 const ORB_SIZE = 128
 const ORB_OFFSET_STORAGE_KEY = 'dobius.orb-offset.v1'
@@ -27,35 +27,38 @@ function loadOffset(): OrbOffset {
   return { x: 0, y: 0 }
 }
 
+/** A press that moves less than this and releases fast is a click, not a drag. */
+const CLICK_SLOP_PX = 5
+const CLICK_MAX_MS = 400
+
 /**
  * THE single voice orb. Renders for ordinary ⌘E dictation AND for Jarvis
- * turns (⌘T / "Hey Adam"): listening comes from the live dictation session,
- * thinking/speaking/error from main's jarvis:state broadcasts. Drag the orb
- * anywhere; the offset persists per app install.
+ * turns (⌘T / "Hey Adam"); stays pinned while Jarvis talk mode is enabled so
+ * there is always something to look at and click. Jarvis phases come from the
+ * store mirror the voice controller writes — including manual ⌘T listening,
+ * which main never broadcasts. Drag anywhere; offset persists per install.
  */
 export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   const dictationState = useAppStore((s) => s.dictationState)
   const partialTranscript = useAppStore((s) => s.partialTranscript)
-  const [jarvisState, setJarvisState] = useState<JarvisStateEvent['state']>('idle')
-  const [jarvisReason, setJarvisReason] = useState<string | undefined>(undefined)
+  const jarvisHud = useAppStore((s) => s.jarvisHud)
+  const jarvisEnabled = useAppStore((s) => s.settings?.voice?.jarvisEnabled === true)
   const [offset, setOffset] = useState<OrbOffset>(loadOffset)
-  const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null)
-
-  useEffect(
-    () =>
-      window.api.jarvis?.onState((event) => {
-        setJarvisState(event.state)
-        setJarvisReason(event.reason)
-      }) ?? undefined,
-    []
-  )
+  const gestureRef = useRef<{
+    startX: number
+    startY: number
+    baseX: number
+    baseY: number
+    moved: boolean
+    startedAt: number
+  } | null>(null)
 
   const dictationActive =
     dictationState === 'listening' ||
     dictationState === 'starting' ||
     dictationState === 'stopping'
-  const jarvisActive = jarvisState === 'thinking' || jarvisState === 'speaking' || jarvisState === 'error'
-  if (!dictationActive && !jarvisActive) {
+  const jarvisActive = jarvisHud.state !== 'idle'
+  if (!dictationActive && !jarvisActive && !jarvisEnabled) {
     return null
   }
 
@@ -65,25 +68,47 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
       : dictationState === 'stopping'
         ? 'Processing...'
         : partialTranscript || 'Listening...'
-    : jarvisState === 'thinking'
+    : jarvisHud.state === 'thinking'
       ? 'Thinking...'
-      : jarvisState === 'speaking'
+      : jarvisHud.state === 'speaking'
         ? 'Speaking...'
-        : jarvisReason || 'ADAM unreachable'
+        : jarvisHud.state === 'listening'
+          ? 'Listening...'
+          : jarvisHud.state === 'error'
+            ? (jarvisHud.reason ?? 'ADAM unreachable')
+            : 'Hey Adam'
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     event.preventDefault()
-    dragRef.current = { startX: event.clientX, startY: event.clientY, baseX: offset.x, baseY: offset.y }
+    gestureRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      baseX: offset.x,
+      baseY: offset.y,
+      moved: false,
+      startedAt: Date.now()
+    }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    const drag = dragRef.current
-    if (!drag) return
-    setOffset({ x: drag.baseX + (event.clientX - drag.startX), y: drag.baseY + (event.clientY - drag.startY) })
+    const gesture = gestureRef.current
+    if (!gesture) return
+    const dx = event.clientX - gesture.startX
+    const dy = event.clientY - gesture.startY
+    if (!gesture.moved && Math.hypot(dx, dy) > CLICK_SLOP_PX) {
+      gesture.moved = true
+    }
+    setOffset({ x: gesture.baseX + dx, y: gesture.baseY + dy })
   }
   const onPointerUp = (): void => {
-    if (!dragRef.current) return
-    dragRef.current = null
+    const gesture = gestureRef.current
+    if (!gesture) return
+    gestureRef.current = null
+    if (!gesture.moved && Date.now() - gesture.startedAt < CLICK_MAX_MS) {
+      requestJarvisToggle()
+      setOffset({ x: gesture.baseX, y: gesture.baseY })
+      return
+    }
     setOffset((current) => {
       window.localStorage.setItem(ORB_OFFSET_STORAGE_KEY, JSON.stringify(current))
       return current
@@ -103,11 +128,13 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       >
-        <VoiceOrb size={ORB_SIZE} getLevel={getAudioLevel} />
+        <VoiceOrb size={ORB_SIZE} getLevel={getAudioLevel} error={jarvisHud.state === 'error'} />
       </div>
-      <span className="max-w-md truncate rounded-md bg-foreground/90 px-2.5 py-1 text-xs text-background shadow-lg">
-        {label}
-      </span>
+      {label ? (
+        <span className="max-w-md truncate rounded-md bg-foreground/90 px-2.5 py-1 text-xs text-background shadow-lg">
+          {label}
+        </span>
+      ) : null}
     </div>
   )
 }

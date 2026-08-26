@@ -7,6 +7,8 @@ type VoiceOrbProps = {
   /** Returns the current mic level, 0..1. Polled once per frame so the orb
    *  reacts to speech without re-rendering React at frame rate. */
   getLevel: () => number
+  /** Error tone shifts the orb's shader hue to red. */
+  error?: boolean
   className?: string
 }
 
@@ -52,10 +54,14 @@ function linkProgram(gl: WebGLRenderingContext): WebGLProgram | null {
   return program
 }
 
-export function VoiceOrb({ size, getLevel, className }: VoiceOrbProps) {
+export function VoiceOrb({ size, getLevel, error = false, className }: VoiceOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const getLevelRef = useRef(getLevel)
   getLevelRef.current = getLevel
+  // Why a ref: the hue uniform is set every animation frame; switching to the
+  // error tone must not require re-initializing the GL program.
+  const errorRef = useRef(error)
+  errorRef.current = error
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -126,6 +132,9 @@ export function VoiceOrb({ size, getLevel, className }: VoiceOrbProps) {
 
       gl.uniform1f(uniforms.iTime, time * 0.001)
       gl.uniform1f(uniforms.rot, rotation)
+      // Why 140: the shader's base palette is blue (~220°); +140° lands on red
+      // through adjustHue without touching the fragment math.
+      gl.uniform1f(uniforms.hue, errorRef.current ? 140 : 0)
       gl.uniform1f(uniforms.hover, Math.min(level * 2, 1))
       gl.uniform1f(uniforms.hoverIntensity, Math.min(level * MAX_HOVER_INTENSITY * 0.8, MAX_HOVER_INTENSITY))
       gl.clear(gl.COLOR_BUFFER_BIT)

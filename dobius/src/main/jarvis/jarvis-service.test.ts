@@ -262,9 +262,11 @@ describe('wake-word ambient mode', () => {
 describe('tapSttFinalTranscripts', () => {
   function makeFakeStt() {
     let sink: SttEventSink | null = null
-    const startSpy = vi.fn(async (_modelId: string, nextSink: SttEventSink): Promise<void> => {
-      sink = nextSink
-    })
+    const startSpy = vi.fn(
+      async (_modelId: string, nextSink: SttEventSink, ..._rest: unknown[]): Promise<void> => {
+        sink = nextSink
+      }
+    )
     return {
       stt: { startDictation: startSpy },
       startSpy,
@@ -326,7 +328,7 @@ describe('tapSttFinalTranscripts', () => {
       ownerFilter: isWakeSessionOwner
     })
 
-    const ownerSink = (event: SttEvent): void => undefined
+    const ownerSink = (): void => undefined
     // Ordinary ⌘E session: owner `desktop:<id>:<n>` — must NOT feed the matcher.
     await stt.startDictation('model-a', ownerSink, undefined, 'desktop:42:3')
     emit({ type: 'final', text: 'hey adam write a poem' })

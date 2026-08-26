@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioCapture } from '@/hooks/use-audio-capture'
+import { useAppStore } from '@/store'
 import {
   AMBIENT_SESSION_ID,
   createJarvisSessionRegistry,
@@ -57,6 +58,9 @@ export function useJarvisTurn(): JarvisTurn {
   // press during thinking/speaking must not open a mic that would hear ADAM's
   // own reply), and state updates are not readable in the same tick.
   const hudStateRef = useRef<OrbHudState>('idle')
+  // Why: main's error broadcasts carry a human reason ("ADAM unreachable");
+  // keep the latest so the store can render it on the orb label.
+  const lastErrorReasonRef = useRef<string | undefined>(undefined)
   const turnCancelRef = useRef<(() => void) | null>(null)
   const ambientHandleRef = useRef<JarvisAmbientSessionHandle | null>(null)
   const armedTimerRef = useRef<number | null>(null)
@@ -69,6 +73,9 @@ export function useJarvisTurn(): JarvisTurn {
   const registry = registryRef.current
   const tracker = trackerRef.current
 
+  // Why mirrored to the store: the orb (DictationIndicator) must render the
+  // SAME phase this controller computes — including manual ⌘T listening,
+  // which main never broadcasts. reason rides along for error labels.
   const setPhase = useCallback((phase: OrbHudState): void => {
     if (errorTimerRef.current !== null) {
       window.clearTimeout(errorTimerRef.current)
@@ -77,10 +84,13 @@ export function useJarvisTurn(): JarvisTurn {
     if (phase === 'error') {
       errorTimerRef.current = window.setTimeout(() => {
         errorTimerRef.current = null
+        hudStateRef.current = 'idle'
+        useAppStore.getState().setJarvisHud('idle')
         setHudState('idle')
       }, ERROR_STATE_CLEAR_MS)
     }
     hudStateRef.current = phase
+    useAppStore.getState().setJarvisHud(phase, phase === 'error' ? lastErrorReasonRef.current : undefined)
     setHudState(phase)
   }, [])
 
@@ -260,10 +270,12 @@ export function useJarvisTurn(): JarvisTurn {
    * semantics: press toggles, and an active press cancels the open turn.
    */
   const toggleTurn = useCallback((): void => {
-    // Why refuse: while ADAM is thinking/speaking there is no barge-in yet —
-    // opening a mic now would capture ADAM's own spoken reply and fight the
-    // still-running turn. The press becomes a no-op instead of a collision.
+    // Why: while ADAM is thinking/speaking, ⌘T means "stop talking" — cancel
+    // the in-flight reply's audio and drop back to idle. (Before this, the
+    // press was ignored and there was no way to silence a long answer.)
     if (hudStateRef.current === 'thinking' || hudStateRef.current === 'speaking') {
+      void window.api.jarvis.cancelSpeak().catch(() => undefined)
+      setPhase('idle')
       return
     }
     if (registry.kind.current === 'turn') {
@@ -297,6 +309,9 @@ export function useJarvisTurn(): JarvisTurn {
   useEffect(
     () =>
       window.api.jarvis.onState((event) => {
+        if (event.reason) {
+          lastErrorReasonRef.current = event.reason
+        }
         const localTurnLive =
           registry.kind.current === 'turn' || turnPhaseRef.current !== 'idle'
         if (localTurnLive && event.state === 'idle') {
