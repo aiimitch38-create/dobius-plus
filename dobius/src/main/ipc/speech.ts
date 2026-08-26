@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { SPEECH_MODEL_CATALOG } from '../speech/model-catalog'
 import { deleteLocalSpeechModel } from '../speech/speech-model-deletion'
 import { getSpeechModelManager, getSpeechSttService } from '../speech/speech-runtime-service'
+import { jarvisTrace } from '../jarvis/jarvis-trace'
 import {
   clearOpenAiSpeechApiKey,
   hasOpenAiSpeechApiKey,
@@ -122,6 +123,7 @@ export function registerSpeechHandlers(store: Store): void {
       let resolvedHotwordsPath: string | undefined
       let windowClosed = false
       const owner = getDesktopOwner(event.sender.id, sessionId)
+      jarvisTrace('stt:startDictation', { owner, modelId, sessionId })
       const cleanupOnWindowClosed = (): void => {
         windowClosed = true
         void getSpeechSttService(store)
@@ -188,13 +190,16 @@ export function registerSpeechHandlers(store: Store): void {
                 window.webContents.send('speech:partial', { text: msg.text ?? '', sessionId })
                 break
               case 'final':
+                jarvisTrace('stt:final', { text: (msg.text ?? '').slice(0, 60), sessionId })
                 window.webContents.send('speech:final', { text: msg.text ?? '', sessionId })
                 break
               case 'stopped':
+                jarvisTrace('stt:stopped', { sessionId })
                 cleanupSessionListener()
                 window.webContents.send('speech:stopped', { sessionId })
                 break
               case 'error':
+                jarvisTrace('stt:error', { error: msg.error ?? '', sessionId })
                 window.webContents.send('speech:error', { error: msg.error ?? '', sessionId })
                 void getSpeechSttService(store)
                   .stopDictation(owner)
@@ -219,9 +224,16 @@ export function registerSpeechHandlers(store: Store): void {
     }
   )
 
+  let feedAudioCallCount = 0
   ipcMain.handle(
     'speech:feedAudio',
     async (_event, buffer: Buffer, sampleRate: number, sessionId = 'desktop') => {
+      feedAudioCallCount++
+      // Trace the first feed per session to confirm audio is reaching the STT
+      // worker, then every 200th call to avoid log flooding.
+      if (feedAudioCallCount <= 1 || feedAudioCallCount % 200 === 0) {
+        jarvisTrace('stt:feedAudio', { callCount: feedAudioCallCount, sessionId, bytes: buffer.byteLength })
+      }
       // Why: the preload sends audio as a Buffer to avoid Float32Array data
       // being zeroed out during contextBridge + IPC serialization.
       const samples = new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4)
