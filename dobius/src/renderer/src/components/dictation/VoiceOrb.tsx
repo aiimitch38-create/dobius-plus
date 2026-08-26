@@ -9,6 +9,9 @@ type VoiceOrbProps = {
   getLevel: () => number
   /** Error tone shifts the orb's shader hue to red. */
   error?: boolean
+  /** Jarvis tone shifts the orb's shader hue to green so ADAM mode reads
+   *  differently from ordinary ⌘E dictation at a glance. */
+  jarvis?: boolean
   className?: string
 }
 
@@ -54,7 +57,7 @@ function linkProgram(gl: WebGLRenderingContext): WebGLProgram | null {
   return program
 }
 
-export function VoiceOrb({ size, getLevel, error = false, className }: VoiceOrbProps) {
+export function VoiceOrb({ size, getLevel, error = false, jarvis = false, className }: VoiceOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const getLevelRef = useRef(getLevel)
   getLevelRef.current = getLevel
@@ -62,6 +65,8 @@ export function VoiceOrb({ size, getLevel, error = false, className }: VoiceOrbP
   // error tone must not require re-initializing the GL program.
   const errorRef = useRef(error)
   errorRef.current = error
+  const jarvisRef = useRef(jarvis)
+  jarvisRef.current = jarvis
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -132,9 +137,9 @@ export function VoiceOrb({ size, getLevel, error = false, className }: VoiceOrbP
 
       gl.uniform1f(uniforms.iTime, time * 0.001)
       gl.uniform1f(uniforms.rot, rotation)
-      // Why 140: the shader's base palette is blue (~220°); +140° lands on red
-      // through adjustHue without touching the fragment math.
-      gl.uniform1f(uniforms.hue, errorRef.current ? 140 : 0)
+      // Why: the shader's base palette is blue (~220°). +140° lands on red,
+      // -130° lands on green — both through adjustHue, no fragment changes.
+      gl.uniform1f(uniforms.hue, errorRef.current ? 140 : jarvisRef.current ? -130 : 0)
       gl.uniform1f(uniforms.hover, Math.min(level * 2, 1))
       gl.uniform1f(uniforms.hoverIntensity, Math.min(level * MAX_HOVER_INTENSITY * 0.8, MAX_HOVER_INTENSITY))
       gl.clear(gl.COLOR_BUFFER_BIT)

@@ -146,7 +146,12 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       >
-        <VoiceOrb size={ORB_SIZE} getLevel={getEffectiveAudioLevel} error={jarvisHud.state === 'error'} />
+        <VoiceOrb
+          size={ORB_SIZE}
+          getLevel={getEffectiveAudioLevel}
+          error={jarvisHud.state === 'error'}
+          jarvis={!dictationActive && jarvisHud.state !== 'error' && jarvisHud.state !== 'idle'}
+        />
       </div>
       {label ? (
         <span className="max-w-md truncate rounded-md bg-foreground/90 px-2.5 py-1 text-xs text-background shadow-lg">

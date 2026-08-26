@@ -3,6 +3,7 @@ import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
+import { jarvisTrace } from './jarvis-trace'
 import {
   JARVIS_PTT_PRESSED_CHANNEL,
   JARVIS_PTT_RELEASED_CHANNEL,
@@ -95,6 +96,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.handle('jarvis:setMode', (_event, active: unknown) => {
     const on = active === true
     const ok = service.toggle(on)
+    jarvisTrace('setMode', { on, ok })
     // Why only-on-success: persisting jarvisEnabled=true when the shortcut was
     // refused would retry a broken grab on every relaunch.
     if (ok) {

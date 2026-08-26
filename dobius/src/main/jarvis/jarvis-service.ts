@@ -15,6 +15,7 @@ import {
 import { resolveElevenLabsConfigFromSettings, speakWithElevenLabs, stopElevenLabsPlayback } from './elevenlabs-client'
 import { JARVIS_PTT_AUTO_RELEASE_MS, applyJarvisSignal, type JarvisSignal } from './jarvis-state'
 import { createWakeWordMatcher, type WakeWordMatcher } from './wake-word-matcher'
+import { jarvisTrace } from './jarvis-trace'
 
 export const JARVIS_SHORTCUT_ACCELERATOR = 'CommandOrControl+T'
 export const JARVIS_STATE_CHANNEL = 'jarvis:state'
@@ -122,6 +123,7 @@ export class JarvisService {
   /** Asks ADAM; speaks the reply. Never throws — failures come back as results. */
   async ask(utteranceRaw: string): Promise<JarvisAskResult> {
     const utterance = typeof utteranceRaw === 'string' ? utteranceRaw.trim() : ''
+    jarvisTrace('ask-begin', { chars: utterance.length })
     if (!utterance) {
       return { kind: 'error', text: 'No speech detected' }
     }
@@ -138,6 +140,7 @@ export class JarvisService {
       result = { kind: 'error', text: ADAM_UNREACHABLE_TEXT }
     }
     if (result.kind === 'error') {
+      jarvisTrace('ask-error', { text: result.text.slice(0, 60) })
       this.transition({ type: 'turn-finished' })
       return result
     }
@@ -178,12 +181,15 @@ export class JarvisService {
     // Read per call: a key pasted into Settings takes effect on the next
     // reply without an app restart.
     const eleven = resolveElevenLabsConfigFromSettings(this.deps.store.getSettings().voice)
+    jarvisTrace('speak-begin', { engine: eleven ? 'elevenlabs' : 'local', chars: text.length })
     if (eleven) {
       try {
         await speakWithElevenLabs(text.trim(), eleven)
+        jarvisTrace('speak-done', { engine: 'elevenlabs' })
         this.transition({ type: 'turn-finished' })
         return { played: true }
-      } catch {
+      } catch (error) {
+        jarvisTrace('elevenlabs-failed', { message: error instanceof Error ? error.message.slice(0, 120) : String(error).slice(0, 120) })
         // fall through to the huddle/local engine below
       }
     }
@@ -221,6 +227,7 @@ export class JarvisService {
   }
 
   private handlePttPress(): void {
+    jarvisTrace('ptt-press')
     // globalShortcut cannot distinguish press from release; emit pressed now
     // and a synthetic released shortly after so renderer listeners stay simple.
     this.deps.broadcast(JARVIS_PTT_PRESSED_CHANNEL, { at: Date.now() })
