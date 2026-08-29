@@ -31,7 +31,10 @@ import type {
   BriefingItem,
   CustomAgent,
   CustomAgentInput,
-  CustomAgentUpdate
+  CustomAgentUpdate,
+  CustomHarnessDefinition,
+  AgentProviderLaunchResult,
+  AgentProviderStatusSnapshot
 } from '../shared/agents'
 import type { DobiusPrompt } from '../shared/prompts'
 import type { TerminalPaneSplitSource } from '../shared/feature-education-telemetry'
@@ -1374,6 +1377,19 @@ export type PreloadApi = {
     getPingStatus: () => Promise<{ used: number; max: number; date: string }>
     pickDirectory: (args: { defaultPath?: string }) => Promise<string | null>
     onRunEvent: (callback: (event: AgentRunEvent) => void) => () => void
+    listHarnesses: () => Promise<CustomHarnessDefinition[]>
+    saveHarness: (
+      definition: CustomHarnessDefinition,
+      originalId?: string | null
+    ) => Promise<CustomHarnessDefinition>
+    deleteHarness: (id: string) => Promise<void>
+    runHarness: (args: {
+      id: string
+      prompt: string
+      cwd?: string
+    }) => Promise<AgentProviderLaunchResult>
+    stopHarness: (id: string) => Promise<void>
+    harnessStatuses: () => Promise<AgentProviderStatusSnapshot[]>
     onRunsChanged: (callback: () => void) => () => void
     onDecisionsChanged: (callback: () => void) => () => void
     onNotificationsChanged: (callback: () => void) => () => void

@@ -178,6 +178,38 @@ export type TriageVerdict = {
   needsClarification: boolean
 }
 
+// A user-defined external agent CLI (label + command + args + env) from the
+// Communications Harness Catalog. Executable since the Phase 5 provider seam:
+// CustomHarnessProvider spawns it. Env values are write-only — they reach the
+// spawned process but must never come back through any read path or log.
+export type CustomHarnessDefinition = {
+  id: string
+  label: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  installInstructionsUrl: string
+  installHint: string
+}
+
+export type AgentProviderState = 'idle' | 'running' | 'finished' | 'failed'
+
+export type AgentProviderStatusSnapshot = {
+  providerId: string
+  agentId: string
+  label: string
+  state: AgentProviderState
+  lastRunId?: string
+  /** Human-facing detail (last error/summary). Never env values or key material. */
+  detail?: string
+}
+
+export type AgentProviderLaunchResult = {
+  runId: string
+  /** Nostr pubkey of the participant identity bound to this instance at launch. */
+  identityPubkey: string
+}
+
 export type AgentRunEvent = {
   runId: string
   agentId: string

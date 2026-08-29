@@ -45,6 +45,7 @@ import { VoicePane } from './VoicePane'
 import { SshPane } from './SshPane'
 import { ExperimentalPane } from './ExperimentalPane'
 import { AgentsPane } from './AgentsPane'
+import { HarnessCatalogSection } from './HarnessCatalogSection'
 import { OrchestrationPane } from './OrchestrationPane'
 import { AccountsPane } from './AccountsPane'
 import { StatsPane } from '../stats/StatsPane'
@@ -1104,6 +1105,7 @@ function Settings(): React.JSX.Element {
                       wslCapabilitiesLoading={windowsTerminalCapabilities.isLoading}
                     />
                   ) : null}
+                  {isSectionMounted('agents') ? <HarnessCatalogSection /> : null}
                 </SettingsSection>
 
                 <SettingsSection

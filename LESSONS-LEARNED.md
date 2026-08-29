@@ -232,3 +232,35 @@ printing `list(entry.keys())` once. Two wasted round-trips for a one-line probe.
 
 Cheap remedies, in order: `npx oxlint <dir> > /tmp/lint.txt 2>&1; echo "exit=$?"`
 then `grep -c`, then read. Never pipe a verification command into `head`/`tail`.
+
+## Never hand-pick a tsconfig in `dobius/` — run the pnpm script
+_2026-08-29 · claude_
+
+`dobius/config/` holds **two** web configs and only one of them typechecks the app:
+
+| Script | Config |
+|---|---|
+| `pnpm run typecheck:node` | `config/tsconfig.node.json` |
+| `pnpm run typecheck:web`  | `config/tsconfig.tc.web.json`  <- the `tc.` one |
+| `pnpm run typecheck:cli`  | `config/tsconfig.tc.cli.json` |
+
+`config/tsconfig.web.json` also exists (used by `typecheck:tsc:web` with
+`--composite false`). Running `tsgo --noEmit -p config/tsconfig.web.json`
+directly emits a wall of **TS6307 "File is not listed within the file list of
+project"** naming files you never touched — `src/main/ipc/worktree-logic.ts`,
+`wsl.ts`, `worktree-branch-name.ts`. It reads exactly like "my change broke
+unrelated modules," and it is purely the wrong project file. Cost a full cycle.
+
+**Rule: always `pnpm run typecheck:node` / `typecheck:web` / `typecheck:cli`.**
+Read `grep -n '"typecheck' package.json` before ever passing `-p` by hand.
+
+Two smaller traps hit in the same turn:
+
+- **cwd persists between Bash calls.** After one `cd dobius`, later commands are
+  already inside it, so `ln -s ... dobius/node_modules` failed with "No such file
+  or directory" while `pwd` was `.../comms-restore/dobius`. Check `pwd` before
+  building relative paths across calls.
+- **Anchor uniqueness before patching.** `pickDirectory:` appears 3x in
+  `preload/api-types.ts`; a single-line anchor matched the wrong block. Assert
+  `s.count(anchor) == 1` and use a two-line anchor. The assertion is what stopped
+  a bad write — keep asserting rather than replacing blind.

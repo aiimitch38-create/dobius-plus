@@ -21,7 +21,8 @@ import type {
   BriefingItem,
   CustomAgent,
   CustomAgentInput,
-  CustomAgentUpdate
+  CustomAgentUpdate,
+  CustomHarnessDefinition
 } from '../shared/agents'
 import type { DobiusPrompt } from '../shared/prompts'
 import type {
@@ -1154,6 +1155,15 @@ const api = {
       ipcRenderer.invoke('agents:getPingStatus'),
     pickDirectory: (args: { defaultPath?: string }): Promise<string | null> =>
       ipcRenderer.invoke('agents:pickDirectory', args),
+    listHarnesses: (): Promise<CustomHarnessDefinition[]> =>
+      ipcRenderer.invoke('agents:listHarnesses'),
+    saveHarness: (definition: CustomHarnessDefinition, originalId?: string | null) =>
+      ipcRenderer.invoke('agents:saveHarness', definition, originalId ?? null),
+    deleteHarness: (id: string): Promise<void> => ipcRenderer.invoke('agents:deleteHarness', id),
+    runHarness: (args: { id: string; prompt: string; cwd?: string }) =>
+      ipcRenderer.invoke('agents:runHarness', args),
+    stopHarness: (id: string): Promise<void> => ipcRenderer.invoke('agents:stopHarness', id),
+    harnessStatuses: () => ipcRenderer.invoke('agents:harnessStatuses'),
     onRunEvent: (callback: (event: AgentRunEvent) => void): (() => void) => {
       const listener = (_event: unknown, event: AgentRunEvent): void => callback(event)
       ipcRenderer.on('agents:runEvent', listener)

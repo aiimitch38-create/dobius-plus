@@ -2,7 +2,22 @@ import { BrowserWindow } from 'electron'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentRunEvent } from '../../shared/agents'
 
+// Why: main-process consumers (the communications provider seam) need the same
+// run-event stream the renderer windows get; broadcastRunEvent fans out to both.
+type RunEventListener = (event: AgentRunEvent) => void
+const runEventListeners = new Set<RunEventListener>()
+
+export function subscribeToAgentRunEvents(listener: RunEventListener): () => void {
+  runEventListeners.add(listener)
+  return () => {
+    runEventListeners.delete(listener)
+  }
+}
+
 export function broadcastRunEvent(event: AgentRunEvent): void {
+  for (const listener of runEventListeners) {
+    listener(event)
+  }
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send('agents:runEvent', event)
