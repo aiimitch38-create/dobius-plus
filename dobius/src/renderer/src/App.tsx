@@ -282,8 +282,9 @@ const ActivityPrototypePage = lazy(() => import('./components/activity/ActivityP
 const Settings = lazy(() => import('./components/settings/Settings'))
 const SkillsPage = lazy(() => import('./components/skills/SkillsPage'))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage'))
-// ponytail: BuzzPage import disabled — the .then() pattern was breaking the app
-const BuzzPage = lazy(() => Promise.resolve({ default: () => null }))
+// The restored Communications client. Lazy so its dependency tree (router,
+// query, editor, syntax highlighting) stays out of the initial bundle.
+const BuzzPage = lazy(() => import('./components/communications/CommunicationsPage'))
 const WorkspaceSpacePage = lazy(() => import('./components/workspace-space/WorkspaceSpacePage'))
 const MobilePage = lazy(() => import('./components/mobile/MobilePage'))
 const QuickOpen = lazy(() => import('./components/QuickOpen'))

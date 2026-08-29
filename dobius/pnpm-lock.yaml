@@ -22,6 +22,9 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.201
         version: 0.3.201(@anthropic-ai/sdk@0.110.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
+      '@dnd-kit/utilities':
+        specifier: ^3.2.2
+        version: 3.2.2(react@19.2.5)
       '@electron-toolkit/preload':
         specifier: ^3.0.2
         version: 3.0.2(electron@42.3.3)
@@ -37,6 +40,9 @@ importers:
       '@floating-ui/dom':
         specifier: 1.7.6
         version: 1.7.6
+      '@fontsource-variable/inter':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@linear/sdk':
         specifier: ^82.1.0
         version: 82.1.0(graphql@16.13.2)
@@ -79,6 +85,9 @@ importers:
       i18next:
         specifier: ^26.3.1
         version: 26.3.1(typescript@5.9.3)
+      jdenticon:
+        specifier: ^3.3.0
+        version: 3.3.0
       jsonc-parser:
         specifier: ^3.3.1
         version: 3.3.1
@@ -100,6 +109,9 @@ importers:
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
+      qrcode.react:
+        specifier: ^4.2.0
+        version: 4.2.0(react@19.2.5)
       react-diff-view:
         specifier: ^3.3.3
         version: 3.3.3(react@19.2.5)
@@ -127,6 +139,9 @@ importers:
       tweetnacl:
         specifier: ^1.0.3
         version: 1.0.3
+      upng-js:
+        specifier: ^2.1.0
+        version: 2.1.0
       virtua:
         specifier: ^0.50.5
         version: 0.50.5(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -1157,6 +1172,9 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@fontsource-variable/inter@5.3.0':
+    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
 
   '@graphql-typed-document-node/core@3.2.0':
     resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
@@ -3707,6 +3725,9 @@ packages:
   caniuse-lite@1.0.30001791:
     resolution: {integrity: sha512-yk0l/YSrOnFZk3UROpDLQD9+kC1l4meK/wed583AXrzoarMGJcbRi2Q4RaUYbKxYAsZ8sWmaSa/DsLmdBeI1vQ==}
 
+  canvas-renderer@2.2.1:
+    resolution: {integrity: sha512-RrBgVL5qCEDIXpJ6NrzyRNoTnXxYarqm/cS/W6ERhUJts5UQtt/XPEosGN3rqUkZ4fjBArlnCbsISJ+KCFnIAg==}
+
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
 
@@ -5024,6 +5045,11 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  jdenticon@3.3.0:
+    resolution: {integrity: sha512-DhuBRNRIybGPeAjMjdHbkIfiwZCCmf8ggu7C49jhp6aJ7DYsZfudnvnTY5/1vgUhrGA7JaDAx1WevnpjCPvaGg==}
+    engines: {node: '>=6.4.0'}
+    hasBin: true
+
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
@@ -5776,6 +5802,9 @@ packages:
   package-manager-detector@1.6.0:
     resolution: {integrity: sha512-61A5ThoTiDG/C8s8UMZwSorAGwMJ0ERVGj2OjoW5pAalsNOg15+iQiPzrLJ4jhZ1HJzmC2PIHT2oEiH3R5fzNA==}
 
+  pako@1.0.11:
+    resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
+
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
@@ -5995,6 +6024,11 @@ packages:
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
+
+  qrcode.react@4.2.0:
+    resolution: {integrity: sha512-QpgqWi8rD9DsS9EP3z7BT+5lY5SFhsqGjpgW5DY/i3mK4M9DTBNz3ErMi8BWYEfI3L0d8GIbGmcdFAS1uIRGjA==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   qrcode@1.5.4:
     resolution: {integrity: sha512-1ca71Zgiu6ORjHqFBDpnSMTR2ReToX4l1Au1VFLyVeBTFavzQnv5JxMFr3ukHVKpSrSA2MCk0lNJSykjUfz7Zg==}
@@ -6760,6 +6794,9 @@ packages:
     hasBin: true
     peerDependencies:
       browserslist: '>= 4.21.0'
+
+  upng-js@2.1.0:
+    resolution: {integrity: sha512-d3xzZzpMP64YkjP5pr8gNyvBt7dLk/uGI67EctzDuVp4lCZyVMo0aJO6l/VDlgbInJYDY6cnClLoBp29eKWI6g==}
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
@@ -7763,6 +7800,8 @@ snapshots:
       react-dom: 19.2.5(react@19.2.5)
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@fontsource-variable/inter@5.3.0': {}
 
   '@graphql-typed-document-node/core@3.2.0(graphql@16.13.2)':
     dependencies:
@@ -10222,6 +10261,10 @@ snapshots:
 
   caniuse-lite@1.0.30001791: {}
 
+  canvas-renderer@2.2.1:
+    dependencies:
+      '@types/node': 25.6.0
+
   ccount@2.0.1: {}
 
   chai@6.2.2: {}
@@ -11680,6 +11723,10 @@ snapshots:
       filelist: 1.0.6
       picocolors: 1.1.1
 
+  jdenticon@3.3.0:
+    dependencies:
+      canvas-renderer: 2.2.1
+
   jiti@2.7.0: {}
 
   jose@6.2.3: {}
@@ -12677,6 +12724,8 @@ snapshots:
 
   package-manager-detector@1.6.0: {}
 
+  pako@1.0.11: {}
+
   parent-module@1.0.1:
     dependencies:
       callsites: 3.1.0
@@ -12918,6 +12967,10 @@ snapshots:
   punycode.js@2.3.1: {}
 
   punycode@2.3.1: {}
+
+  qrcode.react@4.2.0(react@19.2.5):
+    dependencies:
+      react: 19.2.5
 
   qrcode@1.5.4:
     dependencies:
@@ -13847,6 +13900,10 @@ snapshots:
       browserslist: 4.28.2
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  upng-js@2.1.0:
+    dependencies:
+      pako: 1.0.11
 
   uri-js@4.4.1:
     dependencies:

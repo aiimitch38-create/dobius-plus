@@ -17,7 +17,7 @@
 @import "./globals/video-review.css";
 @import "./globals/progress.css";
 
-@config "../../../tailwind.config.js";
+@config "../../tailwind.config.js";
 
 /* Tailwind v4 gates `hover:` behind `@media (hover: hover)`. Some Windows
    hosts answer that query `false` even with a mouse attached — WebView2 here

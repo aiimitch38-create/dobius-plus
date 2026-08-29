@@ -232,6 +232,11 @@ export default defineConfig({
         // The restored Communications tree keeps its own root so its many
         // internal imports do not collide with the app's '@'.
         '@comms': resolve('src/renderer/src/components/communications'),
+        // Buzz generated this as a virtual module from its own build; the
+        // manifest is just JSON, so point at the recovered file directly.
+        '@features-manifest': resolve(
+          'src/renderer/src/components/communications/preview-features.json'
+        ),
         // That tree was written against Tauri. Aliasing its imports onto an
         // Electron-backed shim keeps 52 call sites untouched; nothing from
         // @tauri-apps is installed or shipped.
