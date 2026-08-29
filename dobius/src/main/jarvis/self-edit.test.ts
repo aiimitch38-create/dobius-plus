@@ -1,8 +1,9 @@
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SelfEditStore, resolveEditablePath, selfEditRoots } from './self-edit'
+import { ADAM_PLUGINS_DIR_NAME } from './shell-tool'
 
 function repo(): string {
   const root = mkdtempSync(join(tmpdir(), 'selfedit-'))
@@ -121,5 +122,45 @@ describe('symlink escape (regression: security review 2026-08-29)', () => {
     const root = repo()
     const store = new SelfEditStore([root])
     expect(store.propose('src/voice.ts', 'const a = 9\n', 'fine').ok).toBe(true)
+  })
+})
+
+describe('invariant B — the plugin directory is not self-editable', () => {
+  // Why this lives here as well as in shell-tool.test.ts: the shell tool and
+  // this resolver are two independent write paths into the machine. Invariant B
+  // holds only if BOTH refuse, so each needs its own proof — a passing suite
+  // over there says nothing about a regression over here.
+  it('refuses a write into the plugin directory inside an allowed root', () => {
+    const root = repo()
+    mkdirSync(join(root, ADAM_PLUGINS_DIR_NAME), { recursive: true })
+    const store = new SelfEditStore([root])
+
+    const proposed = store.propose(
+      join(ADAM_PLUGINS_DIR_NAME, 'evil.mjs'),
+      'export const PLUGIN = {}\n',
+      'add a plugin'
+    )
+
+    expect(proposed.ok).toBe(false)
+    expect(existsSync(join(root, ADAM_PLUGINS_DIR_NAME, 'evil.mjs'))).toBe(false)
+  })
+
+  // The parent directory must EXIST in these two. The resolver realpaths the
+  // parent, so a missing directory makes it refuse for the wrong reason and the
+  // test would pass with invariant B deleted.
+  it('refuses it nested, not just at the root of the segment scan', () => {
+    const root = repo()
+    mkdirSync(join(root, 'src', ADAM_PLUGINS_DIR_NAME), { recursive: true })
+    expect(
+      resolveEditablePath(join('src', ADAM_PLUGINS_DIR_NAME, 'evil.mjs'), [root]).ok
+    ).toBe(false)
+  })
+
+  it('refuses a traversal that lands in the plugin directory', () => {
+    const root = repo()
+    mkdirSync(join(root, ADAM_PLUGINS_DIR_NAME), { recursive: true })
+    expect(
+      resolveEditablePath(join('src', '..', ADAM_PLUGINS_DIR_NAME, 'evil.mjs'), [root]).ok
+    ).toBe(false)
   })
 })
