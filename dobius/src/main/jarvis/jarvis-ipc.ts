@@ -6,14 +6,21 @@ import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { converseWithAdam, loadAdamServiceToken } from './adam-client'
-import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
+import {
+  buildAgentContext,
+  buildOpeningLine,
+  parseCommandArgs,
+  runDobiusCommand
+} from './agent-context'
 import { SelfEditStore, selfEditRoots } from './self-edit'
 import {
   closeSelfEditWindow,
   getSelfEditWindow,
-  showSelfEditProposal
+  showSelfEditProposal,
+  showShellCommandProposal
 } from '../window/self-edit-window'
-import { ShellCommandStore } from './shell-command-store'
+import { ShellCommandStore, describeForAgent } from './shell-command-store'
+import { PROPOSE_SHELL_TOOL, ensureClientTool } from './elevenlabs-tools'
 import { adamPluginDir } from './shell-tool'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
 import {
@@ -69,6 +76,35 @@ export function registerJarvisIpcHandlers(store: Store): void {
   registerHandlers(store, service)
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)
+  void ensureShellToolRegistered(store)
+}
+
+/**
+ * Makes sure the agent actually has the shell tool attached.
+ *
+ * Why at startup and not on first use: the tool has to exist server-side before
+ * a conversation opens, or the model simply never calls it and the feature looks
+ * broken with nothing in any log. Guarded on credentials so an install without
+ * ElevenLabs configured makes no network call at all, idempotent by tool name so
+ * relaunching cannot pile up duplicates, and fire-and-forget so a slow API never
+ * delays app start. The outcome is logged either way — a registration that fails
+ * silently is the failure mode this whole build is trying to avoid.
+ */
+async function ensureShellToolRegistered(store: Store): Promise<void> {
+  const voice = store.getSettings().voice
+  const apiKey = voice?.elevenlabsApiKey ?? ''
+  const agentId = voice?.elevenlabsAgentId ?? ''
+  if (!apiKey.trim() || !agentId.trim()) {
+    return
+  }
+  const result = await ensureClientTool(apiKey, agentId, PROPOSE_SHELL_TOOL)
+  if (result.ok) {
+    console.log(
+      `[jarvis] tool ${PROPOSE_SHELL_TOOL.name} id=${result.value.id} created=${result.value.created} attached=${result.value.attached}`
+    )
+    return
+  }
+  console.warn(`[jarvis] could not register ${PROPOSE_SHELL_TOOL.name}: ${result.error}`)
 }
 
 function registerHandlers(store: Store, service: JarvisService): void {
@@ -152,6 +188,22 @@ function registerHandlers(store: Store, service: JarvisService): void {
     const review = getSelfEditWindow()
     return review !== null && event.sender.id === review.webContents.id
   }
+
+  // The AGENT's half. Propose only: this handler can queue a command and can run
+  // a read-only one, but it has no path to executing anything that writes, and
+  // the string it returns never carries the pending id.
+  ipcMain.removeHandler('jarvis:proposeShell')
+  ipcMain.handle('jarvis:proposeShell', async (_event, command: unknown) => {
+    // Coerced here, not in the classifier: the classifier is a pure function
+    // over strings and a non-string token would throw inside it. This is the
+    // trust boundary, matching jarvis:proposeSelfEdit's String(path ?? '').
+    const argv = parseCommandArgs(typeof command === 'string' ? command : String(command ?? ''))
+    const result = await shellCommands.propose(argv, 'Adam asked to run this.')
+    if (result.kind === 'queued') {
+      showShellCommandProposal(result.command)
+    }
+    return describeForAgent(result)
+  })
 
   ipcMain.removeHandler('jarvis:runApprovedShell')
   ipcMain.handle('jarvis:runApprovedShell', (event, id: string) => {

@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { parseCommandArgs } from './agent-context'
 import { ShellCommandStore, describeForAgent, runArgv } from './shell-command-store'
 
 function scratch(name: string): string {
@@ -120,5 +121,48 @@ describe('ShellCommandStore — denied commands', () => {
     const store = new ShellCommandStore()
     const result = await store.propose(['shutdown', '-h', 'now'])
     expect(describeForAgent(result)).toContain('Refused')
+  })
+})
+
+describe('the jarvis:proposeShell boundary', () => {
+  // The handler is `parseCommandArgs(String(command ?? ''))` -> store.propose.
+  // These cover that composition; the handler itself needs electron to import.
+  const proposeFrom = async (command: unknown, store: ShellCommandStore): Promise<string> => {
+    const argv = parseCommandArgs(typeof command === 'string' ? command : String(command ?? ''))
+    return describeForAgent(await store.propose(argv, 'Adam asked to run this.'))
+  }
+
+  it('runs a read-only command and speaks its output', async () => {
+    expect(await proposeFrom('echo hello', new ShellCommandStore())).toBe('hello')
+  })
+
+  it('never speaks the pending id for a writing command', async () => {
+    const store = new ShellCommandStore()
+    const spoken = await proposeFrom(`touch ${scratch('viaipc')}`, store)
+    expect(spoken).not.toMatch(/shell_\d+/)
+    expect(spoken).toMatch(/approval/i)
+    expect(store.pendingCount()).toBe(1)
+  })
+
+  it('coerces a non-string command instead of throwing', async () => {
+    const store = new ShellCommandStore()
+    // The classifier is a pure function over strings on purpose; this boundary
+    // is where model-supplied junk is made safe.
+    await expect(proposeFrom(null, store)).resolves.toBeTypeOf('string')
+    await expect(proposeFrom(42, store)).resolves.toBeTypeOf('string')
+    await expect(proposeFrom(undefined, store)).resolves.toBeTypeOf('string')
+  })
+
+  it('honours quoted arguments containing spaces', async () => {
+    const store = new ShellCommandStore()
+    await proposeFrom('mv "/tmp/a b.txt" /tmp/c', store)
+    const pending = store.get('shell_1')
+    expect(pending?.argv).toEqual(['mv', '/tmp/a b.txt', '/tmp/c'])
+  })
+
+  it('refuses a denied command without queueing it', async () => {
+    const store = new ShellCommandStore()
+    expect(await proposeFrom('sudo rm -rf /', store)).toMatch(/Refused/)
+    expect(store.pendingCount()).toBe(0)
   })
 })

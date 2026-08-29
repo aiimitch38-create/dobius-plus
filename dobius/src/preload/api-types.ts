@@ -3192,6 +3192,12 @@ export type PreloadApi = {
     /** Review window subscription for incoming proposals. */
     onSelfEditProposal: (callback: (proposal: unknown) => void) => () => void
     /**
+     * Proposes a shell command. Read-only runs immediately; anything that writes
+     * is queued for a human click and this resolves to a message saying so. The
+     * pending id is never returned, so no client tool can approve a command.
+     */
+    proposeShell: (command: string) => Promise<string>
+    /**
      * Runs a shell command the user approved on screen.
      *
      * Main refuses any caller that is not the review window's own webContents,

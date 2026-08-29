@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Conversation } from '@elevenlabs/client'
+import { createVoiceAgentClientTools } from './voice-agent-client-tools'
 
 export type VoiceAgentState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error'
 
@@ -84,39 +85,7 @@ export function useVoiceAgent(): VoiceAgent {
       conversationRef.current = await Conversation.startSession({
         signedUrl: signed.url,
         ...(opening ? { dynamicVariables: { opening } } : {}),
-        clientTools: {
-          // ADAM runs on this machine, so ElevenLabs' servers cannot reach it.
-          // The agent asks, we answer locally, the agent speaks the answer.
-          ask_adam: async (parameters: { request?: unknown }) => {
-            const result = await window.api.jarvis.askAdamText(String(parameters?.request ?? ''))
-            return result.text
-          },
-          // Eyes: what the user is working on right now.
-          get_context: async () => window.api.jarvis.agentContext(),
-          // Hands: the dobius CLI, minus destructive verbs (main enforces that).
-          run_dobius: async (parameters: { command?: unknown }) =>
-            window.api.jarvis.runDobius(String(parameters?.command ?? '')),
-          // Self-edit: propose only. The write happens in apply_code_change,
-          // which the user gates by saying "approve" or clicking Approve.
-          propose_code_change: async (parameters: {
-            path?: unknown
-            content?: unknown
-            description?: unknown
-          }) => {
-            const result = await window.api.jarvis.proposeSelfEdit(
-              String(parameters?.path ?? ''),
-              String(parameters?.content ?? ''),
-              String(parameters?.description ?? '')
-            )
-            return result.ok
-              ? `Showing the change to ${result.displayPath} for review. Proposal id ${result.id}. Ask the user to approve it.`
-              : `Could not propose that change: ${result.error}`
-          },
-          apply_code_change: async (parameters: { proposal_id?: unknown }) => {
-            const result = await window.api.jarvis.applySelfEdit(String(parameters?.proposal_id ?? ''))
-            return result.ok ? `Applied to ${result.displayPath}.` : `Not applied: ${result.error}`
-          }
-        },
+        clientTools: createVoiceAgentClientTools(),
         onModeChange: ({ mode }) => {
           setState(mode === 'speaking' ? 'speaking' : 'listening')
           touchIdle()
