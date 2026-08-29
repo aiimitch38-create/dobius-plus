@@ -264,3 +264,33 @@ Two smaller traps hit in the same turn:
   `preload/api-types.ts`; a single-line anchor matched the wrong block. Assert
   `s.count(anchor) == 1` and use a two-line anchor. The assertion is what stopped
   a bad write — keep asserting rather than replacing blind.
+
+## Worktree-isolated sessions: one plain command per call, absolute paths only
+_2026-08-29 · claude_
+
+Working inside a Claude worktree session (`EnterWorktree`, or a session launched
+in `.claude/worktrees/<name>`), the harness guard refuses anything it cannot
+statically prove stays inside the worktree. Three shapes get rejected:
+
+- **Compound commands** — pipes plus redirects plus `&&` chains, and some
+  heredocs. `npx tsgo ... 2>&1 | head -20; echo "EXIT=${PIPESTATUS[0]}"` →
+  *"too complex to verify that it stays inside the worktree."*
+- **Runtime-computed `cd`** — `cd .. && git status` → *"changes directory to a
+  location computed at runtime before running git."*
+- **Python heredoc patches** with nested quoting, intermittently.
+
+And separately: **cwd resets between Bash calls.** A `cd dobius` in one call is
+gone by the next, so `cd dobius && npx vitest ...` fails with
+`cd: no such file or directory: dobius` when cwd already *is* `dobius`. This bit
+three commands in one turn, and once wrote a stray `LESSONS-LEARNED.md` into
+`.claude/worktrees/` because `../` resolved one level higher than intended.
+
+What works:
+
+- One bare command per call. No `;`, no `&&`, no piping a verification command.
+- `git -C "<absolute worktree path>" <cmd>` instead of `cd` then git.
+- Absolute paths for any append or redirect target. Never `../file`.
+- `pwd` first when a relative path spans calls.
+- **Prefer the Read/Edit/Write tools over python heredoc patching.** Edit does
+  not hit the guard at all, and it fails loudly on a non-unique anchor instead
+  of silently patching the wrong block.
