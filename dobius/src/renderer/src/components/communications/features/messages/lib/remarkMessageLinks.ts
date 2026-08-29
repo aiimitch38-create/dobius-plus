@@ -18,7 +18,7 @@
 // Explicit `.ts` extension lets this plugin be imported both by the Vite-built
 // `markdown.tsx` and by `markdown.test.mjs` running under `node --test
 // --experimental-strip-types`. `tsconfig.json` enables `allowImportingTsExtensions`.
-import { createRemarkPrefixPlugin } from "../../../shared/lib/createRemarkPrefixPlugin.ts";
+import { createRemarkPrefixPlugin } from "../../../shared/lib/createRemarkPrefixPlugin";
 
 const MESSAGE_URL_PATTERN = /(?:buzz|buzz):\/\/message\?[^\s<>"')\]]+/g;
 const TRAILING_PUNCTUATION_PATTERN = /[.,;:!?]+$/;

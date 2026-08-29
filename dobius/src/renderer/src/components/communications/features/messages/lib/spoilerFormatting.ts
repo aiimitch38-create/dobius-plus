@@ -37,6 +37,8 @@ export function getSpoilerRangeState(
       isFullySpoiled = false;
       return false;
     }
+    // undefined keeps ProseMirror descending; false above stops it.
+    return undefined;
   });
 
   if (!hasMarkableContent) return "no-markable-content";

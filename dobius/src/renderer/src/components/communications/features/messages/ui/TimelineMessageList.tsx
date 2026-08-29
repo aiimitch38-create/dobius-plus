@@ -429,6 +429,13 @@ function VirtualizedTimelineRows({
     () => buildVirtualizedItems(dayGroups, leadingContent, historyExhausted),
     [dayGroups, historyExhausted, leadingContent],
   );
+  // virtua 0.50 takes a single initial estimate rather than a per-item
+  // function; it measures real heights after first render, so this only
+  // affects the first scrollbar guess.
+  const initialItemSizeEstimate = React.useMemo(
+    () => (items[0] ? estimateItemSize(items[0]) : 64),
+    [estimateItemSize, items],
+  );
   const keys = React.useMemo(() => items.map(virtualizedItemKey), [items]);
   itemsLengthRef.current = items.length;
   const previousKeysRef = React.useRef<readonly string[]>([]);
@@ -567,7 +574,7 @@ function VirtualizedTimelineRows({
           className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-contain px-2 pt-[var(--channel-top-chrome-height,4.5rem)]"
           data={items}
           item={VirtualizedTimelineItemShell}
-          itemSize={estimateItemSize}
+          itemSize={initialItemSizeEstimate}
           bufferSize={offscreenBufferSize}
           keepMounted={retainedIndices}
           style={{ overflowAnchor: "none" }}

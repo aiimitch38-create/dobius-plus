@@ -145,7 +145,8 @@ export function useUpdater() {
           setStatus({ state: "checking" });
         }
 
-        const update = await check({
+        // Dobius+ owns updates; the shim always reports none.
+        const update = await (check as (options?: unknown) => Promise<Update | null>)({
           headers: { "Cache-Control": "no-cache" },
         });
         const shouldShowQuietResult =

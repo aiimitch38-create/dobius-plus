@@ -8,7 +8,7 @@ import {
   mergeMockCustomHarnesses,
   handleSaveCustomHarness,
   handleDeleteCustomHarness,
-} from "./e2eBridgeCustomHarnesses.ts";
+} from "./e2eBridgeCustomHarnesses";
 
 import { relayClient } from "@comms/shared/api/relayClient";
 import { activateRateLimit } from "@comms/shared/api/relayRateLimitGate";
@@ -9091,6 +9091,7 @@ async function sendToRealSocket(args: {
   if (args.message?.type === "Text") {
     socket.send(args.message.data ?? "");
   }
+  return undefined;
 }
 
 function sendToMockSocket(args: {
@@ -9469,6 +9470,8 @@ function sendToMockSocket(args: {
     emitMockLiveEvent(channelId, event);
     sendWsText(socket.handler, ["OK", event.id, true, ""]);
   }
+  // Only the stall branch returns a promise; every other path is a plain exit.
+  return undefined;
 }
 
 function disconnectMockSocket(id: number) {

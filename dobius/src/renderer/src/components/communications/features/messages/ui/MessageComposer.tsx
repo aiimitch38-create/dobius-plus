@@ -373,6 +373,8 @@ function MessageComposerImpl({
       media.setPendingImeta(restoredImeta);
       setSpoileredAttachmentUrls(restoredSpoileredAttachmentUrls);
     }
+    // Only the edit-mode branch above installs a cleanup.
+    return undefined;
   }, [editTarget?.id]);
 
   // ── Focus on reply ──────────────────────────────────────────────────

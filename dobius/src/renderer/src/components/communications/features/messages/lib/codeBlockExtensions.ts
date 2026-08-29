@@ -85,6 +85,7 @@ export const CodeBlockAfterHardBreak = Extension.create({
           state.tr.setSelection(
             TextSelection.near(state.tr.doc.resolve(mapped + 1)),
           );
+          return undefined;
         },
       }),
     ];

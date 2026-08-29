@@ -3,6 +3,8 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+const COMMS_SHIM = 'src/renderer/src/components/communications/tauri-shim'
+
 // Why: the telemetry transport is gated by two compile-time constants that
 // only the official CI release workflow sets. Contributor / `pnpm dev` /
 // third-party rebuilds must substitute literal `null` at these sites so
@@ -230,6 +232,20 @@ export default defineConfig({
         // The restored Communications tree keeps its own root so its many
         // internal imports do not collide with the app's '@'.
         '@comms': resolve('src/renderer/src/components/communications'),
+        // That tree was written against Tauri. Aliasing its imports onto an
+        // Electron-backed shim keeps 52 call sites untouched; nothing from
+        // @tauri-apps is installed or shipped.
+        '@tauri-apps/api/core': resolve(COMMS_SHIM, 'core.ts'),
+        '@tauri-apps/api/event': resolve(COMMS_SHIM, 'event.ts'),
+        '@tauri-apps/api/mocks': resolve(COMMS_SHIM, 'mocks.ts'),
+        '@tauri-apps/api/window': resolve(COMMS_SHIM, 'desktop.ts'),
+        '@tauri-apps/api/webview': resolve(COMMS_SHIM, 'desktop.ts'),
+        '@tauri-apps/api/app': resolve(COMMS_SHIM, 'desktop.ts'),
+        '@tauri-apps/api/path': resolve(COMMS_SHIM, 'desktop.ts'),
+        '@tauri-apps/plugin-opener': resolve(COMMS_SHIM, 'desktop.ts'),
+        '@tauri-apps/plugin-process': resolve(COMMS_SHIM, 'desktop.ts'),
+        '@tauri-apps/plugin-updater': resolve(COMMS_SHIM, 'desktop.ts'),
+        '@tauri-apps/plugin-notification': resolve(COMMS_SHIM, 'desktop.ts'),
         '@': resolve('src/renderer/src')
       }
     },

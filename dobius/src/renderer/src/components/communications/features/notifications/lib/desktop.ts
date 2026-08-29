@@ -181,7 +181,9 @@ export async function listenForDesktopNotificationActions(
 
   if (isTauri()) {
     try {
-      pluginListener = await onAction((notification) => {
+      pluginListener = (await onAction((notification: {
+        extra?: Record<string, unknown>;
+      }) => {
         const target = parseNotificationTarget(
           notification.extra?.buzzNotificationTarget,
         );
@@ -190,7 +192,8 @@ export async function listenForDesktopNotificationActions(
         }
 
         dispatchDesktopNotificationTarget(target);
-      });
+        // Electron shim returns an unregister handle, not Tauri's bare unlisten.
+      })) as unknown as { unregister: () => Promise<void> };
     } catch {
       pluginListener = null;
     }

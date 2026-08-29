@@ -17,6 +17,17 @@
     "paths": {
       "@renderer/*": ["../src/renderer/src/*"],
       "@comms/*": ["../src/renderer/src/components/communications/*"],
+      "@tauri-apps/api/core": ["../src/renderer/src/components/communications/tauri-shim/core.ts"],
+      "@tauri-apps/api/event": ["../src/renderer/src/components/communications/tauri-shim/event.ts"],
+      "@tauri-apps/api/mocks": ["../src/renderer/src/components/communications/tauri-shim/mocks.ts"],
+      "@tauri-apps/api/window": ["../src/renderer/src/components/communications/tauri-shim/desktop.ts"],
+      "@tauri-apps/api/webview": ["../src/renderer/src/components/communications/tauri-shim/desktop.ts"],
+      "@tauri-apps/api/app": ["../src/renderer/src/components/communications/tauri-shim/desktop.ts"],
+      "@tauri-apps/api/path": ["../src/renderer/src/components/communications/tauri-shim/desktop.ts"],
+      "@tauri-apps/plugin-opener": ["../src/renderer/src/components/communications/tauri-shim/desktop.ts"],
+      "@tauri-apps/plugin-process": ["../src/renderer/src/components/communications/tauri-shim/desktop.ts"],
+      "@tauri-apps/plugin-updater": ["../src/renderer/src/components/communications/tauri-shim/desktop.ts"],
+      "@tauri-apps/plugin-notification": ["../src/renderer/src/components/communications/tauri-shim/desktop.ts"],
       "@/*": ["../src/renderer/src/*"]
     }
   }
