@@ -215,9 +215,13 @@ export default defineConfig({
   preload: {
     build: {
       rollupOptions: {
+        // Why single entry: sandboxed preload (sandbox: true) can't require()
+        // sibling chunks at runtime, so communications.ts must be bundled INTO
+        // index.js as a regular module, not declared as its own rollup entry.
+        // index.ts imports it statically; nothing loads communications.js
+        // standalone anymore (the vendored Buzz webview that used to was retired).
         input: {
-          index: resolve('src/preload/index.ts'),
-          communications: resolve('src/preload/communications.ts')
+          index: resolve('src/preload/index.ts')
         }
       },
       externalizeDeps: {
