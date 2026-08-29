@@ -10,6 +10,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { ADAM_PLUGINS_DIR_NAME } from './shell-tool'
 
 export type SelfEditProposal = {
   id: string
@@ -40,8 +41,27 @@ export function selfEditRoots(home: string, repoRoot: string): string[] {
   return [repoRoot, join(home, 'dobius', 'projects', 'ADAM')]
 }
 
-/** Path segments never writable even inside an allowed root. */
-const FORBIDDEN_SEGMENTS = new Set(['.git', 'node_modules', 'out', 'dist', '.env'])
+/**
+ * Path segments never writable even inside an allowed root.
+ *
+ * `adam-plugins` is invariant B: plugins are unsigned code that runs in the main
+ * process at every launch, so ONE approved innocuous-looking write into that
+ * folder would become permanent, unapproved code execution. The name is
+ * imported rather than spelled again — the shell tool, this resolver and the
+ * loader must all mean the same folder, and a second literal is how they drift.
+ */
+const FORBIDDEN_SEGMENTS = new Set([
+  '.git',
+  'node_modules',
+  'out',
+  'dist',
+  '.env',
+  ADAM_PLUGINS_DIR_NAME
+])
+
+function hasForbiddenSegment(absolute: string): boolean {
+  return absolute.split(sep).some((segment) => FORBIDDEN_SEGMENTS.has(segment))
+}
 
 function containedBy(child: string, parent: string): boolean {
   const normalizedParent = parent.endsWith(sep) ? parent : `${parent}${sep}`
@@ -79,8 +99,7 @@ export function resolveEditablePath(
 
   for (const candidate of candidates) {
     const absolute = resolve(candidate)
-    const segments = absolute.split(sep)
-    if (segments.some((segment) => FORBIDDEN_SEGMENTS.has(segment))) {
+    if (hasForbiddenSegment(absolute)) {
       return { ok: false, error: `"${requested}" is in a protected directory.` }
     }
     let resolvedParent: string
@@ -99,6 +118,13 @@ export function resolveEditablePath(
       } catch {
         return { ok: false, error: `"${requested}" could not be resolved.` }
       }
+    }
+    // Why the segment check runs twice: the first pass sees only the requested
+    // string, and a symlink with an innocuous name can resolve INTO a protected
+    // directory. Checking the lexical form alone is the exact hole the shell
+    // tool's plugin-directory rule had before TASK-ADAM-1.1's review.
+    if (hasForbiddenSegment(realAbsolute)) {
+      return { ok: false, error: `"${requested}" is in a protected directory.` }
     }
     if (realRoots.some((root) => containedBy(realAbsolute, root))) {
       return { ok: true, absolutePath: realAbsolute }

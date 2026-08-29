@@ -23,6 +23,8 @@ import { ShellCommandStore, describeForAgent } from './shell-command-store'
 import { FORGET_TOOL, PROPOSE_SHELL_TOOL, REMEMBER_TOOL, ensureClientTool } from './elevenlabs-tools'
 import { AdamMemory } from './adam-memory'
 import { ProactiveWatcher } from './proactive-watcher'
+import type { AdamPlugin } from './plugin-loader'
+import { loadAdamPlugins, logPluginLoad } from './plugin-loader'
 import { adamPluginDir } from './shell-tool'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
 import {
@@ -80,6 +82,31 @@ export function registerJarvisIpcHandlers(store: Store): void {
   restorePersistedMode(store, service)
   void ensureAgentToolsRegistered(store)
   startProactiveWatcher(store, service)
+  void loadPluginsAtStartup()
+}
+
+/**
+ * Plugins Adam gained from `userData/adam-plugins`, for this process's lifetime.
+ *
+ * A plain module-level list rather than a registry: the only readers are in this
+ * file, and a getter/setter pair around one array would be ceremony. Adam cannot
+ * write to that folder (invariant B), so this is code Carson installed by hand.
+ */
+let loadedPlugins: AdamPlugin[] = []
+
+export function getLoadedPlugins(): AdamPlugin[] {
+  return loadedPlugins
+}
+
+/**
+ * Fire-and-forget so a slow or broken plugin cannot delay app start. Every
+ * plugin is logged by name and path, and every failure warned — nothing here
+ * runs silently, because this is unsigned code in the main process.
+ */
+async function loadPluginsAtStartup(): Promise<void> {
+  const result = await loadAdamPlugins(adamPluginDir(app.getPath('userData')))
+  loadedPlugins = result.plugins
+  logPluginLoad(result)
 }
 
 /**

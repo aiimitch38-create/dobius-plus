@@ -41,7 +41,7 @@ scoped test baseline 221 passing.
 | TASK-ADAM-1.3 shell IPC + tool registration | **DONE** — committed, gate passed |
 | TASK-ADAM-2.1 model-writable memory | **DONE** — committed, gate passed |
 | TASK-ADAM-3.1 proactive engine | **DONE** — committed, gate passed |
-| TASK-ADAM-4.1 plugin loader | not started |
+| TASK-ADAM-4.1 plugin loader | **DONE** — committed, gate passed |
 | TASK-ADAM-4.2 ElevenLabs tool sync | not started |
 | TASK-ADAM-4.3 generic plugin dispatch | not started |
 
@@ -157,13 +157,38 @@ Settings are `jarvisProactive` (default OFF), `jarvisProactiveQuietFrom` /
 `jarvisProactiveQuietTo`. All optional, read with `=== true`, so no
 config-manager change is needed.
 
-## Tasks 1.1 – 3.1 are committed and independently verified
+## TASK-ADAM-4.1 — complete
 
-Do not redo them. `TASK-ADAM-4.1` (plugin loader) is the next unstarted task,
-and it owns **invariant B** — the plugin directory must be added to
-`FORBIDDEN_SEGMENTS` in `self-edit.ts` and to the shell tool's deny rules, with
-a test in each. Import `adamPluginDir()` from `shell-tool.ts`; do not re-join
-the path.
+Scoped test count is now **399 passing**, still exactly one failing file. **Use
+399 as the floor from here.**
+
+**Invariant B is now closed on both sides and both are tested** — the shell half
+in `shell-tool.test.ts` ("the plugin directory (invariant B)") from 1.1, the
+self-edit half in `plugin-loader.test.ts` ("INVARIANT B") from 4.1. Do not
+remove either, and do not add a second literal spelling of `adam-plugins`:
+`ADAM_PLUGINS_DIR_NAME` in `shell-tool.ts` is the one definition and both
+consumers import it.
+
+What 4.2 and 4.3 need from `plugin-loader.ts`:
+
+- `getLoadedPlugins()` in `jarvis-ipc.ts` is the list, populated at startup.
+  **If 4.2 and 4.3 do not both use it, delete it** — it exists only for them.
+- `pluginToolName(name)` → `plugin_<name>`, and `PLUGIN_TOOL_PREFIX`. **4.2 must
+  decide tool ownership by this prefix, never by a hardcoded name list** — the
+  build file is explicit, and the failure mode is deleting a working tool.
+- `runPlugin(plugin, parameters)` already catches a throwing plugin and returns
+  text, so 4.3's dispatch does not need its own try/catch.
+
+**Re-run the WIRING CHECK for `plugin_` in 4.2/4.3.** It is absent from the
+bundle today because `pluginToolName` is unreferenced and gets tree-shaken; it
+must reappear once those tasks call it.
+
+Verified, not assumed: the CommonJS bundle preserves the loader's dynamic
+`import()` un-rewritten, so `.mjs` plugins really do load in the packaged app.
+
+## Tasks 1.1 – 4.1 are committed and independently verified
+
+Do not redo them. `TASK-ADAM-4.2` (ElevenLabs tool sync) is next, then 4.3.
 
 Note for the record: the supervisor was killed mid-2.1 at 07:29 by an external
 process reaper, not by a failure of the work. The task was resumed from disk and
