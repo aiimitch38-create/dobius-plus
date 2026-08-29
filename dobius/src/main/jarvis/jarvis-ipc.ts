@@ -25,6 +25,7 @@ import { AdamMemory } from './adam-memory'
 import { ProactiveWatcher } from './proactive-watcher'
 import type { AdamPlugin } from './plugin-loader'
 import { loadAdamPlugins, logPluginLoad } from './plugin-loader'
+import { logToolSync, syncPluginTools } from './elevenlabs-tool-sync'
 import { adamPluginDir } from './shell-tool'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
 import {
@@ -80,9 +81,33 @@ export function registerJarvisIpcHandlers(store: Store): void {
   registerHandlers(store, service)
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)
-  void ensureAgentToolsRegistered(store)
   startProactiveWatcher(store, service)
-  void loadPluginsAtStartup()
+  void registerToolsAndPlugins(store)
+}
+
+/**
+ * Registers the built-in tools, loads plugins, then syncs the plugin tools.
+ *
+ * **Strictly sequential, and that is the point.** `ensureAgentToolsRegistered`
+ * and `syncPluginTools` both read the agent's `tool_ids` and PATCH them back.
+ * Run concurrently they race, and the loser's tools are dropped from a list it
+ * never saw — the same hazard the loop inside `ensureAgentToolsRegistered`
+ * already guards against, one level up.
+ */
+async function registerToolsAndPlugins(store: Store): Promise<void> {
+  await ensureAgentToolsRegistered(store)
+  const result = await loadAdamPlugins(adamPluginDir(app.getPath('userData')))
+  loadedPlugins = result.plugins
+  logPluginLoad(result)
+
+  const voice = store.getSettings().voice
+  logToolSync(
+    await syncPluginTools(
+      voice?.elevenlabsApiKey ?? '',
+      voice?.elevenlabsAgentId ?? '',
+      loadedPlugins
+    )
+  )
 }
 
 /**
@@ -98,16 +123,7 @@ export function getLoadedPlugins(): AdamPlugin[] {
   return loadedPlugins
 }
 
-/**
- * Fire-and-forget so a slow or broken plugin cannot delay app start. Every
- * plugin is logged by name and path, and every failure warned — nothing here
- * runs silently, because this is unsigned code in the main process.
- */
-async function loadPluginsAtStartup(): Promise<void> {
-  const result = await loadAdamPlugins(adamPluginDir(app.getPath('userData')))
-  loadedPlugins = result.plugins
-  logPluginLoad(result)
-}
+
 
 /**
  * Watches for finished terminal jobs and lets ADAM mention them unprompted.

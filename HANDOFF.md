@@ -42,7 +42,7 @@ scoped test baseline 221 passing.
 | TASK-ADAM-2.1 model-writable memory | **DONE** — committed, gate passed |
 | TASK-ADAM-3.1 proactive engine | **DONE** — committed, gate passed |
 | TASK-ADAM-4.1 plugin loader | **DONE** — committed, gate passed |
-| TASK-ADAM-4.2 ElevenLabs tool sync | not started |
+| TASK-ADAM-4.2 ElevenLabs tool sync | **DONE** — committed, gate passed |
 | TASK-ADAM-4.3 generic plugin dispatch | not started |
 
 ## TASK-ADAM-1.1 — complete
@@ -186,9 +186,40 @@ must reappear once those tasks call it.
 Verified, not assumed: the CommonJS bundle preserves the loader's dynamic
 `import()` un-rewritten, so `.mjs` plugins really do load in the packaged app.
 
-## Tasks 1.1 – 4.1 are committed and independently verified
+## TASK-ADAM-4.2 — complete
 
-Do not redo them. `TASK-ADAM-4.2` (ElevenLabs tool sync) is next, then 4.3.
+Scoped test count is now **420 passing**, still exactly one failing file. **Use
+420 as the floor from here.**
+
+`planToolSync` is pure and holds the ownership rule; `applyToolSync` executes a
+plan and is where the second prefix check lives. **Both layers have their own
+test and both were proven falsifiable — do not collapse them back together.**
+
+`registerToolsAndPlugins` in `jarvis-ipc.ts` is **strictly sequential on
+purpose**: built-in tool registration and the plugin sync both read and PATCH
+the agent's `tool_ids`, so running them concurrently drops whichever finished
+first. Do not turn it into `Promise.all`, and add any future tool registration
+inside that chain.
+
+`listClientTools` sets `description`/`parameters` **only when the API sent
+them**. Do not default them — a tool with no description must not come back
+claiming an empty one, and 1.3's shape test pins this.
+
+## Tasks 1.1 – 4.2 are committed and independently verified
+
+Do not redo them. `TASK-ADAM-4.3` (generic plugin dispatch) is the last task.
+It adds a renderer `clientTools` fallback routing any unrecognised tool name to
+`plugin:run` in main. Two things it must not break:
+
+1. **The invariant-A test** in `voice-agent-client-tools.test.ts` iterates the
+   WHOLE `clientTools` map and asserts nothing reaches `runApprovedShell`. A
+   catch-all handler must not become a path to it.
+2. **The WIRING CHECK must still find every hand-written tool name** in the
+   bundle — a fallback that swallows names is exactly what that check catches.
+
+`runPlugin(plugin, parameters)` already catches a throwing plugin and returns
+text, so the dispatch needs no try/catch of its own. `getLoadedPlugins()` in
+`jarvis-ipc.ts` is the list to look the plugin up in.
 
 Note for the record: the supervisor was killed mid-2.1 at 07:29 by an external
 process reaper, not by a failure of the work. The task was resumed from disk and

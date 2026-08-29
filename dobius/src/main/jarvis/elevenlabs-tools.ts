@@ -17,7 +17,17 @@ export type ClientToolConfig = {
   parameters: Record<string, unknown>
 }
 
-export type ToolSummary = { id: string; name: string }
+/**
+ * `description` and `parameters` come from the `tool_config` the list endpoint
+ * already returns. Optional so existing callers are unaffected; TASK-ADAM-4.2's
+ * sync uses them to diff without a second round trip per tool.
+ */
+export type ToolSummary = {
+  id: string
+  name: string
+  description?: string
+  parameters?: Record<string, unknown>
+}
 
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
@@ -109,7 +119,12 @@ export async function listClientTools(
   apiKey: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<ApiResult<ToolSummary[]>> {
-  const result = await callApi<{ tools?: { id?: unknown; tool_config?: { name?: unknown } }[] }>(
+  const result = await callApi<{
+    tools?: {
+      id?: unknown
+      tool_config?: { name?: unknown; description?: unknown; parameters?: unknown }
+    }[]
+  }>(
     `${API_ROOT}/tools`,
     apiKey,
     { method: 'GET' },
@@ -119,7 +134,20 @@ export async function listClientTools(
     return result
   }
   const tools = (result.value.tools ?? [])
-    .map((tool) => ({ id: String(tool?.id ?? ''), name: String(tool?.tool_config?.name ?? '') }))
+    .map((tool) => {
+      const config = tool?.tool_config
+      // Only present keys are carried. Fabricating `description: ''` for a tool
+      // that has none would change the shape every existing caller sees, to say
+      // something the API never said.
+      const summary: ToolSummary = { id: String(tool?.id ?? ''), name: String(config?.name ?? '') }
+      if (typeof config?.description === 'string') {
+        summary.description = config.description
+      }
+      if (config?.parameters && typeof config.parameters === 'object') {
+        summary.parameters = config.parameters as Record<string, unknown>
+      }
+      return summary
+    })
     .filter((tool) => tool.id && tool.name)
   return { ok: true, value: tools }
 }
@@ -140,6 +168,46 @@ export async function createClientTool(
   }
   const id = String(result.value.id ?? result.value.tool_id ?? '')
   return id ? { ok: true, value: id } : { ok: false, error: 'ElevenLabs returned no tool id.' }
+}
+
+/** Rewrites an existing tool in place, so a plugin edit reaches the agent. */
+export async function updateClientTool(
+  apiKey: string,
+  id: string,
+  config: ClientToolConfig,
+  fetchImpl: typeof fetch = fetch
+): Promise<ApiResult<true>> {
+  const result = await callApi<unknown>(
+    `${API_ROOT}/tools/${encodeURIComponent(id)}`,
+    apiKey,
+    { method: 'PATCH', body: JSON.stringify({ tool_config: { type: 'client', ...config } }) },
+    fetchImpl
+  )
+  return result.ok ? { ok: true, value: true } : result
+}
+
+/**
+ * Removes a tool from the account.
+ *
+ * A 404 counts as success: the tool being gone is the state the caller wanted,
+ * and failing here would make every later sync retry a delete that can never
+ * succeed.
+ */
+export async function deleteClientTool(
+  apiKey: string,
+  id: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<ApiResult<true>> {
+  const result = await callApi<unknown>(
+    `${API_ROOT}/tools/${encodeURIComponent(id)}`,
+    apiKey,
+    { method: 'DELETE' },
+    fetchImpl
+  )
+  if (result.ok) {
+    return { ok: true, value: true }
+  }
+  return result.error.includes('HTTP 404') ? { ok: true, value: true } : result
 }
 
 export type AgentPrompt = Record<string, unknown> & { tool_ids?: unknown }
