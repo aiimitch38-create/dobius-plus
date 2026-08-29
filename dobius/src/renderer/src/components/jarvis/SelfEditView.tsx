@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { applyDocumentTheme } from '@/lib/document-theme'
 import { Button } from '../ui/button'
 import { collapseContext, diffLines, type DiffLine } from './diff-lines'
+import {
+  ShellCommandReview,
+  isShellCommandProposal,
+  type ShellCommandProposal
+} from './ShellCommandReview'
 
 /** Lines revealed per tick while "typing" the change in. */
 const REVEAL_PER_TICK = 2
@@ -51,6 +56,7 @@ function linePrefix(kind: DiffLine['kind']): string {
  */
 export function SelfEditView(): React.JSX.Element {
   const [proposal, setProposal] = useState<Proposal | null>(null)
+  const [command, setCommand] = useState<ShellCommandProposal | null>(null)
   const [revealed, setRevealed] = useState(0)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -72,7 +78,23 @@ export function SelfEditView(): React.JSX.Element {
         }
         setMessage(null)
         setRevealed(0)
+        // One window, one decision at a time: a diff arriving replaces a
+        // command still on screen rather than stacking two Run buttons.
+        setCommand(null)
         setProposal(incoming)
+      }),
+    []
+  )
+
+  useEffect(
+    () =>
+      window.api.jarvis.onShellCommandProposal((incoming) => {
+        if (!isShellCommandProposal(incoming)) {
+          return
+        }
+        setMessage(null)
+        setProposal(null)
+        setCommand(incoming)
       }),
     []
   )
@@ -123,10 +145,24 @@ export function SelfEditView(): React.JSX.Element {
     setMessage('Discarded. Nothing was written.')
   }
 
+  if (command) {
+    return (
+      <ShellCommandReview
+        command={command}
+        onDone={(text) => {
+          setCommand(null)
+          setMessage(text)
+        }}
+      />
+    )
+  }
+
   if (!proposal) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-2 bg-background p-6 text-center">
-        <p className="text-sm text-muted-foreground">{message ?? 'No change waiting for review.'}</p>
+        <p className="text-sm text-muted-foreground">
+          {message ?? 'Nothing waiting for review.'}
+        </p>
       </div>
     )
   }

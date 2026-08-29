@@ -85,7 +85,7 @@ not let them block a task.**
 Your gate is the scope this build touches:
 
 ```
-npx vitest run src/main/jarvis src/main/window src/renderer/src/components/jarvis
+npx vitest run --config config/vitest.config.ts src/main/jarvis src/main/window src/renderer/src/components/jarvis
 ```
 
 Baseline on the clean branch: **221 tests passing**, plus one pre-existing
@@ -267,8 +267,8 @@ Append `BUILD COMPLETE` to `HANDOFF.md` only when ALL of:
 - Every task above has `plans/TASK-ADAM-N.N.md` and
   `plans/TASK-ADAM-N.N-REVIEW.md`.
 - Both typechecks exit 0.
-- `npx vitest run src/main/jarvis src/main/window
-  src/renderer/src/components/jarvis` shows **at least 221 passing plus your new
+- `npx vitest run --config config/vitest.config.ts src/main/jarvis
+  src/main/window src/renderer/src/components/jarvis` shows **at least 221 passing plus your new
   tests, and exactly one failing file — `attach-main-window-services.test.ts`.**
 - `npx oxlint` clean on every touched file.
 - The WIRING CHECK passes for every new IPC channel and tool name.

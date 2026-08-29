@@ -88,7 +88,11 @@ fi
 # 7. Scoped tests against the pinned baseline.
 echo ""
 echo "--- Tests (scoped) ---"
-(cd "$APP" && npx vitest run $TEST_SCOPE --reporter=dot >/tmp/adam-tests.log 2>&1)
+# --config is REQUIRED: there is no vitest.config.ts at dobius/ root, so the bare
+# command runs with Vitest defaults — a 5s testTimeout instead of this project's
+# 30s, which makes the heavy src/main/window dynamic imports flake intermittently.
+# See LESSONS-LEARNED.md [Testing] 2026-08-29.
+(cd "$APP" && npx vitest run --config config/vitest.config.ts $TEST_SCOPE --reporter=dot >/tmp/adam-tests.log 2>&1)
 PASSED=$(grep -oE 'Tests +[0-9]+ passed' /tmp/adam-tests.log | grep -oE '[0-9]+' | tail -1)
 PASSED=${PASSED:-0}
 FAILED_TESTS=$(grep -oE 'Tests +[0-9]+ failed' /tmp/adam-tests.log | grep -oE '[0-9]+' | tail -1)
@@ -136,14 +140,19 @@ else
   fi
 fi
 
-# 9. Type suppressions in the files this commit touched.
-if [ -n "$LINT_TARGETS" ]; then
-  SUPPRESS=$(cd "$APP" && echo "$LINT_TARGETS" | tr '\n' '\0' | xargs -0 grep -l '@ts-ignore\|@ts-nocheck' 2>/dev/null || true)
-  if [ -z "$SUPPRESS" ]; then
-    ok "no @ts-ignore / @ts-nocheck"
-  else
-    fail "type suppressions found in: $SUPPRESS"
-  fi
+# 9. Type suppressions ADDED BY THIS COMMIT.
+#
+# Why the diff and not the files: grepping whole files repeats the exact defect
+# that made the old scripts/verify-task.sh unpassable — it flagged a pre-existing
+# `@ts-ignore` in src/preload/index.ts (added in caee2df0, ~4,400 lines in) that
+# this build is forbidden to touch, so the gate could never go green.
+ADDED_SUPPRESS=$(git show "$(git rev-parse HEAD)" -- 'dobius/src/**/*.ts' 'dobius/src/**/*.tsx' 2>/dev/null \
+  | grep -E '^\+' | grep -E '@ts-ignore|@ts-nocheck' || true)
+if [ -z "$ADDED_SUPPRESS" ]; then
+  ok "no @ts-ignore / @ts-nocheck added by this commit"
+else
+  fail "this commit ADDS type suppressions:"
+  echo "$ADDED_SUPPRESS" | head -5 | sed 's/^/       /'
 fi
 
 # 10. Logs.

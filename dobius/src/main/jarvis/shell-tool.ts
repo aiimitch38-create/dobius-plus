@@ -109,6 +109,19 @@ const RECURSIVE_FLAGS = new Set(['-R', '-r', '--recursive'])
 /** The folder name plugins live in; blocked as a path segment anywhere. */
 export const ADAM_PLUGINS_DIR_NAME = 'adam-plugins'
 
+/**
+ * The one definition of where plugins live.
+ *
+ * Why a function rather than each caller joining the name itself: the shell
+ * tool, the self-edit resolver and the loader must all mean the SAME folder. If
+ * one of them drifts, the deny rules stop covering the folder the loader
+ * actually reads and invariant B silently opens. `agent-context.ts:12-18`
+ * records this codebase getting burned by exactly that kind of drift.
+ */
+export function adamPluginDir(userDataPath: string): string {
+  return join(userDataPath, ADAM_PLUGINS_DIR_NAME)
+}
+
 function hasPathSeparator(binary: string): boolean {
   return binary.includes('/') || binary.includes('\\')
 }

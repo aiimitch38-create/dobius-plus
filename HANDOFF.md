@@ -37,7 +37,7 @@ scoped test baseline 221 passing.
 | Task | State |
 |---|---|
 | TASK-ADAM-1.1 shell classification | **DONE** — committed, gate passed |
-| TASK-ADAM-1.2 shell execution + window approval | not started |
+| TASK-ADAM-1.2 shell execution + window approval | **DONE** — committed, gate passed |
 | TASK-ADAM-1.3 shell IPC + tool registration | not started |
 | TASK-ADAM-2.1 model-writable memory | not started |
 | TASK-ADAM-3.1 proactive engine | not started |
@@ -50,9 +50,29 @@ scoped test baseline 221 passing.
 Committed with its plan (`plans/TASK-ADAM-1.1.md`) and review
 (`plans/TASK-ADAM-1.1-REVIEW.md`). `bash scripts/verify-adam-task.sh 1.1` exits 0.
 
-Scoped test count is now **283 passing** (221 baseline + 62 shell-tool tests),
-still exactly one failing file (`attach-main-window-services.test.ts`). Use 283
-as the floor from here.
+Scoped test count is now **295 passing**, still exactly one failing file
+(`attach-main-window-services.test.ts`). Use 295 as the floor from here.
+
+**The gate command changed.** Always pass `--config config/vitest.config.ts`:
+
+```
+npx vitest run --config config/vitest.config.ts src/main/jarvis src/main/window src/renderer/src/components/jarvis
+```
+
+There is no `vitest.config.ts` at `dobius/` root, so the bare command the build
+file originally prescribed ran with Vitest defaults — a 5s `testTimeout` instead
+of the project's 30s — and `src/main/window` flaked roughly 1 run in 6 with
+extra "failing" files that were only slow dynamic imports. `AUTONOMOUS-BUILD.md`
+and `scripts/verify-adam-task.sh` are both fixed. If you see a second failing
+file, check you used `--config` before suspecting your own change.
+
+TASK-ADAM-1.3 must add the AGENT's half of the shell surface: `jarvis:proposeShell`
+(coercing every argv element with `String(...)`), its preload entry, the
+`propose_shell` client tool, the ElevenLabs tool registration, and the WIRING
+CHECK over every channel and tool name from 1.2 and 1.3. It must also add the
+renderer test asserting the `clientTools` map holds no key that can execute a
+command — that needs the map extracted from `use-voice-agent.ts` into its own
+module so it can be imported without a live conversation.
 
 `classifyShellCommand(argv, options)` in `dobius/src/main/jarvis/shell-tool.ts`
 is the gate TASK-ADAM-1.2 wires to execution. It is pure — it does not run

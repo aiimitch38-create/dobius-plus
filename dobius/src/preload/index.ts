@@ -4440,6 +4440,17 @@ const api = {
       ipcRenderer.on('jarvis:self-edit-proposal', listener)
       return () => ipcRenderer.removeListener('jarvis:self-edit-proposal', listener)
     },
+    runApprovedShell: (
+      id: string
+    ): Promise<{ ok: true; output: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('jarvis:runApprovedShell', id),
+    discardShellCommand: (id: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('jarvis:discardShellCommand', id),
+    onShellCommandProposal: (callback: (command: unknown) => void): (() => void) => {
+      const listener = (_event: unknown, command: unknown): void => callback(command)
+      ipcRenderer.on('jarvis:shell-command-proposal', listener)
+      return () => ipcRenderer.removeListener('jarvis:shell-command-proposal', listener)
+    },
     onState: (callback: (event: JarvisStateEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: JarvisStateEvent): void =>
         callback(data)

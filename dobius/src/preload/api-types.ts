@@ -3191,6 +3191,19 @@ export type PreloadApi = {
     discardSelfEdit: (id: string) => Promise<{ ok: boolean }>
     /** Review window subscription for incoming proposals. */
     onSelfEditProposal: (callback: (proposal: unknown) => void) => () => void
+    /**
+     * Runs a shell command the user approved on screen.
+     *
+     * Main refuses any caller that is not the review window's own webContents,
+     * so this is unreachable from the voice agent's client tools.
+     */
+    runApprovedShell: (
+      id: string
+    ) => Promise<{ ok: true; output: string } | { ok: false; error: string }>
+    /** Throws away a pending shell command. */
+    discardShellCommand: (id: string) => Promise<{ ok: boolean }>
+    /** Review window subscription for commands waiting on approval. */
+    onShellCommandProposal: (callback: (command: unknown) => void) => () => void
     onState: (callback: (event: JarvisStateEvent) => void) => () => void
     onPttPressed: (callback: (data: { at: number }) => void) => () => void
     onPttReleased: (callback: (data: { at: number }) => void) => () => void
