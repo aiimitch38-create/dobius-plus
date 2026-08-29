@@ -172,6 +172,27 @@ export async function runPlugin(
   }
 }
 
+/**
+ * Looks a tool name up among the loaded plugins and runs it.
+ *
+ * Lives here rather than inline in the IPC handler so it can be tested at all:
+ * `jarvis-ipc.ts` needs Electron to import, and this lookup is the only
+ * judgement in the dispatch path.
+ */
+export async function runPluginByToolName(
+  plugins: AdamPlugin[],
+  toolName: string,
+  parameters: Record<string, unknown>
+): Promise<string> {
+  const plugin = plugins.find((item) => pluginToolName(item.name) === toolName)
+  if (!plugin) {
+    // A sentence, not a throw: the caller is answering a live conversation, and
+    // an unknown tool is something Adam should be able to say out loud.
+    return `There is no plugin called ${toolName}.`
+  }
+  return runPlugin(plugin, parameters)
+}
+
 /** Startup visibility: nothing runs without a line naming it and where it came from. */
 export function logPluginLoad(result: PluginLoadResult): void {
   for (const plugin of result.plugins) {

@@ -24,7 +24,12 @@ import { FORGET_TOOL, PROPOSE_SHELL_TOOL, REMEMBER_TOOL, ensureClientTool } from
 import { AdamMemory } from './adam-memory'
 import { ProactiveWatcher } from './proactive-watcher'
 import type { AdamPlugin } from './plugin-loader'
-import { loadAdamPlugins, logPluginLoad } from './plugin-loader'
+import {
+  loadAdamPlugins,
+  logPluginLoad,
+  pluginToolName,
+  runPluginByToolName
+} from './plugin-loader'
 import { logToolSync, syncPluginTools } from './elevenlabs-tool-sync'
 import { adamPluginDir } from './shell-tool'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
@@ -221,6 +226,23 @@ function registerHandlers(store: Store, service: JarvisService): void {
   // Why a confirmation instead of Mark LI's silent: true — a remember that fails
   // (bad category, value too long) has to be able to say so, or the model
   // believes it stored something it did not.
+  // Plugin dispatch. The renderer routes any tool name it does not recognise
+  // here, so a new plugin needs no renderer change at all — that per-capability
+  // cost is what Phase 4 exists to remove.
+  ipcMain.removeHandler('jarvis:pluginToolNames')
+  ipcMain.handle('jarvis:pluginToolNames', () =>
+    getLoadedPlugins().map((plugin) => pluginToolName(plugin.name))
+  )
+
+  ipcMain.removeHandler('jarvis:runPlugin')
+  ipcMain.handle('jarvis:runPlugin', (_event, name: unknown, parameters: unknown) =>
+    runPluginByToolName(
+      getLoadedPlugins(),
+      String(name ?? ''),
+      parameters && typeof parameters === 'object' ? (parameters as Record<string, unknown>) : {}
+    )
+  )
+
   ipcMain.removeHandler('jarvis:remember')
   ipcMain.handle('jarvis:remember', (_event, category: unknown, key: unknown, value: unknown) => {
     const result = memory.remember(String(category ?? ''), String(key ?? ''), String(value ?? ''))

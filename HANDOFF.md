@@ -43,7 +43,7 @@ scoped test baseline 221 passing.
 | TASK-ADAM-3.1 proactive engine | **DONE** — committed, gate passed |
 | TASK-ADAM-4.1 plugin loader | **DONE** — committed, gate passed |
 | TASK-ADAM-4.2 ElevenLabs tool sync | **DONE** — committed, gate passed |
-| TASK-ADAM-4.3 generic plugin dispatch | not started |
+| TASK-ADAM-4.3 generic plugin dispatch | **DONE** — committed, gate passed |
 
 ## TASK-ADAM-1.1 — complete
 

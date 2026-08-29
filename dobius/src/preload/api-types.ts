@@ -3195,6 +3195,10 @@ export type PreloadApi = {
     remember: (category: string, key: string, value: string) => Promise<string>
     /** Deletes a remembered fact by key. */
     forget: (key: string) => Promise<string>
+    /** `plugin_<name>` for every plugin loaded from userData/adam-plugins. */
+    pluginToolNames: () => Promise<string[]>
+    /** Runs a plugin tool by its `plugin_<name>`; an unknown name answers in words. */
+    runPluginTool: (name: string, parameters: Record<string, unknown>) => Promise<string>
     /**
      * Proposes a shell command. Read-only runs immediately; anything that writes
      * is queued for a human click and this resolves to a message saying so. The

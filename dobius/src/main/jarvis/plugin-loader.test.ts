@@ -6,7 +6,8 @@ import {
   PLUGIN_TOOL_PREFIX,
   loadAdamPlugins,
   pluginToolName,
-  runPlugin
+  runPlugin,
+  runPluginByToolName
 } from './plugin-loader'
 import { ADAM_PLUGINS_DIR_NAME } from './shell-tool'
 import { resolveEditablePath } from './self-edit'
@@ -168,6 +169,36 @@ describe('runPlugin', () => {
     )
     const { plugins } = await loadAdamPlugins(directory)
     await expect(runPlugin(plugins[0], {})).resolves.toBe('{"count":3}')
+  })
+})
+
+describe('runPluginByToolName — the dispatch path', () => {
+  it('runs the plugin whose tool name matches', async () => {
+    const directory = pluginDir()
+    writePlugin(directory, 'weather.mjs', GOOD_PLUGIN)
+    const { plugins } = await loadAdamPlugins(directory)
+    await expect(runPluginByToolName(plugins, 'plugin_weather', { city: 'Perth' })).resolves.toBe(
+      'It is sunny in Perth.'
+    )
+  })
+
+  it('answers in words for an unknown tool name rather than throwing', async () => {
+    // The renderer routes ANY unrecognised name here, so this is a normal case,
+    // not an exceptional one — and a rejection mid-conversation is silence.
+    await expect(runPluginByToolName([], 'plugin_ghost', {})).resolves.toBe(
+      'There is no plugin called plugin_ghost.'
+    )
+  })
+
+  it('does not match a plugin by its bare name, only by its tool name', async () => {
+    const directory = pluginDir()
+    writePlugin(directory, 'weather.mjs', GOOD_PLUGIN)
+    const { plugins } = await loadAdamPlugins(directory)
+    // `weather` is the plugin; `plugin_weather` is the tool. Matching the bare
+    // name would let a foreign tool called `weather` reach plugin code.
+    await expect(runPluginByToolName(plugins, 'weather', {})).resolves.toContain(
+      'There is no plugin called weather.'
+    )
   })
 })
 

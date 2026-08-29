@@ -82,10 +82,14 @@ export function useVoiceAgent(): VoiceAgent {
       // user's most recent terminal, which keeps every call from opening the
       // same canned way.
       const opening = await window.api.jarvis.agentOpening().catch(() => '')
+      // Explicit entries for the plugins main actually loaded. The map also
+      // falls back for any name not listed, so a sync that ran after this
+      // fetch still dispatches — this is the fast path, not the only one.
+      const pluginToolNames = await window.api.jarvis.pluginToolNames().catch(() => [])
       conversationRef.current = await Conversation.startSession({
         signedUrl: signed.url,
         ...(opening ? { dynamicVariables: { opening } } : {}),
-        clientTools: createVoiceAgentClientTools(),
+        clientTools: createVoiceAgentClientTools(pluginToolNames),
         onModeChange: ({ mode }) => {
           setState(mode === 'speaking' ? 'speaking' : 'listening')
           touchIdle()

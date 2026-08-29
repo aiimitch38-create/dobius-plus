@@ -4443,6 +4443,9 @@ const api = {
     remember: (category: string, key: string, value: string): Promise<string> =>
       ipcRenderer.invoke('jarvis:remember', category, key, value),
     forget: (key: string): Promise<string> => ipcRenderer.invoke('jarvis:forget', key),
+    pluginToolNames: (): Promise<string[]> => ipcRenderer.invoke('jarvis:pluginToolNames'),
+    runPluginTool: (name: string, parameters: Record<string, unknown>): Promise<string> =>
+      ipcRenderer.invoke('jarvis:runPlugin', name, parameters),
     proposeShell: (command: string): Promise<string> =>
       ipcRenderer.invoke('jarvis:proposeShell', command),
     runApprovedShell: (
