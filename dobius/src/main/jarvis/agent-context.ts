@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { classifyOutcome } from './proactive-watcher'
 import { readRecentTerminalActivity } from './terminal-history-context'
 
 const DOBIUS_CLI = '/usr/local/bin/dobius'
@@ -224,8 +225,6 @@ export function composeAgentContext(memoryBlock: string, machineState: string): 
   return `${memory}\n\n${machineState.slice(0, remaining)}`
 }
 
-const GREETINGS = ['Hey.', 'Yeah?', 'Go ahead.', 'Listening.', "What's up.", 'Right here.']
-
 function describeAge(ms: number): string {
   const minutes = Math.round(ms / 60_000)
   if (minutes < 1) {
@@ -241,21 +240,71 @@ function describeAge(ms: number): string {
 /**
  * The line the agent opens a call with.
  *
- * Why generated per call: a fixed first_message makes every conversation start
- * identically, which reads as canned. Grounding the opening in the terminal the
- * user actually touched last means it changes whenever their work changes, and
- * proves up front that this thing can see the machine.
+ * Why not one template with a rotating first word: that was the first version,
+ * and every call read as `<greeting>. Last thing I saw was <project>, just
+ * now.` Only the first two words moved, and "just now" is true almost always,
+ * so six variants collapsed into one sentence the user heard every single time.
+ *
+ * What varies here is the SHAPE, chosen by which facts are actually true —
+ * something broke, something passed, several terminals are live, the machine is
+ * idle. Different situations produce different KINDS of sentence, which is what
+ * makes it sound like someone looked before speaking.
  */
-export function buildOpeningLine(
-  historyRoot: string,
-  now: number = Date.now(),
-  greetings: string[] = GREETINGS
-): string {
-  const greeting = greetings[Math.floor(now / 60_000) % greetings.length]
-  const [mostRecent] = readRecentTerminalActivity(historyRoot, 1)
+const OPENERS_FAILED = [
+  (p: string, age: string) => `Something broke in ${p} ${age}.`,
+  (p: string, age: string) => `${p} went red ${age}.`,
+  (p: string, age: string) => `Bad news — ${p} failed ${age}.`
+]
+
+const OPENERS_PASSED = [
+  (p: string, age: string) => `${p} came back clean ${age}.`,
+  (p: string, age: string) => `${p} finished green ${age}.`,
+  (p: string, age: string) => `That run in ${p} passed ${age}.`
+]
+
+const OPENERS_BUSY = [
+  (p: string, n: number) => `${n} terminals going. ${p} is the loud one.`,
+  (p: string, n: number) => `You've got ${n} running — ${p} most recently.`,
+  (p: string, n: number) => `${n} live terminals. Last touch was ${p}.`
+]
+
+const OPENERS_RECENT = [
+  (p: string, age: string) => `You were in ${p} ${age}.`,
+  (p: string, age: string) => `${p}, ${age}. What do you need?`,
+  (p: string, age: string) => `Still on ${p} — last move ${age}.`
+]
+
+const OPENERS_IDLE = ['Quiet in here.', 'Nothing running.', "Machine's idle.", 'All quiet.']
+
+/** Spreads choices across the fact set rather than the clock. */
+function pick<T>(list: T[], seed: number): T {
+  return list[Math.abs(seed) % list.length]
+}
+
+export function buildOpeningLine(historyRoot: string, now: number = Date.now()): string {
+  const activities = readRecentTerminalActivity(historyRoot, 5)
+  const [mostRecent] = activities
+  // Seeded on real state, so the wording only repeats when the situation does.
+  const seed = Math.floor(now / 60_000) + activities.length
+
   if (!mostRecent) {
-    return `${greeting} Nothing running that I can see.`
+    return pick(OPENERS_IDLE, seed)
   }
+
   const project = mostRecent.worktreePath.split('/').filter(Boolean).pop() ?? 'your project'
-  return `${greeting} Last thing I saw was ${project}, ${describeAge(now - mostRecent.lastActiveAt)}.`
+  const age = describeAge(now - mostRecent.lastActiveAt)
+  const outcome = classifyOutcome(mostRecent.recentOutput)
+
+  if (outcome === 'failed') {
+    return pick(OPENERS_FAILED, seed)(project, age)
+  }
+  if (outcome === 'passed') {
+    return pick(OPENERS_PASSED, seed)(project, age)
+  }
+
+  const live = activities.filter((a) => now - a.lastActiveAt < 10 * 60_000).length
+  if (live > 1) {
+    return pick(OPENERS_BUSY, seed)(project, live)
+  }
+  return pick(OPENERS_RECENT, seed)(project, age)
 }
