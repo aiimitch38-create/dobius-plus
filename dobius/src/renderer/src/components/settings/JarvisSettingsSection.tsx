@@ -13,6 +13,20 @@ type JarvisSettingsSectionProps = {
   onUpdateVoiceSettings: (updates: Partial<VoiceSettings>) => void
 }
 
+/**
+ * Keeps the quiet-hours inputs inside 0–23.
+ *
+ * A number input still yields '' when cleared and accepts pasted junk, and an
+ * out-of-range hour would silently disable quiet hours rather than error.
+ */
+function clampHour(raw: string): number {
+  const parsed = Number.parseInt(raw, 10)
+  if (Number.isNaN(parsed)) {
+    return 0
+  }
+  return Math.min(23, Math.max(0, parsed))
+}
+
 // Why plain literals, not translate(): the localization catalog gate requires
 // synced keys per string; this section ships experimental copy without adding
 // catalog entries (same convention as the floating-phone components).
@@ -147,6 +161,71 @@ export function JarvisSettingsSection({
           />
         </button>
       </div>
+      <div className="flex items-center justify-between gap-4 py-2">
+        <div className="space-y-0.5">
+          <Label>Speak up when a job finishes</Label>
+          <p className="text-xs text-muted-foreground">
+            Adam says one line when a build or test run in a terminal finishes. He stays quiet
+            unless the output actually says it finished, waits 30 seconds, and says nothing more
+            for 5 minutes afterwards.
+          </p>
+        </div>
+        <button
+          role="switch"
+          aria-checked={voiceSettings.jarvisProactive === true}
+          aria-label="Speak up when a job finishes"
+          disabled={!voiceSettings.jarvisEnabled}
+          onClick={() =>
+            onUpdateVoiceSettings({ jarvisProactive: !(voiceSettings.jarvisProactive === true) })
+          }
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors ${
+            voiceSettings.jarvisProactive ? 'bg-foreground' : 'bg-muted-foreground/30'
+          } ${!voiceSettings.jarvisEnabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+        >
+          <span
+            className={`pointer-events-none block size-3.5 rounded-full bg-background shadow-sm transition-transform ${
+              voiceSettings.jarvisProactive ? 'translate-x-4' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {voiceSettings.jarvisProactive === true ? (
+        <div className="flex items-center justify-between gap-4 py-2 pl-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="jarvis-quiet-from">Stay quiet between</Label>
+            <p className="text-xs text-muted-foreground">
+              Hours of the day, 0–23. Wraps past midnight, so 22 to 8 means overnight.
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Input
+              id="jarvis-quiet-from"
+              type="number"
+              min={0}
+              max={23}
+              className="w-16"
+              value={voiceSettings.jarvisProactiveQuietFrom ?? 22}
+              onChange={(event) =>
+                onUpdateVoiceSettings({ jarvisProactiveQuietFrom: clampHour(event.target.value) })
+              }
+            />
+            <span className="text-xs text-muted-foreground">and</span>
+            <Input
+              id="jarvis-quiet-to"
+              type="number"
+              min={0}
+              max={23}
+              className="w-16"
+              value={voiceSettings.jarvisProactiveQuietTo ?? 8}
+              onChange={(event) =>
+                onUpdateVoiceSettings({ jarvisProactiveQuietTo: clampHour(event.target.value) })
+              }
+            />
+          </div>
+        </div>
+      ) : null}
+
       <div className="space-y-1.5 py-2">
         <Label htmlFor="jarvis-elevenlabs-key">ElevenLabs voice (optional)</Label>
         <p className="text-xs text-muted-foreground">

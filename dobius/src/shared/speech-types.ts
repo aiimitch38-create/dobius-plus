@@ -84,6 +84,18 @@ export type VoiceSettings = {
   elevenlabsModelId?: string
   /** ElevenLabs Agents id; set enables the live conversation instead of turns. */
   elevenlabsAgentId?: string
+  /**
+   * When on, ADAM speaks unprompted after a terminal job finishes.
+   *
+   * Default OFF, deliberately: an assistant that talks at you unprompted is
+   * intolerable if it is wrong or too frequent, so this is opt-in and gated by
+   * quiet hours below.
+   */
+  jarvisProactive?: boolean
+  /** Local hour (0–23) proactive speech stops. Defaults to 22. */
+  jarvisProactiveQuietFrom?: number
+  /** Local hour (0–23) proactive speech resumes. Defaults to 8. */
+  jarvisProactiveQuietTo?: number
 }
 
 /** HUD-facing conversation phase for the Jarvis voice loop. */

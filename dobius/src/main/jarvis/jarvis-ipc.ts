@@ -22,6 +22,7 @@ import {
 import { ShellCommandStore, describeForAgent } from './shell-command-store'
 import { FORGET_TOOL, PROPOSE_SHELL_TOOL, REMEMBER_TOOL, ensureClientTool } from './elevenlabs-tools'
 import { AdamMemory } from './adam-memory'
+import { ProactiveWatcher } from './proactive-watcher'
 import { adamPluginDir } from './shell-tool'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
 import {
@@ -78,6 +79,34 @@ export function registerJarvisIpcHandlers(store: Store): void {
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)
   void ensureAgentToolsRegistered(store)
+  startProactiveWatcher(store, service)
+}
+
+/**
+ * Watches for finished terminal jobs and lets ADAM mention them unprompted.
+ *
+ * Always started, never conditionally: it re-reads the setting every tick, so
+ * the toggle takes effect without an event subscription and without restarting
+ * the app. It says nothing at all while the setting is off, which is the
+ * default.
+ *
+ * Speaks through `service.speak` — plain TTS, billed per character — rather than
+ * opening an agent conversation, which bills per minute for a one-line remark.
+ */
+function startProactiveWatcher(store: Store, service: JarvisService): void {
+  const watcher = new ProactiveWatcher({
+    historyRoot: join(app.getPath('userData'), 'terminal-history'),
+    readSettings: () => {
+      const voice = store.getSettings().voice
+      return {
+        enabled: voice?.jarvisProactive === true,
+        quietFrom: voice?.jarvisProactiveQuietFrom,
+        quietTo: voice?.jarvisProactiveQuietTo
+      }
+    },
+    speak: (text) => service.speak(text)
+  })
+  watcher.start()
 }
 
 /**

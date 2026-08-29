@@ -40,7 +40,7 @@ scoped test baseline 221 passing.
 | TASK-ADAM-1.2 shell execution + window approval | **DONE** — committed, gate passed |
 | TASK-ADAM-1.3 shell IPC + tool registration | **DONE** — committed, gate passed |
 | TASK-ADAM-2.1 model-writable memory | **DONE** — committed, gate passed |
-| TASK-ADAM-3.1 proactive engine | not started |
+| TASK-ADAM-3.1 proactive engine | **DONE** — committed, gate passed |
 | TASK-ADAM-4.1 plugin loader | not started |
 | TASK-ADAM-4.2 ElevenLabs tool sync | not started |
 | TASK-ADAM-4.3 generic plugin dispatch | not started |
@@ -137,9 +137,33 @@ approve its own write — `apply_code_change` is exposed as a client tool at
 window's button at `SelfEditView.tsx:105`. Tolerable for a reversible on-screen
 diff with a backup; the shell tool must NOT copy it (invariant A).
 
-## Tasks 1.1 – 2.1 are committed and independently verified
+## TASK-ADAM-3.1 — complete
 
-Do not redo them. `TASK-ADAM-3.1` (proactive engine) is the next unstarted task.
+Scoped test count is now **382 passing**, still exactly one failing file. **Use
+382 as the floor from here.**
+
+`proactive-watcher.ts` splits into a pure `decideProactive(input)` holding all
+four gates and a thin `ProactiveWatcher` shell that polls every 15s. Two things
+a later task must not undo:
+
+1. **`classifyOutcome` strips paths before scanning for markers.** Without it,
+   `error` matches inside a FILENAME and a passing run is announced as a
+   failure — measured on a green vitest tail and a clean vite build. Word
+   boundaries do not help; `-` is already one.
+2. **The watcher primes on its first tick.** Otherwise opening the app announces
+   a job that finished minutes before launch.
+
+Settings are `jarvisProactive` (default OFF), `jarvisProactiveQuietFrom` /
+`jarvisProactiveQuietTo`. All optional, read with `=== true`, so no
+config-manager change is needed.
+
+## Tasks 1.1 – 3.1 are committed and independently verified
+
+Do not redo them. `TASK-ADAM-4.1` (plugin loader) is the next unstarted task,
+and it owns **invariant B** — the plugin directory must be added to
+`FORBIDDEN_SEGMENTS` in `self-edit.ts` and to the shell tool's deny rules, with
+a test in each. Import `adamPluginDir()` from `shell-tool.ts`; do not re-join
+the path.
 
 Note for the record: the supervisor was killed mid-2.1 at 07:29 by an external
 process reaper, not by a failure of the work. The task was resumed from disk and
