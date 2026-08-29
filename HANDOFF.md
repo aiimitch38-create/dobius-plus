@@ -36,7 +36,7 @@ scoped test baseline 221 passing.
 
 | Task | State |
 |---|---|
-| TASK-ADAM-1.1 shell classification | **implementation on disk, UNCOMMITTED** — see below |
+| TASK-ADAM-1.1 shell classification | **DONE** — committed, gate passed |
 | TASK-ADAM-1.2 shell execution + window approval | not started |
 | TASK-ADAM-1.3 shell IPC + tool registration | not started |
 | TASK-ADAM-2.1 model-writable memory | not started |
@@ -45,24 +45,29 @@ scoped test baseline 221 passing.
 | TASK-ADAM-4.2 ElevenLabs tool sync | not started |
 | TASK-ADAM-4.3 generic plugin dispatch | not started |
 
-## Resuming TASK-ADAM-1.1 — do not start it from scratch
+## TASK-ADAM-1.1 — complete
 
-A first run was stopped early (the gate script was broken; replaced in
-`98c92296`). It had already produced good work, which is on disk UNCOMMITTED:
+Committed with its plan (`plans/TASK-ADAM-1.1.md`) and review
+(`plans/TASK-ADAM-1.1-REVIEW.md`). `bash scripts/verify-adam-task.sh 1.1` exits 0.
 
-- `plans/TASK-ADAM-1.1.md` — the plan. It correctly namespaces to `ADAM-` and
-  found a hole the spec missed: a binary containing `/` must not inherit an
-  allowlist entry by basename, or `/tmp/evil/ls` passes as `ls`.
-- `dobius/src/main/jarvis/shell-tool.ts` (212 lines)
-- `dobius/src/main/jarvis/shell-tool.test.ts` (200 lines)
+Scoped test count is now **283 passing** (221 baseline + 62 shell-tool tests),
+still exactly one failing file (`attach-main-window-services.test.ts`). Use 283
+as the floor from here.
 
-Verified by hand at the time of the stop: **61 tests passing, oxlint clean,
-both tsgo configs clean.**
+`classifyShellCommand(argv, options)` in `dobius/src/main/jarvis/shell-tool.ts`
+is the gate TASK-ADAM-1.2 wires to execution. It is pure — it does not run
+anything. `ClassifyOptions` takes `pluginDir` (invariant B) and an injectable
+`realpath`.
 
-So TASK-ADAM-1.1 needs only its remaining cycle steps: REVIEW (re-read both
-files, write `plans/TASK-ADAM-1.1-REVIEW.md`, fix at least one thing), COMMIT,
-GATE (`bash scripts/verify-adam-task.sh 1.1`), LOG. Read the existing files
-first — do not rewrite them.
+**Carried into TASK-ADAM-1.3:** the classifier does not guard against non-string
+argv elements on purpose. `jarvis:proposeShell` MUST coerce every element with
+`String(...)` at the IPC boundary, the way `jarvis:proposeSelfEdit` already does.
+
+**Noted, out of scope (do not fix):** the existing self-edit flow lets the model
+approve its own write — `apply_code_change` is exposed as a client tool at
+`use-voice-agent.ts:115` and reaches the same `jarvis:applySelfEdit` IPC as the
+window's button at `SelfEditView.tsx:105`. Tolerable for a reversible on-screen
+diff with a backup; the shell tool must NOT copy it (invariant A).
 
 ## For Carson, when this finishes
 

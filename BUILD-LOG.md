@@ -31,3 +31,13 @@
 - scripts/run-comms-gate.sh: quits app (daemon survives), runs gate on 3300, relaunches; hardens with installer-proven exact-name kill + holder-naming aborts.
 - Gate: 21/21 exit 0 (19 vendor-seam + 2 method-seam). typecheck:node exit 0.
 - Lessons: capture runs AFTER shapeCheck (set ctx keys in args builders); post-merge 3-dot diffs only show what the target gained; verify/ dir is excluded from tsconfig.node.json so the GATE is its only typecheck — type errors there surface only at run time.
+
+## 2026-08-29 — TASK-ADAM-1.1: shell tool classification and gate (feat/adam-voice-control)
+- New `dobius/src/main/jarvis/shell-tool.ts` — pure classification, no execution. `classifyShellCommand(argv, options)` returns `read-only` | `writing` | `denied`.
+- Execution model is `execFile` + argv (the `runCli` shape at `agent-context.ts:78`), never a shell. So `>`, `|`, `;`, `&&`, `$(…)` arrive as literal arguments and the whole class of redirection parsing was DELETED rather than defended against. Two tests prove the inertness by side effect: the file `echo hello > /tmp/…` would create does not exist after a real `execFile`, and `; touch` / `&& touch` chain nothing.
+- 19-binary read-only allowlist. `osascript` deliberately NOT read-only — "get only" is not decidable from an argv and `osascript -e 'do shell script … with administrator privileges'` is a root escalation, so it is unconditionally `writing`.
+- Beyond spec: a binary containing `/` never inherits an allowlist entry by basename, or `/tmp/evil/ls` would pass as `ls`. Denied binaries are still denied by path (`/usr/bin/sudo`).
+- Argument scan forces `writing` on allowlisted binaries: find `-delete/-exec/-execdir/-ok/-okdir/-fprint*/-fls`, any `xargs`, any output-file flag. find's `-o` stays read-only — there it is the documented OR operator.
+- REVIEW found and fixed a real invariant-B hole: plugin-directory containment was purely lexical, so a symlink pointing at the plugin folder (`cp x.mjs /tmp/notes/x.mjs`) read as harmless in the approval window and still dropped unsigned main-process code into the folder. Now realpaths the token's PARENT (the token is usually a file that does not exist yet) plus `pluginDir`, reusing `resolveEditablePath`'s injectable-`realpath` shape from `self-edit.ts:88`. Test uses a real `symlinkSync` and was verified to FAIL against the old logic before it passed against the fix.
+- Carried forward to TASK-ADAM-1.3: argv elements must be coerced with `String(...)` at the IPC boundary — the classifier deliberately does not guard non-string tokens.
+- Verified: 62 shell-tool tests; scoped gate 283 passing (221 baseline + 62), exactly one failing file (`attach-main-window-services.test.ts`, pre-existing). Both tsgo configs exit 0. oxlint clean.
