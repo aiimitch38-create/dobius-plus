@@ -225,7 +225,62 @@ Note for the record: the supervisor was killed mid-2.1 at 07:29 by an external
 process reaper, not by a failure of the work. The task was resumed from disk and
 carried through VERIFY → REVIEW → COMMIT → GATE → LOG.
 
+## All eight tasks are complete
+
+| | |
+|---|---|
+| Scoped tests | **430 passing**, up from the 221 baseline |
+| Failing files | exactly **1** — `attach-main-window-services.test.ts`, pre-existing on the base commit |
+| Typechecks | `tsgo --noEmit` exit 0 on both configs, no suppressions added |
+| Lint | `oxlint` clean on every touched file |
+| Build | `build:relay` + `build:cli` + `build:electron-vite` + `build:web` exit 0 |
+| Tree | `git status --porcelain` empty |
+
+**Invariant A** (the model can never authorise shell execution) is enforced
+three structural ways and tested across the whole renderer tool map, including
+through 4.3's new proxy fallback — a path `Object.entries` cannot reach, so it
+has its own test.
+
+**Invariant B** (Adam may never write into the plugin directory) is closed on
+both write paths and tested on each: `shell-tool.test.ts` (five tests, from
+1.1) and `self-edit.test.ts` + `plugin-loader.test.ts` (from 4.1). Both were
+verified falsifiable — removing `ADAM_PLUGINS_DIR_NAME` from
+`FORBIDDEN_SEGMENTS` fails them.
+
+## What Carson should watch on first launch
+
+Nothing in this build could be exercised end to end here: every feature needs a
+live microphone and a billed ElevenLabs call, so unit tests cannot prove a
+channel or tool name actually fires. Each new name was instead greped out of the
+built bundle. Worth a look in the main-process log on first launch:
+
+- `[jarvis] tool propose_shell id=… created=… attached=…` (also `remember`,
+  `forget`) — or a `could not register …` warning.
+- `[jarvis] plugin <name> loaded from <path>` for anything in
+  `userData/adam-plugins`, and `[jarvis] plugin tools synced — created …`.
+- **The proactive engine is OFF by default.** Settings → Voice → "Speak up when
+  a job finishes", with quiet hours defaulting to 22 → 8.
+
+Two things were implemented to the documented API shape and tested against a
+fake `fetch`, with **no billed calls made against the account**: the tool
+attach/PATCH in 1.3, and `PATCH`/`DELETE /tools/{id}` in 4.2. The attach
+round-trips the existing prompt block so a replace-semantics API cannot drop the
+system prompt, but the first run is worth watching.
+
+## Noted, out of scope, deliberately not fixed
+
+The existing self-edit flow lets the model approve its own write —
+`apply_code_change` is exposed as a client tool at `use-voice-agent.ts` and
+reaches the same `jarvis:applySelfEdit` IPC as the review window's button.
+Tolerable for a reversible on-screen diff with a backup; the shell tool
+deliberately does NOT copy it (invariant A). Fixing self-edit was out of scope
+for this build.
+
 ## For Carson, when this finishes
 
 Install manually, THEN grant Accessibility + Screen Recording to
+"Dobius+ Computer Use". Installing after granting voids the grant.
+
+BUILD COMPLETE
+Carson must: install manually, THEN grant Accessibility + Screen Recording to
 "Dobius+ Computer Use". Installing after granting voids the grant.
