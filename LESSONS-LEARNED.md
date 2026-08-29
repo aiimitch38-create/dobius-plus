@@ -240,3 +240,31 @@ then `grep -c`, then read. Never pipe a verification command into `head`/`tail`.
 - **ALSO SILENTLY MISSING** without the config: the `@` and `@renderer` path aliases, and `define: DOBIUS_FEATURE_WALL_ENABLED`. A test needing any of those fails under the bare command and passes under the real one.
 - **FIX**: always `npx vitest run --config config/vitest.config.ts <paths>`. Applied to `scripts/verify-adam-task.sh` and documented in `AUTONOMOUS-BUILD.md`. Verified: bare → 1 failure in 6 runs; with config → 4/4 clean at 295 passing with exactly one failing file. The passing COUNT is identical either way, so no baseline moved.
 - **GENERAL RULE**: before treating a newly-failing test as your regression, (a) get the actual error text rather than reasoning from which files failed, and (b) check it against a clean tree (`git stash -u`, N runs of the SAME command the gate uses). A narrower command does not reproduce worker sharding. Here the error text was the whole answer and the first two structural hypotheses were both wrong.
+
+## 2026-08-29 — patch anchor missed at a file's END; the skill that prevents it already existed
+
+- **MISTAKE**: wrote a python-heredoc patch for `voice-agent-client-tools.ts`
+  whose anchor was the file's last two lines, assumed to be `  }\n}`. The file
+  actually ended `  } as VoiceAgentClientTools\n}`. `assert old_tail in s` threw
+  and the script did nothing.
+- **THE RULE ALREADY EXISTED**: `~/.claude/skills/learned-dobius-commit-hygiene`
+  says python-heredoc patching is "only after `grep -n` confirming every anchor
+  verbatim", and its own description triggers on "when a python-heredoc patch
+  assertion misses its anchor". This is the second time in this repo a recorded
+  skill would have prevented the failure (see 2026-08-18, zsh nomatch). The
+  recurring meta-failure is not the anchor — it is not checking the skill list
+  before improvising a mechanical edit.
+- **THE NEW DETAIL, and the only part worth adding**: I *had* read that file —
+  lines 1–30. The anchor I guessed was at the **other end**. Reading a file's
+  head licenses nothing about its tail. Trailing type assertions (`as X`),
+  `satisfies` clauses and `export default` wrappers all live where nobody looks.
+- **WHY IT COST ALMOST NOTHING**: every one of these scripts asserts before
+  `open(p,'w')`, so a missed anchor is a no-op, not a corrupted file. Keep that
+  shape — it is what turns a wrong guess into a retry instead of a recovery.
+- **CHEAPEST REMEDY**: `tail -20 <file>` before writing any patch anchored at the
+  end, the same way `grep -n` is already required for anchors in the middle.
+- **NOT A LESSON**: the turn's other Bash failure was `npx oxlint` exiting 1 on a
+  real `no-unsafe-optional-chaining` finding, inside a chained
+  `patch && typecheck && lint` command. That is the gate doing its job. Chaining
+  a linter into a compound command means a clean *finding* reads as a command
+  *failure* — worth knowing when reading these logs, not worth a rule.
