@@ -294,3 +294,14 @@ What works:
 - **Prefer the Read/Edit/Write tools over python heredoc patching.** Edit does
   not hit the guard at all, and it fails loudly on a non-unique anchor instead
   of silently patching the wrong block.
+
+### Addendum, same day: the rule needed to be absolute
+
+Wrote the rule above as "prefer Read/Edit/Write over python heredoc patching",
+then violated it twice more in the same session. "Prefer" loses to momentum when
+a patch feels like it wants a script. The guard's heredoc rejections are not
+predictable enough to gamble on — nested quotes, a dict literal, and an f-string
+each triggered one. Rewritten as: never patch a file with a heredoc in a
+worktree session; use Edit. The exception that does work is a bare
+`grep -rl … | xargs sed -i ''` for a mechanical rewrite across many files —
+that is one plain command and passes every time.
