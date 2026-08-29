@@ -1,5 +1,11 @@
 # Build plan: Adam — control, plugins, proactive, memory
 
+> **REVISED 2026-08-29 after a pressure test.** Several decisions below were
+> found defective and are corrected in `AUTONOMOUS-BUILD.md`. Where the two
+> documents disagree, **AUTONOMOUS-BUILD.md wins.** The corrections are marked
+> inline as `CORRECTION:`. Read this file for the *why*; take the *what* from
+> the build file.
+
 Four features, one rebuild at the end. Ordered so each phase is independently
 testable and the riskiest thing (shell execution) reuses a gate that already
 exists and is tested.
@@ -33,6 +39,22 @@ operations. Mark LI spends ~2,700 lines on these; on macOS each is a one-liner.
 - Everything else = "writing" → reuse `SelfEditStore`'s window pattern with a
   command payload instead of a diff.
 - Timeout 30s, output capped at 4KB, no shell interpolation of user text.
+
+**CORRECTION (approval is not actually human).** The self-edit flow this reuses
+does not have the property claimed here. `apply_code_change` is exposed as a
+client tool (`use-voice-agent.ts:115`) alongside the window's own button
+(`SelfEditView.tsx:105`), so the model can approve its own write. Acceptable for
+a reversible diff; not for a shell command. The shell tool must expose NO
+approve tool — execution is reachable only from the window's button.
+
+**CORRECTION (classify argv, not a shell string).** Use `execFile` with an argv
+array as `runCli` already does (`agent-context.ts:78`). With no shell, `>`, `|`,
+`;` and `$(...)` are inert literals, and the whole category of redirection
+parsing disappears rather than needing defences.
+
+**CORRECTION (`osascript` is not read-only).** "get only" is not decidable from
+the argv, and `osascript -e 'do shell script ... with administrator privileges'`
+escalates to root. It belongs in the writing bucket unconditionally.
 
 **Files:** `src/main/jarvis/shell-tool.ts` (new), `self-edit-window.ts` (reuse,
 add a command payload variant), `jarvis-ipc.ts`, `use-voice-agent.ts`,
@@ -88,6 +110,12 @@ from time-of-day because it has no signals; Dobius+ has real ones.
 **Design:**
 - Watch `terminal-history/*/output.log` (already the source for recent-activity
   context). A terminal that was active and goes quiet for 30s is a finished job.
+
+**CORRECTION (silence is not completion).** An agent waiting at a permission
+prompt is quiet; an interactive REPL is quiet; at app start every terminal idle
+since yesterday is quiet. Require a completion marker in the tail IN ADDITION to
+the silence, add a 10-minute staleness ceiling, and make the cooldown global so
+four builds finishing together produce one message rather than four.
 - Scan its tail for outcome markers: `error, failed, exit code, ✗, FAIL,
   passed, ✓, built in, Done`.
 - Gates copied from Mark LI (`actions/proactive.py`): minimum silence before
@@ -142,11 +170,16 @@ about fifteen times over.
 **Test:** loader validation (good file, bad name, duplicate, throwing plugin),
 and sync diffing (create, update, delete) against a fake API.
 
-**Open question for Carson:** plugins are unsigned code executing in the main
-process. Folder-in-userData means no rebuild but anything that writes there can
-run code as the app. Alternative is plugins in the repo, which is safe but needs
-a rebuild. Recommend starting with the userData folder and a startup log line
-naming every plugin loaded, so nothing runs silently.
+**RESOLVED (was an open question).** Plugins are unsigned code executing in the
+main process, so the userData folder is only safe if Adam cannot write to it.
+Phase 1 gives him a shell tool with an approval window — which means one approved
+innocuous-looking write into the plugin folder becomes permanent, unapproved code
+execution on every launch. Neither phase is dangerous alone; together they are a
+privilege-escalation path.
+
+Keep the userData folder, and add it to the forbidden paths of both the self-edit
+resolver and the shell tool, with a test on each. Carson installs plugins by hand.
+Keep the startup log line naming every plugin loaded.
 
 **Estimate:** ~350 lines, same build.
 
@@ -165,9 +198,19 @@ naming every plugin loaded, so nothing runs silently.
 
 ## Done bar
 
-- `pnpm typecheck` clean for main and renderer (excluding the pre-existing
-  computer-use-lane errors in `communications/providers`).
+**CORRECTION — the original bar below was unachievable and is superseded by the
+one in `AUTONOMOUS-BUILD.md`.** Two errors: the repo has 566 pre-existing test
+failures across 542 files on this branch's base commit, so "all green" over a
+broad scope cannot be reached; and "nothing committed" is stale — the work is now
+on a clean worktree where every task commits.
+
+Use the scoped gate instead: `npx vitest run src/main/jarvis src/main/window
+src/renderer/src/components/jarvis` → 221 passing on the clean branch plus new
+tests, with exactly one expected failing file
+(`attach-main-window-services.test.ts`).
+
+- `pnpm typecheck` clean for main and renderer.
 - `oxlint` clean on every touched file.
-- All new tests green; existing 88 voice tests still green.
-- Installed asar inode matches the running process.
-- Nothing committed — the tree still carries another lane's work.
+- Every new IPC channel and tool name verified present in the built bundle.
+- Installed asar inode matches the running process (Carson's step, after the
+  single manual install).
