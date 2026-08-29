@@ -38,7 +38,7 @@ function field(model, kind) {
   return model.fields.find((candidate) => candidate.kind === kind);
 }
 
-test("Buzz Agent exposes provider, model, and Buzz-owned effort", () => {
+test("Dobius Agent exposes provider, model, and Dobius-owned effort", () => {
   const model = deriveAgentConfigFieldModel({
     config,
     runtime: runtime("buzz-agent", {

@@ -1,7 +1,7 @@
 import { useCommunityOnboarding } from "@comms/features/onboarding/communityOnboarding";
 import { useSystemColorScheme } from "@comms/shared/theme/useSystemColorScheme";
 import { Button } from "@comms/shared/ui/button";
-import { FlappingBee } from "@comms/shared/ui/buzz-logo/FlappingBee";
+import { LoadingMark } from "@comms/shared/ui/dobius-logo/LoadingMark";
 import { StartupWindowDragRegion } from "@comms/shared/ui/StartupWindowDragRegion";
 
 /**
@@ -23,7 +23,7 @@ export function PendingInviteGate() {
     >
       <StartupWindowDragRegion />
       <div className="relative flex w-full max-w-[500px] flex-col items-center text-center">
-        <FlappingBee className="h-auto w-24" />
+        <LoadingMark className="h-auto w-24" />
         <h1 className="mt-6 text-3xl font-semibold tracking-tight">
           Opening community link
         </h1>

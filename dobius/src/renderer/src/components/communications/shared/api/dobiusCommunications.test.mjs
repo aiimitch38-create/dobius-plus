@@ -97,7 +97,7 @@ test("counts direct and named collections without guessing object size", () => {
   assert.equal(collectionSize({ unrelated: [] }, ["agents"]), 0);
 });
 
-test("projects only real Dobius agents and their run state into Buzz records", async () => {
+test("projects only real Dobius agents and their run state into Dobius records", async () => {
   const storage = new Map();
   globalThis.window = {
     localStorage: {
@@ -134,7 +134,7 @@ test("projects only real Dobius agents and their run state into Buzz records", a
   assert.match(agent.pubkey, /^[a-f0-9]{64}$/);
 });
 
-test("maps Buzz managed-agent start and stop onto Dobius on-demand lifecycle", async () => {
+test("maps Dobius managed-agent start and stop onto Dobius on-demand lifecycle", async () => {
   const identity = {
     privateKey: "16".repeat(32),
     pubkey: "17".repeat(32),
@@ -172,7 +172,7 @@ test("maps Buzz managed-agent start and stop onto Dobius on-demand lifecycle", a
   assert.equal(stopped.result.status, "stopped");
 });
 
-test("projects Dobius agent definitions as Buzz personas", async () => {
+test("projects Dobius agent definitions as Dobius personas", async () => {
   globalThis.window = {
     dobiusCommunications: {
       invoke: async (command) => ({
@@ -222,7 +222,7 @@ test("blocks upstream persona and team fixtures in the Dobius embed", async () =
   });
 });
 
-test("routes Buzz persona creation into the real Dobius agent store", async () => {
+test("routes Dobius persona creation into the real Dobius agent store", async () => {
   const calls = [];
   globalThis.window = {
     dobiusCommunications: {
@@ -432,7 +432,7 @@ test("allows an empty user query for the DM picker initial page", async () => {
   assert.deepEqual(submittedFilter, { kinds: [0], limit: 8, page: 1 });
 });
 
-test("opens a real relay DM and returns the channel shape expected by Buzz", async () => {
+test("opens a real relay DM and returns the channel shape expected by Dobius", async () => {
   const identity = {
     privateKey: "07".repeat(32),
     pubkey: "08".repeat(32),

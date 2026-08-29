@@ -1,8 +1,8 @@
 import { getCanvas, setCanvas } from "@comms/shared/api/tauri";
 
-export const WELCOME_CANVAS_CONTENT = `# Welcome to Buzz
+export const WELCOME_CANVAS_CONTENT = `# Welcome to Dobius
 
-This private channel is your home base for getting oriented. Fizz, Honey, and Bumble can help you learn the app, troubleshoot setup, and work through something you are building.
+This private channel is your home base for getting oriented. Iris, Atlas, and Sage can help you learn the app, troubleshoot setup, and work through something you are building.
 
 ## Work with your agents
 
@@ -16,7 +16,7 @@ Bring the team something you are building, or give them a quick challenge to see
 
 ## Get help
 
-Ask the team a question here, or read the [Buzz user guide](https://github.com/block/buzz#readme).
+Ask the team a question here, or read the [Dobius user guide](https://github.com/block/buzz#readme).
 `;
 
 type WelcomeCanvasClient = {

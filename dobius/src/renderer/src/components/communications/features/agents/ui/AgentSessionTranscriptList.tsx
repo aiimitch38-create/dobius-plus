@@ -23,7 +23,7 @@ import {
 } from "@comms/shared/ui/dialog";
 import { Toggle } from "@comms/shared/ui/toggle";
 import { AnimatedCount } from "@comms/shared/ui/AnimatedCount";
-import { FuzzyLogo } from "@comms/shared/ui/buzz-logo/FuzzyLogo";
+import { FuzzyLogo } from "@comms/shared/ui/dobius-logo/FuzzyLogo";
 import type { PromptSection, TranscriptItem } from "./agentSessionTypes";
 import { TurnLivenessIndicator } from "./TurnLivenessIndicator";
 import { PromptSectionList as PromptContextSections } from "./PromptSectionAccordion";

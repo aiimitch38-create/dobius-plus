@@ -3,7 +3,7 @@ import { TerminalSquare } from "lucide-react";
 
 import type { AcpRuntimeCatalogEntry } from "@comms/shared/api/types";
 import { cn } from "@comms/shared/lib/cn";
-import { BuzzMark } from "@comms/shared/ui/buzz-logo/BuzzMark";
+import { DobiusMark } from "@comms/shared/ui/dobius-logo/DobiusMark";
 import claudeLogoUrl from "../assets/harness-logos/claude.png?inline";
 import { RUNTIME_MARKS } from "./HarnessMarks";
 
@@ -34,7 +34,7 @@ function isBuzzRuntime(runtime: AcpRuntimeCatalogEntry): boolean {
 export function getRuntimeDisplayLabel(
   runtime: AcpRuntimeCatalogEntry,
 ): string {
-  return isBuzzRuntime(runtime) ? "Buzz" : runtime.label;
+  return isBuzzRuntime(runtime) ? "Dobius" : runtime.label;
 }
 
 function getRuntimeLogoUrl(runtime: AcpRuntimeCatalogEntry): string | null {
@@ -59,7 +59,7 @@ export function RuntimeIcon({
   if (isBuzzRuntime(runtime)) {
     // The mark's wide viewBox letterboxes inside a square box, so honoring
     // the caller's size keeps it optically in line with the square logos.
-    return <BuzzMark className={cn(className, "text-foreground")} />;
+    return <DobiusMark className={cn(className, "text-foreground")} />;
   }
 
   if (Mark) {

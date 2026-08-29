@@ -1,0 +1,53 @@
+/*
+ * Motion for the Dobius mark. The vendored client drove its bee through a
+ * bespoke SVG morph engine; the mark is now a single image, so the same three
+ * states — resting, thinking, booting — are plain CSS on that image.
+ */
+
+@keyframes dobius-logo-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Play, then hold invisible for the caller's rest window before repeating, so a
+   long-lived "still working" mark reads as a heartbeat rather than a strobe. */
+@keyframes dobius-logo-breathe {
+  0% {
+    opacity: 0;
+    transform: translateY(2%) scale(0.97);
+  }
+  18%,
+  62% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-2%) scale(0.97);
+  }
+}
+
+.dobius-logo--pulse .dobius-logo__mark,
+.dobius-logo__mark.dobius-logo--pulse {
+  animation: dobius-logo-pulse 1.8s ease-in-out infinite;
+}
+
+.dobius-logo__mark.dobius-logo--breathe {
+  animation: dobius-logo-breathe var(--dobius-logo-cycle, 2.6s) ease-in-out
+    infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dobius-logo--pulse .dobius-logo__mark,
+  .dobius-logo__mark.dobius-logo--pulse,
+  .dobius-logo__mark.dobius-logo--breathe {
+    animation: none;
+    opacity: 0.8;
+    transform: none;
+  }
+}

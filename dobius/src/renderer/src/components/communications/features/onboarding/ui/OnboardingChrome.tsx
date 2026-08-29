@@ -1,4 +1,4 @@
-import { BuzzMark } from "@comms/shared/ui/buzz-logo/BuzzMark";
+import { DobiusMark } from "@comms/shared/ui/dobius-logo/DobiusMark";
 
 /**
  * Positions in the first-launch flow: landing, identity/key, harness setup,
@@ -47,7 +47,7 @@ export const ONBOARDING_SECURITY_ICON_CLASS =
 
 /**
  * Shared onboarding chrome shown on every page after the landing screen: a
- * static Buzz mark pinned to the top-left, and a centered pagination track that
+ * static Dobius mark pinned to the top-left, and a centered pagination track that
  * sits above the page title. The active page reads as a longer bar; inactive
  * pages are dots.
  */
@@ -64,7 +64,7 @@ export function OnboardingChrome({
       className="pointer-events-none fixed inset-x-0 top-12 z-10 flex items-center px-6 text-foreground"
     >
       <span className="block w-11" data-testid="onboarding-logo">
-        <BuzzMark className="h-auto w-full" />
+        <DobiusMark className="h-auto w-full" />
       </span>
       <div
         className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2"

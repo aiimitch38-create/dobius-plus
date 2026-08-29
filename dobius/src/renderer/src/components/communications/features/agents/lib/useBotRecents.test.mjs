@@ -20,7 +20,7 @@ function createPersona(id, displayName) {
 
 test("pickQuickBotPersonas prefers recents before defaults", () => {
   const personas = [
-    createPersona("builtin:fizz", "Fizz"),
+    createPersona("builtin:iris", "Iris"),
     createPersona("builtin:reviewer", "Reviewer"),
   ];
 
@@ -28,21 +28,21 @@ test("pickQuickBotPersonas prefers recents before defaults", () => {
     pickQuickBotPersonas(personas, ["builtin:reviewer"]).map(
       (persona) => persona.id,
     ),
-    ["builtin:reviewer", "builtin:fizz"],
+    ["builtin:reviewer", "builtin:iris"],
   );
 });
 
 test("pickQuickBotPersonas seeds the three starter agents", () => {
   const personas = [
-    createPersona("builtin:bumble", "Bumble"),
-    createPersona("builtin:honey", "Honey"),
-    createPersona("builtin:fizz", "Fizz"),
+    createPersona("builtin:sage", "Sage"),
+    createPersona("builtin:atlas", "Atlas"),
+    createPersona("builtin:iris", "Iris"),
     createPersona("builtin:reviewer", "Reviewer"),
   ];
 
   assert.deepEqual(
     pickQuickBotPersonas(personas, []).map((persona) => persona.id),
-    ["builtin:fizz", "builtin:honey", "builtin:bumble"],
+    ["builtin:iris", "builtin:atlas", "builtin:sage"],
   );
 });
 
@@ -61,17 +61,17 @@ test("pickQuickBotPersonas falls back to any active personas when defaults are m
 
 test("pickQuickBotPersonas skips duplicate and missing recents", () => {
   const personas = [
-    createPersona("builtin:fizz", "Fizz"),
-    createPersona("custom:honey", "Honey"),
+    createPersona("builtin:iris", "Iris"),
+    createPersona("custom:atlas", "Atlas"),
   ];
 
   assert.deepEqual(
     pickQuickBotPersonas(personas, [
-      "builtin:fizz",
+      "builtin:iris",
       "missing",
-      "builtin:fizz",
-      "custom:honey",
+      "builtin:iris",
+      "custom:atlas",
     ]).map((persona) => persona.id),
-    ["builtin:fizz", "custom:honey"],
+    ["builtin:iris", "custom:atlas"],
   );
 });

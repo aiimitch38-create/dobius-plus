@@ -785,14 +785,14 @@ const HUMAN_PUBKEY =
 
 function nudgeBody(agentPubkey) {
   return [
-    "**Fizz** needs configuration before it can respond:",
+    "**Iris** needs configuration before it can respond:",
     "- set `ANTHROPIC_API_KEY` in Edit Agent → Environment variables",
     "",
-    "Open Edit Agent in the Buzz app to set these.",
+    "Open Edit Agent in the Dobius app to set these.",
     "",
     "```buzz:config-nudge",
     JSON.stringify({
-      agent_name: "Fizz",
+      agent_name: "Iris",
       agent_pubkey: agentPubkey,
       requirements: [{ surface: "env_key", key: "ANTHROPIC_API_KEY" }],
     }),

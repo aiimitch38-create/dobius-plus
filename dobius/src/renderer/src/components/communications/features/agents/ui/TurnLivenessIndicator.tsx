@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from "motion/react";
 
 import { cn } from "@comms/shared/lib/cn";
-import { FuzzyLogo } from "@comms/shared/ui/buzz-logo/FuzzyLogo";
+import { FuzzyLogo } from "@comms/shared/ui/dobius-logo/FuzzyLogo";
 import { useTranscriptAnimationEnabled } from "./transcriptAnimationPreference";
 
 const MARKS = ["first", "second", "third"] as const;

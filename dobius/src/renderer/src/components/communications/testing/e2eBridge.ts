@@ -1943,7 +1943,7 @@ function buildMockConfigSurface(pubkey: string): {
   };
 
   // Mixed-provenance showcase — top-level rows carry different origins so the
-  // panel witnesses distinct provenance labels in one frame: "Set in Buzz",
+  // panel witnesses distinct provenance labels in one frame: "Set in Dobius",
   // "Inherited from template", "From config file (...)" and
   // "From environment variable (...)".
   const multiOriginSurface = {
@@ -2005,7 +2005,7 @@ function buildMockConfigSurface(pubkey: string): {
   const buzzAgentSurface = {
     ...gooseSurface,
     runtimeId: "buzz-agent",
-    runtimeLabel: "Buzz Agent",
+    runtimeLabel: "Dobius Agent",
     advanced: [],
     extensions: [],
     sources: {
@@ -2178,22 +2178,22 @@ function resetMockPersonas(config?: E2eConfig) {
   const activePersonaIds = new Set(config?.mock?.activePersonaIds ?? []);
   const builtInPersonas = [
     {
-      id: "builtin:fizz",
-      display_name: "Fizz",
+      id: "builtin:iris",
+      display_name: "Iris",
       avatar_url: null,
-      system_prompt: "You are Fizz.",
+      system_prompt: "You are Iris.",
     },
     {
-      id: "builtin:honey",
-      display_name: "Honey",
+      id: "builtin:atlas",
+      display_name: "Atlas",
       avatar_url: null,
-      system_prompt: "You are Honey.",
+      system_prompt: "You are Atlas.",
     },
     {
-      id: "builtin:bumble",
-      display_name: "Bumble",
+      id: "builtin:sage",
+      display_name: "Sage",
       avatar_url: null,
-      system_prompt: "You are Bumble.",
+      system_prompt: "You are Sage.",
     },
   ];
   mockPersonas = builtInPersonas.map((persona) => ({
@@ -4923,7 +4923,7 @@ const MOCK_PROJECT_SEEDS = [
     dtag: "buzz",
     name: "buzz",
     description:
-      "Relay, desktop, and mobile clients for the Buzz community platform.",
+      "Relay, desktop, and mobile clients for the Dobius community platform.",
     owner: MOCK_IDENTITY_PUBKEY,
     contributors: [ALICE_PUBKEY, BOB_PUBKEY, CHARLIE_PUBKEY],
     activityLevel: 4,
@@ -7152,14 +7152,14 @@ async function handleDiscoverAcpRuntimes(
     },
     {
       id: "buzz-agent",
-      label: "Buzz Agent",
+      label: "Dobius Agent",
       avatar_url: "",
       availability: "available",
       command: "buzz-agent",
       binary_path: "/usr/local/bin/buzz-agent",
       default_args: [],
       mcp_command: "buzz-dev-mcp",
-      install_hint: "Ships with the Buzz desktop app.",
+      install_hint: "Ships with the Dobius desktop app.",
       install_instructions_url: "https://github.com/block/buzz",
       can_auto_install: false,
       requires_external_cli: false,
@@ -8138,7 +8138,7 @@ async function handleStartManagedAgent(
         mockMeshState.models.some((model) => model.id === modelId));
     if (!hasLiveTarget) {
       throw new Error(
-        "Buzz shared compute cannot start because no live member is serving this model.",
+        "Dobius shared compute cannot start because no live member is serving this model.",
       );
     }
   }
@@ -9875,7 +9875,7 @@ export function maybeInstallE2eTauriMocks() {
               name: "Gemma-4-E4B-it-Q4_K_M",
               size: "3.5GB",
               sizeGb: 3.5,
-              description: "Buzz-curated local agent model",
+              description: "Dobius-curated local agent model",
               fit: "comfortable",
               installed: true,
               recommended: true,
@@ -10241,7 +10241,7 @@ export function maybeInstallE2eTauriMocks() {
               kind: "blob",
               size: 33120,
               preview_content:
-                "// Smart HTTP git transport\n// Handles upload-pack and receive-pack for Buzz git repos.\n",
+                "// Smart HTTP git transport\n// Handles upload-pack and receive-pack for Dobius git repos.\n",
             },
           ],
         };
@@ -11128,7 +11128,7 @@ export function maybeInstallE2eTauriMocks() {
           }
           if (mockMeshState.models.length === 0) {
             throw new Error(
-              "no Buzz shared compute serving members are available",
+              "no Dobius shared compute serving members are available",
             );
           }
         }

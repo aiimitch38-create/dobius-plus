@@ -117,15 +117,15 @@ export type DobiusPersonaProjection = {
 // Why: a "team" (RawTeam in tauriTeams.ts) is a named group of persona ids.
 // Dobius persists it as a small standalone record (team-store.ts) that only
 // references custom-agent ids — it never owns or clones agent data. Fields
-// the Buzz UI declares but Dobius has no concept of (builtin/source-dir/
+// the Dobius UI declares but Dobius has no concept of (builtin/source-dir/
 // symlink/version) are honest, stable defaults, never fabricated values.
 //
 // account_ids: which Dobius-connected Claude/Codex accounts (opaque ids from
 // accounts.list — see discoverDobiusAgentRuntimes above — never a token)
 // back this team's agents. RawTeam in tauriTeams.ts has no slot for this —
 // it's an ADDITIONAL key on the wire object, not a repurposed existing one,
-// so old Buzz builds parsing RawTeam just ignore the extra key (fromRawTeam
-// only reads the fields it declares) rather than breaking. Buzz's own
+// so old Dobius builds parsing RawTeam just ignore the extra key (fromRawTeam
+// only reads the fields it declares) rather than breaking. Dobius's own
 // RawTeam/AgentTeam types would need to grow this field before its UI can
 // display it — that's vendor/buzz-desktop/.../tauriTeams.ts, outside what
 // this team-cases patch owns.
@@ -659,7 +659,7 @@ async function sendDobiusChannelMessage(args: unknown): Promise<unknown> {
     throw new Error(submission.message || "The relay rejected the message.");
   }
   const eventId = requiredText(submission.event_id, "message event id");
-  // Why: Buzz owns room delivery while Dobius owns execution; dispatch only
+  // Why: Dobius owns room delivery while Dobius owns execution; dispatch only
   // participants backed by the real Dobius agent store after relay acceptance.
   void dispatchMessageToDobiusAgents({
     channelId,
@@ -1606,7 +1606,7 @@ async function createDobiusTeam(args: unknown): Promise<DobiusTeamProjection> {
       ? input.personaIds.filter((personaId): personaId is string => typeof personaId === "string")
       : undefined,
     // Why optional/undefined rather than []: tauriTeams.ts's CreateTeamInput
-    // has no accountIds field yet, so a real Buzz UI call never sends this
+    // has no accountIds field yet, so a real Dobius UI call never sends this
     // key — team.create's own zod schema treats an absent key as "no
     // accounts bound" (matches personaIds' same undefined-means-omitted
     // convention), not as "clear to empty".
@@ -2105,7 +2105,7 @@ async function updateDobiusProfileAtRelay(args: unknown): Promise<DobiusRelayPro
     throw new Error("Active identity no longer matches the expected pubkey for this avatar sync.");
   }
   // Dobius only ever talks to its own embedded relay (DOBIUS_RELAY_HTTP_URL);
-  // `input.relayUrl` is accepted for signature parity with hosted Buzz but unused.
+  // `input.relayUrl` is accepted for signature parity with hosted Dobius but unused.
   const current = await loadDobiusProfile();
   const content = JSON.stringify({
     display_name: current.display_name ?? undefined,
@@ -2199,7 +2199,7 @@ export async function invokeDobiusBackedTauriCommand(
     }
     case "validate_repos_dir":
       // Repository roots belong to Dobius and are selected through repo/worktree
-      // bindings, never through Buzz's independent filesystem preference.
+      // bindings, never through Dobius's independent filesystem preference.
       return { handled: true, result: undefined };
     case "get_relay_http_url":
       return { handled: true, result: DOBIUS_RELAY_HTTP_URL };
@@ -2259,7 +2259,7 @@ export async function invokeDobiusBackedTauriCommand(
       return { handled: true, result: await discoverDobiusAgentRuntimes() };
     case "discover_agent_models":
       // Dobius passes the saved model directly to its native engine. An empty
-      // successful catalog lets Buzz use each engine's account-level default.
+      // successful catalog lets Dobius use each engine's account-level default.
       return {
         handled: true,
         result: {
@@ -2523,7 +2523,7 @@ export async function invokeDobiusBackedTauriCommand(
     // window, never by this webview. See the build report's KEY_SAFETY notes.
     case "get_nsec":
       await invokeDobiusRuntime("communications.identity.exportNsec");
-      // Contract change from upstream Buzz: this used to resolve to the raw
+      // Contract change from upstream Dobius: this used to resolve to the raw
       // nsec string. It no longer can — update any caller that expected a
       // string here to just await this call for its side effect instead.
       return { handled: true, result: undefined };

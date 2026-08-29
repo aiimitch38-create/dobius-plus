@@ -1,7 +1,7 @@
 import * as React from "react";
 
-import { BuzzMark } from "@comms/shared/ui/buzz-logo/BuzzMark";
-import { FlappingBee } from "@comms/shared/ui/buzz-logo/FlappingBee";
+import { DobiusMark } from "@comms/shared/ui/dobius-logo/DobiusMark";
+import { LoadingMark } from "@comms/shared/ui/dobius-logo/LoadingMark";
 
 type Bee = {
   top: string;
@@ -142,7 +142,7 @@ export function LandingBees() {
       className="pointer-events-none absolute inset-0 overflow-hidden"
     >
       <span className="absolute left-6 top-12 block w-11 text-[#231E1E]">
-        <BuzzMark className="h-auto w-full" />
+        <DobiusMark className="h-auto w-full" />
       </span>
       {BEES.map((bee, i) => (
         <span
@@ -160,7 +160,7 @@ export function LandingBees() {
             opacity: 0.9,
           }}
         >
-          <FlappingBee className="w-full" />
+          <LoadingMark className="w-full" />
         </span>
       ))}
     </div>

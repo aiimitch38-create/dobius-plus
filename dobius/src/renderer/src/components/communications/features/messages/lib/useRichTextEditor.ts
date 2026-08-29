@@ -465,7 +465,7 @@ export function useRichTextEditor({
           openOnClick: false,
           autolink: true,
           linkOnPaste: true,
-          // Allow Buzz message links through TipTap's URL sanitiser.
+          // Allow Dobius message links through TipTap's URL sanitiser.
           // http(s) and mailto are accepted by default; non-listed protocols are
           // stripped on paste/typed input.
           protocols: ["buzz"],
