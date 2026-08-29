@@ -16,6 +16,7 @@
     "baseUrl": null,
     "paths": {
       "@renderer/*": ["../src/renderer/src/*"],
+      "@comms/*": ["../src/renderer/src/components/communications/*"],
       "@/*": ["../src/renderer/src/*"]
     }
   }

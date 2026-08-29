@@ -227,6 +227,9 @@ export default defineConfig({
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
+        // The restored Communications tree keeps its own root so its many
+        // internal imports do not collide with the app's '@'.
+        '@comms': resolve('src/renderer/src/components/communications'),
         '@': resolve('src/renderer/src')
       }
     },
