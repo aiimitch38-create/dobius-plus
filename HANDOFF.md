@@ -39,7 +39,7 @@ scoped test baseline 221 passing.
 | TASK-ADAM-1.1 shell classification | **DONE** — committed, gate passed |
 | TASK-ADAM-1.2 shell execution + window approval | **DONE** — committed, gate passed |
 | TASK-ADAM-1.3 shell IPC + tool registration | **DONE** — committed, gate passed |
-| TASK-ADAM-2.1 model-writable memory | not started |
+| TASK-ADAM-2.1 model-writable memory | **DONE** — committed, gate passed |
 | TASK-ADAM-3.1 proactive engine | not started |
 | TASK-ADAM-4.1 plugin loader | not started |
 | TASK-ADAM-4.2 ElevenLabs tool sync | not started |
@@ -66,10 +66,41 @@ extra "failing" files that were only slow dynamic imports. `AUTONOMOUS-BUILD.md`
 and `scripts/verify-adam-task.sh` are both fixed. If you see a second failing
 file, check you used `--config` before suspecting your own change.
 
+## TASK-ADAM-2.1 — complete
+
+Committed with its plan and review. Scoped test count is now **343 passing**,
+still exactly one failing file (`attach-main-window-services.test.ts`). **Use
+343 as the floor from here.**
+
+What exists: `adam-memory.ts` (`AdamMemory` class — `remember`, `forget`,
+`list`, `format`; six fixed categories; `MAX_KEY_CHARS` 80, `MAX_VALUE_CHARS`
+380, `MAX_TOTAL_CHARS` 2,200; JSON at `userData/adam-memory.json`),
+`jarvis:remember` / `jarvis:forget` IPC + preload, `remember` / `forget` client
+tools, and `REMEMBER_TOOL` / `FORGET_TOOL` registered through the same
+`ensureClientTool` path as `propose_shell`.
+
+**Two things a later task must not undo:**
+
+1. **`composeAgentContext(memoryBlock, machineState)` in `agent-context.ts` owns
+   the 8,000-char budget split.** Memory is capped at `MAX_MEMORY_CHARS` (half
+   the budget) and only the machine state is truncated. Do not "simplify" this
+   back to one `.slice()` over a joined string — that is how a full memory
+   silently evicts the terminal context, and it was measured happening (payload
+   10,048 chars, machine state gone).
+2. **`evict(protectedKey)` must keep skipping the entry just written.** Without
+   it a new fact can select itself as its own eviction victim while `remember`
+   still returns `ok` and the IPC still says "Saved."
+
+**Registration is a sequential loop** over `[PROPOSE_SHELL_TOOL, REMEMBER_TOOL,
+FORGET_TOOL]` in `ensureAgentToolsRegistered`. TASK-ADAM-4.2 will add more tools
+— keep it sequential. Each `ensureClientTool` reads and PATCHes the agent's
+`tool_ids`, so a `Promise.all` races and the loser's tool is dropped from a list
+it never saw.
+
 ## Phase 1 is complete — what exists now
 
-The whole shell path is built and gated. `TASK-ADAM-2.1` (model-writable memory)
-is next.
+The whole shell path is built and gated. `TASK-ADAM-3.1` (proactive engine) is
+next.
 
 - `shell-tool.ts` — `classifyShellCommand(argv, options)`, pure. `ClassifyOptions`
   takes `pluginDir` and an injectable `realpath`. `adamPluginDir(userData)` is the
@@ -105,6 +136,14 @@ approve its own write — `apply_code_change` is exposed as a client tool at
 `use-voice-agent.ts:115` and reaches the same `jarvis:applySelfEdit` IPC as the
 window's button at `SelfEditView.tsx:105`. Tolerable for a reversible on-screen
 diff with a backup; the shell tool must NOT copy it (invariant A).
+
+## Tasks 1.1 – 2.1 are committed and independently verified
+
+Do not redo them. `TASK-ADAM-3.1` (proactive engine) is the next unstarted task.
+
+Note for the record: the supervisor was killed mid-2.1 at 07:29 by an external
+process reaper, not by a failure of the work. The task was resumed from disk and
+carried through VERIFY → REVIEW → COMMIT → GATE → LOG.
 
 ## For Carson, when this finishes
 

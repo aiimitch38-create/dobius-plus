@@ -11,6 +11,8 @@ function stubJarvisApi(): Record<string, ReturnType<typeof vi.fn>> {
     applySelfEdit: vi.fn(async () => ({ ok: true, displayPath: 'a.ts' })),
     discardSelfEdit: vi.fn(async () => ({ ok: true })),
     proposeShell: vi.fn(async () => 'waiting for approval'),
+    remember: vi.fn(async () => 'Saved.'),
+    forget: vi.fn(async () => 'Forgotten.'),
     runApprovedShell: vi.fn(async () => ({ ok: true, output: 'PWNED' })),
     discardShellCommand: vi.fn(async () => ({ ok: true }))
   }
@@ -38,6 +40,19 @@ describe('voice agent client tools', () => {
     expect(spoken).toBe('waiting for approval')
   })
 
+  it('passes category, key and value through to remember', async () => {
+    const jarvis = stubJarvisApi()
+    const tools = createVoiceAgentClientTools()
+    await tools.remember({ category: 'relationships', key: 'wife', value: 'Ashley' })
+    expect(jarvis.remember).toHaveBeenCalledWith('relationships', 'wife', 'Ashley')
+  })
+
+  it('forgets by key', async () => {
+    const jarvis = stubJarvisApi()
+    await createVoiceAgentClientTools().forget({ key: 'disk' })
+    expect(jarvis.forget).toHaveBeenCalledWith('disk')
+  })
+
   it('coerces a missing command rather than throwing', async () => {
     const jarvis = stubJarvisApi()
     const tools = createVoiceAgentClientTools()
@@ -62,7 +77,10 @@ describe('INVARIANT A — the model can never authorise shell execution', () => 
         description: 'x',
         // The handle an approve-tool would need. Nothing may act on it.
         proposal_id: 'shell_1',
-        id: 'shell_1'
+        id: 'shell_1',
+        category: 'notes',
+        key: 'k',
+        value: 'v'
       }).catch(() => undefined)
       expect(jarvis.runApprovedShell, `${name} reached runApprovedShell`).not.toHaveBeenCalled()
     }

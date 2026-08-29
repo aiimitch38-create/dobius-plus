@@ -4,6 +4,10 @@ import { readRecentTerminalActivity } from './terminal-history-context'
 const DOBIUS_CLI = '/usr/local/bin/dobius'
 const CLI_TIMEOUT_MS = 12_000
 const MAX_OUTPUT_CHARS = 4_000
+/** Hard ceiling on the contextual update pushed at connect. */
+export const CONTEXT_BUDGET_CHARS = MAX_OUTPUT_CHARS * 2
+/** The most of that ceiling the memory block may take. See composeAgentContext. */
+export const MAX_MEMORY_CHARS = CONTEXT_BUDGET_CHARS / 2
 
 /**
  * Command groups come from the CLI's own help output, not a hardcoded list.
@@ -158,7 +162,10 @@ export function formatTerminalTabs(listJson: string): string {
   return lines.join('\n').trimEnd()
 }
 
-export async function buildAgentContext(historyRoot?: string): Promise<string> {
+export async function buildAgentContext(
+  historyRoot?: string,
+  memoryBlock = ''
+): Promise<string> {
   const [worktrees, terminalsJson, agents] = await Promise.all([
     runCli(['worktree', 'ps']),
     runCli(['terminal', 'list', '--json']),
@@ -174,7 +181,7 @@ export async function buildAgentContext(historyRoot?: string): Promise<string> {
         )
         .join('\n\n')
     : '(no terminal history found)'
-  return [
+  const machineState = [
     '## What the user was doing most recently (newest first)',
     recentBlock,
     '',
@@ -188,9 +195,33 @@ export async function buildAgentContext(historyRoot?: string): Promise<string> {
     '',
     '## Agents',
     agents || '(none)'
-  ]
-    .join('\n')
-    .slice(0, MAX_OUTPUT_CHARS * 2)
+  ].join('\n')
+
+  return composeAgentContext(memoryBlock, machineState)
+}
+
+/**
+ * Fits the memory block and the machine state into one bounded payload.
+ *
+ * Why the budget is SPLIT rather than the memory appended after a slice: the
+ * agent prompt is already ~8,400 chars against this 8,000 cap, so appending
+ * grows the payload without bound. Slicing a joined string with memory first
+ * would instead let a full memory push the terminal context out entirely —
+ * silently, because nothing errors. Reserving memory's actual size and
+ * truncating only the machine state keeps the total bounded AND keeps both
+ * blocks present.
+ */
+export function composeAgentContext(memoryBlock: string, machineState: string): string {
+  // Memory may claim at most half the budget, so the machine state is always
+  // left room. AdamMemory caps itself well under this, so the slice does not
+  // fire in normal use — it is the boundary guard for a hand-edited
+  // adam-memory.json, which is a file the user is invited to edit.
+  const memory = memoryBlock.trim().slice(0, MAX_MEMORY_CHARS)
+  if (!memory) {
+    return machineState.slice(0, CONTEXT_BUDGET_CHARS)
+  }
+  const remaining = Math.max(0, CONTEXT_BUDGET_CHARS - memory.length - 2)
+  return `${memory}\n\n${machineState.slice(0, remaining)}`
 }
 
 const GREETINGS = ['Hey.', 'Yeah?', 'Go ahead.', 'Listening.', "What's up.", 'Right here.']

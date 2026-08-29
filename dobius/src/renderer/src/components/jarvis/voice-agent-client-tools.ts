@@ -51,6 +51,16 @@ export function createVoiceAgentClientTools(): VoiceAgentClientTools {
       const result = await window.api.jarvis.applySelfEdit(String(parameters?.proposal_id ?? ''))
       return result.ok ? `Applied to ${result.displayPath}.` : `Not applied: ${result.error}`
     },
+    // Memory Adam keeps himself, as opposed to the conversation summaries
+    // ElevenLabs returns. Both confirm rather than failing silently.
+    remember: async (parameters: { category?: unknown; key?: unknown; value?: unknown }) =>
+      window.api.jarvis.remember(
+        String(parameters?.category ?? ''),
+        String(parameters?.key ?? ''),
+        String(parameters?.value ?? '')
+      ),
+    forget: async (parameters: { key?: unknown }) =>
+      window.api.jarvis.forget(String(parameters?.key ?? '')),
     /**
      * Shell: propose ONLY.
      *

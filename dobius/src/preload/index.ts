@@ -4440,6 +4440,9 @@ const api = {
       ipcRenderer.on('jarvis:self-edit-proposal', listener)
       return () => ipcRenderer.removeListener('jarvis:self-edit-proposal', listener)
     },
+    remember: (category: string, key: string, value: string): Promise<string> =>
+      ipcRenderer.invoke('jarvis:remember', category, key, value),
+    forget: (key: string): Promise<string> => ipcRenderer.invoke('jarvis:forget', key),
     proposeShell: (command: string): Promise<string> =>
       ipcRenderer.invoke('jarvis:proposeShell', command),
     runApprovedShell: (

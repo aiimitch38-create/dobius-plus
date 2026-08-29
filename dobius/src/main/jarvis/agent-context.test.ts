@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CONTEXT_BUDGET_CHARS,
+  MAX_MEMORY_CHARS,
+  composeAgentContext,
   decideDobiusCommand,
   formatTerminalTabs,
   parseCommandArgs,
@@ -97,5 +100,55 @@ describe('formatTerminalTabs', () => {
 
   it('falls back to the raw text if the JSON is unreadable', () => {
     expect(formatTerminalTabs('not json')).toBe('not json')
+  })
+})
+
+describe('composeAgentContext — memory must not evict the machine state', () => {
+  const machineState = [
+    '## What the user was doing most recently (newest first)',
+    'MOST RECENT: /Users/x/project',
+    'building...',
+    '',
+    '## Open terminal tabs (numbered as the user counts them)',
+    'Terminal 1: build'
+  ].join('\n')
+
+  it('returns the machine state unchanged when there is no memory', () => {
+    expect(composeAgentContext('', machineState)).toBe(machineState)
+  })
+
+  it('keeps both blocks and stays inside the budget when memory is full', () => {
+    // A memory at its own 2,200-char cap: the case the build file warns about.
+    const memory = `## What I remember about the user\n${'m'.repeat(2_200)}`
+    const result = composeAgentContext(memory, 'S'.repeat(20_000))
+
+    expect(result.length).toBeLessThanOrEqual(CONTEXT_BUDGET_CHARS)
+    expect(result).toContain('## What I remember about the user')
+    // The regression: the terminal context must still be in the payload.
+    expect(result).toContain('S')
+    expect(result.split('S').length - 1).toBeGreaterThan(5_000)
+  })
+
+  it('never truncates the memory block itself', () => {
+    const memory = `## What I remember about the user\nwife: Ashley`
+    const result = composeAgentContext(memory, 'S'.repeat(20_000))
+    expect(result.startsWith(memory)).toBe(true)
+    expect(result).toContain('wife: Ashley')
+  })
+
+  it('still bounds the payload when memory alone exceeds the budget', () => {
+    // This comment used to read "cannot happen in practice". It could: the key
+    // was uncapped, so one remembered fact produced a 10,001-char block and a
+    // 10,048-char payload with no machine state in it. AdamMemory now caps the
+    // key, and this is the second line of defence for a hand-edited file.
+    const result = composeAgentContext('m'.repeat(CONTEXT_BUDGET_CHARS + 500), machineState)
+    expect(result.length).toBeLessThanOrEqual(CONTEXT_BUDGET_CHARS)
+    expect(result).toContain('Terminal 1')
+  })
+
+  it('leaves the machine state at least half the budget however big memory is', () => {
+    const result = composeAgentContext('m'.repeat(50_000), 'S'.repeat(20_000))
+    expect(result.length).toBeLessThanOrEqual(CONTEXT_BUDGET_CHARS)
+    expect(result.split('S').length - 1).toBeGreaterThanOrEqual(MAX_MEMORY_CHARS - 2)
   })
 })

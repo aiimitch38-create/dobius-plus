@@ -3191,6 +3191,10 @@ export type PreloadApi = {
     discardSelfEdit: (id: string) => Promise<{ ok: boolean }>
     /** Review window subscription for incoming proposals. */
     onSelfEditProposal: (callback: (proposal: unknown) => void) => () => void
+    /** Stores a lasting fact about the user; returns a confirmation or the reason. */
+    remember: (category: string, key: string, value: string) => Promise<string>
+    /** Deletes a remembered fact by key. */
+    forget: (key: string) => Promise<string>
     /**
      * Proposes a shell command. Read-only runs immediately; anything that writes
      * is queued for a human click and this resolves to a message saying so. The

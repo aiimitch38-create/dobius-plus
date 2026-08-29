@@ -1,3 +1,5 @@
+import { MEMORY_CATEGORIES } from './adam-memory'
+
 const API_ROOT = 'https://api.elevenlabs.io/v1/convai'
 const TIMEOUT_MS = 15_000
 
@@ -35,6 +37,41 @@ export const PROPOSE_SHELL_TOOL: ClientToolConfig = {
       }
     },
     required: ['command']
+  }
+}
+
+export const REMEMBER_TOOL: ClientToolConfig = {
+  name: 'remember',
+  description:
+    "Store something about the user so you still know it in later conversations. Use it when they tell you a lasting fact — their partner's name, a preference, what a project is for, something they want. Do not use it for things that change hour to hour, like what is currently building.",
+  expects_response: true,
+  parameters: {
+    type: 'object',
+    properties: {
+      category: {
+        type: 'string',
+        enum: [...MEMORY_CATEGORIES],
+        description: 'Which bucket this fact belongs in.'
+      },
+      key: {
+        type: 'string',
+        description: 'Short stable label, e.g. "wife" or "editor". Re-using a key overwrites it.'
+      },
+      value: { type: 'string', description: 'The fact itself, under 380 characters.' }
+    },
+    required: ['category', 'key', 'value']
+  }
+}
+
+export const FORGET_TOOL: ClientToolConfig = {
+  name: 'forget',
+  description:
+    'Delete something you previously remembered, by its key. Use it as soon as the user says you have a fact wrong — a confidently wrong memory is worse than no memory.',
+  expects_response: true,
+  parameters: {
+    type: 'object',
+    properties: { key: { type: 'string', description: 'The key of the memory to delete.' } },
+    required: ['key']
   }
 }
 

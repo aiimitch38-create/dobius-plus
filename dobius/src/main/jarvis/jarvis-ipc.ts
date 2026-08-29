@@ -20,7 +20,8 @@ import {
   showShellCommandProposal
 } from '../window/self-edit-window'
 import { ShellCommandStore, describeForAgent } from './shell-command-store'
-import { PROPOSE_SHELL_TOOL, ensureClientTool } from './elevenlabs-tools'
+import { FORGET_TOOL, PROPOSE_SHELL_TOOL, REMEMBER_TOOL, ensureClientTool } from './elevenlabs-tools'
+import { AdamMemory } from './adam-memory'
 import { adamPluginDir } from './shell-tool'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
 import {
@@ -76,7 +77,7 @@ export function registerJarvisIpcHandlers(store: Store): void {
   registerHandlers(store, service)
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)
-  void ensureShellToolRegistered(store)
+  void ensureAgentToolsRegistered(store)
 }
 
 /**
@@ -90,21 +91,26 @@ export function registerJarvisIpcHandlers(store: Store): void {
  * delays app start. The outcome is logged either way — a registration that fails
  * silently is the failure mode this whole build is trying to avoid.
  */
-async function ensureShellToolRegistered(store: Store): Promise<void> {
+async function ensureAgentToolsRegistered(store: Store): Promise<void> {
   const voice = store.getSettings().voice
   const apiKey = voice?.elevenlabsApiKey ?? ''
   const agentId = voice?.elevenlabsAgentId ?? ''
   if (!apiKey.trim() || !agentId.trim()) {
     return
   }
-  const result = await ensureClientTool(apiKey, agentId, PROPOSE_SHELL_TOOL)
-  if (result.ok) {
-    console.log(
-      `[jarvis] tool ${PROPOSE_SHELL_TOOL.name} id=${result.value.id} created=${result.value.created} attached=${result.value.attached}`
-    )
-    return
+  // Sequential, not Promise.all: each ensure reads the agent's tool_ids and
+  // PATCHes them back, so concurrent calls would race and the loser's tool would
+  // be dropped from the list it never saw.
+  for (const tool of [PROPOSE_SHELL_TOOL, REMEMBER_TOOL, FORGET_TOOL]) {
+    const result = await ensureClientTool(apiKey, agentId, tool)
+    if (result.ok) {
+      console.log(
+        `[jarvis] tool ${tool.name} id=${result.value.id} created=${result.value.created} attached=${result.value.attached}`
+      )
+    } else {
+      console.warn(`[jarvis] could not register ${tool.name}: ${result.error}`)
+    }
   }
-  console.warn(`[jarvis] could not register ${PROPOSE_SHELL_TOOL.name}: ${result.error}`)
 }
 
 function registerHandlers(store: Store, service: JarvisService): void {
@@ -133,9 +139,27 @@ function registerHandlers(store: Store, service: JarvisService): void {
   // main only mints the signed URL so the API key never leaves this process.
   // Why exposed: a refused ⌘T grab is otherwise invisible — the setting still
   // reads "on" while the shortcut belongs to another app.
+  const memory = new AdamMemory(join(app.getPath('userData'), 'adam-memory.json'))
+
   ipcMain.removeHandler('jarvis:agentContext')
   ipcMain.handle('jarvis:agentContext', () =>
-    buildAgentContext(join(app.getPath('userData'), 'terminal-history'))
+    buildAgentContext(join(app.getPath('userData'), 'terminal-history'), memory.format())
+  )
+
+  // Why a confirmation instead of Mark LI's silent: true — a remember that fails
+  // (bad category, value too long) has to be able to say so, or the model
+  // believes it stored something it did not.
+  ipcMain.removeHandler('jarvis:remember')
+  ipcMain.handle('jarvis:remember', (_event, category: unknown, key: unknown, value: unknown) => {
+    const result = memory.remember(String(category ?? ''), String(key ?? ''), String(value ?? ''))
+    return result.ok ? `Saved. I'll remember that.` : result.error
+  })
+
+  ipcMain.removeHandler('jarvis:forget')
+  ipcMain.handle('jarvis:forget', (_event, key: unknown) =>
+    memory.forget(String(key ?? ''))
+      ? `Forgotten.`
+      : `I had nothing stored under "${String(key ?? '')}".`
   )
 
   // Why app.getAppPath()/../..: the repo root is two levels above out/main in
