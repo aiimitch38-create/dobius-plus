@@ -46,6 +46,7 @@ import { SshPane } from './SshPane'
 import { ExperimentalPane } from './ExperimentalPane'
 import { AgentsPane } from './AgentsPane'
 import { HarnessCatalogSection } from './HarnessCatalogSection'
+import { ProviderKeySection } from './ProviderKeySection'
 import { OrchestrationPane } from './OrchestrationPane'
 import { AccountsPane } from './AccountsPane'
 import { StatsPane } from '../stats/StatsPane'
@@ -1103,6 +1104,19 @@ function Settings(): React.JSX.Element {
                       wslAvailable={windowsTerminalCapabilities.wslAvailable}
                       wslDistros={windowsTerminalCapabilities.wslDistros}
                       wslCapabilitiesLoading={windowsTerminalCapabilities.isLoading}
+                    />
+                  ) : null}
+                  {isSectionMounted('agents') ? (
+                    <ProviderKeySection
+                      provider="openrouter"
+                      label={translate(
+                        'auto.components.settings.Settings.openrouterKey',
+                        'OpenRouter API key'
+                      )}
+                      hint={translate(
+                        'auto.components.settings.Settings.openrouterHint',
+                        'Lets an OpenRouter harness run. Stored encrypted on this machine.'
+                      )}
                     />
                   ) : null}
                   {isSectionMounted('agents') ? <HarnessCatalogSection /> : null}

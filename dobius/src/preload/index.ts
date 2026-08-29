@@ -1164,6 +1164,12 @@ const api = {
       ipcRenderer.invoke('agents:runHarness', args),
     stopHarness: (id: string): Promise<void> => ipcRenderer.invoke('agents:stopHarness', id),
     harnessStatuses: () => ipcRenderer.invoke('agents:harnessStatuses'),
+    providerKeyStatus: (provider: string): Promise<{ configured: boolean }> =>
+      ipcRenderer.invoke('agents:providerKeyStatus', provider),
+    saveProviderKey: (provider: string, apiKey: string): Promise<{ configured: boolean }> =>
+      ipcRenderer.invoke('agents:saveProviderKey', provider, apiKey),
+    clearProviderKey: (provider: string): Promise<{ configured: boolean }> =>
+      ipcRenderer.invoke('agents:clearProviderKey', provider),
     onRunEvent: (callback: (event: AgentRunEvent) => void): (() => void) => {
       const listener = (_event: unknown, event: AgentRunEvent): void => callback(event)
       ipcRenderer.on('agents:runEvent', listener)

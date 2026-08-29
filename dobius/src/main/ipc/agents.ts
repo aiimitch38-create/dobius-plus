@@ -53,6 +53,12 @@ import {
   stopCustomHarness
 } from '../communications/providers/custom-harness-instances'
 import { validateCustomHarnessDefinition } from '../communications/providers/custom-harness-provider'
+import {
+  clearProviderApiKey,
+  hasProviderApiKey,
+  saveProviderApiKey,
+  type ProviderKeyId
+} from '../communications/providers/provider-api-key-store'
 
 type PrepareClaudeLaunch = (target?: {
   accountId?: string | null
@@ -220,4 +226,23 @@ export function registerAgentsHandlers(
 
   ipcMain.removeHandler('agents:harnessStatuses')
   ipcMain.handle('agents:harnessStatuses', () => listCustomHarnessStatuses())
+
+  // Provider API keys stay in the main process: the renderer may ask whether one
+  // is configured and may set or clear it, but can never read it back.
+  ipcMain.removeHandler('agents:providerKeyStatus')
+  ipcMain.handle('agents:providerKeyStatus', (_event, provider: ProviderKeyId) => ({
+    configured: hasProviderApiKey(provider)
+  }))
+
+  ipcMain.removeHandler('agents:saveProviderKey')
+  ipcMain.handle('agents:saveProviderKey', (_event, provider: ProviderKeyId, apiKey: string) => {
+    saveProviderApiKey(provider, apiKey)
+    return { configured: true }
+  })
+
+  ipcMain.removeHandler('agents:clearProviderKey')
+  ipcMain.handle('agents:clearProviderKey', (_event, provider: ProviderKeyId) => {
+    clearProviderApiKey(provider)
+    return { configured: false }
+  })
 }
