@@ -103,7 +103,14 @@ broke something — fix it before moving on.
 PLAN → IMPLEMENT → VERIFY → REVIEW → COMMIT → GATE → LOG
 ```
 
-- **PLAN** — write `plans/TASK-N.N.md` (what, why, test, risks) BEFORE any code.
+- **PLAN** — write `plans/TASK-ADAM-N.N.md` (what, why, test, risks) BEFORE any
+  code. **Note the `ADAM-` namespace.** The un-namespaced names
+  `plans/TASK-1.1.md` … `plans/TASK-4.3.md` ALREADY EXIST in this repo from the
+  2026-06 dashboard build, each with its own `-REVIEW.md`. Writing to those names
+  would overwrite committed design docs from another build, and would make the
+  gate vacuous — it checks the plan and review files for existence, and they are
+  already there. Seven of this build's eight task numbers collide, so always
+  write `TASK-ADAM-N.N.md`.
 - **IMPLEMENT** — match surrounding patterns. No speculative abstractions.
 - **VERIFY** — both typechecks exit 0, the scoped vitest command above is green
   against the baseline, `npx oxlint` clean on every file you touched.
@@ -113,15 +120,19 @@ PLAN → IMPLEMENT → VERIFY → REVIEW → COMMIT → GATE → LOG
   or a tool name, run `pnpm run build:electron-vite` and grep `out/` for each new
   channel string and each new tool name. A name that does not appear in the
   bundle is a wiring bug that would otherwise reach Carson.
-- **REVIEW** — re-read every changed file, write `plans/TASK-N.N-REVIEW.md`,
-  fix at least one thing you find.
+- **REVIEW** — re-read every changed file, write
+  `plans/TASK-ADAM-N.N-REVIEW.md`, fix at least one thing you find.
 - **COMMIT** — `git add` specific files, message references the task number.
-- **GATE** — `bash scripts/verify-task.sh N.N` must exit 0.
+- **GATE** — `bash scripts/verify-adam-task.sh N.N` must exit 0. **Use this
+  script, not `scripts/verify-task.sh`.** The old one targets the 2026-06 app at
+  the repo root: it runs `npx vite build` there (so it reports success even when
+  `dobius/` is broken), and it fails permanently on a pre-existing
+  `// eslint-disable` in the old root `src/` that this build may not touch.
 - **LOG** — append to `BUILD-LOG.md`, update `HANDOFF.md`.
 
 ## Tasks
 
-### TASK-1.1 — Shell tool: classification and gate
+### TASK-ADAM-1.1 — Shell tool: classification and gate
 `dobius/src/main/jarvis/shell-tool.ts`: classify a command as read-only, denied,
 or writing. Pure functions, no execution yet.
 
@@ -152,13 +163,13 @@ shutdown, reboot, halt, killall, launchctl, csrutil, spctl, security, chown,
 chmod` with `-R` at `/`, and any path resolving inside the plugin directory
 (invariant B).
 
-`tail -f` needs no classification rule — the 30s execution timeout in TASK-1.2
+`tail -f` needs no classification rule — the 30s execution timeout in TASK-ADAM-1.2
 covers it. Do not add string analysis for it.
 
 Tests: the full classification table; every argument-scan case above; the
 `> /tmp/pwned` inertness test; a plugin-directory path in the deny bucket.
 
-### TASK-1.2 — Shell tool: execution and window approval
+### TASK-ADAM-1.2 — Shell tool: execution and window approval
 Wire the classifier to execution.
 
 - Read-only: runs immediately, `execFile`, 30s timeout, output capped at 4KB.
@@ -177,7 +188,7 @@ Tests: an unapproved command never executes — assert the side effect is absent
 rejected. A test asserting the renderer `clientTools` map contains no key that
 can trigger execution. A test that a denied command is not queued at all.
 
-### TASK-1.3 — Shell tool: IPC, preload, tool registration
+### TASK-ADAM-1.3 — Shell tool: IPC, preload, tool registration
 `jarvis:proposeShell` and `jarvis:runApprovedShell` in `jarvis-ipc.ts`, preload
 entries, renderer clientTool for propose only.
 Register the ElevenLabs tool via the API — see how `ask_adam` and `run_dobius`
@@ -186,7 +197,7 @@ name, description, expects_response, parameters: <JSON schema object>}}`.
 Parameters must be a JSON-Schema object, NOT an array.
 Run the WIRING CHECK for both channel names and the tool name.
 
-### TASK-2.1 — Model-writable memory
+### TASK-ADAM-2.1 — Model-writable memory
 Per plan Phase 2. `dobius/src/main/jarvis/adam-memory.ts` with the six fixed
 categories, caps, and eviction. `remember` and `forget` tools. Inject into the
 existing contextual update in `agent-context.ts`.
@@ -195,7 +206,7 @@ is ~8,400 chars — add the memory block BEFORE the truncation so a full memory
 cannot silently push the terminal context out of the payload.
 Tests: round trip, per-value cap, total cap eviction order, forget.
 
-### TASK-3.1 — Proactive engine
+### TASK-ADAM-3.1 — Proactive engine
 Per plan Phase 3. `dobius/src/main/jarvis/proactive-watcher.ts`.
 
 The plan's trigger is "a terminal that was active then goes quiet for 30s".
@@ -219,7 +230,7 @@ Tests: outcome classification from sample tails; each of the four gates
 independently, with an injected clock (never `Date.now()` in the tested path);
 a test that four simultaneous completions yield one utterance.
 
-### TASK-4.1 — Plugin loader
+### TASK-ADAM-4.1 — Plugin loader
 Per plan Phase 4. `dobius/src/main/jarvis/plugin-loader.ts`. Read
 `userData/adam-plugins/*.mjs`, validate the name against
 `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`, reject duplicates, catch throwing plugins and
@@ -231,7 +242,7 @@ a test in each proving a write into that directory is refused.
 Tests: valid plugin, bad name, duplicate name, plugin that throws on import,
 plugin that throws inside run(), plus the two write-refusal tests above.
 
-### TASK-4.2 — ElevenLabs tool sync
+### TASK-ADAM-4.2 — ElevenLabs tool sync
 `dobius/src/main/jarvis/elevenlabs-tool-sync.ts`. Diff local plugins against the
 agent's registered tools: create new, update changed, delete removed.
 
@@ -244,7 +255,7 @@ and here the failure mode is deleting a working tool.
 Tests: create/update/delete diffing against a fake API; a test that a tool named
 `ask_adam` survives a sync in which no plugins exist at all.
 
-### TASK-4.3 — Generic plugin dispatch
+### TASK-ADAM-4.3 — Generic plugin dispatch
 Renderer `clientTools` routes any unrecognised tool name to `plugin:run` in
 main. Run the WIRING CHECK: the built bundle must still contain every
 hand-written tool name.
@@ -253,7 +264,8 @@ hand-written tool name.
 
 Append `BUILD COMPLETE` to `HANDOFF.md` only when ALL of:
 
-- Every task above has `plans/TASK-N.N.md` and `plans/TASK-N.N-REVIEW.md`.
+- Every task above has `plans/TASK-ADAM-N.N.md` and
+  `plans/TASK-ADAM-N.N-REVIEW.md`.
 - Both typechecks exit 0.
 - `npx vitest run src/main/jarvis src/main/window
   src/renderer/src/components/jarvis` shows **at least 221 passing plus your new
