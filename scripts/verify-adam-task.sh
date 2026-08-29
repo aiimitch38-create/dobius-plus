@@ -34,6 +34,10 @@ TEST_SCOPE="src/main/jarvis src/main/window src/renderer/src/components/jarvis"
 BASELINE_PASSING=221
 EXPECTED_FAILING_FILE="attach-main-window-services.test.ts"
 
+TMP="${TMPDIR:-/tmp}/adam-gate-$$"
+mkdir -p "$TMP"
+trap 'rm -rf "$TMP"' EXIT
+
 PASS=true
 fail() { echo "FAIL: $1"; PASS=false; }
 ok()   { echo "OK   $1"; }
@@ -74,15 +78,15 @@ fi
 # 6. Typechecks — both configs, from the app directory.
 echo ""
 echo "--- Typecheck ---"
-if (cd "$APP" && npx tsgo --noEmit -p config/tsconfig.node.json >/tmp/adam-tc-node.log 2>&1); then
+if (cd "$APP" && npx tsgo --noEmit -p config/tsconfig.node.json >"$TMP/adam-tc-node.log" 2>&1); then
   ok "node typecheck"
 else
-  fail "node typecheck. Tail:"; tail -15 /tmp/adam-tc-node.log | sed 's/^/       /'
+  fail "node typecheck. Tail:"; tail -15 "$TMP/adam-tc-node.log" | sed 's/^/       /'
 fi
-if (cd "$APP" && npx tsgo --noEmit -p config/tsconfig.tc.web.json >/tmp/adam-tc-web.log 2>&1); then
+if (cd "$APP" && npx tsgo --noEmit -p config/tsconfig.tc.web.json >"$TMP/adam-tc-web.log" 2>&1); then
   ok "web typecheck"
 else
-  fail "web typecheck. Tail:"; tail -15 /tmp/adam-tc-web.log | sed 's/^/       /'
+  fail "web typecheck. Tail:"; tail -15 "$TMP/adam-tc-web.log" | sed 's/^/       /'
 fi
 
 # 7. Scoped tests against the pinned baseline.
@@ -92,12 +96,12 @@ echo "--- Tests (scoped) ---"
 # command runs with Vitest defaults — a 5s testTimeout instead of this project's
 # 30s, which makes the heavy src/main/window dynamic imports flake intermittently.
 # See LESSONS-LEARNED.md [Testing] 2026-08-29.
-(cd "$APP" && npx vitest run --config config/vitest.config.ts $TEST_SCOPE --reporter=dot >/tmp/adam-tests.log 2>&1)
-PASSED=$(grep -oE 'Tests +[0-9]+ passed' /tmp/adam-tests.log | grep -oE '[0-9]+' | tail -1)
+(cd "$APP" && npx vitest run --config config/vitest.config.ts $TEST_SCOPE --reporter=dot >"$TMP/adam-tests.log" 2>&1)
+PASSED=$(grep -oE 'Tests +[0-9]+ passed' "$TMP/adam-tests.log" | grep -oE '[0-9]+' | tail -1)
 PASSED=${PASSED:-0}
-FAILED_TESTS=$(grep -oE 'Tests +[0-9]+ failed' /tmp/adam-tests.log | grep -oE '[0-9]+' | tail -1)
+FAILED_TESTS=$(grep -oE 'Tests +[0-9]+ failed' "$TMP/adam-tests.log" | grep -oE '[0-9]+' | tail -1)
 FAILED_TESTS=${FAILED_TESTS:-0}
-FAILED_FILES=$(grep -oE 'Test Files +[0-9]+ failed' /tmp/adam-tests.log | grep -oE '[0-9]+' | tail -1)
+FAILED_FILES=$(grep -oE 'Test Files +[0-9]+ failed' "$TMP/adam-tests.log" | grep -oE '[0-9]+' | tail -1)
 FAILED_FILES=${FAILED_FILES:-0}
 
 if [ "$PASSED" -lt "$BASELINE_PASSING" ]; then
@@ -108,18 +112,18 @@ fi
 
 if [ "$FAILED_TESTS" -gt 0 ]; then
   fail "$FAILED_TESTS individual tests failing:"
-  grep -E '^\s*(FAIL|×)' /tmp/adam-tests.log | head -10 | sed 's/^/       /'
+  grep -E '^\s*(FAIL|×)' "$TMP/adam-tests.log" | head -10 | sed 's/^/       /'
 fi
 
 if [ "$FAILED_FILES" -gt 1 ]; then
   fail "$FAILED_FILES test files failing — only the known one is allowed ($EXPECTED_FAILING_FILE):"
-  grep -E '^\s*FAIL' /tmp/adam-tests.log | head -10 | sed 's/^/       /'
+  grep -E '^\s*FAIL' "$TMP/adam-tests.log" | head -10 | sed 's/^/       /'
 elif [ "$FAILED_FILES" -eq 1 ]; then
-  if grep -qE "FAIL.*$EXPECTED_FAILING_FILE" /tmp/adam-tests.log; then
+  if grep -qE "FAIL.*$EXPECTED_FAILING_FILE" "$TMP/adam-tests.log"; then
     ok "one failing file, and it is the known pre-existing one"
   else
     fail "one failing file, but NOT the expected $EXPECTED_FAILING_FILE:"
-    grep -E '^\s*FAIL' /tmp/adam-tests.log | head -5 | sed 's/^/       /'
+    grep -E '^\s*FAIL' "$TMP/adam-tests.log" | head -5 | sed 's/^/       /'
   fi
 else
   ok "no failing test files"
@@ -133,10 +137,10 @@ if [ -z "$LINT_TARGETS" ]; then
   ok "no source files in this commit to lint"
 else
   # zsh/bash word-splitting: feed the list on stdin, never unquoted expansion.
-  if (cd "$APP" && echo "$LINT_TARGETS" | tr '\n' '\0' | xargs -0 npx oxlint >/tmp/adam-lint.log 2>&1); then
+  if (cd "$APP" && echo "$LINT_TARGETS" | tr '\n' '\0' | xargs -0 npx oxlint >"$TMP/adam-lint.log" 2>&1); then
     ok "oxlint clean on $(echo "$LINT_TARGETS" | wc -l | tr -d ' ') file(s)"
   else
-    fail "oxlint findings:"; tail -20 /tmp/adam-lint.log | sed 's/^/       /'
+    fail "oxlint findings:"; tail -20 "$TMP/adam-lint.log" | sed 's/^/       /'
   fi
 fi
 
