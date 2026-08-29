@@ -19,7 +19,9 @@ import { translate } from './i18n/i18n'
 import { parseTornOffTerminalHash } from './torn-off-terminal-entry'
 import { parseFloatingPhoneHash } from './floating-phone-entry'
 import { parseOrbHash } from './orb-entry'
+import { parseSelfEditHash } from './self-edit-entry'
 import { OrbView } from './components/jarvis/OrbView'
+import { SelfEditView } from './components/jarvis/SelfEditView'
 
 recordRendererCrashBreadcrumb('renderer_bootstrap_started', { dev: import.meta.env.DEV })
 installRendererCrashDiagnostics()
@@ -46,6 +48,8 @@ if (!rootElement) {
 const tornOffTerminal = parseTornOffTerminalHash(window.location.hash)
 const floatingPhone = tornOffTerminal ? null : parseFloatingPhoneHash(window.location.hash)
 const jarvisOrb = tornOffTerminal || floatingPhone ? null : parseOrbHash(window.location.hash)
+const selfEdit =
+  tornOffTerminal || floatingPhone || jarvisOrb ? null : parseSelfEditHash(window.location.hash)
 
 function RendererRoot(): React.JSX.Element {
   useTranslation()
@@ -76,6 +80,18 @@ function RendererRoot(): React.JSX.Element {
         )}
       >
         <FloatingPhoneRoot {...floatingPhone} />
+      </RecoverableRenderErrorBoundary>
+    )
+  }
+  if (selfEdit) {
+    return (
+      <RecoverableRenderErrorBoundary
+        boundaryId="jarvis.self-edit-root"
+        surface="app-root"
+        title="Dobius+ hit a code-review error."
+        description="The self-edit review window could not render. Close it; no change was written."
+      >
+        <SelfEditView />
       </RecoverableRenderErrorBoundary>
     )
   }

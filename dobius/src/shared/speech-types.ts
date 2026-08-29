@@ -78,6 +78,12 @@ export type VoiceSettings = {
   jarvisWakeWord?: boolean
   /** Base URL of the local ADAM agent service. */
   adamEndpoint?: string
+  /** ElevenLabs credentials for spoken replies; empty falls back to the local engine. */
+  elevenlabsApiKey?: string
+  elevenlabsVoiceId?: string
+  elevenlabsModelId?: string
+  /** ElevenLabs Agents id; set enables the live conversation instead of turns. */
+  elevenlabsAgentId?: string
 }
 
 /** HUD-facing conversation phase for the Jarvis voice loop. */

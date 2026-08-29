@@ -28,6 +28,10 @@ export type JarvisTurn = {
   ambientActive: boolean
   /** Click handler for the orb: same toggle as a ⌘T press. */
   toggleTurn: () => void
+  /** Last turn failure, shown under the orb so a dead turn is not silent. */
+  errorText: string | null
+  /** Live mic level for the shared VoiceOrb, 0..1. */
+  getAudioLevel: () => number
 }
 
 /**
@@ -42,6 +46,7 @@ export function useJarvisTurn(): JarvisTurn {
   const [hudState, setHudState] = useState<OrbHudState>('idle')
   const [wakeArmed, setWakeArmed] = useState(false)
   const [ambientActive, setAmbientActive] = useState(false)
+  const [errorText, setErrorText] = useState<string | null>(null)
 
   const capture: JarvisCaptureControls = useAudioCapture()
   const { flags, flagsRef } = useJarvisVoiceSettings()
@@ -67,8 +72,11 @@ export function useJarvisTurn(): JarvisTurn {
     if (phase === 'error') {
       errorTimerRef.current = window.setTimeout(() => {
         errorTimerRef.current = null
+        setErrorText(null)
         setHudState('idle')
       }, ERROR_STATE_CLEAR_MS)
+    } else {
+      setErrorText(null)
     }
     setHudState(phase)
   }, [])
@@ -122,7 +130,8 @@ export function useJarvisTurn(): JarvisTurn {
           setPhase('speaking')
           await window.api.jarvis.speak(result.text)
         }
-      } catch {
+      } catch (error) {
+        setErrorText(error instanceof Error ? error.message : String(error))
         setPhase('error')
         return
       }
@@ -135,14 +144,18 @@ export function useJarvisTurn(): JarvisTurn {
   const finishTurnWithFinal = useCallback(
     (text: string): void => {
       void (async () => {
+        const utterance = text.trim()
+        // ponytail: the ask does not depend on the mic being down, so start it
+        // first and let the worker's stop handshake finish alongside it.
+        const asked = utterance ? runAskFlow(utterance) : null
         await stopSessionCleanly()
         setSessionEpoch((epoch) => epoch + 1)
-        if (!text.trim()) {
+        if (!asked) {
           // Empty finals end the turn gracefully — no ask, no spoken error.
           setPhase('idle')
           return
         }
-        await runAskFlow(text.trim())
+        await asked
       })()
     },
     [runAskFlow, setPhase, stopSessionCleanly]
@@ -197,8 +210,9 @@ export function useJarvisTurn(): JarvisTurn {
         turnPhaseRef.current = 'listening'
         setPhase('listening')
       },
-      onError: () => {
+      onError: (reason: string) => {
         turnPhaseRef.current = 'idle'
+        setErrorText(reason)
         setPhase('error')
       },
       onSettled: () => {
@@ -249,8 +263,11 @@ export function useJarvisTurn(): JarvisTurn {
   )
 
   // Global ⌘T push-to-talk: press starts or cancels a turn.
+  // Why the agentId check: with a live agent configured, the agent hook owns
+  // ⌘T — both handlers reacting would open a turn and a conversation at once,
+  // and they would fight over the microphone.
   useEffect(() => {
-    if (!flags.jarvisEnabled) {
+    if (!flags.jarvisEnabled || flags.agentId !== '') {
       return
     }
     const cleanupPressed = window.api.jarvis.onPttPressed(() => toggleTurn())
@@ -261,10 +278,10 @@ export function useJarvisTurn(): JarvisTurn {
       cleanupPressed()
       cleanupReleased()
     }
-  }, [flags.jarvisEnabled, toggleTurn])
+  }, [flags.agentId, flags.jarvisEnabled, toggleTurn])
 
   const ambientDesired =
-    flags.jarvisEnabled && flags.jarvisWakeWord && flags.sttModel !== ''
+    flags.jarvisEnabled && flags.jarvisWakeWord && flags.sttModel !== '' && flags.agentId === ''
   useEffect(() => {
     if (!ambientDesired || registry.kind.current !== null || ambientHandleRef.current) {
       return
@@ -300,5 +317,12 @@ export function useJarvisTurn(): JarvisTurn {
     [stopSessionCleanly]
   )
 
-  return { hudState, wakeArmed, ambientActive, toggleTurn }
+  return {
+    hudState,
+    wakeArmed,
+    ambientActive,
+    toggleTurn,
+    errorText,
+    getAudioLevel: capture.getAudioLevel
+  }
 }

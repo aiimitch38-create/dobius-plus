@@ -12,6 +12,7 @@ import {
   converseWithAdam,
   loadAdamServiceToken
 } from './adam-client'
+import { resolveElevenLabsConfig, speakWithElevenLabs } from './elevenlabs-client'
 import { JARVIS_PTT_AUTO_RELEASE_MS, applyJarvisSignal, type JarvisSignal } from './jarvis-state'
 import { createWakeWordMatcher, type WakeWordMatcher } from './wake-word-matcher'
 
@@ -134,6 +135,18 @@ export class JarvisService {
       return { played: false, reason: 'empty text' }
     }
     this.transition({ type: 'speak-started' })
+    // ElevenLabs when Carson's key+voice are configured; local engine stays the
+    // fallback so a network/key failure never silences a reply.
+    const eleven = resolveElevenLabsConfig(this.deps.store.getSettings().voice)
+    if (eleven) {
+      try {
+        await speakWithElevenLabs(text.trim(), eleven)
+        this.transition({ type: 'turn-finished' })
+        return { played: true }
+      } catch {
+        // fall through to the huddle/local engine below
+      }
+    }
     let outcome: SpeakOutcome
     try {
       outcome = await (this.deps.speakQueue ?? this.getDefaultSpeakQueue())(text)

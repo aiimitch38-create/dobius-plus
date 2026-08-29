@@ -13,7 +13,7 @@ type StartTurnSessionOptions = {
   /** Called synchronously so cancel-during-start can reach the handle. */
   register: (handle: JarvisTurnSessionHandle) => void
   onListening: () => void
-  onError: () => void
+  onError: (reason: string) => void
   onSettled: () => void
 }
 
@@ -74,7 +74,7 @@ export function startJarvisTurnSession(options: StartTurnSessionOptions): void {
       if (canceled) {
         options.onSettled()
       } else {
-        options.onError()
+        options.onError(err instanceof Error ? err.message : String(err))
       }
     }
   })()

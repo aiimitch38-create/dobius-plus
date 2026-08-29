@@ -4412,6 +4412,34 @@ const api = {
       ipcRenderer.invoke('jarvis:ask', utterance),
     speak: (text: string): Promise<JarvisSpeakOutcome> => ipcRenderer.invoke('jarvis:speak', text),
     openOrb: (): Promise<{ ok: boolean; windowId?: number }> => ipcRenderer.invoke('jarvis:openOrb'),
+    agentSignedUrl: (): Promise<{ ok: true; url: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('jarvis:agentSignedUrl'),
+    askAdamText: (utterance: string): Promise<JarvisAskResult> =>
+      ipcRenderer.invoke('jarvis:askAdamText', utterance),
+    agentContext: (): Promise<string> => ipcRenderer.invoke('jarvis:agentContext'),
+    agentOpening: (): Promise<string> => ipcRenderer.invoke('jarvis:agentOpening'),
+    conversationMemory: (): Promise<string> => ipcRenderer.invoke('jarvis:conversationMemory'),
+    runDobius: (command: string): Promise<string> =>
+      ipcRenderer.invoke('jarvis:runDobius', command),
+    status: (): Promise<{ shortcutActive: boolean; phase: string }> =>
+      ipcRenderer.invoke('jarvis:status'),
+    proposeSelfEdit: (
+      path: string,
+      content: string,
+      description: string
+    ): Promise<{ ok: true; id: string; displayPath: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('jarvis:proposeSelfEdit', path, content, description),
+    applySelfEdit: (
+      id: string
+    ): Promise<{ ok: true; displayPath: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('jarvis:applySelfEdit', id),
+    discardSelfEdit: (id: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('jarvis:discardSelfEdit', id),
+    onSelfEditProposal: (callback: (proposal: unknown) => void): (() => void) => {
+      const listener = (_event: unknown, proposal: unknown): void => callback(proposal)
+      ipcRenderer.on('jarvis:self-edit-proposal', listener)
+      return () => ipcRenderer.removeListener('jarvis:self-edit-proposal', listener)
+    },
     onState: (callback: (event: JarvisStateEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: JarvisStateEvent): void =>
         callback(data)

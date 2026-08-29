@@ -3163,6 +3163,34 @@ export type PreloadApi = {
     ask: (utterance: string) => Promise<JarvisAskResult>
     speak: (text: string) => Promise<JarvisSpeakOutcome>
     openOrb: () => Promise<{ ok: boolean; windowId?: number }>
+    /** Mints a signed websocket URL for the configured ElevenLabs agent. */
+    agentSignedUrl: () => Promise<{ ok: true; url: string } | { ok: false; error: string }>
+    /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
+    askAdamText: (utterance: string) => Promise<JarvisAskResult>
+    /** Snapshot of worktrees, terminal tabs and agents for the voice agent. */
+    agentContext: () => Promise<string>
+    /** A contextual opening line for the agent's first message. */
+    agentOpening: () => Promise<string>
+    /** Summaries of recent calls, so the agent remembers across conversations. */
+    conversationMemory: () => Promise<string>
+    /** Runs an allowlisted `dobius` CLI command on the user's behalf. */
+    runDobius: (command: string) => Promise<string>
+    /** Whether the global shortcut grab succeeded, plus the current phase. */
+    status: () => Promise<{ shortcutActive: boolean; phase: string }>
+    /** Proposes a change to Adam's own code; opens the review window. */
+    proposeSelfEdit: (
+      path: string,
+      content: string,
+      description: string
+    ) => Promise<{ ok: true; id: string; displayPath: string } | { ok: false; error: string }>
+    /** Writes an approved change, keeping a backup. */
+    applySelfEdit: (
+      id: string
+    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string }>
+    /** Throws away a pending change. */
+    discardSelfEdit: (id: string) => Promise<{ ok: boolean }>
+    /** Review window subscription for incoming proposals. */
+    onSelfEditProposal: (callback: (proposal: unknown) => void) => () => void
     onState: (callback: (event: JarvisStateEvent) => void) => () => void
     onPttPressed: (callback: (data: { at: number }) => void) => () => void
     onPttReleased: (callback: (data: { at: number }) => void) => () => void
