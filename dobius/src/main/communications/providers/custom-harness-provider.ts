@@ -1,4 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import {
+  assertPathOutsideProtectedRoots,
+  protectedProviderRoots
+} from './protected-path-guard'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import type {
@@ -76,6 +80,12 @@ export class CustomHarnessProvider implements AgentProvider {
     // Why: binding happens at launch so the harness exists as a Communications
     // participant even before its first reply — same pattern as huddle agents.
     const identity = bindProviderIdentity(this.agentId)
+
+    // A harness runs arbitrary user-supplied commands, so its working
+    // directory is the one thing we can refuse before the process exists.
+    if (launch.cwd) {
+      assertPathOutsideProtectedRoots(protectedProviderRoots(), launch.cwd, process.cwd())
+    }
 
     const runId = randomUUID()
     this.lastRunId = runId
