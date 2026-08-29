@@ -40,6 +40,10 @@ while true; do
   echo "$(date '+%Y-%m-%d %H:%M:%S') [supervisor] Claude exited (code $EXIT_CODE). Resuming (attempt $RETRY/$MAX_RETRIES)..." >> "$LOG_FILE"
   sleep 5  # Brief pause before resume
 
-  claude --dangerously-skip-permissions --continue -p "Read claude-progress.json and HANDOFF.md. If SELF-REVIEW-FINDINGS.md exists with unchecked items, read it too. Resume from the current task."
+  # Re-read the build file FIRST on every resume. A resumed context has lost the
+  # hard rules, the security invariants, and the pinned test baseline — without
+  # them a resumed agent runs the broad test suite, sees the repo's hundreds of
+  # pre-existing failures, and starts "fixing" unrelated subsystems.
+  claude --dangerously-skip-permissions --continue -p "Re-read $BUILD_FILE in full and obey it — especially the hard rules, the two security invariants, and the pinned test baseline. Then read claude-progress.json and HANDOFF.md. If SELF-REVIEW-FINDINGS.md exists with unchecked items, read it too. Resume from the current task."
   EXIT_CODE=$?
 done
