@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { classifyOutcome } from './proactive-watcher'
+import { classifyOutcome, matchedMarker } from './proactive-watcher'
 import { readRecentTerminalActivity } from './terminal-history-context'
 
 const DOBIUS_CLI = '/usr/local/bin/dobius'
@@ -183,6 +183,8 @@ export async function buildAgentContext(
         .join('\n\n')
     : '(no terminal history found)'
   const machineState = [
+    formatOpeningSection(getLastOpening(), Date.now()),
+    '',
     '## What the user was doing most recently (newest first)',
     recentBlock,
     '',
@@ -250,10 +252,13 @@ function describeAge(ms: number): string {
  * idle. Different situations produce different KINDS of sentence, which is what
  * makes it sound like someone looked before speaking.
  */
+// Observation phrasing, not verdicts: the classifier is a substring heuristic
+// and false-positives (the word "error" in ordinary output). "Looks like" is
+// what a person who glanced at a terminal would honestly say.
 const OPENERS_FAILED = [
-  (p: string, age: string) => `Something broke in ${p} ${age}.`,
-  (p: string, age: string) => `${p} went red ${age}.`,
-  (p: string, age: string) => `Bad news — ${p} failed ${age}.`
+  (p: string, age: string) => `Looks like something went wrong in ${p} ${age}.`,
+  (p: string, age: string) => `Seeing failures in ${p} from ${age} — want me to dig in?`,
+  (p: string, age: string) => `Heads up, ${p} may have hit an error ${age}.`
 ]
 
 const OPENERS_PASSED = [
@@ -281,30 +286,80 @@ function pick<T>(list: T[], seed: number): T {
   return list[Math.abs(seed) % list.length]
 }
 
+export type OpeningRecord = {
+  line: string
+  project: string | null
+  marker: string | null
+  at: number
+}
+
+/**
+ * The last opening line handed to the agent, so buildAgentContext can tell
+ * the model what IT opened with and why. Without this the opening is a cue
+ * card the model never saw itself write: asked "what broke?" it has no
+ * evidence, and under pushback it re-attributes its own line to the user
+ * (transcript conv_7801m191..., 2026-08-30).
+ */
+let lastOpening: OpeningRecord | null = null
+const OPENING_FRESH_MS = 5 * 60_000
+
+export function getLastOpening(): OpeningRecord | null {
+  return lastOpening
+}
+
+/**
+ * Always states the attribution rule (the opening/context calls race, so the
+ * specific line may not be recorded yet); adds the line + evidence when fresh.
+ */
+export function formatOpeningSection(record: OpeningRecord | null, now: number): string {
+  const lines = [
+    '## Your opening line',
+    'The first message of every call is YOUR opening line, generated from the',
+    "terminal evidence below before the call connected. You said it — never",
+    'attribute it to the user. If it mentions a failure or a pass, answer',
+    'questions about it from the terminal output in this context.'
+  ]
+  if (record && now - record.at < OPENING_FRESH_MS) {
+    lines.push(`You opened with: "${record.line}"`)
+    if (record.project && record.marker) {
+      lines.push(
+        `That came from the word "${record.marker}" appearing in the recent output of ${record.project} — a heuristic, not a verdict. Check before asserting more.`
+      )
+    }
+  }
+  return lines.join('\n')
+}
+
 export function buildOpeningLine(historyRoot: string, now: number = Date.now()): string {
   const activities = readRecentTerminalActivity(historyRoot, 5)
   const [mostRecent] = activities
   // Seeded on real state, so the wording only repeats when the situation does.
   const seed = Math.floor(now / 60_000) + activities.length
 
+  const record = (line: string, project: string | null, marker: string | null): string => {
+    lastOpening = { line, project, marker, at: now }
+    return line
+  }
+
   if (!mostRecent) {
-    return pick(OPENERS_IDLE, seed)
+    return record(pick(OPENERS_IDLE, seed), null, null)
   }
 
   const project = mostRecent.worktreePath.split('/').filter(Boolean).pop() ?? 'your project'
   const age = describeAge(now - mostRecent.lastActiveAt)
   const outcome = classifyOutcome(mostRecent.recentOutput)
+  const marker = outcome ? matchedMarker(mostRecent.recentOutput) : null
 
   if (outcome === 'failed') {
-    return pick(OPENERS_FAILED, seed)(project, age)
+    return record(pick(OPENERS_FAILED, seed)(project, age), project, marker)
   }
   if (outcome === 'passed') {
-    return pick(OPENERS_PASSED, seed)(project, age)
+    return record(pick(OPENERS_PASSED, seed)(project, age), project, marker)
   }
 
   const live = activities.filter((a) => now - a.lastActiveAt < 10 * 60_000).length
   if (live > 1) {
-    return pick(OPENERS_BUSY, seed)(project, live)
+    return record(pick(OPENERS_BUSY, seed)(project, live), project, null)
   }
-  return pick(OPENERS_RECENT, seed)(project, age)
+  return record(pick(OPENERS_RECENT, seed)(project, age), project, null)
 }

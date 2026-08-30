@@ -70,6 +70,20 @@ export function classifyOutcome(tail: string): Outcome | null {
   return null
 }
 
+/**
+ * The exact marker string classifyOutcome matched, so an opening line built
+ * on the classification can cite its evidence instead of asserting a bare
+ * fact the agent cannot back up when asked "what broke?".
+ */
+export function matchedMarker(tail: string): string | null {
+  const scanned = tail.toLowerCase().replace(PATHS, ' ').replace(NEUTRALISED, ' ✓ ')
+  return (
+    FAILURE_MARKERS.find((marker) => scanned.includes(marker)) ??
+    SUCCESS_MARKERS.find((marker) => scanned.includes(marker)) ??
+    null
+  )
+}
+
 /** Local-hour window, wrapping midnight when `from` is later than `to` (22 → 8). */
 export function isQuietHours(now: number, from: number, to: number): boolean {
   const hour = new Date(now).getHours()
