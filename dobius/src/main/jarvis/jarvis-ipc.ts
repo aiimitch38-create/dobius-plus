@@ -4,7 +4,8 @@ import { join, resolve } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
-import { getLocalSpeaker, getSpeechSttService } from '../speech/speech-runtime-service'
+import { getLocalSpeaker } from '../speech/speech-runtime-service'
+import { wireBargeIn, wireWakeWordObservation } from './jarvis-voice-wiring'
 import { registerTtsBakeoffHandler } from './tts-bakeoff-ipc'
 import { VoiceBrain } from './voice-brain'
 import { converseWithAdam, loadAdamServiceToken } from './adam-client'
@@ -41,11 +42,7 @@ import {
 } from './conversation-memory'
 import { openFloatingOrbWindow } from '../window/floating-orb-window'
 import { pickJarvisTargetWindow } from './jarvis-target-window'
-import {
-  JARVIS_SHORTCUT_ACCELERATOR,
-  getJarvisService,
-  tapSttFinalTranscripts
-} from './jarvis-service'
+import { JARVIS_SHORTCUT_ACCELERATOR, getJarvisService } from './jarvis-service'
 import type {
   JarvisBroadcastPort,
   JarvisService,
@@ -90,6 +87,7 @@ export function registerJarvisIpcHandlers(store: Store): void {
   const service = getJarvisService(createJarvisDeps(store))
   registerHandlers(store, service)
   wireWakeWordObservation(store, service)
+  wireBargeIn(store, service)
   restorePersistedMode(store, service)
   startProactiveWatcher(store, service)
   void registerToolsAndPlugins(store)
@@ -400,14 +398,6 @@ function registerHandlers(store: Store, service: JarvisService): void {
     })
     return result
   })
-}
-
-function wireWakeWordObservation(store: Store, service: JarvisService): void {
-  // The matcher inside the service no-ops unless voice.jarvisWakeWord is on,
-  // so the tap stays permanently installed and cheap while dictation is idle.
-  tapSttFinalTranscripts(getSpeechSttService(store), (text) =>
-    service.handleAmbientTranscript(text)
-  )
 }
 
 function restorePersistedMode(store: Store, service: JarvisService): void {

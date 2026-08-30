@@ -1,7 +1,10 @@
 /* oxlint-disable typescript-eslint/no-explicit-any -- sherpa-onnx native addon has no type definitions */
 import { parentPort, workerData } from 'node:worker_threads'
-import { readdirSync } from 'node:fs'
 import { resampleToRate } from './stt-audio-resample'
+import { createSilenceEndpointer, buildSileroVadConfig } from './silence-endpointer'
+import type { SilenceEndpointer } from './silence-endpointer'
+import { buildKwsConfig, buildRecognizerConfig } from './stt-worker-config'
+import type { KwsInit } from './stt-worker-config'
 
 type WorkerMessage =
   | {
@@ -13,6 +16,8 @@ type WorkerMessage =
       files: string[]
       hotwordsFilePath?: string
       modelingUnit?: string
+      vadModelPath?: string
+      kws?: KwsInit
     }
   | { type: 'feed'; samples: Float32Array; sampleRate: number }
   | { type: 'stop' }
@@ -29,10 +34,16 @@ let stream: any = null
 let isStreaming = false
 let offlineBuffer: Float32Array[] = []
 let offlineSampleRate = 16000
+let vad: any = null
+let endpointer: SilenceEndpointer | null = null
+let kwsSpotter: any = null
+let kwsStream: any = null
 
 // Trailing silence (seconds) that ends an utterance once words were decoded.
 // ponytail: the tuning knob for how snappy a spoken turn feels — 1.2s reads as
 // a lag before every reply; below ~0.5s a mid-sentence breath cuts you off.
+// With VAD active the same window applies, but measured on silero's speech
+// probability, so non-speech noise no longer holds a turn open.
 const END_OF_SPEECH_SILENCE_S = 0.6
 
 function loadSherpa(): any {
@@ -43,70 +54,34 @@ function loadSherpa(): any {
   return require(modulePath)
 }
 
-// Why: different models name their ONNX files differently (e.g.
-// encoder.int8.onnx vs tiny-encoder.onnx vs encoder-epoch-99-avg-1.onnx).
-// We resolve the actual path from the manifest's files list by searching
-// for the role name anywhere in the filename.
-function resolveFile(files: string[], role: string, modelDir: string, ext = '.onnx'): string {
-  const match = files.find((f) => f.includes(role) && f.endsWith(ext))
-  if (!match) {
-    throw new Error(`No *${role}*${ext} found in model files: ${files.join(', ')}`)
-  }
-  return `${modelDir}/${match}`
-}
-
-function resolveTokens(files: string[], modelDir: string): string {
-  const match = files.find((f) => f.endsWith('tokens.txt'))
-  if (!match) {
-    throw new Error(`No *tokens.txt found in model files: ${files.join(', ')}`)
-  }
-  return `${modelDir}/${match}`
-}
-
-// Why: BPE models need a vocab file for hotwords token matching. The file
-// ships in the model archive but isn't listed in the manifest. We discover
-// it at runtime to avoid breaking existing downloads.
-function discoverBpeVocab(modelDir: string): string | undefined {
-  try {
-    const entries = readdirSync(modelDir)
-    const vocabFile = entries.find((f) => f.endsWith('.vocab'))
-    return vocabFile ? `${modelDir}/${vocabFile}` : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function buildHotwordsConfig(msg: Extract<WorkerMessage, { type: 'init' }>): {
-  decodingMethod: string
-  hotwordsFile?: string
-  hotwordsScore?: number
-  modelingUnit?: string
-  bpeVocab?: string
-} {
-  if (msg.modelType !== 'transducer' || !msg.hotwordsFilePath) {
-    return { decodingMethod: 'greedy_search' }
-  }
-
-  const unit = msg.modelingUnit
-  if (unit?.includes('bpe')) {
-    const bpeVocab = discoverBpeVocab(msg.modelDir)
-    if (!bpeVocab) {
-      return { decodingMethod: 'greedy_search' }
-    }
-    return {
-      decodingMethod: 'modified_beam_search',
-      hotwordsFile: msg.hotwordsFilePath,
-      hotwordsScore: 1.5,
-      modelingUnit: unit,
-      bpeVocab
+/**
+ * VAD and KWS are strictly additive: a broken model file must never take
+ * dictation down with it, so each setup failure logs and leaves the feature
+ * off rather than posting an error event.
+ */
+function setupVadAndKws(msg: Extract<WorkerMessage, { type: 'init' }>): void {
+  if (msg.vadModelPath) {
+    try {
+      vad = sherpa.createVoiceActivityDetector(
+        buildSileroVadConfig(msg.vadModelPath, msg.sampleRate),
+        2
+      )
+      endpointer = createSilenceEndpointer({ silenceWindowS: END_OF_SPEECH_SILENCE_S })
+    } catch (err) {
+      vad = null
+      endpointer = null
+      console.warn('[stt-worker] VAD unavailable, falling back to decoder endpointing:', err)
     }
   }
-
-  return {
-    decodingMethod: 'modified_beam_search',
-    hotwordsFile: msg.hotwordsFilePath,
-    hotwordsScore: 1.5,
-    modelingUnit: unit
+  if (msg.kws) {
+    try {
+      kwsSpotter = sherpa.createKeywordSpotter(buildKwsConfig(msg.kws, msg.sampleRate))
+      kwsStream = sherpa.createKeywordStream(kwsSpotter)
+    } catch (err) {
+      kwsSpotter = null
+      kwsStream = null
+      console.warn('[stt-worker] keyword spotter unavailable:', err)
+    }
   }
 }
 
@@ -114,92 +89,22 @@ function handleInit(msg: Extract<WorkerMessage, { type: 'init' }>): void {
   try {
     sherpa = loadSherpa()
 
-    const { modelDir, modelType, streaming, sampleRate, files } = msg
+    const { streaming, sampleRate } = msg
     isStreaming = streaming
     offlineBuffer = []
     offlineSampleRate = sampleRate
 
-    const tokens = resolveTokens(files, modelDir)
-    const hotwords = buildHotwordsConfig(msg)
-
-    if (streaming && modelType === 'transducer') {
-      const config = {
-        featConfig: { sampleRate, featureDim: 80 },
-        modelConfig: {
-          transducer: {
-            encoder: resolveFile(files, 'encoder', modelDir),
-            decoder: resolveFile(files, 'decoder', modelDir),
-            joiner: resolveFile(files, 'joiner', modelDir)
-          },
-          tokens,
-          numThreads: 1,
-          provider: 'cpu',
-          debug: 0
-        },
-        ...hotwords,
-        enableEndpoint: 1,
-        rule1MinTrailingSilence: 2.4,
-        rule2MinTrailingSilence: END_OF_SPEECH_SILENCE_S,
-        rule3MinUtteranceLength: 20
-      }
+    const { config, online } = buildRecognizerConfig(msg, END_OF_SPEECH_SILENCE_S)
+    if (online) {
       recognizer = sherpa.createOnlineRecognizer(config)
       stream = sherpa.createOnlineStream(recognizer)
-    } else if (streaming && modelType === 'paraformer') {
-      const config = {
-        featConfig: { sampleRate, featureDim: 80 },
-        modelConfig: {
-          paraformer: {
-            encoder: resolveFile(files, 'encoder', modelDir),
-            decoder: resolveFile(files, 'decoder', modelDir)
-          },
-          tokens,
-          numThreads: 1,
-          provider: 'cpu',
-          debug: 0
-        },
-        decodingMethod: 'greedy_search',
-        enableEndpoint: 1,
-        rule1MinTrailingSilence: 2.4,
-        rule2MinTrailingSilence: END_OF_SPEECH_SILENCE_S,
-        rule3MinUtteranceLength: 20
-      }
-      recognizer = sherpa.createOnlineRecognizer(config)
-      stream = sherpa.createOnlineStream(recognizer)
-    } else if (modelType === 'whisper') {
-      const config = {
-        featConfig: { sampleRate, featureDim: 80 },
-        modelConfig: {
-          whisper: {
-            encoder: resolveFile(files, 'encoder', modelDir),
-            decoder: resolveFile(files, 'decoder', modelDir)
-          },
-          tokens,
-          numThreads: 2,
-          provider: 'cpu',
-          debug: 0
-        },
-        decodingMethod: 'greedy_search'
-      }
-      recognizer = sherpa.createOfflineRecognizer(config)
-      stream = sherpa.createOfflineStream(recognizer)
     } else {
-      const config = {
-        featConfig: { sampleRate, featureDim: 80 },
-        modelConfig: {
-          transducer: {
-            encoder: resolveFile(files, 'encoder', modelDir),
-            decoder: resolveFile(files, 'decoder', modelDir),
-            joiner: resolveFile(files, 'joiner', modelDir)
-          },
-          tokens,
-          numThreads: 2,
-          provider: 'cpu',
-          debug: 0
-        },
-        ...hotwords
-      }
       recognizer = sherpa.createOfflineRecognizer(config)
       stream = sherpa.createOfflineStream(recognizer)
+    }
+
+    if (streaming) {
+      setupVadAndKws(msg)
     }
 
     parentPort?.postMessage({ type: 'ready' })
@@ -233,7 +138,24 @@ function handleFeed(msg: Extract<WorkerMessage, { type: 'feed' }>): void {
         parentPort?.postMessage({ type: 'partial', text })
       }
 
-      if (sherpa.isEndpoint(recognizer, stream)) {
+      feedKeywordSpotter(samples)
+
+      if (vad && endpointer) {
+        // End-of-turn by silero speech probability: noise is non-speech here,
+        // so it no longer holds the turn open the way decoder silence did.
+        sherpa.voiceActivityDetectorAcceptWaveform(vad, samples)
+        const decision = endpointer.feed({
+          isSpeech: Boolean(sherpa.voiceActivityDetectorIsDetected(vad)),
+          durationS: samples.length / offlineSampleRate
+        })
+        if (decision.endOfTurn) {
+          const finalText = result?.text?.trim()
+          if (finalText) {
+            parentPort?.postMessage({ type: 'final', text: finalText })
+          }
+          sherpa.reset(recognizer, stream)
+        }
+      } else if (sherpa.isEndpoint(recognizer, stream)) {
         const finalText = result?.text?.trim()
         if (finalText) {
           parentPort?.postMessage({ type: 'final', text: finalText })
@@ -269,6 +191,7 @@ function handleStop(): void {
         parentPort?.postMessage({ type: 'final', text })
       }
       stream = sherpa.createOnlineStream(recognizer)
+      endpointer?.reset()
     } else {
       // Why: offline recognizer decodes all audio at once — concatenate
       // buffered chunks into a single Float32Array and feed it to the stream.
@@ -299,11 +222,39 @@ function handleStop(): void {
   parentPort?.postMessage({ type: 'stopped' })
 }
 
+/**
+ * Runs the wake-keyword spotter over the same mic samples the recognizer
+ * sees. A detection is posted to main (barge-in decides what to do with it)
+ * and BOTH streams reset — the keyword stream for the next detection, the
+ * ASR stream so the turn restarts fresh without TTS bleed captured so far.
+ */
+function feedKeywordSpotter(samples: Float32Array): void {
+  if (!kwsSpotter || !kwsStream) {
+    return
+  }
+  sherpa.acceptWaveformOnline(kwsStream, { sampleRate: offlineSampleRate, samples })
+  while (sherpa.isKeywordStreamReady(kwsSpotter, kwsStream)) {
+    sherpa.decodeKeywordStream(kwsSpotter, kwsStream)
+    const keywordResult = JSON.parse(sherpa.getKeywordResultAsJson(kwsSpotter, kwsStream))
+    const keyword = keywordResult?.keyword?.trim()
+    if (keyword) {
+      parentPort?.postMessage({ type: 'keyword', keyword })
+      sherpa.resetKeywordStream(kwsSpotter, kwsStream)
+      sherpa.reset(recognizer, stream)
+      endpointer?.reset()
+    }
+  }
+}
+
 function handleTeardown(): void {
   stream = null
   recognizer = null
   sherpa = null
   offlineBuffer = []
+  vad = null
+  endpointer = null
+  kwsSpotter = null
+  kwsStream = null
   process.exit(0)
 }
 

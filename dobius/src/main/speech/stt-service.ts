@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { app } from 'electron'
 import { getCatalogModel } from './model-catalog'
 import { getSherpaModulePath } from './sherpa-module-path'
+import { ensureSileroVadModel, resolveSileroVadModelPath } from './vad-endpoint'
+import { ensureKwsModel, resolveKwsAssets } from './wake-kws'
 import type { ModelManager } from './model-manager'
 import { OpenAiTranscriptionSession } from './openai-transcription-client'
 import { readOpenAiSpeechApiKey } from './openai-api-key-store'
@@ -19,6 +21,7 @@ export type SttEvent =
   | { type: 'final'; text?: string }
   | { type: 'stopped' }
   | { type: 'error'; error?: string }
+  | { type: 'keyword'; keyword?: string }
 
 export type SttEventSink = (event: SttEvent) => void
 
@@ -230,6 +233,7 @@ export class SttService {
     }
 
     const modelDir = this.modelManager.getModelDir(modelId)
+    const { vadModelPath, kws } = this.resolveVoiceExtras()
     worker.postMessage({
       type: 'init',
       modelDir,
@@ -238,7 +242,9 @@ export class SttService {
       sampleRate: manifest.sampleRate,
       files: manifest.files ?? [],
       hotwordsFilePath,
-      modelingUnit: manifest.modelingUnit
+      modelingUnit: manifest.modelingUnit,
+      vadModelPath,
+      kws
     })
 
     try {
@@ -394,6 +400,30 @@ export class SttService {
       if (this.worker && this.activeModelId === modelId) {
         throw new Error('voice_model_in_use')
       }
+    }
+  }
+
+  /**
+   * VAD endpointing + wake-word barge-in ride the same worker. Strictly
+   * additive and never a hard dependency: missing models degrade gracefully —
+   * this dictation starts without them while the fire-and-forget ensure
+   * fetches them for the NEXT start. Any failure (including a ModelManager
+   * without getModelsDir, as tests inject) just means no extras.
+   */
+  private resolveVoiceExtras(): {
+    vadModelPath?: string
+    kws?: { modelDir: string; files: string[]; keywordsFilePath: string }
+  } {
+    try {
+      const modelsRoot = this.modelManager.getModelsDir()
+      void ensureSileroVadModel(modelsRoot).catch(() => undefined)
+      void ensureKwsModel(modelsRoot).catch(() => undefined)
+      return {
+        vadModelPath: resolveSileroVadModelPath(modelsRoot) ?? undefined,
+        kws: resolveKwsAssets(modelsRoot) ?? undefined
+      }
+    } catch {
+      return {}
     }
   }
 

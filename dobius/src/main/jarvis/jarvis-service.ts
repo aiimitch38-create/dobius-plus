@@ -244,6 +244,11 @@ export class JarvisService {
     }
   }
 
+  /** Barge-in landed: TTS was flushed, the mic is now a fresh turn. */
+  handleBargeIn(): void {
+    this.transition({ type: 'listening-started' })
+  }
+
   dispose(): void {
     if (this.shortcutActive) {
       this.deps.shortcut.unregister()

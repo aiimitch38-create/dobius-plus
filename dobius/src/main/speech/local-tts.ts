@@ -111,7 +111,8 @@ export function buildSupertonicConfig(modelDir: string): object {
   }
 }
 
-async function downloadViaElectronNet(url: string, dest: string): Promise<void> {
+/** Shared by the TTS, VAD, and KWS model fetches — one proxy-aware path. */
+export async function downloadFileOverHttps(url: string, dest: string): Promise<void> {
   // Why net.fetch: it honors the app's proxy settings, unlike Node's fetch.
   if (new URL(url).protocol !== 'https:') {
     throw new Error('Model downloads must use HTTPS')
@@ -126,7 +127,7 @@ async function downloadViaElectronNet(url: string, dest: string): Promise<void> 
   )
 }
 
-function extractTarBz2(archivePath: string, destDir: string): Promise<void> {
+export function extractTarBz2(archivePath: string, destDir: string): Promise<void> {
   mkdirSync(destDir, { recursive: true })
   return new Promise((resolve, reject) => {
     // Why spawn over exec: bzip2 decompression of a 140MB archive is minutes of
@@ -191,7 +192,7 @@ export class LocalTts {
     mkdirSync(this.deps.modelsRoot, { recursive: true })
     const archivePath = join(this.deps.modelsRoot, `${asset.dirName}.tar.bz2`)
     try {
-      await (this.deps.downloadToFile ?? downloadViaElectronNet)(asset.url, archivePath)
+      await (this.deps.downloadToFile ?? downloadFileOverHttps)(asset.url, archivePath)
       await (this.deps.extractArchive ?? extractTarBz2)(archivePath, modelDir)
     } catch (error) {
       // A half-extracted dir would read as "present" next time; remove it.
