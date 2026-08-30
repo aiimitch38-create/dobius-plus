@@ -12,6 +12,8 @@ import { TooltipProvider } from '@comms/shared/ui/tooltip'
 import { primeDobiusIdentity } from '@comms/shared/api/dobiusCommunications'
 import { LoadingMark } from '@comms/shared/ui/dobius-logo/LoadingMark'
 import '@comms/shared/styles/globals.css'
+// Imported after globals.css so its viewport-height corrections land last.
+import './communications-embed.css'
 
 /**
  * The Communications tab.
@@ -73,22 +75,24 @@ export function CommunicationsPage(): React.JSX.Element {
   }
 
   return (
-    <CommunitiesProvider>
-      <CommunityOnboardingProvider>
-        <ThemeProvider defaultTheme="buzz">
-          <TooltipProvider delayDuration={300}>
-            <EmojiBurstProvider>
-              <PoofBurstProvider>
-                <UpdaterProvider>
-                  <App />
-                </UpdaterProvider>
-                <Toaster />
-              </PoofBurstProvider>
-            </EmojiBurstProvider>
-          </TooltipProvider>
-        </ThemeProvider>
-      </CommunityOnboardingProvider>
-    </CommunitiesProvider>
+    <div className="dobius-comms-embed">
+      <CommunitiesProvider>
+        <CommunityOnboardingProvider>
+          <ThemeProvider defaultTheme="buzz">
+            <TooltipProvider delayDuration={300}>
+              <EmojiBurstProvider>
+                <PoofBurstProvider>
+                  <UpdaterProvider>
+                    <App />
+                  </UpdaterProvider>
+                  <Toaster />
+                </PoofBurstProvider>
+              </EmojiBurstProvider>
+            </TooltipProvider>
+          </ThemeProvider>
+        </CommunityOnboardingProvider>
+      </CommunitiesProvider>
+    </div>
   )
 }
 
