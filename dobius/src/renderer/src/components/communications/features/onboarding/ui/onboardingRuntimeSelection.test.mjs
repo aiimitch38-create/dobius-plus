@@ -20,6 +20,24 @@ test("all bundled harnesses are visible in onboarding", () => {
   assert.equal(runtimeIsVisibleInOnboarding("custom"), false);
 });
 
+test("Dobius account-scoped runtimes are visible and lead the list", () => {
+  // Regression: these ids carry the signed-in account's uuid, so a fixed
+  // allowlist filtered out every runtime discovery had just found and the
+  // onboarding step reported no harnesses installed on a machine that had one.
+  const claudeAccount = "dobius-native:claude:9bcfb49a-a73d-4fc8-9d8c-34e52be366e0";
+  assert.equal(runtimeIsVisibleInOnboarding(claudeAccount), true);
+  assert.equal(runtimeIsVisibleInOnboarding("dobius-native:codex:active"), true);
+
+  const ordered = getVisibleOnboardingRuntimes([
+    runtime("claude", "available", "logged_in"),
+    runtime(claudeAccount, "available", "logged_in"),
+  ]);
+  assert.deepEqual(
+    ordered.map((entry) => entry.id),
+    [claudeAccount, "claude"],
+  );
+});
+
 test("visible onboarding runtimes use the product order", () => {
   const runtimes = [
     runtime("buzz-agent", "available", "not_applicable"),

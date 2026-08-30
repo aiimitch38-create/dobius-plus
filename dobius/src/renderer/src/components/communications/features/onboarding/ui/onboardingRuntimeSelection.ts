@@ -11,8 +11,23 @@ const VISIBLE_ONBOARDING_RUNTIME_IDS = new Set<string>(
   ONBOARDING_RUNTIME_ORDER,
 );
 
+// Dobius's own runtimes are minted per signed-in account, so their ids carry
+// the account uuid (`dobius-native:claude:<uuid>`) and can never appear in a
+// fixed list. Without this the onboarding step filtered out every runtime it
+// had just discovered and told the user nothing was installed.
+const DOBIUS_RUNTIME_ID_PREFIX = "dobius-native:";
+
 export function runtimeIsVisibleInOnboarding(runtimeId: string) {
-  return VISIBLE_ONBOARDING_RUNTIME_IDS.has(runtimeId);
+  return (
+    runtimeId.startsWith(DOBIUS_RUNTIME_ID_PREFIX) ||
+    VISIBLE_ONBOARDING_RUNTIME_IDS.has(runtimeId)
+  );
+}
+
+/** Sort key: built-in Dobius runtimes lead, then the fixed upstream order. */
+function onboardingRuntimeRank(runtimeId: string) {
+  if (runtimeId.startsWith(DOBIUS_RUNTIME_ID_PREFIX)) return -1;
+  return ONBOARDING_RUNTIME_ORDER.indexOf(runtimeId);
 }
 
 export function runtimeIsReadyForOnboarding(runtime: AcpRuntimeCatalogEntry) {
@@ -30,8 +45,7 @@ export function getVisibleOnboardingRuntimes(
     .filter((runtime) => runtimeIsVisibleInOnboarding(runtime.id))
     .sort(
       (left, right) =>
-        ONBOARDING_RUNTIME_ORDER.indexOf(left.id) -
-        ONBOARDING_RUNTIME_ORDER.indexOf(right.id),
+        onboardingRuntimeRank(left.id) - onboardingRuntimeRank(right.id),
     );
 }
 
