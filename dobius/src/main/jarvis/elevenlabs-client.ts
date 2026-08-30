@@ -3,6 +3,7 @@ import { writeFile as writeFileAsync } from 'node:fs/promises'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { lastSentenceEnd } from './sentence-stream'
 
 export type ElevenLabsConfig = {
   apiKey: string
@@ -66,10 +67,10 @@ export function chunkForSpeech(text: string): string[] {
   const trimmed = text.trim()
   if (trimmed.length <= FIRST_CHUNK_MAX_CHARS) {return [trimmed]}
   const head = trimmed.slice(0, FIRST_CHUNK_MAX_CHARS)
-  const cut = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '))
+  const end = lastSentenceEnd(head)
   // A too-early break would speak a fragment; one shot reads better than "Yes."
-  if (cut < 20) {return [trimmed]}
-  return [trimmed.slice(0, cut + 1).trim(), trimmed.slice(cut + 1).trim()]
+  if (end < 21) {return [trimmed]}
+  return [trimmed.slice(0, end).trim(), trimmed.slice(end).trim()]
 }
 
 export async function speakWithElevenLabs(text: string, config: ElevenLabsConfig): Promise<void> {

@@ -6,6 +6,7 @@ import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getLocalSpeaker, getSpeechSttService } from '../speech/speech-runtime-service'
 import { registerTtsBakeoffHandler } from './tts-bakeoff-ipc'
+import { VoiceBrain } from './voice-brain'
 import { converseWithAdam, loadAdamServiceToken } from './adam-client'
 import {
   buildAgentContext,
@@ -74,7 +75,9 @@ function createJarvisDeps(store: Store): JarvisServiceDeps {
     store,
     broadcast: createBroadcastPort(),
     shortcut: createGlobalShortcutPort(),
-    localSpeak: (text) => getLocalSpeaker(store).speak(text)
+    localSpeak: (text) => getLocalSpeaker(store).speak(text),
+    // Constructing VoiceBrain is free — the SDK subprocess forks on first ask.
+    brain: new VoiceBrain()
   }
 }
 

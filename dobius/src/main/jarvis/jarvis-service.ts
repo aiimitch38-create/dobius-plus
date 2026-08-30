@@ -46,6 +46,11 @@ export type JarvisServiceDeps = {
    * for any local synthesis failure.
    */
   localSpeak?: (text: string) => Promise<void>
+  /**
+   * Streaming local brain (VoiceBrain). Optional like localSpeak: production
+   * wiring supplies it; without it every ask goes to ADAM as before.
+   */
+  brain?: { ask(utterance: string): AsyncIterable<string> }
   now?: () => number
 }
 
@@ -113,6 +118,15 @@ export class JarvisService {
       return { kind: 'error', text: 'No speech detected' }
     }
     this.transition({ type: 'ask-started' })
+    // Local streaming brain first: sentences start speaking while the model is
+    // still writing the rest. Any failure falls back to the ADAM turn below —
+    // unless audio already played, where repeating the reply would be worse.
+    if (this.deps.store.getSettings().voice?.voiceEngine !== 'elevenlabs' && this.deps.brain) {
+      const streamed = await this.askBrain(utterance)
+      if (streamed) {
+        return streamed
+      }
+    }
     let result: JarvisAskResult
     try {
       result = await converseWithAdam({
@@ -142,25 +156,34 @@ export class JarvisService {
       return { played: false, reason: 'empty text' }
     }
     this.transition({ type: 'speak-started' })
-    // Decision table: 'elevenlabs' → billed API (only when explicitly chosen —
-    // the account is out of credits); 'local' (default) → on-device TTS.
-    // Either path's failure lands on the `say` queue below, never silence.
+    const outcome = await this.speakRouted(text)
+    this.transition({ type: 'turn-finished' })
+    return outcome
+  }
+
+  /**
+   * Engine routing without phase transitions, so streamed turns can hold one
+   * continuous 'speaking' phase across many sentences.
+   *
+   * Decision table: 'elevenlabs' → billed API (only when explicitly chosen —
+   * the account is out of credits); 'local' (default) → on-device TTS.
+   * Either path's failure lands on the `say` queue below, never silence.
+   */
+  private async speakRouted(text: string): Promise<JarvisSpeakOutcome> {
     const voice = this.deps.store.getSettings().voice
     if (voice?.voiceEngine === 'elevenlabs') {
       const eleven = resolveElevenLabsConfig(voice)
       if (eleven) {
         try {
           await speakWithElevenLabs(text.trim(), eleven)
-          this.transition({ type: 'turn-finished' })
           return { played: true }
         } catch {
-          // fall through to the huddle/local engine below
+          // fall through to the huddle/say queue below
         }
       }
     } else if (this.deps.localSpeak) {
       try {
         await this.deps.localSpeak(text.trim())
-        this.transition({ type: 'turn-finished' })
         return { played: true }
       } catch {
         // fall through to the huddle/say queue below
@@ -172,8 +195,39 @@ export class JarvisService {
     } catch (error) {
       outcome = { played: false, reason: error instanceof Error ? error.message : String(error) }
     }
-    this.transition({ type: 'turn-finished' })
     return outcome.played ? { played: true } : { played: false, reason: outcome.reason }
+  }
+
+  /**
+   * One streamed brain turn: sentences speak as they arrive, under a single
+   * speaking phase. Returns null when nothing was spoken yet and the caller
+   * should fall back to ADAM; once audio has played, errors end the turn
+   * instead — restating the whole reply over spoken audio is worse.
+   */
+  private async askBrain(utterance: string): Promise<JarvisAskResult | null> {
+    const brain = this.deps.brain
+    if (!brain) {
+      return null
+    }
+    const spokenParts: string[] = []
+    try {
+      for await (const sentence of brain.ask(utterance)) {
+        if (spokenParts.length === 0) {
+          this.transition({ type: 'speak-started' })
+        }
+        spokenParts.push(sentence)
+        await this.speakRouted(sentence)
+      }
+    } catch {
+      if (spokenParts.length === 0) {
+        return null
+      }
+    }
+    if (spokenParts.length === 0) {
+      return null
+    }
+    this.transition({ type: 'turn-finished' })
+    return { kind: 'answer', text: spokenParts.join(' ') }
   }
 
   /**
