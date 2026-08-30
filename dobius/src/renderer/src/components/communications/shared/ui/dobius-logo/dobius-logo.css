@@ -14,21 +14,22 @@
   }
 }
 
-/* Play, then hold invisible for the caller's rest window before repeating, so a
-   long-lived "still working" mark reads as a heartbeat rather than a strobe. */
+/* The rest window the loop callers ask for is a slower cycle, not a gap: see
+   dobius-logo-breathe. --dobius-logo-cycle carries the caller's timing. */
+
+/* Never reaches zero. A boot gate can stay on screen for a long time — if the
+   mark animates all the way out, a slow start is indistinguishable from a
+   crash, which is exactly how this first read on screen. Motion carries the
+   "still working" signal; opacity stays well above the floor. */
 @keyframes dobius-logo-breathe {
-  0% {
-    opacity: 0;
-    transform: translateY(2%) scale(0.97);
-  }
-  18%,
-  62% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  0%,
   100% {
-    opacity: 0;
-    transform: translateY(-2%) scale(0.97);
+    opacity: 0.72;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 

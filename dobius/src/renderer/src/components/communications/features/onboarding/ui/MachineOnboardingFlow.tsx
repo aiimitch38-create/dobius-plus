@@ -11,6 +11,7 @@ import {
 import type { IdentityStorage } from "@comms/shared/api/types";
 import { Button } from "@comms/shared/ui/button";
 import { StartupWindowDragRegion } from "@comms/shared/ui/StartupWindowDragRegion";
+import { DobiusMark } from "@comms/shared/ui/dobius-logo/DobiusMark";
 import { BackupStep } from "./BackupStep";
 import { DefaultConfigStep } from "./DefaultConfigStep";
 import { DownloadKeyStep } from "./DownloadKeyStep";
@@ -211,12 +212,14 @@ export function MachineOnboardingFlow({
               effect="mask-reveal-up"
               transitionKey="machine-identity"
             >
-              <img
-                alt="Dobius"
-                className="w-full max-w-[600px]"
-                src="/landing/buzz-wordmark.png"
-              />
-              <p className="mt-2 max-w-[560px] text-center text-2xl font-normal leading-none text-foreground">
+              {/* The upstream landing wordmark was Buzz's own lettering, so it
+                  is not restored with the other public assets. The mark plus
+                  the product name carries the same weight here. */}
+              <DobiusMark className="w-full max-w-[140px]" />
+              <h1 className="mt-6 text-5xl font-semibold leading-none text-foreground">
+                Dobius
+              </h1>
+              <p className="mt-4 max-w-[560px] text-center text-2xl font-normal leading-none text-foreground">
                 Your people, your agents, your projects —<br />
                 all in one place.
               </p>
