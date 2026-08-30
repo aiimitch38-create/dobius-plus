@@ -5,12 +5,75 @@
 Clicking **Communications** shows the Dobius mark blinking on a white screen.
 Nothing else ever renders.
 
-## Diagnosis
+## CORRECTION — the first diagnosis below was wrong
+
+Section 1 concluded that the two sides share no vocabulary and that ~187
+commands had to be ported. **The measurements were accurate; the conclusion was
+not.** It was reached by calling `window.dobiusCommunications.invoke(...)`
+through CDP, which is the raw bridge *underneath* the layer the client uses.
+
+`shared/api/dobiusCommunications.ts` is a 3,221-line translator with **171
+command cases**, already wired in at `shared/api/tauri.ts:311`
+(`invokeTauri` -> `invokeDobiusBackedTauriCommand` -> raw bridge as fallback).
+Buzz's snake_case commands are translated there. Nothing needed porting.
+
+**The real root cause, and it is mine.** `dobiusCommunications.ts` read the
+participant identity out of localStorage:
+
+```ts
+const raw = window.localStorage.getItem("dobius-buzz-identity.v1");
+if (!raw) throw new Error("Dobius Communications identity is unavailable");
+```
+
+The only writer of that key is the standalone `main.tsx` entry point, whose
+identity bootstrap I deliberately left out of `CommunicationsPage.tsx` —
+correctly, because it stored a Nostr secret in plain text and Phase 4 had
+already migrated it into the encrypted main-process store
+(`participant-identity-buzz-migration.ts`). **I removed the writer and never
+repointed the reader.** So `localIdentity()` throws on the client's first call
+and it never leaves the loading gate. Confirmed on the live machine: the only
+matching localStorage keys are `buzz-theme-cache` and two mobile-sidebar flags.
+
+The identity itself was never lost — it is reachable from the renderer right
+now, which is what makes the fix small:
+
+```
+window.api.communications.getIdentity()
+  -> {"pubkey":"ebcaeee747b709be8449d70ad6a56e7f83429be2f873d42d762457d65624645f",
+      "username":"Dobius User"}
+```
+
+### Fix applied
+
+- `localIdentity()` now returns the **public half only**, from a module-level
+  cache. No secret enters the renderer.
+- `primeDobiusIdentity()` fills that cache from the main process;
+  `CommunicationsPage` awaits it before mounting the client, because 30-odd
+  call sites read `.pubkey` synchronously while building relay tags and
+  filters. This is what replaces the deleted bootstrap.
+- `signedEvent()` is now async and signs via
+  `window.api.communications.signEvent`. All 15 call sites await it.
+- `decrypt_observer_event` / `build_observer_control_event` need NIP-44 against
+  a *peer* pubkey, and the bridge only offers to-self. They now throw a named
+  error instead of reaching for a key the renderer no longer has. A peer-scoped
+  main-process method is the follow-up.
+
+### Still outstanding
+
+49 of the 187 commands have no case in the translator: mesh, pairing,
+workflows, canvas notes, channel templates, media upload, project PR signing.
+Most already have allowlisted backend methods (`canvas.*`, `channelTemplate.*`,
+`agent.snapshot.*`, `workflow.*`), so they are "add a case", not "build a
+backend".
+
+---
+
+## Original diagnosis (section 1 superseded by the correction above)
 
 Driven through CDP against the installed app (`--remote-debugging-port=9222`),
 not inferred. Three independent causes, only one of them structural.
 
-### 1. The client and the backend speak different languages (structural)
+### 1. The client and the backend speak different languages (WRONG — see above)
 
 The restored client is Buzz's, so it calls Tauri commands in snake_case:
 

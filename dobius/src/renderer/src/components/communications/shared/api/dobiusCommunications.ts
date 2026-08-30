@@ -1,7 +1,5 @@
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
-import { nip44 } from "nostr-tools";
-import { KIND_AGENT_OBSERVER_FRAME } from "@comms/shared/constants/kinds";
 
 type DobiusBridgeResponse =
   | { version: 1; id: string; ok: true; result: unknown }
@@ -227,27 +225,40 @@ async function discoverDobiusAgentRuntimes(): Promise<unknown[]> {
 
 const DOBIUS_RELAY_WEBSOCKET_URL = "ws://localhost:3300";
 const DOBIUS_RELAY_HTTP_URL = "http://localhost:3300";
-const DOBIUS_IDENTITY_STORAGE_KEY = "dobius-buzz-identity.v1";
 const DOBIUS_AGENT_IDENTITIES_STORAGE_KEY = "dobius-buzz-agent-identities.v1";
 
 type DobiusLocalIdentity = {
-  privateKey: string;
   pubkey: string;
   username: string;
 };
 
+/**
+ * The participant identity, public half only.
+ *
+ * This used to read a Nostr private key out of localStorage under
+ * DOBIUS_IDENTITY_STORAGE_KEY. That key no longer exists: Phase 4 migrated it
+ * into the main process, encrypted at rest (participant-identity-store), and
+ * the one thing that ever wrote it — the standalone `main.tsx` entry — is not
+ * part of the Communications tab. Nothing in the renderer holds the secret any
+ * more, so signing happens in main (see {@link signedEvent}).
+ *
+ * Kept synchronous because 30-odd call sites read `.pubkey` inline while
+ * building tags and filters. {@link primeDobiusIdentity} fills the cache once,
+ * before the client renders.
+ */
+let cachedIdentity: DobiusLocalIdentity | null = null;
+
+export async function primeDobiusIdentity(): Promise<DobiusLocalIdentity> {
+  const identity = await window.api.communications.getIdentity();
+  cachedIdentity = { pubkey: identity.pubkey, username: identity.username };
+  return cachedIdentity;
+}
+
 function localIdentity(): DobiusLocalIdentity {
-  const raw = window.localStorage.getItem(DOBIUS_IDENTITY_STORAGE_KEY);
-  if (!raw) throw new Error("Dobius Communications identity is unavailable");
-  const identity = JSON.parse(raw) as Partial<DobiusLocalIdentity>;
-  if (
-    typeof identity.privateKey !== "string" ||
-    typeof identity.pubkey !== "string" ||
-    typeof identity.username !== "string"
-  ) {
-    throw new Error("Dobius Communications identity is invalid");
+  if (!cachedIdentity) {
+    throw new Error("Dobius Communications identity has not loaded yet");
   }
-  return identity as DobiusLocalIdentity;
+  return cachedIdentity;
 }
 
 function signedEventWithPrivateKey(
@@ -272,8 +283,23 @@ function signedEventWithPrivateKey(
   return JSON.stringify(event);
 }
 
-function signedEvent(args: unknown, kindOverride?: number): string {
-  return signedEventWithPrivateKey(args, localIdentity().privateKey, kindOverride);
+/**
+ * Sign as the participant. The private key lives in the main process, so this
+ * is a round trip rather than a local finalizeEvent — which is why it is async
+ * where the old private-key version was not.
+ */
+async function signedEvent(args: unknown, kindOverride?: number): Promise<string> {
+  if (!args || typeof args !== "object") throw new Error("Missing event payload");
+  const input = args as Record<string, unknown>;
+  const kind = kindOverride ?? input.kind;
+  if (typeof kind !== "number") throw new Error("Missing event kind");
+  const signed = await window.api.communications.signEvent({
+    kind,
+    content: typeof input.content === "string" ? input.content : "",
+    tags: Array.isArray(input.tags) ? (input.tags as string[][]) : [],
+    ...(typeof input.createdAt === "number" ? { createdAt: input.createdAt } : {})
+  });
+  return JSON.stringify(signed);
 }
 
 type RelayEventRecord = {
@@ -450,7 +476,7 @@ async function openDobiusDm(args: unknown): Promise<unknown> {
   if (pubkeys.length === 0) throw new Error("Select at least one person to start a DM.");
   if (pubkeys.length > 8) throw new Error("A DM can include at most eight other participants.");
 
-  const submission = await submitRelayEvent(signedEvent({
+  const submission = await submitRelayEvent(await signedEvent({
     kind: 41010,
     content: "",
     tags: pubkeys.map((pubkey) => ["p", pubkey]),
@@ -654,7 +680,7 @@ async function sendDobiusChannelMessage(args: unknown): Promise<unknown> {
   }
 
   const createdAt = Math.floor(Date.now() / 1000);
-  const submission = await submitRelayEvent(signedEvent({ kind, content, tags, createdAt }));
+  const submission = await submitRelayEvent(await signedEvent({ kind, content, tags, createdAt }));
   if (submission.accepted === false) {
     throw new Error(submission.message || "The relay rejected the message.");
   }
@@ -692,7 +718,7 @@ async function updateDobiusProfile(args: unknown): Promise<DobiusRelayProfile> {
     about: choose("about", current.about) ?? undefined,
     nip05: choose("nip05Handle", current.nip05_handle) ?? undefined,
   });
-  await submitRelayEvent(signedEvent({ kind: 0, content, tags: [] }));
+  await submitRelayEvent(await signedEvent({ kind: 0, content, tags: [] }));
   return profileFromEvent({
     id: "pending-profile",
     pubkey: localIdentity().pubkey,
@@ -833,7 +859,7 @@ function channelMetadataTags(args: {
 
 async function publishChannelMetadata(tags: string[][]): Promise<void> {
   const submission = await submitRelayEvent(
-    signedEvent({ kind: DOBIUS_CHANNEL_METADATA_KIND, content: "", tags }),
+    await signedEvent({ kind: DOBIUS_CHANNEL_METADATA_KIND, content: "", tags }),
   );
   if (submission.accepted === false) {
     throw new Error(submission.message || "The relay rejected the channel update.");
@@ -857,7 +883,7 @@ async function publishChannelMembership(channelId: string, members: Map<string, 
   const tags: string[][] = [["d", channelId]];
   for (const [pubkey, role] of members) tags.push(["p", pubkey, role]);
   const submission = await submitRelayEvent(
-    signedEvent({ kind: DOBIUS_CHANNEL_MEMBERSHIP_KIND, content: "", tags }),
+    await signedEvent({ kind: DOBIUS_CHANNEL_MEMBERSHIP_KIND, content: "", tags }),
   );
   if (submission.accepted === false) {
     throw new Error(submission.message || "The relay rejected the membership update.");
@@ -1196,7 +1222,7 @@ async function getDobiusThreadReplies(args: unknown): Promise<unknown> {
 }
 
 async function publishDobiusMutation(kind: number, content: string, tags: string[][]): Promise<void> {
-  const submission = await submitRelayEvent(signedEvent({ kind, content, tags }));
+  const submission = await submitRelayEvent(await signedEvent({ kind, content, tags }));
   if (submission.accepted === false) throw new Error(submission.message || "The relay rejected the action.");
 }
 
@@ -1791,7 +1817,7 @@ async function latestRelayMembershipSnapshot(): Promise<RelayEventRecord | null>
 async function publishDobiusRelayAdminEvent(kind: number, targetPubkey: string, role?: string): Promise<void> {
   const tags: string[][] = [["p", requiredText(targetPubkey, "target pubkey").trim().toLowerCase()]];
   if (role) tags.push(["role", role]);
-  const submission = await submitRelayEvent(signedEvent({ kind, content: "", tags }));
+  const submission = await submitRelayEvent(await signedEvent({ kind, content: "", tags }));
   if (submission.accepted === false) {
     throw new Error(submission.message || "The relay rejected the membership update.");
   }
@@ -1943,7 +1969,7 @@ async function setDobiusContactList(args: unknown): Promise<unknown> {
       typeof contact.relay_url === "string" ? contact.relay_url : "",
       typeof contact.petname === "string" ? contact.petname : "",
     ]);
-  const submission = await submitRelayEvent(signedEvent({ kind: 3, content: "", tags }));
+  const submission = await submitRelayEvent(await signedEvent({ kind: 3, content: "", tags }));
   if (submission.accepted === false) {
     throw new Error(submission.message || "The relay rejected the contact list update.");
   }
@@ -2030,7 +2056,7 @@ async function hideDobiusDm(args: unknown): Promise<void> {
   const selfPubkey = localIdentity().pubkey.toLowerCase();
   const [existing] = await queryRelay([{ kinds: [30622], authors: [selfPubkey], limit: 1 }]);
   const submission = await submitRelayEvent(
-    signedEvent({ kind: 30622, content: "", tags: buildHiddenDmSnapshotTags(selfPubkey, existing?.tags ?? [], channelId) }),
+    await signedEvent({ kind: 30622, content: "", tags: buildHiddenDmSnapshotTags(selfPubkey, existing?.tags ?? [], channelId) }),
   );
   if (submission.accepted === false) {
     throw new Error(submission.message || "The relay rejected hiding the DM.");
@@ -2114,7 +2140,7 @@ async function updateDobiusProfileAtRelay(args: unknown): Promise<DobiusRelayPro
     about: current.about ?? undefined,
     nip05: current.nip05_handle ?? undefined,
   });
-  await submitRelayEvent(signedEvent({ kind: 0, content, tags: [] }));
+  await submitRelayEvent(await signedEvent({ kind: 0, content, tags: [] }));
   return profileFromEvent({
     id: "pending-profile",
     pubkey: identity.pubkey,
@@ -2163,7 +2189,7 @@ export async function invokeDobiusBackedTauriCommand(
       };
     }
     case "sign_event":
-      return { handled: true, result: signedEvent(args) };
+      return { handled: true, result: await signedEvent(args) };
     case "create_auth_event": {
       if (!args || typeof args !== "object") throw new Error("Missing auth payload");
       const input = args as Record<string, unknown>;
@@ -2171,7 +2197,7 @@ export async function invokeDobiusBackedTauriCommand(
       const challenge = requiredText(input.challenge, "relay challenge");
       return {
         handled: true,
-        result: signedEvent(
+        result: await signedEvent(
           {
             content: "",
             tags: [
@@ -2602,38 +2628,16 @@ export async function invokeDobiusBackedTauriCommand(
     }
 
     // ── agent-lifecycle / agent-provider-config / agent-approvals ──────────
-    case "decrypt_observer_event": {
-      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
-      const eventJson = requiredText(input.eventJson, "observer event");
-      const event = JSON.parse(eventJson) as RelayEventRecord;
-      const me = localIdentity();
-      const conversationKey = nip44.v2.utils.getConversationKey(
-        hexToBytes(me.privateKey),
-        event.pubkey,
+    // Both of these need NIP-44 against a PEER's pubkey, which needs the
+    // participant secret. That secret is held by the main process and the
+    // bridge only offers encrypt/decrypt to-self, so there is nothing correct
+    // to call yet — a peer-scoped method has to be added on the main side.
+    // Failing loudly beats decrypting with a key the renderer should not have.
+    case "decrypt_observer_event":
+    case "build_observer_control_event":
+      throw new Error(
+        `${command} needs peer NIP-44 in the main process; not implemented yet`,
       );
-      const plaintext = nip44.v2.decrypt(event.content, conversationKey);
-      return { handled: true, result: JSON.parse(plaintext) };
-    }
-    case "build_observer_control_event": {
-      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
-      const agentPubkey = requiredText(input.agentPubkey, "agent pubkey").toLowerCase();
-      const me = localIdentity();
-      const conversationKey = nip44.v2.utils.getConversationKey(
-        hexToBytes(me.privateKey),
-        agentPubkey,
-      );
-      const content = nip44.v2.encrypt(JSON.stringify(input.payload ?? {}), conversationKey);
-      const event = finalizeEvent(
-        {
-          kind: KIND_AGENT_OBSERVER_FRAME,
-          content,
-          tags: [["p", agentPubkey], ["frame", "control"]],
-          created_at: Math.floor(Date.now() / 1000),
-        },
-        hexToBytes(me.privateKey),
-      );
-      return { handled: true, result: JSON.stringify(event) };
-    }
     case "index_observer_channel_id": {
       const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
       const entries = Array.isArray(input.entries) ? input.entries : [];

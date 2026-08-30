@@ -206,8 +206,12 @@
   }
 
   .buzz-onboarding-neutral-theme {
-    /* Landing "chartreuse" — the welcome background; reused for the CTA label. */
-    --buzz-welcome-chartreuse: #d7d72e;
+    /* Landing accent — the welcome background, reused for the CTA label.
+       Was Buzz's honey chartreuse (#d7d72e), their single most recognisable
+       brand signal. Now a Dobius blue drawn from the mark's "+", which also
+       makes the shell gradient monochromatic against the light-blue bottom
+       stop below instead of running yellow-to-blue. */
+    --buzz-welcome-chartreuse: #7fb2e5;
     /* Bottom stop of the onboarding shell gradient; also the docked-footer
        scrim color so content scrolling under the CTA fades into the page. */
     --buzz-onboarding-shell-bottom: #d7e7f6;

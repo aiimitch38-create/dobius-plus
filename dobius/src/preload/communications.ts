@@ -12,15 +12,20 @@ import {
 
 let requestSequence = 0
 
-/**
- * Idempotent exposure: the guest webview entry runs this at import time and
- * the main-window preload calls it explicitly, so the same bundled module
- * must tolerate both paths without re-exposing in one context.
- */
+// Why a module flag rather than sniffing `window`: the old guard tested
+// `'dobiusCommunications' in window`, but with contextIsolation on, this file
+// runs in the isolated world while exposeInMainWorld writes to the main one.
+// The guard could never see its own work, so a second call always reached
+// exposeInMainWorld and threw "Cannot bind an API on top of an existing
+// property", aborting the rest of the preload.
+let bridgeExposed = false
+
+/** Idempotent exposure — see the flag above for why it is not a window check. */
 export function exposeCommunicationsBridge(): void {
-  if ('dobiusCommunications' in window) {
+  if (bridgeExposed) {
     return
   }
+  bridgeExposed = true
   contextBridge.exposeInMainWorld('dobiusCommunications', {
   invoke(command: string, args: unknown = {}): Promise<CommunicationsBridgeResponse> {
     requestSequence += 1
@@ -38,5 +43,9 @@ export function exposeCommunicationsBridge(): void {
   })
 }
 
-exposeCommunicationsBridge()
+// No import-time call. This module used to be the guest webview's own preload
+// entry and self-exposed on import; that webview was retired in fdcffaaf, and
+// the main-window preload calls exposeCommunicationsBridge() explicitly. The
+// leftover call ran a second time and threw, killing everything after it in
+// index.ts — silently, because it is the last statement there today.
 
