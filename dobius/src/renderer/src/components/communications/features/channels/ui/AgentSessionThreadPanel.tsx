@@ -29,7 +29,7 @@ import type { Channel } from "@comms/shared/api/types";
 import { useEscapeKey } from "@comms/shared/hooks/useEscapeKey";
 import { useIsThreadPanelOverlay } from "@comms/shared/hooks/use-mobile";
 import { useNow } from "@comms/shared/lib/useNow";
-import { AuxiliaryPanel } from "@comms/shared/layout/AuxiliaryPanel";
+import { AuxiliaryPanel } from "@comms/shared/layout/AuxiliaryPanelShell";
 import { AuxiliaryPanelBody } from "@comms/shared/layout/AuxiliaryPanel";
 import {
   AuxiliaryPanelHeader,

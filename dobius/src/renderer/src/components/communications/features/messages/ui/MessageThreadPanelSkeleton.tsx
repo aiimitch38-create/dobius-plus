@@ -7,8 +7,12 @@ import {
 import { useEscapeKey } from "@comms/shared/hooks/useEscapeKey";
 import { useIsThreadPanelOverlay } from "@comms/shared/hooks/use-mobile";
 import { cn } from "@comms/shared/lib/cn";
+// AuxiliaryPanel comes straight from its defining module, not the barrel:
+// the barrel and AuxiliaryPanelShell import each other, so routing this one
+// export through the barrel puts the cycle across two chunks and Rollup warns
+// it "will likely lead to broken execution order".
+import { AuxiliaryPanel } from "@comms/shared/layout/AuxiliaryPanelShell";
 import {
-  AuxiliaryPanel,
   AuxiliaryPanelBody,
   AuxiliaryPanelHeader,
   AuxiliaryPanelHeaderGroup,

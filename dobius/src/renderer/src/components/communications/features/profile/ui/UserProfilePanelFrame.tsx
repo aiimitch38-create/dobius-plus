@@ -1,6 +1,6 @@
 import type * as React from "react";
 
-import { AuxiliaryPanel } from "@comms/shared/layout/AuxiliaryPanel";
+import { AuxiliaryPanel } from "@comms/shared/layout/AuxiliaryPanelShell";
 import { AuxiliaryPanelHeader } from "@comms/shared/layout/AuxiliaryPanel";
 
 type UserProfilePanelFrameProps = {
