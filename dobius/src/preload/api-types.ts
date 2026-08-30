@@ -376,7 +376,8 @@ import type {
   SpeechLifecycleEvent,
   SpeechModelManifest,
   SpeechModelState,
-  SpeechTranscriptEvent
+  SpeechTranscriptEvent,
+  TtsBakeoffResult
 } from '../shared/speech-types'
 import type {
   WorkspaceSpaceAnalyzeResult,
@@ -3148,6 +3149,7 @@ export type PreloadApi = {
     ) => Promise<void>
     feedAudio: (samples: Float32Array, sampleRate: number, sessionId?: string) => Promise<void>
     stopDictation: (sessionId?: string) => Promise<void>
+    runBakeoff: () => Promise<TtsBakeoffResult>
     onPartialTranscript: (callback: (data: SpeechTranscriptEvent) => void) => () => void
     onFinalTranscript: (callback: (data: SpeechTranscriptEvent) => void) => () => void
     onDownloadProgress: (

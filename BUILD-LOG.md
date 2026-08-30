@@ -158,3 +158,11 @@
 - Test-proof: removed the isTtsSpeaking gate → no-flush-when-idle failed; restored → 19/19.
 - WIRING CHECK (fresh build, exit 0): `silero_vad_v5`, `kws-zipformer-gigaspeech`, `dobius-wake-keywords` in out/main; `keyword` ×8 in out/main/stt-worker.js.
 - Verified: scoped gate 542 passing (523 + 19), exactly one failing file (the known one). Both tsgo configs exit 0. oxlint clean.
+
+## 2026-08-30 — TASK-VOICE-4.1: wire the loop + settings UI (feat/adam-voice-control)
+- Loop audit (traced, not assumed): ⌘T/orb/wake-word → `use-jarvis-turn` → speech IPC → stt-worker (VAD + KWS from 3.1) → `jarvis:ask` → brain sentence stream (2.1) → `speakRouted` → LocalSpeaker → afplay (1.2); orb runs on renderer sub-phases + main `jarvis:state` broadcasts; barge-in broadcasts listening. No new glue was needed — the seams from 1.1–3.1 compose into the loop by construction.
+- Settings: new `VoiceEngineSection.tsx` (own file — JarvisSettingsSection is near the counted-lines cap): engine picker (Local default / ElevenLabs), local voice picker (kokoro/supertonic), "Run bake-off" button surfacing the winner + report path with an explicit LISTEN-before-trusting note. Spec's "and nothing else" respected. `speech.runBakeoff` added to preload api-types.
+- **LESSON (recorded): stale `tsconfig.tc.web.tsbuildinfo` served a phantom "runBakeoff does not exist" against the just-edited declaration merge across multiple re-runs.** `rm config/tsconfig.tc.web.tsbuildinfo` fixed it with zero code change. Appended to LESSONS-LEARNED with the detection heuristic (the error's type expansion lists one property fewer than the source).
+- Test-proof: Supertonic persist onClick → no-op → its test failed; restored → 5/5.
+- FULL WIRING CHECK over the complete chain (`build:relay`=0, `build:cli`=0, `build:electron-vite`=0, `build:web`=0): `speech:runBakeoff` in main+preload; `voiceEngine`/`localTtsEngine` in main + renderer(×2); `silero_vad_v5` + `kws-zipformer-gigaspeech` in main; "Run bake-off" in renderer. The channel string correctly does NOT appear in renderer — the renderer goes through the preload bridge.
+- Verified: scoped gate + settings test 547 passing (542 + 5), exactly one failing file (the known one). Both tsgo configs exit 0. oxlint clean.

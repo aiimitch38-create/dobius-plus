@@ -5,6 +5,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Separator } from '../ui/separator'
+import { VoiceEngineSection } from './VoiceEngineSection'
 
 type JarvisSettingsSectionProps = {
   voiceSettings: VoiceSettings
@@ -225,6 +226,11 @@ export function JarvisSettingsSection({
           </div>
         </div>
       ) : null}
+
+      <VoiceEngineSection
+        voiceSettings={voiceSettings}
+        onUpdateVoiceSettings={onUpdateVoiceSettings}
+      />
 
       <div className="space-y-1.5 py-2">
         <Label htmlFor="jarvis-elevenlabs-key">ElevenLabs voice (optional)</Label>

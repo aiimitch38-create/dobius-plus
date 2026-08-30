@@ -268,3 +268,9 @@ then `grep -c`, then read. Never pipe a verification command into `head`/`tail`.
   `patch && typecheck && lint` command. That is the gate doing its job. Chaining
   a linter into a compound command means a clean *finding* reads as a command
   *failure* — worth knowing when reading these logs, not worth a rule.
+
+## 2026-08-30 — stale tsgo tsbuildinfo served a phantom "property does not exist" after editing a declaration merge
+- Tried: adding `runBakeoff` to the `speech` block in `src/preload/api-types.ts` (the `Window.api` declaration merge), then `npx tsgo --noEmit -p config/tsconfig.tc.web.json` — which kept erroring `Property 'runBakeoff' does not exist` on the consumer, across multiple re-runs, with the property verifiably present in the file.
+- Failed because: `config/tsconfig.tc.web.tsbuildinfo` (incremental build state) was stale and tsgo kept type-checking the consumer against the cached old shape of the merged declaration. Fifteen minutes went into hunting a nonexistent second `Window.api` declaration.
+- Works instead: when a type error contradicts a declaration you JUST edited — especially on a `declare global` merge — `rm config/tsconfig.tc.*.tsbuildinfo` and re-run before debugging the types. The gate script is unaffected (it happened to have fresh state), but interactive runs can wedge.
+- Detection: the error's inline type expansion lists one property fewer than the source block currently has — count them.

@@ -31,4 +31,4 @@ exhausted — that is WHY this build exists.
 | TASK-VOICE-1.2 bake-off + speak routing | DONE (501 passing, gate green) |
 | TASK-VOICE-2.1 streaming brain seam | DONE (523 passing, gate green) |
 | TASK-VOICE-3.1 VAD endpointing + barge-in | DONE (542 passing, gate green) |
-| TASK-VOICE-4.1 wire loop + settings UI | not started |
+| TASK-VOICE-4.1 wire loop + settings UI | DONE (547 passing, gate green) |
