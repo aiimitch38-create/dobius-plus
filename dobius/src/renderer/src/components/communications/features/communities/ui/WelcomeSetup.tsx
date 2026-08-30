@@ -1,6 +1,5 @@
 import * as React from "react";
 
-import { HostedCommunityOnboarding } from "@comms/features/communities/ui/HostedCommunityOnboarding";
 import { useCommunityOnboarding } from "@comms/features/onboarding/communityOnboarding";
 import { InviteRedeemForm } from "@comms/features/onboarding/ui/InviteRedeemForm";
 import { OnboardingChrome } from "@comms/features/onboarding/ui/OnboardingChrome";
@@ -12,16 +11,22 @@ import {
   type OnboardingTransitionDirection,
   OnboardingSlideTransition,
 } from "@comms/features/onboarding/ui/OnboardingSlideTransition";
+import { DOBIUS_RELAY_WEBSOCKET_URL } from "@comms/shared/api/dobiusCommunications";
 import { useSystemColorScheme } from "@comms/shared/theme/useSystemColorScheme";
 import { Button } from "@comms/shared/ui/button";
 import { Card } from "@comms/shared/ui/card";
 import { StartupWindowDragRegion } from "@comms/shared/ui/StartupWindowDragRegion";
 
-// The upstream "join" page (invite link + copy-your-public-ID panel) is gone:
-// it exists to join someone else's hosted community, which Dobius does not do
-// — the relay is local. A deep link that still asks for it lands on "member",
-// which is the same form without the private-community instructions.
-type WelcomeSetupPage = "welcome" | "existing" | "member" | "owned";
+// Upstream had five pages here, four of which assumed somebody else's relay:
+// "join" (invite link + copy-your-public-ID), "existing" (pick your role),
+// "owned" and the hosted sign-in modal (both Builderlab, Block's hosted relay
+// service — `clear_builderlab_auth` is not a command this app has, so that
+// path errored on open). Dobius's relay is local and there is exactly one, so
+// "welcome" is now a single Connect button.
+//
+// "member" survives because a resumed onboarding transaction, or a deep link,
+// can still arrive pointing at a relay URL and needs somewhere to land.
+type WelcomeSetupPage = "welcome" | "member";
 type WelcomeTransitionMode = "initial" | OnboardingTransitionDirection;
 
 type WelcomeSetupProps = {
@@ -41,10 +46,10 @@ export function WelcomeSetup({
   const [page, setPage] = React.useState<WelcomeSetupPage>(initialPage);
   const [transitionMode, setTransitionMode] =
     React.useState<WelcomeTransitionMode>(initialTransitionMode);
-  // While true, the Builderlab sign-in modal floats over the current page —
-  // we only navigate to the hosted stage once sign-in completes, so the page
-  // behind the modal never changes out from under the user.
-  const [isHostedSignInOpen, setIsHostedSignInOpen] = React.useState(false);
+  // Latches on the first click. `start()` hands off to the onboarding
+  // transaction, which unmounts this screen; until it does, the button would
+  // otherwise accept a second click and start a duplicate connection.
+  const [isConnectingLocal, setIsConnectingLocal] = React.useState(false);
   const communityOnboarding = useCommunityOnboarding();
   const systemColorScheme = useSystemColorScheme();
 
@@ -106,39 +111,38 @@ export function WelcomeSetup({
             >
               <div className="w-full max-w-[760px]">
                 <h1 className="text-title font-normal">
-                  Set up your community
+                  Connect to your relay
                 </h1>
                 <p className="mt-3 text-sm leading-6 text-foreground/80">
-                  Create your own community, or reconnect one you already have.
+                  Dobius runs its own relay on this machine. Your channels,
+                  messages, and agents stay here.
                 </p>
               </div>
-              <div className="flex w-full flex-1 translate-y-16 flex-col items-center justify-center gap-20 py-8">
+              {/* One action, no choices. Upstream offered "create" (a hosted
+                  Builderlab community) and "join"/"reconnect" (someone else's
+                  relay URL). Neither applies: the relay is local and there is
+                  exactly one, so asking which is a question with one answer. */}
+              <div className="flex w-full flex-1 translate-y-16 flex-col items-center justify-center gap-6 py-8">
                 <Card
                   asChild
                   className={COMMUNITY_OPTION_CARD_CLASS}
                   variant="textured"
                 >
                   <button
-                    data-testid="community-choice-create"
-                    onClick={() => setIsHostedSignInOpen(true)}
+                    data-testid="community-choice-local"
+                    disabled={isConnectingLocal}
+                    onClick={() => {
+                      setIsConnectingLocal(true);
+                      startConnection(DOBIUS_RELAY_WEBSOCKET_URL);
+                    }}
                     type="button"
                   >
-                    Create a community
+                    {isConnectingLocal ? "Connecting…" : "Connect"}
                   </button>
                 </Card>
-                <Card
-                  asChild
-                  className={COMMUNITY_OPTION_CARD_CLASS}
-                  variant="textured"
-                >
-                  <button
-                    data-testid="community-choice-existing"
-                    onClick={() => showPage("existing")}
-                    type="button"
-                  >
-                    I already have a community
-                  </button>
-                </Card>
+                <p className="font-mono text-xs text-foreground/55">
+                  {DOBIUS_RELAY_WEBSOCKET_URL}
+                </p>
               </div>
               <OnboardingFooter>
                 <Button
@@ -151,69 +155,6 @@ export function WelcomeSetup({
                   Back
                 </Button>
               </OnboardingFooter>
-            </OnboardingSlideTransition>
-          ) : page === "existing" ? (
-            <OnboardingSlideTransition
-              className="flex h-full min-h-0 w-full flex-col items-center text-center"
-              containerClassName="h-full min-h-0 [&>.buzz-onboarding-transition-line]:h-full"
-              direction={transitionDirection}
-              transitionKey={`existing-${transitionDirection}`}
-            >
-              <div className="w-full max-w-[760px]">
-                <h1 className="text-title font-normal">
-                  Reconnect to your community
-                </h1>
-                <p className="mt-3 text-sm leading-6 text-foreground/80">
-                  Tell us your role so we can find the fastest way back in.
-                </p>
-              </div>
-              <div className="flex w-full flex-1 translate-y-16 flex-col items-center justify-center gap-20 py-8">
-                <Card
-                  asChild
-                  className={COMMUNITY_OPTION_CARD_CLASS}
-                  variant="textured"
-                >
-                  <button
-                    data-testid="existing-choice-owner"
-                    onClick={() => setIsHostedSignInOpen(true)}
-                    type="button"
-                  >
-                    I own the community
-                  </button>
-                </Card>
-                <Card
-                  asChild
-                  className={COMMUNITY_OPTION_CARD_CLASS}
-                  variant="textured"
-                >
-                  <button
-                    data-testid="existing-choice-member"
-                    onClick={() => showPage("member")}
-                    type="button"
-                  >
-                    I’m a member or admin
-                  </button>
-                </Card>
-              </div>
-              <OnboardingFooter>
-                <Button
-                  className="h-9 rounded-full bg-foreground/10 px-6 hover:bg-foreground/15"
-                  data-testid="existing-back"
-                  onClick={() => showPage("welcome")}
-                  type="button"
-                  variant="ghost"
-                >
-                  Back
-                </Button>
-              </OnboardingFooter>
-            </OnboardingSlideTransition>
-          ) : page === "owned" ? (
-            <OnboardingSlideTransition
-              className="flex w-full flex-col items-center text-center"
-              direction={transitionDirection}
-              transitionKey={`owned-${transitionDirection}`}
-            >
-              <HostedCommunityOnboarding onBack={() => showPage("welcome")} />
             </OnboardingSlideTransition>
           ) : (
             <OnboardingSlideTransition
@@ -234,7 +175,7 @@ export function WelcomeSetup({
                 <InviteRedeemForm
                   error={null}
                   isRedeeming={false}
-                  onCancel={() => showPage("existing")}
+                  onCancel={() => showPage("welcome")}
                   onConnect={startConnection}
                   onRedeem={redeemInvite}
                   placeholder="Invite link or community URL"
@@ -243,16 +184,6 @@ export function WelcomeSetup({
               </div>
             </OnboardingSlideTransition>
           )}
-          {isHostedSignInOpen && page !== "owned" ? (
-            <HostedCommunityOnboarding
-              onBack={() => setIsHostedSignInOpen(false)}
-              onReady={() => {
-                setIsHostedSignInOpen(false);
-                showPage("owned");
-              }}
-              stageHidden
-            />
-          ) : null}
         </div>
       </OnboardingFooterProvider>
     </div>

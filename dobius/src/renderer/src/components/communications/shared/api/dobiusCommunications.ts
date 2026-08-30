@@ -223,7 +223,7 @@ async function discoverDobiusAgentRuntimes(): Promise<unknown[]> {
   return entries;
 }
 
-const DOBIUS_RELAY_WEBSOCKET_URL = "ws://localhost:3300";
+export const DOBIUS_RELAY_WEBSOCKET_URL = "ws://localhost:3300";
 const DOBIUS_RELAY_HTTP_URL = "http://localhost:3300";
 const DOBIUS_AGENT_IDENTITIES_STORAGE_KEY = "dobius-buzz-agent-identities.v1";
 
@@ -1108,7 +1108,22 @@ async function changeDobiusChannelMemberRole(args: unknown): Promise<void> {
 async function ensureDobiusStarterChannels(): Promise<unknown[]> {
   const existing = (await loadRelayChannels()) as Array<Record<string, unknown>>;
   const existingIds = new Set(existing.map((channel) => channel.id));
-  const starters = [{ id: "general", name: "general", description: "Default Dobius Communications channel" }];
+  // Both are required. Onboarding's findStarterChannels() looks for "general"
+  // AND "welcome-everyone" and fails the whole setup step if either is
+  // missing — creating only "general" left it reporting "Starter channels were
+  // not available after setup" on a relay that had just accepted the channel.
+  const starters = [
+    {
+      id: "general",
+      name: "general",
+      description: "Default Dobius Communications channel",
+    },
+    {
+      id: "welcome-everyone",
+      name: "welcome-everyone",
+      description: "Say hello and find your way around",
+    },
+  ];
   for (const starter of starters) {
     if (existingIds.has(starter.id)) continue;
     await createDobiusChannel({

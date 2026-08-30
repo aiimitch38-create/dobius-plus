@@ -500,13 +500,10 @@ function CommunityApp({
       // Show welcome setup for first-run users with no communities
       appContent = (
         <WelcomeSetup
-          // "join" is a page that no longer exists; a transaction persisted
-          // before it was removed resumes on the equivalent "member" form.
-          initialPage={
-            resumeFirstCommunityPage === "join"
-              ? "member"
-              : (resumeFirstCommunityPage ?? undefined)
-          }
+          // Only "member" still exists as a page. A transaction persisted
+          // before the Builderlab and invite pages were removed can name
+          // "join" or "owned"; both resume on the relay-URL form.
+          initialPage={resumeFirstCommunityPage ? "member" : undefined}
           onBack={onBackToMachineConfig}
         />
       );
