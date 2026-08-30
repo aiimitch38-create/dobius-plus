@@ -4,7 +4,8 @@ import { join, resolve } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
-import { getSpeechSttService } from '../speech/speech-runtime-service'
+import { getLocalSpeaker, getSpeechSttService } from '../speech/speech-runtime-service'
+import { registerTtsBakeoffHandler } from './tts-bakeoff-ipc'
 import { converseWithAdam, loadAdamServiceToken } from './adam-client'
 import {
   buildAgentContext,
@@ -72,7 +73,8 @@ function createJarvisDeps(store: Store): JarvisServiceDeps {
   return {
     store,
     broadcast: createBroadcastPort(),
-    shortcut: createGlobalShortcutPort()
+    shortcut: createGlobalShortcutPort(),
+    localSpeak: (text) => getLocalSpeaker(store).speak(text)
   }
 }
 
@@ -211,6 +213,8 @@ function registerHandlers(store: Store, service: JarvisService): void {
 
   ipcMain.removeHandler('jarvis:openOrb')
   ipcMain.handle('jarvis:openOrb', () => openFloatingOrbWindow())
+
+  registerTtsBakeoffHandler(store)
 
   // Live agent: the renderer owns the websocket (it has the mic and speakers),
   // main only mints the signed URL so the API key never leaves this process.

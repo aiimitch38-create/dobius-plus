@@ -410,7 +410,10 @@ export function getDefaultVoiceSettings(): VoiceSettings {
     conductorEnabled: false,
     jarvisEnabled: false,
     jarvisWakeWord: false,
-    adamEndpoint: DEFAULT_ADAM_ENDPOINT
+    adamEndpoint: DEFAULT_ADAM_ENDPOINT,
+    // Local by default: the ElevenLabs account is out of credits (2026-08-29).
+    voiceEngine: 'local',
+    localTtsEngine: 'kokoro'
   }
 }
 

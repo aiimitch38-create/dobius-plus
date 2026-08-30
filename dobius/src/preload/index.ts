@@ -172,7 +172,8 @@ import type {
   SpeechLifecycleEvent,
   SpeechModelManifest,
   SpeechModelState,
-  SpeechTranscriptEvent
+  SpeechTranscriptEvent,
+  TtsBakeoffResult
 } from '../shared/speech-types'
 import type { TelemetryConsentState } from '../shared/telemetry-consent-types'
 import type { PreflightRuntimeContext, RefreshAgentsResult } from './api-types'
@@ -4363,6 +4364,7 @@ const api = {
       ),
     stopDictation: (sessionId = 'desktop'): Promise<void> =>
       ipcRenderer.invoke('speech:stopDictation', sessionId),
+    runBakeoff: (): Promise<TtsBakeoffResult> => ipcRenderer.invoke('speech:runBakeoff'),
 
     onPartialTranscript: (callback: (data: SpeechTranscriptEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: SpeechTranscriptEvent): void =>

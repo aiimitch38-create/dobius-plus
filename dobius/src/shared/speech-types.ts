@@ -55,6 +55,29 @@ export type UserModelConfig = {
 
 export type DictationMode = 'toggle' | 'hold'
 
+export type VoiceEngineChoice = 'elevenlabs' | 'local'
+
+export type LocalTtsEngine = 'kokoro' | 'supertonic'
+
+export type TtsBakeoffEngineRun = {
+  engine: LocalTtsEngine
+  ok: boolean
+  /** First synthesis, including lazy model load. */
+  coldMs?: number
+  /** Average of the remaining sentences — the number the default is picked by. */
+  warmAvgMs?: number
+  perSentenceMs: number[]
+  wavPaths: string[]
+  error?: string
+}
+
+export type TtsBakeoffResult = {
+  /** Lower warm average wins; null when neither engine completed. */
+  winner: LocalTtsEngine | null
+  runs: TtsBakeoffEngineRun[]
+  reportPath: string
+}
+
 export type VoiceSettings = {
   enabled: boolean
   sttModel: string
@@ -78,6 +101,13 @@ export type VoiceSettings = {
   jarvisWakeWord?: boolean
   /** Base URL of the local ADAM agent service. */
   adamEndpoint?: string
+  /**
+   * Which synthesis engine speaks replies. Default 'local' — the ElevenLabs
+   * account is out of credits, so on-device TTS is the standing path.
+   */
+  voiceEngine?: VoiceEngineChoice
+  /** Which on-device TTS model family the local engine loads. */
+  localTtsEngine?: LocalTtsEngine
   /** ElevenLabs credentials for spoken replies; empty falls back to the local engine. */
   elevenlabsApiKey?: string
   elevenlabsVoiceId?: string

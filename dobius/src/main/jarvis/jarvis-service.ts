@@ -39,6 +39,13 @@ export type JarvisServiceDeps = {
   shortcut: JarvisShortcutPort
   fetchFn?: typeof fetch
   speakQueue?: (text: string) => Promise<SpeakOutcome>
+  /**
+   * On-device TTS path (LocalSpeaker). Optional with no default on purpose:
+   * production wiring supplies it, and without it `voiceEngine: 'local'`
+   * falls straight through to the `say` queue — which is also the fallback
+   * for any local synthesis failure.
+   */
+  localSpeak?: (text: string) => Promise<void>
   now?: () => number
 }
 
@@ -135,16 +142,28 @@ export class JarvisService {
       return { played: false, reason: 'empty text' }
     }
     this.transition({ type: 'speak-started' })
-    // ElevenLabs when Carson's key+voice are configured; local engine stays the
-    // fallback so a network/key failure never silences a reply.
-    const eleven = resolveElevenLabsConfig(this.deps.store.getSettings().voice)
-    if (eleven) {
+    // Decision table: 'elevenlabs' → billed API (only when explicitly chosen —
+    // the account is out of credits); 'local' (default) → on-device TTS.
+    // Either path's failure lands on the `say` queue below, never silence.
+    const voice = this.deps.store.getSettings().voice
+    if (voice?.voiceEngine === 'elevenlabs') {
+      const eleven = resolveElevenLabsConfig(voice)
+      if (eleven) {
+        try {
+          await speakWithElevenLabs(text.trim(), eleven)
+          this.transition({ type: 'turn-finished' })
+          return { played: true }
+        } catch {
+          // fall through to the huddle/local engine below
+        }
+      }
+    } else if (this.deps.localSpeak) {
       try {
-        await speakWithElevenLabs(text.trim(), eleven)
+        await this.deps.localSpeak(text.trim())
         this.transition({ type: 'turn-finished' })
         return { played: true }
       } catch {
-        // fall through to the huddle/local engine below
+        // fall through to the huddle/say queue below
       }
     }
     let outcome: SpeakOutcome

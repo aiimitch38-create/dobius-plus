@@ -28,7 +28,7 @@ exhausted — that is WHY this build exists.
 | Task | State |
 |---|---|
 | TASK-VOICE-1.1 local TTS engine module | DONE (486 passing, gate green) |
-| TASK-VOICE-1.2 bake-off + speak routing | not started |
+| TASK-VOICE-1.2 bake-off + speak routing | DONE (501 passing, gate green) |
 | TASK-VOICE-2.1 streaming brain seam | not started |
 | TASK-VOICE-3.1 VAD endpointing + barge-in | not started |
 | TASK-VOICE-4.1 wire loop + settings UI | not started |

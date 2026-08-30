@@ -5,10 +5,11 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { net } from 'electron'
+import type { LocalTtsEngine } from '../../shared/speech-types'
 import { getSherpaModulePath } from './sherpa-module-path'
 import { resolveTarExecutable } from './tar-executable'
 
-export type LocalTtsEngine = 'kokoro' | 'supertonic'
+export type { LocalTtsEngine }
 
 export type TtsAudio = { samples: Float32Array; sampleRate: number }
 
