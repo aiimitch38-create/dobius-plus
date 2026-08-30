@@ -500,7 +500,13 @@ function CommunityApp({
       // Show welcome setup for first-run users with no communities
       appContent = (
         <WelcomeSetup
-          initialPage={resumeFirstCommunityPage ?? undefined}
+          // "join" is a page that no longer exists; a transaction persisted
+          // before it was removed resumes on the equivalent "member" form.
+          initialPage={
+            resumeFirstCommunityPage === "join"
+              ? "member"
+              : (resumeFirstCommunityPage ?? undefined)
+          }
           onBack={onBackToMachineConfig}
         />
       );

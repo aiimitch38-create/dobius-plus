@@ -27,6 +27,8 @@ export type CommunityOnboardingStage =
    */
   | "entering";
 
+// "join" is retained so persisted transactions written before the join page was
+// removed still parse; WelcomeSetup maps it onto "member", the same form.
 export type FirstCommunityPage = "join" | "member" | "owned";
 
 export type CommunityOnboardingTransaction = {
