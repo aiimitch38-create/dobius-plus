@@ -1,10 +1,10 @@
 /* eslint-disable max-lines -- Why: speech worker ownership, warm reuse, and
 timeout teardown must stay co-located so dictation lifecycle state cannot drift. */
 import { Worker } from 'node:worker_threads'
-import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
 import { getCatalogModel } from './model-catalog'
+import { getSherpaModulePath } from './sherpa-module-path'
 import type { ModelManager } from './model-manager'
 import { OpenAiTranscriptionSession } from './openai-transcription-client'
 import { readOpenAiSpeechApiKey } from './openai-api-key-store'
@@ -133,7 +133,7 @@ export class SttService {
     }
 
     const workerPath = this.getWorkerPath()
-    const sherpaModulePath = this.getSherpaModulePath()
+    const sherpaModulePath = getSherpaModulePath()
 
     this.worker = new Worker(workerPath, {
       workerData: { sherpaModulePath }
@@ -454,26 +454,4 @@ export class SttService {
     cleanup?.()
   }
 
-  private getSherpaModulePath(): string {
-    // Why: the main sherpa-onnx npm package uses WASM, which cannot access
-    // the host filesystem to load model files. The platform-specific native
-    // addon (e.g. sherpa-onnx-darwin-arm64) has direct filesystem access
-    // and better performance. We resolve its absolute path here because
-    // the worker runs from out/main/ where bare require() can't find it.
-    const nativePkg =
-      process.platform === 'win32' && process.arch === 'x64'
-        ? 'sherpa-onnx-win-x64'
-        : `sherpa-onnx-${process.platform}-${process.arch}`
-
-    if (app.isPackaged) {
-      const resourcesNodeModule = join(process.resourcesPath, 'node_modules', nativePkg)
-      if (existsSync(resourcesNodeModule)) {
-        return resourcesNodeModule
-      }
-      return join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', nativePkg)
-    }
-
-    const resolved = require.resolve(nativePkg)
-    return join(resolved, '..')
-  }
 }
