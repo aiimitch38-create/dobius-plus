@@ -166,3 +166,10 @@
 - Test-proof: Supertonic persist onClick → no-op → its test failed; restored → 5/5.
 - FULL WIRING CHECK over the complete chain (`build:relay`=0, `build:cli`=0, `build:electron-vite`=0, `build:web`=0): `speech:runBakeoff` in main+preload; `voiceEngine`/`localTtsEngine` in main + renderer(×2); `silero_vad_v5` + `kws-zipformer-gigaspeech` in main; "Run bake-off" in renderer. The channel string correctly does NOT appear in renderer — the renderer goes through the preload bridge.
 - Verified: scoped gate + settings test 547 passing (542 + 5), exactly one failing file (the known one). Both tsgo configs exit 0. oxlint clean.
+
+## 2026-08-30 ~05:45 — TASK-VOICE-5.1 (interactive fix, commit 29a84031)
+Adam attributed his own scripted opening to the user and couldn't answer
+"what broke?" (transcript conv_7801m191...). Fix: agent context now carries
+the opening's authorship rule + the exact line and matched classifier marker;
+failure openers hedged. Server-side ElevenLabs prompt patched live (HTTP 200,
+verified round-trip). Code fix requires next reinstall to take effect.
