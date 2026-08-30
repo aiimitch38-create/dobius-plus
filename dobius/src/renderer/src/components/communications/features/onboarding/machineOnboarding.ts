@@ -194,10 +194,24 @@ export function useMachineOnboardingState({
   const relaunchRequired =
     ((bootedLost && !identityLost) || (bootedLocked && !identityLocked)) &&
     identityQuery.status === "success";
+  // Machine onboarding is already satisfied in Dobius, so it is skipped rather
+  // than answered. Its three steps each ask a question with exactly one answer
+  // here: "Create a new identity key" mints nothing (the participant identity
+  // already exists in the main process, encrypted, and the button only reads it
+  // back); "Back up your key" offers to save a secret the renderer does not
+  // hold and cannot obtain; "Set up your agent harnesses" discovers runtimes
+  // from accounts Dobius already knows, and that list is editable afterwards in
+  // Settings -> Agents. Upstream needed all three because its Rust backend
+  // generated the key on first call and had no other account source.
+  //
+  // The screens stay built and routable (MachineOnboardingFlow) for whenever
+  // Dobius supports an identity it does not own; the dev-only
+  // `?machineOnboarding=1` override still reaches them.
   const hasCompletedCurrentPubkey =
     completedPubkey === currentPubkey ||
     (!forceMachineOnboarding() &&
-      readMachineOnboardingCompletion(currentPubkey));
+      (Boolean(currentPubkey) ||
+        readMachineOnboardingCompletion(currentPubkey)));
 
   let stage: MachineOnboardingStage;
   if (identityResetFailed && identityQuery.status === "success") {

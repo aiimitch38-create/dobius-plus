@@ -1,31 +1,28 @@
 import * as React from "react";
 
-import { closeAllWebSockets } from "@comms/shared/api/relayWebSocketClose";
-import { hasPrimaryShortcutModifier } from "@comms/shared/lib/platform";
-
-const RELOAD_TEARDOWN_TIMEOUT_MS = 500;
-
-/** Reloads the webview after bounded native WebSocket teardown. */
+/**
+ * Cmd+R inside Communications.
+ *
+ * Upstream reloaded the webview here, because the client owned the window.
+ * Embedded in a Dobius+ tab, `window.location.reload()` reloads the entire
+ * app — every terminal, every session — so this deliberately does nothing but
+ * swallow the keystroke, which stops the browser default doing exactly that.
+ *
+ * If a Communications-only refresh is ever wanted, it needs to remount this
+ * subtree (a key change on CommunicationsPage), not touch window.location.
+ */
 export function useReloadShortcut() {
   React.useEffect(() => {
-    async function handleKeyDown(event: KeyboardEvent) {
+    function handleKeyDown(event: KeyboardEvent) {
       if (
-        !hasPrimaryShortcutModifier(event) ||
+        !(event.metaKey || event.ctrlKey) ||
         event.altKey ||
         event.shiftKey ||
         event.key.toLowerCase() !== "r"
       ) {
         return;
       }
-
       event.preventDefault();
-      await Promise.race([
-        closeAllWebSockets(),
-        new Promise<void>((resolve) =>
-          window.setTimeout(resolve, RELOAD_TEARDOWN_TIMEOUT_MS),
-        ),
-      ]);
-      window.location.reload();
     }
 
     window.addEventListener("keydown", handleKeyDown);

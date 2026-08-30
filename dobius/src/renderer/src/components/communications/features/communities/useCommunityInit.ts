@@ -93,6 +93,8 @@ export function useCommunityInit(
   activeCommunity: Community | null,
   communityKey: string,
   isSharedIdentity: boolean,
+  /** Provider setter used to adopt an auto-connected first community. */
+  adoptCommunity: (community: Community) => void,
 ): CommunityInitResult {
   const [result, setResult] = useState<CommunityInitResult>({
     isReady: false,
@@ -138,7 +140,14 @@ export function useCommunityInit(
               identity.pubkey,
             );
             if (community && !cancelled) {
-              window.location.reload();
+              // Adopt through the provider rather than reloading. Upstream
+              // reloaded because initFirstCommunity writes storage directly and
+              // the provider's state goes stale — but this client is a tab
+              // inside Dobius+ now, so `window` is the whole app window and a
+              // reload would take every terminal down with it. addCommunity
+              // performs the same storage write and updates React state, which
+              // re-runs this effect with an activeCommunity.
+              adoptCommunity(community);
               return;
             }
             if (!cancelled) {

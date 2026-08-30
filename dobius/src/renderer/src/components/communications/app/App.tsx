@@ -332,6 +332,7 @@ function CommunityApp({
     activeCommunity,
     communityKey,
     sharedIdentity,
+    addCommunity,
   );
 
   const transitionCommunity = useCallback(

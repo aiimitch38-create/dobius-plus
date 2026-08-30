@@ -115,13 +115,20 @@ function isLocalRelayHost(hostname: string): boolean {
   return ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"].includes(hostname);
 }
 
+/**
+ * Whether the default relay can be connected without asking the user.
+ *
+ * Upstream excluded local hosts here: a localhost relay meant a developer
+ * running their own, so it made them confirm through community setup. Dobius
+ * inverts that premise — the relay it ships is always local, there is exactly
+ * one, and it is already running by the time this is called. Keeping the
+ * exclusion meant the auto-connect path could never fire and every launch
+ * asked a question with one possible answer.
+ */
 export function shouldAutoConnectDefaultRelay(relayUrl: string): boolean {
   try {
     const parsed = new URL(relayUrl);
-    return (
-      (parsed.protocol === "ws:" || parsed.protocol === "wss:") &&
-      !isLocalRelayHost(parsed.hostname)
-    );
+    return parsed.protocol === "ws:" || parsed.protocol === "wss:";
   } catch {
     return false;
   }
@@ -134,7 +141,10 @@ export function deriveCommunityName(relayUrl: string): string {
     );
     const host = url.hostname;
     if (isLocalRelayHost(host)) {
-      return "Local Dev";
+      // Not "Local Dev": for upstream a local relay was a developer's scratch
+      // instance, but here it is the only relay there is and every user sees
+      // this label.
+      return "Dobius";
     }
     const parts = host.split(".");
     // Detect staging environments (e.g. buzz-oss.stage.blox.sqprod.co)

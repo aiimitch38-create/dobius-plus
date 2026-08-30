@@ -49,15 +49,18 @@ test("migrateLegacyCommunityStorage does not overwrite new community state", () 
   assert.equal(storage.getItem("buzz-active-community-id"), "new");
 });
 
-test("signed-build relay defaults auto-connect during first-run onboarding", () => {
-  assert.equal(
-    shouldAutoConnectDefaultRelay("wss://buzz.block.builderlab.xyz"),
-    true,
-  );
-  assert.equal(shouldAutoConnectDefaultRelay("ws://localhost:3000"), false);
-  assert.equal(shouldAutoConnectDefaultRelay("ws://127.0.0.1:3000"), false);
-  assert.equal(shouldAutoConnectDefaultRelay("ws://[::1]:3000"), false);
-  assert.equal(shouldAutoConnectDefaultRelay("ws://0.0.0.0:3000"), false);
+test("websocket relay defaults auto-connect during first-run onboarding", () => {
+  // Local hosts assert TRUE deliberately. Upstream excluded them — a localhost
+  // relay meant a developer running their own — but Dobius always ships a local
+  // relay, so that exclusion permanently disabled the auto-connect path and
+  // forced community setup on every launch.
+  assert.equal(shouldAutoConnectDefaultRelay("ws://localhost:3300"), true);
+  assert.equal(shouldAutoConnectDefaultRelay("ws://127.0.0.1:3300"), true);
+  assert.equal(shouldAutoConnectDefaultRelay("ws://[::1]:3300"), true);
+  assert.equal(shouldAutoConnectDefaultRelay("ws://0.0.0.0:3300"), true);
+  assert.equal(shouldAutoConnectDefaultRelay("wss://relay.example.com"), true);
+
+  // Still false: anything that is not a websocket URL at all.
   assert.equal(shouldAutoConnectDefaultRelay("http://localhost:3000"), false);
   assert.equal(
     shouldAutoConnectDefaultRelay("https://relay.example.com"),
