@@ -26,7 +26,7 @@ export type JarvisTurn = {
   wakeArmed: boolean
   /** True while the continuous wake-word dictation session is capturing. */
   ambientActive: boolean
-  /** Click handler for the orb: same toggle as a ⌘T press. */
+  /** Click handler for the orb: same toggle as a ⌥Space press. */
   toggleTurn: () => void
   /** Last turn failure, shown under the orb so a dead turn is not silent. */
   errorText: string | null
@@ -39,7 +39,7 @@ export type JarvisTurn = {
  * the shared speech IPC (exactly as DictationController drives it), then the
  * ADAM round-trip through window.api.jarvis. At most ONE dictation session is
  * alive at a time; when the experimental wake word is on, that session is a
- * continuous ambient one and a manual click/⌘T "grab" marks the next final as
+ * continuous ambient one and a manual click/⌥Space "grab" marks the next final as
  * the utterance instead of starting a competing session.
  */
 export function useJarvisTurn(): JarvisTurn {
@@ -262,9 +262,9 @@ export function useJarvisTurn(): JarvisTurn {
     [setPhase]
   )
 
-  // Global ⌘T push-to-talk: press starts or cancels a turn.
+  // Global ⌥Space push-to-talk: press starts or cancels a turn.
   // Why the agentId check: with a live agent configured, the agent hook owns
-  // ⌘T — both handlers reacting would open a turn and a conversation at once,
+  // ⌥Space — both handlers reacting would open a turn and a conversation at once,
   // and they would fight over the microphone.
   useEffect(() => {
     if (!flags.jarvisEnabled || flags.agentId !== '') {

@@ -45,7 +45,7 @@ export function JarvisSettingsSection({
   const [testing, setTesting] = useState(false)
   const [shortcutActive, setShortcutActive] = useState<boolean | null>(null)
 
-  // Surfaces a refused ⌘T grab, which otherwise looks identical to "nothing
+  // Surfaces a refused ⌥Space grab, which otherwise looks identical to "nothing
   // happened" when the shortcut is pressed.
   useEffect(() => {
     let cancelled = false
@@ -114,7 +114,7 @@ export function JarvisSettingsSection({
         <div className="space-y-0.5">
           <Label>Jarvis voice loop</Label>
           <p className="text-xs text-muted-foreground">
-            Speak to ADAM hands-free. Press ⌘T anywhere to start a turn, or click the floating orb.
+            Speak to ADAM hands-free. Press ⌥Space anywhere to start a turn, or click the floating orb.
           </p>
         </div>
         <button
@@ -264,7 +264,7 @@ export function JarvisSettingsSection({
           onChange={(event) => setAgentDraft(event.target.value)}
         />
         <p className="text-xs text-muted-foreground">
-          With an agent ID set, ⌘T opens a live conversation you can interrupt, instead of
+          With an agent ID set, ⌥Space opens a live conversation you can interrupt, instead of
           one question at a time. Needs a key with the Conversational AI permission.
         </p>
         <div className="flex items-center gap-2 pt-0.5">
@@ -282,8 +282,8 @@ export function JarvisSettingsSection({
         </div>
         {voiceSettings.jarvisEnabled === true && shortcutActive === false ? (
           <p className="text-xs text-destructive">
-            Cmd+T could not be claimed — another app is holding it, so the shortcut will do
-            nothing. Click the orb instead, or quit whatever owns Cmd+T and toggle Jarvis off
+            Option+Space could not be claimed — another app is holding it, so the shortcut will do
+            nothing. Click the orb instead, or quit whatever owns Option+Space and toggle Jarvis off
             and on.
           </p>
         ) : null}

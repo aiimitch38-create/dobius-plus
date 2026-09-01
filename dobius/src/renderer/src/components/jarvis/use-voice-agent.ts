@@ -36,7 +36,7 @@ export function useVoiceAgent(): VoiceAgent {
   const [errorText, setErrorText] = useState<string | null>(null)
   const conversationRef = useRef<LiveConversation | null>(null)
   const idleTimerRef = useRef<number | null>(null)
-  // Why a ref guard: ⌘T can fire again while startSession is still awaiting,
+  // Why a ref guard: ⌥Space can fire again while startSession is still awaiting,
   // and two sessions would each hold the microphone.
   const startingRef = useRef(false)
 

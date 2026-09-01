@@ -158,7 +158,7 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
       // shortcut grab, so a refused grab must not leave the toggle on.
       const mode = await window.api.jarvis.setMode(true)
       if (!mode.ok) {
-        toast.error('Could not claim ⌘T for Jarvis; it may be used by another app.')
+        toast.error('Could not claim ⌥Space for Jarvis; it may be used by another app.')
         return
       }
       updateVoiceSettings({ jarvisEnabled: true })

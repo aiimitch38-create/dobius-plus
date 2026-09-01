@@ -47,9 +47,9 @@ function readSavedPosition(): Position | null {
 /**
  * The single voice orb for the whole product.
  *
- * Why one component: ⌘E dictation and ⌘T Jarvis are two features but one
+ * Why one component: ⌘E dictation and ⌥Space Jarvis are two features but one
  * on-screen object. Jarvis previously drew its own orb in a separate always-on
- * window, which meant two orbs on screen and — worse — ⌘T did nothing unless
+ * window, which meant two orbs on screen and — worse — ⌥Space did nothing unless
  * that window happened to be open. Mounting useJarvisTurn here keeps the
  * shortcut alive for as long as the app is running.
  */
@@ -61,7 +61,7 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   const { flags } = useJarvisVoiceSettings()
   const agentMode = flags.jarvisEnabled && flags.agentId !== ''
 
-  // ⌘T reaches this window as a Jarvis press event; in live mode it opens or
+  // ⌥Space reaches this window as a Jarvis press event; in live mode it opens or
   // closes the conversation instead of starting a single turn.
   useEffect(() => {
     if (!agentMode) {
@@ -130,7 +130,7 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   )
 
   // Why visible while idle: in live mode the orb IS the start button. Hiding it
-  // until a conversation exists left no way in if ⌘T never arrived, and no clue
+  // until a conversation exists left no way in if ⌥Space never arrived, and no clue
   // that anything was wrong.
   const agentActive = agentMode
   const jarvisActive = !agentMode && jarvis.hudState !== 'idle'
@@ -143,7 +143,7 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
 
   const agentLabel = agentMode
     ? agent.state === 'idle'
-      ? 'Tap or press Cmd+T to talk'
+      ? 'Tap or press Option+Space to talk'
       : agent.state === 'connecting'
       ? 'Connecting...'
       : agent.state === 'speaking'

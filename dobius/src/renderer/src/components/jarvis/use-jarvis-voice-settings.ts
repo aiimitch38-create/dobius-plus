@@ -5,7 +5,7 @@ export type JarvisVoiceFlags = {
   jarvisEnabled: boolean
   sttModel: string
   jarvisWakeWord: boolean
-  /** Non-empty switches ⌘T from one-shot turns to a live agent conversation. */
+  /** Non-empty switches ⌥Space from one-shot turns to a live agent conversation. */
   agentId: string
 }
 

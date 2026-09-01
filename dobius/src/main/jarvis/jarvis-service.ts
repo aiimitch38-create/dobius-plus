@@ -16,7 +16,7 @@ import { resolveElevenLabsConfig, speakWithElevenLabs } from './elevenlabs-clien
 import { JARVIS_PTT_AUTO_RELEASE_MS, applyJarvisSignal, type JarvisSignal } from './jarvis-state'
 import { createWakeWordMatcher, type WakeWordMatcher } from './wake-word-matcher'
 
-export const JARVIS_SHORTCUT_ACCELERATOR = 'CommandOrControl+T'
+export const JARVIS_SHORTCUT_ACCELERATOR = 'Alt+Space'
 export const JARVIS_STATE_CHANNEL = 'jarvis:state'
 export const JARVIS_PTT_PRESSED_CHANNEL = 'jarvis:ptt-pressed'
 export const JARVIS_PTT_RELEASED_CHANNEL = 'jarvis:ptt-released'
@@ -57,7 +57,7 @@ export type JarvisServiceDeps = {
 /**
  * Main-process brain of the Jarvis voice loop. The renderer drives mic capture
  * and STT through the existing speech IPC; this service owns everything that
- * must live in main: the system-wide ⌘T grab, the ADAM round-trip, spoken
+ * must live in main: the system-wide ⌥Space grab, the ADAM round-trip, spoken
  * output, wake-word watching, and HUD state broadcast.
  */
 export class JarvisService {
@@ -82,8 +82,8 @@ export class JarvisService {
   }
 
   /**
-   * Registers/releases the system-wide ⌘T shortcut. Only ever held while Jarvis
-   * mode is on — when off, ⌘T belongs to whatever app is focused.
+   * Registers/releases the system-wide ⌥Space shortcut. Only ever held while Jarvis
+   * mode is on — when off, ⌥Space belongs to whatever app is focused.
    * Returns false (and broadcasts an error state) when the accelerator could
    * not be claimed, e.g. another app already owns it.
    */

@@ -4,7 +4,7 @@ export type TargetableWindow = { isDestroyed(): boolean }
 /**
  * Exactly one window handles a Jarvis event.
  *
- * Why not the focused window alone: ⌘T is a GLOBAL shortcut, so it fires while
+ * Why not the focused window alone: ⌥Space is a GLOBAL shortcut, so it fires while
  * another app has focus and getFocusedWindow() returns null — targeting only
  * the focused window made the shortcut a no-op precisely when it mattered.
  * Why not every window: each app window mounts the orb, and a broadcast would

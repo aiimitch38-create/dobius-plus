@@ -219,7 +219,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
 
   // Live agent: the renderer owns the websocket (it has the mic and speakers),
   // main only mints the signed URL so the API key never leaves this process.
-  // Why exposed: a refused ⌘T grab is otherwise invisible — the setting still
+  // Why exposed: a refused ⌥Space grab is otherwise invisible — the setting still
   // reads "on" while the shortcut belongs to another app.
   const memory = new AdamMemory(join(app.getPath('userData'), 'adam-memory.json'))
 
