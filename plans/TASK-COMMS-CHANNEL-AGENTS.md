@@ -95,6 +95,46 @@ Messages were on the relay; the reads/writes disagreed:
   QueryClients. Fixed: module-singleton clients (per-community keyed map), same
   pattern as the router.
 
+## Phase 2 — channel agents as full working agents (2026-09-02, shipped)
+
+Carson's asks and where each landed:
+- "Too many concurrent agent runs": MAX_CONCURRENT_RUNS 3→8 (agent-runner.ts)
+  AND the dispatcher queues up to 10 min (startDobiusChannelRun) instead of
+  posting "could not start".
+- Model / folder / tools per agent: the runner already supported all three;
+  createDobiusPersona now passes them through and defaults Communications
+  agents to the full toolset + `~/Dobius Agents/<name>` (runner mkdirs it).
+- CLAUDE.md / memory: `settingSources: ['user','project']` on every Claude
+  agent run — user skills/hooks plus the CLAUDE.md at the agent's cwd load.
+- Live back-and-forth + screenshots: channel-sourced runs get two MCP tools
+  (post_channel_message, post_channel_screenshot). Items land in an outbox on
+  the run record; the dispatcher's poll publishes each into the channel as the
+  agent, live, before the run finishes. Screenshots travel as data:image URIs
+  (1.2MB cap) and the chat markdown's urlTransform now lets data:image through.
+- Channel context: dispatch prompts now carry who's in the room, the last ~12
+  messages with author names, and how to use the live tools / @mentions.
+- Channel runs use permissionMode 'dontAsk' — headless, no approval UI to hang.
+
+Also this phase (Carson asks, unrelated to agents):
+- Clicks dying inside the hub: upstream drag regions. StartupWindowDragRegion
+  installed CAPTURE listeners eating every press in the window's top 44px
+  (Dobius+'s tab bar!) — now inert; embed CSS forces -webkit-app-region:
+  no-drag on the whole subtree.
+- Identity loading screen removed: primeDobiusIdentity() starts at chunk
+  import, gate renders an empty frame instead of the logo screen.
+
+## Phase 3 — NEXT: pluggable harnesses (opencode, Hermes, OpenClaude, …)
+
+Carson: "use whatever agent or harness is out there, like a plug-in."
+Evidence in tree: src/main/communications/providers/ has agent-provider.ts,
+claude-agent-sdk-provider.ts, codex-cli-provider.ts, custom-harness-provider.ts
+— a provider seam with NO production consumer yet (confirmed by the Phase-1
+mapping agent). custom-harness-store.ts exists in communications/agents. The
+agents-store engine enum is only 'claude' | 'codex'. Main already has modules
+for opencode, hermes, openclaude, grok, gemini, cursor, droid, amp, kimi, etc.
+Work: wire startAgentRun through the provider seam, extend the engine enum /
+runtime catalog, surface the harnesses in the comms runtime picker.
+
 ## Test harness repair
 
 `dobiusCommunications.test.mjs` had been broken since the identity rework

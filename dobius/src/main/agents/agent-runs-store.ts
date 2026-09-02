@@ -114,6 +114,21 @@ export function updateStoredAgentRun(runId: string, updates: Partial<AgentRun>):
   return { ...run }
 }
 
+export function appendStoredAgentRunOutbox(
+  runId: string,
+  item: NonNullable<AgentRun['outbox']>[number]
+): AgentRun | null {
+  const runs = loadRuns()
+  const run = runs.find((entry) => entry.id === runId)
+  if (!run) {
+    return null
+  }
+  run.outbox = [...(run.outbox ?? []), item]
+  cachedRuns = runs.slice(-MAX_RUNS)
+  persistRuns(cachedRuns)
+  return { ...run }
+}
+
 export function getStoredAgentRun(runId: string): AgentRun | null {
   const run = loadRuns().find((entry) => entry.id === runId)
   return run ? { ...run } : null

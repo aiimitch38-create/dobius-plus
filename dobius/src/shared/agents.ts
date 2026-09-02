@@ -80,6 +80,20 @@ export type CustomAgent = {
 export type AgentRunStatus = 'running' | 'success' | 'error' | 'cancelled'
 export type AgentRunSource = 'manual' | 'heartbeat' | 'channel' | 'asana'
 
+/**
+ * A message the agent posted mid-run via the mcp__dobius__post_channel_message /
+ * post_channel_screenshot tools. The Communications client polls the run and
+ * publishes each item into the originating channel as the agent, live, so
+ * progress and screenshots appear in chat before the run finishes.
+ */
+export type AgentRunOutboxItem = {
+  id: string
+  content: string
+  /** data: URI (image) attached to the message, rendered inline in chat. */
+  imageDataUrl?: string
+  createdAt: number
+}
+
 export type AgentRun = {
   id: string
   agentId: string
@@ -91,6 +105,7 @@ export type AgentRun = {
   summary?: string
   numTurns?: number
   costUsd?: number
+  outbox?: AgentRunOutboxItem[]
 }
 
 export type PendingAgentDecision = {

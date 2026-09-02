@@ -52,7 +52,8 @@ const AgentUpdate = z.object({
 
 const AgentRunStart = z.object({
   id: requiredString('Missing agent id'),
-  prompt: requiredString('Missing agent prompt')
+  prompt: requiredString('Missing agent prompt'),
+  source: z.enum(['manual', 'heartbeat', 'channel', 'asana']).optional()
 })
 
 const AgentRunsQuery = z.object({
@@ -116,7 +117,16 @@ export const CUSTOM_AGENT_METHODS: RpcMethod[] = [
       const runId = await startAgentRun({
         agentId: params.id,
         prompt: params.prompt,
-        prepareClaudeLaunch
+        prepareClaudeLaunch,
+        // Channel runs are headless — nobody sits at the agent panel to click
+        // tool approvals, so undecided prompts would hang the conversation.
+        // 'dontAsk' lets the agent's allowlisted tools run and denies the rest.
+        options: params.source
+          ? {
+              source: params.source,
+              ...(params.source === 'channel' ? { permissionMode: 'dontAsk' as const } : {})
+            }
+          : undefined
       })
       return { runId }
     }

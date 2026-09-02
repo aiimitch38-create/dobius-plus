@@ -284,6 +284,9 @@ test("routes Dobius persona creation into the real Dobius agent store", async ()
     },
   });
 
+  // Communications-created agents are working agents: they default to the
+  // full toolset and a per-agent workspace folder the runner creates on
+  // first use.
   assert.deepEqual(calls, [
     [
       "agent.create",
@@ -293,6 +296,21 @@ test("routes Dobius persona creation into the real Dobius agent store", async ()
         engine: "claude",
         accountId: "claude-account-1",
         model: "codex",
+        allowedTools: [
+          "Read",
+          "Write",
+          "Edit",
+          "Bash",
+          "Grep",
+          "Glob",
+          "WebFetch",
+          "WebSearch",
+          "Task",
+          "TodoWrite",
+          "NotebookEdit",
+        ],
+        skills: undefined,
+        cwd: "~/Dobius Agents/Builder",
       },
     ],
   ]);
@@ -682,9 +700,16 @@ test("dispatches a room message to the matching native Dobius agent and posts it
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 
-  assert.deepEqual(calls.filter(([command]) => command === "agent.run"), [
-    ["agent.run", { id: "native-agent", prompt: "Do the task" }],
-  ]);
+  // The dispatch prompt now carries channel context (names, recent messages)
+  // and the run is marked as channel-sourced so the runner grants the live
+  // chat tools and skips interactive tool approval.
+  const runCalls = calls.filter(([command]) => command === "agent.run");
+  assert.equal(runCalls.length, 1);
+  assert.equal(runCalls[0][1].id, "native-agent");
+  assert.equal(runCalls[0][1].source, "channel");
+  assert.match(runCalls[0][1].prompt, /You are Builder/);
+  assert.match(runCalls[0][1].prompt, /Do the task/);
+  assert.match(runCalls[0][1].prompt, /post_channel_message/);
   assert.equal(submittedEvents.length, 2);
   assert.equal(submittedEvents[1].content, "Done.");
   assert.equal(submittedEvents[1].pubkey, agent.pubkey);

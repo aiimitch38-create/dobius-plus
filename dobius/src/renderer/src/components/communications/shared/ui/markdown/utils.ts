@@ -175,6 +175,13 @@ export function messageLinkUrlTransform(value: string, key: string): string {
   if (key === "href" && isMessageLink(value)) {
     return value;
   }
+  // Inline images posted by agents (post_channel_screenshot) travel as
+  // data:image URIs inside the relay event; defaultUrlTransform strips the
+  // data: scheme, which would render every screenshot blank. Only the image
+  // media types pass — data:text/html etc. stays stripped.
+  if (key === "src" && /^data:image\/(png|jpeg|webp|gif);base64,/.test(value)) {
+    return value;
+  }
   return defaultUrlTransform(value);
 }
 

@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
@@ -22,6 +23,10 @@ export function buildRunEnv(preparation: ClaudeRuntimeAuthPreparation): Options[
 }
 
 export function resolveAgentRunCwd(cwd: string): string {
+  return ensureRunCwd(resolveRunCwdPath(cwd))
+}
+
+function resolveRunCwdPath(cwd: string): string {
   if (!cwd) {
     return os.homedir()
   }
@@ -32,6 +37,18 @@ export function resolveAgentRunCwd(cwd: string): string {
     return path.join(os.homedir(), cwd.slice(2))
   }
   return path.resolve(cwd)
+}
+
+// An agent can be configured with a folder that does not exist yet (agents
+// created from Communications default to a fresh per-agent workspace) — a
+// missing cwd would make the CLI spawn fail, so create it instead.
+function ensureRunCwd(resolved: string): string {
+  try {
+    mkdirSync(resolved, { recursive: true })
+    return resolved
+  } catch {
+    return os.homedir()
+  }
 }
 
 export function currentGitBranch(cwd: string): string | undefined {

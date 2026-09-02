@@ -54,3 +54,12 @@
 .dobius-comms-embed .buzz-onboarding-step-frame {
   min-height: 0;
 }
+
+/* The standalone app marked its headers as window-drag zones; in Electron a
+   drag region swallows every mouse event, which made whole toolbars inside the
+   embedded tab unclickable. The Dobius+ window owns dragging — nothing in this
+   subtree may declare a drag region. */
+.dobius-comms-embed,
+.dobius-comms-embed * {
+  -webkit-app-region: no-drag !important;
+}

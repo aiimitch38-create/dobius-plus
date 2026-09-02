@@ -594,8 +594,78 @@ async function publishDobiusAgentReply(args: {
   return typeof submission.event_id === "string" ? submission.event_id : null;
 }
 
-async function awaitDobiusAgentRun(agent: DobiusAgentRecord, runId: string): Promise<string> {
+// The runner refuses new runs past its concurrency cap; a busy channel (several
+// agents plus chains) hits that in normal use, so queue instead of failing the
+// conversation with "could not start".
+async function startDobiusChannelRun(agentId: string, prompt: string): Promise<string> {
+  const deadline = Date.now() + 10 * 60 * 1000;
+  for (;;) {
+    try {
+      const started = await invokeDobiusRuntime("agent.run", {
+        id: agentId,
+        prompt,
+        source: "channel",
+      });
+      return requiredText(
+        started && typeof started === "object"
+          ? (started as Record<string, unknown>).runId
+          : undefined,
+        "agent run id",
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("Too many concurrent agent runs") || Date.now() >= deadline) {
+        throw error;
+      }
+      await delay(4000);
+    }
+  }
+}
+
+type DobiusAgentRunLiveTarget = {
+  channelId: string;
+  parentEventId: string;
+  broadcast: boolean;
+};
+
+/** Publish any not-yet-seen outbox items (live progress / screenshots) into the channel. */
+async function publishDobiusAgentRunOutbox(
+  agent: DobiusAgentRecord,
+  run: Record<string, unknown>,
+  live: DobiusAgentRunLiveTarget,
+  published: Set<string>,
+): Promise<void> {
+  if (!Array.isArray(run.outbox)) return;
+  for (const raw of run.outbox) {
+    if (!raw || typeof raw !== "object") continue;
+    const item = raw as Record<string, unknown>;
+    const id = typeof item.id === "string" ? item.id : null;
+    if (!id || published.has(id)) continue;
+    published.add(id);
+    const caption = typeof item.content === "string" ? item.content.trim() : "";
+    const image =
+      typeof item.imageDataUrl === "string" && item.imageDataUrl.startsWith("data:image/")
+        ? `\n\n![screenshot](${item.imageDataUrl})`
+        : "";
+    const body = `${caption}${image}`.trim();
+    if (!body) continue;
+    await publishDobiusAgentReply({
+      agent,
+      channelId: live.channelId,
+      parentEventId: live.parentEventId,
+      content: body,
+      broadcast: live.broadcast,
+    }).catch(() => undefined);
+  }
+}
+
+async function awaitDobiusAgentRun(
+  agent: DobiusAgentRecord,
+  runId: string,
+  live?: DobiusAgentRunLiveTarget,
+): Promise<string> {
   const deadline = Date.now() + 2 * 60 * 60 * 1000;
+  const publishedOutbox = new Set<string>();
   while (Date.now() < deadline) {
     const response = await invokeDobiusRuntime("agent.runs", { agentId: agent.id });
     const run = recordsAt(response, "runs").find(
@@ -604,6 +674,9 @@ async function awaitDobiusAgentRun(agent: DobiusAgentRecord, runId: string): Pro
         typeof candidate === "object" &&
         (candidate as Record<string, unknown>).id === runId,
     ) as Record<string, unknown> | undefined;
+    if (run && live) {
+      await publishDobiusAgentRunOutbox(agent, run, live, publishedOutbox);
+    }
     if (run && run.status !== "running") {
       const summary = typeof run.summary === "string" ? run.summary.trim() : "";
       if (run.status === "success") return summary || `${agent.name} completed the task.`;
@@ -665,23 +738,55 @@ async function dispatchMessageToDobiusAgents(args: {
     targets.push(agent);
   }
   const inThread = args.threadParentEventId !== null;
-  const prompt = args.author
-    ? `Message from agent "${args.author.name}" in a shared channel (the user and other agents see your reply; mention @AgentName only if you need that agent to answer): ${args.content}`
-    : args.content;
+  // Context for the turn: who is in the room and what was just said. Without
+  // it each agent saw only the bare triggering text — no names, no history —
+  // which made multi-agent collaboration incoherent.
+  const selfIdentity = localIdentity();
+  const nameByPubkey = new Map<string, string>([
+    [selfIdentity.pubkey.toLowerCase(), selfIdentity.username || "the user"],
+  ]);
+  for (const candidate of agents) {
+    nameByPubkey.set(agentIdentity(candidate.id).pubkey, candidate.name);
+  }
+  const channelAgentNames = agents
+    .filter((candidate) => targetPubkeys.has(agentIdentity(candidate.id).pubkey))
+    .map((candidate) => candidate.name);
+  const history = await queryRelay([
+    { kinds: [9], "#h": [args.channelId], limit: 12 },
+  ]).catch(() => [] as RelayEventRecord[]);
+  const transcript = history
+    .filter((event) => event.id !== args.eventId)
+    .sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id))
+    .map(
+      (event) =>
+        `${nameByPubkey.get(event.pubkey.toLowerCase()) ?? "someone"}: ${event.content}`,
+    )
+    .join("\n");
+  const authorName = args.author?.name ?? (selfIdentity.username || "the user");
+  const buildPrompt = (agent: DobiusAgentRecord): string =>
+    [
+      `You are ${agent.name}, an agent in a shared Dobius Communications channel with ${
+        selfIdentity.username || "the user"
+      }${
+        channelAgentNames.filter((name) => name !== agent.name).length
+          ? ` and the agents ${channelAgentNames.filter((name) => name !== agent.name).join(", ")}`
+          : ""
+      }. Everyone sees your reply.`,
+      transcript ? `Recent channel messages (oldest first):\n${transcript}` : null,
+      `New message from ${args.author ? `agent ${authorName}` : authorName}: ${args.content}`,
+      `Reply concisely with your contribution. Mention @AgentName only when you need that agent to act or answer. While you work you can post live progress with the mcp__dobius__post_channel_message tool and share images with mcp__dobius__post_channel_screenshot.`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   await Promise.all(
     targets.map(async (agent) => {
       try {
-        const started = await invokeDobiusRuntime("agent.run", {
-          id: agent.id,
-          prompt,
+        const runId = await startDobiusChannelRun(agent.id, buildPrompt(agent));
+        const reply = await awaitDobiusAgentRun(agent, runId, {
+          channelId: args.channelId,
+          parentEventId: args.eventId,
+          broadcast: !inThread,
         });
-        const runId = requiredText(
-          started && typeof started === "object"
-            ? (started as Record<string, unknown>).runId
-            : undefined,
-          "agent run id",
-        );
-        const reply = await awaitDobiusAgentRun(agent, runId);
         const publishedId = await publishDobiusAgentReply({
           agent,
           channelId: args.channelId,
@@ -1724,16 +1829,45 @@ export async function loadDobiusPersonas(): Promise<DobiusPersonaProjection[]> {
     .map(personaFromAgent);
 }
 
+// Full working toolset for agents created from Communications: channel agents
+// collaborate on real tasks, so they get read/write/shell/web plus subtasks.
+// The store's own default (Read/Grep/Glob) stays for agents created elsewhere.
+const DOBIUS_CHANNEL_AGENT_TOOLS = [
+  "Read",
+  "Write",
+  "Edit",
+  "Bash",
+  "Grep",
+  "Glob",
+  "WebFetch",
+  "WebSearch",
+  "Task",
+  "TodoWrite",
+  "NotebookEdit",
+];
+
 async function createDobiusPersona(args: unknown): Promise<DobiusPersonaProjection> {
   const input = objectAt(args, "input");
   const runtime = parseRuntimeSelection(input.runtime);
+  const name = requiredText(input.displayName, "agent name");
   const response = await invokeDobiusRuntime("agent.create", {
-    name: requiredText(input.displayName, "agent name"),
+    name,
     systemPrompt:
       typeof input.systemPrompt === "string" ? input.systemPrompt : undefined,
     engine: runtime.engine,
     accountId: runtime.accountId,
     model: typeof input.model === "string" ? input.model : undefined,
+    allowedTools: Array.isArray(input.allowedTools)
+      ? input.allowedTools
+      : DOBIUS_CHANNEL_AGENT_TOOLS,
+    skills: Array.isArray(input.skills) ? input.skills : undefined,
+    // Each agent gets its own workspace folder (created on first run) so its
+    // files, CLAUDE.md, and session history have a stable home. The runner
+    // expands "~" and mkdirs the path.
+    cwd:
+      typeof input.cwd === "string" && input.cwd.trim()
+        ? input.cwd.trim()
+        : `~/Dobius Agents/${name.replace(/[/\\:]/g, "-")}`,
   });
   const agent = objectAt(response, "agent");
   if (!isDobiusAgentRecord(agent)) {

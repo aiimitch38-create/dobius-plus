@@ -17,6 +17,8 @@ const DISPATCH_BRIEF_LIMIT = 6_000
 export type DobiusToolContext = {
   agentId: string
   runId: string
+  /** True for channel-sourced runs: offer the live chat outbox tools. */
+  channelOutbox?: boolean
 }
 
 type TextToolResult = {

@@ -11,10 +11,14 @@ import { Toaster } from '@comms/shared/ui/sonner'
 import { TooltipProvider } from '@comms/shared/ui/tooltip'
 import { primeDobiusIdentity } from '@comms/shared/api/dobiusCommunications'
 import { CommunicationsErrorBoundary } from './CommunicationsErrorBoundary'
-import { LoadingMark } from '@comms/shared/ui/dobius-logo/LoadingMark'
 import '@comms/shared/styles/globals.css'
 // Imported after globals.css so its viewport-height corrections land last.
 import './communications-embed.css'
+
+// Kicked off the moment the chunk loads — one fast IPC round-trip — so by the
+// time React mounts the page the identity is normally already cached and the
+// hub renders immediately, with no loading screen in between.
+const identityPrimed = primeDobiusIdentity()
 
 /**
  * The Communications tab.
@@ -40,7 +44,7 @@ export function CommunicationsPage(): React.JSX.Element {
 
   useEffect(() => {
     let cancelled = false
-    primeDobiusIdentity()
+    identityPrimed
       .then(() => {
         if (!cancelled) setIdentityState('ready')
       })
@@ -55,12 +59,10 @@ export function CommunicationsPage(): React.JSX.Element {
   }, [])
 
   if (identityState === 'loading') {
-    return (
-      <div className="flex h-full min-h-0 items-center justify-center" role="status">
-        <span className="sr-only">Loading Communications…</span>
-        <LoadingMark className="h-auto w-20" />
-      </div>
-    )
+    // No loading screen: the prime started at chunk import and settles within
+    // one IPC round-trip, so this state is a single imperceptible frame. The
+    // error card below still catches a genuine failure.
+    return <div className="dobius-comms-embed" aria-busy="true" />
   }
 
   if (identityState !== 'ready') {
