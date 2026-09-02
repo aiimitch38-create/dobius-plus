@@ -547,23 +547,28 @@ async function publishDobiusAgentReply(args: {
   channelId: string;
   parentEventId: string;
   content: string;
-}): Promise<void> {
+  broadcast: boolean;
+}): Promise<string | null> {
   const identity = agentIdentity(args.agent.id);
-  await submitRelayEvent(
+  const tags: string[][] = [
+    ["h", args.channelId],
+    ["p", localIdentity().pubkey],
+    ["e", args.parentEventId, "", "reply"],
+  ];
+  // A bare reply e-tag hides the message in a thread (threadPanel's main-timeline
+  // filter). ["broadcast","1"] is the reader's existing "reply that renders on the
+  // channel timeline" marker — agents answer in the channel, still linked to the
+  // message they answered. Thread-triggered replies stay un-broadcast on purpose:
+  // threads are the direct line to one agent.
+  if (args.broadcast) tags.push(["broadcast", "1"]);
+  const submission = await submitRelayEvent(
     signedEventWithPrivateKey(
-      {
-        kind: 9,
-        content: args.content,
-        tags: [
-          ["h", args.channelId],
-          ["p", localIdentity().pubkey],
-          ["e", args.parentEventId, "", "reply"],
-        ],
-      },
+      { kind: 9, content: args.content, tags },
       identity.privateKey,
     ),
     identity.pubkey,
   );
+  return typeof submission.event_id === "string" ? submission.event_id : null;
 }
 
 async function awaitDobiusAgentRun(agent: DobiusAgentRecord, runId: string): Promise<string> {
@@ -586,12 +591,32 @@ async function awaitDobiusAgentRun(agent: DobiusAgentRecord, runId: string): Pro
   return `${agent.name} is still working. Its run remains available in Dobius Agents.`;
 }
 
+// Backstop for agent-to-agent chains: even with the mention requirement below, a
+// pair of agents that keep @-mentioning each other must terminate. Depth counts
+// agent-authored hops from the human message that started the chain.
+const MAX_AGENT_CHAIN_DEPTH = 8;
+
+function contentMentionsAgent(content: string, agent: DobiusAgentRecord): boolean {
+  const haystack = content.toLowerCase();
+  const name = agent.name.trim().toLowerCase();
+  if (!name) return false;
+  const compact = name.replace(/\s+/g, "");
+  return haystack.includes(`@${name}`) || haystack.includes(`@${compact}`);
+}
+
 async function dispatchMessageToDobiusAgents(args: {
   channelId: string;
   eventId: string;
   content: string;
   participantPubkeys: string[];
+  /** Non-null when the triggering message lives inside a thread — replies stay there. */
+  threadParentEventId: string | null;
+  /** Set when the triggering message was written by an agent (chain hop). */
+  author?: { agentId: string; name: string };
+  depth?: number;
 }): Promise<void> {
+  const depth = args.depth ?? 0;
+  if (depth >= MAX_AGENT_CHAIN_DEPTH) return;
   const response = await invokeDobiusRuntime("agent.list");
   const agents = recordsAt(response, "agents").filter(isDobiusAgentRecord);
   // Why: ordinary DM messages do not repeat the recipient as an @mention. Resolve
@@ -607,14 +632,25 @@ async function dispatchMessageToDobiusAgents(args: {
   );
   const targets: DobiusAgentRecord[] = [];
   for (const agent of agents) {
-    if (targetPubkeys.has(agentIdentity(agent.id).pubkey)) targets.push(agent);
+    // An agent never answers itself.
+    if (args.author && agent.id === args.author.agentId) continue;
+    if (!targetPubkeys.has(agentIdentity(agent.id).pubkey)) continue;
+    // Membership wakes an agent for HUMAN messages only. For an agent-authored
+    // message the target must be @-mentioned in it — otherwise every member
+    // agent would answer every other agent forever.
+    if (args.author && !contentMentionsAgent(args.content, agent)) continue;
+    targets.push(agent);
   }
+  const inThread = args.threadParentEventId !== null;
+  const prompt = args.author
+    ? `Message from agent "${args.author.name}" in a shared channel (the user and other agents see your reply; mention @AgentName only if you need that agent to answer): ${args.content}`
+    : args.content;
   await Promise.all(
     targets.map(async (agent) => {
       try {
         const started = await invokeDobiusRuntime("agent.run", {
           id: agent.id,
-          prompt: args.content,
+          prompt,
         });
         const runId = requiredText(
           started && typeof started === "object"
@@ -623,12 +659,26 @@ async function dispatchMessageToDobiusAgents(args: {
           "agent run id",
         );
         const reply = await awaitDobiusAgentRun(agent, runId);
-        await publishDobiusAgentReply({
+        const publishedId = await publishDobiusAgentReply({
           agent,
           channelId: args.channelId,
           parentEventId: args.eventId,
           content: reply,
+          broadcast: !inThread,
         });
+        // Channel replies re-enter dispatch so mentioned agents can answer back.
+        // Thread replies do not chain — a thread is the user's direct line.
+        if (publishedId && !inThread) {
+          void dispatchMessageToDobiusAgents({
+            channelId: args.channelId,
+            eventId: publishedId,
+            content: reply,
+            participantPubkeys: [],
+            threadParentEventId: null,
+            author: { agentId: agent.id, name: agent.name },
+            depth: depth + 1,
+          });
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await publishDobiusAgentReply({
@@ -636,6 +686,7 @@ async function dispatchMessageToDobiusAgents(args: {
           channelId: args.channelId,
           parentEventId: args.eventId,
           content: `${agent.name} could not start: ${message}`,
+          broadcast: !inThread,
         }).catch(() => undefined);
       }
     }),
@@ -692,6 +743,7 @@ async function sendDobiusChannelMessage(args: unknown): Promise<unknown> {
     eventId,
     content,
     participantPubkeys: mentionPubkeys,
+    threadParentEventId: parentEventId,
   });
   const rootEventId = parentEventId
     ? tags.find((tag) => tag[0] === "e" && tag[3] === "root")?.[1] ?? parentEventId
