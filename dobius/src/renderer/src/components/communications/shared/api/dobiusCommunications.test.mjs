@@ -476,7 +476,9 @@ test("allows an empty user query for the DM picker initial page", async () => {
   });
   assert.equal(response.handled, true);
   assert.deepEqual(response.result, { users: [], next_cursor: null });
-  assert.deepEqual(submittedFilter, { kinds: [0], limit: 8, page: 1 });
+  // The relay ignores `search`/`page`, so the handler fetches a wide profile
+  // window and filters/pages client-side — the wire filter carries no query.
+  assert.deepEqual(submittedFilter, { kinds: [0], limit: 1000 });
 });
 
 test("opens a real relay DM and returns the channel shape expected by Dobius", async () => {

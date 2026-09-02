@@ -445,18 +445,31 @@ async function loadDobiusUsersBatch(args: unknown): Promise<unknown> {
 
 async function searchDobiusUsers(args: unknown): Promise<unknown> {
   const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
-  const query = typeof input.query === "string" ? input.query.trim() : "";
+  const query = typeof input.query === "string" ? input.query.trim().toLowerCase() : "";
   const limit = typeof input.limit === "number" ? Math.max(1, Math.min(input.limit, 100)) : 8;
   const page = Math.max(Number(input.cursor ?? 1) || 1, 1);
-  const filter: Record<string, unknown> = { kinds: [0], limit, page };
-  if (query) filter.search = query;
-  const events = await queryRelay([filter]);
+  // ponytail: the relay drops `search` and `page` (relay-filters.ts), so the
+  // old passthrough returned the newest N profiles regardless of the query and
+  // re-served page 1 forever. Filter and page client-side over the newest 1000
+  // profiles; a bigger directory needs relay-side search.
+  const events = await queryRelay([{ kinds: [0], limit: 1000 }]);
+  const matches = query
+    ? events.filter((event) => {
+        const profile = profileFromEvent(event, event.pubkey);
+        return (
+          JSON.stringify(profile).toLowerCase().includes(query) ||
+          event.pubkey.toLowerCase().includes(query)
+        );
+      })
+    : events;
+  const start = (page - 1) * limit;
+  const pageEvents = matches.slice(start, start + limit);
   return {
-    users: events.map((event) => ({
+    users: pageEvents.map((event) => ({
       pubkey: event.pubkey,
       ...userProfileSummary(profileFromEvent(event, event.pubkey)),
     })),
-    next_cursor: events.length >= limit ? String(page + 1) : null,
+    next_cursor: start + limit < matches.length ? String(page + 1) : null,
   };
 }
 
@@ -833,7 +846,7 @@ async function dispatchMessageToDobiusAgents(args: {
         // Channel replies re-enter dispatch so mentioned agents can answer back.
         // Thread replies do not chain — a thread is the user's direct line.
         if (publishedId && !inThread) {
-          void dispatchMessageToDobiusAgents({
+          dispatchMessageToDobiusAgents({
             channelId: args.channelId,
             eventId: publishedId,
             content: reply,
@@ -841,6 +854,8 @@ async function dispatchMessageToDobiusAgents(args: {
             threadParentEventId: null,
             author: { agentId: agent.id, name: agent.name },
             depth: depth + 1,
+          }).catch((error: unknown) => {
+            console.error("[comms] agent chain dispatch failed:", error);
           });
         }
       } catch (error) {
@@ -905,12 +920,17 @@ async function sendDobiusChannelMessage(args: unknown): Promise<unknown> {
   const eventId = requiredText(submission.event_id, "message event id");
   // Why: Dobius owns room delivery while Dobius owns execution; dispatch only
   // participants backed by the real Dobius agent store after relay acceptance.
-  void dispatchMessageToDobiusAgents({
+  dispatchMessageToDobiusAgents({
     channelId,
     eventId,
     content,
     participantPubkeys: mentionPubkeys,
     threadParentEventId: parentEventId,
+  }).catch((error: unknown) => {
+    // The prologue (agent.list, room query, prompt assembly) runs before the
+    // per-target try/catch — an escape here used to be an invisible unhandled
+    // rejection, and "no agent ever answered" had no diagnosis.
+    console.error("[comms] agent dispatch failed before any agent started:", error);
   });
   const rootEventId = parentEventId
     ? tags.find((tag) => tag[0] === "e" && tag[3] === "root")?.[1] ?? parentEventId
@@ -1380,18 +1400,32 @@ async function getDobiusChannelWindow(args: unknown): Promise<unknown> {
   const cursor =
     input.cursor && typeof input.cursor === "object" ? (input.cursor as Record<string, unknown>) : null;
 
+  const cursorAt = cursor && typeof cursor.created_at === "number" ? cursor.created_at : null;
+  const cursorId = cursor && typeof cursor.event_id === "string" ? cursor.event_id : null;
+  // ponytail: the relay silently DROPS `until` (relay-filters.ts documents it),
+  // so a cursored request got the same newest page back, the cursor-strip made
+  // it exactly limitRows long, and has_more computed false — scroll-back ended
+  // after one duplicated page. Cut older pages client-side from the newest
+  // 1000 events; channels deeper than 1000 need relay-side `until`.
   const filter: Record<string, unknown> = {
     kinds: DOBIUS_CHANNEL_MESSAGE_KINDS,
     "#h": [channelId],
     // One extra row detects has_more without a second query.
-    limit: limitRows + 1,
+    limit: cursorAt !== null ? 1000 : limitRows + 1,
   };
-  if (cursor && typeof cursor.created_at === "number") filter.until = cursor.created_at;
 
   const events = await queryRelay([filter]);
-  const cursorEventId = cursor && typeof cursor.event_id === "string" ? cursor.event_id : null;
-  const filtered = cursorEventId ? events.filter((event) => event.id !== cursorEventId) : events;
   // Relay returns newest-first; keep that order to pick the page, then flip.
+  const filtered =
+    cursorAt === null
+      ? events
+      : events.filter(
+          (event) =>
+            event.created_at < cursorAt ||
+            (event.created_at === cursorAt &&
+              cursorId !== null &&
+              event.id.localeCompare(cursorId) < 0),
+        );
   const page = filtered.slice(0, limitRows);
   const hasMore = filtered.length > limitRows;
   const oldest = page[page.length - 1] ?? null;
@@ -1463,12 +1497,23 @@ async function searchDobiusMessages(args: unknown): Promise<unknown> {
   const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
   const query = requiredText(input.q, "search query");
   const limit = typeof input.limit === "number" ? Math.max(1, Math.min(input.limit, 100)) : 50;
-  const filter: Record<string, unknown> = { kinds: [1, 9, 40002, 45001, 45003], search: query, limit };
+  // ponytail: the relay drops `search` and `until` (relay-filters.ts), so the
+  // old passthrough returned the newest N messages regardless of the query.
+  // Fetch the newest 1000 candidates and match client-side; full-history
+  // search needs relay-side FTS.
+  const filter: Record<string, unknown> = { kinds: [1, 9, 40002, 45001, 45003], limit: 1000 };
   if (typeof input.channelId === "string" && input.channelId) filter["#h"] = [input.channelId];
   if (Array.isArray(input.authors) && input.authors.length) filter.authors = input.authors;
   if (typeof input.since === "number") filter.since = input.since;
-  if (typeof input.until === "number") filter.until = input.until;
-  const events = await queryRelay([filter]);
+  const needle = query.toLowerCase();
+  const untilAt = typeof input.until === "number" ? input.until : null;
+  const events = (await queryRelay([filter]))
+    .filter(
+      (event) =>
+        event.content.toLowerCase().includes(needle) &&
+        (untilAt === null || event.created_at <= untilAt),
+    )
+    .slice(0, limit);
   return {
     hits: events.map((event) => ({
       event_id: event.id,
@@ -1929,6 +1974,11 @@ async function updateDobiusPersona(args: unknown): Promise<DobiusPersonaProjecti
   if (!isDobiusAgentRecord(agent)) {
     throw new Error("Dobius returned an invalid updated agent");
   }
+  if (typeof updates.name === "string") {
+    // A rename must reach chat: drop the session memo so the next agent
+    // message republishes its kind-0 profile under the new name.
+    publishedAgentProfiles.delete(agentIdentity(agent.id).pubkey);
+  }
   return personaFromAgent(agent);
 }
 
@@ -2063,6 +2113,8 @@ async function sendDobiusManagedAgentChannelMessage(args: unknown): Promise<unkn
     (candidate) => agentIdentity(candidate.id).pubkey.toLowerCase() === agentPubkey,
   );
   if (!agent) throw new Error(`Dobius agent not found for ${agentPubkey}`);
+  // Same guarantee as publishDobiusAgentReply: an agent never posts nameless.
+  await ensureDobiusAgentProfile(agent);
   const identity = agentIdentity(agent.id);
 
   const tags: string[][] = [["h", channelId]];
@@ -3077,16 +3129,50 @@ export async function invokeDobiusBackedTauriCommand(
     }
     case "get_agent_config_surface": {
       const agent = await managedAgentByPubkey(args);
+      // The client's NormalizedConfig contract wants NormalizedField OBJECTS
+      // ({value, origin, writeVia, ...}) or null — never bare strings. Bare
+      // strings passed AgentConfigPanel's `field === null` filter and crashed
+      // isReadOnlyField on `field.writeVia.type` ("reading 'type'") for every
+      // agent with a model or account, on the Agents page AND every agent
+      // profile popover, re-thrown by the panel's 30s refetch.
+      const readOnlyField = (value: string | null) =>
+        value === null || value === undefined || value === ""
+          ? null
+          : {
+              value,
+              origin: "personaDefault" as const,
+              writeVia: { type: "readOnly" as const },
+              overriddenValue: null,
+              overriddenOrigin: null,
+              isRequired: false,
+            };
       return {
         handled: true,
         result: {
           runtimeId: agent.runtime,
           runtimeLabel: agent.runtime === "codex" ? "Codex" : "Claude SDK",
           isPreSpawn: agent.status !== "running",
-          normalized: { model: agent.model, provider: agent.provider },
+          normalized: {
+            model: readOnlyField(agent.model),
+            provider: readOnlyField(agent.provider),
+            mode: null,
+            thinkingEffort: null,
+            maxOutputTokens: null,
+            contextLimit: null,
+            systemPrompt: null,
+          },
           advanced: [],
           extensions: [],
-          sources: {},
+          // The parser reads every tier key; an empty object made each tier
+          // undefined where "available" | "pending" | "notApplicable" is due.
+          sources: {
+            acpNative: "notApplicable",
+            acpConfigOptions: "notApplicable",
+            envVars: "notApplicable",
+            configFile: "notApplicable",
+            configFilePath: null,
+            mcpConfigFilePath: null,
+          },
         },
       };
     }
