@@ -10,6 +10,7 @@ import { PoofBurstProvider } from '@comms/shared/ui/PoofBurstProvider'
 import { Toaster } from '@comms/shared/ui/sonner'
 import { TooltipProvider } from '@comms/shared/ui/tooltip'
 import { primeDobiusIdentity } from '@comms/shared/api/dobiusCommunications'
+import { CommunicationsErrorBoundary } from './CommunicationsErrorBoundary'
 import { LoadingMark } from '@comms/shared/ui/dobius-logo/LoadingMark'
 import '@comms/shared/styles/globals.css'
 // Imported after globals.css so its viewport-height corrections land last.
@@ -76,7 +77,8 @@ export function CommunicationsPage(): React.JSX.Element {
 
   return (
     <div className="dobius-comms-embed">
-      <CommunitiesProvider>
+      <CommunicationsErrorBoundary>
+        <CommunitiesProvider>
         <CommunityOnboardingProvider>
           <ThemeProvider defaultTheme="buzz">
             <TooltipProvider delayDuration={300}>
@@ -90,8 +92,9 @@ export function CommunicationsPage(): React.JSX.Element {
               </EmojiBurstProvider>
             </TooltipProvider>
           </ThemeProvider>
-        </CommunityOnboardingProvider>
-      </CommunitiesProvider>
+          </CommunityOnboardingProvider>
+        </CommunitiesProvider>
+      </CommunicationsErrorBoundary>
     </div>
   )
 }
