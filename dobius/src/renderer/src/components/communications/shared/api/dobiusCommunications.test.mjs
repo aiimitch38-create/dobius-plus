@@ -710,13 +710,22 @@ test("dispatches a room message to the matching native Dobius agent and posts it
   assert.match(runCalls[0][1].prompt, /You are Builder/);
   assert.match(runCalls[0][1].prompt, /Do the task/);
   assert.match(runCalls[0][1].prompt, /post_channel_message/);
-  assert.equal(submittedEvents.length, 2);
-  assert.equal(submittedEvents[1].content, "Done.");
-  assert.equal(submittedEvents[1].pubkey, agent.pubkey);
+  // Three events: the user's message, the agent's kind-0 profile (so its
+  // name resolves in chat — published before its first reply), and the reply.
+  assert.equal(submittedEvents.length, 3);
+  const profile = submittedEvents.find((event) => event.kind === 0);
+  assert.ok(profile, "agent kind-0 profile published");
+  assert.equal(profile.pubkey, agent.pubkey);
+  assert.equal(JSON.parse(profile.content).name, "Builder");
+  const reply = submittedEvents.find(
+    (event) => event.kind === 9 && event.pubkey === agent.pubkey,
+  );
+  assert.ok(reply, "agent reply published");
+  assert.equal(reply.content, "Done.");
   // Replies to a main-timeline message carry ["broadcast","1"] so they render
   // in the channel (still linked via the reply e-tag) instead of collapsing
   // into a thread. Thread-triggered replies stay un-broadcast.
-  assert.deepEqual(submittedEvents[1].tags, [
+  assert.deepEqual(reply.tags, [
     ["h", "agent-room"],
     ["p", identity.pubkey],
     ["e", submittedEvents[0].id, "", "reply"],

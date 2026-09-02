@@ -8,6 +8,7 @@ import {
   updateAgent
 } from '../../../agents/agents-store'
 import { listAgentRuns, startAgentRun } from '../../../agents/agent-runner'
+import { getAgentRunOutbox } from '../../../agents/agent-runs-store'
 import { getDefaultPrepareClaudeLaunch } from '../../../agents/default-claude-launch'
 import { defineMethod, type RpcMethod } from '../core'
 import { OptionalPlainString, OptionalString, requiredString } from '../schemas'
@@ -60,6 +61,11 @@ const AgentRunsQuery = z.object({
   agentId: OptionalString
 })
 
+const AgentRunOutboxQuery = z.object({
+  runId: requiredString('Missing run id'),
+  afterId: OptionalString
+})
+
 function showAgent(id: string): CustomAgent {
   const agent = getAgent(id)
   if (!agent) {
@@ -85,8 +91,14 @@ export const CUSTOM_AGENT_METHODS: RpcMethod[] = [
     handler: (params) => {
       const agents = createAgent(params)
       // Why: createAgent appends the new record and returns the full roster,
-      // so the last entry is the agent that was just created.
-      return { agent: agents.at(-1) }
+      // so the last entry is the agent that was just created. Assert it —
+      // returning { agent: undefined } serializes to {} and callers reading
+      // result.agent.<field> crash with "undefined is not an object".
+      const agent = agents.at(-1)
+      if (!agent) {
+        throw new Error('Agent creation did not persist a record')
+      }
+      return { agent }
     }
   }),
   defineMethod({
@@ -94,7 +106,12 @@ export const CUSTOM_AGENT_METHODS: RpcMethod[] = [
     params: AgentUpdate,
     handler: (params) => {
       const agents = updateAgent(params.id, params.updates)
-      return { agent: agents.find((agent) => agent.id === params.id) }
+      const agent = agents.find((candidate) => candidate.id === params.id)
+      // Same contract as agent.create: never hand back { agent: undefined }.
+      if (!agent) {
+        throw new Error(`Agent not found after update: ${params.id}`)
+      }
+      return { agent }
     }
   }),
   defineMethod({
@@ -138,6 +155,16 @@ export const CUSTOM_AGENT_METHODS: RpcMethod[] = [
       runs: params.agentId
         ? listAgentRuns().filter((run) => run.agentId === params.agentId)
         : listAgentRuns()
+    })
+  }),
+  defineMethod({
+    name: 'agent.runOutbox',
+    params: AgentRunOutboxQuery,
+    // Separate from agent.runs on purpose: outbox items carry base64 images,
+    // and shipping them inside the 750ms runs poll re-serialized megabytes per
+    // tick. This returns only items the caller has not seen yet.
+    handler: (params) => ({
+      items: getAgentRunOutbox(params.runId, params.afterId ?? null)
     })
   })
 ]

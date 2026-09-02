@@ -6,13 +6,14 @@ import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import type { Store } from '../../persistence'
-import { appendStoredAgentRunOutbox } from '../agent-runs-store'
+import { appendAgentRunOutbox } from '../agent-runs-store'
 import { createDobiusToolHandlers, type DobiusToolContext } from './dobius-tool-handlers'
 
 // Raw-file ceiling for screenshots posted into chat. The image travels as a
-// data: URI inside a relay event, so this bounds both the runs store and the
-// relay's sqlite row. Full-page captures should be scaled down by the agent.
-const MAX_CHAT_IMAGE_BYTES = 1_200_000
+// base64 data: URI inside a relay event, and the relay rejects any event over
+// 1MB — 700KB raw is ~955KB encoded, the largest that reliably clears the cap.
+// ponytail: data-URI transport; a blob-store upload path lifts this ceiling.
+const MAX_CHAT_IMAGE_BYTES = 700_000
 
 const CHAT_IMAGE_MIME: Record<string, string> = {
   '.png': 'image/png',
@@ -31,13 +32,13 @@ function queueOutboxItem(
   content: string,
   imageDataUrl?: string
 ): CallToolResult {
-  const run = appendStoredAgentRunOutbox(context.runId, {
+  const appended = appendAgentRunOutbox(context.runId, {
     id: randomUUID(),
     content,
     ...(imageDataUrl ? { imageDataUrl } : {}),
     createdAt: Date.now()
   })
-  if (!run) {
+  if (!appended) {
     return textResult('Failed: this run is no longer tracked, the message was not sent.')
   }
   return textResult('Queued for the channel — it will appear in the chat within a second.')

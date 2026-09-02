@@ -28,10 +28,12 @@ type Props = {
 type State = {
   error: Error | null
   resetKey: Props['resetKey']
+  /** Bumped by Retry so the children remount instead of re-rendering. */
+  attempt: number
 }
 
 export class RecoverableRenderErrorBoundary extends React.Component<Props, State> {
-  state: State = { error: null, resetKey: this.props.resetKey }
+  state: State = { error: null, resetKey: this.props.resetKey, attempt: 0 }
 
   static getDerivedStateFromProps(props: Props, state: State): Partial<State> | null {
     if (props.resetKey !== state.resetKey) {
@@ -61,12 +63,18 @@ export class RecoverableRenderErrorBoundary extends React.Component<Props, State
   }
 
   handleReset = (): void => {
-    this.setState({ error: null })
+    // Clearing the error alone re-renders the SAME children against the same
+    // state — a deterministic crash (bad record in a store) re-throws on the
+    // next frame and Retry looks dead. Bumping the key forces a remount, which
+    // is the same recovery a view switch provides.
+    this.setState((state) => ({ error: null, attempt: state.attempt + 1 }))
   }
 
   render(): React.ReactNode {
     if (!this.state.error) {
-      return this.props.children
+      return (
+        <React.Fragment key={this.state.attempt}>{this.props.children}</React.Fragment>
+      )
     }
 
     if (this.props.fallback) {

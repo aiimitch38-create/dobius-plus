@@ -82,9 +82,13 @@ export type AgentRunSource = 'manual' | 'heartbeat' | 'channel' | 'asana'
 
 /**
  * A message the agent posted mid-run via the mcp__dobius__post_channel_message /
- * post_channel_screenshot tools. The Communications client polls the run and
- * publishes each item into the originating channel as the agent, live, so
- * progress and screenshots appear in chat before the run finishes.
+ * post_channel_screenshot tools. The Communications client polls agent.runOutbox
+ * and publishes each item into the originating channel as the agent, live.
+ * Deliberately NOT part of AgentRun: items carry base64 images, and storing
+ * them on the persisted run record made every append rewrite the whole runs
+ * file synchronously on the main thread and every 750ms runs-poll re-serialize
+ * megabytes — which froze the entire app while agents worked. Outbox items are
+ * transient delivery state and live in memory only.
  */
 export type AgentRunOutboxItem = {
   id: string
@@ -105,7 +109,6 @@ export type AgentRun = {
   summary?: string
   numTurns?: number
   costUsd?: number
-  outbox?: AgentRunOutboxItem[]
 }
 
 export type PendingAgentDecision = {

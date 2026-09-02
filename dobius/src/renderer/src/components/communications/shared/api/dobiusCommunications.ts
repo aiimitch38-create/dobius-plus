@@ -490,20 +490,7 @@ async function openDobiusDm(args: unknown): Promise<unknown> {
   await Promise.all(
     agents
       .filter((agent) => pubkeys.includes(agentIdentity(agent.id).pubkey))
-      .map(async (agent) => {
-        const identity = agentIdentity(agent.id);
-        await submitRelayEvent(
-          signedEventWithPrivateKey(
-            {
-              kind: 0,
-              content: JSON.stringify({ display_name: agent.name, name: agent.name }),
-              tags: [],
-            },
-            identity.privateKey,
-          ),
-          identity.pubkey,
-        );
-      }),
+      .map((agent) => ensureDobiusAgentProfile(agent)),
   );
   const metadata = await queryRelay([{ kinds: [39000], "#d": [channelId], limit: 1 }]);
   const event = metadata.sort((a, b) => b.created_at - a.created_at)[0];
@@ -560,6 +547,33 @@ function resolveRelayThreadRoot(
   return rootTag ?? replyTag ?? parentEventId;
 }
 
+// Session memo of agent pubkeys whose kind-0 profile has been published.
+// Without a kind-0 event on the relay, name resolution has nothing to resolve
+// and agent messages render with no author name — the profile used to be
+// published only when a DM was opened, never for channel messages.
+const publishedAgentProfiles = new Set<string>();
+
+async function ensureDobiusAgentProfile(agent: DobiusAgentRecord): Promise<void> {
+  const identity = agentIdentity(agent.id);
+  if (publishedAgentProfiles.has(identity.pubkey)) return;
+  try {
+    await submitRelayEvent(
+      signedEventWithPrivateKey(
+        {
+          kind: 0,
+          content: JSON.stringify({ display_name: agent.name, name: agent.name }),
+          tags: [],
+        },
+        identity.privateKey,
+      ),
+      identity.pubkey,
+    );
+    publishedAgentProfiles.add(identity.pubkey);
+  } catch {
+    // Retried on the agent's next message.
+  }
+}
+
 async function publishDobiusAgentReply(args: {
   agent: DobiusAgentRecord;
   channelId: string;
@@ -567,6 +581,8 @@ async function publishDobiusAgentReply(args: {
   content: string;
   broadcast: boolean;
 }): Promise<string | null> {
+  // Every agent-authored message guarantees its author has a name in chat.
+  await ensureDobiusAgentProfile(args.agent);
   const identity = agentIdentity(args.agent.id);
   const [parent] = await queryRelay([{ ids: [args.parentEventId], limit: 1 }]).catch(
     () => [undefined],
@@ -628,20 +644,34 @@ type DobiusAgentRunLiveTarget = {
   broadcast: boolean;
 };
 
-/** Publish any not-yet-seen outbox items (live progress / screenshots) into the channel. */
+/**
+ * Publish the run's not-yet-seen outbox items (live progress / screenshots)
+ * into the channel. Fetched via the dedicated agent.runOutbox RPC — never from
+ * agent.runs, whose 750ms poll must stay free of base64 image blobs.
+ * Returns the id of the last item seen, for forward paging.
+ */
 async function publishDobiusAgentRunOutbox(
   agent: DobiusAgentRecord,
-  run: Record<string, unknown>,
+  runId: string,
   live: DobiusAgentRunLiveTarget,
-  published: Set<string>,
-): Promise<void> {
-  if (!Array.isArray(run.outbox)) return;
-  for (const raw of run.outbox) {
+  afterId: string | null,
+): Promise<string | null> {
+  const response = await invokeDobiusRuntime("agent.runOutbox", {
+    runId,
+    ...(afterId ? { afterId } : {}),
+  }).catch(() => null);
+  const items =
+    response && typeof response === "object"
+      ? (response as Record<string, unknown>).items
+      : null;
+  if (!Array.isArray(items)) return afterId;
+  let lastId = afterId;
+  for (const raw of items) {
     if (!raw || typeof raw !== "object") continue;
     const item = raw as Record<string, unknown>;
     const id = typeof item.id === "string" ? item.id : null;
-    if (!id || published.has(id)) continue;
-    published.add(id);
+    if (!id) continue;
+    lastId = id;
     const caption = typeof item.content === "string" ? item.content.trim() : "";
     const image =
       typeof item.imageDataUrl === "string" && item.imageDataUrl.startsWith("data:image/")
@@ -657,6 +687,7 @@ async function publishDobiusAgentRunOutbox(
       broadcast: live.broadcast,
     }).catch(() => undefined);
   }
+  return lastId;
 }
 
 async function awaitDobiusAgentRun(
@@ -665,7 +696,7 @@ async function awaitDobiusAgentRun(
   live?: DobiusAgentRunLiveTarget,
 ): Promise<string> {
   const deadline = Date.now() + 2 * 60 * 60 * 1000;
-  const publishedOutbox = new Set<string>();
+  let outboxCursor: string | null = null;
   while (Date.now() < deadline) {
     const response = await invokeDobiusRuntime("agent.runs", { agentId: agent.id });
     const run = recordsAt(response, "runs").find(
@@ -674,8 +705,8 @@ async function awaitDobiusAgentRun(
         typeof candidate === "object" &&
         (candidate as Record<string, unknown>).id === runId,
     ) as Record<string, unknown> | undefined;
-    if (run && live) {
-      await publishDobiusAgentRunOutbox(agent, run, live, publishedOutbox);
+    if (live) {
+      outboxCursor = await publishDobiusAgentRunOutbox(agent, runId, live, outboxCursor);
     }
     if (run && run.status !== "running") {
       const summary = typeof run.summary === "string" ? run.summary.trim() : "";
