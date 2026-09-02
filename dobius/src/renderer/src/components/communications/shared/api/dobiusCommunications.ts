@@ -542,6 +542,24 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
+/**
+ * Thread root for a reply to `parentEventId`: the parent's root tag, else the
+ * parent's own reply target (a depth-1 parent's reply e-tag IS the root), else
+ * the parent itself. Mirrors the reader's fallback (threading.ts
+ * getThreadReference / forum-thread-projection) — writers that skip the middle
+ * step tag deep replies with the wrong root, and the thread re-query (#e on the
+ * root) permanently loses them after a reload.
+ */
+function resolveRelayThreadRoot(
+  parent: RelayEventRecord | null | undefined,
+  parentEventId: string,
+): string {
+  if (!parent) return parentEventId;
+  const rootTag = parent.tags.find((tag) => tag[0] === "e" && tag[3] === "root")?.[1];
+  const replyTag = parent.tags.find((tag) => tag[0] === "e" && tag[3] === "reply")?.[1];
+  return rootTag ?? replyTag ?? parentEventId;
+}
+
 async function publishDobiusAgentReply(args: {
   agent: DobiusAgentRecord;
   channelId: string;
@@ -550,11 +568,16 @@ async function publishDobiusAgentReply(args: {
   broadcast: boolean;
 }): Promise<string | null> {
   const identity = agentIdentity(args.agent.id);
+  const [parent] = await queryRelay([{ ids: [args.parentEventId], limit: 1 }]).catch(
+    () => [undefined],
+  );
+  const rootEventId = resolveRelayThreadRoot(parent, args.parentEventId);
   const tags: string[][] = [
     ["h", args.channelId],
     ["p", localIdentity().pubkey],
-    ["e", args.parentEventId, "", "reply"],
   ];
+  if (rootEventId !== args.parentEventId) tags.push(["e", rootEventId, "", "root"]);
+  tags.push(["e", args.parentEventId, "", "reply"]);
   // A bare reply e-tag hides the message in a thread (threadPanel's main-timeline
   // filter). ["broadcast","1"] is the reader's existing "reply that renders on the
   // channel timeline" marker — agents answer in the channel, still linked to the
@@ -711,9 +734,12 @@ async function sendDobiusChannelMessage(args: unknown): Promise<unknown> {
   for (const pubkey of mentionPubkeys) tags.push(["p", pubkey]);
   if (parentEventId) {
     const [parent] = await queryRelay([{ ids: [parentEventId], limit: 1 }]);
-    const rootEventId =
-      parent?.tags.find((tag) => tag[0] === "e" && tag[3] === "root")?.[1] ??
-      parentEventId;
+    // Root = the parent's root tag, else the parent's OWN reply target (a
+    // depth-1 parent carries only a reply e-tag whose value IS the root), else
+    // the parent itself. The old fallback skipped the middle step, so replies
+    // below depth 1 were tagged with the wrong root and the thread re-query
+    // (#e on the root) could never find them again after a reload.
+    const rootEventId = resolveRelayThreadRoot(parent ?? null, parentEventId);
     if (parent?.pubkey && parent.pubkey.toLowerCase() !== selfPubkey) {
       tags.push(["p", parent.pubkey]);
     }
@@ -803,7 +829,22 @@ async function loadRelayChannels(): Promise<unknown[]> {
       .filter((tag) => tag[0] === "h")
       .map((tag) => tag[1]),
   );
-  return metadata
+  // One metadata row per channel, newest wins ACROSS authors. The relay keys
+  // addressable replacement on (pubkey, kind, d), so renaming a channel whose
+  // 39000 was authored by someone else leaves both events alive — without this
+  // the sidebar showed the channel twice, old name and new.
+  const newestByChannel = new Map<string, (typeof metadata)[number]>();
+  for (const event of metadata) {
+    const id = eventTag(event, "d") ?? "";
+    const held = newestByChannel.get(id);
+    if (!held || event.created_at > held.created_at) newestByChannel.set(id, event);
+  }
+  return [...newestByChannel.values()]
+    // Drop nameless metadata rows: relay-dm.ts provisions DM channels as bare
+    // 39000s with only d+p tags. Mapped as name:"" streams they polluted the
+    // sidebar AND made the create dialog's empty query "exactly match" them,
+    // which suppressed the create-channel row entirely.
+    .filter((event) => (eventTag(event, "name") ?? "").trim().length > 0)
     .map((event) => {
       const id = eventTag(event, "d") ?? "";
       const channelType = eventTag(event, "t") ?? "stream";
@@ -1047,9 +1088,12 @@ async function updateDobiusChannel(args: unknown): Promise<unknown> {
         : "open";
   const archived = existing.tags.some((tag) => tag[0] === "archived" && tag[1] === "true");
   const existingTtl = eventTag(existing, "ttl");
-  // UpdateChannelInput: omit ttlSeconds to leave unchanged, null clears it, a number sets it.
+  // UpdateChannelInput: omit ttlSeconds to leave unchanged, null clears it, a
+  // number sets it. `undefined` must count as omitted — the management sheet
+  // always passes the key (value undefined when untouched), and the bare `in`
+  // check silently cleared an ephemeral channel's TTL on every name save.
   const ttlSeconds =
-    "ttlSeconds" in input
+    "ttlSeconds" in input && input.ttlSeconds !== undefined
       ? (input.ttlSeconds as number | null)
       : existingTtl
         ? Number(existingTtl)
@@ -1198,14 +1242,37 @@ async function getDobiusChannelWindow(args: unknown): Promise<unknown> {
   const filter: Record<string, unknown> = {
     kinds: DOBIUS_CHANNEL_MESSAGE_KINDS,
     "#h": [channelId],
-    limit: limitRows,
+    // One extra row detects has_more without a second query.
+    limit: limitRows + 1,
   };
   if (cursor && typeof cursor.created_at === "number") filter.until = cursor.created_at;
 
   const events = await queryRelay([filter]);
   const cursorEventId = cursor && typeof cursor.event_id === "string" ? cursor.event_id : null;
   const filtered = cursorEventId ? events.filter((event) => event.id !== cursorEventId) : events;
-  return filtered.sort((a, b) => a.created_at - b.created_at);
+  // Relay returns newest-first; keep that order to pick the page, then flip.
+  const page = filtered.slice(0, limitRows);
+  const hasMore = filtered.length > limitRows;
+  const oldest = page[page.length - 1] ?? null;
+  const nextCursor = hasMore && oldest ? { created_at: oldest.created_at, id: oldest.id } : null;
+  // parseChannelWindowResponse THROWS unless exactly one kind-39006 bounds event
+  // is present, keyed to the request cursor — without it every cold load of the
+  // channel errored and the timeline only ever filled from the live subscription.
+  const boundsSuffix =
+    cursor && typeof cursor.created_at === "number" && typeof cursor.event_id === "string"
+      ? `${cursor.created_at}:${cursor.event_id.toLowerCase()}`
+      : "head";
+  const boundsKey = `${channelId.toLowerCase()}:${boundsSuffix}`;
+  const boundsEvent = {
+    id: `dobius-window-bounds-${boundsKey}`,
+    pubkey: localIdentity().pubkey,
+    created_at: Math.floor(Date.now() / 1000),
+    kind: 39006,
+    tags: [["d", boundsKey]],
+    content: JSON.stringify({ has_more: hasMore, next_cursor: nextCursor }),
+    sig: "0".repeat(128),
+  };
+  return [...page.sort((a, b) => a.created_at - b.created_at), boundsEvent];
 }
 
 async function loadRelayFeed(args: unknown): Promise<unknown> {
@@ -1280,12 +1347,41 @@ async function getDobiusThreadReplies(args: unknown): Promise<unknown> {
   const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
   const rootEventId = requiredText(input.rootEventId, "thread root event id");
   const limit = typeof input.limit === "number" ? Math.max(1, Math.min(input.limit, 500)) : 100;
-  const filter: Record<string, unknown> = { kinds: [1, 9, 40002, 45003], "#e": [rootEventId], limit };
+  // ponytail: the relay orders newest-first before applying `limit`, so forward
+  // keyset paging can't lean on the relay alone — fetch the subtree (cap 1000)
+  // and page in memory. A thread past 1000 replies needs relay-side ascending
+  // order; until then the oldest overflow is dropped.
+  const filter: Record<string, unknown> = {
+    kinds: [1, 9, 40002, 45003],
+    "#e": [rootEventId],
+    limit: 1000,
+  };
   if (typeof input.channelId === "string" && input.channelId) filter["#h"] = [input.channelId];
-  const events = (await queryRelay([filter])).sort(
+  const sorted = (await queryRelay([filter])).sort(
     (left, right) => left.created_at - right.created_at || left.id.localeCompare(right.id),
   );
-  return { events, next_cursor: null };
+  // Forward keyset on (created_at, event_id), per the getThreadReplies contract:
+  // next_cursor is non-null only when a full page came back. The old hardcoded
+  // null cursor ended paging after one call and silently truncated long threads.
+  const cursor =
+    input.cursor && typeof input.cursor === "object"
+      ? (input.cursor as Record<string, unknown>)
+      : null;
+  const cursorAt = cursor && typeof cursor.created_at === "number" ? cursor.created_at : null;
+  const cursorId = cursor && typeof cursor.event_id === "string" ? cursor.event_id : "";
+  const after =
+    cursorAt === null
+      ? sorted
+      : sorted.filter(
+          (event) =>
+            event.created_at > cursorAt ||
+            (event.created_at === cursorAt && event.id.localeCompare(cursorId) > 0),
+        );
+  const events = after.slice(0, limit);
+  const last = events[events.length - 1];
+  const next_cursor =
+    events.length === limit && last ? { created_at: last.created_at, event_id: last.id } : null;
+  return { events, next_cursor };
 }
 
 async function publishDobiusMutation(kind: number, content: string, tags: string[][]): Promise<void> {
@@ -1806,8 +1902,8 @@ async function sendDobiusManagedAgentChannelMessage(args: unknown): Promise<unkn
   let rootEventId: string | null = null;
   if (parentEventId) {
     const [parent] = await queryRelay([{ ids: [parentEventId], limit: 1 }]);
-    rootEventId =
-      parent?.tags.find((tag) => tag[0] === "e" && tag[3] === "root")?.[1] ?? parentEventId;
+    // Same fallback chain as sendDobiusChannelMessage — see resolveRelayThreadRoot.
+    rootEventId = resolveRelayThreadRoot(parent, parentEventId);
     if (rootEventId !== parentEventId) tags.push(["e", rootEventId, "", "root"]);
     tags.push(["e", parentEventId, "", "reply"]);
   }

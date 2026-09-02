@@ -2,16 +2,41 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { getPublicKey } from "nostr-tools/pure";
+import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 
 import {
   collectionSize,
+  primeDobiusIdentity,
   invokeDobiusRuntime,
   invokeDobiusBackedTauriCommand,
   loadDobiusManagedAgents,
   loadDobiusPersonas,
   loadDobiusWorkstationSnapshot,
 } from "./dobiusCommunications.ts";
+
+// The module no longer reads identity from localStorage: the pubkey comes from
+// the main process via window.api.communications and is primed into a module
+// cache, and signing happens in main. Install the bridge stubs and prime.
+async function primeTestIdentity(identity) {
+  globalThis.window.api = {
+    communications: {
+      getIdentity: async () => ({
+        pubkey: identity.pubkey,
+        username: identity.username ?? "Dobius User",
+      }),
+      signEvent: async (event) => ({
+        id: "ab".repeat(32),
+        pubkey: identity.pubkey,
+        created_at: event.createdAt ?? 1_700_000_000,
+        kind: event.kind,
+        tags: event.tags,
+        content: event.content,
+        sig: "cd".repeat(64),
+      }),
+    },
+  };
+  await primeDobiusIdentity();
+}
 
 test("invokes the isolated Dobius bridge and unwraps successful results", async () => {
   globalThis.window = {
@@ -157,6 +182,7 @@ test("maps Dobius managed-agent start and stop onto Dobius on-demand lifecycle",
       }),
     },
   };
+  await primeTestIdentity(identity);
   const [agent] = await loadDobiusManagedAgents();
 
   const started = await invokeDobiusBackedTauriCommand("start_managed_agent", {
@@ -336,6 +362,7 @@ test("reads the signed local profile from the real relay surface", async () => {
     },
     dobiusCommunications: { invoke: async () => ({ ok: true, result: null }) },
   };
+  await primeTestIdentity(identity);
   globalThis.fetch = async (_url, init) => {
     assert.equal(init.method, "POST");
     assert.equal(init.headers["X-Pubkey"], identity.pubkey);
@@ -373,6 +400,7 @@ test("merges and publishes profile updates as a signed kind-zero event", async (
     },
     dobiusCommunications: { invoke: async () => ({ ok: true, result: null }) },
   };
+  await primeTestIdentity(identity);
   const requests = [];
   globalThis.fetch = async (url, init) => {
     requests.push([url, init]);
@@ -416,6 +444,7 @@ test("allows an empty user query for the DM picker initial page", async () => {
     localStorage: { getItem: () => JSON.stringify(identity) },
     dobiusCommunications: { invoke: async () => ({ ok: true, result: null }) },
   };
+  await primeTestIdentity(identity);
   let submittedFilter;
   globalThis.fetch = async (_url, init) => {
     submittedFilter = JSON.parse(init.body)[0];
@@ -443,6 +472,7 @@ test("opens a real relay DM and returns the channel shape expected by Dobius", a
     localStorage: { getItem: () => JSON.stringify(identity) },
     dobiusCommunications: { invoke: async () => ({ ok: true, result: null }) },
   };
+  await primeTestIdentity(identity);
   const requests = [];
   globalThis.fetch = async (url, init) => {
     requests.push([url, init]);
@@ -510,6 +540,7 @@ test("returns real channel members and identifies native Dobius agents", async (
       }),
     },
   };
+  await primeTestIdentity(identity);
   const [agent] = await loadDobiusManagedAgents();
   globalThis.fetch = async () => ({
     ok: true,
@@ -549,6 +580,7 @@ test("sends a signed channel message through the real relay", async () => {
     localStorage: { getItem: () => JSON.stringify(identity) },
     dobiusCommunications: { invoke: async () => ({ ok: true, result: null }) },
   };
+  await primeTestIdentity(identity);
   let submitted;
   globalThis.fetch = async (url, init) => {
     assert.ok(url.endsWith("/events"));
@@ -617,6 +649,7 @@ test("dispatches a room message to the matching native Dobius agent and posts it
       },
     },
   };
+  await primeTestIdentity(identity);
   const [agent] = await loadDobiusManagedAgents();
   const submittedEvents = [];
   globalThis.fetch = async (url, init) => {
@@ -655,10 +688,14 @@ test("dispatches a room message to the matching native Dobius agent and posts it
   assert.equal(submittedEvents.length, 2);
   assert.equal(submittedEvents[1].content, "Done.");
   assert.equal(submittedEvents[1].pubkey, agent.pubkey);
+  // Replies to a main-timeline message carry ["broadcast","1"] so they render
+  // in the channel (still linked via the reply e-tag) instead of collapsing
+  // into a thread. Thread-triggered replies stay un-broadcast.
   assert.deepEqual(submittedEvents[1].tags, [
     ["h", "agent-room"],
     ["p", identity.pubkey],
     ["e", submittedEvents[0].id, "", "reply"],
+    ["broadcast", "1"],
   ]);
 });
 
@@ -672,13 +709,13 @@ test("dispatches a room message to the matching native Dobius agent and posts it
 // signed event's `.pubkey` from the private key, not from any declared
 // value, so a mismatched pair makes membership/ownership checks fail in
 // ways that have nothing to do with the code being tested.
-function installFakeRelay(privateKeyHex, username = "Owner") {
+async function installFakeRelay(privateKeyHex, username = "Owner") {
   const identity = {
     privateKey: privateKeyHex,
     pubkey: getPublicKey(hexToBytes(privateKeyHex)),
     username,
   };
-  const storage = new Map([["dobius-buzz-identity.v1", JSON.stringify(identity)]]);
+  const storage = new Map();
   const events = [];
   globalThis.window = {
     localStorage: {
@@ -686,7 +723,25 @@ function installFakeRelay(privateKeyHex, username = "Owner") {
       setItem: (key, value) => storage.set(key, value),
     },
     dobiusCommunications: { invoke: async () => ({ ok: true, result: null }) },
+    // The module reads the public identity from main and signs there too; the
+    // fake bridge signs for real so pubkey/sig-derived checks stay honest.
+    api: {
+      communications: {
+        getIdentity: async () => ({ pubkey: identity.pubkey, username }),
+        signEvent: async (event) =>
+          finalizeEvent(
+            {
+              kind: event.kind,
+              content: event.content,
+              tags: event.tags,
+              created_at: event.createdAt ?? Math.floor(Date.now() / 1000),
+            },
+            hexToBytes(privateKeyHex),
+          ),
+      },
+    },
   };
+  await primeDobiusIdentity();
   globalThis.fetch = async (url, init) => {
     if (url.endsWith("/events")) {
       const event = JSON.parse(init.body);
@@ -724,7 +779,7 @@ function installFakeRelay(privateKeyHex, username = "Owner") {
 }
 
 test("creates a channel and returns full channel-detail fields, including membership", async () => {
-  const { identity } = installFakeRelay("20".repeat(32));
+  const { identity } = await installFakeRelay("20".repeat(32));
 
   const response = await invokeDobiusBackedTauriCommand("create_channel", {
     name: "Engineering",
@@ -744,7 +799,7 @@ test("creates a channel and returns full channel-detail fields, including member
 });
 
 test("update_channel unwraps its { input } payload instead of reading it flat", async () => {
-  installFakeRelay("22".repeat(32));
+  await installFakeRelay("22".repeat(32));
 
   const created = await invokeDobiusBackedTauriCommand("create_channel", {
     name: "Design",
@@ -763,7 +818,7 @@ test("update_channel unwraps its { input } payload instead of reading it flat", 
 });
 
 test("set_channel_topic accepts its flat payload and does not require a { input } wrapper", async () => {
-  installFakeRelay("24".repeat(32));
+  await installFakeRelay("24".repeat(32));
 
   const created = await invokeDobiusBackedTauriCommand("create_channel", {
     name: "Support",
@@ -784,7 +839,7 @@ test("set_channel_topic accepts its flat payload and does not require a { input 
 });
 
 test("join_channel adds the local identity to membership and archive/unarchive round-trips", async () => {
-  installFakeRelay("26".repeat(32));
+  await installFakeRelay("26".repeat(32));
 
   const created = await invokeDobiusBackedTauriCommand("create_channel", {
     name: "General",
@@ -819,7 +874,7 @@ test("join_channel adds the local identity to membership and archive/unarchive r
 });
 
 test("add_channel_members returns the AddChannelMembersResult shape and updates membership", async () => {
-  installFakeRelay("28".repeat(32));
+  await installFakeRelay("28".repeat(32));
   const otherPubkey = "2a".repeat(32);
 
   const created = await invokeDobiusBackedTauriCommand("create_channel", {
@@ -845,7 +900,7 @@ test("add_channel_members returns the AddChannelMembersResult shape and updates 
 });
 
 test("delete_channel archives the channel so it stops appearing as active", async () => {
-  installFakeRelay("2b".repeat(32));
+  await installFakeRelay("2b".repeat(32));
 
   const created = await invokeDobiusBackedTauriCommand("create_channel", {
     name: "Temp",
@@ -863,7 +918,7 @@ test("delete_channel archives the channel so it stops appearing as active", asyn
 });
 
 test("get_channel_window returns channel-scoped messages sorted oldest-first, honoring the cursor", async () => {
-  const { identity, events } = installFakeRelay("2d".repeat(32));
+  const { identity, events } = await installFakeRelay("2d".repeat(32));
 
   const created = await invokeDobiusBackedTauriCommand("create_channel", {
     name: "Window",
@@ -883,12 +938,27 @@ test("get_channel_window returns channel-scoped messages sorted oldest-first, ho
     cursor: null,
   });
   assert.equal(window.handled, true);
-  assert.deepEqual(window.result.map((event) => event.id), ["m1", "m2"]);
+  // The response now ends with exactly one kind-39006 bounds event —
+  // parseChannelWindowResponse rejects a window without one, which made every
+  // cold load of a channel error before the bounds event was emitted.
+  const contentRows = window.result.filter((event) => event.kind !== 39006);
+  assert.deepEqual(contentRows.map((event) => event.id), ["m1", "m2"]);
+  const bounds = window.result.filter((event) => event.kind === 39006);
+  assert.equal(bounds.length, 1);
+  assert.deepEqual(bounds[0].tags, [["d", `${channelId.toLowerCase()}:head`]]);
+  assert.deepEqual(JSON.parse(bounds[0].content), { has_more: false, next_cursor: null });
 
   const paged = await invokeDobiusBackedTauriCommand("get_channel_window", {
     channelId,
     limitRows: 10,
     cursor: { created_at: 100, event_id: "m1" },
   });
-  assert.deepEqual(paged.result.map((event) => event.id), []);
+  assert.deepEqual(
+    paged.result.filter((event) => event.kind !== 39006).map((event) => event.id),
+    [],
+  );
+  const pagedBounds = paged.result.filter((event) => event.kind === 39006);
+  assert.equal(pagedBounds.length, 1);
+  assert.deepEqual(pagedBounds[0].tags, [["d", `${channelId.toLowerCase()}:100:m1`]]);
+  assert.deepEqual(JSON.parse(pagedBounds[0].content), { has_more: false, next_cursor: null });
 });

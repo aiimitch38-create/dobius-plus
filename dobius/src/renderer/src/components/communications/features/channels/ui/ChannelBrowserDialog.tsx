@@ -246,9 +246,14 @@ export function ChannelBrowserDialog({
   // create a duplicate, mirroring how you'd never make two "#general"s.
   const hasExactMatch = React.useMemo(
     () =>
+      // An empty query can never be an "exact match": relay-provisioned DM
+      // metadata rows have empty names, and treating "" as matching "" hid
+      // the create row the moment the dialog opened.
+      normalizedQuery.length > 0 &&
       channels.some(
         (channel) =>
           channel.channelType !== "dm" &&
+          channel.name.trim().length > 0 &&
           channelNamesMatch(channel.name, normalizedQuery) &&
           (channelTypeFilter
             ? channel.channelType === channelTypeFilter

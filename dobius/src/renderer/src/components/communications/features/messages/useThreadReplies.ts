@@ -87,9 +87,6 @@ export function useThreadReplies(
       openThreadRootId !== null,
     queryFn: async (): Promise<RelayEvent[]> => {
       if (!activeChannel || !openThreadRootId) return [];
-      const cacheAtStart =
-        queryClient.getQueryData<RelayEvent[]>(queryKey) ?? [];
-      const idsAtStart = new Set(cacheAtStart.map((event) => event.id));
       const replies: RelayEvent[] = [];
       let cursor: ThreadCursor | null = null;
       for (let page = 0; page < MAX_THREAD_PAGES; page += 1) {
@@ -105,12 +102,16 @@ export function useThreadReplies(
             openThreadRootId,
             replies,
           );
+          // Union with the WHOLE current cache, not just events that arrived
+          // during the fetch: the old in-flight-only merge let the server
+          // result overwrite live-subscription events that landed before the
+          // fetch started, deleting visible replies on every refetch. Fetched
+          // events win by id so edits from the server still apply.
           const current =
             queryClient.getQueryData<RelayEvent[]>(queryKey) ?? [];
-          const receivedInFlight = current.filter(
-            (event) => !idsAtStart.has(event.id),
-          );
-          return sortMessages([...fetched, ...receivedInFlight]);
+          const byId = new Map(current.map((event) => [event.id, event]));
+          for (const event of fetched) byId.set(event.id, event);
+          return sortMessages([...byId.values()]);
         }
         cursor = response.nextCursor;
       }

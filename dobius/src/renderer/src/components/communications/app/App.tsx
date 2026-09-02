@@ -57,7 +57,7 @@ import { CommunityApplyErrorScreen } from "@comms/features/communities/ui/Commun
 import { CommunityChangeOverlay } from "@comms/features/communities/ui/CommunityChangeOverlay";
 import { setAvatarProfileSyncQueryClient } from "@comms/features/profile/avatarProfileSync";
 import { EncryptedBackupProvider } from "@comms/features/settings/EncryptedBackupProvider";
-import { createBuzzQueryClient } from "@comms/shared/api/queryClient";
+import { buzzQueryClient, getCommunityQueryClient } from "@comms/shared/api/queryClient";
 import { isSharedIdentity as isSharedIdentityCmd } from "@comms/shared/api/tauri";
 import { getProfile } from "@comms/shared/api/tauriProfiles";
 import {
@@ -197,8 +197,18 @@ function CommunitySwitchGate() {
   );
 }
 
-function CommunityQueryProvider({ children }: { children: ReactNode }) {
-  const [queryClient] = useState(createBuzzQueryClient);
+function CommunityQueryProvider({
+  communityKey,
+  children,
+}: {
+  communityKey: string;
+  children: ReactNode;
+}) {
+  // Persistent per-community client (module map): survives the comms subtree
+  // unmounting on a Dobius+ tab switch — which used to discard every cache,
+  // including open threads — while a community switch still gets a fresh cache
+  // via its own key.
+  const queryClient = getCommunityQueryClient(communityKey);
 
   useEffect(() => setAvatarProfileSyncQueryClient(queryClient), [queryClient]);
 
@@ -539,7 +549,7 @@ function CommunityApp({
   }, [communityApplied]);
   if (appContent === null && (!transaction || isEnteringCurtain)) {
     appContent = communityApplied ? (
-      <CommunityQueryProvider key={communityKey}>
+      <CommunityQueryProvider key={communityKey} communityKey={communityKey}>
         <AppReady
           isCommunitySwitch={isCommunitySwitch}
           key={communityKey}
@@ -704,7 +714,11 @@ export function App() {
   useReloadShortcut();
   useInitialRenderReady();
   const [sharedIdentity, setSharedIdentity] = useState<boolean | null>(null);
-  const [queryClient] = useState(createBuzzQueryClient);
+  // Module singleton, like app/router.tsx: the whole comms subtree unmounts on
+  // every Dobius+ tab switch, and a per-mount client threw away every cache
+  // (channel window, thread replies) each time — returning to a thread showed
+  // it empty until the refetch landed, or forever when the refetch missed.
+  const queryClient = buzzQueryClient;
 
   useEffect(() => {
     isSharedIdentityCmd()

@@ -58,7 +58,47 @@
 - DM channels use the same send path; DMs keep the current behavior (thread replies) in
   this task — they are the "direct" surface.
 
-## Lanes B and C (filled when maps land)
+## Lane B — channel create/rename (mapped + fixed)
 
-- B: channel create/rename — pending map.
-- C: thread history loss — pending map.
+Neither was a missing backend. Root causes and fixes, all shipped:
+- CREATE was hidden: relay-dm.ts provisions nameless kind-39000 rows for DMs;
+  the create dialog treated an empty-name channel as an "exact match" for the
+  empty query and suppressed the create row on open. Fixed twice: nameless
+  metadata rows filtered in `loadRelayChannels`, and `hasExactMatch` now
+  requires a non-empty query and a non-empty channel name.
+- RENAME looked broken: relay keys addressable replacement on (pubkey, kind, d),
+  so renaming a channel whose 39000 another pubkey authored left both events
+  alive and the sidebar showed old + new name. Fixed: `loadRelayChannels`
+  de-dupes by d-tag, newest wins across authors.
+- Bonus bug: the management sheet always passes `ttlSeconds: undefined`, and the
+  bare `in` check cleared an ephemeral channel's TTL on every name save. Fixed.
+- NOT done (deliberate): a second rename entry point in the sidebar context menu
+  — the delete path threads a callback through four layers to a confirm dialog;
+  the existing Edit pencil (channel header → manage) works after the fixes.
+
+## Lane C — thread history loss (mapped + fixed)
+
+Messages were on the relay; the reads/writes disagreed:
+- Writers tagged deep replies with the wrong thread root (`rootTag ?? parentId`,
+  skipping the parent's reply target) and agent replies carried no root at all —
+  the thread re-query (#e on the root) could never find them after a reload.
+  Fixed via shared `resolveRelayThreadRoot` (rootTag ?? replyTag ?? parentId) in
+  all three writers.
+- `get_channel_window` never emitted the kind-39006 bounds event
+  `parseChannelWindowResponse` requires, so every cold channel load threw.
+  Fixed: real pagination (limit+1 → has_more/next_cursor) + synthetic bounds.
+- `get_thread_replies` hardcoded `next_cursor: null` (threads truncated at one
+  page). Fixed: forward keyset paging in memory, 1000-event ceiling commented.
+- `useThreadReplies` overwrote live-subscription events with the fetch result.
+  Fixed: union with the whole cache, fetched wins by id.
+- Every Dobius+ tab switch unmounted the comms subtree and discarded per-mount
+  QueryClients. Fixed: module-singleton clients (per-community keyed map), same
+  pattern as the router.
+
+## Test harness repair
+
+`dobiusCommunications.test.mjs` had been broken since the identity rework
+(seeded localStorage identity the module no longer reads). `installFakeRelay`
+now stubs `window.api.communications` (getIdentity + real finalizeEvent
+signing) and awaits `primeDobiusIdentity()`. 26/26 pass, including new
+assertions for broadcast reply tags and the window bounds event.
