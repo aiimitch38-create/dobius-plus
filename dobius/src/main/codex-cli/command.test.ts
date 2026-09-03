@@ -227,6 +227,34 @@ describe('resolveClaudeCommand', () => {
 
     expect(resolveClaudeCommand({ platform: 'linux', pathEnv: '', homePath: root })).toBe('claude')
   })
+
+  it('prefers an explicit overridePath over the filesystem scan', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dobius-claude-command-'))
+    const pathDir = join(root, 'bin')
+    makeExecutable(join(pathDir, 'claude'))
+
+    expect(
+      resolveClaudeCommand({
+        platform: 'darwin',
+        pathEnv: pathDir,
+        homePath: root,
+        overridePath: '/custom/claude'
+      })
+    ).toBe('/custom/claude')
+  })
+
+  it('falls back to DOBIUS_CLAUDE_CLI_PATH when no overridePath option is given', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dobius-claude-command-'))
+    process.env.DOBIUS_CLAUDE_CLI_PATH = '/env/claude'
+
+    try {
+      expect(resolveClaudeCommand({ platform: 'linux', pathEnv: '', homePath: root })).toBe(
+        '/env/claude'
+      )
+    } finally {
+      delete process.env.DOBIUS_CLAUDE_CLI_PATH
+    }
+  })
 })
 
 describe('resolveCliCommands', () => {

@@ -2,10 +2,15 @@ import { randomUUID } from 'node:crypto'
 import type { ChildProcess } from 'node:child_process'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { Options, Query, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AgentRun, AgentRunSource, CustomAgent } from '../../shared/agents'
+import {
+  CHANNEL_AGENT_BASELINE_TOOLS,
+  type AgentRun,
+  type AgentRunSource,
+  type CustomAgent
+} from '../../shared/agents'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
 import { resolveClaudeCommand } from '../codex-cli/command'
-import { getAgent, updateAgentSession } from './agents-store'
+import { getAgent, getAgentSessionForKey, updateAgentSession } from './agents-store'
 import {
   broadcastRunEvent,
   broadcastRunsChanged,
@@ -35,12 +40,32 @@ import {
   updateStoredAgentRun
 } from './agent-runs-store'
 
-const MAX_CONCURRENT_RUNS = 3
+// Channel dispatch fans out to every addressed agent and agent-to-agent chains
+// hold a slot while awaiting each other's runs, so 3 starved a two-agent channel
+// conversation into "Too many concurrent agent runs".
+const MAX_CONCURRENT_RUNS = 8
 
 // Why: the cap must be reserved synchronously — liveRuns is only populated after an
 // await (auth preparation), so checking liveRuns.size alone is a check-then-act race.
 let reservedRuns = 0
-const reservedAgentIds = new Set<string>()
+// Per-agent live-run COUNT, not a Set: with a Set, the first of two concurrent
+// runs for one agent deleted the shared entry on finish, so hasLiveAgentRun
+// went false while the second run was still working (heartbeat double-fires).
+// Counting also lets an agent run several tasks in parallel across channels.
+const reservedAgentRuns = new Map<string, number>()
+
+function reserveAgentRun(agentId: string): void {
+  reservedAgentRuns.set(agentId, (reservedAgentRuns.get(agentId) ?? 0) + 1)
+}
+
+function releaseAgentRun(agentId: string): void {
+  const count = (reservedAgentRuns.get(agentId) ?? 1) - 1
+  if (count <= 0) {
+    reservedAgentRuns.delete(agentId)
+  } else {
+    reservedAgentRuns.set(agentId, count)
+  }
+}
 
 export type PrepareClaudeLaunch = (target?: {
   accountId?: string | null
@@ -48,6 +73,12 @@ export type PrepareClaudeLaunch = (target?: {
 
 type AgentRunOptions = {
   source?: AgentRunSource
+  /**
+   * Task-context key: each Communications channel passes its channel id, so an
+   * agent keeps a SEPARATE continuing session per channel ("each channel is
+   * its own task"). Absent = 'default' (manual runs, the legacy session).
+   */
+  sessionKey?: string
   maxTurns?: number
   maxBudgetUsd?: number
   permissionMode?: Options['permissionMode']
@@ -108,7 +139,8 @@ async function consumeRun(
         sawSystemInit = true
         updateAgentSession(agent.id, {
           lastSessionId: message.session_id,
-          lastSessionCwd: resolvedCwd
+          lastSessionCwd: resolvedCwd,
+          sessionKey: getStoredAgentRun(runId)?.sessionKey
         })
       }
       for (const event of reduceMessage(message, runId, agent.id)) {
@@ -119,7 +151,8 @@ async function consumeRun(
         onResult?.(message)
         updateAgentSession(agent.id, {
           lastSessionId: message.session_id,
-          lastSessionCwd: resolvedCwd
+          lastSessionCwd: resolvedCwd,
+          sessionKey: getStoredAgentRun(runId)?.sessionKey
         })
         // Why: a result already in flight when stopAgentRun fires must not flip a
         // cancelled run back to success/error.
@@ -204,7 +237,7 @@ async function consumeRun(
         appendRunProgress(agent.id, finalRun.status, finalRun.summary)
       }
       liveRuns.delete(runId)
-      reservedAgentIds.delete(agent.id)
+      releaseAgentRun(agent.id)
       reservedRuns -= 1
       broadcastRunsChanged()
     }
@@ -231,7 +264,18 @@ export async function startAgentRun(args: {
     throw new Error('Prompt is required')
   }
   reservedRuns += 1
-  reservedAgentIds.add(agent.id)
+  reserveAgentRun(agent.id)
+  const sessionKey = args.options?.sessionKey ?? 'default'
+  // A live run on the SAME (agent, sessionKey) means that conversation thread
+  // is mid-turn: the new run must not resume its session (two writers on one
+  // transcript) and starts fresh. Different sessionKeys (other channels) run
+  // in parallel, each resuming its own thread.
+  const sessionKeyBusy = listStoredAgentRuns().some(
+    (run) =>
+      run.status === 'running' &&
+      run.agentId === agent.id &&
+      (run.sessionKey ?? 'default') === sessionKey
+  )
   const runId = randomUUID()
   let runAdded = false
   try {
@@ -249,6 +293,7 @@ export async function startAgentRun(args: {
         agentId: agent.id,
         prompt,
         source: args.options?.source ?? 'manual',
+        sessionKey,
         startedAt: Date.now(),
         status: 'running'
       }
@@ -271,13 +316,24 @@ export async function startAgentRun(args: {
     const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
     const branch = currentGitBranch(resolvedCwd)
     const systemPrompt = buildSystemPrompt(agent)
+    const keyedSession = getAgentSessionForKey(agent, sessionKey)
     const resume =
-      args.options?.resume !== false && agent.lastSessionId && agent.lastSessionCwd === resolvedCwd
-        ? agent.lastSessionId
+      args.options?.resume !== false &&
+      !sessionKeyBusy &&
+      keyedSession &&
+      keyedSession.cwd === resolvedCwd
+        ? keyedSession.sessionId
         : undefined
     const permissionMode =
       args.options?.permissionMode ?? (agent.bypassPermissions ? 'bypassPermissions' : 'default')
-    const allowedTools = withDobiusToolAllowRule(args.options?.allowedTools ?? agent.allowedTools)
+    const configuredTools = args.options?.allowedTools ?? agent.allowedTools
+    // Channel runs get the working baseline unioned in — see
+    // CHANNEL_AGENT_BASELINE_TOOLS for why old agents need it.
+    const sourcedTools =
+      (args.options?.source ?? 'manual') === 'channel'
+        ? [...new Set([...configuredTools, ...CHANNEL_AGENT_BASELINE_TOOLS])]
+        : configuredTools
+    const allowedTools = withDobiusToolAllowRule(sourcedTools)
     const options: Options = {
       systemPrompt: systemPrompt || undefined,
       model: agent.model,
@@ -292,14 +348,24 @@ export async function startAgentRun(args: {
       env: buildRunEnv(preparation),
       maxTurns: args.options?.maxTurns ?? 100,
       maxBudgetUsd: args.options?.maxBudgetUsd,
-      outputFormat: args.options?.outputFormat
+      outputFormat: args.options?.outputFormat,
+      // Load the user's ~/.claude settings (skills, hooks) and the project's
+      // CLAUDE.md / memory at the agent's cwd — without this an agent runs
+      // blind to the very files that define how work happens in its folder.
+      settingSources: ['user', 'project']
     }
     // Why: the SDK's bundled CLI lives inside app.asar after packaging and cannot
     // be spawned as a real file. Resolve the user's installed Claude CLI so native
     // Communications agents reuse the same OAuth account as Dobius terminals.
     options.pathToClaudeCodeExecutable = resolveClaudeCommand()
-    options.mcpServers = { dobius: buildDobiusRunMcpServer(agent.id, runId) }
-    options.strictMcpConfig = true
+    options.mcpServers = {
+      dobius: buildDobiusRunMcpServer(agent.id, runId, args.options?.source)
+    }
+    // Not strict: agents should see the user's configured MCP servers
+    // (Playwright browsing, connectors) alongside the per-run dobius server.
+    // Access is still gated per-agent by allowedTools — an MCP server being
+    // loaded does not allow its tools unless the agent's allowlist names them.
+    options.strictMcpConfig = false
     options.hooks = buildAgentHardRailHooks({ agentId: agent.id })
     if (permissionMode === 'default' && (args.options?.source ?? 'manual') === 'manual') {
       options.canUseTool = createAgentCanUseTool({
@@ -314,6 +380,7 @@ export async function startAgentRun(args: {
       agentId: agent.id,
       prompt,
       source: args.options?.source ?? 'manual',
+      sessionKey,
       startedAt: Date.now(),
       status: 'running'
     }
@@ -335,7 +402,7 @@ export async function startAgentRun(args: {
     return runId
   } catch (error) {
     reservedRuns -= 1
-    reservedAgentIds.delete(agent.id)
+    releaseAgentRun(agent.id)
     liveRuns.delete(runId)
     const message = error instanceof Error ? error.message : String(error)
     if (runAdded) {
@@ -394,7 +461,7 @@ function finishCodexRun(
     args.onRunEnded?.(status, summary)
   }
   appendRunProgress(args.agent.id, status, summary)
-  reservedAgentIds.delete(args.agent.id)
+  releaseAgentRun(args.agent.id)
   reservedRuns -= 1
   broadcastRunsChanged()
 }
@@ -427,7 +494,7 @@ export function listAgentRuns(): AgentRun[] {
 
 export function hasLiveAgentRun(agentId: string): boolean {
   return (
-    reservedAgentIds.has(agentId) ||
+    (reservedAgentRuns.get(agentId) ?? 0) > 0 ||
     listStoredAgentRuns().some((run) => run.agentId === agentId && run.status === 'running')
   )
 }

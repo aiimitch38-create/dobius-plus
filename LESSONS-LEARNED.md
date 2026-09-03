@@ -252,3 +252,76 @@ then `grep -c`, then read. Never pipe a verification command into `head`/`tail`.
   1. Boot disk hit 0 bytes free (see above) — blocked every build/install attempt. User freed space manually.
   2. Once disk was healthy, a real typecheck failure surfaced (masked earlier by the same disk pressure truncating the typecheck log — a textbook case of the ENOSPC "clean-looking but truncated" trap): `src/main/communications/participant-identity-buzz-migration.ts` called undocumented Electron internals `webContents.create()` / `WebContents.prototype.destroy()`, whose type declarations Electron 42 dropped. Fixed by switching to the public, typed `BrowserWindow({ show: false, webPreferences: { partition } })` + `.webContents` + `.destroy()` — same behavior, stable API. Paired test file's mocks updated to match (also fixed several pre-existing loose `ReturnType<typeof vi.fn>` typings there that were silently widening to `Mock<Constructable | Procedure>`).
 - Built via `pnpm run build:unpack`, installed via `scripts/install-dobius-v2.sh` (NOT the generic `dobius-build-install` skill — that one assumes an existing installed app to repack from; there wasn't one).
+
+## Never hand-pick a tsconfig in `dobius/` — run the pnpm script
+_2026-08-29 · claude_
+
+`dobius/config/` holds **two** web configs and only one of them typechecks the app:
+
+| Script | Config |
+|---|---|
+| `pnpm run typecheck:node` | `config/tsconfig.node.json` |
+| `pnpm run typecheck:web`  | `config/tsconfig.tc.web.json`  <- the `tc.` one |
+| `pnpm run typecheck:cli`  | `config/tsconfig.tc.cli.json` |
+
+`config/tsconfig.web.json` also exists (used by `typecheck:tsc:web` with
+`--composite false`). Running `tsgo --noEmit -p config/tsconfig.web.json`
+directly emits a wall of **TS6307 "File is not listed within the file list of
+project"** naming files you never touched — `src/main/ipc/worktree-logic.ts`,
+`wsl.ts`, `worktree-branch-name.ts`. It reads exactly like "my change broke
+unrelated modules," and it is purely the wrong project file. Cost a full cycle.
+
+**Rule: always `pnpm run typecheck:node` / `typecheck:web` / `typecheck:cli`.**
+Read `grep -n '"typecheck' package.json` before ever passing `-p` by hand.
+
+Two smaller traps hit in the same turn:
+
+- **cwd persists between Bash calls.** After one `cd dobius`, later commands are
+  already inside it, so `ln -s ... dobius/node_modules` failed with "No such file
+  or directory" while `pwd` was `.../comms-restore/dobius`. Check `pwd` before
+  building relative paths across calls.
+- **Anchor uniqueness before patching.** `pickDirectory:` appears 3x in
+  `preload/api-types.ts`; a single-line anchor matched the wrong block. Assert
+  `s.count(anchor) == 1` and use a two-line anchor. The assertion is what stopped
+  a bad write — keep asserting rather than replacing blind.
+
+## Worktree-isolated sessions: one plain command per call, absolute paths only
+_2026-08-29 · claude_
+
+Working inside a Claude worktree session (`EnterWorktree`, or a session launched
+in `.claude/worktrees/<name>`), the harness guard refuses anything it cannot
+statically prove stays inside the worktree. Three shapes get rejected:
+
+- **Compound commands** — pipes plus redirects plus `&&` chains, and some
+  heredocs. `npx tsgo ... 2>&1 | head -20; echo "EXIT=${PIPESTATUS[0]}"` →
+  *"too complex to verify that it stays inside the worktree."*
+- **Runtime-computed `cd`** — `cd .. && git status` → *"changes directory to a
+  location computed at runtime before running git."*
+- **Python heredoc patches** with nested quoting, intermittently.
+
+And separately: **cwd resets between Bash calls.** A `cd dobius` in one call is
+gone by the next, so `cd dobius && npx vitest ...` fails with
+`cd: no such file or directory: dobius` when cwd already *is* `dobius`. This bit
+three commands in one turn, and once wrote a stray `LESSONS-LEARNED.md` into
+`.claude/worktrees/` because `../` resolved one level higher than intended.
+
+What works:
+
+- One bare command per call. No `;`, no `&&`, no piping a verification command.
+- `git -C "<absolute worktree path>" <cmd>` instead of `cd` then git.
+- Absolute paths for any append or redirect target. Never `../file`.
+- `pwd` first when a relative path spans calls.
+- **Prefer the Read/Edit/Write tools over python heredoc patching.** Edit does
+  not hit the guard at all, and it fails loudly on a non-unique anchor instead
+  of silently patching the wrong block.
+
+### Addendum, same day: the rule needed to be absolute
+
+Wrote the rule above as "prefer Read/Edit/Write over python heredoc patching",
+then violated it twice more in the same session. "Prefer" loses to momentum when
+a patch feels like it wants a script. The guard's heredoc rejections are not
+predictable enough to gamble on — nested quotes, a dict literal, and an f-string
+each triggered one. Rewritten as: never patch a file with a heredoc in a
+worktree session; use Edit. The exception that does work is a bare
+`grep -rl … | xargs sed -i ''` for a mechanical rewrite across many files —
+that is one plain command and passes every time.

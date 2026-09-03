@@ -73,18 +73,68 @@ export type CustomAgent = {
   lastHeartbeatAt?: number
   lastSessionId?: string
   lastSessionCwd?: string
+  /**
+   * Continuing sessions keyed by task context — one per Communications channel
+   * (key = channel id) so each channel is its own conversation thread for the
+   * agent, plus 'default' for manual runs. lastSessionId/lastSessionCwd remain
+   * the legacy single-session fields ('default' mirrors into them).
+   */
+  sessionsByKey?: Record<string, { sessionId: string; cwd: string }>
   createdAt: number
   updatedAt: number
 }
 
+/**
+ * Working toolset guaranteed to every CHANNEL-sourced agent run, regardless of
+ * when the agent was created: agents made before this baseline existed carry
+ * the old read-only default (Read/Grep/Glob) and would otherwise sit in a
+ * channel unable to write, browse, or look anything up. The runner unions this
+ * with the agent's own allowlist for channel runs only — manual/heartbeat runs
+ * keep the agent's configured tools untouched.
+ */
+export const CHANNEL_AGENT_BASELINE_TOOLS = [
+  'Read',
+  'Write',
+  'Edit',
+  'Bash',
+  'Grep',
+  'Glob',
+  'WebFetch',
+  'WebSearch',
+  'Task',
+  'TodoWrite',
+  'NotebookEdit',
+  'mcp__playwright__*'
+] as const
+
 export type AgentRunStatus = 'running' | 'success' | 'error' | 'cancelled'
 export type AgentRunSource = 'manual' | 'heartbeat' | 'channel' | 'asana'
+
+/**
+ * A message the agent posted mid-run via the mcp__dobius__post_channel_message /
+ * post_channel_screenshot tools. The Communications client polls agent.runOutbox
+ * and publishes each item into the originating channel as the agent, live.
+ * Deliberately NOT part of AgentRun: items carry base64 images, and storing
+ * them on the persisted run record made every append rewrite the whole runs
+ * file synchronously on the main thread and every 750ms runs-poll re-serialize
+ * megabytes — which froze the entire app while agents worked. Outbox items are
+ * transient delivery state and live in memory only.
+ */
+export type AgentRunOutboxItem = {
+  id: string
+  content: string
+  /** data: URI (image) attached to the message, rendered inline in chat. */
+  imageDataUrl?: string
+  createdAt: number
+}
 
 export type AgentRun = {
   id: string
   agentId: string
   prompt: string
   source?: AgentRunSource
+  /** Task-context key ('default', or the Communications channel id). */
+  sessionKey?: string
   startedAt: number
   endedAt?: number
   status: AgentRunStatus

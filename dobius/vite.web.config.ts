@@ -2,6 +2,7 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { commsAliases } from './config/comms-alias'
 
 export default defineConfig({
   root: resolve('src/renderer'),
@@ -15,6 +16,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@renderer': resolve('src/renderer/src'),
+      ...commsAliases(),
       '@': resolve('src/renderer/src')
     }
   },

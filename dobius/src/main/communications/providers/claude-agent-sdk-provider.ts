@@ -3,7 +3,9 @@ import type {
   AgentProviderStatusSnapshot,
   AgentRun
 } from '../../../shared/agents'
-import type { PrepareClaudeLaunch } from '../../agents/default-claude-launch'
+// Imported from its defining module: default-claude-launch only imports this
+// type for its own use and does not re-export it (TS2459).
+import type { PrepareClaudeLaunch } from '../../agents/agent-runner'
 import { getAgent } from '../../agents/agents-store'
 import {
   listAgentRuns,

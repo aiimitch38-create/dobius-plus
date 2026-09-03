@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CustomHarnessDefinition } from '../../../shared/agents'
+import type { spawn as nodeSpawn } from 'node:child_process'
 import { CustomHarnessProvider, validateCustomHarnessDefinition } from './custom-harness-provider'
 
 const identityStoreMock = vi.hoisted(() => ({
@@ -50,8 +51,14 @@ function makeFakeChild(): FakeChild {
 
 function setup(definition = makeDefinition()) {
   const child = makeFakeChild()
-  const spawn = vi.fn(() => child)
-  const provider = new CustomHarnessProvider(definition, { spawn })
+  // Typed parameters so assertions can read the options argument; the cast is
+  // confined to the boundary because a fake cannot satisfy ChildProcess.
+  const spawn = vi.fn(
+    (_command: string, _args: readonly string[], _options: { env?: NodeJS.ProcessEnv }) => child
+  )
+  const provider = new CustomHarnessProvider(definition, {
+    spawn: spawn as unknown as typeof nodeSpawn
+  })
   return { provider, spawn, child }
 }
 
@@ -194,11 +201,19 @@ describe('custom harness provider', () => {
     child.emit('close', 0)
 
     const runEvents = events.flatMap((event) =>
-      typeof event === 'object' && event !== null && 'kind' in event && event.kind === 'run-event'
-        ? [event.event]
+      typeof event === 'object' &&
+      event !== null &&
+      'kind' in event &&
+      event.kind === 'run-event' &&
+      'event' in event
+        ? [event.event as { kind?: string; detail?: string }]
         : []
     )
-    expect(runEvents.map((event) => event.detail)).toEqual(['partial tail', 'whole line'])
+    // Only the stdout-derived events: the clean exit also emits a `result`.
+    const stdoutDetails = runEvents
+      .filter((event) => event.kind === 'system')
+      .map((event) => event.detail)
+    expect(stdoutDetails).toEqual(['partial tail', 'whole line'])
     expect(provider.status().state).toBe('finished')
   })
 
