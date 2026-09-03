@@ -11,6 +11,14 @@ This repo is the **active Dobius+ workspace and PR vehicle into `statusdigitalma
 - Before building/installing, confirm `git rev-parse --show-toplevel` is `/Users/bayou/Projects (Code)/dobius-plus` and that the built artifact contains this repo's latest commits.
 - Do not nest one of these repos inside another.
 
+### Where work gets pushed (Carson, 2026-09-02) — DEFAULT is the FORK
+Every push in this repo goes to Carson's own fork by default, NOT the company repo. This is locked in git: `remote.pushDefault = fork` → `aiimitch38-create/dobius-plus` (shared across all worktrees). So a plain `git push` — any branch, any new terminal, any new feature/worktree — lands on the fork automatically. No extra step to remember.
+
+- **Default for all normal work:** push to `fork` (`aiimitch38-create/dobius-plus`). Carson's copy, his control, his off-machine backup. Anytime work needs saving, `git push`.
+- **Brand-new branch:** `git push -u fork <branch>` once to set tracking (plain `git push` also works via pushDefault). New worktrees inherit the fork default automatically.
+- **Company repo (`origin` = `statusdigitalmarketing/dobius-plus`):** ONLY for a deliberate PR into company `main`, and ONLY when Carson explicitly says so. Never the day-to-day default. This supersedes the older "push to `statusdigitalmarketing`" line in the bullet above.
+- **App updates are separate:** keep using local build-and-install to update `/Applications/Dobius+.app`. Pushing to the fork saves the *code*; it does not update the *running app*. Two different actions.
+
 ## Overview
 Dobius+ is an Electron desktop app that wraps Claude Code CLI in themed terminal windows. Each project gets its own window with multi-tab terminals (xterm.js + node-pty), session checkpoints, custom agents, CLAUDE.md editor, conversation history sidebar, and dashboard tabs.
 
