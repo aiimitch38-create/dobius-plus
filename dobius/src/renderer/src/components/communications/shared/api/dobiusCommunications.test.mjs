@@ -308,6 +308,7 @@ test("routes Dobius persona creation into the real Dobius agent store", async ()
           "Task",
           "TodoWrite",
           "NotebookEdit",
+          "mcp__playwright__*",
         ],
         skills: undefined,
         cwd: "~/Dobius Agents/Builder",

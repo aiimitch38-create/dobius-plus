@@ -2363,22 +2363,11 @@ function App(): React.JSX.Element {
                               </Suspense>
                             </div>
                           ) : null}
-                          {/* Not `null`: a lazy page chunk that rejects is
-                              re-thrown into the boundary below and reported,
-                              but one that never settles renders the fallback
-                              forever. With `null` that is an unexplained blank
-                              panel — the Communications chunk is ~6.7MB and is
-                              the most exposed to a slow or interrupted load. */}
-                          <Suspense
-                            fallback={
-                              <div
-                                className="text-muted-foreground flex h-full min-h-0 items-center justify-center text-xs"
-                                role="status"
-                              >
-                                Loading…
-                              </div>
-                            }
-                          >
+                          {/* Deliberately no loading UI (Carson's call,
+                              2026-09-02): pages appear when ready, the panel
+                              stays blank for the brief chunk parse. A chunk
+                              that REJECTS still lands in the boundary below. */}
+                          <Suspense fallback={null}>
                             <RecoverableRenderErrorBoundary
                               boundaryId={`page.${activeView}`}
                               surface="page"

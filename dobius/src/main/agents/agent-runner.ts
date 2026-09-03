@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto'
 import type { ChildProcess } from 'node:child_process'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { Options, Query, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AgentRun, AgentRunSource, CustomAgent } from '../../shared/agents'
+import {
+  CHANNEL_AGENT_BASELINE_TOOLS,
+  type AgentRun,
+  type AgentRunSource,
+  type CustomAgent
+} from '../../shared/agents'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
 import { resolveClaudeCommand } from '../codex-cli/command'
 import { getAgent, updateAgentSession } from './agents-store'
@@ -280,7 +285,14 @@ export async function startAgentRun(args: {
         : undefined
     const permissionMode =
       args.options?.permissionMode ?? (agent.bypassPermissions ? 'bypassPermissions' : 'default')
-    const allowedTools = withDobiusToolAllowRule(args.options?.allowedTools ?? agent.allowedTools)
+    const configuredTools = args.options?.allowedTools ?? agent.allowedTools
+    // Channel runs get the working baseline unioned in — see
+    // CHANNEL_AGENT_BASELINE_TOOLS for why old agents need it.
+    const sourcedTools =
+      (args.options?.source ?? 'manual') === 'channel'
+        ? [...new Set([...configuredTools, ...CHANNEL_AGENT_BASELINE_TOOLS])]
+        : configuredTools
+    const allowedTools = withDobiusToolAllowRule(sourcedTools)
     const options: Options = {
       systemPrompt: systemPrompt || undefined,
       model: agent.model,
@@ -308,7 +320,11 @@ export async function startAgentRun(args: {
     options.mcpServers = {
       dobius: buildDobiusRunMcpServer(agent.id, runId, args.options?.source)
     }
-    options.strictMcpConfig = true
+    // Not strict: agents should see the user's configured MCP servers
+    // (Playwright browsing, connectors) alongside the per-run dobius server.
+    // Access is still gated per-agent by allowedTools — an MCP server being
+    // loaded does not allow its tools unless the agent's allowlist names them.
+    options.strictMcpConfig = false
     options.hooks = buildAgentHardRailHooks({ agentId: agent.id })
     if (permissionMode === 'default' && (args.options?.source ?? 'manual') === 'manual') {
       options.canUseTool = createAgentCanUseTool({

@@ -77,6 +77,29 @@ export type CustomAgent = {
   updatedAt: number
 }
 
+/**
+ * Working toolset guaranteed to every CHANNEL-sourced agent run, regardless of
+ * when the agent was created: agents made before this baseline existed carry
+ * the old read-only default (Read/Grep/Glob) and would otherwise sit in a
+ * channel unable to write, browse, or look anything up. The runner unions this
+ * with the agent's own allowlist for channel runs only — manual/heartbeat runs
+ * keep the agent's configured tools untouched.
+ */
+export const CHANNEL_AGENT_BASELINE_TOOLS = [
+  'Read',
+  'Write',
+  'Edit',
+  'Bash',
+  'Grep',
+  'Glob',
+  'WebFetch',
+  'WebSearch',
+  'Task',
+  'TodoWrite',
+  'NotebookEdit',
+  'mcp__playwright__*'
+] as const
+
 export type AgentRunStatus = 'running' | 'success' | 'error' | 'cancelled'
 export type AgentRunSource = 'manual' | 'heartbeat' | 'channel' | 'asana'
 

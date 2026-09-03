@@ -15,7 +15,11 @@
  * (the Dobius relay), resulting in 404s.
  */
 
-import { invoke } from "@tauri-apps/api/core";
+// invokeTauri, not the raw shim invoke: raw commands bypass the translator
+// and the gateway rejects snake_case, so both lookups below failed forever
+// (~100 swallowed IPC errors at chunk load) and every media URL fell back
+// to the unregistered buzz-media:// scheme.
+import { invokeTauri } from "@comms/shared/api/tauri";
 
 // Matches: https://anything.com/media/{64-hex}.{ext}
 // Also matches thumbnails: /media/{64-hex}.thumb.jpg
@@ -191,7 +195,7 @@ async function fetchProxyPort(): Promise<number | null> {
       const publishRelayOrigin = beginRelayOriginFetch();
       try {
         const url = await withDeadline(
-          invoke<string>("get_relay_http_url"),
+          invokeTauri<string>("get_relay_http_url"),
           deadline,
         );
         if (url !== null) publishRelayOrigin(canonicalOrigin(url));
@@ -203,7 +207,7 @@ async function fetchProxyPort(): Promise<number | null> {
     if (!cachedPort) {
       try {
         const port = await withDeadline(
-          invoke<number>("get_media_proxy_port"),
+          invokeTauri<number>("get_media_proxy_port"),
           deadline,
         );
         if (port !== null && port > 0 && generation === cacheGeneration) {
