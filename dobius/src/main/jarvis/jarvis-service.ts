@@ -80,7 +80,7 @@ export class JarvisService {
       if (this.shortcutActive) {
         return true
       }
-      const registered = this.deps.shortcut.register(() => this.handlePttPress())
+      const registered = this.deps.shortcut.register(() => this.pressPtt())
       if (!registered) {
         this.transition({ type: 'error', reason: 'global-shortcut-unavailable' })
         return false
@@ -180,7 +180,14 @@ export class JarvisService {
     this.wakeMatcher.reset()
   }
 
-  private handlePttPress(): void {
+  /**
+   * Fires the same pressed/released broadcast the global ⌘T shortcut fires —
+   * whatever already-mounted listener owns PTT (the single on-screen orb in
+   * DictationIndicator, or a live agent) reacts exactly as it would to the
+   * real keypress. Public so other UI (e.g. a dock's "talk" button) can
+   * trigger a turn without opening a second, separate orb surface.
+   */
+  pressPtt(): void {
     // globalShortcut cannot distinguish press from release; emit pressed now
     // and a synthetic released shortly after so renderer listeners stay simple.
     this.deps.broadcast(JARVIS_PTT_PRESSED_CHANNEL, { at: Date.now() })

@@ -4423,6 +4423,9 @@ const api = {
       ipcRenderer.invoke('jarvis:ask', utterance),
     speak: (text: string): Promise<JarvisSpeakOutcome> => ipcRenderer.invoke('jarvis:speak', text),
     openOrb: (): Promise<{ ok: boolean; windowId?: number }> => ipcRenderer.invoke('jarvis:openOrb'),
+    pressPtt: (): Promise<void> => ipcRenderer.invoke('jarvis:pressPtt'),
+    getAdamProjectDirectory: (): Promise<string> =>
+      ipcRenderer.invoke('jarvis:getAdamProjectDirectory'),
     agentContext: (): Promise<string> => ipcRenderer.invoke('jarvis:agentContext'),
     agentOpening: (): Promise<string> => ipcRenderer.invoke('jarvis:agentOpening'),
     conversationMemory: (): Promise<string> => ipcRenderer.invoke('jarvis:conversationMemory'),

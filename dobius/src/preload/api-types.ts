@@ -3180,6 +3180,12 @@ export type PreloadApi = {
     ask: (utterance: string) => Promise<JarvisAskResult>
     speak: (text: string) => Promise<JarvisSpeakOutcome>
     openOrb: () => Promise<{ ok: boolean; windowId?: number }>
+    /** Fires the same pressed/released broadcast the global ⌘T shortcut fires,
+     *  so the single on-screen voice orb (DictationIndicator) starts a turn —
+     *  without opening a second, separate orb window. */
+    pressPtt: () => Promise<void>
+    /** Absolute path to the ADAM project checkout (`~/dobius/projects/ADAM`). */
+    getAdamProjectDirectory: () => Promise<string>
     /** Snapshot of worktrees, terminals and agents for the voice agent. */
     agentContext: () => Promise<string>
     /** Proposes a change to Adam's own code; opens the review window. */

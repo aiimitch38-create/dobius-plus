@@ -7,6 +7,11 @@ import type { JarvisAskResult } from '../../shared/speech-types'
 export const ADAM_CONVERSE_TIMEOUT_MS = 10_000
 export const ADAM_UNREACHABLE_TEXT = 'ADAM is unreachable'
 
+/** The ADAM project checkout — also the root `selfEditRoots` allows Adam to rewrite. */
+export function adamProjectDirectory(): string {
+  return join(homedir(), 'dobius', 'projects', 'ADAM')
+}
+
 /**
  * Token path lives outside the settings surface by design: it is machine-local
  * provisioning for the ADAM sidecar, not something the renderer should edit.
@@ -15,7 +20,7 @@ export const ADAM_UNREACHABLE_TEXT = 'ADAM is unreachable'
 export function adamServiceTokenPath(): string {
   return (
     process.env.DOBIUS_ADAM_TOKEN_PATH ||
-    join(homedir(), 'dobius', 'projects', 'ADAM', 'service', 'data', 'service-token')
+    join(adamProjectDirectory(), 'service', 'data', 'service-token')
   )
 }
 

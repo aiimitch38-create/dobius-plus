@@ -53,26 +53,37 @@ vi.mock('react', async () => {
 })
 
 vi.mock('lucide-react', () => ({
-  PanelsTopLeft: function PanelsTopLeft() {
+  MessageCircle: function MessageCircle() {
+    return null
+  },
+  Mic: function Mic() {
+    return null
+  },
+  X: function X() {
     return null
   }
 }))
 
-vi.mock('@/components/ui/button', () => ({
-  Button: function Button() {
-    return null
+const fakeStoreState = { tabsByWorktree: {} as Record<string, unknown> }
+
+vi.mock('@/store', () => {
+  const useAppStore = ((selector: (state: typeof fakeStoreState) => unknown) =>
+    selector(fakeStoreState)) as unknown as {
+    (selector: (state: typeof fakeStoreState) => unknown): unknown
+    getState: () => typeof fakeStoreState
   }
+  useAppStore.getState = () => fakeStoreState
+  return { useAppStore }
+})
+
+vi.mock('@/lib/adam-dock-session', () => ({
+  ensureAdamDockSession: () => Promise.resolve(null),
+  findTerminalTabPtyId: () => null
 }))
 
-vi.mock('@/components/ui/tooltip', () => ({
-  Tooltip: function Tooltip(props: { children?: unknown }) {
-    return props.children
-  },
-  TooltipContent: function TooltipContent(props: { children?: unknown }) {
-    return props.children
-  },
-  TooltipTrigger: function TooltipTrigger(props: { children?: unknown }) {
-    return props.children
+vi.mock('../native-chat/NativeChatView', () => ({
+  default: function NativeChatView() {
+    return null
   }
 }))
 

@@ -47,10 +47,24 @@ function rememberOrbBounds(win: BrowserWindow): void {
   persistedOrbBounds = { x, y, width, height }
 }
 
+/** Belt-and-suspenders against the module-level singleton ever desyncing from
+ *  reality (e.g. a window that outlived a hot-reload of this module) — scan
+ *  every live window by title, not just the local variable, so a second
+ *  orb can never end up on screen at once. */
+function findLiveOrbWindows(): BrowserWindow[] {
+  return BrowserWindow.getAllWindows().filter(
+    (win) => !win.isDestroyed() && win.getTitle() === 'Jarvis'
+  )
+}
+
 export function openFloatingOrbWindow(): { ok: boolean; windowId?: number } {
-  if (floatingOrbWindow && !floatingOrbWindow.isDestroyed()) {
-    floatingOrbWindow.focus()
-    return { ok: true, windowId: floatingOrbWindow.id }
+  const liveOrbWindows = findLiveOrbWindows()
+  if (liveOrbWindows.length > 0) {
+    const [primary, ...strays] = liveOrbWindows
+    strays.forEach((win) => win.close())
+    floatingOrbWindow = primary
+    primary.focus()
+    return { ok: true, windowId: primary.id }
   }
 
   const win = new BrowserWindow({

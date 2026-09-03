@@ -4,7 +4,7 @@ import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
-import { converseWithAdam, loadAdamServiceToken } from './adam-client'
+import { adamProjectDirectory, converseWithAdam, loadAdamServiceToken } from './adam-client'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
 import { SelfEditStore, selfEditRoots } from './self-edit'
 import { closeSelfEditWindow, showSelfEditProposal } from '../window/self-edit-window'
@@ -85,6 +85,14 @@ function registerHandlers(store: Store, service: JarvisService): void {
 
   ipcMain.removeHandler('jarvis:openOrb')
   ipcMain.handle('jarvis:openOrb', () => openFloatingOrbWindow())
+
+  ipcMain.removeHandler('jarvis:pressPtt')
+  ipcMain.handle('jarvis:pressPtt', () => {
+    service.pressPtt()
+  })
+
+  ipcMain.removeHandler('jarvis:getAdamProjectDirectory')
+  ipcMain.handle('jarvis:getAdamProjectDirectory', () => adamProjectDirectory())
 
   // Live agent: the renderer owns the websocket (it has the mic and speakers),
   // main only mints the signed URL so the API key never leaves this process.

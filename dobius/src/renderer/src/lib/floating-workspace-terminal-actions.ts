@@ -1,5 +1,5 @@
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
-import type { BrowserTab, TabGroup } from '../../../shared/types'
+import type { BrowserTab, TabGroup, TerminalTab } from '../../../shared/types'
 import { getGroupVisibleTabOrder } from '@/components/tab-bar/group-tab-order'
 import {
   getNextTabAcrossAllTypes,
@@ -272,4 +272,36 @@ export function switchFloatingWorkspaceTab(
 
   activateFloatingWorkspaceCyclableTab(store, next)
   return true
+}
+
+export type FloatingWorkspaceActiveTerminalTarget = {
+  tabId: string
+  ptyId: string
+  launchAgent: TerminalTab['launchAgent']
+}
+
+/** Resolve the floating workspace's currently active terminal tab (if any) to
+ *  the identifiers a send action needs — ptyId to write to, tabId to resolve
+ *  the runtime owner. Reuses the same group/visible-tab derivation the tab
+ *  switcher above already proved out, so this never drifts from what the
+ *  panel itself considers "active". */
+export function resolveFloatingWorkspaceActiveTerminal(
+  store: FloatingWorkspaceTabSwitchStore
+): FloatingWorkspaceActiveTerminalTarget | null {
+  const group = getActiveFloatingWorkspaceGroup(store)
+  if (!group) {
+    return null
+  }
+  const visibleTabs = getFloatingWorkspaceVisibleTabs(store, group)
+  const active = getFloatingWorkspaceActiveEntry(visibleTabs, group)
+  if (!active || active.type !== 'terminal') {
+    return null
+  }
+  const terminalTab = (store.tabsByWorktree[FLOATING_TERMINAL_WORKTREE_ID] ?? []).find(
+    (tab) => tab.id === active.id
+  )
+  if (!terminalTab?.ptyId) {
+    return null
+  }
+  return { tabId: terminalTab.id, ptyId: terminalTab.ptyId, launchAgent: terminalTab.launchAgent }
 }
