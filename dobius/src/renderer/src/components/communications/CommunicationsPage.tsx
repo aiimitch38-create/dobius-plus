@@ -9,7 +9,10 @@ import { EmojiBurstProvider } from '@comms/shared/ui/EmojiBurstProvider'
 import { PoofBurstProvider } from '@comms/shared/ui/PoofBurstProvider'
 import { Toaster } from '@comms/shared/ui/sonner'
 import { TooltipProvider } from '@comms/shared/ui/tooltip'
-import { primeDobiusIdentity } from '@comms/shared/api/dobiusCommunications'
+import {
+  primeDobiusIdentity,
+  reviveInterruptedChannelRuns
+} from '@comms/shared/api/dobiusCommunications'
 import { CommunicationsErrorBoundary } from './CommunicationsErrorBoundary'
 import '@comms/shared/styles/globals.css'
 // Imported after globals.css so its viewport-height corrections land last.
@@ -47,6 +50,12 @@ export function CommunicationsPage(): React.JSX.Element {
     identityPrimed
       .then(() => {
         if (!cancelled) setIdentityState('ready')
+        // Channels stay live across restarts: re-kick agent conversations the
+        // shutdown interrupted, so the channel picks up where it left off
+        // instead of sitting dead until the user speaks again.
+        reviveInterruptedChannelRuns().catch((error: unknown) => {
+          console.error('[comms] channel revival scan failed:', error)
+        })
       })
       .catch((error: unknown) => {
         if (!cancelled) {

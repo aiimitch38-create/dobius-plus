@@ -590,29 +590,32 @@ async function ensureDobiusAgentProfile(agent: DobiusAgentRecord): Promise<void>
 async function publishDobiusAgentReply(args: {
   agent: DobiusAgentRecord;
   channelId: string;
-  parentEventId: string;
+  /** Null = a top-level channel message (restart revivals have no live parent). */
+  parentEventId: string | null;
   content: string;
   broadcast: boolean;
 }): Promise<string | null> {
   // Every agent-authored message guarantees its author has a name in chat.
   await ensureDobiusAgentProfile(args.agent);
   const identity = agentIdentity(args.agent.id);
-  const [parent] = await queryRelay([{ ids: [args.parentEventId], limit: 1 }]).catch(
-    () => [undefined],
-  );
-  const rootEventId = resolveRelayThreadRoot(parent, args.parentEventId);
   const tags: string[][] = [
     ["h", args.channelId],
     ["p", localIdentity().pubkey],
   ];
-  if (rootEventId !== args.parentEventId) tags.push(["e", rootEventId, "", "root"]);
-  tags.push(["e", args.parentEventId, "", "reply"]);
-  // A bare reply e-tag hides the message in a thread (threadPanel's main-timeline
-  // filter). ["broadcast","1"] is the reader's existing "reply that renders on the
-  // channel timeline" marker — agents answer in the channel, still linked to the
-  // message they answered. Thread-triggered replies stay un-broadcast on purpose:
-  // threads are the direct line to one agent.
-  if (args.broadcast) tags.push(["broadcast", "1"]);
+  if (args.parentEventId) {
+    const [parent] = await queryRelay([{ ids: [args.parentEventId], limit: 1 }]).catch(
+      () => [undefined],
+    );
+    const rootEventId = resolveRelayThreadRoot(parent, args.parentEventId);
+    if (rootEventId !== args.parentEventId) tags.push(["e", rootEventId, "", "root"]);
+    tags.push(["e", args.parentEventId, "", "reply"]);
+    // A bare reply e-tag hides the message in a thread (threadPanel's main-timeline
+    // filter). ["broadcast","1"] is the reader's existing "reply that renders on the
+    // channel timeline" marker — agents answer in the channel, still linked to the
+    // message they answered. Thread-triggered replies stay un-broadcast on purpose:
+    // threads are the direct line to one agent.
+    if (args.broadcast) tags.push(["broadcast", "1"]);
+  }
   const submission = await submitRelayEvent(
     signedEventWithPrivateKey(
       { kind: 9, content: args.content, tags },
@@ -660,9 +663,86 @@ async function startDobiusChannelRun(
 
 type DobiusAgentRunLiveTarget = {
   channelId: string;
-  parentEventId: string;
+  parentEventId: string | null;
   broadcast: boolean;
 };
+
+// ── restart revival: channels stay live across app restarts ─────────────────
+// A run that was mid-flight when the app closed is stamped status 'error' /
+// 'app restarted during run' by the runs store on next load. Without revival
+// the conversation just goes DEAD: the agent's work is lost, its reply never
+// posts, and the channel sits silent until the user speaks again. On comms
+// boot we re-kick each interrupted channel run — the agent resumes its
+// per-channel session, redoes/continues the task, and posts into the channel.
+const REVIVED_RUNS_STORAGE_KEY = "dobius-channel-run-revivals.v1";
+const REVIVAL_WINDOW_MS = 2 * 60 * 60 * 1000;
+const MAX_REVIVALS_PER_BOOT = 4;
+let revivalStarted = false;
+
+export async function reviveInterruptedChannelRuns(): Promise<void> {
+  if (revivalStarted) return;
+  revivalStarted = true;
+  let handled: string[] = [];
+  try {
+    handled = JSON.parse(window.localStorage.getItem(REVIVED_RUNS_STORAGE_KEY) ?? "[]");
+  } catch {
+    handled = [];
+  }
+  const handledSet = new Set(handled);
+  const [runsResponse, agentsResponse] = await Promise.all([
+    invokeDobiusRuntime("agent.runs", {}),
+    invokeDobiusRuntime("agent.list"),
+  ]);
+  const agents = recordsAt(agentsResponse, "agents").filter(isDobiusAgentRecord);
+  const interrupted = recordsAt(runsResponse, "runs")
+    .filter((candidate): candidate is Record<string, unknown> => {
+      if (!candidate || typeof candidate !== "object") return false;
+      const run = candidate as Record<string, unknown>;
+      return (
+        run.source === "channel" &&
+        typeof run.sessionKey === "string" &&
+        run.sessionKey !== "default" &&
+        run.status === "error" &&
+        run.summary === "app restarted during run" &&
+        typeof run.startedAt === "number" &&
+        Date.now() - run.startedAt < REVIVAL_WINDOW_MS &&
+        typeof run.id === "string" &&
+        !handledSet.has(run.id)
+      );
+    })
+    .slice(-MAX_REVIVALS_PER_BOOT);
+  if (!interrupted.length) return;
+  for (const run of interrupted) handledSet.add(run.id as string);
+  window.localStorage.setItem(
+    REVIVED_RUNS_STORAGE_KEY,
+    JSON.stringify([...handledSet].slice(-200)),
+  );
+  for (const run of interrupted) {
+    const agent = agents.find((candidate) => candidate.id === run.agentId);
+    const channelId = run.sessionKey as string;
+    if (!agent) continue;
+    void (async () => {
+      const prompt = `The app restarted and interrupted your previous turn in this channel. Your per-channel session memory is intact — continue (or redo) the task below and post your result to the channel as usual.\n\n<interrupted-task>\n${String(run.prompt ?? "")}\n</interrupted-task>`;
+      try {
+        const runId = await startDobiusChannelRun(agent.id, prompt, channelId);
+        const reply = await awaitDobiusAgentRun(agent, runId, {
+          channelId,
+          parentEventId: null,
+          broadcast: true,
+        });
+        await publishDobiusAgentReply({
+          agent,
+          channelId,
+          parentEventId: null,
+          content: reply,
+          broadcast: true,
+        });
+      } catch (error) {
+        console.error("[comms] channel revival failed for", agent.name, error);
+      }
+    })();
+  }
+}
 
 /**
  * Publish the run's not-yet-seen outbox items (live progress / screenshots)

@@ -43,6 +43,9 @@ function sanitizeRuns(raw: unknown): AgentRun[] {
         record.source === 'heartbeat' || record.source === 'channel' || record.source === 'asana'
           ? record.source
           : 'manual',
+      // Preserved across restarts on purpose: channel revival matches
+      // interrupted runs back to their channel by this key.
+      ...(typeof record.sessionKey === 'string' ? { sessionKey: record.sessionKey } : {}),
       startedAt,
       status: status === 'running' ? 'error' : status,
       summary:
