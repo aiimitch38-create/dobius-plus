@@ -3,9 +3,8 @@
  *
  * Why these shapes are fixed: they are dictated by the already-shipped Buzz
  * clients, not chosen by us. `RelayEvent` mirrors the record returned from
- * `POST /query` (see vendor/buzz-desktop/src/shared/api/dobiusCommunications.ts
- * queryRelay, and src/renderer/src/components/buzz/native/relay-client.ts).
- * Changing a field name here breaks the Buzz Inbox silently.
+ * `POST /query` (see src/renderer/src/components/communications/shared/api/dobiusCommunications.ts
+ * queryRelay). Changing a field name here breaks the Buzz Inbox silently.
  */
 
 /** A Nostr event exactly as the Buzz clients expect it back from /query. */
