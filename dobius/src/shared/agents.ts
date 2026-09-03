@@ -73,6 +73,13 @@ export type CustomAgent = {
   lastHeartbeatAt?: number
   lastSessionId?: string
   lastSessionCwd?: string
+  /**
+   * Continuing sessions keyed by task context — one per Communications channel
+   * (key = channel id) so each channel is its own conversation thread for the
+   * agent, plus 'default' for manual runs. lastSessionId/lastSessionCwd remain
+   * the legacy single-session fields ('default' mirrors into them).
+   */
+  sessionsByKey?: Record<string, { sessionId: string; cwd: string }>
   createdAt: number
   updatedAt: number
 }
@@ -126,6 +133,8 @@ export type AgentRun = {
   agentId: string
   prompt: string
   source?: AgentRunSource
+  /** Task-context key ('default', or the Communications channel id). */
+  sessionKey?: string
   startedAt: number
   endedAt?: number
   status: AgentRunStatus

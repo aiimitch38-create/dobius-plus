@@ -41,8 +41,26 @@ function cloneAgent(agent: CustomAgent): CustomAgent {
     allowedTools: [...agent.allowedTools],
     skills: [...agent.skills],
     heartbeat: { ...agent.heartbeat },
-    channels: { ...agent.channels }
+    channels: { ...agent.channels },
+    sessionsByKey: agent.sessionsByKey ? { ...agent.sessionsByKey } : undefined
   }
+}
+
+function sanitizeSessionsByKey(
+  raw: unknown
+): Record<string, { sessionId: string; cwd: string }> | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined
+  }
+  const sessions: Record<string, { sessionId: string; cwd: string }> = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue
+    const entry = value as Record<string, unknown>
+    if (typeof entry.sessionId === 'string' && typeof entry.cwd === 'string') {
+      sessions[key] = { sessionId: entry.sessionId, cwd: entry.cwd }
+    }
+  }
+  return Object.keys(sessions).length > 0 ? sessions : undefined
 }
 
 function sanitize(raw: unknown): CustomAgent[] {
@@ -85,6 +103,7 @@ function sanitize(raw: unknown): CustomAgent[] {
         lastSessionId: typeof record.lastSessionId === 'string' ? record.lastSessionId : undefined,
         lastSessionCwd:
           typeof record.lastSessionCwd === 'string' ? record.lastSessionCwd : undefined,
+        sessionsByKey: sanitizeSessionsByKey(record.sessionsByKey),
         createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
         updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now()
       }
@@ -270,18 +289,45 @@ export function updateAgentHeartbeatAt(id: string, lastHeartbeatAt: number): voi
 
 export function updateAgentSession(
   id: string,
-  updates: { lastSessionId?: string; lastSessionCwd?: string }
+  updates: { lastSessionId?: string; lastSessionCwd?: string; sessionKey?: string }
 ): void {
   const agents = load()
   const agent = agents.find((entry) => entry.id === id)
   if (!agent) {
     return
   }
-  agent.lastSessionId = updates.lastSessionId
-  agent.lastSessionCwd = updates.lastSessionCwd
+  const key = updates.sessionKey ?? 'default'
+  if (updates.lastSessionId && updates.lastSessionCwd) {
+    agent.sessionsByKey = {
+      ...agent.sessionsByKey,
+      [key]: { sessionId: updates.lastSessionId, cwd: updates.lastSessionCwd }
+    }
+  }
+  // The legacy single-session fields mirror the default key only: a channel
+  // task must never hijack the session a manual run would resume.
+  if (key === 'default') {
+    agent.lastSessionId = updates.lastSessionId
+    agent.lastSessionCwd = updates.lastSessionCwd
+  }
   agent.updatedAt = Date.now()
   cached = agents
   persist(agents)
+}
+
+/** The continuing session for a task key, falling back to the legacy fields for 'default'. */
+export function getAgentSessionForKey(
+  agent: CustomAgent,
+  sessionKey: string | undefined
+): { sessionId: string; cwd: string } | null {
+  const key = sessionKey ?? 'default'
+  const keyed = agent.sessionsByKey?.[key]
+  if (keyed) {
+    return keyed
+  }
+  if (key === 'default' && agent.lastSessionId && agent.lastSessionCwd) {
+    return { sessionId: agent.lastSessionId, cwd: agent.lastSessionCwd }
+  }
+  return null
 }
 
 export function resetAgentSession(id: string): CustomAgent[] {

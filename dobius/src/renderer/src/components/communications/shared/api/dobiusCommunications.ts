@@ -626,7 +626,11 @@ async function publishDobiusAgentReply(args: {
 // The runner refuses new runs past its concurrency cap; a busy channel (several
 // agents plus chains) hits that in normal use, so queue instead of failing the
 // conversation with "could not start".
-async function startDobiusChannelRun(agentId: string, prompt: string): Promise<string> {
+async function startDobiusChannelRun(
+  agentId: string,
+  prompt: string,
+  channelId: string,
+): Promise<string> {
   const deadline = Date.now() + 10 * 60 * 1000;
   for (;;) {
     try {
@@ -634,6 +638,9 @@ async function startDobiusChannelRun(agentId: string, prompt: string): Promise<s
         id: agentId,
         prompt,
         source: "channel",
+        // Each channel is its own task: the agent resumes a per-channel
+        // session, so conversations in different channels never blur.
+        sessionKey: channelId,
       });
       return requiredText(
         started && typeof started === "object"
@@ -830,7 +837,7 @@ async function dispatchMessageToDobiusAgents(args: {
   await Promise.all(
     targets.map(async (agent) => {
       try {
-        const runId = await startDobiusChannelRun(agent.id, buildPrompt(agent));
+        const runId = await startDobiusChannelRun(agent.id, buildPrompt(agent), args.channelId);
         const reply = await awaitDobiusAgentRun(agent, runId, {
           channelId: args.channelId,
           parentEventId: args.eventId,

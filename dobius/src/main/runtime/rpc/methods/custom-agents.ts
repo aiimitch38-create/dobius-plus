@@ -54,7 +54,10 @@ const AgentUpdate = z.object({
 const AgentRunStart = z.object({
   id: requiredString('Missing agent id'),
   prompt: requiredString('Missing agent prompt'),
-  source: z.enum(['manual', 'heartbeat', 'channel', 'asana']).optional()
+  source: z.enum(['manual', 'heartbeat', 'channel', 'asana']).optional(),
+  // Task-context key — Communications passes the channel id so each channel
+  // is its own continuing conversation for the agent.
+  sessionKey: OptionalString
 })
 
 const AgentRunsQuery = z.object({
@@ -138,12 +141,14 @@ export const CUSTOM_AGENT_METHODS: RpcMethod[] = [
         // Channel runs are headless — nobody sits at the agent panel to click
         // tool approvals, so undecided prompts would hang the conversation.
         // 'dontAsk' lets the agent's allowlisted tools run and denies the rest.
-        options: params.source
-          ? {
-              source: params.source,
-              ...(params.source === 'channel' ? { permissionMode: 'dontAsk' as const } : {})
-            }
-          : undefined
+        options:
+          params.source || params.sessionKey
+            ? {
+                source: params.source,
+                sessionKey: params.sessionKey,
+                ...(params.source === 'channel' ? { permissionMode: 'dontAsk' as const } : {})
+              }
+            : undefined
       })
       return { runId }
     }
