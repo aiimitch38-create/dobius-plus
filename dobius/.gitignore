@@ -14,6 +14,9 @@ src/**/*.d.ts
 !src/renderer/src/env.d.ts
 !src/renderer/src/mermaid.d.ts
 !src/types/build-constants.d.ts
+# Tailwind v4's @config directive requires a .js config file — hand-authored,
+# not a tsc artifact.
+!src/renderer/src/components/communications/tailwind.config.js
 
 # Dependencies
 node_modules/

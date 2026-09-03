@@ -1,0 +1,54 @@
+/*
+ * Motion for the Dobius mark. The vendored client drove its bee through a
+ * bespoke SVG morph engine; the mark is now a single image, so the same three
+ * states — resting, thinking, booting — are plain CSS on that image.
+ */
+
+@keyframes dobius-logo-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The rest window the loop callers ask for is a slower cycle, not a gap: see
+   dobius-logo-breathe. --dobius-logo-cycle carries the caller's timing. */
+
+/* Never reaches zero. A boot gate can stay on screen for a long time — if the
+   mark animates all the way out, a slow start is indistinguishable from a
+   crash, which is exactly how this first read on screen. Motion carries the
+   "still working" signal; opacity stays well above the floor. */
+@keyframes dobius-logo-breathe {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.dobius-logo--pulse .dobius-logo__mark,
+.dobius-logo__mark.dobius-logo--pulse {
+  animation: dobius-logo-pulse 1.8s ease-in-out infinite;
+}
+
+.dobius-logo__mark.dobius-logo--breathe {
+  animation: dobius-logo-breathe var(--dobius-logo-cycle, 2.6s) ease-in-out
+    infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dobius-logo--pulse .dobius-logo__mark,
+  .dobius-logo__mark.dobius-logo--pulse,
+  .dobius-logo__mark.dobius-logo--breathe {
+    animation: none;
+    opacity: 0.8;
+    transform: none;
+  }
+}

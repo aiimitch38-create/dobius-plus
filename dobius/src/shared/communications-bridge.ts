@@ -56,6 +56,9 @@ export const COMMUNICATIONS_RUNTIME_METHODS = [
   // Communications — the bridge rejected the call as command_not_allowed.
   'agent.run',
   'agent.runs',
+  // Live outbox delivery for channel runs — separate from agent.runs so the
+  // 750ms poll never carries base64 image blobs.
+  'agent.runOutbox',
   // Snapshot family (snapshots/snapshot-rpc-methods.ts) — registered in
   // ALL_RPC_METHODS but previously unreachable from Communications.
   'agent.snapshot.confirmImport',

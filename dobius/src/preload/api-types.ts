@@ -1390,6 +1390,10 @@ export type PreloadApi = {
     stopHarness: (id: string) => Promise<void>
     harnessStatuses: () => Promise<AgentProviderStatusSnapshot[]>
     onRunEvent: (callback: (event: AgentRunEvent) => void) => () => void
+    /** Whether a provider key is stored. The key itself never crosses this bridge. */
+    providerKeyStatus: (provider: string) => Promise<{ configured: boolean }>
+    saveProviderKey: (provider: string, apiKey: string) => Promise<{ configured: boolean }>
+    clearProviderKey: (provider: string) => Promise<{ configured: boolean }>
     onRunsChanged: (callback: () => void) => () => void
     onDecisionsChanged: (callback: () => void) => () => void
     onNotificationsChanged: (callback: () => void) => () => void

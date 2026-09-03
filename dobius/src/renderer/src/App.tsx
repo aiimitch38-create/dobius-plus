@@ -282,9 +282,9 @@ const ActivityPrototypePage = lazy(() => import('./components/activity/ActivityP
 const Settings = lazy(() => import('./components/settings/Settings'))
 const SkillsPage = lazy(() => import('./components/skills/SkillsPage'))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage'))
-const BuzzPage = lazy(() =>
-  import('./components/buzz/native/BuzzNativePage').then((m) => ({ default: m.BuzzNativePage }))
-)
+// The restored Communications client. Lazy so its dependency tree (router,
+// query, editor, syntax highlighting) stays out of the initial bundle.
+const BuzzPage = lazy(() => import('./components/communications/CommunicationsPage'))
 const WorkspaceSpacePage = lazy(() => import('./components/workspace-space/WorkspaceSpacePage'))
 const MobilePage = lazy(() => import('./components/mobile/MobilePage'))
 const QuickOpen = lazy(() => import('./components/QuickOpen'))
@@ -493,6 +493,16 @@ function App(): React.JSX.Element {
   // and shutdown transitions where activeWorktreeId can briefly become null.
   const shouldMountTerminalWorkbench =
     activeWorktreeId !== null || hasMountedTerminalWorkbenchRef.current
+  // Communications follows the terminal-workbench rule: once opened it stays
+  // MOUNTED and is hidden with CSS. Remounting it on every tab switch re-ran
+  // the whole comms boot (loading flash, relay resubscribe, cache refill) and
+  // dropped live message delivery while the user was on other tabs.
+  const hasMountedCommunicationsRef = useRef(false)
+  if (activeView === 'buzz') {
+    hasMountedCommunicationsRef.current = true
+  }
+  const shouldMountCommunications =
+    activeView === 'buzz' || hasMountedCommunicationsRef.current
   // Why: visible worktree creation owns its faux tab strip from start to finish;
   // the previous workspace must stay mounted for retention without rendering
   // real chrome.
@@ -2363,6 +2373,10 @@ function App(): React.JSX.Element {
                               </Suspense>
                             </div>
                           ) : null}
+                          {/* Deliberately no loading UI (Carson's call,
+                              2026-09-02): pages appear when ready, the panel
+                              stays blank for the brief chunk parse. A chunk
+                              that REJECTS still lands in the boundary below. */}
                           <Suspense fallback={null}>
                             <RecoverableRenderErrorBoundary
                               boundaryId={`page.${activeView}`}
@@ -2377,7 +2391,6 @@ function App(): React.JSX.Element {
                               {activeView === 'settings' ? <Settings /> : null}
                               {activeView === 'skills' ? <SkillsPage /> : null}
                               {activeView === 'agents' ? <AgentsPage /> : null}
-                              {activeView === 'buzz' ? <BuzzPage /> : null}
                               {activeView === 'tasks' ? <TaskPage /> : null}
                               {activeView === 'automations' ? <AutomationsPage /> : null}
                               {activeView === 'activity' ? <ActivityPrototypePage /> : null}
@@ -2400,6 +2413,37 @@ function App(): React.JSX.Element {
                               ) : null}
                             </RecoverableRenderErrorBoundary>
                           </Suspense>
+                          {/* Communications: mounted once, hidden with CSS
+                              (terminal-workbench pattern). Switching tabs no
+                              longer restarts the hub — it is simply revealed,
+                              exactly as it was, and keeps receiving live
+                              messages while hidden. */}
+                          {shouldMountCommunications ? (
+                            <div
+                              className={
+                                activeView === 'buzz'
+                                  ? 'flex flex-1 min-w-0 min-h-0'
+                                  : 'hidden flex-1 min-w-0 min-h-0'
+                              }
+                            >
+                              <Suspense fallback={null}>
+                                <RecoverableRenderErrorBoundary
+                                  boundaryId="page.buzz"
+                                  surface="page"
+                                  title={translate(
+                                    'auto.App.b7a714db1e',
+                                    'This page hit an error.'
+                                  )}
+                                  description={translate(
+                                    'auto.App.03a14f6b5b',
+                                    'Retry the page or navigate to another Dobius+ surface.'
+                                  )}
+                                >
+                                  <BuzzPage />
+                                </RecoverableRenderErrorBoundary>
+                              </Suspense>
+                            </div>
+                          ) : null}
                         </div>
                         {showFloatingTerminalButton ? (
                           <FloatingTerminalToggleButton

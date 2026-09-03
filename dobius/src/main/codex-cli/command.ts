@@ -6,6 +6,7 @@ type ResolveCommandOptions = {
   pathEnv?: string | null
   platform?: NodeJS.Platform
   homePath?: string
+  overridePath?: string | null
 }
 
 function getExecutableNames(platform: NodeJS.Platform, commandName: string): string[] {
@@ -210,6 +211,14 @@ export function resolveCodexCommand(options: ResolveCommandOptions = {}): string
 }
 
 export function resolveClaudeCommand(options: ResolveCommandOptions = {}): string {
+  // Why: on some machines the PATH/version-manager scan below finds nothing at
+  // all (GUI-launched Electron PATH is minimal and claude wasn't installed via
+  // a scanned method) — the SDK then fails to spawn the literal fallback
+  // string "claude". An explicit override always wins over the scan.
+  const override = options.overridePath ?? process.env.DOBIUS_CLAUDE_CLI_PATH
+  if (override) {
+    return override
+  }
   return resolveCliCommand('claude', options)
 }
 

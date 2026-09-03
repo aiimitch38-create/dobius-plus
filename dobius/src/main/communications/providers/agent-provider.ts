@@ -22,7 +22,7 @@ export type AgentProviderStreamEvent =
  * delegate to src/main/agents/agent-runner.ts — they must never reimplement
  * launch mechanics.
  */
-export interface AgentProvider {
+export type AgentProvider = {
   readonly providerId: AgentProviderId
   readonly agentId: string
   /** Starts a run for the bound agent and binds its Nostr participant identity. */

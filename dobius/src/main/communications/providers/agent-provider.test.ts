@@ -1,3 +1,4 @@
+import type { listAgentRuns } from '../../agents/agent-runner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const electronMock = vi.hoisted(() => ({
@@ -9,7 +10,7 @@ vi.mock('electron', () => electronMock)
 const runnerMock = vi.hoisted(() => ({
   startAgentRun: vi.fn(),
   stopAgentRun: vi.fn(),
-  listAgentRuns: vi.fn(() => [] as Awaited<ReturnType<typeof import('../../agents/agent-runner')['listAgentRuns']>>)
+  listAgentRuns: vi.fn(() => [] as Awaited<ReturnType<typeof listAgentRuns>>)
 }))
 
 vi.mock('../../agents/agent-runner', () => runnerMock)

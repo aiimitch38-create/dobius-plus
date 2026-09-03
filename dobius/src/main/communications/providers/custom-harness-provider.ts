@@ -1,4 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import {
+  assertPathOutsideProtectedRoots,
+  protectedProviderRoots
+} from './protected-path-guard'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import type {
@@ -77,6 +81,12 @@ export class CustomHarnessProvider implements AgentProvider {
     // participant even before its first reply — same pattern as huddle agents.
     const identity = bindProviderIdentity(this.agentId)
 
+    // A harness runs arbitrary user-supplied commands, so its working
+    // directory is the one thing we can refuse before the process exists.
+    if (launch.cwd) {
+      assertPathOutsideProtectedRoots(protectedProviderRoots(), launch.cwd, process.cwd())
+    }
+
     const runId = randomUUID()
     this.lastRunId = runId
     this.detail = undefined
@@ -94,15 +104,24 @@ export class CustomHarnessProvider implements AgentProvider {
     this.state = 'running'
     this.emit({ kind: 'status', state: this.status() })
 
+    // Why buffered: a chunk boundary can fall mid-line, so splitting each chunk
+    // on its own emits one logical line as several run events. Hold the trailing
+    // partial until the newline arrives, and flush whatever is left on close.
+    let stdoutTail = ''
+    let stderrTail = ''
     child.stdout?.on('data', (chunk: Buffer) => {
-      for (const line of chunk.toString('utf8').split('\n')) {
+      const lines = (stdoutTail + chunk.toString('utf8')).split('\n')
+      stdoutTail = lines.pop() ?? ''
+      for (const line of lines) {
         if (line.trim()) {
           this.emitRunEvent({ kind: 'system', detail: line })
         }
       }
     })
     child.stderr?.on('data', (chunk: Buffer) => {
-      for (const line of chunk.toString('utf8').split('\n')) {
+      const lines = (stderrTail + chunk.toString('utf8')).split('\n')
+      stderrTail = lines.pop() ?? ''
+      for (const line of lines) {
         if (line.trim()) {
           this.emitRunEvent({ kind: 'error', text: line })
         }
@@ -118,6 +137,14 @@ export class CustomHarnessProvider implements AgentProvider {
       if (this.child !== child) {
         return
       }
+      if (stdoutTail.trim()) {
+        this.emitRunEvent({ kind: 'system', detail: stdoutTail })
+      }
+      if (stderrTail.trim()) {
+        this.emitRunEvent({ kind: 'error', text: stderrTail })
+      }
+      stdoutTail = ''
+      stderrTail = ''
       if (child.killed || code === null) {
         this.state = 'finished'
         this.detail = 'stopped by user'
@@ -140,7 +167,7 @@ export class CustomHarnessProvider implements AgentProvider {
 
   async send(text: string): Promise<void> {
     const child = this.child
-    if (!child || !child.stdin || child.exitCode !== null) {
+    if (!child || !child.stdin || child.exitCode !== null || this.state !== 'running') {
       throw new Error(`Harness ${this.definition.label} is not running`)
     }
     const prompt = text.trim()

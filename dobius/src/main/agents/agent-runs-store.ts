@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
-import type { AgentRun } from '../../shared/agents'
+import type { AgentRun, AgentRunOutboxItem } from '../../shared/agents'
 
 const RUNS_FILE_NAME = 'agents-runs.json'
 const MAX_RUNS = 50
@@ -43,6 +43,9 @@ function sanitizeRuns(raw: unknown): AgentRun[] {
         record.source === 'heartbeat' || record.source === 'channel' || record.source === 'asana'
           ? record.source
           : 'manual',
+      // Preserved across restarts on purpose: channel revival matches
+      // interrupted runs back to their channel by this key.
+      ...(typeof record.sessionKey === 'string' ? { sessionKey: record.sessionKey } : {}),
       startedAt,
       status: status === 'running' ? 'error' : status,
       summary:
@@ -112,6 +115,40 @@ export function updateStoredAgentRun(runId: string, updates: Partial<AgentRun>):
   cachedRuns = runs.slice(-MAX_RUNS)
   persistRuns(cachedRuns)
   return { ...run }
+}
+
+// Live-run outbox: memory only, keyed by runId. Persisting these on the run
+// record was an app-freezing mistake — items carry base64 images, the store
+// rewrote the whole pretty-printed file synchronously on every append, and
+// the 750ms runs poll re-serialized every blob across IPC. Load-time
+// sanitizeRuns dropped them on restart anyway, so persistence bought nothing.
+const MAX_OUTBOX_RUNS = 32
+const liveRunOutbox = new Map<string, AgentRunOutboxItem[]>()
+
+export function appendAgentRunOutbox(runId: string, item: AgentRunOutboxItem): boolean {
+  const run = loadRuns().find((entry) => entry.id === runId)
+  if (!run) {
+    return false
+  }
+  const items = liveRunOutbox.get(runId) ?? []
+  items.push(item)
+  liveRunOutbox.set(runId, items)
+  while (liveRunOutbox.size > MAX_OUTBOX_RUNS) {
+    const oldest = liveRunOutbox.keys().next().value
+    if (oldest === undefined) break
+    liveRunOutbox.delete(oldest)
+  }
+  return true
+}
+
+/** Items appended after `afterId` (all items when afterId is absent/unknown). */
+export function getAgentRunOutbox(runId: string, afterId?: string | null): AgentRunOutboxItem[] {
+  const items = liveRunOutbox.get(runId) ?? []
+  if (!afterId) {
+    return [...items]
+  }
+  const index = items.findIndex((item) => item.id === afterId)
+  return index === -1 ? [...items] : items.slice(index + 1)
 }
 
 export function getStoredAgentRun(runId: string): AgentRun | null {
