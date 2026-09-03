@@ -41,6 +41,18 @@ import {
   writeAgentFile,
   writeCrewFile
 } from '../agents/agent-identity-files'
+import {
+  deleteCustomHarness,
+  listCustomHarnesses,
+  saveCustomHarness,
+  type CustomHarnessDefinition
+} from '../communications/agents/custom-harness-store'
+import {
+  getCustomHarnessProvider,
+  listCustomHarnessStatuses,
+  stopCustomHarness
+} from '../communications/providers/custom-harness-instances'
+import { validateCustomHarnessDefinition } from '../communications/providers/custom-harness-provider'
 
 type PrepareClaudeLaunch = (target?: {
   accountId?: string | null
@@ -173,4 +185,39 @@ export function registerAgentsHandlers(
       return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
     }
   )
+
+  ipcMain.removeHandler('agents:listHarnesses')
+  ipcMain.handle('agents:listHarnesses', () => listCustomHarnesses())
+
+  // Why: validate at the IPC boundary too — a bad record must not persist when
+  // the provider seam would only reject it later at launch.
+  ipcMain.removeHandler('agents:saveHarness')
+  ipcMain.handle(
+    'agents:saveHarness',
+    (_event, definition: CustomHarnessDefinition, originalId?: string | null) => {
+      validateCustomHarnessDefinition(definition)
+      return saveCustomHarness(definition, originalId ?? null)
+    }
+  )
+
+  ipcMain.removeHandler('agents:deleteHarness')
+  ipcMain.handle('agents:deleteHarness', (_event, id: string) => deleteCustomHarness(id))
+
+  ipcMain.removeHandler('agents:runHarness')
+  ipcMain.handle(
+    'agents:runHarness',
+    async (_event, args: { id: string; prompt: string; cwd?: string }) => {
+      const provider = getCustomHarnessProvider(args.id)
+      if (!provider) {
+        throw new Error('Harness not found')
+      }
+      return provider.launch({ agentId: provider.agentId, prompt: args.prompt, cwd: args.cwd })
+    }
+  )
+
+  ipcMain.removeHandler('agents:stopHarness')
+  ipcMain.handle('agents:stopHarness', (_event, id: string) => stopCustomHarness(id))
+
+  ipcMain.removeHandler('agents:harnessStatuses')
+  ipcMain.handle('agents:harnessStatuses', () => listCustomHarnessStatuses())
 }

@@ -12,6 +12,7 @@ import {
   resolveMacOSComputerUseAppPath,
   resolveMacOSComputerUseExecutablePath
 } from './macos-native-provider-paths'
+import { readMacOSHelperCodeSignature } from './macos-code-signature'
 import { RuntimeClientError } from './runtime-client-error'
 
 const PERMISSION_STATUS_HELPER_LAUNCH_TIMEOUT_MS = 5_000
@@ -47,11 +48,13 @@ async function getComputerUsePermissionStatusAsync(): Promise<ComputerUsePermiss
   }
 
   const raw = await readPermissionStatusFromHelperApp(helperAppPath)
+  const signature = await readMacOSHelperCodeSignature(helperAppPath)
 
   return {
     platform: process.platform,
     helperAppPath,
     helperUnavailableReason: null,
+    signature,
     permissions: [
       { id: 'accessibility', status: raw.accessibility ?? 'not-granted' },
       { id: 'screenshots', status: raw.screenshots ?? 'not-granted' }

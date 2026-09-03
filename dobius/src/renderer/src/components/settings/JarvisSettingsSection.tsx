@@ -1,4 +1,8 @@
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import type { VoiceSettings } from '../../../../shared/speech-types'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Separator } from '../ui/separator'
 
@@ -18,6 +22,76 @@ export function JarvisSettingsSection({
   onToggleJarvis,
   onUpdateVoiceSettings
 }: JarvisSettingsSectionProps): React.JSX.Element {
+  // Why drafts: an API key typed character by character must not be persisted
+  // (and re-read by the speech path) on every keystroke — Save commits it.
+  const [keyDraft, setKeyDraft] = useState(voiceSettings.elevenlabsApiKey ?? '')
+  const [voiceDraft, setVoiceDraft] = useState(voiceSettings.elevenlabsVoiceId ?? '')
+  const [agentDraft, setAgentDraft] = useState(voiceSettings.elevenlabsAgentId ?? '')
+  const [testing, setTesting] = useState(false)
+  const [shortcutActive, setShortcutActive] = useState<boolean | null>(null)
+
+  // Surfaces a refused ⌘T grab, which otherwise looks identical to "nothing
+  // happened" when the shortcut is pressed.
+  useEffect(() => {
+    let cancelled = false
+    void window.api.jarvis
+      .status()
+      .then((status) => {
+        if (!cancelled) {
+          setShortcutActive(status.shortcutActive)
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [voiceSettings.jarvisEnabled])
+
+  useEffect(() => {
+    setKeyDraft(voiceSettings.elevenlabsApiKey ?? '')
+    setVoiceDraft(voiceSettings.elevenlabsVoiceId ?? '')
+    setAgentDraft(voiceSettings.elevenlabsAgentId ?? '')
+  }, [
+    voiceSettings.elevenlabsApiKey,
+    voiceSettings.elevenlabsVoiceId,
+    voiceSettings.elevenlabsAgentId
+  ])
+
+  const dirty =
+    keyDraft !== (voiceSettings.elevenlabsApiKey ?? '') ||
+    voiceDraft !== (voiceSettings.elevenlabsVoiceId ?? '') ||
+    agentDraft !== (voiceSettings.elevenlabsAgentId ?? '')
+
+  const saveElevenLabs = (): void => {
+    onUpdateVoiceSettings({
+      elevenlabsApiKey: keyDraft.trim(),
+      elevenlabsVoiceId: voiceDraft.trim(),
+      elevenlabsAgentId: agentDraft.trim()
+    })
+    toast.success(
+      keyDraft.trim() ? 'ElevenLabs voice saved' : 'ElevenLabs cleared — using the built-in voice'
+    )
+  }
+
+  const testElevenLabs = async (): Promise<void> => {
+    if (dirty) {
+      saveElevenLabs()
+    }
+    setTesting(true)
+    try {
+      const outcome = await window.api.jarvis.speak('Jarvis voice check. This is the voice ADAM will reply in.')
+      if (outcome.played) {
+        toast.success('Spoke the test line')
+      } else {
+        toast.error(`Could not speak: ${outcome.reason ?? 'unknown error'}`)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setTesting(false)
+    }
+  }
+
   return (
     <>
       <Separator />
@@ -72,6 +146,68 @@ export function JarvisSettingsSection({
             }`}
           />
         </button>
+      </div>
+      <div className="space-y-1.5 py-2">
+        <Label htmlFor="jarvis-elevenlabs-key">ElevenLabs voice (optional)</Label>
+        <p className="text-xs text-muted-foreground">
+          Paste an ElevenLabs API key and voice ID for spoken replies. Empty falls back to the
+          built-in macOS voice. Keys start with <code>sk_</code>.
+        </p>
+        <Input
+          id="jarvis-elevenlabs-key"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="ElevenLabs API key"
+          value={keyDraft}
+          onChange={(event) => setKeyDraft(event.target.value)}
+        />
+        <Input
+          id="jarvis-elevenlabs-voice"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="Voice ID"
+          value={voiceDraft}
+          onChange={(event) => setVoiceDraft(event.target.value)}
+        />
+        <Input
+          id="jarvis-elevenlabs-agent"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="Agent ID (live conversation, e.g. agent_...)"
+          value={agentDraft}
+          onChange={(event) => setAgentDraft(event.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          With an agent ID set, ⌘T opens a live conversation you can interrupt, instead of
+          one question at a time. Needs a key with the Conversational AI permission.
+        </p>
+        <div className="flex items-center gap-2 pt-0.5">
+          <Button size="sm" onClick={saveElevenLabs} disabled={!dirty}>
+            {dirty ? 'Save' : 'Saved'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void testElevenLabs()}
+            disabled={testing}
+          >
+            {testing ? 'Speaking…' : 'Test voice'}
+          </Button>
+        </div>
+        {voiceSettings.jarvisEnabled === true && shortcutActive === false ? (
+          <p className="text-xs text-destructive">
+            Cmd+T could not be claimed — another app is holding it, so the shortcut will do
+            nothing. Click the orb instead, or quit whatever owns Cmd+T and toggle Jarvis off
+            and on.
+          </p>
+        ) : null}
+        {voiceSettings.elevenlabsAgentId?.trim() ? (
+          <p className="text-xs text-muted-foreground">
+            Live mode is on, so the orb stays on screen. Click it to start or end a
+            conversation.
+          </p>
+        ) : null}
       </div>
       <Separator />
     </>

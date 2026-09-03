@@ -232,3 +232,23 @@ printing `list(entry.keys())` once. Two wasted round-trips for a one-line probe.
 
 Cheap remedies, in order: `npx oxlint <dir> > /tmp/lint.txt 2>&1; echo "exit=$?"`
 then `grep -c`, then read. Never pipe a verification command into `head`/`tail`.
+
+### [Environment] — 2026-08-24
+- **MISTAKE**: Installed the `opencode` CLI with `npm install -g opencode-ai`. npm reported success, but `opencode --version` immediately after failed with `command not found: opencode` (exit 127).
+- **FAILED FIRST**: Tried `brew install anomalyco/tap/opencode` first — failed because this Mac's Homebrew Command Line Tools (Xcode CLT) are too outdated to build the `pkgconf` dependency from source. That's a standing environment fact, not fixable in-task (needs an interactive System Settings CLT update or `sudo xcode-select --install`); it blocks brew installing ANY formula that needs a source build, not just opencode.
+- **FAILED BECAUSE (npm case)**: `npm config get prefix` on this machine is `/Users/bayou/.hermes/node`, not a directory on `$PATH`. Only `/Users/bayou/.local/bin` is on PATH — `node`/`npm` work there only because they're pre-existing symlinks into `/Users/bayou/.hermes/node/bin/{node,npm}`. A fresh `npm install -g <pkg>` drops its bin into `/Users/bayou/.hermes/node/bin/<pkg>` same as node/npm, but nothing auto-creates the matching symlink in `.local/bin`, so the new command is invisible on PATH even though the install succeeded.
+- **FIX**: After any `npm install -g <package>`, symlink the real bin into the PATH'd directory: `ln -sf /Users/bayou/.hermes/node/bin/<bin-name> /Users/bayou/.local/bin/<bin-name>`. Verify with `<bin-name> --version` before reporting the install done.
+- **DETECTION**: `npm install -g` exits 0 but the very next invocation of the tool's own name gives `command not found` (exit 127). Confirm root cause with `npm config get prefix` (will print `/Users/bayou/.hermes/node`) and `ls /Users/bayou/.hermes/node/bin/ | grep <bin-name>` (binary is there, just unlinked).
+- **See also**: `~/.claude/skills/learned-npm-global-bin-symlink/SKILL.md`.
+
+### [Environment] — 2026-08-25
+- **MISTAKE**: None in the code — boot volume hit 0 bytes free mid-diagnosis of "Dobius+ won't launch," and every Bash call failed (including `df -h /` itself) until the user manually freed space.
+- **ROOT CAUSE (of the launch failure)**: no `/Applications/Dobius+.app` existed at all (question-mark Dock icon = stale pointer to nothing). A real build exists in `dobius/dist/mac-arm64` but was never installed, and the repo has a large in-progress uncommitted refactor (`feat/computer-use-v2`: `dobius/index.js` deleted, ~20 files modified) — typecheck is clean, so the refactor itself isn't the blocker, disk space was.
+- **FIX**: user freed space manually (Homebrew cache + this project's own `dobius/dist`/`dobius/out`, both regenerate on next build). See `~/.claude/skills/learned-enospc-silent-build` for the general recovery procedure now updated with this exact failure mode.
+- **NEXT**: once there's durable headroom (consider moving cold node_modules to `/Volumes/Storage`, which has 1.7TB free), rebuild `feat/computer-use-v2` and install via `scripts/install-dobius-v2.sh` (NOT the generic `dobius-build-install` skill — that assumes an existing installed app to repack from, and there currently is none).
+
+### [Fixed] — 2026-08-25
+- **RESOLVED**: `/Applications/Dobius+.app` (pid confirmed running) + daemon both alive. Real root causes were two independent things, both now fixed:
+  1. Boot disk hit 0 bytes free (see above) — blocked every build/install attempt. User freed space manually.
+  2. Once disk was healthy, a real typecheck failure surfaced (masked earlier by the same disk pressure truncating the typecheck log — a textbook case of the ENOSPC "clean-looking but truncated" trap): `src/main/communications/participant-identity-buzz-migration.ts` called undocumented Electron internals `webContents.create()` / `WebContents.prototype.destroy()`, whose type declarations Electron 42 dropped. Fixed by switching to the public, typed `BrowserWindow({ show: false, webPreferences: { partition } })` + `.webContents` + `.destroy()` — same behavior, stable API. Paired test file's mocks updated to match (also fixed several pre-existing loose `ReturnType<typeof vi.fn>` typings there that were silently widening to `Mock<Constructable | Procedure>`).
+- Built via `pnpm run build:unpack`, installed via `scripts/install-dobius-v2.sh` (NOT the generic `dobius-build-install` skill — that one assumes an existing installed app to repack from; there wasn't one).

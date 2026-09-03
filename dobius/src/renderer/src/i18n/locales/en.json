@@ -3826,7 +3826,8 @@
           "managerNav": "Manager",
           "skillsNav": "Skills",
           "knowledgeNav": "Knowledge",
-          "activityNav": "Activity"
+          "activityNav": "Activity",
+          "buzzNav": "Communications"
         },
         "SidebarRepositoryFilterSection": {
           "d3a9c4cea1": "Clear",
@@ -5110,7 +5111,11 @@
           "6b5a2cd3a5": "Accessibility",
           "6b17602073": "Reset access",
           "506f2acf7a": "Resetting access...",
-          "4b65070096": "darwin"
+          "4b65070096": "darwin",
+          "cec4a32da7": "Re-check",
+          "0699f4b8d1": "Ad-hoc build detected",
+          "3f67e69351": "macOS drops Screen Recording and Accessibility grants after every rebuild because this build is not Developer ID signed. A Developer ID signed build keeps them.",
+          "f8ce63d170": "Reset Computer Use grants? Accessibility and Screen Recording must be approved again."
         },
         "DeveloperPermissionsPane": {
           "4c17304beb": "Refresh",
@@ -8390,7 +8395,9 @@
               "20574cbc72": "Enable Voice Dictation",
               "322d457a0d": "transcription",
               "dcc7846641": "Configure the OpenAI API key used for cloud speech-to-text models.",
-              "ebfd0b32e5": "OpenAI Transcription"
+              "ebfd0b32e5": "OpenAI Transcription",
+              "conductor": "Voice Conductor",
+              "conductorDesc": "Run a background Opus session that routes voice commands and dispatched work."
             }
           }
         },
@@ -8883,6 +8890,10 @@
           "6aaefc1cce": "Type",
           "3bb310d336": "Cancel",
           "c9d02bbdc6": "Save destination"
+        },
+        "VoiceConductor": {
+          "title": "Voice Conductor",
+          "description": "Run a background Opus session that routes voice commands and dispatched work to the right terminal."
         }
       },
       "right": {

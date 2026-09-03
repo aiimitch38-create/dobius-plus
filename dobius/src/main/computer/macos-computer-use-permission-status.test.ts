@@ -173,7 +173,8 @@ describe('getComputerUsePermissionStatus', () => {
       permissions: [
         { id: 'accessibility', status: 'granted' },
         { id: 'screenshots', status: 'not-granted' }
-      ]
+      ],
+      signature: { adhoc: false, teamId: null, unknown: true }
     })
     expect(spawn).toHaveBeenCalledWith(
       '/usr/bin/open',
@@ -192,6 +193,30 @@ describe('getComputerUsePermissionStatus', () => {
       recursive: true,
       force: true
     })
+  })
+
+  it('carries the helper code-signature state in the status payload', async () => {
+    const { getComputerUsePermissionStatus } = await import('./macos-computer-use-permissions')
+    mockPermissionStatus('{"accessibility":"granted","screenshots":"granted"}')
+    const openChild = createClosingChild(0)
+    const codesignChild = createClosingChild(0, 'Signature=adhoc\nTeamIdentifier=not set\n')
+    vi.mocked(spawn)
+      .mockImplementationOnce(() => openChild as unknown as ReturnType<typeof spawn>)
+      .mockImplementationOnce(() => codesignChild as unknown as ReturnType<typeof spawn>)
+
+    await expect(getComputerUsePermissionStatus()).resolves.toMatchObject({
+      signature: { adhoc: true, teamId: null }
+    })
+    expect(spawn).toHaveBeenNthCalledWith(
+      2,
+      '/usr/bin/codesign',
+      [
+        '-dv',
+        '--verbose=2',
+        '/Applications/Dobius+ Computer Use.app'
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'] }
+    )
   })
 
   it('returns unavailable permission status when the helper app is missing on macOS', async () => {
@@ -214,6 +239,29 @@ describe('getComputerUsePermissionStatus', () => {
 function mockPermissionStatus(json: string): void {
   vi.mocked(spawnSync).mockReturnValue({ status: 0 } as ReturnType<typeof spawnSync>)
   vi.mocked(readFile).mockResolvedValue(json)
+}
+
+function createClosingChild(code: number, stderr = ''): Record<string, unknown> {
+  const child = {
+    stdout: { off: vi.fn(), on: vi.fn(), setEncoding: vi.fn() },
+    stderr: { off: vi.fn(), on: vi.fn(), setEncoding: vi.fn() },
+    on: vi.fn((event: string, callback: (status: number) => void) => {
+      if (event === 'close') {
+        queueMicrotask(() => callback(code))
+      }
+      return child
+    }),
+    off: vi.fn(() => child),
+    kill: vi.fn(),
+    unref: vi.fn()
+  }
+  if (stderr !== '') {
+    child.stderr.on.mockImplementation((_event: string, callback: (chunk: string) => void) => {
+      queueMicrotask(() => callback(stderr))
+      return child
+    })
+  }
+  return child
 }
 
 function setPlatform(platform: NodeJS.Platform): void {

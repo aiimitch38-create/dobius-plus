@@ -31,3 +31,14 @@
 - scripts/run-comms-gate.sh: quits app (daemon survives), runs gate on 3300, relaunches; hardens with installer-proven exact-name kill + holder-naming aborts.
 - Gate: 21/21 exit 0 (19 vendor-seam + 2 method-seam). typecheck:node exit 0.
 - Lessons: capture runs AFTER shapeCheck (set ctx keys in args builders); post-merge 3-dot diffs only show what the target gained; verify/ dir is excluded from tsconfig.node.json so the GATE is its only typecheck — type errors there surface only at run time.
+
+## 2026-08-26 ~03:20 — Phase 4: Native Communications cutover (commit fdcffaaf)
+- Gate green 21/21 with zero vendor imports (direct core world + method seam + real-relay AUTH).
+- Main window now mounts BuzzNativePage; communications preload exposed to main window; gateway trusts the app renderer surface (communications-surface.ts).
+- Identity migration (webview partition -> participant store) + kind-0 profile publish landed with 12-test decision table.
+- RelayStatusNotice (fail/retry) in native client, 6 tests.
+- vendor/buzz-desktop (400MB) + webview host components deleted; build scripts/installer/verify configs swept.
+- Installer now rm -rf's dist/mac-arm64 post-install (LaunchServices duplicate-icon prevention).
+- Installed to /Applications, relay live (3300), daemon survived install.
+- Lesson: full-volume `lsregister -r` rescans are read-only but scary (sync-tool popups); targeted `-u` + one rebuild is the right tool. Also: `find -maxdepth` missed copies on /Volumes — use mdfind + exact-path probes for app-instance hunts.
+- Pre-existing failure noted (not ours): register-core-handlers.test.ts missing electron mocks (fails at HEAD).

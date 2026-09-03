@@ -3792,7 +3792,8 @@
           "managerNav": "Manager",
           "skillsNav": "Skills",
           "knowledgeNav": "Knowledge",
-          "activityNav": "Activity"
+          "activityNav": "Activity",
+          "buzzNav": "Communications"
         },
         "SidebarRepositoryFilterSection": {
           "d3a9c4cea1": "지우기",
@@ -5095,7 +5096,11 @@
           "6b5a2cd3a5": "접근성",
           "6b17602073": "액세스 재설정",
           "506f2acf7a": "액세스 재설정 중...",
-          "4b65070096": "darwin"
+          "4b65070096": "darwin",
+          "cec4a32da7": "Re-check",
+          "0699f4b8d1": "Ad-hoc build detected",
+          "3f67e69351": "macOS drops Screen Recording and Accessibility grants after every rebuild because this build is not Developer ID signed. A Developer ID signed build keeps them.",
+          "f8ce63d170": "Reset Computer Use grants? Accessibility and Screen Recording must be approved again."
         },
         "DeveloperPermissionsPane": {
           "4c17304beb": "새로고침",
@@ -8338,7 +8343,9 @@
               "20574cbc72": "음성 받아쓰기 활성화",
               "322d457a0d": "전사",
               "dcc7846641": "클라우드 음성-텍스트 모델에 사용되는 OpenAI API 키를 구성합니다.",
-              "ebfd0b32e5": "OpenAI 전사"
+              "ebfd0b32e5": "OpenAI 전사",
+              "conductor": "Voice Conductor",
+              "conductorDesc": "Run a background Opus session that routes voice commands and dispatched work."
             }
           }
         },
@@ -8883,6 +8890,10 @@
           "6aaefc1cce": "Type",
           "3bb310d336": "Cancel",
           "c9d02bbdc6": "Save destination"
+        },
+        "VoiceConductor": {
+          "title": "Voice Conductor",
+          "description": "Run a background Opus session that routes voice commands and dispatched work to the right terminal."
         }
       },
       "right": {

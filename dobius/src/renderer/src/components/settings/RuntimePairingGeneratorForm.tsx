@@ -13,6 +13,7 @@ type RuntimePairingGeneratorFormProps = {
   selectedAddress: string
   refreshingNetworkInterfaces: boolean
   isGeneratingPairing: boolean
+  qrDataUrl: string | null
   webClientUrl: string | null
   runtimePairingUrl: string | null
   copiedTarget: 'web' | 'pairing' | null
@@ -28,6 +29,7 @@ export function RuntimePairingGeneratorForm({
   selectedAddress,
   refreshingNetworkInterfaces,
   isGeneratingPairing,
+  qrDataUrl,
   webClientUrl,
   runtimePairingUrl,
   copiedTarget,
@@ -170,6 +172,27 @@ export function RuntimePairingGeneratorForm({
           </Button>
         </div>
       </div>
+
+      {qrDataUrl ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-border/60 py-4">
+          <div className="rounded-lg border border-border/60 bg-white p-3">
+            <img
+              src={qrDataUrl}
+              alt={translate(
+                'auto.components.settings.RuntimePairingUrlGenerator.qr-alt',
+                'QR code to open this Dobius+ server in a browser'
+              )}
+              className="size-40"
+            />
+          </div>
+          <p className="text-muted-foreground max-w-xs text-center text-xs">
+            {translate(
+              'auto.components.settings.RuntimePairingUrlGenerator.qr-hint',
+              'Scan with your phone camera to open the web view — no app install needed.'
+            )}
+          </p>
+        </div>
+      ) : null}
 
       {webClientUrl ? (
         <GeneratedUrlRow

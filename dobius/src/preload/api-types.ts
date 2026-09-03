@@ -31,7 +31,10 @@ import type {
   BriefingItem,
   CustomAgent,
   CustomAgentInput,
-  CustomAgentUpdate
+  CustomAgentUpdate,
+  CustomHarnessDefinition,
+  AgentProviderLaunchResult,
+  AgentProviderStatusSnapshot
 } from '../shared/agents'
 import type { DobiusPrompt } from '../shared/prompts'
 import type { TerminalPaneSplitSource } from '../shared/feature-education-telemetry'
@@ -1373,6 +1376,19 @@ export type PreloadApi = {
     setPaused: (paused: boolean) => Promise<boolean>
     getPingStatus: () => Promise<{ used: number; max: number; date: string }>
     pickDirectory: (args: { defaultPath?: string }) => Promise<string | null>
+    listHarnesses: () => Promise<CustomHarnessDefinition[]>
+    saveHarness: (
+      definition: CustomHarnessDefinition,
+      originalId?: string | null
+    ) => Promise<CustomHarnessDefinition>
+    deleteHarness: (id: string) => Promise<void>
+    runHarness: (args: {
+      id: string
+      prompt: string
+      cwd?: string
+    }) => Promise<AgentProviderLaunchResult>
+    stopHarness: (id: string) => Promise<void>
+    harnessStatuses: () => Promise<AgentProviderStatusSnapshot[]>
     onRunEvent: (callback: (event: AgentRunEvent) => void) => () => void
     onRunsChanged: (callback: () => void) => () => void
     onDecisionsChanged: (callback: () => void) => () => void
@@ -3118,6 +3134,7 @@ export type PreloadApi = {
       | { available: false }
       | {
           available: true
+          qrDataUrl: string
           pairingUrl: string
           webClientUrl: string | null
           endpoint: string
@@ -3163,6 +3180,34 @@ export type PreloadApi = {
     ask: (utterance: string) => Promise<JarvisAskResult>
     speak: (text: string) => Promise<JarvisSpeakOutcome>
     openOrb: () => Promise<{ ok: boolean; windowId?: number }>
+    /** Snapshot of worktrees, terminals and agents for the voice agent. */
+    agentContext: () => Promise<string>
+    /** Proposes a change to Adam's own code; opens the review window. */
+    proposeSelfEdit: (
+      path: string,
+      content: string,
+      description: string
+    ) => Promise<{ ok: true; id: string; displayPath: string } | { ok: false; error: string }>
+    /** Writes an approved change, keeping a backup. */
+    applySelfEdit: (
+      id: string
+    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string }>
+    /** Throws away a pending change. */
+    discardSelfEdit: (id: string) => Promise<{ ok: boolean }>
+    /** Review window subscription for incoming proposals. */
+    onSelfEditProposal: (callback: (proposal: unknown) => void) => () => void
+    /** Summaries of recent calls, so the agent remembers across conversations. */
+    conversationMemory: () => Promise<string>
+    /** A contextual opening line for the agent's first message. */
+    agentOpening: () => Promise<string>
+    /** Runs an allowlisted `dobius` CLI command on the user's behalf. */
+    runDobius: (command: string) => Promise<string>
+    /** Whether the global ⌘T grab actually succeeded, plus the current phase. */
+    status: () => Promise<{ shortcutActive: boolean; phase: string }>
+    /** Mints a signed websocket URL for the configured ElevenLabs agent. */
+    agentSignedUrl: () => Promise<{ ok: true; url: string } | { ok: false; error: string }>
+    /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
+    askAdamText: (utterance: string) => Promise<JarvisAskResult>
     onState: (callback: (event: JarvisStateEvent) => void) => () => void
     onPttPressed: (callback: (data: { at: number }) => void) => () => void
     onPttReleased: (callback: (data: { at: number }) => void) => () => void

@@ -1,7 +1,12 @@
 import { useEffect } from 'react'
+import { VoiceOrb } from '../dictation/VoiceOrb'
 import { useJarvisTurn } from './use-jarvis-turn'
 import type { OrbHudState } from './use-jarvis-turn'
 import './orb-view.css'
+
+// ponytail: one orb in the product. This window shows the SAME VoiceOrb the
+// dictation HUD draws, so Jarvis never introduces a second look.
+const ORB_SIZE = 128
 
 function orbStateClasses(hudState: OrbHudState, ambientActive: boolean, wakeArmed: boolean): string {
   const classes = ['jarvis-orb']
@@ -19,7 +24,8 @@ function orbStateClasses(hudState: OrbHudState, ambientActive: boolean, wakeArme
 }
 
 export function OrbView(): React.JSX.Element {
-  const { hudState, wakeArmed, ambientActive, toggleTurn } = useJarvisTurn()
+  const { hudState, wakeArmed, ambientActive, toggleTurn, errorText, getAudioLevel } =
+    useJarvisTurn()
 
   // Why documentElement: transparency must apply before React paints; a class
   // on the root div cannot restyle <body> (mirrors FloatingPhoneRoot).
@@ -36,7 +42,9 @@ export function OrbView(): React.JSX.Element {
         ? 'Thinking'
         : hudState === 'speaking'
           ? 'Speaking'
-          : null
+          : hudState === 'error'
+            ? (errorText ?? 'Voice error')
+            : null
 
   return (
     <div className="jarvis-orb-root">
@@ -47,8 +55,7 @@ export function OrbView(): React.JSX.Element {
         aria-label="Jarvis voice orb"
         title={caption ?? 'Click to talk to ADAM'}
       >
-        <span className="jarvis-orb-ring" />
-        <span className="jarvis-orb-core" />
+        <VoiceOrb size={ORB_SIZE} getLevel={getAudioLevel} />
       </button>
       {caption ? <span className="jarvis-orb-caption">{caption}</span> : null}
     </div>

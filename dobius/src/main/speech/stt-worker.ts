@@ -30,6 +30,11 @@ let isStreaming = false
 let offlineBuffer: Float32Array[] = []
 let offlineSampleRate = 16000
 
+// Trailing silence (seconds) that ends an utterance once words were decoded.
+// ponytail: the tuning knob for how snappy a spoken turn feels — 1.2s reads as
+// a lag before every reply; below ~0.5s a mid-sentence breath cuts you off.
+const END_OF_SPEECH_SILENCE_S = 0.6
+
 function loadSherpa(): any {
   const modulePath = workerData?.sherpaModulePath
   if (!modulePath) {
@@ -134,7 +139,7 @@ function handleInit(msg: Extract<WorkerMessage, { type: 'init' }>): void {
         ...hotwords,
         enableEndpoint: 1,
         rule1MinTrailingSilence: 2.4,
-        rule2MinTrailingSilence: 1.2,
+        rule2MinTrailingSilence: END_OF_SPEECH_SILENCE_S,
         rule3MinUtteranceLength: 20
       }
       recognizer = sherpa.createOnlineRecognizer(config)
@@ -155,7 +160,7 @@ function handleInit(msg: Extract<WorkerMessage, { type: 'init' }>): void {
         decodingMethod: 'greedy_search',
         enableEndpoint: 1,
         rule1MinTrailingSilence: 2.4,
-        rule2MinTrailingSilence: 1.2,
+        rule2MinTrailingSilence: END_OF_SPEECH_SILENCE_S,
         rule3MinUtteranceLength: 20
       }
       recognizer = sherpa.createOnlineRecognizer(config)

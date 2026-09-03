@@ -21,7 +21,8 @@ import type {
   BriefingItem,
   CustomAgent,
   CustomAgentInput,
-  CustomAgentUpdate
+  CustomAgentUpdate,
+  CustomHarnessDefinition
 } from '../shared/agents'
 import type { DobiusPrompt } from '../shared/prompts'
 import type {
@@ -1154,6 +1155,15 @@ const api = {
       ipcRenderer.invoke('agents:getPingStatus'),
     pickDirectory: (args: { defaultPath?: string }): Promise<string | null> =>
       ipcRenderer.invoke('agents:pickDirectory', args),
+    listHarnesses: (): Promise<CustomHarnessDefinition[]> =>
+      ipcRenderer.invoke('agents:listHarnesses'),
+    saveHarness: (definition: CustomHarnessDefinition, originalId?: string | null) =>
+      ipcRenderer.invoke('agents:saveHarness', definition, originalId ?? null),
+    deleteHarness: (id: string): Promise<void> => ipcRenderer.invoke('agents:deleteHarness', id),
+    runHarness: (args: { id: string; prompt: string; cwd?: string }) =>
+      ipcRenderer.invoke('agents:runHarness', args),
+    stopHarness: (id: string): Promise<void> => ipcRenderer.invoke('agents:stopHarness', id),
+    harnessStatuses: () => ipcRenderer.invoke('agents:harnessStatuses'),
     onRunEvent: (callback: (event: AgentRunEvent) => void): (() => void) => {
       const listener = (_event: unknown, event: AgentRunEvent): void => callback(event)
       ipcRenderer.on('agents:runEvent', listener)
@@ -4258,6 +4268,7 @@ const api = {
       | { available: false }
       | {
           available: true
+          qrDataUrl: string
           pairingUrl: string
           webClientUrl: string | null
           endpoint: string
@@ -4412,6 +4423,34 @@ const api = {
       ipcRenderer.invoke('jarvis:ask', utterance),
     speak: (text: string): Promise<JarvisSpeakOutcome> => ipcRenderer.invoke('jarvis:speak', text),
     openOrb: (): Promise<{ ok: boolean; windowId?: number }> => ipcRenderer.invoke('jarvis:openOrb'),
+    agentContext: (): Promise<string> => ipcRenderer.invoke('jarvis:agentContext'),
+    agentOpening: (): Promise<string> => ipcRenderer.invoke('jarvis:agentOpening'),
+    conversationMemory: (): Promise<string> => ipcRenderer.invoke('jarvis:conversationMemory'),
+    proposeSelfEdit: (
+      path: string,
+      content: string,
+      description: string
+    ): Promise<{ ok: true; id: string; displayPath: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('jarvis:proposeSelfEdit', path, content, description),
+    applySelfEdit: (
+      id: string
+    ): Promise<{ ok: true; displayPath: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('jarvis:applySelfEdit', id),
+    discardSelfEdit: (id: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('jarvis:discardSelfEdit', id),
+    onSelfEditProposal: (callback: (proposal: unknown) => void): (() => void) => {
+      const listener = (_event: unknown, proposal: unknown): void => callback(proposal)
+      ipcRenderer.on('jarvis:self-edit-proposal', listener)
+      return () => ipcRenderer.removeListener('jarvis:self-edit-proposal', listener)
+    },
+    runDobius: (command: string): Promise<string> =>
+      ipcRenderer.invoke('jarvis:runDobius', command),
+    status: (): Promise<{ shortcutActive: boolean; phase: string }> =>
+      ipcRenderer.invoke('jarvis:status'),
+    agentSignedUrl: (): Promise<{ ok: true; url: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('jarvis:agentSignedUrl'),
+    askAdamText: (utterance: string): Promise<JarvisAskResult> =>
+      ipcRenderer.invoke('jarvis:askAdamText', utterance),
     onState: (callback: (event: JarvisStateEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: JarvisStateEvent): void =>
         callback(data)

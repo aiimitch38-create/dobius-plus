@@ -13,11 +13,13 @@ const LOOPBACK_ADDRESS = '127.0.0.1'
 // last displayed URL across settings collapse/navigation without less-protected storage.
 const runtimePairingUrlCache: {
   selectedAddress: string
+  qrDataUrl: string | null
   runtimePairingUrl: string | null
   webClientUrl: string | null
   runtimePairingDeviceId: string | null
 } = {
   selectedAddress: LOOPBACK_ADDRESS,
+  qrDataUrl: null,
   runtimePairingUrl: null,
   webClientUrl: null,
   runtimePairingDeviceId: null
@@ -38,6 +40,7 @@ export function RuntimePairingUrlGenerator({
     []
   )
   const [selectedAddress, setSelectedAddress] = useState(runtimePairingUrlCache.selectedAddress)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(runtimePairingUrlCache.qrDataUrl)
   const [runtimePairingUrl, setRuntimePairingUrl] = useState<string | null>(
     runtimePairingUrlCache.runtimePairingUrl
   )
@@ -162,10 +165,12 @@ export function RuntimePairingUrlGenerator({
   }, [loadRuntimeAccessGrants])
 
   const clearGeneratedUrls = (): void => {
+    runtimePairingUrlCache.qrDataUrl = null
     runtimePairingUrlCache.runtimePairingUrl = null
     runtimePairingUrlCache.webClientUrl = null
     runtimePairingUrlCache.runtimePairingDeviceId = null
     if (mountedRef.current) {
+      setQrDataUrl(null)
       setRuntimePairingUrl(null)
       setWebClientUrl(null)
       setRuntimePairingDeviceId(null)
@@ -191,10 +196,12 @@ export function RuntimePairingUrlGenerator({
         }
         return
       }
+      runtimePairingUrlCache.qrDataUrl = result.qrDataUrl
       runtimePairingUrlCache.runtimePairingUrl = result.pairingUrl
       runtimePairingUrlCache.webClientUrl = result.webClientUrl
       runtimePairingUrlCache.runtimePairingDeviceId = result.deviceId
       if (mountedRef.current) {
+        setQrDataUrl(result.qrDataUrl)
         setRuntimePairingUrl(result.pairingUrl)
         setWebClientUrl(result.webClientUrl)
         setRuntimePairingDeviceId(result.deviceId)
@@ -354,6 +361,7 @@ export function RuntimePairingUrlGenerator({
           selectedAddress={selectedAddress}
           refreshingNetworkInterfaces={refreshingNetworkInterfaces}
           isGeneratingPairing={isGeneratingPairing}
+          qrDataUrl={qrDataUrl}
           webClientUrl={webClientUrl}
           runtimePairingUrl={runtimePairingUrl}
           copiedTarget={copiedTarget}

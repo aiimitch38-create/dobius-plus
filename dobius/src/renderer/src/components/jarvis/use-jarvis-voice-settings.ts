@@ -5,6 +5,8 @@ export type JarvisVoiceFlags = {
   jarvisEnabled: boolean
   sttModel: string
   jarvisWakeWord: boolean
+  /** Non-empty switches ⌘T from one-shot turns to a live agent conversation. */
+  agentId: string
 }
 
 /**
@@ -19,7 +21,8 @@ export function useJarvisVoiceSettings(): {
   const [flags, setFlags] = useState<JarvisVoiceFlags>({
     jarvisEnabled: false,
     sttModel: '',
-    jarvisWakeWord: false
+    jarvisWakeWord: false,
+    agentId: ''
   })
   const flagsRef = useRef(flags)
 
@@ -29,7 +32,8 @@ export function useJarvisVoiceSettings(): {
       const value: JarvisVoiceFlags = {
         jarvisEnabled: next?.jarvisEnabled === true,
         sttModel: next?.sttModel ?? '',
-        jarvisWakeWord: next?.jarvisWakeWord === true
+        jarvisWakeWord: next?.jarvisWakeWord === true,
+        agentId: next?.elevenlabsAgentId?.trim() ?? ''
       }
       flagsRef.current = value
       setFlags(value)

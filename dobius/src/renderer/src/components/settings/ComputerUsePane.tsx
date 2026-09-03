@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Accessibility, Camera, ExternalLink, RefreshCw, ShieldCheck } from 'lucide-react'
+import { Accessibility, Camera, ExternalLink, RefreshCw, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import type {
+  ComputerUseCodeSignatureStatus,
   ComputerUsePermissionId,
   ComputerUsePermissionState,
   ComputerUsePermissionStatus
@@ -71,6 +72,7 @@ export function ComputerUsePane(): React.JSX.Element {
   const permissionOperationSequence = useRef(0)
   const mountedRef = useRef(true)
   const [helperUnavailableReason, setHelperUnavailableReason] = useState<string | null>(null)
+  const [signature, setSignature] = useState<ComputerUseCodeSignatureStatus | null>(null)
 
   const stateById = useMemo(
     () => new Map(states.map((state) => [state.id, state.status] as const)),
@@ -127,6 +129,7 @@ export function ComputerUsePane(): React.JSX.Element {
       setPlatform(result.platform)
       setStates(result.permissions)
       setHelperUnavailableReason(result.helperUnavailableReason)
+      setSignature(result.signature ?? null)
     } catch (error) {
       if (operationId !== permissionOperationSequence.current || !mountedRef.current) {
         return
@@ -225,6 +228,7 @@ export function ComputerUsePane(): React.JSX.Element {
       setPlatform(result.platform)
       setStates(result.permissions)
       setHelperUnavailableReason(result.helperUnavailableReason)
+      setSignature(result.signature ?? null)
       toast.message(
         translate(
           'auto.components.settings.ComputerUsePane.f189f448a3',
@@ -282,9 +286,29 @@ export function ComputerUsePane(): React.JSX.Element {
               onClick={() => void refresh()}
             >
               <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-              {translate('auto.components.settings.ComputerUsePane.d95d1cfab8', 'Refresh')}
+              {translate('auto.components.settings.ComputerUsePane.cec4a32da7', 'Re-check')}
             </Button>
           </div>
+
+          {signature?.adhoc ? (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-300" />
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                  {translate(
+                    'auto.components.settings.ComputerUsePane.0699f4b8d1',
+                    'Ad-hoc build detected'
+                  )}
+                </p>
+                <p className="text-xs leading-snug text-muted-foreground">
+                  {translate(
+                    'auto.components.settings.ComputerUsePane.3f67e69351',
+                    'macOS drops Screen Recording and Accessibility grants after every rebuild because this build is not Developer ID signed. A Developer ID signed build keeps them.'
+                  )}
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <div className="divide-y divide-border/60 rounded-lg border border-border/60">
@@ -341,7 +365,20 @@ export function ComputerUsePane(): React.JSX.Element {
             <button
               type="button"
               disabled={resetAccessDisabled}
-              onClick={() => void resetAccess()}
+              onClick={() => {
+                // Why: reset wipes OS-level TCC grants, so gate it behind an
+                // explicit confirm instead of a single accidental click.
+                const confirmed = window.confirm(
+                  translate(
+                    'auto.components.settings.ComputerUsePane.f8ce63d170',
+                    'Reset Computer Use grants? Accessibility and Screen Recording must be approved again.'
+                  )
+                )
+                if (!confirmed) {
+                  return
+                }
+                void resetAccess()
+              }}
               className="ml-auto mr-4 block w-28 text-right text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
             >
               {resetting

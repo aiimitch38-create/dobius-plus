@@ -120,8 +120,18 @@ export function registerMobileHandlers(rpcServer: DobiusRuntimeRpcServer): void 
         return { available: false as const }
       }
 
+      // Why: scanning this QR should open the web client directly when one is
+      // bundled (browser handoff, no app install required); fall back to the
+      // pairing URL so the code is still useful for a Dobius+ desktop client.
+      const qrDataUrl = await QRCode.toDataURL(offer.webClientUrl ?? offer.pairingUrl, {
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        width: 256
+      })
+
       return {
         available: true as const,
+        qrDataUrl,
         pairingUrl: offer.pairingUrl,
         webClientUrl: offer.webClientUrl,
         endpoint: offer.endpoint,
