@@ -493,6 +493,16 @@ function App(): React.JSX.Element {
   // and shutdown transitions where activeWorktreeId can briefly become null.
   const shouldMountTerminalWorkbench =
     activeWorktreeId !== null || hasMountedTerminalWorkbenchRef.current
+  // Communications follows the terminal-workbench rule: once opened it stays
+  // MOUNTED and is hidden with CSS. Remounting it on every tab switch re-ran
+  // the whole comms boot (loading flash, relay resubscribe, cache refill) and
+  // dropped live message delivery while the user was on other tabs.
+  const hasMountedCommunicationsRef = useRef(false)
+  if (activeView === 'buzz') {
+    hasMountedCommunicationsRef.current = true
+  }
+  const shouldMountCommunications =
+    activeView === 'buzz' || hasMountedCommunicationsRef.current
   // Why: visible worktree creation owns its faux tab strip from start to finish;
   // the previous workspace must stay mounted for retention without rendering
   // real chrome.
@@ -2381,7 +2391,6 @@ function App(): React.JSX.Element {
                               {activeView === 'settings' ? <Settings /> : null}
                               {activeView === 'skills' ? <SkillsPage /> : null}
                               {activeView === 'agents' ? <AgentsPage /> : null}
-                              {activeView === 'buzz' ? <BuzzPage /> : null}
                               {activeView === 'tasks' ? <TaskPage /> : null}
                               {activeView === 'automations' ? <AutomationsPage /> : null}
                               {activeView === 'activity' ? <ActivityPrototypePage /> : null}
@@ -2404,6 +2413,37 @@ function App(): React.JSX.Element {
                               ) : null}
                             </RecoverableRenderErrorBoundary>
                           </Suspense>
+                          {/* Communications: mounted once, hidden with CSS
+                              (terminal-workbench pattern). Switching tabs no
+                              longer restarts the hub — it is simply revealed,
+                              exactly as it was, and keeps receiving live
+                              messages while hidden. */}
+                          {shouldMountCommunications ? (
+                            <div
+                              className={
+                                activeView === 'buzz'
+                                  ? 'flex flex-1 min-w-0 min-h-0'
+                                  : 'hidden flex-1 min-w-0 min-h-0'
+                              }
+                            >
+                              <Suspense fallback={null}>
+                                <RecoverableRenderErrorBoundary
+                                  boundaryId="page.buzz"
+                                  surface="page"
+                                  title={translate(
+                                    'auto.App.b7a714db1e',
+                                    'This page hit an error.'
+                                  )}
+                                  description={translate(
+                                    'auto.App.03a14f6b5b',
+                                    'Retry the page or navigate to another Dobius+ surface.'
+                                  )}
+                                >
+                                  <BuzzPage />
+                                </RecoverableRenderErrorBoundary>
+                              </Suspense>
+                            </div>
+                          ) : null}
                         </div>
                         {showFloatingTerminalButton ? (
                           <FloatingTerminalToggleButton

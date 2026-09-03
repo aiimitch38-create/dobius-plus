@@ -19,6 +19,12 @@
 .dobius-comms-embed {
   height: 100%;
   min-height: 0;
+  /* Fill the persistent keep-mounted wrapper (a row-flex container in
+     App.tsx) in both axes — without these the embed sizes to content
+     when rendered as a flex item instead of a lone block child. */
+  width: 100%;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
