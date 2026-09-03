@@ -274,3 +274,42 @@ then `grep -c`, then read. Never pipe a verification command into `head`/`tail`.
 - Failed because: `config/tsconfig.tc.web.tsbuildinfo` (incremental build state) was stale and tsgo kept type-checking the consumer against the cached old shape of the merged declaration. Fifteen minutes went into hunting a nonexistent second `Window.api` declaration.
 - Works instead: when a type error contradicts a declaration you JUST edited — especially on a `declare global` merge — `rm config/tsconfig.tc.*.tsbuildinfo` and re-run before debugging the types. The gate script is unaffected (it happened to have fresh state), but interactive runs can wedge.
 - Detection: the error's inline type expansion lists one property fewer than the source block currently has — count them.
+
+## 2026-08-30 — Fixing the wrong copy of the repo: THREE Dobius source trees exist
+
+Symptom: "Dobius+ hit a renderer error" (blank app shell). Fixed it, installed it,
+verified it live (graphState: ready, 19 terminals alive) — and hours later the exact
+same error was back, with the exact same root cause.
+
+Root cause of the RELAPSE (not the crash): the fix went into
+`~/Projects (Code)/Dobius/dobius-plus`, but the app that gets installed is built from
+`~/Projects (Code)/dobius-adam` (branch feat/adam-voice-control). An overnight build
+session there reinstalled the app at 03:01 and put the bug straight back.
+
+Three trees carry the same package name + version (dobius-plus@2.0.0-rc.1):
+  ~/Projects (Code)/Dobius/dobius-plus      <- version + git history matched; NOT what ships
+  ~/Projects (Code)/dobius-adam             <- what actually built the installed app
+  /Volumes/Storage/Projects (Code)/Dobius/dobius-plus   <- stale (c4eddd3)
+
+Version match, commit-history match, and the app's own runtime log paths all pointed at
+the wrong tree. None of those identify the shipping tree.
+
+### What actually identifies the shipping tree
+Read the build log the installer left behind — it prints the pnpm cwd:
+    head -6 /tmp/b-ev.log
+    > dobius-plus@2.0.0-rc.1 build:electron-vite /Users/bayou/Projects (Code)/dobius-adam/dobius
+Or compare the installed artifact against each candidate's `out/`:
+    npx asar extract-file /Applications/Dobius+.app/Contents/Resources/app.asar out/preload/index.js
+    # then diff/cmp against each tree's dobius/out/preload/index.js
+
+### Rule
+Before editing ANY Dobius source file to fix the installed app, prove which tree built it.
+A fix in a tree that does not ship is worse than no fix: it looks verified, then silently reverts.
+
+### The underlying crash (separate lesson, worth keeping)
+Two preload rollup entries (`index.ts` + `communications.ts`) made rollup emit
+`require("./communications.js")` in out/preload/index.js. The main window sets
+`sandbox: true`, and a sandboxed preload may not require a sibling file — it threw,
+`window.api` was never exposed, and App died in the root error boundary.
+Diagnostic tell: `dobius status` -> graphState: unavailable (renderer never mounted),
+vs graphState: ready when the shell is healthy.
