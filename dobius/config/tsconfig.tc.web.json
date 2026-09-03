@@ -14,9 +14,13 @@
   ],
   "compilerOptions": {
     "baseUrl": null,
+    "resolveJsonModule": true,
     "paths": {
       "@renderer/*": ["../src/renderer/src/*"],
       "@comms/*": ["../src/renderer/src/components/communications/*"],
+      "@features-manifest": [
+        "../src/renderer/src/components/communications/preview-features.json"
+      ],
       "@tauri-apps/api/core": ["../src/renderer/src/components/communications/tauri-shim/core.ts"],
       "@tauri-apps/api/event": ["../src/renderer/src/components/communications/tauri-shim/event.ts"],
       "@tauri-apps/api/mocks": ["../src/renderer/src/components/communications/tauri-shim/mocks.ts"],
