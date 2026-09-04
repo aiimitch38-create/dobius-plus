@@ -39,7 +39,6 @@ import {
   getLegacyWorkspaceStorage,
   persistCurrentIdentity,
   signNostrIdentityBinding,
-  signOut,
   type Identity,
   type LegacyWorkspaceStorageSnapshot,
   type NostrIdentityBindingInput
@@ -114,7 +113,6 @@ export function registerCommunicationsIdentityHandlers(): void {
     'communications:identity:persistCurrentIdentity',
     (): Identity => persistCurrentIdentity()
   )
-  ipcMain.handle('communications:identity:signOut', (): void => signOut())
   ipcMain.handle(
     'communications:identity:getLegacyWorkspaceStorage',
     (): LegacyWorkspaceStorageSnapshot => getLegacyWorkspaceStorage()

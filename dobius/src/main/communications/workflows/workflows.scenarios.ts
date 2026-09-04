@@ -21,10 +21,10 @@
  * created_at tie-break race for the runner's second-boundary wait to guard.
  *
  * TRIGGER DETERMINISM: triggerWorkflow executes steps in-process with a
- * deliberately small supported vocabulary (log/delay/noop — see
- * workflow-executor.ts) and never spawns a real agent run, so a definition
- * containing only those step types deterministically completes headless.
- * This fixture uses exactly such a definition; no managed agent or runnable
+ * deliberately small supported vocabulary (log/delay/noop/agent_dispatch —
+ * see workflow-executor.ts). This fixture sticks to log/delay/noop, which
+ * never spawn a real agent run, so a definition containing only those step
+ * types deterministically completes headless. No managed agent or runnable
  * target is needed.
  *
  * CLEANUP: the final step deletes the workflow it created. deleteWorkflow
