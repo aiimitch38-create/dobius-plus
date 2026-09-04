@@ -80,10 +80,15 @@ function post(base: string, path: string, body: unknown): Promise<Response> {
  * sequence it always did.
  */
 function openSocketReader(
-  port: number
+  port: number,
+  options: { origin?: string } = {}
 ): Promise<{ socket: WebSocket; next: () => Promise<unknown[]>; authChallenge: Promise<string> }> {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`ws://127.0.0.1:${port}`)
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}`,
+      undefined,
+      options.origin === undefined ? undefined : { headers: { Origin: options.origin } }
+    )
     openSockets.push(socket)
     const queue: unknown[][] = []
     const waiters: ((frame: unknown[]) => void)[] = []
@@ -302,6 +307,26 @@ describe('relay WebSocket', () => {
     socket.send(JSON.stringify(['REQ', 'empty', { kinds: [9] }]))
 
     expect(await next()).toEqual(['EOSE', 'empty'])
+  })
+
+  it('refuses a REQ from a socket opened with an ordinary website Origin', async () => {
+    const { base, port } = await startTestRelay()
+    await post(base, '/events', signEvent(makeKeypair(), { content: 'over the socket' }))
+
+    const { socket, next } = await openSocketReader(port, { origin: 'https://evil.example' })
+    socket.send(JSON.stringify(['REQ', 'sub-1', { kinds: [1] }]))
+
+    expect(await next()).toEqual(['NOTICE', 'forbidden: this origin may not query the relay'])
+  })
+
+  it('still allows an untrusted-origin socket to publish an EVENT (parity with POST /events)', async () => {
+    const { port } = await startTestRelay()
+    const event = signEvent(makeKeypair(), { content: 'from an untrusted origin' })
+
+    const { socket, next } = await openSocketReader(port, { origin: 'https://evil.example' })
+    socket.send(JSON.stringify(['EVENT', event]))
+
+    expect(await next()).toEqual(['OK', event.id, true, ''])
   })
 
   it('accepts an EVENT frame with OK and stores it', async () => {

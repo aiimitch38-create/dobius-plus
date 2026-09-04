@@ -44,6 +44,13 @@ const KNOWN_PATHS = new Set(['/query', '/events'])
  * loopback (packaged Buzz loaded from `file:` sends `null`; dev serves off
  * localhost) is trusted; any other Origin means some other site's tab is
  * trying to read the relay through the wildcard CORS headers.
+ *
+ * The loopback-hostname check duplicates dobius-runtime-files.ts's
+ * `isLoopbackFileUriHostname`, browser-webauthn-access.ts's
+ * `LOCALHOST_HOSTNAMES`, and advertised-url-watcher.ts's `classifyHost` —
+ * each lives in a different subsystem with its own shape (file-URI parsing,
+ * a Set for WebAuthn origin checks, a fuller IP-classifying function for
+ * port scanning), so it wasn't pulled into one shared helper here.
  */
 function isTrustedQueryOrigin(origin: string | undefined): boolean {
   if (origin === undefined || origin === 'null') {
@@ -81,6 +88,13 @@ type RelayContext = {
   subscriptions: RelaySubscriptions
   /** NIP-42 challenge + authenticated pubkey per connection, keyed like `subscriptions`. */
   auth: Map<WebSocket, ConnectionAuthState>
+  /**
+   * Whether this socket's Origin (captured once, at the WS upgrade) is allowed to
+   * REQ — same trust test as HTTP `/query`, applied over the WebSocket transport
+   * so a browser tab can't reach the same chat history by opening a socket
+   * instead of POSTing.
+   */
+  queryTrusted: Map<WebSocket, boolean>
 }
 
 type RequestBody = { ok: true; text: string } | { ok: false; reason: 'too-large' | 'aborted' }
@@ -274,6 +288,10 @@ function handleReq(ctx: RelayContext, socket: WebSocket, frame: unknown[]): void
     sendFrame(socket, ['NOTICE', 'invalid: REQ needs a string subscription id'])
     return
   }
+  if (!ctx.queryTrusted.get(socket)) {
+    sendFrame(socket, ['NOTICE', 'forbidden: this origin may not query the relay'])
+    return
+  }
   const filters = parseRelayFilters(frame.slice(2))
   if (!filters) {
     sendFrame(socket, ['NOTICE', `invalid: REQ ${subId} carries a malformed filter`])
@@ -335,8 +353,12 @@ function handleFrame(ctx: RelayContext, socket: WebSocket, raw: string): void {
  * to request it (see relay-auth.ts). Unauthenticated sockets are otherwise
  * unaffected — nothing here gates REQ or EVENT on `authenticatedPubkey`.
  */
-function attachConnection(ctx: RelayContext, socket: WebSocket): void {
+function attachConnection(ctx: RelayContext, socket: WebSocket, upgradeRequest: IncomingMessage): void {
   ctx.subscriptions.set(socket, new Map())
+  // Captured once, at the upgrade: the Origin header a browser sends on the
+  // WebSocket handshake is the same one it sends on a fetch(), so this reuses
+  // the HTTP /query trust test rather than trusting every socket by default.
+  ctx.queryTrusted.set(socket, isTrustedQueryOrigin(upgradeRequest.headers.origin))
   sendFrame(socket, ['AUTH', beginAuthChallenge(ctx.auth, socket)])
 
   socket.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
@@ -350,6 +372,7 @@ function attachConnection(ctx: RelayContext, socket: WebSocket): void {
   const drop = (): void => {
     ctx.subscriptions.delete(socket)
     ctx.auth.delete(socket)
+    ctx.queryTrusted.delete(socket)
   }
   socket.on('close', drop)
   socket.on('error', drop)
@@ -367,7 +390,12 @@ function attachConnection(ctx: RelayContext, socket: WebSocket): void {
 export async function startRelayServer(options: RelayServerOptions): Promise<RelayServerHandle> {
   const host = options.host ?? RELAY_HOST
   const requestedPort = options.port ?? RELAY_PORT
-  const ctx: RelayContext = { store: options.store, subscriptions: new Map(), auth: new Map() }
+  const ctx: RelayContext = {
+    store: options.store,
+    subscriptions: new Map(),
+    auth: new Map(),
+    queryTrusted: new Map()
+  }
 
   const server = createServer((req, res) => {
     routeRequest(ctx, req, res).catch((err: Error) => {
@@ -387,7 +415,7 @@ export async function startRelayServer(options: RelayServerOptions): Promise<Rel
   // Attached only after a successful listen: a WebSocketServer bound to a server
   // that is still failing to listen re-emits the bind error uncatchably.
   const wss = new WebSocketServer({ server, maxPayload: MAX_BODY_BYTES })
-  wss.on('connection', (socket) => attachConnection(ctx, socket))
+  wss.on('connection', (socket, request) => attachConnection(ctx, socket, request))
   wss.on('error', (err) => console.warn(`[relay] websocket error: ${err.message}`))
   server.on('error', (err) => console.warn(`[relay] server error: ${err.message}`))
 
@@ -425,6 +453,7 @@ async function closeServer(server: Server, wss: WebSocketServer, ctx: RelayConte
   }
   ctx.subscriptions.clear()
   ctx.auth.clear()
+  ctx.queryTrusted.clear()
   await new Promise<void>((resolve) => wss.close(() => resolve()))
   // Idle keep-alive sockets (every `fetch` leaves one) keep `close` pending
   // forever otherwise, so the process would never exit.
