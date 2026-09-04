@@ -51,14 +51,29 @@ const KNOWN_PATHS = new Set(['/query', '/events'])
  * each lives in a different subsystem with its own shape (file-URI parsing,
  * a Set for WebAuthn origin checks, a fuller IP-classifying function for
  * port scanning), so it wasn't pulled into one shared helper here.
+ *
+ * Chromium's `fetch()` and its WebSocket upgrade disagree on how they
+ * serialize a `file:` document's opaque origin: `fetch()` (used by `/query`
+ * and `/events`) sends the literal string `'null'`, already handled above,
+ * but a WebSocket handshake from the same `file://.../index.html` page (used
+ * by every REQ subscription — channel/DM history, live view, reactions,
+ * backfill) sends `'file://'`. Missing this made every WS-based read from
+ * Dobius+'s own renderer get a `forbidden` NOTICE and silently time out,
+ * while HTTP reads/writes kept working — exactly the "replies show in Inbox
+ * but never in the channel" symptom.
  */
 function isTrustedQueryOrigin(origin: string | undefined): boolean {
-  if (origin === undefined || origin === 'null') {
+  if (origin === undefined || origin === 'null' || origin === 'file://') {
     return true
   }
   try {
-    const { hostname } = new URL(origin)
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+    const { hostname, protocol } = new URL(origin)
+    return (
+      protocol === 'file:' ||
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1'
+    )
   } catch {
     return false
   }

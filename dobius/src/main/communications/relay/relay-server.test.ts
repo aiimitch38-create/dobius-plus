@@ -319,6 +319,23 @@ describe('relay WebSocket', () => {
     expect(await next()).toEqual(['NOTICE', 'forbidden: this origin may not query the relay'])
   })
 
+  it('allows a REQ from a socket opened with a file:// Origin (Dobius+\'s own packaged renderer)', async () => {
+    const { base, port } = await startTestRelay()
+    const event = signEvent(makeKeypair(), { content: 'from the packaged app' })
+    await post(base, '/events', event)
+
+    // Chromium's WebSocket upgrade sends the literal string 'file://' for a
+    // file:// document's opaque origin, unlike fetch()'s 'null' — see
+    // isTrustedQueryOrigin's doc comment. Regression test for the bug where
+    // every WS-based read from Dobius+'s own renderer silently timed out
+    // while HTTP reads/writes (which get 'null') kept working.
+    const { socket, next } = await openSocketReader(port, { origin: 'file://' })
+    socket.send(JSON.stringify(['REQ', 'sub-1', { kinds: [1] }]))
+
+    expect(await next()).toEqual(['EVENT', 'sub-1', event])
+    expect(await next()).toEqual(['EOSE', 'sub-1'])
+  })
+
   it('still allows an untrusted-origin socket to publish an EVENT (parity with POST /events)', async () => {
     const { port } = await startTestRelay()
     const event = signEvent(makeKeypair(), { content: 'from an untrusted origin' })
