@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useAppStore } from '@/store'
+import type { AppState } from '@/store'
 import { isRemoteWorkspaceSnapshotApplyInProgress } from './useIpcEvents'
 import { getSystemPrefersDarkSnapshot } from '../components/terminal-pane/use-system-prefers-dark'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
@@ -21,11 +22,35 @@ import {
 import { buildWorkspaceSessionPayload, shouldPersistWorkspaceSession } from '@/lib/workspace-session'
 import { applyRemoteWorkspacePatchStatus } from '@/lib/apply-remote-workspace-patch-status'
 
+type GitHubRefreshActions = Pick<
+  AppState,
+  | 'refreshAllGitHub'
+  | 'bumpGitHubPRVisibleRefreshGeneration'
+  | 'reportVisibleGitHubPRRefreshCandidates'
+>
+
 // Why: session persistence never drives JSX — it only writes to disk and
 // registers process-lifetime subscriptions. Kept as one hook (not split
 // further) because each effect is a small, independent app-lifetime
 // registration with no shared state between them.
-export function useAppLifecyclePersistence(workspaceSessionReady: boolean): void {
+export function useAppLifecyclePersistence(
+  workspaceSessionReady: boolean,
+  githubRefreshActions: GitHubRefreshActions
+): void {
+  // Refresh GitHub data (PR/issue status) when window regains focus
+  useEffect(() => {
+    const handler = (): void => {
+      if (document.visibilityState === 'visible') {
+        githubRefreshActions.refreshAllGitHub()
+        githubRefreshActions.bumpGitHubPRVisibleRefreshGeneration()
+      } else {
+        githubRefreshActions.reportVisibleGitHubPRRefreshCandidates([], Date.now())
+      }
+    }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [githubRefreshActions])
+
   useEffect(() => {
     setRuntimeGraphStoreStateGetter(useAppStore.getState)
     return () => {
