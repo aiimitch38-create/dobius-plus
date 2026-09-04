@@ -22,6 +22,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   AGENT_COLORS,
   AGENT_ICONS,
+  type AgentEngine,
   type AgentIdentityFileName,
   type AgentReadableFiles
 } from '../../../../shared/agents'
@@ -31,7 +32,16 @@ import { AGENT_ICON_COMPONENTS } from './AgentAvatar'
 import { AgentScheduleEditor } from './AgentScheduleEditor'
 import { AgentSkillsPicker } from './AgentSkillsPicker'
 import { AgentWorkingDirectoryPicker } from './AgentWorkingDirectoryPicker'
-import { AGENT_MODELS, AGENT_TOOLS, type AgentDraft } from './agent-page-state'
+import { AGENT_MODELS, AGENT_TOOLS, CODEX_MODELS, type AgentDraft } from './agent-page-state'
+
+const ENGINE_MODELS: Record<AgentEngine, string[]> = {
+  claude: AGENT_MODELS,
+  codex: CODEX_MODELS
+}
+const ENGINE_LABELS: Record<AgentEngine, string> = {
+  claude: 'Claude',
+  codex: 'ChatGPT'
+}
 
 const IDENTITY_FILE_NAMES: AgentIdentityFileName[] = ['soul', 'role', 'playbook', 'rules']
 const IDENTITY_HINTS: Record<AgentIdentityFileName, string> = {
@@ -191,6 +201,35 @@ export function AgentEditForm({
             </div>
           </Field>
 
+          <Field label="Engine">
+            <Tabs
+              value={draft.engine ?? 'claude'}
+              onValueChange={(value) => {
+                const engine = value as AgentEngine
+                const models = ENGINE_MODELS[engine]
+                onDraftChange({
+                  ...draft,
+                  engine,
+                  // The previous engine's model id isn't valid for the new
+                  // engine's CLI (e.g. `codex --model claude-opus-4-8` would
+                  // just fail) — reset to that engine's first option.
+                  model:
+                    draft.model && models.includes(draft.model)
+                      ? draft.model
+                      : (models[0] ?? draft.model)
+                })
+              }}
+            >
+              <TabsList variant="line">
+                {(Object.keys(ENGINE_LABELS) as AgentEngine[]).map((engine) => (
+                  <TabsTrigger key={engine} value={engine}>
+                    {ENGINE_LABELS[engine]}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </Field>
+
           <Field label="Model">
             <Select
               value={draft.model}
@@ -200,7 +239,7 @@ export function AgentEditForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {AGENT_MODELS.map((model) => (
+                {ENGINE_MODELS[draft.engine ?? 'claude'].map((model) => (
                   <SelectItem key={model} value={model}>
                     {model}
                   </SelectItem>

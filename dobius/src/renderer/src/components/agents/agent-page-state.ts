@@ -13,6 +13,28 @@ export const AGENT_MODELS = [
   'claude-haiku-4-5'
 ]
 
+// Real Codex CLI model ids, kept in sync with the ones this app's own
+// Codex cost tracker prices (dobius/src/main/codex-usage/store.ts's
+// MODEL_PRICING) — these are the values `codex --model <id>` actually
+// accepts, not aspirational names.
+export const CODEX_MODELS = [
+  'gpt-5.5',
+  'gpt-5.5-pro',
+  'gpt-5.4',
+  'gpt-5.4-pro',
+  'gpt-5.4-mini',
+  'gpt-5.4-nano',
+  'gpt-5.3',
+  'gpt-5.3-codex',
+  'gpt-5.3-codex-spark',
+  'gpt-5.2',
+  'gpt-5.2-codex',
+  'gpt-5.1',
+  'gpt-5.1-codex',
+  'gpt-5.1-codex-max',
+  'gpt-5'
+]
+
 export const AGENT_TOOLS = [
   'Read',
   'Grep',
@@ -48,6 +70,7 @@ export function agentToDraft(agent: CustomAgent | null): AgentDraft {
       icon: 'bot',
       color: '#b9bcc2',
       systemPrompt: '',
+      engine: 'claude',
       model: AGENT_MODELS[0],
       allowedTools: ['Read', 'Grep', 'Glob'],
       skills: [],
@@ -73,6 +96,8 @@ export function agentToDraft(agent: CustomAgent | null): AgentDraft {
     icon: agent.icon,
     color: agent.color,
     systemPrompt: agent.systemPrompt,
+    engine: agent.engine ?? 'claude',
+    accountId: agent.accountId,
     model: agent.model,
     allowedTools: [...agent.allowedTools],
     skills: [...agent.skills],

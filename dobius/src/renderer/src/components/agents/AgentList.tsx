@@ -64,9 +64,14 @@ export function AgentList({
             <Plus className="size-4" />
             New crew member
           </Button>
-          <Button size="sm" variant="outline" onClick={onOpenTemplates}>
+          <Button
+            size="icon-sm"
+            variant="outline"
+            title="Templates"
+            aria-label="Templates"
+            onClick={onOpenTemplates}
+          >
             <LayoutTemplate className="size-4" />
-            Templates
           </Button>
         </div>
       </div>
