@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+
 import {
   mergeHistoryOverSnapshot,
   messageSnapshotKey,
@@ -8,6 +12,19 @@ import {
   removeMessageSnapshotsForRelay,
   writeMessageSnapshot,
 } from "./messageSnapshot.ts";
+
+// Same parser react-markdown renders with (see CLAUDE.md's Tech Stack) — a
+// placeholder string is only safe if this doesn't turn it into an image node.
+const markdownProcessor = unified().use(remarkParse).use(remarkGfm);
+
+function collectNodeTypes(tree) {
+  const types = [];
+  (function walk(node) {
+    types.push(node.type);
+    for (const child of node.children ?? []) walk(child);
+  })(tree);
+  return types;
+}
 
 if (typeof globalThis.window === "undefined") {
   const storage = new Map();
@@ -133,7 +150,34 @@ test("inline base64 screenshots are stripped before persisting", () => {
   assert.equal(persisted.length, 1);
   assert.ok(!persisted[0].content.includes(bigBase64));
   assert.ok(persisted[0].content.includes("caption"));
-  assert.ok(persisted[0].content.includes("[image omitted from cache]"));
+  assert.ok(persisted[0].content.includes("image omitted from cache"));
+
+  // The string-level checks above would also pass for a mangled
+  // `![screenshot]([image omitted from cache])` — CommonMark forbids
+  // unescaped spaces in a link destination, so that string fails to parse
+  // as an image and renders as garbled literal syntax instead. Parse the
+  // real output to prove it renders as plain text, not broken markdown.
+  const tree = markdownProcessor.parse(persisted[0].content);
+  const types = collectNodeTypes(tree);
+  assert.ok(!types.includes("image"), `expected no image node, got: ${types.join(", ")}`);
+  assert.ok(!types.includes("link"), `expected no link node, got: ${types.join(", ")}`);
+  const textValues = [];
+  (function walk(node) {
+    if (node.type === "text") textValues.push(node.value);
+    for (const child of node.children ?? []) walk(child);
+  })(tree);
+  // Exact-equality (not just "includes") — a garbled
+  // `![screenshot]([image omitted from cache])` also parses to a text node
+  // whose value merely *contains* the placeholder substring, so "includes"
+  // alone would not have caught that regression.
+  assert.ok(
+    textValues.includes("image omitted from cache"),
+    `expected a plain text node exactly equal to the placeholder, got: ${JSON.stringify(textValues)}`,
+  );
+  assert.ok(
+    textValues.every((value) => !value.includes("![") && !value.includes("](")),
+    `expected no leftover markdown image syntax in text nodes, got: ${JSON.stringify(textValues)}`,
+  );
 });
 
 test("remove clears every snapshot for that relay only", () => {

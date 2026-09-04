@@ -33,10 +33,17 @@ const MAX_CHANNELS_PER_RELAY = 20;
 // MB. The snapshot only needs to instant-paint text while the real timeline
 // revalidates from the relay, so heavy inline images are dropped from the
 // persisted copy rather than counted against the shared localStorage quota.
-const INLINE_IMAGE_DATA_URL = /data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g;
+//
+// Must match the WHOLE `![alt](data:...)` image tag, not just the data URL
+// inside it — replacing only the URL leaves `![alt](placeholder)`, which
+// CommonMark link destinations forbid (unescaped spaces), so it fails to
+// parse as an image and renders as garbled literal text instead. The
+// placeholder itself must not contain `[`/`]`/`(`/`)`, or it could be
+// mistaken for markdown syntax once substituted into the message body.
+const INLINE_IMAGE_MARKDOWN = /!\[[^\]]*\]\(data:image\/[^)]+\)/g;
 
 function stripInlineImageData(content: string): string {
-  return content.replace(INLINE_IMAGE_DATA_URL, "[image omitted from cache]");
+  return content.replace(INLINE_IMAGE_MARKDOWN, "image omitted from cache");
 }
 
 export function messageSnapshotKey(relayUrl: string, channelId: string) {
