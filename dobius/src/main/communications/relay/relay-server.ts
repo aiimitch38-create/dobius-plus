@@ -36,6 +36,27 @@ const PREFLIGHT_HEADERS = {
 
 const KNOWN_PATHS = new Set(['/query', '/events'])
 
+/**
+ * `/query` hands back the full local chat history, so — unlike `/events` — it
+ * must not be reachable from an arbitrary web page even though every response
+ * carries `Access-Control-Allow-Origin: *` for Buzz's sake (see above). A
+ * request with no Origin header (curl, Node fetch) or an Origin backed by the
+ * loopback (packaged Buzz loaded from `file:` sends `null`; dev serves off
+ * localhost) is trusted; any other Origin means some other site's tab is
+ * trying to read the relay through the wildcard CORS headers.
+ */
+function isTrustedQueryOrigin(origin: string | undefined): boolean {
+  if (origin === undefined || origin === 'null') {
+    return true
+  }
+  try {
+    const { hostname } = new URL(origin)
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+  } catch {
+    return false
+  }
+}
+
 export type RelayServerOptions = {
   store: RelayStore
   port?: number
@@ -218,6 +239,11 @@ async function routeRequest(
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST, OPTIONS')
     sendText(res, 405, 'method not allowed: use POST')
+    return
+  }
+
+  if (path === '/query' && !isTrustedQueryOrigin(req.headers.origin)) {
+    sendText(res, 403, 'forbidden: this origin may not query the relay')
     return
   }
 

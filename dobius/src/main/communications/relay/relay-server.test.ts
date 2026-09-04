@@ -174,6 +174,39 @@ describe('relay HTTP routes', () => {
     )
   })
 
+  it('refuses a /query request whose Origin is an ordinary website, even with CORS wide open', async () => {
+    const { base } = await startTestRelay()
+
+    const fromEvilSite = await fetch(`${base}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' },
+      body: JSON.stringify([])
+    })
+    expect(fromEvilSite.status).toBe(403)
+
+    // /events is unaffected — only /query hands back chat history.
+    const eventsFromEvilSite = await fetch(`${base}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' },
+      body: JSON.stringify({ id: 'nope' })
+    })
+    expect(eventsFromEvilSite.status).not.toBe(403)
+  })
+
+  it('allows /query from the packaged app (Origin: null) and requests with no Origin', async () => {
+    const { base } = await startTestRelay()
+
+    const packaged = await fetch(`${base}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'null' },
+      body: JSON.stringify([])
+    })
+    expect(packaged.status).toBe(200)
+
+    const noOrigin = await post(base, '/query', [])
+    expect(noOrigin.status).toBe(200)
+  })
+
   it('reports a duplicate submission as accepted with a message', async () => {
     const { base } = await startTestRelay()
     const event = signEvent(makeKeypair())
