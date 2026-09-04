@@ -80,10 +80,15 @@ function post(base: string, path: string, body: unknown): Promise<Response> {
  * sequence it always did.
  */
 function openSocketReader(
-  port: number
+  port: number,
+  options: { origin?: string } = {}
 ): Promise<{ socket: WebSocket; next: () => Promise<unknown[]>; authChallenge: Promise<string> }> {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`ws://127.0.0.1:${port}`)
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}`,
+      undefined,
+      options.origin === undefined ? undefined : { headers: { Origin: options.origin } }
+    )
     openSockets.push(socket)
     const queue: unknown[][] = []
     const waiters: ((frame: unknown[]) => void)[] = []
@@ -172,6 +177,39 @@ describe('relay HTTP routes', () => {
     expect(await response.text()).toBe(
       'invalid request: body must be a JSON array of NIP-01 filters'
     )
+  })
+
+  it('refuses a /query request whose Origin is an ordinary website, even with CORS wide open', async () => {
+    const { base } = await startTestRelay()
+
+    const fromEvilSite = await fetch(`${base}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' },
+      body: JSON.stringify([])
+    })
+    expect(fromEvilSite.status).toBe(403)
+
+    // /events is unaffected — only /query hands back chat history.
+    const eventsFromEvilSite = await fetch(`${base}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' },
+      body: JSON.stringify({ id: 'nope' })
+    })
+    expect(eventsFromEvilSite.status).not.toBe(403)
+  })
+
+  it('allows /query from the packaged app (Origin: null) and requests with no Origin', async () => {
+    const { base } = await startTestRelay()
+
+    const packaged = await fetch(`${base}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'null' },
+      body: JSON.stringify([])
+    })
+    expect(packaged.status).toBe(200)
+
+    const noOrigin = await post(base, '/query', [])
+    expect(noOrigin.status).toBe(200)
   })
 
   it('reports a duplicate submission as accepted with a message', async () => {
@@ -269,6 +307,26 @@ describe('relay WebSocket', () => {
     socket.send(JSON.stringify(['REQ', 'empty', { kinds: [9] }]))
 
     expect(await next()).toEqual(['EOSE', 'empty'])
+  })
+
+  it('refuses a REQ from a socket opened with an ordinary website Origin', async () => {
+    const { base, port } = await startTestRelay()
+    await post(base, '/events', signEvent(makeKeypair(), { content: 'over the socket' }))
+
+    const { socket, next } = await openSocketReader(port, { origin: 'https://evil.example' })
+    socket.send(JSON.stringify(['REQ', 'sub-1', { kinds: [1] }]))
+
+    expect(await next()).toEqual(['NOTICE', 'forbidden: this origin may not query the relay'])
+  })
+
+  it('still allows an untrusted-origin socket to publish an EVENT (parity with POST /events)', async () => {
+    const { port } = await startTestRelay()
+    const event = signEvent(makeKeypair(), { content: 'from an untrusted origin' })
+
+    const { socket, next } = await openSocketReader(port, { origin: 'https://evil.example' })
+    socket.send(JSON.stringify(['EVENT', event]))
+
+    expect(await next()).toEqual(['OK', event.id, true, ''])
   })
 
   it('accepts an EVENT frame with OK and stores it', async () => {

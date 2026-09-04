@@ -4,7 +4,17 @@ import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const showOpenDialogMock = vi.fn()
-vi.mock('electron', () => ({ dialog: { showOpenDialog: (...args: unknown[]) => showOpenDialogMock(...args) } }))
+// Why a real directory, not a made-up string: assertPathOutsideProtectedRoots
+// resolves each root's nearest *existing* ancestor to catch symlink escapes,
+// so a root that doesn't exist on disk collapses to "/" and (correctly, if
+// confusingly for a test) refuses everything — Electron's real userData is
+// always created at startup, so this fake one needs to exist too.
+let userDataDir: string
+const getPathMock = vi.fn((..._args: unknown[]) => userDataDir)
+vi.mock('electron', () => ({
+  dialog: { showOpenDialog: (...args: unknown[]) => showOpenDialogMock(...args) },
+  app: { getPath: (...args: unknown[]) => getPathMock(...args) }
+}))
 
 const storeBlobMock = vi.fn()
 const readBlobBytesByUrlMock = vi.fn()
@@ -24,6 +34,7 @@ describe('media-commands', () => {
 
   beforeEach(() => {
     dir = mkdtempSync(path.join(tmpdir(), 'dobius-workstation-media-cmds-'))
+    userDataDir = mkdtempSync(path.join(tmpdir(), 'dobius-workstation-media-userdata-'))
     showOpenDialogMock.mockReset()
     storeBlobMock.mockReset()
     readBlobBytesByUrlMock.mockReset()
@@ -32,6 +43,7 @@ describe('media-commands', () => {
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true })
+    rmSync(userDataDir, { recursive: true, force: true })
   })
 
   it('pickAndUploadImage returns null when the user cancels the dialog', async () => {
@@ -69,6 +81,21 @@ describe('media-commands', () => {
 
     await uploadMedia(filePath, false)
     expect(storeBlobMock).toHaveBeenCalledWith(Buffer.from('contents'), 'file.bin')
+  })
+
+  it('uploadMedia refuses a path inside a protected root', async () => {
+    const home = (await import('node:os')).homedir()
+    const protectedPath = path.join(home, '.ssh', 'id_rsa')
+
+    await expect(uploadMedia(protectedPath, false)).rejects.toThrow(/protected location/)
+    expect(storeBlobMock).not.toHaveBeenCalled()
+  })
+
+  it('uploadMedia refuses a path inside Electron userData (app config/settings)', async () => {
+    const protectedPath = path.join(userDataDir, 'config.json')
+
+    await expect(uploadMedia(protectedPath, false)).rejects.toThrow(/protected location/)
+    expect(storeBlobMock).not.toHaveBeenCalled()
   })
 
   it('uploadMediaBytes rejects a payload over the size limit without storing it', async () => {

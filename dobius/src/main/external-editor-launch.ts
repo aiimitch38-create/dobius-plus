@@ -119,11 +119,38 @@ function isCompoundShellCommand(command: string): boolean {
   return /\s/.test(command)
 }
 
+/**
+ * Characters that let a shell chain a second command onto the editor launch:
+ * `;`/newline separate statements, `&`/`|` background or pipe, backticks and
+ * `$(` substitute a nested command, `<`/`>` redirect I/O. `%` and `^` are the
+ * cmd.exe-specific pair — `%` expands an env var (`%PATH%`) or batch
+ * parameter, `^` is cmd's escape character and can smuggle an otherwise-
+ * blocked character past a naive filter (`^&` still means `&`). Quotes,
+ * spaces, and flags stay allowed — compound editor commands like
+ * `open -a "Typora"` or `start "" notepad` need real shell parsing of their
+ * own arguments, and the path is escaped separately below.
+ */
+const UNSAFE_SHELL_COMMAND_CHARS = /[;&|`$<>%^\n\r]/
+
+class UnsafeEditorCommandError extends Error {
+  constructor() {
+    super('Editor command contains characters that are not allowed')
+    this.name = 'UnsafeEditorCommandError'
+  }
+}
+
+function assertSafeCompoundCommand(command: string): void {
+  if (UNSAFE_SHELL_COMMAND_CHARS.test(command)) {
+    throw new UnsafeEditorCommandError()
+  }
+}
+
 function buildShellLaunchSpec(
   command: string,
   pathValue: string,
   platform: NodeJS.Platform
 ): ExternalEditorLaunchSpec {
+  assertSafeCompoundCommand(command)
   const shellCommand = `${command} ${escapePathForShell(pathValue, platform)}`
   if (platform === 'win32') {
     return {
