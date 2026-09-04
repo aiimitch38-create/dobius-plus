@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
+import { commsAliases } from './comms-alias'
 
 const windowsTestWorkerOptions = process.platform === 'win32' ? { maxWorkers: 4 } : {}
 
@@ -10,7 +11,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@renderer': resolve('src/renderer/src'),
-      '@': resolve('src/renderer/src')
+      '@': resolve('src/renderer/src'),
+      // Why: the restored Communications tree's own *.test.mjs files import
+      // via '@comms/*' (its internal root, separate from '@' so its imports
+      // never collide with the rest of the app's) — without this alias here
+      // too, those tests can't resolve their own module's dependencies.
+      ...commsAliases()
     }
   },
   test: {
@@ -18,6 +24,7 @@ export default defineConfig({
     include: [
       'src/**/*.test.ts',
       'src/**/*.test.tsx',
+      'src/**/*.test.mjs',
       'config/scripts/**/*.test.mjs',
       'tests/e2e/**/*.unit.test.ts'
     ],
