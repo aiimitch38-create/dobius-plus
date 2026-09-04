@@ -168,4 +168,30 @@ describe('participant identity store', () => {
 
     expect(identity.username).toBe('dobius')
   })
+
+  it('recovers with a fresh identity when the existing file cannot be decrypted', async () => {
+    // Why this matters: this file is Keychain-encrypted, tied to the app's
+    // exact code signature. An ad-hoc-signed rebuild changes that signature,
+    // so a real identity can go permanently undecryptable — reproduced here
+    // as decryptString throwing, same as a real Keychain access failure.
+    // Mirrors the identical recovery test already proven in
+    // agent-participant-identity-store.test.ts.
+    const store = await loadStoreModule()
+    const original = store.ensureParticipantIdentity()
+
+    const reloaded = await loadStoreModule()
+    safeStorageMock.decryptString.mockImplementationOnce(() => {
+      throw new Error('The user name or passphrase you entered is not correct.')
+    })
+
+    const recovered = reloaded.ensureParticipantIdentity()
+    expect(recovered.pubkey).toMatch(/^[a-f0-9]{64}$/)
+    // A fresh identity, not a crash — continuity with the old one is lost,
+    // but the owner can sign again instead of every publish staying broken.
+    expect(recovered.pubkey).not.toBe(original.pubkey)
+    // The undecryptable file is preserved under a new name, not silently lost.
+    const dobiusDir = join(tempHome, '.dobius')
+    const { readdirSync } = await import('node:fs')
+    expect(readdirSync(dobiusDir).some((name) => name.includes('.undecryptable-'))).toBe(true)
+  })
 })

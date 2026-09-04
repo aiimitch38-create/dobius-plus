@@ -13,7 +13,7 @@
 import { schnorr } from '@noble/curves/secp256k1'
 import { sha256 } from '@noble/hashes/sha256'
 import { safeStorage } from 'electron'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import { join } from 'node:path'
 
@@ -87,22 +87,47 @@ function readStoredIdentity(): StoredParticipantIdentity | null {
   const identityPath = getIdentityPath()
   if (!existsSync(identityPath)) {return null}
 
-  const raw = readFileSync(identityPath)
-  const decrypted = safeStorage.isEncryptionAvailable()
-    ? safeStorage.decryptString(raw)
-    : raw.toString('utf8')
+  try {
+    const raw = readFileSync(identityPath)
+    const decrypted = safeStorage.isEncryptionAvailable()
+      ? safeStorage.decryptString(raw)
+      : raw.toString('utf8')
 
-  const parsed = JSON.parse(decrypted) as Partial<StoredParticipantIdentity>
-  if (
-    typeof parsed.privateKeyHex !== 'string' ||
-    typeof parsed.pubkeyHex !== 'string' ||
-    typeof parsed.username !== 'string'
-  ) {
-    throw new Error('Communications participant identity is invalid')
+    const parsed = JSON.parse(decrypted) as Partial<StoredParticipantIdentity>
+    if (
+      typeof parsed.privateKeyHex !== 'string' ||
+      typeof parsed.pubkeyHex !== 'string' ||
+      typeof parsed.username !== 'string'
+    ) {
+      throw new Error('Communications participant identity is invalid')
+    }
+
+    cachedIdentity = parsed as StoredParticipantIdentity
+    return cachedIdentity
+  } catch (error) {
+    // Why: this file is Keychain-encrypted, and macOS ties that encryption to
+    // the app's exact code signature. Every ad-hoc-signed rebuild changes that
+    // signature, so an existing identity can go permanently undecryptable —
+    // not a rare edge case for this app, an expected one during active
+    // development. Without this catch, the owner's OWN identity lookup fails,
+    // which breaks every signed publish (messages, presence, huddles) with no
+    // visible error. Recover by starting fresh (a new identity generates on
+    // next ensure) rather than leaving Communications permanently broken;
+    // rename instead of delete so nothing is silently destroyed. Matches the
+    // identical recovery already proven in agent-participant-identity-store.ts.
+    console.warn(
+      '[participant-identity-store] could not decrypt the participant identity ' +
+        `(${error instanceof Error ? error.message : String(error)}) — likely a stale Keychain ` +
+        'grant from a prior app signature. Starting a fresh identity.'
+    )
+    try {
+      renameSync(identityPath, `${identityPath}.undecryptable-${Date.now()}`)
+    } catch {
+      // Best-effort backup; proceed with a fresh identity either way.
+    }
+    cachedIdentity = null
+    return null
   }
-
-  cachedIdentity = parsed as StoredParticipantIdentity
-  return cachedIdentity
 }
 
 function writeStoredIdentity(identity: StoredParticipantIdentity): void {

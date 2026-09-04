@@ -139,3 +139,42 @@ test("a message delivered on a superseded connection generation is dropped by th
   client.disconnect();
   server.close();
 });
+
+test("subscribe() sends REQ and delivers events without waiting for a stalled AUTH handshake", async () => {
+  const { server, url } = await startServer();
+  const connected = once(server, "connection");
+
+  const client = new RelayClient();
+  // Skip getRelayWsUrl() (Tauri IPC, unavailable under Node) — connect()
+  // only calls it when relayUrl is unset.
+  client.relayUrl = url;
+
+  const received = [];
+  const subscribePromise = client.subscribeLive({ kinds: [1], limit: 0 }, (event) =>
+    received.push(event),
+  );
+
+  const serverSocket = await connected;
+  // The server deliberately never sends ["AUTH", challenge] or the ["OK", ...]
+  // that would follow it — this is the stalled/failed AUTH scenario. REQ must
+  // arrive anyway; AUTH_TIMEOUT_MS is 25s, so if REQ were still gated on AUTH
+  // this message would never come.
+  const reqMessage = await new Promise((resolve) => {
+    serverSocket.once("message", (raw) => resolve(JSON.parse(raw.toString())));
+  });
+
+  assert.equal(reqMessage[0], "REQ");
+  const subId = reqMessage[1];
+
+  const unsubscribe = await subscribePromise;
+
+  serverSocket.send(JSON.stringify(["EVENT", subId, { ...FAKE_EVENT, id: "e2" }]));
+  await new Promise((resolve) => setTimeout(resolve, 60));
+
+  assert.equal(received.length, 1);
+  assert.equal(received[0].id, "e2");
+
+  await unsubscribe();
+  client.disconnect();
+  server.close();
+});
