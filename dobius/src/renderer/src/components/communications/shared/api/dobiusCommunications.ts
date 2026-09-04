@@ -1880,6 +1880,36 @@ function requiredText(value: unknown, field: string): string {
   return value.trim();
 }
 
+type DobiusChannelTemplateRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  channelType: string;
+  visibility: string;
+  canvasTemplate: string | null;
+  agents: unknown;
+  createdAt: number;
+  updatedAt: number;
+};
+
+// Wire shape mirrors RawChannelTemplate (vendor shared/api/tauriChannelTemplates.ts) —
+// Dobius has no built-in channel templates, so is_builtin is always false,
+// same convention as personaFromAgent/teamFromRecord above.
+function channelTemplateWireShape(template: DobiusChannelTemplateRecord): unknown {
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description,
+    channel_type: template.channelType,
+    visibility: template.visibility,
+    canvas_template: template.canvasTemplate,
+    agents: template.agents,
+    is_builtin: false,
+    created_at: timestampIso(template.createdAt),
+    updated_at: timestampIso(template.updatedAt),
+  };
+}
+
 function personaFromAgent(agent: DobiusAgentRecord): DobiusPersonaProjection {
   return {
     id: agent.id,
@@ -3852,6 +3882,46 @@ export async function invokeDobiusBackedTauriCommand(
         relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
       });
       return { handled: true, result: undefined };
+    }
+
+    // ── channel templates (channel-template-store.ts via channel-templates.ts
+    // RPC methods) ───────────────────────────────────────────────────────────
+    case "list_channel_templates": {
+      const response = (await invokeDobiusRuntime("channelTemplate.list")) as {
+        templates: DobiusChannelTemplateRecord[];
+      };
+      return { handled: true, result: response.templates.map(channelTemplateWireShape) };
+    }
+    case "create_channel_template": {
+      const input = objectAt(args, "input");
+      const response = (await invokeDobiusRuntime("channelTemplate.create", input)) as {
+        template: DobiusChannelTemplateRecord;
+      };
+      return { handled: true, result: channelTemplateWireShape(response.template) };
+    }
+    case "update_channel_template": {
+      const input = objectAt(args, "input");
+      const id = requiredText(input.id, "channel template id");
+      const { id: _id, ...updates } = input;
+      const response = (await invokeDobiusRuntime("channelTemplate.update", {
+        id,
+        updates,
+      })) as { template: DobiusChannelTemplateRecord };
+      return { handled: true, result: channelTemplateWireShape(response.template) };
+    }
+    case "delete_channel_template": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("channelTemplate.delete", {
+        id: requiredText(input.id, "channel template id"),
+      });
+      return { handled: true, result: undefined };
+    }
+    case "duplicate_channel_template": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("channelTemplate.duplicate", {
+        id: requiredText(input.id, "channel template id"),
+      })) as { template: DobiusChannelTemplateRecord };
+      return { handled: true, result: channelTemplateWireShape(response.template) };
     }
 
     default:
