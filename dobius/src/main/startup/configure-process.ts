@@ -118,6 +118,19 @@ export function installUncaughtPipeErrorGuard(): void {
   process.on('uncaughtException', onUncaughtException)
 }
 
+/**
+ * Why: Node treats an unhandled promise rejection as fatal by default (since
+ * Node 15) and exits the process. Agent runs retry on their own promise
+ * chains (see agent-runner.ts's SDK retry path) that can reject after the
+ * caller has moved on — without this listener that one rejection would take
+ * down the whole app instead of just the failed run.
+ */
+export function installUnhandledRejectionGuard(): void {
+  process.on('unhandledRejection', (reason) => {
+    console.error('[main] Unhandled promise rejection (recovered):', reason)
+  })
+}
+
 export function patchPackagedProcessPath(): void {
   if (!app.isPackaged) {
     return

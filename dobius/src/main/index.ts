@@ -60,6 +60,7 @@ import {
   installDevParentSignalQuit,
   installDevParentWatchdog,
   installUncaughtPipeErrorGuard,
+  installUnhandledRejectionGuard,
   isDevParentShutdownRequested,
   patchPackagedProcessPath,
   shouldInstallManagedHooks
@@ -394,6 +395,7 @@ const devAgentHookEndpointNamespace = devInstanceIdentity.isDev
   : undefined
 
 installUncaughtPipeErrorGuard()
+installUnhandledRejectionGuard()
 // Why: propagate the Dobius app version into `process.env` so PTY-env
 // construction in both main (local-pty-provider) and the forked daemon
 // (pty-subprocess) can set `TERM_PROGRAM_VERSION` without re-importing
