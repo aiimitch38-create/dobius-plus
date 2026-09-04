@@ -14,6 +14,41 @@ import {
   loadDobiusWorkstationSnapshot,
 } from "./dobiusCommunications.ts";
 
+// The module no longer generates agent private keys client-side into
+// localStorage either: each agent's real key lives in the main process
+// (agent-participant-identity-store.ts, Keychain-backed via safeStorage) and
+// is fetched/signed over window.api.communications.{getAgentIdentity,
+// signEventAsAgent}. This stub stands in for that store — deterministic per
+// agentId, generated fresh per test, real secp256k1 keys so pubkey/sig-derived
+// checks stay honest (same rationale as installFakeRelay's identity below).
+function agentIdentityBridge() {
+  const registry = new Map();
+  let counter = 0x30;
+  function identityFor(agentId) {
+    let entry = registry.get(agentId);
+    if (!entry) {
+      counter += 1;
+      const privateKey = counter.toString(16).padStart(2, "0").repeat(32);
+      entry = { privateKey, pubkey: getPublicKey(hexToBytes(privateKey)) };
+      registry.set(agentId, entry);
+    }
+    return entry;
+  }
+  return {
+    getAgentIdentity: async (agentId) => ({ pubkey: identityFor(agentId).pubkey }),
+    signEventAsAgent: async (agentId, event) =>
+      finalizeEvent(
+        {
+          kind: event.kind,
+          content: event.content,
+          tags: event.tags,
+          created_at: event.createdAt ?? Math.floor(Date.now() / 1000),
+        },
+        hexToBytes(identityFor(agentId).privateKey),
+      ),
+  };
+}
+
 // The module no longer reads identity from localStorage: the pubkey comes from
 // the main process via window.api.communications and is primed into a module
 // cache, and signing happens in main. Install the bridge stubs and prime.
@@ -33,6 +68,7 @@ async function primeTestIdentity(identity) {
         content: event.content,
         sig: "cd".repeat(64),
       }),
+      ...agentIdentityBridge(),
     },
   };
   await primeDobiusIdentity();
@@ -129,6 +165,7 @@ test("projects only real Dobius agents and their run state into Dobius records",
       getItem: (key) => storage.get(key) ?? null,
       setItem: (key, value) => storage.set(key, value),
     },
+    api: { communications: agentIdentityBridge() },
     dobiusCommunications: {
       invoke: async (command) => ({
         version: 1,

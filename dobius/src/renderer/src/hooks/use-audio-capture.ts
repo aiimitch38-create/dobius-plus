@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import {
   audioLevelFromSamples,
   decayAudioLevel
@@ -270,6 +270,13 @@ export function useAudioCapture() {
     },
     [cleanupCaptureResources, resetBufferedAudio]
   )
+
+  // Why: callers that unmount without calling stop() (e.g. a dictation panel
+  // closed mid-recording) would otherwise leave the mic stream, AudioContext,
+  // and ScriptProcessorNode alive forever — the browser keeps the mic-in-use
+  // indicator lit with no way for the user to release it. Mirrors the unmount
+  // cleanup in use-jarvis-turn.ts.
+  useEffect(() => cleanupCaptureResources, [cleanupCaptureResources])
 
   return {
     start,
