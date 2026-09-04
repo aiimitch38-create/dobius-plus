@@ -18,7 +18,6 @@ import {
 } from '@/lib/desktop-window-chrome'
 import { resolveLeftTitlebarChromeLayout } from '@/lib/titlebar-left-chrome'
 import { shouldShowWorktreeCreationSurface } from '@/lib/worktree-creation-surface'
-import { buildAppFontFamily } from '@/lib/app-font-family'
 import { Toaster } from '@/components/ui/sonner'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -87,8 +86,6 @@ import {
   persistWorkspaceSessionByHostSync
 } from './lib/workspace-session-host-persistence'
 import { shouldRenderPetOverlay } from './components/pet/pet-overlay-visibility'
-import { applyDocumentTheme } from './lib/document-theme'
-import { applyAppSkin } from './lib/app-skin'
 import { useShortcutLabel } from './hooks/useShortcutLabel'
 import { shouldShowWorktreeHistoryControls } from './lib/titlebar-worktree-history-controls'
 import {
@@ -108,6 +105,8 @@ import { useGlobalKeyboardShortcuts } from './hooks/useGlobalKeyboardShortcuts'
 import { useWorkspaceStartupHydration } from './hooks/useWorkspaceStartupHydration'
 import { useOnboardingAndFeatureTipsGate } from './hooks/useOnboardingAndFeatureTipsGate'
 import { useTitlebarChromeMeasurements } from './hooks/useTitlebarChromeMeasurements'
+import { usePersistedUiStateWriter } from './hooks/usePersistedUiStateWriter'
+import { useAppearanceSync } from './hooks/useAppearanceSync'
 import {
   Landing,
   WorktreeCreationPanel,
@@ -596,40 +595,7 @@ function App(): React.JSX.Element {
   // unexpected exit — an acceptable tradeoff vs. periodic UI stalls, and
   // in line with how most terminal apps behave.
 
-  useEffect(() => {
-    if (!persistedUIReady) {
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      void window.api.ui.set({
-        sidebarWidth,
-        rightSidebarOpen,
-        rightSidebarTab,
-        rightSidebarExplorerView,
-        rightSidebarWidth,
-        markdownTocPanelWidth,
-        groupBy,
-        sortBy,
-        projectOrderBy,
-        showActiveOnly: false,
-        hideSleepingWorkspaces: !showSleepingWorkspaces,
-        showSleepingWorkspaces,
-        hideDefaultBranchWorkspace,
-        hideAutomationGeneratedWorkspaces,
-        showDotfilesByWorktree,
-        filterRepoIds,
-        // Why: rides the same debounced save so dashboard auto-acks (which fire
-        // on focus/visibility) and the in-memory ack cleanup paths in
-        // agent-status.ts (close/dismiss) both flow to disk through map
-        // identity changes. Without persisting, agent rows that survive
-        // restart come back bold even when the user had already visited them.
-        acknowledgedAgentsByPaneKey
-      })
-    }, 150)
-
-    return () => window.clearTimeout(timer)
-  }, [
+  usePersistedUiStateWriter({
     persistedUIReady,
     sidebarWidth,
     rightSidebarOpen,
@@ -646,48 +612,9 @@ function App(): React.JSX.Element {
     showDotfilesByWorktree,
     filterRepoIds,
     acknowledgedAgentsByPaneKey
-  ])
+  })
 
-  // Apply theme to document
-  useEffect(() => {
-    if (!settings) {
-      return
-    }
-
-    if (settings.theme === 'dark') {
-      applyDocumentTheme('dark')
-      return undefined
-    } else if (settings.theme === 'light') {
-      applyDocumentTheme('light')
-      return undefined
-    } else {
-      // system
-      const mq = window.matchMedia('(prefers-color-scheme: dark)')
-      applyDocumentTheme('system')
-      const handler = (): void => {
-        applyDocumentTheme('system')
-        // Why: system theme changes do not mutate the store, so mobile
-        // terminal colors need an explicit graph republish.
-        scheduleRuntimeGraphSync()
-      }
-      mq.addEventListener('change', handler)
-      return () => mq.removeEventListener('change', handler)
-    }
-  }, [settings])
-
-  // Apply the app-wide skin. Runs after the theme effect above so the skin owns
-  // the dark/light class while active; clearing it (`none`) reverts to the
-  // stylesheet theme the effect above already set.
-  useEffect(() => {
-    applyAppSkin(settings?.appSkin)
-  }, [settings?.appSkin, settings?.theme])
-
-  useEffect(() => {
-    document.documentElement.style.setProperty(
-      '--app-font-family',
-      buildAppFontFamily(settings?.appFontFamily)
-    )
-  }, [settings?.appFontFamily])
+  useAppearanceSync(settings)
 
   // Refresh GitHub data (PR/issue status) when window regains focus
   useEffect(() => {
