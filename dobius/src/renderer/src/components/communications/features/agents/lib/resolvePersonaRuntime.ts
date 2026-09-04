@@ -140,5 +140,9 @@ export function collectRuntimeWarnings(
     );
     warnings.push(...w);
   }
-  return warnings;
+  // Dedupe: multiple personas sharing the same stale runtime id produce the
+  // identical warning string. Callers render one row per string and key on
+  // the string itself, so duplicates collide into overlapping rows instead
+  // of a single clear warning.
+  return [...new Set(warnings)];
 }
