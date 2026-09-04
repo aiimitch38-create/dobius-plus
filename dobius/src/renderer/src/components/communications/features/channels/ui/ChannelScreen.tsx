@@ -370,20 +370,27 @@ export function ChannelScreen({
     return pubkeys;
   }, [knownAgentPubkeys, messageProfiles, communityAgentPubkeys]);
   const personasQuery = usePersonasQuery();
-  const { personaLookup, respondToLookup } = React.useMemo(() => {
+  const { personaLookup, respondToLookup, agentNameByPubkey } = React.useMemo(() => {
     const agents = managedAgentsQuery.data ?? [];
     const personaById = new Map(
       (personasQuery.data ?? []).map((p) => [p.id, p.displayName]),
     );
     const pLookup = new Map<string, string>();
     const rLookup = new Map<string, RespondToMode>();
+    // Every known managed agent's own name, independent of persona — this is
+    // the fallback tier resolveUserLabel uses so a message from a known
+    // agent never shows a raw pubkey while its kind-0 profile is still
+    // propagating (see identity.ts). Kept separate from personaLookup, which
+    // SystemMessageRow reads presence-of-key from to mean "has a persona".
+    const aLookup = new Map<string, string>();
     for (const agent of agents) {
       const key = agent.pubkey.toLowerCase();
       rLookup.set(key, agent.respondTo);
+      aLookup.set(key, agent.name);
       const pName = agent.personaId ? personaById.get(agent.personaId) : null;
       if (pName) pLookup.set(key, pName);
     }
-    return { personaLookup: pLookup, respondToLookup: rLookup };
+    return { personaLookup: pLookup, respondToLookup: rLookup, agentNameByPubkey: aLookup };
   }, [managedAgentsQuery.data, personasQuery.data]);
   const timelineMessages = React.useMemo(
     () =>
@@ -398,9 +405,11 @@ export function ChannelScreen({
         respondToLookup,
         relaySelfPubkey,
         messageOwnerProfiles,
+        agentNameByPubkey,
       ),
     [
       activeChannel,
+      agentNameByPubkey,
       channelMembers,
       currentProfile?.avatarUrl,
       currentPubkey,
@@ -448,6 +457,7 @@ export function ChannelScreen({
     personaLookup,
     respondToLookup,
     relaySelfPubkey,
+    agentNameByPubkey,
   });
   const {
     firstUnreadMessageId,

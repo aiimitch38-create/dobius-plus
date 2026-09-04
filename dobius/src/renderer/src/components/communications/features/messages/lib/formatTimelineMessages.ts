@@ -137,6 +137,7 @@ function formatMessageAuthor(
   currentPubkey: string | undefined,
   profiles: UserProfileLookup | undefined,
   relaySelfPubkey: string | null | undefined,
+  agentNameByPubkey: Map<string, string> | undefined,
 ) {
   const authorPubkey = resolveEventAuthorPubkey({
     event,
@@ -163,6 +164,7 @@ function formatMessageAuthor(
     fallbackName,
     profiles,
     preferResolvedSelfLabel: true,
+    agentNameByPubkey,
   });
 }
 
@@ -196,6 +198,8 @@ export function formatTimelineMessages(
   relaySelfPubkey?: string | null,
   /** Profiles for verified agent owners, fetched in one batch by the surface. */
   ownerProfiles?: UserProfileLookup,
+  /** Known Dobius-managed agent names, keyed by normalized pubkey — see resolveUserLabel. */
+  agentNameByPubkey?: Map<string, string>,
 ): TimelineMessage[] {
   const currentPubkeyLower = currentPubkey?.toLowerCase();
   const roleByPubkey = new Map<string, string>();
@@ -375,6 +379,7 @@ export function formatTimelineMessages(
       currentPubkey,
       profiles,
       relaySelfPubkey,
+      agentNameByPubkey,
     );
 
     authorPubkeyByEventId.set(event.id, authorPubkey);

@@ -94,8 +94,18 @@ export function resolveUserLabel(input: {
   fallbackName?: string | null;
   profiles?: UserProfileLookup;
   preferResolvedSelfLabel?: boolean;
+  /**
+   * Known Dobius-managed agent names, keyed by normalized pubkey — the same
+   * local data the agent list already has, independent of whether that
+   * agent's kind-0 profile has propagated yet. A message from a known agent
+   * must never fall through to a truncated pubkey just because its profile
+   * event hasn't arrived (lazy first-reply publish) or its identity lookup
+   * rejected out of a Promise.allSettled batch.
+   */
+  agentNameByPubkey?: Map<string, string>;
 }) {
   const {
+    agentNameByPubkey,
     currentPubkey,
     fallbackName,
     preferResolvedSelfLabel = false,
@@ -126,6 +136,11 @@ export function resolveUserLabel(input: {
   const safeFallback = fallbackName?.trim();
   if (safeFallback) {
     return safeFallback;
+  }
+
+  const agentName = agentNameByPubkey?.get(normalizePubkey(pubkey));
+  if (agentName) {
+    return agentName;
   }
 
   return truncatePubkey(pubkey);

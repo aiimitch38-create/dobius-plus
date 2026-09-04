@@ -237,6 +237,19 @@ test("user-signed actor tag does not affect timeline identity or profile loading
   assert.equal(message.role, "member");
 });
 
+test("a message from a known Dobius agent shows its real name even with no cached profile yet", () => {
+  // TASK COMMS.2 trigger 1 (lazy kind-0 publish); see identity.test.mjs for
+  // the no-fallback-available case.
+  const agentNameByPubkey = new Map([[PUBKEY_A.toLowerCase(), "Scout"]]);
+  const [message] = formatTimelineMessages(
+    [streamMessage({ pubkey: PUBKEY_A })],
+    null, undefined, null, undefined, undefined, undefined, undefined, undefined, undefined,
+    agentNameByPubkey,
+  );
+
+  assert.equal(message.author, "Scout");
+});
+
 test("relay-signed actor tag resolves the delegated timeline author", () => {
   const event = finalizeEvent(
     {
