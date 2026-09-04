@@ -43,6 +43,7 @@ import {
 } from "@comms/shared/ui/sidebar";
 import { ChannelMenuButton } from "@comms/features/sidebar/ui/SidebarSection";
 import { ChannelContextMenuItems } from "@comms/features/sidebar/ui/ChannelContextMenu";
+import { ChannelRowActionsMenu } from "@comms/features/sidebar/ui/ChannelRowActionsMenu";
 import { deferMenuAction } from "@comms/features/sidebar/ui/sidebarMenuHelpers";
 import {
   DraggableChannelRow,
@@ -461,6 +462,11 @@ export function ChannelGroupSection({
                     onSelectChannel={onSelectChannel}
                   />
                 )}
+                <ChannelRowActionsMenu
+                  channel={channel}
+                  onDeleteChannel={onDeleteChannel}
+                  onLeaveChannel={onLeaveChannel}
+                />
               </SidebarMenuItem>
             </ContextMenuTrigger>
             <ContextMenuContent>
@@ -754,6 +760,11 @@ export function CustomChannelSection({
                                 onSelectChannel={onSelectChannel}
                               />
                             </DraggableChannelRow>
+                            <ChannelRowActionsMenu
+                              channel={channel}
+                              onDeleteChannel={onDeleteChannel}
+                              onLeaveChannel={onLeaveChannel}
+                            />
                           </SidebarMenuItem>
                         </ContextMenuTrigger>
                         <ContextMenuContent>
