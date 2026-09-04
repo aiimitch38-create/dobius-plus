@@ -71,7 +71,12 @@ export type TriggerWorkflowResult = {
 export async function triggerWorkflow(workflowId: string): Promise<TriggerWorkflowResult> {
   const workflow = getWorkflowOrThrow(workflowId)
   const startedAt = Date.now()
-  const execution = await executeWorkflowSteps(workflow.steps)
+  // Each channel's workflows get their own agent session lineage, matching
+  // Communications channel-agent dispatch (sessionKey: channelId in
+  // dobiusCommunications.ts). A channel-less workflow still must not collapse
+  // onto 'default' — that's the manual-run session — so it gets its own key.
+  const sessionKey = workflow.channelId ?? `workflow:${workflow.id}`
+  const execution = await executeWorkflowSteps(workflow.steps, sessionKey)
   const run: WorkflowRun = {
     id: randomUUID(),
     workflowId: workflow.id,

@@ -22,16 +22,19 @@ describe('executeWorkflowSteps', () => {
   })
 
   it('completes with an empty trace for zero steps', async () => {
-    const result = await executeWorkflowSteps([])
+    const result = await executeWorkflowSteps([], 'session-1')
     expect(result).toEqual({ trace: [], status: 'completed', errorMessage: null, currentStep: null })
   })
 
   it('runs supported step types and records real output', async () => {
-    const result = await executeWorkflowSteps([
-      step({ id: 'a', type: 'log', with: { message: 'hi' } }),
-      step({ id: 'b', type: 'delay', with: { ms: 50 } }),
-      step({ id: 'c', type: 'noop' })
-    ])
+    const result = await executeWorkflowSteps(
+      [
+        step({ id: 'a', type: 'log', with: { message: 'hi' } }),
+        step({ id: 'b', type: 'delay', with: { ms: 50 } }),
+        step({ id: 'c', type: 'noop' })
+      ],
+      'session-1'
+    )
     expect(result.status).toBe('completed')
     expect(result.errorMessage).toBeNull()
     expect(result.currentStep).toBe(2)
@@ -47,10 +50,10 @@ describe('executeWorkflowSteps', () => {
   })
 
   it('marks an unsupported step type as skipped with an honest reason, and keeps running', async () => {
-    const result = await executeWorkflowSteps([
-      step({ id: 'a', type: 'call_webhook' }),
-      step({ id: 'b', type: 'log', with: { message: 'still runs' } })
-    ])
+    const result = await executeWorkflowSteps(
+      [step({ id: 'a', type: 'call_webhook' }), step({ id: 'b', type: 'log', with: { message: 'still runs' } })],
+      'session-1'
+    )
     expect(result.status).toBe('completed')
     expect(result.trace[0]).toMatchObject({ stepId: 'a', status: 'skipped' })
     expect(result.trace[0].error).toMatch(/not executable/)
@@ -62,10 +65,13 @@ describe('executeWorkflowSteps', () => {
     // app) is a real, supported step type that genuinely throws — unlike
     // delay's non-numeric-ms fallback to 0, this exercises a real failure path.
     vi.mocked(getDefaultPrepareClaudeLaunch).mockReturnValue(null)
-    const result = await executeWorkflowSteps([
-      step({ id: 'a', type: 'agent_dispatch', with: { agent_id: 'agent-1', prompt: 'hi' } }),
-      step({ id: 'b', type: 'log', with: { message: 'never runs' } })
-    ])
+    const result = await executeWorkflowSteps(
+      [
+        step({ id: 'a', type: 'agent_dispatch', with: { agent_id: 'agent-1', prompt: 'hi' } }),
+        step({ id: 'b', type: 'log', with: { message: 'never runs' } })
+      ],
+      'session-1'
+    )
     expect(result.status).toBe('failed')
     expect(result.currentStep).toBe(0)
     expect(result.trace).toHaveLength(1)
@@ -78,9 +84,10 @@ describe('executeWorkflowSteps', () => {
     vi.mocked(getDefaultPrepareClaudeLaunch).mockReturnValue(prepareClaudeLaunch)
     vi.mocked(startAgentRun).mockResolvedValue('run-123')
 
-    const result = await executeWorkflowSteps([
-      step({ id: 'a', type: 'agent_dispatch', with: { agent_id: 'agent-1', prompt: 'do the thing' } })
-    ])
+    const result = await executeWorkflowSteps(
+      [step({ id: 'a', type: 'agent_dispatch', with: { agent_id: 'agent-1', prompt: 'do the thing' } })],
+      'channel-42'
+    )
 
     expect(result.status).toBe('completed')
     expect(result.trace[0]).toMatchObject({ stepId: 'a', status: 'completed', output: { runId: 'run-123' }, error: null })
@@ -88,12 +95,12 @@ describe('executeWorkflowSteps', () => {
       agentId: 'agent-1',
       prompt: 'do the thing',
       prepareClaudeLaunch,
-      options: { source: 'channel', permissionMode: 'dontAsk' }
+      options: { source: 'channel', permissionMode: 'dontAsk', resume: false, sessionKey: 'channel-42' }
     })
   })
 
   it('fails an agent_dispatch step missing agent_id or prompt', async () => {
-    const result = await executeWorkflowSteps([step({ id: 'a', type: 'agent_dispatch', with: {} })])
+    const result = await executeWorkflowSteps([step({ id: 'a', type: 'agent_dispatch', with: {} })], 'session-1')
     expect(result.status).toBe('failed')
     expect(result.errorMessage).toMatch(/agent_id/)
     expect(startAgentRun).not.toHaveBeenCalled()

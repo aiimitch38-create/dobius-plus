@@ -26,7 +26,10 @@ export type WorkflowExecutionResult = {
   currentStep: number | null
 }
 
-async function runAgentDispatchStep(step: WorkflowStep): Promise<Record<string, unknown>> {
+async function runAgentDispatchStep(
+  step: WorkflowStep,
+  sessionKey: string
+): Promise<Record<string, unknown>> {
   const agentId = typeof step.with.agent_id === 'string' ? step.with.agent_id : ''
   const prompt = typeof step.with.prompt === 'string' ? step.with.prompt : ''
   if (!agentId) {
@@ -48,30 +51,39 @@ async function runAgentDispatchStep(step: WorkflowStep): Promise<Record<string, 
   }
   // Channel-sourced dispatch: headless, so undecided tool prompts must not
   // hang the workflow — mirrors agent.run's 'channel' source (custom-agents.ts).
+  // resume: false + a non-'default' sessionKey are both required: without
+  // them this run resumes (and its own session lineage would get resumed by)
+  // whatever else shares the 'default' key, i.e. a human's manual run in the
+  // agent panel. See agents-store.ts's "a channel task must never hijack the
+  // session a manual run would resume" and agent-channel-service.ts's
+  // identical guard on its channel-source dispatch.
   const runId = await startAgentRun({
     agentId,
     prompt,
     prepareClaudeLaunch,
-    options: { source: 'channel', permissionMode: 'dontAsk' }
+    options: { source: 'channel', permissionMode: 'dontAsk', resume: false, sessionKey }
   })
   return { runId }
 }
 
-async function runSupportedStep(step: WorkflowStep): Promise<Record<string, unknown>> {
+async function runSupportedStep(step: WorkflowStep, sessionKey: string): Promise<Record<string, unknown>> {
   switch (step.type) {
     case 'log':
       return { message: typeof step.with.message === 'string' ? step.with.message : '' }
     case 'delay':
       return { requestedMs: typeof step.with.ms === 'number' ? step.with.ms : 0 }
     case 'agent_dispatch':
-      return runAgentDispatchStep(step)
+      return runAgentDispatchStep(step, sessionKey)
     case 'noop':
     default:
       return {}
   }
 }
 
-export async function executeWorkflowSteps(steps: WorkflowStep[]): Promise<WorkflowExecutionResult> {
+export async function executeWorkflowSteps(
+  steps: WorkflowStep[],
+  sessionKey: string
+): Promise<WorkflowExecutionResult> {
   const trace: TraceEntry[] = []
   let failedAtIndex: number | null = null
 
@@ -90,7 +102,7 @@ export async function executeWorkflowSteps(steps: WorkflowStep[]): Promise<Workf
       continue
     }
     try {
-      const output = await runSupportedStep(step)
+      const output = await runSupportedStep(step, sessionKey)
       trace.push({ stepId: step.id, status: 'completed', output, startedAt, completedAt: Date.now(), error: null })
     } catch (error) {
       failedAtIndex = index
