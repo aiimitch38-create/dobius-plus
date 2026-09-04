@@ -1910,6 +1910,81 @@ function channelTemplateWireShape(template: DobiusChannelTemplateRecord): unknow
   };
 }
 
+type DobiusWorkflowRecord = {
+  id: string;
+  name: string;
+  ownerPubkey: string;
+  channelId: string | null;
+  definition: Record<string, unknown>;
+  status: string;
+  webhookSecret: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type DobiusTraceEntry = {
+  stepId: string;
+  status: string;
+  output: Record<string, unknown>;
+  startedAt: number | null;
+  completedAt: number | null;
+  error: string | null;
+};
+
+type DobiusWorkflowRunRecord = {
+  id: string;
+  workflowId: string;
+  status: string;
+  currentStep: number | null;
+  executionTrace: DobiusTraceEntry[];
+  startedAt: number | null;
+  completedAt: number | null;
+  errorMessage: string | null;
+  createdAt: number;
+};
+
+// Wire shape mirrors RawWorkflow/RawWorkflowSaveResponse (vendor
+// shared/api/tauriWorkflows.ts) — webhookSecret is stable across updates
+// (workflow-store.ts), so every response can safely include it.
+function workflowWireShape(workflow: DobiusWorkflowRecord): unknown {
+  return {
+    id: workflow.id,
+    name: workflow.name,
+    owner_pubkey: workflow.ownerPubkey,
+    channel_id: workflow.channelId,
+    definition: workflow.definition,
+    status: workflow.status,
+    webhook_secret: workflow.webhookSecret,
+    created_at: workflow.createdAt,
+    updated_at: workflow.updatedAt,
+  };
+}
+
+function traceEntryWireShape(entry: DobiusTraceEntry): unknown {
+  return {
+    step_id: entry.stepId,
+    status: entry.status,
+    output: entry.output,
+    started_at: entry.startedAt,
+    completed_at: entry.completedAt,
+    error: entry.error,
+  };
+}
+
+function workflowRunWireShape(run: DobiusWorkflowRunRecord): unknown {
+  return {
+    id: run.id,
+    workflow_id: run.workflowId,
+    status: run.status,
+    current_step: run.currentStep,
+    execution_trace: run.executionTrace.map(traceEntryWireShape),
+    started_at: run.startedAt,
+    completed_at: run.completedAt,
+    error_message: run.errorMessage,
+    created_at: run.createdAt,
+  };
+}
+
 function personaFromAgent(agent: DobiusAgentRecord): DobiusPersonaProjection {
   return {
     id: agent.id,
@@ -3922,6 +3997,78 @@ export async function invokeDobiusBackedTauriCommand(
         id: requiredText(input.id, "channel template id"),
       })) as { template: DobiusChannelTemplateRecord };
       return { handled: true, result: channelTemplateWireShape(response.template) };
+    }
+
+    // ── workflows (workflow-service.ts via workflow-rpc-methods.ts) —
+    // ownerPubkey is not known to the main process on its own, so thread
+    // localIdentity().pubkey the same way save-subscriptions threads
+    // identityPubkey. ───────────────────────────────────────────────────────
+    case "get_channel_workflows": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.listByChannel", {
+        channelId: requiredText(input.channelId, "channel id"),
+      })) as { workflows: DobiusWorkflowRecord[] };
+      return { handled: true, result: response.workflows.map(workflowWireShape) };
+    }
+    case "get_channels_workflows": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.listByChannels", {
+        channelIds: Array.isArray(input.channelIds) ? input.channelIds : [],
+      })) as { workflows: DobiusWorkflowRecord[] };
+      return { handled: true, result: response.workflows.map(workflowWireShape) };
+    }
+    case "get_workflow": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.show", {
+        workflowId: requiredText(input.workflowId, "workflow id"),
+      })) as { workflow: DobiusWorkflowRecord };
+      return { handled: true, result: workflowWireShape(response.workflow) };
+    }
+    case "create_workflow": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.create", {
+        ownerPubkey: localIdentity().pubkey,
+        channelId: typeof input.channelId === "string" ? input.channelId : null,
+        yamlDefinition: requiredText(input.yamlDefinition, "workflow definition"),
+      })) as { workflow: DobiusWorkflowRecord };
+      return { handled: true, result: workflowWireShape(response.workflow) };
+    }
+    case "update_workflow": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.update", {
+        workflowId: requiredText(input.workflowId, "workflow id"),
+        yamlDefinition: requiredText(input.yamlDefinition, "workflow definition"),
+      })) as { workflow: DobiusWorkflowRecord };
+      return { handled: true, result: workflowWireShape(response.workflow) };
+    }
+    case "delete_workflow": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("workflow.delete", {
+        workflowId: requiredText(input.workflowId, "workflow id"),
+      });
+      return { handled: true, result: undefined };
+    }
+    case "get_workflow_runs": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.runs", {
+        workflowId: requiredText(input.workflowId, "workflow id"),
+        limit: typeof input.limit === "number" ? input.limit : undefined,
+      })) as { runs: DobiusWorkflowRunRecord[] };
+      return { handled: true, result: response.runs.map(workflowRunWireShape) };
+    }
+    case "trigger_workflow": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.trigger", {
+        workflowId: requiredText(input.workflowId, "workflow id"),
+      })) as { runId: string; workflowId: string; status: string };
+      return {
+        handled: true,
+        result: {
+          run_id: response.runId,
+          workflow_id: response.workflowId,
+          status: response.status,
+        },
+      };
     }
 
     default:
