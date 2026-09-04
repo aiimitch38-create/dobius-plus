@@ -45,8 +45,6 @@ import {
 import RightSidebar from './components/right-sidebar'
 import { TelemetryFirstLaunchSurface } from './components/TelemetryFirstLaunchSurface'
 import { ZoomOverlay } from './components/ZoomOverlay'
-import { onOnboardingReopened } from './components/onboarding/show-onboarding-event'
-import { shouldShowOnboarding } from './components/onboarding/should-show-onboarding'
 import { MarkdownTemplatePicker } from './components/editor/MarkdownTemplatePicker'
 import { FloatingTerminalToggleButton } from './components/floating-terminal/FloatingTerminalToggleButton'
 import { useFloatingTerminalOpenState } from './hooks/useFloatingTerminalOpenState'
@@ -100,15 +98,6 @@ import {
 import { selectFloatingVisibleTabCount } from './store/selectors'
 import { selectActiveTerminalChromeState } from './store/active-terminal-chrome-selector'
 import type { VirtualizedScrollAnchor } from './hooks/useVirtualizedScrollAnchor'
-import type { OnboardingState } from '../../shared/types'
-import {
-  getFeatureTipsAppOpenDecision,
-  isCliFeatureTipCompleted
-} from './components/feature-tips/feature-tip-startup-gate'
-import {
-  trackCmdJPaletteFeatureTipShown,
-  trackDobiusCliFeatureTipShown
-} from './components/feature-tips/feature-tip-telemetry'
 import { resolveMountedLazyModalIds, type LazyModalId } from './lazy-modal-mount-state'
 import { translate } from '@/i18n/i18n'
 import PinnedTabCloseDialog from './components/terminal-pane/PinnedTabCloseDialog'
@@ -117,6 +106,7 @@ import { applyRemoteWorkspacePatchStatus } from '@/lib/apply-remote-workspace-pa
 import { shouldMountUpdateCardForStatus } from '@/lib/should-mount-update-card'
 import { useGlobalKeyboardShortcuts } from './hooks/useGlobalKeyboardShortcuts'
 import { useWorkspaceStartupHydration } from './hooks/useWorkspaceStartupHydration'
+import { useOnboardingAndFeatureTipsGate } from './hooks/useOnboardingAndFeatureTipsGate'
 import {
   Landing,
   WorktreeCreationPanel,
@@ -364,21 +354,24 @@ function App(): React.JSX.Element {
   const [titlebarRightClusterWidth, setTitlebarRightClusterWidth] = useState(0)
   const [mountedLazyModalIds, setMountedLazyModalIds] = useState<Set<LazyModalId>>(() => new Set())
   const [shouldMountAddRepoDialog, setShouldMountAddRepoDialog] = useState(false)
-  const [onboarding, setOnboarding] = useState<OnboardingState | null>(null)
-  const [onboardingLoaded, setOnboardingLoaded] = useState(false)
-  const featureTipsPromptedThisSessionRef = useRef(false)
-  const featureTipsSuppressedByOnboardingThisSessionRef = useRef(false)
   const unmountAddRepoDialogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [featureTipCliInstalled, setFeatureTipCliInstalled] = useState<boolean | null>(null)
-  const [onboardingSettingsDetour, setOnboardingSettingsDetour] = useState(false)
-  const shouldRenderOnboarding = onboarding !== null && shouldShowOnboarding(onboarding)
-  const onboardingSettingsDetourActive =
-    onboardingSettingsDetour && activeView === 'settings' && shouldRenderOnboarding
-  if (onboardingSettingsDetour && !onboardingSettingsDetourActive) {
-    // Why: the settings detour is valid only while Settings is onscreen; clear
-    // it during render so onboarding can resume without a follow-up Effect pass.
-    setOnboardingSettingsDetour(false)
-  }
+  const {
+    onboarding,
+    setOnboarding,
+    setOnboardingLoaded,
+    shouldRenderOnboarding,
+    onboardingSettingsDetourActive,
+    beginOnboardingSettingsDetour
+  } = useOnboardingAndFeatureTipsGate({
+    activeView,
+    activeModal,
+    featureTipsSeenIds,
+    featureInteractions,
+    contextualToursAutoEligible,
+    persistedUIReady,
+    settings,
+    actions
+  })
 
   useEffect(() => {
     if (activeModal === 'add-repo') {
@@ -433,101 +426,6 @@ function App(): React.JSX.Element {
   useEditorExternalWatch()
   useGlobalFileDrop()
   useAutoAckViewedAgent()
-
-  useEffect(() => {
-    return onOnboardingReopened(setOnboarding)
-  }, [])
-
-  useEffect(() => {
-    // Why: `onboarding === null` is the startup loading state. Suppress
-    // contextual tours until the persisted onboarding state is known so a
-    // first-run user cannot have a tour marked seen before onboarding appears.
-    const suppressTours = !onboardingLoaded || shouldShowOnboarding(onboarding)
-    actions.setContextualToursOnboardingVisible(suppressTours)
-  }, [actions, onboarding, onboardingLoaded])
-
-  useEffect(() => {
-    if (!persistedUIReady || !onboardingLoaded || contextualToursAutoEligible !== null) {
-      return
-    }
-    // Why: this rollout is for users who are still in first-run onboarding.
-    // Existing profiles are locally classified once and never auto-toured.
-    actions.setContextualToursAutoEligible(shouldShowOnboarding(onboarding))
-  }, [actions, contextualToursAutoEligible, onboarding, onboardingLoaded, persistedUIReady])
-
-  useEffect(() => {
-    if (!persistedUIReady) {
-      return
-    }
-
-    let cancelled = false
-    void window.api.cli
-      .getInstallStatus()
-      .then((status) => {
-        if (cancelled) {
-          return
-        }
-        setFeatureTipCliInstalled(isCliFeatureTipCompleted(status))
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setFeatureTipCliInstalled(true)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [persistedUIReady])
-
-  useEffect(() => {
-    const featureTipsDecision = getFeatureTipsAppOpenDecision({
-      activeModal,
-      cliInstalled: featureTipCliInstalled,
-      featureTipsSeenIds,
-      featureInteractions,
-      onboarding,
-      persistedUIReady,
-      promptedThisSession: featureTipsPromptedThisSessionRef.current,
-      settings,
-      suppressedByOnboardingThisSession: featureTipsSuppressedByOnboardingThisSessionRef.current
-    })
-
-    if (featureTipsDecision.kind === 'suppress-for-onboarding') {
-      // Why: first-download users should finish onboarding without a second
-      // education modal appearing later in the same first-run session.
-      featureTipsSuppressedByOnboardingThisSessionRef.current = true
-      return
-    }
-
-    if (featureTipsDecision.kind !== 'open') {
-      return
-    }
-
-    featureTipsPromptedThisSessionRef.current = true
-    if (featureTipsDecision.tipId === 'dobius-cli') {
-      trackDobiusCliFeatureTipShown('app_open')
-    } else if (featureTipsDecision.tipId === 'cmd-j-palette') {
-      trackCmdJPaletteFeatureTipShown('app_open')
-    }
-    // Why: once a tip is visible, app quit/crash should not make it reappear
-    // on the next launch just because the user never clicked a dismiss button.
-    actions.markFeatureTipsSeen([featureTipsDecision.tipId])
-    actions.openModal('feature-tips', { source: 'app_open', tipId: featureTipsDecision.tipId })
-  }, [
-    activeModal,
-    actions,
-    featureTipCliInstalled,
-    featureInteractions,
-    featureTipsSeenIds,
-    onboarding,
-    persistedUIReady,
-    settings
-  ])
-
-  const beginOnboardingSettingsDetour = useCallback(() => {
-    setOnboardingSettingsDetour(true)
-  }, [])
 
   // Why: sidebar open/close flips width instantaneously. useLayoutEffect
   // runs synchronously after React commits the DOM but before paint, so
