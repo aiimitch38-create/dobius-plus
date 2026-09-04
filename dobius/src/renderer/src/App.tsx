@@ -1,14 +1,5 @@
 /* eslint-disable max-lines */
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import {
-  ArrowLeft,
-  ArrowRight,
-  Minimize2,
-  MoreHorizontal,
-  PanelLeft,
-  PanelRight
-} from 'lucide-react'
-import logo from '../../../resources/logo.svg'
 import { SYNC_FIT_PANES_EVENT, TOGGLE_TERMINAL_PANE_EXPAND_EVENT } from '@/constants/terminal'
 import { resolveLeftSidebarStyleVariables } from '@/lib/left-sidebar-appearance'
 import { canShowRightSidebarForView } from '@/lib/right-sidebar-visibility'
@@ -19,13 +10,7 @@ import {
 import { resolveLeftTitlebarChromeLayout } from '@/lib/titlebar-left-chrome'
 import { shouldShowWorktreeCreationSurface } from '@/lib/worktree-creation-surface'
 import { Toaster } from '@/components/ui/sonner'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger
-} from '@/components/ui/context-menu'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from './store'
 import { useShallow } from 'zustand/react/shallow'
 import { useIpcEvents } from './hooks/useIpcEvents'
@@ -33,7 +18,6 @@ import { useAutomationDispatchEvents } from './hooks/useAutomationDispatchEvents
 import RetainedAgentsSyncGate from './components/dashboard/RetainedAgentsSyncGate'
 import { DobiusTitlebarButtons } from './components/DobiusTitlebarButtons'
 import { AgentHibernationGate } from './components/AgentHibernationGate'
-import { ActivityTitlebarControls } from './components/activity/ActivityTitlebarControls'
 import Sidebar from './components/Sidebar'
 import { useSystemPrefersDark } from './components/terminal-pane/use-system-prefers-dark'
 import RightSidebar from './components/right-sidebar'
@@ -64,7 +48,6 @@ import { useGlobalFileDrop } from './hooks/useGlobalFileDrop'
 import { useRadixBodyPointerEventsRecovery } from './hooks/useRadixBodyPointerEventsRecovery'
 import { shouldRenderPetOverlay } from './components/pet/pet-overlay-visibility'
 import { useShortcutLabel } from './hooks/useShortcutLabel'
-import { shouldShowWorktreeHistoryControls } from './lib/titlebar-worktree-history-controls'
 import {
   canGoBackWorktreeHistory,
   canGoForwardWorktreeHistory
@@ -76,6 +59,11 @@ import { resolveMountedLazyModalIds, type LazyModalId } from './lazy-modal-mount
 import { translate } from '@/i18n/i18n'
 import PinnedTabCloseDialog from './components/terminal-pane/PinnedTabCloseDialog'
 import { WindowControls } from './components/app-shell/WindowControls'
+import {
+  AppTitlebarLeftControls,
+  AppTitlebarMainStrip,
+  AppRightSidebarToggleButton
+} from './components/app-shell/AppTitlebarChrome'
 import { shouldMountUpdateCardForStatus } from '@/lib/should-mount-update-card'
 import { useGlobalKeyboardShortcuts } from './hooks/useGlobalKeyboardShortcuts'
 import { useWorkspaceStartupHydration } from './hooks/useWorkspaceStartupHydration'
@@ -535,199 +523,40 @@ function App(): React.JSX.Element {
     setMountedLazyModalIds(new Set(resolvedMountedLazyModalIds))
   }
 
-  // Why: extracted so both the full-width titlebar (settings/landing) and
-  // the sidebar-width left header (workspace view) can share the same
-  // controls without duplicating the agent badge popover.
   const titlebarLeftControls = (
-    // Why: measure the ENTIRE row (traffic-light pad + sidebar toggle + agent
-    // badge + back/forward group) so the sidebar-collapse spacer in
-    // TabGroupPanel reserves enough width to clear the full floating
-    // `titlebar-left`. Measuring only the inner control cluster left the
-    // back/forward arrows hanging over the first tab when the sidebar was
-    // collapsed (Cmd+B), producing a half-occluded, non-scrollable tab strip.
-    // Why: collapsed workspace mode floats inside a w-0 sidebar wrapper; w-max
-    // prevents Windows Chromium from shrinking the app name down to one glyph.
-    <div
-      ref={titlebarLeftControlsRef}
-      className={`flex h-full shrink-0 items-center${
-        leftTitlebarChromeLayout.isFloating ? ' w-max' : ' w-full'
-      }`}
-    >
-      <div className="flex h-full items-center">
-        {isMac && !isFullScreen ? (
-          <div className="titlebar-traffic-light-pad" />
-        ) : hasCustomTitleBar ? (
-          /* Why: on Windows/Linux the native title bar is removed, so we render
-             the Dobius+ logo as a non-interactive identity anchor and a ··· button
-             that pops up the application menu (the same menu revealed by Alt
-             on the default autoHideMenuBar). */
-          <>
-            <img src={logo} alt="" aria-hidden className="titlebar-logo" />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="titlebar-icon-button"
-                  aria-label={translate('auto.App.8b0b8eb54f', 'Application menu')}
-                  onClick={() => window.api.ui.popupMenu()}
-                >
-                  <MoreHorizontal size={14} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>
-                {translate('auto.App.8b0b8eb54f', 'Application menu')}
-              </TooltipContent>
-            </Tooltip>
-          </>
-        ) : (
-          <div className="pl-2" />
-        )}
-        {showSidebar && !hasCustomTitleBar && (
-          <>
-            {settings?.showTitlebarAppName !== false && (
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <div
-                    className="titlebar-app-name"
-                    aria-label={translate('auto.App.5096cbbc86', 'Dobius+')}
-                  >
-                    <span className="titlebar-app-name-main">
-                      {translate('auto.App.5096cbbc86', 'Dobius+')}
-                    </span>
-                  </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem
-                    onSelect={() => {
-                      void actions.updateSettings({ showTitlebarAppName: false })
-                    }}
-                  >
-                    {translate('auto.App.e81217c1b7', 'Hide App Name')}
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            )}
-          </>
-        )}
-        {showSidebar && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="sidebar-toggle"
-                onClick={actions.toggleSidebar}
-                aria-label={translate('auto.App.e4b9e7dff7', 'Toggle sidebar')}
-              >
-                <PanelLeft size={16} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>
-              {translate('auto.App.ce37cf5279', 'Toggle sidebar ({{value0}})', {
-                value0: leftSidebarShortcutLabel
-              })}
-            </TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-      {/* Why: Back/Forward traverse mixed worktree + page history, so the
-          cluster is shown wherever the history shortcut is live. Hidden in
-          Settings and non-stack page views. */}
-      {shouldShowWorktreeHistoryControls(activeView) && (
-        // Why: when the workspace sidebar is collapsed, this header shrink-wraps
-        // and ml-auto has no spare width; keep a fixed gutter before Back.
-        <div className="ml-auto mr-3 flex items-center pl-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="sidebar-toggle sidebar-toggle-compact"
-                onClick={() => useAppStore.getState().goBackWorktree()}
-                disabled={!canGoBackWorktree}
-                aria-label={translate('auto.App.064bd07810', 'Go back')}
-              >
-                <ArrowLeft size={12} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>
-              {translate('auto.App.fe21e8f6f5', 'Go back ({{value0}})', {
-                value0: historyBackShortcutLabel
-              })}
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="sidebar-toggle sidebar-toggle-compact"
-                onClick={() => useAppStore.getState().goForwardWorktree()}
-                disabled={!canGoForwardWorktree}
-                aria-label={translate('auto.App.cf9099fe98', 'Go forward')}
-              >
-                <ArrowRight size={12} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>
-              {translate('auto.App.f7aa73e785', 'Go forward ({{value0}})', {
-                value0: historyForwardShortcutLabel
-              })}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      )}
-    </div>
+    <AppTitlebarLeftControls
+      titlebarLeftControlsRef={titlebarLeftControlsRef}
+      isFloating={leftTitlebarChromeLayout.isFloating}
+      isMac={isMac}
+      isFullScreen={isFullScreen}
+      hasCustomTitleBar={hasCustomTitleBar}
+      showSidebar={showSidebar}
+      showTitlebarAppName={settings?.showTitlebarAppName}
+      toggleSidebar={actions.toggleSidebar}
+      updateSettings={actions.updateSettings}
+      leftSidebarShortcutLabel={leftSidebarShortcutLabel}
+      activeView={activeView}
+      historyBackShortcutLabel={historyBackShortcutLabel}
+      historyForwardShortcutLabel={historyForwardShortcutLabel}
+      canGoBackWorktree={canGoBackWorktree}
+      canGoForwardWorktree={canGoForwardWorktree}
+    />
   )
 
-  const rightSidebarToggle = showRightSidebarControls ? (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          className="sidebar-toggle mr-2"
-          onClick={actions.toggleRightSidebar}
-          aria-label={translate('auto.App.9e0b441a91', 'Toggle right sidebar')}
-        >
-          <PanelRight size={16} />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" sideOffset={6}>
-        {translate('auto.App.c184e056de', 'Toggle right sidebar ({{value0}})', {
-          value0: rightSidebarShortcutLabel
-        })}
-      </TooltipContent>
-    </Tooltip>
-  ) : null
-
   const titlebarMainStrip = (
-    <>
-      {activeView === 'activity' ? (
-        <ActivityTitlebarControls />
-      ) : creationLayoutActive ? null : (
-        <div
-          id="titlebar-tabs"
-          className={`flex flex-1 min-w-0 self-stretch${!workspaceChromeActive ? ' invisible pointer-events-none' : ''}`}
-        />
-      )}
-      {showTitlebarExpandButton && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              className="titlebar-icon-button"
-              onClick={handleToggleExpand}
-              aria-label={translate('auto.App.c1cf0b0e4a', 'Collapse pane')}
-              disabled={!activeTabCanExpand}
-            >
-              <Minimize2 size={14} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>
-            {translate('auto.App.c1cf0b0e4a', 'Collapse pane')}
-          </TooltipContent>
-        </Tooltip>
-      )}
-      {/* Why: when the right sidebar is open, its own header renders
-      an identical close button — hide this copy so only one is
-      visible at a time. */}
-      <DobiusTitlebarButtons />
-      {!rightSidebarOpen && rightSidebarToggle}
-      {/* Why: reserve space so content is not obscured by the
-      fixed-position window-controls overlay on Windows/Linux. */}
-      {hasCustomTitleBar && <div className="window-controls-titlebar-spacer" />}
-    </>
+    <AppTitlebarMainStrip
+      activeView={activeView}
+      creationLayoutActive={creationLayoutActive}
+      workspaceChromeActive={workspaceChromeActive}
+      showTitlebarExpandButton={showTitlebarExpandButton}
+      onToggleExpand={handleToggleExpand}
+      activeTabCanExpand={activeTabCanExpand}
+      rightSidebarOpen={rightSidebarOpen}
+      hasCustomTitleBar={hasCustomTitleBar}
+      showRightSidebarControls={showRightSidebarControls}
+      onToggleRightSidebar={actions.toggleRightSidebar}
+      rightSidebarShortcutLabel={rightSidebarShortcutLabel}
+    />
   )
 
   return (
@@ -913,7 +742,11 @@ function App(): React.JSX.Element {
                             }
                           >
                             <DobiusTitlebarButtons />
-                            {rightSidebarToggle}
+                            <AppRightSidebarToggleButton
+                              show={showRightSidebarControls}
+                              onToggle={actions.toggleRightSidebar}
+                              shortcutLabel={rightSidebarShortcutLabel}
+                            />
                           </div>
                         )}
                         <div className="flex flex-1 min-w-0 min-h-0 flex-col">
