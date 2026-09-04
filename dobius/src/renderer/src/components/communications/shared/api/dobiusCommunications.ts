@@ -1088,11 +1088,20 @@ async function loadRelayChannels(): Promise<unknown[]> {
     if (!held || event.created_at > held.created_at) newestByChannel.set(id, event);
   }
   return [...newestByChannel.values()]
-    // Drop nameless metadata rows: relay-dm.ts provisions DM channels as bare
-    // 39000s with only d+p tags. Mapped as name:"" streams they polluted the
-    // sidebar AND made the create dialog's empty query "exactly match" them,
-    // which suppressed the create-channel row entirely.
-    .filter((event) => (eventTag(event, "name") ?? "").trim().length > 0)
+    // Drop nameless metadata rows — EXCEPT DMs. relay-dm.ts provisions DM
+    // channels as bare 39000s with only d+p tags, by design: a DM's display
+    // name is derived client-side from the other participant, never stored
+    // here (see dmParticipantDisplay.ts). Filtering those out too meant every
+    // DM vanished the moment the client re-fetched the channel list (tab
+    // switch, restart) — it only ever survived via the create call's
+    // optimistic local response. Non-DM nameless rows are still dropped:
+    // they're duplicate provisioning artifacts that polluted the sidebar AND
+    // made the create dialog's empty query "exactly match" them, which
+    // suppressed the create-channel row entirely.
+    .filter((event) => {
+      const channelType = eventTag(event, "t") ?? "stream";
+      return channelType === "dm" || (eventTag(event, "name") ?? "").trim().length > 0;
+    })
     .map((event) => {
       const id = eventTag(event, "d") ?? "";
       const channelType = eventTag(event, "t") ?? "stream";

@@ -67,6 +67,28 @@ json.dump({
 EOF
 rm -rf "$DEST"
 mv "$STAGE" "$DEST"
+
+# LaunchServices keys apps by bundle ID, not path. rm+mv puts a fresh inode at
+# the same path every install, and if another copy with the same bundle ID
+# exists anywhere else on disk (a stray handoff/backup copy), LaunchServices
+# can bind the Dock tile to the wrong one — the app "acts broken"/relaunches
+# the old build right after an update, which reads as a crash even though
+# nothing crashed. See ~/.claude/skills/learned-dobius-duplicate-app-icon.
+LSR=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$DEST/Contents/Info.plist" 2>/dev/null || echo "")
+if [ -x "$LSR" ]; then
+  "$LSR" -f "$DEST" >/dev/null 2>&1 || true
+  if [ -n "$BUNDLE_ID" ]; then
+    DUPES=$("$LSR" -dump 2>/dev/null | grep -B2 "bundle id:.*$BUNDLE_ID" | grep "path:" | awk '{print $2}' | sort -u | grep -v "^$DEST$" || true)
+    if [ -n "$DUPES" ]; then
+      echo "WARNING: another app on disk shares this bundle ID ($BUNDLE_ID) — this is exactly" >&2
+      echo "the duplicate-icon/wrong-app-launches bug. Move (don't delete) it out of Spotlight's" >&2
+      echo "reach, then re-run this script:" >&2
+      echo "$DUPES" >&2
+    fi
+  fi
+fi
+
 open -a "$DEST"
 
 echo "INSTALLED: $SRC_BRANCH@$SRC_COMMIT -> $DEST"
