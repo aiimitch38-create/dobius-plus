@@ -4,10 +4,10 @@ Last updated: 2026-09-04 (Communications Hub live-bug build)
 
 ## Current state (the one thing that matters)
 
-Working the 4-task Communications Hub live-bug build described in
-`AUTONOMOUS-BUILD.md` (context: `IRIS-REPORT-20260904.md`). Branch
-`feat/computer-use-v2`. **Tasks COMMS.1, COMMS.2, and COMMS.3 are done and
-committed.** COMMS.4 not started yet — last one.
+BUILD COMPLETE. All 4 tasks of the Communications Hub live-bug build
+described in `AUTONOMOUS-BUILD.md` (context: `IRIS-REPORT-20260904.md`) are
+done and committed on branch `feat/computer-use-v2`. Nothing pushed, no PR
+opened, `main` untouched — all local commits, per the build's own rules.
 
 An earlier attempt to run this build via `scripts/crackbot-supervisor.sh`
 in the background got killed with no work done (confirmed: git log showed
@@ -84,9 +84,49 @@ immediately (most likely candidate: some channels' membership never got
 Carson added, e.g. seeded/legacy channels created before the
 always-add-owner path existed).
 
-## What's next (in order)
+## Task COMMS.4 — DONE (commit `768c7dc1`)
 
-1. Task COMMS.4 — channel delete needs a sidebar entry point (`plans/TASK-COMMS.4.md`). Independent, lowest severity, last task in this build.
+Channel delete/leave is now reachable from a hover "⋮" button on each
+channel row, not just right-click. See `plans/TASK-COMMS.4-REVIEW.md`.
+Summary: new `ChannelRowActionsMenu.tsx`, using the shadcn `SidebarMenuAction`
+primitive (already in the UI kit, unused until now) — reuses the exact same
+`onDeleteChannel`/`onLeaveChannel` handlers and moderation-capability gating
+the existing right-click context menu already used, so no new backend
+wiring and no permission-check duplication.
+
+## What's next
+
+All 4 tasks committed on `feat/computer-use-v2`:
+`fe7d8fb9`/`67f09f2c` (COMMS.1), `551eb21d` (COMMS.2), `b0923feb` (COMMS.3),
+`768c7dc1` (COMMS.4), plus 4 docs-only log commits between them.
+
+**Two live-verification items owed** (both require building + installing a
+fresh package, which this build's own guardrail says not to do for routine
+per-task verification):
+1. **COMMS.3**: click the Huddle button in a channel Carson is a member of.
+   If still disabled there, the tooltip will now say why — most likely
+   candidate per the code review: some channel's membership never actually
+   included him (e.g. a channel from before `createDobiusChannel` started
+   always adding the creator as `"owner"`).
+2. **COMMS.4**: hover a channel row, click the new "⋮", delete a channel,
+   confirm it's actually gone after a reload.
+
+**One pre-existing test-infrastructure gap surfaced, not fixed** (flagged
+in `plans/TASK-COMMS.1-REVIEW.md`): this repo's real
+`pnpm --dir dobius run test` command does not actually execute `@comms/**/*.test.mjs`
+files with async test bodies — Vitest imports them but doesn't harvest
+`node:test` registrations, and async bodies never get a chance to run
+before Vitest reports "0 test". Confirmed pre-existing (predates this
+build). All new tests in this build were verified against a throwaway Node
+loader instead (not committed) — real, but not wired into this repo's
+actual CI/test command. Worth a human decision on whether to fix the
+harness (likely: switch these files to Vitest's own `describe`/`it`, or add
+a real `node --test` npm script with proper module resolution).
+
+Next build task, if any, should start fresh from `git log --oneline -15` on
+this branch rather than trusting any stale progress file — this session
+itself resumed from a `claude-progress.json`/`HANDOFF.md` that turned out to
+be leftovers from a completely unrelated older build.
 
 Each follows PLAN → IMPLEMENT → VERIFY → REVIEW → COMMIT → GATE → LOG per
 `AUTONOMOUS-BUILD.md`. Do not push, open a PR, or touch `main`. Do not build
