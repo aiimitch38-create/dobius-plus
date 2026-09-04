@@ -32,6 +32,12 @@ type HuddleIndicatorProps = {
   onStart?: () => void;
   /** Whether the start action is disabled (e.g., permissions, already starting). */
   startDisabled?: boolean;
+  /**
+   * Why the start button is disabled, shown in the tooltip instead of the
+   * default "Huddle" label. A disabled button with no explanation reads as
+   * broken — see TASK COMMS.3. Ignored when `startDisabled` is false.
+   */
+  startDisabledReason?: string | null;
 };
 
 /**
@@ -45,6 +51,7 @@ export function HuddleIndicator({
   renderMode = "button",
   onStart,
   startDisabled,
+  startDisabledReason,
 }: HuddleIndicatorProps) {
   const { joinHuddle, isStarting } = useHuddle();
   const queryClient = useQueryClient();
@@ -225,6 +232,8 @@ export function HuddleIndicator({
       );
     }
 
+    const disabledReason = startDisabled ? (startDisabledReason ?? null) : null;
+
     return (
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -246,7 +255,7 @@ export function HuddleIndicator({
             </Button>
           </span>
         </TooltipTrigger>
-        <TooltipContent>Huddle</TooltipContent>
+        <TooltipContent>{disabledReason ?? "Huddle"}</TooltipContent>
       </Tooltip>
     );
   }

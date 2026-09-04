@@ -13,7 +13,10 @@ import {
 } from "@comms/features/agents/hooks";
 import { requestOpenCreateAgent } from "@comms/features/agents/openCreateAgentEvent";
 import { useChannelMembersQuery } from "@comms/features/channels/hooks";
-import { canStartHuddleInChannel } from "@comms/features/channels/lib/huddleAvailability";
+import {
+  canStartHuddleInChannel,
+  huddleStartDisabledReason,
+} from "@comms/features/channels/lib/huddleAvailability";
 import type { Channel } from "@comms/shared/api/types";
 import { normalizePubkey } from "@comms/shared/lib/pubkey";
 import { Button } from "@comms/shared/ui/button";
@@ -90,6 +93,12 @@ export function ChannelMembersBar({
     currentPubkey,
     selfMember,
   });
+  // Explains a disabled Huddle button instead of leaving it silently inert —
+  // see TASK COMMS.3. HuddleIndicator only shows this when startDisabled is true.
+  const huddleReason = huddleStartDisabledReason({
+    canStartHuddle,
+    isMembersPending: membersQuery.isPending,
+  });
   const previousChannelIdRef = React.useRef(channel.id);
 
   React.useEffect(() => {
@@ -134,6 +143,7 @@ export function ChannelMembersBar({
       }}
       renderMode={variant === "compact" ? "menu-item" : "button"}
       startDisabled={!canStartHuddle || isStartingHuddle}
+      startDisabledReason={huddleReason}
     />
   );
 

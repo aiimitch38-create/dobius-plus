@@ -33,3 +33,28 @@ export function canStartHuddleInChannel({
 
   return channel.visibility === "open" || selfMember !== null;
 }
+
+/**
+ * Explains why the Huddle start button is disabled — TASK COMMS.3: a
+ * disabled button with a static "Huddle" tooltip and no explanation reads as
+ * broken. Returns null once the button should be enabled (caller decides
+ * whether to actually show this — it's meaningless while the button isn't
+ * disabled for some other reason, e.g. already starting).
+ */
+export function huddleStartDisabledReason({
+  canStartHuddle,
+  isMembersPending,
+}: {
+  canStartHuddle: boolean;
+  isMembersPending: boolean;
+}): string | null {
+  if (isMembersPending) {
+    return "Members list is still loading";
+  }
+
+  if (!canStartHuddle) {
+    return "You're not a member of this channel";
+  }
+
+  return null;
+}

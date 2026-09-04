@@ -1,7 +1,10 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { canStartHuddleInChannel } from "./huddleAvailability.ts";
+import {
+  canStartHuddleInChannel,
+  huddleStartDisabledReason,
+} from "./huddleAvailability.ts";
 
 const SELF = "a".repeat(64);
 const OTHER = "b".repeat(64);
@@ -132,5 +135,32 @@ test("canStartHuddleInChannel blocks archived channels and DMs", () => {
       selfMember: null,
     }),
     false,
+  );
+});
+
+test("huddleStartDisabledReason explains a still-loading members list", () => {
+  assert.equal(
+    huddleStartDisabledReason({ canStartHuddle: false, isMembersPending: true }),
+    "Members list is still loading",
+  );
+  // Loading takes priority even if canStartHuddle happens to already be true
+  // (e.g. an open channel) — the members list isn't trustworthy yet either way.
+  assert.equal(
+    huddleStartDisabledReason({ canStartHuddle: true, isMembersPending: true }),
+    "Members list is still loading",
+  );
+});
+
+test("huddleStartDisabledReason explains non-membership once loaded", () => {
+  assert.equal(
+    huddleStartDisabledReason({ canStartHuddle: false, isMembersPending: false }),
+    "You're not a member of this channel",
+  );
+});
+
+test("huddleStartDisabledReason returns null once the button should be enabled", () => {
+  assert.equal(
+    huddleStartDisabledReason({ canStartHuddle: true, isMembersPending: false }),
+    null,
   );
 });
