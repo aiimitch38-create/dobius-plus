@@ -121,6 +121,21 @@ test("per-relay channel cap evicts the least recently written snapshot", () => {
   assert.equal(retained.length, 20);
 });
 
+test("inline base64 screenshots are stripped before persisting", () => {
+  clearRelay();
+  const bigBase64 = "A".repeat(500_000);
+  const withScreenshot = makeEvent({
+    id: "with-screenshot",
+    content: `caption\n\n![screenshot](data:image/png;base64,${bigBase64})`,
+  });
+  writeMessageSnapshot(RELAY, "chan-1", [withScreenshot]);
+  const persisted = readMessageSnapshot(RELAY, "chan-1");
+  assert.equal(persisted.length, 1);
+  assert.ok(!persisted[0].content.includes(bigBase64));
+  assert.ok(persisted[0].content.includes("caption"));
+  assert.ok(persisted[0].content.includes("[image omitted from cache]"));
+});
+
 test("remove clears every snapshot for that relay only", () => {
   clearRelay();
   clearRelay("wss://other.example.com");
