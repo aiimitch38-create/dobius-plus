@@ -1,16 +1,5 @@
 /* eslint-disable max-lines */
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type SetStateAction
-} from 'react'
-import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
-
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -62,19 +51,7 @@ import { onOnboardingReopened } from './components/onboarding/show-onboarding-ev
 import { shouldShowOnboarding } from './components/onboarding/should-show-onboarding'
 import { MarkdownTemplatePicker } from './components/editor/MarkdownTemplatePicker'
 import { FloatingTerminalToggleButton } from './components/floating-terminal/FloatingTerminalToggleButton'
-import {
-  TOGGLE_FLOATING_TERMINAL_EVENT,
-  requestFloatingTerminalOpenMaximized
-} from '@/lib/floating-terminal'
-import {
-  isFloatingWorkspacePanelFocused,
-  isFloatingWorkspacePanelShortcut,
-  isFloatingWorkspaceTerminalInputTarget,
-  shouldMinimizeFloatingWorkspacePanelOnCloseShortcut
-} from '@/lib/floating-workspace-terminal-actions'
-import { createFloatingWorkspaceTourInteractionSnapshot } from '@/lib/floating-workspace-tour-interaction-snapshot'
-import { requestScrollToCurrentWorkspaceRevealAndRename } from '@/lib/scroll-to-current-workspace-status'
-import { OPEN_WORKSPACE_BOARD_EVENT } from './components/sidebar/useWorkspaceBoardPanel'
+import { useFloatingTerminalOpenState } from './hooks/useFloatingTerminalOpenState'
 import { WorkspacePortScanner } from './components/ports/WorkspacePortScanner'
 import { CrashReportDialog } from './components/crash-report/CrashReportDialog'
 import NewWorkspaceComposerModal from './components/NewWorkspaceComposerModal'
@@ -126,13 +103,7 @@ import {
 import { shouldRenderPetOverlay } from './components/pet/pet-overlay-visibility'
 import { applyDocumentTheme } from './lib/document-theme'
 import { applyAppSkin } from './lib/app-skin'
-import { isEditableTarget } from './lib/editable-target'
-import { getSelectedTextForFileSearch } from './lib/file-search-selection'
 import { useShortcutLabel } from './hooks/useShortcutLabel'
-import {
-  folderRelativePathToIncludeGlob,
-  selectedExplorerFolderRelativePath
-} from './components/right-sidebar/file-search-include-pattern'
 import { shouldShowWorktreeHistoryControls } from './lib/titlebar-worktree-history-controls'
 import {
   canGoBackWorktreeHistory,
@@ -141,8 +112,7 @@ import {
 import { selectFloatingVisibleTabCount } from './store/selectors'
 import { selectActiveTerminalChromeState } from './store/active-terminal-chrome-selector'
 import type { VirtualizedScrollAnchor } from './hooks/useVirtualizedScrollAnchor'
-import type { RemoteWorkspacePatchResult } from '../../shared/remote-workspace-types'
-import type { OnboardingState, UpdateStatus } from '../../shared/types'
+import type { OnboardingState } from '../../shared/types'
 import {
   getFeatureTipsAppOpenDecision,
   isCliFeatureTipCompleted
@@ -151,21 +121,47 @@ import {
   trackCmdJPaletteFeatureTipShown,
   trackDobiusCliFeatureTipShown
 } from './components/feature-tips/feature-tip-telemetry'
-import {
-  keybindingMatchesAction,
-  type KeybindingActionId,
-  type KeybindingContext,
-  type PhysicalModifierToken
-} from '../../shared/keybindings'
-import {
-  ModifierDoubleTapDetector,
-  toModifierDoubleTapEvent
-} from '../../shared/modifier-double-tap-detector'
-import { isGitRepoKind } from '../../shared/repo-kind'
-import { showTerminalShortcutCaptureNotification } from '@/lib/terminal-shortcut-capture-notification'
 import { resolveMountedLazyModalIds, type LazyModalId } from './lazy-modal-mount-state'
 import { translate } from '@/i18n/i18n'
 import PinnedTabCloseDialog from './components/terminal-pane/PinnedTabCloseDialog'
+import { WindowControls } from './components/app-shell/WindowControls'
+import { applyRemoteWorkspacePatchStatus } from '@/lib/apply-remote-workspace-patch-status'
+import { shouldMountUpdateCardForStatus } from '@/lib/should-mount-update-card'
+import { useGlobalKeyboardShortcuts } from './hooks/useGlobalKeyboardShortcuts'
+import {
+  Landing,
+  WorktreeCreationPanel,
+  TaskPage,
+  AutomationsPage,
+  ActivityPrototypePage,
+  Settings,
+  SkillsPage,
+  AgentsPage,
+  BuzzPage,
+  WorkspaceSpacePage,
+  MobilePage,
+  QuickOpen,
+  WorktreeJumpPalette,
+  WorkspaceCleanupDialog,
+  Terminal,
+  StatusBar,
+  SetupGuideModal,
+  FeatureWallModal,
+  FeatureTipsModal,
+  AddRepoDialog,
+  NonGitFolderDialog,
+  AddProjectFromFolderDialog,
+  ProjectAddedDialog,
+  DeleteWorktreeDialog,
+  DictationController,
+  SshPassphraseDialog,
+  UpdateCard,
+  ContextualTourOverlay,
+  SetupGuideTelemetryObserver,
+  FloatingTerminalPanel,
+  PetOverlay,
+  OnboardingFlow
+} from './app-lazy-pages'
 
 const isMac = navigator.userAgent.includes('Mac')
 const isWindows = !isMac && navigator.userAgent.includes('Windows')
@@ -179,220 +175,10 @@ const hasCustomTitleBar = shouldRenderDesktopWindowChrome({
   isWebClient: isPairedWebClientWindow()
 })
 
-function getKeybindingContext(target: EventTarget | null): KeybindingContext {
-  return target instanceof HTMLElement && target.classList.contains('xterm-helper-textarea')
-    ? 'terminal'
-    : 'app'
-}
-
-// Abstraction over a real KeyboardEvent and a synthetic double-tap gesture so a
-// single dispatch path serves both. KeybindingInput-compatible (key/code +
-// modifier flags) so it flows straight into keybindingMatchesAction.
-type ShortcutDispatchInput = {
-  key?: string
-  code?: string
-  altKey?: boolean
-  metaKey?: boolean
-  ctrlKey?: boolean
-  shiftKey?: boolean
-  doubleTapModifier?: PhysicalModifierToken
-  target: EventTarget | null
-  defaultPrevented: boolean
-  preventDefault: () => void
-}
-
-// Why: Windows ('hidden' titleBarStyle) and Linux (frame: false) both remove
-// the native OS title bar, so we render our own minimize/maximize/close
-// buttons. These SVG icons match the Fluent/Win11 style: thin 10×10 paths on a
-// 40×30 hit area.
-function WindowControls(): React.JSX.Element {
-  const [maximized, setMaximized] = useState(false)
-  useEffect(() => {
-    // Why: window:maximize-changed only fires on transitions, so a window
-    // restored to a maximized state at startup would render the wrong icon
-    // until the user first clicks the button. Seed from main on mount.
-    let cancelled = false
-    void window.api.ui.isMaximized().then((value) => {
-      if (!cancelled) {
-        setMaximized(value)
-      }
-    })
-    const unsubscribe = window.api.ui.onMaximizeChanged(setMaximized)
-    return () => {
-      cancelled = true
-      unsubscribe()
-    }
-  }, [])
-  return (
-    <div className="window-controls">
-      <button
-        className="window-controls-btn"
-        aria-label={translate('auto.App.bbb7f90669', 'Minimize')}
-        onClick={() => window.api.ui.minimize()}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-          <path d="M0 5h10v1H0z" fill="currentColor" />
-        </svg>
-      </button>
-      <button
-        className="window-controls-btn"
-        aria-label={
-          maximized
-            ? translate('auto.App.66f0a552e5', 'Restore')
-            : translate('auto.App.c9d6f98459', 'Maximize')
-        }
-        onClick={() => window.api.ui.maximize()}
-      >
-        {maximized ? (
-          // Restore icon (two overlapping squares)
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-            <path d="M2 0v2H0v8h8V8h2V0H2zm6 9H1V3h7v6zM9 7H8V2H3V1h6v6z" fill="currentColor" />
-          </svg>
-        ) : (
-          // Maximize icon (single square outline)
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-            <path d="M0 0v10h10V0H0zm9 9H1V1h8v8z" fill="currentColor" />
-          </svg>
-        )}
-      </button>
-      <button
-        className="window-controls-btn window-controls-close"
-        aria-label={translate('auto.App.e960d18540', 'Close')}
-        // Why: IPC to main so the BrowserWindow 'close' event fires, which
-        // sends 'window:close-requested' back to the renderer and keeps the
-        // terminal-running confirmation guard active. window.close() is
-        // unreliable in sandboxed renderers.
-        onClick={() => window.api.ui.requestClose()}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-          <path d="M1 0L0 1l4 4-4 4 1 1 4-4 4 4 1-1-4-4 4-4-1-1-4 4-4-4z" fill="currentColor" />
-        </svg>
-      </button>
-    </div>
-  )
-}
-
-const Landing = lazy(() => import('./components/Landing'))
-const WorktreeCreationPanel = lazy(
-  () => import('./components/worktree-creation/WorktreeCreationPanel')
-)
-const TaskPage = lazy(() => import('./components/TaskPage'))
-const AutomationsPage = lazy(() => import('./components/automations/AutomationsPage'))
-const ActivityPrototypePage = lazy(() => import('./components/activity/ActivityPrototypePage'))
-const Settings = lazy(() => import('./components/settings/Settings'))
-const SkillsPage = lazy(() => import('./components/skills/SkillsPage'))
-const AgentsPage = lazy(() => import('./components/agents/AgentsPage'))
-// The restored Communications client. Lazy so its dependency tree (router,
-// query, editor, syntax highlighting) stays out of the initial bundle.
-const BuzzPage = lazy(() => import('./components/communications/CommunicationsPage'))
-const WorkspaceSpacePage = lazy(() => import('./components/workspace-space/WorkspaceSpacePage'))
-const MobilePage = lazy(() => import('./components/mobile/MobilePage'))
-const QuickOpen = lazy(() => import('./components/QuickOpen'))
-const WorktreeJumpPalette = lazy(() => import('./components/WorktreeJumpPalette'))
-const WorkspaceCleanupDialog = lazy(
-  () => import('./components/workspace-cleanup/WorkspaceCleanupDialog')
-)
-const Terminal = lazy(() => import('./components/Terminal'))
-const StatusBar = lazy(() =>
-  import('./components/status-bar/StatusBar').then((module) => ({ default: module.StatusBar }))
-)
-const SetupGuideModal = lazy(() => import('./components/setup-guide/SetupGuideModal'))
-const FeatureWallModal = lazy(() => import('./components/feature-wall/FeatureWallModal'))
-const FeatureTipsModal = lazy(() => import('./components/feature-tips/FeatureTipsModal'))
-const AddRepoDialog = lazy(() => import('./components/sidebar/AddRepoDialog'))
-const NonGitFolderDialog = lazy(() => import('./components/sidebar/NonGitFolderDialog'))
-const AddProjectFromFolderDialog = lazy(
-  () => import('./components/sidebar/AddProjectFromFolderDialog')
-)
-const ProjectAddedDialog = lazy(() => import('./components/sidebar/ProjectAddedDialog'))
-const DeleteWorktreeDialog = lazy(() => import('./components/sidebar/DeleteWorktreeDialog'))
-const DictationController = lazy(() =>
-  import('./components/dictation/DictationController').then((module) => ({
-    default: module.DictationController
-  }))
-)
-const SshPassphraseDialog = lazy(() =>
-  import('./components/settings/SshPassphraseDialog').then((module) => ({
-    default: module.SshPassphraseDialog
-  }))
-)
-const UpdateCard = lazy(() =>
-  import('./components/UpdateCard').then((module) => ({ default: module.UpdateCard }))
-)
-const ContextualTourOverlay = lazy(() =>
-  import('./components/contextual-tours/ContextualTourOverlay').then((module) => ({
-    default: module.ContextualTourOverlay
-  }))
-)
-const SetupGuideTelemetryObserver = lazy(() =>
-  import('./components/setup-guide/SetupGuideTelemetryObserver').then((module) => ({
-    default: module.SetupGuideTelemetryObserver
-  }))
-)
-const FloatingTerminalPanel = lazy(() =>
-  import('./components/floating-terminal/FloatingTerminalPanel').then((module) => ({
-    default: module.FloatingTerminalPanel
-  }))
-)
-// Why: lazy-loaded so the WebP asset + overlay module aren't fetched unless
-// the user opts into the experimental flag.
-const PetOverlay = lazy(() => import('./components/pet/PetOverlay'))
-// Why: lazy so onboarding's step modules + assets aren't fetched for users
-// past first-launch. The gate `shouldShowOnboarding` lives in its own tiny
-// module so no eager import path pulls OnboardingFlow into the main chunk.
-const OnboardingFlow = lazy(() => import('./components/onboarding/OnboardingFlow'))
-
-function applyRemoteWorkspacePatchStatus(
-  targetId: string,
-  result: RemoteWorkspacePatchResult
-): void {
-  const store = useAppStore.getState()
-  if (result.ok) {
-    store.setRemoteWorkspaceSyncStatus(targetId, {
-      phase: 'synced',
-      direction: 'push',
-      revision: result.snapshot.revision,
-      updatedAt: result.snapshot.updatedAt,
-      lastSyncedAt: Date.now(),
-      message: translate('auto.App.332dbfa497', 'Workspace uploaded')
-    })
-    return
-  }
-  store.setRemoteWorkspaceSyncStatus(targetId, {
-    phase: result.reason === 'stale-revision' ? 'conflict' : 'offline',
-    direction: 'push',
-    revision: result.snapshot?.revision,
-    updatedAt: result.snapshot?.updatedAt,
-    lastSyncedAt: Date.now(),
-    message:
-      result.message ??
-      (result.reason === 'stale-revision'
-        ? 'Workspace changed on another device'
-        : 'Remote workspace sync unavailable')
-  })
-}
-
-function shouldMountUpdateCardForStatus(status: UpdateStatus): boolean {
-  if (status.state === 'idle') {
-    return false
-  }
-  if (status.state === 'checking' || status.state === 'not-available') {
-    return status.userInitiated === true
-  }
-  return true
-}
-
 function App(): React.JSX.Element {
   const clearUnreadDockBadge = useUnreadDockBadge()
   useRadixBodyPointerEventsRecovery()
   useWebSessionTabsSync()
-  const [floatingTerminalOpen, setFloatingTerminalOpen] = useState(false)
-  const floatingWorkspaceTourInteractionSnapshotRef = useRef<{
-    wasPreviouslyInteracted?: boolean
-    persisted?: Promise<void>
-    recordFeatureInteractionForTour: boolean
-  } | null>(null)
-
   // Why: Zustand actions are referentially stable, but each individual
   // useAppStore(s => s.someAction) still registers a subscription that React
   // must check on every store mutation. Consolidating action refs into one
@@ -517,20 +303,14 @@ function App(): React.JSX.Element {
   // Why: a closed empty floating workspace is not startup-critical. Once it owns
   // tabs, keep it mounted while closed so hidden terminal/browser/editor panes
   // retain their local state.
+  const {
+    floatingTerminalOpen,
+    setFloatingTerminalOpenWithFocus,
+    floatingWorkspaceTourInteractionSnapshotRef,
+    cancelFloatingTerminalReturnFocusFrame
+  } = useFloatingTerminalOpenState(floatingTerminalEnabled)
   const shouldMountFloatingTerminalPanel =
     floatingTerminalEnabled && (floatingTerminalOpen || floatingVisibleTabCount > 0)
-  // Why: the floating workspace is a transient overlay; hotkey minimize should
-  // return keyboard focus to the surface the user was working in before it.
-  const floatingTerminalReturnFocusRef = useRef<HTMLElement | null>(null)
-  const floatingTerminalReturnFocusFrameRef = useRef<number | null>(null)
-
-  const cancelFloatingTerminalReturnFocusFrame = useCallback((): void => {
-    if (floatingTerminalReturnFocusFrameRef.current === null) {
-      return
-    }
-    cancelAnimationFrame(floatingTerminalReturnFocusFrameRef.current)
-    floatingTerminalReturnFocusFrameRef.current = null
-  }, [])
 
   const setAppRootNode = useCallback(
     (node: HTMLDivElement | null): void => {
@@ -542,72 +322,6 @@ function App(): React.JSX.Element {
     },
     [cancelFloatingTerminalReturnFocusFrame, clearUnreadDockBadge]
   )
-
-  const rememberFloatingTerminalReturnFocus = useCallback((): void => {
-    const active = document.activeElement
-    if (!(active instanceof HTMLElement)) {
-      floatingTerminalReturnFocusRef.current = null
-      return
-    }
-    if (
-      active.closest('[data-floating-terminal-panel]') ||
-      active.closest('[data-floating-terminal-toggle]')
-    ) {
-      return
-    }
-    floatingTerminalReturnFocusRef.current = active
-  }, [])
-
-  const restoreFloatingTerminalReturnFocus = useCallback((): void => {
-    const target = floatingTerminalReturnFocusRef.current
-    floatingTerminalReturnFocusRef.current = null
-    if (!target || !document.contains(target)) {
-      return
-    }
-    cancelFloatingTerminalReturnFocusFrame()
-    floatingTerminalReturnFocusFrameRef.current = requestAnimationFrame(() => {
-      floatingTerminalReturnFocusFrameRef.current = null
-      if (!document.contains(target)) {
-        return
-      }
-      target.focus({ preventScroll: true })
-    })
-  }, [cancelFloatingTerminalReturnFocusFrame])
-
-  const setFloatingTerminalOpenWithFocus = useCallback(
-    (nextOpen: SetStateAction<boolean>): void => {
-      const resolvedOpen =
-        typeof nextOpen === 'function' ? nextOpen(floatingTerminalOpen) : nextOpen
-      // Why: recordFeatureInteraction updates Zustand subscribers; doing it
-      // inside React's state updater logs a render-phase update warning.
-      if (resolvedOpen && !floatingTerminalOpen) {
-        const state = useAppStore.getState()
-        floatingWorkspaceTourInteractionSnapshotRef.current =
-          createFloatingWorkspaceTourInteractionSnapshot(state)
-        rememberFloatingTerminalReturnFocus()
-      } else if (!resolvedOpen && floatingTerminalOpen) {
-        restoreFloatingTerminalReturnFocus()
-      }
-      setFloatingTerminalOpen(resolvedOpen)
-    },
-    [floatingTerminalOpen, rememberFloatingTerminalReturnFocus, restoreFloatingTerminalReturnFocus]
-  )
-
-  useEffect(() => {
-    const toggleFloatingTerminal = (): void => {
-      if (floatingTerminalEnabled) {
-        setFloatingTerminalOpenWithFocus((open) => !open)
-      }
-    }
-    window.addEventListener(TOGGLE_FLOATING_TERMINAL_EVENT, toggleFloatingTerminal)
-    return () => window.removeEventListener(TOGGLE_FLOATING_TERMINAL_EVENT, toggleFloatingTerminal)
-  }, [floatingTerminalEnabled, setFloatingTerminalOpenWithFocus])
-
-  useEffect(() => {
-    if (!floatingTerminalEnabled) {
-      setFloatingTerminalOpenWithFocus(false)
-    }
-  }, [floatingTerminalEnabled, setFloatingTerminalOpenWithFocus])
 
   const sidebarWidth = useAppStore((s) => s.sidebarWidth)
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
@@ -1494,7 +1208,7 @@ function App(): React.JSX.Element {
     )
   }
 
-  const globalShortcutStateRef = useRef({
+  useGlobalKeyboardShortcuts({
     activeView,
     activeWorktreeId,
     actions,
@@ -1505,411 +1219,9 @@ function App(): React.JSX.Element {
     terminalShortcutPolicy: settings?.terminalShortcutPolicy,
     setFloatingTerminalOpenWithFocus,
     workspaceChromeActive,
-    creationLayoutActive
+    creationLayoutActive,
+    shortcutPlatform
   })
-  // Why: window key listeners are global and long-lived; keep one registration
-  // while letting the handler read current shortcut state on each key event.
-  globalShortcutStateRef.current = {
-    activeView,
-    activeWorktreeId,
-    actions,
-    floatingTerminalEnabled,
-    floatingTerminalOpen,
-    floatingVisibleTabCount,
-    keybindings,
-    terminalShortcutPolicy: settings?.terminalShortcutPolicy,
-    setFloatingTerminalOpenWithFocus,
-    workspaceChromeActive,
-    creationLayoutActive
-  }
-
-  useEffect(() => {
-    const doubleTapDetector = new ModifierDoubleTapDetector()
-
-    const dispatchShortcutInput = (input: ShortcutDispatchInput): void => {
-      const {
-        activeView,
-        activeWorktreeId,
-        actions,
-        floatingTerminalEnabled,
-        floatingTerminalOpen,
-        floatingVisibleTabCount,
-        keybindings,
-        terminalShortcutPolicy,
-        setFloatingTerminalOpenWithFocus,
-        workspaceChromeActive,
-        creationLayoutActive
-      } = globalShortcutStateRef.current
-
-      // Why: child-component handlers (e.g. terminal search Cmd+G / Cmd+Shift+G)
-      // register on the same window capture phase and fire first. If they already
-      // called preventDefault, this handler must not also act on the event —
-      // otherwise both actions execute (e.g. search navigation AND sidebar open).
-      if (input.defaultPrevented) {
-        return
-      }
-      // Why: the Settings recorder intentionally captures existing app
-      // shortcuts, so global handlers must not fire while its button has focus.
-      if (
-        input.target instanceof Element &&
-        input.target.closest('[data-shortcut-recorder-active]') !== null
-      ) {
-        return
-      }
-      const context = getKeybindingContext(input.target)
-
-      // Note: some app-level shortcuts are also intercepted via
-      // before-input-event in createMainWindow.ts so they still work when a
-      // browser guest has focus. The renderer keeps matching handlers for
-      // local-focus cases and to preserve the same guards in one place.
-
-      const matchShortcut = (actionId: KeybindingActionId): boolean =>
-        keybindingMatchesAction(actionId, input, shortcutPlatform, keybindings, {
-          context,
-          terminalShortcutPolicy
-        })
-      const notifyTerminalCapture = (actionId: KeybindingActionId): void => {
-        if (
-          context !== 'terminal' ||
-          (terminalShortcutPolicy ?? 'dobius-first') !== 'dobius-first'
-        ) {
-          return
-        }
-        showTerminalShortcutCaptureNotification({
-          actionId,
-          platform: shortcutPlatform,
-          keybindings
-        })
-      }
-
-      const canRevealRightSidebar = !creationLayoutActive && canShowRightSidebarForView(activeView)
-
-      const openSearchSidebar = (query: string | null): void => {
-        actions.showRightSidebarSearch(query ? { query } : undefined)
-      }
-
-      if (matchShortcut('sidebar.search.toggle') && canRevealRightSidebar) {
-        // Why: when focus is inside the file explorer and a folder is selected,
-        // Cmd/Ctrl+Shift+F means "Find in Folder" — seed the include pattern
-        // with that folder instead of treating the chord as a text-search seed.
-        const selectedFolderRelativePath =
-          document.activeElement instanceof Element
-            ? selectedExplorerFolderRelativePath(document.activeElement)
-            : null
-        if (selectedFolderRelativePath !== null && activeWorktreeId) {
-          input.preventDefault()
-          notifyTerminalCapture('sidebar.search.toggle')
-          actions.showRightSidebarSearch({
-            includePattern: folderRelativePathToIncludeGlob(selectedFolderRelativePath)
-          })
-          return
-        }
-
-        const selectedText = getSelectedTextForFileSearch()
-        if (selectedText) {
-          input.preventDefault()
-          notifyTerminalCapture('sidebar.search.toggle')
-          openSearchSidebar(selectedText)
-          return
-        }
-      }
-
-      // Why: an empty floating workspace has no tab to close; Cmd/Ctrl+W
-      // should hide that transient overlay before underlying app surfaces act.
-      if (
-        keybindingMatchesAction('tab.close', input, shortcutPlatform, keybindings, {
-          context: 'app'
-        }) &&
-        shouldMinimizeFloatingWorkspacePanelOnCloseShortcut({
-          floatingTerminalOpen,
-          floatingVisibleTabCount
-        })
-      ) {
-        input.preventDefault()
-        setFloatingTerminalOpenWithFocus(false)
-        return
-      }
-
-      // Why: when the floating workspace is closed, its own keydown handler is
-      // unmounted and cannot claim Cmd+Opt+Shift+A. Honor the maximize chord
-      // here by opening the panel with a one-shot intent so it mounts straight
-      // into the maximized state. While the panel is open, this is a no-op: the
-      // panel's handler owns the maximize/restore toggle.
-      if (
-        !floatingTerminalOpen &&
-        matchShortcut('floatingWorkspace.maximize') &&
-        floatingTerminalEnabled
-      ) {
-        input.preventDefault()
-        requestFloatingTerminalOpenMaximized()
-        setFloatingTerminalOpenWithFocus(true)
-        return
-      }
-
-      // Why: keep this guard. TipTap's Cmd+B bold binding depends on the
-      // window-level handler *not* toggling the sidebar when focus lives in an
-      // editable surface. The main-process before-input-event already carves out
-      // Cmd+B for the markdown editor (see createMainWindow.ts +
-      // docs/markdown-cmd-b-bold-design.md), but this renderer-side fallback
-      // still covers the blur→press IPC race and any non-carved editable surface.
-      if (isEditableTarget(input.target)) {
-        return
-      }
-
-      // Why: xterm's helper textarea is intentionally not a generic editable
-      // target, but floating-terminal SSH/tmux control chords must still reach
-      // the terminal instead of app-level chrome shortcuts.
-      if (isFloatingWorkspaceTerminalInputTarget(input.target)) {
-        return
-      }
-
-      // Cmd/Ctrl+Alt+Arrow — worktree history back/forward. This stays before
-      // right-sidebar shortcuts because it is navigation, not sidebar reveal.
-      if (matchShortcut('worktree.history.back') || matchShortcut('worktree.history.forward')) {
-        // Why: Back/Forward traverse mixed worktree + page visits, so the
-        // shortcut is active wherever the titlebar button cluster is (terminal
-        // or stack-backed pages). Still suppressed in Settings.
-        if (creationLayoutActive || !shouldShowWorktreeHistoryControls(activeView)) {
-          return
-        }
-        input.preventDefault()
-        const store = useAppStore.getState()
-        if (matchShortcut('worktree.history.back')) {
-          store.goBackWorktree()
-        } else {
-          store.goForwardWorktree()
-        }
-        return
-      }
-
-      // Why: only short-circuit chords the floating panel's own keydown
-      // handler claims (Cmd/Ctrl+T, Cmd/Ctrl+W, Cmd/Ctrl+Shift+B/M). Other
-      // app-level mod shortcuts (B, L, Shift+E/F/G) have no panel-level
-      // counterpart, so suppressing them here would silently no-op when
-      // focus lives inside the floating panel.
-      const floatingWorkspaceFocused = isFloatingWorkspacePanelFocused()
-      if (floatingWorkspaceFocused) {
-        if (
-          isFloatingWorkspacePanelShortcut(input, shortcutPlatform, null, keybindings, {
-            context,
-            terminalShortcutPolicy
-          })
-        ) {
-          return
-        }
-      }
-
-      // Cmd/Ctrl+B — toggle left sidebar
-      if (matchShortcut('sidebar.left.toggle')) {
-        input.preventDefault()
-        notifyTerminalCapture('sidebar.left.toggle')
-        actions.toggleSidebar()
-        return
-      }
-
-      // Toggle the "show sleeping workspaces" sidebar filter without opening the
-      // filters menu (issue #5209). When revealing them, open the left sidebar
-      // so the now-visible sleeping worktrees are actually reachable.
-      if (matchShortcut('sidebar.sleepingWorkspaces.toggle')) {
-        input.preventDefault()
-        notifyTerminalCapture('sidebar.sleepingWorkspaces.toggle')
-        const store = useAppStore.getState()
-        const nextShowSleeping = !store.showSleepingWorkspaces
-        store.setShowSleepingWorkspaces(nextShowSleeping)
-        if (nextShowSleeping) {
-          store.setSidebarOpen(true)
-        }
-        return
-      }
-
-      // Why: rename the active terminal tab. Cmd+R is free in the app/terminal
-      // focus zone because the browser pane owns its own Cmd+R reload and that
-      // focus never reaches this renderer-window handler. Only terminal tabs
-      // have an inline title editor, so other active tab types fall through.
-      if (workspaceChromeActive && !floatingWorkspaceFocused && matchShortcut('tab.rename')) {
-        const store = useAppStore.getState()
-        if (store.activeTabType === 'terminal' && store.activeTabId) {
-          input.preventDefault()
-          notifyTerminalCapture('tab.rename')
-          store.setRenamingTabId(store.activeTabId)
-          return
-        }
-      }
-
-      // Why: open the active worktree's inline title editor. Open/reveal it
-      // first so the card is mounted and visible even when sidebar filters or
-      // collapse state would otherwise hide it.
-      if (
-        workspaceChromeActive &&
-        !floatingWorkspaceFocused &&
-        matchShortcut('workspace.rename') &&
-        activeWorktreeId
-      ) {
-        input.preventDefault()
-        notifyTerminalCapture('workspace.rename')
-        const store = useAppStore.getState()
-        store.setSidebarOpen(true)
-        requestScrollToCurrentWorkspaceRevealAndRename()
-        return
-      }
-
-      if (matchShortcut('workspace.openBoard') && activeView !== 'settings') {
-        input.preventDefault()
-        notifyTerminalCapture('workspace.openBoard')
-        const store = useAppStore.getState()
-        store.setSidebarOpen(true)
-        window.dispatchEvent(new CustomEvent(OPEN_WORKSPACE_BOARD_EVENT))
-        return
-      }
-
-      // Why: Cmd/Ctrl+N is handled via the main-process before-input-event
-      // allowlist (see window-shortcut-policy.ts / useIpcEvents.ts) so it works
-      // globally — including when focus lives inside the markdown rich editor
-      // (contentEditable) or a browser guest webContents, both of which bypass
-      // this renderer-side window keydown listener.
-
-      // Why: full-page navigation surfaces should not reveal the right sidebar;
-      // they are designed as distraction-free content areas.
-      if (matchShortcut('view.tasks') && activeView !== 'settings') {
-        const store = useAppStore.getState()
-        if (store.repos.some((repo) => isGitRepoKind(repo))) {
-          input.preventDefault()
-          notifyTerminalCapture('view.tasks')
-          store.openTaskPage()
-        }
-        return
-      }
-
-      if (!canRevealRightSidebar) {
-        return
-      }
-
-      // Cmd/Ctrl+L — toggle right sidebar
-      if (matchShortcut('sidebar.right.toggle')) {
-        input.preventDefault()
-        notifyTerminalCapture('sidebar.right.toggle')
-        actions.toggleRightSidebar()
-        return
-      }
-
-      // Cmd/Ctrl+Shift+E — toggle right sidebar / explorer tab
-      if (matchShortcut('sidebar.explorer.toggle')) {
-        input.preventDefault()
-        notifyTerminalCapture('sidebar.explorer.toggle')
-        actions.showRightSidebarFiles()
-        return
-      }
-
-      // Cmd/Ctrl+Shift+F — toggle right sidebar / search tab
-      if (matchShortcut('sidebar.search.toggle')) {
-        input.preventDefault()
-        notifyTerminalCapture('sidebar.search.toggle')
-        openSearchSidebar(null)
-        return
-      }
-
-      // Cmd/Ctrl+Shift+G — toggle right sidebar / source control tab.
-      // Skip when terminal search is open — Cmd+Shift+G means "find previous"
-      // in that context (handled by keyboard-handlers.ts). Both listeners share
-      // the window capture phase and registration order can vary with React
-      // effect re-runs, so a DOM check is the reliable coordination mechanism.
-      if (matchShortcut('sidebar.sourceControl.toggle')) {
-        if (document.querySelector('[data-terminal-search-root]')) {
-          return
-        }
-        input.preventDefault()
-        notifyTerminalCapture('sidebar.sourceControl.toggle')
-        actions.setRightSidebarTab('source-control')
-        actions.setRightSidebarOpen(true)
-        return
-      }
-
-      if (matchShortcut('sidebar.checks.toggle')) {
-        input.preventDefault()
-        notifyTerminalCapture('sidebar.checks.toggle')
-        actions.setRightSidebarTab('checks')
-        actions.setRightSidebarOpen(true)
-        return
-      }
-
-      // Cmd+Shift+I — toggle right sidebar / ports tab (macOS only).
-      // Why: Ctrl+Shift+I is the built-in DevTools accelerator on Windows/Linux;
-      // intercepting it would break an essential developer tool.
-      if (matchShortcut('sidebar.ports.toggle')) {
-        input.preventDefault()
-        notifyTerminalCapture('sidebar.ports.toggle')
-        actions.setRightSidebarTab('ports')
-        actions.setRightSidebarOpen(true)
-      }
-    }
-
-    const onKeyDown = (e: KeyboardEvent): void => {
-      const detected = doubleTapDetector.process(
-        toModifierDoubleTapEvent({
-          type: 'keyDown',
-          code: e.code,
-          key: e.key,
-          shift: e.shiftKey,
-          control: e.ctrlKey,
-          alt: e.altKey,
-          meta: e.metaKey,
-          isAutoRepeat: e.repeat
-        }),
-        Date.now()
-      )
-      if (e.repeat) {
-        return
-      }
-      if (detected) {
-        // Synthetic input: no key/modifier flags, so only DoubleTap bindings match.
-        dispatchShortcutInput({
-          doubleTapModifier: detected.modifier,
-          target: e.target,
-          defaultPrevented: e.defaultPrevented,
-          preventDefault: () => e.preventDefault()
-        })
-        return
-      }
-      dispatchShortcutInput({
-        key: e.key,
-        code: e.code,
-        altKey: e.altKey,
-        metaKey: e.metaKey,
-        ctrlKey: e.ctrlKey,
-        shiftKey: e.shiftKey,
-        target: e.target,
-        defaultPrevented: e.defaultPrevented,
-        preventDefault: () => e.preventDefault()
-      })
-    }
-
-    const onKeyUp = (e: KeyboardEvent): void => {
-      doubleTapDetector.process(
-        toModifierDoubleTapEvent({
-          type: 'keyUp',
-          code: e.code,
-          key: e.key,
-          shift: e.shiftKey,
-          control: e.ctrlKey,
-          alt: e.altKey,
-          meta: e.metaKey
-        }),
-        Date.now()
-      )
-    }
-
-    // Why: a window blur mid-gesture must not leave the detector armed.
-    const onBlur = (): void => doubleTapDetector.reset()
-
-    window.addEventListener('keydown', onKeyDown, { capture: true })
-    window.addEventListener('keyup', onKeyUp, { capture: true })
-    window.addEventListener('blur', onBlur)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown, { capture: true })
-      window.removeEventListener('keyup', onKeyUp, { capture: true })
-      window.removeEventListener('blur', onBlur)
-    }
-  }, [])
 
   useLayoutEffect(() => {
     const controls = titlebarLeftControlsRef.current
