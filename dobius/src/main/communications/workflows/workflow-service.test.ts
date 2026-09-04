@@ -29,7 +29,7 @@ describe('workflow-service', () => {
       yamlDefinition: 'name: Greeter\nsteps:\n  - id: a\n    type: log\n    with: {message: hi}'
     })
 
-    const result = triggerWorkflow(workflow.id)
+    const result = await triggerWorkflow(workflow.id)
     expect(result.workflowId).toBe(workflow.id)
     expect(result.status).toBe('completed')
     expect(result.runId).toBeTruthy()
@@ -46,7 +46,7 @@ describe('workflow-service', () => {
     const { triggerWorkflow, getWorkflowOrThrow, updateWorkflow, deleteWorkflow, getWorkflowRuns } = await import(
       './workflow-service'
     )
-    expect(() => triggerWorkflow('ghost')).toThrow(/Workflow not found/)
+    await expect(triggerWorkflow('ghost')).rejects.toThrow(/Workflow not found/)
     expect(() => getWorkflowOrThrow('ghost')).toThrow(/Workflow not found/)
     expect(() => updateWorkflow('ghost', { yamlDefinition: 'name: x' })).toThrow(/Workflow not found/)
     expect(() => deleteWorkflow('ghost')).toThrow(/Workflow not found/)
@@ -56,7 +56,7 @@ describe('workflow-service', () => {
   it('deleting a workflow also clears its run history', async () => {
     const { createWorkflow, triggerWorkflow, deleteWorkflow, getWorkflowOrThrow } = await import('./workflow-service')
     const workflow = createWorkflow({ ownerPubkey: 'owner', channelId: null, yamlDefinition: 'name: X\nsteps: []' })
-    triggerWorkflow(workflow.id)
+    await triggerWorkflow(workflow.id)
     deleteWorkflow(workflow.id)
     expect(() => getWorkflowOrThrow(workflow.id)).toThrow(/Workflow not found/)
   })

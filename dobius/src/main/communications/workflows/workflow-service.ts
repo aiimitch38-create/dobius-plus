@@ -68,10 +68,10 @@ export type TriggerWorkflowResult = {
   status: WorkflowRun['status']
 }
 
-export function triggerWorkflow(workflowId: string): TriggerWorkflowResult {
+export async function triggerWorkflow(workflowId: string): Promise<TriggerWorkflowResult> {
   const workflow = getWorkflowOrThrow(workflowId)
   const startedAt = Date.now()
-  const execution = executeWorkflowSteps(workflow.steps)
+  const execution = await executeWorkflowSteps(workflow.steps)
   const run: WorkflowRun = {
     id: randomUUID(),
     workflowId: workflow.id,

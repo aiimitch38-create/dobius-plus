@@ -2,21 +2,22 @@
  * Executes a workflow's parsed steps in-process for trigger_workflow.
  *
  * HONEST SCOPE: Buzz's real Rust workflow engine has step types this repo
- * has no source for (agent dispatch, HTTP calls, approval gates, ...).
- * Rather than fabricate success for step types we cannot actually run, this
- * executor supports a small, real vocabulary (`log`, `delay`, `noop`) and
- * records every other step type as `skipped` with an honest explanation —
- * see SUPPORTED_STEP_TYPES below. This also means trigger_workflow never
- * spawns a real Claude/Codex agent run, which is deliberate: it keeps the
- * command safe to exercise from an automated verification fixture. Wiring a
- * real `agent`/`dispatch` step type to Dobius's agent-run runtime
- * (src/main/agents/agents-store.ts + the automation runner) is future work,
- * flagged in the build report, not implemented here.
+ * has no source for (HTTP calls, approval gates, ...). Rather than fabricate
+ * success for step types we cannot actually run, this executor supports a
+ * real vocabulary (`log`, `delay`, `noop`, `agent_dispatch`) and records
+ * every other step type as `skipped` with an honest explanation — see
+ * SUPPORTED_STEP_TYPES below. `agent_dispatch` reuses the same
+ * startAgentRun() call the `agent.run` RPC method uses for Communications
+ * channel-agent dispatch (src/main/runtime/rpc/methods/custom-agents.ts) —
+ * it starts the run and records the runId, it does not block the workflow on
+ * the run finishing. Wiring `call_webhook`/`request_approval` (the other two
+ * real Buzz action types, see workflow-yaml.ts) to a real implementation is
+ * future work, flagged in the build report, not implemented here.
  */
 import type { WorkflowStep } from './workflow-yaml'
 import type { TraceEntry, WorkflowRunStatus } from './workflow-run-store'
 
-const SUPPORTED_STEP_TYPES = new Set(['log', 'delay', 'noop'])
+const SUPPORTED_STEP_TYPES = new Set(['log', 'delay', 'noop', 'agent_dispatch'])
 
 export type WorkflowExecutionResult = {
   trace: TraceEntry[]
@@ -25,19 +26,52 @@ export type WorkflowExecutionResult = {
   currentStep: number | null
 }
 
-function runSupportedStep(step: WorkflowStep): Record<string, unknown> {
+async function runAgentDispatchStep(step: WorkflowStep): Promise<Record<string, unknown>> {
+  const agentId = typeof step.with.agent_id === 'string' ? step.with.agent_id : ''
+  const prompt = typeof step.with.prompt === 'string' ? step.with.prompt : ''
+  if (!agentId) {
+    throw new Error('agent_dispatch step is missing a string "agent_id"')
+  }
+  if (!prompt) {
+    throw new Error('agent_dispatch step is missing a string "prompt"')
+  }
+  // Lazy import: agent-runner.ts pulls in the Claude Agent SDK, which most
+  // workflow runs (log/delay/noop only) never need to load — mirrors the
+  // same lazy-import pattern in agent-channel-service.ts.
+  const [{ startAgentRun }, { getDefaultPrepareClaudeLaunch }] = await Promise.all([
+    import('../../agents/agent-runner'),
+    import('../../agents/default-claude-launch')
+  ])
+  const prepareClaudeLaunch = getDefaultPrepareClaudeLaunch()
+  if (!prepareClaudeLaunch) {
+    throw new Error('Agent runs require the Dobius+ app to be running')
+  }
+  // Channel-sourced dispatch: headless, so undecided tool prompts must not
+  // hang the workflow — mirrors agent.run's 'channel' source (custom-agents.ts).
+  const runId = await startAgentRun({
+    agentId,
+    prompt,
+    prepareClaudeLaunch,
+    options: { source: 'channel', permissionMode: 'dontAsk' }
+  })
+  return { runId }
+}
+
+async function runSupportedStep(step: WorkflowStep): Promise<Record<string, unknown>> {
   switch (step.type) {
     case 'log':
       return { message: typeof step.with.message === 'string' ? step.with.message : '' }
     case 'delay':
       return { requestedMs: typeof step.with.ms === 'number' ? step.with.ms : 0 }
+    case 'agent_dispatch':
+      return runAgentDispatchStep(step)
     case 'noop':
     default:
       return {}
   }
 }
 
-export function executeWorkflowSteps(steps: WorkflowStep[]): WorkflowExecutionResult {
+export async function executeWorkflowSteps(steps: WorkflowStep[]): Promise<WorkflowExecutionResult> {
   const trace: TraceEntry[] = []
   let failedAtIndex: number | null = null
 
@@ -56,7 +90,7 @@ export function executeWorkflowSteps(steps: WorkflowStep[]): WorkflowExecutionRe
       continue
     }
     try {
-      const output = runSupportedStep(step)
+      const output = await runSupportedStep(step)
       trace.push({ stepId: step.id, status: 'completed', output, startedAt, completedAt: Date.now(), error: null })
     } catch (error) {
       failedAtIndex = index
