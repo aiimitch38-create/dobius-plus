@@ -6,8 +6,8 @@ Last updated: 2026-09-04 (Communications Hub live-bug build)
 
 Working the 4-task Communications Hub live-bug build described in
 `AUTONOMOUS-BUILD.md` (context: `IRIS-REPORT-20260904.md`). Branch
-`feat/computer-use-v2`. **Task COMMS.1 is done and committed.** COMMS.2-4
-not started yet.
+`feat/computer-use-v2`. **Tasks COMMS.1 and COMMS.2 are done and
+committed.** COMMS.3-4 not started yet.
 
 An earlier attempt to run this build via `scripts/crackbot-supervisor.sh`
 in the background got killed with no work done (confirmed: git log showed
@@ -53,11 +53,23 @@ the "minimal diff" guardrail. Likely means dozens of existing async comms
 tests are silently not running today. Full detail in
 `plans/TASK-COMMS.1-REVIEW.md`.
 
+## Task COMMS.2 — DONE (commit `551eb21d`)
+
+Agent messages now always show a real name instead of a truncated pubkey.
+See `plans/TASK-COMMS.2-REVIEW.md` for full detail. Summary: added a new
+`agentNameByPubkey` fallback tier to `resolveUserLabel` (before the
+truncated-pubkey fallback, after the existing DM `fallbackName` tier),
+sourced from `ChannelScreen.tsx`'s already-in-hand `managedAgentsQuery.data`
+rather than reusing `personaLookup` (which has a different, incompatible
+meaning elsewhere — presence-of-key means "has an assigned persona").
+Deliberately not wired into the Home/Inbox context pane
+(`useHomeInboxContextMessages.ts`) — out of this task's Channels/DM scope;
+flagged in the review file if that surface turns out to need it too.
+
 ## What's next (in order)
 
-1. Task COMMS.2 — agent name must always show on messages (`plans/TASK-COMMS.2.md`). Depends on COMMS.1 context, same area.
-2. Task COMMS.3 — Huddle button silently disabled (`plans/TASK-COMMS.3.md`). Independent.
-3. Task COMMS.4 — channel delete needs a sidebar entry point (`plans/TASK-COMMS.4.md`). Independent, lowest severity, do last.
+1. Task COMMS.3 — Huddle button silently disabled (`plans/TASK-COMMS.3.md`). Independent.
+2. Task COMMS.4 — channel delete needs a sidebar entry point (`plans/TASK-COMMS.4.md`). Independent, lowest severity, do last.
 
 Each follows PLAN → IMPLEMENT → VERIFY → REVIEW → COMMIT → GATE → LOG per
 `AUTONOMOUS-BUILD.md`. Do not push, open a PR, or touch `main`. Do not build
