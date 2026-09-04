@@ -8,7 +8,7 @@
 import { schnorr } from '@noble/curves/secp256k1'
 import { sha256 } from '@noble/hashes/sha256'
 import { safeStorage } from 'electron'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type {
@@ -44,12 +44,38 @@ function readRegistry(): AgentIdentityRegistry {
     return cachedRegistry
   }
 
-  const raw = readFileSync(path)
-  const decrypted = safeStorage.isEncryptionAvailable()
-    ? safeStorage.decryptString(raw)
-    : raw.toString('utf8')
-  cachedRegistry = JSON.parse(decrypted) as AgentIdentityRegistry
-  return cachedRegistry
+  try {
+    const raw = readFileSync(path)
+    const decrypted = safeStorage.isEncryptionAvailable()
+      ? safeStorage.decryptString(raw)
+      : raw.toString('utf8')
+    cachedRegistry = JSON.parse(decrypted) as AgentIdentityRegistry
+    return cachedRegistry
+  } catch (error) {
+    // Why: this file is Keychain-encrypted, and macOS ties that encryption to
+    // the app's exact code signature. Every ad-hoc-signed rebuild changes that
+    // signature, so an existing registry can go permanently undecryptable —
+    // not a rare edge case for this app, an expected one during active
+    // development. Without this catch, EVERY agent's identity lookup fails at
+    // once (they share this one file), which silently drops every agent as a
+    // dispatch target with no visible error — channel messages just never get
+    // a reply. Recover by starting fresh (new identities regenerate on next
+    // use) rather than leaving Communications agents permanently broken;
+    // rename instead of delete so nothing is silently destroyed.
+    console.warn(
+      '[agent-participant-identity-store] could not decrypt the agent identity registry ' +
+        `(${error instanceof Error ? error.message : String(error)}) — likely a stale Keychain ` +
+        'grant from a prior app signature. Starting a fresh registry; existing agents will get ' +
+        'new Communications identities.'
+    )
+    try {
+      renameSync(path, `${path}.undecryptable-${Date.now()}`)
+    } catch {
+      // Best-effort backup; proceed with a fresh registry either way.
+    }
+    cachedRegistry = {}
+    return cachedRegistry
+  }
 }
 
 function writeRegistry(registry: AgentIdentityRegistry): void {

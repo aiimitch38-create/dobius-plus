@@ -95,4 +95,28 @@ describe('agent participant identity store', () => {
     store.clearAgentIdentityRegistry()
     expect(existsSync(join(tempHome, '.dobius', 'communications-agent-identities.enc'))).toBe(false)
   })
+
+  it('recovers with a fresh registry when the existing file cannot be decrypted', async () => {
+    // Why this matters: this file is Keychain-encrypted, tied to the app's
+    // exact code signature. An ad-hoc-signed rebuild changes that signature,
+    // so a real registry can go permanently undecryptable — reproduced here
+    // as decryptString throwing, same as a real Keychain access failure.
+    const store = await loadStoreModule()
+    const original = store.ensureAgentIdentity('agent-1')
+
+    const reloaded = await loadStoreModule()
+    safeStorageMock.decryptString.mockImplementationOnce(() => {
+      throw new Error('The user name or passphrase you entered is not correct.')
+    })
+
+    const recovered = reloaded.ensureAgentIdentity('agent-1')
+    expect(recovered.pubkey).toMatch(/^[a-f0-9]{64}$/)
+    // A fresh identity, not a crash — continuity with the old one is lost,
+    // but every agent gets working dispatch again instead of staying broken.
+    expect(recovered.pubkey).not.toBe(original.pubkey)
+    // The undecryptable file is preserved under a new name, not silently lost.
+    const dobiusDir = join(tempHome, '.dobius')
+    const { readdirSync } = await import('node:fs')
+    expect(readdirSync(dobiusDir).some((name) => name.includes('.undecryptable-'))).toBe(true)
+  })
 })
