@@ -1879,6 +1879,161 @@ function requiredText(value: unknown, field: string): string {
   return value.trim();
 }
 
+type DobiusSaveSubscriptionRecord = {
+  identityPubkey: string;
+  relayUrl: string;
+  scopeType: string;
+  scopeValue: string;
+  kinds: number[];
+  createdAt: number;
+};
+
+// Wire shape mirrors RawSaveSubscription (vendor shared/api/tauriArchive.ts)
+// — decodeRawSubscription() there does its own JSON.parse(raw.kinds), so
+// kinds must go over the wire as a JSON-encoded string, not a real array.
+function saveSubscriptionWireShape(subscription: DobiusSaveSubscriptionRecord): unknown {
+  return {
+    identity_pubkey: subscription.identityPubkey,
+    relay_url: subscription.relayUrl,
+    scope_type: subscription.scopeType,
+    scope_value: subscription.scopeValue,
+    kinds: JSON.stringify(subscription.kinds),
+    created_at: subscription.createdAt,
+  };
+}
+
+type DobiusChannelTemplateRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  channelType: string;
+  visibility: string;
+  canvasTemplate: string | null;
+  agents: unknown;
+  createdAt: number;
+  updatedAt: number;
+};
+
+// Wire shape mirrors RawChannelTemplate (vendor shared/api/tauriChannelTemplates.ts) —
+// Dobius has no built-in channel templates, so is_builtin is always false,
+// same convention as personaFromAgent/teamFromRecord above.
+function channelTemplateWireShape(template: DobiusChannelTemplateRecord): unknown {
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description,
+    channel_type: template.channelType,
+    visibility: template.visibility,
+    canvas_template: template.canvasTemplate,
+    agents: template.agents,
+    is_builtin: false,
+    created_at: timestampIso(template.createdAt),
+    updated_at: timestampIso(template.updatedAt),
+  };
+}
+
+type DobiusWorkflowRecord = {
+  id: string;
+  name: string;
+  ownerPubkey: string;
+  channelId: string | null;
+  definition: Record<string, unknown>;
+  status: string;
+  webhookSecret: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type DobiusTraceEntry = {
+  stepId: string;
+  status: string;
+  output: Record<string, unknown>;
+  startedAt: number | null;
+  completedAt: number | null;
+  error: string | null;
+};
+
+type DobiusWorkflowRunRecord = {
+  id: string;
+  workflowId: string;
+  status: string;
+  currentStep: number | null;
+  executionTrace: DobiusTraceEntry[];
+  startedAt: number | null;
+  completedAt: number | null;
+  errorMessage: string | null;
+  createdAt: number;
+};
+
+// Wire shape mirrors RawWorkflow/RawWorkflowSaveResponse (vendor
+// shared/api/tauriWorkflows.ts) — webhookSecret is stable across updates
+// (workflow-store.ts), so every response can safely include it.
+function workflowWireShape(workflow: DobiusWorkflowRecord): unknown {
+  return {
+    id: workflow.id,
+    name: workflow.name,
+    owner_pubkey: workflow.ownerPubkey,
+    channel_id: workflow.channelId,
+    definition: workflow.definition,
+    status: workflow.status,
+    webhook_secret: workflow.webhookSecret,
+    created_at: workflow.createdAt,
+    updated_at: workflow.updatedAt,
+  };
+}
+
+function traceEntryWireShape(entry: DobiusTraceEntry): unknown {
+  return {
+    step_id: entry.stepId,
+    status: entry.status,
+    output: entry.output,
+    started_at: entry.startedAt,
+    completed_at: entry.completedAt,
+    error: entry.error,
+  };
+}
+
+function workflowRunWireShape(run: DobiusWorkflowRunRecord): unknown {
+  return {
+    id: run.id,
+    workflow_id: run.workflowId,
+    status: run.status,
+    current_step: run.currentStep,
+    execution_trace: run.executionTrace.map(traceEntryWireShape),
+    started_at: run.startedAt,
+    completed_at: run.completedAt,
+    error_message: run.errorMessage,
+    created_at: run.createdAt,
+  };
+}
+
+// mergeProjectPullRequest's real backend (workstation/pull-requests.ts) throws
+// a plain Error whose message IS the merge-conflict JSON payload ({code,
+// message, recovery}); invokeDobiusRuntime prefixes that with "<rpc-error-
+// code>: " before it reaches here. Recover the JSON and hoist its fields onto
+// the re-thrown Error so parseProjectPullRequestMergeError (projectGit.ts)
+// still recognizes the structured recovery payload instead of falling back
+// to a generic error banner.
+function projectMergeError(error: unknown): Error {
+  if (!(error instanceof Error)) return new Error(String(error));
+  const jsonStart = error.message.indexOf("{");
+  if (jsonStart < 0) return error;
+  try {
+    const parsed = JSON.parse(error.message.slice(jsonStart)) as {
+      code?: unknown;
+      message?: unknown;
+      recovery?: unknown;
+    };
+    if (typeof parsed.code !== "string" || typeof parsed.message !== "string") return error;
+    return Object.assign(new Error(parsed.message), {
+      code: parsed.code,
+      recovery: parsed.recovery ?? null,
+    });
+  } catch {
+    return error;
+  }
+}
+
 function personaFromAgent(agent: DobiusAgentRecord): DobiusPersonaProjection {
   return {
     id: agent.id,
@@ -3786,6 +3941,354 @@ export async function invokeDobiusBackedTauriCommand(
       return { handled: true, result: undefined };
     case "is_auto_update_supported":
       return { handled: true, result: await invokeDobiusRuntime("updater.isAutoUpdateSupported") };
+
+    // ── canvas notes (canvas-rpc-methods.ts) ────────────────────────────────
+    case "get_canvas":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getCanvas", args) };
+    case "set_canvas":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.setCanvas", args) };
+
+    // ── social notes (canvas-rpc-methods.ts) ────────────────────────────────
+    case "get_note_reactions":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getNoteReactions", args) };
+    case "get_note":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getNote", args) };
+    case "get_user_notes":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getUserNotes", args) };
+    case "publish_note":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.publishNote", args) };
+    case "get_liked_notes":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getLikedNotes", args) };
+    case "get_global_notes":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getGlobalNotes", args) };
+    case "get_notes_timeline":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getNotesTimeline", args) };
+
+    // ── archive save-subscriptions (save-subscription-store.ts via
+    // save-subscriptions.ts RPC methods) — identityPubkey/relayUrl are not
+    // known to the main process on their own, so thread them explicitly the
+    // same way every other relay-backed case threads channelId/pubkey. ────
+    case "list_save_subscriptions": {
+      const result = (await invokeDobiusRuntime("saveSubscription.list", {
+        identityPubkey: localIdentity().pubkey,
+        relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
+      })) as { subscriptions: DobiusSaveSubscriptionRecord[] };
+      return { handled: true, result: result.subscriptions.map(saveSubscriptionWireShape) };
+    }
+    case "create_save_subscription": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("saveSubscription.create", {
+        ...input,
+        identityPubkey: localIdentity().pubkey,
+        relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
+      });
+      return { handled: true, result: undefined };
+    }
+    case "delete_save_subscription": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const result = (await invokeDobiusRuntime("saveSubscription.delete", {
+        ...input,
+        identityPubkey: localIdentity().pubkey,
+        relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
+      })) as { removed: boolean };
+      return { handled: true, result: result.removed };
+    }
+    case "merge_save_subscription_kinds": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("saveSubscription.mergeKind", {
+        ...input,
+        identityPubkey: localIdentity().pubkey,
+        relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
+      });
+      return { handled: true, result: undefined };
+    }
+    case "remove_save_subscription_kind": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("saveSubscription.removeKind", {
+        ...input,
+        identityPubkey: localIdentity().pubkey,
+        relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
+      });
+      return { handled: true, result: undefined };
+    }
+
+    // ── channel templates (channel-template-store.ts via channel-templates.ts
+    // RPC methods) ───────────────────────────────────────────────────────────
+    case "list_channel_templates": {
+      const response = (await invokeDobiusRuntime("channelTemplate.list")) as {
+        templates: DobiusChannelTemplateRecord[];
+      };
+      return { handled: true, result: response.templates.map(channelTemplateWireShape) };
+    }
+    case "create_channel_template": {
+      const input = objectAt(args, "input");
+      const response = (await invokeDobiusRuntime("channelTemplate.create", input)) as {
+        template: DobiusChannelTemplateRecord;
+      };
+      return { handled: true, result: channelTemplateWireShape(response.template) };
+    }
+    case "update_channel_template": {
+      const input = objectAt(args, "input");
+      const id = requiredText(input.id, "channel template id");
+      const { id: _id, ...updates } = input;
+      const response = (await invokeDobiusRuntime("channelTemplate.update", {
+        id,
+        updates,
+      })) as { template: DobiusChannelTemplateRecord };
+      return { handled: true, result: channelTemplateWireShape(response.template) };
+    }
+    case "delete_channel_template": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("channelTemplate.delete", {
+        id: requiredText(input.id, "channel template id"),
+      });
+      return { handled: true, result: undefined };
+    }
+    case "duplicate_channel_template": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("channelTemplate.duplicate", {
+        id: requiredText(input.id, "channel template id"),
+      })) as { template: DobiusChannelTemplateRecord };
+      return { handled: true, result: channelTemplateWireShape(response.template) };
+    }
+
+    // ── workflows (workflow-service.ts via workflow-rpc-methods.ts) —
+    // ownerPubkey is not known to the main process on its own, so thread
+    // localIdentity().pubkey the same way save-subscriptions threads
+    // identityPubkey. ───────────────────────────────────────────────────────
+    case "get_channel_workflows": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.listByChannel", {
+        channelId: requiredText(input.channelId, "channel id"),
+      })) as { workflows: DobiusWorkflowRecord[] };
+      return { handled: true, result: response.workflows.map(workflowWireShape) };
+    }
+    case "get_channels_workflows": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.listByChannels", {
+        channelIds: Array.isArray(input.channelIds) ? input.channelIds : [],
+      })) as { workflows: DobiusWorkflowRecord[] };
+      return { handled: true, result: response.workflows.map(workflowWireShape) };
+    }
+    case "get_workflow": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.show", {
+        workflowId: requiredText(input.workflowId, "workflow id"),
+      })) as { workflow: DobiusWorkflowRecord };
+      return { handled: true, result: workflowWireShape(response.workflow) };
+    }
+    case "create_workflow": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.create", {
+        ownerPubkey: localIdentity().pubkey,
+        channelId: typeof input.channelId === "string" ? input.channelId : null,
+        yamlDefinition: requiredText(input.yamlDefinition, "workflow definition"),
+      })) as { workflow: DobiusWorkflowRecord };
+      return { handled: true, result: workflowWireShape(response.workflow) };
+    }
+    case "update_workflow": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.update", {
+        workflowId: requiredText(input.workflowId, "workflow id"),
+        yamlDefinition: requiredText(input.yamlDefinition, "workflow definition"),
+      })) as { workflow: DobiusWorkflowRecord };
+      return { handled: true, result: workflowWireShape(response.workflow) };
+    }
+    case "delete_workflow": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("workflow.delete", {
+        workflowId: requiredText(input.workflowId, "workflow id"),
+      });
+      return { handled: true, result: undefined };
+    }
+    case "get_workflow_runs": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.runs", {
+        workflowId: requiredText(input.workflowId, "workflow id"),
+        limit: typeof input.limit === "number" ? input.limit : undefined,
+      })) as { runs: DobiusWorkflowRunRecord[] };
+      return { handled: true, result: response.runs.map(workflowRunWireShape) };
+    }
+    case "trigger_workflow": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("workflow.trigger", {
+        workflowId: requiredText(input.workflowId, "workflow id"),
+      })) as { runId: string; workflowId: string; status: string };
+      return {
+        handled: true,
+        result: {
+          run_id: response.runId,
+          workflow_id: response.workflowId,
+          status: response.status,
+        },
+      };
+    }
+
+    // ── agent/team snapshots (agent-snapshot.ts / team-snapshot.ts via
+    // snapshot-rpc-methods.ts) ──────────────────────────────────────────────
+    case "export_agent_snapshot": {
+      const response = (await invokeDobiusRuntime("agent.snapshot.export", args)) as {
+        saved: boolean;
+      };
+      return { handled: true, result: response.saved };
+    }
+    case "encode_agent_snapshot_for_send":
+      return { handled: true, result: await invokeDobiusRuntime("agent.snapshot.encode", args) };
+    case "preview_agent_snapshot_import":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("agent.snapshot.previewImport", args),
+      };
+    case "confirm_agent_snapshot_import":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("agent.snapshot.confirmImport", objectAt(args, "input")),
+      };
+    case "export_team_snapshot": {
+      const response = (await invokeDobiusRuntime("team.snapshot.export", args)) as {
+        saved: boolean;
+      };
+      return { handled: true, result: response.saved };
+    }
+    case "encode_team_snapshot_for_send":
+      return { handled: true, result: await invokeDobiusRuntime("team.snapshot.encode", args) };
+    case "preview_team_snapshot_import":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("team.snapshot.previewImport", args),
+      };
+    case "confirm_team_snapshot_import": {
+      const response = (await invokeDobiusRuntime(
+        "team.snapshot.confirmImport",
+        objectAt(args, "input"),
+      )) as { team: unknown; personaIds: string[]; members: unknown[] };
+      if (!isDobiusTeamRecord(response.team)) {
+        throw new Error("Dobius returned an invalid imported team");
+      }
+      return {
+        handled: true,
+        result: {
+          team: teamFromRecord(response.team),
+          personaIds: response.personaIds,
+          members: response.members,
+        },
+      };
+    }
+    case "fetch_snapshot_bytes": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("snapshot.fetchBytes", {
+        url: requiredText(input.url, "snapshot URL"),
+        filename: requiredText(input.filename, "snapshot filename"),
+        expectedSha256: requiredText(input.expectedSha256, "expected SHA-256"),
+        expectedSize: typeof input.expectedSize === "number" ? input.expectedSize : 0,
+      })) as { bytesBase64: string };
+      // fetchSnapshotBytes (tauriMedia.ts) only ever does `new
+      // Uint8Array(result)` — a plain byte array satisfies that identically
+      // to a real ArrayBuffer, so no binary IPC transport is needed here.
+      return {
+        handled: true,
+        result: Array.from(atob(response.bytesBase64), (char) => char.charCodeAt(0)),
+      };
+    }
+
+    // ── project git (src/main/communications/workstation/* via
+    // workstation/rpc-methods.ts) — every command below is a real `git`
+    // shell-out (or, for the PR family, a real Nostr-signed status event),
+    // and every backend function already returns the exact snake_case wire
+    // shape the vendor projectGit.ts Raw* types expect, so most cases are
+    // pure passthrough. ───────────────────────────────────────────────────
+    case "get_git_identity":
+      return { handled: true, result: await invokeDobiusRuntime("workstationGit.getIdentity") };
+    case "get_project_repo_snapshot":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.getRemoteSnapshot", args),
+      };
+    case "get_project_repo_diff":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.getRemoteDiff", args),
+      };
+    case "get_project_local_repo_diff":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.getLocalDiff", args),
+      };
+    case "get_project_local_repo_snapshot":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.getLocalSnapshot", args),
+      };
+    case "list_project_local_repositories":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.listLocalRepositories", args),
+      };
+    case "get_project_repo_sync_status":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.getSyncStatus", args),
+      };
+    case "open_project_terminal":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.openTerminal", args),
+      };
+    case "open_project_merge_recovery_terminal":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime(
+          "workstationGit.openMergeRecoveryTerminal",
+          objectAt(args, "input"),
+        ),
+      };
+    case "push_project_local_repository":
+      return { handled: true, result: await invokeDobiusRuntime("workstationGit.push", args) };
+    case "pull_project_local_repository":
+      return { handled: true, result: await invokeDobiusRuntime("workstationGit.pull", args) };
+    case "clone_project_repository":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.cloneRepository", args),
+      };
+    case "create_project_remote_branch":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.createRemoteBranch", args),
+      };
+    case "delete_project_remote_branch":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.deleteRemoteBranch", args),
+      };
+    case "merge_project_pull_request": {
+      try {
+        return {
+          handled: true,
+          result: await invokeDobiusRuntime(
+            "workstationGit.mergePullRequest",
+            objectAt(args, "input"),
+          ),
+        };
+      } catch (error) {
+        throw projectMergeError(error);
+      }
+    }
+    case "sign_project_pull_request_review_request":
+      await invokeDobiusRuntime(
+        "workstationGit.signPullRequestReviewRequest",
+        objectAt(args, "input"),
+      );
+      return { handled: true, result: undefined };
+    case "sign_project_pull_request_status":
+      await invokeDobiusRuntime("workstationGit.signPullRequestStatus", objectAt(args, "input"));
+      return { handled: true, result: undefined };
+    case "publish_project_pull_request_merged_status":
+      await invokeDobiusRuntime(
+        "workstationGit.publishPullRequestMergedStatus",
+        objectAt(args, "input"),
+      );
+      return { handled: true, result: undefined };
 
     default:
       return { handled: false };
