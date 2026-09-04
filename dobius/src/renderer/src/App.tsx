@@ -501,8 +501,7 @@ function App(): React.JSX.Element {
   if (activeView === 'buzz') {
     hasMountedCommunicationsRef.current = true
   }
-  const shouldMountCommunications =
-    activeView === 'buzz' || hasMountedCommunicationsRef.current
+  const shouldMountCommunications = activeView === 'buzz' || hasMountedCommunicationsRef.current
   // Why: visible worktree creation owns its faux tab strip from start to finish;
   // the previous workspace must stay mounted for retention without rendering
   // real chrome.
@@ -1570,7 +1569,10 @@ function App(): React.JSX.Element {
           terminalShortcutPolicy
         })
       const notifyTerminalCapture = (actionId: KeybindingActionId): void => {
-        if (context !== 'terminal' || (terminalShortcutPolicy ?? 'dobius-first') !== 'dobius-first') {
+        if (
+          context !== 'terminal' ||
+          (terminalShortcutPolicy ?? 'dobius-first') !== 'dobius-first'
+        ) {
           return
         }
         showTerminalShortcutCaptureNotification({
@@ -2777,7 +2779,7 @@ function App(): React.JSX.Element {
                   resetKey={activeView}
                   compact
                 >
-                  <DictationController />
+                  <DictationController hideOwnOrb={showFloatingTerminalButton} />
                 </RecoverableRenderErrorBoundary>
               </Suspense>
             ) : null}

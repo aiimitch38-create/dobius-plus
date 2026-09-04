@@ -4,6 +4,7 @@ import { useJarvisTurn } from '../jarvis/use-jarvis-turn'
 import { useJarvisVoiceSettings } from '../jarvis/use-jarvis-voice-settings'
 import { useVoiceAgent } from '../jarvis/use-voice-agent'
 import { VoiceOrb } from './VoiceOrb'
+import { voiceOrbLevelSource } from './voice-orb-live-level'
 
 const ORB_SIZE = 128
 const CAPTION_RESERVE_PX = 28
@@ -16,6 +17,9 @@ type Position = { x: number; y: number }
 type DictationIndicatorProps = {
   /** Current mic level, 0..1, polled by the orb once per frame. */
   getAudioLevel: () => number
+  /** True when the floating terminal agent dock already shows the one voice
+   *  orb — skips this component's own standalone orb so there's never two. */
+  hideOwnOrb?: boolean
 }
 
 function clampToViewport(position: Position): Position {
@@ -53,9 +57,10 @@ function readSavedPosition(): Position | null {
  * that window happened to be open. Mounting useJarvisTurn here keeps the
  * shortcut alive for as long as the app is running.
  */
-export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
+export function DictationIndicator({ getAudioLevel, hideOwnOrb }: DictationIndicatorProps) {
   const dictationState = useAppStore((s) => s.dictationState)
   const partialTranscript = useAppStore((s) => s.partialTranscript)
+  const setVoiceOrbLabel = useAppStore((s) => s.setVoiceOrbLabel)
   const jarvis = useJarvisTurn()
   const agent = useVoiceAgent()
   const { flags } = useJarvisVoiceSettings()
@@ -74,7 +79,8 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   const dragRef = useRef<{ pointerId: number; dx: number; dy: number; moved: boolean } | null>(null)
 
   useEffect(() => {
-    const onResize = (): void => setPosition((current) => (current ? clampToViewport(current) : null))
+    const onResize = (): void =>
+      setPosition((current) => (current ? clampToViewport(current) : null))
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -136,27 +142,20 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   const jarvisActive = !agentMode && jarvis.hudState !== 'idle'
   const dictationActive =
     dictationState === 'listening' || dictationState === 'starting' || dictationState === 'stopping'
+  // Why separate from agentActive: agentActive is true the instant a live
+  // agent is merely *configured*, at rest, forever. This is true only while
+  // an actual agent turn is in progress.
+  const agentGenuinelyActive = agentActive && agent.state !== 'idle'
 
-  if (!agentActive && !jarvisActive && !dictationActive) {
-    return null
-  }
+  const dictationLabel =
+    dictationState === 'starting'
+      ? 'Starting...'
+      : dictationState === 'stopping'
+        ? 'Processing...'
+        : partialTranscript || 'Listening...'
 
-  const agentLabel = agentMode
-    ? agent.state === 'idle'
-      ? 'Tap or press Cmd+T to talk'
-      : agent.state === 'connecting'
-      ? 'Connecting...'
-      : agent.state === 'speaking'
-        ? 'Speaking...'
-        : agent.state === 'error'
-          ? (agent.errorText ?? 'Voice error')
-          : 'Listening...'
-    : null
-
-  const label = agentActive
-    ? (agentLabel ?? 'Listening...')
-    : jarvisActive
-    ? jarvis.hudState === 'thinking'
+  const jarvisLabel =
+    jarvis.hudState === 'thinking'
       ? 'Thinking...'
       : jarvis.hudState === 'speaking'
         ? 'Speaking...'
@@ -165,11 +164,58 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
           : jarvis.wakeArmed
             ? 'Hey Adam - armed'
             : 'Listening...'
-    : dictationState === 'starting'
-      ? 'Starting...'
-      : dictationState === 'stopping'
-        ? 'Processing...'
-        : partialTranscript || 'Listening...'
+
+  const agentLabel = agentMode
+    ? agent.state === 'idle'
+      ? 'Tap or press Cmd+T to talk'
+      : agent.state === 'connecting'
+        ? 'Connecting...'
+        : agent.state === 'speaking'
+          ? 'Speaking...'
+          : agent.state === 'error'
+            ? (agent.errorText ?? 'Voice error')
+            : 'Listening...'
+    : null
+
+  // Why dictation and Jarvis outrank agentActive: ⌘E dictation runs
+  // independently of whether a live agent is merely configured, so a
+  // dictation session in progress must win the caption/orb-level over the
+  // agent's permanent "Tap or press Cmd+T to talk" idle placeholder.
+  const label = dictationActive
+    ? dictationLabel
+    : jarvisActive
+      ? jarvisLabel
+      : agentActive
+        ? (agentLabel ?? 'Listening...')
+        : dictationLabel
+
+  // Why visible while idle: in live mode the orb IS the start button.
+  const isActive = agentActive || jarvisActive || dictationActive
+  // Why a stricter flag for the published label: see agentGenuinelyActive
+  // above — the dock's caption should only speak while something is
+  // genuinely in progress, not nag the idle placeholder permanently.
+  const genuinelyActive = dictationActive || jarvisActive || agentGenuinelyActive
+  const liveGetLevel = dictationActive
+    ? getAudioLevel
+    : jarvisActive
+      ? jarvis.getAudioLevel
+      : agentActive
+        ? agent.getAudioLevel
+        : getAudioLevel
+
+  // Why plain assignment, not state: VoiceOrb polls this every animation
+  // frame, not through React re-renders — mirrors VoiceOrb's own
+  // `getLevelRef.current = getLevel` pattern. Runs every render regardless
+  // of hideOwnOrb so the dock's orb animates even when this one is hidden.
+  voiceOrbLevelSource.current = liveGetLevel
+
+  useEffect(() => {
+    setVoiceOrbLabel(genuinelyActive ? label : null)
+  }, [genuinelyActive, label, setVoiceOrbLabel])
+
+  if (hideOwnOrb || !isActive) {
+    return null
+  }
 
   const positionStyle: React.CSSProperties = position
     ? { left: position.x, top: position.y }
@@ -186,12 +232,7 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
       onPointerUp={onPointerUp}
       title="Drag to move - click to talk to ADAM"
     >
-      <VoiceOrb
-        size={ORB_SIZE}
-        getLevel={
-          agentActive ? agent.getAudioLevel : jarvisActive ? jarvis.getAudioLevel : getAudioLevel
-        }
-      />
+      <VoiceOrb size={ORB_SIZE} getLevel={liveGetLevel} />
       <span className="max-w-md truncate rounded-md bg-foreground/90 px-2.5 py-1 text-xs text-background shadow-lg">
         {label}
       </span>

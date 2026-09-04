@@ -13,7 +13,6 @@ import {
   fetchRecentConversationSummaries,
   formatConversationMemory
 } from './conversation-memory'
-import { openFloatingOrbWindow } from '../window/floating-orb-window'
 import { pickJarvisTargetWindow } from './jarvis-target-window'
 import {
   JARVIS_SHORTCUT_ACCELERATOR,
@@ -83,8 +82,15 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.removeHandler('jarvis:speak')
   ipcMain.handle('jarvis:speak', (_event, text: string) => service.speak(text))
 
+  // Why not openFloatingOrbWindow: that path shows a second, separate orb
+  // window — the app's one canonical orb lives in DictationIndicator
+  // (mounted app-wide) and already reacts to this same PTT broadcast. Kept
+  // as an alias (not removed) in case an older client still calls openOrb.
   ipcMain.removeHandler('jarvis:openOrb')
-  ipcMain.handle('jarvis:openOrb', () => openFloatingOrbWindow())
+  ipcMain.handle('jarvis:openOrb', () => {
+    service.pressPtt()
+    return { ok: true }
+  })
 
   ipcMain.removeHandler('jarvis:pressPtt')
   ipcMain.handle('jarvis:pressPtt', () => {

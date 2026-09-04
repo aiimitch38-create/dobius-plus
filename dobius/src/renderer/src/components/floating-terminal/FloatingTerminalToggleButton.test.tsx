@@ -64,7 +64,10 @@ vi.mock('lucide-react', () => ({
   }
 }))
 
-const fakeStoreState = { tabsByWorktree: {} as Record<string, unknown> }
+const fakeStoreState = {
+  tabsByWorktree: {} as Record<string, unknown>,
+  voiceOrbLabel: null as string | null
+}
 
 vi.mock('@/store', () => {
   const useAppStore = ((selector: (state: typeof fakeStoreState) => unknown) =>
@@ -76,15 +79,8 @@ vi.mock('@/store', () => {
   return { useAppStore }
 })
 
-vi.mock('@/lib/adam-dock-session', () => ({
-  ensureAdamDockSession: () => Promise.resolve(null),
-  findTerminalTabPtyId: () => null
-}))
-
-vi.mock('../native-chat/NativeChatView', () => ({
-  default: function NativeChatView() {
-    return null
-  }
+vi.mock('@/lib/floating-terminal-agent-tab', () => ({
+  ensureFloatingTerminalAgentTab: () => Promise.resolve(null)
 }))
 
 vi.mock('@/hooks/useShortcutLabel', () => ({

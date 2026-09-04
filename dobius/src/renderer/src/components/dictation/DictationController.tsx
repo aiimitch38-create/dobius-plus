@@ -16,7 +16,14 @@ import { showDictationStartErrorToast } from './dictation-start-error-toast'
 import { useHoldDictationGesture } from './use-hold-dictation-gesture'
 import { DICTATION_CONTROL_EVENT, type DictationControlAction } from './dictation-control-events'
 
-export function DictationController() {
+export function DictationController({
+  hideOwnOrb
+}: {
+  /** True when another surface (the floating terminal agent dock) already
+   *  shows the one voice orb — this component's own logic (⌘E/⌘T, capture,
+   *  agent turns) still runs either way, only its standalone orb hides. */
+  hideOwnOrb?: boolean
+} = {}) {
   const dictationState = useAppStore((s) => s.dictationState)
   const setDictationState = useAppStore((s) => s.setDictationState)
   const setPartialTranscript = useAppStore((s) => s.setPartialTranscript)
@@ -404,5 +411,5 @@ export function DictationController() {
     }
   }, [setPartialTranscript, setDictationState, stopCapture, discardBufferedAudio])
 
-  return <DictationIndicator getAudioLevel={getAudioLevel} />
+  return <DictationIndicator getAudioLevel={getAudioLevel} hideOwnOrb={hideOwnOrb} />
 }
