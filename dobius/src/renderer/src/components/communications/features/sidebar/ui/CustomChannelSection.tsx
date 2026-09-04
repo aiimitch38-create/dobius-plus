@@ -446,6 +446,7 @@ export function ChannelGroupSection({
                       isActive={
                         isActiveChannel && selectedChannelId === channel.id
                       }
+                      hasRowAction={Boolean(onDeleteChannel || onLeaveChannel)}
                       onSelectChannel={onSelectChannel}
                     />
                   </DraggableChannelRow>
@@ -459,6 +460,7 @@ export function ChannelGroupSection({
                     isActive={
                       isActiveChannel && selectedChannelId === channel.id
                     }
+                    hasRowAction={Boolean(onDeleteChannel || onLeaveChannel)}
                     onSelectChannel={onSelectChannel}
                   />
                 )}
@@ -757,6 +759,9 @@ export function CustomChannelSection({
                                   isActiveChannel &&
                                   selectedChannelId === channel.id
                                 }
+                                hasRowAction={Boolean(
+                                  onDeleteChannel || onLeaveChannel,
+                                )}
                                 onSelectChannel={onSelectChannel}
                               />
                             </DraggableChannelRow>

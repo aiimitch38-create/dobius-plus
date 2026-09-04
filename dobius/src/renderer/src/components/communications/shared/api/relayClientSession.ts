@@ -542,15 +542,9 @@ export class RelayClient {
       }
       this.wsId = wsId;
 
-      // The relay server does not gate REQ/EVENT on this handshake (see
-      // relay-auth.ts) — it's a client-side-only gate. AUTH now runs in the
-      // background instead of blocking subscribe()/REQ: a stalled or failed
-      // handshake used to leave ensureConnected() (and every subscribe()
-      // waiting on it) hung for up to AUTH_TIMEOUT_MS with the channel/DM
-      // view silently receiving nothing. The timeout/rejection handlers below
-      // still call resetConnection(), which independently drives the visible
-      // connection-state indicator — swallow the promise itself here so a
-      // caller not awaiting it doesn't produce an unhandled rejection.
+      // Server never gates REQ/EVENT on this handshake (relay-auth.ts), so run
+      // it in the background instead of blocking subscribe() — a stall used
+      // to leave the channel/DM view hung silently for up to AUTH_TIMEOUT_MS.
       const authPromise = new Promise<void>((resolve, reject) => {
         const timeout = window.setTimeout(() => {
           const error = new Error("Relay authentication timed out.");

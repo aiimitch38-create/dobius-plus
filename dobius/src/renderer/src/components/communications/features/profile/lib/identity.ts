@@ -94,14 +94,9 @@ export function resolveUserLabel(input: {
   fallbackName?: string | null;
   profiles?: UserProfileLookup;
   preferResolvedSelfLabel?: boolean;
-  /**
-   * Known Dobius-managed agent names, keyed by normalized pubkey — the same
-   * local data the agent list already has, independent of whether that
-   * agent's kind-0 profile has propagated yet. A message from a known agent
-   * must never fall through to a truncated pubkey just because its profile
-   * event hasn't arrived (lazy first-reply publish) or its identity lookup
-   * rejected out of a Promise.allSettled batch.
-   */
+  // Known Dobius agent names by normalized pubkey — a fallback for when the
+  // agent's kind-0 profile hasn't propagated yet, so it never falls through
+  // to a truncated pubkey.
   agentNameByPubkey?: Map<string, string>;
 }) {
   const {

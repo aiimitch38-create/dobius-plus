@@ -83,15 +83,21 @@ if [ -d "dobius/src/" ]; then
     echo "OK No empty catch blocks"
   fi
 
-  # Check for type suppression ADDED by this task's own commit, not the
+  # Check for type suppression ADDED by this task's own commits, not the
   # whole tree — dobius/src/ is a large pre-existing codebase (117
   # eslint-disable, 2 @ts-ignore predate every task in this build), so a
   # repo-wide zero-tolerance count fails identically for every task
   # regardless of what it changes. The real rule this gate should enforce
-  # is "this task didn't add a new one."
+  # is "this task didn't add a new one." Scanning only HEAD~1..HEAD misses
+  # earlier commits of a multi-commit task, so diff every commit whose
+  # subject names this task, not just the latest one.
+  TASK_COMMITS=$(git log --format=%H --grep="Task ${TASK}" 2>/dev/null || true)
   for SUPPRESS in "@ts-ignore" "@ts-nocheck" "// eslint-disable"; do
-    SUP_COUNT=$(git diff HEAD~1 HEAD -- dobius/src/ 2>/dev/null | grep -c "^+.*$SUPPRESS" || true)
-    SUP_COUNT=${SUP_COUNT:-0}
+    SUP_COUNT=0
+    for COMMIT in $TASK_COMMITS; do
+      COMMIT_ADDS=$(git diff "${COMMIT}~1" "$COMMIT" -- dobius/src/ 2>/dev/null | grep -c "^+.*$SUPPRESS" || true)
+      SUP_COUNT=$((SUP_COUNT + ${COMMIT_ADDS:-0}))
+    done
     if [ "$SUP_COUNT" -gt 0 ]; then
       echo "FAIL: This task's commit adds $SUP_COUNT new use(s) of '$SUPPRESS' in dobius/src/"
       PASS=false

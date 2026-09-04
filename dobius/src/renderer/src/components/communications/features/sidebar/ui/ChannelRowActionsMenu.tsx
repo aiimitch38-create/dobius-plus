@@ -1,4 +1,5 @@
 import { EllipsisVertical, LogOut, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 import { useChannelMembersQuery } from "@comms/features/channels/hooks";
 import { useChannelModerationCapabilities } from "@comms/features/channels/ui/ChannelManagementModerationActions";
@@ -13,17 +14,9 @@ import {
 } from "@comms/shared/ui/dropdown-menu";
 import { SidebarMenuAction } from "@comms/shared/ui/sidebar";
 
-/**
- * A hover-revealed "more actions" button on a single channel row — Delete
- * channel / Leave channel. The right-click context menu
- * (`ChannelContextMenuItems`) already has both actions, but nothing on the
- * row itself is discoverable without already knowing to right-click; the
- * only other menu nearby is `SectionActionsMenu` in `CustomChannelSection.tsx`,
- * which is section-level and has no per-channel actions. See TASK COMMS.4.
- * Reuses the same moderation-capability gating as the context menu so a
- * non-owner never sees Delete, and calls the same already-wired
- * `onDeleteChannel`/`onLeaveChannel` handlers — no new backend wiring.
- */
+// Hover-revealed "more actions" button (Delete/Leave channel) on a single
+// row — the existing right-click menu has both actions but isn't
+// discoverable without knowing to right-click. See TASK COMMS.4.
 export function ChannelRowActionsMenu({
   channel,
   onDeleteChannel,
@@ -33,8 +26,13 @@ export function ChannelRowActionsMenu({
   onDeleteChannel?: (channel: Channel) => void;
   onLeaveChannel?: (channel: Channel) => void;
 }) {
+  // Only fetch membership once the menu is actually opened — this component
+  // renders as a permanent sibling in every visible channel row, so an
+  // unconditional query here would fire one members-list fetch per channel
+  // on every sidebar mount instead of 0-1 (see Task COMMS.4 review).
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const canLoadOwnerActions =
-    channel.channelType !== "dm" && Boolean(onDeleteChannel);
+    channel.channelType !== "dm" && Boolean(onDeleteChannel) && isMenuOpen;
   const membersQuery = useChannelMembersQuery(channel.id, canLoadOwnerActions);
   const currentPubkey = useIdentityQuery().data?.pubkey;
   const { canDeleteChannel } = useChannelModerationCapabilities(
@@ -43,12 +41,12 @@ export function ChannelRowActionsMenu({
     canLoadOwnerActions,
   );
 
-  if (!canDeleteChannel && !onLeaveChannel) {
+  if (!onDeleteChannel && !onLeaveChannel) {
     return null;
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
       <DropdownMenuTrigger asChild>
         <SidebarMenuAction
           aria-label={`More actions for ${channel.name}`}

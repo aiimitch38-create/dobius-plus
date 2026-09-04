@@ -255,6 +255,7 @@ export function ChannelMenuButton({
   isMuted,
   dmParticipants,
   presenceStatus,
+  hasRowAction,
   onSelectChannel,
 }: {
   channel: Channel;
@@ -266,6 +267,10 @@ export function ChannelMenuButton({
   isMuted?: boolean;
   dmParticipants?: SidebarDmParticipant[];
   presenceStatus?: PresenceStatus;
+  // Whether a hover-revealed row action (e.g. ChannelRowActionsMenu) sits on
+  // top of this row — when true, fade the trailing badge/icon on hover the
+  // same way the DM row's own action already does (SIDEBAR_ROW_ACTION_REPLACED_BADGE_CLASS).
+  hasRowAction?: boolean;
   onSelectChannel: (channelId: string) => void;
 }) {
   const resolvedLabel = label ?? channel.name;
@@ -318,6 +323,7 @@ export function ChannelMenuButton({
             isActive
               ? "text-sidebar-active-foreground/60"
               : "text-sidebar-foreground/40",
+            hasRowAction && SIDEBAR_ROW_ACTION_REPLACED_BADGE_CLASS,
           )}
         />
       ) : null}
@@ -325,11 +331,20 @@ export function ChannelMenuButton({
         unreadCount > 0 ? (
           <UnreadCountBadge
             channelName={channel.name}
-            className="ml-auto"
+            className={cn(
+              "ml-auto",
+              hasRowAction && SIDEBAR_ROW_ACTION_REPLACED_BADGE_CLASS,
+            )}
             count={unreadCount}
           />
         ) : (
-          <UnreadDotBadge channelName={channel.name} className="ml-auto" />
+          <UnreadDotBadge
+            channelName={channel.name}
+            className={cn(
+              "ml-auto",
+              hasRowAction && SIDEBAR_ROW_ACTION_REPLACED_BADGE_CLASS,
+            )}
+          />
         )
       ) : null}
     </SidebarMenuButton>
