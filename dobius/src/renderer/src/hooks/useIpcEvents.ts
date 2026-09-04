@@ -624,7 +624,7 @@ async function syncRemoteWorkspaceAfterConnect(targetId: string): Promise<void> 
   })
 }
 
-function applyRemoteWorkspacePatchStatus(
+export function applyRemoteWorkspacePatchStatus(
   targetId: string,
   result: RemoteWorkspacePatchResult | undefined
 ): void {
