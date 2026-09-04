@@ -50,8 +50,12 @@ export function getDefaultUserDataPath(
   if (process.env.DOBIUS_USER_DATA_PATH) {
     return process.env.DOBIUS_USER_DATA_PATH
   }
+  // Why: Electron's userData path is derived from package.json "name"
+  // ("dobius-plus"), captured before app.setName('Dobius+') runs — see
+  // persistence.ts's initDataPath(). The CLI must match that exact
+  // lowercase, hyphenated folder name, not the display name.
   if (platform === 'darwin') {
-    return join(homeDir, 'Library', 'Application Support', 'Dobius+')
+    return join(homeDir, 'Library', 'Application Support', 'dobius-plus')
   }
   if (platform === 'win32') {
     const appData = process.env.APPDATA
@@ -61,10 +65,10 @@ export function getDefaultUserDataPath(
         'APPDATA is not set, so the Dobius runtime metadata path cannot be resolved.'
       )
     }
-    return join(appData, 'Dobius+')
+    return join(appData, 'dobius-plus')
   }
   // Why: the CLI must find the same metadata file Electron writes in packaged
   // runs, so this mirrors Electron's default userData base instead of inventing
   // a CLI-specific config path.
-  return join(process.env.XDG_CONFIG_HOME || join(homeDir, '.config'), 'Dobius+')
+  return join(process.env.XDG_CONFIG_HOME || join(homeDir, '.config'), 'dobius-plus')
 }
