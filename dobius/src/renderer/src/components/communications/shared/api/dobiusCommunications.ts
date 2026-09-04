@@ -4071,6 +4071,73 @@ export async function invokeDobiusBackedTauriCommand(
       };
     }
 
+    // ── agent/team snapshots (agent-snapshot.ts / team-snapshot.ts via
+    // snapshot-rpc-methods.ts) ──────────────────────────────────────────────
+    case "export_agent_snapshot": {
+      const response = (await invokeDobiusRuntime("agent.snapshot.export", args)) as {
+        saved: boolean;
+      };
+      return { handled: true, result: response.saved };
+    }
+    case "encode_agent_snapshot_for_send":
+      return { handled: true, result: await invokeDobiusRuntime("agent.snapshot.encode", args) };
+    case "preview_agent_snapshot_import":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("agent.snapshot.previewImport", args),
+      };
+    case "confirm_agent_snapshot_import":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("agent.snapshot.confirmImport", objectAt(args, "input")),
+      };
+    case "export_team_snapshot": {
+      const response = (await invokeDobiusRuntime("team.snapshot.export", args)) as {
+        saved: boolean;
+      };
+      return { handled: true, result: response.saved };
+    }
+    case "encode_team_snapshot_for_send":
+      return { handled: true, result: await invokeDobiusRuntime("team.snapshot.encode", args) };
+    case "preview_team_snapshot_import":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("team.snapshot.previewImport", args),
+      };
+    case "confirm_team_snapshot_import": {
+      const response = (await invokeDobiusRuntime(
+        "team.snapshot.confirmImport",
+        objectAt(args, "input"),
+      )) as { team: unknown; personaIds: string[]; members: unknown[] };
+      if (!isDobiusTeamRecord(response.team)) {
+        throw new Error("Dobius returned an invalid imported team");
+      }
+      return {
+        handled: true,
+        result: {
+          team: teamFromRecord(response.team),
+          personaIds: response.personaIds,
+          members: response.members,
+        },
+      };
+    }
+    case "fetch_snapshot_bytes": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const response = (await invokeDobiusRuntime("snapshot.fetchBytes", {
+        url: requiredText(input.url, "snapshot URL"),
+        filename: requiredText(input.filename, "snapshot filename"),
+        expectedSha256: requiredText(input.expectedSha256, "expected SHA-256"),
+        expectedSize: typeof input.expectedSize === "number" ? input.expectedSize : 0,
+      })) as { bytesBase64: string };
+      // fetchSnapshotBytes (tauriMedia.ts) only ever does `new
+      // Uint8Array(result)` — a plain byte array satisfies that identically
+      // to a real ArrayBuffer, so no binary IPC transport is needed here.
+      return {
+        handled: true,
+        result: Array.from(atob(response.bytesBase64), (char) => char.charCodeAt(0)),
+      };
+    }
+
     default:
       return { handled: false };
   }
