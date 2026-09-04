@@ -14,6 +14,7 @@ const builderConfig = require('../../../config/electron-builder.config.cjs') as 
   mac?: { extraResources?: { from?: string; to?: string }[] }
   linux?: { extraResources?: { from?: string; to?: string }[] }
   win?: { extraResources?: { from?: string; to?: string }[] }
+  asarUnpack?: string[]
 }
 const linuxLauncherAsset = new URL('../../../resources/linux/bin/dobius', import.meta.url)
 
@@ -38,6 +39,39 @@ describe('packaged CLI assets', () => {
         join('node_modules', 'sherpa-onnx-darwin-${arch}'),
         join('node_modules', 'sherpa-onnx-linux-${arch}'),
         join('node_modules', 'sherpa-onnx-win-x64')
+      ])
+    )
+  })
+
+  it('unpacks the CLI entry point and every out/main provider directory it can require', () => {
+    // Why: the CLI runs via ELECTRON_RUN_AS_NODE, bypassing Electron's asar
+    // integration — anything under out/main/ that agent-hooks code requires
+    // (managed-agent-hook-controls.js and friends) must be unpacked or the
+    // CLI throws MODULE_NOT_FOUND for every command, not just a specific
+    // agent. Caught live 2026-09-03: `amp`, `codex-accounts`,
+    // `command-code`, `devin`, `kimi`, `openclaude`, and `runtime` existed
+    // in out/main/ but were missing from this list.
+    expect(builderConfig.asarUnpack).toEqual(
+      expect.arrayContaining([
+        'out/cli/**',
+        'out/shared/**',
+        'out/main/agent-hooks/**',
+        'out/main/amp/**',
+        'out/main/antigravity/**',
+        'out/main/claude/**',
+        'out/main/codex/**',
+        'out/main/codex-accounts/**',
+        'out/main/command-code/**',
+        'out/main/copilot/**',
+        'out/main/cursor/**',
+        'out/main/devin/**',
+        'out/main/droid/**',
+        'out/main/gemini/**',
+        'out/main/grok/**',
+        'out/main/hermes/**',
+        'out/main/kimi/**',
+        'out/main/openclaude/**',
+        'out/main/runtime/**'
       ])
     )
   })
