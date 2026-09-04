@@ -41,11 +41,10 @@ export default function ThemePicker({ currentIndex, onChange }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 p-2 rounded-lg z-50"
+            className="glass absolute right-0 top-full mt-2 p-2 rounded-lg z-50"
             style={{
               backgroundColor: 'var(--surface)',
               border: '1px solid var(--border)',
-              backdropFilter: 'blur(12px)',
               minWidth: '140px',
             }}
           >

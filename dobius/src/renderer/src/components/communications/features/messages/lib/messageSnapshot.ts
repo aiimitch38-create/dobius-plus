@@ -28,6 +28,24 @@ const MAX_EVENTS_PER_SNAPSHOT = 80;
 
 const MAX_CHANNELS_PER_RELAY = 20;
 
+// Agent screenshots post as `![...](data:image/...;base64,...)` inline in
+// message content — a single screenshot can be several hundred KB to a few
+// MB. The snapshot only needs to instant-paint text while the real timeline
+// revalidates from the relay, so heavy inline images are dropped from the
+// persisted copy rather than counted against the shared localStorage quota.
+//
+// Must match the WHOLE `![alt](data:...)` image tag, not just the data URL
+// inside it — replacing only the URL leaves `![alt](placeholder)`, which
+// CommonMark link destinations forbid (unescaped spaces), so it fails to
+// parse as an image and renders as garbled literal text instead. The
+// placeholder itself must not contain `[`/`]`/`(`/`)`, or it could be
+// mistaken for markdown syntax once substituted into the message body.
+const INLINE_IMAGE_MARKDOWN = /!\[[^\]]*\]\(data:image\/[^)]+\)/g;
+
+function stripInlineImageData(content: string): string {
+  return content.replace(INLINE_IMAGE_MARKDOWN, "image omitted from cache");
+}
+
 export function messageSnapshotKey(relayUrl: string, channelId: string) {
   return `${STORAGE_KEY_PREFIX}:${normalizeRelayUrl(relayUrl)}:${channelId}`;
 }
@@ -130,7 +148,8 @@ export function writeMessageSnapshot(
   try {
     const persistable = events
       .filter((event) => !event.pending)
-      .slice(-MAX_EVENTS_PER_SNAPSHOT);
+      .slice(-MAX_EVENTS_PER_SNAPSHOT)
+      .map((event) => ({ ...event, content: stripInlineImageData(event.content) }));
     if (persistable.length === 0) {
       return;
     }
