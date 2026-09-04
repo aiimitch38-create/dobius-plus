@@ -3784,6 +3784,76 @@ export async function invokeDobiusBackedTauriCommand(
     case "is_auto_update_supported":
       return { handled: true, result: await invokeDobiusRuntime("updater.isAutoUpdateSupported") };
 
+    // ── canvas notes (canvas-rpc-methods.ts) ────────────────────────────────
+    case "get_canvas":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getCanvas", args) };
+    case "set_canvas":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.setCanvas", args) };
+
+    // ── social notes (canvas-rpc-methods.ts) ────────────────────────────────
+    case "get_note_reactions":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getNoteReactions", args) };
+    case "get_note":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getNote", args) };
+    case "get_user_notes":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getUserNotes", args) };
+    case "publish_note":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.publishNote", args) };
+    case "get_liked_notes":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getLikedNotes", args) };
+    case "get_global_notes":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getGlobalNotes", args) };
+    case "get_notes_timeline":
+      return { handled: true, result: await invokeDobiusRuntime("canvas.getNotesTimeline", args) };
+
+    // ── archive save-subscriptions (save-subscription-store.ts via
+    // save-subscriptions.ts RPC methods) — identityPubkey/relayUrl are not
+    // known to the main process on their own, so thread them explicitly the
+    // same way every other relay-backed case threads channelId/pubkey. ────
+    case "list_save_subscriptions": {
+      const result = (await invokeDobiusRuntime("saveSubscription.list", {
+        identityPubkey: localIdentity().pubkey,
+        relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
+      })) as { subscriptions: unknown[] };
+      return { handled: true, result: result.subscriptions };
+    }
+    case "create_save_subscription": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("saveSubscription.create", {
+        ...input,
+        identityPubkey: localIdentity().pubkey,
+        relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
+      });
+      return { handled: true, result: undefined };
+    }
+    case "delete_save_subscription": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const result = (await invokeDobiusRuntime("saveSubscription.delete", {
+        ...input,
+        identityPubkey: localIdentity().pubkey,
+        relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
+      })) as { removed: boolean };
+      return { handled: true, result: result.removed };
+    }
+    case "merge_save_subscription_kinds": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("saveSubscription.mergeKind", {
+        ...input,
+        identityPubkey: localIdentity().pubkey,
+        relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
+      });
+      return { handled: true, result: undefined };
+    }
+    case "remove_save_subscription_kind": {
+      const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      await invokeDobiusRuntime("saveSubscription.removeKind", {
+        ...input,
+        identityPubkey: localIdentity().pubkey,
+        relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
+      });
+      return { handled: true, result: undefined };
+    }
+
     default:
       return { handled: false };
   }
