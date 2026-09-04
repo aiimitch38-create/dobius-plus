@@ -1,7 +1,10 @@
 import { useEffect } from 'react'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store'
-import { isRemoteWorkspaceSnapshotApplyInProgress } from './useIpcEvents'
+import {
+  applyRemoteWorkspacePatchStatus,
+  isRemoteWorkspaceSnapshotApplyInProgress
+} from './useIpcEvents'
 import { getSystemPrefersDarkSnapshot } from '../components/terminal-pane/use-system-prefers-dark'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
 import { dispatchWindowCloseRequest } from '../components/window-close-request-coordinator'
@@ -20,7 +23,6 @@ import {
   persistWorkspaceSessionByHostSync
 } from '@/lib/workspace-session-host-persistence'
 import { buildWorkspaceSessionPayload, shouldPersistWorkspaceSession } from '@/lib/workspace-session'
-import { applyRemoteWorkspacePatchStatus } from '@/lib/apply-remote-workspace-patch-status'
 
 type GitHubRefreshActions = Pick<
   AppState,
