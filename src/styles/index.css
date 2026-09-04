@@ -64,7 +64,9 @@ button {
   -webkit-app-region: no-drag;
 }
 
-/* Backdrop blur for overlays */
+/* Backdrop blur for overlays. Applied to the ThemePicker dropdown
+   (src/components/shared/ThemePicker.jsx). Also intended for Build Monitor
+   overlays once BuildMonitorView grows one — no overlay exists there yet. */
 .glass {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
