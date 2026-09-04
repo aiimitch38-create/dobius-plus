@@ -7,6 +7,10 @@ import {
   storeBlob,
   type BlobDescriptor
 } from './blob-store'
+import {
+  assertPathOutsideProtectedRoots,
+  protectedProviderRoots
+} from '../../providers/protected-path-guard'
 
 const MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
@@ -43,6 +47,10 @@ export async function pickAndUploadMedia(): Promise<BlobDescriptor[]> {
 
 /** Uploads a file already on disk at `filePath`. `isTemp` is accepted for API parity; this store is content-addressed either way. */
 export async function uploadMedia(filePath: string, _isTemp: boolean): Promise<BlobDescriptor> {
+  // Why: filePath crosses the RPC boundary from the renderer, so it's an
+  // arbitrary absolute path an untrusted caller chose, not one the user
+  // picked through the native dialog above — refuse credential/identity dirs.
+  assertPathOutsideProtectedRoots(protectedProviderRoots(), filePath, process.cwd())
   return readAndStore(filePath)
 }
 

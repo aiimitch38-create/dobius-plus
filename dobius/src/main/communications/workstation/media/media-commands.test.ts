@@ -71,6 +71,14 @@ describe('media-commands', () => {
     expect(storeBlobMock).toHaveBeenCalledWith(Buffer.from('contents'), 'file.bin')
   })
 
+  it('uploadMedia refuses a path inside a protected root', async () => {
+    const home = (await import('node:os')).homedir()
+    const protectedPath = path.join(home, '.ssh', 'id_rsa')
+
+    await expect(uploadMedia(protectedPath, false)).rejects.toThrow(/protected location/)
+    expect(storeBlobMock).not.toHaveBeenCalled()
+  })
+
   it('uploadMediaBytes rejects a payload over the size limit without storing it', async () => {
     // Length-only fixture: the size guard reads .length and must reject before any read.
     const tooBig = { length: 200 * 1024 * 1024 + 1 } as unknown as number[]
