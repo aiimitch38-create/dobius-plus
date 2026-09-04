@@ -1985,6 +1985,33 @@ function workflowRunWireShape(run: DobiusWorkflowRunRecord): unknown {
   };
 }
 
+// mergeProjectPullRequest's real backend (workstation/pull-requests.ts) throws
+// a plain Error whose message IS the merge-conflict JSON payload ({code,
+// message, recovery}); invokeDobiusRuntime prefixes that with "<rpc-error-
+// code>: " before it reaches here. Recover the JSON and hoist its fields onto
+// the re-thrown Error so parseProjectPullRequestMergeError (projectGit.ts)
+// still recognizes the structured recovery payload instead of falling back
+// to a generic error banner.
+function projectMergeError(error: unknown): Error {
+  if (!(error instanceof Error)) return new Error(String(error));
+  const jsonStart = error.message.indexOf("{");
+  if (jsonStart < 0) return error;
+  try {
+    const parsed = JSON.parse(error.message.slice(jsonStart)) as {
+      code?: unknown;
+      message?: unknown;
+      recovery?: unknown;
+    };
+    if (typeof parsed.code !== "string" || typeof parsed.message !== "string") return error;
+    return Object.assign(new Error(parsed.message), {
+      code: parsed.code,
+      recovery: parsed.recovery ?? null,
+    });
+  } catch {
+    return error;
+  }
+}
+
 function personaFromAgent(agent: DobiusAgentRecord): DobiusPersonaProjection {
   return {
     id: agent.id,
@@ -4137,6 +4164,105 @@ export async function invokeDobiusBackedTauriCommand(
         result: Array.from(atob(response.bytesBase64), (char) => char.charCodeAt(0)),
       };
     }
+
+    // ── project git (src/main/communications/workstation/* via
+    // workstation/rpc-methods.ts) — every command below is a real `git`
+    // shell-out (or, for the PR family, a real Nostr-signed status event),
+    // and every backend function already returns the exact snake_case wire
+    // shape the vendor projectGit.ts Raw* types expect, so most cases are
+    // pure passthrough. ───────────────────────────────────────────────────
+    case "get_git_identity":
+      return { handled: true, result: await invokeDobiusRuntime("workstationGit.getIdentity") };
+    case "get_project_repo_snapshot":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.getRemoteSnapshot", args),
+      };
+    case "get_project_repo_diff":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.getRemoteDiff", args),
+      };
+    case "get_project_local_repo_diff":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.getLocalDiff", args),
+      };
+    case "get_project_local_repo_snapshot":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.getLocalSnapshot", args),
+      };
+    case "list_project_local_repositories":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.listLocalRepositories", args),
+      };
+    case "get_project_repo_sync_status":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.getSyncStatus", args),
+      };
+    case "open_project_terminal":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.openTerminal", args),
+      };
+    case "open_project_merge_recovery_terminal":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime(
+          "workstationGit.openMergeRecoveryTerminal",
+          objectAt(args, "input"),
+        ),
+      };
+    case "push_project_local_repository":
+      return { handled: true, result: await invokeDobiusRuntime("workstationGit.push", args) };
+    case "pull_project_local_repository":
+      return { handled: true, result: await invokeDobiusRuntime("workstationGit.pull", args) };
+    case "clone_project_repository":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.cloneRepository", args),
+      };
+    case "create_project_remote_branch":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.createRemoteBranch", args),
+      };
+    case "delete_project_remote_branch":
+      return {
+        handled: true,
+        result: await invokeDobiusRuntime("workstationGit.deleteRemoteBranch", args),
+      };
+    case "merge_project_pull_request": {
+      try {
+        return {
+          handled: true,
+          result: await invokeDobiusRuntime(
+            "workstationGit.mergePullRequest",
+            objectAt(args, "input"),
+          ),
+        };
+      } catch (error) {
+        throw projectMergeError(error);
+      }
+    }
+    case "sign_project_pull_request_review_request":
+      await invokeDobiusRuntime(
+        "workstationGit.signPullRequestReviewRequest",
+        objectAt(args, "input"),
+      );
+      return { handled: true, result: undefined };
+    case "sign_project_pull_request_status":
+      await invokeDobiusRuntime("workstationGit.signPullRequestStatus", objectAt(args, "input"));
+      return { handled: true, result: undefined };
+    case "publish_project_pull_request_merged_status":
+      await invokeDobiusRuntime(
+        "workstationGit.publishPullRequestMergedStatus",
+        objectAt(args, "input"),
+      );
+      return { handled: true, result: undefined };
 
     default:
       return { handled: false };
