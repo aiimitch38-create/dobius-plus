@@ -135,4 +135,12 @@ describe('resolveExternalEditorLaunchSpec', () => {
       ).toThrow(/not allowed/)
     }
   })
+
+  it('refuses cmd.exe env-var expansion and escape-caret smuggling on Windows', () => {
+    for (const command of ['code %USERPROFILE%\\evil.bat', 'code ^& calc.exe']) {
+      expect(() =>
+        resolveExternalEditorLaunchSpec(command, 'C:\\workspace', { platform: 'win32' })
+      ).toThrow(/not allowed/)
+    }
+  })
 })

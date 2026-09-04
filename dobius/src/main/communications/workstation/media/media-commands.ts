@@ -1,4 +1,4 @@
-import { dialog } from 'electron'
+import { app, dialog } from 'electron'
 import { readFile, stat } from 'node:fs/promises'
 import {
   ensureMediaServerStarted,
@@ -50,7 +50,14 @@ export async function uploadMedia(filePath: string, _isTemp: boolean): Promise<B
   // Why: filePath crosses the RPC boundary from the renderer, so it's an
   // arbitrary absolute path an untrusted caller chose, not one the user
   // picked through the native dialog above — refuse credential/identity dirs.
-  assertPathOutsideProtectedRoots(protectedProviderRoots(), filePath, process.cwd())
+  // userData is added here (per protectedProviderRoots' own note) since it
+  // holds dobius-data.json / config.json — the app's own settings — which
+  // protectedProviderRoots can't see without importing Electron.
+  assertPathOutsideProtectedRoots(
+    [...protectedProviderRoots(), app.getPath('userData')],
+    filePath,
+    process.cwd()
+  )
   return readAndStore(filePath)
 }
 
