@@ -121,4 +121,18 @@ describe('resolveExternalEditorLaunchSpec', () => {
       spawnArgs: ['/d', '/s', '/c', 'nvim --clean C:\\workspaces\\dobius']
     })
   })
+
+  it('refuses a compound command that tries to chain a second shell command', () => {
+    expect(() =>
+      resolveExternalEditorLaunchSpec('code; rm -rf ~', '/tmp/workspace', { platform: 'darwin' })
+    ).toThrow(/not allowed/)
+  })
+
+  it('refuses a compound command that pipes or substitutes a nested command', () => {
+    for (const command of ['code $(rm -rf ~)', 'code `rm -rf ~`', 'code -x | sh', 'code -x & sh']) {
+      expect(() =>
+        resolveExternalEditorLaunchSpec(command, '/tmp/workspace', { platform: 'darwin' })
+      ).toThrow(/not allowed/)
+    }
+  })
 })
