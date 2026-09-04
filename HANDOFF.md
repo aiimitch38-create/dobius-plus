@@ -6,8 +6,8 @@ Last updated: 2026-09-04 (Communications Hub live-bug build)
 
 Working the 4-task Communications Hub live-bug build described in
 `AUTONOMOUS-BUILD.md` (context: `IRIS-REPORT-20260904.md`). Branch
-`feat/computer-use-v2`. **Tasks COMMS.1 and COMMS.2 are done and
-committed.** COMMS.3-4 not started yet.
+`feat/computer-use-v2`. **Tasks COMMS.1, COMMS.2, and COMMS.3 are done and
+committed.** COMMS.4 not started yet — last one.
 
 An earlier attempt to run this build via `scripts/crackbot-supervisor.sh`
 in the background got killed with no work done (confirmed: git log showed
@@ -66,10 +66,27 @@ Deliberately not wired into the Home/Inbox context pane
 (`useHomeInboxContextMessages.ts`) — out of this task's Channels/DM scope;
 flagged in the review file if that surface turns out to need it too.
 
+## Task COMMS.3 — DONE (commit `b0923feb`)
+
+Huddle button now explains why it's disabled instead of silently doing
+nothing. See `plans/TASK-COMMS.3-REVIEW.md`. Summary: new
+`huddleStartDisabledReason()` pure function in `huddleAvailability.ts`,
+threaded through `ChannelMembersBar.tsx` → `HuddleIndicator.tsx`'s tooltip.
+Traced the membership-resolution code end to end (consistent pubkey
+normalization, creator always added as member on channel creation) and
+found no bug in it — **could not verify live against Carson's actual
+channel data** (no DevTools/CDP on this build, and installing a fresh
+package is out of scope for routine per-task verification per this build's
+own guardrail). **Owed**: once a human builds and installs this branch,
+click the Huddle button in a channel Carson is a member of — if it's still
+disabled there, the tooltip will now say why, which narrows the real bug
+immediately (most likely candidate: some channels' membership never got
+Carson added, e.g. seeded/legacy channels created before the
+always-add-owner path existed).
+
 ## What's next (in order)
 
-1. Task COMMS.3 — Huddle button silently disabled (`plans/TASK-COMMS.3.md`). Independent.
-2. Task COMMS.4 — channel delete needs a sidebar entry point (`plans/TASK-COMMS.4.md`). Independent, lowest severity, do last.
+1. Task COMMS.4 — channel delete needs a sidebar entry point (`plans/TASK-COMMS.4.md`). Independent, lowest severity, last task in this build.
 
 Each follows PLAN → IMPLEMENT → VERIFY → REVIEW → COMMIT → GATE → LOG per
 `AUTONOMOUS-BUILD.md`. Do not push, open a PR, or touch `main`. Do not build
