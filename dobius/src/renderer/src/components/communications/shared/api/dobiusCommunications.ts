@@ -1880,6 +1880,29 @@ function requiredText(value: unknown, field: string): string {
   return value.trim();
 }
 
+type DobiusSaveSubscriptionRecord = {
+  identityPubkey: string;
+  relayUrl: string;
+  scopeType: string;
+  scopeValue: string;
+  kinds: number[];
+  createdAt: number;
+};
+
+// Wire shape mirrors RawSaveSubscription (vendor shared/api/tauriArchive.ts)
+// — decodeRawSubscription() there does its own JSON.parse(raw.kinds), so
+// kinds must go over the wire as a JSON-encoded string, not a real array.
+function saveSubscriptionWireShape(subscription: DobiusSaveSubscriptionRecord): unknown {
+  return {
+    identity_pubkey: subscription.identityPubkey,
+    relay_url: subscription.relayUrl,
+    scope_type: subscription.scopeType,
+    scope_value: subscription.scopeValue,
+    kinds: JSON.stringify(subscription.kinds),
+    created_at: subscription.createdAt,
+  };
+}
+
 type DobiusChannelTemplateRecord = {
   id: string;
   name: string;
@@ -3946,8 +3969,8 @@ export async function invokeDobiusBackedTauriCommand(
       const result = (await invokeDobiusRuntime("saveSubscription.list", {
         identityPubkey: localIdentity().pubkey,
         relayUrl: DOBIUS_RELAY_WEBSOCKET_URL,
-      })) as { subscriptions: unknown[] };
-      return { handled: true, result: result.subscriptions };
+      })) as { subscriptions: DobiusSaveSubscriptionRecord[] };
+      return { handled: true, result: result.subscriptions.map(saveSubscriptionWireShape) };
     }
     case "create_save_subscription": {
       const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
