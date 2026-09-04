@@ -1,6 +1,3 @@
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
-
 type DobiusBridgeResponse =
   | { version: 1; id: string; ok: true; result: unknown }
   | {
@@ -225,7 +222,6 @@ async function discoverDobiusAgentRuntimes(): Promise<unknown[]> {
 
 export const DOBIUS_RELAY_WEBSOCKET_URL = "ws://localhost:3300";
 const DOBIUS_RELAY_HTTP_URL = "http://localhost:3300";
-const DOBIUS_AGENT_IDENTITIES_STORAGE_KEY = "dobius-buzz-agent-identities.v1";
 
 type DobiusLocalIdentity = {
   pubkey: string;
@@ -261,28 +257,6 @@ function localIdentity(): DobiusLocalIdentity {
   return cachedIdentity;
 }
 
-function signedEventWithPrivateKey(
-  args: unknown,
-  privateKey: string,
-  kindOverride?: number,
-): string {
-  if (!args || typeof args !== "object") throw new Error("Missing event payload");
-  const input = args as Record<string, unknown>;
-  const kind = kindOverride ?? input.kind;
-  if (typeof kind !== "number") throw new Error("Missing event kind");
-  const tags = Array.isArray(input.tags) ? (input.tags as string[][]) : [];
-  const content = typeof input.content === "string" ? input.content : "";
-  const createdAt =
-    typeof input.createdAt === "number"
-      ? input.createdAt
-      : Math.floor(Date.now() / 1000);
-  const event = finalizeEvent(
-    { kind, tags, content, created_at: createdAt },
-    hexToBytes(privateKey),
-  );
-  return JSON.stringify(event);
-}
-
 /**
  * Sign as the participant. The private key lives in the main process, so this
  * is a round trip rather than a local finalizeEvent — which is why it is async
@@ -294,6 +268,30 @@ async function signedEvent(args: unknown, kindOverride?: number): Promise<string
   const kind = kindOverride ?? input.kind;
   if (typeof kind !== "number") throw new Error("Missing event kind");
   const signed = await window.api.communications.signEvent({
+    kind,
+    content: typeof input.content === "string" ? input.content : "",
+    tags: Array.isArray(input.tags) ? (input.tags as string[][]) : [],
+    ...(typeof input.createdAt === "number" ? { createdAt: input.createdAt } : {})
+  });
+  return JSON.stringify(signed);
+}
+
+/**
+ * Sign as a Dobius-managed agent. The agent's private key is generated and
+ * held in the main process (agent-participant-identity-store.ts, Keychain-
+ * backed via safeStorage) — the renderer never sees it, same rationale as
+ * {@link signedEvent} for the participant's own identity.
+ */
+async function signEventAsAgent(
+  agentId: string,
+  args: unknown,
+  kindOverride?: number,
+): Promise<string> {
+  if (!args || typeof args !== "object") throw new Error("Missing event payload");
+  const input = args as Record<string, unknown>;
+  const kind = kindOverride ?? input.kind;
+  if (typeof kind !== "number") throw new Error("Missing event kind");
+  const signed = await window.api.communications.signEventAsAgent(agentId, {
     kind,
     content: typeof input.content === "string" ? input.content : "",
     tags: Array.isArray(input.tags) ? (input.tags as string[][]) : [],
@@ -500,9 +498,10 @@ async function openDobiusDm(args: unknown): Promise<unknown> {
   const channelId = requiredText(responsePayload.channel_id, "DM channel id");
   const agentResponse = await invokeDobiusRuntime("agent.list");
   const agents = recordsAt(agentResponse, "agents").filter(isDobiusAgentRecord);
+  const dmAgentPubkeyById = await agentPubkeysById(agents);
   await Promise.all(
     agents
-      .filter((agent) => pubkeys.includes(agentIdentity(agent.id).pubkey))
+      .filter((agent) => pubkeys.includes(dmAgentPubkeyById.get(agent.id) ?? ""))
       .map((agent) => ensureDobiusAgentProfile(agent)),
   );
   const metadata = await queryRelay([{ kinds: [39000], "#d": [channelId], limit: 1 }]);
@@ -567,21 +566,18 @@ function resolveRelayThreadRoot(
 const publishedAgentProfiles = new Set<string>();
 
 async function ensureDobiusAgentProfile(agent: DobiusAgentRecord): Promise<void> {
-  const identity = agentIdentity(agent.id);
-  if (publishedAgentProfiles.has(identity.pubkey)) return;
+  const pubkey = await projectionPubkey(agent.id);
+  if (publishedAgentProfiles.has(pubkey)) return;
   try {
     await submitRelayEvent(
-      signedEventWithPrivateKey(
-        {
-          kind: 0,
-          content: JSON.stringify({ display_name: agent.name, name: agent.name }),
-          tags: [],
-        },
-        identity.privateKey,
-      ),
-      identity.pubkey,
+      await signEventAsAgent(agent.id, {
+        kind: 0,
+        content: JSON.stringify({ display_name: agent.name, name: agent.name }),
+        tags: [],
+      }),
+      pubkey,
     );
-    publishedAgentProfiles.add(identity.pubkey);
+    publishedAgentProfiles.add(pubkey);
   } catch {
     // Retried on the agent's next message.
   }
@@ -597,7 +593,7 @@ async function publishDobiusAgentReply(args: {
 }): Promise<string | null> {
   // Every agent-authored message guarantees its author has a name in chat.
   await ensureDobiusAgentProfile(args.agent);
-  const identity = agentIdentity(args.agent.id);
+  const pubkey = await projectionPubkey(args.agent.id);
   const tags: string[][] = [
     ["h", args.channelId],
     ["p", localIdentity().pubkey],
@@ -617,11 +613,8 @@ async function publishDobiusAgentReply(args: {
     if (args.broadcast) tags.push(["broadcast", "1"]);
   }
   const submission = await submitRelayEvent(
-    signedEventWithPrivateKey(
-      { kind: 9, content: args.content, tags },
-      identity.privateKey,
-    ),
-    identity.pubkey,
+    await signEventAsAgent(args.agent.id, { kind: 9, content: args.content, tags }),
+    pubkey,
   );
   return typeof submission.event_id === "string" ? submission.event_id : null;
 }
@@ -857,11 +850,12 @@ async function dispatchMessageToDobiusAgents(args: {
   const targetPubkeys = new Set(
     [...args.participantPubkeys, ...roomPubkeys].map((value) => value.toLowerCase()),
   );
+  const dispatchAgentPubkeyById = await agentPubkeysById(agents);
   const targets: DobiusAgentRecord[] = [];
   for (const agent of agents) {
     // An agent never answers itself.
     if (args.author && agent.id === args.author.agentId) continue;
-    if (!targetPubkeys.has(agentIdentity(agent.id).pubkey)) continue;
+    if (!targetPubkeys.has(dispatchAgentPubkeyById.get(agent.id) ?? "")) continue;
     // Membership wakes an agent for HUMAN messages only. For an agent-authored
     // message the target must be @-mentioned in it — otherwise every member
     // agent would answer every other agent forever.
@@ -877,10 +871,11 @@ async function dispatchMessageToDobiusAgents(args: {
     [selfIdentity.pubkey.toLowerCase(), selfIdentity.username || "the user"],
   ]);
   for (const candidate of agents) {
-    nameByPubkey.set(agentIdentity(candidate.id).pubkey, candidate.name);
+    const candidatePubkey = dispatchAgentPubkeyById.get(candidate.id);
+    if (candidatePubkey) nameByPubkey.set(candidatePubkey, candidate.name);
   }
   const channelAgentNames = agents
-    .filter((candidate) => targetPubkeys.has(agentIdentity(candidate.id).pubkey))
+    .filter((candidate) => targetPubkeys.has(dispatchAgentPubkeyById.get(candidate.id) ?? ""))
     .map((candidate) => candidate.name);
   const history = await queryRelay([
     { kinds: [9], "#h": [args.channelId], limit: 12 },
@@ -1141,8 +1136,12 @@ async function loadDobiusChannelMembers(args: unknown): Promise<unknown> {
   ]);
   const latest = membershipEvents.sort((a, b) => b.created_at - a.created_at)[0];
   const agents = recordsAt(agentResponse, "agents").filter(isDobiusAgentRecord);
+  const membersAgentPubkeyById = await agentPubkeysById(agents);
   const agentByPubkey = new Map(
-    agents.map((agent) => [agentIdentity(agent.id).pubkey.toLowerCase(), agent]),
+    agents.map((agent) => [
+      (membersAgentPubkeyById.get(agent.id) ?? "").toLowerCase(),
+      agent,
+    ]),
   );
   const members = (latest?.tags ?? [])
     .filter((tag) => tag[0] === "p" && typeof tag[1] === "string")
@@ -1822,40 +1821,40 @@ function isDobiusTeamRecord(value: unknown): value is DobiusTeamRecord {
   return typeof candidate.id === "string" && typeof candidate.name === "string";
 }
 
-type DobiusAgentIdentity = { privateKey: string; pubkey: string };
-
-function loadAgentIdentityRegistry(): Record<string, DobiusAgentIdentity> {
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(DOBIUS_AGENT_IDENTITIES_STORAGE_KEY) ?? "{}",
-    ) as Record<string, DobiusAgentIdentity>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function agentIdentity(agentId: string): DobiusAgentIdentity {
-  const identities = loadAgentIdentityRegistry();
-  const existing = identities[agentId];
-  if (
-    existing &&
-    /^[a-f0-9]{64}$/.test(existing.privateKey) &&
-    /^[a-f0-9]{64}$/.test(existing.pubkey)
-  ) {
-    return existing;
-  }
-  const privateKey = bytesToHex(generateSecretKey());
-  const identity = { privateKey, pubkey: getPublicKey(hexToBytes(privateKey)) };
-  identities[agentId] = identity;
-  window.localStorage.setItem(DOBIUS_AGENT_IDENTITIES_STORAGE_KEY, JSON.stringify(identities));
-  return identity;
-}
+// In-memory only: the agent's real pubkey lives in the main process
+// (agent-participant-identity-store.ts), fetched once per agent over IPC and
+// cached here. Never persisted in the renderer — a page reload just re-fetches
+// the same pubkey from main, it does not generate a new identity.
+const agentPubkeyCache = new Map<string, string>();
 
 async function projectionPubkey(agentId: string): Promise<string> {
   // Why: room participants need a real signing identity, not a display-only
   // hash, so native Dobius runs can answer as themselves in Communications.
-  return agentIdentity(agentId).pubkey;
+  const cached = agentPubkeyCache.get(agentId);
+  if (cached) return cached;
+  const { pubkey } = await window.api.communications.getAgentIdentity(agentId);
+  agentPubkeyCache.set(agentId, pubkey);
+  return pubkey;
+}
+
+/** Resolves each agent's pubkey in parallel; use before a synchronous filter/map/find over agents. */
+// Why allSettled, not all: one agent's Keychain-backed identity can fail
+// independently of the rest (e.g. an ad-hoc-signed reinstall changes the
+// app's CDHash and macOS revokes safeStorage access for that entry — see
+// NOTES.md). A single rejection must not blank pubkey resolution for every
+// other, healthy agent in the batch; callers already treat a missing entry
+// here as "this agent doesn't match," which degrades gracefully.
+async function agentPubkeysById(
+  agents: DobiusAgentRecord[],
+): Promise<Map<string, string>> {
+  const settled = await Promise.allSettled(
+    agents.map(async (agent): Promise<[string, string]> => [agent.id, await projectionPubkey(agent.id)]),
+  );
+  const entries: Array<[string, string]> = [];
+  for (const result of settled) {
+    if (result.status === "fulfilled") entries.push(result.value);
+  }
+  return new Map(entries);
 }
 
 function timestampIso(value: number | undefined): string {
@@ -1914,10 +1913,14 @@ export async function loadDobiusManagedAgents(): Promise<DobiusManagedAgentProje
   const runningAgentIds = new Set(
     runs.filter((run) => run.status === "running").map((run) => run.agentId),
   );
+  // One agent's identity lookup failing (see agentPubkeysById) must not blank
+  // the whole managed-agents list — drop just that agent instead.
+  const pubkeyById = await agentPubkeysById(agents);
 
-  return Promise.all(
-    agents.map(async (agent) => ({
-      pubkey: await projectionPubkey(agent.id),
+  return agents
+    .filter((agent) => pubkeyById.has(agent.id))
+    .map((agent) => ({
+      pubkey: pubkeyById.get(agent.id) as string,
       name: agent.name,
       persona_id: null,
       runtime: runtimeId(
@@ -1962,8 +1965,7 @@ export async function loadDobiusManagedAgents(): Promise<DobiusManagedAgentProje
       backend_agent_id: agent.id,
       respond_to: "owner-only" as const,
       respond_to_allowlist: [],
-    })),
-  );
+    }));
 }
 
 async function managedAgentByPubkey(args: unknown): Promise<DobiusManagedAgentProjection> {
@@ -2077,7 +2079,7 @@ async function updateDobiusPersona(args: unknown): Promise<DobiusPersonaProjecti
   if (typeof updates.name === "string") {
     // A rename must reach chat: drop the session memo so the next agent
     // message republishes its kind-0 profile under the new name.
-    publishedAgentProfiles.delete(agentIdentity(agent.id).pubkey);
+    publishedAgentProfiles.delete(await projectionPubkey(agent.id));
   }
   return personaFromAgent(agent);
 }
@@ -2209,13 +2211,14 @@ async function sendDobiusManagedAgentChannelMessage(args: unknown): Promise<unkn
 
   const response = await invokeDobiusRuntime("agent.list");
   const agents = recordsAt(response, "agents").filter(isDobiusAgentRecord);
+  const sendAgentPubkeyById = await agentPubkeysById(agents);
   const agent = agents.find(
-    (candidate) => agentIdentity(candidate.id).pubkey.toLowerCase() === agentPubkey,
+    (candidate) => (sendAgentPubkeyById.get(candidate.id) ?? "").toLowerCase() === agentPubkey,
   );
   if (!agent) throw new Error(`Dobius agent not found for ${agentPubkey}`);
   // Same guarantee as publishDobiusAgentReply: an agent never posts nameless.
   await ensureDobiusAgentProfile(agent);
-  const identity = agentIdentity(agent.id);
+  const senderPubkey = await projectionPubkey(agent.id);
 
   const tags: string[][] = [["h", channelId]];
   for (const pubkey of mentionPubkeys) tags.push(["p", pubkey]);
@@ -2232,8 +2235,8 @@ async function sendDobiusManagedAgentChannelMessage(args: unknown): Promise<unkn
 
   const createdAt = Math.floor(Date.now() / 1000);
   const submission = await submitRelayEvent(
-    signedEventWithPrivateKey({ kind: 9, content, tags, createdAt }, identity.privateKey),
-    identity.pubkey,
+    await signEventAsAgent(agent.id, { kind: 9, content, tags, createdAt }),
+    senderPubkey,
   );
   if (submission.accepted === false) {
     throw new Error(submission.message || "The relay rejected the agent message.");
