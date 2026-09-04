@@ -6,8 +6,10 @@ import type {
   CustomAgent,
   PendingAgentDecision
 } from '../../../../shared/agents'
+import type { AgentTemplate } from '../../../../shared/agent-templates'
 import { AgentDecisionTicketDialog } from './AgentDecisionTicketDialog'
 import { AgentEditForm } from './AgentEditForm'
+import { AgentTemplatesDialog } from './AgentTemplatesDialog'
 import { CrewFilesDialog } from './CrewFilesDialog'
 import type { AgentDraft } from './agent-page-state'
 
@@ -21,6 +23,7 @@ export function AgentPageDialogs({
   crewFiles,
   activeCrewFile,
   savingCrewFiles,
+  templatesOpen,
   agents,
   decisions,
   openDecisionId,
@@ -34,6 +37,8 @@ export function AgentPageDialogs({
   onActiveCrewFileChange,
   onCrewFilesOpenChange,
   onSaveCrewFiles,
+  onTemplatesOpenChange,
+  onSelectTemplate,
   onOpenDecisionChange,
   onDecisionResolved
 }: {
@@ -46,6 +51,7 @@ export function AgentPageDialogs({
   crewFiles: AgentCrewFiles
   activeCrewFile: AgentCrewFileName
   savingCrewFiles: boolean
+  templatesOpen: boolean
   agents: CustomAgent[]
   decisions: PendingAgentDecision[]
   openDecisionId: string | null
@@ -59,11 +65,18 @@ export function AgentPageDialogs({
   onActiveCrewFileChange: (name: AgentCrewFileName) => void
   onCrewFilesOpenChange: (open: boolean) => void
   onSaveCrewFiles: () => void
+  onTemplatesOpenChange: (open: boolean) => void
+  onSelectTemplate: (template: AgentTemplate) => void
   onOpenDecisionChange: (id: string | null) => void
   onDecisionResolved: () => void
 }): React.JSX.Element {
   return (
     <>
+      <AgentTemplatesDialog
+        open={templatesOpen}
+        onOpenChange={onTemplatesOpenChange}
+        onSelectTemplate={onSelectTemplate}
+      />
       <AgentEditForm
         open={editOpen}
         draft={draft}

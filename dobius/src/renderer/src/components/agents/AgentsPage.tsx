@@ -8,6 +8,7 @@ import type {
   BriefingItem,
   CustomAgent
 } from '../../../../shared/agents'
+import type { AgentTemplate } from '../../../../shared/agent-templates'
 import { AgentList } from './AgentList'
 import { AgentMissionControlPanel } from './AgentMissionControlPanel'
 import { AgentPageDialogs } from './AgentPageDialogs'
@@ -36,6 +37,7 @@ export default function AgentsPage(): React.JSX.Element {
   const [draft, setDraft] = useState<AgentDraft>(() => agentToDraft(null))
   const [mode, setMode] = useState<AgentPageMode>('run')
   const [editOpen, setEditOpen] = useState(false)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
   const [agentFiles, setAgentFiles] = useState<AgentReadableFiles>(DEFAULT_AGENT_FILES)
   const [activeIdentityFile, setActiveIdentityFile] = useState<AgentIdentityFileName>('soul')
   const [prompt, setPrompt] = useState('')
@@ -184,6 +186,27 @@ export default function AgentsPage(): React.JSX.Element {
     setTranscript([])
   }
 
+  const createAgentFromTemplate = (template: AgentTemplate): void => {
+    setSelectedTerminalId(null)
+    setSelectedAgentId(null)
+    setDraft({
+      ...agentToDraft(null),
+      name: template.name,
+      description: template.description,
+      icon: template.icon,
+      color: template.color,
+      systemPrompt: template.systemPrompt,
+      model: template.model,
+      allowedTools: [...template.allowedTools]
+    })
+    setAgentFiles(DEFAULT_AGENT_FILES)
+    setActiveIdentityFile('soul')
+    setTemplatesOpen(false)
+    setEditOpen(true)
+    setMode('run')
+    setTranscript([])
+  }
+
   const openEditAgent = (): void => {
     if (!selectedAgent) {
       createNewAgent()
@@ -317,6 +340,7 @@ export default function AgentsPage(): React.JSX.Element {
           selectedTerminalId={selectedTerminalId}
           onCreate={createNewAgent}
           onOpenCrewFiles={() => void openCrewFiles()}
+          onOpenTemplates={() => setTemplatesOpen(true)}
           onSelect={selectAgent}
           onSelectTerminal={selectTerminal}
         />
@@ -374,6 +398,7 @@ export default function AgentsPage(): React.JSX.Element {
         crewFiles={crewFiles}
         activeCrewFile={activeCrewFile}
         savingCrewFiles={savingCrewFiles}
+        templatesOpen={templatesOpen}
         agents={agents}
         decisions={decisions}
         openDecisionId={openDecisionId}
@@ -399,6 +424,8 @@ export default function AgentsPage(): React.JSX.Element {
         onActiveCrewFileChange={setActiveCrewFile}
         onCrewFilesOpenChange={setCrewFilesOpen}
         onSaveCrewFiles={() => void saveCrewFiles()}
+        onTemplatesOpenChange={setTemplatesOpen}
+        onSelectTemplate={createAgentFromTemplate}
         onOpenDecisionChange={setOpenDecisionId}
         onDecisionResolved={() => void loadDecisions()}
       />

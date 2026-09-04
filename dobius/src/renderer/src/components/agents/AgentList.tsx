@@ -1,4 +1,4 @@
-import { AlertTriangle, BookOpen, Plus } from 'lucide-react'
+import { AlertTriangle, BookOpen, LayoutTemplate, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { AgentRun, CustomAgent, PendingAgentDecision } from '../../../../shared/agents'
@@ -26,6 +26,7 @@ export function AgentList({
   selectedTerminalId,
   onCreate,
   onOpenCrewFiles,
+  onOpenTemplates,
   onSelect,
   onSelectTerminal
 }: {
@@ -37,6 +38,7 @@ export function AgentList({
   selectedTerminalId: string | null
   onCreate: () => void
   onOpenCrewFiles: () => void
+  onOpenTemplates: () => void
   onSelect: (id: string) => void
   onSelectTerminal: (id: string) => void
 }): React.JSX.Element {
@@ -57,10 +59,16 @@ export function AgentList({
             Crew files
           </Button>
         </div>
-        <Button className="w-full" size="sm" onClick={onCreate}>
-          <Plus className="size-4" />
-          New crew member
-        </Button>
+        <div className="flex gap-2">
+          <Button className="flex-1" size="sm" onClick={onCreate}>
+            <Plus className="size-4" />
+            New crew member
+          </Button>
+          <Button size="sm" variant="outline" onClick={onOpenTemplates}>
+            <LayoutTemplate className="size-4" />
+            Templates
+          </Button>
+        </div>
       </div>
       <div className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto p-2">
         {agents.map((agent) => (
