@@ -107,6 +107,7 @@ import { shouldMountUpdateCardForStatus } from '@/lib/should-mount-update-card'
 import { useGlobalKeyboardShortcuts } from './hooks/useGlobalKeyboardShortcuts'
 import { useWorkspaceStartupHydration } from './hooks/useWorkspaceStartupHydration'
 import { useOnboardingAndFeatureTipsGate } from './hooks/useOnboardingAndFeatureTipsGate'
+import { useTitlebarChromeMeasurements } from './hooks/useTitlebarChromeMeasurements'
 import {
   Landing,
   WorktreeCreationPanel,
@@ -348,10 +349,6 @@ function App(): React.JSX.Element {
   })
   const canGoBackWorktree = useAppStore(canGoBackWorktreeHistory)
   const canGoForwardWorktree = useAppStore(canGoForwardWorktreeHistory)
-  const titlebarLeftControlsRef = useRef<HTMLDivElement | null>(null)
-  const titlebarRightClusterRef = useRef<HTMLDivElement | null>(null)
-  const [collapsedSidebarHeaderWidth, setCollapsedSidebarHeaderWidth] = useState(0)
-  const [titlebarRightClusterWidth, setTitlebarRightClusterWidth] = useState(0)
   const [mountedLazyModalIds, setMountedLazyModalIds] = useState<Set<LazyModalId>>(() => new Set())
   const [shouldMountAddRepoDialog, setShouldMountAddRepoDialog] = useState(false)
   const unmountAddRepoDialogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -757,53 +754,20 @@ function App(): React.JSX.Element {
     shortcutPlatform
   })
 
-  useLayoutEffect(() => {
-    const controls = titlebarLeftControlsRef.current
-    if (!controls) {
-      return
-    }
-
-    const updateWidth = (): void => {
-      setCollapsedSidebarHeaderWidth(controls.getBoundingClientRect().width)
-    }
-
-    updateWidth()
-    const observer = new ResizeObserver(() => {
-      updateWidth()
-    })
-    observer.observe(controls)
-    return () => observer.disconnect()
-  }, [
+  const {
+    titlebarLeftControlsRef,
+    titlebarRightClusterRef,
+    collapsedSidebarHeaderWidth,
+    titlebarRightClusterWidth
+  } = useTitlebarChromeMeasurements({
     isFullScreen,
-    settings?.showTitlebarAppName,
+    showTitlebarAppName: settings?.showTitlebarAppName,
     showSidebar,
-    leftTitlebarChromeLayout.isFloating,
-    sidebarOpen
-  ])
-
-  // Why: the floating top-right cluster (TV, Quick Commands, notifications,
-  // sidebar toggle) overlays the rightmost pane's tab strip in a separate DOM
-  // branch. Measuring its real width — rather than hardcoding a per-button sum
-  // that silently under-reserves whenever a button is added — lets the tab strip
-  // reserve exactly enough space so long tab titles never slide under it.
-  useLayoutEffect(() => {
-    const cluster = titlebarRightClusterRef.current
-    if (!cluster) {
-      setTitlebarRightClusterWidth(0)
-      return
-    }
-
-    const updateWidth = (): void => {
-      setTitlebarRightClusterWidth(cluster.getBoundingClientRect().width)
-    }
-
-    updateWidth()
-    const observer = new ResizeObserver(() => {
-      updateWidth()
-    })
-    observer.observe(cluster)
-    return () => observer.disconnect()
-  }, [workspaceChromeActive, rightSidebarOpen])
+    leftTitlebarChromeIsFloating: leftTitlebarChromeLayout.isFloating,
+    sidebarOpen,
+    workspaceChromeActive,
+    rightSidebarOpen
+  })
 
   const resolvedMountedLazyModalIds = resolveMountedLazyModalIds(activeModal, mountedLazyModalIds)
   if (resolvedMountedLazyModalIds !== mountedLazyModalIds) {
