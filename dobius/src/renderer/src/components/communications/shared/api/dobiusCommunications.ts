@@ -1838,14 +1838,23 @@ async function projectionPubkey(agentId: string): Promise<string> {
 }
 
 /** Resolves each agent's pubkey in parallel; use before a synchronous filter/map/find over agents. */
+// Why allSettled, not all: one agent's Keychain-backed identity can fail
+// independently of the rest (e.g. an ad-hoc-signed reinstall changes the
+// app's CDHash and macOS revokes safeStorage access for that entry — see
+// NOTES.md). A single rejection must not blank pubkey resolution for every
+// other, healthy agent in the batch; callers already treat a missing entry
+// here as "this agent doesn't match," which degrades gracefully.
 async function agentPubkeysById(
   agents: DobiusAgentRecord[],
 ): Promise<Map<string, string>> {
-  return new Map(
-    await Promise.all(
-      agents.map(async (agent): Promise<[string, string]> => [agent.id, await projectionPubkey(agent.id)]),
-    ),
+  const settled = await Promise.allSettled(
+    agents.map(async (agent): Promise<[string, string]> => [agent.id, await projectionPubkey(agent.id)]),
   );
+  const entries: Array<[string, string]> = [];
+  for (const result of settled) {
+    if (result.status === "fulfilled") entries.push(result.value);
+  }
+  return new Map(entries);
 }
 
 function timestampIso(value: number | undefined): string {
@@ -1904,10 +1913,14 @@ export async function loadDobiusManagedAgents(): Promise<DobiusManagedAgentProje
   const runningAgentIds = new Set(
     runs.filter((run) => run.status === "running").map((run) => run.agentId),
   );
+  // One agent's identity lookup failing (see agentPubkeysById) must not blank
+  // the whole managed-agents list — drop just that agent instead.
+  const pubkeyById = await agentPubkeysById(agents);
 
-  return Promise.all(
-    agents.map(async (agent) => ({
-      pubkey: await projectionPubkey(agent.id),
+  return agents
+    .filter((agent) => pubkeyById.has(agent.id))
+    .map((agent) => ({
+      pubkey: pubkeyById.get(agent.id) as string,
       name: agent.name,
       persona_id: null,
       runtime: runtimeId(
@@ -1952,8 +1965,7 @@ export async function loadDobiusManagedAgents(): Promise<DobiusManagedAgentProje
       backend_agent_id: agent.id,
       respond_to: "owner-only" as const,
       respond_to_allowlist: [],
-    })),
-  );
+    }));
 }
 
 async function managedAgentByPubkey(args: unknown): Promise<DobiusManagedAgentProjection> {

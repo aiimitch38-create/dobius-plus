@@ -275,8 +275,13 @@ export function useAudioCapture() {
   // closed mid-recording) would otherwise leave the mic stream, AudioContext,
   // and ScriptProcessorNode alive forever — the browser keeps the mic-in-use
   // indicator lit with no way for the user to release it. Mirrors the unmount
-  // cleanup in use-jarvis-turn.ts.
-  useEffect(() => cleanupCaptureResources, [cleanupCaptureResources])
+  // cleanup in use-jarvis-turn.ts. Must call stop(), not cleanupCaptureResources
+  // directly: stop() bumps startRequestRef first, which is the guard start()'s
+  // in-flight getUserMedia()/AudioContext continuation checks before acquiring
+  // the stream — without that bump, a start() call still pending when this
+  // unmounts would see a stale-but-matching startRequestRef, sail past the
+  // guard, and open a live mic for a component that's already gone.
+  useEffect(() => stop, [stop])
 
   return {
     start,

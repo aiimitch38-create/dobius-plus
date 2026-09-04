@@ -235,6 +235,49 @@ test("maps Dobius managed-agent start and stop onto Dobius on-demand lifecycle",
   assert.equal(stopped.result.status, "stopped");
 });
 
+test("one agent's identity lookup failing does not blank the whole managed-agent list", async () => {
+  const identity = {
+    privateKey: "18".repeat(32),
+    pubkey: "19".repeat(32),
+    username: "Dobius User",
+  };
+  const storage = new Map([["dobius-buzz-identity.v1", JSON.stringify(identity)]]);
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
+    },
+    dobiusCommunications: {
+      invoke: async () => ({
+        version: 1,
+        id: "agent.list",
+        ok: true,
+        result: {
+          agents: [
+            { id: "healthy-agent", name: "Healthy", model: "claude" },
+            { id: "broken-agent", name: "Broken", model: "claude" },
+          ],
+          runs: [],
+        },
+      }),
+    },
+  };
+  await primeTestIdentity(identity);
+  // Simulate the broken agent's Keychain-backed identity failing (e.g. an
+  // ad-hoc-signed reinstall revoking safeStorage access) without touching
+  // the healthy agent's resolution.
+  const bridgedGetAgentIdentity = globalThis.window.api.communications.getAgentIdentity;
+  globalThis.window.api.communications.getAgentIdentity = async (agentId) => {
+    if (agentId === "broken-agent") throw new Error("Keychain access denied");
+    return bridgedGetAgentIdentity(agentId);
+  };
+
+  const agents = await loadDobiusManagedAgents();
+  assert.equal(agents.length, 1, "the broken agent is dropped, not the whole list");
+  assert.equal(agents[0].name, "Healthy");
+  assert.match(agents[0].pubkey, /^[a-f0-9]{64}$/);
+});
+
 test("projects Dobius agent definitions as Dobius personas", async () => {
   globalThis.window = {
     dobiusCommunications: {
