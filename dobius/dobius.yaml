@@ -2,3 +2,9 @@ scripts:
   setup: |
     node config/scripts/run-internal-dev-setup.mjs
     pnpm install
+
+environmentRecipes:
+  - id: hostinger-linux-box
+    name: Hostinger Linux Box
+    create: ./scripts/dobius-vm/hostinger-ssh-create.sh
+    destroy: none
