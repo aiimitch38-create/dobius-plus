@@ -2456,6 +2456,14 @@ export type HostSettingOverrides = {
   defaultWorktreeLocation?: string
 }
 
+/** Auto-mirror of local repos to an external drive. `destination` is an
+ *  existing directory the user picked; its disappearance is how we detect the
+ *  drive being unplugged. */
+export type ExternalBackupSettings = {
+  enabled: boolean
+  destination: string
+}
+
 export type GlobalSettings = {
   workspaceDir: string
   /** Per-host overrides keyed by ExecutionHostId. Effective value for a
@@ -2881,6 +2889,11 @@ export type GlobalSettings = {
    *  configuration surface and edge cases (conflicts with existing paths,
    *  cleanup on worktree delete) are still being worked out. */
   experimentalWorktreeSymlinks: boolean
+
+  /** Mirror local repos (and their worktrees) to an external drive on a timer.
+   *  Optional so profiles saved before this feature keep loading; the
+   *  persistence merge hydrates the default. */
+  externalBackup?: ExternalBackupSettings
 
   /** Active non-local runtime environment for client-routed RPC. `null`
    *  preserves the current local desktop behavior. */

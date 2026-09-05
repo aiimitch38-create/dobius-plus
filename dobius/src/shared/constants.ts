@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- Why: default persisted settings live in one schema-shaped object so migrations and tests compare against one source of truth. */
 import type {
+  ExternalBackupSettings,
   GlobalSettings,
   NotificationSettings,
   OnboardingChecklistState,
@@ -391,8 +392,13 @@ export function getDefaultSettings(homedir: string): GlobalSettings {
       customAgentCommand: ''
     },
     sourceControlAi: getDefaultSourceControlAiSettings(),
-    voice: getDefaultVoiceSettings()
+    voice: getDefaultVoiceSettings(),
+    externalBackup: getDefaultExternalBackupSettings()
   }
+}
+
+export function getDefaultExternalBackupSettings(): ExternalBackupSettings {
+  return { enabled: false, destination: '' }
 }
 
 export const DEFAULT_ADAM_ENDPOINT = 'http://127.0.0.1:8791'

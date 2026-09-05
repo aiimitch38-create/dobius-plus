@@ -153,6 +153,9 @@ import { AutomationService } from './automations/service'
 import { createHeadlessAutomationOutputSnapshotBuffer } from './automations/headless-dispatch'
 import { buildHeadlessAutomationWorktreeCreateArgs } from './automations/headless-workspace-create'
 import { AgentAwakeService } from './agent-awake-service'
+import { ExternalBackupService } from './external-backup-service'
+import { collectExternalBackupSources } from './external-backup-sources'
+import { getDefaultExternalBackupSettings } from '../shared/constants'
 import {
   getCrashBreadcrumbSnapshot,
   recordCoalescedCrashBreadcrumb,
@@ -212,6 +215,7 @@ let headlessBrowserDisplayAvailable = false
 
 let starNag: StarNagService | null = null
 let agentAwakeService: AgentAwakeService | null = null
+let externalBackupService: ExternalBackupService | null = null
 let crashReports: CrashReportStore | null = null
 let unsubscribeAgentAwakeStatusChanges: (() => void) | null = null
 let watcherShutdownPromise: Promise<void> | null = null
@@ -1646,6 +1650,44 @@ app.whenReady().then(async () => {
   initializeBrowserSessionsForApp()
   agentAwakeService = new AgentAwakeService()
   agentAwakeService.setEnabled(store.getSettings().keepComputerAwakeWhileAgentsRun)
+  // Why the local alias: `store` is a nullable module-level binding, and the
+  // callbacks below outlive the narrowing that holds on this line.
+  const backupStore = store
+  externalBackupService = new ExternalBackupService({
+    getSettings: () =>
+      backupStore.getSettings().externalBackup ?? getDefaultExternalBackupSettings(),
+    listSources: () =>
+      collectExternalBackupSources({
+        repos: backupStore.getRepos(),
+        workspaceDir: backupStore.getSettings().workspaceDir
+      }),
+    onDriveMissing: (destination) => {
+      void dialog.showMessageBox({
+        type: 'warning',
+        message: 'External drive not connected',
+        detail: `Auto-backup is on, but ${destination} is not available. Reconnect the drive to resume backups.`,
+        buttons: ['OK']
+      })
+    }
+  })
+  externalBackupService.setEnabled(
+    (backupStore.getSettings().externalBackup ?? getDefaultExternalBackupSettings()).enabled
+  )
+  // Why subscribe here instead of threading the service through the settings
+  // IPC arg chain: the toggle only needs to start/stop a timer, and the store
+  // already broadcasts every settings write.
+  backupStore.onSettingsChanged((updates) => {
+    if (!('externalBackup' in updates)) {
+      return
+    }
+    const backup = backupStore.getSettings().externalBackup ?? getDefaultExternalBackupSettings()
+    externalBackupService?.setEnabled(backup.enabled)
+    // Run straight away so turning the toggle on with the drive unplugged
+    // surfaces the warning immediately instead of at the next tick.
+    if (backup.enabled) {
+      void externalBackupService?.runOnce()
+    }
+  })
   // Why: disk-hydrated status rows are UI continuity only. The service starts
   // from an empty snapshot; only hook events observed in this runtime can keep
   // the local computer awake.
@@ -2182,6 +2224,8 @@ app.on('before-quit', () => {
   unsubscribeAgentAwakeStatusChanges = null
   agentAwakeService?.dispose()
   agentAwakeService = null
+  externalBackupService?.dispose()
+  externalBackupService = null
   // Why: PTY cleanup is deferred to will-quit so the renderer has a chance to
   // capture terminal scrollback buffers before PTY exit events race in and
   // unmount TerminalPane components (removing their capture callbacks).

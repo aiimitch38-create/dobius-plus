@@ -6,6 +6,7 @@ import { Button } from '../ui/button'
 import { Label } from '../ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import { AdvancedNetworkSettingsSection } from './AdvancedNetworkSettingsSection'
+import { ExternalBackupSetting } from './ExternalBackupSetting'
 import { SearchableSetting } from './SearchableSetting'
 import { SettingsSubsectionHeader, SettingsSwitch } from './SettingsFormControls'
 import { getAdvancedPaneSearchEntries, getAdvancedSearchEntry } from './advanced-search'
@@ -42,6 +43,8 @@ export function AdvancedPane({ settings, updateSettings }: AdvancedPaneProps): R
 
   return (
     <div className="space-y-4">
+      <ExternalBackupSetting settings={settings} updateSettings={updateSettings} />
+
       <section className="space-y-3">
         <SettingsSubsectionHeader
           title={translate('auto.components.settings.AdvancedPane.8d8d8ac599', 'Compatibility')}
