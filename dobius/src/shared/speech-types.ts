@@ -10,6 +10,10 @@ export type SpeechModelManifest = {
   type: SpeechModelType
   provider: SpeechModelProvider
   language: string
+  /** Compressed download size in bytes, NOT installed size. Measure it with
+   * `curl -sIL <downloadUrl>` (Content-Length); do not estimate. Archives
+   * expand substantially - Parakeet v3 is a 487 MB download that occupies
+   * ~640 MB on disk. */
   sizeBytes?: number
   downloadUrl?: string
   archiveSha256?: string

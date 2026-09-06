@@ -21,7 +21,7 @@ export const SPEECH_MODEL_CATALOG: SpeechModelManifest[] = [
     type: 'transducer',
     provider: 'local',
     language: 'multilingual',
-    sizeBytes: 180_000_000,
+    sizeBytes: 487_200_000,
     downloadUrl:
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2',
     archiveSha256: '5793d0fd397c5778d2cf2126994d58e9d56b1be7c04d13c7a15bb1b4eafb16bf',
@@ -39,7 +39,7 @@ export const SPEECH_MODEL_CATALOG: SpeechModelManifest[] = [
     type: 'transducer',
     provider: 'local',
     language: 'en',
-    sizeBytes: 170_000_000,
+    sizeBytes: 482_500_000,
     downloadUrl:
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2',
     archiveSha256: '157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad',
@@ -56,7 +56,7 @@ export const SPEECH_MODEL_CATALOG: SpeechModelManifest[] = [
     type: 'transducer',
     provider: 'local',
     language: 'zh-en',
-    sizeBytes: 130_000_000,
+    sizeBytes: 511_300_000,
     downloadUrl:
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2',
     archiveSha256: '27ffbd9ee24ad186d99acc2f6354d7992b27bcab490812510665fa8f9389c5f8',
@@ -79,7 +79,7 @@ export const SPEECH_MODEL_CATALOG: SpeechModelManifest[] = [
     type: 'paraformer',
     provider: 'local',
     language: 'zh-en',
-    sizeBytes: 115_000_000,
+    sizeBytes: 1_047_300_000,
     downloadUrl:
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-paraformer-bilingual-zh-en.tar.bz2',
     archiveSha256: '5462a1fce42693deae572af1e8c4687124b12aa85fe61ff4d3168bb5280e205f',
