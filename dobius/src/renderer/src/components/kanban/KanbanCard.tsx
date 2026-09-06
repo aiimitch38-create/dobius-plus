@@ -1,4 +1,4 @@
-import { Check, MessageCircle, Paperclip } from 'lucide-react'
+import { Check, Paperclip } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { AvatarStack } from './AvatarStack'
@@ -93,10 +93,6 @@ export function KanbanCard({
               </p>
             ) : null}
             <footer className="mt-3 flex items-center gap-3 text-[11px] tabular-nums text-kanban-muted-foreground">
-              <span className="flex items-center gap-1">
-                <MessageCircle className="size-3.5" />
-                {task.commentCount}
-              </span>
               <span className="flex items-center gap-1">
                 <Paperclip className="size-3.5" />
                 {task.files.length}

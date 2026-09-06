@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
   ChevronDown,
-  ExternalLink,
   Paperclip,
   Link2,
   Plus,
@@ -115,11 +114,21 @@ export function KanbanDetailPanel({
           <Workflow className="size-4" />
         </span>
         <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold">{task.title}</h2>
-        <Button variant="ghost" size="icon-xs" aria-label="Copy task link">
+        {/* "Open in new window" was removed rather than left inert: there is no
+            route that opens a single task. Copy link is kept because the task
+            id is a real, useful thing to hand to an agent or paste in chat. */}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Copy task id"
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(task.id)
+              .then(() => toast.success('Task id copied'))
+              .catch(() => toast.error('Could not copy to the clipboard'))
+          }}
+        >
           <Link2 />
-        </Button>
-        <Button variant="ghost" size="icon-xs" aria-label="Open task in new window">
-          <ExternalLink />
         </Button>
         <Button variant="ghost" size="icon-xs" onClick={onDelete} aria-label="Delete task">
           <Trash2 />
@@ -224,15 +233,6 @@ export function KanbanDetailPanel({
                   style={{ objectPosition: index ? '70% top' : '25% top' }}
                 />
               ))}
-            <button
-              type="button"
-              className="grid aspect-square w-[62px] shrink-0 place-items-center rounded-md border border-dashed border-kanban-border-strong text-[10px] text-kanban-muted-foreground outline-none hover:bg-kanban-hover focus-visible:ring-2 focus-visible:ring-kanban-accent"
-            >
-              <span className="grid place-items-center gap-1">
-                <Plus className="size-4" />
-                Add
-              </span>
-            </button>
           </div>
           <div className="mt-4 space-y-1">
             <Field label="Assignee">
@@ -379,21 +379,26 @@ export function KanbanDetailPanel({
                       : 'Set date'}
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="w-48 p-1">
-                  {[
-                    ['2026-09-12', 'Sep 12, 2026'],
-                    ['2026-09-18', 'Sep 18, 2026'],
-                    ['2026-09-25', 'Sep 25, 2026']
-                  ].map(([value, label]) => (
+                <PopoverContent align="start" className="w-56 space-y-1 p-2">
+                  {/* Was three hardcoded dates (Sep 12/18/25 2026) and no way to
+                      clear one. A native date input is the whole feature. */}
+                  <Input
+                    type="date"
+                    value={task.dueDate ?? ''}
+                    onChange={(event) =>
+                      onUpdate({ dueDate: event.target.value || undefined })
+                    }
+                    className="h-8 text-xs"
+                  />
+                  {task.dueDate ? (
                     <button
-                      key={value}
                       type="button"
-                      onClick={() => onUpdate({ dueDate: value })}
-                      className="block w-full rounded px-3 py-2 text-left text-xs hover:bg-kanban-hover"
+                      onClick={() => onUpdate({ dueDate: undefined })}
+                      className="block w-full rounded px-3 py-1.5 text-left text-xs text-kanban-muted-foreground hover:bg-kanban-hover"
                     >
-                      {label}
+                      Clear due date
                     </button>
-                  ))}
+                  ) : null}
                 </PopoverContent>
               </Popover>
             </Field>
