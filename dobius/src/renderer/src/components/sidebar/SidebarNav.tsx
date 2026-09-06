@@ -3,7 +3,6 @@ import {
   Bell,
   Bot,
   CalendarClock,
-  Columns3,
   Hexagon,
   Search,
   Smartphone,
@@ -56,7 +55,6 @@ const SidebarNav = React.memo(function SidebarNav() {
   const showAutomationsButton = useAppStore((s) => shouldShowAutomationsButton(s.settings))
   const showMobileButton = useAppStore((s) => shouldShowMobileButton(s.settings))
   const automationsActive = activeView === 'automations'
-  const kanbanActive = activeView === 'manager'
   const agentsActive = activeView === 'agents'
   const buzzActive = activeView === 'buzz'
   const skillsActive = activeView === 'skills'
@@ -78,23 +76,6 @@ const SidebarNav = React.memo(function SidebarNav() {
     >
       <SetupGuideSidebarEntry />
       <SidebarTaskNavButton />
-      <button
-        type="button"
-        onClick={() => setActiveView('manager')}
-        aria-current={kanbanActive ? 'page' : undefined}
-        className={cn(
-          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium tracking-tight transition-colors',
-          kanbanActive
-            ? 'bg-worktree-sidebar-accent text-worktree-sidebar-accent-foreground'
-            : 'text-worktree-sidebar-foreground/60 hover:bg-worktree-sidebar-foreground/8'
-        )}
-      >
-        <Columns3
-          className={cn('size-4 shrink-0', !kanbanActive && 'text-worktree-sidebar-foreground/30')}
-          strokeWidth={kanbanActive ? 2.25 : 1.75}
-        />
-        <span className="flex-1">Vertex Board</span>
-      </button>
       {showAutomationsButton ? (
         <ContextMenu>
           <ContextMenuTrigger asChild>

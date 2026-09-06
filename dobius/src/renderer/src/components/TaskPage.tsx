@@ -3011,6 +3011,46 @@ const hasUpstreamCandidateDivergence = (
   !!s.sources.upstreamCandidate &&
   !sameGitHubOwnerRepo(s.sources.originCandidate, s.sources.upstreamCandidate)
 
+const VertexBoard = React.lazy(() => import('./kanban/KanbanBoard'))
+
+/** Switches this page between the external-issues surface (GitHub, GitLab,
+ *  Linear, Jira — all read-only) and the Vertex-owned board. Rendered in both
+ *  branches so the control never moves. */
+function TasksSurfaceToggle({
+  boardOpen,
+  onChange
+}: {
+  boardOpen: boolean
+  onChange: (next: boolean) => void
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-none items-center gap-1 text-xs">
+      {[
+        { id: 'tasks', label: translate('auto.components.TaskPage.surfaceTasks', 'Tasks') },
+        { id: 'board', label: translate('auto.components.TaskPage.surfaceBoard', 'Board') }
+      ].map((surface) => {
+        const active = (surface.id === 'board') === boardOpen
+        return (
+          <button
+            key={surface.id}
+            type="button"
+            aria-current={active ? 'page' : undefined}
+            onClick={() => onChange(surface.id === 'board')}
+            className={cn(
+              'rounded-md border px-2 py-1 text-xs transition',
+              active
+                ? 'border-border/50 bg-foreground/90 text-background'
+                : 'border-border/50 bg-transparent text-foreground hover:bg-muted/50'
+            )}
+          >
+            {surface.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function TaskPage(): React.JSX.Element {
   useTranslation()
   const settings = useAppStore((s) => s.settings)
@@ -3661,6 +3701,11 @@ export default function TaskPage(): React.JSX.Element {
   // gated on a non-null `activeProject` once they pick one.
   const projectModeVisible = taskSource === 'github'
   const [githubMode, setGithubMode] = useState<'items' | 'project'>('items')
+
+  // Why: the Vertex board is a second surface on this page, not a second page.
+  // It is source-independent — Vertex owns those tasks, so it sits beside the
+  // provider tabs rather than inside them (see shared/vertex-task-types.ts).
+  const [boardOpen, setBoardOpen] = useState(false)
 
   // ── GitLab task-source state ──────────────────────────────────────
   // Why: parallel to Linear's slim per-source state. Skips workItemsCache
@@ -7815,6 +7860,22 @@ export default function TaskPage(): React.JSX.Element {
     hasLinearViewContext: Boolean(selectedLinearCustomView)
   })
 
+  // Why an early return rather than a branch deep in the tree: the board owns
+  // its own full-height layout and shares none of the list chrome below. The
+  // toggle is rendered in both branches so switching back is always one click.
+  if (boardOpen) {
+    return (
+      <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
+        <div className="flex flex-none items-center gap-2 px-5 pt-1.5 md:px-8">
+          <TasksSurfaceToggle boardOpen onChange={setBoardOpen} />
+        </div>
+        <React.Suspense fallback={<div className="flex-1" />}>
+          <VertexBoard />
+        </React.Suspense>
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex h-full min-h-0 flex-1 overflow-hidden bg-background text-foreground">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -8023,6 +8084,8 @@ export default function TaskPage(): React.JSX.Element {
                     <span className="min-w-0 truncate">{taskSourceAvailabilityNotice.label}</span>
                   </div>
                 ) : null}
+
+                <TasksSurfaceToggle boardOpen={false} onChange={setBoardOpen} />
 
                 {taskSource === 'github' ? (
                   <div className="flex min-w-0 flex-wrap items-center gap-2">

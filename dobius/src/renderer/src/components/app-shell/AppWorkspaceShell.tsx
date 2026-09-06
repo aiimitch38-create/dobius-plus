@@ -13,7 +13,6 @@ import {
   Landing,
   WorktreeCreationPanel,
   TaskPage,
-  KanbanPage,
   AutomationsPage,
   ActivityPrototypePage,
   Settings,
@@ -288,7 +287,6 @@ export function AppWorkspaceShell({
                       {activeView === 'skills' ? <SkillsPage /> : null}
                       {activeView === 'agents' ? <AgentsPage /> : null}
                       {activeView === 'tasks' ? <TaskPage /> : null}
-                      {activeView === 'manager' ? <KanbanPage /> : null}
                       {activeView === 'automations' ? <AutomationsPage /> : null}
                       {activeView === 'activity' ? <ActivityPrototypePage /> : null}
                       {activeView === 'space' ? <WorkspaceSpacePage /> : null}
