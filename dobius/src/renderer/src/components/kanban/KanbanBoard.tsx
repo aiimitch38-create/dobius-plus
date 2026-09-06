@@ -199,6 +199,15 @@ function SecondaryView({
     )
 
   if (view === 'analytics') {
+    const counts = new Map<string, number>()
+    for (const task of tasks) {
+      if (!task.assignee) continue
+      counts.set(task.assignee.name, (counts.get(task.assignee.name) ?? 0) + 1)
+    }
+    const workload = [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+    const workloadMax = Math.max(1, ...workload.map((entry) => entry.count))
     const totals = statuses.map((status) => ({
       status,
       count: tasks.filter((task) => task.status === status).length
@@ -250,23 +259,30 @@ function SecondaryView({
           </div>
           <div className="rounded-xl border border-kanban-border bg-kanban-card p-5">
             <h2 className="text-sm font-semibold">Team workload</h2>
+            {/* Why derived: this panel used to list four invented teammates
+                with percentages from `72 - index * 11`. Counts now come from
+                who the tasks are actually assigned to. */}
             <div className="mt-5 space-y-5">
-              {['Vision (Design)', 'Maya Chen', 'Sam Ortiz', 'Lee Park'].map((name, index) => (
-                <div key={name}>
-                  <div className="mb-1.5 flex justify-between text-[10px]">
-                    <span>{name}</span>
-                    <span className="tabular-nums text-kanban-muted-foreground">
-                      {72 - index * 11}%
-                    </span>
+              {workload.length ? (
+                workload.map(({ name, count }) => (
+                  <div key={name}>
+                    <div className="mb-1.5 flex justify-between text-[10px]">
+                      <span className="truncate">{name}</span>
+                      <span className="tabular-nums text-kanban-muted-foreground">{count}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-kanban-column">
+                      <div
+                        className="h-full rounded-full bg-kanban-accent"
+                        style={{ width: `${(count / workloadMax) * 100}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2 rounded-full bg-kanban-column">
-                    <div
-                      className="h-full rounded-full bg-kanban-accent"
-                      style={{ width: `${72 - index * 11}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-[11px] text-kanban-muted-foreground">
+                  No tasks are assigned yet.
+                </p>
+              )}
             </div>
           </div>
         </div>
