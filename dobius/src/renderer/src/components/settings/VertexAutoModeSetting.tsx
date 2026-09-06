@@ -4,7 +4,7 @@ import { SearchableSetting } from './SearchableSetting'
 
 const TITLE = 'Run assigned board tasks automatically'
 const DESCRIPTION =
-  'When a Vertex board task is assigned to an agent and moved to To Do, that agent starts it, posts progress and a screenshot to Communications, and moves the card to Review. It never marks a task Done. Off by default: this starts agent runs, which cost money, without a click.'
+  'When a Dobius board task is assigned to an agent and moved to To Do, that agent starts it, posts progress and a screenshot to Communications, and moves the card to Review. It never marks a task Done. Off by default: this starts agent runs, which cost money, without a click.'
 
 type Props = {
   settings: GlobalSettings
@@ -19,7 +19,7 @@ export function VertexAutoModeSetting({ settings, updateSettings }: Props): Reac
       <SearchableSetting
         title={TITLE}
         description={DESCRIPTION}
-        keywords={['vertex', 'kanban', 'board', 'task', 'auto', 'dispatch', 'agent', 'assign']}
+        keywords={['dobius', 'vertex', 'kanban', 'board', 'task', 'auto', 'dispatch', 'agent', 'assign']}
       >
         <div className="flex items-start justify-between gap-4 py-2">
           <div className="min-w-0 flex-1 space-y-0.5">

@@ -158,8 +158,8 @@ describe('the prompt', () => {
     vertexTaskStore.create({ title: 'prove it', status: 'todo', assignee: agent })
     await runVertexAutoModeTickForTest(prepare)
     const prompt = startAgentRun.mock.calls[0][0].prompt as string
-    expect(prompt).toContain('post_channel_message')
-    expect(prompt).toContain('post_channel_screenshot')
+    expect(prompt).toContain('file_briefing_item')
+    expect(prompt).toContain('screenshot')
     expect(prompt).toContain('Do NOT mark this task Done')
   })
 
@@ -179,10 +179,12 @@ describe('the prompt', () => {
     vertexTaskStore.create({ title: 'bounded', status: 'todo', assignee: agent })
     await runVertexAutoModeTickForTest(prepare)
     expect(startAgentRun.mock.calls[0][0].options).toMatchObject({
-      source: 'vertex',
+      source: 'dobius',
       maxTurns: 15,
-      maxBudgetUsd: 0.5,
-      allowedTools: ['mcp__dobius__*']
+      maxBudgetUsd: 0.5
     })
+    // Must NOT set allowedTools: agent-runner replaces (not unions) the
+    // agent's own tools with it, which would leave the agent unable to work.
+    expect(startAgentRun.mock.calls[0][0].options).not.toHaveProperty('allowedTools')
   })
 })

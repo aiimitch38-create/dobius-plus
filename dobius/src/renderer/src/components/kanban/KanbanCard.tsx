@@ -51,7 +51,7 @@ export function KanbanCard({
             {task.coverImageUrl ? (
               <img
                 src={task.coverImageUrl}
-                alt="Vertex interface preview"
+                alt="Task cover image"
                 className="mt-2.5 aspect-video w-full rounded-md border border-kanban-border object-cover object-top"
               />
             ) : null}

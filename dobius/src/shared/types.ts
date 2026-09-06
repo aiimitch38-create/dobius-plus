@@ -2663,7 +2663,7 @@ export type GlobalSettings = {
   /** Why: Automations can be restored from Settings or the View menu, so this
    *  only controls whether the top-level sidebar shortcut is shown. */
   showAutomationsButton?: boolean
-  /** Dispatch Vertex board tasks to their assigned agent automatically.
+  /** Dispatch Dobius board tasks to their assigned agent automatically.
    *  Off by default: it starts agent runs, which cost money, with no click. */
   vertexAutoModeEnabled?: boolean
   /** Why: Dobius Mobile remains reachable from Settings; this only controls

@@ -95,6 +95,9 @@ export type VertexTaskDispatch = {
   updatedAt: number
   /** Failure summary, surfaced in the UI. Never a stack trace. */
   error?: string
+  /** The agent's own closing message, shown on the task so there is something
+   *  to read besides a status dot. */
+  report?: string
 }
 
 export type VertexTaskLink = {
