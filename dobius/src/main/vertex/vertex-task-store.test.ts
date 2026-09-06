@@ -150,6 +150,34 @@ describe('persistence', () => {
   })
 })
 
+describe('destination', () => {
+  it('defaults to system', () => {
+    expect(vertexTaskStore.create({ title: 'a' }).destination).toBe('system')
+  })
+
+  it('honours an explicit destination', () => {
+    expect(vertexTaskStore.create({ title: 'a', destination: 'asana' }).destination).toBe('asana')
+  })
+
+  it('defaults records written before the field existed', () => {
+    // Why: a missing destination must never read as Asana, or old tasks would
+    // silently look like they are routed to an external service.
+    writeFileSync(
+      join(dir, 'vertex-tasks.json'),
+      JSON.stringify([{ id: '1', title: 'legacy', status: 'todo', order: 1000 }]),
+      'utf8'
+    )
+    setVertexTaskStorageDir(dir)
+    expect(vertexTaskStore.list()[0].destination).toBe('system')
+  })
+
+  it('rejects a bogus destination', () => {
+    expect(vertexTaskStore.create({ title: 'a', destination: 'slack' as never }).destination).toBe(
+      'system'
+    )
+  })
+})
+
 describe('remove', () => {
   it('deletes and reports whether anything was removed', () => {
     const t = vertexTaskStore.create({ title: 'gone' })

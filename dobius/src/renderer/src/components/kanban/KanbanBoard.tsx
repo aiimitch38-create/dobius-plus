@@ -17,6 +17,7 @@ import {
   Search,
   SlidersHorizontal
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -47,7 +48,14 @@ import { useAssignablePeople } from './kanban-people'
 import { moveTasksOptimistically } from './kanban-ordering'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanDetailPanel } from './KanbanDetailPanel'
-import type { Task, TaskPriority, TaskSource, TaskStatus, TaskType } from './kanban-types'
+import type {
+  Task,
+  TaskPriority,
+  TaskSource,
+  TaskStatus,
+  TaskType,
+  VertexTaskDestination
+} from './kanban-types'
 
 const statuses: TaskStatus[] = ['backlog', 'todo', 'in-progress', 'review', 'testing', 'done']
 const views = [
@@ -350,6 +358,7 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
   const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('medium')
   // '' means unassigned. Real agents come from the Agents tab's roster.
   const [newTaskAssigneeId, setNewTaskAssigneeId] = useState('')
+  const [newTaskDestination, setNewTaskDestination] = useState<VertexTaskDestination>('system')
   const assignablePeople = useAssignablePeople()
 
   useEffect(() => {
@@ -413,11 +422,18 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
       status: newTaskStatus,
       type: newTaskType,
       priority: newTaskPriority,
+      destination: newTaskDestination,
       assignee: assignablePeople.find((person) => person.id === newTaskAssigneeId)
     })
     if (!task) return
     setTasks((current) => [...current, task])
     setSelectedTaskId(task.id)
+    toast.success(
+      task.assignee
+        ? `Created and assigned to ${task.assignee.name}`
+        : `Created in ${statusNames[task.status]}`,
+      { description: task.destination === 'asana' ? 'Destination: Asana' : 'Destination: system' }
+    )
     setNewTaskTitle('')
     setNewTaskAssigneeId('')
     setNewTaskOpen(false)
@@ -641,6 +657,21 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
                   </Select>
                 </label>
               </div>
+              <label className="space-y-1.5 text-xs">
+                <span>Destination</span>
+                <Select
+                  value={newTaskDestination}
+                  onValueChange={(value) => setNewTaskDestination(value as VertexTaskDestination)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">System task (stays in Dobius)</SelectItem>
+                    <SelectItem value="asana">Asana</SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
               <label className="space-y-1.5 text-xs">
                 <span>Assign to</span>
                 <Select

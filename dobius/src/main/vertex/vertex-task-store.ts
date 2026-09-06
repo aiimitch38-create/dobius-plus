@@ -17,6 +17,7 @@ import { app } from 'electron'
 
 import {
   isVertexTaskPriority,
+  isVertexTaskDestination,
   isVertexTaskStatus,
   isVertexTaskType,
   type VertexTask,
@@ -57,7 +58,14 @@ function readAll(): VertexTask[] {
   }
   try {
     const parsed = JSON.parse(readFileSync(p, 'utf8'))
-    cached = Array.isArray(parsed) ? parsed.filter(isUsableTask) : []
+    cached = Array.isArray(parsed)
+      ? parsed.filter(isUsableTask).map((task) => ({
+          // Why defaulted on read: records written before `destination`
+          // existed have none, and a missing value must not read as Asana.
+          ...task,
+          destination: isVertexTaskDestination(task.destination) ? task.destination : 'system'
+        }))
+      : []
   } catch {
     // Why swallow: a corrupt file must not stop the app from booting. Starting
     // empty is recoverable; refusing to launch is not.
@@ -108,6 +116,7 @@ function normalizeInput(input: VertexTaskInput): VertexTask {
     status: isVertexTaskStatus(input.status) ? input.status : 'backlog',
     priority: isVertexTaskPriority(input.priority) ? input.priority : 'medium',
     type: isVertexTaskType(input.type) ? input.type : 'feature',
+    destination: isVertexTaskDestination(input.destination) ? input.destination : 'system',
     order: 0,
     assignee: input.assignee,
     collaborators: [],

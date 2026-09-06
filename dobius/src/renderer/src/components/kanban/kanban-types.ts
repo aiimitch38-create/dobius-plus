@@ -3,6 +3,7 @@ import type {
   VertexTaskInput,
   VertexTaskPatch,
   VertexTaskPriority,
+  VertexTaskDestination,
   VertexTaskStatus,
   VertexTaskType
 } from '../../../../shared/vertex-task-types'
@@ -12,6 +13,7 @@ export type Person = import('../../../../shared/vertex-task-types').VertexAssign
 export type TaskStatus = VertexTaskStatus
 export type TaskPriority = VertexTaskPriority
 export type TaskType = VertexTaskType
+export type { VertexTaskDestination }
 
 /** Renderer boundary: both IPC and the browser mock use this Promise-based shape. */
 export type TaskSource = {

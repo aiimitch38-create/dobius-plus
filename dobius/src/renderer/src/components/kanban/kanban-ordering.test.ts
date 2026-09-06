@@ -9,6 +9,7 @@ const task = (id: string, status: Task['status']): Task => ({
   status,
   priority: 'medium',
   type: 'feature',
+  destination: 'system' as const,
   order: 0,
   collaborators: [],
   labels: [],

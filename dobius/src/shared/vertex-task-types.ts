@@ -13,6 +13,14 @@
  * uses, so the renderer never learns where tasks are stored. */
 
 export type VertexTaskStatus = 'backlog' | 'todo' | 'in-progress' | 'review' | 'testing' | 'done'
+
+/** Where a task is meant to live.
+ *
+ * 'system' stays inside Dobius: Vertex owns it end to end and no external
+ * service is told about it. 'asana' means it is destined for Asana — the
+ * routing target, NOT a claim that it has been synced. Nothing pushes to
+ * Asana yet, so treat this as the operator's stated intent for the task. */
+export type VertexTaskDestination = 'system' | 'asana'
 export type VertexTaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type VertexTaskType =
   | 'feature'
@@ -31,6 +39,7 @@ export const VERTEX_TASK_STATUSES: readonly VertexTaskStatus[] = [
   'testing',
   'done',
 ]
+export const VERTEX_TASK_DESTINATIONS: readonly VertexTaskDestination[] = ['system', 'asana']
 export const VERTEX_TASK_PRIORITIES: readonly VertexTaskPriority[] = [
   'low',
   'medium',
@@ -84,6 +93,8 @@ export type VertexTask = {
   status: VertexTaskStatus
   priority: VertexTaskPriority
   type: VertexTaskType
+  /** Where this task is routed. Defaults to 'system'. */
+  destination: VertexTaskDestination
   /** Rank within a column. Sparse on purpose — see reindex() in the store. */
   order: number
   coverImageUrl?: string
@@ -113,6 +124,7 @@ export type VertexTaskInput = {
   description?: string
   priority?: VertexTaskPriority
   type?: VertexTaskType
+  destination?: VertexTaskDestination
   assignee?: VertexAssignee
   projectId?: string
   missionId?: string
@@ -150,4 +162,8 @@ export function isVertexTaskPriority(value: unknown): value is VertexTaskPriorit
 
 export function isVertexTaskType(value: unknown): value is VertexTaskType {
   return VERTEX_TASK_TYPES.includes(value as VertexTaskType)
+}
+
+export function isVertexTaskDestination(value: unknown): value is VertexTaskDestination {
+  return VERTEX_TASK_DESTINATIONS.includes(value as VertexTaskDestination)
 }

@@ -9,6 +9,7 @@ import {
   X,
   Workflow
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -23,7 +24,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AvatarStack } from './AvatarStack'
 import { LabelChip } from './kanban-chips'
 import { useAssignablePeople } from './kanban-people'
-import type { Task, TaskPriority, TaskSource, TaskStatus, TaskType } from './kanban-types'
+import type {
+  Task,
+  TaskPriority,
+  TaskSource,
+  TaskStatus,
+  TaskType,
+  VertexTaskDestination
+} from './kanban-types'
 
 const statuses: TaskStatus[] = ['backlog', 'todo', 'in-progress', 'review', 'testing', 'done']
 const priorities: TaskPriority[] = ['low', 'medium', 'high', 'urgent']
@@ -68,6 +76,9 @@ export function KanbanDetailPanel({
 }): React.JSX.Element {
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [newLabel, setNewLabel] = useState('')
+  // Controlled so picking someone closes the popover — leaving it open read
+  // as "nothing happened".
+  const [assigneeOpen, setAssigneeOpen] = useState(false)
   const assignablePeople = useAssignablePeople()
   // Labels already in use anywhere on the board, minus the ones on this task.
   const availableLabels = useMemo(
@@ -224,7 +235,7 @@ export function KanbanDetailPanel({
           </div>
           <div className="mt-4 space-y-1">
             <Field label="Assignee">
-              <Popover>
+              <Popover open={assigneeOpen} onOpenChange={setAssigneeOpen}>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
@@ -236,19 +247,74 @@ export function KanbanDetailPanel({
                   </button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-56 p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssigneeOpen(false)
+                      if (!task.assignee) return
+                      onUpdate({ assignee: undefined })
+                      toast.success(`Unassigned "${task.title}"`)
+                    }}
+                    className="flex w-full items-center gap-2 rounded px-2 py-2 text-xs text-kanban-muted-foreground outline-none hover:bg-kanban-hover focus-visible:ring-2 focus-visible:ring-kanban-accent"
+                  >
+                    Unassigned
+                  </button>
                   {assignablePeople.map((person) => (
                     <button
                       key={person.id}
                       type="button"
-                      onClick={() => onUpdate({ assignee: person })}
+                      onClick={() => {
+                        setAssigneeOpen(false)
+                        if (task.assignee?.id === person.id) return
+                        onUpdate({ assignee: person })
+                        // Why a toast: assigning has no other visible effect on
+                        // this panel, so without it the click reads as a no-op.
+                        toast.success(`Assigned to ${person.name}`, {
+                          description:
+                            person.kind === 'agent'
+                              ? `"${task.title}" is now on ${person.name}. It will not start on its own yet.`
+                              : `"${task.title}"`
+                        })
+                      }}
                       className="flex w-full items-center gap-2 rounded px-2 py-2 text-xs outline-none hover:bg-kanban-hover focus-visible:ring-2 focus-visible:ring-kanban-accent"
                     >
                       <AvatarStack people={[person]} />
-                      {person.name}
+                      <span className="flex-1 truncate text-left">{person.name}</span>
+                      {person.kind === 'agent' ? (
+                        <span className="text-[9px] text-kanban-muted-foreground">agent</span>
+                      ) : null}
+                      {task.assignee?.id === person.id ? '✓' : ''}
                     </button>
                   ))}
                 </PopoverContent>
               </Popover>
+            </Field>
+            <Field label="Destination">
+              <Select
+                value={task.destination}
+                onValueChange={(value) => {
+                  const next = value as VertexTaskDestination
+                  if (next === task.destination) return
+                  onUpdate({ destination: next })
+                  toast.success(
+                    next === 'asana' ? 'Destination set to Asana' : 'Destination set to system',
+                    {
+                      description:
+                        next === 'asana'
+                          ? 'Routing intent only — nothing is pushed to Asana yet.'
+                          : 'Stays inside Dobius.'
+                    }
+                  )
+                }}
+              >
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">System task</SelectItem>
+                  <SelectItem value="asana">Asana</SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
             <Field label="Collaborators">
               <div className="flex items-center gap-2">

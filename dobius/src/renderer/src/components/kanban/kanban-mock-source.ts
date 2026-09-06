@@ -25,6 +25,7 @@ function newTask(input: Parameters<TaskSource['create']>[0]): Task {
     status: input.status ?? 'backlog',
     priority: input.priority ?? 'medium',
     type: input.type ?? 'feature',
+    destination: input.destination ?? 'system',
     order: now,
     assignee: input.assignee,
     collaborators: [],
