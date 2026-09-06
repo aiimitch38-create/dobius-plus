@@ -8,6 +8,7 @@ import { getCatalogModel } from './model-catalog'
 import type { ModelManager } from './model-manager'
 import { OpenAiTranscriptionSession } from './openai-transcription-client'
 import { readOpenAiSpeechApiKey } from './openai-api-key-store'
+import { assertEnoughMemoryForModel } from './stt-memory-preflight'
 
 export const START_DICTATION_TIMEOUT_MS = 60_000
 const STOP_DICTATION_TIMEOUT_MS = 60_000
@@ -131,6 +132,15 @@ export class SttService {
     if (modelState.status !== 'ready') {
       throw new Error(`Model not ready: ${modelState.status}`)
     }
+
+    // Why: sherpa-onnx aborts the PROCESS (not a catchable JS throw) when the
+    // ONNX arena allocation fails, and this worker lives in the main process,
+    // so an out-of-memory model load takes the whole app down. Check before
+    // spawning so the caller gets an error it can surface instead.
+    assertEnoughMemoryForModel(
+      this.modelManager.getModelDir(modelId),
+      manifest.files ?? [],
+    )
 
     const workerPath = this.getWorkerPath()
     const sherpaModulePath = this.getSherpaModulePath()
