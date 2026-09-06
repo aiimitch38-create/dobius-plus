@@ -9,6 +9,7 @@ import {
 import { resolveLeftTitlebarChromeLayout } from '@/lib/titlebar-left-chrome'
 import { shouldShowWorktreeCreationSurface } from '@/lib/worktree-creation-surface'
 import { Toaster } from '@/components/ui/sonner'
+import { BoardDispatchGate } from './components/kanban/BoardDispatchGate'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useIpcEvents } from './hooks/useIpcEvents'
 import { useAutomationDispatchEvents } from './hooks/useAutomationDispatchEvents'
@@ -489,6 +490,7 @@ function App(): React.JSX.Element {
           </LinkRoutingPreferenceDialogProvider>
         </ConfirmationDialogProvider>
       </TooltipProvider>
+      <BoardDispatchGate enabled={settings?.vertexAutoModeEnabled === true} />
       <Toaster closeButton toastOptions={{ className: 'font-sans text-sm' }} />
       <PinnedTabCloseDialog />
       {/* Why: rendered last so it sits after all -webkit-app-region:drag elements

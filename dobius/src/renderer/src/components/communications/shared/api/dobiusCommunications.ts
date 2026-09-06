@@ -1723,6 +1723,55 @@ async function removeDobiusReaction(args: unknown): Promise<void> {
   await publishDobiusMutation(5, "", [["e", reaction.id]]);
 }
 
+/**
+ * Run a Dobius board task as an agent, inside a Communications channel.
+ *
+ * Why this lives here rather than in the board: everything an agent needs to
+ * talk to you — identity, a signing key, the outbox drain that turns
+ * post_channel_message / post_channel_screenshot into real messages — is in
+ * this module and only works for a run this module started. Starting the run
+ * anywhere else gives the agent posting tools whose output goes nowhere.
+ *
+ * So the board hands the task here and the existing channel path does the
+ * rest: the agent narrates progress and posts screenshots live, and its final
+ * answer is published as a normal channel message.
+ *
+ * Returns the agent's final text, which the board stores on the task.
+ */
+export async function runDobiusBoardTaskInChannel(args: {
+  agentId: string;
+  channelId: string;
+  prompt: string;
+}): Promise<string> {
+  const agentsResponse = await invokeDobiusRuntime("agent.list");
+  const agent = recordsAt(agentsResponse, "agents")
+    .filter(isDobiusAgentRecord)
+    .find((candidate) => candidate.id === args.agentId);
+  if (!agent) {
+    throw new Error(`No such agent: ${args.agentId}`);
+  }
+
+  const runId = await startDobiusChannelRun(agent.id, args.prompt, args.channelId);
+  // parentEventId null = post at channel top level. The board task has no
+  // originating message to thread under.
+  const live: DobiusAgentRunLiveTarget = {
+    channelId: args.channelId,
+    parentEventId: null,
+    broadcast: true,
+  };
+  const reply = await awaitDobiusAgentRun(agent, runId, live);
+  if (reply.trim() && reply.trim() !== NO_REPLY_SENTINEL) {
+    await publishDobiusAgentReply({
+      agent,
+      channelId: args.channelId,
+      parentEventId: null,
+      content: reply,
+      broadcast: true,
+    }).catch(() => undefined);
+  }
+  return reply;
+}
+
 export function isDobiusCommunicationsAvailable(): boolean {
   return typeof window.dobiusCommunications?.invoke === "function";
 }

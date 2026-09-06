@@ -4,7 +4,7 @@ import { SearchableSetting } from './SearchableSetting'
 
 const TITLE = 'Run assigned board tasks automatically'
 const DESCRIPTION =
-  'When a Dobius board task is assigned to an agent and moved to To Do, that agent starts it, posts progress and a screenshot to Communications, and moves the card to Review. It never marks a task Done. Off by default: this starts agent runs, which cost money, without a click.'
+  'When a Dobius board task is assigned to an agent and moved to To Do, that agent picks it up, posts progress and screenshots into Communications, and the card moves to Review. It never marks a task Done. Dispatch only runs while a Dobius window is open. Off by default: this starts agent runs, which cost money, without a click.'
 
 type Props = {
   settings: GlobalSettings

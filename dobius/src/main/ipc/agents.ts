@@ -32,11 +32,6 @@ import { dismissBriefingItems, listRecentBriefingItems } from '../agents/agent-b
 import { getAgentsPaused, getPingStatus, setAgentsPaused } from '../agents/agents-config-store'
 import { startAgentHeartbeats } from '../agents/agent-heartbeat-service'
 import { startAsanaAutoMode } from '../agents/asana-auto-mode-service'
-import {
-  isVertexAutoModeEnabled,
-  setVertexAutoModeEnabled,
-  startVertexAutoMode
-} from '../vertex/vertex-auto-mode-service'
 import { listDrafts, setDraftStatus } from '../agents/agent-draft-store'
 import { approveDraftAndPost } from '../agents/agent-draft-approval'
 import { setDobiusToolKnowledgeStore } from '../agents/agent-tools/dobius-tool-server'
@@ -79,15 +74,12 @@ export function registerAgentsHandlers(
   setDefaultPrepareCodexLaunch(prepareCodexLaunch)
   startAgentHeartbeats(prepareClaudeLaunch)
   startAsanaAutoMode(prepareClaudeLaunch)
-  // Off unless the operator turned it on: this spends money without a click.
-  setVertexAutoModeEnabled(store.getSettings().vertexAutoModeEnabled === true)
-  startVertexAutoMode(prepareClaudeLaunch)
-  store.onSettingsChanged((_updates, next) => {
-    setVertexAutoModeEnabled(next.vertexAutoModeEnabled === true)
-  })
-
-  ipcMain.removeHandler('vertexAutoMode:get')
-  ipcMain.handle('vertexAutoMode:get', () => isVertexAutoModeEnabled())
+  // Board dispatch deliberately does NOT run here. It lives in the renderer
+  // (components/kanban/board-dispatch.ts) because an agent can only post
+  // progress and screenshots from a run started through the Communications
+  // channel path — identity, signing and the outbox drain all live there.
+  // Dispatching from main gave the agent posting tools whose output silently
+  // went nowhere. Two dispatchers would also both claim the same task.
 
   ipcMain.removeHandler('agents:list')
   ipcMain.handle('agents:list', () => listAgents())
