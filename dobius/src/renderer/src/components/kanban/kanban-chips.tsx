@@ -1,11 +1,20 @@
 import type { TaskPriority, TaskType } from './kanban-types'
 
 const typeLabels: Record<TaskType, string> = {
-  feature: 'Feature', design: 'Design', integration: 'Integration', ai: 'AI', security: 'Security', infra: 'Infra', bug: 'Bug'
+  feature: 'Feature',
+  design: 'Design',
+  integration: 'Integration',
+  ai: 'AI',
+  security: 'Security',
+  infra: 'Infra',
+  bug: 'Bug'
 }
 
 const priorityLabels: Record<TaskPriority, string> = {
-  low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent'
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent'
 }
 
 export function TypeChip({ type }: { type: TaskType }): React.JSX.Element {
@@ -13,7 +22,9 @@ export function TypeChip({ type }: { type: TaskType }): React.JSX.Element {
 }
 
 export function PriorityChip({ priority }: { priority: TaskPriority }): React.JSX.Element {
-  return <span className={`kanban-chip kanban-priority-${priority}`}>{priorityLabels[priority]}</span>
+  return (
+    <span className={`kanban-chip kanban-priority-${priority}`}>{priorityLabels[priority]}</span>
+  )
 }
 
 export function LabelChip({ label }: { label: string }): React.JSX.Element {

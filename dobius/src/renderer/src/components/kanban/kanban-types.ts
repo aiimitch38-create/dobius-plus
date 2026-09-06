@@ -1,34 +1,23 @@
-export type TaskStatus = 'backlog' | 'todo' | 'in-progress' | 'review' | 'testing' | 'done'
-export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
-export type TaskType = 'feature' | 'design' | 'integration' | 'ai' | 'security' | 'infra' | 'bug'
+import type {
+  VertexTask,
+  VertexTaskInput,
+  VertexTaskPatch,
+  VertexTaskPriority,
+  VertexTaskStatus,
+  VertexTaskType
+} from '../../../../shared/vertex-task-types'
 
-export type Person = { id: string; name: string; avatarUrl?: string; initials: string }
+export type Task = VertexTask
+export type Person = import('../../../../shared/vertex-task-types').VertexAssignee
+export type TaskStatus = VertexTaskStatus
+export type TaskPriority = VertexTaskPriority
+export type TaskType = VertexTaskType
 
-export type Task = {
-  id: string
-  title: string
-  description: string
-  status: TaskStatus
-  priority: TaskPriority
-  type: TaskType
-  coverImageUrl?: string
-  commentCount: number
-  attachmentCount: number
-  assignee?: Person
-  collaborators: Person[]
-  dueDate?: string
-  labels: string[]
-  related: { id: string; label: string }[]
-  dependencies: string[]
-  subtasks: { id: string; title: string; done: boolean }[]
-  files: { id: string; name: string; url?: string }[]
-}
-
-/** The ONLY way the board reads or writes tasks. Ship an in-memory mock now;
- *  a real store replaces it later with zero component changes. */
+/** Renderer boundary: both IPC and the browser mock use this Promise-based shape. */
 export type TaskSource = {
-  list(): Task[]
-  move(taskId: string, to: TaskStatus, toIndex: number): void
-  update(taskId: string, patch: Partial<Task>): void
-  create(partial: Pick<Task, 'title' | 'status'>): Task
+  list(): Promise<VertexTask[]>
+  move(taskId: string, to: VertexTaskStatus, toIndex: number): Promise<VertexTask | null>
+  update(taskId: string, patch: VertexTaskPatch): Promise<VertexTask | null>
+  create(input: VertexTaskInput): Promise<VertexTask | null>
+  remove(taskId: string): Promise<boolean>
 }

@@ -59,9 +59,17 @@ export function KanbanCard({
               {task.description}
             </p>
             <footer className="mt-3 flex items-center gap-3 text-[11px] tabular-nums text-kanban-muted-foreground">
-              <span className="flex items-center gap-1"><MessageCircle className="size-3.5" />{task.commentCount}</span>
-              <span className="flex items-center gap-1"><Paperclip className="size-3.5" />{task.attachmentCount}</span>
-              <div className="ml-auto"><AvatarStack people={task.collaborators} /></div>
+              <span className="flex items-center gap-1">
+                <MessageCircle className="size-3.5" />
+                {task.commentCount}
+              </span>
+              <span className="flex items-center gap-1">
+                <Paperclip className="size-3.5" />
+                {task.files.length}
+              </span>
+              <div className="ml-auto">
+                <AvatarStack people={task.collaborators} />
+              </div>
             </footer>
           </>
         ) : null}
