@@ -272,7 +272,13 @@ export function KanbanDetailPanel({
                         toast.success(`Assigned to ${person.name}`, {
                           description:
                             person.kind === 'agent'
-                              ? `"${task.title}" is now on ${person.name}. It will not start on its own yet.`
+                              ? /* Not "will not start on its own": with board
+                                   auto mode on, board-dispatch.ts picks the card
+                                   up from To Do within 15s and spends real
+                                   money (MAX_BUDGET_USD, board-dispatch.ts:31). */
+                                task.status === 'todo'
+                                ? `"${task.title}" is now on ${person.name}. In To Do with board auto mode on, it starts on its own and can spend up to $3.`
+                                : `"${task.title}" is now on ${person.name}. Move it to To Do to start the run.`
                               : `"${task.title}"`
                         })
                       }}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   BarChart3,
@@ -11,7 +11,6 @@ import {
   Columns3,
   Filter,
   List,
-  MessageCircle,
   Paperclip,
   Plus,
   Search,
@@ -45,6 +44,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { kanbanMockSource } from './kanban-mock-source'
 import { getKanbanIpcSource } from './kanban-ipc-source'
 import { useAssignablePeople } from './kanban-people'
+import { DAY_MS, parseDueDate, startOfDay } from './kanban-dates'
 import { moveTasksOptimistically } from './kanban-ordering'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanDetailPanel } from './KanbanDetailPanel'
@@ -56,6 +56,8 @@ import type {
   TaskType,
   VertexTaskDestination
 } from './kanban-types'
+
+const REFRESH_MS = 4_000
 
 const statuses: TaskStatus[] = ['backlog', 'todo', 'in-progress', 'review', 'testing', 'done']
 const views = [
@@ -74,6 +76,281 @@ const statusNames: Record<TaskStatus, string> = {
   review: 'Review',
   testing: 'Testing',
   done: 'Done'
+}
+
+
+/* Why these three views are derived, not decorative: Timeline used to position
+ * every bar with `left: (index % 5) * 12%`, Calendar bucketed a task onto a day
+ * with `taskIndex % 30 === index`, and Activity picked its verb with
+ * `index % 3`. None of that touched a real field. Everything below reads
+ * `dueDate`, `createdAt` or `dispatch`, and anything with no real value behind
+ * it says so instead of drawing something. */
+
+const TIMELINE_DAYS = 7
+
+function formatDay(ms: number): string {
+  return new Date(ms).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })
+}
+
+function formatAgo(ms: number): string {
+  const minutes = Math.max(0, Math.round((Date.now() - ms) / 60_000))
+  if (minutes < 60) return `${minutes}m`
+  if (minutes < 60 * 24) return `${Math.round(minutes / 60)}h`
+  return `${Math.round(minutes / (60 * 24))}d`
+}
+
+function TimelineView({
+  tasks,
+  onOpen
+}: {
+  tasks: Task[]
+  onOpen: (id: string) => void
+}): React.JSX.Element {
+  const today = startOfDay(Date.now())
+  const windowEnd = today + (TIMELINE_DAYS - 1) * DAY_MS
+  const rows = tasks
+    .map((task) => ({ task, due: parseDueDate(task.dueDate) }))
+    .filter((row): row is { task: Task; due: number } => row.due !== null && row.due <= windowEnd)
+    .sort((a, b) => a.due - b.due)
+  const undated = tasks.length - rows.length
+
+  return (
+    <div className="scrollbar-sleek min-h-0 flex-1 overflow-auto p-4">
+      <div className="min-w-[900px] rounded-xl border border-kanban-border bg-kanban-card p-4">
+        <div className="mb-4 grid grid-cols-[180px_repeat(7,1fr)] text-center text-[10px] text-kanban-muted-foreground">
+          <span className="text-left">
+            {new Date(today).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+          </span>
+          {Array.from({ length: TIMELINE_DAYS }, (_, index) => (
+            <span key={index}>{formatDay(today + index * DAY_MS)}</span>
+          ))}
+        </div>
+        <div className="space-y-3">
+          {rows.map(({ task, due }) => {
+            const overdue = due < today
+            const startDay = Math.min(
+              TIMELINE_DAYS - 1,
+              Math.max(0, Math.round((startOfDay(task.createdAt) - today) / DAY_MS))
+            )
+            const endDay = Math.min(
+              TIMELINE_DAYS - 1,
+              Math.max(startDay, Math.round((due - today) / DAY_MS))
+            )
+            return (
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => onOpen(task.id)}
+                className="grid w-full grid-cols-[180px_1fr] items-center gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-kanban-accent"
+              >
+                <span className="truncate text-xs font-medium">{task.title}</span>
+                <span className="relative h-8 rounded-md bg-kanban-column">
+                  <span
+                    title={`Created ${new Date(task.createdAt).toLocaleDateString()} · due ${new Date(due).toLocaleDateString()}`}
+                    className={`absolute inset-y-1 truncate rounded-md px-3 py-1 text-[10px] font-medium kanban-timeline-${task.status}`}
+                    style={{
+                      left: `${(startDay / TIMELINE_DAYS) * 100}%`,
+                      width: `${((endDay - startDay + 1) / TIMELINE_DAYS) * 100}%`
+                    }}
+                  >
+                    {overdue ? 'Overdue · ' : ''}
+                    {statusNames[task.status]}
+                  </span>
+                </span>
+              </button>
+            )
+          })}
+          {rows.length ? null : (
+            <p className="py-6 text-center text-[11px] text-kanban-muted-foreground">
+              No task is due in the next {TIMELINE_DAYS} days.
+            </p>
+          )}
+        </div>
+        {undated ? (
+          <p className="mt-4 border-t border-kanban-border pt-3 text-[10px] text-kanban-muted-foreground">
+            {undated} {undated === 1 ? 'task has' : 'tasks have'} no due date in this window and
+            {undated === 1 ? ' is' : ' are'} not shown.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function CalendarView({
+  tasks,
+  onOpen
+}: {
+  tasks: Task[]
+  onOpen: (id: string) => void
+}): React.JSX.Element {
+  const [monthOffset, setMonthOffset] = useState(0)
+  const today = startOfDay(Date.now())
+  const now = new Date(today)
+  const monthStart = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
+  // Grid starts on the Sunday on or before the 1st, and always runs 6 rows so
+  // the layout does not jump between months.
+  const gridStart = new Date(
+    monthStart.getFullYear(),
+    monthStart.getMonth(),
+    1 - monthStart.getDay()
+  ).getTime()
+
+  const byDay = new Map<number, Task[]>()
+  for (const task of tasks) {
+    const due = parseDueDate(task.dueDate)
+    if (due === null) continue
+    const bucket = byDay.get(due)
+    if (bucket) bucket.push(task)
+    else byDay.set(due, [task])
+  }
+
+  return (
+    <div className="min-h-0 flex-1 p-4">
+      <div className="flex h-full flex-col rounded-xl border border-kanban-border bg-kanban-card">
+        <div className="flex items-center justify-between border-b border-kanban-border px-4 py-3">
+          <h2 className="text-sm font-semibold">
+            {monthStart.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+          </h2>
+          <div className="flex gap-1">
+            <Button variant="outline" size="sm" onClick={() => setMonthOffset(0)}>
+              Today
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Previous month"
+              onClick={() => setMonthOffset((value) => value - 1)}
+            >
+              <ChevronLeft />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Next month"
+              onClick={() => setMonthOffset((value) => value + 1)}
+            >
+              <ChevronRight />
+            </Button>
+          </div>
+        </div>
+        <div className="grid flex-1 grid-cols-7 grid-rows-[28px_repeat(6,1fr)]">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+            <div
+              key={day}
+              className="border-b border-r border-kanban-border p-2 text-center text-[10px] font-medium text-kanban-muted-foreground"
+            >
+              {day}
+            </div>
+          ))}
+          {Array.from({ length: 42 }, (_, index) => {
+            const cell = new Date(gridStart)
+            cell.setDate(cell.getDate() + index)
+            const cellStart = startOfDay(cell.getTime())
+            const inMonth = cell.getMonth() === monthStart.getMonth()
+            const dayTasks = byDay.get(cellStart) ?? []
+            return (
+              <div
+                key={cellStart}
+                className="scrollbar-sleek min-h-20 overflow-auto border-b border-r border-kanban-border p-1.5"
+              >
+                <span
+                  className={
+                    cellStart === today
+                      ? 'grid size-5 place-items-center rounded-full bg-kanban-accent text-[10px] text-kanban-accent-foreground'
+                      : `text-[10px] ${inMonth ? 'text-kanban-muted-foreground' : 'text-kanban-muted-foreground/50'}`
+                  }
+                >
+                  {cell.getDate()}
+                </span>
+                {dayTasks.map((task) => (
+                  <button
+                    key={task.id}
+                    type="button"
+                    onClick={() => onOpen(task.id)}
+                    className={`mt-1 block w-full truncate rounded px-1.5 py-1 text-left text-[9px] outline-none focus-visible:ring-2 focus-visible:ring-kanban-accent kanban-timeline-${task.status}`}
+                  >
+                    {task.title}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ActivityView({
+  tasks,
+  onOpen
+}: {
+  tasks: Task[]
+  onOpen: (id: string) => void
+}): React.JSX.Element {
+  /* The only real event log on a task is `dispatch` — what the agent runner
+   * wrote. There is no comment or attachment history behind this view, so it
+   * shows agent runs and nothing else. */
+  const events = tasks
+    .flatMap((task) => (task.dispatch ? [{ task, dispatch: task.dispatch }] : []))
+    .sort((a, b) => b.dispatch.updatedAt - a.dispatch.updatedAt)
+    .slice(0, 20)
+
+  return (
+    <div className="scrollbar-sleek min-h-0 flex-1 overflow-auto p-4">
+      <div className="mx-auto max-w-3xl space-y-3">
+        {events.length ? (
+          events.map(({ task, dispatch }) => (
+            <button
+              key={task.id}
+              type="button"
+              onClick={() => onOpen(task.id)}
+              className="flex w-full items-start gap-3 rounded-xl border border-kanban-border bg-kanban-card p-4 text-left outline-none hover:bg-kanban-hover focus-visible:ring-2 focus-visible:ring-kanban-accent"
+            >
+              <span
+                className={`mt-1 grid size-7 shrink-0 place-items-center rounded-full kanban-activity-${task.status}`}
+              >
+                {dispatch.status === 'succeeded' ? (
+                  <Check className="size-3.5" />
+                ) : (
+                  <Circle className="size-3.5" />
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-semibold">{task.title}</span>
+                <span
+                  className="mt-1 block text-[11px] text-kanban-muted-foreground"
+                  title={dispatch.error ?? undefined}
+                >
+                  {dispatch.status === 'running'
+                    ? `${dispatch.agentName} is working on this`
+                    : dispatch.status === 'succeeded'
+                      ? `${dispatch.agentName} finished — moved to`
+                      : dispatch.status === 'dead'
+                        ? `${dispatch.agentName} failed ${dispatch.attempts}x — stopped in`
+                        : `${dispatch.agentName} failed in`}{' '}
+                  <strong className={`font-medium kanban-status-${task.status}`}>
+                    {statusNames[task.status]}
+                  </strong>
+                </span>
+              </span>
+              <span className="flex shrink-0 items-center gap-2 text-[10px] tabular-nums text-kanban-muted-foreground">
+                {typeof dispatch.costUsd === 'number' ? (
+                  <span>${dispatch.costUsd.toFixed(2)}</span>
+                ) : null}
+                <span>{formatAgo(dispatch.updatedAt)}</span>
+              </span>
+            </button>
+          ))
+        ) : (
+          <p className="py-10 text-center text-[11px] text-kanban-muted-foreground">
+            No agent activity yet. Assign a task to an agent and move it to To Do.
+          </p>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function SecondaryView({
@@ -117,94 +394,9 @@ function SecondaryView({
       </div>
     )
 
-  if (view === 'timeline')
-    return (
-      <div className="scrollbar-sleek min-h-0 flex-1 overflow-auto p-4">
-        <div className="min-w-[900px] rounded-xl border border-kanban-border bg-kanban-card p-4">
-          <div className="mb-4 grid grid-cols-[180px_repeat(6,1fr)] text-center text-[10px] text-kanban-muted-foreground">
-            <span className="text-left">September 2026</span>
-            {['Mon 7', 'Tue 8', 'Wed 9', 'Thu 10', 'Fri 11', 'Sat 12'].map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
-          <div className="space-y-3">
-            {tasks.slice(0, 12).map((task, index) => (
-              <button
-                key={task.id}
-                type="button"
-                onClick={() => onOpen(task.id)}
-                className="grid w-full grid-cols-[180px_1fr] items-center gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-kanban-accent"
-              >
-                <span className="truncate text-xs font-medium">{task.title}</span>
-                <span className="relative h-8 rounded-md bg-kanban-column">
-                  <span
-                    className={`absolute inset-y-1 rounded-md px-3 py-1 text-[10px] font-medium kanban-timeline-${task.status}`}
-                    style={{ left: `${(index % 5) * 12}%`, width: `${24 + (index % 3) * 8}%` }}
-                  >
-                    {statusNames[task.status]}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
+  if (view === 'timeline') return <TimelineView tasks={tasks} onOpen={onOpen} />
 
-  if (view === 'calendar')
-    return (
-      <div className="min-h-0 flex-1 p-4">
-        <div className="flex h-full flex-col rounded-xl border border-kanban-border bg-kanban-card">
-          <div className="flex items-center justify-between border-b border-kanban-border px-4 py-3">
-            <h2 className="text-sm font-semibold">September 2026</h2>
-            <div className="flex gap-1">
-              <Button variant="outline" size="sm">
-                Today
-              </Button>
-              <Button variant="ghost" size="icon-sm" aria-label="Previous month">
-                <ChevronLeft />
-              </Button>
-              <Button variant="ghost" size="icon-sm" aria-label="Next month">
-                <ChevronRight />
-              </Button>
-            </div>
-          </div>
-          <div className="grid flex-1 grid-cols-7 grid-rows-[28px_repeat(5,1fr)]">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-              <div
-                key={day}
-                className="border-b border-r border-kanban-border p-2 text-center text-[10px] font-medium text-kanban-muted-foreground"
-              >
-                {day}
-              </div>
-            ))}
-            {Array.from({ length: 35 }, (_, index) => {
-              const day = index + 1
-              const dayTasks = tasks.filter((_, taskIndex) => taskIndex % 30 === index)
-              return (
-                <div key={day} className="min-h-20 border-b border-r border-kanban-border p-1.5">
-                  <span
-                    className={`text-[10px] ${day === 12 ? 'grid size-5 place-items-center rounded-full bg-kanban-accent text-kanban-accent-foreground' : 'text-kanban-muted-foreground'}`}
-                  >
-                    {day}
-                  </span>
-                  {dayTasks.map((task) => (
-                    <button
-                      key={task.id}
-                      type="button"
-                      onClick={() => onOpen(task.id)}
-                      className={`mt-1 block w-full truncate rounded px-1.5 py-1 text-left text-[9px] outline-none focus-visible:ring-2 focus-visible:ring-kanban-accent kanban-timeline-${task.status}`}
-                    >
-                      {task.title}
-                    </button>
-                  ))}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-    )
+  if (view === 'calendar') return <CalendarView tasks={tasks} onOpen={onOpen} />
 
   if (view === 'analytics') {
     const counts = new Map<string, number>()
@@ -298,47 +490,7 @@ function SecondaryView({
     )
   }
 
-  return (
-    <div className="scrollbar-sleek min-h-0 flex-1 overflow-auto p-4">
-      <div className="mx-auto max-w-3xl space-y-3">
-        {tasks.slice(0, 12).map((task, index) => (
-          <button
-            key={task.id}
-            type="button"
-            onClick={() => onOpen(task.id)}
-            className="flex w-full items-start gap-3 rounded-xl border border-kanban-border bg-kanban-card p-4 text-left outline-none hover:bg-kanban-hover focus-visible:ring-2 focus-visible:ring-kanban-accent"
-          >
-            <span
-              className={`mt-1 grid size-7 shrink-0 place-items-center rounded-full kanban-activity-${task.status}`}
-            >
-              {task.status === 'done' ? (
-                <Check className="size-3.5" />
-              ) : (
-                <Circle className="size-3.5" />
-              )}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-xs font-semibold">{task.title}</span>
-              <span className="mt-1 block text-[11px] text-kanban-muted-foreground">
-                {index % 3 === 0
-                  ? 'Status changed to'
-                  : index % 3 === 1
-                    ? 'New comment added in'
-                    : 'Attachment uploaded to'}{' '}
-                <strong className={`font-medium kanban-status-${task.status}`}>
-                  {statusNames[task.status]}
-                </strong>
-              </span>
-            </span>
-            <span className="flex items-center gap-1 text-[10px] text-kanban-muted-foreground">
-              <MessageCircle className="size-3" />
-              {index + 2}h
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
+  return <ActivityView tasks={tasks} onOpen={onOpen} />
 }
 
 export default function KanbanBoard({ source }: { source?: TaskSource }): React.JSX.Element {
@@ -360,14 +512,28 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
   const [newTaskAssigneeId, setNewTaskAssigneeId] = useState('')
   const [newTaskDestination, setNewTaskDestination] = useState<VertexTaskDestination>('system')
   const assignablePeople = useAssignablePeople()
+  // Non-zero while a drag or a local write is outstanding — see the poll below.
+  const busy = useRef(0)
 
+  /* Poll, don't just load once: board-dispatch.ts writes claim -> running ->
+   * succeeded straight to the store from another module, so without this the
+   * card sits in To Do while the agent runs, finishes and moves it to Review.
+   * Skipped mid-drag and while a write is in flight so a refresh cannot fight
+   * the optimistic update. */
   useEffect(() => {
     let cancelled = false
-    void taskSource.list().then((listed) => {
-      if (!cancelled) setTasks(listed)
-    })
+    const load = (): void => {
+      void taskSource.list().then((listed) => {
+        if (!cancelled) setTasks(listed)
+      })
+    }
+    load()
+    const timer = setInterval(() => {
+      if (busy.current === 0) load()
+    }, REFRESH_MS)
     return () => {
       cancelled = true
+      clearInterval(timer)
     }
   }, [taskSource])
 
@@ -391,6 +557,7 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
         task.id === taskId ? { ...task, ...patch, updatedAt: Date.now() } : task
       )
     )
+    busy.current += 1
     void taskSource
       .update(taskId, patch)
       .then((updated) => {
@@ -398,10 +565,14 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
         else setTasks((current) => current.map((task) => (task.id === taskId ? updated : task)))
       })
       .catch(() => setTasks(previous))
+      .finally(() => {
+        busy.current -= 1
+      })
   }
   const moveTask = (taskId: string, status: TaskStatus, index: number): void => {
     const previous = tasks
     setTasks((current) => moveTasksOptimistically(current, taskId, status, index))
+    busy.current += 1
     void taskSource
       .move(taskId, status, index)
       .then(async (moved) => {
@@ -409,6 +580,9 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
         else setTasks(await taskSource.list())
       })
       .catch(() => setTasks(previous))
+      .finally(() => {
+        busy.current -= 1
+      })
   }
   const createTask = (status: TaskStatus): void => {
     setNewTaskStatus(status)
@@ -538,8 +712,12 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
                   dropIndex={dropTarget?.status === status ? (dropTarget?.index ?? null) : null}
                   onOpen={setSelectedTaskId}
                   onCreate={createTask}
-                  onDragStart={setDraggedTaskId}
+                  onDragStart={(taskId) => {
+                    busy.current += 1
+                    setDraggedTaskId(taskId)
+                  }}
                   onDragEnd={() => {
+                    busy.current -= 1
                     setDraggedTaskId(null)
                     setDropTarget(null)
                   }}
@@ -568,12 +746,16 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
               const previous = tasks
               setTasks((current) => current.filter((task) => task.id !== selectedTask.id))
               setSelectedTaskId(null)
+              busy.current += 1
               void taskSource
                 .remove(selectedTask.id)
                 .then((removed) => {
                   if (!removed) setTasks(previous)
                 })
                 .catch(() => setTasks(previous))
+                .finally(() => {
+                  busy.current -= 1
+                })
             }}
           />
         ) : null}
