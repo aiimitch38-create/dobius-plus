@@ -482,7 +482,6 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
                 className={`flex h-10 items-center gap-2 border-b-2 px-3 text-[11px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-kanban-accent ${activeView === id ? 'border-kanban-accent text-kanban-foreground' : 'border-transparent text-kanban-muted-foreground hover:text-kanban-foreground'}`}
               >
                 <Icon className="size-3.5" />
-                {id === 'activity' ? <Plus className="size-3" /> : null}
                 {label}
               </button>
             ))}
