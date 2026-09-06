@@ -145,19 +145,19 @@
 }
 
 :root {
-  /* Vertex Kanban owns a deliberately dark canvas in both application themes. */
-  --kanban-background: oklch(0.12 0.02 250);
-  --kanban-column: oklch(0.17 0.02 250);
-  --kanban-card: oklch(0.205 0.025 250);
-  --kanban-panel: oklch(0.16 0.022 250);
-  --kanban-dock: oklch(0.135 0.02 250);
-  --kanban-control: oklch(0.18 0.025 250);
-  --kanban-hover: oklch(0.27 0.03 250);
-  --kanban-foreground: oklch(0.96 0.01 250);
-  --kanban-muted-foreground: oklch(0.7 0.025 250);
-  --kanban-border: oklch(0.34 0.025 250 / 0.62);
-  --kanban-border-strong: oklch(0.49 0.035 250 / 0.72);
-  --kanban-count: oklch(0.32 0.025 250 / 0.72);
+  /* Vertex Kanban uses a light canvas while semantic colors remain saturated. */
+  --kanban-background: oklch(0.985 0.004 250);
+  --kanban-column: oklch(0.955 0.008 250);
+  --kanban-card: oklch(1 0 0);
+  --kanban-panel: oklch(1 0 0);
+  --kanban-dock: oklch(0.98 0.006 250);
+  --kanban-control: oklch(1 0 0);
+  --kanban-hover: oklch(0.94 0.012 265);
+  --kanban-foreground: oklch(0.22 0.025 250);
+  --kanban-muted-foreground: oklch(0.5 0.025 250);
+  --kanban-border: oklch(0.82 0.018 250 / 0.78);
+  --kanban-border-strong: oklch(0.68 0.03 250 / 0.82);
+  --kanban-count: oklch(0.89 0.018 250);
   --kanban-accent: oklch(0.58 0.25 285);
   --kanban-accent-hover: oklch(0.64 0.24 285);
   --kanban-accent-soft: oklch(0.58 0.25 285 / 0.12);
@@ -168,8 +168,8 @@
   --kanban-blue: oklch(0.68 0.17 250);
   --kanban-avatar: oklch(0.55 0.16 35);
   --kanban-avatar-foreground: oklch(0.99 0 0);
-  --kanban-card-shadow: 0 5px 16px oklch(0 0 0 / 0.2);
-  --kanban-panel-shadow: -18px 0 48px oklch(0 0 0 / 0.45);
+  --kanban-card-shadow: 0 5px 16px oklch(0.25 0.03 250 / 0.08);
+  --kanban-panel-shadow: -18px 0 48px oklch(0.25 0.03 250 / 0.16);
   --kanban-neutral: oklch(0.69 0.02 250);
   --kanban-violet: oklch(0.7 0.2 292);
   --kanban-amber: oklch(0.76 0.16 78);
@@ -218,6 +218,19 @@
 .kanban-chip-bug, .kanban-priority-high, .kanban-priority-urgent, .kanban-label-red { color: var(--kanban-red); }
 .kanban-priority-medium { color: var(--kanban-amber); }
 .kanban-priority-low { color: var(--kanban-green); }
+
+.kanban-timeline-backlog, .kanban-activity-backlog { color: var(--kanban-neutral); background: color-mix(in oklch, var(--kanban-neutral) 16%, var(--kanban-card)); }
+.kanban-timeline-todo, .kanban-activity-todo { color: var(--kanban-blue); background: color-mix(in oklch, var(--kanban-blue) 16%, var(--kanban-card)); }
+.kanban-timeline-in-progress, .kanban-activity-in-progress { color: var(--kanban-violet); background: color-mix(in oklch, var(--kanban-violet) 16%, var(--kanban-card)); }
+.kanban-timeline-review, .kanban-activity-review { color: var(--kanban-amber); background: color-mix(in oklch, var(--kanban-amber) 16%, var(--kanban-card)); }
+.kanban-timeline-testing, .kanban-activity-testing { color: var(--kanban-red); background: color-mix(in oklch, var(--kanban-red) 16%, var(--kanban-card)); }
+.kanban-timeline-done, .kanban-activity-done { color: var(--kanban-green); background: color-mix(in oklch, var(--kanban-green) 16%, var(--kanban-card)); }
+.kanban-chart-backlog { background: var(--kanban-neutral); }
+.kanban-chart-todo { background: var(--kanban-blue); }
+.kanban-chart-in-progress { background: var(--kanban-violet); }
+.kanban-chart-review { background: var(--kanban-amber); }
+.kanban-chart-testing { background: var(--kanban-red); }
+.kanban-chart-done { background: var(--kanban-green); }
 
 /* ── Light Mode ──────────────────────────────────────── */
 
