@@ -75,6 +75,9 @@ export function VoiceSpeechModelSection({
               mState?.status === 'downloading' || mState?.status === 'extracting'
             const isActive = voiceSettings.sttModel === manifest.id
             const isCloud = manifest.provider === 'openai'
+            // Why: the server provider has no local weights to download, so it
+            // is selectable immediately and must not be dimmed as "not ready".
+            const isServer = manifest.provider === 'vps'
             const deletePending = pendingDeleteModelIds.has(manifest.id)
             const sizeMb = manifest.sizeBytes ? Math.round(manifest.sizeBytes / 1_000_000) : null
 
@@ -83,7 +86,7 @@ export function VoiceSpeechModelSection({
                 key={manifest.id}
                 disabled={isDownloading}
                 onSelect={() => {
-                  if (isReady) {
+                  if (isServer || isReady) {
                     onUpdateVoiceSettings({ sttModel: manifest.id })
                   } else if (isCloud) {
                     onOpenOpenAiDialog(manifest.id)
@@ -101,11 +104,11 @@ export function VoiceSpeechModelSection({
                   }
                 }}
                 className={`group flex items-center gap-2.5 py-2.5 ${
-                  !isCloud && !isReady && !isDownloading ? 'opacity-50' : ''
+                  !isCloud && !isServer && !isReady && !isDownloading ? 'opacity-50' : ''
                 }`}
               >
                 <span className="flex size-4 shrink-0 items-center justify-center">
-                  {isActive && isReady ? (
+                  {isActive && (isReady || isServer) ? (
                     <Check className="size-3.5" />
                   ) : isDownloading ? (
                     <Loader2 className="size-3.5 animate-spin text-muted-foreground" />

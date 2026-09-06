@@ -2,6 +2,18 @@ import type { SpeechModelManifest } from '../../shared/speech-types'
 
 export const SPEECH_MODEL_CATALOG: SpeechModelManifest[] = [
   {
+    id: 'vps-parakeet-tdt-v3',
+    label: 'Parakeet on Server',
+    description:
+      'Highest accuracy with punctuation and capitalization, run on your own machine over Tailscale. Uses no memory on this Mac.',
+    type: 'vps',
+    provider: 'vps',
+    language: 'multilingual',
+    sampleRate: 16000,
+    streaming: false,
+    recommended: true
+  },
+  {
     id: 'parakeet-tdt-0.6b-v3-int8',
     label: 'Parakeet TDT v3',
     description:
@@ -17,8 +29,7 @@ export const SPEECH_MODEL_CATALOG: SpeechModelManifest[] = [
     files: ['encoder.int8.onnx', 'decoder.int8.onnx', 'joiner.int8.onnx', 'tokens.txt'],
     sampleRate: 16000,
     streaming: false,
-    modelingUnit: 'bpe',
-    recommended: true
+    modelingUnit: 'bpe'
   },
   {
     id: 'parakeet-tdt-0.6b-v2-int8',

@@ -1,5 +1,5 @@
-export type SpeechModelType = 'transducer' | 'paraformer' | 'whisper' | 'openai'
-export type SpeechModelProvider = 'local' | 'openai'
+export type SpeechModelType = 'transducer' | 'paraformer' | 'whisper' | 'openai' | 'vps'
+export type SpeechModelProvider = 'local' | 'openai' | 'vps'
 
 export type ModelingUnit = 'bpe' | 'cjkchar' | 'cjkchar+bpe'
 
@@ -64,6 +64,8 @@ export type VoiceSettings = {
   terminalConfirmBeforeInsert: boolean
   userModels: UserModelConfig[]
   openAiApiKeyConfigured: boolean
+  /** Base URL of the self-hosted Parakeet speech server (Tailscale). */
+  vpsSttEndpoint?: string
   /** When on, run the background Voice Conductor session (routes voice/dispatched work). */
   conductorEnabled: boolean
   /**

@@ -9,6 +9,14 @@ import type { ModelManager } from './model-manager'
 import { OpenAiTranscriptionSession } from './openai-transcription-client'
 import { readOpenAiSpeechApiKey } from './openai-api-key-store'
 import { assertEnoughMemoryForModel } from './stt-memory-preflight'
+import { VpsTranscriptionSession, DEFAULT_VPS_STT_ENDPOINT } from './vps-transcription-client'
+
+/* Why an interface: the OpenAI and VPS transports differ only in where the
+audio goes, so the feed/stop paths below stay transport-agnostic. */
+type RemoteTranscriptionSession = {
+  feedAudio(samples: Float32Array, sampleRate: number): void
+  finish(): Promise<string>
+}
 
 export const START_DICTATION_TIMEOUT_MS = 60_000
 const STOP_DICTATION_TIMEOUT_MS = 60_000
@@ -25,7 +33,10 @@ export type SttEventSink = (event: SttEvent) => void
 
 export class SttService {
   private worker: Worker | null = null
-  private cloudSession: OpenAiTranscriptionSession | null = null
+  private cloudSession: RemoteTranscriptionSession | null = null
+  /* Base URL of the self-hosted Parakeet server. Defaults to the Tailscale
+  address the dobius-stt service binds; Settings may override it. */
+  private vpsEndpoint: string = DEFAULT_VPS_STT_ENDPOINT
   private modelManager: ModelManager
   private activeModelId: string | null = null
   private activeHotwordsFilePath: string | undefined
@@ -42,6 +53,11 @@ export class SttService {
 
   constructor(modelManager: ModelManager) {
     this.modelManager = modelManager
+  }
+
+  /** Point dictation at a different speech server. Empty input restores the default. */
+  setVpsEndpoint(endpoint: string | undefined): void {
+    this.vpsEndpoint = endpoint?.trim() || DEFAULT_VPS_STT_ENDPOINT
   }
 
   async startDictation(
@@ -88,6 +104,25 @@ export class SttService {
     const manifest = getCatalogModel(modelId)
     if (!manifest) {
       throw new Error(`Unknown model: ${modelId}`)
+    }
+
+    if (manifest.provider === 'vps') {
+      // Why no model-state check: nothing is downloaded locally for this
+      // provider; the weights live on the server.
+      if (this.worker) {
+        await this.stopDictation(owner, { cancelStarting: false })
+        await this.teardownIdleWorker()
+      }
+      if (this.cloudSession) {
+        await this.stopDictation(owner, { cancelStarting: false })
+      }
+
+      this.cloudSession = new VpsTranscriptionSession(this.vpsEndpoint)
+      this.activeModelId = modelId
+      this.activeHotwordsFilePath = undefined
+      this.eventSink = sink
+      sink({ type: 'ready' })
+      return
     }
 
     if (manifest.provider === 'openai') {
