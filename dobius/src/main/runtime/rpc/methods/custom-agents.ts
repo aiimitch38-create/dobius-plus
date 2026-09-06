@@ -63,7 +63,12 @@ const AgentRunStart = z.object({
   // a runaway; an automatic board dispatch has nobody watching, so it must
   // pass its own ceiling.
   maxBudgetUsd: z.number().positive().max(100).optional(),
-  maxTurns: z.number().int().positive().max(200).optional()
+  maxTurns: z.number().int().positive().max(200).optional(),
+  // Default (omitted) = resume the sessionKey's conversation, which is what
+  // chat wants. An automated dispatch must be able to say `false`: without it
+  // a board task sent into a channel resumes whatever chat the agent last had
+  // there and pays to re-ingest the whole transcript.
+  resume: z.boolean().optional()
 })
 
 const AgentRunsQuery = z.object({
@@ -148,12 +153,17 @@ export const CUSTOM_AGENT_METHODS: RpcMethod[] = [
         // tool approvals, so undecided prompts would hang the conversation.
         // 'dontAsk' lets the agent's allowlisted tools run and denies the rest.
         options:
-          params.source || params.sessionKey || params.maxBudgetUsd || params.maxTurns
+          params.source ||
+          params.sessionKey ||
+          params.maxBudgetUsd ||
+          params.maxTurns ||
+          params.resume !== undefined
             ? {
                 source: params.source,
                 sessionKey: params.sessionKey,
                 ...(params.maxBudgetUsd ? { maxBudgetUsd: params.maxBudgetUsd } : {}),
                 ...(params.maxTurns ? { maxTurns: params.maxTurns } : {}),
+                ...(params.resume !== undefined ? { resume: params.resume } : {}),
                 ...(params.source === 'channel' ? { permissionMode: 'dontAsk' as const } : {})
               }
             : undefined

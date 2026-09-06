@@ -1788,6 +1788,10 @@ export async function runDobiusBoardTaskInChannel(args: {
     prompt: args.prompt,
     source: "channel",
     sessionKey: args.channelId,
+    // A board task is not a continuation of the channel's chat. Without this
+    // the run resumes whatever the agent was last saying here and re-ingests
+    // the transcript before doing any work — billed against this task's cap.
+    resume: false,
     maxBudgetUsd: args.maxBudgetUsd,
     maxTurns: args.maxTurns,
   });

@@ -44,6 +44,12 @@ import {
 // hold a slot while awaiting each other's runs, so 3 starved a two-agent channel
 // conversation into "Too many concurrent agent runs".
 const MAX_CONCURRENT_RUNS = 8
+// Omitting a budget must fail CLOSED. Nine call sites start real Claude runs
+// without passing one — including two nobody watches (automation workflow
+// steps, boot-time revival of interrupted channel runs) — and an uncapped SDK
+// run bills until it decides it is finished. Deliberate callers still pass
+// their own ceiling; this only catches the ones that pass nothing.
+const DEFAULT_MAX_BUDGET_USD = 2
 
 // Why: the cap must be reserved synchronously — liveRuns is only populated after an
 // await (auth preparation), so checking liveRuns.size alone is a check-then-act race.
@@ -349,7 +355,7 @@ export async function startAgentRun(args: {
       abortController,
       env: buildRunEnv(preparation),
       maxTurns: args.options?.maxTurns ?? 100,
-      maxBudgetUsd: args.options?.maxBudgetUsd,
+      maxBudgetUsd: args.options?.maxBudgetUsd ?? DEFAULT_MAX_BUDGET_USD,
       outputFormat: args.options?.outputFormat,
       // Load the user's ~/.claude settings (skills, hooks) and the project's
       // CLAUDE.md / memory at the agent's cwd — without this an agent runs
