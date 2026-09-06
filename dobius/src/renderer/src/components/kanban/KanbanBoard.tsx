@@ -4,13 +4,15 @@ import {
   List, MessageCircle, Paperclip, Plus, Search, SlidersHorizontal, Workflow
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { kanbanMockSource } from './kanban-mock-source'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanDetailPanel } from './KanbanDetailPanel'
-import type { TaskSource, TaskStatus } from './kanban-types'
+import type { TaskPriority, TaskSource, TaskStatus, TaskType } from './kanban-types'
 
 const statuses: TaskStatus[] = ['backlog', 'todo', 'in-progress', 'review', 'testing', 'done']
 const views = [
@@ -42,6 +44,11 @@ export default function KanbanBoard({ source = kanbanMockSource }: { source?: Ta
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [filterHigh, setFilterHigh] = useState(false)
+  const [newTaskOpen, setNewTaskOpen] = useState(false)
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('todo')
+  const [newTaskType, setNewTaskType] = useState<TaskType>('feature')
+  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('medium')
   const tasks = source.list()
 
   const visibleTasks = useMemo(() => tasks.filter((task) => {
@@ -52,8 +59,17 @@ export default function KanbanBoard({ source = kanbanMockSource }: { source?: Ta
 
   const mutate = (action: () => void): void => { action(); setRevision((value) => value + 1) }
   const createTask = (status: TaskStatus): void => {
-    const task = source.create({ title: 'Untitled Vertex task', status })
+    setNewTaskStatus(status)
+    setNewTaskOpen(true)
+  }
+  const submitNewTask = (): void => {
+    const title = newTaskTitle.trim()
+    if (!title) return
+    const task = source.create({ title, status: newTaskStatus })
+    source.update(task.id, { type: newTaskType, priority: newTaskPriority })
     setSelectedTaskId(task.id)
+    setNewTaskTitle('')
+    setNewTaskOpen(false)
     setRevision((value) => value + 1)
   }
 
@@ -85,6 +101,21 @@ export default function KanbanBoard({ source = kanbanMockSource }: { source?: Ta
       ) : <SecondaryView view={activeView} tasks={visibleTasks} onOpen={setSelectedTaskId} />}
 
       {selectedTask ? <KanbanDetailPanel task={selectedTask} onClose={() => setSelectedTaskId(null)} onUpdate={(patch) => mutate(() => source.update(selectedTask.id, patch))} /> : null}
+
+      <Dialog open={newTaskOpen} onOpenChange={setNewTaskOpen}>
+        <DialogContent className="max-w-md border-kanban-border bg-kanban-panel text-kanban-foreground">
+          <DialogHeader><DialogTitle>Create a Vertex task</DialogTitle><DialogDescription>Choose where the task starts and how the team should classify it.</DialogDescription></DialogHeader>
+          <div className="space-y-4">
+            <label className="space-y-1.5 text-xs font-medium"><span>Task title</span><Input autoFocus value={newTaskTitle} onChange={(event) => setNewTaskTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitNewTask() }} placeholder="What needs to be done?" /></label>
+            <div className="grid grid-cols-3 gap-2">
+              <label className="space-y-1.5 text-xs"><span>Status</span><Select value={newTaskStatus} onValueChange={(value) => setNewTaskStatus(value as TaskStatus)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{statuses.map((status) => <SelectItem key={status} value={status}>{statusNames[status]}</SelectItem>)}</SelectContent></Select></label>
+              <label className="space-y-1.5 text-xs"><span>Type</span><Select value={newTaskType} onValueChange={(value) => setNewTaskType(value as TaskType)}><SelectTrigger className="w-full capitalize"><SelectValue /></SelectTrigger><SelectContent>{['feature','design','integration','ai','security','infra','bug'].map((type) => <SelectItem key={type} value={type} className="capitalize">{type}</SelectItem>)}</SelectContent></Select></label>
+              <label className="space-y-1.5 text-xs"><span>Priority</span><Select value={newTaskPriority} onValueChange={(value) => setNewTaskPriority(value as TaskPriority)}><SelectTrigger className="w-full capitalize"><SelectValue /></SelectTrigger><SelectContent>{['low','medium','high','urgent'].map((priority) => <SelectItem key={priority} value={priority} className="capitalize">{priority}</SelectItem>)}</SelectContent></Select></label>
+            </div>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setNewTaskOpen(false)}>Cancel</Button><Button disabled={!newTaskTitle.trim()} onClick={submitNewTask} className="bg-kanban-accent text-kanban-accent-foreground hover:bg-kanban-accent-hover"><Plus />Create Task</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </main>
     </TooltipProvider>
