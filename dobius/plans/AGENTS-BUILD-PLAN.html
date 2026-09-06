@@ -1,0 +1,484 @@
+<title>Dobius Agents Build Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+  :root {
+    --ink:        #14151d;
+    --ink-2:      #43465c;
+    --ink-3:      #6f7288;
+    --paper:      #ffffff;
+    --paper-2:    #f6f6fa;
+    --paper-3:    #eeeef5;
+    --rule:       #e0e0ea;
+    --rule-2:     #cdcdda;
+    --accent:     #5340d6;
+    --accent-ink: #ffffff;
+    --accent-dim: #efecfd;
+    --go:         #1c7f4c;
+    --go-dim:     #e6f4ec;
+    --wait:       #9a6206;
+    --wait-dim:   #fbf0dd;
+    --stop:       #b1372c;
+    --stop-dim:   #fbeae8;
+    --shadow:     0 1px 2px rgba(20,21,29,.05), 0 8px 24px rgba(20,21,29,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink:        #ececf3;
+      --ink-2:      #a9abbe;
+      --ink-3:      #797c92;
+      --paper:      #0f1016;
+      --paper-2:    #16171f;
+      --paper-3:    #1d1e28;
+      --rule:       #282a36;
+      --rule-2:     #383a49;
+      --accent:     #9b8cff;
+      --accent-ink: #14151d;
+      --accent-dim: #1e1b3a;
+      --go:         #4ec98a;
+      --go-dim:     #12261c;
+      --wait:       #e0a94a;
+      --wait-dim:   #2a2013;
+      --stop:       #f0796b;
+      --stop-dim:   #2e1715;
+      --shadow:     0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink:        #ececf3;
+    --ink-2:      #a9abbe;
+    --ink-3:      #797c92;
+    --paper:      #0f1016;
+    --paper-2:    #16171f;
+    --paper-3:    #1d1e28;
+    --rule:       #282a36;
+    --rule-2:     #383a49;
+    --accent:     #9b8cff;
+    --accent-ink: #14151d;
+    --accent-dim: #1e1b3a;
+    --go:         #4ec98a;
+    --go-dim:     #12261c;
+    --wait:       #e0a94a;
+    --wait-dim:   #2a2013;
+    --stop:       #f0796b;
+    --stop-dim:   #2e1715;
+    --shadow:     0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 78ch; margin: 0 auto; padding: 4rem 1.5rem 7rem; }
+  @media (max-width: 640px) { .wrap { padding: 2.5rem 1.1rem 4rem; } }
+
+  h1, h2, h3, .eyebrow, .pnum {
+    font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+    text-wrap: balance;
+  }
+  h1 { font-size: clamp(2rem, 5.2vw, 2.9rem); line-height: 1.08; letter-spacing: -.022em; font-weight: 700; margin: .3rem 0 0; }
+  h2 { font-size: 1.32rem; line-height: 1.22; letter-spacing: -.012em; font-weight: 600; margin: 0; }
+  h3 { font-size: 1rem; line-height: 1.3; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.005em; }
+  p { margin: 0 0 1rem; }
+  .lede { font-size: 1.09rem; color: var(--ink-2); margin-top: 1.1rem; }
+  strong { font-weight: 600; }
+  code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .855em; }
+  code { background: var(--paper-3); padding: .1em .35em; border-radius: 4px; }
+
+  .eyebrow {
+    font-size: .68rem; font-weight: 600; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+
+  /* ── verdict ───────────────────────────────── */
+  .verdict {
+    margin: 2.6rem 0 0; padding: 1.4rem 1.5rem;
+    background: var(--accent-dim);
+    border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+    border-radius: 10px;
+  }
+  .verdict p:last-child { margin-bottom: 0; }
+
+  /* ── phase ─────────────────────────────────── */
+  .phase { margin-top: 3.4rem; }
+  .phase-head {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 1rem;
+    align-items: start; padding-bottom: .85rem;
+    border-bottom: 1px solid var(--rule-2);
+  }
+  .pnum {
+    font-size: 1.55rem; font-weight: 700; line-height: 1; color: var(--accent);
+    font-variant-numeric: tabular-nums; padding-top: .1rem;
+  }
+  .phase-sub { color: var(--ink-3); font-size: .87rem; margin: .3rem 0 0; }
+  .tag {
+    font-size: .66rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    padding: .3rem .55rem; border-radius: 999px; white-space: nowrap;
+    font-family: Archivo, sans-serif;
+  }
+  .t-block { background: var(--stop-dim); color: var(--stop); }
+  .t-par   { background: var(--go-dim);   color: var(--go); }
+  .t-seq   { background: var(--wait-dim); color: var(--wait); }
+
+  /* ── work packages ─────────────────────────── */
+  .pkgs { display: grid; gap: .85rem; margin-top: 1.3rem; }
+  .pkg {
+    background: var(--paper-2); border: 1px solid var(--rule);
+    border-radius: 10px; padding: 1.05rem 1.15rem; box-shadow: var(--shadow);
+  }
+  .pkg-top { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; margin-bottom: .5rem; }
+  .pkg-id {
+    font-family: "IBM Plex Mono", monospace; font-size: .74rem; font-weight: 500;
+    color: var(--accent-ink); background: var(--accent);
+    padding: .18rem .45rem; border-radius: 4px; letter-spacing: .02em;
+  }
+  .pkg p { font-size: .93rem; margin-bottom: .7rem; color: var(--ink-2); }
+  .pkg p strong { color: var(--ink); }
+  .files {
+    font-family: "IBM Plex Mono", monospace; font-size: .76rem; line-height: 1.85;
+    color: var(--ink-2); background: var(--paper-3);
+    border-radius: 7px; padding: .6rem .75rem; margin: 0;
+    overflow-x: auto; white-space: pre;
+  }
+  .files b { color: var(--ink); font-weight: 500; }
+  .done-when {
+    margin: .7rem 0 0; padding-top: .7rem; border-top: 1px dashed var(--rule-2);
+    font-size: .87rem; color: var(--ink-2);
+  }
+  .done-when b {
+    font-family: Archivo, sans-serif; font-size: .68rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3); display: block; margin-bottom: .2rem;
+  }
+
+  /* ── generic blocks ────────────────────────── */
+  .note {
+    border-left: 3px solid var(--rule-2); padding: .1rem 0 .1rem 1rem;
+    margin: 1.2rem 0; color: var(--ink-2); font-size: .95rem;
+  }
+  .note.warn { border-left-color: var(--stop); }
+  ul { margin: 0 0 1rem; padding-left: 1.15rem; }
+  li { margin-bottom: .38rem; }
+
+  .tablewrap { overflow-x: auto; margin: 1.2rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .89rem; min-width: 30rem; }
+  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    font-family: Archivo, sans-serif; font-size: .68rem; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ink-3); font-weight: 600;
+    border-bottom-color: var(--rule-2);
+  }
+  td.mono { font-family: "IBM Plex Mono", monospace; font-size: .8rem; }
+
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 3.2rem 0 0; }
+  .foot { margin-top: 1.4rem; font-size: .85rem; color: var(--ink-3); }
+</style>
+
+<div class="wrap">
+
+  <span class="eyebrow">Dobius+ &middot; build plan</span>
+  <h1>Agents, end to end</h1>
+  <p class="lede">
+    One front screen, a real task pipeline, and a loop that actually finishes.
+    Sequenced so the expensive work only starts once the cheap work has proven
+    it will pay off.
+  </p>
+
+  <div class="verdict">
+    <p><strong>The call: prove one task before building anything on top of it.</strong></p>
+    <p>
+      Zero board tasks have completed successfully. One ran, cost <strong>$0.76</strong>,
+      and produced nothing &mdash; not because there was no pipeline, but because
+      &ldquo;SKINS inside dobius&rdquo; had no description. Five agents conferring about that
+      same task is four dollars and still no answer.
+    </p>
+    <p style="margin-bottom:0">
+      Every phase below is ordered so that a failure costs pennies instead of an
+      afternoon. The front screen comes last on purpose: it is a window onto data
+      that mostly does not exist yet.
+    </p>
+  </div>
+
+  <!-- PHASE 0 -->
+  <section class="phase">
+    <div class="phase-head">
+      <span class="pnum">0</span>
+      <div>
+        <h2>Prove the loop</h2>
+        <p class="phase-sub">One task, start to finish. Nothing else begins until this is green.</p>
+      </div>
+      <span class="tag t-block">blocking</span>
+    </div>
+
+    <div class="pkgs">
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">P0-1</span><h3>Run one well-specified task</h3></div>
+        <p>
+          Not a code change &mdash; a test. Write a task with a real description and
+          acceptance criteria, assign it to <strong>Watson</strong> or <strong>Friday</strong>
+          (both have Bash and Write; Adam has neither and cannot screenshot), move it
+          to <strong>To&nbsp;Do</strong>, and watch.
+        </p>
+        <div class="done-when">
+          <b>Done when</b>
+          The card moves To&nbsp;Do &rarr; In&nbsp;Progress on its own; a message and an
+          <em>inline screenshot</em> appear in Communications; the card lands in Review
+          carrying the agent&rsquo;s report and the real dollar cost.
+        </div>
+      </div>
+
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">P0-2</span><h3>Fix whatever P0-1 breaks</h3></div>
+        <p>
+          The bridge from board to Communications has never carried a real run.
+          Reserve room for it to be wrong. Most likely failure points: no channel
+          resolved, the outbox never drains, or the agent ignores the screenshot step.
+        </p>
+        <p class="files"><b>src/renderer/src/components/kanban/board-dispatch.ts</b>
+<b>src/renderer/src/components/communications/shared/api/dobiusCommunications.ts</b>
+  &rarr; runDobiusBoardTaskInChannel</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PHASE 1 -->
+  <section class="phase">
+    <div class="phase-head">
+      <span class="pnum">1</span>
+      <div>
+        <h2>The triage gate</h2>
+        <p class="phase-sub">The pipeline stage that saves money instead of spending it.</p>
+      </div>
+      <span class="tag t-seq">after 0</span>
+    </div>
+
+    <p>
+      Before an expensive agent is dispatched, a cheap one reads the task and rules on
+      whether it is actionable. One turn, roughly a cent. It would have caught the
+      $0.76 run for a penny. Copy <code>asana-auto-mode-service.ts</code>, which already
+      does exactly this with a structured verdict &mdash; do not invent a new shape.
+    </p>
+
+    <div class="pkgs">
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">P1-1</span><h3>Triage verdict + gate</h3></div>
+        <p>
+          Cheap model, <code>maxTurns: 1</code>, <code>maxBudgetUsd: 0.05</code>.
+          Returns <strong>actionable</strong>, <strong>missing</strong> (what the task
+          fails to say), and <strong>suggestedAgent</strong>. Not actionable &rarr; the
+          card returns to To&nbsp;Do with the question attached and <em>nothing further is
+          spent</em>.
+        </p>
+        <p class="files">new <b>src/renderer/src/components/kanban/task-triage.ts</b>
+read  src/main/agents/asana-triage-verdict.ts   (the proven shape)
+edit  src/renderer/src/components/kanban/board-dispatch.ts</p>
+        <div class="done-when">
+          <b>Done when</b>
+          A one-line task is refused for under $0.02 and the card explains what it needs.
+          A well-specified task passes through untouched.
+        </div>
+      </div>
+
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">P1-2</span><h3>Surface the verdict on the card</h3></div>
+        <p>
+          The refusal has to be readable without opening anything &mdash; that is the whole
+          point. Extend the dispatch status line already on the card.
+        </p>
+        <p class="files">edit <b>src/renderer/src/components/kanban/KanbanCard.tsx</b>
+edit <b>src/shared/vertex-task-types.ts</b>   &rarr; VertexTaskDispatch.triage</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PHASE 2 -->
+  <section class="phase">
+    <div class="phase-head">
+      <span class="pnum">2</span>
+      <div>
+        <h2>Roster &amp; departments</h2>
+        <p class="phase-sub">Route by role. Only worth doing once triage guarantees well-formed input.</p>
+      </div>
+      <span class="tag t-seq">after 1</span>
+    </div>
+
+    <p>The departments already exist in your roster &mdash; they just are not used for routing:</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Agent</th><th>Role</th><th>Tools</th><th>Routes</th></tr></thead>
+        <tbody>
+          <tr><td>Adam</td><td>Lead Developer</td><td class="mono">Read Grep Glob</td><td>review, read-only audits</td></tr>
+          <tr><td>Gunner</td><td>Head of SMIDs</td><td class="mono">+ Bash WebFetch</td><td>research, integrations</td></tr>
+          <tr><td>Friday</td><td>Research &amp; Analysis</td><td class="mono">+ Bash Edit Write</td><td>build, feature work</td></tr>
+          <tr><td>Edith</td><td>QA &amp; Review</td><td class="mono">Codex, Bash</td><td>testing, verification</td></tr>
+          <tr><td>Watson</td><td>Personal Assistant</td><td class="mono">full workspace</td><td>general, catch-all</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pkgs">
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">P2-1</span><h3>Route task type &rarr; department</h3></div>
+        <p>
+          A task already carries a <code>type</code> (feature, design, bug, security,
+          infra&hellip;). Map it to a role, and let triage&rsquo;s <code>suggestedAgent</code>
+          override. An unassigned task then routes itself.
+        </p>
+        <p class="files">new <b>src/renderer/src/components/kanban/agent-routing.ts</b>
+edit src/renderer/src/components/kanban/board-dispatch.ts</p>
+      </div>
+
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">P2-2</span><h3>Handoff: build &rarr; QA</h3></div>
+        <p>
+          On success, instead of stopping at Review, dispatch <strong>Edith</strong> to verify
+          against the acceptance criteria. She posts her verdict to the same channel thread.
+          <strong>Cap the chain at two hops</strong> &mdash; agents that can hand off
+          indefinitely will.
+        </p>
+        <div class="done-when">
+          <b>Done when</b>
+          A finished task shows both the builder&rsquo;s report and QA&rsquo;s verdict, and the
+          chain provably cannot exceed two hops.
+        </div>
+      </div>
+    </div>
+
+    <div class="note warn">
+      <strong>Money.</strong> Each hop is a full run. Two hops at $3 each is $6 per task.
+      Set the per-task ceiling before turning this on, not after.
+    </div>
+  </section>
+
+  <!-- PHASE 3 -->
+  <section class="phase">
+    <div class="phase-head">
+      <span class="pnum">3</span>
+      <div>
+        <h2>The front screen</h2>
+        <p class="phase-sub">Three columns. Built last, so every panel shows something real.</p>
+      </div>
+      <span class="tag t-par">parallel inside</span>
+    </div>
+
+    <p>
+      Most of the navigation already exists as view ids &mdash; <code>dashboard</code>,
+      <code>knowledge</code>, <code>space</code>, <code>agents</code>, <code>buzz</code>.
+      <code>dashboard</code> and <code>knowledge</code> are declared but never rendered.
+      This phase is mostly wiring what is already there, not new construction.
+    </p>
+
+    <div class="pkgs">
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">P3-1</span><h3>Top navigation</h3></div>
+        <p>
+          Command&nbsp;Center &middot; Workspace &middot; Projects &middot; Knowledge &middot;
+          <strong>Agents</strong> &middot; Systems. Communications is <em>not</em> a top-level
+          entry &mdash; it lives in the left column of Agents, which is the split you
+          disliked, removed.
+        </p>
+        <p class="files">edit <b>src/renderer/src/components/app-shell/AppWorkspaceShell.tsx</b>
+edit <b>src/renderer/src/components/sidebar/SidebarNav.tsx</b>
+edit src/renderer/src/store/slices/ui.ts   (render dashboard, knowledge)</p>
+      </div>
+
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">P3-2</span><h3>Agents: three-column shell</h3></div>
+        <p>
+          Communications (left) &middot; Crew (centre) &middot; Alerts (right).
+          <strong>Do not re-parent the Communications subtree.</strong> It stays mounted
+          where it is and is shown by CSS &mdash; it must keep receiving while hidden, and
+          remounting 247k lines will kill live channels.
+        </p>
+        <p class="files">new <b>src/renderer/src/components/agents-hub/AgentsHub.tsx</b>
+new <b>src/renderer/src/components/agents-hub/CrewColumn.tsx</b>
+new <b>src/renderer/src/components/agents-hub/AlertsColumn.tsx</b></p>
+      </div>
+
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">P3-3</span><h3>Projects as a folder tree</h3></div>
+        <p>
+          A drop-down tree that opens down into the code, per your sketch. Reuse the
+          existing worktree and repo services rather than walking the filesystem again.
+        </p>
+        <p class="files">new <b>src/renderer/src/components/projects/ProjectsTree.tsx</b>
+reuse src/main/git-service, worktree services</p>
+      </div>
+
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">P3-4</span><h3>Real telemetry, or no panel</h3></div>
+        <p>
+          The mockup shows per-agent CPU, RAM, disk and token percentages.
+          <strong>None of that data exists.</strong> Either source it honestly or leave
+          the panel out. Placeholder numbers on a dashboard are the same failure we spent
+          this morning deleting from the board.
+        </p>
+        <div class="done-when">
+          <b>Done when</b>
+          Every number on screen traces to a real source, or its panel is absent.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHROME -->
+  <section class="phase">
+    <div class="phase-head">
+      <span class="pnum">&mdash;</span>
+      <div>
+        <h2>Chrome fixes</h2>
+        <p class="phase-sub">Small, independent, safe to run alongside anything above.</p>
+      </div>
+      <span class="tag t-par">parallel</span>
+    </div>
+    <div class="pkgs">
+      <div class="pkg">
+        <div class="pkg-top"><span class="pkg-id">C-1</span><h3>Stop Communications feeling like a second app</h3></div>
+        <p>
+          The 1.2s boot splash is <strong>already removed</strong>. Two left: it mounts its
+          own <code>&lt;Toaster&gt;</code> while Dobius already has one, and it forces
+          <code>defaultTheme="buzz"</code> instead of inheriting yours.
+        </p>
+        <p class="files">edit <b>src/renderer/src/components/communications/CommunicationsPage.tsx</b></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- RULES -->
+  <hr>
+  <section class="phase" style="margin-top:2.2rem">
+    <h2>Rules for parallel agents</h2>
+    <p style="margin-top:.8rem">
+      Packages within a phase touch disjoint files and can run at once. Anything that
+      edits <code>board-dispatch.ts</code> runs alone &mdash; P1-1 and P2-1 both do, so they
+      are sequential with respect to each other.
+    </p>
+    <ul>
+      <li><strong>Never both edit one file.</strong> If two packages need the same file, one waits.</li>
+      <li><strong>Do not touch <code>src/main/daemon/</code>.</strong> It runs terminal sessions. Changing it forces a daemon restart, which kills every open terminal.</li>
+      <li><strong>No fake data.</strong> If the real value is not available, omit the element.</li>
+      <li><strong>Verify by looking.</strong> A screenshot of the running app, not a passing build.</li>
+      <li><strong>Real exit codes.</strong> <code>pnpm run build:mac</code> then <code>ec=$?</code> &mdash; never chained after an <code>echo</code>.</li>
+      <li><strong>Agents move cards to Review, never Done.</strong> Closing is a human decision.</li>
+    </ul>
+
+    <div class="note">
+      <strong>Installing.</strong> Install and relaunch the app. Do <em>not</em> restart the
+      daemon &mdash; it serves PTYs only, app code reloads with the app, and restarting it
+      destroys live terminal sessions for no benefit.
+    </div>
+
+    <p class="foot">
+      Ordered so the cheapest thing that can disprove the plan runs first.
+      Phase&nbsp;0 is one task and an afternoon; it decides whether the rest is worth building.
+    </p>
+  </section>
+
+</div>

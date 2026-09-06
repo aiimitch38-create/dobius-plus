@@ -103,6 +103,15 @@ function bootSplashHoldMs(): number {
   if (e2e) {
     return e2e.bootSplashHoldMs ?? 0;
   }
+  // Embedded in Dobius there is no splash. The hold exists because the
+  // standalone client owned a native window whose setup could outlast the
+  // mark, leaving it unmounted before it ever painted. Inside Dobius the app
+  // shell is already up and this tab is already mounted, so the hold is 1.2s
+  // of dead time on every visit — and it is what makes Communications read as
+  // a separate app booting rather than a tab.
+  if (!isTauri()) {
+    return 0;
+  }
   return BOOT_SPLASH_MIN_VISIBLE_MS;
 }
 
