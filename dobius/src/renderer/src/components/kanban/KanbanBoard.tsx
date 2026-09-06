@@ -43,6 +43,7 @@ import {
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { kanbanMockSource } from './kanban-mock-source'
 import { getKanbanIpcSource } from './kanban-ipc-source'
+import { useAssignablePeople } from './kanban-people'
 import { moveTasksOptimistically } from './kanban-ordering'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanDetailPanel } from './KanbanDetailPanel'
@@ -331,6 +332,9 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('todo')
   const [newTaskType, setNewTaskType] = useState<TaskType>('feature')
   const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('medium')
+  // '' means unassigned. Real agents come from the Agents tab's roster.
+  const [newTaskAssigneeId, setNewTaskAssigneeId] = useState('')
+  const assignablePeople = useAssignablePeople()
 
   useEffect(() => {
     let cancelled = false
@@ -392,12 +396,14 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
       title,
       status: newTaskStatus,
       type: newTaskType,
-      priority: newTaskPriority
+      priority: newTaskPriority,
+      assignee: assignablePeople.find((person) => person.id === newTaskAssigneeId)
     })
     if (!task) return
     setTasks((current) => [...current, task])
     setSelectedTaskId(task.id)
     setNewTaskTitle('')
+    setNewTaskAssigneeId('')
     setNewTaskOpen(false)
   }
 
@@ -462,7 +468,7 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
                   <DropdownMenuContent align="end">
                     {statuses.map((status) => (
                       <DropdownMenuItem key={status} onClick={() => createTask(status)}>
-                        Add to {status}
+                        Add to {statusNames[status]}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
@@ -523,6 +529,7 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
         {selectedTask ? (
           <KanbanDetailPanel
             task={selectedTask}
+            allTasks={tasks}
             onClose={() => setSelectedTaskId(null)}
             onUpdate={(patch) => updateTask(selectedTask.id, patch)}
             onDelete={() => {
@@ -542,7 +549,7 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
         <Dialog open={newTaskOpen} onOpenChange={setNewTaskOpen}>
           <DialogContent className="max-w-md border-kanban-border bg-kanban-panel text-kanban-foreground">
             <DialogHeader>
-              <DialogTitle>Create a Vertex task</DialogTitle>
+              <DialogTitle>Create a task</DialogTitle>
               <DialogDescription>
                 Choose where the task starts and how the team should classify it.
               </DialogDescription>
@@ -618,6 +625,28 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
                   </Select>
                 </label>
               </div>
+              <label className="space-y-1.5 text-xs">
+                <span>Assign to</span>
+                <Select
+                  value={newTaskAssigneeId || 'unassigned'}
+                  onValueChange={(value) =>
+                    setNewTaskAssigneeId(value === 'unassigned' ? '' : value)
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {assignablePeople.map((person) => (
+                      <SelectItem key={person.id} value={person.id}>
+                        {person.name}
+                        {person.kind === 'agent' ? ' (agent)' : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setNewTaskOpen(false)}>

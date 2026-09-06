@@ -1,19 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Bold,
   CalendarDays,
   ChevronDown,
-  Code,
   ExternalLink,
-  FileImage,
-  Italic,
   Link2,
-  List,
-  ListOrdered,
   Plus,
-  Quote,
-  Strikethrough,
-  Table2,
   Trash2,
   X,
   Workflow
@@ -31,6 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AvatarStack } from './AvatarStack'
 import { LabelChip } from './kanban-chips'
+import { useAssignablePeople } from './kanban-people'
 import type { Task, TaskPriority, TaskSource, TaskStatus, TaskType } from './kanban-types'
 
 const statuses: TaskStatus[] = ['backlog', 'todo', 'in-progress', 'review', 'testing', 'done']
@@ -44,25 +36,6 @@ const statusLabel: Record<TaskStatus, string> = {
   testing: 'Testing',
   done: 'Done'
 }
-const editorItems = [
-  'Arrow, text, shapes, highlights',
-  'Voice annotations (STT)',
-  'Attach notes and files',
-  'Convert annotations to tasks',
-  'AI analysis of screenshots',
-  'Work on images and live previews',
-  'Integrate with agents and tasks'
-]
-const assignablePeople = [
-  { kind: 'human' as const, id: 'me', name: 'Me', initials: 'ME' },
-  { kind: 'agent' as const, id: 'vision', name: 'Vision (Design)', initials: 'VD' },
-  { kind: 'agent' as const, id: 'atlas', name: 'Atlas (Engineering)', initials: 'AE' },
-  { kind: 'agent' as const, id: 'sage', name: 'Sage (Research)', initials: 'SR' }
-]
-const availableLabels = ['Canvas', 'UI/UX', 'High Priority', 'Agent', 'Desktop']
-const availableFolders = ['Vertex / Canvas', 'Vertex / Desktop', 'Vertex / Agents']
-const availableDependencies = ['Annotation engine', 'Canvas renderer', 'Agent permissions']
-
 function Field({
   label,
   children
@@ -80,16 +53,38 @@ function Field({
 
 export function KanbanDetailPanel({
   task,
+  allTasks,
   onClose,
   onUpdate,
   onDelete
 }: {
   task: Task
+  /** Every task on the board: labels and dependencies are drawn from real
+   *  data rather than a hardcoded demo list. */
+  allTasks: Task[]
   onClose: () => void
   onUpdate: (patch: Parameters<TaskSource['update']>[1]) => void
   onDelete: () => void
 }): React.JSX.Element {
   const [subtaskTitle, setSubtaskTitle] = useState('')
+  const [newLabel, setNewLabel] = useState('')
+  const assignablePeople = useAssignablePeople()
+  // Labels already in use anywhere on the board, minus the ones on this task.
+  const availableLabels = useMemo(
+    () =>
+      [...new Set(allTasks.flatMap((item) => item.labels))]
+        .filter((label) => !task.labels.includes(label))
+        .sort(),
+    [allTasks, task.labels]
+  )
+  // A dependency is another real task, never a made-up component name.
+  const availableDependencies = useMemo(
+    () =>
+      allTasks.filter(
+        (item) => item.id !== task.id && !task.dependencies.includes(item.id)
+      ),
+    [allTasks, task.id, task.dependencies]
+  )
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose()
@@ -341,6 +336,22 @@ export function KanbanDetailPanel({
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-48 p-1">
+                    {/* Why a text input first: on a fresh board no labels
+                        exist yet, so picking from prior labels alone would
+                        leave the control permanently empty. */}
+                    <Input
+                      value={newLabel}
+                      onChange={(event) => setNewLabel(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter') return
+                        const next = newLabel.trim()
+                        if (!next || task.labels.includes(next)) return
+                        onUpdate({ labels: [...task.labels, next] })
+                        setNewLabel('')
+                      }}
+                      placeholder="New label"
+                      className="mb-1 h-8 text-xs"
+                    />
                     {availableLabels.map((label) => (
                       <button
                         key={label}
@@ -362,126 +373,71 @@ export function KanbanDetailPanel({
                 </Popover>
               </div>
             </Field>
-            <Field label="Related">
-              <div className="flex flex-wrap items-center gap-1">
-                {task.related.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="flex items-center gap-1 rounded-md border border-kanban-border px-2 py-1 text-[10px] outline-none hover:bg-kanban-hover focus-visible:ring-2 focus-visible:ring-kanban-accent"
-                  >
-                    <Workflow className="size-3 text-kanban-blue" />
-                    {item.label}
-                  </button>
-                ))}
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon-xs" aria-label="Add related folder">
-                      <Plus />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-56 p-1">
-                    {availableFolders.map((folder) => (
-                      <button
-                        key={folder}
-                        type="button"
-                        onClick={() =>
-                          onUpdate({
-                            related: [
-                              ...task.related.filter((item) => item.label !== folder),
-                              { id: folder.toLowerCase().replaceAll(' ', '-'), label: folder }
-                            ]
-                          })
-                        }
-                        className="flex w-full items-center gap-2 rounded px-3 py-2 text-xs hover:bg-kanban-hover"
-                      >
-                        <Workflow className="size-3.5 text-kanban-blue" />
-                        {folder}
-                      </button>
-                    ))}
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </Field>
             <Field label="Dependencies">
-              <div className="flex items-center gap-1">
-                <span className="rounded-md border border-kanban-border px-2 py-1 text-[10px]">
-                  {task.dependencies.length} tasks
-                </span>
+              <div className="flex flex-wrap items-center gap-1">
+                {task.dependencies.map((dependencyId) => {
+                  const dependency = allTasks.find((item) => item.id === dependencyId)
+                  return (
+                    <button
+                      key={dependencyId}
+                      type="button"
+                      onClick={() =>
+                        onUpdate({
+                          dependencies: task.dependencies.filter((item) => item !== dependencyId)
+                        })
+                      }
+                      title="Remove dependency"
+                      className="flex max-w-[190px] items-center gap-1 rounded-md border border-kanban-border px-2 py-1 text-[10px] outline-none hover:bg-kanban-hover focus-visible:ring-2 focus-visible:ring-kanban-accent"
+                    >
+                      <Workflow className="size-3 shrink-0 text-kanban-blue" />
+                      <span className="truncate">{dependency?.title ?? dependencyId}</span>
+                    </button>
+                  )
+                })}
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="ghost" size="icon-xs" aria-label="Add dependency">
                       <Plus />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent align="start" className="w-56 p-1">
-                    {availableDependencies.map((dependency) => (
-                      <button
-                        key={dependency}
-                        type="button"
-                        onClick={() =>
-                          onUpdate({
-                            dependencies: task.dependencies.includes(dependency)
-                              ? task.dependencies.filter((item) => item !== dependency)
-                              : [...task.dependencies, dependency]
-                          })
-                        }
-                        className="flex w-full items-center justify-between rounded px-3 py-2 text-xs hover:bg-kanban-hover"
-                      >
-                        <span>{dependency}</span>
-                        {task.dependencies.includes(dependency) ? '✓' : ''}
-                      </button>
-                    ))}
+                  <PopoverContent align="start" className="w-64 p-1">
+                    {availableDependencies.length ? (
+                      availableDependencies.map((candidate) => (
+                        <button
+                          key={candidate.id}
+                          type="button"
+                          onClick={() =>
+                            onUpdate({ dependencies: [...task.dependencies, candidate.id] })
+                          }
+                          className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-xs hover:bg-kanban-hover"
+                        >
+                          <Workflow className="size-3.5 shrink-0 text-kanban-blue" />
+                          <span className="truncate">{candidate.title}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-3 py-2 text-xs text-kanban-muted-foreground">
+                        No other tasks yet.
+                      </p>
+                    )}
                   </PopoverContent>
                 </Popover>
               </div>
             </Field>
           </div>
           <section className="mt-4">
-            <div className="flex items-end justify-between">
-              <h3 className="text-[12px] font-semibold">Description</h3>
-              <div className="flex text-[10px]">
-                <button type="button" className="border-b border-kanban-accent px-2 py-1">
-                  Write
-                </button>
-                <button type="button" className="px-2 py-1 text-kanban-muted-foreground">
-                  Preview
-                </button>
-              </div>
-            </div>
-            <div className="mt-1 overflow-hidden rounded-lg border border-kanban-border">
-              <div className="flex flex-wrap gap-0.5 border-b border-kanban-border p-1.5">
-                {[
-                  Bold,
-                  Italic,
-                  Strikethrough,
-                  Link2,
-                  List,
-                  ListOrdered,
-                  Quote,
-                  Code,
-                  FileImage,
-                  Table2
-                ].map((Icon, index) => (
-                  <Button
-                    key={index}
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`Formatting option ${index + 1}`}
-                  >
-                    <Icon />
-                  </Button>
-                ))}
-              </div>
-              <div className="p-3 text-[10px] leading-[1.55]">
-                <p>This feature should allow:</p>
-                <ul className="mt-1 list-disc pl-5">
-                  {editorItems.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            <h3 className="text-[12px] font-semibold">Description</h3>
+            <textarea
+              key={task.id}
+              defaultValue={task.description}
+              onBlur={(event) => {
+                const next = event.target.value
+                if (next !== task.description) onUpdate({ description: next })
+              }}
+              placeholder="What needs to be done?"
+              rows={6}
+              className="mt-1 w-full resize-y rounded-lg border border-kanban-border bg-transparent p-3 text-[11px] leading-[1.55] outline-none placeholder:text-kanban-muted-foreground focus-visible:ring-2 focus-visible:ring-kanban-accent"
+            />
           </section>
         </TabsContent>
         <TabsContent value="subtasks" className="min-h-0 flex-1 overflow-y-auto p-4">
