@@ -10,6 +10,7 @@ import { FloatingTerminalToggleButton } from '../floating-terminal/FloatingTermi
 import { DobiusTitlebarButtons } from '../DobiusTitlebarButtons'
 import { AppRightSidebarToggleButton } from './AppTitlebarChrome'
 import { AgentsHubSubNav, isAgentsHubView } from '../agents-hub/AgentsHubSubNav'
+import { AgentsOverview } from '../agents-hub/AgentsOverview'
 import {
   Landing,
   WorktreeCreationPanel,
@@ -293,6 +294,7 @@ export function AppWorkspaceShell({
                       {activeView === 'settings' ? <Settings /> : null}
                       {activeView === 'skills' ? <SkillsPage /> : null}
                       {activeView === 'agents' ? <AgentsPage /> : null}
+                      {activeView === 'dashboard' ? <AgentsOverview /> : null}
                       {activeView === 'tasks' ? <TaskPage /> : null}
                       {activeView === 'automations' ? <AutomationsPage /> : null}
                       {activeView === 'activity' ? <ActivityPrototypePage /> : null}
