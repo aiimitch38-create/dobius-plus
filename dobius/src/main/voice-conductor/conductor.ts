@@ -23,8 +23,6 @@ const CONDUCTOR_CWD = `~/${CONDUCTOR_DIR_NAME}`
 // Opus-class reasoning is required to disambiguate fuzzy transcripts
 // ("be to be portal" => "B2B Portal").
 const CONDUCTOR_MODEL = 'opus'
-// Mirrors v1's 3s respawn backoff after an abnormal PTY exit.
-const RESPAWN_DELAY_MS = 3000
 const CONDUCTOR_ALLOWED_TOOLS = [
   'Bash',
   'Read',
@@ -35,11 +33,6 @@ const CONDUCTOR_ALLOWED_TOOLS = [
   'WebFetch',
   'WebSearch'
 ]
-
-// Establishes the background session on start so later transcripts have a
-// session to resume; the conductor should not act until a transcript arrives.
-const PRIMING_PROMPT =
-  'Voice Conductor online. You are now running as a background session with no terminal window. Acknowledge readiness in one short line and stand by. Do not take any action until a tagged voice transcript arrives.'
 
 export type ReplyEntry = { message: string; ts: number }
 
@@ -124,22 +117,8 @@ export function createVoiceConductor(): VoiceConductor {
   let sessionId: string | null = null
   let lastError: string | null = null
   let agentId: string | null = null
-  let respawnTimer: ReturnType<typeof setTimeout> | null = null
   // Serializes transcript turns so they resume the session one at a time.
   let transcriptChain: Promise<void> = Promise.resolve()
-
-  function scheduleRespawn(): void {
-    if (!enabled || respawnTimer) {
-      return
-    }
-    respawnTimer = setTimeout(() => {
-      respawnTimer = null
-      if (enabled && !running) {
-        // Re-establish the background session; lastError is already recorded on failure.
-        void kick(PRIMING_PROMPT, { resume: true }).catch(() => {})
-      }
-    }, RESPAWN_DELAY_MS)
-  }
 
   async function kick(prompt: string, opts: { resume: boolean }): Promise<void> {
     const prepare = getDefaultPrepareClaudeLaunch()
@@ -171,10 +150,8 @@ export function createVoiceConductor(): VoiceConductor {
           onRunEnded: (status, summary) => {
             running = false
             currentRunId = null
-            // Only an abnormal end (not a user stop) triggers the v1-style respawn.
             if (status === 'error') {
               lastError = summary
-              scheduleRespawn()
             }
           }
         }
@@ -191,27 +168,25 @@ export function createVoiceConductor(): VoiceConductor {
 
   return {
     async start() {
-      // Idempotent: already on with a live/primed run.
-      if (enabled && (running || currentRunId)) {
+      if (enabled) {
         return
       }
-      enabled = true
+      // ponytail: no priming run. Enabling just readies the agent + cwd; the
+      // FIRST voice transcript establishes the session that later turns resume.
+      // The old priming prompt spent a full Opus run (~140k input tokens, ~$0.70)
+      // to have the model reply "ready", on every start.
+      if (!getDefaultPrepareClaudeLaunch()) {
+        throw new Error(
+          'Voice Conductor requires the Dobius+ app to be running (no Claude launch preparer registered)'
+        )
+      }
       ensureConductorDir()
       agentId = ensureAgentId()
-      try {
-        await kick(PRIMING_PROMPT, { resume: true })
-      } catch (error) {
-        enabled = false
-        throw error
-      }
+      enabled = true
     },
 
     async stop() {
       enabled = false
-      if (respawnTimer) {
-        clearTimeout(respawnTimer)
-        respawnTimer = null
-      }
       const runId = currentRunId
       currentRunId = null
       running = false

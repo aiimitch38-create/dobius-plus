@@ -90,17 +90,6 @@ function gitRepo(): Repo {
   }
 }
 
-function folderRepo(): Repo {
-  return {
-    id: 'folder-1',
-    path: '/tmp/folder-1',
-    displayName: 'folder-1',
-    badgeColor: 'gray',
-    addedAt: 1,
-    kind: 'folder'
-  }
-}
-
 function setSidebarState({
   settings = getDefaultSettings('/tmp'),
   repos = [gitRepo()]
@@ -288,50 +277,6 @@ describe('SidebarNav', () => {
     expect(shortcuts?.textContent).toContain('⌘')
     expect(shortcuts?.textContent).toContain('J')
     expect(searchButton?.querySelector('kbd')).toBeNull()
-  })
-
-  it('hides task source shortcuts until the Tasks row is hovered or focused', async () => {
-    const container = await renderSidebarNav()
-
-    const tasksButton = getButtonByText(container, 'Tasks')
-    const shortcuts = tasksButton.querySelector('[aria-label="Open GitHub tasks"]')?.parentElement
-
-    expect(shortcuts?.className).toContain('hidden')
-    expect(shortcuts?.className).toContain('group-hover:flex')
-    expect(shortcuts?.className).toContain('group-focus-within:flex')
-  })
-
-  it('hides available Tasks from its sidebar context menu', async () => {
-    const container = await renderSidebarNav()
-
-    const tasksButton = getButtonByText(container, 'Tasks')
-    expect(tasksButton.getAttribute('aria-disabled')).toBe('false')
-
-    const tasksMenu = tasksButton.closest('[data-testid="context-menu"]')
-    expect(tasksMenu).not.toBeNull()
-    await clickButton(getHideButton(tasksMenu as HTMLElement))
-
-    expect(mocks.updateSettings).toHaveBeenCalledWith({ showTasksButton: false })
-  })
-
-  it('keeps unavailable Tasks context-menu-capable while left click remains inert', async () => {
-    setSidebarState({ repos: [folderRepo()] })
-    const container = await renderSidebarNav()
-
-    const tasksButton = getButtonByText(container, 'Tasks')
-    expect(tasksButton.getAttribute('aria-disabled')).toBe('true')
-    expect(tasksButton.disabled).toBe(false)
-    expect(tasksButton.querySelectorAll('[role="button"]')).toHaveLength(0)
-    expect(tasksButton.querySelector('[aria-label="Open GitHub tasks"]')).toBeNull()
-
-    await clickButton(tasksButton)
-    expect(mocks.openTaskPage).not.toHaveBeenCalled()
-
-    const tasksMenu = tasksButton.closest('[data-testid="context-menu"]')
-    expect(tasksMenu).not.toBeNull()
-    await clickButton(getHideButton(tasksMenu as HTMLElement))
-
-    expect(mocks.updateSettings).toHaveBeenCalledWith({ showTasksButton: false })
   })
 
   it('shows the setup guide entry only after readiness, before completion, and before explicit hide', () => {

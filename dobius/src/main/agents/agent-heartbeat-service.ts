@@ -10,6 +10,12 @@ import { hasLiveAgentRun, startAgentRun } from './agent-runner'
 
 const HEARTBEAT_PROMPT =
   'Heartbeat check. Follow your Role, Playbook, and Briefing directive. Investigate quietly, then return ONLY the structured verdict.'
+// ponytail: heartbeats are a fixed, schema-constrained "anything urgent?" check —
+// classification, not judgement. On the agent's own (Opus-class) model each no-op
+// verdict cost ~$0.70 of input tokens to answer urgency:'silent'. Haiku 4.5 is 5x
+// cheaper per input token. Upgrade path: make this a per-agent heartbeat.model field
+// if some agent's check genuinely needs deeper reasoning.
+const HEARTBEAT_MODEL = 'claude-haiku-4-5'
 const TICK_MS = 60_000
 const TEN_MINUTES_MS = 10 * TICK_MS
 
@@ -175,6 +181,7 @@ async function maybeStartHeartbeat(
     options: {
       source: 'heartbeat',
       resume: false,
+      model: HEARTBEAT_MODEL,
       maxTurns: agent.heartbeat.maxTurns,
       maxBudgetUsd: agent.heartbeat.maxBudgetUsd,
       permissionMode: 'dontAsk',

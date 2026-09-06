@@ -11,9 +11,14 @@ vi.mock('../agents/agent-runner', () => ({
   stopAgentRun: vi.fn()
 }))
 vi.mock('../agents/default-claude-launch', () => ({
-  getDefaultPrepareClaudeLaunch: () => null
+  getDefaultPrepareClaudeLaunch: vi.fn(() => null)
 }))
+// Keep start() from touching the real filesystem.
+vi.mock('node:fs', () => ({ existsSync: () => true, mkdirSync: vi.fn() }))
 
+import { listAgents } from '../agents/agents-store'
+import { startAgentRun } from '../agents/agent-runner'
+import { getDefaultPrepareClaudeLaunch } from '../agents/default-claude-launch'
 import { createReplyStore, createVoiceConductor } from './conductor'
 
 describe('Voice Conductor enable gate', () => {
@@ -23,6 +28,18 @@ describe('Voice Conductor enable gate', () => {
     await expect(
       conductor.postTranscript({ requestId: 'req-1', transcript: 'start work' })
     ).rejects.toThrow('Voice Conductor is disabled')
+  })
+
+  it('starts without spending a model run — the first transcript establishes the session', async () => {
+    vi.mocked(getDefaultPrepareClaudeLaunch).mockReturnValue(async () => ({}) as never)
+    vi.mocked(listAgents).mockReturnValue([{ id: 'agent-1', name: 'Voice Conductor' }] as never)
+    vi.mocked(startAgentRun).mockClear()
+
+    const conductor = createVoiceConductor()
+    await conductor.start()
+
+    expect(conductor.isRunning()).toBe(true)
+    expect(startAgentRun).not.toHaveBeenCalled()
   })
 })
 

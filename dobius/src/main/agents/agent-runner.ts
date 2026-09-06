@@ -81,6 +81,8 @@ type AgentRunOptions = {
   sessionKey?: string
   maxTurns?: number
   maxBudgetUsd?: number
+  /** Per-run model override. Absent = the agent's configured model. */
+  model?: string
   permissionMode?: Options['permissionMode']
   allowedTools?: string[]
   outputFormat?: Options['outputFormat']
@@ -336,7 +338,7 @@ export async function startAgentRun(args: {
     const allowedTools = withDobiusToolAllowRule(sourcedTools)
     const options: Options = {
       systemPrompt: systemPrompt || undefined,
-      model: agent.model,
+      model: args.options?.model ?? agent.model,
       cwd: resolvedCwd,
       allowedTools,
       skills: agent.skills.length > 0 ? agent.skills : undefined,

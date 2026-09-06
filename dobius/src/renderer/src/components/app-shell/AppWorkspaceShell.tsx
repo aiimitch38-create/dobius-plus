@@ -9,6 +9,7 @@ import RightSidebar from '../right-sidebar'
 import { FloatingTerminalToggleButton } from '../floating-terminal/FloatingTerminalToggleButton'
 import { DobiusTitlebarButtons } from '../DobiusTitlebarButtons'
 import { AppRightSidebarToggleButton } from './AppTitlebarChrome'
+import { AgentsHubSubNav, isAgentsHubView } from '../agents-hub/AgentsHubSubNav'
 import {
   Landing,
   WorktreeCreationPanel,
@@ -241,6 +242,12 @@ export function AppWorkspaceShell({
                   </div>
                 )}
                 <div className="flex flex-1 min-w-0 min-h-0 flex-col">
+                  {/* Why: the Agents sub-nav sits in a FIXED child slot (null
+                      when off) so the Communications element below keeps its
+                      position in this children list. Adding/removing a child
+                      above it would shift indices and remount the hub,
+                      dropping live channels. */}
+                  {isAgentsHubView(activeView) ? <AgentsHubSubNav /> : null}
                   {shouldMountTerminalWorkbench ? (
                     <div
                       className={

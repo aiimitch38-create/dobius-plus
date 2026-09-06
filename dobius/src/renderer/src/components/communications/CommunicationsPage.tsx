@@ -4,15 +4,16 @@ import { App } from '@comms/app/App'
 import { CommunitiesProvider } from '@comms/features/communities/useCommunities'
 import { CommunityOnboardingProvider } from '@comms/features/onboarding/communityOnboarding'
 import { UpdaterProvider } from '@comms/features/settings/hooks/UpdaterProvider'
-import { ThemeProvider } from '@comms/shared/theme/ThemeProvider'
+import { ThemeProvider, useTheme } from '@comms/shared/theme/ThemeProvider'
 import { EmojiBurstProvider } from '@comms/shared/ui/EmojiBurstProvider'
 import { PoofBurstProvider } from '@comms/shared/ui/PoofBurstProvider'
-import { Toaster } from '@comms/shared/ui/sonner'
 import { TooltipProvider } from '@comms/shared/ui/tooltip'
 import {
   primeDobiusIdentity,
   reviveInterruptedChannelRuns
 } from '@comms/shared/api/dobiusCommunications'
+import { useAppStore } from '@/store'
+import { resolveDocumentTheme } from '@/lib/document-theme'
 import { CommunicationsErrorBoundary } from './CommunicationsErrorBoundary'
 import '@comms/shared/styles/globals.css'
 // Imported after globals.css so its viewport-height corrections land last.
@@ -22,6 +23,25 @@ import './communications-embed.css'
 // time React mounts the page the identity is normally already cached and the
 // hub renders immediately, with no loading screen in between.
 const identityPrimed = primeDobiusIdentity()
+
+/**
+ * Keeps the embedded client on the Dobius appearance setting instead of its own
+ * standalone theme. The client's ThemeProvider owns the CSS vars for this
+ * subtree, so inheriting means driving its two Dobius-branded themes from the
+ * app's light/dark preference: `system` hands control back to its own
+ * follow-system logic, an explicit choice pins the matching variant.
+ */
+function DobiusThemeSync(): null {
+  const preference = useAppStore((s) => s.settings?.theme) ?? 'system'
+  const { setTheme, setFollowSystem } = useTheme()
+
+  useEffect(() => {
+    setFollowSystem(preference === 'system')
+    setTheme(resolveDocumentTheme(preference) ? 'buzz-dark' : 'buzz')
+  }, [preference, setTheme, setFollowSystem])
+
+  return null
+}
 
 /**
  * The Communications tab.
@@ -91,14 +111,14 @@ export function CommunicationsPage(): React.JSX.Element {
       <CommunicationsErrorBoundary>
         <CommunitiesProvider>
         <CommunityOnboardingProvider>
-          <ThemeProvider defaultTheme="buzz">
+          <ThemeProvider>
+            <DobiusThemeSync />
             <TooltipProvider delayDuration={300}>
               <EmojiBurstProvider>
                 <PoofBurstProvider>
                   <UpdaterProvider>
                     <App />
                   </UpdaterProvider>
-                  <Toaster />
                 </PoofBurstProvider>
               </EmojiBurstProvider>
             </TooltipProvider>
