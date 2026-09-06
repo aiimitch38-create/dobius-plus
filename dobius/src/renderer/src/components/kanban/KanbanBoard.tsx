@@ -36,7 +36,7 @@ function SecondaryView({ view, tasks, onOpen }: { view: Exclude<(typeof views)[n
 export default function KanbanBoard({ source = kanbanMockSource }: { source?: TaskSource }): React.JSX.Element {
   const [revision, setRevision] = useState(0)
   const [activeView, setActiveView] = useState<(typeof views)[number]['id']>('board')
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>('vertex-1')
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<{ status: TaskStatus; index: number } | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
