@@ -5165,7 +5165,17 @@ describe('DobiusRuntimeService', () => {
   it('sets up an existing folder on a fresh runtime after importing the repo project', async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), 'dobius-runtime-project-setup-'))
     const repos: Record<string, unknown>[] = []
-    getRepoUpstreamMock.mockResolvedValueOnce({ owner: 'statusdigitalmarketing', repo: 'dobius' })
+    // The upstream is 'dobius-plus'. This fixture still said 'dobius' from
+    // before the rename, so the imported folder resolved to project
+    // github:statusdigitalmarketing/dobius and never matched the
+    // github:statusdigitalmarketing/dobius-plus this test asks for and
+    // asserts. setupProjectExistingFolder was right to refuse: it only
+    // adopts a mismatched folder into a project that exists and is
+    // GitHub-backed, and no such project existed under the old name.
+    getRepoUpstreamMock.mockResolvedValueOnce({
+      owner: 'statusdigitalmarketing',
+      repo: 'dobius-plus'
+    })
     const runtimeStore = {
       ...store,
       getRepos: () => [...repos] as never,
