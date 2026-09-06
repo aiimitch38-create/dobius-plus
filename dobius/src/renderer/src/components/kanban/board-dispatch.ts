@@ -24,6 +24,12 @@ import { runDobiusBoardTaskInChannel } from '../communications/shared/api/dobius
 const POLL_MS = 15_000
 const MAX_IN_FLIGHT = 2
 const MAX_ATTEMPTS = 2
+/* A first real run blew a $0.50 cap without finishing, and billed $0.76 doing
+ * it — the SDK stops a run once it NOTICES the budget is gone, so the number
+ * is a trigger, not a ceiling. $0.50 does not buy a real task; budget for
+ * roughly 1.5x whatever you set. */
+const MAX_BUDGET_USD = 3
+const MAX_TURNS = 30
 
 let timer: ReturnType<typeof setInterval> | null = null
 let enabled = false
@@ -106,13 +112,21 @@ async function dispatchTask(task: VertexTask, channelId: string): Promise<void> 
   await window.api.vertexTasks.update(task.id, { dispatch: base, status: 'in-progress' })
 
   try {
-    const report = await runDobiusBoardTaskInChannel({
+    const { reply, costUsd } = await runDobiusBoardTaskInChannel({
       agentId: assignee.id,
       channelId,
-      prompt: buildPrompt(task)
+      prompt: buildPrompt(task),
+      maxBudgetUsd: MAX_BUDGET_USD,
+      maxTurns: MAX_TURNS
     })
     await window.api.vertexTasks.update(task.id, {
-      dispatch: { ...base, status: 'succeeded', report: report.slice(0, 4000), updatedAt: Date.now() },
+      dispatch: {
+        ...base,
+        status: 'succeeded',
+        report: reply.slice(0, 4000),
+        costUsd,
+        updatedAt: Date.now()
+      },
       // Review, never Done — a human closes it.
       status: 'review'
     })

@@ -54,10 +54,16 @@ const AgentUpdate = z.object({
 const AgentRunStart = z.object({
   id: requiredString('Missing agent id'),
   prompt: requiredString('Missing agent prompt'),
-  source: z.enum(['manual', 'heartbeat', 'channel', 'asana']).optional(),
+  source: z.enum(['manual', 'heartbeat', 'channel', 'asana', 'dobius']).optional(),
   // Task-context key — Communications passes the channel id so each channel
   // is its own continuing conversation for the agent.
-  sessionKey: OptionalString
+  sessionKey: OptionalString,
+  // Why these are here: startAgentRun has NO default budget, so a run started
+  // over this RPC without them is uncapped. A person watching a chat can stop
+  // a runaway; an automatic board dispatch has nobody watching, so it must
+  // pass its own ceiling.
+  maxBudgetUsd: z.number().positive().max(100).optional(),
+  maxTurns: z.number().int().positive().max(200).optional()
 })
 
 const AgentRunsQuery = z.object({
@@ -142,10 +148,12 @@ export const CUSTOM_AGENT_METHODS: RpcMethod[] = [
         // tool approvals, so undecided prompts would hang the conversation.
         // 'dontAsk' lets the agent's allowlisted tools run and denies the rest.
         options:
-          params.source || params.sessionKey
+          params.source || params.sessionKey || params.maxBudgetUsd || params.maxTurns
             ? {
                 source: params.source,
                 sessionKey: params.sessionKey,
+                ...(params.maxBudgetUsd ? { maxBudgetUsd: params.maxBudgetUsd } : {}),
+                ...(params.maxTurns ? { maxTurns: params.maxTurns } : {}),
                 ...(params.source === 'channel' ? { permissionMode: 'dontAsk' as const } : {})
               }
             : undefined

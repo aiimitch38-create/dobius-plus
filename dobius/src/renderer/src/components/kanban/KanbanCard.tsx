@@ -80,8 +80,16 @@ export function KanbanCard({
                       ? `${task.dispatch.agentName} finished — needs review`
                       : task.dispatch.status === 'dead'
                         ? `${task.dispatch.agentName} failed ${task.dispatch.attempts}x — stopped`
-                        : `${task.dispatch.agentName} failed — will retry`}
+                        : /* Not "will retry": a failed task stays in In
+                             Progress, and dispatch only picks up To Do, so
+                             nothing re-runs until a human moves it back. */
+                          `${task.dispatch.agentName} failed — move to To Do to retry`}
                 </span>
+                {typeof task.dispatch.costUsd === 'number' ? (
+                  <span className="shrink-0 tabular-nums">
+                    ${task.dispatch.costUsd.toFixed(2)}
+                  </span>
+                ) : null}
               </p>
             ) : null}
             <footer className="mt-3 flex items-center gap-3 text-[11px] tabular-nums text-kanban-muted-foreground">

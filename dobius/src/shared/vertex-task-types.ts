@@ -95,6 +95,10 @@ export type VertexTaskDispatch = {
   updatedAt: number
   /** Failure summary, surfaced in the UI. Never a stack trace. */
   error?: string
+  /** What the run actually billed. Recorded because the budget option is a
+   *  trigger rather than a hard ceiling — an observed run billed $0.76
+   *  against a $0.50 cap. */
+  costUsd?: number | null
   /** The agent's own closing message, shown on the task so there is something
    *  to read besides a status dot. */
   report?: string

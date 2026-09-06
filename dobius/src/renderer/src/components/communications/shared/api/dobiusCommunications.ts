@@ -1742,7 +1742,9 @@ export async function runDobiusBoardTaskInChannel(args: {
   agentId: string;
   channelId: string;
   prompt: string;
-}): Promise<string> {
+  maxBudgetUsd: number;
+  maxTurns: number;
+}): Promise<{ reply: string; costUsd: number | null }> {
   const agentsResponse = await invokeDobiusRuntime("agent.list");
   const agent = recordsAt(agentsResponse, "agents")
     .filter(isDobiusAgentRecord)
@@ -1751,7 +1753,23 @@ export async function runDobiusBoardTaskInChannel(args: {
     throw new Error(`No such agent: ${args.agentId}`);
   }
 
-  const runId = await startDobiusChannelRun(agent.id, args.prompt, args.channelId);
+  // Not startDobiusChannelRun: that path passes no budget, and startAgentRun
+  // has no default, so an unattended board run would be uncapped. Chat is
+  // watched by a person; this is not.
+  const started = await invokeDobiusRuntime("agent.run", {
+    id: agent.id,
+    prompt: args.prompt,
+    source: "channel",
+    sessionKey: args.channelId,
+    maxBudgetUsd: args.maxBudgetUsd,
+    maxTurns: args.maxTurns,
+  });
+  const runId = requiredText(
+    started && typeof started === "object"
+      ? (started as Record<string, unknown>).runId
+      : undefined,
+    "agent run id",
+  );
   // parentEventId null = post at channel top level. The board task has no
   // originating message to thread under.
   const live: DobiusAgentRunLiveTarget = {
@@ -1769,7 +1787,16 @@ export async function runDobiusBoardTaskInChannel(args: {
       broadcast: true,
     }).catch(() => undefined);
   }
-  return reply;
+  // The budget option is a trigger, not a ceiling — an observed run billed
+  // $0.76 against a $0.50 cap. Report what was actually spent.
+  const runsResponse = await invokeDobiusRuntime("agent.runs", { agentId: agent.id }).catch(
+    () => null,
+  );
+  const record = recordsAt(runsResponse, "runs").find(
+    (candidate) => (candidate as Record<string, unknown>).id === runId,
+  ) as Record<string, unknown> | undefined;
+  const costUsd = typeof record?.costUsd === "number" ? record.costUsd : null;
+  return { reply, costUsd };
 }
 
 export function isDobiusCommunicationsAvailable(): boolean {
