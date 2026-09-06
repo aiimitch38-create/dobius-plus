@@ -51,7 +51,7 @@ describe('VpsTranscriptionSession', () => {
     session.feedAudio(tone(1), SR)
     expect(await session.finish()).toBe('Hello, world.')
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     // Trailing slash on the endpoint must not produce a double slash.
     expect(url).toBe('http://server:8823/transcribe')
     expect(init.method).toBe('POST')
