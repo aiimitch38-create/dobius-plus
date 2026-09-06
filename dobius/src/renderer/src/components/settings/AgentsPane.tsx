@@ -11,6 +11,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { cn } from '@/lib/utils'
 import { AgentAwakeSetting } from './AgentAwakeSetting'
+import { VertexAutoModeSetting } from './VertexAutoModeSetting'
 import { AgentCacheTimerSection } from './AgentCacheTimerSection'
 import { AgentRuntimeSetting } from './AgentRuntimeSetting'
 import {
@@ -843,6 +844,7 @@ export function AgentsPane({
       <AgentGeneratedTabTitlesSetting settings={settings} updateSettings={updateSettings} />
 
       <AgentAwakeSetting settings={settings} updateSettings={updateSettings} />
+      <VertexAutoModeSetting settings={settings} updateSettings={updateSettings} />
 
       <AgentCacheTimerSection settings={settings} updateSettings={updateSettings} />
 

@@ -131,6 +131,7 @@
   --color-kanban-success: var(--kanban-success);
   --color-kanban-success-foreground: var(--kanban-success-foreground);
   --color-kanban-blue: var(--kanban-blue);
+  --color-kanban-red: var(--kanban-red);
   --color-kanban-avatar: var(--kanban-avatar);
   --color-kanban-avatar-foreground: var(--kanban-avatar-foreground);
   --shadow-kanban-card: var(--kanban-card-shadow);

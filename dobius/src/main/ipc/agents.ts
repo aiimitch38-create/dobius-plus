@@ -32,6 +32,11 @@ import { dismissBriefingItems, listRecentBriefingItems } from '../agents/agent-b
 import { getAgentsPaused, getPingStatus, setAgentsPaused } from '../agents/agents-config-store'
 import { startAgentHeartbeats } from '../agents/agent-heartbeat-service'
 import { startAsanaAutoMode } from '../agents/asana-auto-mode-service'
+import {
+  isVertexAutoModeEnabled,
+  setVertexAutoModeEnabled,
+  startVertexAutoMode
+} from '../vertex/vertex-auto-mode-service'
 import { listDrafts, setDraftStatus } from '../agents/agent-draft-store'
 import { approveDraftAndPost } from '../agents/agent-draft-approval'
 import { setDobiusToolKnowledgeStore } from '../agents/agent-tools/dobius-tool-server'
@@ -74,6 +79,15 @@ export function registerAgentsHandlers(
   setDefaultPrepareCodexLaunch(prepareCodexLaunch)
   startAgentHeartbeats(prepareClaudeLaunch)
   startAsanaAutoMode(prepareClaudeLaunch)
+  // Off unless the operator turned it on: this spends money without a click.
+  setVertexAutoModeEnabled(store.getSettings().vertexAutoModeEnabled === true)
+  startVertexAutoMode(prepareClaudeLaunch)
+  store.onSettingsChanged((_updates, next) => {
+    setVertexAutoModeEnabled(next.vertexAutoModeEnabled === true)
+  })
+
+  ipcMain.removeHandler('vertexAutoMode:get')
+  ipcMain.handle('vertexAutoMode:get', () => isVertexAutoModeEnabled())
 
   ipcMain.removeHandler('agents:list')
   ipcMain.handle('agents:list', () => listAgents())

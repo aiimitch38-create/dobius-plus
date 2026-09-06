@@ -81,6 +81,22 @@ export type VertexTaskFile = {
   url?: string
 }
 
+/** What the dispatcher has done with this task.
+ *
+ * Lives ON the task rather than in a side ledger so the board can show it:
+ * "assigned" with no visible progress was the exact thing that made the old
+ * flow untrustworthy. `attempts` drives dead-lettering after repeated failure. */
+export type VertexTaskDispatch = {
+  status: 'running' | 'succeeded' | 'failed' | 'dead'
+  agentId: string
+  agentName: string
+  runId?: string
+  attempts: number
+  updatedAt: number
+  /** Failure summary, surfaced in the UI. Never a stack trace. */
+  error?: string
+}
+
 export type VertexTaskLink = {
   id: string
   label: string
@@ -109,6 +125,8 @@ export type VertexTask = {
   subtasks: VertexSubtask[]
   files: VertexTaskFile[]
   commentCount: number
+  /** Set by the auto-mode dispatcher; absent means never dispatched. */
+  dispatch?: VertexTaskDispatch
   /** Forward seam for Missions (an objective that spawns many tasks). Missions
    * have no store yet; carrying the id now avoids a migration later. */
   missionId?: string
