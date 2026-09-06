@@ -111,6 +111,30 @@
   --color-git-graph-lane-4: var(--git-graph-lane-4);
   --color-git-graph-lane-5: var(--git-graph-lane-5);
   --color-annotation-highlight: var(--annotation-highlight);
+  --color-kanban-background: var(--kanban-background);
+  --color-kanban-column: var(--kanban-column);
+  --color-kanban-card: var(--kanban-card);
+  --color-kanban-panel: var(--kanban-panel);
+  --color-kanban-dock: var(--kanban-dock);
+  --color-kanban-control: var(--kanban-control);
+  --color-kanban-hover: var(--kanban-hover);
+  --color-kanban-foreground: var(--kanban-foreground);
+  --color-kanban-muted-foreground: var(--kanban-muted-foreground);
+  --color-kanban-border: var(--kanban-border);
+  --color-kanban-border-strong: var(--kanban-border-strong);
+  --color-kanban-count: var(--kanban-count);
+  --color-kanban-accent: var(--kanban-accent);
+  --color-kanban-accent-hover: var(--kanban-accent-hover);
+  --color-kanban-accent-soft: var(--kanban-accent-soft);
+  --color-kanban-accent-border: var(--kanban-accent-border);
+  --color-kanban-accent-foreground: var(--kanban-accent-foreground);
+  --color-kanban-success: var(--kanban-success);
+  --color-kanban-success-foreground: var(--kanban-success-foreground);
+  --color-kanban-blue: var(--kanban-blue);
+  --color-kanban-avatar: var(--kanban-avatar);
+  --color-kanban-avatar-foreground: var(--kanban-avatar-foreground);
+  --shadow-kanban-card: var(--kanban-card-shadow);
+  --shadow-kanban-panel: var(--kanban-panel-shadow);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -119,6 +143,81 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 }
+
+:root {
+  /* Vertex Kanban owns a deliberately dark canvas in both application themes. */
+  --kanban-background: oklch(0.12 0.02 250);
+  --kanban-column: oklch(0.17 0.02 250);
+  --kanban-card: oklch(0.205 0.025 250);
+  --kanban-panel: oklch(0.16 0.022 250);
+  --kanban-dock: oklch(0.135 0.02 250);
+  --kanban-control: oklch(0.18 0.025 250);
+  --kanban-hover: oklch(0.27 0.03 250);
+  --kanban-foreground: oklch(0.96 0.01 250);
+  --kanban-muted-foreground: oklch(0.7 0.025 250);
+  --kanban-border: oklch(0.34 0.025 250 / 0.62);
+  --kanban-border-strong: oklch(0.49 0.035 250 / 0.72);
+  --kanban-count: oklch(0.32 0.025 250 / 0.72);
+  --kanban-accent: oklch(0.58 0.25 285);
+  --kanban-accent-hover: oklch(0.64 0.24 285);
+  --kanban-accent-soft: oklch(0.58 0.25 285 / 0.12);
+  --kanban-accent-border: oklch(0.82 0.12 285 / 0.3);
+  --kanban-accent-foreground: oklch(0.99 0 0);
+  --kanban-success: oklch(0.67 0.19 150);
+  --kanban-success-foreground: oklch(0.99 0 0);
+  --kanban-blue: oklch(0.68 0.17 250);
+  --kanban-avatar: oklch(0.55 0.16 35);
+  --kanban-avatar-foreground: oklch(0.99 0 0);
+  --kanban-card-shadow: 0 5px 16px oklch(0 0 0 / 0.2);
+  --kanban-panel-shadow: -18px 0 48px oklch(0 0 0 / 0.45);
+  --kanban-neutral: oklch(0.69 0.02 250);
+  --kanban-violet: oklch(0.7 0.2 292);
+  --kanban-amber: oklch(0.76 0.16 78);
+  --kanban-red: oklch(0.7 0.2 22);
+  --kanban-green: oklch(0.72 0.17 150);
+  --kanban-chip-blue: oklch(0.7 0.18 250);
+  --kanban-chip-cyan: oklch(0.76 0.13 205);
+  --kanban-chip-purple: oklch(0.72 0.2 295);
+  --kanban-chip-pink: oklch(0.72 0.19 345);
+}
+
+.kanban-column-header {
+  display: flex;
+  height: 40px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--kanban-border);
+  padding: 0 9px;
+  background: color-mix(in oklch, currentColor 14%, var(--kanban-column));
+}
+
+.kanban-status-backlog { color: var(--kanban-neutral); }
+.kanban-status-todo { color: var(--kanban-blue); }
+.kanban-status-in-progress { color: var(--kanban-violet); }
+.kanban-status-review { color: var(--kanban-amber); }
+.kanban-status-testing { color: var(--kanban-red); }
+.kanban-status-done { color: var(--kanban-green); }
+
+.kanban-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: currentColor;
+  background: color-mix(in oklch, currentColor 16%, transparent);
+}
+
+.kanban-chip-feature, .kanban-chip-integration, .kanban-label-blue { color: var(--kanban-chip-blue); }
+.kanban-chip-design { color: var(--kanban-chip-cyan); }
+.kanban-chip-ai, .kanban-chip-security, .kanban-label-violet { color: var(--kanban-chip-purple); }
+.kanban-chip-infra { color: var(--kanban-neutral); }
+.kanban-chip-bug, .kanban-priority-high, .kanban-priority-urgent, .kanban-label-red { color: var(--kanban-red); }
+.kanban-priority-medium { color: var(--kanban-amber); }
+.kanban-priority-low { color: var(--kanban-green); }
 
 /* ── Light Mode ──────────────────────────────────────── */
 
