@@ -79,7 +79,13 @@ function isReady(task: VertexTask): boolean {
   if (task.status !== 'todo') return false
   const dispatch = task.dispatch
   if (!dispatch) return true
-  // Retry a failure until it dead-letters; never re-run a success.
+  // Retry is OPERATOR-triggered, not automatic. dispatchTask() claims a task by
+  // setting status 'in-progress' and a failure leaves it there, so the status
+  // check above already excludes it — nothing re-runs on its own. That is
+  // deliberate: every attempt spends real money, and a task that failed once
+  // usually fails the same way twice. Dragging the card back to To Do is the
+  // human saying "try again", and this is the branch that then allows it,
+  // until the attempt count is spent. KanbanCard says exactly this.
   return dispatch.status === 'failed' && dispatch.attempts < MAX_ATTEMPTS
 }
 

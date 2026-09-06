@@ -3,6 +3,7 @@ import {
   CalendarDays,
   ChevronDown,
   ExternalLink,
+  Paperclip,
   Link2,
   Plus,
   Trash2,
@@ -543,15 +544,85 @@ export function KanbanDetailPanel({
             )}
           </div>
         </TabsContent>
-        {['files', 'activity'].map((tab) => (
-          <TabsContent
-            key={tab}
-            value={tab}
-            className="grid flex-1 place-items-center text-sm text-kanban-muted-foreground"
-          >
-            No {tab} selected
-          </TabsContent>
-        ))}
+        <TabsContent
+          value="files"
+          className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto p-4"
+        >
+          {task.files.length ? (
+            <ul className="space-y-1">
+              {task.files.map((file) => (
+                <li
+                  key={file.id}
+                  className="flex items-center gap-2 rounded-md border border-kanban-border px-3 py-2 text-xs"
+                >
+                  <Paperclip className="size-3.5 shrink-0 text-kanban-muted-foreground" />
+                  <span className="truncate">{file.name}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="grid h-full place-items-center text-sm text-kanban-muted-foreground">
+              No files on this task.
+            </p>
+          )}
+        </TabsContent>
+        {/* Why this tab exists: dispatch.report holds the agent's own closing
+            message — what it changed and what the operator must check by hand —
+            and it was written to the task but rendered nowhere, so the one
+            piece of evidence a run produces was unreadable. */}
+        <TabsContent
+          value="activity"
+          className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto p-4"
+        >
+          {task.dispatch ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="font-medium">{task.dispatch.agentName}</span>
+                <span className={`kanban-status-${task.status}`}>{task.dispatch.status}</span>
+                <span className="text-kanban-muted-foreground">
+                  attempt {task.dispatch.attempts}
+                </span>
+                {typeof task.dispatch.costUsd === 'number' ? (
+                  <span className="tabular-nums text-kanban-muted-foreground">
+                    ${task.dispatch.costUsd.toFixed(2)}
+                  </span>
+                ) : null}
+                <span className="ml-auto text-kanban-muted-foreground">
+                  {new Date(task.dispatch.updatedAt).toLocaleString()}
+                </span>
+              </div>
+
+              {task.dispatch.error ? (
+                <p className="rounded-md border border-kanban-border bg-kanban-column p-3 text-[11px] leading-[1.55] text-kanban-red">
+                  {task.dispatch.error}
+                </p>
+              ) : null}
+
+              {task.dispatch.report ? (
+                <div>
+                  <h3 className="mb-1 text-[11px] font-semibold">
+                    {task.dispatch.agentName} reported
+                  </h3>
+                  <p className="whitespace-pre-wrap rounded-md border border-kanban-border bg-kanban-column p-3 text-[11px] leading-[1.55]">
+                    {task.dispatch.report}
+                  </p>
+                </div>
+              ) : task.dispatch.status === 'running' ? (
+                <p className="text-[11px] text-kanban-muted-foreground">
+                  Still working. The report appears here when the run ends.
+                </p>
+              ) : (
+                <p className="text-[11px] text-kanban-muted-foreground">
+                  The run ended without a report.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="grid h-full place-items-center text-center text-sm text-kanban-muted-foreground">
+              No agent has run this task yet.
+            </p>
+          )}
+        </TabsContent>
       </Tabs>
       <footer className="grid shrink-0 grid-cols-[1fr_1.18fr] gap-2 border-t border-kanban-border bg-kanban-panel px-4 py-3">
         <Popover>

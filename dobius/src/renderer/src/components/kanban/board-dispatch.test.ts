@@ -73,9 +73,31 @@ describe('idempotency', () => {
     )
   })
 
-  it('retries a failure that has attempts left', () => {
+  it('does NOT pick a failure back up on its own', () => {
+    // The real dispatcher leaves a failed task in In Progress, and this is the
+    // state it actually produces — the previous version of this test asserted
+    // status 'todo', which the dispatcher never writes after a failure, so it
+    // passed while describing something that could not happen.
     expect(
-      isReady(task({ assignee: agent, dispatch: dispatch({ status: 'failed', attempts: 1 }) }))
+      isReady(
+        task({
+          assignee: agent,
+          status: 'in-progress',
+          dispatch: dispatch({ status: 'failed', attempts: 1 })
+        })
+      )
+    ).toBe(false)
+  })
+
+  it('retries a failure once the operator moves it back to To Do', () => {
+    expect(
+      isReady(
+        task({
+          assignee: agent,
+          status: 'todo',
+          dispatch: dispatch({ status: 'failed', attempts: 1 })
+        })
+      )
     ).toBe(true)
   })
 
