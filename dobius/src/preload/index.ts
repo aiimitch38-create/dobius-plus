@@ -244,6 +244,12 @@ import type {
   ReactErrorBoundaryReportResult
 } from '../shared/crash-reporting'
 import type { PreloadApi } from './api-types'
+import type {
+  VertexTask,
+  VertexTaskInput,
+  VertexTaskPatch,
+  VertexTaskStatus
+} from '../shared/vertex-task-types'
 
 type NativeFileDropCallback = (data: NativeFileDropPayload) => void
 
@@ -2031,6 +2037,17 @@ const api = {
     kimiStatus: (): Promise<AgentHookInstallStatus> => ipcRenderer.invoke('agentHooks:kimiStatus')
   },
 
+  vertexTasks: {
+    list: (): Promise<VertexTask[]> => ipcRenderer.invoke('vertexTasks:list'),
+    create: (input: VertexTaskInput): Promise<VertexTask | null> =>
+      ipcRenderer.invoke('vertexTasks:create', input),
+    update: (taskId: string, patch: VertexTaskPatch): Promise<VertexTask | null> =>
+      ipcRenderer.invoke('vertexTasks:update', { taskId, patch }),
+    move: (taskId: string, to: VertexTaskStatus, toIndex: number): Promise<VertexTask | null> =>
+      ipcRenderer.invoke('vertexTasks:move', { taskId, to, toIndex }),
+    remove: (taskId: string): Promise<boolean> =>
+      ipcRenderer.invoke('vertexTasks:remove', taskId)
+  },
   agentTrust: {
     markTrusted: (args: {
       preset: 'cursor' | 'copilot' | 'codex'

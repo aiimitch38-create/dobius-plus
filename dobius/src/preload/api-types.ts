@@ -394,6 +394,12 @@ import type {
 } from '../shared/workspace-ports'
 import type { GhAuthDiagnostic } from '../shared/github-auth-types'
 import type {
+  VertexTask,
+  VertexTaskInput,
+  VertexTaskPatch,
+  VertexTaskStatus
+} from '../shared/vertex-task-types'
+import type {
   SshConnectionState,
   SshTarget,
   PortForwardEntry,
@@ -2161,6 +2167,13 @@ export type PreloadApi = {
     copilotStatus: () => Promise<AgentHookInstallStatus>
     hermesStatus: () => Promise<AgentHookInstallStatus>
     devinStatus: () => Promise<AgentHookInstallStatus>
+  }
+  vertexTasks: {
+    list: () => Promise<VertexTask[]>
+    create: (input: VertexTaskInput) => Promise<VertexTask | null>
+    update: (taskId: string, patch: VertexTaskPatch) => Promise<VertexTask | null>
+    move: (taskId: string, to: VertexTaskStatus, toIndex: number) => Promise<VertexTask | null>
+    remove: (taskId: string) => Promise<boolean>
   }
   agentTrust: {
     markTrusted: (args: {

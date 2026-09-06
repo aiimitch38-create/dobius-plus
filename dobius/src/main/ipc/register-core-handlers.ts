@@ -64,6 +64,7 @@ import { registerSpeechHandlers } from './speech'
 import { registerCodexAccountHandlers } from './codex-accounts'
 import { registerAgentHookHandlers } from './agent-hooks'
 import { registerAgentTrustHandlers } from './agent-trust'
+import { registerVertexTaskHandlers } from './vertex-tasks'
 import { registerProjectFilesHandlers } from './project-files'
 import { registerClaudeAccountHandlers } from './claude-accounts'
 import { registerMiniMaxCredentialsHandlers } from './minimax-credentials'
@@ -154,6 +155,7 @@ export function registerCoreHandlers(
   registerCodexAccountHandlers(codexAccounts)
   registerAgentHookHandlers(runtime)
   registerAgentTrustHandlers()
+  registerVertexTaskHandlers()
   registerClaudeAccountHandlers(claudeAccounts)
   registerMiniMaxCredentialsHandlers(rateLimits)
   registerRateLimitHandlers(rateLimits)
