@@ -1,3 +1,4 @@
+import { BUZZ_TERMINAL_THEMES } from './buzz'
 import { CLASSIC_TERMINAL_THEMES } from './classic'
 import { DEFAULT_TERMINAL_THEMES } from './defaults'
 import { LEGACY_DOBIUS_TERMINAL_THEMES } from './legacy-dobius'
@@ -11,7 +12,8 @@ const THEME_CATEGORIES: readonly TerminalThemeMap[] = [
   POPULAR_DARK_TERMINAL_THEMES,
   POPULAR_LIGHT_TERMINAL_THEMES,
   CLASSIC_TERMINAL_THEMES,
-  LEGACY_DOBIUS_TERMINAL_THEMES
+  LEGACY_DOBIUS_TERMINAL_THEMES,
+  BUZZ_TERMINAL_THEMES
 ]
 
 export const TERMINAL_THEME_CATALOG: TerminalThemeMap = mergeTerminalThemeCatalogs(

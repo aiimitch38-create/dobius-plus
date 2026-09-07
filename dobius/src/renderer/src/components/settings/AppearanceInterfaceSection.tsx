@@ -118,13 +118,15 @@ export function AppearanceInterfaceSection({
               value={settings.appSkin ?? APP_SKIN_NONE}
               onValueChange={(value) =>
                 updateSettings(
-                  // Why: Buzz is stylesheet-driven with no matching terminal
-                  // palette, so it must not overwrite the terminal themes.
-                  value === APP_SKIN_NONE || value === APP_SKIN_BUZZ
+                  // Why: "change everything" — a skin colors the app chrome AND
+                  // the terminal. Legacy skins share one palette name across both
+                  // catalogs; Buzz has its own light/dark terminal palettes
+                  // (buzz.ts) since its skin is stylesheet-driven, not token-derived.
+                  value === APP_SKIN_NONE
                     ? { appSkin: value }
-                    : // Why: "change everything" — a skin colors the app chrome
-                      // AND the terminal (same palette exists in both catalogs).
-                      { appSkin: value, terminalThemeDark: value, terminalThemeLight: value }
+                    : value === APP_SKIN_BUZZ
+                      ? { appSkin: value, terminalThemeDark: 'Buzz Dark', terminalThemeLight: 'Buzz Light' }
+                      : { appSkin: value, terminalThemeDark: value, terminalThemeLight: value }
                 )
               }
             >
