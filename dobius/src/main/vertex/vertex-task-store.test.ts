@@ -6,6 +6,30 @@ import { join } from 'node:path'
 // The store imports electron only for app.getPath, which the storage-dir
 // override replaces in tests.
 vi.mock('electron', () => ({ app: { getPath: () => tmpdir() } }))
+vi.mock('../agents/agents-store', () => ({
+  listAgents: () => [
+    {
+      id: 'agent-watson-uuid',
+      name: 'Watson',
+      description: '',
+      icon: 'bot',
+      color: 'blue',
+      systemPrompt: '',
+      engine: 'codex',
+      accountId: null,
+      model: 'gpt-5.5',
+      allowedTools: [],
+      skills: [],
+      cwd: '',
+      bypassPermissions: false,
+      heartbeat: { enabled: false },
+      notify: { enabled: false },
+      channels: { enabled: false },
+      createdAt: 0,
+      updatedAt: 0
+    }
+  ]
+}))
 
 import { setVertexTaskStorageDir, vertexTaskStore } from './vertex-task-store'
 import type { VertexTaskStatus } from '../../shared/vertex-task-types'
@@ -45,6 +69,14 @@ describe('create', () => {
     vertexTaskStore.create({ title: 'first' })
     vertexTaskStore.create({ title: 'second' })
     expect(ids('backlog')).toEqual(['first', 'second'])
+  })
+
+  it('links child tasks back to the parent task', () => {
+    const parent = vertexTaskStore.create({ title: 'parent' })
+    const child = vertexTaskStore.create({ title: 'child', parentTaskId: parent.id })
+    const updatedParent = vertexTaskStore.list().find((task) => task.id === parent.id)
+    expect(child.parentTaskId).toBe(parent.id)
+    expect(updatedParent?.childTaskIds).toEqual([child.id])
   })
 })
 
@@ -93,6 +125,20 @@ describe('move', () => {
   it('returns null for an unknown task', () => {
     expect(vertexTaskStore.move('nope', 'todo', 0)).toBeNull()
   })
+
+  it('does not move a task to done without a result note', () => {
+    const t = vertexTaskStore.create({ title: 'needs proof' })
+    expect(vertexTaskStore.move(t.id, 'done', 0)).toBeNull()
+    expect(vertexTaskStore.list()[0].status).toBe('backlog')
+  })
+
+  it('stamps completedAt when a proven task moves to done', () => {
+    const t = vertexTaskStore.create({ title: 'proved' })
+    vertexTaskStore.update(t.id, { resultNote: 'Verified locally.' })
+    const done = vertexTaskStore.move(t.id, 'done', 0)
+    expect(done?.status).toBe('done')
+    expect(done?.completedAt).toEqual(expect.any(Number))
+  })
 })
 
 describe('update', () => {
@@ -113,6 +159,23 @@ describe('update', () => {
 
   it('returns null for an unknown task', () => {
     expect(vertexTaskStore.update('nope', { title: 'x' })).toBeNull()
+  })
+
+  it('does not update a task to done without a result note', () => {
+    const t = vertexTaskStore.create({ title: 'needs proof' })
+    expect(vertexTaskStore.update(t.id, { status: 'done' })).toBeNull()
+    expect(vertexTaskStore.list()[0].status).toBe('backlog')
+  })
+
+  it('allows done when the patch includes a result note', () => {
+    const t = vertexTaskStore.create({ title: 'proved' })
+    const done = vertexTaskStore.update(t.id, {
+      status: 'done',
+      resultNote: 'Build passed.'
+    })
+    expect(done?.status).toBe('done')
+    expect(done?.resultNote).toBe('Build passed.')
+    expect(done?.completedAt).toEqual(expect.any(Number))
   })
 })
 
@@ -147,6 +210,45 @@ describe('persistence', () => {
     vertexTaskStore.create({ title: 'on disk' })
     const raw = readFileSync(join(dir, 'vertex-tasks.json'), 'utf8')
     expect(JSON.parse(raw)[0].title).toBe('on disk')
+  })
+
+  it('normalizes legacy friendly agent ids to the real agent roster id', () => {
+    writeFileSync(
+      join(dir, 'vertex-tasks.json'),
+      JSON.stringify([
+        {
+          id: '1',
+          title: 'legacy assignee',
+          status: 'todo',
+          destination: 'system',
+          order: 1000,
+          assignee: { kind: 'agent', id: 'watson', name: 'Watson', initials: 'WT' },
+          collaborators: [{ kind: 'agent', id: 'watson', name: 'Watson', initials: 'WT' }],
+          labels: [],
+          related: [],
+          dependencies: [],
+          subtasks: [],
+          files: [],
+          dispatch: {
+            status: 'failed',
+            agentId: 'watson',
+            agentName: 'Watson',
+            attempts: 1,
+            updatedAt: 0,
+            error: 'No such agent: watson'
+          },
+          createdAt: 0,
+          updatedAt: 0
+        }
+      ]),
+      'utf8'
+    )
+    setVertexTaskStorageDir(dir)
+    const [task] = vertexTaskStore.list()
+
+    expect(task.assignee?.id).toBe('agent-watson-uuid')
+    expect(task.collaborators[0]?.id).toBe('agent-watson-uuid')
+    expect(task.dispatch?.agentId).toBe('agent-watson-uuid')
   })
 })
 

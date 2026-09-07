@@ -2039,6 +2039,7 @@ const api = {
 
   vertexTasks: {
     list: (): Promise<VertexTask[]> => ipcRenderer.invoke('vertexTasks:list'),
+    reload: (): Promise<VertexTask[]> => ipcRenderer.invoke('vertexTasks:reload'),
     create: (input: VertexTaskInput): Promise<VertexTask | null> =>
       ipcRenderer.invoke('vertexTasks:create', input),
     update: (taskId: string, patch: VertexTaskPatch): Promise<VertexTask | null> =>

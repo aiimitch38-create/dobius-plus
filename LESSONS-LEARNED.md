@@ -325,3 +325,25 @@ each triggered one. Rewritten as: never patch a file with a heredoc in a
 worktree session; use Edit. The exception that does work is a bare
 `grep -rl … | xargs sed -i ''` for a mechanical rewrite across many files —
 that is one plain command and passes every time.
+
+### [Multi-agent] `git stash` is UNSAFE in the shared checkout — the stash stack is global — 2026-09-06
+- **MISTAKE**: Ran `git stash -u` in `Dobius/dobius-plus` to measure a typecheck baseline, then `git stash pop`. Another agent was editing the same checkout at the same moment and stashed during my typecheck window. The stash stack is **per-repository — not per-worktree and not per-agent** — so `pop` restored the top entry, which was *theirs*, not mine. Their files appeared in my `git status` looking like my own edits, and later vanished from the tree. `pop` reported success throughout. That is the whole lesson: **in a shared checkout, `git stash pop` can silently hand you someone else's tree.**
+- **FIX**: Never `git stash` in a shared checkout. To measure a clean baseline, use a private throwaway worktree instead:
+  ```bash
+  git worktree add -q --detach "$SCRATCH/tc-wt" HEAD
+  ln -s "<repo>/dobius/node_modules" "$SCRATCH/tc-wt/dobius/node_modules"   # tsgo/vitest need it
+  git diff HEAD -- <only my paths> > /tmp/mine.patch
+  git -C "$SCRATCH/tc-wt" apply --index /tmp/mine.patch
+  ```
+- **NO WORK WAS ACTUALLY LOST — and my "data loss" call was wrong.** I concluded the other agent's work had been destroyed, spent a long detour recovering it from unreachable stash objects, pinned refs, wrote a recovery report, and restored the files into the shared tree. All of it was wasted: they had simply moved to their own worktree (`Projects (Code)/dobius-plus/dev-environment-tab`) and committed everything as `6829cd30`, complete with the test cases and five i18n locale files my hand-restore did not even have. Committing my reconstruction would have put a strictly worse duplicate of an existing feature onto a sibling branch.
+- **THE REAL LESSON — files missing from your working tree is NOT evidence of loss.** Before saying "lost", in this order, cheapest first:
+  ```bash
+  git branch -a --list '*<feature>*'          # is it on a sibling branch?
+  git worktree list                           # did they move to their own worktree?
+  git log --all --oneline -- <path>           # any branch ever commit it?
+  git fsck --unreachable                      # only NOW consider stash forensics
+  ```
+  I went straight to `git fsck` because I had already decided it was destroyed. Searching only the branch you are standing on and calling the result "unrecoverable" is a conclusion built from one branch's worth of evidence. In a repo with 9 worktrees and multiple agents, that is not enough to declare anything.
+- **Still true and worth keeping**: a dropped stash IS recoverable while unreachable — `git fsck --unreachable`, then `git update-ref refs/recovered/<slug> <sha>` to pin it before `gc` prunes. A `git stash -u` writes **three** commits (`WIP on …`, `index on …`, `untracked files on …`); new files live only in the third, so recover them with `git checkout <untracked-sha> -- <paths>`. Good technique; I just applied it to a problem that did not exist.
+- **Also verified**: committing with explicit pathspecs (`git add -- a b c` && `git commit -- a b c`) genuinely does keep other agents' dirty files out of your commit. That part held under concurrent editing.
+- **CONTEXT**: Related to the 2026-08-25 NOTES rule about never `git checkout <my-branch>` in a shared tree — same root cause (shared repo state), same silent blast radius. And if you do restore someone's work into a shared tree, do not commit it on their behalf: check whether they already committed it somewhere first.

@@ -10359,6 +10359,30 @@ export default function TaskPage(): React.JSX.Element {
                       )
                     })}
                   </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon-xs"
+                        onClick={() => setLinearRefreshNonce((n) => n + 1)}
+                        disabled={activeLinearIssueLoading}
+                        aria-label={translate(
+                          'auto.components.TaskPage.8964184a8b',
+                          'Refresh Linear'
+                        )}
+                        className="border-border/50 bg-background/70"
+                      >
+                        {activeLinearIssueLoading ? (
+                          <LoaderCircle className="size-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="size-3.5" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={6}>
+                      {translate('auto.components.TaskPage.8964184a8b', 'Refresh Linear')}
+                    </TooltipContent>
+                  </Tooltip>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button

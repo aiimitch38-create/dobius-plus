@@ -26,6 +26,7 @@ import {
   type VertexTaskSource,
   type VertexTaskStatus,
 } from '../../shared/vertex-task-types'
+import { listAgents } from '../agents/agents-store'
 
 const FILE_NAME = 'vertex-tasks.json'
 const ORDER_GAP = 1000
@@ -59,12 +60,7 @@ function readAll(): VertexTask[] {
   try {
     const parsed = JSON.parse(readFileSync(p, 'utf8'))
     cached = Array.isArray(parsed)
-      ? parsed.filter(isUsableTask).map((task) => ({
-          // Why defaulted on read: records written before `destination`
-          // existed have none, and a missing value must not read as Asana.
-          ...task,
-          destination: isVertexTaskDestination(task.destination) ? task.destination : 'system'
-        }))
+      ? parsed.filter(isUsableTask).map(normalizePersistedTask)
       : []
   } catch {
     // Why swallow: a corrupt file must not stop the app from booting. Starting
@@ -72,6 +68,66 @@ function readAll(): VertexTask[] {
     cached = []
   }
   return cached
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '??'
+  const first = parts[0][0] ?? ''
+  const second = parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : (parts[0][1] ?? '')
+  return `${first}${second}`.toUpperCase()
+}
+
+function normalizedKey(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+function normalizeAgentPerson(person: VertexTask['assignee']): VertexTask['assignee'] {
+  if (person?.kind !== 'agent') return person
+  const agents = listAgents()
+  if (agents.some((agent) => agent.id === person.id)) return person
+  const wanted = normalizedKey(person.name || person.id)
+  const agent = agents.find(
+    (candidate) =>
+      normalizedKey(candidate.name) === wanted || normalizedKey(candidate.id) === wanted,
+  )
+  return agent
+    ? { kind: 'agent', id: agent.id, name: agent.name, initials: initialsOf(agent.name) }
+    : person
+}
+
+function normalizePersistedTask(task: VertexTask): VertexTask {
+  const assignee = normalizeAgentPerson(task.assignee)
+  const collaborators = Array.isArray(task.collaborators)
+    ? task.collaborators
+        .map(normalizeAgentPerson)
+        .filter((person): person is NonNullable<VertexTask['assignee']> => person !== undefined)
+    : []
+  return {
+    // Why defaulted on read: records written before `destination` existed have
+    // none, and a missing value must not read as Asana.
+    ...task,
+    destination: isVertexTaskDestination(task.destination) ? task.destination : 'system',
+    assignee,
+    collaborators,
+    labels: Array.isArray(task.labels) ? task.labels : [],
+    related: Array.isArray(task.related) ? task.related : [],
+    dependencies: Array.isArray(task.dependencies) ? task.dependencies : [],
+    subtasks: Array.isArray(task.subtasks) ? task.subtasks : [],
+    files: Array.isArray(task.files) ? task.files : [],
+    childTaskIds: Array.isArray(task.childTaskIds)
+      ? task.childTaskIds.filter((id): id is string => typeof id === 'string')
+      : [],
+    dispatch:
+      task.dispatch && assignee?.kind === 'agent'
+        ? { ...task.dispatch, agentId: assignee.id, agentName: assignee.name }
+        : task.dispatch,
+  }
+}
+
+export function reloadVertexTasksFromDisk(): VertexTask[] {
+  cached = null
+  return readAll()
 }
 
 /** Drop rows that would crash a renderer rather than trusting the file. */
@@ -123,8 +179,16 @@ function normalizeInput(input: VertexTaskInput): VertexTask {
     labels: [],
     related: [],
     dependencies: [],
+    parentTaskId: input.parentTaskId,
+    childTaskIds: [],
     subtasks: [],
     files: [],
+    origin: input.origin
+      ? {
+          ...input.origin,
+          createdAt: typeof input.origin.createdAt === 'number' ? input.origin.createdAt : now,
+        }
+      : undefined,
     missionId: input.missionId,
     projectId: input.projectId,
     createdAt: now,
@@ -148,6 +212,13 @@ export const vertexTaskStore: VertexTaskSource = {
     const last = column[column.length - 1]
     task.order = (last?.order ?? 0) + ORDER_GAP
     tasks.push(task)
+    if (task.parentTaskId) {
+      const parent = tasks.find((t) => t.id === task.parentTaskId)
+      if (parent && !parent.childTaskIds.includes(task.id)) {
+        parent.childTaskIds.push(task.id)
+        parent.updatedAt = task.updatedAt
+      }
+    }
     persist(tasks)
     return task
   },
@@ -157,6 +228,13 @@ export const vertexTaskStore: VertexTaskSource = {
     const task = tasks.find((t) => t.id === taskId)
     if (!task) return null
 
+    if ((patch.status ?? task.status) === 'done') {
+      const resultNote = (patch.resultNote ?? task.resultNote)?.trim()
+      if (!resultNote) return null
+      patch.resultNote = resultNote
+      patch.completedAt = patch.completedAt ?? task.completedAt ?? Date.now()
+    }
+
     // Status is intentionally patchable: the detail panel changes it directly.
     // Landing at the end of the destination column matches what a user sees.
     if (patch.status && patch.status !== task.status && isVertexTaskStatus(patch.status)) {
@@ -165,6 +243,13 @@ export const vertexTaskStore: VertexTaskSource = {
     }
 
     Object.assign(task, patch, { updatedAt: Date.now() })
+    if (patch.parentTaskId && patch.parentTaskId !== task.id) {
+      const parent = tasks.find((t) => t.id === patch.parentTaskId)
+      if (parent && !parent.childTaskIds.includes(task.id)) {
+        parent.childTaskIds.push(task.id)
+        parent.updatedAt = task.updatedAt
+      }
+    }
     persist(tasks)
     return task
   },
@@ -174,6 +259,9 @@ export const vertexTaskStore: VertexTaskSource = {
     const tasks = [...readAll()]
     const task = tasks.find((t) => t.id === taskId)
     if (!task) return null
+    if (to === 'done' && !task.resultNote?.trim()) {
+      return null
+    }
 
     task.status = to
     const column = columnOf(tasks, to).filter((t) => t.id !== taskId)
@@ -197,6 +285,9 @@ export const vertexTaskStore: VertexTaskSource = {
     }
 
     task.updatedAt = Date.now()
+    if (to === 'done') {
+      task.completedAt = task.completedAt ?? task.updatedAt
+    }
     persist(tasks)
     return task
   },

@@ -2170,6 +2170,7 @@ export type PreloadApi = {
   }
   vertexTasks: {
     list: () => Promise<VertexTask[]>
+    reload: () => Promise<VertexTask[]>
     create: (input: VertexTaskInput) => Promise<VertexTask | null>
     update: (taskId: string, patch: VertexTaskPatch) => Promise<VertexTask | null>
     move: (taskId: string, to: VertexTaskStatus, toIndex: number) => Promise<VertexTask | null>

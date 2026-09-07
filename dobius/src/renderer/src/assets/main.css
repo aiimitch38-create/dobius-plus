@@ -222,6 +222,9 @@
 .kanban-status-in-progress {
   color: var(--kanban-violet);
 }
+.kanban-status-blocked {
+  color: var(--kanban-red);
+}
 .kanban-status-review {
   color: var(--kanban-amber);
 }
@@ -288,6 +291,11 @@
   color: var(--kanban-violet);
   background: color-mix(in oklch, var(--kanban-violet) 16%, var(--kanban-card));
 }
+.kanban-timeline-blocked,
+.kanban-activity-blocked {
+  color: var(--kanban-red);
+  background: color-mix(in oklch, var(--kanban-red) 16%, var(--kanban-card));
+}
 .kanban-timeline-review,
 .kanban-activity-review {
   color: var(--kanban-amber);
@@ -311,6 +319,9 @@
 }
 .kanban-chart-in-progress {
   background: var(--kanban-violet);
+}
+.kanban-chart-blocked {
+  background: var(--kanban-red);
 }
 .kanban-chart-review {
   background: var(--kanban-amber);

@@ -18,6 +18,7 @@ export type { VertexTaskDestination }
 /** Renderer boundary: both IPC and the browser mock use this Promise-based shape. */
 export type TaskSource = {
   list(): Promise<VertexTask[]>
+  reload?(): Promise<VertexTask[]>
   move(taskId: string, to: VertexTaskStatus, toIndex: number): Promise<VertexTask | null>
   update(taskId: string, patch: VertexTaskPatch): Promise<VertexTask | null>
   create(input: VertexTaskInput): Promise<VertexTask | null>

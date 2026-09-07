@@ -10,7 +10,7 @@
 
 import { ipcMain } from 'electron'
 
-import { vertexTaskStore } from '../vertex/vertex-task-store'
+import { reloadVertexTasksFromDisk, vertexTaskStore } from '../vertex/vertex-task-store'
 import {
   isVertexTaskStatus,
   type VertexTask,
@@ -25,6 +25,9 @@ function isNonEmptyString(value: unknown): value is string {
 export function registerVertexTaskHandlers(): void {
   ipcMain.removeHandler('vertexTasks:list')
   ipcMain.handle('vertexTasks:list', async (): Promise<VertexTask[]> => vertexTaskStore.list())
+
+  ipcMain.removeHandler('vertexTasks:reload')
+  ipcMain.handle('vertexTasks:reload', async (): Promise<VertexTask[]> => reloadVertexTasksFromDisk())
 
   ipcMain.removeHandler('vertexTasks:create')
   ipcMain.handle(

@@ -32,8 +32,13 @@ function newTask(input: Parameters<TaskSource['create']>[0]): Task {
     labels: [],
     related: [],
     dependencies: [],
+    parentTaskId: input.parentTaskId,
+    childTaskIds: [],
     subtasks: [],
     files: [],
+    origin: input.origin
+      ? { ...input.origin, createdAt: input.origin.createdAt ?? now }
+      : undefined,
     projectId: input.projectId,
     missionId: input.missionId,
     createdAt: now,
@@ -54,6 +59,7 @@ export const kanbanMockSource: TaskSource = {
     useKanbanStore.setState((state) => {
       const moving = state.tasks.find((task) => task.id === taskId)
       if (!moving) return state
+      if (to === 'done' && !moving.resultNote?.trim()) return state
       const without = state.tasks.filter((task) => task.id !== taskId)
       const targetIndexes = without.reduce<number[]>((indexes, task, index) => {
         if (task.status === to) indexes.push(index)
@@ -63,16 +69,34 @@ export const kanbanMockSource: TaskSource = {
         toIndex >= targetIndexes.length
           ? (targetIndexes.at(-1) ?? without.length - 1) + 1
           : targetIndexes[toIndex]
-      without.splice(Math.max(0, insertionIndex), 0, { ...moving, status: to })
+      without.splice(Math.max(0, insertionIndex), 0, {
+        ...moving,
+        status: to,
+        completedAt: to === 'done' ? (moving.completedAt ?? Date.now()) : moving.completedAt
+      })
       return { tasks: without, revision: state.revision + 1 }
     })
     return find(taskId)
   },
 
   async update(taskId, patch) {
+    const existing = find(taskId)
+    if ((patch.status ?? existing?.status) === 'done' && !(patch.resultNote ?? existing?.resultNote)?.trim()) {
+      return null
+    }
     useKanbanStore.setState((state) => ({
       tasks: state.tasks.map((task) =>
-        task.id === taskId ? { ...task, ...patch, updatedAt: Date.now() } : task
+        task.id === taskId
+          ? {
+              ...task,
+              ...patch,
+              completedAt:
+                (patch.status ?? task.status) === 'done'
+                  ? (patch.completedAt ?? task.completedAt ?? Date.now())
+                  : patch.completedAt,
+              updatedAt: Date.now()
+            }
+          : task
       ),
       revision: state.revision + 1
     }))
@@ -82,7 +106,14 @@ export const kanbanMockSource: TaskSource = {
   async create(input) {
     const task = newTask(input)
     useKanbanStore.setState((state) => ({
-      tasks: [...state.tasks, task],
+      tasks: [
+        ...state.tasks.map((item) =>
+          task.parentTaskId && item.id === task.parentTaskId
+            ? { ...item, childTaskIds: [...item.childTaskIds, task.id], updatedAt: task.updatedAt }
+            : item
+        ),
+        task
+      ],
       revision: state.revision + 1
     }))
     return task

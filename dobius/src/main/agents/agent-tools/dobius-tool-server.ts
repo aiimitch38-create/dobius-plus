@@ -97,6 +97,24 @@ export function buildDobiusToolServer(context: DobiusToolContext): McpSdkServerC
             const dataUrl = `data:${mime};base64,${readFileSync(filePath).toString('base64')}`
             return queueOutboxItem(context, args.caption ?? '', dataUrl)
           }
+        ),
+        tool(
+          'create_board_task',
+          'Create a Dobius system Kanban task from this channel run, optionally as a child of the task you are working on and assigned to another agent. Never sends to Asana or any external service.',
+          {
+            title: z.string().min(1),
+            description: z.string().optional(),
+            assignee: z.string().optional(),
+            parentTaskId: z.string().optional(),
+            status: z
+              .enum(['backlog', 'todo', 'in-progress', 'blocked', 'review', 'testing'])
+              .optional(),
+            priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+            type: z
+              .enum(['feature', 'design', 'integration', 'ai', 'security', 'infra', 'bug'])
+              .optional()
+          },
+          async (args) => asCallToolResult(await handlers.createBoardTask(args))
         )
       ]
     : []

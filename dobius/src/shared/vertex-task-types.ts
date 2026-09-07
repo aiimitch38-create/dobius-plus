@@ -12,7 +12,14 @@
  * The `VertexTaskSource` contract below is the ONLY interface the Kanban UI
  * uses, so the renderer never learns where tasks are stored. */
 
-export type VertexTaskStatus = 'backlog' | 'todo' | 'in-progress' | 'review' | 'testing' | 'done'
+export type VertexTaskStatus =
+  | 'backlog'
+  | 'todo'
+  | 'in-progress'
+  | 'blocked'
+  | 'review'
+  | 'testing'
+  | 'done'
 
 /** Where a task is meant to live.
  *
@@ -35,6 +42,7 @@ export const VERTEX_TASK_STATUSES: readonly VertexTaskStatus[] = [
   'backlog',
   'todo',
   'in-progress',
+  'blocked',
   'review',
   'testing',
   'done',
@@ -109,6 +117,14 @@ export type VertexTaskLink = {
   label: string
 }
 
+export type VertexTaskOrigin = {
+  kind: 'user' | 'agent' | 'manual'
+  name: string
+  /** Short source note, never a raw sensitive transcript. */
+  note?: string
+  createdAt: number
+}
+
 export type VertexTask = {
   id: string
   title: string
@@ -129,8 +145,17 @@ export type VertexTask = {
   related: VertexTaskLink[]
   /** Ids of other Vertex tasks this one waits on. */
   dependencies: string[]
+  /** Parent task created from user intake or an agent handoff. */
+  parentTaskId?: string
+  /** Real child task ids created by agents or operators from this task. */
+  childTaskIds: string[]
   subtasks: VertexSubtask[]
   files: VertexTaskFile[]
+  /** Required before a task can enter Done. */
+  resultNote?: string
+  completedAt?: number
+  /** Who or what created this task inside the system. */
+  origin?: VertexTaskOrigin
   /** Set by the auto-mode dispatcher; absent means never dispatched. */
   dispatch?: VertexTaskDispatch
   /** Forward seam for Missions (an objective that spawns many tasks). Missions
@@ -150,6 +175,8 @@ export type VertexTaskInput = {
   type?: VertexTaskType
   destination?: VertexTaskDestination
   assignee?: VertexAssignee
+  parentTaskId?: string
+  origin?: Omit<VertexTaskOrigin, 'createdAt'> & { createdAt?: number }
   projectId?: string
   missionId?: string
 }
@@ -169,6 +196,8 @@ export type VertexTaskPatch = Partial<
  */
 export type VertexTaskSource = {
   list(): VertexTask[]
+  /** Force a fresh read from persistent storage, bypassing any in-memory cache. */
+  reload?(): VertexTask[]
   create(input: VertexTaskInput): VertexTask
   update(taskId: string, patch: VertexTaskPatch): VertexTask | null
   /** Move a task to `to`, inserted at `toIndex` among that column's tasks. */

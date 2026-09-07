@@ -22,6 +22,7 @@ function task(patch: Partial<VertexTask> = {}): VertexTask {
     labels: [],
     related: [],
     dependencies: [],
+    childTaskIds: [],
     subtasks: [],
     files: [],
     createdAt: 0,

@@ -33,13 +33,22 @@ import type {
   VertexTaskDestination
 } from './kanban-types'
 
-const statuses: TaskStatus[] = ['backlog', 'todo', 'in-progress', 'review', 'testing', 'done']
+const statuses: TaskStatus[] = [
+  'backlog',
+  'todo',
+  'in-progress',
+  'blocked',
+  'review',
+  'testing',
+  'done'
+]
 const priorities: TaskPriority[] = ['low', 'medium', 'high', 'urgent']
 const types: TaskType[] = ['feature', 'design', 'integration', 'ai', 'security', 'infra', 'bug']
 const statusLabel: Record<TaskStatus, string> = {
   backlog: 'Backlog',
   todo: 'To Do',
   'in-progress': 'In Progress',
+  blocked: 'Blocked',
   review: 'Review',
   testing: 'Testing',
   done: 'Done'
@@ -64,6 +73,7 @@ export function KanbanDetailPanel({
   allTasks,
   onClose,
   onUpdate,
+  onCreateChild,
   onDelete
 }: {
   task: Task
@@ -72,9 +82,12 @@ export function KanbanDetailPanel({
   allTasks: Task[]
   onClose: () => void
   onUpdate: (patch: Parameters<TaskSource['update']>[1]) => void
+  onCreateChild: (title: string, assigneeId: string) => void
   onDelete: () => void
 }): React.JSX.Element {
   const [subtaskTitle, setSubtaskTitle] = useState('')
+  const [childTaskTitle, setChildTaskTitle] = useState('')
+  const [childAssigneeId, setChildAssigneeId] = useState('')
   const [newLabel, setNewLabel] = useState('')
   // Controlled so picking someone closes the popover — leaving it open read
   // as "nothing happened".
@@ -96,6 +109,12 @@ export function KanbanDetailPanel({
       ),
     [allTasks, task.id, task.dependencies]
   )
+  const parentTask = task.parentTaskId
+    ? (allTasks.find((item) => item.id === task.parentTaskId) ?? null)
+    : null
+  const childTasks = task.childTaskIds
+    .map((childId) => allTasks.find((item) => item.id === childId))
+    .filter((item): item is Task => Boolean(item))
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose()
@@ -502,6 +521,34 @@ export function KanbanDetailPanel({
                 </Popover>
               </div>
             </Field>
+            <Field label="Parent">
+              {parentTask ? (
+                <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-kanban-border px-2 py-1 text-[10px]">
+                  <Workflow className="size-3 shrink-0 text-kanban-blue" />
+                  <span className="truncate">{parentTask.title}</span>
+                </span>
+              ) : (
+                <span className="text-[11px] text-kanban-muted-foreground">None</span>
+              )}
+            </Field>
+            <Field label="Children">
+              {childTasks.length ? (
+                <div className="flex flex-wrap gap-1">
+                  {childTasks.map((child) => (
+                    <span
+                      key={child.id}
+                      className={`inline-flex max-w-[190px] items-center gap-1 rounded-md border border-kanban-border px-2 py-1 text-[10px] kanban-status-${child.status}`}
+                      title={statusLabel[child.status]}
+                    >
+                      <Workflow className="size-3 shrink-0" />
+                      <span className="truncate text-kanban-foreground">{child.title}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-[11px] text-kanban-muted-foreground">None</span>
+              )}
+            </Field>
           </div>
           <section className="mt-4">
             <h3 className="text-[12px] font-semibold">Description</h3>
@@ -516,6 +563,25 @@ export function KanbanDetailPanel({
               rows={6}
               className="mt-1 w-full resize-y rounded-lg border border-kanban-border bg-transparent p-3 text-[11px] leading-[1.55] outline-none placeholder:text-kanban-muted-foreground focus-visible:ring-2 focus-visible:ring-kanban-accent"
             />
+          </section>
+          <section className="mt-4">
+            <h3 className="text-[12px] font-semibold">Result note</h3>
+            <textarea
+              key={`${task.id}-result`}
+              defaultValue={task.resultNote ?? ''}
+              onBlur={(event) => {
+                const next = event.target.value.trim()
+                if (next !== (task.resultNote ?? '')) onUpdate({ resultNote: next || undefined })
+              }}
+              placeholder="Required before Done."
+              rows={3}
+              className="mt-1 w-full resize-y rounded-lg border border-kanban-border bg-transparent p-3 text-[11px] leading-[1.55] outline-none placeholder:text-kanban-muted-foreground focus-visible:ring-2 focus-visible:ring-kanban-accent"
+            />
+            {task.completedAt ? (
+              <p className="mt-1 text-[10px] text-kanban-muted-foreground">
+                Completed {new Date(task.completedAt).toLocaleString()}
+              </p>
+            ) : null}
           </section>
         </TabsContent>
         <TabsContent value="subtasks" className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -629,7 +695,7 @@ export function KanbanDetailPanel({
           )}
         </TabsContent>
       </Tabs>
-      <footer className="grid shrink-0 grid-cols-[1fr_1.18fr] gap-2 border-t border-kanban-border bg-kanban-panel px-4 py-3">
+      <footer className="grid shrink-0 grid-cols-3 gap-2 border-t border-kanban-border bg-kanban-panel px-4 py-3">
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="secondary">
@@ -660,6 +726,54 @@ export function KanbanDetailPanel({
                 }}
               >
                 Add
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="secondary">
+              <Workflow />
+              Child Task
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="center" side="top" className="w-80 p-3">
+            <p className="mb-2 text-xs font-semibold">New child task</p>
+            <div className="space-y-2">
+              <Input
+                value={childTaskTitle}
+                onChange={(event) => setChildTaskTitle(event.target.value)}
+                placeholder="Task title"
+                className="h-8"
+              />
+              <Select
+                value={childAssigneeId || 'unassigned'}
+                onValueChange={(value) => setChildAssigneeId(value === 'unassigned' ? '' : value)}
+              >
+                <SelectTrigger className="h-8 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {assignablePeople.map((person) => (
+                    <SelectItem key={person.id} value={person.id}>
+                      {person.name}
+                      {person.kind === 'agent' ? ' (agent)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                disabled={!childTaskTitle.trim()}
+                onClick={() => {
+                  onCreateChild(childTaskTitle, childAssigneeId)
+                  setChildTaskTitle('')
+                  setChildAssigneeId('')
+                }}
+                className="w-full"
+              >
+                Create
               </Button>
             </div>
           </PopoverContent>

@@ -4,6 +4,7 @@ import { appendBriefingItem } from '../agent-briefing-store'
 import { appendDraft } from '../agent-draft-store'
 import { listAgents } from '../agents-store'
 import { getBuildDispatcher, getRepoLister } from '../agent-dispatch-registry'
+import { vertexTaskStore } from '../../vertex/vertex-task-store'
 import {
   buildKnowledgeTree,
   isAllowedKnowledgePath,
@@ -13,6 +14,7 @@ import {
 const ASANA_BODY_LIMIT = 4_000
 const KNOWLEDGE_RESPONSE_LIMIT = 1_500
 const DISPATCH_BRIEF_LIMIT = 6_000
+const BOARD_TASK_DESCRIPTION_LIMIT = 4_000
 
 export type DobiusToolContext = {
   agentId: string
@@ -99,6 +101,55 @@ function slugFromBrief(brief: string): string {
 
 export function createDobiusToolHandlers(context: DobiusToolContext, store: Store | null) {
   return {
+    async createBoardTask(args: {
+      title: string
+      description?: string
+      assignee?: string
+      parentTaskId?: string
+      status?: 'backlog' | 'todo' | 'in-progress' | 'blocked' | 'review' | 'testing'
+      priority?: 'low' | 'medium' | 'high' | 'urgent'
+      type?: 'feature' | 'design' | 'integration' | 'ai' | 'security' | 'infra' | 'bug'
+    }): Promise<TextToolResult> {
+      const title = args.title.trim()
+      if (!title) {
+        return errorResult('Task title is required.')
+      }
+      const assigneeQuery = args.assignee?.trim()
+      const assignee = assigneeQuery
+        ? listAgents().find(
+            (agent) =>
+              agent.id === assigneeQuery || agent.name.toLowerCase() === assigneeQuery.toLowerCase()
+          )
+        : null
+      if (assigneeQuery && !assignee) {
+        const available = listAgents().map((agent) => agent.name).join(', ') || 'none'
+        return errorResult(`Assignee not found. Available agents: ${available}.`)
+      }
+      const description = args.description
+        ? trimText(redactSensitiveText(args.description), BOARD_TASK_DESCRIPTION_LIMIT).text
+        : ''
+      const task = vertexTaskStore.create({
+        title,
+        description,
+        status: args.status ?? 'todo',
+        priority: args.priority ?? 'medium',
+        type: args.type ?? 'feature',
+        destination: 'system',
+        parentTaskId: args.parentTaskId?.trim() || undefined,
+        assignee: assignee
+          ? { kind: 'agent', id: assignee.id, name: assignee.name, initials: assignee.name.slice(0, 2).toUpperCase() }
+          : undefined,
+        origin: {
+          kind: 'agent',
+          name: context.agentId,
+          note: 'Created from a Communications agent handoff.'
+        }
+      })
+      return textResult(
+        `Created board task ${task.id}: "${task.title}"${assignee ? ` assigned to ${assignee.name}` : ''}.`
+      )
+    },
+
     async asanaDraftComment(args: { gid: string; body: string }): Promise<TextToolResult> {
       const gid = args.gid.trim()
       if (!gid) {

@@ -8,6 +8,7 @@ const statusMeta: Record<TaskStatus, { label: string }> = {
   backlog: { label: 'Backlog' },
   todo: { label: 'To Do' },
   'in-progress': { label: 'In Progress' },
+  blocked: { label: 'Blocked' },
   review: { label: 'Review' },
   testing: { label: 'Testing' },
   done: { label: 'Done' }

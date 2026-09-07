@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   BarChart3,
@@ -13,6 +13,7 @@ import {
   List,
   Paperclip,
   Plus,
+  RefreshCw,
   Search,
   SlidersHorizontal
 } from 'lucide-react'
@@ -59,7 +60,15 @@ import type {
 
 const REFRESH_MS = 4_000
 
-const statuses: TaskStatus[] = ['backlog', 'todo', 'in-progress', 'review', 'testing', 'done']
+const statuses: TaskStatus[] = [
+  'backlog',
+  'todo',
+  'in-progress',
+  'blocked',
+  'review',
+  'testing',
+  'done'
+]
 const views = [
   { id: 'board', label: 'Board', icon: Columns3 },
   { id: 'list', label: 'List', icon: List },
@@ -73,6 +82,7 @@ const statusNames: Record<TaskStatus, string> = {
   backlog: 'Backlog',
   todo: 'To Do',
   'in-progress': 'In Progress',
+  blocked: 'Blocked',
   review: 'Review',
   testing: 'Testing',
   done: 'Done'
@@ -503,6 +513,7 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [filterHigh, setFilterHigh] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [newTaskOpen, setNewTaskOpen] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('todo')
@@ -514,6 +525,28 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
   const assignablePeople = useAssignablePeople()
   // Non-zero while a drag or a local write is outstanding — see the poll below.
   const busy = useRef(0)
+  const loadTasks = useCallback(
+    async (isCancelled?: () => boolean): Promise<void> => {
+      const listed = await taskSource.list()
+      if (!isCancelled?.()) {
+        setTasks(listed)
+      }
+    },
+    [taskSource]
+  )
+  const refreshTasks = useCallback((): void => {
+    if (refreshing) {
+      return
+    }
+    setRefreshing(true)
+    void loadTasks()
+      .catch(() => {
+        toast.error('Failed to refresh tasks')
+      })
+      .finally(() => {
+        setRefreshing(false)
+      })
+  }, [loadTasks, refreshing])
 
   /* Poll, don't just load once: board-dispatch.ts writes claim -> running ->
    * succeeded straight to the store from another module, so without this the
@@ -523,19 +556,19 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
   useEffect(() => {
     let cancelled = false
     const load = (): void => {
-      void taskSource.list().then((listed) => {
-        if (!cancelled) setTasks(listed)
-      })
+      void loadTasks(() => cancelled)
     }
     load()
     const timer = setInterval(() => {
-      if (busy.current === 0) load()
+      if (busy.current === 0) {
+        load()
+      }
     }, REFRESH_MS)
     return () => {
       cancelled = true
       clearInterval(timer)
     }
-  }, [taskSource])
+  }, [loadTasks])
 
   const visibleTasks = useMemo(
     () =>
@@ -550,7 +583,24 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
   )
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null
 
+  const getCompletionProof = (task: Task): string | null => {
+    const existing = task.resultNote?.trim()
+    if (existing) return existing
+    const note = window.prompt('Done requires a short result note. What was completed?')
+    const trimmed = note?.trim()
+    return trimmed || null
+  }
+
   const updateTask = (taskId: string, patch: Parameters<TaskSource['update']>[1]): void => {
+    const target = tasks.find((task) => task.id === taskId)
+    if (patch.status === 'done' && target && !patch.resultNote?.trim()) {
+      const resultNote = getCompletionProof(target)
+      if (!resultNote) {
+        toast.error('Done needs a result note')
+        return
+      }
+      patch = { ...patch, resultNote, completedAt: Date.now() }
+    }
     const previous = tasks
     setTasks((current) =>
       current.map((task) =>
@@ -571,10 +621,30 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
   }
   const moveTask = (taskId: string, status: TaskStatus, index: number): void => {
     const previous = tasks
-    setTasks((current) => moveTasksOptimistically(current, taskId, status, index))
+    const target = tasks.find((task) => task.id === taskId)
+    let proofPatch: Pick<Task, 'resultNote' | 'completedAt'> | null = null
+    if (status === 'done' && target && !target.resultNote?.trim()) {
+      const resultNote = getCompletionProof(target)
+      if (!resultNote) {
+        toast.error('Done needs a result note')
+        return
+      }
+      proofPatch = { resultNote, completedAt: Date.now() }
+    }
+    setTasks((current) =>
+      moveTasksOptimistically(
+        current.map((task) => (task.id === taskId && proofPatch ? { ...task, ...proofPatch } : task)),
+        taskId,
+        status,
+        index
+      )
+    )
     busy.current += 1
-    void taskSource
-      .move(taskId, status, index)
+    const persistProof = proofPatch
+      ? taskSource.update(taskId, proofPatch).then((updated) => Boolean(updated))
+      : Promise.resolve(true)
+    void persistProof
+      .then((ready) => (ready ? taskSource.move(taskId, status, index) : null))
       .then(async (moved) => {
         if (!moved) setTasks(previous)
         else setTasks(await taskSource.list())
@@ -611,6 +681,33 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
     setNewTaskTitle('')
     setNewTaskAssigneeId('')
     setNewTaskOpen(false)
+  }
+  const createChildTask = async (parent: Task, title: string, assigneeId: string): Promise<void> => {
+    const trimmed = title.trim()
+    if (!trimmed) return
+    const task = await taskSource.create({
+      title: trimmed,
+      status: 'todo',
+      type: parent.type,
+      priority: parent.priority,
+      destination: 'system',
+      parentTaskId: parent.id,
+      assignee: assignablePeople.find((person) => person.id === assigneeId),
+      origin: {
+        kind: 'agent',
+        name: parent.assignee?.name ?? 'Dobius system',
+        note: `Child task from ${parent.title}`
+      }
+    })
+    if (!task) {
+      toast.error('Could not create child task')
+      return
+    }
+    setTasks(await taskSource.list())
+    setSelectedTaskId(task.id)
+    toast.success('Child task created', {
+      description: task.assignee ? `Assigned to ${task.assignee.name}` : 'Unassigned'
+    })
   }
 
   return (
@@ -654,6 +751,15 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
                   Search
                 </Button>
               )}
+              <Button
+                variant="outline"
+                className="h-9 border-kanban-border bg-kanban-control text-xs"
+                onClick={refreshTasks}
+                disabled={refreshing}
+              >
+                <RefreshCw className={refreshing ? 'animate-spin' : undefined} />
+                Refresh
+              </Button>
               <div className="flex">
                 <Button
                   onClick={() => createTask('todo')}
@@ -742,6 +848,7 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
             allTasks={tasks}
             onClose={() => setSelectedTaskId(null)}
             onUpdate={(patch) => updateTask(selectedTask.id, patch)}
+            onCreateChild={(title, assigneeId) => createChildTask(selectedTask, title, assigneeId)}
             onDelete={() => {
               const previous = tasks
               setTasks((current) => current.filter((task) => task.id !== selectedTask.id))
