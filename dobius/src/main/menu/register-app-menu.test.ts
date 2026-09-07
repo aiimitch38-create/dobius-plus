@@ -238,8 +238,8 @@ describe('registerAppMenu', () => {
     expect(helpLabels).toEqual(
       expect.arrayContaining([
         'Report Crash...',
-        'Getting Started with Dobius',
-        'Explore Dobius',
+        'Getting Started with Dobius+',
+        'Explore Dobius+',
         'Check for Updates...'
       ])
     )
@@ -261,8 +261,8 @@ describe('registerAppMenu', () => {
     expect(helpLabels).toEqual([
       'Report Crash...',
       undefined,
-      'Explore Dobius',
-      'Getting Started with Dobius'
+      'Explore Dobius+',
+      'Getting Started with Dobius+'
     ])
   })
 
@@ -271,7 +271,7 @@ describe('registerAppMenu', () => {
     registerAppMenu(options)
 
     const setupGuideItem = getSubmenu(getTemplate(), 'Help').find(
-      (entry) => entry.label === 'Getting Started with Dobius'
+      (entry) => entry.label === 'Getting Started with Dobius+'
     )
     expect(setupGuideItem?.accelerator).toBeUndefined()
 
@@ -287,7 +287,7 @@ describe('registerAppMenu', () => {
     registerAppMenu(options)
 
     const featureTourItem = getSubmenu(getTemplate(), 'Help').find(
-      (entry) => entry.label === 'Explore Dobius'
+      (entry) => entry.label === 'Explore Dobius+'
     )
     expect(featureTourItem?.accelerator).toBeUndefined()
 
@@ -335,7 +335,7 @@ describe('registerAppMenu', () => {
     expect(automationsItem?.type).toBe('checkbox')
     expect(automationsItem?.checked).toBe(false)
 
-    const mobileItem = appearanceSubmenu.find((item) => item.label === 'Show Dobius Mobile Button')
+    const mobileItem = appearanceSubmenu.find((item) => item.label === 'Show Dobius+ Mobile Button')
     expect(mobileItem?.type).toBe('checkbox')
     expect(mobileItem?.checked).toBe(true)
 
@@ -358,7 +358,7 @@ describe('registerAppMenu', () => {
       .find((item) => item.label === 'Show Automations Button')
       ?.click?.({} as never, {} as never, {} as never)
     appearanceSubmenu
-      .find((item) => item.label === 'Show Dobius Mobile Button')
+      .find((item) => item.label === 'Show Dobius+ Mobile Button')
       ?.click?.({} as never, {} as never, {} as never)
     appearanceSubmenu
       .find((item) => item.label === 'Show Titlebar App Name')

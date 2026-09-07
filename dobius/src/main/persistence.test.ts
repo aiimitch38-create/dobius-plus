@@ -361,20 +361,20 @@ describe('Store', () => {
 
     expect(store.getProjects()).toEqual([
       expect.objectContaining({
-        id: 'github:statusdigitalmarketing/dobius-plus',
+        id: 'github:statusdigitalmarketing/dobius',
         sourceRepoIds: ['local-repo', 'remote-repo']
       })
     ])
     expect(store.getProjectHostSetups()).toEqual([
       expect.objectContaining({
         id: 'local-repo',
-        projectId: 'github:statusdigitalmarketing/dobius-plus',
+        projectId: 'github:statusdigitalmarketing/dobius',
         hostId: 'local',
         path: '/Users/alice/dobius'
       }),
       expect.objectContaining({
         id: 'remote-repo',
-        projectId: 'github:statusdigitalmarketing/dobius-plus',
+        projectId: 'github:statusdigitalmarketing/dobius',
         hostId: 'ssh:gpu-vm',
         path: '/home/alice/dobius'
       })
@@ -1518,7 +1518,7 @@ describe('Store', () => {
 
     expect(automation.runContext).toMatchObject({
       kind: 'workspace-run',
-      projectId: 'github:statusdigitalmarketing/dobius-plus',
+      projectId: 'github:statusdigitalmarketing/dobius',
       hostId: toSshExecutionHostId('builder'),
       projectHostSetupId: 'r1',
       repoId: 'r1',
@@ -1527,7 +1527,7 @@ describe('Store', () => {
     expect(automation.sourceContext).toMatchObject({
       kind: 'task-source',
       provider: 'github',
-      projectId: 'github:statusdigitalmarketing/dobius-plus',
+      projectId: 'github:statusdigitalmarketing/dobius',
       hostId: toSshExecutionHostId('builder'),
       projectHostSetupId: 'r1',
       repoId: 'r1',
@@ -1626,7 +1626,7 @@ describe('Store', () => {
 
     expect(migratedAutomation?.runContext).toMatchObject({
       kind: 'workspace-run',
-      projectId: 'github:statusdigitalmarketing/dobius-plus',
+      projectId: 'github:statusdigitalmarketing/dobius',
       hostId: toSshExecutionHostId('builder'),
       projectHostSetupId: 'r1',
       repoId: 'r1',
@@ -1635,7 +1635,7 @@ describe('Store', () => {
     expect(migratedAutomation?.sourceContext).toMatchObject({
       kind: 'task-source',
       provider: 'github',
-      projectId: 'github:statusdigitalmarketing/dobius-plus',
+      projectId: 'github:statusdigitalmarketing/dobius',
       hostId: toSshExecutionHostId('builder'),
       projectHostSetupId: 'r1',
       repoId: 'r1',
@@ -3080,7 +3080,7 @@ describe('Store', () => {
 
     expect(store.getProjects()).toEqual([
       expect.objectContaining({
-        id: 'github:statusdigitalmarketing/dobius-plus',
+        id: 'github:statusdigitalmarketing/dobius',
         displayName: 'renamed',
         sourceRepoIds: ['r1']
       })
@@ -3088,7 +3088,7 @@ describe('Store', () => {
     expect(store.getProjectHostSetups()).toEqual([
       expect.objectContaining({
         id: 'r1',
-        projectId: 'github:statusdigitalmarketing/dobius-plus',
+        projectId: 'github:statusdigitalmarketing/dobius',
         displayName: 'renamed',
         worktreeBasePath: '../new-worktrees'
       })
