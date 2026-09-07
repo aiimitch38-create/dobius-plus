@@ -94,11 +94,11 @@ function cliStatus(overrides: Partial<CliInstallStatus>): CliInstallStatus {
     commandPath: '/usr/local/bin/dobius',
     pathDirectory: '/usr/local/bin',
     pathConfigured: true,
-    launcherPath: '/Applications/Dobius.app/Contents/MacOS/Dobius',
+    launcherPath: '/Applications/Dobius+.app/Contents/MacOS/Dobius+',
     installMethod: 'symlink',
     supported: true,
     state: 'installed',
-    currentTarget: '/Applications/Dobius.app/Contents/MacOS/Dobius',
+    currentTarget: '/Applications/Dobius+.app/Contents/MacOS/Dobius+',
     unsupportedReason: null,
     detail: null,
     ...overrides
@@ -205,11 +205,11 @@ describe('LinearAgentSkillSetupPrompt reminder toast', () => {
       'Enable agents to read and edit the attached Linear ticket.'
     )
     expect(toast.warning).toHaveBeenCalledWith(
-      'Dobius CLI and Linear skill are missing',
+      'Dobius+ CLI and Linear skill are missing',
       expect.objectContaining({
         id: 'linear-agent-skill-setup-dobius.linearTicketsSkill.setupDismissed.host',
         description:
-          'Install the Dobius CLI and the Linear skill to enable your agents to read and edit Linear tasks.',
+          'Install the Dobius+ CLI and the Linear skill to enable your agents to read and edit Linear tasks.',
         action: {
           label: 'Set up',
           onClick: expect.any(Function)
@@ -218,15 +218,15 @@ describe('LinearAgentSkillSetupPrompt reminder toast', () => {
     )
   })
 
-  it('does not repeat the Dobius CLI in CLI-only reminder toast copy', async () => {
+  it('does not repeat the Dobius+ CLI in CLI-only reminder toast copy', async () => {
     mocks.skillState.installed = true
     await snoozeInitialModal({ linked: true, remote: false, surface: 'modal' })
     await renderPrompt({ linked: true, remote: false, surface: 'modal' })
 
     expect(toast.warning).toHaveBeenCalledWith(
-      'Dobius CLI is missing',
+      'Dobius+ CLI is missing',
       expect.objectContaining({
-        description: 'Install the Dobius CLI to enable your agents to read and edit Linear tasks.'
+        description: 'Install the Dobius+ CLI to enable your agents to read and edit Linear tasks.'
       })
     )
   })
@@ -236,10 +236,10 @@ describe('LinearAgentSkillSetupPrompt reminder toast', () => {
     await renderPrompt({ linked: true, remote: true, surface: 'modal' })
 
     expect(toast.warning).toHaveBeenCalledWith(
-      'Dobius CLI and Linear skill are missing',
+      'Dobius+ CLI and Linear skill are missing',
       expect.objectContaining({
         description:
-          'Install the Dobius CLI and the Linear skill to enable your agents to read and edit Linear tasks. Remote agent environments may need their own setup.'
+          'Install the Dobius+ CLI and the Linear skill to enable your agents to read and edit Linear tasks. Remote agent environments may need their own setup.'
       })
     )
   })
@@ -261,10 +261,10 @@ describe('LinearAgentSkillSetupPrompt reminder toast', () => {
     await renderPrompt(wslProps)
 
     expect(toast.warning).toHaveBeenCalledWith(
-      'Dobius CLI and Linear skill are missing',
+      'Dobius+ CLI and Linear skill are missing',
       expect.objectContaining({
         description:
-          'Install the Dobius CLI and the Linear skill to enable your agents to read and edit Linear tasks. This setup runs in the selected WSL agent runtime.'
+          'Install the Dobius+ CLI and the Linear skill to enable your agents to read and edit Linear tasks. This setup runs in the selected WSL agent runtime.'
       })
     )
   })

@@ -137,7 +137,7 @@ describe('WorktreeCardDetailsHover', () => {
     )
 
     const moreActionsIndex = markup.indexOf('aria-label="More PR actions"')
-    const openInDobiusIndex = markup.indexOf('aria-label="Open in Dobius"')
+    const openInDobiusIndex = markup.indexOf('aria-label="Open in Dobius+"')
     const viewOnGitHubIndex = markup.indexOf('aria-label="View on GitHub"')
 
     expect(moreActionsIndex).toBeGreaterThan(-1)
@@ -174,7 +174,7 @@ describe('WorktreeCardDetailsHover', () => {
     const moreActionsIndex = markup.indexOf('aria-label="More issue actions"')
     const copyLinkIndex = markup.indexOf('Copy link')
     const editIssueIndex = markup.indexOf('aria-label="Edit issue"')
-    const openInDobiusIndex = markup.indexOf('aria-label="Open in Dobius"')
+    const openInDobiusIndex = markup.indexOf('aria-label="Open in Dobius+"')
     const viewOnGitHubIndex = markup.indexOf('aria-label="View on GitHub"')
 
     expect(moreActionsIndex).toBeGreaterThan(-1)

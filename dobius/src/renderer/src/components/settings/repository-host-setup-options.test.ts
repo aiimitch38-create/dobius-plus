@@ -21,8 +21,8 @@ function runtimeHost(
   return {
     id: 'runtime:env-1',
     kind: 'runtime',
-    label: 'Remote Dobius',
-    detail: 'Dobius server',
+    label: 'Remote Dobius+',
+    detail: 'Dobius+ server',
     health: 'available',
     ...overrides
   } as ExecutionHostRegistryEntry
@@ -53,7 +53,7 @@ describe('buildSetupHostOptions', () => {
       })[0]
     ).toMatchObject({
       isAvailable: true,
-      detail: 'Dobius server'
+      detail: 'Dobius+ server'
     })
   })
 
@@ -69,7 +69,7 @@ describe('buildSetupHostOptions', () => {
       })[0]
     ).toMatchObject({
       isAvailable: false,
-      detail: 'Update Dobius on this host to set up projects'
+      detail: 'Update Dobius+ on this host to set up projects'
     })
   })
 })

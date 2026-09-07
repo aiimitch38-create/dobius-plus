@@ -30,7 +30,7 @@ function makeRepo(overrides: Partial<Repo> & Pick<Repo, 'id' | 'displayName' | '
 function makeProject({ id, ...overrides }: Partial<Project> & Pick<Project, 'id'>): Project {
   return {
     id,
-    displayName: 'Dobius',
+    displayName: 'Dobius+',
     badgeColor: '#737373',
     sourceRepoIds: ['local-repo', 'remote-repo'],
     createdAt: 100,
@@ -44,7 +44,7 @@ function makeSetup(
     Pick<ProjectHostSetup, 'id' | 'projectId' | 'repoId' | 'hostId' | 'path'>
 ): ProjectHostSetup {
   return {
-    displayName: 'Dobius',
+    displayName: 'Dobius+',
     kind: 'git',
     setupState: 'ready',
     setupMethod: 'legacy-repo',
@@ -110,12 +110,12 @@ describe('RepositoryHostSetupsSection', () => {
   it('shows a viewing-host selector when the project has multiple settings-backed hosts', () => {
     const localRepo = makeRepo({
       id: 'local-repo',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       path: '/Users/alice/dobius'
     })
     const remoteRepo = makeRepo({
       id: 'remote-repo',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       path: '/home/alice/dobius',
       connectionId: 'openclaw 2'
     })
@@ -152,12 +152,12 @@ describe('RepositoryHostSetupsSection', () => {
     const openSettingsTarget = vi.fn()
     const localRepo = makeRepo({
       id: 'local-repo',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       path: '/Users/alice/dobius'
     })
     const remoteRepo = makeRepo({
       id: 'remote-repo',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       path: '/home/alice/dobius',
       connectionId: 'openclaw 2'
     })
@@ -215,7 +215,7 @@ describe('RepositoryHostSetupsSection', () => {
     const openSettingsTarget = vi.fn()
     const localRepo = makeRepo({
       id: 'local-repo',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       path: '/Users/alice/dobius'
     })
     useAppStore.setState({
@@ -275,14 +275,14 @@ describe('RepositoryHostSetupsSection', () => {
       }),
       repo: makeRepo({
         id: 'remote-repo',
-        displayName: 'Dobius',
+        displayName: 'Dobius+',
         path: '/home/alice/dobius',
         connectionId: 'openclaw 2'
       })
     })
     const localRepo = makeRepo({
       id: 'local-repo',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       path: '/Users/alice/dobius'
     })
     useAppStore.setState({
@@ -325,7 +325,7 @@ describe('RepositoryHostSetupsSection', () => {
       hostId: 'ssh:openclaw%202',
       path: '/home/alice/dobius',
       kind: 'git',
-      displayName: 'Dobius'
+      displayName: 'Dobius+'
     })
     expect(openSettingsPage).toHaveBeenCalledTimes(1)
     expect(openSettingsTarget).toHaveBeenCalledWith({ pane: 'repo', repoId: 'remote-repo' })
@@ -345,14 +345,14 @@ describe('RepositoryHostSetupsSection', () => {
       }),
       repo: makeRepo({
         id: 'remote-repo',
-        displayName: 'Dobius',
+        displayName: 'Dobius+',
         path: '/home/alice/dobius',
         connectionId: 'openclaw 2'
       })
     })
     const localRepo = makeRepo({
       id: 'local-repo',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       path: '/Users/alice/dobius'
     })
     useAppStore.setState({
@@ -400,7 +400,7 @@ describe('RepositoryHostSetupsSection', () => {
       hostId: 'ssh:openclaw%202',
       url: 'https://github.com/statusdigitalmarketing/dobius-plus.git',
       destination: '/home/alice',
-      displayName: 'Dobius'
+      displayName: 'Dobius+'
     })
     expect(openSettingsPage).toHaveBeenCalledTimes(1)
     expect(openSettingsTarget).toHaveBeenCalledWith({ pane: 'repo', repoId: 'remote-repo' })
@@ -421,7 +421,7 @@ describe('RepositoryHostSetupsSection', () => {
     })
     const localRepo = makeRepo({
       id: 'local-repo',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       path: '/Users/alice/dobius'
     })
     useAppStore.setState({
@@ -478,7 +478,7 @@ describe('RepositoryHostSetupsSection', () => {
     expect(createProjectHostSetup).toHaveBeenCalledWith({
       projectId: 'github:statusdigitalmarketing/dobius-plus',
       hostId: 'runtime:gpu',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       setupState: 'not-set-up',
       setupMethod: 'provisioned'
     })
@@ -490,7 +490,7 @@ describe('RepositoryHostSetupsSection', () => {
     const setupProjectExistingFolder = vi.fn()
     const localRepo = makeRepo({
       id: 'local-repo',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       path: '/Users/alice/dobius'
     })
     useAppStore.setState({
@@ -534,7 +534,7 @@ describe('RepositoryHostSetupsSection', () => {
     renderSection(localRepo)
     clickButton('Add to another host')
 
-    expect(container.textContent).toContain('Update Dobius on this host to set up projects')
+    expect(container.textContent).toContain('Update Dobius+ on this host to set up projects')
     const browseButton = findButton('Browse folder')
     const plannedButton = findButton('Add host placeholder')
     expect(browseButton?.disabled).toBe(true)
@@ -564,7 +564,7 @@ describe('RepositoryHostSetupsSection', () => {
     })
     const localRepo = makeRepo({
       id: 'local-repo',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       path: '/Users/alice/dobius'
     })
     useAppStore.setState({
@@ -620,7 +620,7 @@ describe('RepositoryHostSetupsSection', () => {
     expect(createProjectHostSetup).toHaveBeenCalledWith({
       projectId: 'github:statusdigitalmarketing/dobius-plus',
       hostId: 'runtime:gpu',
-      displayName: 'Dobius',
+      displayName: 'Dobius+',
       setupState: 'not-set-up',
       setupMethod: 'provisioned'
     })

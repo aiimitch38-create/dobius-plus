@@ -172,6 +172,6 @@ describe('WorktreeCard SSH reconnect prompt', () => {
       <WorktreeCard worktree={makeWorktree()} repo={runtimeRepo} isActive={false} />
     )
     expect(markup).not.toContain('Server disconnected')
-    expect(markup).toContain('Project on Dobius server')
+    expect(markup).toContain('Project on Dobius+ server')
   })
 })
