@@ -92,7 +92,7 @@ describe('feature tips', () => {
 
     expect(cliTip).toMatchObject({
       action: 'setup-cli',
-      title: 'Let agents drive Dobius with the Dobius CLI',
+      title: 'Let agents drive Dobius+ with the Dobius+ CLI',
       ctaLabel: 'Install CLI & Skills'
     })
     expect(cliTip?.description).toContain('coordinate child worktrees')

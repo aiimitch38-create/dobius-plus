@@ -91,14 +91,14 @@ describe('project host setup projection', () => {
         id: 'local-repo',
         path: '/Users/alice/dobius',
         displayName: 'Dobius',
-        upstream: { owner: 'statusdigitalmarketing', repo: 'Dobius' }
+        upstream: { owner: 'statusdigitalmarketing', repo: 'Dobius-Plus' }
       }),
       repo({
         id: 'remote-repo',
         path: '/home/alice/dobius',
         displayName: 'dobius',
         connectionId: 'gpu-vm',
-        upstream: { owner: 'statusdigitalmarketing', repo: 'dobius' }
+        upstream: { owner: 'statusdigitalmarketing', repo: 'dobius-plus' }
       })
     ])
 
@@ -106,7 +106,7 @@ describe('project host setup projection', () => {
     expect(projection.projects[0]).toMatchObject({
       id: 'github:statusdigitalmarketing/dobius-plus',
       sourceRepoIds: ['local-repo', 'remote-repo'],
-      providerIdentity: { provider: 'github', owner: 'statusdigitalmarketing', repo: 'Dobius' }
+      providerIdentity: { provider: 'github', owner: 'statusdigitalmarketing', repo: 'Dobius-Plus' }
     })
     expect(getProjectHostSetupsForProject(projection.setups, 'github:statusdigitalmarketing/dobius-plus')).toHaveLength(
       2
@@ -144,7 +144,7 @@ describe('project host setup projection', () => {
     expect(projection.projects[0]).toMatchObject({
       id: 'github:statusdigitalmarketing/dobius-plus',
       sourceRepoIds: ['local-repo', 'remote-repo'],
-      providerIdentity: { provider: 'github', owner: 'statusdigitalmarketing', repo: 'dobius' }
+      providerIdentity: { provider: 'github', owner: 'statusdigitalmarketing', repo: 'dobius-plus' }
     })
     expect(getProjectHostSetupsForProject(projection.setups, 'github:statusdigitalmarketing/dobius-plus')).toHaveLength(
       2
@@ -181,7 +181,7 @@ describe('project host setup projection', () => {
       id: 'github:statusdigitalmarketing/dobius-plus',
       displayName: 'dobius',
       sourceRepoIds: ['canonical-local-repo', 'old-branch-checkout'],
-      providerIdentity: { provider: 'github', owner: 'statusdigitalmarketing', repo: 'dobius' }
+      providerIdentity: { provider: 'github', owner: 'statusdigitalmarketing', repo: 'dobius-plus' }
     })
   })
 
@@ -335,7 +335,7 @@ describe('project host setup projection', () => {
       path: '/home/alice/dobius',
       displayName: 'dobius',
       connectionId: 'openclaw 2',
-      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius' }
+      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius-plus' }
     })
     const projection = projectHostSetupProjectionFromRepos([targetRepo])
 
@@ -353,7 +353,7 @@ describe('isGitHubBackedRepo', () => {
       id: 'r',
       path: '/r',
       displayName: 'r',
-      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius' }
+      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius-plus' }
     })
     expect(isGitHubBackedRepo(target)).toBe(true)
   })

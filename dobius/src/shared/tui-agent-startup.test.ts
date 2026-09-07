@@ -91,7 +91,11 @@ describe('tui agent startup plans', () => {
     expect(plan?.launchCommand).not.toContain('--settings')
   })
 
-  it('uses the Linux Dobius CLI command for Claude Agent Teams launches', () => {
+  it('uses the plain dobius shim for Claude Agent Teams on Linux', () => {
+    // Why: the Linux binary is `resources/linux/bin/dobius`. The old `-ide`
+    // suffix existed only to avoid shadowing the GNOME *Orca* screen reader;
+    // the rebrand removed that collision and the binary was renamed to plain
+    // `dobius` (STAGE3-CODEX-REPORT.md), so no wrapper name applies.
     const plan = buildAgentStartupPlan({
       agent: 'claude-agent-teams',
       prompt: '',
@@ -100,14 +104,14 @@ describe('tui agent startup plans', () => {
       allowEmptyPromptLaunch: true
     })
 
-    expect(plan?.launchCommand).toBe('dobius-ide claude-teams')
+    expect(plan?.launchCommand).toBe('dobius claude-teams')
   })
 
   it('uses the plain dobius shim for Claude Agent Teams on Linux SSH remotes', () => {
-    // Why: the SSH relay deploys the CLI shim as `dobius` (not the local-only
-    // `dobius-ide` GNOME-screen-reader workaround), so a remote launch must not
-    // emit `dobius-ide claude-teams` — that name is not on the remote PATH and
-    // `claude-teams` is rejected by the relay's CLI switch (issue #6500).
+    // Why: the SSH relay deploys the CLI shim as `dobius`, and `claude-teams`
+    // is rejected by the relay's CLI switch under any other name (issue #6500).
+    // Local Linux now resolves to the same command — see above — so this pins
+    // the remote path independently in case the two ever diverge again.
     const plan = buildAgentStartupPlan({
       agent: 'claude-agent-teams',
       prompt: '',
@@ -135,10 +139,10 @@ describe('tui agent startup plans', () => {
     expect(plan?.launchCommand).toBe('dobius.cmd claude-teams')
   })
 
-  it('keeps the Linux dobius-ide wrapper for local (non-remote) Claude Agent Teams', () => {
-    // Why: the `dobius-ide` rename is still required for a local Linux desktop
-    // install (avoids shadowing the GNOME Dobius screen reader), so an explicit
-    // isRemote:false must preserve it.
+  it('uses the plain dobius shim for local (non-remote) Linux Claude Agent Teams', () => {
+    // Why: an explicit isRemote:false must resolve the same as the implicit
+    // case above. The retired `-ide` rename means local and remote agree on
+    // Linux today; this asserts the explicit flag does not reintroduce a split.
     const plan = buildAgentStartupPlan({
       agent: 'claude-agent-teams',
       prompt: '',
@@ -148,7 +152,7 @@ describe('tui agent startup plans', () => {
       allowEmptyPromptLaunch: true
     })
 
-    expect(plan?.launchCommand).toBe('dobius-ide claude-teams')
+    expect(plan?.launchCommand).toBe('dobius claude-teams')
   })
 
   it('launches OpenClaude as a distinct argv agent', () => {

@@ -84,9 +84,49 @@ Two files outside the requested scope still say bare "Dobius" in user-facing cop
   "Update Dobius or use a supported platform/provider path before retrying."
 No test asserts either, so CI cannot catch them.
 
-## Separately discovered — pre-existing failures in src/shared (NOT touched)
-7 failures in 3 files, unrelated to any of this and present before these commits
-(`tui-agent-startup.test.ts`, `feature-tips.test.ts`, `project-host-setup-projection.test.ts`
-last changed in caee2df0; none imports protocol-compat). Symptoms are CLI-wrapper naming,
-e.g. `expected 'dobius claude-teams' to be 'dobius-ide claude-teams'` — likely the same
-half-finished rebrand, one token further on (`dobius` vs `dobius-ide`). Needs its own repair.
+## Fourth pass — src/shared (7 failures, fixed)
+
+`src/shared` was never in the earlier runs, so these were invisible until now.
+
+**The `dobius-ide` pair — the tests were wrong, NOT the source.** Both asserted
+`dobius-ide claude-teams`; the source emits `dobius`. The obvious read is "the rename was
+lost, restore it" — that would have been a real bug on every Linux launch. Evidence says
+otherwise:
+- `resources/linux/bin/` contains exactly one file: `dobius`.
+- `plans/STAGE3-CODEX-REPORT.md:12` records `resources/linux/bin/dobius` "(renamed from
+  `resources/linux/bin/dobius-ide`)" — a deliberate rename.
+- `resources/linux/packaging/after-install.sh` links `/usr/bin/dobius` and lists
+  `/opt/dobius-ide` only in a legacy-cleanup loop.
+- `git log -S` shows `getDobiusCliCommandNameForPlatform` never had an `-ide` branch.
+
+The `-ide` suffix only ever existed to avoid shadowing the GNOME **Orca** screen reader.
+The rebrand removed that collision, so the wrapper was retired. Tests updated to `dobius`,
+and their comments corrected — several said "the GNOME **Dobius** screen reader", which is
+a rebrand artifact (no such program exists).
+
+**Consequence worth knowing:** the `isRemote && platform === 'linux'` branch in
+`getTuiAgentLaunchCommand` (tui-agent-config.ts:366) is now a no-op — both sides resolve to
+`dobius`. It is harmless and still guards a future divergence, but ~10 files carry comments
+describing a `dobius-ide` rename that no longer happens. Left alone; flagged here.
+
+**feature-tips** (1) — same copy class as pass one: source `feature-tips.ts:36` says
+"Dobius+", test said "Dobius".
+
+**project-host-setup-projection** (4) — same org-rename class, but one case needed real
+care. "groups repo checkouts with the same provider identity" feeds two repos whose upstream
+differs ONLY IN CASE (`Dobius` vs `dobius`) to prove case-insensitive grouping. A blanket
+`repo: 'dobius'` -> `'dobius-plus'` broke that premise (two genuinely different names -> 2
+projects, not 1). Fixed by moving the pair together to `Dobius-Plus` / `dobius-plus`,
+preserving the case difference the test exists to exercise. `providerIdentity` keeps
+first-seen casing, so its expectation follows the input.
+
+## Result after four passes
+    src/shared: 193/193 files, 1789 passed
+    sidebar + settings + menu + runtime: 334/334 files, 3433 passed, 3 skipped
+    tsgo --noEmit exits 0 on both configs
+
+## Note on running the full suite
+`vitest run --config config/vitest.config.ts` alone reports ~424 files failing at
+COLLECTION. That is not real breakage — `pnpm test` first runs
+`config/scripts/ensure-native-runtime.mjs --runtime=node`, without which the native modules
+cannot load. Always use `pnpm test` for a whole-repo number.
