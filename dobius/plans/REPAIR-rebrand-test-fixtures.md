@@ -64,8 +64,29 @@ No source files change. Only test fixtures.
     tsgo --noEmit exits 0 on both tc.web and node.
 Only test fixtures changed across both passes. No source file, no behaviour.
 
-## Flagged for a human — NOT fixed here
-`shared/protocol-compat.ts:61,63`, `communications/.../personaModelDiscoveryStatus.ts:71` and
-`shared/computer-use-error-recovery.ts:39` still say bare "Dobius" in user-facing copy while
-the rest of the app says "Dobius+". The tests now match the code as written, so this is
-invisible to CI — but it is a real product-name inconsistency a user can see.
+## Third pass — the source copy itself (protocol-compat.ts, fixed)
+
+`shared/protocol-compat.ts:61,63` were the last user-facing strings still saying bare
+"Dobius" in the runtime-compat block. Both templates fixed (4 occurrences), and the two
+assertions in `AddRepoHostSelector.test.tsx:133,134` moved with them — the same two lines
+that were deliberately LEFT alone in the first two passes, because until now the code
+genuinely said "Dobius" and the tests were right to match it. Fixing source is what makes
+changing them correct.
+
+These strings are plain template literals, not i18n keys (checked `locales/en.json`), so no
+translation files needed updating.
+
+## Still flagged — NOT fixed
+Two files outside the requested scope still say bare "Dobius" in user-facing copy:
+- `communications/features/agents/ui/personaModelDiscoveryStatus.ts:71`
+  "This version of Dobius cannot use shared compute. Update Dobius or choose another provider."
+- `shared/computer-use-error-recovery.ts:39`
+  "Update Dobius or use a supported platform/provider path before retrying."
+No test asserts either, so CI cannot catch them.
+
+## Separately discovered — pre-existing failures in src/shared (NOT touched)
+7 failures in 3 files, unrelated to any of this and present before these commits
+(`tui-agent-startup.test.ts`, `feature-tips.test.ts`, `project-host-setup-projection.test.ts`
+last changed in caee2df0; none imports protocol-compat). Symptoms are CLI-wrapper naming,
+e.g. `expected 'dobius claude-teams' to be 'dobius-ide claude-teams'` — likely the same
+half-finished rebrand, one token further on (`dobius` vs `dobius-ide`). Needs its own repair.

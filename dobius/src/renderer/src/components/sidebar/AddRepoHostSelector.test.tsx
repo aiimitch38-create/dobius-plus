@@ -130,8 +130,8 @@ describe('AddRepoHostSelector', () => {
     )
 
     expect(html).toContain('Update needed')
-    expect(html).toContain('The selected Dobius server is too old for this client.')
-    expect(html).toContain('Update Dobius on the server.')
+    expect(html).toContain('The selected Dobius+ server is too old for this client.')
+    expect(html).toContain('Update Dobius+ on the server.')
     expect(html).toContain('aria-disabled="true"')
   })
 })
