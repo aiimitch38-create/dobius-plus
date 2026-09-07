@@ -315,19 +315,19 @@ describe('AppearancePane', () => {
   })
 
   it('reveals an advanced sidebar control when its search matches, even though it is hidden by default', async () => {
-    // The Show Tasks Button toggle lives behind the Window & Sidebar Advanced
-    // disclosure; with no search it stays collapsed, but a matching query must
-    // force the disclosure open so the control is reachable.
+    // The Show Automations Button toggle lives behind the Window & Sidebar
+    // Advanced disclosure; with no search it stays collapsed, but a matching
+    // query must force the disclosure open so the control is reachable.
     mocks.state.settingsSearchQuery = ''
     const collapsedContainer = await renderAppearancePane(getDefaultSettings('/tmp'))
     expect(
-      collapsedContainer.querySelector('button[role="switch"][aria-label="Show Tasks Button"]')
+      collapsedContainer.querySelector('button[role="switch"][aria-label="Show Automations Button"]')
     ).toBeNull()
 
-    mocks.state.settingsSearchQuery = 'tasks'
+    mocks.state.settingsSearchQuery = 'automations'
     const searchedContainer = await renderAppearancePane(getDefaultSettings('/tmp'))
     expect(
-      searchedContainer.querySelector('button[role="switch"][aria-label="Show Tasks Button"]')
+      searchedContainer.querySelector('button[role="switch"][aria-label="Show Automations Button"]')
     ).not.toBeNull()
   })
 

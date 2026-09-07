@@ -8,7 +8,6 @@ export const WorktreeCreationPanel = lazy(
   () => import('./components/worktree-creation/WorktreeCreationPanel')
 )
 export const TaskPage = lazy(() => import('./components/TaskPage'))
-export const KanbanPage = lazy(() => import('./components/kanban/KanbanBoard'))
 export const AutomationsPage = lazy(() => import('./components/automations/AutomationsPage'))
 export const ActivityPrototypePage = lazy(
   () => import('./components/activity/ActivityPrototypePage')

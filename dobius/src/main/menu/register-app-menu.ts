@@ -9,7 +9,6 @@ import type { UpdateCheckOptions } from '../../shared/types'
 import { translateMain } from '../i18n/main-i18n'
 
 export type AppearanceMenuState = {
-  showTasksButton: boolean
   showAutomationsButton: boolean
   showMobileButton: boolean
   showTitlebarAppName: boolean
@@ -211,12 +210,6 @@ function buildAndApplyMenu(options: RegisterAppMenuOptions): void {
         click: () => onToggleAppearance('statusBarVisible')
       },
       { type: 'separator' },
-      {
-        label: translateMain('menu.showTasksButton', 'Show Tasks Button'),
-        type: 'checkbox',
-        checked: appearance.showTasksButton,
-        click: () => onToggleAppearance('showTasksButton')
-      },
       {
         label: translateMain('menu.showAutomationsButton', 'Show Automations Button'),
         type: 'checkbox',

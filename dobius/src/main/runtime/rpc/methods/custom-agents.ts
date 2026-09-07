@@ -54,7 +54,7 @@ const AgentUpdate = z.object({
 const AgentRunStart = z.object({
   id: requiredString('Missing agent id'),
   prompt: requiredString('Missing agent prompt'),
-  source: z.enum(['manual', 'heartbeat', 'channel', 'asana', 'dobius']).optional(),
+  source: z.enum(['manual', 'heartbeat', 'channel', 'asana']).optional(),
   // Task-context key — Communications passes the channel id so each channel
   // is its own continuing conversation for the agent.
   sessionKey: OptionalString,

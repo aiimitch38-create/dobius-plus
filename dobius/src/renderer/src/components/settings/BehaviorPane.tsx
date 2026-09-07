@@ -63,12 +63,6 @@ export function BehaviorPane({ settings, updateSettings }: BehaviorPaneProps): R
         />
         <div className="divide-y divide-border/40">
           <SettingsSwitchRow
-            label="Show Tasks shortcut"
-            description="Show Tasks in the main sidebar."
-            checked={settings.showTasksButton}
-            onChange={() => updateSettings({ showTasksButton: !settings.showTasksButton })}
-          />
-          <SettingsSwitchRow
             label="Show Automations shortcut"
             description="Show Automations in the main sidebar."
             checked={settings.showAutomationsButton ?? true}

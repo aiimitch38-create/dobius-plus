@@ -108,7 +108,7 @@ export const CHANNEL_AGENT_BASELINE_TOOLS = [
 ] as const
 
 export type AgentRunStatus = 'running' | 'success' | 'error' | 'cancelled'
-export type AgentRunSource = 'manual' | 'heartbeat' | 'channel' | 'asana' | 'dobius'
+export type AgentRunSource = 'manual' | 'heartbeat' | 'channel' | 'asana'
 
 /**
  * A message the agent posted mid-run via the mcp__dobius__post_channel_message /
