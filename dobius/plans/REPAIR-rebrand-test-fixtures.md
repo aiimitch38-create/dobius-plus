@@ -36,8 +36,36 @@ No source files change. Only test fixtures.
 ## Rollback
 `git restore --worktree -- <file>` per file; nothing staged until green.
 
-## Known NOT covered (separate bugs, left alone)
-4 failing files have no bare "Dobius": CommentMarkdown, RepositoryIconPicker.github-avatar-refresh,
-repository-icon-github, DeleteWorktreeDialog(partial). Symptoms include
-`expected 2832 to be less than -1` and `Cannot read properties of undefined (reading 'status')`
-— different root causes, not diagnosed here.
+## Second pass — the remaining 9, four separate root causes (all fixed)
+
+1. **`AddRepoHostSelector.test.tsx`** (1). Source `AddRepoHostSelector.tsx:156` says
+   "Pair with **Dobius+** running on another computer."; the test said "Dobius". Only that
+   line changed. Its other two Dobius assertions (`:133`, `:134`) are CORRECT as-is — they
+   match `shared/protocol-compat.ts:63`, which the rebrand never swept and which still says
+   bare "Dobius". This is why the blanket first pass reverted this file.
+
+2. **`CommentMarkdown.test.tsx`** (2) and 3. **`repository-icon-github.test.ts`** (2) +
+   **`RepositoryIconPicker.github-avatar-refresh.test.tsx`** (1). Same cause as the copy
+   sweep but a different token: the `stablyai/dobius -> statusdigitalmarketing/dobius-plus`
+   org rename updated the EXPECTED urls/labels and left the INPUT fixtures on `repo: 'dobius'`,
+   so each test contradicted itself. Fixed the inputs (and the echoed-back `upstream:`
+   expectations, which must move together). The `parkerrex` fixtures deliberately keep
+   `repo: 'dobius'` — they model the fork's own origin slug, not the parent org.
+
+4. **`VoicePane.test.tsx`** (3). Not a rebrand issue. `JarvisSettingsSection` mounts inside
+   VoicePane and calls `window.api.jarvis.status()` in an effect (`:38`); the test's
+   `window.api` mock had no `jarvis`, so the effect threw `TypeError: Cannot read properties
+   of undefined (reading 'status')`. The component's `.catch()` cannot catch that — it is a
+   synchronous property access on `undefined`. Added a `jarvis.status` stub shaped per
+   `main/jarvis/jarvis-ipc.ts:172` (`{ shortcutActive, phase }`).
+
+## Result
+    34 failures -> 0.  334/334 files, 3433 passed, 3 skipped, exit 0.
+    tsgo --noEmit exits 0 on both tc.web and node.
+Only test fixtures changed across both passes. No source file, no behaviour.
+
+## Flagged for a human — NOT fixed here
+`shared/protocol-compat.ts:61,63`, `communications/.../personaModelDiscoveryStatus.ts:71` and
+`shared/computer-use-error-recovery.ts:39` still say bare "Dobius" in user-facing copy while
+the rest of the app says "Dobius+". The tests now match the code as written, so this is
+invisible to CI — but it is a real product-name inconsistency a user can see.

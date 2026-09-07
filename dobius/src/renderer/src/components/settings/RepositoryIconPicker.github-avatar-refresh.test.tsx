@@ -98,7 +98,7 @@ describe('RepositoryIconPicker GitHub avatar refresh', () => {
     const updateRepo = vi.fn()
     // A fork whose avatar tracks its parent org, resolved earlier while online.
     const repo = makeRepo({
-      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius' },
+      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius-plus' },
       repoIcon: {
         type: 'image',
         src: 'https://github.com/statusdigitalmarketing.png?size=64',

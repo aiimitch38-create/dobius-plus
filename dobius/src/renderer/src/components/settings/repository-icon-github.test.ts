@@ -36,7 +36,7 @@ describe('repository GitHub avatar resolution', () => {
   })
 
   it('uses stored upstream by default to avoid unnecessary live checks', async () => {
-    const repo = makeRepo({ upstream: { owner: 'statusdigitalmarketing', repo: 'dobius' } })
+    const repo = makeRepo({ upstream: { owner: 'statusdigitalmarketing', repo: 'dobius-plus' } })
 
     await expect(resolveRepositoryGitHubAvatar({ kind: 'local' }, repo)).resolves.toEqual({
       repoIcon: {
@@ -45,7 +45,7 @@ describe('repository GitHub avatar resolution', () => {
         source: 'github',
         label: 'statusdigitalmarketing/dobius-plus'
       },
-      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius' }
+      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius-plus' }
     })
 
     expect(apiMocks.repoUpstream).not.toHaveBeenCalled()
@@ -130,7 +130,7 @@ describe('repository GitHub avatar resolution', () => {
     // A fork whose avatar tracks its parent org. The live upstream probe fails
     // (offline/unauthed → null), which must NOT downgrade to the origin slug.
     const repo = makeRepo({
-      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius' },
+      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius-plus' },
       repoIcon: {
         type: 'image',
         src: 'https://github.com/statusdigitalmarketing.png?size=64',
@@ -153,7 +153,7 @@ describe('repository GitHub avatar resolution', () => {
         source: 'github',
         label: 'statusdigitalmarketing/dobius-plus'
       },
-      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius' }
+      upstream: { owner: 'statusdigitalmarketing', repo: 'dobius-plus' }
     })
     // The origin slug must never be consulted once we fall back to the known parent.
     expect(apiMocks.repoSlug).not.toHaveBeenCalled()

@@ -50,6 +50,9 @@ function installWindowApi(
       developerPermissions: {
         request: vi.fn(requestMicrophonePermission)
       },
+      jarvis: {
+        status: vi.fn(async () => ({ shortcutActive: false, phase: 'idle' }))
+      },
       speech: {
         getCatalog: vi.fn(async () => []),
         getOpenAiApiKeyStatus: vi.fn(async () => ({ configured: false })),
