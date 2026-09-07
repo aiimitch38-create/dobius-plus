@@ -91,7 +91,6 @@ function createSettings(overrides: Partial<GlobalSettings> = {}): GlobalSettings
     sourceControlGroupOrder: 'changes-first',
     sourceControlCompareAgainstUpstream: false,
     showTitlebarAppName: true,
-    showTasksButton: true,
     floatingTerminalEnabled: false,
     floatingTerminalCwd: '~',
     floatingTerminalTriggerLocation: 'floating-button',

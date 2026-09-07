@@ -55,7 +55,6 @@
     "toggleLeftSidebar": "左サイドバーの表示/非表示",
     "toggleRightSidebar": "右サイドバーの表示/非表示",
     "showStatusBar": "ステータスバーを表示",
-    "showTasksButton": "タスクボタンを表示",
     "showAutomationsButton": "オートメーションボタンを表示",
     "showMobileButton": "Dobius+ モバイル ボタンを表示",
     "showTitlebarAppName": "タイトルバーのアプリ名を表示",
