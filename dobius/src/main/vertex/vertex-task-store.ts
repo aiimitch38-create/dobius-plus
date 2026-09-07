@@ -125,7 +125,6 @@ function normalizeInput(input: VertexTaskInput): VertexTask {
     dependencies: [],
     subtasks: [],
     files: [],
-    commentCount: 0,
     missionId: input.missionId,
     projectId: input.projectId,
     createdAt: now,

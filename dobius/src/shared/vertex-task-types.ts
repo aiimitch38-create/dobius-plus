@@ -131,7 +131,6 @@ export type VertexTask = {
   dependencies: string[]
   subtasks: VertexSubtask[]
   files: VertexTaskFile[]
-  commentCount: number
   /** Set by the auto-mode dispatcher; absent means never dispatched. */
   dispatch?: VertexTaskDispatch
   /** Forward seam for Missions (an objective that spawns many tasks). Missions

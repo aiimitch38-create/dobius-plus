@@ -34,7 +34,6 @@ function newTask(input: Parameters<TaskSource['create']>[0]): Task {
     dependencies: [],
     subtasks: [],
     files: [],
-    commentCount: 0,
     projectId: input.projectId,
     missionId: input.missionId,
     createdAt: now,
