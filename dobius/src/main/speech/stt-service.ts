@@ -117,7 +117,12 @@ export class SttService {
         await this.stopDictation(owner, { cancelStarting: false })
       }
 
-      this.cloudSession = new VpsTranscriptionSession(this.vpsEndpoint)
+      const vpsSession = new VpsTranscriptionSession(this.vpsEndpoint)
+      // Key-DOWN is the only free moment to pay for connection setup: the user
+      // is about to speak for seconds, and finish() runs on key-UP when they
+      // are already waiting. See VpsTranscriptionSession.warmUp.
+      vpsSession.warmUp()
+      this.cloudSession = vpsSession
       this.activeModelId = modelId
       this.activeHotwordsFilePath = undefined
       this.eventSink = sink

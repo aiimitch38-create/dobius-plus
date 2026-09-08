@@ -31,6 +31,34 @@ describe('describeVpsTranscriptionFailure', () => {
   })
 })
 
+describe('VpsTranscriptionSession.warmUp', () => {
+  it('touches /health so key-UP does not pay for connection setup', () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    new VpsTranscriptionSession('http://server:8823/').warmUp()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    // Trailing slash on the endpoint must not produce a double slash.
+    expect(fetchMock.mock.calls[0][0]).toBe('http://server:8823/health')
+  })
+
+  it('swallows a failed warm-up: it is an optimisation, not a precondition', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('ECONNREFUSED')
+      })
+    )
+
+    const session = new VpsTranscriptionSession('http://server:8823')
+    expect(() => session.warmUp()).not.toThrow()
+    // An unhandled rejection here would take the main process down, so give the
+    // fire-and-forget promise a tick to settle before the test ends.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+})
+
 describe('VpsTranscriptionSession', () => {
   it('returns empty string without calling the server when no audio was fed', async () => {
     const fetchMock = vi.fn()

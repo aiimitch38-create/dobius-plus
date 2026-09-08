@@ -18,6 +18,8 @@ const VPS_TRANSCRIPTION_SAMPLE_RATE = 16000
 /** Matches the service's MAX_BODY_BYTES (64 MB) with headroom to spare. */
 const MAX_VPS_AUDIO_SECONDS = 10 * 60
 const REQUEST_TIMEOUT_MS = 120_000
+/** Short: the warm-up is best-effort and must never outlive the dictation. */
+const WARMUP_TIMEOUT_MS = 5_000
 
 export const DEFAULT_VPS_STT_ENDPOINT = 'http://100.98.24.1:8823'
 
@@ -60,10 +62,33 @@ export class VpsTranscriptionSession {
     this.chunks.push(new Float32Array(normalized))
   }
 
+  /**
+   * Open the path to the server while the user is still speaking.
+   *
+   * Why: measured 2026-09-08 against the live service, TCP connect to the
+   * Tailscale endpoint swung between 0.077s and 2.9s depending on how recently
+   * the path had been used, while an already-warm path answered /health in
+   * 138ms. finish() is called on key-UP, so on a cold path the user pays that
+   * whole setup cost after they have stopped talking, on top of the upload and
+   * the decode. Touching /health on key-DOWN moves it into the time they are
+   * already spending speaking.
+   *
+   * Fire-and-forget by design: this is an optimisation, and a failure here must
+   * never break a dictation that finish() could still complete on its own.
+   */
+  warmUp(): void {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), WARMUP_TIMEOUT_MS)
+    void fetch(`${this.endpoint.replace(/\/$/, '')}/health`, { signal: controller.signal })
+      .catch(() => undefined)
+      .finally(() => clearTimeout(timer))
+  }
+
   async finish(): Promise<string> {
     if (this.chunks.length === 0) {
       return ''
     }
+    const startedAt = Date.now()
 
     const audio = combineChunks(this.chunks)
     this.chunks = []
@@ -99,6 +124,18 @@ export class VpsTranscriptionSession {
     if (typeof data.text !== 'string') {
       throw new Error('Speech server response did not include text')
     }
+    // Why log this: the server already reports how long it actually spent
+    // decoding, and the client was discarding it — so a slow dictation gave no
+    // way to tell a slow model from a slow network without hand-measuring.
+    // Everything that is not decode is transport.
+    const roundTripMs = Date.now() - startedAt
+    const decodeMs = typeof data.decode_seconds === 'number' ? data.decode_seconds * 1000 : null
+    console.info(
+      `[speech] vps transcribe: audio=${data.audio_seconds ?? '?'}s ` +
+        `decode=${decodeMs === null ? '?' : Math.round(decodeMs)}ms ` +
+        `network=${decodeMs === null ? '?' : Math.round(roundTripMs - decodeMs)}ms ` +
+        `roundTrip=${roundTripMs}ms rtf=${data.rtf ?? '?'} bytes=${wav.byteLength}`
+    )
     return data.text
   }
 }
