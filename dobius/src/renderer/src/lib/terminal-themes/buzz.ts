@@ -1,58 +1,58 @@
 import type { TerminalThemeMap } from './types'
 
 // Buzz terminal palettes. Buzz is a stylesheet-driven skin (buzz-skin.css) with
-// no ported ITheme, so its terminals had no matching colors — selecting Buzz
-// left the terminal on whatever theme was set before. These two palettes make
-// the terminal match Buzz's floating content card: the warm near-black canvas
-// (#1a1a1a) in dark, the white card (#ffffff) in light. ANSI colors track the
-// neutral GitHub-style hues Buzz's chrome already reads as.
+// no ported ITheme, so its terminals had no matching colors. Canvas and text are
+// taken straight from Buzz's own gradient stops (buzz-skin.css:15-16, 35-36) so
+// the terminal reads as Buzz rather than as a neutral white/black pane: warm
+// cream over deep navy in light, the inverse in dark. ANSI hues are warmed to
+// sit on those canvases instead of on GitHub's neutral surfaces.
 export const BUZZ_TERMINAL_THEMES: TerminalThemeMap = {
   'Buzz Dark': {
-    background: '#1A1A1A',
-    foreground: '#E6EDF3',
-    cursor: '#58A6FF',
-    cursorAccent: '#1A1A1A',
-    selectionBackground: '#58A6FF44',
-    selectionForeground: '#E6EDF3',
-    black: '#1A1A1A',
-    red: '#F85149',
-    green: '#3FB950',
-    yellow: '#D29922',
-    blue: '#58A6FF',
-    magenta: '#BC8CFF',
-    cyan: '#39C5CF',
-    white: '#E6EDF3',
-    brightBlack: '#E6EDF388',
-    brightRed: '#F9746D',
-    brightGreen: '#65C773',
-    brightYellow: '#DBAD4E',
-    brightBlue: '#79B8FF',
-    brightMagenta: '#D2A8FF',
-    brightCyan: '#56D4DD',
-    brightWhite: '#E6EDF3'
+    background: '#0A1423',
+    foreground: '#E6E6B6',
+    cursor: '#C4D0DA',
+    cursorAccent: '#0A1423',
+    selectionBackground: '#C4D0DA44',
+    selectionForeground: '#E6E6B6',
+    black: '#0A1423',
+    red: '#E86A5E',
+    green: '#8FB96A',
+    yellow: '#D9C05A',
+    blue: '#7FA8CC',
+    magenta: '#B98FC4',
+    cyan: '#6FB5B5',
+    white: '#E6E6B6',
+    brightBlack: '#8A8452',
+    brightRed: '#F58A7C',
+    brightGreen: '#A9CE86',
+    brightYellow: '#EBD87C',
+    brightBlue: '#A3C4E0',
+    brightMagenta: '#D2ADDA',
+    brightCyan: '#93CFCF',
+    brightWhite: '#F4F2DC'
   },
   'Buzz Light': {
-    background: '#FFFFFF',
-    foreground: '#1F2328',
-    cursor: '#0969DA',
-    cursorAccent: '#FFFFFF',
-    selectionBackground: '#0969DA33',
-    selectionForeground: '#1F2328',
-    black: '#1F2328',
-    red: '#CF222E',
-    green: '#116329',
-    yellow: '#4D2D00',
-    blue: '#0969DA',
-    magenta: '#8250DF',
-    cyan: '#1B7C83',
-    white: '#6E7781',
-    brightBlack: '#1F232888',
-    brightRed: '#A40E26',
-    brightGreen: '#1A7F37',
-    brightYellow: '#633C01',
-    brightBlue: '#218BFF',
-    brightMagenta: '#A475F9',
-    brightCyan: '#3192AA',
-    brightWhite: '#1F2328'
+    background: '#E6E6B6',
+    foreground: '#0A1423',
+    cursor: '#4A4616',
+    cursorAccent: '#E6E6B6',
+    selectionBackground: '#4A461633',
+    selectionForeground: '#0A1423',
+    black: '#0A1423',
+    red: '#9B2C22',
+    green: '#3D6023',
+    yellow: '#6B5310',
+    blue: '#1F4E79',
+    magenta: '#6B3A78',
+    cyan: '#1C5F5F',
+    white: '#5A5A44',
+    brightBlack: '#4A4616',
+    brightRed: '#A32B1E',
+    brightGreen: '#3F6321',
+    brightYellow: '#70560E',
+    brightBlue: '#2A6699',
+    brightMagenta: '#8A4C9B',
+    brightCyan: '#1B6262',
+    brightWhite: '#0A1423'
   }
 }
