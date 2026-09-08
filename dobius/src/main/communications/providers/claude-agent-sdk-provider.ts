@@ -6,6 +6,10 @@ import type {
 // Imported from its defining module: default-claude-launch only imports this
 // type for its own use and does not re-export it (TS2459).
 import type { PrepareClaudeLaunch } from '../../agents/agent-runner'
+import {
+  CHANNEL_MAX_TURNS,
+  chatChannelPrompt
+} from '../../agents/agent-channel-voice'
 import { getAgent } from '../../agents/agents-store'
 import {
   listAgentRuns,
@@ -35,10 +39,12 @@ export class ClaudeAgentSdkProvider implements AgentProvider {
     const identity = bindProviderIdentity(this.agentId)
     const runId = await startAgentRun({
       agentId: this.agentId,
-      prompt: launch.prompt,
+      prompt: chatChannelPrompt(launch.prompt),
       cwd: launch.cwd,
       prepareClaudeLaunch: this.prepareClaudeLaunch,
-      options: { source: 'channel' }
+      // Why: without an explicit cap a chat turn inherits agent-runner's
+      // build-sized default of 100 turns (agent-runner.ts, maxTurns ?? 100).
+      options: { source: 'channel', maxTurns: CHANNEL_MAX_TURNS }
     })
     return { runId, identityPubkey: identity.pubkey }
   }
@@ -51,9 +57,11 @@ export class ClaudeAgentSdkProvider implements AgentProvider {
     }
     await startAgentRun({
       agentId: this.agentId,
-      prompt,
+      prompt: chatChannelPrompt(prompt),
       prepareClaudeLaunch: this.prepareClaudeLaunch,
-      options: { source: 'channel' }
+      // Why: without an explicit cap a chat turn inherits agent-runner's
+      // build-sized default of 100 turns (agent-runner.ts, maxTurns ?? 100).
+      options: { source: 'channel', maxTurns: CHANNEL_MAX_TURNS }
     })
   }
 

@@ -1,5 +1,6 @@
 import type { listAgentRuns } from '../../agents/agent-runner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CHANNEL_MAX_TURNS } from '../../agents/agent-channel-voice'
 
 const electronMock = vi.hoisted(() => ({
   BrowserWindow: { getAllWindows: () => [] }
@@ -96,9 +97,12 @@ describe('runner-backed agent providers', () => {
     expect(runnerMock.startAgentRun).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: 'agent-1',
-        prompt: 'hello',
+        // Channel traffic is wrapped with the shared chat voice and capped at
+        // CHANNEL_MAX_TURNS (agents/agent-channel-voice.ts) — the raw text is
+        // carried inside the wrapper, it is no longer passed through bare.
+        prompt: expect.stringContaining('hello'),
         cwd: '/tmp/w',
-        options: { source: 'channel' }
+        options: { source: 'channel', maxTurns: CHANNEL_MAX_TURNS }
       })
     )
   })
@@ -126,7 +130,8 @@ describe('runner-backed agent providers', () => {
       expect.objectContaining({
         agentId: 'agent-1',
         prepareCodexLaunch,
-        options: { source: 'channel' }
+        prompt: expect.stringContaining('hi'),
+        options: { source: 'channel', maxTurns: CHANNEL_MAX_TURNS }
       })
     )
   })
@@ -144,9 +149,12 @@ describe('runner-backed agent providers', () => {
 
     await provider.send('  follow up  ')
 
-    expect(runnerMock.startAgentRun).toHaveBeenLastCalledWith(
-      expect.objectContaining({ prompt: 'follow up', options: { source: 'channel' } })
-    )
+    const call = runnerMock.startAgentRun.mock.calls.at(-1)?.[0]
+    // Trimmed, wrapped in the chat voice, and turn-capped.
+    expect(call.prompt).toContain('follow up')
+    expect(call.prompt).not.toContain('  follow up  ')
+    expect(call.prompt).toContain('live team chat')
+    expect(call.options).toEqual({ source: 'channel', maxTurns: CHANNEL_MAX_TURNS })
   })
 
   it('send rejects an empty prompt', async () => {

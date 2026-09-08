@@ -6,6 +6,7 @@ import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import type { Store } from '../../persistence'
+import { appendAgentMemory } from '../agent-identity-files'
 import { appendAgentRunOutbox } from '../agent-runs-store'
 import { createDobiusToolHandlers, type DobiusToolContext } from './dobius-tool-handlers'
 
@@ -123,6 +124,17 @@ export function buildDobiusToolServer(context: DobiusToolContext): McpSdkServerC
     version: '1.0.0',
     tools: [
       ...channelTools,
+      tool(
+        'remember',
+        'Save a durable fact to your own memory so you still know it on your next run. Use it for things that stay true — a decision the user made, where something lives, a preference, a gotcha you hit. One fact per call, written as a short sentence. Do NOT use it for the details of the task you are doing right now; that is what your reply is for.',
+        { note: z.string().min(1).max(500) },
+        async (args) => {
+          const count = appendAgentMemory(context.agentId, args.note)
+          return count === 0
+            ? textResult('Nothing saved — the note was empty.')
+            : textResult(`Saved to memory (${count} ${count === 1 ? 'fact' : 'facts'} held).`)
+        }
+      ),
       tool(
         'asana_draft_comment',
         'Queue a draft Asana comment for human approval. Never posts to Asana.',

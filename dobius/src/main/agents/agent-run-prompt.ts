@@ -1,8 +1,18 @@
 import type { CustomAgent } from '../../shared/agents'
 import { readAgentPromptFiles } from './agent-identity-files'
 
+// Why 8 and not 40: measured 2026-09-07, the last 40 entries were 5.4-5.9KB for
+// every crew member — 26% of Gunner's system prompt, 69% of Adam's and 78% of
+// Voice Conductor's. Two costs, not one. It is the largest single section of the
+// prompt for most agents, and because each entry is 120 characters of the agent's
+// own past prose it is also the strongest style example in the context, sitting
+// last and closest to the reply. Agents were reading forty samples of themselves
+// writing at length and then continuing the pattern. Eight is enough to answer
+// "what did I just do" without teaching the voice.
+const PROGRESS_LOG_LINES = 8
+
 function progressLogRecentLines(content: string): string {
-  return content.split(/\r?\n/).filter(Boolean).slice(-40).join('\n')
+  return content.split(/\r?\n/).filter(Boolean).slice(-PROGRESS_LOG_LINES).join('\n')
 }
 
 function addPromptSection(sections: string[], heading: string, content: string): void {

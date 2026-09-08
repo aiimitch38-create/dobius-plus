@@ -157,6 +157,32 @@ export function readAgentPromptFiles(agentId: string): AgentPromptFiles {
   }
 }
 
+// Why: memory.md was readable by the prompt builder and writable only from the
+// Settings dialog over IPC, so no agent could record anything it learned — every
+// run started amnesiac and all six crew memories sat at their placeholder text.
+// This is the agent-facing writer behind the `remember` tool.
+const MEMORY_MAX_LINES = 200
+
+export function appendAgentMemory(agentId: string, note: string): number {
+  const line = note.replace(/\s+/g, ' ').trim()
+  if (!line) {
+    return 0
+  }
+  const filePath = agentMemoryFilePath(agentId)
+  const current = readOrCreate(filePath, MEMORY_TEMPLATE)
+  // Why: the file ships with a placeholder that readAgentPromptFiles strips from
+  // the prompt. Keeping it once a real note lands would make the whole file
+  // non-template and push the placeholder into every future system prompt.
+  const kept = current
+    .split(/\r?\n/)
+    .filter((entry) => entry.trim() && entry.trim() !== MEMORY_TEMPLATE.trim())
+  // Why: same unbounded-growth guard as the progress log — memory is injected in
+  // full on every run, so it cannot be allowed to grow without a ceiling.
+  const lines = [...kept, `- ${line}`].slice(-MEMORY_MAX_LINES)
+  atomicWrite(filePath, `${lines.join('\n')}\n`)
+  return lines.length
+}
+
 const PROGRESS_LOG_MAX_LINES = 400
 
 export function appendAgentProgressLog(agentId: string, line: string): void {

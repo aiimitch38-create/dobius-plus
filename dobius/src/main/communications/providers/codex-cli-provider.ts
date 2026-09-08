@@ -4,6 +4,10 @@ import type {
   AgentRun
 } from '../../../shared/agents'
 import type { PrepareCodexLaunch } from '../../agents/default-codex-launch'
+import {
+  CHANNEL_MAX_TURNS,
+  chatChannelPrompt
+} from '../../agents/agent-channel-voice'
 import { getAgent } from '../../agents/agents-store'
 import { listAgentRuns, startAgentRun, stopAgentRun } from '../../agents/agent-runner'
 import { subscribeToAgentRunEvents } from '../../agents/agent-run-events'
@@ -28,13 +32,15 @@ export class CodexCliProvider implements AgentProvider {
     const identity = bindProviderIdentity(this.agentId)
     const runId = await startAgentRun({
       agentId: this.agentId,
-      prompt: launch.prompt,
+      prompt: chatChannelPrompt(launch.prompt),
       cwd: launch.cwd,
       prepareClaudeLaunch: async () => {
         throw new Error('Codex runs do not use Claude account preparation')
       },
       prepareCodexLaunch: this.prepareCodexLaunch,
-      options: { source: 'channel' }
+      // Why: without an explicit cap a chat turn inherits agent-runner's
+      // build-sized default of 100 turns (agent-runner.ts, maxTurns ?? 100).
+      options: { source: 'channel', maxTurns: CHANNEL_MAX_TURNS }
     })
     return { runId, identityPubkey: identity.pubkey }
   }
@@ -47,12 +53,14 @@ export class CodexCliProvider implements AgentProvider {
     }
     await startAgentRun({
       agentId: this.agentId,
-      prompt,
+      prompt: chatChannelPrompt(prompt),
       prepareClaudeLaunch: async () => {
         throw new Error('Codex runs do not use Claude account preparation')
       },
       prepareCodexLaunch: this.prepareCodexLaunch,
-      options: { source: 'channel' }
+      // Why: without an explicit cap a chat turn inherits agent-runner's
+      // build-sized default of 100 turns (agent-runner.ts, maxTurns ?? 100).
+      options: { source: 'channel', maxTurns: CHANNEL_MAX_TURNS }
     })
   }
 
