@@ -835,12 +835,18 @@ function clampText(value: string, max: number): string {
   return value.length <= max ? value : `${value.slice(0, max)}… [truncated]`;
 }
 
-function contentMentionsAgent(content: string, agent: DobiusAgentRecord): boolean {
+export function contentMentionsAgent(content: string, agent: DobiusAgentRecord): boolean {
   const haystack = content.toLowerCase();
   const name = agent.name.trim().toLowerCase();
   if (!name) return false;
   const compact = name.replace(/\s+/g, "");
-  return haystack.includes(`@${name}`) || haystack.includes(`@${compact}`);
+  if (haystack.includes(`@${name}`) || haystack.includes(`@${compact}`)) return true;
+  // Why: Carson types "adam", not "@Adam". A human naming an agent should route
+  // to that agent alone. Word-boundary + length>=4 so "adam" matches but
+  // "adamant" does not, and short names cannot collide with ordinary words.
+  if (compact.length < 4) return false;
+  const escaped = compact.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(haystack);
 }
 
 async function dispatchMessageToDobiusAgents(args: {
@@ -870,17 +876,25 @@ async function dispatchMessageToDobiusAgents(args: {
     [...args.participantPubkeys, ...roomPubkeys].map((value) => value.toLowerCase()),
   );
   const dispatchAgentPubkeyById = await agentPubkeysById(agents);
-  const targets: DobiusAgentRecord[] = [];
+  const members: DobiusAgentRecord[] = [];
   for (const agent of agents) {
     // An agent never answers itself.
     if (args.author && agent.id === args.author.agentId) continue;
     if (!targetPubkeys.has(dispatchAgentPubkeyById.get(agent.id) ?? "")) continue;
-    // Membership wakes an agent for HUMAN messages only. For an agent-authored
-    // message the target must be @-mentioned in it — otherwise every member
-    // agent would answer every other agent forever.
+    // For an agent-authored message the target must be mentioned in it —
+    // otherwise every member agent would answer every other agent forever.
     if (args.author && !contentMentionsAgent(args.content, agent)) continue;
-    targets.push(agent);
+    members.push(agent);
   }
+  // Why: a HUMAN message that names agents wakes only those. Naming nobody
+  // still broadcasts, so the channel keeps working as a room. Without this one
+  // word from Carson started a full agent session for every member at once —
+  // measured at 4 concurrent runs per message.
+  const namedByHuman = args.author
+    ? []
+    : members.filter((agent) => contentMentionsAgent(args.content, agent));
+  const targets: DobiusAgentRecord[] =
+    namedByHuman.length > 0 ? namedByHuman : members;
   const inThread = args.threadParentEventId !== null;
   // Context for the turn: who is in the room and what was just said. Without
   // it each agent saw only the bare triggering text — no names, no history —
