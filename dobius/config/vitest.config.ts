@@ -16,6 +16,10 @@ export default defineConfig({
       // via '@comms/*' (its internal root, separate from '@' so its imports
       // never collide with the rest of the app's) — without this alias here
       // too, those tests can't resolve their own module's dependencies.
+      // Why: 355 *.test.mjs files import node's built-in runner but resolve
+      // their sources through vitest-only aliases, so neither runner could
+      // execute them. The shim re-exports vitest's equivalents.
+      'node:test': resolve('config/node-test-shim.mjs'),
       ...commsAliases()
     }
   },
