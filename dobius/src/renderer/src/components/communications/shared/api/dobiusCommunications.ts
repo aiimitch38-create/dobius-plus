@@ -905,7 +905,7 @@ async function dispatchMessageToDobiusAgents(args: {
   ]);
   for (const candidate of agents) {
     const candidatePubkey = dispatchAgentPubkeyById.get(candidate.id);
-    if (candidatePubkey) nameByPubkey.set(candidatePubkey, candidate.name);
+    if (candidatePubkey) nameByPubkey.set(candidatePubkey.toLowerCase(), candidate.name);
   }
   const channelAgentNames = agents
     .filter((candidate) => targetPubkeys.has(dispatchAgentPubkeyById.get(candidate.id) ?? ""))
@@ -913,6 +913,33 @@ async function dispatchMessageToDobiusAgents(args: {
   const history = await queryRelay([
     { kinds: [9], "#h": [args.channelId], limit: HISTORY_MESSAGE_LIMIT },
   ]).catch(() => [] as RelayEventRecord[]);
+  // Why: agents are re-keyed over time (an agent deleted and recreated gets a
+  // new derived pubkey), so history written under a retired key resolved to
+  // "someone" — 173 of Adam's and 99 of Friday's messages in home-base. Agents
+  // then read a transcript that cannot tell them who said what, and re-derive
+  // facts a teammate already established. The relay keeps kind-0 metadata for
+  // every key it has seen, so resolve the retired ones from there.
+  const unknownPubkeys = [
+    ...new Set(
+      history
+        .map((event) => event.pubkey.toLowerCase())
+        .filter((pubkey) => !nameByPubkey.has(pubkey)),
+    ),
+  ];
+  if (unknownPubkeys.length > 0) {
+    const profiles = await queryRelay([{ kinds: [0], authors: unknownPubkeys }]).catch(
+      () => [] as RelayEventRecord[],
+    );
+    for (const profile of profiles) {
+      try {
+        const parsed = JSON.parse(profile.content) as { name?: string; display_name?: string };
+        const label = parsed.name || parsed.display_name;
+        if (label) nameByPubkey.set(profile.pubkey.toLowerCase(), label);
+      } catch {
+        // A malformed profile just leaves that key unresolved.
+      }
+    }
+  }
   const lines = history
     .filter((event) => event.id !== args.eventId)
     .sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id))
