@@ -342,6 +342,7 @@ export async function startAgentRun(args: {
         ? [...new Set([...configuredTools, ...CHANNEL_AGENT_BASELINE_TOOLS])]
         : configuredTools
     const allowedTools = withDobiusToolAllowRule(sourcedTools)
+    const isChannelRun = (args.options?.source ?? 'manual') === 'channel'
     const options: Options = {
       systemPrompt: systemPrompt || undefined,
       model: args.options?.model ?? agent.model,
@@ -355,12 +356,20 @@ export async function startAgentRun(args: {
       abortController,
       env: buildRunEnv(preparation),
       maxTurns: args.options?.maxTurns ?? 100,
-      maxBudgetUsd: args.options?.maxBudgetUsd ?? DEFAULT_MAX_BUDGET_USD,
+      // Channel chat is cheap now (~$0.20/run on Sonnet with length limits);
+      // $1 is ~5x a typical run — real work never dies mid-task, runaways stop.
+      maxBudgetUsd:
+        args.options?.maxBudgetUsd ?? (isChannelRun ? 1 : DEFAULT_MAX_BUDGET_USD),
       outputFormat: args.options?.outputFormat,
-      // Load the user's ~/.claude settings (skills, hooks) and the project's
-      // CLAUDE.md / memory at the agent's cwd — without this an agent runs
-      // blind to the very files that define how work happens in its folder.
-      settingSources: ['user', 'project']
+      // Load the project's CLAUDE.md / memory at the agent's cwd — without this
+      // an agent runs blind to the very files that define how work happens in
+      // its folder.
+      // Channel runs deliberately SKIP 'user': the operator's ~/.claude carries
+      // a 195-skill catalog plus global CLAUDE.md that measured 9,906 tokens on
+      // every cold boot, and channel agents get their skills named explicitly
+      // per-agent instead. Hard rails come from buildAgentHardRailHooks below,
+      // not from settings, so dropping 'user' does not weaken them.
+      settingSources: isChannelRun ? ['project'] : ['user', 'project']
     }
     // Why: the SDK's bundled CLI lives inside app.asar after packaging and cannot
     // be spawned as a real file. Resolve the user's installed Claude CLI so native

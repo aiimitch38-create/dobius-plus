@@ -814,7 +814,7 @@ async function awaitDobiusAgentRun(
 // Backstop for agent-to-agent chains: even with the mention requirement below, a
 // pair of agents that keep @-mentioning each other must terminate. Depth counts
 // agent-authored hops from the human message that started the chain.
-const MAX_AGENT_CHAIN_DEPTH = 8;
+const MAX_AGENT_CHAIN_DEPTH = 3;
 
 // An agent that judges it wasn't the one directed to answer returns this exact
 // token instead of prose, so dispatchMessageToDobiusAgents can skip publishing
@@ -956,7 +956,7 @@ async function dispatchMessageToDobiusAgents(args: {
         // answer — post nothing. Without this, every agent in the channel
         // posted its own "I'm standing down" line, which is exactly the noise
         // an explicit "only X replies" instruction was trying to prevent.
-        if (reply.trim() === NO_REPLY_SENTINEL) {
+        if (reply.includes(NO_REPLY_SENTINEL)) {
           return;
         }
         const publishedId = await publishDobiusAgentReply({
@@ -1809,7 +1809,7 @@ export async function runDobiusBoardTaskInChannel(args: {
     broadcast: true,
   };
   const reply = await awaitDobiusAgentRun(agent, runId, live);
-  if (reply.trim() && reply.trim() !== NO_REPLY_SENTINEL) {
+  if (reply.trim() && !reply.includes(NO_REPLY_SENTINEL)) {
     await publishDobiusAgentReply({
       agent,
       channelId: args.channelId,

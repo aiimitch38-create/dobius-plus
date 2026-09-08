@@ -138,7 +138,7 @@ export async function handleChannelMessage(
         permissionMode: 'dontAsk',
         allowedTools: readonlyTools(match.agent),
         maxTurns: 25,
-        maxBudgetUsd: 0.5,
+        maxBudgetUsd: 1,
         onResult: (message) => {
           void sendOnce(resultReply(match.agent, message))
         },
