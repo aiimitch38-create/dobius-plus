@@ -9,6 +9,13 @@ const {
 } = require('./packaged-runtime-node-modules.cjs')
 
 const isMacRelease = process.env.DOBIUS_MAC_RELEASE === '1'
+
+// Why: ad-hoc signing mints a new code identity on every build, so macOS treats
+// each install as a different app — TCC grants (mic, accessibility, screen
+// recording, app management) are dropped and duplicate permission rows pile up.
+// A stable self-signed local certificate keeps one identity across dev builds.
+// Create it once; absent, builds fall back to ad-hoc exactly as before.
+const LOCAL_DEV_SIGN_IDENTITY = 'Dobius Local Signing'
 const isLinuxArm64Release = process.env.DOBIUS_LINUX_ARM64_RELEASE === '1'
 const featureWallResources = {
   from: 'resources/onboarding/feature-wall',
@@ -193,6 +200,9 @@ module.exports = {
     createDesktopShortcut: 'always'
   },
   mac: {
+    identity: isMacRelease
+      ? undefined
+      : (process.env.CSC_NAME ?? findInstalledMacSigningIdentity() ?? undefined),
     icon: 'resources/build/icon.icns',
     entitlements: 'resources/build/entitlements.mac.plist',
     entitlementsInherit: 'resources/build/entitlements.mac.plist',
@@ -451,7 +461,11 @@ function findInstalledMacSigningIdentity(keychainFile) {
       return releaseMatch[1]
     }
     if (!isMacRelease) {
-      return output.match(/"([^"]*Apple Development:[^"]+)"/)?.[1] ?? null
+      return (
+        output.match(/"([^"]*Apple Development:[^"]+)"/)?.[1] ??
+        output.match(new RegExp(`"(${LOCAL_DEV_SIGN_IDENTITY})"`))?.[1] ??
+        null
+      )
     }
   } catch {}
   return null
