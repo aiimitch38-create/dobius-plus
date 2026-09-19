@@ -347,3 +347,20 @@ that is one plain command and passes every time.
 - **Still true and worth keeping**: a dropped stash IS recoverable while unreachable — `git fsck --unreachable`, then `git update-ref refs/recovered/<slug> <sha>` to pin it before `gc` prunes. A `git stash -u` writes **three** commits (`WIP on …`, `index on …`, `untracked files on …`); new files live only in the third, so recover them with `git checkout <untracked-sha> -- <paths>`. Good technique; I just applied it to a problem that did not exist.
 - **Also verified**: committing with explicit pathspecs (`git add -- a b c` && `git commit -- a b c`) genuinely does keep other agents' dirty files out of your commit. That part held under concurrent editing.
 - **CONTEXT**: Related to the 2026-08-25 NOTES rule about never `git checkout <my-branch>` in a shared tree — same root cause (shared repo state), same silent blast radius. And if you do restore someone's work into a shared tree, do not commit it on their behalf: check whether they already committed it somewhere first.
+
+## 2026-09-19 — `main` in dobius-plus is the OLD app; never base a worktree on it
+_claude_
+
+Created `git worktree add -b feat/… <path> main` for a new integration. `main`
+(8b53069c, "v1.0.66 shipped") is the legacy `electron/*.js` codebase: no `dobius/`
+directory, no `src/main/asana`, nothing the CLAUDE.md describes. The only symptom was
+`ln: …/dobius/node_modules: No such file or directory` when symlinking deps. The
+Dobius+ app lives on the `feat/dobius-plus-ui` lineage; the newest tip is whatever the
+shared checkout has out (`fix/channel-cost` @ 8841a218 that day, 178 ahead of
+`feat/dobius-plus-ui`). `main` and that lineage have diverged by hundreds of commits
+in both directions.
+
+**Rule.** Before `git worktree add`, run
+`git ls-tree -d --name-only <base> dobius/src/main` — if it prints nothing, the base
+is the wrong codebase. Base new app work on the shared checkout's current commit
+(`git -C "…/Dobius/dobius-plus" rev-parse HEAD`), not on `main`.
