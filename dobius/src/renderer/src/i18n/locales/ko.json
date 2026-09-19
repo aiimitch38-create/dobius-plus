@@ -669,7 +669,9 @@
         "devSearchKeywordError": "error",
         "devSearchKeywordNotification": "notification",
         "automationTitle": "Automation",
-        "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases."
+        "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases.",
+        "hostingTitle": "Hostinger",
+        "hostingDescription": "Your Hostinger VPS, domains, and DNS records."
       },
       "useAppMenuPaste": {
         "pasteTooLarge": "붙여넣기 내용이 너무 큽니다."
@@ -1711,7 +1713,9 @@
         "searchIssues": "이슈 검색",
         "useIssueNumber": "이슈 #{{value0}} 사용",
         "noMatchingIssuesLoaded": "일치하는 이슈를 불러오지 않았습니다.",
-        "editReviewersWithCurrent": "리뷰어 편집: {{value0}}"
+        "editReviewersWithCurrent": "리뷰어 편집: {{value0}}",
+        "surfaceTasks": "Tasks",
+        "surfaceBoard": "Board"
       },
       "Terminal": {
         "73768427cf": "닫기",
@@ -6131,7 +6135,9 @@
           "custom-description": "다른 기기가 연결할 수 있는 주소를 알립니다. LAN 또는 Tailscale 호스트, 또는 전체 ws(s):// URL입니다.",
           "custom-hint": "호스트, host:port 또는 ws(s):// URL을 입력하세요.",
           "custom-cancel": "취소",
-          "custom-use": "주소 사용"
+          "custom-use": "주소 사용",
+          "qr-alt": "QR code to open this Dobius+ server in a browser",
+          "qr-hint": "Scan with your phone camera to open the web view — no app install needed."
         },
         "Settings": {
           "3bf149e873": "프로젝트 설정 > {{value0}}",
@@ -6208,7 +6214,11 @@
           "dev": "Dev Tools",
           "devDescription": "Dev-only tools for exercising UI states.",
           "automationTitle": "Automation",
-          "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases."
+          "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases.",
+          "openrouterKey": "OpenRouter API key",
+          "openrouterHint": "Lets an OpenRouter harness run. Stored encrypted on this machine.",
+          "hostingTitle": "Hostinger",
+          "hostingDescription": "Your Hostinger VPS, domains, and DNS records. Add DNS records without leaving the app."
         },
         "SettingsFormControls": {
           "42a4d15a30": "일치하는 글꼴이 없습니다.",
@@ -8893,6 +8903,73 @@
         "VoiceConductor": {
           "title": "Voice Conductor",
           "description": "Run a background Opus session that routes voice commands and dispatched work to the right terminal."
+        },
+        "HarnessCatalogSection": {
+          "title": "Harness Catalog",
+          "description": "External agent CLIs you can launch and DM like built-in agents. Each one gets its own Communications identity.",
+          "empty": "No harnesses yet. Add an ACP-speaking CLI below.",
+          "promptPlaceholder": "Prompt sent to a harness when you press play",
+          "addTitle": "Add harness",
+          "argsPlaceholder": "Arguments, space separated (acp)",
+          "save": "Save harness"
+        },
+        "HostingerPane": {
+          "loadFailed": "Could not load Hostinger account.",
+          "dnsLoadFailed": "Could not load DNS records.",
+          "tokenRequired": "Enter an API token before setting it.",
+          "tokenSet": "Hostinger token saved.",
+          "tokenFailed": "Could not save token.",
+          "tokenCleared": "Token cleared.",
+          "tokenClearFailed": "Could not clear token.",
+          "dnsSaved": "DNS record saved.",
+          "dnsSaveFailed": "Could not save DNS record.",
+          "statusConnected": "● Connected",
+          "statusChecking": "Checking…",
+          "statusNotConnected": "Not connected",
+          "tokenLabel": "Hostinger API token",
+          "tokenPlaceholder": "New token",
+          "setTokenButton": "Set",
+          "clearTokenButton": "Clear",
+          "refreshButton": "Refresh",
+          "vpsHeader": "Servers",
+          "vpsDescription": "VPS instances on this account.",
+          "vpsNone": "No VPS on this account.",
+          "colHostname": "Hostname",
+          "colPlan": "Plan",
+          "colIpv4": "IPv4",
+          "colOs": "OS",
+          "colState": "State",
+          "domainsHeader": "Domains",
+          "domainsDescription": "Pick a domain to view and add DNS records.",
+          "domainLabel": "Domain",
+          "domainPlaceholder": "Choose a domain",
+          "dnsNone": "No records.",
+          "colName": "Name",
+          "colType": "Type",
+          "colValue": "Value",
+          "colTtl": "TTL",
+          "addRecordLabel": "Add a record",
+          "replaceWarning": "Replace is on: this will delete {{values}}.",
+          "addRecordDescription": "Existing values for the same name and type are kept unless Replace is on.",
+          "placeholderCname": "target.example.com",
+          "placeholderTxt": "text",
+          "placeholderIp": "1.2.3.4",
+          "replaceToggle": "Replace",
+          "addRecordButton": "Save record"
+        },
+        "ProviderKeySection": {
+          "saved": "Saved — paste a new key to replace it",
+          "placeholder": "Paste your API key",
+          "save": "Save",
+          "remove": "Remove",
+          "configured": "A key is stored, encrypted on this machine. It is never shown again.",
+          "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "hostinger": {
+          "search": {
+            "title": "Hostinger",
+            "description": "Connect a Hostinger API token to see your VPS, domains, and DNS records, and add DNS records."
+          }
         }
       },
       "right": {
@@ -10476,7 +10553,14 @@
           "FloatingTerminalToggleButton": {
             "3b04b065b5": "플로팅 워크스페이스 표시",
             "5785dd9148": "플로팅 워크스페이스 최소화",
-            "bfe7809a70": "{{value0}} 플로팅 워크스페이스({{value1}})"
+            "bfe7809a70": "{{value0}} 플로팅 워크스페이스({{value1}})",
+            "dock-no-terminal": "Could not start the chat.",
+            "dock-ready": "Ready",
+            "dock-talk": "Talk to Dobius",
+            "dock-name": "Dobius",
+            "dock-voice": "Toggle dictation",
+            "dock-voice-label": "Voice",
+            "dock-chat-label": "Chat"
           },
           "FloatingTerminalWindowControls": {
             "2f6054342c": "최소화",
@@ -12561,6 +12645,11 @@
           "categoryPlaceholder": "Category",
           "removeTag": "Remove tag",
           "addTagPlaceholder": "Add tag…"
+        }
+      },
+      "agents-hub": {
+        "AgentsHubSubNav": {
+          "subnav": "Agent surfaces"
         }
       }
     },

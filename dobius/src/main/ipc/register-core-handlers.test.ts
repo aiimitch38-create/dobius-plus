@@ -51,6 +51,8 @@ const {
   registerGitLabHandlersMock,
   registerHostedReviewHandlersMock,
   registerAsanaHandlersMock,
+  registerHostingerHandlersMock,
+  registerVertexTaskHandlersMock,
   registerAgentsHandlersMock,
   registerExportHandlersMock,
   registerKnowledgeHandlersMock,
@@ -116,6 +118,8 @@ const {
   registerGitLabHandlersMock: vi.fn(),
   registerHostedReviewHandlersMock: vi.fn(),
   registerAsanaHandlersMock: vi.fn(),
+  registerHostingerHandlersMock: vi.fn(),
+  registerVertexTaskHandlersMock: vi.fn(),
   registerAgentsHandlersMock: vi.fn(),
   registerExportHandlersMock: vi.fn(),
   registerKnowledgeHandlersMock: vi.fn(),
@@ -362,6 +366,17 @@ vi.mock('./asana', () => ({
   registerAsanaHandlers: registerAsanaHandlersMock
 }))
 
+vi.mock('./hostinger', () => ({
+  registerHostingerHandlers: registerHostingerHandlersMock
+}))
+
+// Pre-existing gap: the registrar has called registerVertexTaskHandlers() since before
+// this branch, but the test never mocked it, so it threw on the node `electron` stub
+// before reaching the later assertions.
+vi.mock('./vertex-tasks', () => ({
+  registerVertexTaskHandlers: registerVertexTaskHandlersMock
+}))
+
 vi.mock('./agents', () => ({
   registerAgentsHandlers: registerAgentsHandlersMock
 }))
@@ -431,6 +446,8 @@ describe('registerCoreHandlers', () => {
     registerGitLabHandlersMock.mockReset()
     registerHostedReviewHandlersMock.mockReset()
     registerAsanaHandlersMock.mockReset()
+    registerHostingerHandlersMock.mockReset()
+    registerVertexTaskHandlersMock.mockReset()
     registerAgentsHandlersMock.mockReset()
     registerExportHandlersMock.mockReset()
     registerKnowledgeHandlersMock.mockReset()
@@ -497,6 +514,7 @@ describe('registerCoreHandlers', () => {
     expect(registerGitLabHandlersMock).toHaveBeenCalledWith(store)
     expect(registerHostedReviewHandlersMock).toHaveBeenCalledWith(store, stats)
     expect(registerAsanaHandlersMock).toHaveBeenCalled()
+    expect(registerHostingerHandlersMock).toHaveBeenCalled()
     expect(registerAgentsHandlersMock).toHaveBeenCalled()
     expect(registerFeedbackHandlersMock).toHaveBeenCalled()
     expect(registerImessageBridgeHandlersMock).toHaveBeenCalled()

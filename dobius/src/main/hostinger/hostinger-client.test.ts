@@ -144,20 +144,60 @@ describe('requests', () => {
     await expect(listHostingerDomains()).rejects.toThrow('Hostinger rejected the token: Unauthenticated.')
   })
 
-  it('validates, then writes, then re-reads the zone', async () => {
+  it('reads the zone, validates, writes, then re-reads', async () => {
+    const before = queueResponse(200, '[]')
     const validate = queueResponse(200, '{"message":"Request accepted"}')
     const put = queueResponse(200, '{"message":"Request accepted"}')
-    const get = queueResponse(200, '[{"name":"vigbets","type":"A","ttl":300,"records":[{"content":"45.82.75.172"}]}]')
+    const after = queueResponse(200, '[{"name":"vigbets","type":"A","ttl":300,"records":[{"content":"45.82.75.172"}]}]')
     const { upsertHostingerDnsRecord } = await import('./hostinger-client')
     const records = await upsertHostingerDnsRecord({ domain: 'vertexio.online', name: 'vigbets', type: 'A', content: '45.82.75.172', ttl: 300 })
+    expect(before.options).toMatchObject({ method: 'GET', path: '/api/dns/v1/zones/vertexio.online' })
     expect(validate.options).toMatchObject({ method: 'POST', path: '/api/dns/v1/zones/vertexio.online/validate' })
     expect(put.options).toMatchObject({ method: 'PUT', path: '/api/dns/v1/zones/vertexio.online' })
     expect(JSON.parse(String(put.request.write.mock.calls[0][0]))).toEqual({
       overwrite: true,
       zone: [{ name: 'vigbets', type: 'A', ttl: 300, records: [{ content: '45.82.75.172' }] }]
     })
-    expect(get.options).toMatchObject({ method: 'GET', path: '/api/dns/v1/zones/vertexio.online' })
+    expect(after.options).toMatchObject({ method: 'GET', path: '/api/dns/v1/zones/vertexio.online' })
     expect(records).toEqual([{ name: 'vigbets', type: 'A', ttl: 300, values: ['45.82.75.172'] }])
+  })
+
+  it('keeps existing values for the same name+type unless replace is set', async () => {
+    queueResponse(200, '[{"name":"@","type":"TXT","ttl":3600,"records":[{"content":"v=spf1 include:_spf.mail.hostinger.com ~all"}]}]')
+    queueResponse(200, '{"message":"Request accepted"}')
+    const put = queueResponse(200, '{"message":"Request accepted"}')
+    queueResponse(200, '[]')
+    const { upsertHostingerDnsRecord } = await import('./hostinger-client')
+    await upsertHostingerDnsRecord({ domain: 'vertexio.online', name: '@', type: 'TXT', content: 'google-site-verification=abc' })
+    expect(JSON.parse(String(put.request.write.mock.calls[0][0])).zone[0].records).toEqual([
+      { content: 'v=spf1 include:_spf.mail.hostinger.com ~all' },
+      { content: 'google-site-verification=abc' }
+    ])
+
+    queueResponse(200, '[{"name":"@","type":"TXT","ttl":3600,"records":[{"content":"old"}]}]')
+    queueResponse(200, '{"message":"Request accepted"}')
+    const putReplace = queueResponse(200, '{"message":"Request accepted"}')
+    queueResponse(200, '[]')
+    await upsertHostingerDnsRecord({ domain: 'vertexio.online', name: '@', type: 'TXT', content: 'new', replace: true })
+    expect(JSON.parse(String(putReplace.request.write.mock.calls[0][0])).zone[0].records).toEqual([{ content: 'new' }])
+  })
+
+  it('stops before PUT when validate rejects the record', async () => {
+    queueResponse(200, '[]')
+    queueResponse(422, '{"message":"The records.0.content field is invalid."}')
+    const { upsertHostingerDnsRecord } = await import('./hostinger-client')
+    await expect(
+      upsertHostingerDnsRecord({ domain: 'vertexio.online', name: 'vigbets', type: 'A', content: 'not-an-ip' })
+    ).rejects.toThrow('Hostinger HTTP 422: The records.0.content field is invalid.')
+    expect(mocks.httpsRequest).toHaveBeenCalledTimes(2)   // GET zone + validate; no PUT
+  })
+
+  it('rejects a malformed IPC payload before any request', async () => {
+    const { upsertHostingerDnsRecord, buildZoneUpdate } = await import('./hostinger-client')
+    await expect(upsertHostingerDnsRecord({ domain: 'vertexio.online', name: 5, type: 'A', content: '1.2.3.4' } as never)).rejects.toThrow(/must be strings/)
+    expect(() => buildZoneUpdate({ domain: 'vertexio.online', name: '@', type: 'A', content: '1.2.3.4', ttl: '300' as never })).toThrow(/TTL must be a number/)
+    expect(buildZoneUpdate({ domain: 'vertexio.online', name: '@', type: 'A', content: '1.2.3.4', ttl: 10 ** 9 }).body.zone[0].ttl).toBe(7 * 24 * 3600)
+    expect(mocks.httpsRequest).not.toHaveBeenCalled()
   })
 
   it('reports a status without throwing when the token is rejected', async () => {

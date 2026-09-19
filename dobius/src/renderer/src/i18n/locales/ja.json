@@ -669,7 +669,9 @@
         "devSearchKeywordError": "error",
         "devSearchKeywordNotification": "notification",
         "automationTitle": "Automation",
-        "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases."
+        "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases.",
+        "hostingTitle": "Hostinger",
+        "hostingDescription": "Your Hostinger VPS, domains, and DNS records."
       },
       "useAppMenuPaste": {
         "pasteTooLarge": "貼り付け内容が大きすぎます。"
@@ -1711,7 +1713,9 @@
         "searchIssues": "Issue を検索",
         "useIssueNumber": "Issue #{{value0}} を使用",
         "noMatchingIssuesLoaded": "一致する issue は読み込まれていません。",
-        "editReviewersWithCurrent": "レビュアーを編集: {{value0}}"
+        "editReviewersWithCurrent": "レビュアーを編集: {{value0}}",
+        "surfaceTasks": "Tasks",
+        "surfaceBoard": "Board"
       },
       "Terminal": {
         "73768427cf": "閉じる",
@@ -6168,7 +6172,9 @@
           "custom-description": "他のデバイスから到達できるアドレスを指定します。LAN や Tailscale のホスト、または完全な ws(s):// URL です。",
           "custom-hint": "ホスト、host:port、または ws(s):// URL を入力してください。",
           "custom-cancel": "キャンセル",
-          "custom-use": "アドレスを使用"
+          "custom-use": "アドレスを使用",
+          "qr-alt": "QR code to open this Dobius+ server in a browser",
+          "qr-hint": "Scan with your phone camera to open the web view — no app install needed."
         },
         "Settings": {
           "3bf149e873": "プロジェクト設定 > {{value0}}",
@@ -6245,7 +6251,11 @@
           "dev": "Dev Tools",
           "devDescription": "Dev-only tools for exercising UI states.",
           "automationTitle": "Automation",
-          "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases."
+          "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases.",
+          "openrouterKey": "OpenRouter API key",
+          "openrouterHint": "Lets an OpenRouter harness run. Stored encrypted on this machine.",
+          "hostingTitle": "Hostinger",
+          "hostingDescription": "Your Hostinger VPS, domains, and DNS records. Add DNS records without leaving the app."
         },
         "SettingsFormControls": {
           "42a4d15a30": "一致するフォントがありません。",
@@ -8893,6 +8903,73 @@
         "VoiceConductor": {
           "title": "Voice Conductor",
           "description": "Run a background Opus session that routes voice commands and dispatched work to the right terminal."
+        },
+        "HarnessCatalogSection": {
+          "title": "Harness Catalog",
+          "description": "External agent CLIs you can launch and DM like built-in agents. Each one gets its own Communications identity.",
+          "empty": "No harnesses yet. Add an ACP-speaking CLI below.",
+          "promptPlaceholder": "Prompt sent to a harness when you press play",
+          "addTitle": "Add harness",
+          "argsPlaceholder": "Arguments, space separated (acp)",
+          "save": "Save harness"
+        },
+        "HostingerPane": {
+          "loadFailed": "Could not load Hostinger account.",
+          "dnsLoadFailed": "Could not load DNS records.",
+          "tokenRequired": "Enter an API token before setting it.",
+          "tokenSet": "Hostinger token saved.",
+          "tokenFailed": "Could not save token.",
+          "tokenCleared": "Token cleared.",
+          "tokenClearFailed": "Could not clear token.",
+          "dnsSaved": "DNS record saved.",
+          "dnsSaveFailed": "Could not save DNS record.",
+          "statusConnected": "● Connected",
+          "statusChecking": "Checking…",
+          "statusNotConnected": "Not connected",
+          "tokenLabel": "Hostinger API token",
+          "tokenPlaceholder": "New token",
+          "setTokenButton": "Set",
+          "clearTokenButton": "Clear",
+          "refreshButton": "Refresh",
+          "vpsHeader": "Servers",
+          "vpsDescription": "VPS instances on this account.",
+          "vpsNone": "No VPS on this account.",
+          "colHostname": "Hostname",
+          "colPlan": "Plan",
+          "colIpv4": "IPv4",
+          "colOs": "OS",
+          "colState": "State",
+          "domainsHeader": "Domains",
+          "domainsDescription": "Pick a domain to view and add DNS records.",
+          "domainLabel": "Domain",
+          "domainPlaceholder": "Choose a domain",
+          "dnsNone": "No records.",
+          "colName": "Name",
+          "colType": "Type",
+          "colValue": "Value",
+          "colTtl": "TTL",
+          "addRecordLabel": "Add a record",
+          "replaceWarning": "Replace is on: this will delete {{values}}.",
+          "addRecordDescription": "Existing values for the same name and type are kept unless Replace is on.",
+          "placeholderCname": "target.example.com",
+          "placeholderTxt": "text",
+          "placeholderIp": "1.2.3.4",
+          "replaceToggle": "Replace",
+          "addRecordButton": "Save record"
+        },
+        "ProviderKeySection": {
+          "saved": "Saved — paste a new key to replace it",
+          "placeholder": "Paste your API key",
+          "save": "Save",
+          "remove": "Remove",
+          "configured": "A key is stored, encrypted on this machine. It is never shown again.",
+          "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "hostinger": {
+          "search": {
+            "title": "Hostinger",
+            "description": "Connect a Hostinger API token to see your VPS, domains, and DNS records, and add DNS records."
+          }
         }
       },
       "right": {
@@ -10476,7 +10553,14 @@
           "FloatingTerminalToggleButton": {
             "3b04b065b5": "フローティングワークスペースを表示",
             "5785dd9148": "フローティングワークスペースを最小限に抑える",
-            "bfe7809a70": "{{value0}} フローティング ワークスペース ({{value1}})"
+            "bfe7809a70": "{{value0}} フローティング ワークスペース ({{value1}})",
+            "dock-no-terminal": "Could not start the chat.",
+            "dock-ready": "Ready",
+            "dock-talk": "Talk to Dobius",
+            "dock-name": "Dobius",
+            "dock-voice": "Toggle dictation",
+            "dock-voice-label": "Voice",
+            "dock-chat-label": "Chat"
           },
           "FloatingTerminalWindowControls": {
             "2f6054342c": "最小化",
@@ -12561,6 +12645,11 @@
           "categoryPlaceholder": "Category",
           "removeTag": "Remove tag",
           "addTagPlaceholder": "Add tag…"
+        }
+      },
+      "agents-hub": {
+        "AgentsHubSubNav": {
+          "subnav": "Agent surfaces"
         }
       }
     },

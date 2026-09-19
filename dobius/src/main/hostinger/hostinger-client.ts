@@ -6,7 +6,13 @@ import type {
   HostingerStatus,
   HostingerVps
 } from '../../shared/hostinger'
-import { HOSTINGER_DOMAIN_RE, isHostingerDnsType } from '../../shared/hostinger'
+import {
+  HOSTINGER_DEFAULT_TTL,
+  HOSTINGER_DOMAIN_RE,
+  HOSTINGER_MAX_NAME_LENGTH,
+  HOSTINGER_MAX_TTL,
+  isHostingerDnsType
+} from '../../shared/hostinger'
 import { getHostingerToken, hasHostingerToken } from './hostinger-token-store'
 
 // Wire facts from the official OpenAPI spec (developers.hostinger.com/openapi/openapi.json,
@@ -19,9 +25,13 @@ import { getHostingerToken, hasHostingerToken } from './hostinger-token-store'
 // `overwrite: true` replaces the RRs matching name+type; false appends to them.
 const HOSTINGER_HOST = 'developers.hostinger.com'
 const TIMEOUT_MS = 15_000
-const DEFAULT_TTL = 3600
+const DEFAULT_TTL = HOSTINGER_DEFAULT_TTL
 
 type Json = Record<string, unknown>
+
+function isObject(value: unknown): value is Json {
+  return typeof value === 'object' && value !== null
+}
 
 function hostingerRequest<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<T> {
   const token = getHostingerToken() // main-process only; throws if not configured
@@ -70,7 +80,7 @@ function hostingerRequest<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?
 }
 
 // Hostinger error bodies are {message, error_code?}; surface the message, not the JSON.
-export function describeHttpError(code: number, raw: string): string {
+function describeHttpError(code: number, raw: string): string {
   try {
     const parsed = JSON.parse(raw) as Json
     const message = typeof parsed.message === 'string' ? parsed.message : ''
@@ -99,9 +109,8 @@ export function parseVps(raw: unknown): HostingerVps[] {
   if (!Array.isArray(raw)) {
     return []
   }
-  return raw.map((item) => {
-    const v = item as Json
-    const template = v.template as Json | undefined
+  return raw.filter(isObject).map((v) => {
+    const template = isObject(v.template) ? v.template : undefined
     return {
       id: asNumberOrNull(v.id) ?? (Number.parseInt(String(v.id ?? ''), 10) || 0),
       hostname: String(v.hostname ?? ''),
@@ -122,8 +131,7 @@ export function parseDomains(raw: unknown): HostingerDomain[] {
   if (!Array.isArray(raw)) {
     return []
   }
-  return raw.map((item) => {
-    const d = item as Json
+  return raw.filter(isObject).map((d) => {
     return {
       domain: String(d.domain ?? ''),
       type: String(d.type ?? ''),
@@ -137,10 +145,9 @@ export function parseZone(raw: unknown): HostingerDnsRecord[] {
   if (!Array.isArray(raw)) {
     return []
   }
-  return raw.map((item) => {
-    const r = item as Json
+  return raw.filter(isObject).map((r) => {
     const values = Array.isArray(r.records)
-      ? r.records.map((x) => String((x as Json)?.content ?? '')).filter(Boolean)
+      ? r.records.filter(isObject).map((x) => String(x.content ?? '')).filter(Boolean)
       : []
     return {
       name: String(r.name ?? '@'),
@@ -151,7 +158,10 @@ export function parseZone(raw: unknown): HostingerDnsRecord[] {
   })
 }
 
-export function assertDomain(domain: string): string {
+function assertDomain(domain: unknown): string {
+  if (typeof domain !== 'string') {
+    throw new Error('Domain must be a string')
+  }
   const trimmed = domain.trim().toLowerCase()
   if (!HOSTINGER_DOMAIN_RE.test(trimmed)) {
     throw new Error(`"${domain}" is not a valid domain name`)
@@ -159,27 +169,52 @@ export function assertDomain(domain: string): string {
   return trimmed
 }
 
-export function buildZoneUpdate(input: HostingerDnsRecordInput): {
-  domain: string
-  body: { overwrite: boolean; zone: { name: string; type: string; ttl: number; records: { content: string }[] }[] }
-} {
-  const domain = assertDomain(input.domain)
-  if (!isHostingerDnsType(input.type)) {
-    throw new Error(`Unsupported DNS record type "${String(input.type)}"`)
+type ZoneUpdateBody = {
+  overwrite: boolean
+  zone: { name: string; type: string; ttl: number; records: { content: string }[] }[]
+}
+
+// Runtime shape check on the IPC payload (repo convention: never trust renderer args),
+// then the field rules. Throws a plain validation Error, never a TypeError.
+export function buildZoneUpdate(
+  input: HostingerDnsRecordInput,
+  existingValues: string[] = []
+): { domain: string; body: ZoneUpdateBody } {
+  if (!isObject(input)) {
+    throw new Error('DNS record input is required')
   }
-  const content = input.content.trim()
-  if (!content) {
+  const { domain, name, type, content, ttl, replace } = input as Record<string, unknown>
+  if (typeof domain !== 'string' || typeof name !== 'string' || typeof type !== 'string' || typeof content !== 'string') {
+    throw new Error('DNS record fields must be strings')
+  }
+  if (ttl !== undefined && typeof ttl !== 'number') {
+    throw new Error('DNS record TTL must be a number')
+  }
+  const safeDomain = assertDomain(domain)
+  if (!isHostingerDnsType(type)) {
+    throw new Error(`Unsupported DNS record type "${type}"`)
+  }
+  const value = content.trim()
+  if (!value) {
     throw new Error('DNS record value is required')
   }
-  const name = input.name.trim() || '@'
-  if (/\s/.test(name)) {
-    throw new Error('DNS record name cannot contain spaces')
+  const safeName = name.trim() || '@'
+  if (/\s/.test(safeName) || safeName.length > HOSTINGER_MAX_NAME_LENGTH) {
+    throw new Error('DNS record name cannot contain spaces or exceed 253 characters')
   }
-  const ttl = input.ttl && Number.isFinite(input.ttl) && input.ttl > 0 ? Math.floor(input.ttl) : DEFAULT_TTL
+  const safeTtl =
+    ttl !== undefined && Number.isFinite(ttl) && ttl > 0
+      ? Math.min(Math.floor(ttl), HOSTINGER_MAX_TTL)
+      : DEFAULT_TTL
+  // Default is ADD: keep the zone's existing values for this name+type and append ours,
+  // so a second TXT at @ or a round-robin A is never silently wiped. `replace: true` is the
+  // explicit, confirmed path. Either way the PUT uses overwrite so the result is exactly
+  // the list we send.
+  const kept = replace === true ? [] : existingValues.filter((v) => v !== value)
+  const records = [...kept, value].map((c) => ({ content: c }))
   return {
-    domain,
-    // overwrite: the pane promises "replaces existing values for the same name and type".
-    body: { overwrite: true, zone: [{ name, type: input.type, ttl, records: [{ content }] }] }
+    domain: safeDomain,
+    body: { overwrite: true, zone: [{ name: safeName, type, ttl: safeTtl, records }] }
   }
 }
 
@@ -196,9 +231,15 @@ export async function listHostingerDns(domain: string): Promise<HostingerDnsReco
   return parseZone(await hostingerRequest<unknown>('GET', `/api/dns/v1/zones/${encodeURIComponent(safe)}`))
 }
 
-// The single write. Validate first so a bad record fails before anything changes.
+// The single write: read the zone (so existing values for this name+type are kept
+// unless `replace`), validate, PUT, then re-read so the caller sees server truth.
+// Validate runs before PUT so a bad record fails before anything changes.
 export async function upsertHostingerDnsRecord(input: HostingerDnsRecordInput): Promise<HostingerDnsRecord[]> {
-  const { domain, body } = buildZoneUpdate(input)
+  const probe = buildZoneUpdate(input)            // shape/field validation before any request
+  const current = await listHostingerDns(probe.domain)
+  const target = probe.body.zone[0]
+  const existing = current.find((r) => r.name === target.name && r.type === target.type)?.values ?? []
+  const { domain, body } = buildZoneUpdate(input, existing)
   const zonePath = `/api/dns/v1/zones/${encodeURIComponent(domain)}`
   await hostingerRequest<unknown>('POST', `${zonePath}/validate`, body)
   await hostingerRequest<unknown>('PUT', zonePath, body)

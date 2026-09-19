@@ -7,7 +7,11 @@ import type {
   HostingerStatus,
   HostingerVps
 } from '../../../../shared/hostinger'
-import { HOSTINGER_DNS_TYPES } from '../../../../shared/hostinger'
+import {
+  HOSTINGER_DEFAULT_TTL,
+  HOSTINGER_DNS_TYPES,
+  isHostingerDnsType
+} from '../../../../shared/hostinger'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
@@ -33,7 +37,8 @@ export function HostingerPane(): React.JSX.Element {
   const [dnsName, setDnsName] = useState('@')
   const [dnsType, setDnsType] = useState<HostingerDnsType>('A')
   const [dnsContent, setDnsContent] = useState('')
-  const [dnsTtl, setDnsTtl] = useState('3600')
+  const [dnsTtl, setDnsTtl] = useState(String(HOSTINGER_DEFAULT_TTL))
+  const [dnsReplace, setDnsReplace] = useState(false)
 
   const loadAccount = useCallback(async () => {
     setBusy(true)
@@ -53,6 +58,11 @@ export function HostingerPane(): React.JSX.Element {
       setVps(nextVps)
       setDomains(nextDomains)
       setSelectedDomain((current) => current || nextDomains.find((d) => d.status === 'active')?.domain || '')
+    } catch (error) {
+      // status() never throws, but the two list calls can (network drop, 5xx after a good status)
+      setVps([])
+      setDomains([])
+      toast.error(errorMessage(error, translate('auto.components.settings.HostingerPane.loadFailed', 'Could not load Hostinger account.')))
     } finally {
       setBusy(false)
     }
@@ -98,14 +108,16 @@ export function HostingerPane(): React.JSX.Element {
       const msg = translate('auto.components.settings.HostingerPane.tokenSet', 'Hostinger token saved.')
       setFeedback(msg)
       toast.success(msg)
-      await loadAccount()
     } catch (error) {
       const msg = errorMessage(error, translate('auto.components.settings.HostingerPane.tokenFailed', 'Could not save token.'))
       setFeedback(msg)
       toast.error(msg)
-    } finally {
       setBusy(false)
+      return
     }
+    setBusy(false)
+    // Outside the token try/catch: a failed account load must not read as "could not save token".
+    await loadAccount()
   }, [loadAccount])
 
   const clearToken = useCallback(async () => {
@@ -141,17 +153,22 @@ export function HostingerPane(): React.JSX.Element {
         name: dnsName.trim() || '@',
         type: dnsType,
         content: dnsContent.trim(),
-        ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : undefined
+        ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : undefined,
+        replace: dnsReplace
       })
       setRecords(next)
       setDnsContent('')
+      setDnsReplace(false)
       toast.success(translate('auto.components.settings.HostingerPane.dnsSaved', 'DNS record saved.'))
     } catch (error) {
       toast.error(errorMessage(error, translate('auto.components.settings.HostingerPane.dnsSaveFailed', 'Could not save DNS record.')))
     } finally {
       setBusy(false)
     }
-  }, [selectedDomain, dnsName, dnsType, dnsContent, dnsTtl])
+  }, [selectedDomain, dnsName, dnsType, dnsContent, dnsTtl, dnsReplace])
+
+  // What "replace" would delete, so the user sees it before clicking Save.
+  const existingForTarget = records.find((r) => r.name === (dnsName.trim() || '@') && r.type === dnsType)?.values ?? []
 
   const searchEntry = getHostingerPaneSearchEntries()[0]
   const connectionText = feedback
@@ -213,11 +230,11 @@ export function HostingerPane(): React.JSX.Element {
               <table className="w-full text-xs">
                 <thead className="text-muted-foreground">
                   <tr>
-                    <th className="py-1 text-left font-normal">Hostname</th>
-                    <th className="py-1 text-left font-normal">Plan</th>
-                    <th className="py-1 text-left font-normal">IPv4</th>
-                    <th className="py-1 text-left font-normal">OS</th>
-                    <th className="py-1 text-left font-normal">State</th>
+                    <th className="py-1 text-left font-normal">{translate('auto.components.settings.HostingerPane.colHostname', 'Hostname')}</th>
+                    <th className="py-1 text-left font-normal">{translate('auto.components.settings.HostingerPane.colPlan', 'Plan')}</th>
+                    <th className="py-1 text-left font-normal">{translate('auto.components.settings.HostingerPane.colIpv4', 'IPv4')}</th>
+                    <th className="py-1 text-left font-normal">{translate('auto.components.settings.HostingerPane.colOs', 'OS')}</th>
+                    <th className="py-1 text-left font-normal">{translate('auto.components.settings.HostingerPane.colState', 'State')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -263,10 +280,10 @@ export function HostingerPane(): React.JSX.Element {
                   <table className="w-full text-xs">
                     <thead className="text-muted-foreground">
                       <tr>
-                        <th className="py-1 text-left font-normal">Name</th>
-                        <th className="py-1 text-left font-normal">Type</th>
-                        <th className="py-1 text-left font-normal">Value</th>
-                        <th className="py-1 text-left font-normal">TTL</th>
+                        <th className="py-1 text-left font-normal">{translate('auto.components.settings.HostingerPane.colName', 'Name')}</th>
+                        <th className="py-1 text-left font-normal">{translate('auto.components.settings.HostingerPane.colType', 'Type')}</th>
+                        <th className="py-1 text-left font-normal">{translate('auto.components.settings.HostingerPane.colValue', 'Value')}</th>
+                        <th className="py-1 text-left font-normal">{translate('auto.components.settings.HostingerPane.colTtl', 'TTL')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -282,20 +299,46 @@ export function HostingerPane(): React.JSX.Element {
                   </table>
                 )}
                 <SettingsRow
-                  label={translate('auto.components.settings.HostingerPane.addRecordLabel', 'Add or update a record')}
-                  description={translate('auto.components.settings.HostingerPane.addRecordDescription', 'Replaces existing values for the same name and type.')}
+                  label={translate('auto.components.settings.HostingerPane.addRecordLabel', 'Add a record')}
+                  description={
+                    dnsReplace && existingForTarget.length > 0
+                      ? translate(
+                          'auto.components.settings.HostingerPane.replaceWarning',
+                          'Replace is on: this will delete {{values}}.'
+                        ).replace('{{values}}', existingForTarget.join(', '))
+                      : translate(
+                          'auto.components.settings.HostingerPane.addRecordDescription',
+                          'Existing values for the same name and type are kept unless Replace is on.'
+                        )
+                  }
                   alignTop
                   control={
                     <div className="flex flex-wrap justify-end gap-2">
                       <Input value={dnsName} onChange={(e) => setDnsName(e.target.value)} placeholder="@" disabled={busy} className="h-7 w-24 font-mono text-xs" />
-                      <Select value={dnsType} onValueChange={(v) => setDnsType(v as HostingerDnsType)} disabled={busy}>
+                      <Select value={dnsType} onValueChange={(v) => { if (isHostingerDnsType(v)) setDnsType(v) }} disabled={busy}>
                         <SelectTrigger className="h-7 w-24 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {HOSTINGER_DNS_TYPES.map((t) => (<SelectItem key={t} value={t}>{t}</SelectItem>))}
                         </SelectContent>
                       </Select>
-                      <Input value={dnsContent} onChange={(e) => setDnsContent(e.target.value)} placeholder={dnsType === 'CNAME' ? 'target.example.com' : dnsType === 'TXT' ? 'text' : '1.2.3.4'} disabled={busy} className="h-7 w-48 font-mono text-xs" />
-                      <Input value={dnsTtl} onChange={(e) => setDnsTtl(e.target.value)} placeholder="3600" disabled={busy} className="h-7 w-20 font-mono text-xs" />
+                      <Input
+                        value={dnsContent}
+                        onChange={(e) => setDnsContent(e.target.value)}
+                        placeholder={
+                          dnsType === 'CNAME'
+                            ? translate('auto.components.settings.HostingerPane.placeholderCname', 'target.example.com')
+                            : dnsType === 'TXT'
+                              ? translate('auto.components.settings.HostingerPane.placeholderTxt', 'text')
+                              : translate('auto.components.settings.HostingerPane.placeholderIp', '1.2.3.4')
+                        }
+                        disabled={busy}
+                        className="h-7 w-48 font-mono text-xs"
+                      />
+                      <Input value={dnsTtl} onChange={(e) => setDnsTtl(e.target.value)} placeholder={String(HOSTINGER_DEFAULT_TTL)} disabled={busy} className="h-7 w-20 font-mono text-xs" />
+                      <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <input type="checkbox" checked={dnsReplace} onChange={(e) => setDnsReplace(e.target.checked)} disabled={busy} />
+                        {translate('auto.components.settings.HostingerPane.replaceToggle', 'Replace')}
+                      </label>
                       <Button type="button" size="sm" className="h-7 text-xs" disabled={busy || !dnsContent.trim()} onClick={() => void addRecord()}>
                         {translate('auto.components.settings.HostingerPane.addRecordButton', 'Save record')}
                       </Button>
