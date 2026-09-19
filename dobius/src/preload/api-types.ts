@@ -18,6 +18,13 @@ import type { ReadClipboardTextOptions } from '../shared/clipboard-text'
 import type { AppIdentity } from '../shared/app-identity'
 import type { AsanaConfig, AsanaTasksSnapshot } from '../shared/asana'
 import type {
+  HostingerDnsRecord,
+  HostingerDnsRecordInput,
+  HostingerDomain,
+  HostingerStatus,
+  HostingerVps
+} from '../shared/hostinger'
+import type {
   AgentRun,
   AgentRunEvent,
   AgentCrewFileName,
@@ -1351,6 +1358,16 @@ export type PreloadApi = {
     clearLocalDone: (gid: string) => Promise<AsanaTasksSnapshot>
     completeTask: (gid: string) => Promise<AsanaTasksSnapshot>
     onTasksUpdated: (callback: (snapshot: AsanaTasksSnapshot) => void) => () => void
+  }
+  hostinger: {
+    setToken: (token: string) => Promise<void>
+    hasToken: () => Promise<boolean>
+    clearToken: () => Promise<void>
+    status: () => Promise<HostingerStatus>
+    listVps: () => Promise<HostingerVps[]>
+    listDomains: () => Promise<HostingerDomain[]>
+    listDns: (domain: string) => Promise<HostingerDnsRecord[]>
+    upsertDns: (input: HostingerDnsRecordInput) => Promise<HostingerDnsRecord[]>
   }
   agents: {
     list: () => Promise<CustomAgent[]>

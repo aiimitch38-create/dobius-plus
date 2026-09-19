@@ -48,6 +48,7 @@ import { getGitProviderApiBudgetSearchEntries } from '@/components/settings/git-
 import { getCommitMessageAiPaneSearchEntries } from '@/components/settings/commit-message-ai-search'
 import { getTasksPaneSearchEntries } from '@/components/settings/tasks-search'
 import { getAsanaPaneSearchEntries } from '@/components/settings/asana-search'
+import { getHostingerPaneSearchEntries } from '@/components/settings/hostinger-search'
 import { getFloatingWorkspaceSearchEntries } from '@/components/settings/floating-workspace-search'
 import { getAppearancePaneSearchEntries } from '@/components/settings/appearance-search'
 import { getInputPaneSearchEntries } from '@/components/settings/input-search'
@@ -501,6 +502,21 @@ export function buildSettingsNavigationMetadata({
       group: 'remote',
       badge: translate('auto.hooks.useSettingsNavigationMetadata.40d80bad8a', 'Beta')
     },
+    ...(showDesktopOnlySettings
+      ? [
+          {
+            id: 'hosting',
+            title: translate('auto.hooks.useSettingsNavigationMetadata.hostingTitle', 'Hostinger'),
+            description: translate(
+              'auto.hooks.useSettingsNavigationMetadata.hostingDescription',
+              'Your Hostinger VPS, domains, and DNS records.'
+            ),
+            icon: Globe,
+            searchEntries: getHostingerPaneSearchEntries(),
+            group: 'remote'
+          }
+        ]
+      : []),
     ...(showDesktopOnlySettings && isMac
       ? [
           {

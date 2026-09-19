@@ -53,6 +53,7 @@ import { StatsPane } from '../stats/StatsPane'
 import { IntegrationsPane } from './IntegrationsPane'
 import { TasksPane } from './TasksPane'
 import { AsanaPane } from './AsanaPane'
+import { HostingerPane } from './HostingerPane'
 import { QuickCommandsPane } from './QuickCommandsPane'
 import { DeveloperPermissionsPane } from './DeveloperPermissionsPane'
 import { ComputerUsePane } from './ComputerUsePane'
@@ -1563,6 +1564,20 @@ function Settings(): React.JSX.Element {
                     />
                   ) : null}
                 </SettingsSection>
+
+                {showDesktopOnlySettings ? (
+                  <SettingsSection
+                    id="hosting"
+                    title={translate('auto.components.settings.Settings.hostingTitle', 'Hostinger')}
+                    description={translate(
+                      'auto.components.settings.Settings.hostingDescription',
+                      'Your Hostinger VPS, domains, and DNS records. Add DNS records without leaving the app.'
+                    )}
+                    searchEntries={getSectionSearchEntries('hosting')}
+                  >
+                    {isSectionMounted('hosting') ? <HostingerPane /> : null}
+                  </SettingsSection>
+                ) : null}
 
                 {showDesktopOnlySettings ? (
                   <SettingsSection

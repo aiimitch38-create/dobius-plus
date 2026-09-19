@@ -17,6 +17,7 @@ import { registerLinearHandlers } from './linear'
 import { registerJiraHandlers } from './jira'
 import { registerFeedbackHandlers } from './feedback'
 import { registerAsanaHandlers } from './asana'
+import { registerHostingerHandlers } from './hostinger'
 import { registerAgentsHandlers } from './agents'
 import { registerImessageBridgeHandlers } from './imessage-bridge'
 import { registerCrashReportingHandlers } from './crash-reporting'
@@ -166,6 +167,7 @@ export function registerCoreHandlers(
   registerJiraHandlers()
   registerFeedbackHandlers()
   registerAsanaHandlers()
+  registerHostingerHandlers()
   registerAgentsHandlers(
     async (target) => {
       if (!commitMessageAgentEnv?.prepareForClaudeLaunch) {

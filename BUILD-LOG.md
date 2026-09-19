@@ -86,3 +86,6 @@
 - Extracted into its own file rather than inlining in `CustomChannelSection.tsx`, which was already 761 lines (over its 400-line oxlint cap) before this task touched it — kept that file's net growth to +11 lines.
 - Commit: `768c7dc1`.
 - **All 4 Communications Hub tasks now done.** Two live-verification items still owed (both need a build+install, out of scope for this build's routine per-task gate) — see `HANDOFF.md` for the full list. One pre-existing test-infrastructure gap surfaced during COMMS.1 (async `@comms/**/*.test.mjs` files don't actually run under this repo's real `pnpm test`) — also flagged there, not fixed, out of scope.
+
+## 2026-09-19 — Task HOST-1.1 Hostinger integration (branch feat/hostinger-integration)
+Settings → Remote Hosts → Hostinger: encrypted API token, VPS list, domains, DNS records, add/update A/AAAA/CNAME/TXT (validate → PUT overwrite → re-read). Mirrors the Asana integration shape. typecheck:node/cli 0; typecheck:web has 2 pre-existing errors on base 8841a218 (untouched files); vitest 11/11. Not yet watched in electron:dev — do that before any install.

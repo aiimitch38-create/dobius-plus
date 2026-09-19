@@ -8,6 +8,13 @@ import { glApi } from './gitlab'
 import type { AppIdentity } from '../shared/app-identity'
 import type { AsanaConfig, AsanaTasksSnapshot } from '../shared/asana'
 import type {
+  HostingerDnsRecord,
+  HostingerDnsRecordInput,
+  HostingerDomain,
+  HostingerStatus,
+  HostingerVps
+} from '../shared/hostinger'
+import type {
   AgentRun,
   AgentRunEvent,
   AgentCrewFileName,
@@ -1106,6 +1113,19 @@ const api = {
       return () => ipcRenderer.removeListener('asana:tasksUpdated', listener)
     }
   } satisfies PreloadApi['asana'],
+
+  hostinger: {
+    setToken: (token: string): Promise<void> => ipcRenderer.invoke('hostinger:setToken', token),
+    hasToken: (): Promise<boolean> => ipcRenderer.invoke('hostinger:hasToken'),
+    clearToken: (): Promise<void> => ipcRenderer.invoke('hostinger:clearToken'),
+    status: (): Promise<HostingerStatus> => ipcRenderer.invoke('hostinger:status'),
+    listVps: (): Promise<HostingerVps[]> => ipcRenderer.invoke('hostinger:listVps'),
+    listDomains: (): Promise<HostingerDomain[]> => ipcRenderer.invoke('hostinger:listDomains'),
+    listDns: (domain: string): Promise<HostingerDnsRecord[]> =>
+      ipcRenderer.invoke('hostinger:listDns', domain),
+    upsertDns: (input: HostingerDnsRecordInput): Promise<HostingerDnsRecord[]> =>
+      ipcRenderer.invoke('hostinger:upsertDns', input)
+  } satisfies PreloadApi['hostinger'],
 
   communications: {
     getIdentity: () => ipcRenderer.invoke('communications:getIdentity'),
