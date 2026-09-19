@@ -89,3 +89,6 @@
 
 ## 2026-09-19 — Task HOST-1.1 Hostinger integration (branch feat/hostinger-integration)
 Settings → Remote Hosts → Hostinger: encrypted API token, VPS list, domains, DNS records, add/update A/AAAA/CNAME/TXT (validate → PUT overwrite → re-read). Mirrors the Asana integration shape. typecheck:node/cli 0; typecheck:web has 2 pre-existing errors on base 8841a218 (untouched files); vitest 11/11. Not yet watched in electron:dev — do that before any install.
+
+## 2026-09-19 — HOST-1.2 installed to /Applications/Dobius+.app
+Built from feat/hostinger-integration @ ea9960e8 via build:release + electron-builder --dir (typecheck step skipped in the script because of two pre-existing web errors; typechecks run by hand instead). Installed with install-dobius-gated.sh --take-over (live app was fix/channel-cost @ 8841a218 = this branch base, so nothing regressed). Provenance stamped. NOT yet watched in electron:dev — Carson chose live install; verify in-app next.
