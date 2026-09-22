@@ -35,6 +35,31 @@ if [ -f "$DEST/$PROV_REL" ] && [ "$TAKE_OVER" != "--take-over" ]; then
   fi
 fi
 
+# Downgrade guard: refuse to install an OLDER app over a newer one.
+# Why (2026-09-07): a stale 1.0.66 lane build landed over the 2.0.0-rc.1 app and
+# read as "months of work wiped". Branch ownership alone did not catch it — the
+# version going backwards is the signal that a stale lane is installing.
+if [ "$TAKE_OVER" != "--take-over" ]; then
+  SRC_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_SRC/Contents/Info.plist" 2>/dev/null || echo "")
+  DST_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$DEST/Contents/Info.plist" 2>/dev/null || echo "")
+  if [ -n "$SRC_VER" ] && [ -n "$DST_VER" ]; then
+    if ! python3 - "$SRC_VER" "$DST_VER" <<'PYVER'
+import re, sys
+def key(v):
+    return [int(n) for n in re.findall(r"\d+", v.split("-")[0])[:3]] or [0]
+src, dst = key(sys.argv[1]), key(sys.argv[2])
+sys.exit(0 if src >= dst else 1)
+PYVER
+    then
+      echo "REFUSED: that build is version $SRC_VER but /Applications/Dobius+.app is $DST_VER." >&2
+      echo "Installing it would DOWNGRADE the app (this is the 'my work disappeared' bug)." >&2
+      echo "You are installing from: $SRC_REPO ($SRC_BRANCH)" >&2
+      echo "Re-run with --take-over only if you really mean to go backwards." >&2
+      exit 5
+    fi
+  fi
+fi
+
 # Simple lock so two installs can't interleave.
 if ! mkdir "$LOCK" 2>/dev/null; then
   echo "REFUSED: another install is in progress (lock: $LOCK). Remove it if stale." >&2

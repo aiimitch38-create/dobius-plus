@@ -2,8 +2,18 @@ node_modules/
 dist/
 dist-mobile/
 dist-electron/
+out/
+output/
+release/
 .DS_Store
+Thumbs.db
+*.log
+*.log.*
+*.tsbuildinfo
 *.dmg
+.env
+.env.local
+.env.*.local
 mobile-pairing-smoketest.png
 *-smoketest.png
 .claude-backups/
@@ -11,6 +21,9 @@ AUTONOMOUS-REPAIR.md
 scripts/supervisor.log
 .playwright-mcp/
 .playwright-cli/
+playwright-report/
+test-results/
+coverage/
 dobius/output/
 .dobius/
 
