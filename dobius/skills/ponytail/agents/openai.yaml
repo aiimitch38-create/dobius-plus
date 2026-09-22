@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ponytail"
+  short_description: "Dobius rationale comments and guardrails"
+  default_prompt: "Use $ponytail to preserve Dobius rationale comments and architecture guardrails while editing."
