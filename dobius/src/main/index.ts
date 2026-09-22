@@ -1627,6 +1627,9 @@ function shouldSuppressCodexAutoApprovalSyntheticTitleFromHook(args: {
 
 app.whenReady().then(async () => {
   logStartupMilestone('app-ready')
+  void import('./agents/agent-run-event-journal')
+    .then(({ replayRecentAgentRunJournalEvents }) => replayRecentAgentRunJournalEvents())
+    .catch((error) => console.warn('[agents] event journal replay failed:', error))
   electronApp.setAppUserModelId(devInstanceIdentity.appUserModelId)
   app.setName(devInstanceIdentity.name)
 

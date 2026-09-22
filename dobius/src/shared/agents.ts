@@ -110,6 +110,15 @@ export const CHANNEL_AGENT_BASELINE_TOOLS = [
 export type AgentRunStatus = 'running' | 'success' | 'error' | 'cancelled'
 export type AgentRunSource = 'manual' | 'heartbeat' | 'channel' | 'asana'
 
+export type AgentRunContext = {
+  correlationId: string
+  adamJobId?: string
+  adamTaskId?: string
+  projectId?: string
+  worktreeId?: string
+  requestedBy?: string
+}
+
 /**
  * A message the agent posted mid-run via the mcp__dobius__post_channel_message /
  * post_channel_screenshot tools. The Communications client polls agent.runOutbox
@@ -133,6 +142,7 @@ export type AgentRun = {
   agentId: string
   prompt: string
   source?: AgentRunSource
+  context?: AgentRunContext
   /** Task-context key ('default', or the Communications channel id). */
   sessionKey?: string
   startedAt: number
@@ -264,6 +274,7 @@ export type AgentRunEvent = {
   runId: string
   agentId: string
   ts: number
+  context?: AgentRunContext
   kind: 'assistant-text' | 'tool-use' | 'tool-result' | 'system' | 'result' | 'error'
   text?: string
   toolName?: string

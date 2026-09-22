@@ -1,6 +1,8 @@
 import { BrowserWindow } from 'electron'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentRunEvent } from '../../shared/agents'
+import { getStoredAgentRun } from './agent-runs-store'
+import { appendAgentRunJournalEvent } from './agent-run-event-journal'
 
 // Why: main-process consumers (the communications provider seam) need the same
 // run-event stream the renderer windows get; broadcastRunEvent fans out to both.
@@ -15,12 +17,18 @@ export function subscribeToAgentRunEvents(listener: RunEventListener): () => voi
 }
 
 export function broadcastRunEvent(event: AgentRunEvent): void {
+  const run = getStoredAgentRun(event.runId)
+  const enrichedEvent: AgentRunEvent = {
+    ...event,
+    ...(event.context || run?.context ? { context: event.context ?? run?.context } : {})
+  }
+  appendAgentRunJournalEvent(enrichedEvent)
   for (const listener of runEventListeners) {
-    listener(event)
+    listener(enrichedEvent)
   }
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
-      win.webContents.send('agents:runEvent', event)
+      win.webContents.send('agents:runEvent', enrichedEvent)
     }
   }
 }

@@ -5,6 +5,7 @@ import type { Options, Query, SDKResultMessage } from '@anthropic-ai/claude-agen
 import {
   CHANNEL_AGENT_BASELINE_TOOLS,
   type AgentRun,
+  type AgentRunContext,
   type AgentRunSource,
   type CustomAgent
 } from '../../shared/agents'
@@ -94,6 +95,7 @@ type AgentRunOptions = {
   outputFormat?: Options['outputFormat']
   resume?: boolean
   onResult?: (message: SDKResultMessage) => void
+  context?: AgentRunContext
   // Why: onResult only fires when the SDK emits a result message — abnormal EOF
   // and thrown-stream errors need their own hook so channel replies never go silent.
   onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
@@ -301,12 +303,14 @@ export async function startAgentRun(args: {
         agentId: agent.id,
         prompt,
         source: args.options?.source ?? 'manual',
+        context: args.options?.context ?? { correlationId: runId },
         sessionKey,
         startedAt: Date.now(),
         status: 'running'
       }
       addRun(run)
       runAdded = true
+      broadcastRunEvent({ ...eventBase(runId, agent.id), kind: 'system', detail: 'Run accepted' })
       startCodexRun({
         runId,
         agent,
@@ -397,12 +401,14 @@ export async function startAgentRun(args: {
       agentId: agent.id,
       prompt,
       source: args.options?.source ?? 'manual',
+      context: args.options?.context ?? { correlationId: runId },
       sessionKey,
       startedAt: Date.now(),
       status: 'running'
     }
     addRun(run)
     runAdded = true
+    broadcastRunEvent({ ...eventBase(runId, agent.id), kind: 'system', detail: 'Run accepted' })
     const sdkQuery = query({ prompt, options })
     liveRuns.set(runId, { query: sdkQuery, abortController })
     // consumeRun's finally owns releasing the reservation from here on.

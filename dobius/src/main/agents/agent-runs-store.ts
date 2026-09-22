@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
-import type { AgentRun, AgentRunOutboxItem } from '../../shared/agents'
+import type { AgentRun, AgentRunContext, AgentRunOutboxItem } from '../../shared/agents'
 
 const RUNS_FILE_NAME = 'agents-runs.json'
 const MAX_RUNS = 50
@@ -54,6 +54,19 @@ function sanitizeRuns(raw: unknown): AgentRun[] {
           : typeof record.summary === 'string'
             ? record.summary
             : undefined
+    }
+    if (typeof record.context === 'object' && record.context !== null) {
+      const context = record.context as Partial<AgentRunContext>
+      if (typeof context.correlationId === 'string' && context.correlationId.length > 0) {
+        run.context = {
+          correlationId: context.correlationId,
+          ...(typeof context.adamJobId === 'string' ? { adamJobId: context.adamJobId } : {}),
+          ...(typeof context.adamTaskId === 'string' ? { adamTaskId: context.adamTaskId } : {}),
+          ...(typeof context.projectId === 'string' ? { projectId: context.projectId } : {}),
+          ...(typeof context.worktreeId === 'string' ? { worktreeId: context.worktreeId } : {}),
+          ...(typeof context.requestedBy === 'string' ? { requestedBy: context.requestedBy } : {})
+        }
+      }
     }
     if (typeof record.endedAt === 'number' || status === 'running') {
       run.endedAt = typeof record.endedAt === 'number' ? record.endedAt : Date.now()
