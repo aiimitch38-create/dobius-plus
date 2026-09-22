@@ -1711,7 +1711,9 @@
         "searchIssues": "Search issues",
         "useIssueNumber": "Use issue #{{value0}}",
         "noMatchingIssuesLoaded": "No matching issues loaded.",
-        "editReviewersWithCurrent": "Edit reviewers: {{value0}}"
+        "editReviewersWithCurrent": "Edit reviewers: {{value0}}",
+        "surfaceTasks": "Tasks",
+        "surfaceBoard": "Board"
       },
       "Terminal": {
         "73768427cf": "Close",
@@ -2754,6 +2756,14 @@
                   "6d0e6a4b7a": "new browser",
                   "c87ad57785": "browser tab",
                   "cce7ef1d2c": "web",
+                  "163b9394d1": "Dev Environment",
+                  "e47d7a60b2": "dev",
+                  "aa0c4c745a": "developer",
+                  "2c6007e26d": "dev server",
+                  "2ce5f77c4b": "dev environment",
+                  "c0827011ac": "localhost",
+                  "674b56356d": "vite",
+                  "49b668943c": "ui preview",
                   "5f17fb9d0c": "markdown",
                   "44caaf7b36": "md",
                   "fb50e3d874": "new markdown",
@@ -3826,7 +3836,8 @@
           "skillsNav": "Skills",
           "knowledgeNav": "Knowledge",
           "activityNav": "Activity",
-          "buzzNav": "Communications"
+          "buzzNav": "Communications",
+          "dobiusHome": "Dobius"
         },
         "SidebarRepositoryFilterSection": {
           "d3a9c4cea1": "Clear",
@@ -6183,7 +6194,9 @@
           "custom-description": "Advertise an address another device can reach — a LAN or Tailscale host, or a full ws(s):// URL.",
           "custom-hint": "Enter a host, host:port, or a ws(s):// URL.",
           "custom-cancel": "Cancel",
-          "custom-use": "Use address"
+          "custom-use": "Use address",
+          "qr-alt": "QR code to open this Dobius+ server in a browser",
+          "qr-hint": "Scan with your phone camera to open the web view — no app install needed."
         },
         "Settings": {
           "3bf149e873": "Project Settings > {{value0}}",
@@ -6260,7 +6273,9 @@
           "dev": "Dev Tools",
           "devDescription": "Dev-only tools for exercising UI states.",
           "automationTitle": "Automation",
-          "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases."
+          "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases.",
+          "openrouterKey": "OpenRouter API key",
+          "openrouterHint": "Lets an OpenRouter harness run. Stored encrypted on this machine."
         },
         "SettingsFormControls": {
           "42a4d15a30": "No matching fonts.",
@@ -8893,6 +8908,23 @@
         "VoiceConductor": {
           "title": "Voice Conductor",
           "description": "Run a background Opus session that routes voice commands and dispatched work to the right terminal."
+        },
+        "HarnessCatalogSection": {
+          "title": "Harness Catalog",
+          "description": "External agent CLIs you can launch and DM like built-in agents. Each one gets its own Communications identity.",
+          "empty": "No harnesses yet. Add an ACP-speaking CLI below.",
+          "promptPlaceholder": "Prompt sent to a harness when you press play",
+          "addTitle": "Add harness",
+          "argsPlaceholder": "Arguments, space separated (acp)",
+          "save": "Save harness"
+        },
+        "ProviderKeySection": {
+          "saved": "Saved — paste a new key to replace it",
+          "placeholder": "Paste your API key",
+          "save": "Save",
+          "remove": "Remove",
+          "configured": "A key is stored, encrypted on this machine. It is never shown again.",
+          "missing": "No key stored yet. This provider will fail to launch until one is added."
         }
       },
       "right": {
@@ -10476,7 +10508,14 @@
           "FloatingTerminalToggleButton": {
             "3b04b065b5": "Show floating workspace",
             "5785dd9148": "Minimize floating workspace",
-            "bfe7809a70": "{{value0}} floating workspace ({{value1}})"
+            "bfe7809a70": "{{value0}} floating workspace ({{value1}})",
+            "dock-no-terminal": "Could not start the chat.",
+            "dock-ready": "Ready",
+            "dock-talk": "Talk to Dobius",
+            "dock-name": "Dobius",
+            "dock-voice": "Toggle dictation",
+            "dock-voice-label": "Voice",
+            "dock-chat-label": "Chat"
           },
           "FloatingTerminalWindowControls": {
             "2f6054342c": "Minimize",
@@ -12562,6 +12601,11 @@
           "removeTag": "Remove tag",
           "addTagPlaceholder": "Add tag…"
         }
+      },
+      "agents-hub": {
+        "AgentsHubSubNav": {
+          "subnav": "Agent surfaces"
+        }
       }
     },
     "i18n": {
@@ -12669,5 +12713,8 @@
         }
       }
     }
+  },
+  "commandCenter": {
+    "navigation": "Command Center"
   }
 }

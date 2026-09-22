@@ -62,6 +62,9 @@ vi.mock('react', async () => {
 })
 
 vi.mock('lucide-react', () => ({
+  Code2: function Code2() {
+    return null
+  },
   FilePlus: function FilePlus() {
     return null
   },
@@ -468,6 +471,27 @@ describe('TabBar context menu wiring', () => {
     expect(menuLabels[1]).toContain('Open Markdown...')
     expect(menuLabels[2]).toContain('New Terminal')
     expect(menuLabels[3]).toContain('New Browser Tab')
+  })
+
+  it('opens the dev environment from the new-tab menu', async () => {
+    const onOpenDevEnvironment = vi.fn()
+    const element = await renderTabBar({
+      tabs: [TERMINAL_TAB],
+      onOpenDevEnvironment
+    })
+
+    const devEnvironmentItem = findChildrenByType(element, 'DropdownMenuItem').find((item) =>
+      extractText(item.props.children).includes('Dev Environment')
+    )
+
+    expect(devEnvironmentItem).toBeTruthy()
+    if (!devEnvironmentItem) {
+      throw new Error('Expected Dev Environment menu item')
+    }
+
+    ;(devEnvironmentItem.props.onSelect as () => void)()
+
+    expect(onOpenDevEnvironment).toHaveBeenCalledTimes(1)
   })
 
   it('turns New Mobile Emulator into a go-to action when the workspace already has one', async () => {

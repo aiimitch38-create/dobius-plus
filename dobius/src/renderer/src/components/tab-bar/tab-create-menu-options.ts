@@ -10,6 +10,7 @@ export type TabCreateMenuOptionKind =
   | 'new-simulator'
   | 'new-terminal'
   | 'new-terminal-shell'
+  | 'open-dev-environment'
   | 'open-markdown'
 
 export type TabCreateMenuOption = {
@@ -22,6 +23,7 @@ export type TabCreateMenuOption = {
 
 export type TabCreateMenuOptionsContext = {
   hasNewBrowser: boolean
+  hasDevEnvironment: boolean
   hasNewMarkdown: boolean
   hasOpenMarkdown: boolean
   hasSimulator: boolean
@@ -110,6 +112,30 @@ export function buildTabCreateMenuOptions(
         translate('auto.components.tab.bar.tab.create.menu.options.6d0e6a4b7a', 'new browser'),
         translate('auto.components.tab.bar.tab.create.menu.options.c87ad57785', 'browser tab'),
         translate('auto.components.tab.bar.tab.create.menu.options.cce7ef1d2c', 'web')
+      ]
+    })
+  }
+
+  if (context.hasDevEnvironment) {
+    const label = translate(
+      'auto.components.tab.bar.tab.create.menu.options.163b9394d1',
+      'Dev Environment'
+    )
+    options.push({
+      id: 'open-dev-environment',
+      kind: 'open-dev-environment',
+      label,
+      keywords: [
+        translate('auto.components.tab.bar.tab.create.menu.options.e47d7a60b2', 'dev'),
+        translate('auto.components.tab.bar.tab.create.menu.options.aa0c4c745a', 'developer'),
+        translate('auto.components.tab.bar.tab.create.menu.options.2c6007e26d', 'dev server'),
+        translate(
+          'auto.components.tab.bar.tab.create.menu.options.2ce5f77c4b',
+          'dev environment'
+        ),
+        translate('auto.components.tab.bar.tab.create.menu.options.c0827011ac', 'localhost'),
+        translate('auto.components.tab.bar.tab.create.menu.options.674b56356d', 'vite'),
+        translate('auto.components.tab.bar.tab.create.menu.options.49b668943c', 'ui preview')
       ]
     })
   }

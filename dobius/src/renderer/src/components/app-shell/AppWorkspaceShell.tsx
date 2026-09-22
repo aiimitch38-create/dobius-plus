@@ -13,6 +13,8 @@ import { AgentsHubSubNav, isAgentsHubView } from '../agents-hub/AgentsHubSubNav'
 import { AgentsOverview } from '../agents-hub/AgentsOverview'
 import {
   Landing,
+  CommandCenterPage,
+  HomePage,
   WorktreeCreationPanel,
   TaskPage,
   AutomationsPage,
@@ -292,6 +294,8 @@ export function AppWorkspaceShell({
                       )}
                     >
                       {activeView === 'settings' ? <Settings /> : null}
+                      {activeView === 'manager' ? <CommandCenterPage /> : null}
+                      {activeView === 'dobius' ? <HomePage /> : null}
                       {activeView === 'skills' ? <SkillsPage /> : null}
                       {activeView === 'agents' ? <AgentsPage /> : null}
                       {activeView === 'dashboard' ? <AgentsOverview /> : null}

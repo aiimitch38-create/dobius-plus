@@ -110,6 +110,7 @@ import { closeTerminalTab } from './terminal/terminal-tab-actions'
 import { translate } from '@/i18n/i18n'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { browserWorkspaceHasRemoteOwner } from '@/runtime/remote-browser-tab-ownership'
+import { resolveDobiusDevEnvironmentUrl } from '@/lib/dobius-dev-environment-url'
 
 const EditorPanel = lazy(() => import('./editor/EditorPanel'))
 
@@ -960,6 +961,26 @@ function Terminal(): React.JSX.Element | null {
     })
   }, [activeWorktreeId, createBrowserTab, openNewBrowserTabInActiveWorkspace])
 
+  const handleOpenDevEnvironment = useCallback(() => {
+    if (!activeWorktreeId) {
+      return
+    }
+    const state = useAppStore.getState()
+    const targetGroupId =
+      state.activeGroupIdByWorktree[activeWorktreeId] ??
+      state.groupsByWorktree[activeWorktreeId]?.[0]?.id
+    createBrowserTab(activeWorktreeId, resolveDobiusDevEnvironmentUrl(), {
+      title: translate(
+        'auto.components.tab.bar.tab.create.menu.options.163b9394d1',
+        'Dev Environment'
+      ),
+      targetGroupId,
+      // ponytail: Dobius UI dev servers are client-local; routing this through a
+      // remote runtime would make localhost resolve on the wrong machine.
+      browserRuntimeEnvironmentId: null
+    })
+  }, [activeWorktreeId, createBrowserTab])
+
   const handleOpenEntry = useCallback(async (args: TabCreateEntryArgs) => {
     await openTabBarEntry(args)
   }, [])
@@ -1749,6 +1770,7 @@ function Terminal(): React.JSX.Element | null {
             onNewTerminalTab={() => handleNewTab()}
             onNewTerminalWithShell={handleNewTab}
             onNewBrowserTab={handleNewBrowserTab}
+            onOpenDevEnvironment={handleOpenDevEnvironment}
             onNewSimulatorTab={mobileEmulatorEnabled ? handleNewSimulatorTab : undefined}
             onOpenEntry={handleOpenEntry}
             onNewFileTab={handleNewFile}

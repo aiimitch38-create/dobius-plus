@@ -27,6 +27,7 @@ const STATUS_LABEL: Record<VertexTaskStatus, string> = {
   'in-progress': 'In Progress',
   review: 'Review',
   testing: 'Testing',
+  blocked: 'Blocked',
   done: 'Done'
 }
 

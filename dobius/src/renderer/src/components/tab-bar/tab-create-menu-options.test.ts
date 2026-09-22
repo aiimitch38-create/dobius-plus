@@ -15,6 +15,7 @@ describe('tab create menu options', () => {
   const defaultOptions = buildTabCreateMenuOptions({
     terminalOnly: false,
     hasNewBrowser: true,
+    hasDevEnvironment: true,
     hasNewMarkdown: true,
     hasOpenMarkdown: true,
     hasSimulator: true,
@@ -33,6 +34,7 @@ describe('tab create menu options', () => {
     const options = buildTabCreateMenuOptions({
       terminalOnly: false,
       hasNewBrowser: true,
+      hasDevEnvironment: true,
       hasNewMarkdown: true,
       hasOpenMarkdown: false,
       hasSimulator: true,
@@ -53,10 +55,20 @@ describe('tab create menu options', () => {
     ).toEqual(['new-browser'])
   })
 
+  it('matches dev server aliases to the dev environment action', () => {
+    expect(
+      findMatchingTabCreateMenuOptions('dev server', defaultOptions).map((option) => option.kind)
+    ).toEqual(['open-dev-environment'])
+    expect(
+      findMatchingTabCreateMenuOptions('ui preview', defaultOptions).map((option) => option.kind)
+    ).toEqual(['open-dev-environment'])
+  })
+
   it('preserves default Windows shell order for tied terminal matches', () => {
     const options = buildTabCreateMenuOptions({
       terminalOnly: false,
       hasNewBrowser: false,
+      hasDevEnvironment: false,
       hasNewMarkdown: false,
       hasOpenMarkdown: false,
       hasSimulator: false,

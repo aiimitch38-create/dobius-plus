@@ -8,6 +8,7 @@ import { SortableContext } from '@dnd-kit/sortable'
 import {
   ChevronLeft,
   ChevronRight,
+  Code2,
   FilePlus,
   FileText,
   Globe,
@@ -118,6 +119,7 @@ type TabBarProps = {
   /** On Windows, opens a new terminal with a specific shell instead of the default. */
   onNewTerminalWithShell?: (shell: string) => void
   onNewBrowserTab: () => void
+  onOpenDevEnvironment?: () => void
   onNewSimulatorTab?: () => void
   onOpenEntry?: (args: TabCreateEntryArgs) => Promise<void>
   terminalOnly?: boolean
@@ -243,6 +245,7 @@ function TabBarInner({
   onNewTerminalTab,
   onNewTerminalWithShell,
   onNewBrowserTab,
+  onOpenDevEnvironment,
   onNewSimulatorTab,
   onOpenEntry,
   terminalOnly = false,
@@ -576,6 +579,7 @@ function TabBarInner({
         terminalOnly,
         windowsShellEntries,
         hasNewBrowser: !terminalOnly,
+        hasDevEnvironment: !terminalOnly && Boolean(onOpenDevEnvironment),
         hasNewMarkdown: !terminalOnly && Boolean(onNewFileTab),
         hasOpenMarkdown: !terminalOnly && Boolean(onOpenFileTab),
         hasSimulator: !terminalOnly && mobileEmulatorEnabled && Boolean(onNewSimulatorTab),
@@ -584,6 +588,7 @@ function TabBarInner({
     [
       mobileEmulatorEnabled,
       onNewFileTab,
+      onOpenDevEnvironment,
       onNewSimulatorTab,
       onOpenFileTab,
       terminalOnly,
@@ -612,6 +617,9 @@ function TabBarInner({
         break
       case 'new-browser':
         onNewBrowserTab()
+        break
+      case 'open-dev-environment':
+        onOpenDevEnvironment?.()
         break
       case 'new-markdown':
         onNewFileTab?.()
@@ -735,6 +743,19 @@ function TabBarInner({
       <DropdownMenuShortcut>{newBrowserShortcut}</DropdownMenuShortcut>
     </DropdownMenuItem>
   ) : null
+  const devEnvironmentMenuItem =
+    !terminalOnly && onOpenDevEnvironment ? (
+      <DropdownMenuItem
+        onSelect={onOpenDevEnvironment}
+        className="gap-2 rounded-[7px] px-2 py-1.5 text-[12px] leading-5 font-medium"
+      >
+        <Code2 className="size-4 text-muted-foreground" />
+        {translate(
+          'auto.components.tab.bar.tab.create.menu.options.163b9394d1',
+          'Dev Environment'
+        )}
+      </DropdownMenuItem>
+    ) : null
   const newSimulatorMenuItem =
     !terminalOnly && mobileEmulatorEnabled && onNewSimulatorTab ? (
       workspaceHasSimulatorTab ? (
@@ -806,6 +827,7 @@ function TabBarInner({
         {openMarkdownMenuItem}
         {defaultTerminalMenuItems}
         {newBrowserMenuItem}
+        {devEnvironmentMenuItem}
         {newSimulatorMenuItem}
         {mobileEmulatorIntroMenuBlock}
       </>
@@ -813,6 +835,7 @@ function TabBarInner({
       <>
         {defaultTerminalMenuItems}
         {newBrowserMenuItem}
+        {devEnvironmentMenuItem}
         {newMarkdownMenuItem}
         {openMarkdownMenuItem}
         {newSimulatorMenuItem}

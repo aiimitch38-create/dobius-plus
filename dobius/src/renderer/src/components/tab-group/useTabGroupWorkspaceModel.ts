@@ -30,6 +30,8 @@ import { ensureSimulatorTab, getSimulatorTabForWorktree } from '@/lib/ensure-sim
 import { buildDuplicatedBrowserTabOptions } from '@/lib/duplicate-browser-tab-options'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { browserWorkspaceHasRemoteOwner } from '@/runtime/remote-browser-tab-ownership'
+import { resolveDobiusDevEnvironmentUrl } from '@/lib/dobius-dev-environment-url'
+import { translate } from '@/i18n/i18n'
 
 export function recordTerminalTabGroupSplit(createdTerminal: TerminalTab | null | undefined): void {
   if (!createdTerminal) {
@@ -602,6 +604,18 @@ export function useTabGroupWorkspaceModel({
       createSplitGroup,
       newBrowserTab: () => {
         void openNewBrowserTabInActiveWorkspace(groupId)
+      },
+      openDevEnvironment: () => {
+        createBrowserTab(worktreeId, resolveDobiusDevEnvironmentUrl(), {
+          title: translate(
+            'auto.components.tab.bar.tab.create.menu.options.163b9394d1',
+            'Dev Environment'
+          ),
+          targetGroupId: groupId,
+          // ponytail: Dobius UI dev servers are client-local; routing this through a
+          // remote runtime would make localhost resolve on the wrong machine.
+          browserRuntimeEnvironmentId: null
+        })
       },
       newSimulatorTab: worktreeState.mobileEmulatorEnabled
         ? () => {

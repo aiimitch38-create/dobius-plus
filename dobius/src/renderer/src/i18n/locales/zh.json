@@ -1711,7 +1711,9 @@
         "searchIssues": "搜索议题",
         "useIssueNumber": "使用议题 #{{value0}}",
         "noMatchingIssuesLoaded": "没有加载到匹配的议题。",
-        "editReviewersWithCurrent": "编辑评审人：{{value0}}"
+        "editReviewersWithCurrent": "编辑评审人：{{value0}}",
+        "surfaceTasks": "Tasks",
+        "surfaceBoard": "Board"
       },
       "Terminal": {
         "73768427cf": "关闭",
@@ -2767,7 +2769,15 @@
                   "1baeb07c17": "iOS 模拟器",
                   "8a580f88cf": "iPhone",
                   "7ecdc5ef08": "iPad",
-                  "14965cc123": "移动端"
+                  "14965cc123": "移动端",
+                  "163b9394d1": "Dev Environment",
+                  "e47d7a60b2": "dev",
+                  "aa0c4c745a": "developer",
+                  "2c6007e26d": "dev server",
+                  "2ce5f77c4b": "dev environment",
+                  "c0827011ac": "localhost",
+                  "674b56356d": "vite",
+                  "49b668943c": "ui preview"
                 }
               }
             }
@@ -3792,7 +3802,8 @@
           "skillsNav": "Skills",
           "knowledgeNav": "Knowledge",
           "activityNav": "Activity",
-          "buzzNav": "Communications"
+          "buzzNav": "Communications",
+          "dobiusHome": "Dobius"
         },
         "SidebarRepositoryFilterSection": {
           "d3a9c4cea1": "清除",
@@ -6131,7 +6142,9 @@
           "custom-description": "公布其他设备可以访问的地址：LAN 或 Tailscale 主机，或完整的 ws(s):// URL。",
           "custom-hint": "请输入主机、host:port 或 ws(s):// URL。",
           "custom-cancel": "取消",
-          "custom-use": "使用地址"
+          "custom-use": "使用地址",
+          "qr-alt": "QR code to open this Dobius+ server in a browser",
+          "qr-hint": "Scan with your phone camera to open the web view — no app install needed."
         },
         "Settings": {
           "3bf149e873": "项目设置 > {{value0}}",
@@ -6208,7 +6221,9 @@
           "dev": "开发工具",
           "devDescription": "仅用于调试 UI 状态的开发工具。",
           "automationTitle": "Automation",
-          "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases."
+          "automationDescription": "Configure Asana automation inputs for later task and auto-mode phases.",
+          "openrouterKey": "OpenRouter API key",
+          "openrouterHint": "Lets an OpenRouter harness run. Stored encrypted on this machine."
         },
         "SettingsFormControls": {
           "42a4d15a30": "没有匹配的字体。",
@@ -8893,6 +8908,23 @@
         "VoiceConductor": {
           "title": "Voice Conductor",
           "description": "Run a background Opus session that routes voice commands and dispatched work to the right terminal."
+        },
+        "HarnessCatalogSection": {
+          "title": "Harness Catalog",
+          "description": "External agent CLIs you can launch and DM like built-in agents. Each one gets its own Communications identity.",
+          "empty": "No harnesses yet. Add an ACP-speaking CLI below.",
+          "promptPlaceholder": "Prompt sent to a harness when you press play",
+          "addTitle": "Add harness",
+          "argsPlaceholder": "Arguments, space separated (acp)",
+          "save": "Save harness"
+        },
+        "ProviderKeySection": {
+          "saved": "Saved — paste a new key to replace it",
+          "placeholder": "Paste your API key",
+          "save": "Save",
+          "remove": "Remove",
+          "configured": "A key is stored, encrypted on this machine. It is never shown again.",
+          "missing": "No key stored yet. This provider will fail to launch until one is added."
         }
       },
       "right": {
@@ -10476,7 +10508,14 @@
           "FloatingTerminalToggleButton": {
             "3b04b065b5": "显示浮动工作区",
             "5785dd9148": "最小化浮动工作区",
-            "bfe7809a70": "{{value0}} 浮动工作区 ({{value1}})"
+            "bfe7809a70": "{{value0}} 浮动工作区 ({{value1}})",
+            "dock-no-terminal": "Could not start the chat.",
+            "dock-ready": "Ready",
+            "dock-talk": "Talk to Dobius",
+            "dock-name": "Dobius",
+            "dock-voice": "Toggle dictation",
+            "dock-voice-label": "Voice",
+            "dock-chat-label": "Chat"
           },
           "FloatingTerminalWindowControls": {
             "2f6054342c": "最小化",
@@ -12562,6 +12601,11 @@
           "removeTag": "Remove tag",
           "addTagPlaceholder": "Add tag…"
         }
+      },
+      "agents-hub": {
+        "AgentsHubSubNav": {
+          "subnav": "Agent surfaces"
+        }
       }
     },
     "i18n": {
@@ -12669,5 +12713,8 @@
         }
       }
     }
+  },
+  "commandCenter": {
+    "navigation": "Command Center"
   }
 }

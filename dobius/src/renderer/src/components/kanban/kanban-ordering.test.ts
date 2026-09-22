@@ -16,6 +16,7 @@ const task = (id: string, status: Task['status']): Task => ({
   related: [],
   dependencies: [],
   subtasks: [],
+  childTaskIds: [],
   files: [],
   createdAt: 0,
   updatedAt: 0

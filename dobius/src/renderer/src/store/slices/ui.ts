@@ -562,6 +562,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'dobius'
     | 'buzz'
   previousViewBeforeTasks:
     | 'terminal'
@@ -575,6 +576,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'dobius'
     | 'buzz'
   previousViewBeforeSettings:
     | 'terminal'
@@ -588,6 +590,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'dobius'
     | 'buzz'
   previousViewBeforeActivity:
     | 'terminal'
@@ -601,6 +604,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'dobius'
     | 'buzz'
   previousViewBeforeAutomations:
     | 'terminal'
@@ -614,6 +618,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'dobius'
     | 'buzz'
   previousViewBeforeSpace:
     | 'terminal'
@@ -627,6 +632,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'dobius'
     | 'buzz'
   previousViewBeforeSkills:
     | 'terminal'
@@ -640,6 +646,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'dobius'
     | 'buzz'
   previousViewBeforeKnowledge:
     | 'terminal'
@@ -653,6 +660,7 @@ export type UISlice = {
     | 'mobile'
     | 'dashboard'
     | 'manager'
+    | 'dobius'
     | 'buzz'
   previousViewBeforeMobile:
     | 'terminal'
@@ -666,6 +674,7 @@ export type UISlice = {
     | 'knowledge'
     | 'dashboard'
     | 'manager'
+    | 'dobius'
     | 'buzz'
   setActiveView: (view: UISlice['activeView']) => void
   taskPageData: {
