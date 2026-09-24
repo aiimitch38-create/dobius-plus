@@ -105,3 +105,33 @@
 
 ## Rollback
 Revert the commit; rails return to the regex form and cwd failure falls back to home again.
+
+## Second follow-up (review findings F1-F3)
+- **F1 case-insensitive filesystems.** APFS/NTFS open `~/.Dobius/Agents/OTHER` as the agents
+  folder, but every comparison was case-sensitive. `protected-path-guard.ts` now exports
+  `comparablePath()` (lower-cases on darwin/win32 only). `isWithin` folds both sides. The rails
+  fold every candidate, every protected prefix and the own agent id, and the reference regex uses `i`.
+- **F2 relative / quoted routes into the agents folder (Bash only).** Bash strings are unquoted
+  the way the shell would (`"`, `'`, `\` removed) before matching. A Bash reference that stops at
+  `.dobius/agents` (no id) or at `<home>/.dobius` itself is denied, because a `cd` there reaches every
+  agent through relative paths. `..` in a command that references the agents folder is denied (own folder
+  then `../other`). The `<home>/.dobius` rule is anchored to the home folder because repos have their
+  own `.dobius` folder (hooks.ts:107, ipc/worktrees.ts:2143). `ls .dobius` in a repo stays allowed.
+- **F3 cost.** `realpathPreservingMissingTail` walks up with `existsSync` and calls `realpathSync`
+  once on the first existing ancestor; a resolvable-but-failing entry (EACCES/ELOOP) is treated as
+  missing. Candidates are computed once per tool call (`inspectStrings`) and shared by both rails.
+  Only the first 64 path tokens per call are symlink-resolved; the rest get lexical and name checks.
+- Tests: case spellings (Write/Edit/Bash, own id in other case allowed; guard `SECRETS/…` and
+  upper-cased root; darwin/win32 only via `it.runIf`). F2: 8 Bash spellings denied, own-folder
+  `cd` + relative read and repo `.dobius` allowed. F3: 2000 missing 8-level paths evaluate in under 1 s,
+  fewer than 100 `realpathSync` calls (pass-through `vi.mock('node:fs')` spy), and a credential path after 200
+  tokens is still denied.
+- Mutation checks (each failed, then restored): F1 no case fold (2 fail); F2a no empty-id
+  deny (2); F2b no home-.dobius rule (1); F2c no `..` rule (1); F2d no unquoting (3); F3a no token
+  cap (1, call-count test); F3b throw-per-level walk (1, call-count test). With only the timing test, F3a
+  and F3b each survived alone (either fix keeps it under 1 s), which is why the call-count test exists.
+- Verification: typecheck exit 0; oxlint + react-doctor clean on the 4 files; targeted 5 files /
+  86 tests green. The wider run of src/main/{agents,communications/providers,communications/workstation/media}
+  had one failure, agent-provider.test.ts, which is in basefail.txt.
+- Updated test: `ls ~/.dobius/ && cat src/tokenizer.ts` is now denied (home `.dobius` rule), so that
+  allowed-case assertion became `cat ~/.dobius/notes/ideas.md && …`.

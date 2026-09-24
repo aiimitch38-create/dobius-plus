@@ -1,7 +1,10 @@
 import os from 'node:os'
 import path from 'node:path'
 import type { HookCallbackMatcher, HookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
-import { realpathPreservingMissingTail } from '../communications/providers/protected-path-guard'
+import {
+  comparablePath,
+  realpathPreservingMissingTail
+} from '../communications/providers/protected-path-guard'
 
 type HardRailRunContext = {
   agentId: string
@@ -31,24 +34,47 @@ function normalizePathLike(value: string): string {
 
 const ABSOLUTE_PATH_TOKEN = /(?<![^\s"'=:(`<>])\/[^\s"'`;&|<>()]+/g
 
+// Why: symlink resolution costs filesystem calls on the Electron main thread;
+// past this many tokens only the lexical checks run (credential names are still
+// denied by rawStringMentionsCredential).
+const MAX_RESOLVED_PATH_TOKENS = 64
+
+type InspectedString = {
+  raw: string
+  // Home references expanded; for Bash also quotes/backslashes removed the way
+  // the shell would (`~/.dobius/"agents"/x` reaches `agents`).
+  expanded: string
+  // Comparable (case-folded where the filesystem is) path spellings to check.
+  candidates: string[]
+}
+
 // Why: a protected path can sit anywhere in a Bash command (`cat a; cat <path>`,
 // `--file=<path>`), and a symlink can point at it under an innocent name. Every
-// absolute path is checked both as written and with symlinks resolved.
-function candidatePaths(raw: string): string[] {
-  const candidates = new Set<string>()
-  for (const [token] of expandHomeReferences(raw).matchAll(ABSOLUTE_PATH_TOKEN)) {
-    candidates.add(path.normalize(token).replace(/\\/g, '/'))
-    candidates.add(realpathPreservingMissingTail(token).replace(/\\/g, '/'))
-  }
-  return [...candidates]
+// absolute path is checked both as written and with symlinks resolved. Computed
+// once per tool call and shared by every rail.
+function inspectStrings(toolName: string, input: unknown): InspectedString[] {
+  let resolveBudget = MAX_RESOLVED_PATH_TOKENS
+  return stringsToInspect(toolName, input).map((raw) => {
+    const unquoted = toolName === 'Bash' ? raw.replace(/["'\\]/g, '') : raw
+    const expanded = expandHomeReferences(unquoted)
+    const candidates = new Set([comparablePath(normalizePathLike(raw))])
+    for (const [token] of expanded.matchAll(ABSOLUTE_PATH_TOKEN)) {
+      candidates.add(comparablePath(path.normalize(token).replace(/\\/g, '/')))
+      if (resolveBudget > 0) {
+        resolveBudget -= 1
+        candidates.add(comparablePath(realpathPreservingMissingTail(token).replace(/\\/g, '/')))
+      }
+    }
+    return { raw, expanded, candidates: [...candidates] }
+  })
 }
 
 // Both spellings of a protected location: as written under $HOME, and with
-// symlinks resolved (e.g. a dotfiles-managed ~/.claude).
+// symlinks resolved (e.g. a dotfiles-managed ~/.claude), in comparable form.
 function protectedForms(literal: string): string[] {
   const real = realpathPreservingMissingTail(literal).replace(/\\/g, '/')
   const trailing = literal.endsWith('/') ? '/' : ''
-  return [...new Set([literal, `${real.replace(/\/$/, '')}${trailing}`])]
+  return [...new Set([literal, `${real.replace(/\/$/, '')}${trailing}`])].map(comparablePath)
 }
 
 function collectStrings(value: unknown, strings: string[] = []): string[] {
@@ -139,7 +165,7 @@ function stringsToInspect(toolName: string, input: unknown): string[] {
   return collectStrings(input)
 }
 
-function targetsCredentials(toolName: string, input: unknown): HardRailDenial | null {
+function targetsCredentials(inspected: InspectedString[]): HardRailDenial | null {
   const home = normalizePathLike(os.homedir())
   const credentialPrefixes = [
     `${home}/.claude/.credentials.json`,
@@ -147,16 +173,15 @@ function targetsCredentials(toolName: string, input: unknown): HardRailDenial | 
     `${home}/Library/Keychains`
   ].flatMap(protectedForms)
   const dobiusPrefixes = protectedForms(`${home}/.dobius/`)
-  for (const raw of stringsToInspect(toolName, input)) {
-    if (rawStringMentionsCredential(raw)) {
+  for (const { raw, expanded, candidates } of inspected) {
+    if (rawStringMentionsCredential(raw) || rawStringMentionsCredential(expanded)) {
       return { reason: 'Hard rail: credential material is not available to agents.' }
     }
-    const normalized = normalizePathLike(raw)
-    const basename = path.basename(normalized)
+    const basename = path.basename(normalizePathLike(raw))
     if (basename === '.env' || basename.startsWith('.env.')) {
       return { reason: 'Hard rail: credential environment files are not available to agents.' }
     }
-    for (const candidate of [normalized, ...candidatePaths(raw)]) {
+    for (const candidate of candidates) {
       if (credentialPrefixes.some((prefix) => candidate.startsWith(prefix))) {
         return { reason: 'Hard rail: credential material is not available to agents.' }
       }
@@ -171,35 +196,63 @@ function targetsCredentials(toolName: string, input: unknown): HardRailDenial | 
   return null
 }
 
+const IDENTITY_DENIAL: HardRailDenial = {
+  reason: 'Hard rail: agents may not edit another agent identity or memory.'
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function targetsOtherAgentIdentity(
   context: HardRailRunContext,
   toolName: string,
-  input: unknown
+  inspected: InspectedString[]
 ): HardRailDenial | null {
   // Why: Bash can cp/cat/rm another agent's files just as well as Write/Edit can —
   // the isolation rail must cover shell commands too.
-  if (!FILE_EDIT_TOOLS.includes(toolName) && toolName !== 'Bash') {
+  const isBash = toolName === 'Bash'
+  if (!FILE_EDIT_TOOLS.includes(toolName) && !isBash) {
     return null
   }
-  const agentsRoots = protectedForms(
-    `${normalizePathLike(path.join(os.homedir(), '.dobius', 'agents'))}/`
-  )
+  const ownId = comparablePath(context.agentId)
+  const home = normalizePathLike(os.homedir())
+  const agentsRoots = protectedForms(`${home}/.dobius/agents/`)
   // Why: inside a Bash command the agents dir appears mid-string (often via ~ or
   // $HOME), so a startsWith check misses it — scan for every reference instead.
-  const referencePattern = /\/\.dobius\/agents\/([^/\s"'`;&|]+)/g
-  for (const raw of stringsToInspect(toolName, input)) {
-    for (const candidate of [normalizePathLike(raw), ...candidatePaths(raw)]) {
+  const referencePattern = /\.dobius\/+agents(?=\/|$|[\s;&|`()<>])(?:\/+([^/\s`;&|()<>]*))?/gi
+  // Why: a shell that `cd`s into ~/.dobius or its agents folder reaches every
+  // agent through relative paths (`cat other/memory.md`), so in Bash a reference
+  // that stops at those folders is denied too — only the own id is usable.
+  const dobiusRootReference = new RegExp(
+    `${escapeRegExp(home)}/+\\.dobius/*(?=$|[\\s;&|\`()<>])`,
+    'i'
+  )
+  for (const { expanded, candidates } of inspected) {
+    for (const candidate of candidates) {
       const agentsRoot = agentsRoots.find((root) => candidate.startsWith(root))
       const targetAgentId = agentsRoot ? candidate.slice(agentsRoot.length).split('/')[0] : ''
-      if (targetAgentId && targetAgentId !== context.agentId) {
-        return { reason: 'Hard rail: agents may not edit another agent identity or memory.' }
+      if (targetAgentId && targetAgentId !== ownId) {
+        return IDENTITY_DENIAL
       }
     }
-    for (const match of expandHomeReferences(raw).matchAll(referencePattern)) {
-      const targetAgentId = match[1]
-      if (targetAgentId && targetAgentId !== context.agentId) {
-        return { reason: 'Hard rail: agents may not edit another agent identity or memory.' }
+    let referencesAgentsFolder = false
+    for (const match of expanded.matchAll(referencePattern)) {
+      referencesAgentsFolder = true
+      const targetAgentId = comparablePath(match[1] ?? '')
+      if (targetAgentId !== ownId && (targetAgentId || isBash)) {
+        return IDENTITY_DENIAL
       }
+    }
+    if (!isBash) {
+      continue
+    }
+    if (dobiusRootReference.test(expanded)) {
+      return IDENTITY_DENIAL
+    }
+    // Why: from inside the own agent folder, `../other` reaches a sibling agent.
+    if (referencesAgentsFolder && /(?:^|[\s/=])\.\.(?:\/|$|[\s;&|)])/.test(expanded)) {
+      return IDENTITY_DENIAL
     }
   }
   return null
@@ -210,11 +263,12 @@ export function evaluateAgentHardRails(
   toolName: string,
   input: unknown
 ): HardRailDenial | null {
-  return (
-    commandTriggersHardRail(toolName, input) ??
-    targetsCredentials(toolName, input) ??
-    targetsOtherAgentIdentity(context, toolName, input)
-  )
+  const commandDenial = commandTriggersHardRail(toolName, input)
+  if (commandDenial) {
+    return commandDenial
+  }
+  const inspected = inspectStrings(toolName, input)
+  return targetsCredentials(inspected) ?? targetsOtherAgentIdentity(context, toolName, inspected)
 }
 
 export function buildAgentHardRailHooks(context: HardRailRunContext): {

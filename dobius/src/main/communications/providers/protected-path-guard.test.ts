@@ -97,6 +97,19 @@ describe('assertPathOutsideProtectedRoots', () => {
     ).not.toThrow()
   })
 
+  it.runIf(process.platform === 'darwin' || process.platform === 'win32')(
+    'refuses a different letter case of a protected root on a case-insensitive filesystem',
+    () => {
+      const { base, secrets } = workspace()
+      expect(() => assertPathOutsideProtectedRoots([secrets], 'SECRETS/key.txt', base)).toThrow(
+        ProtectedPathError
+      )
+      expect(() =>
+        assertPathOutsideProtectedRoots([secrets.toUpperCase()], 'secrets/key.txt', base)
+      ).toThrow(ProtectedPathError)
+    }
+  )
+
   it('is a no-op when no roots are protected', () => {
     const { base, secrets } = workspace()
     expect(() => assertPathOutsideProtectedRoots([], secrets, base)).not.toThrow()

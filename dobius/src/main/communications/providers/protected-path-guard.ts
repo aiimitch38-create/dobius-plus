@@ -1,6 +1,6 @@
-import { realpathSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, isAbsolute, join, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 
 /**
  * Directories a provider must never be pointed at. All credential or identity
@@ -37,11 +37,39 @@ export class ProtectedPathError extends Error {
   }
 }
 
+// Why: APFS (macOS default) and NTFS are case-insensitive, so `~/.SSH` opens the
+// same folder as `~/.ssh` — a case-sensitive containment check is bypassed by
+// changing one letter.
+const CASE_INSENSITIVE_PATHS = process.platform === 'darwin' || process.platform === 'win32'
+
+/** Folds a path to the form two paths should be compared in on this platform. */
+export function comparablePath(value: string): string {
+  return CASE_INSENSITIVE_PATHS ? value.toLowerCase() : value
+}
+
 function isWithin(root: string, candidate: string): boolean {
-  if (candidate === root) {
+  const rootKey = comparablePath(root)
+  const candidateKey = comparablePath(candidate)
+  if (candidateKey === rootKey) {
     return true
   }
-  return candidate.startsWith(root.endsWith(sep) ? root : `${root}${sep}`)
+  return candidateKey.startsWith(rootKey.endsWith(sep) ? rootKey : `${rootKey}${sep}`)
+}
+
+function realpathIfPresent(target: string): string | null {
+  if (!existsSync(target)) {
+    return null
+  }
+  try {
+    return realpathSync(target)
+  } catch (error) {
+    // Why: an entry that exists but cannot be resolved (permission, symlink
+    // loop) is treated like a missing one, so its parent gets resolved instead.
+    if (error instanceof Error && 'code' in error) {
+      return null
+    }
+    throw error
+  }
 }
 
 /**
@@ -53,17 +81,20 @@ function isWithin(root: string, candidate: string): boolean {
 export function realpathPreservingMissingTail(target: string): string {
   let current = resolve(target)
   const missing: string[] = []
+  // Why existsSync first: realpathSync throws for every missing level, and a
+  // thrown error per level made a many-path command cost seconds on the main
+  // thread (the agent hard-rail hook calls this synchronously).
   for (;;) {
-    try {
-      return join(realpathSync(current), ...missing)
-    } catch {
-      const parent = resolve(current, '..')
-      if (parent === current) {
-        return resolve(target)
-      }
-      missing.unshift(basename(current))
-      current = parent
+    const real = realpathIfPresent(current)
+    if (real !== null) {
+      return join(real, ...missing)
     }
+    const parent = dirname(current)
+    if (parent === current) {
+      return resolve(target)
+    }
+    missing.unshift(basename(current))
+    current = parent
   }
 }
 

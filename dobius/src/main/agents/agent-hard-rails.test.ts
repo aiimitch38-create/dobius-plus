@@ -1,8 +1,15 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import type * as fs from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { evaluateAgentHardRails } from './agent-hard-rails'
+
+// Pass-through spy so the tests can count filesystem resolutions (F3 cost bound).
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof fs>()
+  return { ...actual, realpathSync: vi.fn(actual.realpathSync) }
+})
 
 const ctx = { agentId: 'agent-a' }
 
@@ -117,7 +124,9 @@ describe('agent hard rails: protected paths in every spelling (BUILD-005)', () =
     expect(bash('cat $HOME/.dobius/agents/agent-a/memory.md')).toBeNull()
     expect(bash(`ls ${fakeHome}/.dobius/agents/agent-a/`)).toBeNull()
     expect(bash('ls ~/.claude/skills && cat $HOME/.claude/CLAUDE.md')).toBeNull()
-    expect(bash('ls ~/.dobius/ && cat src/tokenizer.ts')).toBeNull()
+    expect(bash('cat ~/.dobius/notes/ideas.md && cat src/tokenizer.ts')).toBeNull()
+    expect(bash('cd ~/.dobius/agents/agent-a && cat memory.md')).toBeNull()
+    expect(bash('ls .dobius && cat .dobius/config.json')).toBeNull()
   })
 
   it('allows ordinary chained commands and denies only real force-pushes', () => {
@@ -133,6 +142,88 @@ describe('agent hard rails: protected paths in every spelling (BUILD-005)', () =
       /force-push/
     )
     expect(bash('(cd /tmp/wt && git push origin +main)')?.reason).toMatch(/force-push/)
+  })
+})
+
+describe('agent hard rails: agents folder reached by case, cd or quoting (BUILD-005)', () => {
+  const originalHome = process.env.HOME
+  const fakeHome = '/Users/rails-test-user'
+
+  beforeEach(() => {
+    process.env.HOME = fakeHome
+  })
+
+  afterEach(() => {
+    process.env.HOME = originalHome
+  })
+
+  const caseInsensitiveFs = process.platform === 'darwin' || process.platform === 'win32'
+
+  it.runIf(caseInsensitiveFs)('denies other-agent paths spelled in another letter case', () => {
+    expect(
+      evaluateAgentHardRails(ctx, 'Write', {
+        file_path: `${fakeHome}/.Dobius/agents/other/MEMORY.md`,
+        content: 'x'
+      })?.reason
+    ).toMatch(/another agent/)
+    expect(
+      evaluateAgentHardRails(ctx, 'Edit', {
+        file_path: `${fakeHome}/.dobius/Agents/other/SOUL.md`,
+        old_string: 'a',
+        new_string: 'b'
+      })?.reason
+    ).toMatch(/another agent/)
+    expect(
+      evaluateAgentHardRails(ctx, 'Bash', { command: 'echo pwn >> ~/.dobius/AGENTS/other/MEMORY.md' })
+        ?.reason
+    ).toMatch(/another agent/)
+    expect(
+      evaluateAgentHardRails(ctx, 'Write', {
+        file_path: `${fakeHome}/.DOBIUS/agents/AGENT-A/memory.md`,
+        content: 'x'
+      })
+    ).toBeNull()
+  })
+
+  it.each([
+    ['cd ~/.dobius/agents && cat other/MEMORY.md'],
+    ['cd ~/.dobius/agents/other && echo x >> memory.md'],
+    ['cat ~/.dobius/"agents"/other/x'],
+    ["cat ~/.dobius/'agents'/other/x"],
+    ['cat ~/.dobius/ag\\ents/other/x'],
+    ['cd $HOME/.dobius && cat agents/other/memory.md'],
+    ['ls ~/.dobius/agents/'],
+    ['cd ~/.dobius/agents/agent-a && cat ../other/memory.md']
+  ])('denies reaching another agent through the agents folder: %s', (command) => {
+    expect(evaluateAgentHardRails(ctx, 'Bash', { command })?.reason).toMatch(/another agent/)
+  })
+
+  it('evaluates a 2000-path command well under a second', () => {
+    const paths = Array.from(
+      { length: 2000 },
+      (_, index) => `/tmp/rails-missing-${index}/a/b/c/d/e/f/g/h.txt`
+    )
+    const started = performance.now()
+    expect(evaluateAgentHardRails(ctx, 'Bash', { command: `cat ${paths.join(' ')}` })).toBeNull()
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
+
+  it('bounds symlink resolution: capped tokens, no realpath call per missing level', () => {
+    const paths = Array.from(
+      { length: 2000 },
+      (_, index) => `/tmp/rails-missing-${index}/a/b/c/d/e/f/g/h.txt`
+    )
+    vi.mocked(realpathSync).mockClear()
+    evaluateAgentHardRails(ctx, 'Bash', { command: `cat ${paths.join(' ')}` })
+    // 64 resolved tokens × one call on their existing ancestor, plus the fixed
+    // protected-location lookups. Uncapped or throw-per-level would be thousands.
+    expect(vi.mocked(realpathSync).mock.calls.length).toBeLessThan(100)
+  })
+
+  it('still denies a credential path beyond the symlink-resolution budget', () => {
+    const paths = Array.from({ length: 200 }, (_, index) => `/tmp/rails-missing-${index}/x`)
+    const command = `cat ${paths.join(' ')} ${fakeHome}/.claude/.credentials.json`
+    expect(evaluateAgentHardRails(ctx, 'Bash', { command })?.reason).toMatch(/credential/)
   })
 })
 
