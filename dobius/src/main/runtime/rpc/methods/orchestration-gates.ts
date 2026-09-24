@@ -3,6 +3,7 @@ import { defineMethod, type RpcMethod } from '../core'
 import { OptionalFiniteNumber, OptionalString, requiredString } from '../schemas'
 import type { GateStatus } from '../../orchestration/db'
 import { Coordinator } from '../../orchestration/coordinator'
+import { assertExecutionAdmitted } from '../../../agents/execution-gate'
 
 // Why: the coordinator instance is stored at module scope so orchestration.runStop
 // can signal it to halt. Only one coordinator can run at a time (enforced by
@@ -44,6 +45,9 @@ export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
     name: 'orchestration.run',
     params: RunParams,
     handler: (params, { runtime }) => {
+      // Why: a coordinator run dispatches autonomous workers, so "Pause crew"
+      // must refuse it before any coordinator row is written.
+      assertExecutionAdmitted('agent-run')
       const db = runtime.getOrchestrationDb()
 
       const existing = db.getActiveCoordinatorRun()

@@ -20,6 +20,7 @@ import {
 } from '../../shared/automation-precheck'
 import { deliverAutomationRunNotification } from './run-notification-delivery'
 import { isFinalRunStatus } from './run-final-status'
+import { checkExecutionAdmission } from '../agents/execution-gate'
 
 const DEFAULT_TICK_MS = 60 * 1000
 
@@ -189,12 +190,19 @@ export class AutomationService {
     }
     const run = this.store.createAutomationRun(automation, scheduledFor)
     const graceMs = automation.missedRunGraceMinutes * 60 * 1000
-    if (now - scheduledFor > graceMs) {
+    const missed = now - scheduledFor > graceMs
+    // Why: scheduled runs are autonomous and must honor "Pause crew" (manual runNow
+    // stays allowed). Advancing nextRunAt keeps a paused tick from re-firing.
+    const admission = missed ? null : checkExecutionAdmission('agent-run')
+    if (missed || !admission?.allowed) {
       this.store.updateAutomationRun({
         runId: run.id,
-        status: 'skipped_missed',
+        status: missed ? 'skipped_missed' : 'skipped_unavailable',
         workspaceId: automation.workspaceId,
-        error: 'Dobius was unavailable during the missed-run grace window.'
+        error:
+          admission?.allowed === false
+            ? admission.message
+            : 'Dobius was unavailable during the missed-run grace window.'
       })
       this.store.advanceAutomationNextRun(automation.id, now)
       return
