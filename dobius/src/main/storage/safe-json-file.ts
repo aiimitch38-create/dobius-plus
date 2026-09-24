@@ -263,26 +263,42 @@ export class SafeJsonFile<T> {
     this.quarantine()
   }
 
-  // Why: keep a copy of the bad bytes as evidence; quarantine copies are never deleted.
   private quarantine(): void {
-    const target = this.options.filePath()
-    let fingerprint: string
-    try {
-      const stat = statSync(target)
-      fingerprint = `${stat.size}:${stat.mtimeMs}:${stat.ino}`
-    } catch (error) {
-      fingerprint = `stat-failed:${errorText(error)}`
-    }
-    if (this.quarantinedFingerprint === fingerprint) {
-      return
-    }
-    this.quarantinedFingerprint = fingerprint
-    const copyPath = `${target}.unreadable-${Date.now()}`
-    try {
-      copyFileSync(target, copyPath, fsConstants.COPYFILE_EXCL)
-      console.error(`${this.options.label} unreadable copy kept at ${copyPath}`)
-    } catch (error) {
-      console.error(`${this.options.label} could not keep an unreadable copy: ${errorText(error)}`)
-    }
+    this.quarantinedFingerprint = keepUnreadableCopy(
+      this.options.filePath(),
+      this.options.label,
+      this.quarantinedFingerprint
+    )
   }
+}
+
+/**
+ * Copies an unreadable file to `<file>.unreadable-<ms>` unless the same bytes
+ * (size/mtime/inode) were already copied. Returns the fingerprint to pass back
+ * next time. Never throws.
+ * Why: keep a copy of the bad bytes as evidence; quarantine copies are never deleted.
+ */
+export function keepUnreadableCopy(
+  target: string,
+  label: string,
+  lastFingerprint: string | null
+): string {
+  let fingerprint: string
+  try {
+    const stat = statSync(target)
+    fingerprint = `${stat.size}:${stat.mtimeMs}:${stat.ino}`
+  } catch (error) {
+    fingerprint = `stat-failed:${errorText(error)}`
+  }
+  if (lastFingerprint === fingerprint) {
+    return fingerprint
+  }
+  const copyPath = `${target}.unreadable-${Date.now()}`
+  try {
+    copyFileSync(target, copyPath, fsConstants.COPYFILE_EXCL)
+    console.error(`${label} unreadable copy kept at ${copyPath}`)
+  } catch (error) {
+    console.error(`${label} could not keep an unreadable copy: ${errorText(error)}`)
+  }
+  return fingerprint
 }

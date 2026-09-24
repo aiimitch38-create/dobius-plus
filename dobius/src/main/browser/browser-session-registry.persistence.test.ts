@@ -10,6 +10,7 @@ type FsState = {
   tmpWrites: string[]
   failTmpWrite: boolean
   failRename: boolean
+  readErrorCode: string | null
 }
 
 function fsKey(pathValue: string): string {
@@ -23,7 +24,8 @@ function createFsState(): FsState {
     mtimes: new Map(),
     tmpWrites: [],
     failTmpWrite: false,
-    failRename: false
+    failRename: false,
+    readErrorCode: null
   }
 }
 
@@ -71,6 +73,7 @@ function installModuleMocks(
   }))
 
   vi.doMock('node:fs', () => ({
+    constants: { COPYFILE_EXCL: 1 },
     copyFileSync: vi.fn((src: string, dst: string) => {
       const sourceKey = fsKey(src)
       const destinationKey = fsKey(dst)
@@ -86,9 +89,13 @@ function installModuleMocks(
     existsSync: vi.fn((p: string) => fsState.present.has(fsKey(p))),
     mkdirSync: vi.fn(),
     readFileSync: vi.fn((p: string) => {
+      if (fsState.readErrorCode && fsKey(p) === META_PATH) {
+        const code = fsState.readErrorCode
+        throw Object.assign(new Error(`${code}: injected`), { code })
+      }
       const v = fsState.files.get(fsKey(p))
       if (v === undefined) {
-        throw new Error('ENOENT')
+        throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
       }
       return v
     }),
@@ -617,5 +624,86 @@ describe('BrowserSessionRegistry metadata temp files (#51)', () => {
     browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
 
     expect(tmpKeys(fsState).sort()).toEqual([live, young].sort())
+  })
+})
+
+describe('BrowserSessionRegistry unreadable metadata', () => {
+  const PROFILE = {
+    id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    scope: 'imported',
+    partition: 'persist:dobius-browser-session-cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    label: 'Work',
+    source: null
+  }
+
+  function quarantineCopies(fsState: FsState): string[] {
+    return [...fsState.present].filter((key) => key.startsWith(`${META_PATH}.unreadable-`))
+  }
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.restoreAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+
+  it.each([
+    ['malformed JSON', '{"profiles": [', null, true],
+    ['wrong top-level shape', '[1,2]', null, true],
+    ['EACCES on read', '{"profiles": []}', 'EACCES', false]
+  ] as const)(
+    '%s: every save is refused and the bytes stay unchanged',
+    async (_l, raw, code, copied) => {
+      const fsState = createFsState()
+      fsState.files.set(META_PATH, raw)
+      fsState.present.add(META_PATH)
+      fsState.mtimes.set(META_PATH, 1)
+      fsState.readErrorCode = code
+      // An EACCES file cannot be copied either; quarantine is best-effort there.
+      installModuleMocks(fsState, code ? new Set([META_PATH]) : new Set())
+      const { browserSessionRegistry } = await import('./browser-session-registry')
+
+      browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
+      browserSessionRegistry.applyPendingCookieImport()
+      browserSessionRegistry.setPendingCookieImport('persist:dobius-browser', '/staged/x')
+      browserSessionRegistry.persistUserAgent('persist:dobius-browser', 'UA/3')
+      browserSessionRegistry.createProfile('isolated', 'New')
+
+      expect(fsState.files.get(META_PATH)).toBe(raw)
+      expect(fsState.tmpWrites).toEqual([])
+      // Quarantine copy is kept once, not on every access.
+      expect(quarantineCopies(fsState)).toHaveLength(copied ? 1 : 0)
+      expect(console.error).toHaveBeenCalledWith(expect.stringContaining('not saved'))
+    }
+  )
+
+  it('a repaired file is read again on the next access and saves resume', async () => {
+    const fsState = createFsState()
+    fsState.files.set(META_PATH, '{"profiles": [')
+    fsState.present.add(META_PATH)
+    installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    browserSessionRegistry.persistUserAgent('persist:dobius-browser', 'UA/lost')
+    expect(fsState.files.get(META_PATH)).toBe('{"profiles": [')
+
+    seedMeta(fsState, { defaultSource: null, profiles: [PROFILE] })
+    browserSessionRegistry.persistUserAgent('persist:dobius-browser', 'UA/4')
+
+    const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
+    expect(written.profiles).toEqual([PROFILE])
+    expect(written.userAgentByPartition).toEqual({ 'persist:dobius-browser': 'UA/4' })
+  })
+
+  it('a missing file is a normal first run: saves create it', async () => {
+    const fsState = createFsState()
+    installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    browserSessionRegistry.persistUserAgent('persist:dobius-browser', 'UA/5')
+
+    const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
+    expect(written.userAgent).toBe('UA/5')
+    expect(quarantineCopies(fsState)).toEqual([])
   })
 })

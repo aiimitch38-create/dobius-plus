@@ -75,10 +75,29 @@
   behaviour is unchanged.
 - agent-hooks keeps its own inline write (0o600 mode, dot-prefixed temp name) to keep the
   Upstream diff small; only the cleanup gate changed plus the start-up sweep.
-- Not addressed (outside #51): `loadPersistedMeta()` still treats an unreadable
-  `browser-session-meta.json` as empty, so the next save overwrites it with defaults. Adopting
-  `SafeJsonFile` there changes every caller and the many tests that mock this module's fs;
-  it belongs with the safe-persistence stores work.
+- Coordinator follow-up (second commit): browser-session-meta.json now separates
+  missing / unreadable / ok (see "Follow-up" below). BUILD-009B explicitly excludes this file.
+
+## Follow-up: unreadable browser-session metadata (second commit)
+- Root cause: `loadPersistedMeta()` caught every read/parse error and returned defaults; the next
+  `persistMeta()` merged its update into those defaults and replaced the real file, dropping
+  profiles, pending cookie imports and per-partition UAs.
+- Fix: `readPersistedMeta()` uses `readSafeJsonFile` (top level must be a plain object) on every
+  call, with no cache. Why no `SafeJsonFile`: the registry singleton is built at import time,
+  possibly before userData is final, and a cached value could pin the wrong path. While unreadable:
+  reads return defaults (as before), `persistMeta` refuses and logs, the error is logged once per
+  detail, and a quarantine copy `<file>.unreadable-<ms>` is kept once per fingerprint. The next
+  access after a repair reads the file again and saves resume. A missing file is a normal first run.
+  If userData can't be resolved yet, that counts as missing (the old code treated it the same way).
+- `safe-json-file.ts`: the quarantine body moved into exported `keepUnreadableCopy()`;
+  `SafeJsonFile` calls it, so the behaviour is unchanged.
+- Tests (persistence test, fs mock now sets `code` on ENOENT and has `constants`): malformed JSON,
+  wrong shape, and EACCES each run all save APIs → bytes unchanged, no temp written, exactly one
+  quarantine copy (none for EACCES, which cannot be copied), and a "not saved" error. A repaired
+  file recovers and keeps its profiles. A missing file creates the file.
+- Mutations: M7 persist ignores unreadable (4 fail); M8 quarantine every access (1 fail);
+  M9 cache first read (2 fail); M10 missing treated as unreadable (1 fail).
+- Verification: typecheck exit 0; oxlint + react-doctor clean; targeted 14 files / 376 passed.
 
 ## Rollback
 Revert the commit. Temps written by the new code use the same naming family, so old code simply

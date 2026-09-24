@@ -5,11 +5,16 @@
 import { app, session } from 'electron'
 import type { Session } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { DOBIUS_BROWSER_PARTITION } from '../../shared/constants'
 import type { BrowserSessionProfile, BrowserSessionProfileScope } from '../../shared/types'
-import { sweepStaleTempFiles, writeJsonFileAtomic } from '../storage/safe-json-file'
+import {
+  keepUnreadableCopy,
+  readSafeJsonFile,
+  sweepStaleTempFiles,
+  writeJsonFileAtomic
+} from '../storage/safe-json-file'
 import { browserManager } from './browser-manager'
 import { hasSystemMediaAccess, requestSystemMediaAccess } from './browser-media-access'
 import { cleanElectronUserAgent, setupClientHintsOverride } from './browser-session-ua'
@@ -32,6 +37,15 @@ type BrowserSessionMeta = {
 // Matches the unique `<file>.<pid>.<hex>.tmp` name (group 1 = pid) and the
 // older shared `<file>.tmp` name, which carries no owner.
 const META_TEMP_RE = /^browser-session-meta\.json(?:\.(\d+)\.[\da-f]+)?\.tmp$/
+const META_LABEL = '[browser-session] browser-session-meta.json'
+
+type MetaRead = { status: 'ok' | 'missing' | 'unreadable'; meta: BrowserSessionMeta }
+
+function parseMetaObject(raw: unknown): Record<string, unknown> | undefined {
+  return raw !== null && typeof raw === 'object' && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : undefined
+}
 
 // Why: the registry is the single source of truth for which Electron partitions
 // are valid. will-attach-webview consults it to decide whether a guest's
@@ -40,6 +54,8 @@ const META_TEMP_RE = /^browser-session-meta\.json(?:\.(\d+)\.[\da-f]+)?\.tmp$/
 
 class BrowserSessionRegistry {
   private readonly profiles = new Map<string, BrowserSessionProfile>()
+  private unreadableDetail: string | null = null
+  private unreadableFingerprint: string | null = null
 
   constructor() {
     const persisted = this.loadPersistedSource()
@@ -74,7 +90,13 @@ class BrowserSessionRegistry {
   // The temp name is unique per write and removed when the write fails.
   private persistMeta(updates: Partial<BrowserSessionMeta>): void {
     try {
-      const existing = this.loadPersistedMeta()
+      const { status, meta: existing } = this.readPersistedMeta()
+      if (status === 'unreadable') {
+        // Why: merging into defaults would overwrite the user's profiles and
+        // pending imports that the unreadable file may still hold.
+        console.error(`${META_LABEL} not saved: the existing file is unreadable; fix or remove it`)
+        return
+      }
       writeJsonFileAtomic(this.metadataPath, { ...existing, ...updates })
     } catch (error) {
       // Why not rethrow: callers are startup replay and IPC handlers whose
@@ -98,44 +120,65 @@ class BrowserSessionRegistry {
   }
 
   private loadPersistedMeta(): BrowserSessionMeta {
-    try {
-      const raw = readFileSync(this.metadataPath, 'utf-8')
-      const data = JSON.parse(raw)
-      const legacyUserAgent = typeof data?.userAgent === 'string' ? data.userAgent : null
-      const userAgentByPartition: Record<string, string> =
-        data && typeof data.userAgentByPartition === 'object' && data.userAgentByPartition
-          ? { ...data.userAgentByPartition }
-          : {}
-      if (legacyUserAgent && !userAgentByPartition[DOBIUS_BROWSER_PARTITION]) {
-        userAgentByPartition[DOBIUS_BROWSER_PARTITION] = legacyUserAgent
-      }
+    return this.readPersistedMeta().meta
+  }
 
-      const legacyPendingCookieDbPath =
-        typeof data?.pendingCookieDbPath === 'string' ? data.pendingCookieDbPath : null
-      const pendingCookieImports: Record<string, string> =
-        data && typeof data.pendingCookieImports === 'object' && data.pendingCookieImports
-          ? { ...data.pendingCookieImports }
-          : {}
-      if (legacyPendingCookieDbPath && !pendingCookieImports[DOBIUS_BROWSER_PARTITION]) {
-        pendingCookieImports[DOBIUS_BROWSER_PARTITION] = legacyPendingCookieDbPath
-      }
-      return {
-        defaultSource: data?.defaultSource ?? null,
-        userAgent: legacyUserAgent,
-        userAgentByPartition,
-        pendingCookieDbPath: legacyPendingCookieDbPath,
-        pendingCookieImports,
-        profiles: Array.isArray(data?.profiles) ? data.profiles : []
-      }
+  // Why re-read every call: nothing is cached, so a repaired file is picked up
+  // on the next access, and a read before app ready cannot pin a wrong path.
+  private readPersistedMeta(): MetaRead {
+    let filePath: string
+    try {
+      filePath = this.metadataPath
     } catch {
-      return {
-        defaultSource: null,
-        userAgent: null,
-        userAgentByPartition: {},
-        pendingCookieDbPath: null,
-        pendingCookieImports: {},
-        profiles: []
+      // userData is not resolvable yet (pre-ready or unit tests): nothing to read.
+      return { status: 'missing', meta: BrowserSessionRegistry.normalizeMeta({}) }
+    }
+    const result = readSafeJsonFile(filePath, parseMetaObject, () => ({}))
+    if (result.status === 'unreadable') {
+      if (this.unreadableDetail !== result.detail) {
+        this.unreadableDetail = result.detail
+        console.error(
+          `${META_LABEL} unreadable (${result.detail}); saves are blocked until it is fixed`
+        )
       }
+      this.unreadableFingerprint = keepUnreadableCopy(
+        filePath,
+        META_LABEL,
+        this.unreadableFingerprint
+      )
+    } else if (this.unreadableDetail !== null) {
+      this.unreadableDetail = null
+      console.warn(`${META_LABEL} is readable again`)
+    }
+    return { status: result.status, meta: BrowserSessionRegistry.normalizeMeta(result.value) }
+  }
+
+  private static normalizeMeta(data: Record<string, unknown>): BrowserSessionMeta {
+    const legacyUserAgent = typeof data.userAgent === 'string' ? data.userAgent : null
+    const userAgentByPartition: Record<string, string> =
+      typeof data.userAgentByPartition === 'object' && data.userAgentByPartition
+        ? { ...(data.userAgentByPartition as Record<string, string>) }
+        : {}
+    if (legacyUserAgent && !userAgentByPartition[DOBIUS_BROWSER_PARTITION]) {
+      userAgentByPartition[DOBIUS_BROWSER_PARTITION] = legacyUserAgent
+    }
+
+    const legacyPendingCookieDbPath =
+      typeof data.pendingCookieDbPath === 'string' ? data.pendingCookieDbPath : null
+    const pendingCookieImports: Record<string, string> =
+      typeof data.pendingCookieImports === 'object' && data.pendingCookieImports
+        ? { ...(data.pendingCookieImports as Record<string, string>) }
+        : {}
+    if (legacyPendingCookieDbPath && !pendingCookieImports[DOBIUS_BROWSER_PARTITION]) {
+      pendingCookieImports[DOBIUS_BROWSER_PARTITION] = legacyPendingCookieDbPath
+    }
+    return {
+      defaultSource: (data.defaultSource as BrowserSessionProfile['source'] | undefined) ?? null,
+      userAgent: legacyUserAgent,
+      userAgentByPartition,
+      pendingCookieDbPath: legacyPendingCookieDbPath,
+      pendingCookieImports,
+      profiles: Array.isArray(data.profiles) ? (data.profiles as BrowserSessionProfile[]) : []
     }
   }
 
