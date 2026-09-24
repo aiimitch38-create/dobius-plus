@@ -253,9 +253,23 @@ export const vertexTaskStore: VertexTaskSource = {
       task.order = (column.at(-1)?.order ?? 0) + ORDER_GAP
     }
 
+    if (patch.parentTaskId === task.id) {
+      delete patch.parentTaskId
+    }
+    const oldParentId = task.parentTaskId
     Object.assign(task, patch, { updatedAt: Date.now() })
-    if (patch.parentTaskId && patch.parentTaskId !== task.id) {
-      const parent = tasks.find((t) => t.id === patch.parentTaskId)
+    if ('parentTaskId' in patch) {
+      // Why: re-parenting must move the id between both parents' child lists
+      // in this same write, or the old parent keeps a stale child.
+      task.parentTaskId = patch.parentTaskId || undefined
+      if (oldParentId !== task.parentTaskId) {
+        const oldParent = tasks.find((t) => t.id === oldParentId)
+        if (oldParent?.childTaskIds.includes(task.id)) {
+          oldParent.childTaskIds = oldParent.childTaskIds.filter((id) => id !== task.id)
+          oldParent.updatedAt = task.updatedAt
+        }
+      }
+      const parent = tasks.find((t) => t.id === task.parentTaskId)
       if (parent && !parent.childTaskIds.includes(task.id)) {
         parent.childTaskIds.push(task.id)
         parent.updatedAt = task.updatedAt

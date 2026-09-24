@@ -68,8 +68,6 @@
 - #47 also clears `parentTaskId` on children and dangling `dependencies` ids (BUG-MATRIX asks for
   "delete child and parent cases; no surviving dangling references"). `dependencies` gate
   nothing today (grep: only KanbanDetailPanel display/edit), so no dispatch behavior changes.
-- Not fixed (out of scope, noted for review): `update()` re-parenting leaves the old parent's
-  `childTaskIds` entry.
 
 ## Rollback
 Revert the commit. Quarantine copies `vertex-tasks.json.unreadable-<ms>` stay on disk.
@@ -86,3 +84,21 @@ Revert the commit. Quarantine copies `vertex-tasks.json.unreadable-<ms>` stay on
 ## Lessons
 - Typecheck and oxlint take several minutes under the parallel-build load; run them in the
   background instead of against the 2-minute tool timeout.
+
+## Follow-up (coordinator request, second commit)
+- `update()` re-parenting: when a patch carries `parentTaskId` (including `undefined`/empty =
+  no parent), the task id is removed from the OLD parent's `childTaskIds` and added once to the
+  NEW parent's, in the same `persist()`. A patch that names the task as its own parent drops
+  that field (previously it was stored as a self-parent without linking). Patches that do not
+  mention `parentTaskId` leave relationships untouched.
+- Tests (`re-parenting` block): P1→P2 twice → P1 `[]`, P2 `[A]` once; clear parent → only removal;
+  unrelated patch keeps the link.
+- Mutation checks: M5 skip old-parent removal = 2 fail; M6 only handle truthy `parentTaskId` = 1
+  fail; M7 drop the no-duplicate guard = 1 fail. Restored: 35/35 pass.
+- `create_board_task` error path (investigated only; `dobius-tool-server.ts` NOT edited per
+  coordinator, BUILD-007 owns it): the SDK's `createSdkMcpServer` registers the handler on its
+  bundled McpServer (`registerTool`), whose CallTool request handler wraps the call in
+  try/catch and returns `createToolError(message)` =
+  `{content:[{type:'text',text:message}], isError:true}` (node_modules/@anthropic-ai/
+  claude-agent-sdk 0.3.201 `sdk.mjs`). A thrown store error therefore reaches the agent as a
+  tool error with the read-only / could-not-be-saved text; no crash, no hang.

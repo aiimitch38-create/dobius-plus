@@ -398,3 +398,46 @@ describe('remove relationships', () => {
     expect(rows.find((t) => t.id === waiter.id)?.dependencies).toEqual([child.id])
   })
 })
+
+describe('re-parenting', () => {
+  const childIdsOf = (id: string): string[] | undefined =>
+    (
+      JSON.parse(readFileSync(join(dir, 'vertex-tasks.json'), 'utf8')) as {
+        id: string
+        childTaskIds: string[]
+      }[]
+    ).find((t) => t.id === id)?.childTaskIds
+
+  it('moves the child id from the old parent to the new one in the same write', () => {
+    const p1 = vertexTaskStore.create({ title: 'p1' })
+    const p2 = vertexTaskStore.create({ title: 'p2' })
+    const a = vertexTaskStore.create({ title: 'a', parentTaskId: p1.id })
+
+    vertexTaskStore.update(a.id, { parentTaskId: p2.id })
+    vertexTaskStore.update(a.id, { parentTaskId: p2.id })
+
+    expect(childIdsOf(p1.id)).toEqual([])
+    expect(childIdsOf(p2.id)).toEqual([a.id])
+  })
+
+  it('only removes the id when the parent is cleared', () => {
+    const p1 = vertexTaskStore.create({ title: 'p1' })
+    const other = vertexTaskStore.create({ title: 'other' })
+    const a = vertexTaskStore.create({ title: 'a', parentTaskId: p1.id })
+
+    const updated = vertexTaskStore.update(a.id, { parentTaskId: undefined })
+
+    expect(updated?.parentTaskId).toBeUndefined()
+    expect(childIdsOf(p1.id)).toEqual([])
+    expect(childIdsOf(other.id)).toEqual([])
+  })
+
+  it('leaves the parent alone when a patch does not mention it', () => {
+    const p1 = vertexTaskStore.create({ title: 'p1' })
+    const a = vertexTaskStore.create({ title: 'a', parentTaskId: p1.id })
+
+    vertexTaskStore.update(a.id, { title: 'renamed' })
+
+    expect(childIdsOf(p1.id)).toEqual([a.id])
+  })
+})
