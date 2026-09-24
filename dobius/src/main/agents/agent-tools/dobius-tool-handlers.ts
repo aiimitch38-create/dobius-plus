@@ -1,3 +1,4 @@
+import type { AsanaLane } from '../../../shared/asana'
 import type { Store } from '../../persistence'
 import { getAsanaConfig } from '../../asana/asana-config'
 import { appendBriefingItem } from '../agent-briefing-store'
@@ -16,12 +17,31 @@ const ASANA_BODY_LIMIT = 4_000
 const KNOWLEDGE_RESPONSE_LIMIT = 1_500
 const DISPATCH_BRIEF_LIMIT = 6_000
 const BOARD_TASK_DESCRIPTION_LIMIT = 4_000
+// Why: dispatch_build launches a terminal agent outside startAgentRun's cap, so
+// it holds its own capacity: one worktree creation in flight app-wide, and one
+// successful build per run (a triage run handles exactly one Asana task).
+const MAX_IN_FLIGHT_BUILD_DISPATCHES = 1
+const MAX_BUILDS_PER_RUN = 1
+let inFlightBuildDispatches = 0
+
+export type DobiusToolName =
+  | 'post_channel_message'
+  | 'post_channel_screenshot'
+  | 'create_board_task'
+  | 'asana_draft_comment'
+  | 'dispatch_build'
+  | 'read_knowledge'
+  | 'list_crew'
+  | 'crew_status'
+  | 'file_briefing_item'
 
 export type DobiusToolContext = {
   agentId: string
   runId: string
-  /** True for channel-sourced runs: offer the live chat outbox tools. */
-  channelOutbox?: boolean
+  /** The run profile's tool set: only these are registered, and privileged handlers re-check it. */
+  tools: readonly DobiusToolName[]
+  /** Trusted Asana lane set by the runner's caller, never by the model. */
+  buildLane?: AsanaLane
 }
 
 type TextToolResult = {
@@ -100,7 +120,18 @@ function slugFromBrief(brief: string): string {
   return sanitizeSlug(brief.trim().split(/\s+/).slice(0, 6).join(' '), 'asana-build')
 }
 
+function dispatchCapabilityError(context: DobiusToolContext): string | null {
+  if (!context.tools.includes('dispatch_build')) {
+    return 'build dispatch not permitted: this run has no build capability.'
+  }
+  if (context.buildLane !== 'build') {
+    return 'build dispatch not permitted: only build-lane Asana tasks may dispatch builds.'
+  }
+  return null
+}
+
 export function createDobiusToolHandlers(context: DobiusToolContext, store: Store | null) {
+  let buildsDispatchedByRun = 0
   return {
     async createBoardTask(args: {
       title: string
@@ -181,6 +212,10 @@ export function createDobiusToolHandlers(context: DobiusToolContext, store: Stor
       brief: string
       branchName?: string
     }): Promise<TextToolResult> {
+      const capabilityError = dispatchCapabilityError(context)
+      if (capabilityError) {
+        return errorResult(capabilityError)
+      }
       const repoQuery = args.repo.trim()
       if (!repoQuery) {
         return errorResult('Repo is required.')
@@ -213,17 +248,32 @@ export function createDobiusToolHandlers(context: DobiusToolContext, store: Stor
         ? sanitizeSlug(args.branchName, slugFromBrief(brief))
         : slugFromBrief(brief)
       const buildAgent = getAsanaConfig().autoMode.buildAgent ?? 'claude'
+      if (buildsDispatchedByRun >= MAX_BUILDS_PER_RUN) {
+        return errorResult('build dispatch refused: this run already dispatched its build.')
+      }
+      if (inFlightBuildDispatches >= MAX_IN_FLIGHT_BUILD_DISPATCHES) {
+        return errorResult(
+          'build dispatch refused: another build dispatch is in progress, retry shortly.'
+        )
+      }
+      // Reserved synchronously right before the only await; released on both exits below.
+      inFlightBuildDispatches += 1
+      buildsDispatchedByRun += 1
       let result: { worktreeId: string; ok: boolean; error?: string }
       try {
         result = await dispatch({ repoId: repo.id, name, baseBranch: undefined, brief, buildAgent })
       } catch (error) {
+        inFlightBuildDispatches -= 1
+        buildsDispatchedByRun -= 1
         // Why: keep the tool contract (return isError, never reject) local, in case
         // a future dispatcher registration throws instead of catching internally.
         return errorResult(
           `build dispatch failed: ${error instanceof Error ? error.message : String(error)}`
         )
       }
+      inFlightBuildDispatches -= 1
       if (!result.ok) {
+        buildsDispatchedByRun -= 1
         return errorResult(result.error || 'build dispatch failed.')
       }
       appendBriefingItem({

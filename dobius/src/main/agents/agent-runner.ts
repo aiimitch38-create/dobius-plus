@@ -2,13 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { ChildProcess } from 'node:child_process'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { Options, Query, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
-import {
-  CHANNEL_AGENT_BASELINE_TOOLS,
-  type AgentRun,
-  type AgentRunContext,
-  type AgentRunSource,
-  type CustomAgent
-} from '../../shared/agents'
+import type { AgentRun, AgentRunContext, AgentRunSource, CustomAgent } from '../../shared/agents'
+import type { AsanaLane } from '../../shared/asana'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
 import { resolveClaudeCommand } from '../codex-cli/command'
 import { getAgent, getAgentSessionForKey, updateAgentSession } from './agents-store'
@@ -28,7 +23,13 @@ import { assertExecutionAdmitted, type ExecutionOrigin } from './execution-gate'
 import { appendAgentRunNotification } from './agent-notification-store'
 import { appendRunProgress } from './agent-run-progress-log'
 import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
-import { buildDobiusRunMcpServer, withDobiusToolAllowRule } from './agent-runner-dobius-tools'
+import {
+  buildDobiusRunMcpServer,
+  buildProfileAllowedTools,
+  builtInToolsFor,
+  resolveAgentRunProfile,
+  type AgentRunProfileId
+} from './agent-runner-dobius-tools'
 import { buildSystemPrompt } from './agent-run-prompt'
 import {
   getDefaultPrepareCodexLaunch,
@@ -92,7 +93,16 @@ type AgentRunOptions = {
   /** Per-run model override. Absent = the agent's configured model. */
   model?: string
   permissionMode?: Options['permissionMode']
+  /**
+   * Explicit tool list for this run. When given it also bounds which built-in
+   * tools are available (SDK `tools`); omitted = the agent's allowlist with the
+   * SDK's default built-in set.
+   */
   allowedTools?: string[]
+  /** Tool profile; defaults to `source`. See agent-runner-dobius-tools.ts. */
+  profile?: AgentRunProfileId
+  /** Trusted Asana lane for 'asana' runs; only 'build' grants dispatch_build. */
+  asanaLane?: AsanaLane
   outputFormat?: Options['outputFormat']
   resume?: boolean
   onResult?: (message: SDKResultMessage) => void
@@ -345,14 +355,15 @@ export async function startAgentRun(args: {
         : undefined
     const permissionMode =
       args.options?.permissionMode ?? (agent.bypassPermissions ? 'bypassPermissions' : 'default')
+    const profile = resolveAgentRunProfile({
+      source: args.options?.source ?? 'manual',
+      profile: args.options?.profile,
+      asanaLane: args.options?.asanaLane
+    })
     const configuredTools = args.options?.allowedTools ?? agent.allowedTools
-    // Channel runs get the working baseline unioned in — see
+    // Channel-profile runs get the working baseline unioned in — see
     // CHANNEL_AGENT_BASELINE_TOOLS for why old agents need it.
-    const sourcedTools =
-      (args.options?.source ?? 'manual') === 'channel'
-        ? [...new Set([...configuredTools, ...CHANNEL_AGENT_BASELINE_TOOLS])]
-        : configuredTools
-    const allowedTools = withDobiusToolAllowRule(sourcedTools)
+    const allowedTools = buildProfileAllowedTools(profile, configuredTools)
     const isChannelRun = (args.options?.source ?? 'manual') === 'channel'
     const options: Options = {
       systemPrompt: systemPrompt || undefined,
@@ -360,7 +371,7 @@ export async function startAgentRun(args: {
       cwd: resolvedCwd,
       allowedTools,
       skills: agent.skills.length > 0 ? agent.skills : undefined,
-      tools: args.options?.allowedTools,
+      tools: builtInToolsFor(args.options?.allowedTools),
       permissionMode,
       allowDangerouslySkipPermissions: permissionMode === 'bypassPermissions' ? true : undefined,
       resume,
@@ -386,9 +397,10 @@ export async function startAgentRun(args: {
     // be spawned as a real file. Resolve the user's installed Claude CLI so native
     // Communications agents reuse the same OAuth account as Dobius terminals.
     options.pathToClaudeCodeExecutable = resolveClaudeCommand()
-    options.mcpServers = {
-      dobius: buildDobiusRunMcpServer(agent.id, runId, args.options?.source)
-    }
+    options.mcpServers =
+      profile.dobiusTools.length > 0
+        ? { dobius: buildDobiusRunMcpServer(agent.id, runId, profile) }
+        : {}
     // Not strict: agents should see the user's configured MCP servers
     // (Playwright browsing, connectors) alongside the per-run dobius server.
     // Access is still gated per-agent by allowedTools — an MCP server being

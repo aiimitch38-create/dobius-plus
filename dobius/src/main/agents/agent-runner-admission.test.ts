@@ -58,7 +58,9 @@ vi.mock('./agent-runner-environment', () => ({
 }))
 vi.mock('./agent-runner-dobius-tools', () => ({
   buildDobiusRunMcpServer: vi.fn(() => ({})),
-  withDobiusToolAllowRule: (tools: string[]) => tools
+  buildProfileAllowedTools: (_profile: unknown, tools: string[]) => tools,
+  builtInToolsFor: () => undefined,
+  resolveAgentRunProfile: () => ({ id: 'manual', dobiusTools: [], channelBaseline: false })
 }))
 vi.mock('./agent-run-prompt', () => ({ buildSystemPrompt: () => '' }))
 vi.mock('./default-codex-launch', () => ({ getDefaultPrepareCodexLaunch: () => () => null }))
