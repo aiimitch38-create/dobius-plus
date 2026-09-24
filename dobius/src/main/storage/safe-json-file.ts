@@ -3,6 +3,7 @@ import {
   constants as fsConstants,
   copyFileSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   statSync,
@@ -73,22 +74,95 @@ export function uniqueTmpPath(target: string): string {
 }
 
 // Throws on failure; the original file is untouched unless rename succeeded.
-export function writeJsonFileAtomic(target: string, value: unknown): void {
+// The unique temp file is removed on every failure, including a partial write.
+export function writeFileAtomic(target: string, data: string): void {
   const tmp = uniqueTmpPath(target)
   mkdirSync(path.dirname(target), { recursive: true })
   try {
-    writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf-8')
+    writeFileSync(tmp, data, 'utf-8')
     renameSync(tmp, target)
   } catch (error) {
-    try {
-      unlinkSync(tmp)
-    } catch (cleanupError) {
-      if (errorCode(cleanupError) !== 'ENOENT') {
-        console.warn(`[storage] could not remove temp file ${tmp}: ${errorText(cleanupError)}`)
-      }
-    }
+    removeTempFile(tmp)
     throw error
   }
+}
+
+export function writeJsonFileAtomic(target: string, value: unknown): void {
+  writeFileAtomic(target, `${JSON.stringify(value, null, 2)}\n`)
+}
+
+// Never throws: the temp may never have been created (ENOENT is expected).
+export function removeTempFile(tmp: string): void {
+  try {
+    unlinkSync(tmp)
+  } catch (cleanupError) {
+    if (errorCode(cleanupError) !== 'ENOENT') {
+      console.warn(`[storage] could not remove temp file ${tmp}: ${errorText(cleanupError)}`)
+    }
+  }
+}
+
+// Why 10 minutes: every writer here is synchronous and finishes in well under
+// a second, so a temp this old can only be the residue of a crashed or failed write.
+export const STALE_TEMP_MIN_AGE_MS = 10 * 60_000
+
+function isOtherLiveProcess(pid: number): boolean {
+  if (pid === process.pid) {
+    return false
+  }
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    // EPERM means the process exists but belongs to someone else.
+    return errorCode(error) === 'EPERM'
+  }
+}
+
+/**
+ * Removes abandoned temp files in `dir` whose name matches `pattern`.
+ * Capture group 1, when present, is the writer's pid. A temp is kept when it
+ * is younger than `minAgeMs` or its writer is another live process, so a
+ * concurrent writer's in-flight temp is never deleted. Never throws.
+ */
+export function sweepStaleTempFiles(
+  dir: string,
+  pattern: RegExp,
+  minAgeMs: number = STALE_TEMP_MIN_AGE_MS,
+  now: number = Date.now()
+): string[] {
+  let names: string[]
+  try {
+    names = readdirSync(dir)
+  } catch (error) {
+    if (errorCode(error) !== 'ENOENT') {
+      console.warn(`[storage] could not scan ${dir} for stale temp files: ${errorText(error)}`)
+    }
+    return []
+  }
+  const removed: string[] = []
+  for (const name of names) {
+    const match = pattern.exec(name)
+    if (!match) {
+      continue
+    }
+    if (match[1] !== undefined && isOtherLiveProcess(Number(match[1]))) {
+      continue
+    }
+    const tmp = path.join(dir, name)
+    try {
+      if (now - statSync(tmp).mtimeMs < minAgeMs) {
+        continue
+      }
+      unlinkSync(tmp)
+      removed.push(name)
+    } catch (error) {
+      if (errorCode(error) !== 'ENOENT') {
+        console.warn(`[storage] could not remove stale temp file ${tmp}: ${errorText(error)}`)
+      }
+    }
+  }
+  return removed
 }
 
 /**

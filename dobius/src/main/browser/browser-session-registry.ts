@@ -5,18 +5,11 @@
 import { app, session } from 'electron'
 import type { Session } from 'electron'
 import { randomUUID } from 'node:crypto'
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync
-} from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { DOBIUS_BROWSER_PARTITION } from '../../shared/constants'
 import type { BrowserSessionProfile, BrowserSessionProfileScope } from '../../shared/types'
+import { sweepStaleTempFiles, writeJsonFileAtomic } from '../storage/safe-json-file'
 import { browserManager } from './browser-manager'
 import { hasSystemMediaAccess, requestSystemMediaAccess } from './browser-media-access'
 import { cleanElectronUserAgent, setupClientHintsOverride } from './browser-session-ua'
@@ -35,6 +28,10 @@ type BrowserSessionMeta = {
   pendingCookieImports: Record<string, string>
   profiles: BrowserSessionProfile[]
 }
+
+// Matches the unique `<file>.<pid>.<hex>.tmp` name (group 1 = pid) and the
+// older shared `<file>.tmp` name, which carries no owner.
+const META_TEMP_RE = /^browser-session-meta\.json(?:\.(\d+)\.[\da-f]+)?\.tmp$/
 
 // Why: the registry is the single source of truth for which Electron partitions
 // are valid. will-attach-webview consults it to decide whether a guest's
@@ -74,14 +71,15 @@ class BrowserSessionRegistry {
 
   // Why: write-to-temp-then-rename is atomic on all supported platforms.
   // A crash mid-write would only lose the temp file, not corrupt the live one.
+  // The temp name is unique per write and removed when the write fails.
   private persistMeta(updates: Partial<BrowserSessionMeta>): void {
     try {
       const existing = this.loadPersistedMeta()
-      const tmpPath = `${this.metadataPath}.tmp`
-      writeFileSync(tmpPath, JSON.stringify({ ...existing, ...updates }))
-      renameSync(tmpPath, this.metadataPath)
-    } catch {
-      // best-effort
+      writeJsonFileAtomic(this.metadataPath, { ...existing, ...updates })
+    } catch (error) {
+      // Why not rethrow: callers are startup replay and IPC handlers whose
+      // in-memory state is already updated; the failure is reported, not hidden.
+      console.error('[browser-session] failed to save browser-session-meta.json:', error)
     }
   }
 
@@ -152,6 +150,7 @@ class BrowserSessionRegistry {
   // silently returns null. Re-reading here after app readiness ensures the
   // default profile's source is populated.
   initializeBrowserSessionsFromPersistedState(): void {
+    sweepStaleTempFiles(app.getPath('userData'), META_TEMP_RE)
     const meta = this.loadPersistedMeta()
     if (meta.defaultSource) {
       const current = this.profiles.get('default')

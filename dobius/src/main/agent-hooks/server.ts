@@ -12,9 +12,10 @@
 //     Dobius restart so retained dashboard rows reappear on relaunch
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { chmodSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { removeTempFile, sweepStaleTempFiles } from '../storage/safe-json-file'
 import { track } from '../telemetry/client'
 import { getCohortAtEmit } from '../telemetry/cohort-classifier'
 import { AGENT_KIND_VALUES, type AgentKind } from '../../shared/telemetry-events'
@@ -91,6 +92,8 @@ type PaneKeyAliasEntry = {
 // the endpoint file in userData/agent-hooks/ so all hook-server-owned cross-
 // restart artifacts stay co-located.
 const LAST_STATUS_FILE_NAME = 'last-status.json'
+// Group 1 is the writer's pid; see runStatusPersist().
+const LAST_STATUS_TEMP_RE = /^\.last-status-(\d+)-[\da-f-]+\.tmp$/
 const ASSISTANT_MESSAGE_RETRY_ATTEMPTS = 5
 const ASSISTANT_MESSAGE_RETRY_MS = 50
 const INTERRUPTED_DONE_LATE_WORKING_SUPPRESSION_MS = 15_000
@@ -1177,6 +1180,9 @@ export class AgentHookServer {
     if (this.lastStatusFilePath) {
       this.hydrateLastStatusFromDisk()
     }
+    if (this.endpointDir) {
+      sweepStaleTempFiles(this.endpointDir, LAST_STATUS_TEMP_RE)
+    }
     this.server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       if (req.method !== 'POST') {
         res.writeHead(404)
@@ -1594,7 +1600,6 @@ export class AgentHookServer {
       return
     }
     const tmpPath = join(this.endpointDir, `.last-status-${process.pid}-${randomUUID()}.tmp`)
-    let tmpWritten = false
     try {
       mkdirSync(this.endpointDir, { recursive: true, mode: 0o700 })
       if (process.platform !== 'win32') {
@@ -1605,18 +1610,13 @@ export class AgentHookServer {
         }
       }
       writeFileSync(tmpPath, json, { mode: 0o600 })
-      tmpWritten = true
       renameSync(tmpPath, this.lastStatusFilePath)
       this.lastWrittenJson = json
     } catch (err) {
       console.warn('[agent-hooks] failed to write last-status file:', err)
-      if (tmpWritten) {
-        try {
-          unlinkSync(tmpPath)
-        } catch {
-          // tmp already gone
-        }
-      }
+      // Why unconditional: a write that throws midway (ENOSPC) has already
+      // created the temp file, so cleanup cannot depend on the write finishing.
+      removeTempFile(tmpPath)
     }
   }
 

@@ -6,6 +6,10 @@ const META_PATH = `${USER_DATA}/browser-session-meta.json`
 type FsState = {
   files: Map<string, string>
   present: Set<string>
+  mtimes: Map<string, number>
+  tmpWrites: string[]
+  failTmpWrite: boolean
+  failRename: boolean
 }
 
 function fsKey(pathValue: string): string {
@@ -13,7 +17,14 @@ function fsKey(pathValue: string): string {
 }
 
 function createFsState(): FsState {
-  return { files: new Map(), present: new Set() }
+  return {
+    files: new Map(),
+    present: new Set(),
+    mtimes: new Map(),
+    tmpWrites: [],
+    failTmpWrite: false,
+    failRename: false
+  }
 }
 
 function seedMeta(fsState: FsState, meta: unknown): void {
@@ -81,7 +92,17 @@ function installModuleMocks(
       }
       return v
     }),
+    readdirSync: vi.fn((dir: string) => {
+      const prefix = `${fsKey(dir)}/`
+      return [...fsState.present]
+        .filter((key) => key.startsWith(prefix) && !key.slice(prefix.length).includes('/'))
+        .map((key) => key.slice(prefix.length))
+    }),
+    statSync: vi.fn((p: string) => ({ mtimeMs: fsState.mtimes.get(fsKey(p)) ?? Date.now() })),
     renameSync: vi.fn((from: string, to: string) => {
+      if (fsState.failRename) {
+        throw Object.assign(new Error('EPERM: injected'), { code: 'EPERM' })
+      }
       const sourceKey = fsKey(from)
       const destinationKey = fsKey(to)
       const v = fsState.files.get(sourceKey)
@@ -101,6 +122,15 @@ function installModuleMocks(
     writeFileSync: vi.fn((p: string, data: string | Uint8Array) => {
       const value = typeof data === 'string' ? data : Buffer.from(data).toString('utf-8')
       const key = fsKey(p)
+      if (key.endsWith('.tmp')) {
+        fsState.tmpWrites.push(key)
+      }
+      if (fsState.failTmpWrite && key.endsWith('.tmp')) {
+        // Partial write: the temp exists with some bytes before the error.
+        fsState.files.set(key, value.slice(0, 5))
+        fsState.present.add(key)
+        throw Object.assign(new Error('ENOSPC: injected'), { code: 'ENOSPC' })
+      }
       fsState.files.set(key, value)
       fsState.present.add(key)
     })
@@ -512,5 +542,80 @@ describe('BrowserSessionRegistry persistence', () => {
     const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
     expect(written.pendingCookieImports).toEqual({})
     expect(fsState.present.has('/outside/Cookies')).toBe(false)
+  })
+})
+
+describe('BrowserSessionRegistry metadata temp files (#51)', () => {
+  const PROFILE_PARTITION = 'persist:dobius-browser-session-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+
+  function tmpKeys(fsState: FsState): string[] {
+    return [...fsState.present].filter((key) => key.endsWith('.tmp'))
+  }
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.restoreAllMocks()
+  })
+
+  it('gives every save its own temp name', async () => {
+    const fsState = createFsState()
+    seedMeta(fsState, { defaultSource: null, profiles: [] })
+    installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    browserSessionRegistry.setPendingCookieImport('persist:dobius-browser', '/staged/a')
+    browserSessionRegistry.persistUserAgent(PROFILE_PARTITION, 'UA/1')
+
+    expect(fsState.tmpWrites).toHaveLength(2)
+    expect(new Set(fsState.tmpWrites).size).toBe(2)
+    expect(fsState.tmpWrites.every((key) => key !== `${META_PATH}.tmp`)).toBe(true)
+    expect(tmpKeys(fsState)).toEqual([])
+  })
+
+  it.each([
+    ['a write that fails midway', 'failTmpWrite'],
+    ['a rename that fails', 'failRename']
+  ] as const)('%s keeps valid metadata, leaves no temp, and reports it', async (_l, key) => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const fsState = createFsState()
+    seedMeta(fsState, {
+      defaultSource: null,
+      pendingCookieImports: { 'persist:dobius-browser': '/staged/keep' },
+      profiles: []
+    })
+    const before = fsState.files.get(META_PATH)
+    installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    fsState[key] = true
+    browserSessionRegistry.persistUserAgent(PROFILE_PARTITION, 'UA/2')
+
+    expect(fsState.files.get(META_PATH)).toBe(before)
+    expect(tmpKeys(fsState)).toEqual([])
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('browser-session-meta.json'),
+      expect.anything()
+    )
+  })
+
+  it("sweeps abandoned metadata temps at startup but keeps a live writer's temp", async () => {
+    const fsState = createFsState()
+    seedMeta(fsState, { defaultSource: null, profiles: [] })
+    const old = Date.now() - 11 * 60_000
+    const legacy = `${META_PATH}.tmp`
+    const dead = `${META_PATH}.2147483646.0123456789ab.tmp`
+    const live = `${META_PATH}.${process.ppid}.0123456789ab.tmp`
+    const young = `${META_PATH}.2147483646.fedcba987654.tmp`
+    for (const tmp of [legacy, dead, live, young]) {
+      fsState.files.set(tmp, '')
+      fsState.present.add(tmp)
+      fsState.mtimes.set(tmp, tmp === young ? Date.now() - 1_000 : old)
+    }
+    installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
+
+    expect(tmpKeys(fsState).sort()).toEqual([live, young].sort())
   })
 })
