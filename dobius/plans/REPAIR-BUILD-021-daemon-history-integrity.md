@@ -22,6 +22,10 @@
     captured. `daemon-server.closeHistorySession` captures it before awaiting the final
     checkpoint, so a ptyId respawned during that await (new writer, endedAt null) is never
     marked ended by the old session's late close. Callers without opts keep old behaviour.
+    Follow-up: the same token gates the final `appendIncrements(..., { onlyWriter })`, and
+    `checkpoint()` re-checks after writing its tmp file (`isWriterReplaced`: a DIFFERENT writer is
+    now registered) and removes the tmp instead of renaming it over the respawned session's
+    checkpoint. A merely-missing writer keeps the old behaviour.
     `DaemonPtyAdapter`'s exit handler (~1032) calls `closeSession` with no await in between,
     so it has no in-process gap; left unchanged (see Reviewer notes).
 - `history-retention.ts` (new; split out to keep history-manager.ts under `max-lines`)
@@ -74,6 +78,9 @@ swept, oldest first, until the folder fits. Size quota only; no age-based rule w
 - `src/main/daemon/daemon-server-history-close-race.test.ts` (new): barrier on the final
   checkpoint in `closeHistorySession`; respawn during the await → new session keeps
   `endedAt: null`; control without respawn → endedAt stamped.
+  Plus: respawn during the await → the new session's output.log has no old records (control:
+  records appended without respawn); real checkpoint with a barrier on the tmp write → respawned
+  session dir holds only meta.json (no old checkpoint, no tmp), endedAt null.
 - `src/main/daemon/daemon-init.test.ts`: the sweep is not called during init, and is called once
   after 30 s with `getDaemonProvider()`, `<userData>/terminal-history` and the quota path.
 - `history-manager.test.ts` is back to its pre-build content (the retention tests moved).
@@ -90,6 +97,9 @@ swept, oldest first, until the folder fits. Size quota only; no age-based rule w
 - F3a no rename-back → reopened-session test fails. F3b any leftover deleted → leftover test
   fails. F3c leftovers never cleaned → leftover test fails.
 - RACE closeHistorySession without the writer token → respawn race test fails.
+- A1 daemon-server calls appendIncrements without `{ onlyWriter }` → log test fails. A2
+  appendIncrements ignores opts → log test fails. C1 checkpoint replaced-writer guard removed →
+  checkpoint test fails. C2 guard kept but tmp not removed → checkpoint test fails.
 
 ## Rollback
 Revert the commit. meta.json format is unchanged apart from a trailing newline (readers use

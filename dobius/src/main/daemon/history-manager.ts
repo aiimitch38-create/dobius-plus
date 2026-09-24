@@ -53,6 +53,9 @@ type SessionWriter = {
   logBytes: number | null
 }
 
+/** Only act on this writer; a respawn of the same id installs a different one. */
+type WriterGuard = { onlyWriter: object | undefined }
+
 export type HistoryManagerOptions = {
   onWriteError?: (sessionId: string, error: Error) => void
 }
@@ -82,8 +85,7 @@ export class HistoryManager {
         endedAt: null,
         exitCode: null
       }
-      // Why atomic: a torn meta.json reads as "no session", losing the
-      // terminal's identity (cwd, dims) and its cold-restore eligibility.
+      // Why atomic: a torn meta.json reads as "no session" (cwd/dims + restore lost).
       writeJsonFileAtomic(join(dir, 'meta.json'), meta)
 
       // Why: if a session ID is reused after a previous clean exit, stale
@@ -141,13 +143,14 @@ export class HistoryManager {
   async appendIncrements(
     sessionId: string,
     seq: number,
-    records: PendingOutputRecord[]
+    records: PendingOutputRecord[],
+    opts?: WriterGuard
   ): Promise<'ok' | 'needs-checkpoint'> {
     if (this.disabledSessions.has(sessionId) || records.length === 0) {
       return 'ok'
     }
     const writer = this.writers.get(sessionId)
-    if (!writer) {
+    if (!writer || (opts && writer !== opts.onlyWriter)) {
       return 'ok'
     }
     try {
@@ -222,6 +225,10 @@ export class HistoryManager {
       // guard, which awaits this promise before the next tick.
       const tmpPath = `${writer.checkpointPath}.tmp`
       await fsPromises.writeFile(tmpPath, data)
+      if (this.isWriterReplaced(sessionId, writer)) {
+        await fsPromises.rm(tmpPath, { force: true })
+        return
+      }
       await fsPromises.rename(tmpPath, writer.checkpointPath)
       // Why: the snapshot subsumes every logged record, so the log resets to
       // the new generation. Crash between rename and this reset is safe: the
@@ -233,6 +240,12 @@ export class HistoryManager {
     } catch (err) {
       this.handleWriteError(sessionId, err)
     }
+  }
+
+  // Why: the same session id can be respawned (new writer, same dir) while an
+  // old write is awaiting; the old session's data must not land in the new one.
+  private isWriterReplaced(sessionId: string, writer: SessionWriter): boolean {
+    return (this.writers.get(sessionId) ?? writer) !== writer
   }
 
   // Why: a warm registerWriter may attach to a session dir that already has a
@@ -280,24 +293,15 @@ export class HistoryManager {
     }
   }
 
-  /** Identity of the writer currently open for sessionId (undefined if none).
-   *  Pass it to closeSession to end only that generation of the session. */
+  /** Current writer identity for sessionId, for WriterGuard callers. */
   getWriterToken(sessionId: string): object | undefined {
     return this.writers.get(sessionId)
   }
 
-  async closeSession(
-    sessionId: string,
-    exitCode: number,
-    opts?: { onlyWriter: object | undefined }
-  ): Promise<void> {
+  async closeSession(sessionId: string, exitCode: number, opts?: WriterGuard): Promise<void> {
     const writer = this.writers.get(sessionId)
-    if (!writer) {
-      return
-    }
-    // Why: a caller that awaited between the exit and this call may find the
-    // same id already respawned; endedAt must not land on the new session.
-    if (opts && writer !== opts.onlyWriter) {
+    // Why the guard: after a respawn of this id, endedAt must not land on the new session.
+    if (!writer || (opts && writer !== opts.onlyWriter)) {
       return
     }
 

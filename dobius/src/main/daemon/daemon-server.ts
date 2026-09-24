@@ -515,7 +515,7 @@ export class DaemonServer {
     if (snapshot) {
       await this.historyManager.checkpoint(sessionId, snapshot)
       if (records.length > 0) {
-        await this.historyManager.appendIncrements(sessionId, seq, records)
+        await this.historyManager.appendIncrements(sessionId, seq, records, { onlyWriter })
       }
     }
     await this.historyManager.closeSession(sessionId, code, { onlyWriter })
