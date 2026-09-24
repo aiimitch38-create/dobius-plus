@@ -5,18 +5,16 @@
 import { app, session } from 'electron'
 import type { Session } from 'electron'
 import { randomUUID } from 'node:crypto'
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync
-} from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { DOBIUS_BROWSER_PARTITION } from '../../shared/constants'
 import type { BrowserSessionProfile, BrowserSessionProfileScope } from '../../shared/types'
+import {
+  keepUnreadableCopy,
+  readSafeJsonFile,
+  sweepStaleTempFiles,
+  writeJsonFileAtomic
+} from '../storage/safe-json-file'
 import { browserManager } from './browser-manager'
 import { hasSystemMediaAccess, requestSystemMediaAccess } from './browser-media-access'
 import { cleanElectronUserAgent, setupClientHintsOverride } from './browser-session-ua'
@@ -36,6 +34,19 @@ type BrowserSessionMeta = {
   profiles: BrowserSessionProfile[]
 }
 
+// Matches the unique `<file>.<pid>.<hex>.tmp` name (group 1 = pid) and the
+// older shared `<file>.tmp` name, which carries no owner.
+const META_TEMP_RE = /^browser-session-meta\.json(?:\.(\d+)\.[\da-f]+)?\.tmp$/
+const META_LABEL = '[browser-session] browser-session-meta.json'
+
+type MetaRead = { status: 'ok' | 'missing' | 'unreadable'; meta: BrowserSessionMeta }
+
+function parseMetaObject(raw: unknown): Record<string, unknown> | undefined {
+  return raw !== null && typeof raw === 'object' && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : undefined
+}
+
 // Why: the registry is the single source of truth for which Electron partitions
 // are valid. will-attach-webview consults it to decide whether a guest's
 // requested partition is allowed. This prevents a compromised renderer from
@@ -43,6 +54,11 @@ type BrowserSessionMeta = {
 
 class BrowserSessionRegistry {
   private readonly profiles = new Map<string, BrowserSessionProfile>()
+  private unreadableDetail: string | null = null
+  private unreadableFingerprint: string | null = null
+  // True while in-memory profiles were built from defaults because the file
+  // was unreadable; cleared once a later read re-hydrates them from the file.
+  private builtFromUnreadable = false
 
   constructor() {
     const persisted = this.loadPersistedSource()
@@ -74,14 +90,21 @@ class BrowserSessionRegistry {
 
   // Why: write-to-temp-then-rename is atomic on all supported platforms.
   // A crash mid-write would only lose the temp file, not corrupt the live one.
+  // The temp name is unique per write and removed when the write fails.
   private persistMeta(updates: Partial<BrowserSessionMeta>): void {
     try {
-      const existing = this.loadPersistedMeta()
-      const tmpPath = `${this.metadataPath}.tmp`
-      writeFileSync(tmpPath, JSON.stringify({ ...existing, ...updates }))
-      renameSync(tmpPath, this.metadataPath)
-    } catch {
-      // best-effort
+      const { status, meta: existing } = this.readPersistedMeta()
+      if (status === 'unreadable') {
+        // Why: merging into defaults would overwrite the user's profiles and
+        // pending imports that the unreadable file may still hold.
+        console.error(`${META_LABEL} not saved: the existing file is unreadable; fix or remove it`)
+        return
+      }
+      writeJsonFileAtomic(this.metadataPath, { ...existing, ...updates })
+    } catch (error) {
+      // Why not rethrow: callers are startup replay and IPC handlers whose
+      // in-memory state is already updated; the failure is reported, not hidden.
+      console.error('[browser-session] failed to save browser-session-meta.json:', error)
     }
   }
 
@@ -100,44 +123,102 @@ class BrowserSessionRegistry {
   }
 
   private loadPersistedMeta(): BrowserSessionMeta {
-    try {
-      const raw = readFileSync(this.metadataPath, 'utf-8')
-      const data = JSON.parse(raw)
-      const legacyUserAgent = typeof data?.userAgent === 'string' ? data.userAgent : null
-      const userAgentByPartition: Record<string, string> =
-        data && typeof data.userAgentByPartition === 'object' && data.userAgentByPartition
-          ? { ...data.userAgentByPartition }
-          : {}
-      if (legacyUserAgent && !userAgentByPartition[DOBIUS_BROWSER_PARTITION]) {
-        userAgentByPartition[DOBIUS_BROWSER_PARTITION] = legacyUserAgent
-      }
+    return this.readPersistedMeta().meta
+  }
 
-      const legacyPendingCookieDbPath =
-        typeof data?.pendingCookieDbPath === 'string' ? data.pendingCookieDbPath : null
-      const pendingCookieImports: Record<string, string> =
-        data && typeof data.pendingCookieImports === 'object' && data.pendingCookieImports
-          ? { ...data.pendingCookieImports }
-          : {}
-      if (legacyPendingCookieDbPath && !pendingCookieImports[DOBIUS_BROWSER_PARTITION]) {
-        pendingCookieImports[DOBIUS_BROWSER_PARTITION] = legacyPendingCookieDbPath
-      }
-      return {
-        defaultSource: data?.defaultSource ?? null,
-        userAgent: legacyUserAgent,
-        userAgentByPartition,
-        pendingCookieDbPath: legacyPendingCookieDbPath,
-        pendingCookieImports,
-        profiles: Array.isArray(data?.profiles) ? data.profiles : []
-      }
+  // Why re-read every call: nothing is cached, so a repaired file is picked up
+  // on the next access, and a read before app ready cannot pin a wrong path.
+  private readPersistedMeta(): MetaRead {
+    let filePath: string
+    try {
+      filePath = this.metadataPath
     } catch {
-      return {
-        defaultSource: null,
-        userAgent: null,
-        userAgentByPartition: {},
-        pendingCookieDbPath: null,
-        pendingCookieImports: {},
-        profiles: []
+      // userData is not resolvable yet (pre-ready or unit tests): nothing to read.
+      return { status: 'missing', meta: BrowserSessionRegistry.normalizeMeta({}) }
+    }
+    const result = readSafeJsonFile(filePath, parseMetaObject, () => ({}))
+    if (result.status === 'unreadable') {
+      if (this.unreadableDetail !== result.detail) {
+        this.unreadableDetail = result.detail
+        console.error(
+          `${META_LABEL} unreadable (${result.detail}); saves are blocked until it is fixed`
+        )
       }
+      this.unreadableFingerprint = keepUnreadableCopy(
+        filePath,
+        META_LABEL,
+        this.unreadableFingerprint
+      )
+      this.builtFromUnreadable = true
+    } else if (this.unreadableDetail !== null) {
+      this.unreadableDetail = null
+      console.warn(`${META_LABEL} is readable again`)
+    }
+    const meta = BrowserSessionRegistry.normalizeMeta(result.value)
+    if (result.status !== 'unreadable' && this.builtFromUnreadable) {
+      this.rehydrateAfterRepair(meta)
+    }
+    return { status: result.status, meta }
+  }
+
+  // Why: the next save writes in-memory profiles over the repaired file, so
+  // they must first absorb what the file holds (file wins per id; profiles
+  // created this session are kept) or the repaired profiles would be dropped.
+  private rehydrateAfterRepair(meta: BrowserSessionMeta): void {
+    try {
+      this.hydrateFromPersisted(meta.profiles)
+      const current = this.profiles.get('default')
+      if (current && meta.defaultSource) {
+        this.profiles.set('default', { ...current, source: meta.defaultSource })
+      }
+      for (const [partition, ua] of Object.entries(meta.userAgentByPartition)) {
+        if (this.isAllowedPartition(partition)) {
+          const sess = session.fromPartition(partition)
+          sess.setUserAgent(ua)
+          setupClientHintsOverride(sess, ua)
+        }
+      }
+      this.builtFromUnreadable = false
+    } catch (error) {
+      // Left set so the next access retries (e.g. sessions not available before ready).
+      console.error(`${META_LABEL} could not re-apply the repaired file:`, error)
+    }
+  }
+
+  // Why: mutations must see a repaired file before they change in-memory
+  // profiles, so a delete is not undone and a create does not drop others.
+  private syncAfterRepair(): void {
+    if (this.builtFromUnreadable) {
+      this.readPersistedMeta()
+    }
+  }
+
+  private static normalizeMeta(data: Record<string, unknown>): BrowserSessionMeta {
+    const legacyUserAgent = typeof data.userAgent === 'string' ? data.userAgent : null
+    const userAgentByPartition: Record<string, string> =
+      typeof data.userAgentByPartition === 'object' && data.userAgentByPartition
+        ? { ...(data.userAgentByPartition as Record<string, string>) }
+        : {}
+    if (legacyUserAgent && !userAgentByPartition[DOBIUS_BROWSER_PARTITION]) {
+      userAgentByPartition[DOBIUS_BROWSER_PARTITION] = legacyUserAgent
+    }
+
+    const legacyPendingCookieDbPath =
+      typeof data.pendingCookieDbPath === 'string' ? data.pendingCookieDbPath : null
+    const pendingCookieImports: Record<string, string> =
+      typeof data.pendingCookieImports === 'object' && data.pendingCookieImports
+        ? { ...(data.pendingCookieImports as Record<string, string>) }
+        : {}
+    if (legacyPendingCookieDbPath && !pendingCookieImports[DOBIUS_BROWSER_PARTITION]) {
+      pendingCookieImports[DOBIUS_BROWSER_PARTITION] = legacyPendingCookieDbPath
+    }
+    return {
+      defaultSource: (data.defaultSource as BrowserSessionProfile['source'] | undefined) ?? null,
+      userAgent: legacyUserAgent,
+      userAgentByPartition,
+      pendingCookieDbPath: legacyPendingCookieDbPath,
+      pendingCookieImports,
+      profiles: Array.isArray(data.profiles) ? (data.profiles as BrowserSessionProfile[]) : []
     }
   }
 
@@ -152,6 +233,7 @@ class BrowserSessionRegistry {
   // silently returns null. Re-reading here after app readiness ensures the
   // default profile's source is populated.
   initializeBrowserSessionsFromPersistedState(): void {
+    sweepStaleTempFiles(app.getPath('userData'), META_TEMP_RE)
     const meta = this.loadPersistedMeta()
     if (meta.defaultSource) {
       const current = this.profiles.get('default')
@@ -341,6 +423,7 @@ class BrowserSessionRegistry {
     if (scope === 'default') {
       return null
     }
+    this.syncAfterRepair()
     const id = randomUUID()
     // Why: partition names are deterministic from the profile id so main can
     // reconstruct the allowlist on restart from persisted profile metadata
@@ -363,6 +446,7 @@ class BrowserSessionRegistry {
     profileId: string,
     source: BrowserSessionProfile['source']
   ): BrowserSessionProfile | null {
+    this.syncAfterRepair()
     const profile = this.profiles.get(profileId)
     if (!profile) {
       return null
@@ -378,6 +462,7 @@ class BrowserSessionRegistry {
   }
 
   async deleteProfile(profileId: string): Promise<boolean> {
+    this.syncAfterRepair()
     const profile = this.profiles.get(profileId)
     if (!profile || profile.scope === 'default') {
       return false
@@ -417,6 +502,7 @@ class BrowserSessionRegistry {
       // Why: persist metadata BEFORE clearing storage so that if the app quits
       // mid-clear, the next launch won't show a stale "imported from X" badge
       // for cookies that were partially or fully removed.
+      this.syncAfterRepair()
       const defaultProfile = this.profiles.get('default')
       if (defaultProfile) {
         this.profiles.set('default', { ...defaultProfile, source: null })

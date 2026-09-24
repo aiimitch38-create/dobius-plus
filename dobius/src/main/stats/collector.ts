@@ -1,6 +1,7 @@
 import { app } from 'electron'
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
+import { readFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import { sweepStaleTempFiles, writeFileAtomic } from '../storage/safe-json-file'
 import type { StatsSummary } from '../../shared/types'
 import type { StatsEvent, StatsAggregates, StatsFile } from './types'
 
@@ -14,6 +15,9 @@ const MAX_COUNTED_PRS = 2_000
 // Why 5s instead of the main store's 300ms: stat events are infrequent
 // (a few per session) and not latency-sensitive for the UI.
 const DEBOUNCE_MS = 5_000
+// Matches both the current `<file>.<pid>.<hex>.tmp` name and the older
+// `<file>.<pid>.<ms>.<hex>.tmp` residue; group 1 is the writer's pid.
+const STATS_TEMP_RE = /^dobius-stats\.json\.(\d+)\.[\da-f.]+\.tmp$/
 
 // Why: same timing constraint as persistence.ts — the path must be captured
 // after configureDevUserDataPath() but before app.setName('Dobius'). See the
@@ -64,6 +68,7 @@ export class StatsCollector {
     const data = this.load()
     this.events = data.events
     this.aggregates = data.aggregates
+    sweepStaleTempFiles(dirname(getStatsFile()), STATS_TEMP_RE)
   }
 
   onAgentStarted(listener: (totalAgentsSpawned: number) => void): () => void {
@@ -261,8 +266,6 @@ export class StatsCollector {
 
     // Why unique temp file: same race-safe pattern as persistence.ts:120 —
     // synchronous flushes can race the debounced writer during shutdown.
-    const tmpFile = `${statsFile}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
-    writeFileSync(tmpFile, JSON.stringify(data), 'utf-8')
-    renameSync(tmpFile, statsFile)
+    writeFileAtomic(statsFile, JSON.stringify(data))
   }
 }
