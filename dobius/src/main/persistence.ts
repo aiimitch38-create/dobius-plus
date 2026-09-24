@@ -13,7 +13,7 @@ import {
   statSync,
   realpathSync
 } from 'node:fs'
-import { writeFile, rename, mkdir, rm, copyFile } from 'node:fs/promises'
+import { writeFile, rename, mkdir, rm } from 'node:fs/promises'
 import { join, dirname, isAbsolute, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { createHash, randomUUID } from 'node:crypto'
@@ -103,7 +103,10 @@ import {
   ONBOARDING_FLOW_VERSION,
   ONBOARDING_FINAL_STEP
 } from '../shared/constants'
-import { parseWorkspaceSession } from '../shared/workspace-session-schema'
+import {
+  parseWorkspaceSession,
+  workspaceSessionStateSchema
+} from '../shared/workspace-session-schema'
 import {
   LOCAL_EXECUTION_HOST_ID,
   normalizeExecutionHostOrder,
@@ -518,6 +521,87 @@ function workspaceSessionPatchNeedsFullNormalization(patch: WorkspaceSessionPatc
   )
 }
 
+const MAX_WORKSPACE_SESSION_SALVAGE_PASSES = 10
+
+// Why (#32): one invalid field or entry used to reset the whole session (every
+// tab and layout). Drop only what zod rejects: a top-level field falls back to
+// its default, a record entry or array element is removed, the rest is kept.
+function salvageWorkspaceSession(
+  raw: unknown,
+  defaults: WorkspaceSessionState
+): { value: WorkspaceSessionState; dropped: string[] } | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null
+  }
+  const candidate = structuredClone(raw) as Record<string, unknown>
+  const defaultFields = defaults as unknown as Record<string, unknown>
+  const dropped: string[] = []
+  for (let pass = 0; pass < MAX_WORKSPACE_SESSION_SALVAGE_PASSES; pass++) {
+    const result = workspaceSessionStateSchema.safeParse(candidate)
+    if (result.success) {
+      return { value: result.data, dropped }
+    }
+    const droppedElements = new Map<unknown[], Set<number>>()
+    for (const issue of result.error.issues) {
+      const [field, entryKey, elementIndex] = issue.path
+      if (typeof field !== 'string') {
+        return null
+      }
+      const container = candidate[field]
+      if (entryKey === undefined || !container || typeof container !== 'object') {
+        if (defaultFields[field] === undefined) {
+          delete candidate[field]
+        } else {
+          candidate[field] = structuredClone(defaultFields[field])
+        }
+        dropped.push(field)
+        continue
+      }
+      const entry = Array.isArray(container)
+        ? container
+        : (container as Record<PropertyKey, unknown>)[entryKey as PropertyKey]
+      const index = Array.isArray(container) ? entryKey : elementIndex
+      if (Array.isArray(entry) && typeof index === 'number') {
+        const indexes = droppedElements.get(entry) ?? new Set<number>()
+        indexes.add(index)
+        droppedElements.set(entry, indexes)
+        dropped.push(issue.path.slice(0, Array.isArray(container) ? 2 : 3).join('.'))
+        continue
+      }
+      delete (container as Record<PropertyKey, unknown>)[entryKey as PropertyKey]
+      dropped.push(`${field}.${String(entryKey)}`)
+    }
+    for (const [array, indexes] of droppedElements) {
+      for (const index of [...indexes].sort((a, b) => b - a)) {
+        array.splice(index, 1)
+      }
+    }
+  }
+  return null
+}
+
+function parseWorkspaceSessionSalvaging(
+  raw: unknown,
+  defaults: WorkspaceSessionState,
+  label: string
+): WorkspaceSessionState | null {
+  const result = parseWorkspaceSession(raw)
+  if (result.ok) {
+    return { ...defaults, ...result.value }
+  }
+  const salvaged = salvageWorkspaceSession(raw, defaults)
+  if (!salvaged) {
+    console.error(`[persistence] Corrupt ${label}, using defaults:`, result.error)
+    return null
+  }
+  const dropped = [...new Set(salvaged.dropped)]
+  console.warn(
+    `[persistence] Dropped ${dropped.length} invalid ${label} field(s), kept the rest:`,
+    dropped.slice(0, 20).join(', ')
+  )
+  return { ...defaults, ...salvaged.value }
+}
+
 /** Normalize the persisted non-'local' host partitions. 'local' is intentionally
  *  dropped here — it is the legacy workspaceSession blob — so the two surfaces
  *  never diverge. Each partition is zod-validated independently: a corrupt host
@@ -538,15 +622,15 @@ function parseWorkspaceSessionsByHostId(
     if (!hostId || hostId === LOCAL_EXECUTION_HOST_ID) {
       continue
     }
-    const result = parseWorkspaceSession(value)
-    if (!result.ok) {
-      console.error(
-        `[persistence] Corrupt workspace session for host ${hostId}, using defaults:`,
-        result.error
-      )
+    const session = parseWorkspaceSessionSalvaging(
+      value,
+      defaults,
+      `workspace session for host ${hostId}`
+    )
+    if (!session) {
       continue
     }
-    partitions[hostId] = { ...defaults, ...result.value }
+    partitions[hostId] = session
   }
   return partitions
 }
@@ -2593,6 +2677,7 @@ export class Store {
   private githubCacheDirty = false
   private gitUsernameCache = new Map<string, string>()
   private loadNeedsSave = false
+  private backupRotationSuspended = false
   private settingsChangeListeners = new Set<
     (
       updates: Partial<GlobalSettings>,
@@ -2720,6 +2805,9 @@ export class Store {
   // active use. The backup ring should capture meaningfully different moments,
   // not five near-identical snapshots from one burst of store updates.
   private shouldRotateBackups(now: number, dataFile: string): boolean {
+    if (this.backupRotationSuspended) {
+      return false
+    }
     try {
       const mtime = statSync(backupPath(dataFile, 0)).mtimeMs
       return now - mtime >= BACKUP_MIN_INTERVAL_MS
@@ -2731,29 +2819,10 @@ export class Store {
   // Why: rotate oldest to discarded and shift .bak.i to .bak.i+1 by rename;
   // then copy the current data file to .bak.0 so load() has a JSON recovery
   // source even if a later primary write is truncated or corrupted.
-  private async rotateBackupsAsync(dataFile: string): Promise<void> {
-    if (!existsSync(dataFile)) {
-      return
-    }
-    await rm(backupPath(dataFile, BACKUP_COUNT - 1)).catch((err: unknown) => {
-      if (err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('[persistence] Failed to remove oldest backup:', err)
-      }
-    })
-    for (let i = BACKUP_COUNT - 2; i >= 0; i--) {
-      const src = backupPath(dataFile, i)
-      const dst = backupPath(dataFile, i + 1)
-      if (existsSync(src)) {
-        await rename(src, dst).catch((err) => {
-          console.error('[persistence] Failed to rotate backup', src, '->', dst, err)
-        })
-      }
-    }
-    await copyFile(dataFile, backupPath(dataFile, 0)).catch((err) => {
-      console.error('[persistence] Failed to snapshot current file to .bak.0:', err)
-    })
-  }
-
+  // Why sync on both write paths (#33): an awaited rotation could be suspended
+  // mid-shift while the quit flush ran its own rotation over the same slots,
+  // losing or duplicating generations. Running it without awaits makes each
+  // rotation atomic with respect to the event loop.
   private rotateBackupsSync(dataFile: string): void {
     if (!existsSync(dataFile)) {
       return
@@ -2783,27 +2852,62 @@ export class Store {
     }
   }
 
-  private restoreFromBackup(dataFile: string): boolean {
+  // Why (#31, N6): a backup is chosen only after its complete state loads
+  // (parse + migrate + normalize), candidates are only ever read, and the
+  // primary is replaced by tmp+rename so a failed restore leaves it untouched.
+  private restoreFromBackup(dataFile: string): PersistedState | null {
     for (let i = 0; i < BACKUP_COUNT; i++) {
       const path = backupPath(dataFile, i)
-      if (!existsSync(path)) {
+      const candidate = this.readStateFile(path)
+      if (candidate === null) {
         continue
       }
-      try {
-        const raw = readFileSync(path, 'utf-8')
-        JSON.parse(raw)
-        mkdirSync(dirname(dataFile), { recursive: true })
-        writeFileSync(dataFile, raw, 'utf-8')
-        console.warn(`[persistence] Recovered state from backup slot ${i}: ${path}`)
-        return true
-      } catch (err) {
-        console.error(`[persistence] Backup slot ${i} unusable, trying next:`, err)
-      }
+      this.promoteBackupToPrimary(path, dataFile)
+      console.warn(`[persistence] Recovered state from backup slot ${i}: ${path}`)
+      return candidate
     }
-    return false
+    return null
   }
 
-  private load(allowBackupRecovery = true): PersistedState {
+  private promoteBackupToPrimary(backupFile: string, dataFile: string): void {
+    const tmpFile = `${dataFile}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+    let renamed = false
+    try {
+      mkdirSync(dirname(dataFile), { recursive: true })
+      copyFileSync(backupFile, tmpFile)
+      renameSync(tmpFile, dataFile)
+      renamed = true
+    } catch (err) {
+      console.error('[persistence] Failed to restore backup over primary; primary unchanged:', err)
+    } finally {
+      if (!renamed) {
+        try {
+          unlinkSync(tmpFile)
+        } catch (cleanupErr) {
+          if ((cleanupErr as NodeJS.ErrnoException).code !== 'ENOENT') {
+            console.warn('[persistence] Failed to remove restore tmp file:', cleanupErr)
+          }
+        }
+      }
+    }
+  }
+
+  // Why (#31): the next save replaces an unloadable primary, so keep a copy of
+  // it first; a migration bug may have rejected data a fixed build can read.
+  private preserveFailedPrimary(dataFile: string): void {
+    if (!existsSync(dataFile)) {
+      return
+    }
+    const preservedFile = `${dataFile}.failed-${Date.now()}`
+    try {
+      copyFileSync(dataFile, preservedFile)
+      console.warn(`[persistence] Preserved unloadable state file at ${preservedFile}`)
+    } catch (err) {
+      console.error('[persistence] Failed to preserve unloadable state file:', err)
+    }
+  }
+
+  private load(): PersistedState {
     // Capture once, at the top: this is the unambiguous "has the user run
     // Dobius before?" signal used by the telemetry cohort migration below.
     // Field-based inference (e.g., `settings.telemetry` presence) does not
@@ -2817,18 +2921,57 @@ export class Store {
       fileExists: fileExistedOnLoad
     })
 
+    let result = fileExistedOnLoad ? this.readStateFile(dataFile) : null
+    let recoveredFromBackup = false
+
+    // Corrupt-file catch path and "no file on disk" path converge here. The
+    // telemetry migration below runs on whichever branch produced `result`,
+    // because a user whose `dobius-data.json` got corrupted is not a fresh
+    // install of the telemetry release — they still count as existing and
+    // must see the opt-in banner, not the default-on toast.
+    if (result === null) {
+      let hasBackup = false
+      for (let i = 0; i < BACKUP_COUNT; i++) {
+        if (existsSync(backupPath(dataFile, i))) {
+          hasBackup = true
+          break
+        }
+      }
+      if (fileExistedOnLoad || hasBackup) {
+        this.preserveFailedPrimary(dataFile)
+        result = this.restoreFromBackup(dataFile)
+        recoveredFromBackup = result !== null
+        if (result === null) {
+          console.error('[persistence] No usable state file or backup found, using defaults')
+          // Why (#31): this session starts from defaults while older backups
+          // still exist; rotating would push defaults through all five slots
+          // and destroy the remaining recovery sources.
+          this.backupRotationSuspended = hasBackup
+        }
+      }
+    }
+
+    return this.finishLoad(result, fileExistedOnLoad, fileExistedOnLoad || recoveredFromBackup)
+  }
+
+  // Why (#31): parse, migrate and normalize one candidate file without writing
+  // anything, so primary and backups are judged on their complete loaded state.
+  private readStateFile(sourceFile: string): PersistedState | null {
     let result: PersistedState | null = null
+    let stage: 'read' | 'parse' | 'migrate/normalize' = 'read'
     try {
-      if (fileExistedOnLoad) {
+      if (existsSync(sourceFile)) {
         const readStartedAt = performance.now()
-        const raw = readFileSync(dataFile, 'utf-8')
+        const raw = readFileSync(sourceFile, 'utf-8')
         logPersistenceStartupMilestone('persistence-read-done', {
           bytes: Buffer.byteLength(raw),
           durationMs: Math.round(performance.now() - readStartedAt)
         })
         logPersistenceStartupMilestone('persistence-json-parse-start')
+        stage = 'parse'
         const parsed = JSON.parse(raw) as PersistedState
         logPersistenceStartupMilestone('persistence-json-parse-done')
+        stage = 'migrate/normalize'
 
         // Why: secret settings are stored encrypted on disk via safeStorage.
         // Decrypt at the load boundary so the rest of the app sees plaintext.
@@ -3314,21 +3457,19 @@ export class Store {
           // Zod-validate at the read boundary so a field-type flip from an
           // older build — or a truncated write from a crash — gets rejected
           // cleanly instead of poisoning Zustand state and crashing the
-          // renderer on mount. On validation failure, fall back to defaults
-          // and log; a corrupt session file shouldn't trap the user out.
+          // renderer on mount. On validation failure, drop only the rejected
+          // fields/entries and log; a corrupt session file shouldn't trap the user out.
           workspaceSession: (() => {
             if (parsed.workspaceSession === undefined) {
               return defaults.workspaceSession
             }
-            const result = parseWorkspaceSession(parsed.workspaceSession)
-            if (!result.ok) {
-              console.error(
-                '[persistence] Corrupt workspace session, using defaults:',
-                result.error
-              )
-              return defaults.workspaceSession
-            }
-            return { ...defaults.workspaceSession, ...result.value }
+            return (
+              parseWorkspaceSessionSalvaging(
+                parsed.workspaceSession,
+                defaults.workspaceSession,
+                'workspace session'
+              ) ?? defaults.workspaceSession
+            )
           })(),
           // Why: per-host session partitions for non-'local' hosts. 'local'
           // stays in workspaceSession (legacy field) so a downgrade still
@@ -3355,30 +3496,17 @@ export class Store {
         }
       }
     } catch (err) {
-      console.error('[persistence] Failed to load primary state, trying backups:', err)
+      console.error(`[persistence] Failed to load ${sourceFile} (${stage} failed):`, err)
     }
+    return result
+  }
 
-    // Corrupt-file catch path and "no file on disk" path converge here. The
-    // telemetry migration below runs on whichever branch produced `result`,
-    // because a user whose `dobius-data.json` got corrupted is not a fresh
-    // install of the telemetry release — they still count as existing and
-    // must see the opt-in banner, not the default-on toast.
-    if (result === null && allowBackupRecovery) {
-      let hasBackup = false
-      for (let i = 0; i < BACKUP_COUNT; i++) {
-        if (existsSync(backupPath(dataFile, i))) {
-          hasBackup = true
-          break
-        }
-      }
-      if (fileExistedOnLoad || hasBackup) {
-        if (this.restoreFromBackup(dataFile)) {
-          return this.load(false)
-        }
-        console.error('[persistence] No usable state file or backup found, using defaults')
-      }
-    }
-
+  private finishLoad(
+    loaded: PersistedState | null,
+    fileExistedOnLoad: boolean,
+    existingProfile: boolean
+  ): PersistedState {
+    let result = loaded
     if (result === null) {
       const defaults = getDefaultPersistedState(homedir())
       const isFreshDefaultProfile =
@@ -3437,7 +3565,7 @@ export class Store {
       this.loadNeedsSave = true
     }
 
-    const migrated = this.migrateTelemetry(result, fileExistedOnLoad)
+    const migrated = this.migrateTelemetry(result, existingProfile)
 
     // githubCache lives in a sidecar file now (see getGithubCacheFile). A
     // legacy in-file cache (pre-sidecar build, or a downgrade round-trip) is
@@ -3647,7 +3775,7 @@ export class Store {
     }
     const now = Date.now()
     if (this.shouldRotateBackups(now, dataFile)) {
-      await this.rotateBackupsAsync(dataFile)
+      this.rotateBackupsSync(dataFile)
     }
   }
 
