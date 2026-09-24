@@ -31,6 +31,17 @@
     publishes with `renameSync` + `writeFileSync(log header)`. Both are sync, so nothing can
     interleave between the check and the publish (F2). The final records are appended with
     `appendFileSync` straight after the sync publish, with no await in between.
+  - Third review: (F1) every checkpoint write uses a unique tmp `checkpoint.json.<uuid>.tmp` and
+    only ever deletes its own. Before, a dropped checkpoint (old session, or a periodic one
+    in flight at exit) could delete another write's shared `.tmp`, causing ENOENT on rename and
+    disabled history. Crash leftovers (`checkpoint.json[.<id>].tmp`, at least 10 min old) are
+    removed on `openSession`/`registerWriter` by `removeStaleCheckpointTmps`. Readers only open
+    `checkpoint.json`. (F2) `owns()` also requires that no writer registration happened since the
+    finalization started: a per-id serial from a global counter, bumped in `setWriter` (used by
+    openSession and registerWriter) and dropped on close/remove/finalize. So a respawned writer
+    that is later removed (SIGTERM `releaseWithoutMarkingEnded`, dispose, its own exit) does not
+    hand the dir back to the old finalization. DaemonServer now passes `onWriteError`, which logs
+    only the session id and the error code (never the message).
   - `resolveLogState` + `SessionWriter` moved unchanged to new `history-log-state.ts` to keep
     history-manager.ts under `max-lines`.
   - `DaemonPtyAdapter`'s exit handler is unchanged: an exit event arriving after a respawn can
@@ -107,6 +118,12 @@ swept, oldest first, until the folder fits. Size quota only; no age-based rule w
   endedAt stamped unguarded → 1+2 fail; checkpoint owner check removed → 1+2 fail; tmp not
   removed → 1+2 fail; final append removed → control fails; periodic-checkpoint owner check
   always true → test 4 fails.
+
+- Third review (race file): shared tmp name → tests A (old dropped checkpoint vs respawned
+  checkpoint) and B (periodic checkpoint at exit vs final) fail; registration check removed or
+  never bumped → SIGTERM-after-respawn test fails; stale-tmp age gate removed / not called in
+  openSession / not called in registerWriter → the matching stale-tmp tests fail; onWriteError
+  wiring removed → logging test fails.
 
 ## Rollback
 Revert the commit. meta.json format is unchanged apart from a trailing newline (readers use

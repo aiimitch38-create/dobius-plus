@@ -1,4 +1,14 @@
-import { closeSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  closeSync,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+  unlinkSync
+} from 'node:fs'
 import { decodeLogHeader, LOG_HEADER_BYTES } from './terminal-history-log'
 
 export type SessionWriter = {
@@ -55,4 +65,32 @@ export function resolveLogState(writer: SessionWriter): void {
   // extended.
   writer.logBytes = 0
   writer.logGeneration = readCheckpointGeneration(writer) ?? 0
+}
+
+const STALE_TMP_AGE_MS = 10 * 60 * 1000
+const CHECKPOINT_TMP = /^checkpoint\.json\.(?:[\w-]+\.)?tmp$/
+
+/** Removes checkpoint tmp files left by a crash. Readers only open
+ *  checkpoint.json, so leftovers are harmless; the age gate keeps any write
+ *  still in flight (e.g. a detached final checkpoint) untouched. */
+export function removeStaleCheckpointTmps(dir: string, now: number): void {
+  let names: string[]
+  try {
+    names = readdirSync(dir)
+  } catch {
+    return
+  }
+  for (const name of names.filter((entry) => CHECKPOINT_TMP.test(entry))) {
+    const file = join(dir, name)
+    try {
+      if (now - statSync(file).mtimeMs >= STALE_TMP_AGE_MS) {
+        unlinkSync(file)
+      }
+    } catch (error) {
+      console.warn(
+        '[history] could not remove stale checkpoint tmp:',
+        (error as NodeJS.ErrnoException).code
+      )
+    }
+  }
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import {
   appendFileSync,
@@ -13,7 +14,7 @@ import {
 import { writeJsonFileAtomic } from '../storage/safe-json-file'
 import { getHistorySessionDirName } from './history-paths'
 import { encodeLogBatch, encodeLogHeader, LOG_HEADER_BYTES } from './terminal-history-log'
-import { resolveLogState, type SessionWriter } from './history-log-state'
+import { removeStaleCheckpointTmps, resolveLogState, type SessionWriter } from './history-log-state'
 import type { PendingOutputRecord, TerminalCheckpointFile, TerminalSnapshot } from './types'
 
 // Why 5MB: bounds both cold-restore replay time and disk usage per session.
@@ -51,6 +52,10 @@ export type HistoryManagerOptions = {
 export class HistoryManager {
   private basePath: string
   private writers = new Map<string, SessionWriter>()
+  // Why: bumped on every writer registration so a detached finalization can
+  // tell that its id was re-registered even after that newer writer is gone.
+  private registrations = new Map<string, number>()
+  private registrationSerial = 0
   private disabledSessions = new Set<string>()
   private onWriteError?: (sessionId: string, error: Error) => void
 
@@ -93,13 +98,8 @@ export class HistoryManager {
         }
       }
 
-      this.writers.set(sessionId, {
-        dir,
-        checkpointPath,
-        logPath,
-        logGeneration: 0,
-        logBytes: 0
-      })
+      removeStaleCheckpointTmps(dir, Date.now())
+      this.setWriter(sessionId, { dir, checkpointPath, logPath, logGeneration: 0, logBytes: 0 })
     } catch (err) {
       this.handleWriteError(sessionId, err)
     }
@@ -115,13 +115,19 @@ export class HistoryManager {
       return
     }
     const dir = join(this.basePath, getHistorySessionDirName(sessionId))
-    this.writers.set(sessionId, {
+    removeStaleCheckpointTmps(dir, Date.now())
+    this.setWriter(sessionId, {
       dir,
       checkpointPath: join(dir, 'checkpoint.json'),
       logPath: join(dir, 'output.log'),
       logGeneration: null,
       logBytes: null
     })
+  }
+
+  private setWriter(sessionId: string, writer: SessionWriter): void {
+    this.writers.set(sessionId, writer)
+    this.registrations.set(sessionId, ++this.registrationSerial)
   }
 
   /** Appends one take batch to the incremental log. Returns 'needs-checkpoint'
@@ -219,9 +225,9 @@ export class HistoryManager {
     // on crash. Reading a corrupt checkpoint is worse than reading a
     // slightly stale one. Async IO — a sync ~MB write (worse under
     // antivirus scanning on Windows) would stall input/IPC for its
-    // duration. Overlap is prevented by the adapter's checkpointInFlight
-    // guard, which awaits this promise before the next tick.
-    const tmpPath = `${writer.checkpointPath}.tmp`
+    // duration. Why a unique name: a periodic and a final checkpoint (or an old
+    // and a respawned writer) can overlap, and must never share or delete one tmp.
+    const tmpPath = `${writer.checkpointPath}.${randomUUID()}.tmp`
     await fsPromises.writeFile(tmpPath, data)
     // Why: the same id can be respawned (same dir) during the await above;
     // then the old session's snapshot must not be published into it.
@@ -247,6 +253,7 @@ export class HistoryManager {
       return
     }
     this.writers.delete(sessionId)
+    this.registrations.delete(sessionId)
     this.markEnded(sessionId, writer, exitCode)
   }
 
@@ -263,7 +270,9 @@ export class HistoryManager {
       return
     }
     this.writers.delete(sessionId)
-    const owns = (): boolean => !this.writers.has(sessionId)
+    const registration = this.registrations.get(sessionId)
+    const owns = (): boolean =>
+      this.registrations.get(sessionId) === registration && !this.writers.has(sessionId)
     if (take && !this.disabledSessions.has(sessionId)) {
       try {
         const published = await this.writeCheckpoint(writer, take.snapshot, owns)
@@ -278,6 +287,7 @@ export class HistoryManager {
       }
     }
     if (owns()) {
+      this.registrations.delete(sessionId)
       this.markEnded(sessionId, writer, exitCode)
     }
   }
@@ -299,6 +309,7 @@ export class HistoryManager {
 
   async removeSession(sessionId: string): Promise<void> {
     this.writers.delete(sessionId)
+    this.registrations.delete(sessionId)
     this.disabledSessions.delete(sessionId)
     rmSync(join(this.basePath, getHistorySessionDirName(sessionId)), {
       recursive: true,

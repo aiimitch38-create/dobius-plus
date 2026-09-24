@@ -25,6 +25,10 @@ import {
   type TerminalSnapshot
 } from './types'
 
+function historyErrorCode(error: Error): string {
+  return (error as NodeJS.ErrnoException).code ?? error.name
+}
+
 export type DaemonServerOptions = {
   socketPath: string
   tokenPath: string
@@ -80,7 +84,13 @@ export class DaemonServer {
     this.socketPath = opts.socketPath
     this.tokenPath = opts.tokenPath
     this.token = randomUUID()
-    this.historyManager = opts.historyPath ? new HistoryManager(opts.historyPath) : null
+    this.historyManager = opts.historyPath
+      ? new HistoryManager(opts.historyPath, {
+          // Why only id + code: history errors must never log terminal content.
+          onWriteError: (sessionId, error) =>
+            console.warn('[history] write failed:', sessionId, historyErrorCode(error))
+        })
+      : null
     this.historyReader = opts.historyPath ? new HistoryReader(opts.historyPath) : null
     this.host = new TerminalHost({
       spawnSubprocess: opts.spawnSubprocess,
