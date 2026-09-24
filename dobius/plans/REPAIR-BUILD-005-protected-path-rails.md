@@ -135,3 +135,26 @@ Revert the commit; rails return to the regex form and cwd failure falls back to 
   had one failure, agent-provider.test.ts, which is in basefail.txt.
 - Updated test: `ls ~/.dobius/ && cat src/tokenizer.ts` is now denied (home `.dobius` rule), so that
   allowed-case assertion became `cat ~/.dobius/notes/ideas.md && …`.
+
+## Final follow-up (coordinator): read tools + narrow `..` rule
+- **Read tools.** The cross-agent rail ran only for Write/Edit/MultiEdit/NotebookEdit and Bash, so
+  `Read ~/.dobius/agents/sam/MEMORY.md` was allowed while `cat` of it was denied. It now also covers
+  Read (file_path), NotebookRead (notebook_path), Glob (path, pattern) and Grep (path, glob) through
+  `IDENTITY_FIELDS`. Grep's regex `pattern` and edit-tool content are not locations and are skipped.
+  `stringsToInspect` now tags each string with its top-level field. The credential rail still sees
+  every string, as before. Glob and Grep are directory-scoped like Bash: a `path` at the agents folder
+  or at `~/.dobius` is denied, and a Glob/Grep rooted in the own agent folder cannot use `..` in its
+  other fields. The denial text is now "agents may not read or edit another agent identity or
+  memory". No code or test matched the old text.
+- **`..` false positive.** `..` anywhere in a command that also named the agents folder was denied
+  (`cat ../README.md ~/.dobius/agents/<own>/x`). `climbsOutOfAgentFolder` now denies only (a) a token
+  that names the agents folder AND has a `..` segment, or (b) a `..` token in a segment after a
+  `cd`/`pushd` into the agents folder, until a later `cd` elsewhere.
+- Tests: 11 read-tool inputs denied. Own folder with Read/Glob and a Grep whose pattern text names
+  `.dobius/agents` are allowed. `..` cases: the false positive and two other ordinary uses allowed;
+  `cd …/agent-a && cat ../sam/x`, `cd …; cd .. && cat sam/x`, relative and absolute
+  `agent-a/../sam` denied.
+- Mutation checks (each failed, then restored): R1 drop the read tools (11), R2 Glob/Grep not
+  directory-scoped (3), R3 no Glob/Grep search-root `..` rule (1), R4 old broad `..` rule (1),
+  R5 no cd tracking (2), R6 no token-level `..` rule (1), R7 Grep pattern treated as a location (1).
+- Verification: typecheck exit 0; oxlint + react-doctor clean; targeted 6 files / 103 tests green.

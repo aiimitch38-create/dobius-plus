@@ -40,6 +40,8 @@ const ABSOLUTE_PATH_TOKEN = /(?<![^\s"'=:(`<>])\/[^\s"'`;&|<>()]+/g
 const MAX_RESOLVED_PATH_TOKENS = 64
 
 type InspectedString = {
+  // Top-level input key the string came from ('' when the input is not an object).
+  field: string
   raw: string
   // Home references expanded; for Bash also quotes/backslashes removed the way
   // the shell would (`~/.dobius/"agents"/x` reaches `agents`).
@@ -54,7 +56,7 @@ type InspectedString = {
 // once per tool call and shared by every rail.
 function inspectStrings(toolName: string, input: unknown): InspectedString[] {
   let resolveBudget = MAX_RESOLVED_PATH_TOKENS
-  return stringsToInspect(toolName, input).map((raw) => {
+  return stringsToInspect(toolName, input).map(({ field, raw }) => {
     const unquoted = toolName === 'Bash' ? raw.replace(/["'\\]/g, '') : raw
     const expanded = expandHomeReferences(unquoted)
     const candidates = new Set([comparablePath(normalizePathLike(raw))])
@@ -65,7 +67,7 @@ function inspectStrings(toolName: string, input: unknown): InspectedString[] {
         candidates.add(comparablePath(realpathPreservingMissingTail(token).replace(/\\/g, '/')))
       }
     }
-    return { raw, expanded, candidates: [...candidates] }
+    return { field, raw, expanded, candidates: [...candidates] }
   })
 }
 
@@ -155,14 +157,19 @@ const FILE_EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
 
 // Why: for file-editing tools only the TARGET PATH matters — scanning the content
 // payload false-denies writing ".env" into a .gitignore or a README that mentions it.
-function stringsToInspect(toolName: string, input: unknown): string[] {
-  if (FILE_EDIT_TOOLS.includes(toolName) && typeof input === 'object' && input !== null) {
-    const record = input as Record<string, unknown>
-    return ['file_path', 'path', 'notebook_path']
-      .map((key) => record[key])
-      .filter((value): value is string => typeof value === 'string')
+function stringsToInspect(toolName: string, input: unknown): { field: string; raw: string }[] {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return collectStrings(input).map((raw) => ({ field: '', raw }))
   }
-  return collectStrings(input)
+  const record = input as Record<string, unknown>
+  if (FILE_EDIT_TOOLS.includes(toolName)) {
+    return ['file_path', 'path', 'notebook_path']
+      .map((field) => ({ field, raw: record[field] }))
+      .filter((entry): entry is { field: string; raw: string } => typeof entry.raw === 'string')
+  }
+  return Object.entries(record).flatMap(([field, value]) =>
+    collectStrings(value).map((raw) => ({ field, raw }))
+  )
 }
 
 function targetsCredentials(inspected: InspectedString[]): HardRailDenial | null {
@@ -197,7 +204,53 @@ function targetsCredentials(inspected: InspectedString[]): HardRailDenial | null
 }
 
 const IDENTITY_DENIAL: HardRailDenial = {
-  reason: 'Hard rail: agents may not edit another agent identity or memory.'
+  reason: 'Hard rail: agents may not read or edit another agent identity or memory.'
+}
+
+// Input fields that name a location, per tool. Content payloads and Grep's
+// regex `pattern` are not locations and are left out (a search for the text
+// ".dobius/agents" in a repo is fine).
+const IDENTITY_FIELDS: Record<string, readonly string[]> = {
+  Bash: ['command'],
+  Write: ['file_path', 'path', 'notebook_path'],
+  Edit: ['file_path', 'path', 'notebook_path'],
+  MultiEdit: ['file_path', 'path', 'notebook_path'],
+  NotebookEdit: ['file_path', 'path', 'notebook_path'],
+  Read: ['file_path'],
+  NotebookRead: ['notebook_path'],
+  Glob: ['path', 'pattern'],
+  Grep: ['path', 'glob']
+}
+
+// Tools that act on a whole directory tree: pointing them at the agents folder
+// (or at ~/.dobius) reaches every agent, not one.
+const DIRECTORY_SCOPED_TOOLS = ['Bash', 'Glob', 'Grep']
+
+const AGENTS_FOLDER_REFERENCE = /\.dobius\/+agents(?=\/|$|[\s;&|`()<>])/i
+const DOT_DOT_SEGMENT = /(?:^|\/)\.\.(?:\/|$)/
+
+function tokensOf(value: string): string[] {
+  return value.trim().split(/\s+/).filter(Boolean)
+}
+
+// Why: `..` only matters where it climbs out of an agent folder — inside a path
+// that names the agents folder, or after a `cd` into it. `cat ../README.md
+// ~/.dobius/agents/<own>/x` must stay allowed.
+function climbsOutOfAgentFolder(command: string): boolean {
+  let insideAgentsFolder = false
+  for (const segment of command.split(SHELL_SEGMENT_SEPARATOR)) {
+    const tokens = tokensOf(segment)
+    if (tokens.some((token) => DOT_DOT_SEGMENT.test(token) && AGENTS_FOLDER_REFERENCE.test(token))) {
+      return true
+    }
+    if (insideAgentsFolder && tokens.some((token) => DOT_DOT_SEGMENT.test(token))) {
+      return true
+    }
+    if (tokens[0] === 'cd' || tokens[0] === 'pushd') {
+      insideAgentsFolder = tokens.slice(1).some((token) => AGENTS_FOLDER_REFERENCE.test(token))
+    }
+  }
+  return false
 }
 
 function escapeRegExp(value: string): string {
@@ -209,26 +262,32 @@ function targetsOtherAgentIdentity(
   toolName: string,
   inspected: InspectedString[]
 ): HardRailDenial | null {
-  // Why: Bash can cp/cat/rm another agent's files just as well as Write/Edit can —
-  // the isolation rail must cover shell commands too.
-  const isBash = toolName === 'Bash'
-  if (!FILE_EDIT_TOOLS.includes(toolName) && !isBash) {
+  // Why: Bash, Read, Glob and Grep reach another agent's files just as well as
+  // Write/Edit can — the isolation rail must cover every file-touching tool.
+  const fields = IDENTITY_FIELDS[toolName]
+  if (!fields) {
     return null
   }
+  const scopesDirectory = DIRECTORY_SCOPED_TOOLS.includes(toolName)
   const ownId = comparablePath(context.agentId)
   const home = normalizePathLike(os.homedir())
   const agentsRoots = protectedForms(`${home}/.dobius/agents/`)
   // Why: inside a Bash command the agents dir appears mid-string (often via ~ or
   // $HOME), so a startsWith check misses it — scan for every reference instead.
   const referencePattern = /\.dobius\/+agents(?=\/|$|[\s;&|`()<>])(?:\/+([^/\s`;&|()<>]*))?/gi
-  // Why: a shell that `cd`s into ~/.dobius or its agents folder reaches every
-  // agent through relative paths (`cat other/memory.md`), so in Bash a reference
-  // that stops at those folders is denied too — only the own id is usable.
+  // Why: a shell that `cd`s into ~/.dobius or its agents folder (or a Glob/Grep
+  // rooted there) reaches every agent through relative paths (`cat other/memory.md`),
+  // so a reference that stops at those folders is denied too — only the own id is usable.
   const dobiusRootReference = new RegExp(
     `${escapeRegExp(home)}/+\\.dobius/*(?=$|[\\s;&|\`()<>])`,
     'i'
   )
-  for (const { expanded, candidates } of inspected) {
+  const located = inspected.filter((entry) => fields.includes(entry.field))
+  // Glob/Grep `path` acts as the working directory for the other fields.
+  const searchRootInAgentsFolder =
+    toolName !== 'Bash' &&
+    located.some((entry) => entry.field === 'path' && AGENTS_FOLDER_REFERENCE.test(entry.expanded))
+  for (const { expanded, candidates } of located) {
     for (const candidate of candidates) {
       const agentsRoot = agentsRoots.find((root) => candidate.startsWith(root))
       const targetAgentId = agentsRoot ? candidate.slice(agentsRoot.length).split('/')[0] : ''
@@ -236,22 +295,20 @@ function targetsOtherAgentIdentity(
         return IDENTITY_DENIAL
       }
     }
-    let referencesAgentsFolder = false
     for (const match of expanded.matchAll(referencePattern)) {
-      referencesAgentsFolder = true
       const targetAgentId = comparablePath(match[1] ?? '')
-      if (targetAgentId !== ownId && (targetAgentId || isBash)) {
+      if (targetAgentId !== ownId && (targetAgentId || scopesDirectory)) {
         return IDENTITY_DENIAL
       }
     }
-    if (!isBash) {
-      continue
-    }
-    if (dobiusRootReference.test(expanded)) {
+    if (scopesDirectory && dobiusRootReference.test(expanded)) {
       return IDENTITY_DENIAL
     }
     // Why: from inside the own agent folder, `../other` reaches a sibling agent.
-    if (referencesAgentsFolder && /(?:^|[\s/=])\.\.(?:\/|$|[\s;&|)])/.test(expanded)) {
+    if (climbsOutOfAgentFolder(expanded)) {
+      return IDENTITY_DENIAL
+    }
+    if (searchRootInAgentsFolder && tokensOf(expanded).some((token) => DOT_DOT_SEGMENT.test(token))) {
       return IDENTITY_DENIAL
     }
   }

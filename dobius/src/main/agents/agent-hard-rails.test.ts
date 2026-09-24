@@ -198,6 +198,52 @@ describe('agent hard rails: agents folder reached by case, cd or quoting (BUILD-
     expect(evaluateAgentHardRails(ctx, 'Bash', { command })?.reason).toMatch(/another agent/)
   })
 
+  it.each([
+    ['Read', { file_path: `${fakeHome}/.dobius/agents/sam/MEMORY.md` }],
+    ['Read', { file_path: '~/.dobius/agents/sam/MEMORY.md' }],
+    ['NotebookRead', { notebook_path: '$HOME/.dobius/agents/sam/notes.ipynb' }],
+    ['Glob', { pattern: '~/.dobius/agents/sam/*' }],
+    ['Glob', { path: fakeHome, pattern: '.dobius/agents/sam/**' }],
+    ['Glob', { path: `${fakeHome}/.dobius/agents`, pattern: '*/MEMORY.md' }],
+    ['Glob', { path: `${fakeHome}/.dobius`, pattern: '**/*.md' }],
+    ['Glob', { path: `${fakeHome}/.dobius/agents/agent-a`, pattern: '../sam/*' }],
+    ['Grep', { path: `${fakeHome}/.dobius/agents/sam`, pattern: 'secret' }],
+    ['Grep', { path: `${fakeHome}/.dobius/agents`, pattern: 'secret' }],
+    ['Grep', { path: fakeHome, glob: '.dobius/agents/sam/**', pattern: 'x' }]
+  ])('denies reading another agent with %s %j', (tool, input) => {
+    expect(evaluateAgentHardRails(ctx, tool, input)?.reason).toMatch(
+      /may not read or edit another agent/
+    )
+  })
+
+  it('lets read tools use the own agent folder and search text that names .dobius/agents', () => {
+    expect(
+      evaluateAgentHardRails(ctx, 'Read', { file_path: `${fakeHome}/.dobius/agents/agent-a/m.md` })
+    ).toBeNull()
+    expect(
+      evaluateAgentHardRails(ctx, 'Glob', {
+        path: `${fakeHome}/.dobius/agents/agent-a`,
+        pattern: '**/*.md'
+      })
+    ).toBeNull()
+    expect(
+      evaluateAgentHardRails(ctx, 'Grep', { path: '/repo', pattern: '.dobius/agents/sam' })
+    ).toBeNull()
+  })
+
+  it('treats .. as an escape only inside or after a cd into an agent folder', () => {
+    const bash = (command: string) => evaluateAgentHardRails(ctx, 'Bash', { command })
+    expect(bash('cat ../README.md ~/.dobius/agents/agent-a/memory.md')).toBeNull()
+    expect(bash('cd /repo && cat ../x.md; cat ~/.dobius/agents/agent-a/m.md')).toBeNull()
+    expect(bash('cd ~/.dobius/agents/agent-a && cd /repo && cat ../x.md')).toBeNull()
+    expect(bash('cd ~/.dobius/agents/agent-a && cat ../sam/x')?.reason).toMatch(/another agent/)
+    expect(bash('cd ~/.dobius/agents/agent-a; cd .. && cat sam/x')?.reason).toMatch(
+      /another agent/
+    )
+    expect(bash('cat .dobius/agents/agent-a/../sam/x')?.reason).toMatch(/another agent/)
+    expect(bash('cat ~/.dobius/agents/agent-a/../sam/x')?.reason).toMatch(/another agent/)
+  })
+
   it('evaluates a 2000-path command well under a second', () => {
     const paths = Array.from(
       { length: 2000 },
