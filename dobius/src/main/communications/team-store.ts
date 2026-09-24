@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { app } from 'electron'
 import { SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'teams.json'
 
@@ -41,7 +41,7 @@ export type TeamUpdate = Partial<Omit<TeamInput, 'name'>> & {
 }
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function cloneTeam(team: Team): Team {

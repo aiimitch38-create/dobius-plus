@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import type { BriefingItem } from '../../shared/agents'
 import { SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agents-briefing.json'
 const MAX_ITEMS = 200
@@ -12,7 +13,7 @@ const RECENT_WINDOW_MS = 48 * 60 * 60 * 1000
 type StoredBriefingItem = BriefingItem & { dismissed?: true }
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function sanitizeItems(raw: unknown): StoredBriefingItem[] {

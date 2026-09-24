@@ -1,16 +1,16 @@
 import path from 'node:path'
-import { app } from 'electron'
 import type { AsanaConfig, AsanaProjectRef } from '../../shared/asana'
 import { DEFAULT_ASANA_CONFIG } from '../../shared/asana'
 import { isTuiAgent } from '../../shared/tui-agent-config'
 import { SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Why: Asana automation keeps its own JSON file instead of the typed settings
 // store so the feature can evolve without touching GlobalSettings migrations.
 const CONFIG_FILE_NAME = 'asana-config.json'
 
 function configFilePath(): string {
-  return path.join(app.getPath('userData'), CONFIG_FILE_NAME)
+  return path.join(getUserDataRoot(), CONFIG_FILE_NAME)
 }
 
 function sanitizeString(value: unknown, fallback: string): string {

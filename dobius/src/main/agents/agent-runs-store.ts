@@ -1,13 +1,13 @@
 import path from 'node:path'
-import { app } from 'electron'
 import type { AgentRun, AgentRunContext, AgentRunOutboxItem } from '../../shared/agents'
 import { SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const RUNS_FILE_NAME = 'agents-runs.json'
 const MAX_RUNS = 50
 
 function runsPath(): string {
-  return path.join(app.getPath('userData'), RUNS_FILE_NAME)
+  return path.join(getUserDataRoot(), RUNS_FILE_NAME)
 }
 
 function sanitizeRuns(raw: unknown): AgentRun[] {

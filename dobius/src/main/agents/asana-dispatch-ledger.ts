@@ -1,7 +1,7 @@
 import path from 'node:path'
-import { app } from 'electron'
 import type { AsanaLane } from '../../shared/asana'
 import { SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'asana-dispatch-ledger.json'
 const MAX_ATTEMPTS = 2
@@ -17,7 +17,7 @@ export type AsanaDispatchRecord = {
 }
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function sanitizeRecord(raw: unknown): AsanaDispatchRecord | null {

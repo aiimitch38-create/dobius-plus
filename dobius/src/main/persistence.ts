@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- Why: persistence keeps schema defaults, migration,
 load/save, and flush logic in one file so the full storage contract is reviewable
 as a unit instead of being scattered across modules. */
-import { app, safeStorage } from 'electron'
+import { safeStorage } from 'electron'
 import {
   readFileSync,
   writeFileSync,
@@ -81,6 +81,7 @@ import {
 } from '../shared/task-source-context'
 import type { MigrationUnsupportedPtyEntry } from '../shared/agent-status-types'
 import { MOBILE_PAIRING_USERDATA_FILES } from './runtime/mobile-pairing-files'
+import { captureUserDataRoot, getUserDataRoot } from './storage/user-data-root'
 import { hardenExistingSecureFile } from '../shared/secure-file'
 import {
   LEGACY_DEFAULT_SSH_RELAY_GRACE_PERIOD_SECONDS,
@@ -309,30 +310,20 @@ function retireLegacyInstructionsForClearedTextActionRecipes(
 // path, causing dev and production instances to share the same file and silently
 // overwrite each other.
 //
-// It also must not be resolved lazily on every call, because app.setName('Dobius')
+// It also must not re-read app.getPath('userData') on every call, because app.setName('Dobius')
 // runs before the Store constructor and would change the resolved path from
 // lowercase 'dobius' to uppercase 'Dobius'. On case-sensitive filesystems (Linux)
 // this would look in the wrong directory and lose existing user data.
 //
 // Solution: index.ts calls initDataPath() right after configureDevUserDataPath()
 // but before app.setName(), capturing the correct path at the right moment.
-let _dataFile: string | null = null
-let _userDataDir: string | null = null
-
+// The captured root lives in storage/user-data-root.ts so every store shares it.
 export function initDataPath(): void {
-  const userDataDir = app.getPath('userData')
-  _userDataDir = userDataDir
-  _dataFile = join(userDataDir, 'dobius-data.json')
+  captureUserDataRoot()
 }
 
 function getDataFile(): string {
-  if (!_dataFile) {
-    // Safety fallback — should not be hit in normal startup.
-    const userDataDir = app.getPath('userData')
-    _userDataDir = userDataDir
-    _dataFile = join(userDataDir, 'dobius-data.json')
-  }
-  return _dataFile
+  return join(getUserDataRoot(), 'dobius-data.json')
 }
 
 // Why a sidecar: githubCache is a refetchable 5-min-TTL poll cache whose
@@ -449,11 +440,7 @@ function readGithubCacheSnapshot(): PersistedState['githubCache'] | null {
  * different directory and lose paired devices across restarts/updates.
  */
 export function getCanonicalUserDataPath(): string {
-  if (!_userDataDir) {
-    // Safety fallback — should not be hit in normal startup.
-    _userDataDir = app.getPath('userData')
-  }
-  return _userDataDir
+  return getUserDataRoot()
 }
 
 /**

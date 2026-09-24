@@ -14,6 +14,7 @@ import {
   getCanonicalUserDataPath,
   migrateMobilePairingDataToCanonicalUserDataPath
 } from './persistence'
+import { reportUserDataRootDivergence } from './storage/user-data-root'
 import { applyAppIcon } from './app-icon'
 import { applyLaunchAtLogin } from './launch-at-login'
 import { StatsCollector, initStatsPath } from './stats/collector'
@@ -642,7 +643,7 @@ function startDesktopFirstWindowStartupServices(): Promise<void> {
         // Why: hooks source this endpoint file at invocation time, so old PTY
         // env still reaches the current Dobius process after an app restart.
         // Dev uses a namespace because all worktrees share `dobius-dev`.
-        userDataPath: app.getPath('userData'),
+        userDataPath: getCanonicalUserDataPath(),
         endpointNamespace: devAgentHookEndpointNamespace
       })
       logStartupMilestone('startup-service-done', { service: 'agent-hook-server' })
@@ -674,7 +675,7 @@ async function startServeAgentHookServer(): Promise<void> {
   try {
     await agentHookServer.start({
       env: app.isPackaged ? 'production' : 'development',
-      userDataPath: app.getPath('userData'),
+      userDataPath: getCanonicalUserDataPath(),
       endpointNamespace: devAgentHookEndpointNamespace
     })
   } catch (error) {
@@ -783,7 +784,7 @@ function openMainWindow(): BrowserWindow {
   // startup/windows-user-data-acl.ts; per-write EPERM retries are the backstop.
   if (process.platform === 'win32') {
     logStartupMilestone('acl-grant-start')
-    ensureWindowsUserDataAclGrant(app.getPath('userData'), {
+    ensureWindowsUserDataAclGrant(getCanonicalUserDataPath(), {
       onDone: (result) => {
         logStartupMilestone('acl-grant-done', { mode: result.mode })
         if (result.mode === 'failed') {
@@ -1138,7 +1139,10 @@ function maybeApplyGpuFallbackForThisLaunch(): void {
   if (isServeMode || process.platform !== 'win32') {
     return
   }
-  const marker = readActiveGpuFallbackMarker(app.getPath('userData'), getGpuFallbackEnvironment())
+  const marker = readActiveGpuFallbackMarker(
+    getCanonicalUserDataPath(),
+    getGpuFallbackEnvironment()
+  )
   if (!marker) {
     return
   }
@@ -1174,7 +1178,7 @@ function handleGpuChildCrash(reason: string, exitCode: number | null): void {
   }
   try {
     writeGpuFallbackMarker(
-      app.getPath('userData'),
+      getCanonicalUserDataPath(),
       {
         engagedAt,
         crashesInWindow: result.crashesInWindow
@@ -1633,11 +1637,12 @@ app.whenReady().then(async () => {
     .catch((error) => console.warn('[agents] event journal replay failed:', error))
   electronApp.setAppUserModelId(devInstanceIdentity.appUserModelId)
   app.setName(devInstanceIdentity.name)
+  reportUserDataRootDivergence()
 
   store = new Store()
   await migrateLegacyDobiusConfig(store)
   logStartupMilestone('store-loaded')
-  selfHealRuntimeEnvironmentFocus({ store, userDataPath: app.getPath('userData') })
+  selfHealRuntimeEnvironmentFocus({ store, userDataPath: getCanonicalUserDataPath() })
   applyAppIcon(store.getSettings().appIcon)
   if (shouldSuppressDevEducation({ isDev: is.dev })) {
     suppressDevEducationForStore(store)
