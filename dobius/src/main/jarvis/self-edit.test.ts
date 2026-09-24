@@ -9,7 +9,8 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { SelfEditStore, isSensitiveFileName, resolveEditablePath, selfEditRoots } from './self-edit'
+import { SelfEditStore, resolveEditablePath, selfEditRoots } from './self-edit'
+import { isSensitiveFileName } from './self-edit-path-policy'
 import {
   INSTALL_PROVENANCE_FILE,
   type SelfEditRepoRoot,
@@ -192,6 +193,18 @@ describe('canonical path policy (BUILD-006, #26 #27)', () => {
     expect(resolveEditablePath('src/env.ts', [root]).ok).toBe(true)
     expect(resolveEditablePath('src/token-utils.ts', [root]).ok).toBe(true)
     expect(isSensitiveFileName('environment.ts')).toBe(false)
+  })
+
+  it('refuses names Windows would alias onto a protected file', () => {
+    const root = repo()
+    // Why create `.git.`: a missing parent is refused for a different reason;
+    // on Windows the kernel would open `.git` for it.
+    mkdirSync(join(root, '.git.'))
+    for (const name of ['.git./config', '.env ', '.env::$DATA', 'src/voice.ts.']) {
+      const result = resolveEditablePath(name, [root])
+      expect(result.ok, name).toBe(false)
+      expect(result.ok ? '' : result.error, name).toMatch(/different file/)
+    }
   })
 
   it('allows .env templates but no other .env variant', () => {

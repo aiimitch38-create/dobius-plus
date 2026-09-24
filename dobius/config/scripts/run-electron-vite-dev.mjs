@@ -77,7 +77,9 @@ function seedDevInstanceIdentityEnv() {
   const identitySeed = process.env.DOBIUS_DEV_INSTANCE_KEY || repoRoot
   const dockTitle = process.env.DOBIUS_DEV_DOCK_TITLE || createDockTitle(branch, label)
 
-  process.env.DOBIUS_DEV_REPO_ROOT ||= repoRoot
+  // Why always assign: a `pnpm dev` started from another dev instance's terminal
+  // must not inherit that checkout as its Jarvis self-edit root.
+  process.env.DOBIUS_DEV_REPO_ROOT = repoRoot
   process.env.DOBIUS_DEV_INSTANCE_KEY ||= identitySeed
   if (branch) {
     process.env.DOBIUS_DEV_BRANCH ||= branch

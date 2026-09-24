@@ -10,6 +10,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { protectedReason } from './self-edit-path-policy'
 
 export type SelfEditProposal = {
   id: string
@@ -38,59 +39,6 @@ const MAX_CONTENT_BYTES = 512 * 1024
  */
 export function selfEditRoots(home: string, repoRoot: string): string[] {
   return [repoRoot, join(home, 'dobius', 'projects', 'ADAM')]
-}
-
-/**
- * Path segments never writable even inside an allowed root. Compared
- * case-insensitively: the default macOS volume treats `.GIT` as `.git`.
- */
-const FORBIDDEN_SEGMENTS = new Set(['.git', 'node_modules', 'out', 'dist', '.ssh', '.gnupg'])
-
-/**
- * Sensitive-file policy: credential and secret files are never writable, in any
- * folder. Covers every `.env` variant (`.env.local`, `.env.production`, ...)
- * except the committed templates below, which carry no secrets,
- * package-manager and git credential files, private keys and certificates, and
- * the ADAM service token.
- */
-const SENSITIVE_FILE_NAMES = new Set([
-  '.envrc',
-  '.npmrc',
-  '.netrc',
-  '.pypirc',
-  '.git-credentials',
-  'auth.json',
-  'credentials',
-  'credentials.json',
-  'service-token',
-  'id_rsa',
-  'id_dsa',
-  'id_ecdsa',
-  'id_ed25519'
-])
-const ENV_TEMPLATE_NAMES = new Set(['.env.example', '.env.sample', '.env.template'])
-const SENSITIVE_EXTENSIONS = ['.pem', '.key', '.p12', '.pfx', '.enc', '.keystore', '.jks']
-
-export function isSensitiveFileName(name: string): boolean {
-  const lower = name.toLowerCase()
-  return (
-    lower === '.env' ||
-    (lower.startsWith('.env.') && !ENV_TEMPLATE_NAMES.has(lower)) ||
-    SENSITIVE_FILE_NAMES.has(lower) ||
-    SENSITIVE_EXTENSIONS.some((extension) => lower.endsWith(extension))
-  )
-}
-
-function protectedReason(segments: string[], requested: string): string | null {
-  const parts = segments.filter(Boolean)
-  if (parts.some((segment) => FORBIDDEN_SEGMENTS.has(segment.toLowerCase()))) {
-    return `"${requested}" is in a protected directory.`
-  }
-  const leaf = parts.at(-1)
-  if (leaf && isSensitiveFileName(leaf)) {
-    return `"${requested}" is a secrets or credentials file.`
-  }
-  return null
 }
 
 function containedBy(child: string, parent: string): boolean {
@@ -157,7 +105,8 @@ export function resolveEditablePath(
       // while the write lands in a protected place.
       const canonicalReason = protectedReason(
         relative(containingRoot, realAbsolute).split(sep),
-        requested
+        requested,
+        { rootRelative: true }
       )
       if (canonicalReason) {
         return { ok: false, error: canonicalReason }

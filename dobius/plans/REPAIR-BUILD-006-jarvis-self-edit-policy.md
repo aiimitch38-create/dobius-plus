@@ -46,6 +46,8 @@ changes which paths it may write and how the editable repo root is found.
 ## Files
 - `src/main/jarvis/self-edit.ts`
 - `src/main/jarvis/self-edit-repo-root.ts` (new)
+- `src/main/jarvis/self-edit-path-policy.ts` (new, commit 3)
+- `config/scripts/run-electron-vite-dev.mjs`, `src/main/providers/local-pty-provider.ts` (+ tests; commit 3)
 - `src/main/jarvis/jarvis-ipc.ts` (import line + the repo-root block only)
 - `src/main/jarvis/self-edit.test.ts`
 
@@ -92,6 +94,29 @@ P2/P4 re-run after the file split: still fail.
   app folder, not the whole git repo (scripts/, docs/ are outside it), matching the old intent.
 - `.env` templates (`.env.example`, `.env.sample`, `.env.template`) are editable; all other
   `.env*` stay blocked.
+
+## Review follow-up (commit 3)
+- F1: `config/scripts/run-electron-vite-dev.mjs` now always assigns `DOBIUS_DEV_REPO_ROOT` (was
+  `||=`), so a `pnpm dev` launched from another dev instance's terminal cannot inherit that
+  checkout as its self-edit root. `local-pty-provider.ts` also strips `DOBIUS_DEV_REPO_ROOT` and
+  `DOBIUS_SELF_EDIT_REPO_ROOT` from child shells (added to `PANE_IDENTITY_ENV_KEYS`; an explicit
+  caller-supplied value is still honored, same as the pane keys).
+- F2: canonical root-relative segments that end in `.` or space, or contain `:`, are refused on
+  every platform (Windows would open `.git.` as `.git`, and `.env::$DATA` as `.env`). Only the
+  root-relative canonical path is checked, so a drive prefix like `C:` in the root is not affected.
+  The path policy moved to `src/main/jarvis/self-edit-path-policy.ts` to keep self-edit.ts under
+  max-lines.
+- Tests: `.git./config` (with a real `.git.` folder so this rule is what refuses), `.env `,
+  `.env::$DATA`, `src/voice.ts.`; pty spawn does not pass either root var; the dev wrapper test
+  now starts with an inherited `DOBIUS_DEV_REPO_ROOT=/other-checkout/dobius` and still sees
+  its own checkout.
+- Mutation checks (each failed 1 test, restored): F2a drop alias check; F2b drop `:` rule;
+  F2c trailing space only; F2d trailing dot only; F2e check not applied on canonical path;
+  F1a/F1b drop either strip key; F1c launcher back to `||=`.
+- Verification: typecheck exit 0; oxlint + react-doctor clean on all 7 changed files;
+  src/main/jarvis + local-pty-provider + run-electron-vite-dev tests: 14 files / 172 passed.
+- Deviation: touches `config/scripts/run-electron-vite-dev.mjs`, `local-pty-provider.ts` and
+  their tests, outside the spec's file list (requested by review F1).
 
 ## Rollback
 Revert the commit. No data or file formats change.

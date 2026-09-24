@@ -198,7 +198,9 @@ describe('run-electron-vite-dev', () => {
         DOBIUS_DEV_WRAPPER_TEST_PID_FILE: pidFile,
         DOBIUS_DEV_WRAPPER_TEST_ENV_FILE: envFile,
         DOBIUS_DEV_BRANCH: 'feature/billing-shell',
-        DOBIUS_DEV_WORKTREE_NAME: 'payment-ui'
+        DOBIUS_DEV_WORKTREE_NAME: 'payment-ui',
+        // Inherited from another dev instance's terminal; must be replaced (BUILD-006).
+        DOBIUS_DEV_REPO_ROOT: '/other-checkout/dobius'
       }),
       stdio: 'ignore'
     })

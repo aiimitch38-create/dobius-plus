@@ -735,6 +735,31 @@ describe('LocalPtyProvider', () => {
       expect(spawnCall[2].env.DOBIUS_WORKTREE_ID).toBeUndefined()
     })
 
+    it('does not pass the Jarvis self-edit repo root to child shells', async () => {
+      const saved = {
+        DOBIUS_DEV_REPO_ROOT: process.env.DOBIUS_DEV_REPO_ROOT,
+        DOBIUS_SELF_EDIT_REPO_ROOT: process.env.DOBIUS_SELF_EDIT_REPO_ROOT
+      }
+      process.env.DOBIUS_DEV_REPO_ROOT = '/checkout-a/dobius'
+      process.env.DOBIUS_SELF_EDIT_REPO_ROOT = '/checkout-a/dobius'
+
+      try {
+        await provider.spawn({ cols: 80, rows: 24 })
+      } finally {
+        for (const [key, value] of Object.entries(saved)) {
+          if (value === undefined) {
+            delete process.env[key]
+          } else {
+            process.env[key] = value
+          }
+        }
+      }
+
+      const spawnCall = spawnMock.mock.calls.at(-1)!
+      expect(spawnCall[2].env.DOBIUS_DEV_REPO_ROOT).toBeUndefined()
+      expect(spawnCall[2].env.DOBIUS_SELF_EDIT_REPO_ROOT).toBeUndefined()
+    })
+
     it('preserves explicit child Dobius pane identity over parent env', async () => {
       const saved = {
         DOBIUS_PANE_KEY: process.env.DOBIUS_PANE_KEY,
