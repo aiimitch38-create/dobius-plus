@@ -17,23 +17,39 @@
   - `openSession` and `updateMeta` publish meta.json with BUILD-009 `writeJsonFileAtomic`
     (unique tmp + rename; tmp removed on failure). An interrupted update leaves the previous
     meta.json intact. `writeFileSync` import dropped.
-  - New `sweepEndedSessions(maxTotalBytes, now)`: thin wrapper that passes this manager's live
-    writer dirs to `sweepEndedHistory` in the new `history-retention.ts` (split out so
-    history-manager.ts stays under the 300-line `max-lines` lint limit).
-- `history-retention.ts` (new)
-  - `sweepEndedHistory(basePath, maxTotalBytes, liveDirs, now)`: sizes every dir in the history root; only dirs
-    whose meta.json parses with a string `endedAt` at least 10 min old (`RETENTION_MIN_ENDED_AGE_MS`,
-    covers the `ignoreCleanEnd` spawn-probe race) and that this manager is not writing are
-    candidates. Deletes oldest `endedAt` first, stops as soon as total ≤ quota, and re-reads
-    meta right before each delete so a session id reopened since the scan is skipped. Live,
-    hibernated (immediate kill keeps `endedAt: null`, see hibernation-cold-restore-repro.test.ts),
-    crashed/awaiting-restore, corrupt-meta and worktree-GC dirs are never deleted. Any scan
-    error throws before anything is removed (fail closed).
+  - Review fix (root race): `getWriterToken(sessionId)` + `closeSession(id, code, { onlyWriter })`.
+    `closeSession` stamps endedAt only when the registered writer is still the one the caller
+    captured. `daemon-server.closeHistorySession` captures it before awaiting the final
+    checkpoint, so a ptyId respawned during that await (new writer, endedAt null) is never
+    marked ended by the old session's late close. Callers without opts keep old behaviour.
+    `DaemonPtyAdapter`'s exit handler (~1032) calls `closeSession` with no await in between,
+    so it has no in-process gap; left unchanged (see Reviewer notes).
+- `history-retention.ts` (new; split out to keep history-manager.ts under `max-lines`)
+  - `sweepEndedHistory(basePath, maxTotalBytes, liveDirs, now)`: sizes every dir in the history
+    root. Candidates = meta.json parses with a string `endedAt` at least 10 min old
+    (`RETENTION_MIN_ENDED_AGE_MS`, covers the `ignoreCleanEnd` spawn-probe race) and the dir is
+    not in `liveDirs`. Live, hibernated (immediate kill keeps `endedAt: null`, see
+    hibernation-cold-restore-repro.test.ts), crashed/awaiting-restore, corrupt-meta, in-grace
+    and worktree-GC dirs are never deleted. A scan error throws before anything is removed.
+  - Review fix F2: the quota is measured against deletable bytes. kept = total − candidates;
+    if kept alone exceeds the quota, nothing is deleted and a warning is logged; otherwise
+    candidates are removed oldest `endedAt` first until candidate bytes ≤ quota − kept.
+  - Review fix F3: each delete renames the dir to a `.deleting-<12 hex>` sibling, re-reads meta
+    inside it, and only then `rmSync`s; if meta changed (session reopened), it is renamed back.
+    Leftover `.deleting-*` dirs from an interrupted sweep are removed only if their meta is ended.
+  - Review fix F1: `runHistoryRetentionSweep(provider, historyDir, quotaPath)` is the production
+    entry. Reads the quota (none → null, provider never asked), then `provider.listProcesses()`
+    (router/degraded/adapter; the router already fails closed if any adapter fails), maps ids with
+    `getHistorySessionDirName` into `liveDirs`. No provider or a rejected list → sweep skipped.
+    (The earlier `HistoryManager.sweepEndedSessions` used the main-process manager's always-empty
+    writers map and was removed.)
   - `readHistoryRetentionQuotaBytes(file)` via BUILD-009 `readSafeJsonFile`: `{ "maxTotalMB": N }`
     (positive number) → bytes; missing, unreadable, wrong shape or no key → `null` (off).
-- `daemon-init.ts`: after daemon init completes, `scheduleHistoryRetentionSweep()` runs once,
-  30 s later (unref'd timer): reads `userData/terminal-history-retention.json`; no quota → no-op.
-  Errors are logged, never thrown.
+- `daemon-init.ts`: after daemon init completes, `scheduleHistoryRetentionSweep()` fires once,
+  30 s later (unref'd timer), calling `runHistoryRetentionSweep` with the module-level `adapter`
+  read at fire time. Errors are logged, never thrown.
+- `daemon-server.ts`: captures the writer token in `closeHistorySession`; also a mechanical
+  lint fix (`import()` type annotation → `import type`) flagged by oxlint in this touched file.
 - Unchanged: `releaseWithoutMarkingEnded` / SIGTERM keep-alive behaviour, `removeSession`,
   checkpoint writes (already atomic).
 
@@ -44,27 +60,36 @@ Retention ships **off**. It only deletes after Carson creates
 swept, oldest first, until the folder fits. Size quota only; no age-based rule was added.
 
 ## Tests
-- New `src/main/daemon/history-manager-meta-atomic.test.ts` (partial `node:fs` mock that writes
-  half of meta.json then throws ENOSPC):
-  - interrupted `closeSession` endedAt update → meta keeps cwd/cols/rows, `endedAt: null`,
-    `HistoryReader.hasRestorableHistory` true, no tmp left in the dir.
-  - interrupted `dispose` → previous meta intact.
-  - retention re-check: a session reopened between scan and delete is kept.
-- Extended `src/main/daemon/history-manager.test.ts` "HistoryManager retention sweep":
-  mixed active / ended / just-ended / corrupt-meta dirs over quota → only the 3 eligible ended
-  dirs removed; oldest-first stop at quota; live writer never removed; grace period at quota 0;
-  under quota deletes nothing; quota file missing/invalid/unreadable → null; MB → bytes.
+- `src/main/daemon/history-manager-meta-atomic.test.ts` (new; partial `node:fs` mock writes half of
+  meta.json then throws ENOSPC; a readFileSync hook can flip endedAt to null on the Nth read):
+  interrupted `closeSession` keeps cwd/cols/rows + restorability with no tmp left; interrupted
+  `dispose` keeps meta; a session reopened between scan and delete is renamed back (no
+  `.deleting-*` left).
+- `src/main/daemon/history-retention.test.ts` (new): mixed active/ended/just-ended/corrupt dirs →
+  only the 3 eligible ended dirs removed; oldest-first stop; quota vs deletable bytes; nothing
+  deleted when non-deletable bytes exceed the quota; grace at quota 0; under quota; ended vs live
+  `.deleting-*` leftovers; no leftover after a normal sweep; `runHistoryRetentionSweep` keeps a
+  daemon-reported live id with a stale endedAt, skips on a rejected list or null provider, and
+  never asks the daemon without a quota file; quota file parsing.
+- `src/main/daemon/daemon-server-history-close-race.test.ts` (new): barrier on the final
+  checkpoint in `closeHistorySession`; respawn during the await → new session keeps
+  `endedAt: null`; control without respawn → endedAt stamped.
+- `src/main/daemon/daemon-init.test.ts`: the sweep is not called during init, and is called once
+  after 30 s with `getDaemonProvider()`, `<userData>/terminal-history` and the quota path.
+- `history-manager.test.ts` is back to its pre-build content (the retention tests moved).
 
-## Mutation checks (each: break code → test fails → restore → green)
-- M1 `updateMeta` back to in-place `writeFileSync` → both meta-atomic tests fail.
-- M2 drop the `endedAt` string filter → still green on its own, because the pre-delete re-read
-  (`readEndedAt(dir) !== candidate.endedAt`) also rejects null/corrupt meta (defense in depth).
-  Dropping both → mixed-archive sweep test fails.
-- M3 drop the grace-period check → grace test fails.
-- M4 drop the live-writer guard → live-writer test fails.
-- M5 drop the oldest-first sort → stop-at-quota test fails.
-- M6 drop the pre-delete re-read → "retention skips a session reopened between the scan and the
-  delete" (meta-atomic test file, readFileSync hook flips endedAt to null on the 2nd read) fails.
+## Mutation checks (each: break code → named test fails → restore → green)
+- M1 `updateMeta` back to in-place write → both meta-atomic tests fail.
+- M2 endedAt filter removed → caught by the re-check; filter + re-check removed → mixed test fails.
+- M3 grace check removed → grace test fails.
+- M5 sort removed → stop-at-quota and deletable-bytes tests fail.
+- M6 re-check inside the moved dir removed → reopened-session test fails.
+- F1a liveDirs dropped → daemon-reported-live test fails. F1b rejected list treated as empty →
+  skip test fails. F1c daemon-init passes null instead of `adapter` → daemon-init wiring test fails.
+- F2a budget ignores kept bytes → 3 tests fail. F2b no "kept exceeds quota" skip → skip test fails.
+- F3a no rename-back → reopened-session test fails. F3b any leftover deleted → leftover test
+  fails. F3c leftovers never cleaned → leftover test fails.
+- RACE closeHistorySession without the writer token → respawn race test fails.
 
 ## Rollback
 Revert the commit. meta.json format is unchanged apart from a trailing newline (readers use
@@ -75,5 +100,7 @@ JSON.parse). The quota file is only read, never written.
   field would touch shared settings types/UI outside this build's files).
 - New file `src/main/daemon/history-retention.ts` (not in the spec's file list) holds the sweep
   and quota reader; needed to keep history-manager.ts within `max-lines`.
+- `daemon-server.ts` touched (not in spec list) for the coordinator's root-race fix, plus one
+  mechanical `consistent-type-imports` lint fix there.
 - Spec lists `removeSession` (history-manager.ts:302-308) as an anchor; it is unchanged — the
   sweep is a separate method so the explicit-close path keeps its semantics.

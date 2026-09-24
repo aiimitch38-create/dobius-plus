@@ -1,11 +1,14 @@
 import { join } from 'node:path'
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { readSafeJsonFile } from '../storage/safe-json-file'
+import { getHistorySessionDirName } from './history-paths'
 
 // Why: the spawn probe race can still cold-restore a session whose endedAt was
 // written moments earlier (detectColdRestore ignoreCleanEnd), so a just-ended
 // session is never eligible for the retention sweep.
 const RETENTION_MIN_ENDED_AGE_MS = 10 * 60 * 1000
+const DELETING_PREFIX = '.deleting-'
 
 export type HistoryRetentionResult = {
   totalBytes: number
@@ -61,10 +64,57 @@ function readEndedAt(dir: string): unknown {
   }
 }
 
+type ScanResult = {
+  totalBytes: number
+  candidates: RetentionCandidate[]
+  candidateBytes: number
+  leftovers: RetentionCandidate[]
+}
+
+function scanHistoryRoot(basePath: string, liveDirs: ReadonlySet<string>, now: number): ScanResult {
+  const scan: ScanResult = { totalBytes: 0, candidates: [], candidateBytes: 0, leftovers: [] }
+  for (const entry of readdirSync(basePath, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue
+    }
+    const dir = join(basePath, entry.name)
+    const bytes = directoryBytes(dir)
+    scan.totalBytes += bytes
+    const endedAt = readEndedAt(dir)
+    if (typeof endedAt !== 'string' || liveDirs.has(dir)) {
+      continue
+    }
+    const endedAtMs = Date.parse(endedAt)
+    if (entry.name.startsWith(DELETING_PREFIX)) {
+      // Why: a sweep interrupted after its rename; only ended leftovers go.
+      scan.leftovers.push({ dir, endedAt, endedAtMs, bytes })
+    } else if (Number.isFinite(endedAtMs) && now - endedAtMs >= RETENTION_MIN_ENDED_AGE_MS) {
+      scan.candidates.push({ dir, endedAt, endedAtMs, bytes })
+      scan.candidateBytes += bytes
+    }
+  }
+  return scan
+}
+
+// Why rename first: the daemon (another process) may reopen this session id
+// at any moment. Once the dir is moved aside, a reopen writes to a fresh dir,
+// so the re-check inside the moved dir is final.
+function removeIfStillEnded(basePath: string, candidate: RetentionCandidate): boolean {
+  const moved = join(basePath, `${DELETING_PREFIX}${randomBytes(6).toString('hex')}`)
+  renameSync(candidate.dir, moved)
+  if (readEndedAt(moved) !== candidate.endedAt) {
+    renameSync(moved, candidate.dir)
+    return false
+  }
+  rmSync(moved, { recursive: true, force: true })
+  return true
+}
+
 /** Deletes ended sessions, oldest endedAt first, until the archive fits in
  *  maxTotalBytes. Sessions without a clean endedAt (live, hibernated, or
  *  crashed and awaiting cold restore), unreadable metadata and `liveDirs` are
- *  never deleted. A scan error throws before anything is removed. */
+ *  never deleted. If those alone exceed the quota, nothing is deleted. A scan
+ *  error throws before anything is removed. */
 export function sweepEndedHistory(
   basePath: string,
   maxTotalBytes: number,
@@ -75,36 +125,64 @@ export function sweepEndedHistory(
   if (!existsSync(basePath)) {
     return result
   }
-  const candidates: RetentionCandidate[] = []
-  for (const entry of readdirSync(basePath, { withFileTypes: true })) {
-    if (!entry.isDirectory()) {
-      continue
-    }
-    const dir = join(basePath, entry.name)
-    const bytes = directoryBytes(dir)
-    result.totalBytes += bytes
-    const endedAt = readEndedAt(dir)
-    if (typeof endedAt !== 'string' || liveDirs.has(dir)) {
-      continue
-    }
-    const endedAtMs = Date.parse(endedAt)
-    if (Number.isFinite(endedAtMs) && now - endedAtMs >= RETENTION_MIN_ENDED_AGE_MS) {
-      candidates.push({ dir, endedAt, endedAtMs, bytes })
-    }
+  const scan = scanHistoryRoot(basePath, liveDirs, now)
+  result.totalBytes = scan.totalBytes
+  for (const leftover of scan.leftovers) {
+    rmSync(leftover.dir, { recursive: true, force: true })
+    result.freedBytes += leftover.bytes
   }
-  candidates.sort((a, b) => a.endedAtMs - b.endedAtMs)
-  for (const candidate of candidates) {
-    if (result.totalBytes - result.freedBytes <= maxTotalBytes) {
+  const keptBytes = scan.totalBytes - scan.candidateBytes - result.freedBytes
+  if (keptBytes > maxTotalBytes) {
+    console.warn(
+      `[history] retention skipped: ${keptBytes} bytes of non-deletable history already exceed the ${maxTotalBytes}-byte quota`
+    )
+    return result
+  }
+  const budget = maxTotalBytes - keptBytes
+  let remaining = scan.candidateBytes
+  scan.candidates.sort((a, b) => a.endedAtMs - b.endedAtMs)
+  for (const candidate of scan.candidates) {
+    if (remaining <= budget) {
       break
     }
-    // Why re-read: the daemon may have reopened this session id (fresh
-    // endedAt: null) after the scan; that session is live again.
-    if (readEndedAt(candidate.dir) !== candidate.endedAt) {
-      continue
+    if (removeIfStillEnded(basePath, candidate)) {
+      remaining -= candidate.bytes
+      result.removedSessions++
+      result.freedBytes += candidate.bytes
     }
-    rmSync(candidate.dir, { recursive: true, force: true })
-    result.removedSessions++
-    result.freedBytes += candidate.bytes
   }
   return result
+}
+
+type LiveSessionSource = { listProcesses(): Promise<{ id: string }[]> }
+
+/** Production entry point: reads the quota, asks the daemon provider which
+ *  sessions are alive, then sweeps. Returns null when the sweep was skipped.
+ *  Why skip without a live list: without it a session whose id was reused
+ *  could look ended, so the sweep fails closed. */
+export async function runHistoryRetentionSweep(
+  provider: LiveSessionSource | null,
+  historyDir: string,
+  quotaPath: string,
+  now = Date.now()
+): Promise<HistoryRetentionResult | null> {
+  const maxTotalBytes = readHistoryRetentionQuotaBytes(quotaPath)
+  if (maxTotalBytes === null) {
+    return null
+  }
+  if (!provider) {
+    console.warn('[history] retention skipped: daemon provider unavailable')
+    return null
+  }
+  let live: { id: string }[]
+  try {
+    live = await provider.listProcesses()
+  } catch (error) {
+    console.warn('[history] retention skipped: could not list live daemon sessions:', error)
+    return null
+  }
+  const liveDirs = new Set(
+    live.map((session) => join(historyDir, getHistorySessionDirName(session.id)))
+  )
+  return sweepEndedHistory(historyDir, maxTotalBytes, liveDirs, now)
 }

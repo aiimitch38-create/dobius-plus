@@ -215,6 +215,12 @@ vi.mock('fs', () => ({
 
 vi.mock('child_process', () => ({ fork: forkMock }))
 
+const { runHistoryRetentionSweepMock } = vi.hoisted(() => ({
+  runHistoryRetentionSweepMock: vi.fn(async () => null)
+}))
+
+vi.mock('./history-retention', () => ({ runHistoryRetentionSweep: runHistoryRetentionSweepMock }))
+
 vi.mock('net', () => ({ connect: netConnectMock }))
 
 vi.mock('./daemon-health', () => ({
@@ -911,6 +917,29 @@ describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
     await mod.restartDaemon()
     expect(originalSpawner.resetHandle).toHaveBeenCalledTimes(2)
     expect(adapterInstances).toHaveLength(3)
+  })
+
+  it('runs the history retention sweep once, 30s after init, with the live daemon provider', async () => {
+    vi.useFakeTimers()
+    try {
+      runHistoryRetentionSweepMock.mockClear()
+      const mod = await importFresh()
+      await mod.initDaemonPtyProvider()
+      expect(runHistoryRetentionSweepMock).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(30_000)
+
+      expect(runHistoryRetentionSweepMock).toHaveBeenCalledTimes(1)
+      const provider = mod.getDaemonProvider()
+      expect(provider).not.toBeNull()
+      expect(runHistoryRetentionSweepMock).toHaveBeenCalledWith(
+        provider,
+        join(FAKE_USER_DATA_PATH, 'terminal-history'),
+        join(FAKE_USER_DATA_PATH, 'terminal-history-retention.json')
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('throws when restartDaemon is called before initDaemonPtyProvider', async () => {

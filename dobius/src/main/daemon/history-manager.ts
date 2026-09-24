@@ -12,7 +12,6 @@ import {
   promises as fsPromises
 } from 'node:fs'
 import { writeJsonFileAtomic } from '../storage/safe-json-file'
-import { sweepEndedHistory, type HistoryRetentionResult } from './history-retention'
 import { getHistorySessionDirName } from './history-paths'
 import {
   decodeLogHeader,
@@ -281,9 +280,24 @@ export class HistoryManager {
     }
   }
 
-  async closeSession(sessionId: string, exitCode: number): Promise<void> {
+  /** Identity of the writer currently open for sessionId (undefined if none).
+   *  Pass it to closeSession to end only that generation of the session. */
+  getWriterToken(sessionId: string): object | undefined {
+    return this.writers.get(sessionId)
+  }
+
+  async closeSession(
+    sessionId: string,
+    exitCode: number,
+    opts?: { onlyWriter: object | undefined }
+  ): Promise<void> {
     const writer = this.writers.get(sessionId)
     if (!writer) {
+      return
+    }
+    // Why: a caller that awaited between the exit and this call may find the
+    // same id already respawned; endedAt must not land on the new session.
+    if (opts && writer !== opts.onlyWriter) {
       return
     }
 
@@ -309,13 +323,6 @@ export class HistoryManager {
       recursive: true,
       force: true
     })
-  }
-
-  /** Retention sweep over the whole history root; sessions this manager is
-   *  still writing are never eligible. See sweepEndedHistory. */
-  sweepEndedSessions(maxTotalBytes: number, now = Date.now()): HistoryRetentionResult {
-    const liveDirs = new Set([...this.writers.values()].map((writer) => writer.dir))
-    return sweepEndedHistory(this.basePath, maxTotalBytes, liveDirs, now)
   }
 
   isSessionDisabled(sessionId: string): boolean {

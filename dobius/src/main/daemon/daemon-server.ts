@@ -13,6 +13,7 @@ import { HistoryManager } from './history-manager'
 import { HistoryReader } from './history-reader'
 import { readCurrentProcessMacSystemResolverHealth } from '../network/macos-system-resolver-health'
 import type { SubprocessHandle } from './session'
+import type { StartupCommandDelivery } from '../../shared/codex-startup-delivery'
 import { checkPtySpawnHealth } from './pty-subprocess'
 import {
   PROTOCOL_VERSION,
@@ -37,7 +38,7 @@ export type DaemonServerOptions = {
     env?: Record<string, string>
     envToDelete?: string[]
     command?: string
-    startupCommandDelivery?: import('../../shared/codex-startup-delivery').StartupCommandDelivery
+    startupCommandDelivery?: StartupCommandDelivery
     shellOverride?: string
     terminalWindowsWslDistro?: string | null
     terminalWindowsPowerShellImplementation?: 'auto' | 'powershell.exe' | 'pwsh.exe'
@@ -510,13 +511,14 @@ export class DaemonServer {
       return
     }
     this.sessionsNeedingFullCheckpoint.delete(sessionId)
+    const onlyWriter = this.historyManager.getWriterToken(sessionId)
     if (snapshot) {
       await this.historyManager.checkpoint(sessionId, snapshot)
       if (records.length > 0) {
         await this.historyManager.appendIncrements(sessionId, seq, records)
       }
     }
-    await this.historyManager.closeSession(sessionId, code)
+    await this.historyManager.closeSession(sessionId, code, { onlyWriter })
   }
 
   private scheduleCheckpointTimer(): void {

@@ -5,6 +5,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import type * as NodeFs from 'node:fs'
 import { HistoryManager } from './history-manager'
 import { HistoryReader } from './history-reader'
+import { sweepEndedHistory } from './history-retention'
 import { getHistorySessionDirName } from './history-paths'
 
 // Why: simulate a crash mid-write of meta.json. The mocked writeFileSync puts
@@ -93,9 +94,10 @@ describe('HistoryManager meta.json integrity', () => {
     await mgr.closeSession('reopened', 0)
     const later = Date.now() + 60 * 60 * 1000
 
-    // Read 1 is the scan (ended), read 2 is the pre-delete re-check (reopened).
+    // Read 1 is the scan (ended), read 2 is the re-check inside the moved-aside
+    // dir (reopened), so the dir must be renamed back.
     metaReads.reopenOnRead = 2
-    expect(new HistoryManager(dir).sweepEndedSessions(0, later).removedSessions).toBe(0)
-    expect(mgr.hasHistory('reopened')).toBe(true)
+    expect(sweepEndedHistory(dir, 0, new Set(), later).removedSessions).toBe(0)
+    expect(readdirSync(dir)).toEqual([getHistorySessionDirName('reopened')])
   })
 })

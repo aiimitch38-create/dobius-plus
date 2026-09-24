@@ -23,8 +23,7 @@ import {
 import { DaemonPtyAdapter } from './daemon-pty-adapter'
 import { DaemonPtyRouter } from './daemon-pty-router'
 import { DaemonClient } from './client'
-import { HistoryManager } from './history-manager'
-import { readHistoryRetentionQuotaBytes } from './history-retention'
+import { runHistoryRetentionSweep } from './history-retention'
 import {
   PREVIOUS_DAEMON_PROTOCOL_VERSIONS,
   PROTOCOL_VERSION,
@@ -85,21 +84,26 @@ const HISTORY_RETENTION_DELAY_MS = 30_000
 // the user writes {"maxTotalMB": N} to terminal-history-retention.json.
 function scheduleHistoryRetentionSweep(): void {
   const timer = setTimeout(() => {
-    try {
-      const quotaPath = join(app.getPath('userData'), 'terminal-history-retention.json')
-      const maxTotalBytes = readHistoryRetentionQuotaBytes(quotaPath)
-      if (maxTotalBytes === null) {
-        return
-      }
-      const result = new HistoryManager(getHistoryDir()).sweepEndedSessions(maxTotalBytes)
-      if (result.removedSessions > 0) {
-        console.log(
-          `[daemon] terminal history retention removed ${result.removedSessions} ended sessions (${result.freedBytes} bytes)`
+    // Why the module-level adapter: read at fire time so a daemon restart in
+    // the meantime still supplies the current live-session list.
+    Promise.resolve()
+      .then(() =>
+        runHistoryRetentionSweep(
+          adapter,
+          getHistoryDir(),
+          join(app.getPath('userData'), 'terminal-history-retention.json')
         )
-      }
-    } catch (error) {
-      console.warn('[daemon] terminal history retention sweep failed:', error)
-    }
+      )
+      .then((result) => {
+        if (result && result.removedSessions > 0) {
+          console.log(
+            `[daemon] terminal history retention removed ${result.removedSessions} ended sessions (${result.freedBytes} bytes)`
+          )
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn('[daemon] terminal history retention sweep failed:', error)
+      })
   }, HISTORY_RETENTION_DELAY_MS)
   timer.unref?.()
 }
