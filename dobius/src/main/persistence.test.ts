@@ -8820,6 +8820,19 @@ describe('Store', () => {
       expect(tmpFilesInDataDir()).toEqual([])
     })
 
+    it('keeps one failed-primary copy when the same bad file fails on every launch (#31)', async () => {
+      writeDataFile(badMigrationState('bad-primary'))
+      const primaryBytes = readFileSync(dataFile(), 'utf-8')
+      await createStore()
+      // Simulates a crash before the first save: the same bad bytes on the next launch.
+      writeFileSync(dataFile(), primaryBytes, 'utf-8')
+      await createStore()
+      const preserved = readdirSync(testState.dir).filter((name) =>
+        name.startsWith('dobius-data.json.failed-')
+      )
+      expect(preserved).toHaveLength(1)
+    })
+
     it('never rotates defaults into the backup ring when every candidate fails (#31)', async () => {
       writeDataFile(badMigrationState('bad-primary'))
       for (let i = 0; i < 5; i++) {

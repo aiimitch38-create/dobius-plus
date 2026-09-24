@@ -11,10 +11,11 @@ import {
   unlinkSync,
   copyFileSync,
   statSync,
-  realpathSync
+  realpathSync,
+  readdirSync
 } from 'node:fs'
 import { writeFile, rename, mkdir, rm } from 'node:fs/promises'
-import { join, dirname, isAbsolute, resolve, sep } from 'node:path'
+import { join, dirname, basename, isAbsolute, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { createHash, randomUUID } from 'node:crypto'
 import type {
@@ -2900,6 +2901,22 @@ export class Store {
     }
     const preservedFile = `${dataFile}.failed-${Date.now()}`
     try {
+      // Why: a crash loop before the first save would otherwise add a full copy
+      // of the same bytes on every launch and slowly fill the disk.
+      const bytes = readFileSync(dataFile)
+      const dir = dirname(dataFile)
+      const prefix = `${basename(dataFile)}.failed-`
+      const alreadyKept = readdirSync(dir).some((name) => {
+        const candidate = join(dir, name)
+        return (
+          name.startsWith(prefix) &&
+          statSync(candidate).size === bytes.length &&
+          readFileSync(candidate).equals(bytes)
+        )
+      })
+      if (alreadyKept) {
+        return
+      }
       copyFileSync(dataFile, preservedFile)
       console.warn(`[persistence] Preserved unloadable state file at ${preservedFile}`)
     } catch (err) {
