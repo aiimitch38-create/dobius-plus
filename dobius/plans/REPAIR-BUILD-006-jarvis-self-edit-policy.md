@@ -19,7 +19,8 @@ changes which paths it may write and how the editable repo root is found.
 - `protectedReason(segments, requested)`: forbidden directory segments (`.git`, `node_modules`,
   `out`, `dist`, plus `.ssh`, `.gnupg`), compared case-insensitively (default macOS volume is
   case-insensitive), and the documented sensitive-file policy `isSensitiveFileName()` on the leaf:
-  `.env` and every `.env.*`, `.envrc`, `.npmrc`, `.netrc`, `.pypirc`, `.git-credentials`,
+  `.env` and every `.env.*` except the templates `.env.example`, `.env.sample`, `.env.template`
+  (exact names, case-insensitive), `.envrc`, `.npmrc`, `.netrc`, `.pypirc`, `.git-credentials`,
   `auth.json`, `credentials(.json)`, `service-token`, `id_rsa|id_dsa|id_ecdsa|id_ed25519`, and
   `*.pem|.key|.p12|.pfx|.enc|.keystore|.jks`.
 - Applied twice: on the lexical requested path (as before) AND on the canonical path relative to
@@ -28,10 +29,15 @@ changes which paths it may write and how the editable repo root is found.
   and refuses if it fails or resolves elsewhere (review can take minutes; `O_NOFOLLOW` only
   guards the leaf). A residual race between this re-check and `openSync` remains (Node has no
   `openat`); it shrinks the window from minutes to microseconds.
-- `resolveSelfEditRepoRoot({isPackaged, env, home})`: `DOBIUS_SELF_EDIT_REPO_ROOT` if set;
-  else in dev only `DOBIUS_DEV_REPO_ROOT` (set by `config/scripts/run-electron-vite-dev.mjs` to
-  this checkout's `dobius/` folder, which is what the old comment intended). Must be absolute,
-  an existing directory, not `/` and not the home folder. Otherwise `{ok:false, error}`.
+- `resolveSelfEditRepoRoot({isPackaged, env, home, resourcesPath})` in the new
+  `src/main/jarvis/self-edit-repo-root.ts` (split out so self-edit.ts stays under max-lines 300).
+  Order: `DOBIUS_SELF_EDIT_REPO_ROOT` if set. In dev: `DOBIUS_DEV_REPO_ROOT` (set by
+  `config/scripts/run-electron-vite-dev.mjs` to this checkout's `dobius/` folder, which is what the
+  old comment intended). Packaged: `<repo>/dobius`, where `repo` comes from
+  `process.resourcesPath/INSTALL-PROVENANCE.json`, stamped by `scripts/install-dobius-gated.sh`
+  (`"repo"` = git toplevel), read via `readSafeJsonFile`. Every source must be absolute, an existing
+  directory containing `package.json`, and not `/` or the home folder. Otherwise `{ok:false, error}`
+  naming the source (missing stamp / unreadable stamp / bad folder).
 - `SelfEditStore` takes an optional `unavailableReason`; when set, every `propose` returns it.
   The renderer tool (`use-voice-agent.ts` `propose_code_change`) already speaks
   `Could not propose that change: <error>`, so the reason is visible/audible. No existing setting
@@ -39,6 +45,7 @@ changes which paths it may write and how the editable repo root is found.
 
 ## Files
 - `src/main/jarvis/self-edit.ts`
+- `src/main/jarvis/self-edit-repo-root.ts` (new)
 - `src/main/jarvis/jarvis-ipc.ts` (import line + the repo-root block only)
 - `src/main/jarvis/self-edit.test.ts`
 
@@ -51,16 +58,25 @@ changes which paths it may write and how the editable repo root is found.
 - Ordinary source (`src/voice.ts`, `src/env.ts`, `src/token-utils.ts`) allowed.
 - Parent folder swapped for a symlink to `.git` between propose and apply: apply refused,
   `.git` file unchanged.
-- Repo root: packaged + configured -> configured path (not `Contents`); packaged + only
-  `DOBIUS_DEV_REPO_ROOT` -> refused with message naming `DOBIUS_SELF_EDIT_REPO_ROOT`; dev ->
-  launcher checkout; relative, `/`, home, `home/` refused; missing dir refused; unconfigured store
-  refuses every proposal with the reason.
+- `.env.example`/`.env.sample`/`.env.template` (and `.ENV.Example`) allowed;
+  `.env.example.local`, `.env.examples`, `.env.local.example` refused.
+- Repo root (real temp dirs): packaged env override wins over the stamp; packaged falls back to
+  `<stamp.repo>/dobius`; packaged ignores `DOBIUS_DEV_REPO_ROOT` and with no stamp refuses naming
+  `DOBIUS_SELF_EDIT_REPO_ROOT`; malformed JSON / array / no `repo` / empty / non-string refused;
+  stamp pointing at a missing dir, `"unknown"`, or a folder without `dobius/package.json` refused;
+  dev uses launcher checkout, refuses when unset; relative, `/`, home, `home/`, no-package.json
+  override refused; unconfigured store refuses every proposal with the reason.
 
 Mutation checks (each made the file fail, then restored; final 24/24 green):
 M1 skip canonical check (2 fail); M2 drop `.env.*` rule (2); M3 drop apply re-check (1);
 M4 let packaged use `DOBIUS_DEV_REPO_ROOT` (1); M5 drop too-broad root check (1);
 M6 ignore `unavailableReason` (1); M7 case-sensitive segments (1, after making the test use an
 existing folder: a missing parent was refused for a different reason and masked it).
+Follow-up (commit 2): P1 ignore env override (1); P2 use stamp repo without `/dobius` (1);
+P3 accept a missing/unreadable stamp (2); P4 drop package.json check (1); P5 dev path taken when
+packaged (3); P6 drop template allowlist (1); P7 allow `.env.example.*` prefixes (1). P8 (no trim
+on stamp repo) survived: equivalent mutant, an empty/blank repo is refused either way.
+P2/P4 re-run after the file split: still fail.
 
 ## Deviations from EXECUTION-ORDER.md
 - `apply()` gained a 4-line re-validation (spec lists only lines 39-44/80-90). BUG-MATRIX #26 asks
@@ -70,18 +86,19 @@ existing folder: a missing parent was refused for a different reason and masked 
   canonical check is relative to the containing root.
 
 ## Decisions for Carson
-- The packaged app has no repo root unless `DOBIUS_SELF_EDIT_REPO_ROOT` is set in its
-  environment (e.g. `launchctl setenv DOBIUS_SELF_EDIT_REPO_ROOT ".../dobius-plus/dobius"`), so
-  Jarvis self-edit in the installed app now refuses with that reason instead of targeting the
-  bundle. A Settings field could replace the env var later (config registry, #118).
-- `.env.example`-style templates are also blocked (all `.env.*`, fail closed).
+- Packaged app: editable root is `<repo>/dobius` from the installer's provenance stamp, so C2 keeps
+  working with no setup after a gated install. Installs without a stamp (e.g. the v2 installer)
+  refuse with a spoken reason until `DOBIUS_SELF_EDIT_REPO_ROOT` is set. The editable root is the
+  app folder, not the whole git repo (scripts/, docs/ are outside it), matching the old intent.
+- `.env` templates (`.env.example`, `.env.sample`, `.env.template`) are editable; all other
+  `.env*` stay blocked.
 
 ## Rollback
 Revert the commit. No data or file formats change.
 
 ## Verification
 - `pnpm run typecheck` exit 0.
-- `npx vitest run --config config/vitest.config.ts src/main/jarvis`: 12 files / 107 tests green.
+- `npx vitest run --config config/vitest.config.ts src/main/jarvis`: 12 files / 107 tests green (commit 1); after follow-up, src/main/jarvis + src/main/storage: 14 files / 132 tests green.
 - oxlint + react-doctor clean on the 3 changed files. `oxfmt --check` differences in
   `self-edit.test.ts`/`jarvis-ipc.ts` are pre-existing lines, left alone.
 - Full suite: DEFERRED (coordinator).

@@ -9,13 +9,12 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { SelfEditStore, isSensitiveFileName, resolveEditablePath, selfEditRoots } from './self-edit'
 import {
-  SelfEditStore,
-  isSensitiveFileName,
-  resolveEditablePath,
-  resolveSelfEditRepoRoot,
-  selfEditRoots
-} from './self-edit'
+  INSTALL_PROVENANCE_FILE,
+  type SelfEditRepoRoot,
+  resolveSelfEditRepoRoot
+} from './self-edit-repo-root'
 
 function repo(): string {
   const root = mkdtempSync(join(tmpdir(), 'selfedit-'))
@@ -195,6 +194,16 @@ describe('canonical path policy (BUILD-006, #26 #27)', () => {
     expect(isSensitiveFileName('environment.ts')).toBe(false)
   })
 
+  it('allows .env templates but no other .env variant', () => {
+    const root = repo()
+    for (const name of ['.env.example', '.env.sample', '.env.template', 'src/.ENV.Example']) {
+      expect(resolveEditablePath(name, [root]).ok, name).toBe(true)
+    }
+    for (const name of ['.env.example.local', '.env.examples', '.env.local.example']) {
+      expect(resolveEditablePath(name, [root]).ok, name).toBe(false)
+    }
+  })
+
   it('refuses to apply when a parent folder was swapped for a symlink after proposing', () => {
     const root = repo()
     mkdirSync(join(root, '.git'))
@@ -216,61 +225,83 @@ describe('canonical path policy (BUILD-006, #26 #27)', () => {
 
 describe('resolveSelfEditRepoRoot (BUILD-006, X1)', () => {
   const home = '/Users/x'
-  const isDirectory = (path: string): boolean => path === '/repo/dobius-plus'
 
-  it('uses the configured repo when packaged, not the bundle Contents folder', () => {
-    const result = resolveSelfEditRepoRoot({
-      isPackaged: true,
-      env: { DOBIUS_SELF_EDIT_REPO_ROOT: '/repo/dobius-plus' },
-      home,
-      isDirectory
-    })
-    expect(result).toEqual({ ok: true, root: '/repo/dobius-plus' })
+  /** A checkout with an app folder (`<repo>/dobius/package.json`). */
+  function checkout(): { repo: string; app: string } {
+    const repo = mkdtempSync(join(tmpdir(), 'selfedit-repo-'))
+    const app = join(repo, 'dobius')
+    mkdirSync(app)
+    writeFileSync(join(app, 'package.json'), '{}\n')
+    return { repo, app }
+  }
+
+  /** A packaged `Contents/Resources` folder, optionally with a provenance stamp. */
+  function resources(stamp?: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'selfedit-resources-'))
+    if (stamp !== undefined) {
+      writeFileSync(join(dir, INSTALL_PROVENANCE_FILE), stamp)
+    }
+    return dir
+  }
+
+  function packaged(env: NodeJS.ProcessEnv, resourcesPath: string): SelfEditRepoRoot {
+    return resolveSelfEditRepoRoot({ isPackaged: true, env, home, resourcesPath })
+  }
+
+  it('packaged: the env override wins over the provenance stamp', () => {
+    const configured = checkout()
+    const stamped = checkout()
+    const result = packaged(
+      { DOBIUS_SELF_EDIT_REPO_ROOT: configured.app },
+      resources(JSON.stringify({ repo: stamped.repo }))
+    )
+    expect(result).toEqual({ ok: true, root: configured.app })
   })
 
-  it('refuses with a visible reason when packaged and nothing is configured', () => {
-    const result = resolveSelfEditRepoRoot({
-      isPackaged: true,
-      // The dev launcher variable must not leak into a packaged app's choice.
-      env: { DOBIUS_DEV_REPO_ROOT: '/repo/dobius-plus' },
-      home,
-      isDirectory
-    })
+  it('packaged: falls back to <provenance.repo>/dobius, not the bundle Contents folder', () => {
+    const { repo, app } = checkout()
+    const stamp = JSON.stringify({ branch: 'main', commit: 'abc1234', repo })
+    expect(packaged({}, resources(stamp))).toEqual({ ok: true, root: app })
+  })
+
+  it('packaged: ignores the dev launcher variable', () => {
+    const { app } = checkout()
+    const result = packaged({ DOBIUS_DEV_REPO_ROOT: app }, resources())
     expect(result.ok).toBe(false)
+    expect(result.ok ? '' : result.error).toMatch(/no provenance stamp/)
     expect(result.ok ? '' : result.error).toMatch(/DOBIUS_SELF_EDIT_REPO_ROOT/)
   })
 
-  it('uses the dev launcher checkout in dev', () => {
-    expect(
-      resolveSelfEditRepoRoot({
-        isPackaged: false,
-        env: { DOBIUS_DEV_REPO_ROOT: '/repo/dobius-plus' },
-        home,
-        isDirectory
-      })
-    ).toEqual({ ok: true, root: '/repo/dobius-plus' })
-  })
-
-  it('refuses relative, filesystem-root and home roots even when they exist', () => {
-    for (const configured of ['repo/dobius-plus', '/', home, `${home}/`]) {
-      const result = resolveSelfEditRepoRoot({
-        isPackaged: true,
-        env: { DOBIUS_SELF_EDIT_REPO_ROOT: configured },
-        home,
-        isDirectory: () => true
-      })
-      expect(result.ok, configured).toBe(false)
+  it('packaged: refuses a malformed or repo-less provenance stamp', () => {
+    for (const stamp of ['{not json', '[]', '{"branch":"main"}', '{"repo":""}', '{"repo":7}']) {
+      const result = packaged({}, resources(stamp))
+      expect(result.ok, stamp).toBe(false)
+      expect(result.ok ? '' : result.error, stamp).toMatch(/no readable repo path/)
     }
   })
 
-  it('refuses a configured root that does not exist', () => {
-    const result = resolveSelfEditRepoRoot({
-      isPackaged: true,
-      env: { DOBIUS_SELF_EDIT_REPO_ROOT: '/repo/missing' },
-      home,
-      isDirectory
-    })
-    expect(result.ok).toBe(false)
+  it('packaged: refuses a stamp pointing at a missing, relative or app-less folder', () => {
+    const noApp = mkdtempSync(join(tmpdir(), 'selfedit-noapp-'))
+    for (const repo of ['/nonexistent/dobius-plus', 'unknown', noApp]) {
+      const result = packaged({}, resources(JSON.stringify({ repo })))
+      expect(result.ok, repo).toBe(false)
+    }
+  })
+
+  it('dev: uses the launcher checkout and refuses when it is unset', () => {
+    const { app } = checkout()
+    const dev = (env: NodeJS.ProcessEnv): SelfEditRepoRoot =>
+      resolveSelfEditRepoRoot({ isPackaged: false, env, home, resourcesPath: resources() })
+    expect(dev({ DOBIUS_DEV_REPO_ROOT: app })).toEqual({ ok: true, root: app })
+    expect(dev({}).ok).toBe(false)
+  })
+
+  it('refuses relative, filesystem-root and home roots and folders without package.json', () => {
+    const noApp = mkdtempSync(join(tmpdir(), 'selfedit-noapp-'))
+    for (const configured of ['repo/dobius', '/', home, `${home}/`, noApp]) {
+      const result = packaged({ DOBIUS_SELF_EDIT_REPO_ROOT: configured }, resources())
+      expect(result.ok, configured).toBe(false)
+    }
   })
 
   it('an unconfigured store refuses every proposal with the reason', () => {

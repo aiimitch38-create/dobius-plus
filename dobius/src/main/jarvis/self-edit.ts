@@ -7,10 +7,9 @@ import {
   openSync,
   readFileSync,
   realpathSync,
-  statSync,
   writeFileSync
 } from 'node:fs'
-import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 export type SelfEditProposal = {
   id: string
@@ -41,65 +40,6 @@ export function selfEditRoots(home: string, repoRoot: string): string[] {
   return [repoRoot, join(home, 'dobius', 'projects', 'ADAM')]
 }
 
-export type SelfEditRepoRoot = { ok: true; root: string } | { ok: false; error: string }
-
-/**
- * The Dobius+ checkout Adam may rewrite, from explicit configuration only.
- *
- * Why not app.getAppPath(): two parents of it is the bundle's `Contents` folder
- * when packaged and the folder ABOVE the checkout in dev, so neither is the repo.
- * DOBIUS_SELF_EDIT_REPO_ROOT names the checkout on purpose; in dev the launcher
- * (run-electron-vite-dev.mjs) already sets DOBIUS_DEV_REPO_ROOT to this checkout.
- * With neither, self-edit refuses rather than guessing a folder.
- */
-export function resolveSelfEditRepoRoot(options: {
-  isPackaged: boolean
-  env: NodeJS.ProcessEnv
-  home: string
-  isDirectory?: (p: string) => boolean
-}): SelfEditRepoRoot {
-  const { isPackaged, env, home } = options
-  const isDirectory = options.isDirectory ?? defaultIsDirectory
-  const explicit = env.DOBIUS_SELF_EDIT_REPO_ROOT?.trim()
-  const configured = explicit || (isPackaged ? '' : env.DOBIUS_DEV_REPO_ROOT?.trim())
-  if (!configured) {
-    return {
-      ok: false,
-      error:
-        'Self-edit is off: no Dobius+ source folder is configured. Set DOBIUS_SELF_EDIT_REPO_ROOT to the Dobius+ checkout and restart.'
-    }
-  }
-  if (!isAbsolute(configured)) {
-    return {
-      ok: false,
-      error: `Self-edit is off: the configured source folder "${configured}" is not an absolute path.`
-    }
-  }
-  const root = resolve(configured)
-  // Why: a filesystem or home root would make nearly every file on the machine editable.
-  if (root === parse(root).root || root === resolve(home)) {
-    return {
-      ok: false,
-      error: `Self-edit is off: "${root}" is too broad to be the Dobius+ source folder.`
-    }
-  }
-  if (!isDirectory(root)) {
-    return {
-      ok: false,
-      error: `Self-edit is off: the configured source folder "${root}" does not exist.`
-    }
-  }
-  return { ok: true, root }
-}
-
-function defaultIsDirectory(path: string): boolean {
-  try {
-    return statSync(path).isDirectory()
-  } catch {
-    return false
-  }
-}
-
 /**
  * Path segments never writable even inside an allowed root. Compared
  * case-insensitively: the default macOS volume treats `.GIT` as `.git`.
@@ -108,7 +48,8 @@ const FORBIDDEN_SEGMENTS = new Set(['.git', 'node_modules', 'out', 'dist', '.ssh
 
 /**
  * Sensitive-file policy: credential and secret files are never writable, in any
- * folder. Covers every `.env` variant (`.env.local`, `.env.production`, ...),
+ * folder. Covers every `.env` variant (`.env.local`, `.env.production`, ...)
+ * except the committed templates below, which carry no secrets,
  * package-manager and git credential files, private keys and certificates, and
  * the ADAM service token.
  */
@@ -127,13 +68,14 @@ const SENSITIVE_FILE_NAMES = new Set([
   'id_ecdsa',
   'id_ed25519'
 ])
+const ENV_TEMPLATE_NAMES = new Set(['.env.example', '.env.sample', '.env.template'])
 const SENSITIVE_EXTENSIONS = ['.pem', '.key', '.p12', '.pfx', '.enc', '.keystore', '.jks']
 
 export function isSensitiveFileName(name: string): boolean {
   const lower = name.toLowerCase()
   return (
     lower === '.env' ||
-    lower.startsWith('.env.') ||
+    (lower.startsWith('.env.') && !ENV_TEMPLATE_NAMES.has(lower)) ||
     SENSITIVE_FILE_NAMES.has(lower) ||
     SENSITIVE_EXTENSIONS.some((extension) => lower.endsWith(extension))
   )

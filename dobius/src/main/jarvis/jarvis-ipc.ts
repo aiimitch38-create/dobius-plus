@@ -6,7 +6,8 @@ import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory, converseWithAdam, loadAdamServiceToken } from './adam-client'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
-import { SelfEditStore, resolveSelfEditRepoRoot, selfEditRoots } from './self-edit'
+import { SelfEditStore, selfEditRoots } from './self-edit'
+import { resolveSelfEditRepoRoot } from './self-edit-repo-root'
 import { closeSelfEditWindow, showSelfEditProposal } from '../window/self-edit-window'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
 import {
@@ -112,7 +113,8 @@ function registerHandlers(store: Store, service: JarvisService): void {
   const repoRoot = resolveSelfEditRepoRoot({
     isPackaged: app.isPackaged,
     env: process.env,
-    home: app.getPath('home')
+    home: app.getPath('home'),
+    resourcesPath: process.resourcesPath
   })
   const selfEdits = repoRoot.ok
     ? new SelfEditStore(selfEditRoots(app.getPath('home'), repoRoot.root))
