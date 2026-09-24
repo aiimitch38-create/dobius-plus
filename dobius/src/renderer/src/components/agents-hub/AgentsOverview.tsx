@@ -92,8 +92,12 @@ function Row({
 
 function ago(ms: number): string {
   const minutes = Math.max(0, Math.round((Date.now() - ms) / 60_000))
-  if (minutes < 60) return `${minutes}m`
-  if (minutes < 60 * 24) return `${Math.round(minutes / 60)}h`
+  if (minutes < 60) {
+    return `${minutes}m`
+  }
+  if (minutes < 60 * 24) {
+    return `${Math.round(minutes / 60)}h`
+  }
   return `${Math.round(minutes / (60 * 24))}d`
 }
 
@@ -101,14 +105,27 @@ export function AgentsOverview(): React.JSX.Element {
   const [tasks, setTasks] = useState<VertexTask[]>([])
   const [agents, setAgents] = useState<CustomAgent[]>([])
   const [runs, setRuns] = useState<AgentRun[]>([])
+  const [boardError, setBoardError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const [t, a, r] = await Promise.all([
-      window.api?.vertexTasks?.list().catch(() => []) ?? [],
+      // Why not [] on failure: an unreadable board would read as "Nothing open".
+      window.api?.vertexTasks?.list().then(
+        (list) => {
+          setBoardError(null)
+          return list
+        },
+        () => {
+          setBoardError('Board could not be loaded')
+          return null
+        }
+      ) ?? [],
       window.api?.agents?.list().catch(() => []) ?? [],
       window.api?.agents?.listRuns?.().catch(() => []) ?? []
     ])
-    setTasks(t as VertexTask[])
+    if (t) {
+      setTasks(t as VertexTask[])
+    }
     setAgents(a as CustomAgent[])
     setRuns(r as AgentRun[])
   }, [])
@@ -139,7 +156,8 @@ export function AgentsOverview(): React.JSX.Element {
           icon={LayoutList}
           title="Board"
           subtitle={
-            openTasks.length ? `${openTasks.length} open of ${tasks.length}` : 'Nothing open'
+            boardError ??
+            (openTasks.length ? `${openTasks.length} open of ${tasks.length}` : 'Nothing open')
           }
           tone="bg-ops-violet-soft text-ops-violet"
         >

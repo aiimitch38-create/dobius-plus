@@ -1,17 +1,17 @@
 /* Persistence for Vertex-owned tasks.
  *
  * Follows the same shape as communications/team-store.ts: a JSON file in
- * userData, an in-memory cache, and an atomic write (temp file + rename) so a
- * crash mid-write cannot leave a truncated file. Deliberately not SQLite —
- * a Kanban holds hundreds of rows, not millions, and adding a schema plus
- * migrations would buy nothing here.
+ * userData behind SafeJsonFile (in-memory cache, atomic temp + rename write).
+ * An unreadable file makes the board read-only: every call throws instead of
+ * showing an empty board that the next save would write over the real one.
+ * Deliberately not SQLite — a Kanban holds hundreds of rows, not millions,
+ * and adding a schema plus migrations would buy nothing here.
  *
  * Ordering: tasks carry a sparse `order` within their column, spaced by
  * ORDER_GAP. A move usually just picks a midpoint between neighbours, so no
  * other row is touched. Only when the gap closes does the column reindex. */
 
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 
@@ -27,17 +27,18 @@ import {
   type VertexTaskStatus,
 } from '../../shared/vertex-task-types'
 import { listAgents } from '../agents/agents-store'
+import { SafeJsonFile } from '../storage/safe-json-file'
 
 const FILE_NAME = 'vertex-tasks.json'
 const ORDER_GAP = 1000
 
-let cached: VertexTask[] | null = null
 /** Overridable so tests do not touch the real userData directory. */
 let storageDirOverride: string | null = null
+let file = createFile()
 
 export function setVertexTaskStorageDir(dir: string | null): void {
   storageDirOverride = dir
-  cached = null
+  file = createFile()
 }
 
 function storageDir(): string {
@@ -48,33 +49,36 @@ function filePath(): string {
   return path.join(storageDir(), FILE_NAME)
 }
 
+function createFile(): SafeJsonFile<VertexTask[]> {
+  return new SafeJsonFile<VertexTask[]>({
+    filePath,
+    // Why all-or-nothing: a dropped row would be erased by the next save, so
+    // one bad row makes the whole file unreadable (read-only + quarantine).
+    parse: (raw) =>
+      Array.isArray(raw) && raw.every(isUsableTask) ? raw.map(normalizePersistedTask) : undefined,
+    fallback: () => [],
+    label: `[vertex] ${FILE_NAME}`,
+  })
+}
+
 function readAll(): VertexTask[] {
-  if (cached) {
-    return cached
+  const tasks = file.get()
+  const { status, detail } = file.getStatus()
+  if (status === 'unreadable') {
+    throw new Error(
+      `The Kanban board file ${filePath()} could not be read (${detail}). The board is read-only until the file is fixed or removed.`,
+    )
   }
-  const p = filePath()
-  if (!existsSync(p)) {
-    cached = []
-    return cached
-  }
-  try {
-    const parsed = JSON.parse(readFileSync(p, 'utf8'))
-    cached = Array.isArray(parsed)
-      ? parsed.filter(isUsableTask).map(normalizePersistedTask)
-      : []
-  } catch {
-    // Why swallow: a corrupt file must not stop the app from booting. Starting
-    // empty is recoverable; refusing to launch is not.
-    cached = []
-  }
-  return cached
+  return tasks
 }
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) return '??'
+  if (!parts.length) {
+    return '??'
+  }
   const first = parts[0][0] ?? ''
-  const second = parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : (parts[0][1] ?? '')
+  const second = parts.length > 1 ? (parts.at(-1)?.[0] ?? '') : (parts[0][1] ?? '')
   return `${first}${second}`.toUpperCase()
 }
 
@@ -83,9 +87,13 @@ function normalizedKey(value: string): string {
 }
 
 function normalizeAgentPerson(person: VertexTask['assignee']): VertexTask['assignee'] {
-  if (person?.kind !== 'agent') return person
+  if (person?.kind !== 'agent') {
+    return person
+  }
   const agents = listAgents()
-  if (agents.some((agent) => agent.id === person.id)) return person
+  if (agents.some((agent) => agent.id === person.id)) {
+    return person
+  }
   const wanted = normalizedKey(person.name || person.id)
   const agent = agents.find(
     (candidate) =>
@@ -126,13 +134,15 @@ function normalizePersistedTask(task: VertexTask): VertexTask {
 }
 
 export function reloadVertexTasksFromDisk(): VertexTask[] {
-  cached = null
+  file.invalidate()
   return readAll()
 }
 
 /** Drop rows that would crash a renderer rather than trusting the file. */
 function isUsableTask(value: unknown): value is VertexTask {
-  if (!value || typeof value !== 'object') return false
+  if (!value || typeof value !== 'object') {
+    return false
+  }
   const t = value as Partial<VertexTask>
   return (
     typeof t.id === 'string' &&
@@ -143,13 +153,12 @@ function isUsableTask(value: unknown): value is VertexTask {
 }
 
 function persist(tasks: VertexTask[]): void {
-  const dir = storageDir()
-  mkdirSync(dir, { recursive: true })
-  const target = filePath()
-  const tmp = `${target}.tmp-${process.pid}`
-  writeFileSync(tmp, JSON.stringify(tasks, null, 2), 'utf8')
-  renameSync(tmp, target)
-  cached = tasks
+  if (!file.set(tasks)) {
+    // Why: set() keeps the unsaved value (and callers mutate cached rows in
+    // place), so drop the cache to show what is really on disk.
+    file.invalidate()
+    throw new Error(`The Kanban board could not be saved to ${filePath()}.`)
+  }
 }
 
 function columnOf(tasks: VertexTask[], status: VertexTaskStatus): VertexTask[] {
@@ -209,7 +218,7 @@ export const vertexTaskStore: VertexTaskSource = {
     const tasks = [...readAll()]
     const task = normalizeInput(input)
     const column = columnOf(tasks, task.status)
-    const last = column[column.length - 1]
+    const last = column.at(-1)
     task.order = (last?.order ?? 0) + ORDER_GAP
     tasks.push(task)
     if (task.parentTaskId) {
@@ -226,11 +235,15 @@ export const vertexTaskStore: VertexTaskSource = {
   update(taskId: string, patch: VertexTaskPatch): VertexTask | null {
     const tasks = [...readAll()]
     const task = tasks.find((t) => t.id === taskId)
-    if (!task) return null
+    if (!task) {
+      return null
+    }
 
     if ((patch.status ?? task.status) === 'done') {
       const resultNote = (patch.resultNote ?? task.resultNote)?.trim()
-      if (!resultNote) return null
+      if (!resultNote) {
+        return null
+      }
       patch.resultNote = resultNote
       patch.completedAt = patch.completedAt ?? task.completedAt ?? Date.now()
     }
@@ -239,12 +252,26 @@ export const vertexTaskStore: VertexTaskSource = {
     // Landing at the end of the destination column matches what a user sees.
     if (patch.status && patch.status !== task.status && isVertexTaskStatus(patch.status)) {
       const column = columnOf(tasks, patch.status)
-      task.order = (column[column.length - 1]?.order ?? 0) + ORDER_GAP
+      task.order = (column.at(-1)?.order ?? 0) + ORDER_GAP
     }
 
+    if (patch.parentTaskId === task.id) {
+      delete patch.parentTaskId
+    }
+    const oldParentId = task.parentTaskId
     Object.assign(task, patch, { updatedAt: Date.now() })
-    if (patch.parentTaskId && patch.parentTaskId !== task.id) {
-      const parent = tasks.find((t) => t.id === patch.parentTaskId)
+    if ('parentTaskId' in patch) {
+      // Why: re-parenting must move the id between both parents' child lists
+      // in this same write, or the old parent keeps a stale child.
+      task.parentTaskId = patch.parentTaskId || undefined
+      if (oldParentId !== task.parentTaskId) {
+        const oldParent = tasks.find((t) => t.id === oldParentId)
+        if (oldParent?.childTaskIds.includes(task.id)) {
+          oldParent.childTaskIds = oldParent.childTaskIds.filter((id) => id !== task.id)
+          oldParent.updatedAt = task.updatedAt
+        }
+      }
+      const parent = tasks.find((t) => t.id === task.parentTaskId)
       if (parent && !parent.childTaskIds.includes(task.id)) {
         parent.childTaskIds.push(task.id)
         parent.updatedAt = task.updatedAt
@@ -255,10 +282,14 @@ export const vertexTaskStore: VertexTaskSource = {
   },
 
   move(taskId: string, to: VertexTaskStatus, toIndex: number): VertexTask | null {
-    if (!isVertexTaskStatus(to)) return null
+    if (!isVertexTaskStatus(to)) {
+      return null
+    }
     const tasks = [...readAll()]
     const task = tasks.find((t) => t.id === taskId)
-    if (!task) return null
+    if (!task) {
+      return null
+    }
     if (to === 'done' && !task.resultNote?.trim()) {
       return null
     }
@@ -294,8 +325,30 @@ export const vertexTaskStore: VertexTaskSource = {
 
   remove(taskId: string): boolean {
     const tasks = readAll()
-    const next = tasks.filter((t) => t.id !== taskId)
-    if (next.length === tasks.length) return false
+    if (!tasks.some((t) => t.id === taskId)) {
+      return false
+    }
+    const now = Date.now()
+    // Unlink the removed task from parents, children and dependents in the
+    // same write, so no row is left pointing at an id that no longer exists.
+    const next = tasks
+      .filter((t) => t.id !== taskId)
+      .map((t) => {
+        const linked =
+          t.parentTaskId === taskId ||
+          t.childTaskIds.includes(taskId) ||
+          t.dependencies.includes(taskId)
+        if (!linked) {
+          return t
+        }
+        return {
+          ...t,
+          parentTaskId: t.parentTaskId === taskId ? undefined : t.parentTaskId,
+          childTaskIds: t.childTaskIds.filter((id) => id !== taskId),
+          dependencies: t.dependencies.filter((id) => id !== taskId),
+          updatedAt: now,
+        }
+      })
     persist(next)
     return true
   },

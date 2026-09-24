@@ -137,6 +137,28 @@ describe('SafeJsonFile unreadable originals', () => {
   })
 })
 
+describe('SafeJsonFile invalidate', () => {
+  it('re-reads a file that changed on disk', () => {
+    writeFileSync(target, '["a"]')
+    const file = makeFile()
+    expect(file.get()).toEqual(['a'])
+    writeFileSync(target, '["a","b"]')
+    expect(file.get()).toEqual(['a'])
+    file.invalidate()
+    expect(file.get()).toEqual(['a', 'b'])
+  })
+
+  it('does not quarantine the same bad file again', () => {
+    writeFileSync(target, '{bad')
+    const file = makeFile()
+    file.get()
+    file.invalidate()
+    file.get()
+    expect(quarantineCopies()).toHaveLength(1)
+    expect(file.getStatus().status).toBe('unreadable')
+  })
+})
+
 describe('SafeJsonFile missing and ok files', () => {
   it('missing file returns the first-run default and creates nothing on load', () => {
     const file = makeFile()
