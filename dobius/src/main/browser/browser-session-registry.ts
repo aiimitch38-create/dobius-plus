@@ -56,6 +56,9 @@ class BrowserSessionRegistry {
   private readonly profiles = new Map<string, BrowserSessionProfile>()
   private unreadableDetail: string | null = null
   private unreadableFingerprint: string | null = null
+  // True while in-memory profiles were built from defaults because the file
+  // was unreadable; cleared once a later read re-hydrates them from the file.
+  private builtFromUnreadable = false
 
   constructor() {
     const persisted = this.loadPersistedSource()
@@ -146,11 +149,48 @@ class BrowserSessionRegistry {
         META_LABEL,
         this.unreadableFingerprint
       )
+      this.builtFromUnreadable = true
     } else if (this.unreadableDetail !== null) {
       this.unreadableDetail = null
       console.warn(`${META_LABEL} is readable again`)
     }
-    return { status: result.status, meta: BrowserSessionRegistry.normalizeMeta(result.value) }
+    const meta = BrowserSessionRegistry.normalizeMeta(result.value)
+    if (result.status !== 'unreadable' && this.builtFromUnreadable) {
+      this.rehydrateAfterRepair(meta)
+    }
+    return { status: result.status, meta }
+  }
+
+  // Why: the next save writes in-memory profiles over the repaired file, so
+  // they must first absorb what the file holds (file wins per id; profiles
+  // created this session are kept) or the repaired profiles would be dropped.
+  private rehydrateAfterRepair(meta: BrowserSessionMeta): void {
+    try {
+      this.hydrateFromPersisted(meta.profiles)
+      const current = this.profiles.get('default')
+      if (current && meta.defaultSource) {
+        this.profiles.set('default', { ...current, source: meta.defaultSource })
+      }
+      for (const [partition, ua] of Object.entries(meta.userAgentByPartition)) {
+        if (this.isAllowedPartition(partition)) {
+          const sess = session.fromPartition(partition)
+          sess.setUserAgent(ua)
+          setupClientHintsOverride(sess, ua)
+        }
+      }
+      this.builtFromUnreadable = false
+    } catch (error) {
+      // Left set so the next access retries (e.g. sessions not available before ready).
+      console.error(`${META_LABEL} could not re-apply the repaired file:`, error)
+    }
+  }
+
+  // Why: mutations must see a repaired file before they change in-memory
+  // profiles, so a delete is not undone and a create does not drop others.
+  private syncAfterRepair(): void {
+    if (this.builtFromUnreadable) {
+      this.readPersistedMeta()
+    }
   }
 
   private static normalizeMeta(data: Record<string, unknown>): BrowserSessionMeta {
@@ -383,6 +423,7 @@ class BrowserSessionRegistry {
     if (scope === 'default') {
       return null
     }
+    this.syncAfterRepair()
     const id = randomUUID()
     // Why: partition names are deterministic from the profile id so main can
     // reconstruct the allowlist on restart from persisted profile metadata
@@ -405,6 +446,7 @@ class BrowserSessionRegistry {
     profileId: string,
     source: BrowserSessionProfile['source']
   ): BrowserSessionProfile | null {
+    this.syncAfterRepair()
     const profile = this.profiles.get(profileId)
     if (!profile) {
       return null
@@ -420,6 +462,7 @@ class BrowserSessionRegistry {
   }
 
   async deleteProfile(profileId: string): Promise<boolean> {
+    this.syncAfterRepair()
     const profile = this.profiles.get(profileId)
     if (!profile || profile.scope === 'default') {
       return false
@@ -459,6 +502,7 @@ class BrowserSessionRegistry {
       // Why: persist metadata BEFORE clearing storage so that if the app quits
       // mid-clear, the next launch won't show a stale "imported from X" badge
       // for cookies that were partially or fully removed.
+      this.syncAfterRepair()
       const defaultProfile = this.profiles.get('default')
       if (defaultProfile) {
         this.profiles.set('default', { ...defaultProfile, source: null })

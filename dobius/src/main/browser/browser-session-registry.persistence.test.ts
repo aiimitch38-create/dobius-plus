@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as RegistryModule from './browser-session-registry'
 
 const USER_DATA = '/user-data'
 const META_PATH = `${USER_DATA}/browser-session-meta.json`
@@ -693,6 +694,60 @@ describe('BrowserSessionRegistry unreadable metadata', () => {
     const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
     expect(written.profiles).toEqual([PROFILE])
     expect(written.userAgentByPartition).toEqual({ 'persist:dobius-browser': 'UA/4' })
+  })
+
+  describe('file repaired mid-session after an unreadable start', () => {
+    const A = { ...PROFILE, id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', label: 'A' }
+    const B = { ...PROFILE, id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', label: 'B' }
+    A.partition = `persist:dobius-browser-session-${A.id}`
+    B.partition = `persist:dobius-browser-session-${B.id}`
+
+    async function startUnreadableThenRepair(): Promise<{
+      fsState: FsState
+      registry: typeof RegistryModule.browserSessionRegistry
+    }> {
+      const fsState = createFsState()
+      fsState.files.set(META_PATH, '{"profiles": [')
+      fsState.present.add(META_PATH)
+      fsState.mtimes.set(META_PATH, 1)
+      installModuleMocks(fsState)
+      const { browserSessionRegistry } = await import('./browser-session-registry')
+      browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
+      expect(browserSessionRegistry.listProfiles().map((p) => p.id)).toEqual(['default'])
+      seedMeta(fsState, {
+        defaultSource: null,
+        userAgentByPartition: { [A.partition]: 'UA/A' },
+        profiles: [A, B]
+      })
+      return { fsState, registry: browserSessionRegistry }
+    }
+
+    function writtenProfileIds(fsState: FsState): string[] {
+      const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
+      return (written.profiles as { id: string }[]).map((p) => p.id).sort()
+    }
+
+    it('creating a profile keeps the repaired profiles', async () => {
+      const { fsState, registry } = await startUnreadableThenRepair()
+      const created = registry.createProfile('isolated', 'C')
+      expect(writtenProfileIds(fsState)).toEqual([A.id, B.id, created!.id].sort())
+      expect(registry.isAllowedPartition(A.partition)).toBe(true)
+    })
+
+    it('deleting a repaired profile removes only that one', async () => {
+      const { fsState, registry } = await startUnreadableThenRepair()
+      await expect(registry.deleteProfile(B.id)).resolves.toBe(true)
+      expect(writtenProfileIds(fsState)).toEqual([A.id])
+      expect(registry.isAllowedPartition(B.partition)).toBe(false)
+    })
+
+    it('persistUserAgent keeps the repaired profiles and UAs', async () => {
+      const { fsState, registry } = await startUnreadableThenRepair()
+      registry.persistUserAgent(B.partition, 'UA/B')
+      const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
+      expect(writtenProfileIds(fsState)).toEqual([A.id, B.id])
+      expect(written.userAgentByPartition).toEqual({ [A.partition]: 'UA/A', [B.partition]: 'UA/B' })
+    })
   })
 
   it('a missing file is a normal first run: saves create it', async () => {

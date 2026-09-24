@@ -99,6 +99,27 @@
   M9 cache first read (2 fail); M10 missing treated as unreadable (1 fail).
 - Verification: typecheck exit 0; oxlint + react-doctor clean; targeted 14 files / 376 passed.
 
+## Review fix F1: file repaired mid-session (third commit)
+- Problem: if the app started while the file was unreadable, in-memory profiles held only
+  'default'. After a repair, the next create/delete/source change wrote the in-memory list and
+  dropped the repaired profiles A and B (and their webview partitions next launch).
+- Fix: `builtFromUnreadable` is set on an unreadable read. The first readable read afterwards
+  calls `rehydrateAfterRepair`, which does three things. (1) `hydrateFromPersisted` (the file wins
+  for existing ids; profiles created this session are kept). (2) It adopts the file's
+  `defaultSource` when set. (3) It re-applies persisted UAs to allowed partitions. The flag is
+  cleared only on success, so a throw (e.g. sessions not ready) retries on the next access.
+  `createProfile`, `updateProfileSource`, `deleteProfile` and `clearDefaultSessionCookies` call
+  `syncAfterRepair()` first, so the file is absorbed before the mutation is applied.
+- Tests: start unreadable → repair with A,B → create C writes A,B,C; delete B writes only A and
+  removes B from the allowlist; persistUserAgent keeps A,B and both UAs (regression guard; it
+  passed before the fix because UA saves already re-read the file).
+- Mutations: M11 no rehydrate (2 fail); M12 no sync before mutations (2 fail); M13 rehydrate
+  drops one file profile (2 fail).
+- Read-only accessors (listProfiles, isAllowedPartition) do not trigger the sync: they can be
+  called from inside the rehydrate step and would recurse. They catch up on the next persist,
+  mutation or startup.
+- Verification: typecheck exit 0; oxlint + react-doctor clean; targeted 14 files / 379 passed.
+
 ## Rollback
 Revert the commit. Temps written by the new code use the same naming family, so old code simply
 ignores them; nothing on disk needs migrating.
