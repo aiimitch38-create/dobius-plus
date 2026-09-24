@@ -115,6 +115,10 @@ export function useVoiceAgent(): VoiceAgent {
           apply_code_change: async (parameters: { proposal_id?: unknown }) => {
             const result = await window.api.jarvis.applySelfEdit(String(parameters?.proposal_id ?? ''))
             return result.ok ? `Applied to ${result.displayPath}.` : `Not applied: ${result.error}`
+          },
+          undo_code_change: async (parameters: { proposal_id?: unknown }) => {
+            const result = await window.api.jarvis.undoSelfEdit(String(parameters?.proposal_id ?? ''))
+            return result.ok ? `Undid the change to ${result.displayPath}.` : `Not undone: ${result.error}`
           }
         },
         onModeChange: ({ mode }) => {

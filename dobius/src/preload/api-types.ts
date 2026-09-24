@@ -3214,10 +3214,14 @@ export type PreloadApi = {
       content: string,
       description: string
     ) => Promise<{ ok: true; id: string; displayPath: string } | { ok: false; error: string }>
-    /** Writes an approved change, keeping a backup. */
+    /** Writes an approved change, keeping a backup. Refuses (conflict) if the file changed since the proposal. */
     applySelfEdit: (
       id: string
-    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string }>
+    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string; conflict?: true }>
+    /** Restores the bytes from before an applied change. Refuses (conflict) if the file changed after it. */
+    undoSelfEdit: (
+      id: string
+    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string; conflict?: true }>
     /** Throws away a pending change. */
     discardSelfEdit: (id: string) => Promise<{ ok: boolean }>
     /** Review window subscription for incoming proposals. */

@@ -1,6 +1,8 @@
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   renameSync,
   symlinkSync,
@@ -9,7 +11,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { SelfEditStore, resolveEditablePath, selfEditRoots } from './self-edit'
+import { type SelfEditProposal, SelfEditStore, resolveEditablePath, selfEditRoots } from './self-edit'
 import { isSensitiveFileName } from './self-edit-path-policy'
 import {
   INSTALL_PROVENANCE_FILE,
@@ -323,5 +325,146 @@ describe('resolveSelfEditRepoRoot (BUILD-006, X1)', () => {
     const proposed = store.propose(join(root, 'src', 'voice.ts'), 'const a = 5\n', 'x')
     expect(proposed).toEqual({ ok: false, error: 'Self-edit is off: not configured.' })
     expect(readFileSync(join(root, 'src', 'voice.ts'), 'utf-8')).toBe('const a = 1\n')
+  })
+})
+
+describe('concurrency and undo (BUILD-019, #38 #39)', () => {
+  function proposeVoice(store: SelfEditStore, content = 'const a = 2\n'): SelfEditProposal {
+    const proposed = store.propose('src/voice.ts', content, 'bump')
+    if (!proposed.ok) {
+      throw new Error(proposed.error)
+    }
+    return proposed.proposal
+  }
+
+  it('refuses to apply over an edit made after the proposal and leaves the file untouched', () => {
+    const root = repo()
+    const file = join(root, 'src', 'voice.ts')
+    const store = new SelfEditStore([root])
+    const proposal = proposeVoice(store)
+
+    writeFileSync(file, 'const a = 1 // edited by hand\n')
+    const applied = store.apply(proposal.id, join(root, 'backups'))
+
+    expect(applied).toMatchObject({ ok: false, conflict: true })
+    expect(applied.ok ? '' : applied.error).toMatch(/changed since Adam proposed/)
+    expect(readFileSync(file, 'utf-8')).toBe('const a = 1 // edited by hand\n')
+    expect(existsSync(join(root, 'backups'))).toBe(false)
+    // Still pending, so the review window keeps showing it until discarded.
+    expect(store.get(proposal.id)).not.toBeNull()
+  })
+
+  it('detects a same-length change that differs only in invalid utf-8 bytes', () => {
+    const root = repo()
+    const file = join(root, 'src', 'voice.ts')
+    writeFileSync(file, Buffer.from([0x61, 0xff, 0x0a]))
+    const store = new SelfEditStore([root])
+    const proposal = proposeVoice(store)
+
+    // Decodes to the same string as 0xff, so only a byte digest sees it.
+    writeFileSync(file, Buffer.from([0x61, 0xfe, 0x0a]))
+    expect(store.apply(proposal.id, join(root, 'backups'))).toMatchObject({ conflict: true })
+    expect(readFileSync(file)).toEqual(Buffer.from([0x61, 0xfe, 0x0a]))
+  })
+
+  it('refuses to apply a new-file proposal when the file appeared meanwhile', () => {
+    const root = repo()
+    const store = new SelfEditStore([root])
+    const proposed = store.propose('src/new.ts', 'export {}\n', 'create')
+    if (!proposed.ok) {
+      throw new Error(proposed.error)
+    }
+    writeFileSync(join(root, 'src', 'new.ts'), 'someone else\n')
+    expect(store.apply(proposed.proposal.id, join(root, 'backups'))).toMatchObject({
+      conflict: true
+    })
+    expect(readFileSync(join(root, 'src', 'new.ts'), 'utf-8')).toBe('someone else\n')
+  })
+
+  it('apply then undo restores the exact original bytes', () => {
+    const root = repo()
+    const file = join(root, 'src', 'voice.ts')
+    const original = Buffer.from([0x61, 0xff, 0x0d, 0x0a, 0x00])
+    writeFileSync(file, original)
+    const store = new SelfEditStore([root])
+    const proposal = proposeVoice(store)
+
+    expect(store.apply(proposal.id, join(root, 'backups')).ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('const a = 2\n')
+
+    expect(store.undo(proposal.id)).toEqual({ ok: true, displayPath: 'src/voice.ts' })
+    expect(readFileSync(file)).toEqual(original)
+    // One step: a second undo has nothing left to restore.
+    expect(store.undo(proposal.id)).toEqual({
+      ok: false,
+      error: 'There is no applied change with that id to undo.'
+    })
+    expect(readFileSync(file)).toEqual(original)
+  })
+
+  it('undo of an edit that created a file removes it again', () => {
+    const root = repo()
+    const store = new SelfEditStore([root])
+    const proposed = store.propose('src/new.ts', 'export {}\n', 'create')
+    if (!proposed.ok) {
+      throw new Error(proposed.error)
+    }
+    expect(store.apply(proposed.proposal.id, join(root, 'backups')).ok).toBe(true)
+    expect(store.undo(proposed.proposal.id).ok).toBe(true)
+    expect(existsSync(join(root, 'src', 'new.ts'))).toBe(false)
+  })
+
+  it('refuses to undo when the file changed after the edit, keeping the later edit', () => {
+    const root = repo()
+    const file = join(root, 'src', 'voice.ts')
+    const store = new SelfEditStore([root])
+    const proposal = proposeVoice(store)
+    expect(store.apply(proposal.id, join(root, 'backups')).ok).toBe(true)
+
+    writeFileSync(file, 'const a = 2 // later edit\n')
+    const undone = store.undo(proposal.id)
+
+    expect(undone).toMatchObject({ ok: false, conflict: true })
+    expect(undone.ok ? '' : undone.error).toMatch(/changed after the edit was applied/)
+    expect(readFileSync(file, 'utf-8')).toBe('const a = 2 // later edit\n')
+  })
+
+  it('refuses to undo a created file that was edited afterwards', () => {
+    const root = repo()
+    const store = new SelfEditStore([root])
+    const proposed = store.propose('src/new.ts', 'export {}\n', 'create')
+    if (!proposed.ok) {
+      throw new Error(proposed.error)
+    }
+    expect(store.apply(proposed.proposal.id, join(root, 'backups')).ok).toBe(true)
+    writeFileSync(join(root, 'src', 'new.ts'), 'export const kept = 1\n')
+    expect(store.undo(proposed.proposal.id)).toMatchObject({ conflict: true })
+    expect(readFileSync(join(root, 'src', 'new.ts'), 'utf-8')).toBe('export const kept = 1\n')
+  })
+
+  it('refuses to undo from a backup that was modified', () => {
+    const root = repo()
+    const file = join(root, 'src', 'voice.ts')
+    const store = new SelfEditStore([root])
+    const proposal = proposeVoice(store)
+    expect(store.apply(proposal.id, join(root, 'backups')).ok).toBe(true)
+
+    writeFileSync(proposal.appliedBackupPath as string, 'tampered\n')
+    expect(store.undo(proposal.id).ok).toBe(false)
+    expect(readFileSync(file, 'utf-8')).toBe('const a = 2\n')
+  })
+
+  it('never overwrites an earlier backup with the same name', () => {
+    const root = repo()
+    const backups = join(root, 'backups')
+    const store = new SelfEditStore([root], () => 42)
+    const proposal = proposeVoice(store)
+    mkdirSync(backups)
+    writeFileSync(join(backups, `${proposal.id}-42.bak`), 'older backup\n')
+
+    expect(store.apply(proposal.id, backups).ok).toBe(false)
+    expect(readFileSync(join(backups, `${proposal.id}-42.bak`), 'utf-8')).toBe('older backup\n')
+    expect(readFileSync(join(root, 'src', 'voice.ts'), 'utf-8')).toBe('const a = 1\n')
+    expect(readdirSync(backups)).toEqual([`${proposal.id}-42.bak`])
   })
 })
