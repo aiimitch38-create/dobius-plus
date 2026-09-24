@@ -83,3 +83,24 @@ Revert the commit. No file formats changed.
 ## Lessons
 - A chmod-000 test cannot simulate EACCES for stores that call `hardenExistingSecureFile()`
   before reading; they chmod the file back to 0600 first. Inject the read error instead.
+
+## Review follow-up F1 (coordinator review)
+- Problem: while the registry is unreadable, `getOrCreatePendingDevice` / `rotatePendingDevice`
+  threw out of `DobiusRuntimeRpcServer.createPairingOffer()`. Headless serve awaits
+  `printServeReady()` (index.ts ~2187), which calls `createPairingOffer` (index.ts ~1392), so
+  `dobius_server_ready` was never printed and anything waiting on readiness hung.
+- Fix (runtime-rpc.ts `createPairingOffer`): catch `DeviceRegistryUnreadableError`, log it with
+  console.error, and return `{ available: false, reason }`. The result type widens to
+  `{ available: false; reason?: string }`, which all existing callers accept (they only test
+  `available`). Other errors still throw. `E2EEKeypairUnreadableError` cannot reach this path:
+  the keypair loads only in `start()`, and when it fails `e2eeKeypair` stays null, so the
+  existing `!publicKeyB64` guard returns `{available:false}` before the registry is touched.
+- Serve path: with `available:false`, `printServeReady` prints `pairing: null` in the JSON
+  ready line, or the plain "Dobius server ready" line. It is a non-exported function in index.ts,
+  so it was verified by reading the code, not by a test. `--serve-recipe-json` still throws on
+  unavailable pairing, the same as before for any unavailable pairing.
+- Test: runtime-rpc.test.ts "reports pairing unavailable instead of throwing when the device
+  registry is unreadable". It starts a WS server over a corrupt registry, calls createPairingOffer
+  with rotate false/true, and expects `{available:false}` with a reason containing "unreadable"
+  and the file bytes unchanged. Mutation check: disabling the catch made it fail with
+  DeviceRegistryUnreadableError; restored → pass.
