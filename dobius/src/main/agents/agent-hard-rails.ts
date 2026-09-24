@@ -1,6 +1,7 @@
 import os from 'node:os'
 import path from 'node:path'
 import type { HookCallbackMatcher, HookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
+import { realpathPreservingMissingTail } from '../communications/providers/protected-path-guard'
 
 type HardRailRunContext = {
   agentId: string
@@ -10,18 +11,44 @@ type HardRailDenial = {
   reason: string
 }
 
-function expandHome(value: string): string {
-  if (value === '~') {
-    return os.homedir()
-  }
-  if (value.startsWith('~/') || value.startsWith('~\\')) {
-    return path.join(os.homedir(), value.slice(2))
-  }
+// Why: the shell expands `$HOME`, `${HOME}`, `~` and `~user` before the command
+// runs, so a rail that only matches the literal `~/` text is bypassed by any of
+// the other spellings. Expand them all (anywhere in the string) before matching.
+function expandHomeReferences(value: string): string {
+  const home = os.homedir()
   return value
+    .replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])/g, () => home)
+    .replace(
+      /(^|[\s"'=:(`])~([A-Za-z0-9._-]*)(?=[/\\\s"'`;&|)]|$)/g,
+      (_match, lead: string, user: string) =>
+        `${lead}${user ? path.join(path.dirname(home), user) : home}`
+    )
 }
 
 function normalizePathLike(value: string): string {
-  return path.normalize(expandHome(value)).replace(/\\/g, '/')
+  return path.normalize(expandHomeReferences(value)).replace(/\\/g, '/')
+}
+
+const ABSOLUTE_PATH_TOKEN = /(?<![^\s"'=:(`<>])\/[^\s"'`;&|<>()]+/g
+
+// Why: a protected path can sit anywhere in a Bash command (`cat a; cat <path>`,
+// `--file=<path>`), and a symlink can point at it under an innocent name. Every
+// absolute path is checked both as written and with symlinks resolved.
+function candidatePaths(raw: string): string[] {
+  const candidates = new Set<string>()
+  for (const [token] of expandHomeReferences(raw).matchAll(ABSOLUTE_PATH_TOKEN)) {
+    candidates.add(path.normalize(token).replace(/\\/g, '/'))
+    candidates.add(realpathPreservingMissingTail(token).replace(/\\/g, '/'))
+  }
+  return [...candidates]
+}
+
+// Both spellings of a protected location: as written under $HOME, and with
+// symlinks resolved (e.g. a dotfiles-managed ~/.claude).
+function protectedForms(literal: string): string[] {
+  const real = realpathPreservingMissingTail(literal).replace(/\\/g, '/')
+  const trailing = literal.endsWith('/') ? '/' : ''
+  return [...new Set([literal, `${real.replace(/\/$/, '')}${trailing}`])]
 }
 
 function collectStrings(value: unknown, strings: string[] = []): string[] {
@@ -51,17 +78,7 @@ function commandTriggersHardRail(toolName: string, input: unknown): HardRailDeni
   if (typeof command !== 'string') {
     return null
   }
-  // Why: global options can sit between git and push (`git -C <path> push --force`),
-  // so match them as separate tokens within one shell command (not across |;&).
-  const gitPush = /\bgit\b(?:(?!(?:&&|;|\|))[^])*?\bpush\b/
-  if (
-    gitPush.test(command) &&
-    /\bpush\b[\s\S]*(?:--force(?:-with-lease)?\b|(?:^|\s)-[A-Za-z]*f[A-Za-z]*\b)/.test(command)
-  ) {
-    return { reason: 'Hard rail: force-pushing is not allowed from agent runs.' }
-  }
-  // Why: `git push origin +branch` is refspec-syntax force-push — same rail.
-  if (gitPush.test(command) && /\bpush\b[^|;&]*\s\+\S/.test(command)) {
+  if (isForcePush(command)) {
     return { reason: 'Hard rail: force-pushing is not allowed from agent runs.' }
   }
   if (/\brm\s+(?:-[^\s]*r[^\s]*f|-+[^\s]*f[^\s]*r)\s+(?:--\s+)?\/(?:\*|\s|$)/.test(command)) {
@@ -70,12 +87,41 @@ function commandTriggersHardRail(toolName: string, input: unknown): HardRailDeni
   return null
 }
 
+const SHELL_SEGMENT_SEPARATOR = /&&|\|\||[;|&\n()`]/
+
+// Why: flags belong to the command in their own shell segment only, so
+// `git push && rm -rf dist` must not read rm's `-rf` as a push flag. Global
+// options can sit between git and push (`git -C <path> push --force`).
+function isForcePush(command: string): boolean {
+  for (const segment of command.split(SHELL_SEGMENT_SEPARATOR)) {
+    const tokens = segment
+      .trim()
+      .split(/\s+/)
+      .map((token) => token.replace(/^["']|["']$/g, ''))
+    const gitIndex = tokens.findIndex((token) => token === 'git' || token.endsWith('/git'))
+    const pushIndex = gitIndex === -1 ? -1 : tokens.indexOf('push', gitIndex + 1)
+    if (pushIndex !== -1 && tokens.slice(pushIndex + 1).some(isForcePushArgument)) {
+      return true
+    }
+  }
+  return false
+}
+
+// `+branch` is refspec-syntax force-push — same rail as --force / -f.
+function isForcePushArgument(token: string): boolean {
+  return token.startsWith('--force') || /^-[A-Za-z]*f[A-Za-z]*$/.test(token) || /^\+\S/.test(token)
+}
+
+// Why: prefix-agnostic on purpose — `/Users/$USER/.claude/...` or a variable
+// holding the home dir cannot be expanded here, but the credential file names
+// themselves are distinctive enough to deny wherever they appear.
 function rawStringMentionsCredential(value: string): boolean {
   return (
     /(^|[\s"'=:/\\])\.env(?:\.[^\s"'`;&|]*)?(?=$|[\s"'`;&|])/i.test(value) ||
-    /~[/\\]\.claude[/\\](?:\.credentials\.json|credentials[^\s"'`;&|]*)/i.test(value) ||
-    /~[/\\]\.dobius[/\\].*[/\\]token[^\s"'`;&|]*/i.test(value) ||
-    /~[/\\]Library[/\\]Keychains(?:[/\\]|\s|$)/i.test(value)
+    /(^|[\s"'=:/\\])\.credentials\.json(?=$|[\s"'`;&|)])/i.test(value) ||
+    /\.claude[/\\]credentials[^\s"'`;&|]*/i.test(value) ||
+    /\.dobius[/\\][^\s"'`;&|]*[/\\]token[^\s"'`;&|]*/i.test(value) ||
+    /Library[/\\]Keychains(?:[/\\]|\s|$)/i.test(value)
   )
 }
 
@@ -98,9 +144,9 @@ function targetsCredentials(toolName: string, input: unknown): HardRailDenial | 
   const credentialPrefixes = [
     `${home}/.claude/.credentials.json`,
     `${home}/.claude/credentials`,
-    `${home}/.dobius/`,
     `${home}/Library/Keychains`
-  ]
+  ].flatMap(protectedForms)
+  const dobiusPrefixes = protectedForms(`${home}/.dobius/`)
   for (const raw of stringsToInspect(toolName, input)) {
     if (rawStringMentionsCredential(raw)) {
       return { reason: 'Hard rail: credential material is not available to agents.' }
@@ -110,10 +156,14 @@ function targetsCredentials(toolName: string, input: unknown): HardRailDenial | 
     if (basename === '.env' || basename.startsWith('.env.')) {
       return { reason: 'Hard rail: credential environment files are not available to agents.' }
     }
-    if (
-      credentialPrefixes.some((prefix) => normalized === prefix || normalized.startsWith(prefix))
-    ) {
-      if (!normalized.includes('/.dobius/') || /\/token[^/]*$/i.test(normalized)) {
+    for (const candidate of [normalized, ...candidatePaths(raw)]) {
+      if (credentialPrefixes.some((prefix) => candidate.startsWith(prefix))) {
+        return { reason: 'Hard rail: credential material is not available to agents.' }
+      }
+      if (
+        dobiusPrefixes.some((prefix) => candidate.startsWith(prefix)) &&
+        /\/token[^/]*$/i.test(candidate)
+      ) {
         return { reason: 'Hard rail: credential material is not available to agents.' }
       }
     }
@@ -131,19 +181,21 @@ function targetsOtherAgentIdentity(
   if (!FILE_EDIT_TOOLS.includes(toolName) && toolName !== 'Bash') {
     return null
   }
-  const agentsRoot = `${normalizePathLike(path.join(os.homedir(), '.dobius', 'agents'))}/`
-  // Why: inside a Bash command the agents dir appears mid-string (often via ~),
-  // so a startsWith check misses it — scan for every reference instead.
-  const referencePattern = /(?:~|\/[^\s"'`;&|]*?)\/\.dobius\/agents\/([^/\s"'`;&|]+)/g
+  const agentsRoots = protectedForms(
+    `${normalizePathLike(path.join(os.homedir(), '.dobius', 'agents'))}/`
+  )
+  // Why: inside a Bash command the agents dir appears mid-string (often via ~ or
+  // $HOME), so a startsWith check misses it — scan for every reference instead.
+  const referencePattern = /\/\.dobius\/agents\/([^/\s"'`;&|]+)/g
   for (const raw of stringsToInspect(toolName, input)) {
-    const normalized = normalizePathLike(raw)
-    if (normalized.startsWith(agentsRoot)) {
-      const targetAgentId = normalized.slice(agentsRoot.length).split('/')[0]
+    for (const candidate of [normalizePathLike(raw), ...candidatePaths(raw)]) {
+      const agentsRoot = agentsRoots.find((root) => candidate.startsWith(root))
+      const targetAgentId = agentsRoot ? candidate.slice(agentsRoot.length).split('/')[0] : ''
       if (targetAgentId && targetAgentId !== context.agentId) {
         return { reason: 'Hard rail: agents may not edit another agent identity or memory.' }
       }
     }
-    for (const match of raw.matchAll(referencePattern)) {
+    for (const match of expandHomeReferences(raw).matchAll(referencePattern)) {
       const targetAgentId = match[1]
       if (targetAgentId && targetAgentId !== context.agentId) {
         return { reason: 'Hard rail: agents may not edit another agent identity or memory.' }

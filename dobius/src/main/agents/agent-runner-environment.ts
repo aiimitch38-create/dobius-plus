@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { accessSync, constants, mkdirSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
@@ -42,13 +42,18 @@ function resolveRunCwdPath(cwd: string): string {
 // An agent can be configured with a folder that does not exist yet (agents
 // created from Communications default to a fresh per-agent workspace) — a
 // missing cwd would make the CLI spawn fail, so create it instead.
+// Why: a folder that cannot be created or written must reject the run. Falling
+// back to the home folder would silently run the agent (often in bypass mode)
+// over every dotfile and credential store instead of the folder the user chose.
 function ensureRunCwd(resolved: string): string {
   try {
     mkdirSync(resolved, { recursive: true })
-    return resolved
-  } catch {
-    return os.homedir()
+    accessSync(resolved, constants.W_OK)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`Agent working folder cannot be used: ${resolved} (${detail})`)
   }
+  return resolved
 }
 
 export function currentGitBranch(cwd: string): string | undefined {

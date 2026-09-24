@@ -1,0 +1,91 @@
+# REPAIR BUILD-005 — protected-path rails (#3 #4 #23 #76)
+
+## Root cause
+- **#3 (A1)** `agent-hard-rails.ts` `rawStringMentionsCredential` only matched the literal text
+  `~/.claude/...`; the prefix check in `targetsCredentials` compared the WHOLE Bash command string
+  with `startsWith(<home>/...)`, so any credential path that was not the first word
+  (`cat /Users/bayou/.claude/.credentials.json`) or was spelled `$HOME/…` / `${HOME}/…` passed.
+  Symlinks were never resolved.
+- **#4 (A14)** `targetsOtherAgentIdentity` reference regex required `~` or an absolute prefix of
+  the form `/…/.dobius/agents/`; `$HOME/.dobius/agents/<other>` has only one slash before
+  `.dobius`, so it never matched. No symlink resolution either.
+- **#76 (A16)** force-push rail: `/\bpush\b[\s\S]*(... -[A-Za-z]*f ...)/` scanned everything after
+  `push` across `&&`/`;`, so `rm -rf` in a later command read as `-f` → `git push && rm -rf dist`
+  denied.
+- **#23 (orig #3)** `agent-runner-environment.ts ensureRunCwd`: `catch { return os.homedir() }` —
+  a folder that could not be created silently ran the agent in the home folder. An existing but
+  unwritable folder was accepted (mkdir recursive succeeds on it).
+
+## Fix
+- `protected-path-guard.ts`: new exported `realpathPreservingMissingTail()` (resolve the deepest
+  existing ancestor through symlinks, re-append the missing tail). Existing
+  `realpathNearestExisting` / `assertPathOutsideProtectedRoots` untouched. The guard had no
+  `$HOME`/`~` expansion, so only the symlink part is shared.
+- `agent-hard-rails.ts`:
+  - `expandHomeReferences()` replaces `expandHome()`: expands `$HOME`, `${HOME}`, `~`, `~user`
+    anywhere in a string (word-start only for `~`, so `HEAD~1` is untouched).
+  - `candidatePaths()` extracts every absolute path token from the (expanded) string and yields it
+    normalised AND symlink-resolved. `protectedForms()` gives each protected location as written
+    and realpath-resolved (covers a symlinked `~/.claude`).
+  - Credential rail checks every candidate against the prefixes (same set and `.dobius/**/token*`
+    rule as before). Name-based raw checks made prefix-agnostic (`.claude/credentials*`,
+    `.dobius/<no-space>/token*`, `Library/Keychains`) plus bare `.credentials.json` as a word (same
+    treatment `.env` already had) — catches `/Users/$USER/…` and `cd ~/.claude && cat .credentials.json`.
+    The `.dobius/.*token` regex was tightened to not span across spaces (was greedy across the
+    whole command: `ls ~/.dobius/ && cat src/tokenizer.ts` false-denied).
+  - Identity rail checks candidates (incl. realpath) against the agents root and runs the
+    reference regex on the expanded string.
+  - Force-push: `isForcePush()` splits the command into shell segments (`&& || ; | & \n ( ) \``),
+    finds `git … push` inside one segment, then checks only that segment's arguments
+    (`--force*`, short cluster containing `f`, `+refspec`).
+- `agent-runner-environment.ts`: `ensureRunCwd` runs `mkdirSync` + `accessSync(W_OK)`; on failure
+  throws `Agent working folder cannot be used: <path> (<detail>)`. Both callers in
+  `agent-runner.ts` (codex :305, claude :335) are inside the `try` before `addRun`, so the run is
+  rejected, the reservation released, and the error propagates to the caller.
+
+## Tests
+- `agent-hard-rails.test.ts` (extended): literal `/Users/<u>`, `$HOME`, `${HOME}`, quoted,
+  `~user`, `$USER`, `cd … && cat .credentials.json`, mid-command, `..`, `//`, Keychains, dobius
+  token; other-agent identity via `$HOME`/`${HOME}`/`$USER`/mid-command; own identity + ordinary
+  `.claude`/`.dobius` reads allowed; `git push && rm -rf dist` and friends allowed; `-f`, `--force`,
+  `-uf`, `--force-if-includes`, `(… git push origin +main)` denied; real-fs symlinks (file link,
+  dir link to Keychains, link into agent-b, link reached via `$HOME`/`${HOME}`/`~`) denied,
+  harmless symlink allowed. HOME is overridden per test (os.homedir honours $HOME); fixtures are
+  placeholder bytes in a tmp dir.
+- New `agent-runner-environment.test.ts`: missing folder created; uncreatable folder (0500 parent),
+  existing unwritable folder (0500), and file-as-cwd all throw — never return home.
+- Mutation checks (each made the targeted tests fail, then restored):
+  M1 no segment split (1 fail), M2 no home expansion (1 fail, after adding the `$HOME`-symlink
+  test — the first run survived because name checks alone caught the non-symlink spellings),
+  M3 no realpath candidate (3), M4 no bare `.credentials.json` (2), M5 catch returns homedir (3),
+  M6 no W_OK check (1).
+
+## Verification
+- `pnpm run typecheck` exit 0.
+- `npx vitest run src/main/agents/ src/main/communications/providers/protected-path-guard.test.ts`:
+  15 files / 114 tests green (before the `$HOME`-symlink test was added; the two targeted files are
+  36/36 after).
+- oxlint + react-doctor config: clean on all 5 changed files (checked one file at a time).
+- Full suite: DEFERRED (coordinator).
+
+## Deviations from EXECUTION-ORDER.md
+- Touched `communications/providers/protected-path-guard.ts` (listed as reuse candidate): added one
+  exported helper; existing functions unchanged.
+- `.dobius/**/token*` rule kept as before (any file whose name starts with `token` under `.dobius`
+  is denied, e.g. `tokenizer-ideas.md`) — pre-existing, out of scope.
+
+## Decisions for Carson
+- An existing agent folder that is not writable now rejects the run (spec: "unwritable cwd →
+  rejected"). A read-only analysis folder would need to be writable or the check relaxed to
+  "exists and is a directory".
+- Bare `.credentials.json` anywhere in a Bash command is denied (e.g. `grep -r .credentials.json src`).
+
+## Known limits (rails are defence in depth, not a sandbox)
+- Variable indirection (`H=$HOME; cat $H/work/link`) and relative paths after `cd` into a symlinked
+  dir are not resolved; the prefix-agnostic name checks still catch the known credential names.
+- Latent issue seen, not fixed (out of scope): `assertPathOutsideProtectedRoots` resolves a
+  MISSING root (e.g. `~/.gnupg` absent) to its nearest existing ancestor — the home folder — so
+  every candidate under home is refused by custom-harness/media callers.
+
+## Rollback
+Revert the commit; rails return to the regex form and cwd failure falls back to home again.

@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve, sep } from 'node:path'
+import { basename, isAbsolute, join, resolve, sep } from 'node:path'
 
 /**
  * Directories a provider must never be pointed at. All credential or identity
@@ -58,6 +58,28 @@ function realpathNearestExisting(target: string): string {
       if (parent === current) {
         return current
       }
+      current = parent
+    }
+  }
+}
+
+/**
+ * Like realpathNearestExisting, but re-appends the not-yet-existing tail, so
+ * the result names the same entry the path would reach once created. Needed
+ * when a caller compares against a specific file, not only a root directory.
+ */
+export function realpathPreservingMissingTail(target: string): string {
+  let current = resolve(target)
+  const missing: string[] = []
+  for (;;) {
+    try {
+      return join(realpathSync(current), ...missing)
+    } catch {
+      const parent = resolve(current, '..')
+      if (parent === current) {
+        return resolve(target)
+      }
+      missing.unshift(basename(current))
       current = parent
     }
   }
