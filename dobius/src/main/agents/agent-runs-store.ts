@@ -1,12 +1,10 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 import type { AgentRun, AgentRunContext, AgentRunOutboxItem } from '../../shared/agents'
+import { SafeJsonFile } from '../storage/safe-json-file'
 
 const RUNS_FILE_NAME = 'agents-runs.json'
 const MAX_RUNS = 50
-
-let cachedRuns: AgentRun[] | null = null
 
 function runsPath(): string {
   return path.join(app.getPath('userData'), RUNS_FILE_NAME)
@@ -81,40 +79,33 @@ function sanitizeRuns(raw: unknown): AgentRun[] {
   })
 }
 
+const file = new SafeJsonFile<AgentRun[]>({
+  filePath: runsPath,
+  parse: (raw) => (Array.isArray(raw) ? sanitizeRuns(raw).slice(-MAX_RUNS) : undefined),
+  fallback: () => [],
+  label: '[agents] agents-runs.json'
+})
+let reconciled = false
+
 function loadRuns(): AgentRun[] {
-  if (cachedRuns) {
-    return cachedRuns
+  const runs = file.get()
+  // Why: persist restart reconciliation (running -> error) only after a
+  // successful parse; a failed or missing read never writes.
+  if (!reconciled && file.getStatus().status === 'ok') {
+    reconciled = true
+    persistRuns(runs)
   }
-  try {
-    cachedRuns = sanitizeRuns(JSON.parse(readFileSync(runsPath(), 'utf-8')))
-  } catch {
-    cachedRuns = []
-  }
-  cachedRuns = cachedRuns.slice(-MAX_RUNS)
-  persistRuns(cachedRuns)
-  return cachedRuns
+  return runs
 }
 
 function persistRuns(runs: AgentRun[]): void {
-  const target = runsPath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(runs.slice(-MAX_RUNS), null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[agents] failed to persist runs:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+  file.set(runs.slice(-MAX_RUNS))
 }
 
 export function addStoredAgentRun(run: AgentRun): AgentRun[] {
   const runs = loadRuns()
   runs.push(run)
-  cachedRuns = runs.slice(-MAX_RUNS)
-  persistRuns(cachedRuns)
+  persistRuns(runs)
   return listStoredAgentRuns()
 }
 
@@ -125,8 +116,7 @@ export function updateStoredAgentRun(runId: string, updates: Partial<AgentRun>):
     return null
   }
   Object.assign(run, updates)
-  cachedRuns = runs.slice(-MAX_RUNS)
-  persistRuns(cachedRuns)
+  persistRuns(runs)
   return { ...run }
 }
 
@@ -148,7 +138,9 @@ export function appendAgentRunOutbox(runId: string, item: AgentRunOutboxItem): b
   liveRunOutbox.set(runId, items)
   while (liveRunOutbox.size > MAX_OUTBOX_RUNS) {
     const oldest = liveRunOutbox.keys().next().value
-    if (oldest === undefined) break
+    if (oldest === undefined) {
+      break
+    }
     liveRunOutbox.delete(oldest)
   }
   return true

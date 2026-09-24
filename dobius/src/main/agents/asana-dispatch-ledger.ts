@@ -1,7 +1,7 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 import type { AsanaLane } from '../../shared/asana'
+import { SafeJsonFile } from '../storage/safe-json-file'
 
 const FILE_NAME = 'asana-dispatch-ledger.json'
 const MAX_ATTEMPTS = 2
@@ -15,8 +15,6 @@ export type AsanaDispatchRecord = {
   attempts: number
   status: 'claimed' | 'briefed' | 'failed' | 'dead'
 }
-
-let cached: AsanaDispatchRecord[] | null = null
 
 function filePath(): string {
   return path.join(app.getPath('userData'), FILE_NAME)
@@ -49,43 +47,25 @@ function sanitizeRecord(raw: unknown): AsanaDispatchRecord | null {
   return { gid, lane, firstSeenAt, lastAttemptAt, attempts, status }
 }
 
-function load(): AsanaDispatchRecord[] {
-  if (cached) {
-    return cached
-  }
-  try {
-    const raw = JSON.parse(readFileSync(filePath(), 'utf-8'))
-    cached = Array.isArray(raw)
+const file = new SafeJsonFile<AsanaDispatchRecord[]>({
+  filePath,
+  parse: (raw) =>
+    Array.isArray(raw)
       ? raw.flatMap((entry) => {
           const record = sanitizeRecord(entry)
           return record ? [record] : []
         })
-      : []
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[agents] failed to load Asana dispatch ledger:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = []
-  }
-  return cached
+      : undefined,
+  fallback: () => [],
+  label: '[agents] asana-dispatch-ledger.json'
+})
+
+function load(): AsanaDispatchRecord[] {
+  return file.get()
 }
 
 function persist(records: AsanaDispatchRecord[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(records, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[agents] failed to persist Asana dispatch ledger:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+  file.set(records)
 }
 
 function findRecord(gid: string): AsanaDispatchRecord | undefined {
@@ -103,6 +83,10 @@ export function hasBeenClaimed(gid: string): boolean {
 
 export function claimTask(gid: string, lane: AsanaLane): AsanaDispatchRecord | null {
   if (hasBeenClaimed(gid) || isDead(gid)) {
+    return null
+  }
+  // Why: an unreadable ledger may hold this task's claim; re-dispatching would start a duplicate paid run.
+  if (file.getStatus().status === 'unreadable') {
     return null
   }
   const records = load()
@@ -125,8 +109,7 @@ export function claimTask(gid: string, lane: AsanaLane): AsanaDispatchRecord | n
     attempts: 0,
     status: 'claimed'
   }
-  cached = [...records, record]
-  persist(cached)
+  persist([...records, record])
   return cloneRecord(record)
 }
 
@@ -165,8 +148,7 @@ export function releaseClaim(gid: string): AsanaDispatchRecord | null {
     return record ? cloneRecord(record) : null
   }
   if (record.attempts === 0) {
-    cached = records.filter((entry) => entry !== record)
-    persist(cached)
+    persist(records.filter((entry) => entry !== record))
     return null
   }
   record.status = 'failed'
@@ -184,7 +166,6 @@ export function listDispatchRecords(): AsanaDispatchRecord[] {
 
 export function pruneOld(now = Date.now()): AsanaDispatchRecord[] {
   const cutoff = now - RETENTION_MS
-  cached = load().filter((record) => record.firstSeenAt >= cutoff)
-  persist(cached)
+  persist(load().filter((record) => record.firstSeenAt >= cutoff))
   return listDispatchRecords()
 }

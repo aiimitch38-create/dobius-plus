@@ -1,15 +1,13 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 import type { AsanaConfig, AsanaProjectRef } from '../../shared/asana'
 import { DEFAULT_ASANA_CONFIG } from '../../shared/asana'
 import { isTuiAgent } from '../../shared/tui-agent-config'
+import { SafeJsonFile } from '../storage/safe-json-file'
 
 // Why: Asana automation keeps its own JSON file instead of the typed settings
 // store so the feature can evolve without touching GlobalSettings migrations.
 const CONFIG_FILE_NAME = 'asana-config.json'
-
-let cached: AsanaConfig | null = null
 
 function configFilePath(): string {
   return path.join(app.getPath('userData'), CONFIG_FILE_NAME)
@@ -80,37 +78,19 @@ export function sanitizeConfig(raw: unknown): AsanaConfig {
   }
 }
 
-function loadConfigFromDisk(): AsanaConfig {
-  try {
-    return sanitizeConfig(JSON.parse(readFileSync(configFilePath(), 'utf-8')))
-  } catch {
-    // Missing or corrupt file both fall back to defaults; the next update
-    // rewrites a valid file.
-    return sanitizeConfig(DEFAULT_ASANA_CONFIG)
-  }
-}
-
-function persistConfig(config: AsanaConfig): void {
-  const target = configFilePath()
-  // Why: tmp-write + rename keeps the file readable if the app dies mid-write,
-  // mirroring the Store's atomic persistence pattern.
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[asana] failed to persist config:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
-}
+// Why: an unreadable file yields defaults (auto mode off) and is never overwritten.
+const file = new SafeJsonFile<AsanaConfig>({
+  filePath: configFilePath,
+  parse: (raw) =>
+    typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+      ? sanitizeConfig(raw)
+      : undefined,
+  fallback: () => sanitizeConfig(DEFAULT_ASANA_CONFIG),
+  label: '[asana] asana-config.json'
+})
 
 export function getAsanaConfig(): AsanaConfig {
-  if (!cached) {
-    cached = loadConfigFromDisk()
-  }
+  const cached = file.get()
   return {
     ...cached,
     allowedProjects: cached.allowedProjects.map((project) => ({ ...project })),
@@ -125,8 +105,7 @@ export function updateAsanaConfig(updates: Partial<AsanaConfig>): AsanaConfig {
     Object.entries(updates).filter(([, value]) => value !== undefined)
   )
   const next = sanitizeConfig({ ...getAsanaConfig(), ...definedUpdates })
-  cached = next
-  persistConfig(next)
+  file.set(next)
   return {
     ...next,
     allowedProjects: next.allowedProjects.map((project) => ({ ...project })),
