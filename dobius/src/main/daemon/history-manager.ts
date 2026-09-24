@@ -1,7 +1,6 @@
 import { join } from 'node:path'
 import {
   mkdirSync,
-  writeFileSync,
   readFileSync,
   existsSync,
   rmSync,
@@ -12,6 +11,8 @@ import {
   fstatSync,
   promises as fsPromises
 } from 'node:fs'
+import { writeJsonFileAtomic } from '../storage/safe-json-file'
+import { sweepEndedHistory, type HistoryRetentionResult } from './history-retention'
 import { getHistorySessionDirName } from './history-paths'
 import {
   decodeLogHeader,
@@ -82,7 +83,9 @@ export class HistoryManager {
         endedAt: null,
         exitCode: null
       }
-      writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta, null, 2))
+      // Why atomic: a torn meta.json reads as "no session", losing the
+      // terminal's identity (cwd, dims) and its cold-restore eligibility.
+      writeJsonFileAtomic(join(dir, 'meta.json'), meta)
 
       // Why: if a session ID is reused after a previous clean exit, stale
       // recovery files may still be on disk. Without removing them, a crash
@@ -308,6 +311,13 @@ export class HistoryManager {
     })
   }
 
+  /** Retention sweep over the whole history root; sessions this manager is
+   *  still writing are never eligible. See sweepEndedHistory. */
+  sweepEndedSessions(maxTotalBytes: number, now = Date.now()): HistoryRetentionResult {
+    const liveDirs = new Set([...this.writers.values()].map((writer) => writer.dir))
+    return sweepEndedHistory(this.basePath, maxTotalBytes, liveDirs, now)
+  }
+
   isSessionDisabled(sessionId: string): boolean {
     return this.disabledSessions.has(sessionId)
   }
@@ -380,6 +390,6 @@ export class HistoryManager {
       return
     }
     Object.assign(meta, updates)
-    writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonFileAtomic(metaPath, meta)
   }
 }

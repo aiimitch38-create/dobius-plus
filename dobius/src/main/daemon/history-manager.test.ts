@@ -1,8 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { mkdtempSync, rmSync, readFileSync, existsSync, chmodSync } from 'node:fs'
+import {
+  mkdtempSync,
+  rmSync,
+  readFileSync,
+  existsSync,
+  chmodSync,
+  mkdirSync,
+  writeFileSync
+} from 'node:fs'
 import { HistoryManager } from './history-manager'
+import { readHistoryRetentionQuotaBytes } from './history-retention'
 import type { TerminalSnapshot, TerminalModes } from './types'
 import { getHistorySessionDirName } from './history-paths'
 
@@ -313,5 +322,118 @@ describe('HistoryManager', () => {
         expect(errors[0].sessionId).toBe('err-cb')
       }
     )
+  })
+})
+
+describe('HistoryManager retention sweep', () => {
+  const HOUR = 60 * 60 * 1000
+  const NOW = Date.parse('2026-09-24T12:00:00.000Z')
+  let dir: string
+
+  beforeEach(() => {
+    dir = createTestDir()
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  function writeSession(
+    sessionId: string,
+    endedAt: string | null,
+    payloadBytes: number,
+    metaText?: string
+  ): void {
+    const sessionDir = join(dir, getHistorySessionDirName(sessionId))
+    mkdirSync(sessionDir, { recursive: true })
+    const meta = {
+      cwd: '/tmp',
+      cols: 80,
+      rows: 24,
+      startedAt: '2026-09-01T00:00:00.000Z',
+      endedAt,
+      exitCode: endedAt ? 0 : null
+    }
+    writeFileSync(join(sessionDir, 'meta.json'), metaText ?? JSON.stringify(meta))
+    writeFileSync(join(sessionDir, 'checkpoint.json'), 'x'.repeat(payloadBytes))
+  }
+
+  function exists(sessionId: string): boolean {
+    return existsSync(join(dir, getHistorySessionDirName(sessionId)))
+  }
+
+  it('sweeps only ended sessions, oldest first, never active or recoverable ones', () => {
+    writeSession('active-old', null, 100_000)
+    writeSession('ended-oldest', new Date(NOW - 72 * HOUR).toISOString(), 100_000)
+    writeSession('ended-middle', new Date(NOW - 48 * HOUR).toISOString(), 100_000)
+    writeSession('ended-newest', new Date(NOW - 24 * HOUR).toISOString(), 100_000)
+    writeSession('ended-just-now', new Date(NOW - 60 * 1000).toISOString(), 100_000)
+    writeSession('corrupt-meta', null, 100_000, '{"cwd": "/tm')
+
+    // Six dirs of ~100 KB; a 350 KB quota needs three removals: exactly the
+    // three ended sessions past the grace period.
+    const result = new HistoryManager(dir).sweepEndedSessions(350_000, NOW)
+
+    expect(exists('ended-oldest')).toBe(false)
+    expect(exists('ended-middle')).toBe(false)
+    expect(exists('ended-newest')).toBe(false)
+    expect(exists('active-old')).toBe(true)
+    expect(exists('ended-just-now')).toBe(true)
+    expect(exists('corrupt-meta')).toBe(true)
+    expect(result.removedSessions).toBe(3)
+    expect(result.totalBytes - result.freedBytes).toBeLessThanOrEqual(350_000)
+  })
+
+  it('stops as soon as the archive fits, keeping newer ended sessions', () => {
+    writeSession('ended-oldest', new Date(NOW - 72 * HOUR).toISOString(), 100_000)
+    writeSession('ended-newest', new Date(NOW - 24 * HOUR).toISOString(), 100_000)
+
+    new HistoryManager(dir).sweepEndedSessions(150_000, NOW)
+
+    expect(exists('ended-oldest')).toBe(false)
+    expect(exists('ended-newest')).toBe(true)
+  })
+
+  it('never removes a session this manager is still writing', async () => {
+    const mgr = new HistoryManager(dir)
+    await mgr.openSession('live', { cwd: '/tmp', cols: 80, rows: 24 })
+    // Simulate stale on-disk endedAt for a session id that is open again.
+    writeSession('live', new Date(NOW - 72 * HOUR).toISOString(), 100_000)
+
+    expect(mgr.sweepEndedSessions(0, NOW).removedSessions).toBe(0)
+    expect(exists('live')).toBe(true)
+  })
+
+  it('keeps a session that ended within the grace period even at zero quota', () => {
+    writeSession('ended-just-now', new Date(NOW - 60 * 1000).toISOString(), 1_000)
+    expect(new HistoryManager(dir).sweepEndedSessions(0, NOW).removedSessions).toBe(0)
+    expect(exists('ended-just-now')).toBe(true)
+  })
+
+  it('deletes nothing while under quota', () => {
+    writeSession('ended', new Date(NOW - 72 * HOUR).toISOString(), 1_000)
+    expect(new HistoryManager(dir).sweepEndedSessions(1_000_000, NOW).removedSessions).toBe(0)
+    expect(exists('ended')).toBe(true)
+  })
+
+  describe('readHistoryRetentionQuotaBytes', () => {
+    it('is disabled (null) when no quota file exists', () => {
+      expect(readHistoryRetentionQuotaBytes(join(dir, 'missing.json'))).toBeNull()
+    })
+
+    it('is disabled for unreadable or invalid quota files', () => {
+      const bad = join(dir, 'bad.json')
+      const invalid = ['{not json', '{"maxTotalMB": -5}', '{"maxTotalMB": "500"}', '[]', '{}']
+      for (const text of invalid) {
+        writeFileSync(bad, text)
+        expect(readHistoryRetentionQuotaBytes(bad)).toBeNull()
+      }
+    })
+
+    it('converts maxTotalMB to bytes', () => {
+      const file = join(dir, 'quota.json')
+      writeFileSync(file, '{"maxTotalMB": 500}')
+      expect(readHistoryRetentionQuotaBytes(file)).toBe(500 * 1024 * 1024)
+    })
   })
 })
