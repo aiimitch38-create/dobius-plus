@@ -138,6 +138,9 @@ export function createVoiceConductor(): VoiceConductor {
         prepareClaudeLaunch: prepare,
         options: {
           source: 'channel',
+          // Its own tool set only: no channel baseline unioned in, no dobius MCP tools.
+          profile: 'voice-conductor',
+          allowedTools: CONDUCTOR_ALLOWED_TOOLS,
           // agent-runner resolves the real session id from the agent's stored
           // lastSessionId; this flag only means "don't force a fresh session".
           resume: opts.resume,

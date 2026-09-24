@@ -136,8 +136,13 @@ async function dispatchTriage(
       prepareClaudeLaunch,
       options: {
         source: 'asana',
+        // The lane comes from the Asana assignee routing, never from the model;
+        // only the build lane's profile carries dispatch_build.
+        asanaLane: lane,
+        asanaTaskGid: task.gid,
         permissionMode: 'dontAsk',
-        allowedTools: ['mcp__dobius__*'],
+        // No built-in tools: triage works only through its profile's dobius tools.
+        allowedTools: [],
         maxTurns: 15,
         maxBudgetUsd: 0.3,
         outputFormat: triageOutputFormat(),

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -90,5 +90,33 @@ describe('asana dispatch ledger', () => {
 
     expect(ledger.releaseClaim('200003')).toMatchObject({ status: 'briefed' })
     expect(ledger.releaseClaim('200004')).toMatchObject({ status: 'dead', attempts: 2 })
+  })
+
+  it('never re-claims a task whose build was dispatched, even after the triage run fails', async () => {
+    const ledger = await loadLedger()
+    ledger.claimTask('300001', 'build')
+    expect(ledger.mayDispatchBuild('300001')).toBe(true)
+    expect(ledger.recordBuildDispatched('300001')).toBe(true)
+    ledger.recordFailure('300001')
+
+    expect(ledger.mayDispatchBuild('300001')).toBe(false)
+    expect(ledger.claimTask('300001', 'build')).toBeNull()
+    // Survives a reload (the field is persisted, not session-only).
+    const reloaded = await loadLedger()
+    expect(reloaded.mayDispatchBuild('300001')).toBe(false)
+    expect(reloaded.claimTask('300001', 'build')).toBeNull()
+  })
+
+  it('records a build for a task missing from the ledger', async () => {
+    const ledger = await loadLedger()
+    expect(ledger.recordBuildDispatched('300002')).toBe(true)
+    expect(ledger.mayDispatchBuild('300002')).toBe(false)
+    expect(ledger.claimTask('300002', 'build')).toBeNull()
+  })
+
+  it('refuses build dispatch while the ledger is unreadable', async () => {
+    writeFileSync(path.join(electronMock.userDataDir, 'asana-dispatch-ledger.json'), '{broken')
+    const ledger = await loadLedger()
+    expect(ledger.mayDispatchBuild('300003')).toBe(false)
   })
 })

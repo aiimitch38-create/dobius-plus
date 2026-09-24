@@ -43,6 +43,32 @@ describe('Voice Conductor enable gate', () => {
   })
 })
 
+describe('Voice Conductor tool profile', () => {
+  it('runs with its own tool set, not the channel profile', async () => {
+    vi.mocked(getDefaultPrepareClaudeLaunch).mockReturnValue(async () => ({}) as never)
+    vi.mocked(listAgents).mockReturnValue([{ id: 'agent-1', name: 'Voice Conductor' }] as never)
+    vi.mocked(startAgentRun).mockReset()
+    vi.mocked(startAgentRun).mockResolvedValue('run-1')
+
+    const conductor = createVoiceConductor()
+    await conductor.start()
+    await conductor.postTranscript({ requestId: 'req-1', transcript: 'status' })
+
+    const options = vi.mocked(startAgentRun).mock.calls[0][0].options
+    expect(options?.profile).toBe('voice-conductor')
+    expect(options?.allowedTools).toEqual([
+      'Bash',
+      'Read',
+      'Edit',
+      'Write',
+      'Glob',
+      'Grep',
+      'WebFetch',
+      'WebSearch'
+    ])
+  })
+})
+
 describe('createReplyStore', () => {
   it('returns the stored reply when no sinceTs is given', () => {
     const store = createReplyStore(() => 100)
