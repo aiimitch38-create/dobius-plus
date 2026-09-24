@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { AsanaConfig } from '../../../../shared/asana'
-import type { CustomAgent } from '../../../../shared/agents'
+import type { AgentsExecutionState, CustomAgent } from '../../../../shared/agents'
 import type { TuiAgent } from '../../../../shared/types'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -26,6 +26,7 @@ export function AsanaPane(): React.JSX.Element {
   const [hasToken, setHasToken] = useState(false)
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [executionState, setExecutionState] = useState<AgentsExecutionState | null>(null)
   const disabledTuiAgents = useAppStore((state) => state.settings?.disabledTuiAgents ?? [])
   const agentCatalog = getAgentCatalog()
   const enabledBuildAgents = filterEnabledTuiAgents(TUI_AGENT_AUTO_PICK_ORDER, disabledTuiAgents)
@@ -48,6 +49,12 @@ export function AsanaPane(): React.JSX.Element {
 
   useEffect(() => {
     void refresh()
+    window.api.agents
+      .getExecutionState()
+      .then(setExecutionState)
+      .catch((error) => {
+        console.error('Failed to load crew execution state:', error)
+      })
   }, [refresh])
 
   const saveConfig = useCallback(async (updates: Partial<AsanaConfig>) => {
@@ -123,6 +130,20 @@ export function AsanaPane(): React.JSX.Element {
   }, [])
 
   const searchEntry = getAsanaPaneSearchEntries()[0]
+  // Why: Auto Mode runs through the crew gate, so "on" means nothing while the crew is paused.
+  const autoModeBlockedText =
+    config?.autoMode.enabled !== true || !executionState?.paused
+      ? null
+      : executionState.status === 'unreadable'
+        ? translate(
+            'auto.components.settings.AsanaPane.autoModeBlockedUnreadable',
+            'Blocked: crew control file could not be read ({{filePath}}). Fix or remove it, then resume the crew.',
+            { filePath: executionState.filePath }
+          )
+        : translate(
+            'auto.components.settings.AsanaPane.autoModeBlockedPaused',
+            'Blocked: crew paused. Resume the crew on the Agents page to run Auto Mode.'
+          )
   const isEnabledBuildAgent = (value: string): value is TuiAgent =>
     enabledBuildAgentSet.has(value as TuiAgent)
 
@@ -239,10 +260,19 @@ export function AsanaPane(): React.JSX.Element {
 
         <SettingsRow
           label={translate('auto.components.settings.AsanaPane.autoModeLabel', 'Auto Mode')}
-          description={translate(
-            'auto.components.settings.AsanaPane.autoModeDescription',
-            'Polls Asana for new build and review lane tasks.'
-          )}
+          description={
+            <>
+              {translate(
+                'auto.components.settings.AsanaPane.autoModeDescription',
+                'Polls Asana for new build and review lane tasks.'
+              )}
+              {autoModeBlockedText ? (
+                <span role="status" className="block break-all text-destructive">
+                  {autoModeBlockedText}
+                </span>
+              ) : null}
+            </>
+          }
           control={
             <SettingsSwitch
               checked={config?.autoMode.enabled === true}

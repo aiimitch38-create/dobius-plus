@@ -8865,6 +8865,8 @@
           "autoModeLabel": "Auto Mode",
           "autoModeDescription": "Polls Asana (enable in a later phase).",
           "autoModeAriaLabel": "Toggle Asana Auto Mode",
+          "autoModeBlockedPaused": "Blocked: crew paused. Resume the crew on the Agents page to run Auto Mode.",
+          "autoModeBlockedUnreadable": "Blocked: crew control file could not be read ({{filePath}}). Fix or remove it, then resume the crew.",
           "tokenFailed": "Could not save token.",
           "tokenClearFailed": "Could not clear token.",
           "triageAgentLabel": "Triage agent",

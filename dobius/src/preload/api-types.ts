@@ -28,6 +28,7 @@ import type {
   AgentIdentityFileName,
   PendingAgentDecision,
   AgentReadableFiles,
+  AgentsExecutionState,
   BriefingItem,
   CustomAgent,
   CustomAgentInput,
@@ -1379,6 +1380,7 @@ export type PreloadApi = {
     approveDraft: (id: string) => Promise<AgentDraftComment>
     discardDraft: (id: string) => Promise<AgentDraftComment>
     getPaused: () => Promise<boolean>
+    getExecutionState: () => Promise<AgentsExecutionState>
     setPaused: (paused: boolean) => Promise<boolean>
     getPingStatus: () => Promise<{ used: number; max: number; date: string }>
     pickDirectory: (args: { defaultPath?: string }) => Promise<string | null>

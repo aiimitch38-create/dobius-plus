@@ -5,6 +5,7 @@ import type {
   AgentReadableFiles,
   AgentRun,
   AgentRunEvent,
+  AgentsExecutionState,
   BriefingItem,
   CustomAgent
 } from '../../../../shared/agents'
@@ -12,7 +13,7 @@ import type { AgentTemplate } from '../../../../shared/agent-templates'
 import { AgentList } from './AgentList'
 import { AgentMissionControlPanel } from './AgentMissionControlPanel'
 import { AgentPageDialogs } from './AgentPageDialogs'
-import { AgentsPageHeader } from './AgentsPageHeader'
+import { AgentsPageHeader, CrewControlUnreadableNotice } from './AgentsPageHeader'
 import { countSilentHeartbeatRunsToday } from './agent-briefing-count'
 import { DEFAULT_AGENT_FILES } from './agent-default-files'
 import { useCrewFiles } from './use-crew-files'
@@ -44,7 +45,8 @@ export default function AgentsPage(): React.JSX.Element {
   const [transcript, setTranscript] = useState<AgentRunEvent[]>([])
   const [saving, setSaving] = useState(false)
   const [briefingItems, setBriefingItems] = useState<BriefingItem[]>([])
-  const [paused, setPaused] = useState(false)
+  const [executionState, setExecutionState] = useState<AgentsExecutionState | null>(null)
+  const paused = executionState?.paused ?? false
   const [pingStatus, setPingStatus] = useState<{ used: number; max: number; date: string } | null>(
     null
   )
@@ -126,7 +128,7 @@ export default function AgentsPage(): React.JSX.Element {
   }, [])
 
   const loadPaused = useCallback(async (): Promise<void> => {
-    setPaused(await window.api.agents.getPaused())
+    setExecutionState(await window.api.agents.getExecutionState())
   }, [])
 
   useAgentPageInitialLoad({ loadAgents, loadRuns, loadBriefing, loadPaused })
@@ -299,11 +301,15 @@ export default function AgentsPage(): React.JSX.Element {
 
   const togglePaused = async (): Promise<void> => {
     try {
-      setPaused(await window.api.agents.setPaused(!paused))
+      await window.api.agents.setPaused(!paused)
     } catch (error) {
       console.error('Failed to change crew pause state:', error)
       toast.error('Could not change crew pause state')
     }
+    // Why: re-read even after a failure so the header reflects what the gate actually enforces.
+    await loadPaused().catch((error) => {
+      console.error('Failed to load crew pause state:', error)
+    })
   }
 
   const dismissBriefing = async (): Promise<void> => {
@@ -326,9 +332,11 @@ export default function AgentsPage(): React.JSX.Element {
       <AgentsPageHeader
         agentCount={agents.length}
         paused={paused}
+        resumeBlocked={executionState?.status === 'unreadable'}
         pingStatus={pingStatus}
         onTogglePaused={() => void togglePaused()}
       />
+      <CrewControlUnreadableNotice state={executionState} />
 
       <section className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)]">
         <AgentList
