@@ -139,6 +139,7 @@ async function dispatchTriage(
         // The lane comes from the Asana assignee routing, never from the model;
         // only the build lane's profile carries dispatch_build.
         asanaLane: lane,
+        asanaTaskGid: task.gid,
         permissionMode: 'dontAsk',
         // No built-in tools: triage works only through its profile's dobius tools.
         allowedTools: [],

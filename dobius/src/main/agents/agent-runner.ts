@@ -101,8 +101,9 @@ type AgentRunOptions = {
   allowedTools?: string[]
   /** Tool profile; defaults to `source`. See agent-runner-dobius-tools.ts. */
   profile?: AgentRunProfileId
-  /** Trusted Asana lane for 'asana' runs; only 'build' grants dispatch_build. */
+  /** Trusted Asana lane and task for 'asana' runs; only a build-lane task grants dispatch_build. */
   asanaLane?: AsanaLane
+  asanaTaskGid?: string
   outputFormat?: Options['outputFormat']
   resume?: boolean
   onResult?: (message: SDKResultMessage) => void
@@ -358,7 +359,8 @@ export async function startAgentRun(args: {
     const profile = resolveAgentRunProfile({
       source: args.options?.source ?? 'manual',
       profile: args.options?.profile,
-      asanaLane: args.options?.asanaLane
+      asanaLane: args.options?.asanaLane,
+      asanaTaskGid: args.options?.asanaTaskGid
     })
     const configuredTools = args.options?.allowedTools ?? agent.allowedTools
     // Channel-profile runs get the working baseline unioned in — see

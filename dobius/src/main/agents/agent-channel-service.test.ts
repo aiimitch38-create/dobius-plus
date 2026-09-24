@@ -112,3 +112,21 @@ describe('handleChannelMessage start errors', () => {
     expect(await replyFor(new Error('Too many concurrent agent runs'))).toContain('busy')
   })
 })
+
+describe('handleChannelMessage tool profile', () => {
+  it('starts iMessage runs on the read-only imessage profile', async () => {
+    mocks.agents = [agent({ name: 'Auditor' })]
+    mocks.startAgentRun.mockReset()
+    mocks.startAgentRun.mockResolvedValue('run-1')
+    await handleChannelMessage({
+      text: '@Auditor check',
+      replyHandle: 'me',
+      prepareClaudeLaunch: vi.fn(),
+      sendReply: vi.fn(async () => {})
+    })
+    expect(mocks.startAgentRun.mock.calls[0][0].options).toMatchObject({
+      source: 'channel',
+      profile: 'imessage'
+    })
+  })
+})

@@ -14,6 +14,8 @@ export type AsanaDispatchRecord = {
   lastAttemptAt: number
   attempts: number
   status: 'claimed' | 'briefed' | 'failed' | 'dead'
+  /** Set once a build worktree was dispatched (or its outcome is unknown) for this task. */
+  buildDispatchedAt?: number
 }
 
 function filePath(): string {
@@ -44,7 +46,17 @@ function sanitizeRecord(raw: unknown): AsanaDispatchRecord | null {
     typeof record.attempts === 'number' && Number.isFinite(record.attempts)
       ? Math.max(0, Math.floor(record.attempts))
       : 0
-  return { gid, lane, firstSeenAt, lastAttemptAt, attempts, status }
+  const buildDispatchedAt =
+    typeof record.buildDispatchedAt === 'number' ? record.buildDispatchedAt : undefined
+  return {
+    gid,
+    lane,
+    firstSeenAt,
+    lastAttemptAt,
+    attempts,
+    status,
+    ...(buildDispatchedAt === undefined ? {} : { buildDispatchedAt })
+  }
 }
 
 const file = new SafeJsonFile<AsanaDispatchRecord[]>({
@@ -82,7 +94,9 @@ export function hasBeenClaimed(gid: string): boolean {
 }
 
 export function claimTask(gid: string, lane: AsanaLane): AsanaDispatchRecord | null {
-  if (hasBeenClaimed(gid) || isDead(gid)) {
+  // Why: a task whose build was already dispatched is done-for-dispatch; a
+  // retried triage must not launch a second worktree + terminal agent.
+  if (hasBeenClaimed(gid) || isDead(gid) || findRecord(gid)?.buildDispatchedAt !== undefined) {
     return null
   }
   // Why: an unreadable ledger may hold this task's claim; re-dispatching would start a duplicate paid run.
@@ -154,6 +168,38 @@ export function releaseClaim(gid: string): AsanaDispatchRecord | null {
   record.status = 'failed'
   persist(records)
   return cloneRecord(record)
+}
+
+/** Fails closed: an unreadable ledger may already record this task's build. */
+export function mayDispatchBuild(gid: string): boolean {
+  const record = findRecord(gid)
+  // getStatus reflects the read findRecord just did.
+  if (file.getStatus().status === 'unreadable') {
+    return false
+  }
+  return record?.buildDispatchedAt === undefined
+}
+
+export function recordBuildDispatched(gid: string, lane: AsanaLane = 'build'): boolean {
+  const records = load()
+  const now = Date.now()
+  const record = records.find((entry) => entry.gid === gid)
+  if (record) {
+    record.buildDispatchedAt = now
+    return file.set(records)
+  }
+  return file.set([
+    ...records,
+    {
+      gid,
+      lane,
+      firstSeenAt: now,
+      lastAttemptAt: now,
+      attempts: 0,
+      status: 'briefed',
+      buildDispatchedAt: now
+    }
+  ])
 }
 
 export function isDead(gid: string): boolean {

@@ -103,14 +103,14 @@ export function buildDobiusToolServer(context: DobiusToolContext): McpSdkServerC
     ),
     tool(
       'create_board_task',
-      'Create a Dobius system Kanban task from this channel run, optionally as a child of the task you are working on and assigned to another agent. Never sends to Asana or any external service.',
+      'Create a Dobius system Kanban task from this channel run, optionally as a child of the task you are working on and assigned to another agent. The card lands in Backlog; a human moves it to To Do to start it. Never sends to Asana or any external service.',
       {
         title: z.string().min(1),
         description: z.string().optional(),
         assignee: z.string().optional(),
         parentTaskId: z.string().optional(),
         status: z
-          .enum(['backlog', 'todo', 'in-progress', 'blocked', 'review', 'testing'])
+          .enum(['backlog', 'in-progress', 'blocked', 'review', 'testing'])
           .optional(),
         priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
         type: z

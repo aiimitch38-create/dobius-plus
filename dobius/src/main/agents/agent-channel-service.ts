@@ -135,6 +135,7 @@ export async function handleChannelMessage(
       prepareClaudeLaunch: args.prepareClaudeLaunch,
       options: {
         source: 'channel',
+        profile: 'imessage',
         resume: false,
         permissionMode: 'dontAsk',
         allowedTools: readonlyTools(match.agent),

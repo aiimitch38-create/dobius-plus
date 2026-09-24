@@ -5,9 +5,9 @@ import type { DobiusToolName } from './agent-tools/dobius-tool-handlers'
 
 /**
  * Which tool set a run gets. Defaults to the run's source; the Voice Conductor
- * records its runs as 'channel' but must not inherit the channel profile.
+ * and iMessage runs record as 'channel' but must not inherit the channel profile.
  */
-export type AgentRunProfileId = AgentRunSource | 'voice-conductor'
+export type AgentRunProfileId = AgentRunSource | 'voice-conductor' | 'imessage'
 
 export type AgentRunProfile = {
   id: AgentRunProfileId
@@ -15,6 +15,8 @@ export type AgentRunProfile = {
   dobiusTools: readonly DobiusToolName[]
   /** Trusted Asana lane from the caller; only a 'build' lane may dispatch builds. */
   buildLane?: AsanaLane
+  /** Trusted Asana task gid; dispatch_build needs it to record the build per task. */
+  asanaTaskGid?: string
   /** Channel runs get CHANNEL_AGENT_BASELINE_TOOLS unioned into their allowlist. */
   channelBaseline: boolean
 }
@@ -38,21 +40,26 @@ const PROFILE_DOBIUS_TOOLS: Record<AgentRunProfileId, readonly DobiusToolName[]>
   channel: ['post_channel_message', 'post_channel_screenshot', 'create_board_task', ...CREW_TOOLS],
   asana: ['file_briefing_item', 'asana_draft_comment', 'read_knowledge'],
   // The conductor drives Dobius+ through its dobius-* CLI commands, not MCP.
-  'voice-conductor': []
+  'voice-conductor': [],
+  // Read-only: iMessage replies go back through the run result, not the outbox,
+  // and a board card could auto-dispatch a full-power run.
+  imessage: ['read_knowledge', 'list_crew', 'crew_status', 'file_briefing_item']
 }
 
 export function resolveAgentRunProfile(args: {
   source: AgentRunSource
   profile?: AgentRunProfileId
   asanaLane?: AsanaLane
+  asanaTaskGid?: string
 }): AgentRunProfile {
   const id = args.profile ?? args.source
   const buildLane = id === 'asana' ? args.asanaLane : undefined
+  const asanaTaskGid = id === 'asana' ? args.asanaTaskGid?.trim() || undefined : undefined
   const dobiusTools =
-    buildLane === 'build'
+    buildLane === 'build' && asanaTaskGid
       ? [...PROFILE_DOBIUS_TOOLS[id], 'dispatch_build' as const]
       : PROFILE_DOBIUS_TOOLS[id]
-  return { id, dobiusTools, buildLane, channelBaseline: id === 'channel' }
+  return { id, dobiusTools, buildLane, asanaTaskGid, channelBaseline: id === 'channel' }
 }
 
 /**
@@ -99,6 +106,7 @@ export function buildDobiusRunMcpServer(agentId: string, runId: string, profile:
     agentId,
     runId,
     tools: profile.dobiusTools,
-    buildLane: profile.buildLane
+    buildLane: profile.buildLane,
+    asanaTaskGid: profile.asanaTaskGid
   })
 }

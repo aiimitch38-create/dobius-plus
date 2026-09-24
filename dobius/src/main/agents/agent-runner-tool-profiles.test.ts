@@ -68,7 +68,10 @@ import { startAgentRun } from './agent-runner'
 type CapturedOptions = {
   allowedTools: string[]
   tools?: string[]
-  mcpServers: Record<string, { context?: { tools: string[]; buildLane?: string } }>
+  mcpServers: Record<
+    string,
+    { context?: { tools: string[]; buildLane?: string; asanaTaskGid?: string } }
+  >
 }
 
 const CREW = [
@@ -123,7 +126,12 @@ describe('startAgentRun tool profiles (SDK query arguments)', () => {
   })
 
   it('build-lane triage: explicit empty built-ins, dobius tools incl. dispatch_build', async () => {
-    const options = await launch({ source: 'asana', asanaLane: 'build', allowedTools: [] })
+    const options = await launch({
+      source: 'asana',
+      asanaLane: 'build',
+      asanaTaskGid: '1200',
+      allowedTools: []
+    })
     expect(options.tools).toEqual([])
     expect(options.allowedTools).toEqual([
       'mcp__dobius__file_briefing_item',
@@ -132,6 +140,7 @@ describe('startAgentRun tool profiles (SDK query arguments)', () => {
       'mcp__dobius__dispatch_build'
     ])
     expect(options.mcpServers.dobius.context?.buildLane).toBe('build')
+    expect(options.mcpServers.dobius.context?.asanaTaskGid).toBe('1200')
   })
 
   it('review-lane triage: no dispatch_build anywhere', async () => {
@@ -153,6 +162,23 @@ describe('startAgentRun tool profiles (SDK query arguments)', () => {
     expect(channel.allowedTools).toEqual(
       expect.arrayContaining([...CHANNEL_AGENT_BASELINE_TOOLS, 'mcp__dobius__post_channel_message'])
     )
+  })
+
+  it('iMessage run: read-only built-ins and dobius tools, no channel baseline', async () => {
+    const options = await launch({
+      source: 'channel',
+      profile: 'imessage',
+      allowedTools: ['Read', 'Grep']
+    })
+    expect(options.tools).toEqual(['Read', 'Grep'])
+    expect(options.allowedTools).toEqual([
+      'Read',
+      'Grep',
+      'mcp__dobius__read_knowledge',
+      'mcp__dobius__list_crew',
+      'mcp__dobius__crew_status',
+      'mcp__dobius__file_briefing_item'
+    ])
   })
 
   it('voice conductor: only its own tools — no channel baseline, no dobius server', async () => {

@@ -1,28 +1,20 @@
 import type { AsanaLane } from '../../../shared/asana'
 import type { Store } from '../../persistence'
-import { getAsanaConfig } from '../../asana/asana-config'
 import { appendBriefingItem } from '../agent-briefing-store'
 import { appendDraft } from '../agent-draft-store'
 import { listAgents } from '../agents-store'
-import { getBuildDispatcher, getRepoLister } from '../agent-dispatch-registry'
-import { checkExecutionAdmission } from '../execution-gate'
 import { vertexTaskStore } from '../../vertex/vertex-task-store'
 import {
   buildKnowledgeTree,
   isAllowedKnowledgePath,
   safeReadFile
 } from '../../ipc/knowledge-indexer'
+import { createDispatchBuildHandler } from './dispatch-build-handler'
+import { errorResult, textResult, trimText, type TextToolResult } from './dobius-tool-result'
 
 const ASANA_BODY_LIMIT = 4_000
 const KNOWLEDGE_RESPONSE_LIMIT = 1_500
-const DISPATCH_BRIEF_LIMIT = 6_000
 const BOARD_TASK_DESCRIPTION_LIMIT = 4_000
-// Why: dispatch_build launches a terminal agent outside startAgentRun's cap, so
-// it holds its own capacity: one worktree creation in flight app-wide, and one
-// successful build per run (a triage run handles exactly one Asana task).
-const MAX_IN_FLIGHT_BUILD_DISPATCHES = 1
-const MAX_BUILDS_PER_RUN = 1
-let inFlightBuildDispatches = 0
 
 export type DobiusToolName =
   | 'post_channel_message'
@@ -42,11 +34,8 @@ export type DobiusToolContext = {
   tools: readonly DobiusToolName[]
   /** Trusted Asana lane set by the runner's caller, never by the model. */
   buildLane?: AsanaLane
-}
-
-type TextToolResult = {
-  content: [{ type: 'text'; text: string }]
-  isError?: boolean
+  /** Trusted Asana task gid for a triage run; a build is recorded against it. */
+  asanaTaskGid?: string
 }
 
 type KnowledgeLeafSummary = {
@@ -54,21 +43,6 @@ type KnowledgeLeafSummary = {
   title: string
   summary: string
   filePath: string
-}
-
-function textResult(text: string): TextToolResult {
-  return { content: [{ type: 'text', text }] }
-}
-
-function errorResult(text: string): TextToolResult {
-  return { isError: true, content: [{ type: 'text', text }] }
-}
-
-function trimText(value: string, maxLength: number): { text: string; truncated: boolean } {
-  if (value.length <= maxLength) {
-    return { text: value, truncated: false }
-  }
-  return { text: value.slice(0, maxLength), truncated: true }
 }
 
 function allKnowledgeLeaves(store: Store): KnowledgeLeafSummary[] {
@@ -104,34 +78,7 @@ function readAllowedLeafContent(leaf: KnowledgeLeafSummary, store: Store): strin
   return safeReadFile(leaf.filePath)
 }
 
-// Why: an agent-supplied name reaches the worktree/branch name — sanitize to a
-// safe slug so a possibly-injected triage agent can't pass '../x' or shell chars.
-function sanitizeSlug(value: string, fallback: string): string {
-  const slug = value
-    .trim()
-    .slice(0, 60)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return slug || fallback
-}
-
-function slugFromBrief(brief: string): string {
-  return sanitizeSlug(brief.trim().split(/\s+/).slice(0, 6).join(' '), 'asana-build')
-}
-
-function dispatchCapabilityError(context: DobiusToolContext): string | null {
-  if (!context.tools.includes('dispatch_build')) {
-    return 'build dispatch not permitted: this run has no build capability.'
-  }
-  if (context.buildLane !== 'build') {
-    return 'build dispatch not permitted: only build-lane Asana tasks may dispatch builds.'
-  }
-  return null
-}
-
 export function createDobiusToolHandlers(context: DobiusToolContext, store: Store | null) {
-  let buildsDispatchedByRun = 0
   return {
     async createBoardTask(args: {
       title: string
@@ -163,7 +110,9 @@ export function createDobiusToolHandlers(context: DobiusToolContext, store: Stor
       const task = vertexTaskStore.create({
         title,
         description,
-        status: args.status ?? 'todo',
+        // Why: an agent-assigned 'todo' card auto-dispatches a full-power run on the
+        // board, so agent-created cards wait in Backlog until a human moves them.
+        status: args.status && args.status !== 'todo' ? args.status : 'backlog',
         priority: args.priority ?? 'medium',
         type: args.type ?? 'feature',
         destination: 'system',
@@ -178,7 +127,7 @@ export function createDobiusToolHandlers(context: DobiusToolContext, store: Stor
         }
       })
       return textResult(
-        `Created board task ${task.id}: "${task.title}"${assignee ? ` assigned to ${assignee.name}` : ''}.`
+        `Created board task ${task.id}: "${task.title}"${assignee ? ` assigned to ${assignee.name}` : ''} in ${task.status}.${task.status === 'backlog' ? ' A human moves it to To Do to start it.' : ''}`
       )
     },
 
@@ -207,82 +156,7 @@ export function createDobiusToolHandlers(context: DobiusToolContext, store: Stor
       )
     },
 
-    async dispatchBuild(args: {
-      repo: string
-      brief: string
-      branchName?: string
-    }): Promise<TextToolResult> {
-      const capabilityError = dispatchCapabilityError(context)
-      if (capabilityError) {
-        return errorResult(capabilityError)
-      }
-      const repoQuery = args.repo.trim()
-      if (!repoQuery) {
-        return errorResult('Repo is required.')
-      }
-      const brief = trimText(args.brief, DISPATCH_BRIEF_LIMIT).text
-      if (!brief.trim()) {
-        return errorResult('Build brief is required.')
-      }
-      const admission = checkExecutionAdmission('dispatch-build')
-      if (!admission.allowed) {
-        return errorResult(`build dispatch blocked: ${admission.message}`)
-      }
-      const listRepos = getRepoLister()
-      if (!listRepos) {
-        return errorResult('build dispatch not available: repo list unavailable.')
-      }
-      const repos = listRepos()
-      const repo =
-        repos.find((entry) => entry.id === repoQuery) ??
-        repos.find((entry) => entry.name.toLowerCase() === repoQuery.toLowerCase())
-      if (!repo) {
-        const available = repos.map((entry) => entry.name).join(', ') || 'none'
-        return errorResult(`Repo not found. Available repos: ${available}.`)
-      }
-      const dispatch = getBuildDispatcher()
-      if (!dispatch) {
-        return errorResult('build dispatch unavailable.')
-      }
-      const name = args.branchName
-        ? sanitizeSlug(args.branchName, slugFromBrief(brief))
-        : slugFromBrief(brief)
-      const buildAgent = getAsanaConfig().autoMode.buildAgent ?? 'claude'
-      if (buildsDispatchedByRun >= MAX_BUILDS_PER_RUN) {
-        return errorResult('build dispatch refused: this run already dispatched its build.')
-      }
-      if (inFlightBuildDispatches >= MAX_IN_FLIGHT_BUILD_DISPATCHES) {
-        return errorResult(
-          'build dispatch refused: another build dispatch is in progress, retry shortly.'
-        )
-      }
-      // Reserved synchronously right before the only await; released on both exits below.
-      inFlightBuildDispatches += 1
-      buildsDispatchedByRun += 1
-      let result: { worktreeId: string; ok: boolean; error?: string }
-      try {
-        result = await dispatch({ repoId: repo.id, name, baseBranch: undefined, brief, buildAgent })
-      } catch (error) {
-        inFlightBuildDispatches -= 1
-        buildsDispatchedByRun -= 1
-        // Why: keep the tool contract (return isError, never reject) local, in case
-        // a future dispatcher registration throws instead of catching internally.
-        return errorResult(
-          `build dispatch failed: ${error instanceof Error ? error.message : String(error)}`
-        )
-      }
-      inFlightBuildDispatches -= 1
-      if (!result.ok) {
-        buildsDispatchedByRun -= 1
-        return errorResult(result.error || 'build dispatch failed.')
-      }
-      appendBriefingItem({
-        agentId: context.agentId,
-        urgency: 'now',
-        summary: `Build dispatched: ${repo.name} / ${name}`
-      })
-      return textResult(`Build dispatched for ${repo.name} / ${name}: ${result.worktreeId}`)
-    },
+    dispatchBuild: createDispatchBuildHandler(context),
 
     async readKnowledge(args: { query: string; leafId?: string }): Promise<TextToolResult> {
       if (!store) {

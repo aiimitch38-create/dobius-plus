@@ -1,4 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDobiusToolHandlers, type DobiusToolContext } from './dobius-tool-handlers'
 import { buildDobiusToolServer } from './dobius-tool-server'
 import { resolveAgentRunProfile } from '../agent-runner-dobius-tools'
@@ -10,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   getAsanaConfig: vi.fn(),
   checkExecutionAdmission: vi.fn()
 }))
+
+// The real Asana dispatch ledger, in a throwaway userData dir.
+const userDataDir = vi.hoisted(() => ({ path: '' }))
+vi.mock('electron', () => ({ app: { getPath: () => userDataDir.path } }))
 
 vi.mock('../execution-gate', () => ({
   checkExecutionAdmission: mocks.checkExecutionAdmission
@@ -117,16 +124,44 @@ vi.mock('../../ipc/knowledge-indexer', () => ({
   )
 }))
 
-// A build-lane Asana triage run: the only profile that may dispatch builds.
-const context: DobiusToolContext = {
-  agentId: 'agent-1',
-  runId: 'run-1',
-  tools: resolveAgentRunProfile({ source: 'asana', asanaLane: 'build' }).dobiusTools,
-  buildLane: 'build'
+userDataDir.path = mkdtempSync(path.join(tmpdir(), 'dobius-tool-server-'))
+
+let gidCounter = 0
+function freshGid(): string {
+  gidCounter += 1
+  return `gid-${gidCounter}`
 }
+
+// A build-lane Asana triage run: the only profile that may dispatch builds.
+// Each test gets its own Asana task, since the ledger records one build per task.
+function buildLaneContext(): DobiusToolContext {
+  const profile = resolveAgentRunProfile({
+    source: 'asana',
+    asanaLane: 'build',
+    asanaTaskGid: freshGid()
+  })
+  return {
+    agentId: 'agent-1',
+    runId: 'run-1',
+    tools: profile.dobiusTools,
+    buildLane: profile.buildLane,
+    asanaTaskGid: profile.asanaTaskGid
+  }
+}
+let context = buildLaneContext()
+
+/** Another build-lane triage run for its own, new Asana task. */
+function buildRun(runId: string): DobiusToolContext {
+  return { ...context, runId, asanaTaskGid: freshGid() }
+}
+
+afterAll(() => {
+  rmSync(userDataDir.path, { recursive: true, force: true })
+})
 const store = { getRepos: () => [{ path: '/repo' }] } as never
 
 beforeEach(() => {
+  context = buildLaneContext()
   mocks.appendDraft.mockReset()
   mocks.appendBriefingItem.mockReset()
   mocks.fetch.mockReset()
@@ -326,8 +361,18 @@ describe('run capability profiles', () => {
     ],
     [
       'asana build-lane triage',
-      { source: 'asana' as const, asanaLane: 'build' as const },
+      { source: 'asana' as const, asanaLane: 'build' as const, asanaTaskGid: '1200' },
       ['file_briefing_item', 'asana_draft_comment', 'read_knowledge', 'dispatch_build']
+    ],
+    [
+      'asana build-lane triage without a trusted task gid',
+      { source: 'asana' as const, asanaLane: 'build' as const },
+      ['file_briefing_item', 'asana_draft_comment', 'read_knowledge']
+    ],
+    [
+      'iMessage run (recorded as channel)',
+      { source: 'channel' as const, profile: 'imessage' as const },
+      ['read_knowledge', 'list_crew', 'crew_status', 'file_briefing_item']
     ],
     [
       'asana review-lane triage',
@@ -346,7 +391,7 @@ describe('run capability profiles', () => {
     ],
     [
       'a non-asana run that claims a build lane',
-      { source: 'channel' as const, asanaLane: 'build' as const },
+      { source: 'channel' as const, asanaLane: 'build' as const, asanaTaskGid: '1200' },
       ['post_channel_message', 'post_channel_screenshot', 'create_board_task', ...CREW]
     ]
   ])('%s gets exactly its tool set', (_label, input, expected) => {
@@ -356,7 +401,8 @@ describe('run capability profiles', () => {
       agentId: 'agent-1',
       runId: 'run-x',
       tools: profile.dobiusTools,
-      buildLane: profile.buildLane
+      buildLane: profile.buildLane,
+      asanaTaskGid: profile.asanaTaskGid
     })
     expect(names).toEqual([...expected].sort())
   })
@@ -379,10 +425,6 @@ describe('dispatch_build authorization and capacity', () => {
     setBuildDispatcher(dispatch)
   }
 
-  function buildRun(runId: string): DobiusToolContext {
-    return { ...context, runId }
-  }
-
   it.each([
     ['a channel run', { tools: resolveAgentRunProfile({ source: 'channel' }).dobiusTools }],
     ['a manual run', { tools: resolveAgentRunProfile({ source: 'manual' }).dobiusTools }],
@@ -390,14 +432,19 @@ describe('dispatch_build authorization and capacity', () => {
       'a build-lane run without the build capability',
       {
         tools: resolveAgentRunProfile({ source: 'asana' }).dobiusTools,
-        buildLane: 'build' as const
+        buildLane: 'build' as const,
+        asanaTaskGid: 'gid-no-capability'
       }
     ],
     [
       'a review-lane triage run given the tool anyway',
-      { tools: context.tools, buildLane: 'review' as const }
+      { tools: context.tools, buildLane: 'review' as const, asanaTaskGid: 'gid-review' }
     ],
-    ['a run with the tool but no trusted lane', { tools: context.tools, buildLane: undefined }]
+    ['a run with the tool but no trusted lane', { tools: context.tools, buildLane: undefined }],
+    [
+      'a build-lane run with the tool but no trusted task gid',
+      { tools: context.tools, buildLane: 'build' as const, asanaTaskGid: undefined }
+    ]
   ])('denies %s before admission or dispatch', async (_label, overrides) => {
     const dispatch = vi.fn(async () => ({ worktreeId: 'wt-x', ok: true }))
     await wireRepos(dispatch)
@@ -445,7 +492,7 @@ describe('dispatch_build authorization and capacity', () => {
     expect(third.isError).toBeUndefined()
   })
 
-  it('allows one build per run', async () => {
+  it('allows one build per Asana task within a run', async () => {
     const dispatch = vi.fn(async () => ({ worktreeId: 'wt-1', ok: true }))
     await wireRepos(dispatch)
     const handlers = createDobiusToolHandlers(buildRun('run-once'), store)
@@ -487,5 +534,139 @@ describe('dispatch_build authorization and capacity', () => {
       (await handlers.dispatchBuild({ repo: 'repo-1', brief: 'Build' })).isError
     ).toBeUndefined()
     expect(dispatch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('dispatch_build is one build per Asana task', () => {
+  it('refuses a second dispatch after the first triage run fails and the task is re-claimed', async () => {
+    const ledger = await import('../asana-dispatch-ledger')
+    const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
+    const dispatch = vi.fn(async () => ({ worktreeId: 'wt-1', ok: true }))
+    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus' }])
+    setBuildDispatcher(dispatch)
+    const gid = freshGid()
+    const run = (runId: string) =>
+      createDobiusToolHandlers({ ...context, runId, asanaTaskGid: gid }, store)
+
+    expect(ledger.claimTask(gid, 'build')).not.toBeNull()
+    expect((await run('run-1').dispatchBuild({ repo: 'repo-1', brief: 'Build' })).isError).toBe(
+      undefined
+    )
+    // The triage run then fails (turn cap, budget, bad verdict).
+    ledger.recordFailure(gid)
+    expect(ledger.claimTask(gid, 'build')).toBeNull()
+
+    // Even a run that somehow started for the same task cannot dispatch again.
+    const second = await run('run-2').dispatchBuild({ repo: 'repo-1', brief: 'Build' })
+    expect(second.isError).toBe(true)
+    expect(second.content[0].text).toContain(`already dispatched for Asana task ${gid}`)
+    expect(dispatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('times out a never-settling dispatch, frees the slot, and logs the late result once', async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const { BUILD_DISPATCH_TIMEOUT_MS } = await import('./dispatch-build-handler')
+      const ledger = await import('../asana-dispatch-ledger')
+      const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
+      let lateFinish: (value: { worktreeId: string; ok: boolean }) => void = () => {}
+      const dispatch = vi.fn(async () => ({ worktreeId: 'wt-after', ok: true }))
+      dispatch.mockImplementationOnce(
+        () =>
+          new Promise<{ worktreeId: string; ok: boolean }>((resolve) => {
+            lateFinish = resolve
+          })
+      )
+      setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus' }])
+      setBuildDispatcher(dispatch)
+      const stuck = buildRun('run-stuck')
+
+      const pending = createDobiusToolHandlers(stuck, store).dispatchBuild({
+        repo: 'repo-1',
+        brief: 'Build'
+      })
+      await vi.advanceTimersByTimeAsync(BUILD_DISPATCH_TIMEOUT_MS)
+      const timedOut = await pending
+      expect(timedOut.isError).toBe(true)
+      expect(timedOut.content[0].text).toContain('timed out')
+      // Outcome unknown → fail closed for that task.
+      expect(ledger.mayDispatchBuild(stuck.asanaTaskGid as string)).toBe(false)
+
+      // The app-wide slot is free again for another task.
+      const next = await createDobiusToolHandlers(buildRun('run-next'), store).dispatchBuild({
+        repo: 'repo-1',
+        brief: 'Build'
+      })
+      expect(next.isError).toBeUndefined()
+
+      lateFinish({ worktreeId: 'wt-late', ok: true })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0][0])).toContain('wt-late')
+
+      // A late result must not release a second time: one slot still means one in flight.
+      let hold: (value: { worktreeId: string; ok: boolean }) => void = () => {}
+      dispatch.mockImplementationOnce(
+        () =>
+          new Promise<{ worktreeId: string; ok: boolean }>((resolve) => {
+            hold = resolve
+          })
+      )
+      const held = createDobiusToolHandlers(buildRun('run-held'), store).dispatchBuild({
+        repo: 'repo-1',
+        brief: 'Build'
+      })
+      const blocked = await createDobiusToolHandlers(buildRun('run-blocked'), store).dispatchBuild({
+        repo: 'repo-1',
+        brief: 'Build'
+      })
+      expect(blocked.content[0].text).toContain('in progress')
+      hold({ worktreeId: 'wt-held', ok: true })
+      await held
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('create_board_task', () => {
+  it.each([undefined, 'todo' as const])(
+    'creates agent cards in Backlog so they never auto-dispatch (requested status %s)',
+    async (status) => {
+      const { vertexTaskStore } = await import('../../vertex/vertex-task-store')
+      const create = vi
+        .spyOn(vertexTaskStore, 'create')
+        .mockImplementation((input) => ({ id: 'task-1', ...input }) as never)
+      try {
+        const handlers = createDobiusToolHandlers(context, store)
+        const result = await handlers.createBoardTask({
+          title: 'Follow up',
+          assignee: 'Builder',
+          ...(status ? { status } : {})
+        })
+        expect(create.mock.calls[0][0]).toMatchObject({ status: 'backlog' })
+        expect(result.content[0].text).toContain('in backlog')
+      } finally {
+        create.mockRestore()
+      }
+    }
+  )
+
+  it('keeps a non-dispatching status the agent chose', async () => {
+    const { vertexTaskStore } = await import('../../vertex/vertex-task-store')
+    const create = vi
+      .spyOn(vertexTaskStore, 'create')
+      .mockImplementation((input) => ({ id: 'task-2', ...input }) as never)
+    try {
+      await createDobiusToolHandlers(context, store).createBoardTask({
+        title: 'Blocked item',
+        status: 'blocked'
+      })
+      expect(create.mock.calls[0][0]).toMatchObject({ status: 'blocked' })
+    } finally {
+      create.mockRestore()
+    }
   })
 })

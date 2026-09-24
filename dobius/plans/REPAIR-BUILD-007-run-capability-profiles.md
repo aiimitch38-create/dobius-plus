@@ -82,8 +82,9 @@ M10 dispatch_build for any asana lane (4) · M11 conductor drops its profile (1)
   `createManagedWorktree` with YOLO args outside `startAgentRun`; that launch policy is the
   ADAM/terminal-agent build (EXECUTION-ORDER BUILD for `execution-gate.ts` ADAM check).
 
-- Lint: `max-lines` errors are pre-existing in `agent-runner.ts` (459 → 464 lines) and
-  `dobius-tool-handlers.ts` (309 → 352). Fixing them needs a file split, left per the rules.
+- Lint: `max-lines` error is pre-existing in `agent-runner.ts` (459 → 466 lines); fixing it
+  needs a file split, left per the rules. (`dobius-tool-handlers.ts` was 309 at base; after the
+  review round it is 258 and clean.)
   Everything else oxlint + react-doctor clean.
 
 ## Verification
@@ -105,3 +106,52 @@ changes.
   case where only it stands between the caller and the action.
 - A never-resolving mock implementation (`vi.fn(() => new Promise(...))`) hangs every later
   call too; use `mockImplementationOnce` for the pending one.
+
+## Review round 1 (coordinator findings F1–F3)
+- **F1: build cap was per run, not per Asana task.** A triage run that dispatched and then failed let
+  the next tick re-claim the gid and dispatch again. Fix: `asana-auto-mode-service` passes the
+  trusted `asanaTaskGid` (from the Asana task, never from model input). The profile grants
+  `dispatch_build` only for asana + build lane + gid, and the handler re-checks all three.
+  `asana-dispatch-ledger.ts` (additive, old code ignores it): an optional `buildDispatchedAt`,
+  `mayDispatchBuild(gid)` (fails closed while the ledger is unreadable), and
+  `recordBuildDispatched(gid)`. `claimTask` refuses a gid that has a dispatched build. The old
+  per-run allowance was deleted: the per-task ledger covers it, and the ledger cache updates even
+  when a write fails.
+- **F2: iMessage got create_board_task.** An agent-assigned 'todo' card auto-dispatches a
+  full-power run. New `imessage` profile: read_knowledge, list_crew, crew_status,
+  file_briefing_item, and no channel baseline (so `mcp__playwright__*` is no longer approved
+  for iMessage). The reply goes back through the run result (`onResult` → `sendReply`), not the
+  outbox, so no post tools are needed. `agent-channel-service.ts` gets a one-line
+  `profile: 'imessage'`. `create_board_task` now creates cards in `backlog`: 'todo' is removed
+  from the tool schema, and the handler turns a direct 'todo' request into 'backlog'. Only
+  'todo' auto-dispatches (`board-dispatch.ts` `isReady`).
+- **F3: dispatch had no timeout.** The await is raced against `BUILD_DISPATCH_TIMEOUT_MS`
+  (10 min). On timeout: the slot is released once, the task is recorded as dispatched (outcome
+  unknown, so fail closed), and the tool returns a clear error. A late result is only logged
+  (`console.warn`); it never releases again.
+- `dispatchBuild` moved into `agent-tools/dispatch-build-handler.ts`, with shared
+  `textResult`/`errorResult`/`trimText` in `agent-tools/dobius-tool-result.ts`.
+  `dobius-tool-handlers.ts` is now 258 lines, which clears its pre-existing max-lines error.
+- Tests: ledger (never re-claims after a dispatched build, survives reload, missing record,
+  unreadable → refuse). Server: dispatch → triage failure → re-claim refused → second dispatch
+  refused; fake-timer timeout frees the slot, marks the task, logs the late result exactly once,
+  and the next in-flight dispatch still blocks a concurrent one (no double release);
+  create_board_task default and explicit 'todo' → backlog, 'blocked' kept; profile table adds
+  imessage and build-lane-without-gid; denial adds tool-without-gid. Runner fixture: iMessage
+  (read-only built-ins, no baseline), triage passes the gid through. Channel service: passes
+  `profile: 'imessage'`.
+- Found by a test: `SafeJsonFile.getStatus()` only reflects a prior `get()`, so
+  `mayDispatchBuild` reads the record first.
+- Mutation checks (all killed): N1 claim ignores buildDispatchedAt (2), N2 handler skips the
+  ledger check (2), N3 success not recorded (1), N4 no slot release on timeout (8), N5 late
+  double release (1), N6 timeout not recorded (1), N7 ledger ignores unreadable (1), N8 board
+  default 'todo' (2), N9 explicit 'todo' kept (1), N10 channel service drops the profile (1),
+  N11 imessage gets channel tools (2), N12 imessage gets the baseline (2), N13 dispatch_build
+  without gid in the profile (1), N14 handler without the gid check (1). Re-run on the moved
+  code: M1 (1), M2 (1, after giving the review-lane row a gid), M3 (2), M4 (4).
+- Verification: typecheck exit 0; agents + voice-conductor 22 files / 156 tests green.
+- Deviations added: edited `asana-dispatch-ledger.ts` (additive) and `agent-channel-service.ts`
+  (1 line); new modules `dispatch-build-handler.ts` and `dobius-tool-result.ts`.
+- Decisions for Carson added: timeout = 10 min, and a timed-out dispatch counts as dispatched
+  for that task (a human re-queues it). Agent-created board cards always start in Backlog, so
+  agent-to-agent board hand-offs now need a human to move the card to To Do.
