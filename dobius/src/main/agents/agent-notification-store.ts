@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import type {
   AgentRun,
   AgentNotificationEntry,
@@ -8,6 +8,7 @@ import type {
 } from '../../shared/agents'
 import type { CustomAgent } from '../../shared/agents'
 import { SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agents-notifications.json'
 const MAX_ENTRIES = 50
@@ -18,7 +19,7 @@ type PersistedNotifications = {
 }
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function sanitizeEntry(raw: unknown): AgentNotificationEntry | null {

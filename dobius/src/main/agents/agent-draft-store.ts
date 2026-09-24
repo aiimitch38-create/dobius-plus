@@ -1,15 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import type { AgentDraftComment } from '../../shared/agents'
 import { SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agent-drafts.json'
 const MAX_DRAFTS = 100
 const RECENT_FINALIZED_COUNT = 20
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function sanitizeStatus(value: unknown): AgentDraftComment['status'] {

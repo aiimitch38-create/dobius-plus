@@ -17,6 +17,7 @@ import {
   normalizeSkills
 } from './agent-record-normalization'
 import { SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agents.json'
 const DEFAULT_MODEL = 'claude-opus-4-8'
@@ -31,7 +32,7 @@ function normalizeModel(value: unknown, engine: AgentEngine): string {
 }
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function cloneAgent(agent: CustomAgent): CustomAgent {
