@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { boardDispatchInternals } from './board-dispatch'
+import { boardDispatchInternals, setBoardDispatchEnabled } from './board-dispatch'
 import type { VertexTask } from '../../../../shared/vertex-task-types'
 
 const { isReady, buildPrompt } = boardDispatchInternals
@@ -136,5 +136,44 @@ describe('the prompt', () => {
     )
     expect(prompt).toContain('make it fast')
     expect(prompt).toContain('perf')
+  })
+})
+
+describe('pause gate on the poll', () => {
+  function stubApi(getPaused: () => Promise<boolean>) {
+    const api = {
+      agents: { getPaused: vi.fn(getPaused) },
+      vertexTasks: { list: vi.fn(async () => []), update: vi.fn(async () => undefined) }
+    }
+    vi.stubGlobal('window', { api })
+    setBoardDispatchEnabled(true)
+    return api
+  }
+
+  afterEach(() => {
+    setBoardDispatchEnabled(false)
+    vi.unstubAllGlobals()
+  })
+
+  it('claims nothing while the crew is paused', async () => {
+    const api = stubApi(async () => true)
+    await boardDispatchInternals.poll()
+    expect(api.vertexTasks.list).not.toHaveBeenCalled()
+    expect(api.vertexTasks.update).not.toHaveBeenCalled()
+  })
+
+  it('treats a failed pause lookup as paused', async () => {
+    const api = stubApi(async () => {
+      throw new Error('ipc down')
+    })
+    await boardDispatchInternals.poll()
+    expect(api.vertexTasks.list).not.toHaveBeenCalled()
+    expect(api.vertexTasks.update).not.toHaveBeenCalled()
+  })
+
+  it('polls tasks when the crew is running', async () => {
+    const api = stubApi(async () => false)
+    await boardDispatchInternals.poll()
+    expect(api.vertexTasks.list).toHaveBeenCalledTimes(1)
   })
 })

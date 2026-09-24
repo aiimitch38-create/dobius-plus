@@ -60,4 +60,35 @@ describe('asana dispatch ledger', () => {
     expect(ledger.claimTask('123458', 'build')).toBeNull()
     expect(ledger.recordFailure('123458')).toMatchObject({ attempts: 2, status: 'dead' })
   })
+
+  it('releaseClaim removes a fresh claim so the task is claimable again', async () => {
+    const ledger = await loadLedger()
+    ledger.claimTask('200001', 'build')
+
+    expect(ledger.releaseClaim('200001')).toBeNull()
+    expect(ledger.listDispatchRecords()).toHaveLength(0)
+    expect(ledger.claimTask('200001', 'build')).toMatchObject({ status: 'claimed' })
+  })
+
+  it('releaseClaim returns a reclaimed failed record to failed without counting an attempt', async () => {
+    const ledger = await loadLedger()
+    ledger.claimTask('200002', 'build')
+    ledger.recordFailure('200002')
+    ledger.claimTask('200002', 'build')
+
+    expect(ledger.releaseClaim('200002')).toMatchObject({ status: 'failed', attempts: 1 })
+  })
+
+  it('releaseClaim leaves briefed and dead records unchanged', async () => {
+    const ledger = await loadLedger()
+    ledger.claimTask('200003', 'build')
+    ledger.recordBriefed('200003')
+    ledger.claimTask('200004', 'build')
+    ledger.recordFailure('200004')
+    ledger.claimTask('200004', 'build')
+    ledger.recordFailure('200004')
+
+    expect(ledger.releaseClaim('200003')).toMatchObject({ status: 'briefed' })
+    expect(ledger.releaseClaim('200004')).toMatchObject({ status: 'dead', attempts: 2 })
+  })
 })

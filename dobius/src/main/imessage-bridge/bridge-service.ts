@@ -10,6 +10,7 @@ import { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-co
 import { extractChatDbMessageText } from './chat-db-message-text'
 import { countOutboundLastMinute, sendImessage } from './imessage-send'
 import { handleChannelMessage } from '../agents/agent-channel-service'
+import { checkExecutionAdmission } from '../agents/execution-gate'
 import type { PrepareClaudeLaunch } from '../agents/agent-runner'
 
 export { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-config'
@@ -249,14 +250,34 @@ function matchTriggeredCommand(text: string, triggerPrefix: string): string | nu
  * Type the command into Dobius's active terminal and press Enter, then close the
  * loop with a short iMessage ack (or a hint when no terminal is available).
  */
-async function dispatchCommand(command: string, selfHandle: string): Promise<void> {
+async function dispatchCommand(
+  command: string,
+  selfHandle: string,
+  target: ImessageBridgeTerminalDispatcher | null = dispatcher
+): Promise<void> {
+  // Why: refused, not queued — the watermark still advances, so a command sent
+  // while paused is never replayed on resume.
+  const admission = checkExecutionAdmission('imessage-command')
+  if (!admission.allowed) {
+    console.warn(`[imessage-bridge] command not sent: ${admission.reason}`)
+    await sendImessage(
+      selfHandle,
+      '(Dobius+ crew is paused; command not sent to the terminal)'
+    ).catch((error) => {
+      console.warn(
+        '[imessage-bridge] pause reply failed:',
+        error instanceof Error ? error.message : String(error)
+      )
+    })
+    return
+  }
   const singleLine = command.replace(/[\r\n]+/g, ' ').slice(0, MAX_COMMAND_LENGTH)
   try {
-    if (!dispatcher) {
+    if (!target) {
       throw new Error('no_active_terminal')
     }
-    const handle = await dispatcher.resolveActiveTerminal()
-    await dispatcher.sendTerminal(handle, { text: singleLine, enter: true })
+    const handle = await target.resolveActiveTerminal()
+    await target.sendTerminal(handle, { text: singleLine, enter: true })
     console.log(`[imessage-bridge] dispatched to ${handle}: ${singleLine.slice(0, 80)}`)
     await sendImessage(selfHandle, '(sent to the active Dobius+ terminal)')
   } catch (error) {
@@ -272,3 +293,6 @@ async function dispatchCommand(command: string, selfHandle: string): Promise<voi
     })
   }
 }
+
+// Test seam only.
+export const bridgeServiceInternals = { dispatchCommand }

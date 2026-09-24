@@ -8,6 +8,7 @@ import { appendBriefingItem } from './agent-briefing-store'
 import { appendAgentNotification } from './agent-notification-store'
 import { getAgentsPaused } from './agents-config-store'
 import { getAgent } from './agents-store'
+import { checkExecutionAdmission, isExecutionBlockedError } from './execution-gate'
 import { startAgentRun } from './agent-runner'
 import {
   claimTask,
@@ -15,7 +16,8 @@ import {
   isDead,
   pruneOld,
   recordBriefed,
-  recordFailure
+  recordFailure,
+  releaseClaim
 } from './asana-dispatch-ledger'
 import { triageOutputFormat, validateTriageVerdict } from './asana-triage-verdict'
 import { wrapUntrustedTaskText } from './asana-untrusted-text'
@@ -148,6 +150,11 @@ async function dispatchTriage(
     })
   } catch (error) {
     inFlightTriageGids.delete(task.gid)
+    if (isExecutionBlockedError(error)) {
+      releaseClaim(task.gid)
+      console.info(`[agents] Asana triage not started: ${error.message}`)
+      return
+    }
     handleFailure(task.gid, triageAgentId)
     console.warn(
       '[agents] Asana triage dispatch failed:',
@@ -170,6 +177,10 @@ function maybeDispatchTask(
     return
   }
   if (inFlightTriageGids.size >= MAX_IN_FLIGHT_TRIAGE) {
+    return
+  }
+  // Why: the pause can flip while tick awaits the Asana refresh; never claim while blocked.
+  if (!checkExecutionAdmission('agent-run').allowed) {
     return
   }
   const record = claimTask(task.gid, lane)
@@ -249,3 +260,6 @@ export function stopAsanaAutoMode(): void {
   clearInterval(interval)
   interval = null
 }
+
+// Test seam only.
+export const asanaAutoModeInternals = { maybeDispatchTask, dispatchTriage }

@@ -130,7 +130,13 @@ export function registerAgentsHandlers(
 
   ipcMain.removeHandler('agents:run')
   ipcMain.handle('agents:run', (_event, args: { agentId: string; prompt: string }) =>
-    startAgentRun({ ...args, prepareClaudeLaunch, prepareCodexLaunch })
+    startAgentRun({
+      ...args,
+      prepareClaudeLaunch,
+      prepareCodexLaunch,
+      // The only operator origin: a human pressed Run on the Agents page.
+      options: { origin: 'agents-page' }
+    })
   )
 
   ipcMain.removeHandler('agents:stop')

@@ -156,6 +156,24 @@ export function recordFailure(gid: string): AsanaDispatchRecord | null {
   return cloneRecord(record)
 }
 
+// Why: a start refused by the execution gate is not a failed attempt, so it
+// must not move the task toward 'dead'.
+export function releaseClaim(gid: string): AsanaDispatchRecord | null {
+  const records = load()
+  const record = records.find((entry) => entry.gid === gid)
+  if (!record || record.status !== 'claimed') {
+    return record ? cloneRecord(record) : null
+  }
+  if (record.attempts === 0) {
+    cached = records.filter((entry) => entry !== record)
+    persist(cached)
+    return null
+  }
+  record.status = 'failed'
+  persist(records)
+  return cloneRecord(record)
+}
+
 export function isDead(gid: string): boolean {
   return findRecord(gid)?.status === 'dead'
 }

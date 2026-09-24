@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { CustomAgent } from '../../shared/agents'
-import { matchAgentMention } from './agent-channel-service'
+import { handleChannelMessage, matchAgentMention } from './agent-channel-service'
+import { ExecutionBlockedError } from './execution-gate'
+
+const mocks = vi.hoisted(() => ({
+  agents: [] as CustomAgent[],
+  startAgentRun: vi.fn()
+}))
+
+vi.mock('./agents-store', () => ({ listAgents: () => mocks.agents }))
+vi.mock('./agent-runner', () => ({ startAgentRun: mocks.startAgentRun }))
 
 function agent(overrides: Partial<CustomAgent>): CustomAgent {
   return {
@@ -75,5 +84,31 @@ describe('matchAgentMention', () => {
         agent({ name: 'Auditor', channels: { imessage: false } })
       ])
     ).toBe('unknown-mention')
+  })
+})
+
+describe('handleChannelMessage start errors', () => {
+  async function replyFor(error: Error): Promise<string> {
+    mocks.agents = [agent({ name: 'Auditor' })]
+    mocks.startAgentRun.mockReset()
+    mocks.startAgentRun.mockRejectedValue(error)
+    const sendReply = vi.fn(async () => {})
+    await handleChannelMessage({
+      text: '@Auditor check',
+      replyHandle: 'me',
+      prepareClaudeLaunch: vi.fn(),
+      sendReply
+    })
+    return String(sendReply.mock.calls.at(0)?.at(0))
+  }
+
+  it('tells the phone the crew is paused when the gate blocks the run', async () => {
+    const reply = await replyFor(new ExecutionBlockedError('agent-run', 'paused', 'paused'))
+    expect(reply).toContain('paused')
+    expect(reply).not.toContain('busy')
+  })
+
+  it('keeps the busy reply for other start errors', async () => {
+    expect(await replyFor(new Error('Too many concurrent agent runs'))).toContain('busy')
   })
 })

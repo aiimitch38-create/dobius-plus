@@ -79,10 +79,16 @@ function buildPrompt(task: VertexTask): string {
 }
 
 function isReady(task: VertexTask): boolean {
-  if (task.assignee?.kind !== 'agent') return false
-  if (task.status !== 'todo') return false
+  if (task.assignee?.kind !== 'agent') {
+    return false
+  }
+  if (task.status !== 'todo') {
+    return false
+  }
   const dispatch = task.dispatch
-  if (!dispatch) return true
+  if (!dispatch) {
+    return true
+  }
   // Retry is OPERATOR-triggered, not automatic. dispatchTask() claims a task by
   // setting status 'in-progress' and a failure leaves it there, so the status
   // check above already excludes it — nothing re-runs on its own. That is
@@ -97,7 +103,9 @@ function isReady(task: VertexTask): boolean {
  *  traffic is separable; otherwise the first channel that exists. */
 async function resolveChannelId(): Promise<string | null> {
   const channels = await getChannels().catch(() => [])
-  if (!channels.length) return null
+  if (!channels.length) {
+    return null
+  }
   const named = channels.find((channel) =>
     /board|task|dobius/i.test(String((channel as { name?: string }).name ?? ''))
   )
@@ -106,7 +114,9 @@ async function resolveChannelId(): Promise<string | null> {
 
 async function dispatchTask(task: VertexTask, channelId: string): Promise<void> {
   const assignee = task.assignee
-  if (!assignee) return
+  if (!assignee) {
+    return
+  }
   const attempts = (task.dispatch?.attempts ?? 0) + 1
   const base = {
     status: 'running' as const,
@@ -156,12 +166,21 @@ async function dispatchTask(task: VertexTask, channelId: string): Promise<void> 
 }
 
 async function poll(): Promise<void> {
-  if (polling || !enabled) return
+  if (polling || !enabled) {
+    return
+  }
   polling = true
   try {
+    // Why: claiming while paused would mark the card failed when main refuses the run.
+    const paused = await window.api.agents.getPaused().catch(() => true)
+    if (paused) {
+      return
+    }
     const tasks = await window.api.vertexTasks.list()
     const ready = tasks.filter((task) => isReady(task) && !inFlight.has(task.id))
-    if (!ready.length) return
+    if (!ready.length) {
+      return
+    }
     const channelId = await resolveChannelId()
     if (!channelId) {
       // Why not silent: without a channel there is nowhere for the agent to
@@ -170,7 +189,9 @@ async function poll(): Promise<void> {
       return
     }
     for (const task of ready) {
-      if (inFlight.size >= MAX_IN_FLIGHT) break
+      if (inFlight.size >= MAX_IN_FLIGHT) {
+        break
+      }
       void dispatchTask(task, channelId)
     }
   } catch (error) {
@@ -181,14 +202,18 @@ async function poll(): Promise<void> {
 }
 
 export function startBoardDispatch(): () => void {
-  if (timer) return stopBoardDispatch
+  if (timer) {
+    return stopBoardDispatch
+  }
   timer = setInterval(() => void poll(), POLL_MS)
   void poll()
   return stopBoardDispatch
 }
 
 export function stopBoardDispatch(): void {
-  if (!timer) return
+  if (!timer) {
+    return
+  }
   clearInterval(timer)
   timer = null
 }
@@ -198,4 +223,4 @@ export function resetBoardDispatchForTest(): void {
   inFlight.clear()
 }
 
-export const boardDispatchInternals = { isReady, buildPrompt }
+export const boardDispatchInternals = { isReady, buildPrompt, poll }

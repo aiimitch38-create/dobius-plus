@@ -35,3 +35,8 @@
 - Verify: typecheck node+cli+web 0 errors, oxlint clean on touched files, 47 automation/destination tests pass (8 new), electron-vite build exit 0.
 - Lessons: service.ts sat exactly at the 300-line cap — split into run-notification-delivery.ts + run-final-status.ts; localize-renderer-strings.mjs sweeps the whole repo, revert unrelated wraps before committing; `cmd | tail -1` masks exit codes in && chains.
 - Pre-existing branch failures NOT absorbed: agent-runner.ts max-lines, localization-coverage on untouched files.
+
+## 2026-09-24 — BUILD-001 fail-closed "Pause crew" execution gate (stabilize/001-global-execution-gate)
+- Fixes #1 (autonomous paths ignored pause) and #2 (unreadable pause file unpaused + got overwritten). Plan: plans/REPAIR-BUILD-001-execution-gate.md.
+- Verified: typecheck exit 0; targeted suites 98/98; full-suite failures (85 files) pre-exist on parent b5c66cf5 except one flaky hermes test (3/3 green alone). Code-reviewer subagent: no findings.
+- Lesson: run `oxfmt` only on files you edited and re-check the diff — it reformats untouched lines and globs (`*.test.ts`) pull in unrelated files.

@@ -4,6 +4,7 @@ import { appendBriefingItem } from '../agent-briefing-store'
 import { appendDraft } from '../agent-draft-store'
 import { listAgents } from '../agents-store'
 import { getBuildDispatcher, getRepoLister } from '../agent-dispatch-registry'
+import { checkExecutionAdmission } from '../execution-gate'
 import { vertexTaskStore } from '../../vertex/vertex-task-store'
 import {
   buildKnowledgeTree,
@@ -187,6 +188,10 @@ export function createDobiusToolHandlers(context: DobiusToolContext, store: Stor
       const brief = trimText(args.brief, DISPATCH_BRIEF_LIMIT).text
       if (!brief.trim()) {
         return errorResult('Build brief is required.')
+      }
+      const admission = checkExecutionAdmission('dispatch-build')
+      if (!admission.allowed) {
+        return errorResult(`build dispatch blocked: ${admission.message}`)
       }
       const listRepos = getRepoLister()
       if (!listRepos) {

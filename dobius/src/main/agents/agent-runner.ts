@@ -24,6 +24,7 @@ import {
   setDecisionBypassRunHandler
 } from './agent-decision-queue'
 import { buildAgentHardRailHooks } from './agent-hard-rails'
+import { assertExecutionAdmitted, type ExecutionOrigin } from './execution-gate'
 import { appendAgentRunNotification } from './agent-notification-store'
 import { appendRunProgress } from './agent-run-progress-log'
 import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
@@ -99,6 +100,8 @@ type AgentRunOptions = {
   // Why: onResult only fires when the SDK emits a result message — abnormal EOF
   // and thrown-stream errors need their own hook so channel replies never go silent.
   onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
+  // Omitted = autonomous, so a new caller cannot bypass Pause crew by forgetting it.
+  origin?: ExecutionOrigin
 }
 
 type LiveRun = {
@@ -262,6 +265,8 @@ export async function startAgentRun(args: {
   prepareCodexLaunch?: PrepareCodexLaunch
   options?: AgentRunOptions
 }): Promise<string> {
+  const origin = args.options?.origin ?? 'agent-run'
+  assertExecutionAdmitted(origin)
   if (reservedRuns >= MAX_CONCURRENT_RUNS) {
     throw new Error('Too many concurrent agent runs')
   }
@@ -324,6 +329,8 @@ export async function startAgentRun(args: {
     const preparation = await args.prepareClaudeLaunch(
       agent.accountId ? { accountId: agent.accountId } : undefined
     )
+    // Why: the crew can be paused while auth preparation is awaited.
+    assertExecutionAdmitted(origin)
     const abortController = new AbortController()
     const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
     const branch = currentGitBranch(resolvedCwd)

@@ -5,7 +5,12 @@ const mocks = vi.hoisted(() => ({
   appendDraft: vi.fn(),
   appendBriefingItem: vi.fn(),
   fetch: vi.fn(),
-  getAsanaConfig: vi.fn()
+  getAsanaConfig: vi.fn(),
+  checkExecutionAdmission: vi.fn()
+}))
+
+vi.mock('../execution-gate', () => ({
+  checkExecutionAdmission: mocks.checkExecutionAdmission
 }))
 
 vi.stubGlobal('fetch', mocks.fetch)
@@ -107,6 +112,8 @@ beforeEach(() => {
   mocks.appendBriefingItem.mockReset()
   mocks.fetch.mockReset()
   mocks.getAsanaConfig.mockReset()
+  mocks.checkExecutionAdmission.mockReset()
+  mocks.checkExecutionAdmission.mockReturnValue({ allowed: true })
   mocks.appendDraft.mockReturnValue({ id: 'draft-1' })
   mocks.appendBriefingItem.mockReturnValue({ id: 'brief-1' })
   mocks.getAsanaConfig.mockReturnValue({
@@ -236,6 +243,26 @@ describe('Dobius tool handlers', () => {
 
     expect(result.isError).toBe(true)
     expect(result.content[0].text).toContain('DobiusPlus')
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('blocks build dispatch while the crew is paused', async () => {
+    const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
+    const dispatch = vi.fn(async () => ({ worktreeId: 'wt-4', ok: true }))
+    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus' }])
+    setBuildDispatcher(dispatch)
+    mocks.checkExecutionAdmission.mockReturnValue({
+      allowed: false,
+      reason: 'paused',
+      message: 'Crew is paused.'
+    })
+
+    const handlers = createDobiusToolHandlers(context, store)
+    const result = await handlers.dispatchBuild({ repo: 'repo-1', brief: 'Do the work' })
+
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain('blocked')
+    expect(mocks.checkExecutionAdmission).toHaveBeenCalledWith('dispatch-build')
     expect(dispatch).not.toHaveBeenCalled()
   })
 
