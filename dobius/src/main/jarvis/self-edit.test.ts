@@ -1,8 +1,21 @@
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { SelfEditStore, resolveEditablePath, selfEditRoots } from './self-edit'
+import {
+  SelfEditStore,
+  isSensitiveFileName,
+  resolveEditablePath,
+  resolveSelfEditRepoRoot,
+  selfEditRoots
+} from './self-edit'
 
 function repo(): string {
   const root = mkdtempSync(join(tmpdir(), 'selfedit-'))
@@ -121,5 +134,150 @@ describe('symlink escape (regression: security review 2026-08-29)', () => {
     const root = repo()
     const store = new SelfEditStore([root])
     expect(store.propose('src/voice.ts', 'const a = 9\n', 'fine').ok).toBe(true)
+  })
+})
+
+describe('canonical path policy (BUILD-006, #26 #27)', () => {
+  it('refuses an in-root symlinked FILE that points at .env.local', () => {
+    const root = repo()
+    writeFileSync(join(root, '.env.local'), 'SECRET=1\n')
+    symlinkSync(join(root, '.env.local'), join(root, 'src', 'config.ts'))
+
+    const store = new SelfEditStore([root])
+    const proposed = store.propose('src/config.ts', 'SECRET=pwned\n', 'rewrite config')
+
+    expect(proposed.ok).toBe(false)
+    expect(readFileSync(join(root, '.env.local'), 'utf-8')).toBe('SECRET=1\n')
+  })
+
+  it('refuses an in-root symlinked DIRECTORY that points into .git', () => {
+    const root = repo()
+    mkdirSync(join(root, '.git'))
+    writeFileSync(join(root, '.git', 'config'), '[core]\n')
+    symlinkSync(join(root, '.git'), join(root, 'src', 'meta'))
+
+    const store = new SelfEditStore([root])
+    expect(store.propose('src/meta/config', '[core]\nhooksPath=/tmp\n', 'x').ok).toBe(false)
+    expect(store.propose('src/meta/hooks-new', '#!/bin/sh\n', 'x').ok).toBe(false)
+    expect(readFileSync(join(root, '.git', 'config'), 'utf-8')).toBe('[core]\n')
+  })
+
+  it('refuses every .env variant and credential file, directly and in subfolders', () => {
+    const root = repo()
+    for (const name of [
+      '.env',
+      '.env.local',
+      '.env.production',
+      'src/.env.development.local',
+      '.ENV.Local',
+      '.npmrc',
+      'auth.json',
+      'certs/server.pem',
+      'service/data/service-token'
+    ]) {
+      const result = resolveEditablePath(name, [root])
+      expect(result.ok, name).toBe(false)
+    }
+  })
+
+  it('refuses a protected directory whatever its case', () => {
+    const root = repo()
+    mkdirSync(join(root, 'Out'))
+    // Why an existing folder: a missing parent is refused for a different reason.
+    expect(resolveEditablePath('Out/bundle.js', [root]).ok).toBe(false)
+  })
+
+  it('still allows ordinary source edits, including env-like source names', () => {
+    const root = repo()
+    expect(resolveEditablePath('src/voice.ts', [root]).ok).toBe(true)
+    expect(resolveEditablePath('src/env.ts', [root]).ok).toBe(true)
+    expect(resolveEditablePath('src/token-utils.ts', [root]).ok).toBe(true)
+    expect(isSensitiveFileName('environment.ts')).toBe(false)
+  })
+
+  it('refuses to apply when a parent folder was swapped for a symlink after proposing', () => {
+    const root = repo()
+    mkdirSync(join(root, '.git'))
+    writeFileSync(join(root, '.git', 'voice.ts'), 'git internals\n')
+    const store = new SelfEditStore([root])
+    const proposed = store.propose('src/voice.ts', 'const a = 2\n', 'bump')
+    if (!proposed.ok) {
+      throw new Error('expected proposal')
+    }
+
+    renameSync(join(root, 'src'), join(root, 'src-old'))
+    symlinkSync(join(root, '.git'), join(root, 'src'))
+
+    const applied = store.apply(proposed.proposal.id, join(root, 'backups'))
+    expect(applied.ok).toBe(false)
+    expect(readFileSync(join(root, '.git', 'voice.ts'), 'utf-8')).toBe('git internals\n')
+  })
+})
+
+describe('resolveSelfEditRepoRoot (BUILD-006, X1)', () => {
+  const home = '/Users/x'
+  const isDirectory = (path: string): boolean => path === '/repo/dobius-plus'
+
+  it('uses the configured repo when packaged, not the bundle Contents folder', () => {
+    const result = resolveSelfEditRepoRoot({
+      isPackaged: true,
+      env: { DOBIUS_SELF_EDIT_REPO_ROOT: '/repo/dobius-plus' },
+      home,
+      isDirectory
+    })
+    expect(result).toEqual({ ok: true, root: '/repo/dobius-plus' })
+  })
+
+  it('refuses with a visible reason when packaged and nothing is configured', () => {
+    const result = resolveSelfEditRepoRoot({
+      isPackaged: true,
+      // The dev launcher variable must not leak into a packaged app's choice.
+      env: { DOBIUS_DEV_REPO_ROOT: '/repo/dobius-plus' },
+      home,
+      isDirectory
+    })
+    expect(result.ok).toBe(false)
+    expect(result.ok ? '' : result.error).toMatch(/DOBIUS_SELF_EDIT_REPO_ROOT/)
+  })
+
+  it('uses the dev launcher checkout in dev', () => {
+    expect(
+      resolveSelfEditRepoRoot({
+        isPackaged: false,
+        env: { DOBIUS_DEV_REPO_ROOT: '/repo/dobius-plus' },
+        home,
+        isDirectory
+      })
+    ).toEqual({ ok: true, root: '/repo/dobius-plus' })
+  })
+
+  it('refuses relative, filesystem-root and home roots even when they exist', () => {
+    for (const configured of ['repo/dobius-plus', '/', home, `${home}/`]) {
+      const result = resolveSelfEditRepoRoot({
+        isPackaged: true,
+        env: { DOBIUS_SELF_EDIT_REPO_ROOT: configured },
+        home,
+        isDirectory: () => true
+      })
+      expect(result.ok, configured).toBe(false)
+    }
+  })
+
+  it('refuses a configured root that does not exist', () => {
+    const result = resolveSelfEditRepoRoot({
+      isPackaged: true,
+      env: { DOBIUS_SELF_EDIT_REPO_ROOT: '/repo/missing' },
+      home,
+      isDirectory
+    })
+    expect(result.ok).toBe(false)
+  })
+
+  it('an unconfigured store refuses every proposal with the reason', () => {
+    const root = repo()
+    const store = new SelfEditStore([], Date.now, 'Self-edit is off: not configured.')
+    const proposed = store.propose(join(root, 'src', 'voice.ts'), 'const a = 5\n', 'x')
+    expect(proposed).toEqual({ ok: false, error: 'Self-edit is off: not configured.' })
+    expect(readFileSync(join(root, 'src', 'voice.ts'), 'utf-8')).toBe('const a = 1\n')
   })
 })

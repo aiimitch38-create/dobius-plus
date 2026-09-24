@@ -1,12 +1,12 @@
 import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory, converseWithAdam, loadAdamServiceToken } from './adam-client'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
-import { SelfEditStore, selfEditRoots } from './self-edit'
+import { SelfEditStore, resolveSelfEditRepoRoot, selfEditRoots } from './self-edit'
 import { closeSelfEditWindow, showSelfEditProposal } from '../window/self-edit-window'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
 import {
@@ -109,12 +109,14 @@ function registerHandlers(store: Store, service: JarvisService): void {
     buildAgentContext(join(app.getPath('userData'), 'terminal-history'))
   )
 
-  // Why app.getAppPath()/../..: the repo root is two levels above out/main in
-  // dev and the asar root when packaged; resolving from the app path keeps the
-  // editable root tied to THIS checkout rather than a hardcoded machine path.
-  const selfEdits = new SelfEditStore(
-    selfEditRoots(app.getPath('home'), resolve(app.getAppPath(), '..', '..'))
-  )
+  const repoRoot = resolveSelfEditRepoRoot({
+    isPackaged: app.isPackaged,
+    env: process.env,
+    home: app.getPath('home')
+  })
+  const selfEdits = repoRoot.ok
+    ? new SelfEditStore(selfEditRoots(app.getPath('home'), repoRoot.root))
+    : new SelfEditStore([], Date.now, repoRoot.error)
   const selfEditBackups = join(app.getPath('userData'), 'self-edit-backups')
 
   ipcMain.removeHandler('jarvis:proposeSelfEdit')

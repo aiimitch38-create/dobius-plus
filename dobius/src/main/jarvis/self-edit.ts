@@ -7,9 +7,10 @@ import {
   openSync,
   readFileSync,
   realpathSync,
+  statSync,
   writeFileSync
 } from 'node:fs'
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 
 export type SelfEditProposal = {
   id: string
@@ -40,8 +41,115 @@ export function selfEditRoots(home: string, repoRoot: string): string[] {
   return [repoRoot, join(home, 'dobius', 'projects', 'ADAM')]
 }
 
-/** Path segments never writable even inside an allowed root. */
-const FORBIDDEN_SEGMENTS = new Set(['.git', 'node_modules', 'out', 'dist', '.env'])
+export type SelfEditRepoRoot = { ok: true; root: string } | { ok: false; error: string }
+
+/**
+ * The Dobius+ checkout Adam may rewrite, from explicit configuration only.
+ *
+ * Why not app.getAppPath(): two parents of it is the bundle's `Contents` folder
+ * when packaged and the folder ABOVE the checkout in dev, so neither is the repo.
+ * DOBIUS_SELF_EDIT_REPO_ROOT names the checkout on purpose; in dev the launcher
+ * (run-electron-vite-dev.mjs) already sets DOBIUS_DEV_REPO_ROOT to this checkout.
+ * With neither, self-edit refuses rather than guessing a folder.
+ */
+export function resolveSelfEditRepoRoot(options: {
+  isPackaged: boolean
+  env: NodeJS.ProcessEnv
+  home: string
+  isDirectory?: (p: string) => boolean
+}): SelfEditRepoRoot {
+  const { isPackaged, env, home } = options
+  const isDirectory = options.isDirectory ?? defaultIsDirectory
+  const explicit = env.DOBIUS_SELF_EDIT_REPO_ROOT?.trim()
+  const configured = explicit || (isPackaged ? '' : env.DOBIUS_DEV_REPO_ROOT?.trim())
+  if (!configured) {
+    return {
+      ok: false,
+      error:
+        'Self-edit is off: no Dobius+ source folder is configured. Set DOBIUS_SELF_EDIT_REPO_ROOT to the Dobius+ checkout and restart.'
+    }
+  }
+  if (!isAbsolute(configured)) {
+    return {
+      ok: false,
+      error: `Self-edit is off: the configured source folder "${configured}" is not an absolute path.`
+    }
+  }
+  const root = resolve(configured)
+  // Why: a filesystem or home root would make nearly every file on the machine editable.
+  if (root === parse(root).root || root === resolve(home)) {
+    return {
+      ok: false,
+      error: `Self-edit is off: "${root}" is too broad to be the Dobius+ source folder.`
+    }
+  }
+  if (!isDirectory(root)) {
+    return {
+      ok: false,
+      error: `Self-edit is off: the configured source folder "${root}" does not exist.`
+    }
+  }
+  return { ok: true, root }
+}
+
+function defaultIsDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Path segments never writable even inside an allowed root. Compared
+ * case-insensitively: the default macOS volume treats `.GIT` as `.git`.
+ */
+const FORBIDDEN_SEGMENTS = new Set(['.git', 'node_modules', 'out', 'dist', '.ssh', '.gnupg'])
+
+/**
+ * Sensitive-file policy: credential and secret files are never writable, in any
+ * folder. Covers every `.env` variant (`.env.local`, `.env.production`, ...),
+ * package-manager and git credential files, private keys and certificates, and
+ * the ADAM service token.
+ */
+const SENSITIVE_FILE_NAMES = new Set([
+  '.envrc',
+  '.npmrc',
+  '.netrc',
+  '.pypirc',
+  '.git-credentials',
+  'auth.json',
+  'credentials',
+  'credentials.json',
+  'service-token',
+  'id_rsa',
+  'id_dsa',
+  'id_ecdsa',
+  'id_ed25519'
+])
+const SENSITIVE_EXTENSIONS = ['.pem', '.key', '.p12', '.pfx', '.enc', '.keystore', '.jks']
+
+export function isSensitiveFileName(name: string): boolean {
+  const lower = name.toLowerCase()
+  return (
+    lower === '.env' ||
+    lower.startsWith('.env.') ||
+    SENSITIVE_FILE_NAMES.has(lower) ||
+    SENSITIVE_EXTENSIONS.some((extension) => lower.endsWith(extension))
+  )
+}
+
+function protectedReason(segments: string[], requested: string): string | null {
+  const parts = segments.filter(Boolean)
+  if (parts.some((segment) => FORBIDDEN_SEGMENTS.has(segment.toLowerCase()))) {
+    return `"${requested}" is in a protected directory.`
+  }
+  const leaf = parts.at(-1)
+  if (leaf && isSensitiveFileName(leaf)) {
+    return `"${requested}" is a secrets or credentials file.`
+  }
+  return null
+}
 
 function containedBy(child: string, parent: string): boolean {
   const normalizedParent = parent.endsWith(sep) ? parent : `${parent}${sep}`
@@ -79,9 +187,9 @@ export function resolveEditablePath(
 
   for (const candidate of candidates) {
     const absolute = resolve(candidate)
-    const segments = absolute.split(sep)
-    if (segments.some((segment) => FORBIDDEN_SEGMENTS.has(segment))) {
-      return { ok: false, error: `"${requested}" is in a protected directory.` }
+    const lexicalReason = protectedReason(absolute.split(sep), requested)
+    if (lexicalReason) {
+      return { ok: false, error: lexicalReason }
     }
     let resolvedParent: string
     try {
@@ -100,7 +208,18 @@ export function resolveEditablePath(
         return { ok: false, error: `"${requested}" could not be resolved.` }
       }
     }
-    if (realRoots.some((root) => containedBy(realAbsolute, root))) {
+    const containingRoot = realRoots.find((root) => containedBy(realAbsolute, root))
+    if (containingRoot) {
+      // Why check again after realpath: an in-root symlink (`link -> .git`,
+      // `config.ts -> .env.local`) passes the check on the requested string
+      // while the write lands in a protected place.
+      const canonicalReason = protectedReason(
+        relative(containingRoot, realAbsolute).split(sep),
+        requested
+      )
+      if (canonicalReason) {
+        return { ok: false, error: canonicalReason }
+      }
       return { ok: true, absolutePath: realAbsolute }
     }
   }
@@ -136,10 +255,15 @@ export class SelfEditStore {
 
   constructor(
     private readonly roots: string[],
-    private readonly now: () => number = Date.now
+    private readonly now: () => number = Date.now,
+    /** Set when no repo root is configured: every proposal is refused with it. */
+    private readonly unavailableReason: string | null = null
   ) {}
 
   propose(requestedPath: string, newContent: string, description: string): ProposeResult {
+    if (this.unavailableReason) {
+      return { ok: false, error: this.unavailableReason }
+    }
     if (typeof newContent !== 'string') {
       return { ok: false, error: 'No file content given.' }
     }
@@ -186,6 +310,15 @@ export class SelfEditStore {
     const proposal = this.proposals.get(id)
     if (!proposal) {
       return { ok: false, error: 'That change is no longer pending.' }
+    }
+    // Why re-resolve: review can take minutes, and a parent folder swapped for a
+    // symlink meanwhile would redirect the write; O_NOFOLLOW only guards the leaf.
+    const recheck = resolveEditablePath(proposal.absolutePath, this.roots)
+    if (!recheck.ok || recheck.absolutePath !== proposal.absolutePath) {
+      return {
+        ok: false,
+        error: recheck.ok ? `"${proposal.displayPath}" moved since it was proposed.` : recheck.error
+      }
     }
     try {
       mkdirSync(backupDir, { recursive: true })
