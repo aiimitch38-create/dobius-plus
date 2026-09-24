@@ -10,7 +10,7 @@ import {
   listEnvironments
 } from '../../shared/runtime-environment-store'
 import { DeviceRegistry } from './device-registry'
-import { loadOrCreateE2EEKeypair } from './e2ee-keypair'
+import { E2EEKeypairUnreadableError, loadOrCreateE2EEKeypair } from './e2ee-keypair'
 import {
   clearRuntimeMetadata,
   clearRuntimeMetadataIfOwned,
@@ -255,15 +255,14 @@ describe('runtime metadata', () => {
     }
   )
 
-  it('replaces oversized E2EE keypair files instead of reading them as metadata', () => {
+  it('refuses oversized E2EE keypair files without reading or replacing them', () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'dobius-runtime-large-keypair-'))
     tempDirs.push(userDataPath)
     const keypairPath = join(userDataPath, 'dobius-e2ee-keypair.json')
     writeFileSync(keypairPath, 'x'.repeat(9 * 1024))
 
-    const keypair = loadOrCreateE2EEKeypair(userDataPath)
+    expect(() => loadOrCreateE2EEKeypair(userDataPath)).toThrow(E2EEKeypairUnreadableError)
 
-    expect(keypair.publicKey).toHaveLength(32)
-    expect(statSync(keypairPath).size).toBeLessThan(1024)
+    expect(statSync(keypairPath).size).toBe(9 * 1024)
   })
 })

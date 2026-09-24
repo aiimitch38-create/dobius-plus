@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- Why: this integration-style RPC test keeps the request/response contract together so regressions in the external CLI surface are easier to spot. */
-import { existsSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createConnection, type Socket } from 'node:net'
@@ -356,6 +356,35 @@ describe('DobiusRuntimeRpcServer', () => {
     }
 
     await server.stop()
+  })
+
+  it('reports pairing unavailable instead of throwing when the device registry is unreadable', async () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'dobius-runtime-rpc-'))
+    const registryPath = join(userDataPath, 'dobius-devices.json')
+    writeFileSync(registryPath, '[{"deviceId":', { mode: 0o600 })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const runtime = new DobiusRuntimeService()
+    const server = new DobiusRuntimeRpcServer({
+      runtime,
+      userDataPath,
+      enableWebSocket: true,
+      wsPort: 0
+    })
+
+    try {
+      await server.start()
+
+      // Why: headless serve awaits this before printing dobius_server_ready.
+      for (const rotate of [false, true]) {
+        const offer = server.createPairingOffer({ address: '100.64.1.20', rotate })
+        expect(offer.available).toBe(false)
+        expect(offer.available ? '' : offer.reason).toContain('unreadable')
+      }
+      expect(readFileSync(registryPath, 'utf-8')).toBe('[{"deviceId":')
+    } finally {
+      await server.stop()
+      errorSpy.mockRestore()
+    }
   })
 
   it('includes a web client URL when the web bundle is served by the runtime', async () => {

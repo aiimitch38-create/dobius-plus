@@ -17,7 +17,12 @@ import type { RpcMessageContext, RpcTransport } from './rpc/transport'
 import { UnixSocketTransport } from './rpc/unix-socket-transport'
 import { WebSocketTransport } from './rpc/ws-transport'
 import type { WebSocket } from 'ws'
-import { DeviceRegistry, type DeviceScope } from './device-registry'
+import {
+  DeviceRegistry,
+  DeviceRegistryUnreadableError,
+  type DeviceEntry,
+  type DeviceScope
+} from './device-registry'
 import { loadOrCreateE2EEKeypair, type E2EEKeypair } from './e2ee-keypair'
 import { E2EEChannel } from './rpc/e2ee-channel'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../shared/pairing'
@@ -493,7 +498,7 @@ export class DobiusRuntimeRpcServer {
     rotate?: boolean
     scope?: DeviceScope
   }):
-    | { available: false }
+    | { available: false; reason?: string }
     | {
         available: true
         pairingUrl: string
@@ -510,9 +515,20 @@ export class DobiusRuntimeRpcServer {
     const endpoint = resolvePairingEndpoint(rawEndpoint, args.address)
     const deviceName = args.name ?? `CLI ${new Date().toLocaleDateString()}`
     const scope = args.scope ?? 'runtime'
-    const device = args.rotate
-      ? this.deviceRegistry.rotatePendingDevice(deviceName, scope)
-      : this.deviceRegistry.getOrCreatePendingDevice(deviceName, scope)
+    let device: DeviceEntry
+    try {
+      device = args.rotate
+        ? this.deviceRegistry.rotatePendingDevice(deviceName, scope)
+        : this.deviceRegistry.getOrCreatePendingDevice(deviceName, scope)
+    } catch (error) {
+      // Why: headless serve awaits this before printing readiness; a throw
+      // there would hang anything waiting for dobius_server_ready.
+      if (error instanceof DeviceRegistryUnreadableError) {
+        console.error(`[runtime] pairing unavailable: ${error.message}`)
+        return { available: false, reason: error.message }
+      }
+      throw error
+    }
     const pairingUrl = encodePairingOffer({
       v: PAIRING_OFFER_VERSION,
       endpoint,
