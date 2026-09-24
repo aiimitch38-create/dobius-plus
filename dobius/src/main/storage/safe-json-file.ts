@@ -211,4 +211,10 @@ export class SafeJsonFile<T> {
       console.error(`${this.options.label} could not keep an unreadable copy: ${errorText(error)}`)
     }
   }
+
+  // Next get() re-reads the file. Quarantine bookkeeping is kept, so the
+  // same bad file is not copied again.
+  invalidate(): void {
+    this.cached = null
+  }
 }

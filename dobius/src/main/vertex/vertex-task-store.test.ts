@@ -201,18 +201,33 @@ describe('persistence', () => {
     expect(vertexTaskStore.list().map((t) => t.title)).toEqual(['fixed'])
   })
 
-  it('drops malformed rows but keeps the good ones', () => {
-    writeFileSync(
-      join(dir, 'vertex-tasks.json'),
-      JSON.stringify([
-        { id: '1', title: 'good', status: 'todo', order: 1000 },
-        { id: '2', title: 'no status', order: 2000 },
-        'not an object',
-      ]),
-      'utf8',
-    )
+  it('treats a file with an invalid row as unreadable instead of dropping the row', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const text = JSON.stringify([
+      { id: '1', title: 'good', status: 'todo', order: 1000 },
+      { id: '2', title: 'string order', status: 'todo', order: '5' },
+      { id: '3', title: 'renamed status', status: 'doing', order: 3000 }
+    ])
+    writeFileSync(join(dir, 'vertex-tasks.json'), text, 'utf8')
     setVertexTaskStorageDir(dir)
-    expect(vertexTaskStore.list().map((t) => t.title)).toEqual(['good'])
+
+    expect(() => vertexTaskStore.list()).toThrow('read-only')
+    expect(() => vertexTaskStore.create({ title: 'new' })).toThrow('read-only')
+    expect(readFileSync(join(dir, 'vertex-tasks.json'), 'utf8')).toBe(text)
+    expect(readdirSync(dir).filter((name) => name.includes('.unreadable-'))).toHaveLength(1)
+  })
+
+  it('reloading an unreadable file does not make another quarantine copy', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    // Distinct timestamps, so a second copy could not hide behind a name clash.
+    let now = 1_000
+    vi.spyOn(Date, 'now').mockImplementation(() => (now += 1000))
+    writeFileSync(join(dir, 'vertex-tasks.json'), '{bad', 'utf8')
+    setVertexTaskStorageDir(dir)
+    for (let i = 0; i < 3; i += 1) {
+      expect(() => reloadVertexTasksFromDisk()).toThrow('read-only')
+    }
+    expect(readdirSync(dir).filter((name) => name.includes('.unreadable-'))).toHaveLength(1)
   })
 
   it('writes valid JSON to disk', () => {

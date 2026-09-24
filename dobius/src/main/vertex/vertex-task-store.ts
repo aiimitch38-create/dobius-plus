@@ -52,8 +52,10 @@ function filePath(): string {
 function createFile(): SafeJsonFile<VertexTask[]> {
   return new SafeJsonFile<VertexTask[]>({
     filePath,
+    // Why all-or-nothing: a dropped row would be erased by the next save, so
+    // one bad row makes the whole file unreadable (read-only + quarantine).
     parse: (raw) =>
-      Array.isArray(raw) ? raw.filter(isUsableTask).map(normalizePersistedTask) : undefined,
+      Array.isArray(raw) && raw.every(isUsableTask) ? raw.map(normalizePersistedTask) : undefined,
     fallback: () => [],
     label: `[vertex] ${FILE_NAME}`,
   })
@@ -132,7 +134,7 @@ function normalizePersistedTask(task: VertexTask): VertexTask {
 }
 
 export function reloadVertexTasksFromDisk(): VertexTask[] {
-  file = createFile()
+  file.invalidate()
   return readAll()
 }
 
@@ -154,7 +156,7 @@ function persist(tasks: VertexTask[]): void {
   if (!file.set(tasks)) {
     // Why: set() keeps the unsaved value (and callers mutate cached rows in
     // place), so drop the cache to show what is really on disk.
-    file = createFile()
+    file.invalidate()
     throw new Error(`The Kanban board could not be saved to ${filePath()}.`)
   }
 }

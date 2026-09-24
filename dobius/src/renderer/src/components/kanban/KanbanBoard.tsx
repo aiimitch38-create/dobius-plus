@@ -598,6 +598,7 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
     return () => {
       cancelled = true
       clearInterval(timer)
+      toast.dismiss(LOAD_ERROR_TOAST_ID)
     }
   }, [loadTasks])
 

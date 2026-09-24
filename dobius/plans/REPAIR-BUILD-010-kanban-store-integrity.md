@@ -102,3 +102,26 @@ Revert the commit. Quarantine copies `vertex-tasks.json.unreadable-<ms>` stay on
   `{content:[{type:'text',text:message}], isError:true}` (node_modules/@anthropic-ai/
   claude-agent-sdk 0.3.201 `sdk.mjs`). A thrown store error therefore reaches the agent as a
   tool error with the read-only / could-not-be-saved text; no crash, no hang.
+
+## Review fixes (coordinator findings F1-F4, third commit)
+- F1 `KanbanBoard.tsx`: the poll effect cleanup also calls `toast.dismiss('kanban-load-error')`,
+  so the sticky toast does not outlive the board. Test: new `KanbanBoard.test.tsx` (sonner mocked,
+  rejecting source → sticky toast shown; unmount → dismissed).
+- F2 `agents-hub/AgentsOverview.tsx`: a rejected `vertexTasks.list()` keeps the previous tasks and
+  sets the Board panel subtitle to "Board could not be loaded" (cleared on the next good load)
+  instead of `[]` → "Nothing open". The component has no i18n (all strings are literals), so no
+  locale files. Test: new `AgentsOverview.test.tsx`.
+- F3 `vertex-task-store.ts` parse: a row failing `isUsableTask` (e.g. `"order":"5"`, unknown
+  status) now makes the whole file unreadable (read-only + quarantine) instead of being dropped
+  and erased by the next save. Replaced test `drops malformed rows but keeps the good ones` with
+  `treats a file with an invalid row as unreadable instead of dropping the row`.
+  Trade-off: one bad row blocks the whole board until the file is fixed (fail closed).
+- F4: new `SafeJsonFile.invalidate()` (added at the END of the class; clears only `cached`, keeps
+  status/quarantine bookkeeping). `reloadVertexTasksFromDisk()` and the failed-save path use it
+  instead of building a new SafeJsonFile, so repeated reloads of a bad file make one quarantine
+  copy. Tests: `SafeJsonFile invalidate` block (re-read after change; no second copy) and store
+  test `reloading an unreadable file does not make another quarantine copy` (Date.now stubbed so
+  copies cannot collide on name).
+- Mutation checks: M8 no dismiss on unmount; M9 overview back to `[]` on failure; M10 parse
+  filters rows again; M11 reload recreates the SafeJsonFile; M12 `invalidate()` no-op. Results in
+  the return block (each failed, then restored). AgentsOverview.tsx: fixed pre-existing `curly` in `ago()`.
