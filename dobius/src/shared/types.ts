@@ -2850,6 +2850,10 @@ export type GlobalSettings = {
    *  on read into [5_000ms, 60min] to defend against bad config.
    *  See docs/mobile-fit-hold.md. */
   mobileAutoRestoreFitMs: number | null
+  /** Why: the phone/web WebSocket listener binds 0.0.0.0 and exposes terminal,
+   *  git and file RPCs to the LAN, so it is opt-in (read once at startup; a
+   *  change takes effect on next launch). Missing or non-true means off. */
+  mobileListenerEnabled?: boolean
   /** Experimental: floating animated pet (claude.webp) in the bottom-right
    *  corner. Opt-in because it's a cosmetic joke feature; users who leave it
    *  off never mount the overlay. Toggling takes effect immediately in the

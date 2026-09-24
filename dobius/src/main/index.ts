@@ -42,6 +42,7 @@ import { resolveConsent } from './telemetry/consent'
 import { triggerStartupNotificationRegistration } from './ipc/notifications'
 import { DobiusRuntimeService } from './runtime/dobius-runtime'
 import { DobiusRuntimeRpcServer } from './runtime/runtime-rpc'
+import { shouldEnableRuntimeWebSocket } from './runtime/mobile-listener-setting'
 import { awaitRuntimeFileWatcherUnsubscribes } from './runtime/dobius-runtime-files'
 import { clearRuntimeMetadataIfOwned } from './runtime/runtime-metadata'
 import { ensureMainI18n, setMainUiLanguage } from './i18n/main-i18n'
@@ -2094,7 +2095,10 @@ app.whenReady().then(async () => {
     // app.getPath('userData') that resolves elsewhere and drops paired devices
     // across restarts/updates. See persistence.ts:getCanonicalUserDataPath.
     userDataPath: getCanonicalUserDataPath(),
-    enableWebSocket: true,
+    enableWebSocket: shouldEnableRuntimeWebSocket({
+      settings: store.getSettings(),
+      isServeMode
+    }),
     ...(isE2E ? { wsPort: 0 } : {}),
     ...(devWsPort !== undefined ? { wsPort: devWsPort } : {}),
     ...(serveOptions?.wsPort !== undefined ? { wsPort: serveOptions.wsPort } : {}),
