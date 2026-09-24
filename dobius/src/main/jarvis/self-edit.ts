@@ -9,7 +9,8 @@ import {
   realpathSync,
   writeFileSync
 } from 'node:fs'
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { protectedReason } from './self-edit-path-policy'
 
 export type SelfEditProposal = {
   id: string
@@ -39,9 +40,6 @@ const MAX_CONTENT_BYTES = 512 * 1024
 export function selfEditRoots(home: string, repoRoot: string): string[] {
   return [repoRoot, join(home, 'dobius', 'projects', 'ADAM')]
 }
-
-/** Path segments never writable even inside an allowed root. */
-const FORBIDDEN_SEGMENTS = new Set(['.git', 'node_modules', 'out', 'dist', '.env'])
 
 function containedBy(child: string, parent: string): boolean {
   const normalizedParent = parent.endsWith(sep) ? parent : `${parent}${sep}`
@@ -79,9 +77,9 @@ export function resolveEditablePath(
 
   for (const candidate of candidates) {
     const absolute = resolve(candidate)
-    const segments = absolute.split(sep)
-    if (segments.some((segment) => FORBIDDEN_SEGMENTS.has(segment))) {
-      return { ok: false, error: `"${requested}" is in a protected directory.` }
+    const lexicalReason = protectedReason(absolute.split(sep), requested)
+    if (lexicalReason) {
+      return { ok: false, error: lexicalReason }
     }
     let resolvedParent: string
     try {
@@ -100,7 +98,19 @@ export function resolveEditablePath(
         return { ok: false, error: `"${requested}" could not be resolved.` }
       }
     }
-    if (realRoots.some((root) => containedBy(realAbsolute, root))) {
+    const containingRoot = realRoots.find((root) => containedBy(realAbsolute, root))
+    if (containingRoot) {
+      // Why check again after realpath: an in-root symlink (`link -> .git`,
+      // `config.ts -> .env.local`) passes the check on the requested string
+      // while the write lands in a protected place.
+      const canonicalReason = protectedReason(
+        relative(containingRoot, realAbsolute).split(sep),
+        requested,
+        { rootRelative: true }
+      )
+      if (canonicalReason) {
+        return { ok: false, error: canonicalReason }
+      }
       return { ok: true, absolutePath: realAbsolute }
     }
   }
@@ -136,10 +146,15 @@ export class SelfEditStore {
 
   constructor(
     private readonly roots: string[],
-    private readonly now: () => number = Date.now
+    private readonly now: () => number = Date.now,
+    /** Set when no repo root is configured: every proposal is refused with it. */
+    private readonly unavailableReason: string | null = null
   ) {}
 
   propose(requestedPath: string, newContent: string, description: string): ProposeResult {
+    if (this.unavailableReason) {
+      return { ok: false, error: this.unavailableReason }
+    }
     if (typeof newContent !== 'string') {
       return { ok: false, error: 'No file content given.' }
     }
@@ -186,6 +201,15 @@ export class SelfEditStore {
     const proposal = this.proposals.get(id)
     if (!proposal) {
       return { ok: false, error: 'That change is no longer pending.' }
+    }
+    // Why re-resolve: review can take minutes, and a parent folder swapped for a
+    // symlink meanwhile would redirect the write; O_NOFOLLOW only guards the leaf.
+    const recheck = resolveEditablePath(proposal.absolutePath, this.roots)
+    if (!recheck.ok || recheck.absolutePath !== proposal.absolutePath) {
+      return {
+        ok: false,
+        error: recheck.ok ? `"${proposal.displayPath}" moved since it was proposed.` : recheck.error
+      }
     }
     try {
       mkdirSync(backupDir, { recursive: true })
