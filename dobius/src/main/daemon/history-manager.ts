@@ -1,24 +1,19 @@
 import { join } from 'node:path'
 import {
+  appendFileSync,
   mkdirSync,
   readFileSync,
   existsSync,
+  renameSync,
   rmSync,
   unlinkSync,
-  openSync,
-  closeSync,
-  readSync,
-  fstatSync,
+  writeFileSync,
   promises as fsPromises
 } from 'node:fs'
 import { writeJsonFileAtomic } from '../storage/safe-json-file'
 import { getHistorySessionDirName } from './history-paths'
-import {
-  decodeLogHeader,
-  encodeLogBatch,
-  encodeLogHeader,
-  LOG_HEADER_BYTES
-} from './terminal-history-log'
+import { encodeLogBatch, encodeLogHeader, LOG_HEADER_BYTES } from './terminal-history-log'
+import { resolveLogState, type SessionWriter } from './history-log-state'
 import type { PendingOutputRecord, TerminalCheckpointFile, TerminalSnapshot } from './types'
 
 // Why 5MB: bounds both cold-restore replay time and disk usage per session.
@@ -42,19 +37,12 @@ export type OpenSessionOptions = {
   rows: number
 }
 
-type SessionWriter = {
-  dir: string
-  checkpointPath: string
-  logPath: string
-  /** Generation of the on-disk log header. Null until lazily resolved on the
-   *  first append after a warm registerWriter (the file may predate us). */
-  logGeneration: number | null
-  /** Current log file size. Null until lazily resolved alongside generation. */
-  logBytes: number | null
+/** What the daemon took from an exited PTY for its final history write. */
+export type FinalHistoryTake = {
+  snapshot: TerminalSnapshot
+  seq: number
+  records: PendingOutputRecord[]
 }
-
-/** Only act on this writer; a respawn of the same id installs a different one. */
-type WriterGuard = { onlyWriter: object | undefined }
 
 export type HistoryManagerOptions = {
   onWriteError?: (sessionId: string, error: Error) => void
@@ -143,18 +131,17 @@ export class HistoryManager {
   async appendIncrements(
     sessionId: string,
     seq: number,
-    records: PendingOutputRecord[],
-    opts?: WriterGuard
+    records: PendingOutputRecord[]
   ): Promise<'ok' | 'needs-checkpoint'> {
     if (this.disabledSessions.has(sessionId) || records.length === 0) {
       return 'ok'
     }
     const writer = this.writers.get(sessionId)
-    if (!writer || (opts && writer !== opts.onlyWriter)) {
+    if (!writer) {
       return 'ok'
     }
     try {
-      this.resolveLogState(writer)
+      resolveLogState(writer)
       const batch = encodeLogBatch(seq, records)
       // Why max(..., header): a fresh log gets its header written below, so
       // the projected size must include it or the cap can be overshot.
@@ -189,123 +176,113 @@ export class HistoryManager {
     if (!writer) {
       return
     }
-
     try {
-      // Why: shells that haven't emitted OSC-7 have snapshot.cwd = null.
-      // Persisting null would overwrite the usable cwd from meta.json,
-      // breaking cold restore cwd recovery. Fall back to the meta cwd
-      // so the revived shell inherits the original working directory.
-      let effectiveCwd = snapshot.cwd
-      if (effectiveCwd === null) {
-        const meta = this.readMetaFromDir(writer.dir)
-        effectiveCwd = meta?.cwd ?? null
-      }
-
-      this.resolveLogState(writer)
-      const generation = (writer.logGeneration ?? 0) + 1
-      const checkpointFile: TerminalCheckpointFile = {
-        snapshotAnsi: snapshot.snapshotAnsi,
-        scrollbackAnsi: snapshot.scrollbackAnsi,
-        oscLinks: snapshot.oscLinks,
-        rehydrateSequences: snapshot.rehydrateSequences,
-        cwd: effectiveCwd,
-        cols: snapshot.cols,
-        rows: snapshot.rows,
-        modes: snapshot.modes,
-        scrollbackLines: snapshot.scrollbackLines,
-        generation,
-        checkpointedAt: new Date().toISOString()
-      }
-      const data = JSON.stringify(checkpointFile)
-      // Why: atomic write via tmp+rename prevents half-written checkpoints
-      // on crash. Reading a corrupt checkpoint is worse than reading a
-      // slightly stale one. Async IO — a sync ~MB write (worse under
-      // antivirus scanning on Windows) would stall input/IPC for its
-      // duration. Overlap is prevented by the adapter's checkpointInFlight
-      // guard, which awaits this promise before the next tick.
-      const tmpPath = `${writer.checkpointPath}.tmp`
-      await fsPromises.writeFile(tmpPath, data)
-      if (this.isWriterReplaced(sessionId, writer)) {
-        await fsPromises.rm(tmpPath, { force: true })
-        return
-      }
-      await fsPromises.rename(tmpPath, writer.checkpointPath)
-      // Why: the snapshot subsumes every logged record, so the log resets to
-      // the new generation. Crash between rename and this reset is safe: the
-      // stale log's generation no longer matches the checkpoint's, so the
-      // restore reader ignores it.
-      await fsPromises.writeFile(writer.logPath, encodeLogHeader(generation))
-      writer.logGeneration = generation
-      writer.logBytes = LOG_HEADER_BYTES
+      await this.writeCheckpoint(writer, snapshot, () => this.writers.get(sessionId) === writer)
     } catch (err) {
       this.handleWriteError(sessionId, err)
     }
   }
 
-  // Why: the same session id can be respawned (new writer, same dir) while an
-  // old write is awaiting; the old session's data must not land in the new one.
-  private isWriterReplaced(sessionId: string, writer: SessionWriter): boolean {
-    return (this.writers.get(sessionId) ?? writer) !== writer
+  /** Returns false when `owns()` turned false before the checkpoint was published. */
+  private async writeCheckpoint(
+    writer: SessionWriter,
+    snapshot: TerminalSnapshot,
+    owns: () => boolean
+  ): Promise<boolean> {
+    // Why: shells that haven't emitted OSC-7 have snapshot.cwd = null.
+    // Persisting null would overwrite the usable cwd from meta.json,
+    // breaking cold restore cwd recovery. Fall back to the meta cwd
+    // so the revived shell inherits the original working directory.
+    let effectiveCwd = snapshot.cwd
+    if (effectiveCwd === null) {
+      const meta = this.readMetaFromDir(writer.dir)
+      effectiveCwd = meta?.cwd ?? null
+    }
+
+    resolveLogState(writer)
+    const generation = (writer.logGeneration ?? 0) + 1
+    const checkpointFile: TerminalCheckpointFile = {
+      snapshotAnsi: snapshot.snapshotAnsi,
+      scrollbackAnsi: snapshot.scrollbackAnsi,
+      oscLinks: snapshot.oscLinks,
+      rehydrateSequences: snapshot.rehydrateSequences,
+      cwd: effectiveCwd,
+      cols: snapshot.cols,
+      rows: snapshot.rows,
+      modes: snapshot.modes,
+      scrollbackLines: snapshot.scrollbackLines,
+      generation,
+      checkpointedAt: new Date().toISOString()
+    }
+    const data = JSON.stringify(checkpointFile)
+    // Why: atomic write via tmp+rename prevents half-written checkpoints
+    // on crash. Reading a corrupt checkpoint is worse than reading a
+    // slightly stale one. Async IO — a sync ~MB write (worse under
+    // antivirus scanning on Windows) would stall input/IPC for its
+    // duration. Overlap is prevented by the adapter's checkpointInFlight
+    // guard, which awaits this promise before the next tick.
+    const tmpPath = `${writer.checkpointPath}.tmp`
+    await fsPromises.writeFile(tmpPath, data)
+    // Why: the same id can be respawned (same dir) during the await above;
+    // then the old session's snapshot must not be published into it.
+    if (!owns()) {
+      await fsPromises.rm(tmpPath, { force: true })
+      return false
+    }
+    // Why sync: nothing may run between the owner check and the publish.
+    renameSync(tmpPath, writer.checkpointPath)
+    // Why: the snapshot subsumes every logged record, so the log resets to
+    // the new generation. Crash between rename and this reset is safe: the
+    // stale log's generation no longer matches the checkpoint's, so the
+    // restore reader ignores it.
+    writeFileSync(writer.logPath, encodeLogHeader(generation))
+    writer.logGeneration = generation
+    writer.logBytes = LOG_HEADER_BYTES
+    return true
   }
 
-  // Why: a warm registerWriter may attach to a session dir that already has a
-  // log (app relaunch while the daemon kept running). Generation and size are
-  // read from disk once so appends continue the existing stream instead of
-  // clobbering it.
-  private resolveLogState(writer: SessionWriter): void {
-    if (writer.logBytes !== null && writer.logGeneration !== null) {
-      return
-    }
-    let headerGeneration: number | null = null
-    let size = 0
-    try {
-      const fd = openSync(writer.logPath, 'r')
-      try {
-        size = fstatSync(fd).size
-        const header = Buffer.alloc(LOG_HEADER_BYTES)
-        if (readSync(fd, header, 0, LOG_HEADER_BYTES, 0) === LOG_HEADER_BYTES) {
-          headerGeneration = decodeLogHeader(header)
-        }
-      } finally {
-        closeSync(fd)
-      }
-    } catch {
-      // Missing log file — fresh state below.
-    }
-    if (headerGeneration !== null) {
-      writer.logGeneration = headerGeneration
-      writer.logBytes = size
-      return
-    }
-    // Missing or unreadable header: logBytes = 0 makes the next append rewrite
-    // the file from scratch (writeFile truncates), so a garbage file cannot be
-    // extended.
-    writer.logBytes = 0
-    writer.logGeneration = this.readCheckpointGeneration(writer) ?? 0
-  }
-
-  private readCheckpointGeneration(writer: SessionWriter): number | null {
-    try {
-      const checkpoint = JSON.parse(readFileSync(writer.checkpointPath, 'utf-8'))
-      return typeof checkpoint.generation === 'number' ? checkpoint.generation : null
-    } catch {
-      return null
-    }
-  }
-
-  /** Current writer identity for sessionId, for WriterGuard callers. */
-  getWriterToken(sessionId: string): object | undefined {
-    return this.writers.get(sessionId)
-  }
-
-  async closeSession(sessionId: string, exitCode: number, opts?: WriterGuard): Promise<void> {
+  async closeSession(sessionId: string, exitCode: number): Promise<void> {
     const writer = this.writers.get(sessionId)
-    // Why the guard: after a respawn of this id, endedAt must not land on the new session.
-    if (!writer || (opts && writer !== opts.onlyWriter)) {
+    if (!writer) {
       return
     }
-
     this.writers.delete(sessionId)
+    this.markEnded(sessionId, writer, exitCode)
+  }
+
+  /** Final checkpoint + endedAt for an exited PTY. The writer is detached
+   *  synchronously, so a respawn of the same id registers its own writer; once
+   *  one exists, the dir belongs to the new session and this stops writing. */
+  async finalizeSession(
+    sessionId: string,
+    exitCode: number,
+    take: FinalHistoryTake | null
+  ): Promise<void> {
+    const writer = this.writers.get(sessionId)
+    if (!writer) {
+      return
+    }
+    this.writers.delete(sessionId)
+    const owns = (): boolean => !this.writers.has(sessionId)
+    if (take && !this.disabledSessions.has(sessionId)) {
+      try {
+        const published = await this.writeCheckpoint(writer, take.snapshot, owns)
+        const batch = encodeLogBatch(take.seq, take.records)
+        // Why sync with no await since the publish: ownership cannot change in between.
+        const fits = LOG_HEADER_BYTES + batch.length <= LOG_MAX_BYTES
+        if (published && take.records.length > 0 && fits) {
+          appendFileSync(writer.logPath, batch)
+        }
+      } catch (err) {
+        this.onWriteError?.(sessionId, err as Error)
+      }
+    }
+    if (owns()) {
+      this.markEnded(sessionId, writer, exitCode)
+    }
+  }
+
+  private markEnded(sessionId: string, writer: SessionWriter, exitCode: number): void {
     // Why: the session is dead, so its disabled flag is dead state. Without this
     // a session poisoned by a transient mid-life write error leaks its id in
     // disabledSessions forever (sessionIds are fresh per PTY, never reused).

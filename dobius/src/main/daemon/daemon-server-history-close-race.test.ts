@@ -11,12 +11,12 @@ import {
 } from 'node:fs'
 import { DaemonServer } from './daemon-server'
 import type { HistoryManager } from './history-manager'
-import type { SubprocessHandle } from './session'
 import { getHistorySessionDirName } from './history-paths'
+import type { SubprocessHandle } from './session'
 import type { PendingOutputRecord, TerminalSnapshot } from './types'
 
 const snapshot: TerminalSnapshot = {
-  snapshotAnsi: 'old session output\r\n',
+  snapshotAnsi: 'OLD-SESSION-SNAPSHOT\r\n',
   scrollbackAnsi: '',
   rehydrateSequences: '',
   cwd: '/tmp',
@@ -31,9 +31,11 @@ const snapshot: TerminalSnapshot = {
   scrollbackLines: 0
 }
 
-// Why: the exit handler awaits the final checkpoint before stamping endedAt.
-// If the renderer respawns the same ptyId during that await, the new live
-// session must not be marked ended by the old session's late close.
+const oldRecords: PendingOutputRecord[] = [{ kind: 'output', data: 'OLD-SESSION-OUTPUT' }]
+
+// Why: the exit handler awaits the final checkpoint's tmp write. If the same
+// ptyId is respawned during that await, nothing of the old session (snapshot,
+// records, endedAt) may land in the new live session's history.
 describe('DaemonServer history close vs respawn race', () => {
   let dir: string
   let server: DaemonServer
@@ -49,6 +51,7 @@ describe('DaemonServer history close vs respawn race', () => {
   })
 
   afterEach(() => {
+    server['stopCheckpointTimer']()
     vi.restoreAllMocks()
     rmSync(dir, { recursive: true, force: true })
   })
@@ -61,56 +64,17 @@ describe('DaemonServer history close vs respawn race', () => {
     return manager
   }
 
-  const oldRecords: PendingOutputRecord[] = [{ kind: 'output', data: 'OLD-SESSION-OUTPUT' }]
-
-  function sessionFile(name: string): string {
-    return join(dir, 'terminal-history', getHistorySessionDirName('pty-1'), name)
+  function sessionDir(): string {
+    return join(dir, 'terminal-history', getHistorySessionDirName('pty-1'))
   }
 
-  async function closeWithBarrier(
-    respawnDuringCheckpoint: boolean,
-    records: PendingOutputRecord[] = []
-  ): Promise<void> {
-    const manager = history()
-    await manager.openSession('pty-1', { cwd: '/tmp', cols: 80, rows: 24 })
-    let release: () => void = () => undefined
-    const barrier = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    vi.spyOn(manager, 'checkpoint').mockImplementation(() => barrier)
-
-    const closing = server['closeHistorySession']('pty-1', 0, snapshot, 1, records)
-    if (respawnDuringCheckpoint) {
-      await manager.openSession('pty-1', { cwd: '/tmp/new', cols: 80, rows: 24 })
-    }
-    release()
-    await closing
+  function readIfExists(name: string): string {
+    const file = join(sessionDir(), name)
+    return existsSync(file) ? readFileSync(file, 'utf-8') : ''
   }
 
-  it('does not stamp endedAt onto a session respawned during the final checkpoint', async () => {
-    await closeWithBarrier(true)
-    expect(history().readMeta('pty-1')).toMatchObject({ cwd: '/tmp/new', endedAt: null })
-  })
-
-  it('still stamps endedAt when no respawn happened (control)', async () => {
-    await closeWithBarrier(false)
-    expect(history().readMeta('pty-1')?.endedAt).toEqual(expect.any(String))
-  })
-
-  it("does not append the old session's final records to a respawned session's log", async () => {
-    await closeWithBarrier(true, oldRecords)
-    const log = sessionFile('output.log')
-    expect(existsSync(log) ? readFileSync(log, 'utf-8') : '').not.toContain('OLD-SESSION-OUTPUT')
-  })
-
-  it('appends the final records when no respawn happened (control)', async () => {
-    await closeWithBarrier(false, oldRecords)
-    expect(readFileSync(sessionFile('output.log'), 'utf-8')).toContain('OLD-SESSION-OUTPUT')
-  })
-
-  it("does not publish the old session's final checkpoint over a respawned session", async () => {
-    const manager = history()
-    await manager.openSession('pty-1', { cwd: '/tmp', cols: 80, rows: 24 })
+  // Blocks the checkpoint tmp write until the returned release() is called.
+  function blockCheckpointTmpWrite(): { started: Promise<void>; release: () => void } {
     let release: () => void = () => undefined
     const barrier = new Promise<void>((resolve) => {
       release = resolve
@@ -127,16 +91,67 @@ describe('DaemonServer history close vs respawn race', () => {
       }
       return realWriteFile(...args)
     })
+    return { started: tmpWriteStarted, release }
+  }
 
-    const closing = server['closeHistorySession']('pty-1', 0, snapshot, 1, [])
-    await tmpWriteStarted
-    await manager.openSession('pty-1', { cwd: '/tmp/new', cols: 80, rows: 24 })
-    release()
+  // Exit pty-1 with a final snapshot + records; optionally respawn it while the
+  // checkpoint's tmp write is blocked.
+  async function exitWithBarrier(respawn: (() => Promise<void>) | null): Promise<void> {
+    await server['trackHistorySession']('pty-1', { isNew: true, cwd: '/tmp', cols: 80, rows: 24 })
+    const gate = blockCheckpointTmpWrite()
+    const closing = server['closeHistorySession']('pty-1', 0, snapshot, 1, oldRecords)
+    await gate.started
+    await respawn?.()
+    gate.release()
     await closing
+  }
 
-    expect(readdirSync(join(dir, 'terminal-history', getHistorySessionDirName('pty-1')))).toEqual([
-      'meta.json'
-    ])
-    expect(manager.readMeta('pty-1')).toMatchObject({ cwd: '/tmp/new', endedAt: null })
+  function expectUntouchedLiveSession(): void {
+    expect(history().readMeta('pty-1')?.endedAt).toBeNull()
+    expect(history()['writers'].has('pty-1')).toBe(true)
+    expect(readdirSync(sessionDir()).sort()).toEqual(['meta.json'])
+    expect(readIfExists('output.log')).not.toContain('OLD-SESSION-OUTPUT')
+  }
+
+  it('production respawn (createOrAttach isNew → registerWriter) keeps the new session live', async () => {
+    await exitWithBarrier(async () => {
+      // meta endedAt is still null here, so this takes the registerWriter branch.
+      expect(server['historyReader']?.hasRestorableHistory('pty-1')).toBe(true)
+      await server['trackHistorySession']('pty-1', {
+        isNew: true,
+        cwd: '/tmp',
+        cols: 80,
+        rows: 24
+      })
+    })
+    expectUntouchedLiveSession()
+  })
+
+  it('respawn through openSession keeps the new session live', async () => {
+    await exitWithBarrier(async () => {
+      await history().openSession('pty-1', { cwd: '/tmp/new', cols: 80, rows: 24 })
+    })
+    expectUntouchedLiveSession()
+    expect(history().readMeta('pty-1')?.cwd).toBe('/tmp/new')
+  })
+
+  it('without a respawn, the final checkpoint, records and endedAt are all written (control)', async () => {
+    await exitWithBarrier(null)
+    expect(history().readMeta('pty-1')?.endedAt).toEqual(expect.any(String))
+    expect(history()['writers'].has('pty-1')).toBe(false)
+    expect(readIfExists('checkpoint.json')).toContain('OLD-SESSION-SNAPSHOT')
+    expect(readIfExists('output.log')).toContain('OLD-SESSION-OUTPUT')
+  })
+
+  it('an in-flight periodic checkpoint is not published after the id is respawned', async () => {
+    const manager = history()
+    await manager.openSession('pty-1', { cwd: '/tmp', cols: 80, rows: 24 })
+    const gate = blockCheckpointTmpWrite()
+    const ticking = manager.checkpoint('pty-1', snapshot)
+    await gate.started
+    await manager.openSession('pty-1', { cwd: '/tmp/new', cols: 80, rows: 24 })
+    gate.release()
+    await ticking
+    expect(readdirSync(sessionDir())).toEqual(['meta.json'])
   })
 })

@@ -511,14 +511,11 @@ export class DaemonServer {
       return
     }
     this.sessionsNeedingFullCheckpoint.delete(sessionId)
-    const onlyWriter = this.historyManager.getWriterToken(sessionId)
-    if (snapshot) {
-      await this.historyManager.checkpoint(sessionId, snapshot)
-      if (records.length > 0) {
-        await this.historyManager.appendIncrements(sessionId, seq, records, { onlyWriter })
-      }
-    }
-    await this.historyManager.closeSession(sessionId, code, { onlyWriter })
+    await this.historyManager.finalizeSession(
+      sessionId,
+      code,
+      snapshot ? { snapshot, seq, records } : null
+    )
   }
 
   private scheduleCheckpointTimer(): void {

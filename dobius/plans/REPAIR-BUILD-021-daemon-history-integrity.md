@@ -17,17 +17,24 @@
   - `openSession` and `updateMeta` publish meta.json with BUILD-009 `writeJsonFileAtomic`
     (unique tmp + rename; tmp removed on failure). An interrupted update leaves the previous
     meta.json intact. `writeFileSync` import dropped.
-  - Review fix (root race): `getWriterToken(sessionId)` + `closeSession(id, code, { onlyWriter })`.
-    `closeSession` stamps endedAt only when the registered writer is still the one the caller
-    captured. `daemon-server.closeHistorySession` captures it before awaiting the final
-    checkpoint, so a ptyId respawned during that await (new writer, endedAt null) is never
-    marked ended by the old session's late close. Callers without opts keep old behaviour.
-    Follow-up: the same token gates the final `appendIncrements(..., { onlyWriter })`, and
-    `checkpoint()` re-checks after writing its tmp file (`isWriterReplaced`: a DIFFERENT writer is
-    now registered) and removes the tmp instead of renaming it over the respawned session's
-    checkpoint. A merely-missing writer keeps the old behaviour.
-    `DaemonPtyAdapter`'s exit handler (~1032) calls `closeSession` with no await in between,
-    so it has no in-process gap; left unchanged (see Reviewer notes).
+  - Respawn race (final design after re-review): `finalizeSession(id, code, take)` replaces the
+    daemon-server checkpoint → appendIncrements → closeSession chain. It DETACHES the writer from
+    the map synchronously at the call (before any await). A respawn of the same id, whether
+    through `trackHistorySession` (createOrAttach isNew, meta endedAt still null →
+    `registerWriter`) or `openSession`, then gets a fresh writer. The detached finalization owns the
+    dir only while no writer exists for the id (`owns()`): the final checkpoint's tmp file is
+    removed instead of published, the final records are not appended, and endedAt is not stamped
+    once a new writer exists. The earlier `{ onlyWriter }` token design is gone; it failed because
+    `registerWriter` returned early and the new session shared the old writer.
+  - `writeCheckpoint(writer, snapshot, owns)` (shared by the periodic `checkpoint()`, whose owner
+    test is "the map still holds this writer"): after the async tmp write it checks `owns()`, then
+    publishes with `renameSync` + `writeFileSync(log header)`. Both are sync, so nothing can
+    interleave between the check and the publish (F2). The final records are appended with
+    `appendFileSync` straight after the sync publish, with no await in between.
+  - `resolveLogState` + `SessionWriter` moved unchanged to new `history-log-state.ts` to keep
+    history-manager.ts under `max-lines`.
+  - `DaemonPtyAdapter`'s exit handler is unchanged: an exit event arriving after a respawn can
+    still stamp endedAt (needs a protocol change); the sweep's live list protects such sessions.
 - `history-retention.ts` (new; split out to keep history-manager.ts under `max-lines`)
   - `sweepEndedHistory(basePath, maxTotalBytes, liveDirs, now)`: sizes every dir in the history
     root. Candidates = meta.json parses with a string `endedAt` at least 10 min old
@@ -75,12 +82,11 @@ swept, oldest first, until the folder fits. Size quota only; no age-based rule w
   `.deleting-*` leftovers; no leftover after a normal sweep; `runHistoryRetentionSweep` keeps a
   daemon-reported live id with a stale endedAt, skips on a rejected list or null provider, and
   never asks the daemon without a quota file; quota file parsing.
-- `src/main/daemon/daemon-server-history-close-race.test.ts` (new): barrier on the final
-  checkpoint in `closeHistorySession`; respawn during the await → new session keeps
-  `endedAt: null`; control without respawn → endedAt stamped.
-  Plus: respawn during the await → the new session's output.log has no old records (control:
-  records appended without respawn); real checkpoint with a barrier on the tmp write → respawned
-  session dir holds only meta.json (no old checkpoint, no tmp), endedAt null.
+- `src/main/daemon/daemon-server-history-close-race.test.ts` (new): a barrier on the real
+  checkpoint tmp write. (1) production respawn via `trackHistorySession` isNew while meta endedAt
+  is null → new writer registered, endedAt null, dir holds only meta.json, no old records;
+  (2) respawn via `openSession` → same; (3) control without respawn → checkpoint, records and
+  endedAt all written; (4) an in-flight periodic `checkpoint()` is not published after a respawn.
 - `src/main/daemon/daemon-init.test.ts`: the sweep is not called during init, and is called once
   after 30 s with `getDaemonProvider()`, `<userData>/terminal-history` and the quota path.
 - `history-manager.test.ts` is back to its pre-build content (the retention tests moved).
@@ -96,10 +102,11 @@ swept, oldest first, until the folder fits. Size quota only; no age-based rule w
 - F2a budget ignores kept bytes → 3 tests fail. F2b no "kept exceeds quota" skip → skip test fails.
 - F3a no rename-back → reopened-session test fails. F3b any leftover deleted → leftover test
   fails. F3c leftovers never cleaned → leftover test fails.
-- RACE closeHistorySession without the writer token → respawn race test fails.
-- A1 daemon-server calls appendIncrements without `{ onlyWriter }` → log test fails. A2
-  appendIncrements ignores opts → log test fails. C1 checkpoint replaced-writer guard removed →
-  checkpoint test fails. C2 guard kept but tmp not removed → checkpoint test fails.
+- Respawn race (all on the race test file): daemon-server back to the old chain → tests 1+2 fail;
+  no detach (owner = same writer object) → test 1 + control fail; `owns()` always true → 1+2 fail;
+  endedAt stamped unguarded → 1+2 fail; checkpoint owner check removed → 1+2 fail; tmp not
+  removed → 1+2 fail; final append removed → control fails; periodic-checkpoint owner check
+  always true → test 4 fails.
 
 ## Rollback
 Revert the commit. meta.json format is unchanged apart from a trailing newline (readers use
@@ -112,5 +119,8 @@ JSON.parse). The quota file is only read, never written.
   and quota reader; needed to keep history-manager.ts within `max-lines`.
 - `daemon-server.ts` touched (not in spec list) for the coordinator's root-race fix, plus one
   mechanical `consistent-type-imports` lint fix there.
+- New `history-log-state.ts` (moved `resolveLogState`/`SessionWriter`) for `max-lines`.
+- Checkpoint publish (rename + log header) is now sync (small metadata writes); the large tmp
+  write stays async.
 - Spec lists `removeSession` (history-manager.ts:302-308) as an anchor; it is unchanged — the
   sweep is a separate method so the explicit-close path keeps its semantics.
