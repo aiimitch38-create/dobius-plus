@@ -18,6 +18,7 @@ import type {
   AgentIdentityFileName,
   PendingAgentDecision,
   AgentReadableFiles,
+  AgentsExecutionState,
   BriefingItem,
   CustomAgent,
   CustomAgentInput,
@@ -1155,6 +1156,8 @@ const api = {
     discardDraft: (id: string): Promise<AgentDraftComment> =>
       ipcRenderer.invoke('agents:discardDraft', id),
     getPaused: (): Promise<boolean> => ipcRenderer.invoke('agents:getPaused'),
+    getExecutionState: (): Promise<AgentsExecutionState> =>
+      ipcRenderer.invoke('agents:getExecutionState'),
     setPaused: (paused: boolean): Promise<boolean> =>
       ipcRenderer.invoke('agents:setPaused', paused),
     getPingStatus: (): Promise<{ used: number; max: number; date: string }> =>

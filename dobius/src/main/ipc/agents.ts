@@ -3,6 +3,7 @@ import type {
   AgentCrewFileName,
   AgentIdentityFileName,
   AgentDecisionResolution,
+  AgentsExecutionState,
   BriefingItem,
   CustomAgentInput,
   CustomAgentUpdate
@@ -29,7 +30,12 @@ import {
   markAgentNotificationsRead
 } from '../agents/agent-notification-store'
 import { dismissBriefingItems, listRecentBriefingItems } from '../agents/agent-briefing-store'
-import { getAgentsPaused, getPingStatus, setAgentsPaused } from '../agents/agents-config-store'
+import {
+  getAgentsControlState,
+  getAgentsPaused,
+  getPingStatus,
+  setAgentsPaused
+} from '../agents/agents-config-store'
 import { startAgentHeartbeats } from '../agents/agent-heartbeat-service'
 import { startAsanaAutoMode } from '../agents/asana-auto-mode-service'
 import { listDrafts, setDraftStatus } from '../agents/agent-draft-store'
@@ -183,6 +189,12 @@ export function registerAgentsHandlers(
 
   ipcMain.removeHandler('agents:getPaused')
   ipcMain.handle('agents:getPaused', () => getAgentsPaused())
+
+  ipcMain.removeHandler('agents:getExecutionState')
+  ipcMain.handle('agents:getExecutionState', (): AgentsExecutionState => {
+    const { paused, status, detail, filePath } = getAgentsControlState()
+    return { paused, status, detail, filePath }
+  })
 
   ipcMain.removeHandler('agents:setPaused')
   ipcMain.handle('agents:setPaused', (_event, paused: boolean) => setAgentsPaused(paused))

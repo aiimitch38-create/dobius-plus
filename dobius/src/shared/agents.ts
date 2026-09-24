@@ -207,6 +207,15 @@ export type AgentNotificationsSnapshot = {
   unreadCount: number
 }
 
+// Effective crew pause state as the gate sees it. `detail` is an errno code or
+// parse problem, never file contents.
+export type AgentsExecutionState = {
+  paused: boolean
+  status: 'ok' | 'missing' | 'unreadable'
+  detail: string | null
+  filePath: string
+}
+
 export type BriefingItem = {
   id: string
   agentId: string
