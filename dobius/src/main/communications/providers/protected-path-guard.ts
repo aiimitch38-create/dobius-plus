@@ -45,28 +45,10 @@ function isWithin(root: string, candidate: string): boolean {
 }
 
 /**
- * Resolves the deepest ancestor that exists, so a path whose leaf has not been
- * created yet still gets its real parent checked.
- */
-function realpathNearestExisting(target: string): string {
-  let current = resolve(target)
-  for (;;) {
-    try {
-      return realpathSync(current)
-    } catch {
-      const parent = resolve(current, '..')
-      if (parent === current) {
-        return current
-      }
-      current = parent
-    }
-  }
-}
-
-/**
- * Like realpathNearestExisting, but re-appends the not-yet-existing tail, so
- * the result names the same entry the path would reach once created. Needed
- * when a caller compares against a specific file, not only a root directory.
+ * Resolves the deepest ancestor that exists, then re-appends the not-yet-existing
+ * tail, so a path whose leaf has not been created yet still gets its real parent
+ * checked. Why the tail: dropping it would turn a missing root (no ~/.gnupg)
+ * into its parent — the home folder — and refuse every path under home.
  */
 export function realpathPreservingMissingTail(target: string): string {
   let current = resolve(target)
@@ -103,9 +85,9 @@ export function assertPathOutsideProtectedRoots(
     }
   }
 
-  const realResolved = realpathNearestExisting(resolved)
+  const realResolved = realpathPreservingMissingTail(resolved)
   for (const root of protectedRoots) {
-    if (isWithin(realpathNearestExisting(root), realResolved)) {
+    if (isWithin(realpathPreservingMissingTail(root), realResolved)) {
       throw new ProtectedPathError(candidatePath)
     }
   }

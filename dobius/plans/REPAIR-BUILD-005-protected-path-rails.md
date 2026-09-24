@@ -83,9 +83,25 @@
 ## Known limits (rails are defence in depth, not a sandbox)
 - Variable indirection (`H=$HOME; cat $H/work/link`) and relative paths after `cd` into a symlinked
   dir are not resolved; the prefix-agnostic name checks still catch the known credential names.
-- Latent issue seen, not fixed (out of scope): `assertPathOutsideProtectedRoots` resolves a
-  MISSING root (e.g. `~/.gnupg` absent) to its nearest existing ancestor — the home folder — so
-  every candidate under home is refused by custom-harness/media callers.
+- A dangling symlink that points at a still-missing protected root is not followed (realpath
+  fails, so the link is treated as a plain missing path). If the root is created later, the link
+  leads into it.
+
+## Follow-up commit (coordinator request): missing protected root widened to home
+- Root cause: `assertPathOutsideProtectedRoots`' symlink pass used `realpathNearestExisting(root)`,
+  which DROPPED the missing tail. A root that does not exist (no `~/.gnupg`, `~/.aws`) therefore
+  became its parent, the home folder, and every candidate under home was refused. That hit
+  `custom-harness-provider.ts:87` (harness cwd) and `media-commands.ts:56` (uploadMedia).
+- Fix: both sides of the symlink pass now use `realpathPreservingMissingTail`, so a missing root
+  protects exactly its own path (and anything later created under it). `realpathNearestExisting`
+  had no other users and was removed. The literal pass is unchanged.
+- Tests (`protected-path-guard.test.ts`): a missing root leaves `work/notes.txt` and the base dir
+  allowed. The missing root and `.gnupg/private-keys-v1.d/k.key` are refused. A missing root under a
+  symlinked parent still refuses the real-path route in and allows a sibling file. Two of these
+  failed before the fix. Existing root tests are unchanged and green. Callers'
+  tests (custom-harness-provider, media-commands) green.
+- Mutation checks: M7 drop the tail again (9 fail across guard and rails tests), M8 compare the root
+  unresolved (3 fail).
 
 ## Rollback
 Revert the commit; rails return to the regex form and cwd failure falls back to home again.
