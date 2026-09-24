@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
+import { SafeJsonFile } from '../storage/safe-json-file'
 
 const FILE_NAME = 'teams.json'
 
@@ -39,8 +39,6 @@ export type TeamInput = {
 export type TeamUpdate = Partial<Omit<TeamInput, 'name'>> & {
   name?: string
 }
-
-let cached: Team[] | null = null
 
 function filePath(): string {
   return path.join(app.getPath('userData'), FILE_NAME)
@@ -116,37 +114,19 @@ function sanitize(raw: unknown): Team[] {
   })
 }
 
+const file = new SafeJsonFile<Team[]>({
+  filePath,
+  parse: (raw) => (Array.isArray(raw) ? sanitize(raw) : undefined),
+  fallback: () => [],
+  label: '[teams] teams.json'
+})
+
 function load(): Team[] {
-  if (cached) {
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(filePath(), 'utf-8')))
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[teams] failed to load teams:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = []
-  }
-  return cached
+  return file.get()
 }
 
 function persist(teams: Team[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(teams, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[teams] failed to persist teams:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+  file.set(teams)
 }
 
 function assertValidName(name: string): void {
@@ -179,7 +159,6 @@ export function createTeam(input: TeamInput): Team[] {
     createdAt: now,
     updatedAt: now
   })
-  cached = teams
   persist(teams)
   return listTeams()
 }
@@ -207,7 +186,6 @@ export function updateTeam(id: string, updates: TeamUpdate): Team[] {
     team.accountIds = normalizeAccountIds(updates.accountIds)
   }
   team.updatedAt = Date.now()
-  cached = teams
   persist(teams)
   return listTeams()
 }
@@ -215,7 +193,6 @@ export function updateTeam(id: string, updates: TeamUpdate): Team[] {
 // Why: a team is only a named reference to Dobius custom agents by id —
 // deleting it must never touch the agents-store records it points at.
 export function removeTeam(id: string): Team[] {
-  cached = load().filter((team) => team.id !== id)
-  persist(cached)
+  persist(load().filter((team) => team.id !== id))
   return listTeams()
 }

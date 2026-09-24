@@ -1,14 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import type { AgentDraftComment } from '../../shared/agents'
+import { SafeJsonFile } from '../storage/safe-json-file'
 
 const FILE_NAME = 'agent-drafts.json'
 const MAX_DRAFTS = 100
 const RECENT_FINALIZED_COUNT = 20
-
-let cached: AgentDraftComment[] | null = null
 
 function filePath(): string {
   return path.join(app.getPath('userData'), FILE_NAME)
@@ -53,37 +51,19 @@ function sanitize(raw: unknown): AgentDraftComment[] {
   })
 }
 
+const file = new SafeJsonFile<AgentDraftComment[]>({
+  filePath,
+  parse: (raw) => (Array.isArray(raw) ? sanitize(raw).slice(-MAX_DRAFTS) : undefined),
+  fallback: () => [],
+  label: '[agents] agent-drafts.json'
+})
+
 function load(): AgentDraftComment[] {
-  if (cached) {
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(filePath(), 'utf-8'))).slice(-MAX_DRAFTS)
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[agents] failed to load drafts:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = []
-  }
-  return cached
+  return file.get()
 }
 
 function persist(drafts: AgentDraftComment[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(drafts.slice(-MAX_DRAFTS), null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[agents] failed to persist drafts:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+  file.set(drafts.slice(-MAX_DRAFTS))
 }
 
 export function broadcastDraftsChanged(): void {
@@ -105,8 +85,7 @@ export function appendDraft(input: {
     createdAt: Date.now(),
     status: 'pending'
   }
-  cached = [...load(), draft].slice(-MAX_DRAFTS)
-  persist(cached)
+  persist([...load(), draft])
   broadcastDraftsChanged()
   return { ...draft, target: { ...draft.target } }
 }
@@ -138,8 +117,7 @@ export function setDraftStatus(
     return null
   }
   draft.status = status
-  cached = drafts.slice(-MAX_DRAFTS)
-  persist(cached)
+  persist(drafts)
   broadcastDraftsChanged()
   return { ...draft, target: { ...draft.target } }
 }

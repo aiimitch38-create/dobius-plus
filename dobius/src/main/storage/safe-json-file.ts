@@ -1,0 +1,214 @@
+import { randomBytes } from 'node:crypto'
+import {
+  constants as fsConstants,
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync
+} from 'node:fs'
+import path from 'node:path'
+
+export type SafeJsonStatus = 'ok' | 'missing' | 'unreadable'
+
+export type SafeJsonLoadResult<T> = {
+  status: SafeJsonStatus
+  value: T
+  // errno code or parse problem; never file contents.
+  detail: string | null
+}
+
+export type SafeJsonFileOptions<T> = {
+  // Resolved lazily so each store keeps its current userData location exactly.
+  filePath: () => string
+  // Returns undefined when the parsed JSON has the wrong top-level shape.
+  parse: (raw: unknown) => T | undefined
+  // First-run value used when the file does not exist yet.
+  fallback: () => T
+  // Log prefix, e.g. '[agents] agents.json'.
+  label: string
+}
+
+function errorCode(error: unknown): string | undefined {
+  return error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined
+}
+
+function errorText(error: unknown): string {
+  return errorCode(error) ?? (error instanceof Error ? error.message : String(error))
+}
+
+// Reads never write: a failed read must not be able to replace real data.
+export function readSafeJsonFile<T>(
+  filePath: string,
+  parse: (raw: unknown) => T | undefined,
+  fallback: () => T
+): SafeJsonLoadResult<T> {
+  let text: string
+  try {
+    text = readFileSync(filePath, 'utf-8')
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') {
+      return { status: 'missing', value: fallback(), detail: null }
+    }
+    return { status: 'unreadable', value: fallback(), detail: errorText(error) }
+  }
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return { status: 'unreadable', value: fallback(), detail: 'invalid JSON' }
+  }
+  const value = parse(raw)
+  if (value === undefined) {
+    return { status: 'unreadable', value: fallback(), detail: 'unexpected JSON shape' }
+  }
+  return { status: 'ok', value, detail: null }
+}
+
+export function uniqueTmpPath(target: string): string {
+  // Why: pid alone collides when two writers in one process save the same file.
+  return `${target}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`
+}
+
+// Throws on failure; the original file is untouched unless rename succeeded.
+export function writeJsonFileAtomic(target: string, value: unknown): void {
+  const tmp = uniqueTmpPath(target)
+  mkdirSync(path.dirname(target), { recursive: true })
+  try {
+    writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf-8')
+    renameSync(tmp, target)
+  } catch (error) {
+    try {
+      unlinkSync(tmp)
+    } catch (cleanupError) {
+      if (errorCode(cleanupError) !== 'ENOENT') {
+        console.warn(`[storage] could not remove temp file ${tmp}: ${errorText(cleanupError)}`)
+      }
+    }
+    throw error
+  }
+}
+
+/**
+ * One JSON file owned by one store. While the file is unreadable the store
+ * keeps session-only values in memory, refuses to save over the original,
+ * and re-reads on every access so a repaired file recovers without restart.
+ */
+export class SafeJsonFile<T> {
+  private cached: T | null = null
+  // Meaningful only once `cached` is set.
+  private status: SafeJsonStatus = 'missing'
+  private detail: string | null = null
+  private lastLoggedDetail: string | null = null
+  private lastRefusedDetail: string | null = null
+  private quarantinedFingerprint: string | null = null
+
+  constructor(private readonly options: SafeJsonFileOptions<T>) {}
+
+  get(): T {
+    if (this.cached !== null && this.status !== 'unreadable') {
+      return this.cached
+    }
+    const result = readSafeJsonFile(
+      this.options.filePath(),
+      this.options.parse,
+      this.options.fallback
+    )
+    if (result.status === 'unreadable') {
+      this.markUnreadable(result.detail ?? 'unreadable')
+      // Keep session-only edits made while unreadable instead of resetting them each access.
+      if (this.cached === null) {
+        this.cached = result.value
+      }
+      return this.cached
+    }
+    if (this.status === 'unreadable' && this.cached !== null) {
+      console.warn(`${this.options.label} is readable again; unsaved session changes were dropped`)
+    }
+    this.status = result.status
+    this.detail = null
+    this.lastLoggedDetail = null
+    this.lastRefusedDetail = null
+    this.cached = result.value
+    return this.cached
+  }
+
+  // Status of the most recent read; call get() first.
+  getStatus(): { status: SafeJsonStatus; detail: string | null } {
+    return { status: this.status, detail: this.detail }
+  }
+
+  /**
+   * Returns false (and never throws) when the value could not be saved.
+   * Why no throw: callers include run finalization and background pollers
+   * whose bookkeeping must not abort; every store already treated a failed
+   * write as warn-and-continue.
+   */
+  set(value: T): boolean {
+    const wasUnreadable = this.status === 'unreadable'
+    this.get()
+    if (wasUnreadable && this.status !== 'unreadable') {
+      // Why: `value` was derived from the session-only copy; writing it would
+      // clobber the file that just became readable again.
+      console.error(
+        `${this.options.label} not saved: the file changed on disk; reloaded it instead`
+      )
+      return false
+    }
+    this.cached = value
+    if (this.status === 'unreadable') {
+      if (this.lastRefusedDetail !== this.detail) {
+        this.lastRefusedDetail = this.detail
+        console.error(
+          `${this.options.label} not saved: the existing file is unreadable (${this.detail}); fix or remove it`
+        )
+      }
+      return false
+    }
+    try {
+      writeJsonFileAtomic(this.options.filePath(), value)
+      this.status = 'ok'
+      return true
+    } catch (error) {
+      console.warn(`${this.options.label} failed to persist: ${errorText(error)}`)
+      return false
+    }
+  }
+
+  private markUnreadable(detail: string): void {
+    this.status = 'unreadable'
+    this.detail = detail
+    if (this.lastLoggedDetail !== detail) {
+      this.lastLoggedDetail = detail
+      console.error(
+        `${this.options.label} unreadable (${this.options.filePath()}: ${detail}); saves are blocked until it is fixed`
+      )
+    }
+    this.quarantine()
+  }
+
+  // Why: keep a copy of the bad bytes as evidence; quarantine copies are never deleted.
+  private quarantine(): void {
+    const target = this.options.filePath()
+    let fingerprint: string
+    try {
+      const stat = statSync(target)
+      fingerprint = `${stat.size}:${stat.mtimeMs}:${stat.ino}`
+    } catch (error) {
+      fingerprint = `stat-failed:${errorText(error)}`
+    }
+    if (this.quarantinedFingerprint === fingerprint) {
+      return
+    }
+    this.quarantinedFingerprint = fingerprint
+    const copyPath = `${target}.unreadable-${Date.now()}`
+    try {
+      copyFileSync(target, copyPath, fsConstants.COPYFILE_EXCL)
+      console.error(`${this.options.label} unreadable copy kept at ${copyPath}`)
+    } catch (error) {
+      console.error(`${this.options.label} could not keep an unreadable copy: ${errorText(error)}`)
+    }
+  }
+}
