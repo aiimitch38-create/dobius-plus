@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -31,7 +31,11 @@ vi.mock('../agents/agents-store', () => ({
   ]
 }))
 
-import { setVertexTaskStorageDir, vertexTaskStore } from './vertex-task-store'
+import {
+  reloadVertexTasksFromDisk,
+  setVertexTaskStorageDir,
+  vertexTaskStore
+} from './vertex-task-store'
 import type { VertexTaskStatus } from '../../shared/vertex-task-types'
 
 let dir: string
@@ -42,6 +46,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   setVertexTaskStorageDir(null)
   rmSync(dir, { recursive: true, force: true })
 })
@@ -118,7 +123,7 @@ describe('move', () => {
     }
     const order = ids('backlog')
     expect(order[0]).toBe('top')
-    expect(order[order.length - 1]).toBe('bottom')
+    expect(order.at(-1)).toBe('bottom')
     expect(new Set(order).size).toBe(order.length)
   })
 
@@ -186,10 +191,14 @@ describe('persistence', () => {
     expect(vertexTaskStore.list().map((t) => t.title)).toEqual(['durable'])
   })
 
-  it('starts empty rather than throwing on a corrupt file', () => {
-    writeFileSync(join(dir, 'vertex-tasks.json'), '{not json', 'utf8')
+  it('recovers without a restart once an unreadable file is repaired', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const file = join(dir, 'vertex-tasks.json')
+    writeFileSync(file, '{not json', 'utf8')
     setVertexTaskStorageDir(dir)
-    expect(vertexTaskStore.list()).toEqual([])
+    expect(() => vertexTaskStore.list()).toThrow('read-only')
+    writeFileSync(file, JSON.stringify([{ id: '1', title: 'fixed', status: 'todo', order: 1 }]))
+    expect(vertexTaskStore.list().map((t) => t.title)).toEqual(['fixed'])
   })
 
   it('drops malformed rows but keeps the good ones', () => {
@@ -286,5 +295,106 @@ describe('remove', () => {
     expect(vertexTaskStore.remove(t.id)).toBe(true)
     expect(vertexTaskStore.list()).toEqual([])
     expect(vertexTaskStore.remove(t.id)).toBe(false)
+  })
+})
+
+// #28: a board file that cannot be read must never be replaced by an empty one.
+describe('unreadable board file', () => {
+  const boardFile = (): string => join(dir, 'vertex-tasks.json')
+
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    try {
+      chmodSync(boardFile(), 0o600)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error
+      }
+    }
+  })
+
+  const validBoard = JSON.stringify([{ id: '1', title: 'real card', status: 'todo', order: 1000 }])
+  const cases: [string, string, boolean][] = [
+    ['malformed JSON', '[{"id":"1","title":"real card"', false],
+    ['a non-array top level', '{"tasks":[]}', false],
+    ['EACCES', validBoard, true]
+  ]
+
+  it.each(cases)('keeps the original bytes and refuses every change (%s)', (_label, text, lock) => {
+    if (lock && process.getuid?.() === 0) { // root ignores file modes
+      return
+    }
+    writeFileSync(boardFile(), text, 'utf8')
+    if (lock) {
+      chmodSync(boardFile(), 0o000)
+    }
+    setVertexTaskStorageDir(dir)
+
+    expect(() => vertexTaskStore.list()).toThrow('read-only')
+    expect(() => vertexTaskStore.create({ title: 'new card' })).toThrow('read-only')
+    expect(() => vertexTaskStore.update('1', { title: 'x' })).toThrow('read-only')
+    expect(() => vertexTaskStore.move('1', 'todo', 0)).toThrow('read-only')
+    expect(() => vertexTaskStore.remove('1')).toThrow('read-only')
+    expect(() => reloadVertexTasksFromDisk()).toThrow('read-only')
+
+    chmodSync(boardFile(), 0o600)
+    expect(readFileSync(boardFile(), 'utf8')).toBe(text)
+    expect(readdirSync(dir).filter((name) => name.endsWith('.tmp'))).toEqual([])
+  })
+
+  it('throws and keeps showing the disk state when a save fails', () => {
+    if (process.getuid?.() === 0) { // root ignores directory modes
+      return
+    }
+    const kept = vertexTaskStore.create({ title: 'kept' })
+    chmodSync(dir, 0o500)
+    try {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      expect(() => vertexTaskStore.create({ title: 'lost' })).toThrow('could not be saved')
+      expect(() => vertexTaskStore.update(kept.id, { title: 'renamed' })).toThrow(
+        'could not be saved'
+      )
+      expect(vertexTaskStore.list().map((t) => t.title)).toEqual(['kept'])
+    } finally {
+      chmodSync(dir, 0o700)
+    }
+  })
+})
+
+// #47: deleting a task must not leave its id behind in any other row.
+describe('remove relationships', () => {
+  const onDisk = (): { id: string; parentTaskId?: string; childTaskIds: string[]; dependencies: string[] }[] =>
+    JSON.parse(readFileSync(join(dir, 'vertex-tasks.json'), 'utf8'))
+
+  it('removes a deleted child from its parent in the same write', () => {
+    const parent = vertexTaskStore.create({ title: 'parent' })
+    const child = vertexTaskStore.create({ title: 'child', parentTaskId: parent.id })
+    const sibling = vertexTaskStore.create({ title: 'sibling', parentTaskId: parent.id })
+
+    expect(vertexTaskStore.remove(child.id)).toBe(true)
+
+    const rows = onDisk()
+    expect(rows.map((t) => t.id)).toEqual([parent.id, sibling.id])
+    expect(rows.find((t) => t.id === parent.id)?.childTaskIds).toEqual([sibling.id])
+    expect(vertexTaskStore.list().find((t) => t.id === parent.id)?.childTaskIds).toEqual([
+      sibling.id
+    ])
+  })
+
+  it('unlinks children and dependents when a parent is deleted, deleting nothing else', () => {
+    const parent = vertexTaskStore.create({ title: 'parent' })
+    const child = vertexTaskStore.create({ title: 'child', parentTaskId: parent.id })
+    const waiter = vertexTaskStore.create({ title: 'waiter' })
+    vertexTaskStore.update(waiter.id, { dependencies: [parent.id, child.id] })
+
+    expect(vertexTaskStore.remove(parent.id)).toBe(true)
+
+    const rows = onDisk()
+    expect(rows.map((t) => t.id)).toEqual([child.id, waiter.id])
+    expect(rows.find((t) => t.id === child.id)?.parentTaskId).toBeUndefined()
+    expect(rows.find((t) => t.id === waiter.id)?.dependencies).toEqual([child.id])
   })
 })
