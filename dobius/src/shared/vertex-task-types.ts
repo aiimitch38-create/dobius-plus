@@ -109,6 +109,9 @@ export type VertexTaskDispatch = {
    *  one another live instance (dev builds share userData) is still running. */
   ownerPid?: number
   ownerSessionId?: string
+  /** Window whose dispatcher holds the claim, stamped by main from the IPC
+   *  sender, so that window can report which of its claims it still awaits. */
+  ownerWebContentsId?: number
   updatedAt: number
   /** Failure summary, surfaced in the UI. Never a stack trace. */
   error?: string

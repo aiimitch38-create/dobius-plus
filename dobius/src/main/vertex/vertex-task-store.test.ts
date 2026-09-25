@@ -37,6 +37,7 @@ import {
   vertexTaskStore
 } from './vertex-task-store'
 import type { VertexTaskStatus } from '../../shared/vertex-task-types'
+import { withClaimingWindow, withLostClaimCheck } from './vertex-dispatch-recovery'
 
 let dir: string
 
@@ -491,7 +492,7 @@ describe('interrupted dispatch claims (#94)', () => {
         agentId: agent.id,
         agentName: agent.name,
         attempts: 1,
-        updatedAt: 1,
+        updatedAt: Date.now(),
         ...dispatch
       }
     }
@@ -521,6 +522,16 @@ describe('interrupted dispatch claims (#94)', () => {
     expect(onDisk().dispatch.status).toBe('failed')
     // The operator's retry: move to To Do. The dispatcher picks up failed + todo.
     expect(vertexTaskStore.move('card', 'todo', 0)?.dispatch?.status).toBe('failed')
+  })
+
+  it('releases a live-pid claim older than the age cap (pid reused after a crash)', () => {
+    writeClaim({
+      ownerPid: LIVE_OTHER_PID,
+      ownerSessionId: 'other',
+      updatedAt: Date.now() - 6 * 60 * 60 * 1000 - 1
+    })
+
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('failed')
   })
 
   it('leaves a live other instance claim running (shared userData in dev)', () => {
@@ -608,5 +619,78 @@ describe('interrupted dispatch claims (#94)', () => {
     })
 
     expect(settled?.dispatch?.ownerPid).toBeUndefined()
+  })
+})
+
+describe('claims a window has lost (#94, same process)', () => {
+  const agent = { kind: 'agent' as const, id: 'agent-watson-uuid', name: 'Watson', initials: 'WA' }
+  const WINDOW = 7
+  const OTHER_WINDOW = 8
+
+  function claim(windowId = WINDOW): string {
+    const created = vertexTaskStore.create({ title: 'card', status: 'todo', assignee: agent })
+    withClaimingWindow(windowId, () =>
+      vertexTaskStore.update(created.id, {
+        status: 'in-progress',
+        dispatch: {
+          status: 'running',
+          agentId: agent.id,
+          agentName: agent.name,
+          attempts: 1,
+          updatedAt: Date.now()
+        }
+      })
+    )
+    return created.id
+  }
+
+  const release = (active: string[] = [], liveWindows = [WINDOW]): void =>
+    void withLostClaimCheck(
+      {
+        webContentsId: WINDOW,
+        activeTaskIds: new Set(active),
+        isWebContentsLive: (id) => liveWindows.includes(id)
+      },
+      () => vertexTaskStore.list()
+    )
+
+  const dispatchOf = (id: string) => vertexTaskStore.list().find((t) => t.id === id)?.dispatch
+
+  it('records the claiming window', () => {
+    const id = claim()
+    expect(dispatchOf(id)).toMatchObject({ ownerWebContentsId: WINDOW })
+  })
+
+  it('does not leak the window to a later in-process claim, or the check to a later read', () => {
+    release([])
+    const windowClaim = claim()
+    const created = vertexTaskStore.create({ title: 'tool', status: 'todo', assignee: agent })
+    const inProcess = vertexTaskStore.update(created.id, {
+      dispatch: { status: 'running', agentId: agent.id, agentName: agent.name, attempts: 1, updatedAt: 1 }
+    })
+    expect(inProcess?.dispatch?.ownerWebContentsId).toBeUndefined()
+    // A plain read (no window asking) never ends this process's own claims.
+    expect(dispatchOf(windowClaim)?.status).toBe('running')
+  })
+
+  it('ends a claim its dispatcher no longer awaits (reload, failed settle) as interrupted', () => {
+    const id = claim()
+    release([])
+    expect(dispatchOf(id)).toMatchObject({ status: 'failed' })
+    expect(dispatchOf(id)?.error).toContain('reloaded or lost track')
+  })
+
+  it('keeps a claim the current dispatcher still awaits', () => {
+    const id = claim()
+    release([id])
+    expect(dispatchOf(id)?.status).toBe('running')
+  })
+
+  it('leaves another open window alone, but not a closed one', () => {
+    const id = claim(OTHER_WINDOW)
+    release([], [WINDOW, OTHER_WINDOW])
+    expect(dispatchOf(id)?.status).toBe('running')
+    release([], [WINDOW])
+    expect(dispatchOf(id)?.status).toBe('failed')
   })
 })

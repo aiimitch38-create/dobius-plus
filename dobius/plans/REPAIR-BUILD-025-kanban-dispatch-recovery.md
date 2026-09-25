@@ -70,7 +70,7 @@ recovery-write failure rethrown (M12). Every one failed at least one test.
 
 ## Verification
 - `pnpm run typecheck` exit 0.
-- Targeted vitest: `src/main/vertex`, `src/renderer/src/components/kanban`,
+- Targeted vitest (after review fixes: + `src/main/agents`, `src/main/ipc/vertex-tasks.test.ts`, `agents-hub`; 40 files passed, 1 skipped; 660 passed, 2 skipped). First commit: `src/main/vertex`, `src/renderer/src/components/kanban`,
   `src/main/runtime/orchestration`, `dobius-tool-server.test.ts`,
   `reviveInterruptedChannelRuns.test.mjs`, `dobiusCommunications.test.mjs` → 13 files passed,
   1 skipped; 277 passed, 2 skipped.
@@ -88,22 +88,67 @@ recovery-write failure rethrown (M12). Every one failed at least one test.
 - Not linked to the agent run id / BUILD-023 lease: the board only learns the run id when the run
   ends (`runDobiusBoardTaskInChannel` does not expose it), and the lease is memory-only. Ownership is
   the main process, which is the lifetime of every agent run.
-- Known gap: a **renderer** reload or crash while main keeps running loses the promise that would
-  settle the card, but main (the owner) is alive, so the card stays "working" until the next app
-  restart, where it converges to failed. Fixing that needs a run-id handoff from
-  `runDobiusBoardTaskInChannel` or per-webContents claim tracking; left for a follow-up.
-- Known limit (same as BUILD-026 without its heartbeat): if a crashed instance's pid is reused by an
-  unrelated live process, its claim stays running until that process exits.
+- Renderer-side loss (review F1) is handled by per-window claim tracking (below), not by run ids.
+- New IPC `vertexTasks:releaseInterruptedClaims` (main `ipc/vertex-tasks.ts`, preload, api-types) and
+  `ipc/vertex-tasks.test.ts`, outside the spec's file list.
 
 ## Decisions for Carson
 - An interrupted claim becomes a failure that uses up its attempt (2nd interrupted attempt =
   dead-lettered), the same as a failed run, because the interrupted run may already have spent money.
 - Interrupted board runs are no longer auto-revived after a restart; the card asks for a manual retry.
-- Claims written before this build (no owner) are released on first read. If an older build is
-  running alongside and mid-run, its card will show failed; its settle write still lands afterwards.
+- Claims written before this build (no owner) are released on first read. **Transition cost
+  (review F3):** if an older installed build is running at the same time on the same profile and is
+  mid-run, the new build marks that live card failed; the old build's settle write still lands
+  afterwards and overwrites it. Running several instances on one profile is unsupported; this is
+  accepted rather than guessed around (an owner-less claim cannot be told apart from a crashed one).
+- Age cap `CLAIM_MAX_AGE_MS` = 6 hours (review F2), for claims of another live pid only.
+- After a window reload the old run may still be going in main. The card shows "Interrupted" and a
+  manual retry starts a second run beside it (review F1). Recorded; not auto-cancelled.
+
+## Review fixes (third commit)
+- **F1 (medium)** a claim of THIS process stayed "running" while main lived if the renderer reloaded
+  or crashed, or the settle write rejected (no promise left to settle it). Now:
+  - `vertexTasks:update` runs the store update inside `withClaimingWindow(event.sender.id, ...)`
+    (in `vertex-dispatch-recovery.ts`), so a claim is stamped with the calling window
+    (`ownerWebContentsId`; a renderer-sent value is replaced; in-process callers stamp none).
+  - Every dispatcher poll first calls `vertexTasks:releaseInterruptedClaims({activeTaskIds})` with
+    its in-flight set (even while paused; it launches nothing). Main runs `list()` inside
+    `withLostClaimCheck(check, ...)` and ends as failed/dead
+    ("Interrupted: the window that started this run reloaded or lost track of it. Move to To Do to
+    retry.", out of To Do, same path as crash recovery) every claim of this process + session that
+    is either (a) the caller's window and not in its in-flight set (a reloaded window's set starts
+    empty; a failed settle already left `inFlight`), or (b) another window that is gone or crashed
+    (`webContents.fromId`). A live other window's claims are left alone.
+  - Why this and not run ids: the run id is only known when the run ends
+    (`runDobiusBoardTaskInChannel`), so stamping it needs a change to the 4.4k-line vendor module;
+    the in-flight set is already the exact "still awaited" truth.
+  - The underlying agent run may still be live in main after a reload. The operator sees
+    "Interrupted" and can retry by hand; that starts a second run. Nothing is relaunched automatically.
+  - With auto mode off the dispatcher never polls, so such a claim converges when auto mode is turned
+    on, or at the next restart.
+  - Both helpers set a module variable around one synchronous store call and clear it in
+    `finally`. This keeps `vertex-task-store.ts` under max-lines and the shared `VertexTaskSource`
+    signature unchanged.
+  - An earlier draft also stamped a per-load dispatcher id. It was removed: mutation showed it
+    redundant (a reloaded window's in-flight set never holds an old claim, and a running card is never
+    re-claimed).
+- **F2 (low)** a crashed instance's pid reused by an unrelated live process kept its claim forever.
+  Claims of another live pid are now released once `updatedAt` is older than `CLAIM_MAX_AGE_MS` =
+  6 hours. Board runs are capped at $3 and 30 turns but not by time; 6 hours is several times what
+  such a run should take (an estimate, not measured), so a live run is very unlikely to be cut. If one
+  is, its own settle write still lands afterwards. Own-process claims are not aged; F1 covers them.
+- **F3 (low)** documented under Decisions (transition cost; one profile, one instance).
+- Tests: `vertex-task-store.test.ts` (age cap; window stamp; lost claim released; awaited claim kept;
+  other live window kept, closed window released), `board-dispatch.test.ts` (each poll reports the
+  in-flight set), new `ipc/vertex-tasks.test.ts` (update uses the sender window; release scoped to
+  the sender; crashed/destroyed/missing windows are not live; malformed requests ignored).
+- Mutations (each failed at least one test, then restored): no age cap; in-flight set ignored
+  (never release / always release); other windows released regardless; lost-claim release removed;
+  window not stamped; window or check not cleared after its call (leak); poll skips the release call; IPC ignores the sender; IPC skips validation;
+  crashed window counted live.
 
 ## Rollback
-Revert the commit. Data: new optional fields `ownerPid`/`ownerSessionId` on running dispatches;
+Revert the commits. Data: new optional fields `ownerPid`/`ownerSessionId`/`ownerWebContentsId` on running dispatches;
 older builds ignore them. No file format or schema change.
 
 ## Lessons

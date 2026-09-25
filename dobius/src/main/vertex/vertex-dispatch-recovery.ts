@@ -15,6 +15,20 @@ import {
 import { isPidAlive } from '../lib/is-pid-alive'
 
 const INTERRUPTED = 'Interrupted: Dobius stopped before this run finished.'
+const LOST = 'Interrupted: the window that started this run reloaded or lost track of it.'
+
+/* Why 6 hours: a board run is capped by budget ($3) and turns (30), not by
+ * time, and no such run is expected to take more than an hour or two. A
+ * claim this old held by another pid is far more likely a crashed instance
+ * whose pid the OS gave to an unrelated process than a run still going. */
+export const CLAIM_MAX_AGE_MS = 6 * 60 * 60 * 1000
+
+/** Which window is asking, and which claims its dispatcher is still awaiting. */
+export type DispatcherClaimCheck = {
+  webContentsId: number
+  activeTaskIds: ReadonlySet<string>
+  isWebContentsLive: (id: number) => boolean
+}
 
 // Why the session id: it tells this process apart from an earlier one that
 // crashed and whose pid the OS has since handed back to us.
@@ -35,17 +49,70 @@ function isOrphanedClaim(dispatch: VertexTaskDispatch): boolean {
   if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) {
     return true
   }
-  return !isPidAlive(pid)
+  return !isPidAlive(pid) || !(Date.now() - dispatch.updatedAt < CLAIM_MAX_AGE_MS)
+}
+
+/* Claims of THIS process whose renderer promise is gone: the window's
+ * dispatcher no longer awaits the task (the window reloaded, so its in-flight
+ * set started empty, or the settle write failed), or the window that claimed
+ * it is gone. Only the process's own claims: another process's are
+ * isOrphanedClaim's job. */
+function isLostDispatcherClaim(
+  task: VertexTask,
+  dispatch: VertexTaskDispatch,
+  check: DispatcherClaimCheck,
+): boolean {
+  if (
+    dispatch.status !== 'running' ||
+    dispatch.ownerPid !== PROCESS_OWNER.pid ||
+    dispatch.ownerSessionId !== PROCESS_OWNER.sessionId ||
+    typeof dispatch.ownerWebContentsId !== 'number'
+  ) {
+    return false
+  }
+  if (dispatch.ownerWebContentsId !== check.webContentsId) {
+    return !check.isWebContentsLive(dispatch.ownerWebContentsId)
+  }
+  return !check.activeTaskIds.has(task.id)
 }
 
 function withoutOwner(dispatch: VertexTaskDispatch): VertexTaskDispatch {
   const next = { ...dispatch }
   delete next.ownerPid
   delete next.ownerSessionId
+  delete next.ownerWebContentsId
   return next
 }
 
-/** Only the store stamps ownership: whatever the renderer sent is replaced. */
+/** Window whose IPC update is being applied; see withClaimingWindow. */
+let claimingWebContentsId: number | undefined
+/** Window asking for its lost claims to be ended; see withLostClaimCheck. */
+let lostClaimCheck: DispatcherClaimCheck | undefined
+
+/** Run a store update on behalf of a renderer window, so a claim it makes
+ *  records that window. Synchronous, so no other update can interleave. */
+export function withClaimingWindow<T>(webContentsId: number, update: () => T): T {
+  claimingWebContentsId = webContentsId
+  try {
+    return update()
+  } finally {
+    claimingWebContentsId = undefined
+  }
+}
+
+/** Run a store read that also ends this process's claims the asking window's
+ *  dispatcher has lost. Synchronous, like withClaimingWindow. */
+export function withLostClaimCheck<T>(check: DispatcherClaimCheck, read: () => T): T {
+  lostClaimCheck = check
+  try {
+    return read()
+  } finally {
+    lostClaimCheck = undefined
+  }
+}
+
+/** Only main stamps ownership: whatever the renderer sent is replaced. The
+ *  window is unset for in-process callers. */
 export function stampClaimOwner(patch: VertexTaskPatch): void {
   if (!patch.dispatch) {
     return
@@ -53,7 +120,12 @@ export function stampClaimOwner(patch: VertexTaskPatch): void {
   const next = withoutOwner(patch.dispatch)
   patch.dispatch =
     next.status === 'running'
-      ? { ...next, ownerPid: PROCESS_OWNER.pid, ownerSessionId: PROCESS_OWNER.sessionId }
+      ? {
+          ...next,
+          ownerPid: PROCESS_OWNER.pid,
+          ownerSessionId: PROCESS_OWNER.sessionId,
+          ownerWebContentsId: claimingWebContentsId,
+        }
       : next
 }
 
@@ -61,18 +133,23 @@ export function stampClaimOwner(patch: VertexTaskPatch): void {
  * and the dispatcher only picks up failed cards. End such a claim exactly the
  * way a failed run ends: failed (or dead once the attempts are spent) and out
  * of To Do, so only an operator move re-dispatches it. Never relaunches. */
-function releaseOrphanedClaims(tasks: VertexTask[], orderGap: number): boolean {
+function releaseClaims(
+  tasks: VertexTask[],
+  orderGap: number,
+  reasonFor: (task: VertexTask, dispatch: VertexTaskDispatch) => string | null,
+): boolean {
   const now = Date.now()
   let changed = false
   for (const task of tasks) {
-    if (!task.dispatch || !isOrphanedClaim(task.dispatch)) {
+    const reason = task.dispatch ? reasonFor(task, task.dispatch) : null
+    if (!task.dispatch || !reason) {
       continue
     }
     const spent = task.dispatch.attempts >= VERTEX_DISPATCH_MAX_ATTEMPTS
     task.dispatch = {
       ...withoutOwner(task.dispatch),
       status: spent ? 'dead' : 'failed',
-      error: spent ? `${INTERRUPTED} No attempts left.` : `${INTERRUPTED} Move to To Do to retry.`,
+      error: spent ? `${reason} No attempts left.` : `${reason} Move to To Do to retry.`,
       updatedAt: now,
     }
     if (task.status === 'todo') {
@@ -86,14 +163,22 @@ function releaseOrphanedClaims(tasks: VertexTask[], orderGap: number): boolean {
   return changed
 }
 
-/** The store's read with orphaned claims released and saved first. */
+/** The store's read with orphaned claims released and saved first. Inside
+ *  withLostClaimCheck, also this process's claims that window has lost. */
 export function readReleasingOrphanedClaims(
   read: () => VertexTask[],
   save: (tasks: VertexTask[]) => void,
   orderGap: number,
 ): VertexTask[] {
+  const check = lostClaimCheck
   const tasks = read()
-  if (!releaseOrphanedClaims(tasks, orderGap)) {
+  const released = releaseClaims(tasks, orderGap, (task, dispatch) => {
+    if (isOrphanedClaim(dispatch)) {
+      return INTERRUPTED
+    }
+    return check && isLostDispatcherClaim(task, dispatch, check) ? LOST : null
+  })
+  if (!released) {
     return tasks
   }
   try {

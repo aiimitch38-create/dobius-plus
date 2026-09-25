@@ -185,6 +185,10 @@ async function poll(): Promise<void> {
   }
   polling = true
   try {
+    // Why: this window's claims not in inFlight have no promise left to
+    // settle them (reload, failed settle write). Main ends them as
+    // interrupted. First, and even while paused: it launches nothing.
+    await window.api.vertexTasks.releaseInterruptedClaims({ activeTaskIds: [...inFlight] })
     // Why: claiming while paused would mark the card failed when main refuses the run.
     const paused = await window.api.agents.getPaused().catch(() => true)
     if (paused) {

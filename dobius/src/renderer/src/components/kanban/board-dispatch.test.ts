@@ -156,7 +156,11 @@ describe('pause gate on the poll', () => {
   function stubApi(getPaused: () => Promise<boolean>) {
     const api = {
       agents: { getPaused: vi.fn(getPaused) },
-      vertexTasks: { list: vi.fn(async () => []), update: vi.fn(async () => undefined) }
+      vertexTasks: {
+        list: vi.fn(async () => []),
+        update: vi.fn(async () => undefined),
+        releaseInterruptedClaims: vi.fn(async () => undefined)
+      }
     }
     vi.stubGlobal('window', { api })
     setBoardDispatchEnabled(true)
@@ -197,7 +201,11 @@ describe('claim failures (N9)', () => {
   function stubApi(update: () => Promise<unknown>) {
     const api = {
       agents: { getPaused: vi.fn(async () => false) },
-      vertexTasks: { list: vi.fn(async () => [ready]), update: vi.fn(update) }
+      vertexTasks: {
+        list: vi.fn(async () => [ready]),
+        update: vi.fn(update),
+        releaseInterruptedClaims: vi.fn(async () => undefined)
+      }
     }
     vi.stubGlobal('window', { api })
     setBoardDispatchEnabled(true)
@@ -249,6 +257,19 @@ describe('claim failures (N9)', () => {
     await boardDispatchInternals.dispatchTask(ready, 'board')
     expect(api.vertexTasks.update).toHaveBeenCalledTimes(1)
     expect(runBoardTask).not.toHaveBeenCalled()
+  })
+
+  it('tells main which claims this dispatcher still awaits, on every poll', async () => {
+    const api = stubApi(async () => ready)
+    runBoardTask.mockReturnValue(new Promise(() => undefined))
+    await boardDispatchInternals.poll()
+    expect(api.vertexTasks.releaseInterruptedClaims).toHaveBeenLastCalledWith({ activeTaskIds: [] })
+    await vi.waitFor(() => expect(runBoardTask).toHaveBeenCalledTimes(1))
+
+    await boardDispatchInternals.poll()
+    expect(api.vertexTasks.releaseInterruptedClaims).toHaveBeenLastCalledWith({
+      activeTaskIds: ['t1']
+    })
   })
 
   it('settles a claimed run into Review', async () => {
