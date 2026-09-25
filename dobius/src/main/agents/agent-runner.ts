@@ -26,6 +26,7 @@ import {
   withPermissionDenialNote
 } from './agent-headless-permissions'
 import { assertExecutionAdmitted, type ExecutionOrigin } from './execution-gate'
+import { claimRunSession, currentRunSessionKey, releaseRunSession } from './agent-session-lease'
 import { appendAgentRunNotification } from './agent-notification-store'
 import { appendRunProgress } from './agent-run-progress-log'
 import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
@@ -149,6 +150,15 @@ function updateRun(runId: string, updates: Partial<AgentRun>): void {
   }
 }
 
+// Why: keyed by the run's claim, not the stored run: history is display state,
+// and a reset since the run started must not be undone by it.
+function recordRunSession(agentId: string, runId: string, sessionId: string, cwd: string): void {
+  const sessionKey = currentRunSessionKey(runId)
+  if (sessionKey !== null) {
+    updateAgentSession(agentId, { lastSessionId: sessionId, lastSessionCwd: cwd, sessionKey })
+  }
+}
+
 async function consumeRun(
   runId: string,
   agent: CustomAgent,
@@ -168,11 +178,7 @@ async function consumeRun(
     for await (const message of activeQuery) {
       if (message.type === 'system' && message.subtype === 'init') {
         sawSystemInit = true
-        updateAgentSession(agent.id, {
-          lastSessionId: message.session_id,
-          lastSessionCwd: resolvedCwd,
-          sessionKey: getStoredAgentRun(runId)?.sessionKey
-        })
+        recordRunSession(agent.id, runId, message.session_id, resolvedCwd)
       }
       for (const event of reduceMessage(message, runId, agent.id)) {
         broadcastRunEvent(event)
@@ -181,11 +187,7 @@ async function consumeRun(
       if (message.type === 'result') {
         sawResult = true
         onResult?.(message)
-        updateAgentSession(agent.id, {
-          lastSessionId: message.session_id,
-          lastSessionCwd: resolvedCwd,
-          sessionKey: getStoredAgentRun(runId)?.sessionKey
-        })
+        recordRunSession(agent.id, runId, message.session_id, resolvedCwd)
         // Why: a result already in flight when stopAgentRun fires must not flip a
         // cancelled run back to success/error.
         const current = getStoredAgentRun(runId)
@@ -277,6 +279,7 @@ async function consumeRun(
       }
       liveRuns.delete(runId)
       forgetPermissionDenials(runId)
+      releaseRunSession(runId)
       releaseAgentRun(agent.id)
       reservedRuns -= 1
       broadcastRunsChanged()
@@ -312,17 +315,12 @@ export async function startAgentRun(args: {
   reservedRuns += 1
   reserveAgentRun(agent.id)
   const sessionKey = args.options?.sessionKey ?? 'default'
+  const runId = randomUUID()
   // A live run on the SAME (agent, sessionKey) means that conversation thread
   // is mid-turn: the new run must not resume its session (two writers on one
   // transcript) and starts fresh. Different sessionKeys (other channels) run
-  // in parallel, each resuming its own thread.
-  const sessionKeyBusy = listStoredAgentRuns().some(
-    (run) =>
-      run.status === 'running' &&
-      run.agentId === agent.id &&
-      (run.sessionKey ?? 'default') === sessionKey
-  )
-  const runId = randomUUID()
+  // in parallel, each resuming its own thread. Claimed before any await.
+  const sessionKeyBusy = !claimRunSession(runId, agent.id, sessionKey)
   let runAdded = false
   try {
     if (agent.engine === 'codex') {
@@ -480,6 +478,7 @@ export async function startAgentRun(args: {
   } catch (error) {
     reservedRuns -= 1
     releaseAgentRun(agent.id)
+    releaseRunSession(runId)
     liveRuns.delete(runId)
     const message = error instanceof Error ? error.message : String(error)
     if (runAdded) {
@@ -542,6 +541,7 @@ function finishCodexRun(
     args.onRunEnded?.(status, summary)
   }
   appendRunProgress(args.agent.id, status, summary)
+  releaseRunSession(args.runId)
   releaseAgentRun(args.agent.id)
   reservedRuns -= 1
   broadcastRunsChanged()

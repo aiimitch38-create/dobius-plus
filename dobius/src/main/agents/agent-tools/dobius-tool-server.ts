@@ -43,7 +43,9 @@ function queueOutboxItem(
     createdAt: Date.now()
   })
   if (!appended) {
-    return textResult('Failed: this run is no longer tracked, the message was not sent.')
+    return textResult(
+      'Failed: the message was not sent (this run is no longer tracked, or the message is over the 8 MB outbox limit).'
+    )
   }
   return textResult('Queued for the channel — it will appear in the chat within a second.')
 }

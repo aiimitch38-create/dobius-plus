@@ -20,23 +20,37 @@ describe('chunkForSpeech', () => {
 })
 
 describe('resolveElevenLabsConfig', () => {
-  it('prefers saved settings over the environment', () => {
+  const noStoredKey = (): string => ''
+
+  it('uses the protected-store key over the environment (#24)', () => {
     const config = resolveElevenLabsConfig(
-      { elevenlabsApiKey: 'sk_settings', elevenlabsVoiceId: 'voice-a' },
-      { ELEVENLABS_API_KEY: 'sk_env', ELEVENLABS_VOICE_ID: 'voice-b' } as NodeJS.ProcessEnv
+      { elevenlabsVoiceId: 'voice-a' },
+      { ELEVENLABS_API_KEY: 'sk_env', ELEVENLABS_VOICE_ID: 'voice-b' } as NodeJS.ProcessEnv,
+      () => 'sk_stored'
     )
-    expect(config).toEqual({ apiKey: 'sk_settings', voiceId: 'voice-a', modelId: 'eleven_turbo_v2_5' })
+    expect(config).toEqual({ apiKey: 'sk_stored', voiceId: 'voice-a', modelId: 'eleven_turbo_v2_5' })
   })
 
-  it('falls back to the environment when settings are empty', () => {
+  it('falls back to the environment when no key is stored', () => {
     const config = resolveElevenLabsConfig(
-      { elevenlabsApiKey: '  ', elevenlabsVoiceId: '' },
-      { ELEVENLABS_API_KEY: 'sk_env', ELEVENLABS_VOICE_ID: 'voice-b' } as NodeJS.ProcessEnv
+      { elevenlabsVoiceId: '' },
+      { ELEVENLABS_API_KEY: 'sk_env', ELEVENLABS_VOICE_ID: 'voice-b' } as NodeJS.ProcessEnv,
+      noStoredKey
     )
     expect(config?.apiKey).toBe('sk_env')
   })
 
+  it('does not read the key store when no voice is pinned', () => {
+    let reads = 0
+    const config = resolveElevenLabsConfig(null, {} as NodeJS.ProcessEnv, () => {
+      reads += 1
+      return 'sk_stored'
+    })
+    expect(config).toBeNull()
+    expect(reads).toBe(0)
+  })
+
   it('returns null when neither source has a key and voice', () => {
-    expect(resolveElevenLabsConfig(null, {} as NodeJS.ProcessEnv)).toBeNull()
+    expect(resolveElevenLabsConfig(null, {} as NodeJS.ProcessEnv, noStoredKey)).toBeNull()
   })
 })

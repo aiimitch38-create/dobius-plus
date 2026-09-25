@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain, nativeTheme } from 'electron'
 import type { Store } from '../persistence'
 import type { GlobalSettings, PersistedState } from '../../shared/types'
+import type { VoiceSettings } from '../../shared/speech-types'
 import { listSystemFontFamilies } from '../system-fonts'
 import { previewGhosttyImport } from '../ghostty/index'
 import { previewWarpThemeImport } from '../warp-themes'
@@ -37,6 +38,31 @@ function sanitizeRendererSettingsUpdate(args: Partial<GlobalSettings>): Partial<
   return sanitizedArgs
 }
 
+// Why (#24): the ElevenLabs key lives in the encrypted key store
+// (jarvis:saveElevenLabsKey); a renderer's voice object may never put a key
+// back into plaintext settings, so only the value already stored survives.
+function keepStoredElevenLabsKey(
+  voice: VoiceSettings,
+  current: VoiceSettings | undefined
+): VoiceSettings {
+  const { elevenlabsApiKey: _rendererKey, ...rest } = voice
+  void _rendererKey
+  return current?.elevenlabsApiKey !== undefined
+    ? { ...rest, elevenlabsApiKey: current.elevenlabsApiKey }
+    : rest
+}
+
+// Why (#24): an unmigrated key may still sit in settings (encryption was
+// unavailable); it is used by main only and never sent to a renderer.
+function withoutElevenLabsKey<T extends Partial<GlobalSettings>>(settings: T): T {
+  if (!settings.voice || !('elevenlabsApiKey' in settings.voice)) {
+    return settings
+  }
+  const { elevenlabsApiKey: _key, ...voice } = settings.voice
+  void _key
+  return { ...settings, voice }
+}
+
 // Why: fields that appear in the View > Appearance submenu need the menu
 // rebuilt after any update so the checkbox `checked` state stays in sync
 // with the persisted value. Electron doesn't reactively re-render menu
@@ -56,13 +82,13 @@ export function registerSettingsHandlers(
       const isOrigin =
         originWebContentsId !== undefined && window.webContents.id === originWebContentsId
       if (!window.isDestroyed() && !isOrigin) {
-        window.webContents.send('settings:changed', updates)
+        window.webContents.send('settings:changed', withoutElevenLabsKey(updates))
       }
     }
   })
 
   ipcMain.handle('settings:get', () => {
-    return store.getSettings()
+    return withoutElevenLabsKey(store.getSettings())
   })
 
   // Why (#25): read-only; reports field names only, never secret values.
@@ -75,6 +101,9 @@ export function registerSettingsHandlers(
     // Why: Floating Workspace grants are trusted only when written by the
     // main-process directory picker, never by renderer-provided settings IPC.
     delete sanitizedArgs.floatingTerminalTrustedCwds
+    if (sanitizedArgs.voice) {
+      sanitizedArgs.voice = keepStoredElevenLabsKey(sanitizedArgs.voice, store.getSettings().voice)
+    }
     if (typeof args.floatingTerminalCwd === 'string') {
       sanitizedArgs.floatingTerminalCwd = await sanitizeFloatingWorkspaceDirectorySetting(
         store,
@@ -179,7 +208,7 @@ export function registerSettingsHandlers(
       })
     }
 
-    return result
+    return withoutElevenLabsKey(result)
   })
 
   ipcMain.handle('settings:listFonts', () => {

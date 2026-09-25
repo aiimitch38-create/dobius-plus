@@ -3,6 +3,7 @@ import type { OrchestrationDb } from './db'
 import type { MessageRow, TaskRow, CoordinatorStatus } from './types'
 import { buildDispatchPreamble } from './preamble'
 import { reconcileLifecycleMessage } from './lifecycle-reconciliation'
+import { checkExecutionAdmission } from '../../agents/execution-gate'
 
 export type CoordinatorRuntime = {
   sendTerminal(handle: string, action: { text?: string; enter?: boolean }): Promise<unknown>
@@ -119,6 +120,7 @@ export class Coordinator {
   // another root created mid-run). A run only decomposes, dispatches and
   // converges over the tasks it claimed at start plus tasks linked to them.
   private ownedTaskIds = new Set<string>()
+  private admissionBlockLogged = false
   private opts: Required<Omit<CoordinatorOptions, 'onLog' | 'worktree'>> & {
     onLog: (msg: string) => void
     worktree?: string
@@ -504,7 +506,7 @@ export class Coordinator {
     // Why: count currently dispatched tasks to enforce concurrency limit.
     const dispatched = this.db.listTasks({ status: 'dispatched' })
     let slotsAvailable = this.opts.maxConcurrent - dispatched.length
-    if (slotsAvailable <= 0) {
+    if (slotsAvailable <= 0 || !this.isDispatchAdmitted()) {
       return
     }
 
@@ -592,6 +594,12 @@ export class Coordinator {
     if (this.stopped || this.db.getTask(task.id)?.status !== 'ready') {
       return
     }
+    // Why: orchestration.run only checks Pause crew at start; re-check after
+    // the last await so pausing mid-run stops further workers. The task stays
+    // 'ready' and is dispatched on a later tick once the crew is resumed.
+    if (!this.isDispatchAdmitted()) {
+      return
+    }
     const dispatch = this.db.createDispatchContext(task.id, targetHandle)
 
     // Why: agents dispatched by the coordinator must use dobius-dev in dev mode
@@ -643,6 +651,22 @@ export class Coordinator {
 
     this.opts.onLog(`Dispatched task ${task.id} to ${targetHandle}`)
     this.state.phase = 'monitoring'
+  }
+
+  private isDispatchAdmitted(): boolean {
+    const admission = checkExecutionAdmission('agent-run')
+    if (admission.allowed) {
+      this.admissionBlockLogged = false
+      return true
+    }
+    if (!this.admissionBlockLogged) {
+      this.admissionBlockLogged = true
+      const note = `Coordinator run ${this.state.runId} is holding dispatch; ready tasks stay ready: ${admission.message}`
+      // Why: the RPC caller passes no onLog, so the hold also goes to the main log once.
+      console.warn(`[orchestration] ${note}`)
+      this.opts.onLog(note)
+    }
+    return false
   }
 
   private async getAvailableTerminals(): Promise<string[]> {

@@ -51,7 +51,8 @@ function installWindowApi(
         request: vi.fn(requestMicrophonePermission)
       },
       jarvis: {
-        status: vi.fn(async () => ({ shortcutActive: false, phase: 'idle' }))
+        status: vi.fn(async () => ({ shortcutActive: false, phase: 'idle' })),
+        getElevenLabsKeyStatus: vi.fn(async () => ({ configured: false, sessionOnly: false }))
       },
       speech: {
         getCatalog: vi.fn(async () => []),

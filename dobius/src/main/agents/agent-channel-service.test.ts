@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { CustomAgent } from '../../shared/agents'
+import { IMESSAGE_SESSION_KEY, type CustomAgent } from '../../shared/agents'
 import { handleChannelMessage, matchAgentMention } from './agent-channel-service'
 import { CodexRunUnsupportedError } from './codex-run-policy'
 import { ExecutionBlockedError } from './execution-gate'
@@ -136,5 +136,21 @@ describe('handleChannelMessage tool profile', () => {
       source: 'channel',
       profile: 'imessage'
     })
+  })
+
+  it('runs iMessage asks on their own session key, never the manual default (N2)', async () => {
+    mocks.agents = [agent({ name: 'Auditor' })]
+    mocks.startAgentRun.mockReset()
+    mocks.startAgentRun.mockResolvedValue('run-1')
+    await handleChannelMessage({
+      text: '@Auditor check',
+      replyHandle: 'me',
+      prepareClaudeLaunch: vi.fn(),
+      sendReply: vi.fn(async () => {})
+    })
+    const options = mocks.startAgentRun.mock.calls[0][0].options
+    expect(options.sessionKey).toBe(IMESSAGE_SESSION_KEY)
+    expect(IMESSAGE_SESSION_KEY).not.toBe('default')
+    expect(options.resume).toBe(false)
   })
 })

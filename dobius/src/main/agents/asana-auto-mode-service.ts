@@ -1,5 +1,5 @@
 import type { SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AsanaLane, AsanaTask } from '../../shared/asana'
+import type { AsanaLane, AsanaProjectRef, AsanaTask } from '../../shared/asana'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
 import { getAsanaConfig } from '../asana/asana-config'
 import { refreshAsanaTasks } from '../asana/asana-queue-service'
@@ -16,6 +16,7 @@ import {
   hasBeenClaimed,
   isDead,
   pruneOld,
+  reconcileInterruptedClaims,
   recordBriefed,
   recordFailure,
   releaseClaim
@@ -36,18 +37,24 @@ let lastPollAt = 0
 const inFlightTriageGids = new Set<string>()
 // Triage agent ids already told they cannot triage on Codex (one brief, not one per tick).
 const codexTriageBriefed = new Set<string>()
+// Tasks waiting because no triage agent is set; one aggregate brief per process.
+const noAgentWaiting = new Set<string>()
+let noAgentBriefSent = false
 
-function taskLabel(task: AsanaTask): string {
-  return task.name.trim() || task.gid
-}
-
-function appendNoAgentBrief(task: AsanaTask, lane: AsanaLane): void {
+// Why: no triage agent is a blocked configuration, not a finished intake, so
+// the task stays unclaimed and is triaged once an agent is picked. Sent after
+// a poll, once per process, as one line for all waiting tasks.
+function flushNoAgentBrief(): void {
+  if (noAgentBriefSent || noAgentWaiting.size === 0) {
+    return
+  }
+  noAgentBriefSent = true
+  const count = noAgentWaiting.size
   appendBriefingItem({
     agentId: ASANA_BRIEFING_AGENT_ID,
     urgency: 'digest',
-    summary: `New Asana task in ${lane} lane: ${taskLabel(task)} (no triage agent set)`
+    summary: `Asana Auto Mode is blocked: ${count} ${count === 1 ? 'task' : 'tasks'} waiting, no triage agent set. They will be triaged once you pick one.`
   })
-  recordBriefed(task.gid)
 }
 
 function appendCodexTriageBrief(triageAgentId: string, name: string): void {
@@ -185,6 +192,15 @@ async function dispatchTriage(
   }
 }
 
+// Empty allowlist = every project (and tasks in no project); see asana-config.ts.
+function isAllowedForAutoMode(task: AsanaTask, allowedProjects: AsanaProjectRef[]): boolean {
+  if (allowedProjects.length === 0) {
+    return true
+  }
+  const taskProjects = new Set(task.projectGids ?? [])
+  return allowedProjects.some((project) => taskProjects.has(project.gid))
+}
+
 function maybeDispatchTask(
   task: AsanaTask,
   lane: AsanaLane,
@@ -193,6 +209,10 @@ function maybeDispatchTask(
   // Why: the review lane holds Sam's *completed* work (that's what to review), so
   // only the build lane skips completed tasks. Idempotency comes from the ledger.
   if (lane === 'build' && task.completed) {
+    return
+  }
+  const config = getAsanaConfig()
+  if (!isAllowedForAutoMode(task, config.allowedProjects)) {
     return
   }
   if (hasBeenClaimed(task.gid) || isDead(task.gid)) {
@@ -205,20 +225,22 @@ function maybeDispatchTask(
   if (!checkExecutionAdmission('agent-run').allowed) {
     return
   }
-  const triageAgentId = getAsanaConfig().autoMode.triageAgentId
+  const triageAgentId = config.autoMode.triageAgentId
   const triageAgent = triageAgentId ? getAgent(triageAgentId) : null
   if (triageAgentId && triageAgent?.engine === 'codex') {
     appendCodexTriageBrief(triageAgentId, triageAgent.name)
     return
   }
-  // A later switch back to a Codex agent should brief again.
-  codexTriageBriefed.clear()
-  const record = claimTask(task.gid, lane)
-  if (!record) {
+  if (!triageAgentId || !triageAgent) {
+    noAgentWaiting.add(task.gid)
     return
   }
-  if (!triageAgentId || !triageAgent) {
-    appendNoAgentBrief(task, lane)
+  // A later switch back to a Codex agent, or to no agent, should brief again.
+  codexTriageBriefed.clear()
+  noAgentWaiting.clear()
+  noAgentBriefSent = false
+  const record = claimTask(task.gid, lane)
+  if (!record) {
     return
   }
   void dispatchTriage(task, lane, triageAgentId, prepareClaudeLaunch)
@@ -245,6 +267,14 @@ function safeMaybeDispatchTask(
   }
 }
 
+function reconcileInterrupted(): void {
+  for (const record of reconcileInterruptedClaims()) {
+    if (record.status === 'dead') {
+      appendDeadLetterBrief(record.gid)
+    }
+  }
+}
+
 async function tick(prepareClaudeLaunch: PrepareClaudeLaunch): Promise<void> {
   if (ticking || getAgentsPaused() || !hasAsanaToken()) {
     return
@@ -260,6 +290,7 @@ async function tick(prepareClaudeLaunch: PrepareClaudeLaunch): Promise<void> {
   ticking = true
   lastPollAt = Date.now()
   try {
+    reconcileInterrupted()
     pruneOld()
     const snapshot = await refreshAsanaTasks()
     for (const task of snapshot.build) {
@@ -268,6 +299,7 @@ async function tick(prepareClaudeLaunch: PrepareClaudeLaunch): Promise<void> {
     for (const task of snapshot.review) {
       safeMaybeDispatchTask(task, 'review', prepareClaudeLaunch)
     }
+    flushNoAgentBrief()
   } finally {
     ticking = false
   }
@@ -291,4 +323,9 @@ export function stopAsanaAutoMode(): void {
 }
 
 // Test seam only.
-export const asanaAutoModeInternals = { maybeDispatchTask, dispatchTriage }
+export const asanaAutoModeInternals = {
+  maybeDispatchTask,
+  dispatchTriage,
+  reconcileInterrupted,
+  flushNoAgentBrief
+}

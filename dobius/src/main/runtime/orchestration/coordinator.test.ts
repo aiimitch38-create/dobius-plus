@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- Why: coordinator tests cover dispatch, DAG ordering, escalation, decision gates, concurrency, and stop — splitting by category would scatter shared setup without improving clarity. */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type * as ExecutionGateModule from '../../agents/execution-gate'
 import { OrchestrationDb } from './db'
 import { reconcileLifecycleMessage } from './lifecycle-reconciliation'
 import {
@@ -8,6 +9,23 @@ import {
   parseAllowStaleBaseFromSpec,
   type CoordinatorRuntime
 } from './coordinator'
+
+const gateState = vi.hoisted(() => ({ paused: false }))
+
+vi.mock('../../agents/execution-gate', async (importOriginal) => {
+  const actual = await importOriginal<typeof ExecutionGateModule>()
+  return {
+    ...actual,
+    checkExecutionAdmission: () =>
+      gateState.paused
+        ? {
+            allowed: false,
+            reason: 'paused',
+            message: 'Crew is paused. Resume it on the Agents page to allow autonomous runs.'
+          }
+        : { allowed: true }
+  }
+})
 
 type DriftResult = {
   base: string
@@ -113,6 +131,8 @@ describe('Coordinator', () => {
   let db: OrchestrationDb
 
   afterEach(() => {
+    gateState.paused = false
+    vi.restoreAllMocks()
     db?.close()
   })
 
@@ -886,6 +906,77 @@ describe('Coordinator', () => {
       expect(runtime.sentMessages).toEqual([])
       expect(runtime.createdTerminals).toEqual([])
       expect(db.getDispatchContext(task.id)).toBeUndefined()
+      expect(db.getTask(task.id)?.status).toBe('ready')
+    })
+  })
+
+  describe('Pause crew during a run', () => {
+    it('pausing while a dispatch awaits its last check leaves the task ready until resume', async () => {
+      db = new OrchestrationDb(':memory:')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const runtime = createMockRuntime()
+      runtime.terminals = [{ handle: 'term_a', worktreeId: 'wt1', connected: true, writable: true }]
+      const task = db.createTask({ spec: 'must wait for resume' })
+      let releaseProbe: () => void = () => {}
+      let probeCalls = 0
+      runtime.probeWorktreeDrift = async () => {
+        probeCalls++
+        if (probeCalls === 1) {
+          await new Promise<void>((resolve) => {
+            releaseProbe = resolve
+          })
+        }
+        return null
+      }
+      const logs: string[] = []
+      const coordinator = new Coordinator(db, runtime, {
+        spec: 'run',
+        coordinatorHandle: 'coord',
+        pollIntervalMs: 20,
+        worktree: 'wt1',
+        onLog: (msg) => logs.push(msg)
+      })
+      const run = coordinator.run()
+      await waitFor(() => probeCalls === 1)
+      gateState.paused = true
+      releaseProbe()
+      // Several paused ticks: nothing starts and the hold is logged once.
+      await new Promise((r) => {
+        setTimeout(r, 150)
+      })
+      expect(runtime.sentMessages).toEqual([])
+      expect(db.getDispatchContext(task.id)).toBeUndefined()
+      expect(db.getTask(task.id)?.status).toBe('ready')
+      expect(logs.filter((msg) => msg.includes('holding dispatch'))).toHaveLength(1)
+      expect(warn).toHaveBeenCalledTimes(1)
+
+      gateState.paused = false
+      await waitFor(() => runtime.sentMessages.length === 1)
+      insertWorkerDone(db, { taskId: task.id })
+      const result = await run
+      expect(result.status).toBe('completed')
+      expect(result.completedTasks).toContain(task.id)
+    })
+
+    it('creates no worker terminal while the crew is paused', async () => {
+      db = new OrchestrationDb(':memory:')
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      gateState.paused = true
+      const runtime = createMockRuntime()
+      const task = db.createTask({ spec: 'paused from the start' })
+      const coordinator = new Coordinator(db, runtime, {
+        spec: 'run',
+        coordinatorHandle: 'coord',
+        pollIntervalMs: 20
+      })
+      const run = coordinator.run()
+      await new Promise((r) => {
+        setTimeout(r, 100)
+      })
+      coordinator.stop()
+      await run
+      expect(runtime.createdTerminals).toEqual([])
+      expect(runtime.sentMessages).toEqual([])
       expect(db.getTask(task.id)?.status).toBe('ready')
     })
   })

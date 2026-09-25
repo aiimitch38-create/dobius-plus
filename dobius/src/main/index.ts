@@ -32,6 +32,7 @@ import { startSpan } from './observability/tracer'
 import { registerMobileHandlers } from './ipc/mobile'
 import { initTelemetry, shutdownTelemetry, trackAppOpenedOnce } from './telemetry/client'
 import { setClaudeSettingsOverrideReader } from './codex-cli/command'
+import { setAdamEndpointSettingReader } from './adam-connection'
 import { runManagedHookInstallers } from './agent-hooks/install-telemetry'
 import {
   isAgentStatusHooksEnabled,
@@ -89,6 +90,7 @@ import { maybeRedirectAppImageCliLaunch } from './startup/appimage-cli-redirect'
 import { maybeRedirectPackagedCliEntryLaunch } from './startup/packaged-cli-entry-redirect'
 import { startFirstWindowStartupServices } from './startup/first-window-startup-services'
 import { migrateLegacyDobiusConfig } from './migrate-legacy-dobius-config'
+import { claimV2WriterMarker } from './storage/v2-writer-marker'
 import { getDevInstanceIdentity } from './startup/dev-instance-identity'
 import { hydrateShellPath, mergePathSegments } from './startup/hydrate-shell-path'
 import {
@@ -585,6 +587,9 @@ if (hasSingleInstanceLock) {
   // dobius-dev in dev mode) but before app.setName('Dobius') inside whenReady
   // (which would change the resolved path on case-sensitive filesystems).
   initDataPath()
+  // Why: before anything else writes here, so a legacy V1 launch refuses this
+  // dir (bug #52). Inside the lock branch: a transient second process never writes.
+  claimV2WriterMarker(app.getVersion())
   // Why: same timing constraint as initDataPath — capture the userData path
   // before app.setName changes it. See persistence.ts:20-28.
   initStatsPath()
@@ -1643,6 +1648,9 @@ app.whenReady().then(async () => {
   // Why: headless Claude spawns must honor the Settings command override ahead
   // of the DOBIUS_CLAUDE_CLI_PATH env var (X9); read live so edits apply.
   setClaudeSettingsOverrideReader(() => store?.getSettings().agentCmdOverrides?.claude)
+  // Why: event delivery has no store handle; read the live Settings endpoint
+  // so it follows the same ADAM connection as Jarvis converse (#81).
+  setAdamEndpointSettingReader(() => store?.getSettings().voice?.adamEndpoint)
   // Why: after the store, and a background drain that resumes from the saved
   // cursor instead of re-posting the last 1,000 events on every launch (N5).
   void import('./agents/agent-run-event-journal')
@@ -1826,7 +1834,10 @@ app.whenReady().then(async () => {
     // server process should execute schedules owned by `remote_host_service`.
     allowRemoteHostScheduling: isServeMode,
     headlessDispatcher: isServeMode
-      ? async ({ automation, run, target }) => {
+      ? async ({ automation, run, target, honorExecutionGate }) => {
+          // Why: the spawn happens after awaited worktree work; the runtime
+          // re-checks Pause crew right before it for gated runs.
+          const executionOrigin = honorExecutionGate ? ('agent-run' as const) : undefined
           const terminalSnapshotLimit = 2_000
           let terminalHandle: string
           let terminalSessionId: string | null = null
@@ -1841,7 +1852,8 @@ app.whenReady().then(async () => {
                 automation,
                 run,
                 repo: target.repo
-              })
+              }),
+              executionOrigin
             })
             terminalHandle = created.startupTerminal?.handle ?? ''
             terminalSessionId = created.startupTerminal?.tabId ?? null
@@ -1864,7 +1876,8 @@ app.whenReady().then(async () => {
               {
                 agent: automation.agentId,
                 prompt: automation.prompt,
-                title: run.title
+                title: run.title,
+                executionOrigin
               }
             )
             terminalHandle = terminal.handle

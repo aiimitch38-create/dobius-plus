@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- Why: runtime behavior is stateful and cross-cutting, so these tests stay in one file to preserve the end-to-end invariants around handles, waits, and graph sync. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as GitUsernameModule from '../git/git-username'
+import type * as ExecutionGateModule from '../agents/execution-gate'
 import { performance } from 'node:perf_hooks'
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
@@ -513,7 +514,25 @@ vi.mock('../git/git-username', async () => {
   return { ...actual, resolveLocalGitUsername: vi.fn(async () => '') }
 })
 
+const executionGateState = vi.hoisted(() => ({ paused: false }))
+
+vi.mock('../agents/execution-gate', async (importOriginal) => {
+  const actual = await importOriginal<typeof ExecutionGateModule>()
+  return {
+    ...actual,
+    checkExecutionAdmission: () =>
+      executionGateState.paused
+        ? {
+            allowed: false,
+            reason: 'paused',
+            message: 'Crew is paused. Resume it on the Agents page to allow autonomous runs.'
+          }
+        : { allowed: true }
+  }
+})
+
 function resetRuntimeTestMocks(): void {
+  executionGateState.paused = false
   resetPlatform()
   advertisedUrlWatcher.clear()
   electronMocks.BrowserWindow.fromId.mockReset()
@@ -21827,6 +21846,100 @@ describe('DobiusRuntimeService', () => {
 
     expect(spawn).not.toHaveBeenCalled()
     expect(addWorktree).not.toHaveBeenCalled()
+  })
+
+  // BUILD-027 F2: serve-mode automations pass an executionOrigin, so Pause
+  // crew turned on during the awaited worktree work stops the agent spawn.
+  it('refuses the startup agent of a gated create when Pause crew turns on mid-create', async () => {
+    const metaById: Record<string, WorktreeMeta> = {}
+    const runtimeStore = {
+      ...store,
+      getSettings: () => ({
+        ...store.getSettings(),
+        agentCmdOverrides: {}
+      }),
+      getAllWorktreeMeta: () => metaById,
+      getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
+      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+        metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
+        return metaById[worktreeId]
+      }
+    }
+    const runtime = new DobiusRuntimeService(runtimeStore as never)
+    const spawn = vi.fn().mockResolvedValue({ id: 'pty-gated-startup' })
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.setNotifier({
+      worktreesChanged: vi.fn(),
+      reposChanged: vi.fn(),
+      activateWorktree: vi.fn(),
+      createTerminal: vi.fn(),
+      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-gated-startup' }),
+      splitTerminal: vi.fn(),
+      renameTerminal: vi.fn(),
+      focusTerminal: vi.fn(),
+      closeTerminal: vi.fn(),
+      sleepWorktree: vi.fn(),
+      terminalFitOverrideChanged: vi.fn(),
+      terminalDriverChanged: vi.fn()
+    })
+    runtime.attachWindow(1)
+
+    computeWorktreePathMock.mockReturnValue('/tmp/workspaces/runtime-gated-startup')
+    ensurePathWithinWorkspaceMock.mockReturnValue('/tmp/workspaces/runtime-gated-startup')
+    const worktreeEntry = {
+      path: '/tmp/workspaces/runtime-gated-startup',
+      head: 'def',
+      branch: 'runtime-gated-startup',
+      isBare: false,
+      isMainWorktree: false
+    }
+    // Pause crew turns on while the worktree is being created (an awaited step).
+    vi.mocked(addWorktree).mockImplementationOnce(async () => {
+      executionGateState.paused = true
+      return {}
+    })
+    vi.mocked(listWorktrees).mockResolvedValue([worktreeEntry])
+
+    const create = runtime.createManagedWorktree({
+      repoSelector: TEST_REPO_ID,
+      name: 'runtime-gated-startup',
+      startupAgent: 'codex',
+      startupPrompt: 'hi',
+      executionOrigin: 'agent-run'
+    })
+
+    await expect(create).rejects.toMatchObject({
+      name: 'ExecutionBlockedError',
+      message: expect.stringContaining(
+        'Workspace /tmp/workspaces/runtime-gated-startup was created, but no agent was started in it.'
+      )
+    })
+    await expect(create).rejects.toThrow(/Crew is paused/)
+    expect(spawn).not.toHaveBeenCalled()
+
+    // The same workspace can still launch an agent once resumed; a gated launch
+    // into it while paused is refused before the spawn.
+    executionGateState.paused = false
+    const created = await runtime.createManagedWorktree({
+      repoSelector: TEST_REPO_ID,
+      name: 'runtime-gated-startup-2',
+      executionOrigin: 'agent-run'
+    })
+    spawn.mockClear()
+    executionGateState.paused = true
+    await expect(
+      runtime.launchAgentTerminal(`id:${created.worktree.id}`, {
+        agent: 'codex',
+        prompt: 'hi',
+        executionOrigin: 'agent-run'
+      })
+    ).rejects.toThrow(/Crew is paused/)
+    expect(spawn).not.toHaveBeenCalled()
   })
 
   it('launches explicit startup agents with prompts for CLI-created worktrees', async () => {

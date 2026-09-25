@@ -40,6 +40,25 @@ describe('selfEditRoots', () => {
       '/Users/x/dobius/projects/ADAM'
     ])
   })
+
+  it('never lets the ADAM location override widen the write roots (review F1)', () => {
+    const saved = process.env.DOBIUS_ADAM_PROJECT_DIR
+    try {
+      for (const override of ['/', '/Users/x', '/opt/adam']) {
+        process.env.DOBIUS_ADAM_PROJECT_DIR = override
+        expect(selfEditRoots('/Users/x', '/repo')).toEqual([
+          '/repo',
+          '/Users/x/dobius/projects/ADAM'
+        ])
+      }
+    } finally {
+      if (saved === undefined) {
+        delete process.env.DOBIUS_ADAM_PROJECT_DIR
+      } else {
+        process.env.DOBIUS_ADAM_PROJECT_DIR = saved
+      }
+    }
+  })
 })
 
 describe('resolveEditablePath', () => {
