@@ -20,6 +20,7 @@ import {
   dest,
   distBundle,
   envFor,
+  fixtureAsar,
   gatedScript,
   git,
   makeBundle,
@@ -169,7 +170,7 @@ describe.runIf(process.platform === 'darwin')(
         sourceStateFrom: 'install',
         version: '2.0.0',
         buildNumber: 41,
-        artifactSha256: createHash('sha256').update('v2').digest('hex')
+        artifactSha256: createHash('sha256').update(fixtureAsar('v2')).digest('hex')
       })
       expect(readFileSync(path.join(root, 'history.log'), 'utf8')).toContain(
         'version 2.0.0 build 41'

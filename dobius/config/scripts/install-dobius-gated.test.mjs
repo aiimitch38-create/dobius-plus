@@ -15,6 +15,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   asarOf,
+  asarTagCommand,
   cleanupRoots,
   dest,
   makeBundle,
@@ -232,7 +233,7 @@ function withAppShims(root) {
     const file = path.join(shimDir, name)
     writeFileSync(
       file,
-      `#!/bin/bash\nprintf '%s\\t%s\\t%s\\t%s\\n' "${name}" "$*" "$(cat "${destAsar}" 2>/dev/null)" "$([ -d "${stageOf(root)}" ] && echo staged || echo nostage)" >> "${trace}"\nexit ${exitCode}\n`
+      `#!/bin/bash\nprintf '%s\\t%s\\t%s\\t%s\\n' "${name}" "$*" "$(${asarTagCommand(destAsar)} 2>/dev/null)" "$([ -d "${stageOf(root)}" ] && echo staged || echo nostage)" >> "${trace}"\nexit ${exitCode}\n`
     )
     chmodSync(file, 0o755)
     return file
