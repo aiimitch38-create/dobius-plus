@@ -1,4 +1,4 @@
-import { buildE2EEAuthPayloadFromFrame } from './e2ee-handshake'
+import { beginE2EEAuthFromFrame } from './e2ee-handshake'
 import { parseAuthenticatedFrame, parseReadyFrame } from './remote-runtime-request-frames'
 import type { RemoteRuntimeClientError } from './remote-runtime-client-error'
 import { dispatchSharedControlFrame } from './remote-runtime-shared-control-frame-dispatch'
@@ -32,8 +32,11 @@ export function handleSharedControlTextFrame(args: {
       args.handleSocketClosed(error)
       return
     }
+    if (!args.sharedKey) {
+      return
+    }
     args.setState('awaiting_authenticated')
-    args.sendEncrypted(buildE2EEAuthPayloadFromFrame(args.deviceToken, args.frame))
+    args.sendEncrypted(beginE2EEAuthFromFrame(args.sharedKey, args.deviceToken, args.frame))
     return
   }
 

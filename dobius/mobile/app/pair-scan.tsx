@@ -199,7 +199,9 @@ export default function PairScanScreen() {
         id: hostId,
         name: hostName,
         endpoint: offer.endpoint,
-        deviceToken: offer.deviceToken,
+        // Why: the desktop swaps the single-use QR token for this phone's own
+        // token on first login; saving the scanned one would lock it out.
+        deviceToken: client?.getDeviceToken() ?? offer.deviceToken,
         publicKeyB64: offer.publicKeyB64,
         lastConnected: Date.now()
       })

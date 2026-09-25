@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WebSocket } from 'ws'
 import { E2EEChannel } from './e2ee-channel'
 import { decrypt, deriveSharedKey, encrypt, generateKeyPair } from './e2ee-crypto'
+import { enableE2EESequencing } from '../../../shared/e2ee-sequencing'
 
 // Why: #17 — a passive LAN sniffer must not be able to replay a captured
 // handshake on a fresh socket and become the paired phone.
@@ -40,6 +41,7 @@ describe('E2EEChannel replay protection (#17)', () => {
   it('rejects a captured hello + auth replayed on a new connection', () => {
     const phoneKeys = generateKeyPair()
     const sharedKey = deriveSharedKey(phoneKeys.secretKey, serverKeys.publicKey)
+    enableE2EESequencing(sharedKey, 'client')
     const hello = JSON.stringify({
       type: 'e2ee_hello',
       publicKeyB64: Buffer.from(phoneKeys.publicKey).toString('base64')
@@ -115,6 +117,7 @@ describe('E2EEChannel replay protection (#17)', () => {
   it('rejects a non-string challenge without throwing', () => {
     const phoneKeys = generateKeyPair()
     const sharedKey = deriveSharedKey(phoneKeys.secretKey, serverKeys.publicKey)
+    enableE2EESequencing(sharedKey, 'client')
     const ctx = openChannel()
     ctx.channel.handleRawMessage(
       JSON.stringify({

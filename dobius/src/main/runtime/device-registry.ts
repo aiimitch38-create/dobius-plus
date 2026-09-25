@@ -6,6 +6,10 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { hardenExistingSecureFile, writeSecureJsonFile } from '../../shared/secure-file'
 import type { DeviceScope } from '../../shared/runtime-types'
+import {
+  MOBILE_PAIRING_OFFER_MIN_REMAINING_MS,
+  MOBILE_PAIRING_OFFER_TTL_MS
+} from '../../shared/mobile-pairing-offer-lifetime'
 import { constantTimeEqual } from '../lib/constant-time-equal'
 import { readSafeJsonFile } from '../storage/safe-json-file'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
@@ -13,11 +17,7 @@ import { isMobileRpcGrant, type MobileRpcGrant } from './mobile-rpc-grants'
 
 export type { DeviceScope }
 
-// Why: a phone pairing QR carries a full device token. Until a phone first
-// connects, the only copy is on screen (or in a screenshot), so an unscanned
-// mobile offer stops authenticating after this long. Runtime links are listed
-// and revocable in Settings, so they keep no TTL here.
-export const MOBILE_PAIRING_OFFER_TTL_MS = 15 * 60 * 1000
+export { MOBILE_PAIRING_OFFER_MIN_REMAINING_MS, MOBILE_PAIRING_OFFER_TTL_MS }
 
 function isExpiredPairingOffer(device: DeviceEntry, now: number): boolean {
   return (
@@ -126,11 +126,11 @@ export class DeviceRegistry {
     this.assertWritable()
     const now = Date.now()
     const existing = this.devices.find((d) => d.lastSeenAt === 0 && d.scope === scope)
-    if (existing && !isExpiredPairingOffer(existing, now)) {
+    if (existing && !isExpiredPairingOffer(existing, now + MOBILE_PAIRING_OFFER_MIN_REMAINING_MS)) {
       return existing
     }
     if (existing) {
-      // Why: never hand out an expired offer; drop it and mint a fresh one.
+      // Why: never hand out an expired or nearly expired offer; mint a fresh one.
       return this.rotatePendingDevice(name, scope)
     }
     return this.addDevice(name, scope)
@@ -176,6 +176,31 @@ export class DeviceRegistry {
       return null
     }
     return device
+  }
+
+  // Why: a mobile pairing QR is single-use. The first login with it swaps in a
+  // new token that only the phone receives (inside the E2EE channel), so a
+  // photo or screenshot of the QR is worthless once the phone has paired.
+  // Runtime links are shared by parallel short-lived sockets (CLI, desktop
+  // remote hosts, browser tabs) and keep their token; they stay listed and
+  // revocable instead. Throws if the swap cannot be saved (nothing changes).
+  consumePairingOffer(token: string): string | null {
+    const device = this.validateToken(token)
+    if (!device || device.scope !== 'mobile' || device.lastSeenAt !== 0) {
+      return null
+    }
+    this.assertWritable()
+    const previous = { token: device.token, lastSeenAt: device.lastSeenAt }
+    device.token = randomBytes(24).toString('hex')
+    device.lastSeenAt = Date.now()
+    try {
+      this.save()
+    } catch (error) {
+      device.token = previous.token
+      device.lastSeenAt = previous.lastSeenAt
+      throw error
+    }
+    return device.token
   }
 
   updateLastSeen(deviceId: string): void {

@@ -2,7 +2,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DeviceRegistry, MOBILE_PAIRING_OFFER_TTL_MS } from './device-registry'
+import {
+  DeviceRegistry,
+  MOBILE_PAIRING_OFFER_MIN_REMAINING_MS,
+  MOBILE_PAIRING_OFFER_TTL_MS
+} from './device-registry'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 
 // Why: #19 — a pairing QR is a full device token. An old screenshot of an
@@ -47,6 +51,18 @@ describe('mobile pairing offer expiry (#19)', () => {
     expect(fresh.token).not.toBe(stale.token)
     expect(registry.validateToken(fresh.token)?.deviceId).toBe(fresh.deviceId)
     expect(registry.getDevice(stale.deviceId)).toBeNull()
+  })
+
+  it('re-issues an offer with more than 5 minutes left, mints a new one below that (F2)', () => {
+    const registry = new DeviceRegistry(dir)
+    const offer = registry.getOrCreatePendingDevice('Mobile', 'mobile')
+    const edge = MOBILE_PAIRING_OFFER_TTL_MS - MOBILE_PAIRING_OFFER_MIN_REMAINING_MS
+    vi.setSystemTime(T0 + edge)
+    expect(registry.getOrCreatePendingDevice('Mobile', 'mobile').token).toBe(offer.token)
+    vi.setSystemTime(T0 + edge + 1)
+    const fresh = registry.getOrCreatePendingDevice('Mobile', 'mobile')
+    expect(fresh.token).not.toBe(offer.token)
+    expect(registry.getDevice(offer.deviceId)).toBeNull()
   })
 
   it('keeps a paired phone valid long after the TTL', () => {

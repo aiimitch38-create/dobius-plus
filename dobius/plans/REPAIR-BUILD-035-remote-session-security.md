@@ -114,10 +114,7 @@ challenge (5, incl. the real-server integration test); M14 phone drops challenge
   `remote-runtime-shared-control-frame-handler.ts`, `src/renderer/src/web/web-runtime-client.ts`,
   `mobile/src/transport/rpc-client.ts`, `src/main/lib/constant-time-equal.ts` (new),
   `src/main/dobius-cli/install-clis.ts` (X8 installer overlap).
-- Spec test "consumed QR fails" is not implemented: after first use the QR token IS the phone's
-  long-term credential (no rotation exists), so a consumed QR can only be killed by revoking the
-  device, which is now visible in the list. Rotating the token on first use needs a new storage
-  path in the phone, web and CLI clients; left for a follow-up.
+- Spec test "consumed QR fails": implemented for phone QRs in review round 1 (see below).
 - #19 "hidden from the device list": pending mobile offers stay out of `mobile:listDevices`
   (the onboarding badge and pairing flow count that list as "paired"); instead they now expire in
   15 min and are rotated by "Regenerate". `ipc/mobile.ts` only got a comment fix (TLS → E2EE).
@@ -149,3 +146,94 @@ unchanged; expired pending entries are simply valid again after a revert.
   a real leftover socket inode needs a SIGKILLed listener to reproduce.
 - The mobile vitest config runs from `dobius/` (`--config mobile/vitest.config.ts`) without
   `mobile/node_modules`; its tests mock `./e2ee`.
+
+## Review round 1 (coordinator security review: F1 medium, F2–F6 low)
+Branch first merged `stabilize/integration` (brings the 009C2 fix; the two
+`dobius-runtime.test.ts` "pre-marks remote Codex" cases now pass).
+
+- **F1 single-use phone QR.** `DeviceRegistry.consumePairingOffer(token)`: for a pending
+  (`lastSeenAt === 0`) *mobile* entry it mints a new 48-hex token, stamps `lastSeenAt`, saves, and
+  returns it; on a save failure it restores the old values and throws. `E2EEChannel` gets an
+  optional `claimToken` that runs right after `validateToken` in the same synchronous call (two
+  sockets racing on one QR: the second sees the swapped registry and is refused). The new token
+  goes to the client only inside the encrypted `e2ee_authenticated {deviceToken}`; the channel
+  binds itself to it. If the swap throws, the login fails (never a live QR token, never an unsaved
+  token). Phone: `rpc-client` adopts it for all later frames and reconnects
+  (`getDeviceToken()`, `onDeviceTokenRotated`); `pair-scan` / `pair-confirm` save
+  `client.getDeviceToken()` instead of the scanned token; `client-context` persists a rotation via
+  `saveHost`. **Runtime-scope links (web client, desktop remote hosts, CLI) are not rotated:**
+  one link is used by several sockets at once (`sendRemoteRuntimeRequest` opens a socket per
+  call, the desktop holds a shared-control and a request connection per environment, the web
+  client opens sibling clients, CLI processes run in parallel) and it is stored in places the
+  server cannot update together (CLI env files, the main-process environment store, browser
+  storage). A first-use swap would be won by one socket and every concurrent sibling presenting
+  the link would be locked out. Those links stay listed and revocable in Settings. Listed under
+  Decisions for Carson.
+- **F2** `getOrCreatePendingDevice` mints a fresh mobile offer when less than 5 min of its 15 min
+  would remain. Constants moved to `src/shared/mobile-pairing-offer-lifetime.ts`.
+  `usePairingQrAutoRefresh` (renderer) re-fetches the QR every 4 min while it is shown in
+  `MobilePane` and on `MobilePage` step 2, so the shown QR is at most 14 min old.
+- **F3** Live-pid sockets are probed with an injectable probe: ENOENT/ENOTSOCK → remove after one
+  probe; ECONNREFUSED → probe again after 200 ms and remove only if it refuses (or is gone) again;
+  connect, timeout or other errors keep it.
+- **F4** Pre-auth sockets remember their remote address and whether they sent any frame (a v2
+  client's first frame is `e2ee_hello`). At the global cap, the oldest socket that never sent a
+  frame is evicted first, else the oldest pre-auth one. New per-address cap of 16 sockets that
+  have not logged in (1013 "Too many pending connections"); a logged-in socket stops counting.
+- **F5** Per-direction frame counters, same v2 bump, all six client sites plus the server.
+  Carried in the authenticated 24-byte NaCl nonce rather than a plaintext field:
+  `[direction 0x01 c→s / 0x02 s→c][uint64 counter][15 random bytes]`. XSalsa20-Poly1305
+  authenticates the nonce, so it is as tamper-proof as a field inside the plaintext, and every
+  RPC/terminal frame format (text JSON and binary stream frames) stays untouched. The random
+  tail keeps nonces unique if a replayed hello makes the server re-derive a key it used before.
+  Receiver rule: open the box first, then require the peer's direction byte and a counter
+  strictly above the last accepted one (forged frames never move the counter). Implemented once in
+  `src/shared/e2ee-sequencing.ts` (per shared-key object, via WeakMap, so no call-site signature
+  changes) and used by `shared/e2ee-crypto.ts` (server + CLI + desktop remote hosts) and
+  `renderer/web/web-e2ee.ts`; the Expo app has a byte-identical copy
+  (`mobile/src/transport/e2ee-sequencing.ts`, guarded by `e2ee-sequencing-mirror.test.ts`).
+  Clients switch it on when `e2ee_ready` carries `version >= 2` and a challenge
+  (`beginE2EEAuth`), so they still talk v1 to an older desktop. The server switches it on after
+  the challenge checks out, starting from the auth frame's counter
+  (`enableE2EESequencingFromFirstFrame`), so a v1 client still receives its
+  `client_update_required` error in a format it can decrypt; a v2 auth with a non-sequenced nonce
+  is refused ("Unsequenced e2ee_auth"). Replayed, reordered and reflected frames are dropped as
+  decrypt failures (server: counts toward the 5-failure close).
+- **F6** `mobile/scripts/repro-terminal-colors.ts`, `repro-worktree-startup-stream.ts`,
+  `test-subscribe.ts` now use one helper, `mobile/scripts/e2ee-script-session.ts` (v2 hello,
+  challenge echo, counters, adopts a rotated token without printing it; it caches the last
+  decrypted frame because each script decrypts every frame in two listeners). Checked ad hoc
+  against a real `DobiusRuntimeRpcServer` (temporary test, not committed; Metro/expo tsconfig
+  keeps `mobile/scripts` out of the main vitest project).
+- **Update prompt.** New phone `ConnectionState` `'update-required'`: on `e2ee_error`
+  `client_update_required` the client stops (no auth-retry loop) and the home card / session
+  header read "Update the Dobius+ app" (`classifyConnection` verdict kind `update-required`,
+  red status dot, no Reconnect button). This only helps phones built from this commit onward;
+  a phone app from before handshake v2 still shows its old "Auth failed".
+- Line budgets: `pair-scan.tsx` and the two repro scripts are at their `mobile/.oxlintrc.json`
+  max-lines ceilings, so the new code was folded into the shared script helper and an inline
+  `client?.getDeviceToken() ?? offer.deviceToken`; the v2 phone tests moved to
+  `rpc-client-handshake-v2.test.ts` (rpc-client.test.ts is at its 800-line cap).
+
+### Tests added in this round (all seen failing with the fix removed)
+`device-registry-consume.test.ts`, `runtime-rpc-pairing-consume.test.ts` (real server: QR token
+refused after first use, phone token works, runtime link reusable), `rpc/e2ee-channel-session.test.ts`
+(in-session replay, reorder, replayed auth frame, unsequenced v2 auth, token handoff, failed swap),
+`shared/e2ee-sequencing.test.ts` (order, replay, reorder, reflection, forged frame does not move
+the counter), `shared/e2ee-sequencing-mirror.test.ts`, `shared/mobile-pairing-offer-lifetime.test.ts`,
+`renderer/.../use-pairing-qr-auto-refresh.test.ts`, the F2 case in
+`device-registry-pairing-expiry.test.ts`, 4 F3 cases in `runtime-socket-sweep.test.ts`, 2 F4 cases in
+`ws-transport-admission.test.ts`, `mobile/.../rpc-client-handshake-v2.test.ts` (challenge + sequencing
+on, v1 fallback, token adoption, update-required), `mobile/.../connection-health.test.ts`.
+Existing server tests now switch counters on for their hand-built clients.
+
+Mutation checks (each failed its tests, then restored): N1 claimToken not wired (1); N2 no swap
+(1); N3 no revert on failed save (1); N4 new token not sent (1); N5 no 5-min margin (1); N6 one
+refusal unlinks (2); N7 no per-address cap (1); N8 evict oldest regardless of hello (1); N9 counter
+not enforced (5); N10 server never sequences (7); N11 phone ignores new token (1); N12
+update-required handled as auth failure (1); N13 mobile mirror drift (1); N14 QR refresh slower
+than the reuse window (1).
+
+### Decisions for Carson (added)
+- Runtime/web/CLI pairing links are not single-use (reason above); they remain revocable.
+- If saving the swapped phone token fails, the pairing attempt fails and the user scans a new QR.

@@ -17,6 +17,9 @@ const MAX_WS_MESSAGE_BYTES = 1024 * 1024
 // cap high enough that leaked/stale streams do not starve short control RPCs.
 const MAX_WS_CONNECTIONS = 128
 const PRE_AUTH_TIMEOUT_MS = 10_000
+// Why: one LAN host cannot hold more than this many sockets that have not
+// logged in; the phone connects from its own address and is never affected.
+const MAX_PRE_AUTH_PER_ADDRESS = 16
 type WebSocketMessagePayload = string | Uint8Array<ArrayBufferLike>
 type WebSocketMessageHandler = {
   bivarianceHack(
@@ -45,6 +48,8 @@ export type WebSocketTransportOptions = {
   heartbeatIntervalMs?: number
   // Why: test-only override. Production uses PRE_AUTH_TIMEOUT_MS.
   preAuthTimeoutMs?: number
+  // Why: test-only override. Production uses MAX_PRE_AUTH_PER_ADDRESS.
+  maxPreAuthPerAddress?: number
   // Why: the pairing server can also serve the browser client, so users do
   // not need a second dev/static server once the web bundle is built.
   staticRoot?: string
@@ -55,6 +60,7 @@ export class WebSocketTransport implements RpcTransport {
   private readonly port: number
   private readonly heartbeatIntervalMs: number
   private readonly preAuthTimeoutMs: number
+  private readonly maxPreAuthPerAddress: number
   private readonly staticRoot: string | undefined
   private httpServer: HttpServer | null = null
   private wss: WebSocketServer | null = null
@@ -71,22 +77,25 @@ export class WebSocketTransport implements RpcTransport {
   // so ws.on('close') can notify the runtime which mobile client disconnected.
   private wsClientIds = new Map<WebSocket, string>()
   private preAuthTimers = new WeakMap<WebSocket, ReturnType<typeof setTimeout>>()
-  // Why: sockets that have not authenticated yet, oldest first (Set keeps
-  // insertion order). When the slot cap is hit the oldest of these is evicted
-  // so unauthenticated LAN clients can never lock a paired phone out.
-  private unauthenticatedSockets = new Set<WebSocket>()
+  // Why: sockets that have not authenticated yet, oldest first (Map keeps
+  // insertion order). When the slot cap is hit one of these is evicted so
+  // unauthenticated LAN clients can never lock a paired phone out; sockets
+  // that never sent a frame (not even e2ee_hello) go first.
+  private unauthenticatedSockets = new Map<WebSocket, { address: string; spoke: boolean }>()
 
   constructor({
     host,
     port,
     heartbeatIntervalMs,
     preAuthTimeoutMs,
+    maxPreAuthPerAddress,
     staticRoot
   }: WebSocketTransportOptions) {
     this.host = host
     this.port = port
     this.heartbeatIntervalMs = heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS
     this.preAuthTimeoutMs = preAuthTimeoutMs ?? PRE_AUTH_TIMEOUT_MS
+    this.maxPreAuthPerAddress = maxPreAuthPerAddress ?? MAX_PRE_AUTH_PER_ADDRESS
     this.staticRoot = staticRoot
   }
 
@@ -184,14 +193,19 @@ export class WebSocketTransport implements RpcTransport {
       maxPayload: MAX_WS_MESSAGE_BYTES
     })
 
-    wss.on('connection', (ws) => {
+    wss.on('connection', (ws, req) => {
+      const address = req.socket.remoteAddress ?? 'unknown'
+      if (this.countUnauthenticatedFrom(address) >= this.maxPreAuthPerAddress) {
+        ws.close(1013, 'Too many pending connections')
+        return
+      }
       if (wss.clients.size > MAX_WS_CONNECTIONS && !this.evictOldestUnauthenticated()) {
         // Why: every slot holds an authenticated client; those are never
         // displaced by a newcomer that has not proven anything yet.
         ws.close(1013, 'Maximum connections reached')
         return
       }
-      this.handleConnection(ws)
+      this.handleConnection(ws, address)
     })
 
     this.httpServer = httpServer
@@ -199,15 +213,32 @@ export class WebSocketTransport implements RpcTransport {
     this.startHeartbeat()
   }
 
+  private countUnauthenticatedFrom(address: string): number {
+    let count = 0
+    for (const entry of this.unauthenticatedSockets.values()) {
+      if (entry.address === address) {
+        count += 1
+      }
+    }
+    return count
+  }
+
   private evictOldestUnauthenticated(): boolean {
-    const oldest = this.unauthenticatedSockets.values().next()
-    if (oldest.done) {
+    let victim: WebSocket | null = null
+    for (const [ws, entry] of this.unauthenticatedSockets) {
+      if (!entry.spoke) {
+        victim = ws
+        break
+      }
+      victim ??= ws
+    }
+    if (!victim) {
       return false
     }
-    this.unauthenticatedSockets.delete(oldest.value)
+    this.unauthenticatedSockets.delete(victim)
     // Why: terminate frees the slot at once; a close handshake with a silent
     // pre-auth client could hold it until the TCP timeout.
-    oldest.value.terminate()
+    victim.terminate()
     return true
   }
 
@@ -286,7 +317,7 @@ export class WebSocketTransport implements RpcTransport {
   // one-per-request). Multiple requests can be multiplexed on the same
   // connection via the RPC `id` field. The transport delegates all auth
   // and dispatch logic to the message handler set by DobiusRuntimeRpcServer.
-  private handleConnection(ws: WebSocket): void {
+  private handleConnection(ws: WebSocket, address: string): void {
     let finalized = false
     const onPong = (): void => {
       this.wsAlive.add(ws)
@@ -297,6 +328,10 @@ export class WebSocketTransport implements RpcTransport {
       // app-level frames also count toward liveness so an actively-talking
       // client doesn't get terminated mid-request.
       this.wsAlive.add(ws)
+      const pendingEntry = this.unauthenticatedSockets.get(ws)
+      if (pendingEntry) {
+        pendingEntry.spoke = true
+      }
       const msg =
         typeof data === 'string'
           ? data
@@ -351,7 +386,7 @@ export class WebSocketTransport implements RpcTransport {
       preAuthTimer.unref()
     }
     this.preAuthTimers.set(ws, preAuthTimer)
-    this.unauthenticatedSockets.add(ws)
+    this.unauthenticatedSockets.set(ws, { address, spoke: false })
 
     // Why: seed alive=true so the first heartbeat tick after connect doesn't
     // treat a fresh socket as dead. Subsequent pongs (or any inbound traffic)

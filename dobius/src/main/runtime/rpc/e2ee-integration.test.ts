@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import type { WebSocket } from 'ws'
 import { E2EEChannel } from './e2ee-channel'
 import { generateKeyPair, deriveSharedKey, encrypt, decrypt } from './e2ee-crypto'
+import { enableE2EESequencing } from '../../../shared/e2ee-sequencing'
 
 // Why: this test simulates the full mobile → desktop E2EE flow without a real
 // WebSocket. The "mobile" side generates an ephemeral keypair, sends e2ee_hello,
@@ -68,6 +69,7 @@ describe('E2EE integration (simulated mobile ↔ desktop)', () => {
     )
     const ready = JSON.parse(sent.at(-1)!) as { challenge: string }
     const sharedKey = deriveSharedKey(keys.secretKey, serverKeys.publicKey)
+    enableE2EESequencing(sharedKey, 'client')
     targetChannel.handleRawMessage(
       encrypt(
         JSON.stringify({
@@ -135,11 +137,9 @@ describe('E2EE integration (simulated mobile ↔ desktop)', () => {
       onError
     })
 
-    completeHandshake(newChannel, newMobileKeys)
+    const secondShared = completeHandshake(newChannel, newMobileKeys)
 
     expect(onReady).toHaveBeenCalledTimes(2)
-
-    const secondShared = deriveSharedKey(newMobileKeys.secretKey, serverKeys.publicKey)
 
     // Keys from different sessions must not be interchangeable
     expect(Buffer.from(firstShared).toString('hex')).not.toBe(

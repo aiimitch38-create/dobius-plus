@@ -1,4 +1,5 @@
 import nacl from 'tweetnacl'
+import { acceptE2EEReceivedNonce, nextE2EESendNonce } from '../../../shared/e2ee-sequencing'
 
 if (globalThis.crypto?.getRandomValues) {
   nacl.setPRNG((bytes, count) => {
@@ -39,7 +40,7 @@ export function encryptBytes(
   plaintext: Uint8Array<ArrayBufferLike>,
   sharedKey: Uint8Array
 ): Uint8Array<ArrayBuffer> {
-  const nonce = nacl.randomBytes(nacl.box.nonceLength)
+  const nonce = nextE2EESendNonce(sharedKey, nacl.randomBytes(nacl.box.nonceLength))
   const ciphertext = nacl.box.after(plaintext, nonce, sharedKey)
   const bundle = new Uint8Array(nonce.length + ciphertext.length)
   bundle.set(nonce)
@@ -57,7 +58,7 @@ export function decryptBytes(
   const nonce = bundle.slice(0, nacl.box.nonceLength)
   const ciphertext = bundle.slice(nacl.box.nonceLength)
   const plaintext = nacl.box.open.after(ciphertext, nonce, sharedKey)
-  return plaintext ? new Uint8Array(plaintext) : null
+  return plaintext && acceptE2EEReceivedNonce(sharedKey, nonce) ? new Uint8Array(plaintext) : null
 }
 
 function base64ToBytes(value: string): Uint8Array {

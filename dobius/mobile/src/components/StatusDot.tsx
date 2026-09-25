@@ -9,7 +9,8 @@ const stateColors: Record<ConnectionState, string> = {
   handshaking: colors.statusAmber,
   reconnecting: colors.statusAmber,
   disconnected: colors.textMuted,
-  'auth-failed': colors.statusRed
+  'auth-failed': colors.statusRed,
+  'update-required': colors.statusRed
 }
 
 // Why: when caller passes a verdict, the dot color reflects the verdict's
@@ -25,7 +26,9 @@ export function StatusDot({
   verdict?: ConnectionVerdict
 }) {
   const color =
-    verdict?.kind === 'unreachable' || verdict?.kind === 'auth-failed'
+    verdict?.kind === 'unreachable' ||
+    verdict?.kind === 'auth-failed' ||
+    verdict?.kind === 'update-required'
       ? colors.statusRed
       : verdict?.kind === 'warning'
         ? colors.statusAmber

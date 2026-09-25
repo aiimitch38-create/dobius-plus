@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import type { WebSocket } from 'ws'
 import { E2EEChannel, type E2EEChannelOptions } from './e2ee-channel'
 import { generateKeyPair, deriveSharedKey, encrypt, decrypt, encryptBytes } from './e2ee-crypto'
+import { enableE2EESequencing } from '../../../shared/e2ee-sequencing'
 
 function publicKeyToBase64(key: Uint8Array): string {
   return Buffer.from(key).toString('base64')
@@ -43,6 +44,7 @@ function doHandshake(ctx: ReturnType<typeof setup>) {
   })
   ctx.channel.handleRawMessage(hello)
   const sharedKey = deriveSharedKey(ctx.clientKeys.secretKey, ctx.serverKeys.publicKey)
+  enableE2EESequencing(sharedKey, 'client')
   const ready = JSON.parse(ctx.ws.sent.at(-1)!) as { challenge: string }
   ctx.channel.handleRawMessage(
     encrypt(
@@ -102,6 +104,7 @@ describe('E2EEChannel', () => {
         })
       )
       const sharedKey = deriveSharedKey(ctx.clientKeys.secretKey, ctx.serverKeys.publicKey)
+      enableE2EESequencing(sharedKey, 'client')
       const ready = JSON.parse(ctx.ws.sent[0]!) as { challenge: string }
       ctx.channel.handleRawMessage(
         encrypt(

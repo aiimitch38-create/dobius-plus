@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest'
 import {
   createRuntimeTransportMetadata,
   RUNTIME_SOCKET_NAME_REGEX,
-  sweepOrphanedRuntimeSockets
+  sweepOrphanedRuntimeSockets,
+  type RuntimeSocketProbeResult
 } from './runtime-rpc'
 
 function listenOn(socketPath: string): Promise<Server> {
@@ -136,5 +137,55 @@ describe('sweepOrphanedRuntimeSockets', () => {
     const socketName = basename(transport.endpoint)
     expect(RUNTIME_SOCKET_NAME_REGEX.test(socketName)).toBe(true)
     expect(socketName).toBe('o-99-rt.sock')
+  })
+
+  describe('live-pid probe policy (F3)', () => {
+    function scriptedProbe(results: RuntimeSocketProbeResult[]) {
+      const calls: number[] = []
+      const probe = async (): Promise<RuntimeSocketProbeResult> => {
+        calls.push(Date.now())
+        return results[Math.min(calls.length - 1, results.length - 1)]!
+      }
+      return { probe, calls }
+    }
+
+    function staleSocket(): { userDataPath: string; socketPath: string } {
+      const userDataPath = mkdtempSync(join(tmpdir(), 'dobius-sweep-'))
+      const socketPath = join(userDataPath, `o-${process.pid}-eeee.sock`)
+      writeFileSync(socketPath, '')
+      return { userDataPath, socketPath }
+    }
+
+    it('keeps a socket that refuses once and then accepts (full accept queue)', async () => {
+      const { userDataPath, socketPath } = staleSocket()
+      const { probe, calls } = scriptedProbe(['refused', 'listening'])
+      await sweepOrphanedRuntimeSockets(userDataPath, SYNTHETIC_OWN_PID, probe)
+      expect(calls).toHaveLength(2)
+      expect(existsSync(socketPath)).toBe(true)
+    })
+
+    it('removes a socket only after two refusals about 200 ms apart', async () => {
+      const { userDataPath, socketPath } = staleSocket()
+      const { probe, calls } = scriptedProbe(['refused', 'refused'])
+      await sweepOrphanedRuntimeSockets(userDataPath, SYNTHETIC_OWN_PID, probe)
+      expect(calls).toHaveLength(2)
+      expect(calls[1]! - calls[0]!).toBeGreaterThanOrEqual(150)
+      expect(existsSync(socketPath)).toBe(false)
+    })
+
+    it('removes a non-socket or vanished path after one probe', async () => {
+      const { userDataPath, socketPath } = staleSocket()
+      const { probe, calls } = scriptedProbe(['gone'])
+      await sweepOrphanedRuntimeSockets(userDataPath, SYNTHETIC_OWN_PID, probe)
+      expect(calls).toHaveLength(1)
+      expect(existsSync(socketPath)).toBe(false)
+    })
+
+    it('keeps a socket whose probe times out or fails oddly', async () => {
+      const { userDataPath, socketPath } = staleSocket()
+      const { probe } = scriptedProbe(['unknown'])
+      await sweepOrphanedRuntimeSockets(userDataPath, SYNTHETIC_OWN_PID, probe)
+      expect(existsSync(socketPath)).toBe(true)
+    })
   })
 })

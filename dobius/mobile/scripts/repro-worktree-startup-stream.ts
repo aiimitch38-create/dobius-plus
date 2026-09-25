@@ -6,8 +6,8 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import nacl from 'tweetnacl'
 import WebSocket from 'ws'
+import { createScriptE2EESession } from './e2ee-script-session'
 
 const WS_URL = process.env.DOBIUS_MOBILE_WS_URL ?? 'ws://127.0.0.1:6768'
 const USER_DATA =
@@ -58,7 +58,7 @@ function readJson<T>(path: string): T {
 }
 
 const devices = readJson<Array<{ token: string }>>(join(USER_DATA, 'dobius-devices.json'))
-const token = devices[0]?.token
+let token = devices[0]?.token
 const keypair = readJson<{ publicKeyB64: string }>(join(USER_DATA, 'dobius-e2ee-keypair.json'))
 
 if (!token || !keypair.publicKeyB64) {
@@ -68,46 +68,15 @@ if (!token || !keypair.publicKeyB64) {
 let reqId = 0
 const pending = new Map<string, PendingRequest>()
 const streamListeners = new Map<string, (result: Record<string, unknown>) => void>()
-const clientKeys = nacl.box.keyPair()
-const serverPublicKey = Buffer.from(keypair.publicKeyB64, 'base64')
-const sharedKey = nacl.box.before(new Uint8Array(serverPublicKey), clientKeys.secretKey)
+const e2ee = createScriptE2EESession(keypair.publicKeyB64)
 
 function nextId(): string {
   reqId += 1
   return `startup-repro-${reqId}`
 }
 
-function toBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString('base64')
-}
-
-function fromBase64(value: string): Uint8Array {
-  return new Uint8Array(Buffer.from(value, 'base64'))
-}
-
-function encrypt(plaintext: string): string {
-  const nonce = nacl.randomBytes(nacl.box.nonceLength)
-  const message = new TextEncoder().encode(plaintext)
-  const ciphertext = nacl.box.after(message, nonce, sharedKey)
-  const bundle = new Uint8Array(nonce.length + ciphertext.length)
-  bundle.set(nonce)
-  bundle.set(ciphertext, nonce.length)
-  return toBase64(bundle)
-}
-
-function decrypt(payload: string): string | null {
-  const bundle = fromBase64(payload)
-  if (bundle.length < nacl.box.nonceLength + nacl.box.overheadLength) {
-    return null
-  }
-  const nonce = bundle.subarray(0, nacl.box.nonceLength)
-  const ciphertext = bundle.subarray(nacl.box.nonceLength)
-  const plaintext = nacl.box.open.after(ciphertext, nonce, sharedKey)
-  return plaintext ? new TextDecoder().decode(plaintext) : null
-}
-
 function sendRaw(ws: WebSocket, payload: unknown): void {
-  ws.send(encrypt(JSON.stringify(payload)))
+  ws.send(e2ee.encrypt(JSON.stringify(payload)))
 }
 
 function send(
@@ -243,43 +212,8 @@ function save(captures: Capture[], worktreeName: string): string {
 }
 
 async function run(ws: WebSocket): Promise<void> {
-  ws.send(
-    JSON.stringify({
-      type: 'e2ee_hello',
-      publicKeyB64: toBase64(clientKeys.publicKey)
-    })
-  )
-
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Timed out waiting for e2ee_ready')), 5000)
-    ws.once('message', (data) => {
-      clearTimeout(timeout)
-      const msg = JSON.parse(data.toString()) as { type?: string }
-      if (msg.type !== 'e2ee_ready') {
-        reject(new Error(`Unexpected handshake response: ${data.toString()}`))
-        return
-      }
-      resolve()
-    })
-  })
-
-  sendRaw(ws, { type: 'e2ee_auth', deviceToken: token })
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error('Timed out waiting for e2ee_authenticated')),
-      5000
-    )
-    ws.once('message', (data) => {
-      clearTimeout(timeout)
-      const plaintext = decrypt(data.toString())
-      const msg = plaintext ? (JSON.parse(plaintext) as { type?: string }) : null
-      if (msg?.type !== 'e2ee_authenticated') {
-        reject(new Error(`Unexpected auth response: ${data.toString()}`))
-        return
-      }
-      resolve()
-    })
-  })
+  // Why: checked at startup; a let loses that narrowing inside this function.
+  token = await e2ee.authenticate(ws, token as string)
 
   const created = await send(
     ws,
@@ -337,7 +271,7 @@ ws.on('message', (data) => {
   if (raw.startsWith('{')) {
     return
   }
-  const plaintext = decrypt(raw)
+  const plaintext = e2ee.decrypt(raw)
   if (!plaintext) {
     return
   }

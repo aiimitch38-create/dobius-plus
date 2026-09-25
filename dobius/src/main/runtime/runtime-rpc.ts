@@ -753,6 +753,7 @@ export class DobiusRuntimeRpcServer {
             channel = new E2EEChannel(ws, {
               serverSecretKey: this.e2eeKeypair!.secretKey,
               validateToken: (token) => this.deviceRegistry?.validateToken(token) != null,
+              claimToken: (token) => this.deviceRegistry?.consumePairingOffer(token) ?? null,
               onReady: (ch) => {
                 if (ch.deviceToken) {
                   wsTransport.setClientId(ws, ch.deviceToken)
@@ -1113,27 +1114,50 @@ export const RUNTIME_SOCKET_NAME_REGEX = /^o-(\d+)-[A-Za-z0-9_-]+\.sock$/
 
 // Why: a live pid is not proof the socket is live — after a crash the OS can
 // hand the dead runtime's pid to an unrelated process, and the old socket then
-// survived every sweep. A unix socket with no listener refuses connections, so
-// ECONNREFUSED (or the file vanishing, or it not being a socket at all) marks it
-// orphaned. Anything else, including a slow accept, counts as live so a running
-// runtime is never swept.
+// survived every sweep. So a live-pid socket is test-connected: ENOENT/ENOTSOCK
+// means there is no socket to protect; ECONNREFUSED means no listener, but a
+// live runtime whose accept queue is momentarily full can refuse too, so it
+// must refuse twice, ~200 ms apart. A connect, a timeout or any other error
+// keeps the socket, so a running runtime is never swept.
 const SOCKET_PROBE_TIMEOUT_MS = 500
-const ORPHANED_SOCKET_ERROR_CODES = new Set(['ECONNREFUSED', 'ENOENT', 'ENOTSOCK'])
+const SOCKET_REPROBE_DELAY_MS = 200
 
-function isSocketListenerGone(socketPath: string): Promise<boolean> {
+export type RuntimeSocketProbeResult = 'listening' | 'refused' | 'gone' | 'unknown'
+export type RuntimeSocketProbe = (socketPath: string) => Promise<RuntimeSocketProbeResult>
+
+function probeRuntimeSocket(socketPath: string): Promise<RuntimeSocketProbeResult> {
   return new Promise((resolve) => {
     const probe = connect(socketPath)
-    const finish = (gone: boolean): void => {
+    const finish = (result: RuntimeSocketProbeResult): void => {
       clearTimeout(timer)
       probe.destroy()
-      resolve(gone)
+      resolve(result)
     }
-    const timer = setTimeout(() => finish(false), SOCKET_PROBE_TIMEOUT_MS)
-    probe.once('connect', () => finish(false))
+    const timer = setTimeout(() => finish('unknown'), SOCKET_PROBE_TIMEOUT_MS)
+    probe.once('connect', () => finish('listening'))
     probe.once('error', (error: NodeJS.ErrnoException) => {
-      finish(ORPHANED_SOCKET_ERROR_CODES.has(error.code ?? ''))
+      if (error.code === 'ECONNREFUSED') {
+        finish('refused')
+      } else if (error.code === 'ENOENT' || error.code === 'ENOTSOCK') {
+        finish('gone')
+      } else {
+        finish('unknown')
+      }
     })
   })
+}
+
+async function isOrphanedLivePidSocket(
+  socketPath: string,
+  probe: RuntimeSocketProbe
+): Promise<boolean> {
+  const first = await probe(socketPath)
+  if (first !== 'refused') {
+    return first === 'gone'
+  }
+  await new Promise((resolve) => setTimeout(resolve, SOCKET_REPROBE_DELAY_MS))
+  const second = await probe(socketPath)
+  return second === 'refused' || second === 'gone'
 }
 
 function removeOrphanedSocket(socketPath: string): void {
@@ -1147,7 +1171,8 @@ function removeOrphanedSocket(socketPath: string): void {
 
 export async function sweepOrphanedRuntimeSockets(
   userDataPath: string,
-  ownPid: number
+  ownPid: number,
+  probe: RuntimeSocketProbe = probeRuntimeSocket
 ): Promise<void> {
   let entries: string[]
   try {
@@ -1179,8 +1204,8 @@ export async function sweepOrphanedRuntimeSockets(
       continue
     }
     probes.push(
-      isSocketListenerGone(socketPath).then((gone) => {
-        if (gone) {
+      isOrphanedLivePidSocket(socketPath, probe).then((orphaned) => {
+        if (orphaned) {
           removeOrphanedSocket(socketPath)
         }
       })

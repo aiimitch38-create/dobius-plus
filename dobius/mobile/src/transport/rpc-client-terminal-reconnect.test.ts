@@ -12,7 +12,8 @@ vi.mock('./e2ee', () => ({
   publicKeyToBase64: () => 'client-public-key',
   encrypt: (plaintext: string) => `encrypted:${plaintext}`,
   decrypt: (raw: string) => (raw === 'undecryptable' ? null : raw.replace(/^encrypted:/, '')),
-  decryptBytes: (bytes: Uint8Array) => bytes
+  decryptBytes: (bytes: Uint8Array) => bytes,
+  enableE2EESequencing: () => {}
 }))
 
 class MockWebSocket {

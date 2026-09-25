@@ -4,6 +4,7 @@
 import { randomBytes } from 'node:crypto'
 import type { WebSocket } from 'ws'
 import { E2EE_CLIENT_UPDATE_REQUIRED, E2EE_HANDSHAKE_VERSION } from '../../../shared/e2ee-handshake'
+import { enableE2EESequencingFromFirstFrame } from '../../../shared/e2ee-sequencing'
 import { constantTimeEqual } from '../../lib/constant-time-equal'
 import { deriveSharedKey, encrypt, decrypt, encryptBytes, decryptBytes } from './e2ee-crypto'
 
@@ -13,6 +14,7 @@ const HANDSHAKE_TIMEOUT_MS = 10_000
 const MAX_CONSECUTIVE_DECRYPT_FAILURES = 5
 const MAX_BINARY_BUFFERED_AMOUNT = 8 * 1024 * 1024
 const HANDSHAKE_CHALLENGE_BYTES = 32
+const AUTH_NONCE_BYTES = 24
 // Why: distinct from 4001 so logs tell an outdated client from a bad token.
 const CLOSE_CLIENT_UPDATE_REQUIRED = 4010
 
@@ -30,6 +32,10 @@ type E2EEAuth = {
 export type E2EEChannelOptions = {
   serverSecretKey: Uint8Array
   validateToken: (token: string) => boolean
+  // Why: a pairing QR token is single-use. Called right after validateToken in
+  // the same tick, it returns the replacement token when this login consumed a
+  // pairing offer (sent to the client inside the encrypted channel), or null.
+  claimToken?: (token: string) => string | null
   onReady: (channel: E2EEChannel) => void
   onError: (code: number, reason: string) => void
 }
@@ -44,6 +50,7 @@ export class E2EEChannel {
   private readonly ws: WebSocket
   private readonly serverSecretKey: Uint8Array
   private readonly validateToken: (token: string) => boolean
+  private readonly claimToken: ((token: string) => string | null) | undefined
   private readonly onReady: (channel: E2EEChannel) => void
   private readonly onError: (code: number, reason: string) => void
   // Why: the RPC handler is set after the channel is ready, so the channel
@@ -64,6 +71,7 @@ export class E2EEChannel {
     this.ws = ws
     this.serverSecretKey = options.serverSecretKey
     this.validateToken = options.validateToken
+    this.claimToken = options.claimToken
     this.onReady = options.onReady
     this.onError = options.onError
 
@@ -123,7 +131,7 @@ export class E2EEChannel {
 
     this.consecutiveFailures = 0
     if (this.state === 'awaiting_auth') {
-      this.handleAuth(plaintext)
+      this.handleAuth(plaintext, Buffer.from(raw, 'base64').subarray(0, AUTH_NONCE_BYTES))
       return
     }
 
@@ -200,7 +208,7 @@ export class E2EEChannel {
     }
   }
 
-  private handleAuth(plaintext: string): void {
+  private handleAuth(plaintext: string, authNonce: Uint8Array): void {
     let auth: E2EEAuth
     try {
       auth = JSON.parse(plaintext) as E2EEAuth
@@ -233,13 +241,32 @@ export class E2EEChannel {
       this.onError(4001, 'Stale e2ee_auth')
       return
     }
+    if (
+      !this.sharedKey ||
+      !enableE2EESequencingFromFirstFrame(this.sharedKey, 'server', authNonce)
+    ) {
+      this.sendEncryptedControl({ type: 'e2ee_error', error: { code: 'bad_auth' } })
+      this.onError(4001, 'Unsequenced e2ee_auth')
+      return
+    }
     if (!this.validateToken(auth.deviceToken)) {
       this.sendEncryptedControl({ type: 'e2ee_error', error: { code: 'unauthorized' } })
       this.onError(4001, 'Unauthorized')
       return
     }
+    let rotatedToken: string | null
+    try {
+      rotatedToken = this.claimToken?.(auth.deviceToken) ?? null
+    } catch (error) {
+      // Why: if the single-use swap cannot be saved, fail the login rather
+      // than leave the QR token valid or hand out a token that is not on disk.
+      console.error('[e2ee] could not consume pairing offer:', error)
+      this.sendEncryptedControl({ type: 'e2ee_error', error: { code: 'unauthorized' } })
+      this.onError(4001, 'Unauthorized')
+      return
+    }
 
-    this.deviceToken = auth.deviceToken
+    this.deviceToken = rotatedToken ?? auth.deviceToken
     this.challenge = null
     this.state = 'ready'
 
@@ -248,7 +275,11 @@ export class E2EEChannel {
       this.handshakeTimer = null
     }
 
-    this.sendEncryptedControl({ type: 'e2ee_authenticated' })
+    this.sendEncryptedControl(
+      rotatedToken
+        ? { type: 'e2ee_authenticated', deviceToken: rotatedToken }
+        : { type: 'e2ee_authenticated' }
+    )
     this.onReady(this)
   }
 

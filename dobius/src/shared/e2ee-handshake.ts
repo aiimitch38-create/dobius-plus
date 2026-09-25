@@ -5,6 +5,8 @@
 // client's ephemeral secret can produce that frame. Kept in shared/ so the CLI,
 // web client and desktop remote-host client build the same auth frame. The
 // Expo app (mobile/) cannot import from here and mirrors it in rpc-client.ts.
+import { enableE2EESequencing } from './e2ee-sequencing'
+
 export const E2EE_HANDSHAKE_VERSION = 2
 
 // Why: sent (encrypted) to clients whose auth frame carries no challenge, i.e.
@@ -17,19 +19,38 @@ export type E2EEAuthPayload = {
   challenge?: string
 }
 
-// Why: an older desktop sends `e2ee_ready` without a challenge and ignores
-// unknown auth fields, so omitting the field keeps new clients compatible.
-export function buildE2EEAuthPayload(deviceToken: string, ready: unknown): E2EEAuthPayload {
-  const challenge =
-    typeof ready === 'object' && ready !== null
-      ? (ready as { challenge?: unknown }).challenge
-      : undefined
-  return typeof challenge === 'string' && challenge.length > 0
-    ? { type: 'e2ee_auth', deviceToken, challenge }
-    : { type: 'e2ee_auth', deviceToken }
+export function isE2EEHandshakeV2Ready(ready: unknown): ready is { challenge: string } {
+  if (typeof ready !== 'object' || ready === null) {
+    return false
+  }
+  const { version, challenge } = ready as { version?: unknown; challenge?: unknown }
+  return (
+    typeof version === 'number' &&
+    version >= E2EE_HANDSHAKE_VERSION &&
+    typeof challenge === 'string' &&
+    challenge.length > 0
+  )
 }
 
-export function buildE2EEAuthPayloadFromFrame(
+// Why: called once the plaintext e2ee_ready arrives, before the first
+// encrypted frame. A v2 server gets the challenge echoed and per-direction
+// frame counters switched on for this connection's key. An older desktop
+// sends neither and ignores unknown auth fields, so the client falls back to
+// the v1 frame format there instead of failing.
+export function beginE2EEAuth(
+  sharedKey: Uint8Array,
+  deviceToken: string,
+  ready: unknown
+): E2EEAuthPayload {
+  if (!isE2EEHandshakeV2Ready(ready)) {
+    return { type: 'e2ee_auth', deviceToken }
+  }
+  enableE2EESequencing(sharedKey, 'client')
+  return { type: 'e2ee_auth', deviceToken, challenge: ready.challenge }
+}
+
+export function beginE2EEAuthFromFrame(
+  sharedKey: Uint8Array,
   deviceToken: string,
   readyFrame: string
 ): E2EEAuthPayload {
@@ -37,8 +58,8 @@ export function buildE2EEAuthPayloadFromFrame(
   try {
     ready = JSON.parse(readyFrame)
   } catch {
-    // Callers validate the ready frame first; a parse miss just means no challenge.
+    // Callers validate the ready frame first; a parse miss just means v1.
     ready = null
   }
-  return buildE2EEAuthPayload(deviceToken, ready)
+  return beginE2EEAuth(sharedKey, deviceToken, ready)
 }

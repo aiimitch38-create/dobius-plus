@@ -14,6 +14,7 @@ import { readRuntimeMetadata } from './runtime-metadata'
 import { createRuntimeTransportMetadata, DobiusRuntimeRpcServer } from './runtime-rpc'
 import { parsePairingCode } from '../../shared/pairing'
 import { decrypt, deriveSharedKey, encrypt, generateKeyPair } from './rpc/e2ee-crypto'
+import { enableE2EESequencing } from '../../shared/e2ee-sequencing'
 import { DeviceRegistry } from './device-registry'
 
 vi.mock('../git/worktree', () => ({
@@ -149,9 +150,13 @@ function waitForWsClose(ws: WebSocket): Promise<void> {
 type AuthenticatedMobileWs = {
   ws: WebSocket
   sharedKey: Uint8Array
+  deviceToken: string
 }
 
-async function authenticateMobileWsSession(pairingUrl: string): Promise<AuthenticatedMobileWs> {
+async function authenticateMobileWsSession(
+  pairingUrl: string,
+  deviceTokenOverride?: string
+): Promise<AuthenticatedMobileWs> {
   const parsed = parsePairingCode(pairingUrl)
   expect(parsed).toBeTruthy()
   const ws = await connectWs(parsed!.endpoint)
@@ -167,26 +172,35 @@ async function authenticateMobileWsSession(pairingUrl: string): Promise<Authenti
   )
   const ready = JSON.parse(await nextWsMessage(ws)) as { type: string; challenge: string }
   expect(ready).toMatchObject({ type: 'e2ee_ready', version: 2 })
+  enableE2EESequencing(sharedKey, 'client')
 
+  const presentedToken = deviceTokenOverride ?? parsed!.deviceToken
   ws.send(
     encrypt(
       JSON.stringify({
         type: 'e2ee_auth',
-        deviceToken: parsed!.deviceToken,
+        deviceToken: presentedToken,
         challenge: ready.challenge
       }),
       sharedKey
     )
   )
-  expect(JSON.parse(decrypt(await nextWsMessage(ws), sharedKey)!)).toEqual({
-    type: 'e2ee_authenticated'
-  })
+  const authenticated = JSON.parse(decrypt(await nextWsMessage(ws), sharedKey)!) as {
+    type: string
+    deviceToken?: string
+  }
+  expect(authenticated.type).toBe('e2ee_authenticated')
 
-  return { ws, sharedKey }
+  // Why: a mobile pairing token is single-use; the server hands back the
+  // phone's own token on first login (F1).
+  return { ws, sharedKey, deviceToken: authenticated.deviceToken ?? presentedToken }
 }
 
-async function authenticateMobileWs(pairingUrl: string): Promise<WebSocket> {
-  return (await authenticateMobileWsSession(pairingUrl)).ws
+async function authenticateMobileWs(
+  pairingUrl: string,
+  deviceTokenOverride?: string
+): Promise<WebSocket> {
+  return (await authenticateMobileWsSession(pairingUrl, deviceTokenOverride)).ws
 }
 
 function sendEncryptedWsRequest(
@@ -595,8 +609,9 @@ describe('DobiusRuntimeRpcServer', () => {
       if (!offer.available) {
         throw new Error('WebSocket pairing unavailable')
       }
-      const first = await authenticateMobileWs(offer.pairingUrl)
-      const second = await authenticateMobileWs(offer.pairingUrl)
+      const firstSession = await authenticateMobileWsSession(offer.pairingUrl)
+      const first = firstSession.ws
+      const second = await authenticateMobileWs(offer.pairingUrl, firstSession.deviceToken)
 
       expect(server.revokeMobileDevice(offer.deviceId)).toBe(true)
       await Promise.all([waitForWsClose(first), waitForWsClose(second)])

@@ -7,7 +7,8 @@ export const MOBILE_SESSION_STATUS_LABELS: Record<ConnectionState, string> = {
   connected: 'Connected',
   disconnected: 'Disconnected',
   reconnecting: 'Reconnecting',
-  'auth-failed': 'Auth failed'
+  'auth-failed': 'Auth failed',
+  'update-required': 'Update the Dobius+ app'
 }
 
 export const TERMINAL_GESTURE_INPUT_BUCKET_CAPACITY = 64

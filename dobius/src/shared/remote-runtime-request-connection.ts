@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import WebSocket from 'ws'
 import type { PairingOffer } from './pairing'
 import { decrypt, encrypt } from './e2ee-crypto'
-import { buildE2EEAuthPayloadFromFrame } from './e2ee-handshake'
+import { beginE2EEAuthFromFrame } from './e2ee-handshake'
 import type { RuntimeRpcResponse } from './runtime-rpc-envelope'
 import { RemoteRuntimeClientError } from './remote-runtime-client'
 import {
@@ -184,7 +184,7 @@ export class RemoteRuntimeRequestConnection {
     }
     this.ws?.send(
       encrypt(
-        JSON.stringify(buildE2EEAuthPayloadFromFrame(this.pairing.deviceToken, frame)),
+        JSON.stringify(beginE2EEAuthFromFrame(sharedKey, this.pairing.deviceToken, frame)),
         sharedKey
       )
     )
