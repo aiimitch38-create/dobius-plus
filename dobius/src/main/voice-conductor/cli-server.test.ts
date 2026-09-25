@@ -55,6 +55,7 @@ function makeDeps(): FakeDeps {
     },
     imessage: {
       isAvailable: () => true,
+      unavailableReason: () => null,
       send: vi.fn(),
       ask: vi.fn(async () => 'yes')
     },
