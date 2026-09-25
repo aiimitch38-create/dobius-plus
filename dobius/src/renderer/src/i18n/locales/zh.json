@@ -8942,6 +8942,10 @@
           "remove": "Remove",
           "configured": "A key is stored, encrypted on this machine. It is never shown again.",
           "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "agent-sandbox-copy": {
+          "title": "代理沙盒（推荐）",
+          "description": "Claude 代理运行的命令只能写入代理的工作文件夹、其 git 仓库、临时文件夹和包缓存，并且无法读取其他代理的记忆或已保存的凭据。关闭后，代理可以写入你主文件夹中的任何位置。钩子、设置和 shell 启动文件在两种情况下都会受到保护。"
         }
       },
       "right": {

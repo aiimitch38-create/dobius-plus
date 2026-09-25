@@ -19,6 +19,7 @@ import {
   setDecisionBypassRunHandler
 } from './agent-decision-queue'
 import { buildAgentHardRailHooks } from './agent-hard-rails'
+import { resolveAgentRunSandboxPolicy } from './agent-sandbox-context'
 import {
   createHeadlessCanUseTool,
   forgetPermissionDenials,
@@ -35,6 +36,7 @@ import {
 } from './agent-run-end-callbacks'
 import { appendRunProgress } from './agent-run-progress-log'
 import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
+import { scheduleSessionWorkspaceBriefRefresh } from './session-workspace-brief'
 import {
   buildDobiusRunMcpServer,
   buildProfileAllowedTools,
@@ -378,6 +380,7 @@ export async function startAgentRun(args: {
     assertExecutionAdmitted(origin)
     const abortController = new AbortController()
     const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
+    void scheduleSessionWorkspaceBriefRefresh(resolvedCwd)
     const branch = currentGitBranch(resolvedCwd)
     const systemPrompt = buildSystemPrompt(agent)
     const keyedSession = getAgentSessionForKey(agent, sessionKey)
@@ -443,6 +446,15 @@ export async function startAgentRun(args: {
     // loaded does not allow its tools unless the agent's allowlist names them.
     options.strictMcpConfig = false
     options.hooks = buildAgentHardRailHooks({ agentId: agent.id, profile: profile.id, spawnedBy: args.options?.spawnedBy })
+    // Kernel-enforced file and credential limits for Bash, plus matching deny
+    // rules for the file tools; the rails above stay as defense in depth.
+    // Sets options.sandbox and options.disallowedTools.
+    Object.assign(options, resolveAgentRunSandboxPolicy({
+      agentId: agent.id,
+      cwd: resolvedCwd,
+      claudeConfigDir: preparation.configDir,
+      claudeExecutable: options.pathToClaudeCodeExecutable
+    }))
     const source = args.options?.source ?? 'manual'
     // Only a person who pressed Run on the Agents page watches the decision
     // queue. Every other run (heartbeat, Asana, iMessage, workflows, RPC/CLI,

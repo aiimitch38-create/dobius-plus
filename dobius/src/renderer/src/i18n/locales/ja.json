@@ -8942,6 +8942,10 @@
           "remove": "Remove",
           "configured": "A key is stored, encrypted on this machine. It is never shown again.",
           "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "agent-sandbox-copy": {
+          "title": "エージェントのサンドボックス（推奨）",
+          "description": "Claude エージェントが実行するコマンドは、エージェントの作業フォルダー、その git リポジトリ、一時フォルダー、パッケージキャッシュにのみ書き込めます。他のエージェントのメモリや保存された認証情報は読み取れません。オフにすると、エージェントはホームフォルダー内のどこにでも書き込めるようになります。フック、設定、シェルの起動ファイルはどちらの場合も保護されます。"
         }
       },
       "right": {

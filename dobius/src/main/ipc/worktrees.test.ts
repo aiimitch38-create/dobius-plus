@@ -226,6 +226,14 @@ vi.mock('../runtime/worktree-teardown', () => ({
   killAllProcessesForWorktree: killAllProcessesForWorktreeMock
 }))
 
+const refreshSessionWorkspaceBriefMock = vi.hoisted(() =>
+  vi.fn(async () => ({ status: 'skipped' as const, reason: 'not-a-git-worktree' as const }))
+)
+
+vi.mock('../agents/session-workspace-brief', () => ({
+  refreshSessionWorkspaceBrief: refreshSessionWorkspaceBriefMock
+}))
+
 vi.mock('./pty', () => ({
   clearProviderPtyState: clearProviderPtyStateMock,
   getLocalPtyProvider: getLocalPtyProviderMock
@@ -570,6 +578,23 @@ describe('registerWorktreeHandlers', () => {
     expect(runtimeStub.resolveRemoteTrackingBase).not.toHaveBeenCalled()
     expect(runtimeStub.fetchRemoteWithCache).not.toHaveBeenCalled()
     expect(addWorktreeMock).not.toHaveBeenCalled()
+  })
+
+  it('writes the session workspace brief into a newly created local worktree', async () => {
+    listWorktreesMock.mockResolvedValue([
+      {
+        path: '/workspace/brief-wt',
+        head: 'abc',
+        branch: 'refs/heads/brief-wt',
+        isBare: false,
+        isMainWorktree: false
+      }
+    ])
+    refreshSessionWorkspaceBriefMock.mockClear()
+
+    await handlers['worktrees:create'](null, { repoId: 'repo-1', name: 'brief-wt' })
+
+    expect(refreshSessionWorkspaceBriefMock).toHaveBeenCalledWith('/workspace/brief-wt')
   })
 
   it('skips the broad remote fetch when creating from an existing commit SHA base', async () => {

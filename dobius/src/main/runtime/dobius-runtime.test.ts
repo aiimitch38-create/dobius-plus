@@ -515,6 +515,13 @@ vi.mock('../git/git-username', async () => {
 })
 
 const executionGateState = vi.hoisted(() => ({ paused: false }))
+const refreshSessionWorkspaceBriefMock = vi.hoisted(() =>
+  vi.fn(async () => ({ status: 'skipped' as const, reason: 'not-a-git-worktree' as const }))
+)
+
+vi.mock('../agents/session-workspace-brief', () => ({
+  refreshSessionWorkspaceBrief: refreshSessionWorkspaceBriefMock
+}))
 
 vi.mock('../agents/execution-gate', async (importOriginal) => {
   const actual = await importOriginal<typeof ExecutionGateModule>()
@@ -2149,6 +2156,25 @@ describe('DobiusRuntimeService', () => {
     await expect(runtime.showManagedWorktree('id:does-not-exist')).rejects.toThrow(
       'selector_not_found'
     )
+  })
+
+  it('writes the session workspace brief into a new local worktree before returning', async () => {
+    const runtime = new DobiusRuntimeService(store)
+    const createdWorktree = {
+      path: '/tmp/workspaces/brief-target',
+      head: 'def',
+      branch: 'brief-target',
+      isBare: false,
+      isMainWorktree: false
+    }
+    computeWorktreePathMock.mockReturnValue(createdWorktree.path)
+    ensurePathWithinWorkspaceMock.mockReturnValue(createdWorktree.path)
+    vi.mocked(listWorktrees).mockResolvedValue([...MOCK_GIT_WORKTREES, createdWorktree])
+    refreshSessionWorkspaceBriefMock.mockClear()
+
+    await runtime.createManagedWorktree({ repoSelector: 'id:repo-1', name: 'brief-target' })
+
+    expect(refreshSessionWorkspaceBriefMock).toHaveBeenCalledWith(createdWorktree.path)
   })
 
   it('does not reuse stale in-flight worktree scans after creating a worktree', async () => {
@@ -22746,7 +22772,14 @@ describe('DobiusRuntimeService', () => {
     }
     const fsProvider = {
       realpath: vi.fn().mockResolvedValue('/remote/mobile-codex-draft'),
-      readFile: vi.fn().mockRejectedValue(new Error('missing config')),
+      // Real missing-file shape: relay stat() throws ENOENT, relay dispatcher
+      // forwards err.code, ssh-channel-multiplexer sets it on the rejected Error.
+      readFile: vi.fn().mockRejectedValue(
+        Object.assign(
+          new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
+          { code: 'ENOENT' }
+        )
+      ),
       createDir: vi.fn().mockResolvedValue(undefined),
       writeFile: vi.fn().mockResolvedValue(undefined)
     }
@@ -22859,7 +22892,14 @@ describe('DobiusRuntimeService', () => {
     }
     const fsProvider = {
       realpath: vi.fn().mockResolvedValue('/remote/mobile-codex-command'),
-      readFile: vi.fn().mockRejectedValue(new Error('missing config')),
+      // Real missing-file shape: relay stat() throws ENOENT, relay dispatcher
+      // forwards err.code, ssh-channel-multiplexer sets it on the rejected Error.
+      readFile: vi.fn().mockRejectedValue(
+        Object.assign(
+          new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
+          { code: 'ENOENT' }
+        )
+      ),
       createDir: vi.fn().mockResolvedValue(undefined),
       writeFile: vi.fn().mockResolvedValue(undefined)
     }
