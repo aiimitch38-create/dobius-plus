@@ -15,6 +15,7 @@ import { translate } from '@/i18n/i18n'
 import { showDictationStartErrorToast } from './dictation-start-error-toast'
 import { useHoldDictationGesture } from './use-hold-dictation-gesture'
 import { DICTATION_CONTROL_EVENT, type DictationControlAction } from './dictation-control-events'
+import { extractIpcErrorMessage } from '@/lib/ipc-error'
 
 export function DictationController({
   hideOwnOrb
@@ -159,7 +160,24 @@ export function DictationController({
     try {
       // Why: worker startup can take seconds after idle teardown. Capture first
       // and buffer locally so speech during "Starting..." is not discarded.
-      await startCapture({ bufferAudio: true, sessionId })
+      await startCapture({
+        bufferAudio: true,
+        sessionId,
+        onFeedError: (error) => {
+          if (
+            dictationRunRef.current !== runId ||
+            activeSessionIdRef.current !== sessionId ||
+            dictationStateRef.current !== 'listening'
+          ) {
+            return
+          }
+          // Why: main is no longer accepting audio (e.g. the cloud 10-minute
+          // limit). Stop visibly so the audio already accepted is transcribed
+          // and inserted, instead of showing Listening while speech is dropped.
+          toast.error(`Dictation stopped: ${extractIpcErrorMessage(error, 'audio was rejected')}`)
+          void finishDictationSession(sessionId)
+        }
+      })
       captureStarted = true
       if (stopRequestedDuringStartRef.current) {
         stopCapture({ preserveBufferedAudio: true })
