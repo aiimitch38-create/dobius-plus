@@ -37,6 +37,7 @@ function depsWith(imessage: IMessageBridge): ConductorCliDeps & {
 } {
   return {
     imessage,
+    workRegistry: { capacityError: () => null },
     terminals: { spawnAgent: vi.fn(async () => ({ runId: 'run-1' })) }
   } as unknown as ConductorCliDeps & { terminals: { spawnAgent: ReturnType<typeof vi.fn> } }
 }

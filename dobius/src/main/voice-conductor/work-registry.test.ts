@@ -31,6 +31,7 @@ describe('createWorkRegistry', () => {
   it('status() with no target returns everything', () => {
     const reg = createWorkRegistry()
     reg.track({ workId: 'wk-1', tabId: 'term-a-1', requestId: 'r1', description: 'alpha' })
+    reg.markDone('wk-1', 'ok')
     reg.track({ workId: 'wk-2', tabId: 'term-b-2', requestId: 'r2', description: 'beta' })
 
     expect(reg.status()).toHaveLength(2)
@@ -39,6 +40,7 @@ describe('createWorkRegistry', () => {
   it('status(target) fuzzy-matches workId, tabId, and description case-insensitively', () => {
     const reg = createWorkRegistry()
     reg.track({ workId: 'wk-abc12', tabId: 'term-slimject-1', requestId: 'r1', description: 'fix the checkout bug' })
+    reg.markDone('wk-abc12', 'ok')
     reg.track({ workId: 'wk-def34', tabId: 'term-axiom-2', requestId: 'r2', description: 'update routing table' })
 
     // description substring, mixed case
@@ -78,5 +80,37 @@ describe('createWorkRegistry', () => {
   it('markDone returns null for an unknown workId', () => {
     const reg = createWorkRegistry()
     expect(reg.markDone('wk-missing', 'whatever')).toBeNull()
+  })
+
+  it('#61 refuses a second running item and admits one after the first ends', () => {
+    const reg = createWorkRegistry()
+    expect(reg.track({ workId: 'wk-1', tabId: 't1', requestId: 'r1', description: 'one' })).toEqual({ ok: true })
+
+    expect(reg.capacityError()).toBe('concurrency cap: 1/1 agents already running')
+    expect(reg.track({ workId: 'wk-2', tabId: 't2', requestId: 'r2', description: 'two' })).toEqual({
+      ok: false,
+      error: 'concurrency cap: 1/1 agents already running',
+      retryable: true
+    })
+    // Re-tracking the running item is an update, not a second item.
+    expect(reg.track({ workId: 'wk-1', tabId: 't1', requestId: 'r1', description: 'one again' }).ok).toBe(true)
+
+    reg.markDone('wk-1', 'failed', 'error')
+    expect(reg.capacityError()).toBeNull()
+    expect(reg.track({ workId: 'wk-2', tabId: 't2', requestId: 'r2', description: 'two' }).ok).toBe(true)
+  })
+
+  it('#61 makes no reservation when it cannot be saved', () => {
+    const reg = createWorkRegistry({
+      onChange: () => {
+        throw new Error('work.json could not be saved')
+      }
+    })
+
+    expect(() => reg.track({ workId: 'wk-1', tabId: 't1', requestId: 'r1', description: 'one' })).toThrow(
+      'could not be saved'
+    )
+    expect(reg.list()).toEqual([])
+    expect(reg.capacityError()).toBeNull()
   })
 })

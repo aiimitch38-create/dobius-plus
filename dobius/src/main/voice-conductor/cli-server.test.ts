@@ -41,14 +41,17 @@ function makeDeps(): FakeDeps {
         running: false,
         runId: null,
         sessionId: null,
-        lastError: null
+        lastError: null,
+        maxBudgetUsd: 2,
+        queuedTurns: 0
       }),
       postTranscript: vi.fn(async () => {}),
       setReply: vi.fn(() => {}),
       getReply: () => null
     },
     workRegistry: {
-      track: vi.fn(() => {}),
+      track: vi.fn(() => ({ ok: true as const })),
+      capacityError: vi.fn(() => null),
       status: vi.fn(() => []),
       markDone: vi.fn(() => null),
       list: vi.fn(() => [])

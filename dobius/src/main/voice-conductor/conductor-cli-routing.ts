@@ -3,6 +3,7 @@
 // max-lines limit; cli-server.ts owns the socket plumbing and re-exports this.
 import type { IMessageBridge, WorkItem } from './types'
 import type { ConductorCliDeps, ConductorCliResult } from './cli-server'
+import { isConductorWorkCapacityError } from './agent-spawn'
 
 // --- pure request routing (socket-free, unit-testable) ------------------
 
@@ -136,7 +137,10 @@ export async function handleConductorCliRequest(
         if ([workId, tabId, requestId, description].some(hasNullByte)) {
           return { status: 400, body: { ok: false, error: 'null byte in argument' } }
         }
-        d.workRegistry.track({ workId, tabId, requestId, description })
+        const tracked = d.workRegistry.track({ workId, tabId, requestId, description })
+        if (!tracked.ok) {
+          return { status: 200, body: { ok: false, error: tracked.error, retryable: true } }
+        }
         return { status: 200, body: { ok: true, workId } }
       }
 
@@ -151,6 +155,15 @@ export async function handleConductorCliRequest(
         const summary = asString(body.summary)
         if (!workId.trim()) {
           return { status: 400, body: { ok: false, error: 'workId required' } }
+        }
+        // A spawned run holds the work cap until the run itself ends; releasing
+        // it by hand would let a second paid run start alongside it.
+        const owned = d.workRegistry.list().find((entry) => entry.workId === workId)
+        if (owned?.kind === 'spawn' && owned.status === 'running') {
+          return {
+            status: 409,
+            body: { ok: false, error: `"${workId}" is a spawned agent run; it is released when the run ends` }
+          }
         }
         const item = d.workRegistry.markDone(workId, summary, toRegistryStatus(asString(body.status)))
         if (!item) {
@@ -173,6 +186,11 @@ export async function handleConductorCliRequest(
         if ([projectPath, agentId, initialPrompt].some(hasNullByte)) {
           return { status: 400, body: { ok: false, error: 'null byte in argument' } }
         }
+        // Don't ask Carson to approve a spawn the work cap would refuse.
+        const busy = d.workRegistry.capacityError()
+        if (busy) {
+          return { status: 200, body: { ok: false, error: busy, retryable: true } }
+        }
         // v1 gated the spawn behind an iMessage confirm to Carson. Preserve that
         // and FAIL CLOSED: no channel, no reply or no explicit yes = no spawn.
         const promptPreview =
@@ -186,8 +204,16 @@ export async function handleConductorCliRequest(
         if (!decision.approved) {
           return { status: 200, body: { ok: false, error: `spawn declined (${decision.reason})` } }
         }
-        const spawned = await d.terminals.spawnAgent(projectPath, agentId, initialPrompt)
-        return { status: 200, body: { ok: true, ...spawned } }
+        try {
+          const spawned = await d.terminals.spawnAgent(projectPath, agentId, initialPrompt)
+          return { status: 200, body: { ok: true, ...spawned } }
+        } catch (error) {
+          // Another item took the slot while Carson was answering.
+          if (isConductorWorkCapacityError(error)) {
+            return { status: 200, body: { ok: false, error: error.message, retryable: true } }
+          }
+          throw error
+        }
       }
 
       case '/confirm': {

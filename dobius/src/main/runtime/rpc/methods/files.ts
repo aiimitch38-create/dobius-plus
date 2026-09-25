@@ -1,7 +1,9 @@
 /* oxlint-disable max-lines -- Why: file RPC routing coverage stays together so the dispatcher contract for read, write, mutation, and watch methods is easy to audit. */
+import { posix, resolve } from 'node:path'
 import { z } from 'zod'
 import { defineMethod, defineStreamingMethod, type RpcAnyMethod } from '../core'
 import { createFileWatchEventBatcher } from './file-watch-event-batcher'
+import { assertMobileWriteAllowed } from '../../mobile-write-path-guard'
 
 let filesWatchSubscriptionSeq = 0
 const RUNTIME_FILE_BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/
@@ -231,14 +233,24 @@ export const FILE_METHODS: RpcAnyMethod[] = [
   defineMethod({
     name: 'files.writeTerminalArtifact',
     params: TerminalArtifactFileWrite,
-    handler: async (params, { runtime, clientId }) =>
-      runtime.writeTerminalArtifactFile(
+    handler: async (params, { runtime, clientId, clientKind }) => {
+      if (clientKind === 'mobile') {
+        const { root, connectionId } = await runtime.resolveMobileWriteRoot(params.worktree)
+        await assertMobileWriteAllowed({
+          worktreeRoot: root,
+          targetPath: params.absolutePath,
+          connectionId,
+          allowOutsideWorktree: true
+        })
+      }
+      return runtime.writeTerminalArtifactFile(
         params.worktree,
         params.grantId,
         params.absolutePath,
         params.content,
         clientId
       )
+    }
   }),
   defineMethod({
     name: 'files.readPreview',
@@ -298,8 +310,20 @@ export const FILE_METHODS: RpcAnyMethod[] = [
   defineMethod({
     name: 'files.createFile',
     params: FileOpen,
-    handler: async (params, { runtime }) =>
-      runtime.createFileExplorerFile(params.worktree, params.relativePath)
+    handler: async (params, { runtime, clientKind }) => {
+      if (clientKind === 'mobile') {
+        const { root, connectionId } = await runtime.resolveMobileWriteRoot(params.worktree)
+        await assertMobileWriteAllowed({
+          worktreeRoot: root,
+          targetPath: connectionId
+            ? posix.join(root, params.relativePath)
+            : resolve(root, params.relativePath),
+          connectionId,
+          allowOutsideWorktree: false
+        })
+      }
+      return runtime.createFileExplorerFile(params.worktree, params.relativePath)
+    }
   }),
   defineMethod({
     name: 'files.createDir',
