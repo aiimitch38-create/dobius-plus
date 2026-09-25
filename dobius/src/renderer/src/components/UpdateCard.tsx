@@ -142,7 +142,8 @@ export function UpdateCard() {
   } else if (
     status.state === 'checking' ||
     status.state === 'idle' ||
-    status.state === 'not-available'
+    status.state === 'not-available' ||
+    status.state === 'disabled'
   ) {
     // Why: a new check cycle has started or completed without an available update.
     // Clear the cached version so a later check failure cannot dismiss or link to
@@ -181,7 +182,8 @@ export function UpdateCard() {
   }
 
   const shouldAutoDismissLatest =
-    status.state === 'not-available' && 'userInitiated' in status && Boolean(status.userInitiated)
+    (status.state === 'not-available' || status.state === 'disabled') &&
+    Boolean(status.userInitiated)
 
   // Why: auto-dismiss "You're on the latest version" after 3 seconds.
   // The timer resets if the status changes before it fires.
@@ -247,6 +249,9 @@ export function UpdateCard() {
     return null
   }
   if (status.state === 'not-available' && autoDismissed) {
+    return null
+  }
+  if (status.state === 'disabled' && (!isUserInitiated || autoDismissed)) {
     return null
   }
 
@@ -448,15 +453,17 @@ export function UpdateCard() {
       ? 'Checking for updates'
       : status.state === 'not-available'
         ? "You're on the latest version"
-        : status.state === 'available'
-          ? 'Update available'
-          : status.state === 'downloading'
-            ? 'Downloading update'
-            : status.state === 'downloaded'
-              ? 'Update ready to install'
-              : status.state === 'error'
-                ? 'Update error'
-                : 'Update status'
+        : status.state === 'disabled'
+          ? 'Automatic updates are off'
+          : status.state === 'available'
+            ? 'Update available'
+            : status.state === 'downloading'
+              ? 'Downloading update'
+              : status.state === 'downloaded'
+                ? 'Update ready to install'
+                : status.state === 'error'
+                  ? 'Update error'
+                  : 'Update status'
 
   // ── Card wrapper ──────────────────────────────────────────────────
 
@@ -483,6 +490,18 @@ export function UpdateCard() {
         <CompactCardContent
           icon="check"
           text={translate('auto.components.UpdateCard.ea2a41adbe', "You're on the latest version.")}
+        />
+      )
+    }
+
+    if (status.state === 'disabled') {
+      return (
+        <CompactCardContent
+          icon="error"
+          text={translate(
+            'auto.components.UpdateCard.f528af4816',
+            'Updates are managed by the install script.'
+          )}
         />
       )
     }

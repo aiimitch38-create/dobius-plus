@@ -1775,7 +1775,8 @@
         "a726967bd3": "닫기",
         "d5253b54af": "오류",
         "7ffc08506e": "확인",
-        "522df222b9": "스피너"
+        "522df222b9": "스피너",
+        "f528af4816": "업데이트는 설치 스크립트로 관리됩니다."
       },
       "WorktreeJumpPalette": {
         "ac037cfac2": "이동",
@@ -5297,7 +5298,8 @@
           "31fd7150cf": "업데이트 확인 중...",
           "3394d1f663": "확인 중",
           "d69a09b672": "업데이트는 시작 시 자동으로 확인됩니다.",
-          "7173352632": "idle"
+          "7173352632": "idle",
+          "9b7a940bd3": "업데이트는 설치 스크립트로 관리됩니다."
         },
         "GeneralWorkspaceSettingsSection": {
           "3d538a98f7": "워크스페이스의 열기 메뉴에서 사용 가능한 앱을 선택하세요.",
@@ -12569,7 +12571,9 @@
           "notConnected": "Connect Asana in Settings → Automation to see your build and review lanes.",
           "title": "Tasks",
           "sync": "Sync",
-          "empty": "Nothing here."
+          "empty": "Nothing here.",
+          "requeue": "Re-queue",
+          "confirmRequeue": "Re-queue this task for Asana Auto Mode? It will be triaged again and may start a new build."
         },
         "PromptsPanel": {
           "title": "Prompts",

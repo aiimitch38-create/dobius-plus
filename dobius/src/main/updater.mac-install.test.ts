@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   appMock,
@@ -104,6 +104,12 @@ vi.mock('@electron-toolkit/utils', () => ({
   is: isMock
 }))
 
+// Why: these tests exercise the opted-in updater path; the shared update
+// policy needs the opt-in flag and the disconnect switch off (BUILD-046).
+vi.mock('./dobius-disconnect', () => ({
+  DOBIUS_SERVICES_DISCONNECTED: false
+}))
+
 vi.mock('./ipc/pty', () => ({
   killAllPty: killAllPtyMock
 }))
@@ -118,6 +124,10 @@ vi.mock('./updater-nudge', () => ({
 }))
 
 describe('updater mac install handoff', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   beforeEach(() => {
     vi.resetModules()
     autoUpdaterMock.reset()
@@ -132,6 +142,7 @@ describe('updater mac install handoff', () => {
     isMock.dev = false
     killAllPtyMock.mockReset()
     vi.unstubAllGlobals()
+    vi.stubEnv('DOBIUS_ENABLE_DOBIUS_UPDATES', '1')
     vi.useRealTimers()
   })
 

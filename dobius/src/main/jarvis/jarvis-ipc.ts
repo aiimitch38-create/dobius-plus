@@ -44,11 +44,15 @@ function createGlobalShortcutPort(): JarvisShortcutPort {
   }
 }
 
+// Why module state: the service is a singleton built on the first register,
+// but the main window is recreated on macOS re-activation.
+let jarvisHostWindow: BrowserWindow | null = null
+
 function createBroadcastPort(): JarvisBroadcastPort {
   return (channel, payload) => {
     const target = pickJarvisTargetWindow(
       BrowserWindow.getFocusedWindow(),
-      BrowserWindow.getAllWindows()
+      jarvisHostWindow ? [jarvisHostWindow] : []
     )
     target?.webContents.send(channel, payload)
   }
@@ -67,7 +71,8 @@ function persistVoicePatch(store: Store, patch: Partial<VoiceSettings>): void {
   store.updateSettings({ voice: { ...current, ...patch } }, { notifyListeners: true })
 }
 
-export function registerJarvisIpcHandlers(store: Store): void {
+export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindow): void {
+  jarvisHostWindow = mainWindow
   // Why (#24): move a plaintext settings key into the protected store before
   // any handler reads it. Failure leaves it in settings, so it still works.
   migrateElevenLabsKeyOutOfSettings(store)
@@ -263,9 +268,13 @@ function restorePersistedMode(store: Store, service: JarvisService): void {
   if (store.getSettings().voice?.jarvisEnabled !== true) {
     return
   }
-  // If the grab now conflicts with another app, fall back to off so the stored
-  // flag matches what the user actually gets after relaunch.
+  // Why the stored flag is left on (#122-F9): writing false here silently
+  // turned the user's switch off whenever another app held ⌘T at launch.
+  // The error state toggle() broadcasts here is sent before the renderer
+  // listens, so it is not what surfaces this: the renderer asks jarvis:status
+  // on mount and toasts (use-jarvis-turn), Settings shows it too, and toggling
+  // off and on retries.
   if (!service.toggle(true)) {
-    persistVoicePatch(store, { jarvisEnabled: false })
+    console.warn('[jarvis] Cmd+T is held by another app; Jarvis stays on without the shortcut')
   }
 }

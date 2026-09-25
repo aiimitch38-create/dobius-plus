@@ -99,6 +99,13 @@ describe('setUpdateStatus changelog caching', () => {
     expect(store.getState().updateChangelog).toBeNull()
   })
 
+  it('clears cached changelog when updates turn out to be disabled', () => {
+    const store = createTestStore()
+    setState(store, { state: 'available', version: '1.2.0', changelog: RICH_CHANGELOG })
+    setState(store, { state: 'disabled', reason: 'disconnected', userInitiated: true })
+    expect(store.getState().updateChangelog).toBeNull()
+  })
+
   it('preserves manual check intent through available for lazy-mounted update card', () => {
     const store = createTestStore()
     setState(store, { state: 'checking', userInitiated: true })

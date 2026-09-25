@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { join } from 'node:path'
@@ -423,3 +431,62 @@ function listFiles(dir: string): string[] {
     .filter((entry) => entry.isFile())
     .map((entry) => join(entry.parentPath, entry.name))
 }
+
+describe('Linear workspace file is never overwritten while unreadable (BUILD-009B)', () => {
+  const validWorkspace = {
+    id: 'ws-alpha',
+    organizationId: 'ws-alpha',
+    organizationName: 'Alpha',
+    displayName: 'Ada',
+    email: 'ada@example.com'
+  }
+
+  it.each([
+    ['truncated JSON', '{"version": 1, "workspaces": [{"id"'],
+    [
+      'a malformed workspace next to a valid one',
+      JSON.stringify({ workspaces: [validWorkspace, { id: 'ws-beta' }] })
+    ],
+    ['workspaces that is not a list', JSON.stringify({ workspaces: 5 })]
+  ])('%s', async (_name, text) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const dobiusDir = join(tempHome, '.dobius')
+    const target = join(dobiusDir, 'linear-workspaces.json')
+    mkdirSync(join(dobiusDir, 'linear-tokens'), { recursive: true })
+    writeFileSync(workspaceTokenPath(validWorkspace.id), 'token-alpha')
+    writeFileSync(target, text, 'utf-8')
+    const before = statSync(target)
+    const linear = await loadClientModule()
+
+    linear.initLinearToken()
+    expect(linear.getStatus().connected).toBe(false)
+    linear.selectWorkspace('all')
+    linear.clearToken(validWorkspace.id)
+    linear.disconnect()
+
+    expect(readFileSync(target, 'utf-8')).toBe(text)
+    expect(statSync(target).mtimeMs).toBe(before.mtimeMs)
+    const names = readdirSync(dobiusDir)
+    expect(names.filter((name) => name.endsWith('.tmp'))).toEqual([])
+    expect(names.filter((name) => name.startsWith('linear-workspaces.json.unreadable-'))).toHaveLength(
+      1
+    )
+    // Warn-and-continue path: one error naming the file, not one per refused save.
+    const refusals = vi
+      .mocked(console.error)
+      .mock.calls.filter((call) => String(call[0]).includes('linear-workspaces.json not saved'))
+    expect(refusals).toHaveLength(1)
+  })
+
+  it('still saves a readable workspace list owner-only (0600)', async () => {
+    writeMultiWorkspaceFiles([{ id: 'ws-alpha', token: 'token-alpha' }], 'ws-alpha')
+    const target = join(tempHome, '.dobius', 'linear-workspaces.json')
+    const linear = await loadClientModule()
+
+    linear.selectWorkspace('all')
+    expect(JSON.parse(readFileSync(target, 'utf-8')).selectedWorkspaceId).toBe('all')
+    if (process.platform !== 'win32') {
+      expect(statSync(target).mode & 0o777).toBe(0o600)
+    }
+  })
+})

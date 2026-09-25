@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Plus, Trash2, Pencil, X } from 'lucide-react'
+import { toast } from 'sonner'
 import type { DobiusPrompt } from '../../../../shared/prompts'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
@@ -30,12 +31,22 @@ export default function PromptsPanel(): React.JSX.Element {
     if (!editing || !editing.title.trim() || !editing.text.trim()) {
       return
     }
-    setPrompts(await window.api.prompts.save(editing))
-    setEditing(null)
+    try {
+      setPrompts(await window.api.prompts.save(editing))
+      setEditing(null)
+    } catch (error) {
+      // Why: a refused save (unreadable prompts.json) must be visible; the
+      // editor stays open so the text is not lost.
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
   }, [editing])
 
   const remove = useCallback(async (id: string) => {
-    setPrompts(await window.api.prompts.delete(id))
+    try {
+      setPrompts(await window.api.prompts.delete(id))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
   }, [])
 
   return (
