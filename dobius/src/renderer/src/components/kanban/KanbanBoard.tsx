@@ -50,6 +50,7 @@ import { DAY_MS, parseDueDate, startOfDay } from './kanban-dates'
 import { moveTasksOptimistically } from './kanban-ordering'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanDetailPanel } from './KanbanDetailPanel'
+import { KanbanDoneNoteDialog } from './KanbanDoneNoteDialog'
 import type {
   Task,
   TaskPriority,
@@ -61,6 +62,10 @@ import type {
 
 const REFRESH_MS = 4_000
 const LOAD_ERROR_TOAST_ID = 'kanban-load-error'
+
+type PendingDone =
+  | { kind: 'move'; taskId: string; status: TaskStatus; index: number }
+  | { kind: 'update'; taskId: string; patch: Parameters<TaskSource['update']>[1] }
 
 const statuses: TaskStatus[] = [
   'backlog',
@@ -99,6 +104,11 @@ const statusNames: Record<TaskStatus, string> = {
  * it says so instead of drawing something. */
 
 const TIMELINE_DAYS = 7
+
+// Why: an empty board has nothing done, so it reads 0% rather than 0/0 = NaN%.
+function completionRatePercent(done: number, total: number): number {
+  return total > 0 ? Math.round((done / total) * 100) : 0
+}
 
 function formatDay(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })
@@ -451,7 +461,7 @@ function SecondaryView({
             },
             {
               label: 'Completion rate',
-              value: `${Math.round(((totals.find((item) => item.status === 'done')?.count ?? 0) / tasks.length) * 100)}%`
+              value: `${completionRatePercent(totals.find((item) => item.status === 'done')?.count ?? 0, tasks.length)}%`
             },
             {
               label: 'High priority',
@@ -615,25 +625,31 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
   )
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null
 
-  const getCompletionProof = (task: Task): string | null => {
-    const existing = task.resultNote?.trim()
-    if (existing) {
-      return existing
+  // A Done write without a note waits here for the dialog; Cancel drops it,
+  // so the card never leaves its column.
+  const [pendingDone, setPendingDone] = useState<PendingDone | null>(null)
+  const confirmDoneNote = (resultNote: string): void => {
+    const pending = pendingDone
+    if (!pending) {
+      return
     }
-    const note = window.prompt('Done requires a short result note. What was completed?')
-    const trimmed = note?.trim()
-    return trimmed || null
+    setPendingDone(null)
+    if (pending.kind === 'move') {
+      moveTask(pending.taskId, pending.status, pending.index, resultNote)
+    } else {
+      updateTask(pending.taskId, { ...pending.patch, resultNote, completedAt: Date.now() })
+    }
   }
 
   const updateTask = (taskId: string, patch: Parameters<TaskSource['update']>[1]): void => {
     const target = tasks.find((task) => task.id === taskId)
     if (patch.status === 'done' && target && !patch.resultNote?.trim()) {
-      const resultNote = getCompletionProof(target)
-      if (!resultNote) {
-        toast.error('Done needs a result note')
+      const existing = target.resultNote?.trim()
+      if (!existing) {
+        setPendingDone({ kind: 'update', taskId, patch })
         return
       }
-      patch = { ...patch, resultNote, completedAt: Date.now() }
+      patch = { ...patch, resultNote: existing, completedAt: Date.now() }
     }
     const previous = tasks
     setTasks((current) =>
@@ -656,17 +672,16 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
         busy.current -= 1
       })
   }
-  const moveTask = (taskId: string, status: TaskStatus, index: number): void => {
+  const moveTask = (taskId: string, status: TaskStatus, index: number, note?: string): void => {
     const previous = tasks
     const target = tasks.find((task) => task.id === taskId)
     let proofPatch: Pick<Task, 'resultNote' | 'completedAt'> | null = null
     if (status === 'done' && target && !target.resultNote?.trim()) {
-      const resultNote = getCompletionProof(target)
-      if (!resultNote) {
-        toast.error('Done needs a result note')
+      if (!note) {
+        setPendingDone({ kind: 'move', taskId, status, index })
         return
       }
-      proofPatch = { resultNote, completedAt: Date.now() }
+      proofPatch = { resultNote: note, completedAt: Date.now() }
     }
     setTasks((current) =>
       moveTasksOptimistically(
@@ -916,6 +931,12 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
             }}
           />
         ) : null}
+
+        <KanbanDoneNoteDialog
+          open={pendingDone !== null}
+          onCancel={() => setPendingDone(null)}
+          onConfirm={confirmDoneNote}
+        />
 
         <Dialog open={newTaskOpen} onOpenChange={setNewTaskOpen}>
           <DialogContent className="max-w-md border-kanban-border bg-kanban-panel text-kanban-foreground">
