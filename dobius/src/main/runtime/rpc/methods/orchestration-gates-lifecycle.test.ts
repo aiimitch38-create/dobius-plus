@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { ORCHESTRATION_GATE_METHODS } from './orchestration-gates'
 import type { RpcContext } from '../core'
 import { OrchestrationDb } from '../../orchestration/db'
+import Database from '../../../sqlite/sync-database'
 import { DobiusRuntimeService } from '../../dobius-runtime'
 
 const testState = vi.hoisted(() => ({ dir: '' }))
@@ -136,5 +137,76 @@ describe('orchestration coordinator run ownership', () => {
     )) as { runId: string; status: string }
     expect(second.status).toBe('running')
     expect(call('orchestration.runStop', {}, ctx)).toEqual({ runId: second.runId, stopped: true })
+  })
+
+  it('retires a live-pid run whose heartbeat is stale (reused pid) so run succeeds', async () => {
+    const dbPath = join(testState.dir, 'orchestration.db')
+    const other = new OrchestrationDb(dbPath, { pid: process.ppid, sessionId: 'crashed-instance' })
+    const task = other.createTask({ spec: 'gated' })
+    other.createGate({ taskId: task.id, question: 'proceed?' })
+    const crashed = other.createCoordinatorRun({ spec: 'before crash', coordinatorHandle: 'coord' })
+    other.close()
+    const raw = new Database(dbPath)
+    raw
+      .prepare(
+        "UPDATE coordinator_runs SET owner_heartbeat_at = datetime('now', '-5 minutes') WHERE id = ?"
+      )
+      .run(crashed.id)
+    raw.close()
+
+    const db = new OrchestrationDb(dbPath)
+    runtime.setOrchestrationDb(db)
+    const started = (await call(
+      'orchestration.run',
+      { spec: 'after crash', pollIntervalMs: 10 },
+      ctx
+    )) as { runId: string; status: string }
+    expect(started.status).toBe('running')
+    expect(db.getCoordinatorRun(crashed.id)?.status).toBe('failed')
+    expect(call('orchestration.runStop', {}, ctx)).toEqual({ runId: started.runId, stopped: true })
+  })
+
+  it('still refuses a live-pid run whose heartbeat is fresh', () => {
+    const dbPath = join(testState.dir, 'orchestration.db')
+    const other = new OrchestrationDb(dbPath, { pid: process.ppid, sessionId: 'beating-instance' })
+    other.createTask({ spec: 'owned elsewhere' })
+    const live = other.createCoordinatorRun({ spec: 'beating', coordinatorHandle: 'coord' })
+    other.touchCoordinatorRun(live.id)
+    other.close()
+
+    const db = new OrchestrationDb(dbPath)
+    runtime.setOrchestrationDb(db)
+    expect(() => call('orchestration.run', { spec: 'second' }, ctx)).toThrow(
+      /Coordinator already running: .*owned by another live process/
+    )
+    expect(db.getCoordinatorRun(live.id)?.status).toBe('running')
+  })
+
+  it('with a huge poll interval, runStop then run succeeds without waiting it out', async () => {
+    const db = new OrchestrationDb(':memory:')
+    runtime.setOrchestrationDb(db)
+    const task = db.createTask({ spec: 'gated' })
+    db.createGate({ taskId: task.id, question: 'proceed?' })
+
+    const first = (await call(
+      'orchestration.run',
+      { spec: 'slow poll', pollIntervalMs: 3_600_000 },
+      ctx
+    )) as { runId: string }
+    expect(db.getCoordinatorRun(first.runId)?.poll_interval_ms).toBe(60_000)
+    await new Promise((r) => {
+      setTimeout(r, 30)
+    })
+    call('orchestration.runStop', {}, ctx)
+    await new Promise((r) => {
+      setTimeout(r, 30)
+    })
+    const second = (await call(
+      'orchestration.run',
+      { spec: 'right after', pollIntervalMs: 10 },
+      ctx
+    )) as { status: string }
+    expect(second.status).toBe('running')
+    call('orchestration.runStop', {}, ctx)
   })
 })

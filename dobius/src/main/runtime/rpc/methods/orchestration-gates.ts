@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { defineMethod, type RpcMethod } from '../core'
 import { OptionalFiniteNumber, OptionalString, requiredString } from '../schemas'
 import type { GateStatus } from '../../orchestration/db'
-import { Coordinator } from '../../orchestration/coordinator'
+import { Coordinator, clampPollIntervalMs } from '../../orchestration/coordinator'
 import { assertExecutionAdmitted } from '../../../agents/execution-gate'
 
 // Why: the coordinator instance is stored at module scope so orchestration.runStop
@@ -19,7 +19,9 @@ const unsettledLoops = new Map<Coordinator, string>()
 const RunParams = z.object({
   spec: requiredString('Missing --spec'),
   from: OptionalString,
-  pollIntervalMs: OptionalFiniteNumber,
+  pollIntervalMs: OptionalFiniteNumber.transform((ms) =>
+    ms === undefined ? undefined : clampPollIntervalMs(ms)
+  ),
   maxConcurrent: OptionalFiniteNumber,
   worktree: OptionalString
 })

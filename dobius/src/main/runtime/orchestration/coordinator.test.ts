@@ -811,6 +811,50 @@ describe('Coordinator', () => {
     })
   })
 
+  describe('stop wakes the poll sleep', () => {
+    it('stop() during a long (capped) poll sleep settles the run promptly', async () => {
+      db = new OrchestrationDb(':memory:')
+      const runtime = createMockRuntime()
+      const task = db.createTask({ spec: 'gated' })
+      db.createGate({ taskId: task.id, question: 'proceed?' })
+      const coordinator = new Coordinator(db, runtime, {
+        spec: 'run',
+        coordinatorHandle: 'coord',
+        pollIntervalMs: 3_600_000
+      })
+      const run = coordinator.run()
+      await new Promise((r) => {
+        setTimeout(r, 30)
+      })
+      const stoppedAt = Date.now()
+      coordinator.stop()
+      const result = await run
+      expect(result.status).toBe('failed')
+      expect(Date.now() - stoppedAt).toBeLessThan(1_000)
+    })
+
+    it('stops dispatching once its run row is retired elsewhere', async () => {
+      db = new OrchestrationDb(':memory:')
+      const runtime = createMockRuntime()
+      const first = db.createTask({ spec: 'first' })
+      const coordinator = new Coordinator(db, runtime, {
+        spec: 'run',
+        coordinatorHandle: 'coord',
+        pollIntervalMs: 20
+      })
+      const run = coordinator.run()
+      await waitFor(() => db.getTask(first.id)?.status === 'dispatched')
+      const runId = db.getActiveCoordinatorRun()?.id
+      expect(runId).toBeDefined()
+      db.updateCoordinatorRun(runId as string, 'failed')
+      const second = db.createTask({ spec: 'child', parentId: first.id })
+
+      const result = await run
+      expect(result.status).toBe('failed')
+      expect(db.getDispatchContext(second.id)).toBeUndefined()
+    })
+  })
+
   describe('stop during dispatch', () => {
     it('a coordinator stopped while awaiting terminals dispatches nothing', async () => {
       db = new OrchestrationDb(':memory:')

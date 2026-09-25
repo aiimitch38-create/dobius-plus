@@ -156,6 +156,54 @@
 - A stopping loop that never settles (e.g. a hung terminal send) blocks new runs until restart.
   This is deliberate (fail closed).
 
+## Review round 2 (re-review of 51fc1469)
+- **F1 [medium] a reused pid kept a crashed run "alive" forever** (after a crash + reboot an unrelated
+  process can hold the pid; `kill(pid, 0)` then succeeds or gives EPERM, and only `reset` would clear it).
+  - v6 (not shipped yet, so folded in) also adds nullable `coordinator_runs.owner_heartbeat_at TEXT`,
+    set to `datetime('now')` on insert.
+  - `touchCoordinatorRun(id)` beats `WHERE status = 'running'` and returns whether it changed a row.
+    `Coordinator.tick` calls it first on every tick.
+  - `failOrphanedCoordinatorRuns`: a foreign row is live only if its pid is alive AND its heartbeat is
+    newer than `max(60s, 10 × poll_interval_ms)` (from the row). The comparison uses `julianday()` on
+    both sides, like #63, so SQLite and ISO stamps compare as instants. A NULL heartbeat is never fresh.
+  - Added safeguard: if the touch finds the row no longer `running` (retired by another process or
+    stopped), the loop stops instead of dispatching. This closes the case where a very slow tick
+    looked stale to another instance, which then retired the row and started its own run.
+- **F2 [low] stop could not wake the poll sleep, and the interval had no upper bound.**
+  - `Coordinator.sleep` is wakeable: `stop()` clears the timer and resolves at once.
+  - `MAX_POLL_MS = 60_000`, `clampPollIntervalMs` in `coordinator.ts`, applied in the constructor and
+    in the `orchestration.run` schema (`pollIntervalMs` is transformed), so the stored row matches too.
+    Clamp chosen over reject so existing callers keep working. This also caps the heartbeat window at
+    10 minutes.
+  - The round-1 `unsettledLoops` guard stays. It now only covers the microtask gap and in-flight awaits
+    such as a terminal send.
+
+### Tests (round 2)
+- `db.test.ts`: "a live foreign pid counts only while its heartbeat is inside max(60s, 10 polls)" covers
+  stale SQLite and ISO stamps, a stale and a fresh slow-poll row, and a fresh ISO row. Also
+  "touchCoordinatorRun beats only while the row is running".
+- `orchestration-gates-lifecycle.test.ts`: "retires a live-pid run whose heartbeat is stale (reused pid)
+  so run succeeds"; "still refuses a live-pid run whose heartbeat is fresh"; "with a huge poll interval,
+  runStop then run succeeds without waiting it out" (also asserts the stored interval is 60000).
+- `coordinator.test.ts`: "stop() during a long (capped) poll sleep settles the run promptly"; "stops
+  dispatching once its run row is retired elsewhere".
+
+### Mutation checks (round 2; stabilize-run/026/mut2/run2.py, originals restored)
+- Heartbeat check removed → db window test + gates stale-heartbeat test fail.
+- String compare instead of julianday → db window test fails.
+- Tick touch/stop-on-retired removed → retired-elsewhere test fails.
+- `stop()` no longer wakes the sleep → coordinator prompt-stop test + gates huge-interval test fail.
+- Clamp removed → gates huge-interval test fails.
+
+### Verification (round 2)
+- `pnpm run typecheck` exit 0; oxlint + react-doctor clean on the 7 changed files.
+- Targeted: 8 files passed, 1 skipped; 247 passed, 2 skipped. Full suite: DEFERRED.
+
+### Decisions (round 2)
+- Heartbeat window = max(60s, 10 × the row's poll interval), computed from the row's stored interval.
+- `pollIntervalMs` above 60s is clamped, not rejected.
+- A loop whose row stops being `running` stops itself.
+
 ## Rollback
 Revert the commits. v6 only adds two nullable columns; older code ignores them. Rows marked `failed`
 by orphan retirement stay `failed` (correct under old code too).

@@ -42,10 +42,17 @@ function generateId(prefix: string): string {
 // the parent workspace even when no dispatch context exists. v4 → v5 adds
 // explicit task_title/display_name fields for orchestration worker UI labels.
 // v5 → v6 records which process (pid + per-process session id) owns each
-// coordinator run, so one process never retires another live process's run.
+// coordinator run and when its loop last beat, so one process never retires
+// another live process's run, and a reused pid cannot keep a dead run alive.
 const SCHEMA_VERSION = 6
 
 export type CoordinatorRunOwner = { pid: number; sessionId: string }
+
+// Why: a foreign run is live only while its loop keeps beating. The window is
+// generous (10 polls, never under 60s) so a slow tick is not mistaken for a
+// crash; poll intervals are capped at 60s, so it never exceeds 10 minutes.
+const OWNER_HEARTBEAT_MIN_WINDOW_S = 60
+const OWNER_HEARTBEAT_POLLS = 10
 
 // Why: the session id tells a live owner apart from an earlier process that
 // happened to have the same (since reused) pid.
@@ -178,7 +185,8 @@ export class OrchestrationDb {
         created_at          TEXT NOT NULL DEFAULT (datetime('now')),
         completed_at        TEXT,
         owner_pid           INTEGER,
-        owner_session       TEXT
+        owner_session       TEXT,
+        owner_heartbeat_at  TEXT
       );
     `)
     this.createUndeliveredInboxIndexIfPossible()
@@ -289,6 +297,9 @@ export class OrchestrationDb {
         }
         if (!this.hasColumn('coordinator_runs', 'owner_session')) {
           this.db.exec(`ALTER TABLE coordinator_runs ADD COLUMN owner_session TEXT`)
+        }
+        if (!this.hasColumn('coordinator_runs', 'owner_heartbeat_at')) {
+          this.db.exec(`ALTER TABLE coordinator_runs ADD COLUMN owner_heartbeat_at TEXT`)
         }
       }
       this.createUndeliveredInboxIndexIfPossible()
@@ -877,7 +888,7 @@ export class OrchestrationDb {
     const id = generateId('run')
     this.db
       .prepare(
-        "INSERT INTO coordinator_runs (id, spec, status, coordinator_handle, poll_interval_ms, owner_pid, owner_session) VALUES (?, ?, 'running', ?, ?, ?, ?)"
+        "INSERT INTO coordinator_runs (id, spec, status, coordinator_handle, poll_interval_ms, owner_pid, owner_session, owner_heartbeat_at) VALUES (?, ?, 'running', ?, ?, ?, ?, datetime('now'))"
       )
       .run(
         id,
@@ -907,6 +918,32 @@ export class OrchestrationDb {
     return this.getCoordinatorRun(id)
   }
 
+  // Why: returns false once the row is no longer 'running' (stopped, or
+  // retired by another process), telling the loop it no longer owns the run.
+  touchCoordinatorRun(id: string): boolean {
+    const result = this.db
+      .prepare(
+        "UPDATE coordinator_runs SET owner_heartbeat_at = datetime('now') WHERE id = ? AND status = 'running'"
+      )
+      .run(id)
+    return result.changes > 0
+  }
+
+  // Why: julianday() parses both SQLite 'YYYY-MM-DD HH:MM:SS' and ISO strings
+  // as UTC (same handling as getStaleDispatches). NULL is never fresh.
+  private hasFreshOwnerHeartbeat(id: string): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT 1 AS fresh FROM coordinator_runs WHERE id = ?
+           AND owner_heartbeat_at IS NOT NULL
+           AND julianday(owner_heartbeat_at) > julianday('now') - (
+             MAX(?, ? * poll_interval_ms / 1000.0) / 86400.0
+           )`
+      )
+      .get(id, OWNER_HEARTBEAT_MIN_WINDOW_S, OWNER_HEARTBEAT_POLLS) as { fresh: number } | undefined
+    return row !== undefined
+  }
+
   ownsCoordinatorRun(run: CoordinatorRun): boolean {
     return run.owner_pid === this.owner.pid && run.owner_session === this.owner.sessionId
   }
@@ -914,8 +951,10 @@ export class OrchestrationDb {
   // Why: a 'running' row outlives a crashed owner and would block every later
   // run. Retired ('failed', tasks and history kept) are rows with no owner
   // (pre-v6 legacy rows, which predate this build), rows of a dead pid or of a
-  // reused pid with another session, and rows of this process other than
-  // ownedRunId. A live other process's run is left alone so it keeps running.
+  // reused pid with another session, rows whose heartbeat went stale (a pid
+  // can be reused by an unrelated process after a crash, so a live pid alone
+  // proves nothing), and rows of this process other than ownedRunId. A live,
+  // beating other process's run is left alone so it keeps running.
   failOrphanedCoordinatorRuns(ownedRunId?: string | null): string[] {
     const rows = this.db
       .prepare(
@@ -931,7 +970,7 @@ export class OrchestrationDb {
         if (pid === null || !Number.isInteger(pid) || pid <= 0 || pid === this.owner.pid) {
           return true
         }
-        return !isPidAlive(pid)
+        return !isPidAlive(pid) || !this.hasFreshOwnerHeartbeat(row.id)
       })
       .map((row) => row.id)
     for (const id of orphans) {

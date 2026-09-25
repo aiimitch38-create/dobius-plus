@@ -611,6 +611,48 @@ describe('OrchestrationDb', () => {
       expect(d.getActiveCoordinatorRun()?.id).toBe(live)
     })
 
+    it('a live foreign pid counts only while its heartbeat is inside max(60s, 10 polls)', () => {
+      dir = mkdtempSync(join(tmpdir(), 'orch-open-for-process-'))
+      const dbPath = join(dir, 'orchestration.db')
+      const runAs = (spec: string, pollIntervalMs: number, heartbeat: string): string => {
+        const other = new OrchestrationDb(dbPath, { pid: process.ppid, sessionId: spec })
+        const run = other.createCoordinatorRun({ spec, coordinatorHandle: 'coord', pollIntervalMs })
+        other.close()
+        const raw = new Database(dbPath)
+        raw
+          .prepare('UPDATE coordinator_runs SET owner_heartbeat_at = ? WHERE id = ?')
+          .run(heartbeat, run.id)
+        raw.close()
+        return run.id
+      }
+      const sqliteAgo = (s: number): string =>
+        new Date(Date.now() - s * 1000).toISOString().replace('T', ' ').slice(0, 19)
+      const isoAgo = (s: number): string => new Date(Date.now() - s * 1000).toISOString()
+      // Why: both stored shapes (SQLite default and JS ISO) must compare as instants.
+      const staleSqlite = runAs('stale-sqlite', 2000, sqliteAgo(90))
+      const staleIso = runAs('stale-iso', 2000, isoAgo(90))
+      const staleSlowPoll = runAs('stale-slow-poll', 30_000, sqliteAgo(400))
+      const freshSlowPoll = runAs('fresh-slow-poll', 30_000, sqliteAgo(200))
+      const freshIso = runAs('fresh-iso', 2000, isoAgo(20))
+
+      const d = OrchestrationDb.openForProcess(dbPath, { pid: process.pid, sessionId: 'self' })
+      db = d
+      expect(d.getCoordinatorRun(staleSqlite)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(staleIso)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(staleSlowPoll)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(freshSlowPoll)?.status).toBe('running')
+      expect(d.getCoordinatorRun(freshIso)?.status).toBe('running')
+    })
+
+    it('touchCoordinatorRun beats only while the row is running', () => {
+      const d = createDb()
+      const run = d.createCoordinatorRun({ spec: 'beat', coordinatorHandle: 'coord' })
+      expect(run.owner_heartbeat_at).not.toBeNull()
+      expect(d.touchCoordinatorRun(run.id)).toBe(true)
+      d.updateCoordinatorRun(run.id, 'failed')
+      expect(d.touchCoordinatorRun(run.id)).toBe(false)
+    })
+
     it('upgrades a v5 DB additively; its ownerless running row is retired as legacy', () => {
       dir = mkdtempSync(join(tmpdir(), 'orch-open-for-process-'))
       const dbPath = join(dir, 'orchestration.db')

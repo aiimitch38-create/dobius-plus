@@ -80,6 +80,13 @@ type CoordinatorState = {
 
 const DEFAULT_POLL_MS = 2000
 const MAX_CONCURRENT_DEFAULT = 4
+// Why: bounds how long a stop can take to be noticed and keeps the run's
+// owner-heartbeat window (10 polls) at 10 minutes or less.
+export const MAX_POLL_MS = 60_000
+
+export function clampPollIntervalMs(ms: number): number {
+  return Math.min(ms, MAX_POLL_MS)
+}
 
 // Why: 10 min matches the preamble's documented heartbeat cadence (5 min) ×
 // 2, so a single missed heartbeat is the earliest a dispatch can look stale.
@@ -107,6 +114,7 @@ export class Coordinator {
   private runtime: CoordinatorRuntime
   private state: CoordinatorState
   private stopped = false
+  private wakeSleep: (() => void) | null = null
   // Why: the task table is global and outlives runs (old failed tasks,
   // another root created mid-run). A run only decomposes, dispatches and
   // converges over the tasks it claimed at start plus tasks linked to them.
@@ -122,7 +130,7 @@ export class Coordinator {
     this.opts = {
       spec: options.spec,
       coordinatorHandle: options.coordinatorHandle,
-      pollIntervalMs: options.pollIntervalMs ?? DEFAULT_POLL_MS,
+      pollIntervalMs: clampPollIntervalMs(options.pollIntervalMs ?? DEFAULT_POLL_MS),
       maxConcurrent: options.maxConcurrent ?? MAX_CONCURRENT_DEFAULT,
       worktree: options.worktree,
       onLog: options.onLog ?? (() => {})
@@ -215,6 +223,7 @@ export class Coordinator {
 
   stop(): void {
     this.stopped = true
+    this.wakeSleep?.()
   }
 
   // Why: the coordinator decomposes the top-level spec into a task DAG.
@@ -287,6 +296,14 @@ export class Coordinator {
   }
 
   private async tick(): Promise<boolean> {
+    // Why: the heartbeat proves to other processes sharing the DB that this
+    // run is still owned. If the row is no longer 'running' (retired or
+    // stopped elsewhere) this loop no longer owns it and must not dispatch.
+    if (!this.db.touchCoordinatorRun(this.state.runId)) {
+      this.opts.onLog(`Coordinator run ${this.state.runId} is no longer running; stopping`)
+      this.stop()
+      return false
+    }
     this.adoptLinkedTasks()
     this.processMessages()
     this.processEscalations()
@@ -687,9 +704,22 @@ export class Coordinator {
     return false
   }
 
+  // Why: stop() wakes the pending sleep so a stopped loop settles at once
+  // instead of after a full poll interval.
   private sleep(ms: number): Promise<void> {
+    if (this.stopped) {
+      return Promise.resolve()
+    }
     return new Promise((resolve) => {
-      setTimeout(resolve, ms)
+      const timer = setTimeout(() => {
+        this.wakeSleep = null
+        resolve()
+      }, ms)
+      this.wakeSleep = () => {
+        clearTimeout(timer)
+        this.wakeSleep = null
+        resolve()
+      }
     })
   }
 }
