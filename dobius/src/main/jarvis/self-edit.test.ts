@@ -40,6 +40,20 @@ describe('selfEditRoots', () => {
       '/Users/x/dobius/projects/ADAM'
     ])
   })
+
+  it('uses the configured ADAM location instead of assuming one home layout (#118)', () => {
+    const saved = process.env.DOBIUS_ADAM_PROJECT_DIR
+    process.env.DOBIUS_ADAM_PROJECT_DIR = '/opt/adam'
+    try {
+      expect(selfEditRoots('/Users/x', '/repo')).toEqual(['/repo', '/opt/adam'])
+    } finally {
+      if (saved === undefined) {
+        delete process.env.DOBIUS_ADAM_PROJECT_DIR
+      } else {
+        process.env.DOBIUS_ADAM_PROJECT_DIR = saved
+      }
+    }
+  })
 })
 
 describe('resolveEditablePath', () => {

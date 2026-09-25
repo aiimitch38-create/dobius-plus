@@ -2,7 +2,8 @@ import { appendFile, open, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
-import { errorCode, postEventToAdam, resolveAdamServiceToken } from './adam-event-ingest'
+import { resolveAdamToken } from '../adam-connection'
+import { errorCode, postEventToAdam } from './adam-event-ingest'
 
 // Byte offset into agent-events.ndjson: every line before it was delivered
 // to ADAM or quarantined. Everything after it is pending.
@@ -12,6 +13,7 @@ export type AdamEventDeliveryState =
   | 'not-started'
   | 'idle'
   | 'delivering'
+  | 'not-installed'
   | 'no-token'
   | 'unauthorized'
   | 'offline'
@@ -195,9 +197,9 @@ async function drainOnce(): Promise<DrainOutcome> {
     return 'caught-up'
   }
 
-  const tokenResult = await resolveAdamServiceToken()
+  const tokenResult = await resolveAdamToken()
   if (tokenResult.token === undefined) {
-    setHealth('no-token', tokenResult.detail)
+    setHealth(tokenResult.state, tokenResult.detail)
     return 'retry'
   }
   if (typeof fetch !== 'function') {

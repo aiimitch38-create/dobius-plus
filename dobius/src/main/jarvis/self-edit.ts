@@ -10,6 +10,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { adamProjectDirectory } from '../adam-connection'
 import { protectedReason } from './self-edit-path-policy'
 import {
   bytesDigest,
@@ -61,7 +62,7 @@ export const WINDOWS_WRITE_UNSUPPORTED =
  * what the model asks for.
  */
 export function selfEditRoots(home: string, repoRoot: string): string[] {
-  return [repoRoot, join(home, 'dobius', 'projects', 'ADAM')]
+  return [repoRoot, adamProjectDirectory(home)]
 }
 
 function containedBy(child: string, parent: string): boolean {

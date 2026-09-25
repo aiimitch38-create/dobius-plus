@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,11 +14,18 @@ vi.mock('electron', () => ({
 }))
 
 const FAKE_TOKEN = 'test-token-not-real'
-const ENV_KEYS = ['ADAM_SERVICE_TOKEN', 'ADAM_SERVICE_TOKEN_PATH', 'ADAM_SERVICE_URL', 'DOBIUS_DATA_DIR']
+const ENV_KEYS = [
+  'ADAM_SERVICE_TOKEN',
+  'ADAM_SERVICE_TOKEN_PATH',
+  'ADAM_SERVICE_URL',
+  'DOBIUS_ADAM_TOKEN_PATH',
+  'DOBIUS_ADAM_PROJECT_DIR',
+  'DOBIUS_DATA_DIR'
+]
 let savedEnv: Record<string, string | undefined> = {}
 let otherDir = ''
 
-type FetchCall = { eventId: string }
+type FetchCall = { eventId: string; url: string; authorization: string }
 const fetchCalls: FetchCall[] = []
 let respond: (eventId: string) => Promise<Response> = async () => new Response('{}', { status: 200 })
 
@@ -61,9 +68,10 @@ beforeEach(() => {
   respond = async () => new Response('{}', { status: 200 })
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (_url: URL, init: RequestInit) => {
+    vi.fn(async (url: string, init: RequestInit) => {
       const { eventId } = JSON.parse(String(init.body)) as { eventId: string }
-      fetchCalls.push({ eventId })
+      const authorization = (init.headers as Record<string, string>).authorization
+      fetchCalls.push({ eventId, url: String(url), authorization })
       return respond(eventId)
     })
   )
@@ -256,6 +264,58 @@ describe('agent run event journal delivery', () => {
     expect(journal.getAdamEventDeliveryHealth()).toMatchObject({ deliveredCount: 3, quarantinedCount: 1 })
   })
 
+  it('follows a changed Settings endpoint and token without restart (#81)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    delete process.env.ADAM_SERVICE_TOKEN
+    process.env.ADAM_SERVICE_TOKEN_PATH = path.join(otherDir, 'token')
+    writeFileSync(process.env.ADAM_SERVICE_TOKEN_PATH, `${FAKE_TOKEN}-1\n`)
+    const journal = await loadJournal()
+    const connection = await import('../adam-connection')
+    let endpoint = 'http://adam.one:9000/'
+    connection.setAdamEndpointSettingReader(() => endpoint)
+    journal.startAgentRunEventDelivery()
+    journal.appendAgentRunJournalEvent(event(1))
+    await journal.whenAgentRunJournalIdle()
+
+    endpoint = 'http://adam.two:9000'
+    writeFileSync(process.env.ADAM_SERVICE_TOKEN_PATH, `${FAKE_TOKEN}-2\n`)
+    journal.appendAgentRunJournalEvent(event(2))
+    await journal.whenAgentRunJournalIdle()
+
+    expect(fetchCalls.map((call) => [call.url, call.authorization])).toEqual([
+      ['http://adam.one:9000/v1/events/ingest', `Bearer ${FAKE_TOKEN}-1`],
+      ['http://adam.two:9000/v1/events/ingest', `Bearer ${FAKE_TOKEN}-2`]
+    ])
+  })
+
+  it('shows a not-installed state, keeps events queued and never crashes when ADAM is missing (#118)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    delete process.env.ADAM_SERVICE_TOKEN
+    process.env.DOBIUS_ADAM_PROJECT_DIR = path.join(otherDir, 'no-adam-here')
+    writeFileSync(journalFile(), `${record('a')}\n`)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const journal = await loadJournal()
+    journal.startAgentRunEventDelivery()
+    await journal.whenAgentRunJournalIdle()
+
+    expect(fetchCalls).toHaveLength(0)
+    expect(journal.getAdamEventDeliveryHealth()).toMatchObject({
+      state: 'not-installed',
+      detail: 'ADAM folder not found'
+    })
+    expect(warn.mock.calls.flat().join(' ')).toContain('not-installed')
+
+    // Installing ADAM later is picked up by the next retry, no restart.
+    const tokenDir = path.join(process.env.DOBIUS_ADAM_PROJECT_DIR, 'service', 'data')
+    mkdirSync(tokenDir, { recursive: true })
+    writeFileSync(path.join(tokenDir, 'service-token'), FAKE_TOKEN)
+    await vi.advanceTimersByTimeAsync(1_000)
+    await journal.whenAgentRunJournalIdle()
+    expect(fetchCalls.map((call) => call.eventId)).toEqual(['a'])
+    expect(journal.getAdamEventDeliveryHealth().state).toBe('idle')
+    expect(warn.mock.calls.flat().join(' ')).not.toContain(FAKE_TOKEN)
+  })
+
   it('does not deliver before startup starts delivery', async () => {
     const journal = await loadJournal()
     journal.appendAgentRunJournalEvent(event(1))
@@ -288,5 +348,9 @@ describe('agent run event journal delivery', () => {
     expect(storeCreated).toBeGreaterThan(ready)
     expect(start).toBeGreaterThan(storeCreated)
     expect(source).not.toContain('replayRecentAgentRunJournalEvents')
+    // #81: delivery reads the live Settings endpoint, wired before it starts.
+    const reader = source.indexOf('setAdamEndpointSettingReader(() => store?.getSettings().voice?.adamEndpoint)')
+    expect(reader).toBeGreaterThan(storeCreated)
+    expect(reader).toBeLessThan(start)
   })
 })

@@ -4,7 +4,8 @@ import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
-import { adamProjectDirectory, converseWithAdam, loadAdamServiceToken } from './adam-client'
+import { adamProjectDirectory } from '../adam-connection'
+import { askAdam } from './adam-client'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
 import { SelfEditStore, selfEditRoots } from './self-edit'
 import { resolveSelfEditRepoRoot } from './self-edit-repo-root'
@@ -194,9 +195,8 @@ function registerHandlers(store: Store, service: JarvisService): void {
   // service.ask() would talk over it with a second voice.
   ipcMain.removeHandler('jarvis:askAdamText')
   ipcMain.handle('jarvis:askAdamText', async (_event, utterance: string) => {
-    const result = await converseWithAdam({
-      endpoint: store.getSettings().voice?.adamEndpoint,
-      token: loadAdamServiceToken(),
+    const result = await askAdam({
+      settingsEndpoint: store.getSettings().voice?.adamEndpoint,
       utterance: typeof utterance === 'string' ? utterance : ''
     })
     return result

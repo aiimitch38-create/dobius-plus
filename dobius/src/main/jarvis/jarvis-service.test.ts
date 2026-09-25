@@ -14,7 +14,6 @@ import {
   tapSttFinalTranscripts
 } from './jarvis-service'
 import type { JarvisBroadcastPort, JarvisShortcutPort } from './jarvis-service'
-import { resetAdamServiceTokenCacheForTests } from './adam-client'
 
 const BASE_VOICE: VoiceSettings = {
   enabled: false,
@@ -72,14 +71,12 @@ function statesOf(broadcast: ReturnType<typeof vi.fn>): string[] {
 }
 
 beforeEach(() => {
-  // Why a throwaway token path: ask() reads the machine-local ADAM token once;
+  // Why a throwaway token path: ask() reads the machine-local ADAM token;
   // pointing the env override at a temp location keeps tests off Carson's disk.
   process.env.DOBIUS_ADAM_TOKEN_PATH = join(mkdtempSync(join(tmpdir(), 'jarvis-test-')), 'token')
-  resetAdamServiceTokenCacheForTests()
 })
 
 afterEach(() => {
-  resetAdamServiceTokenCacheForTests()
   delete process.env.DOBIUS_ADAM_TOKEN_PATH
   vi.useRealTimers()
 })
