@@ -46,6 +46,15 @@ const SCHEMA_VERSION = 5
 export class OrchestrationDb {
   private db: Database.Database
 
+  // Why: coordinators live only in the process that started them, so a
+  // 'running' row found when this process first opens the DB was left by a
+  // previous process and has no owner.
+  static openForProcess(dbPath: string): OrchestrationDb {
+    const db = new OrchestrationDb(dbPath)
+    db.failOrphanedCoordinatorRuns()
+    return db
+  }
+
   constructor(dbPath: string | ':memory:') {
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
@@ -686,44 +695,57 @@ export class OrchestrationDb {
   // failed / circuit_broken row with an old-or-null last_heartbeat_at would
   // warn every tick (warning storm). Without `dispatched_at < :threshold`,
   // a freshly-dispatched worker would trip the warning during its first
-  // heartbeat interval (false positive). Callers supply the threshold as an
-  // ISO timestamp so the SQLite string-compare ordering works correctly
-  // (ISO-8601 compares lexicographically in time order).
+  // heartbeat interval (false positive).
+  // Why julianday(): dispatched_at and heartbeat times are stored as SQLite
+  // 'YYYY-MM-DD HH:MM:SS' while callers pass an ISO 'YYYY-MM-DDTHH:MM:SS.sssZ'
+  // threshold (and older rows may hold either). A plain string compare puts
+  // ' ' before 'T', so every same-day row looked older than the threshold.
+  // julianday() parses both shapes as UTC, so no stored row has to be rewritten.
   getStaleDispatches(thresholdIso: string): DispatchContextRow[] {
     return this.db
       .prepare(
         `SELECT * FROM dispatch_contexts
          WHERE status = 'dispatched'
            AND dispatched_at IS NOT NULL
-           AND dispatched_at < ?
-           AND (last_heartbeat_at IS NULL OR last_heartbeat_at < ?)`
+           AND julianday(dispatched_at) < julianday(?1)
+           AND (last_heartbeat_at IS NULL OR julianday(last_heartbeat_at) < julianday(?1))`
       )
-      .all(thresholdIso, thresholdIso) as DispatchContextRow[]
+      .all(thresholdIso) as DispatchContextRow[]
   }
 
+  // Why: returns undefined (and changes nothing) unless the context is still
+  // active. A duplicate or late failure for an attempt that already completed,
+  // failed or circuit-broke must not bump failure_count again or flip the
+  // task, which by then may belong to a newer attempt.
   failDispatch(ctxId: string, error: string): DispatchContextRow | undefined {
     const ctx = this.db.prepare('SELECT * FROM dispatch_contexts WHERE id = ?').get(ctxId) as
       | DispatchContextRow
       | undefined
-    if (!ctx) {
+    if (!ctx || (ctx.status !== 'pending' && ctx.status !== 'dispatched')) {
       return undefined
     }
 
     const newFailureCount = ctx.failure_count + 1
     const newStatus: DispatchStatus = newFailureCount >= 3 ? 'circuit_broken' : 'failed'
 
-    this.db
+    const changed = this.db
       .prepare(
-        'UPDATE dispatch_contexts SET status = ?, failure_count = ?, last_failure = ? WHERE id = ?'
+        "UPDATE dispatch_contexts SET status = ?, failure_count = ?, last_failure = ? WHERE id = ? AND status IN ('pending', 'dispatched')"
       )
       .run(newStatus, newFailureCount, error, ctxId)
+    if (changed.changes === 0) {
+      return undefined
+    }
 
     // Why: set the task back to 'ready' (not 'pending') so the coordinator can
     // re-dispatch it on the next tick. The task's deps are already satisfied —
     // setting it to 'pending' would strand it since promoteReadyTasks only runs
-    // when a dep completes.
+    // when a dep completes. Only a task still 'dispatched' is moved, so a task
+    // a human already completed, failed or blocked keeps that status.
     const taskStatus: TaskStatus = newStatus === 'circuit_broken' ? 'failed' : 'ready'
-    this.db.prepare('UPDATE tasks SET status = ? WHERE id = ?').run(taskStatus, ctx.task_id)
+    this.db
+      .prepare("UPDATE tasks SET status = ? WHERE id = ? AND status = 'dispatched'")
+      .run(taskStatus, ctx.task_id)
 
     return this.db.prepare('SELECT * FROM dispatch_contexts WHERE id = ?').get(ctxId) as
       | DispatchContextRow
@@ -840,6 +862,23 @@ export class OrchestrationDb {
       )
       .run(status, completedAt, id)
     return this.getCoordinatorRun(id)
+  }
+
+  // Why: a 'running' row is only true while a live Coordinator in this
+  // process owns it. After a crash/restart the row outlives its owner and
+  // would block every later run (and runStop could not clear it). Marking
+  // orphans 'failed' keeps their tasks and history; nothing is deleted.
+  failOrphanedCoordinatorRuns(ownedRunId?: string | null): string[] {
+    const rows = this.db
+      .prepare(
+        "SELECT id FROM coordinator_runs WHERE status = 'running' ORDER BY created_at DESC, rowid DESC"
+      )
+      .all() as { id: string }[]
+    const orphans = rows.map((row) => row.id).filter((id) => id !== ownedRunId)
+    for (const id of orphans) {
+      this.updateCoordinatorRun(id, 'failed')
+    }
+    return orphans
   }
 
   getActiveCoordinatorRun(): CoordinatorRun | undefined {

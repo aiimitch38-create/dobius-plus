@@ -97,6 +97,18 @@ function insertWorkerDone(
   })
 }
 
+async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error('waitFor timed out')
+    }
+    await new Promise((r) => {
+      setTimeout(r, 10)
+    })
+  }
+}
+
 describe('Coordinator', () => {
   let db: OrchestrationDb
 
@@ -151,6 +163,14 @@ describe('Coordinator', () => {
 
     const task = db.createTask({ spec: 'send-driven completion' })
     const dispatch = db.createDispatchContext(task.id, 'term_a')
+    const coordinator = new Coordinator(db, runtime, {
+      spec: 'go',
+      coordinatorHandle: 'coord',
+      pollIntervalMs: 20
+    })
+    // The run claims the dispatched task synchronously; send then reconciles
+    // the completion before the coordinator's first message read.
+    const runPromise = coordinator.run()
     const msg = db.insertMessage({
       from: 'term_a',
       to: 'coord',
@@ -161,12 +181,7 @@ describe('Coordinator', () => {
 
     reconcileLifecycleMessage(db, msg)
 
-    const coordinator = new Coordinator(db, runtime, {
-      spec: 'go',
-      coordinatorHandle: 'coord',
-      pollIntervalMs: 20
-    })
-    const result = await coordinator.run()
+    const result = await runPromise
 
     expect(result.status).toBe('completed')
     expect(result.completedTasks).toContain(task.id)
@@ -178,6 +193,12 @@ describe('Coordinator', () => {
 
     const task = db.createTask({ spec: 'duplicate completion' })
     const dispatch = db.createDispatchContext(task.id, 'term_a')
+    const coordinator = new Coordinator(db, runtime, {
+      spec: 'go',
+      coordinatorHandle: 'coord',
+      pollIntervalMs: 20
+    })
+    const runPromise = coordinator.run()
     const payload = JSON.stringify({ taskId: task.id, dispatchId: dispatch.id })
     const first = db.insertMessage({
       from: 'term_a',
@@ -196,12 +217,7 @@ describe('Coordinator', () => {
 
     reconcileLifecycleMessage(db, first)
 
-    const coordinator = new Coordinator(db, runtime, {
-      spec: 'go',
-      coordinatorHandle: 'coord',
-      pollIntervalMs: 20
-    })
-    const result = await coordinator.run()
+    const result = await runPromise
 
     expect(result.status).toBe('completed')
     expect(result.completedTasks.filter((id) => id === task.id)).toHaveLength(1)
@@ -253,17 +269,21 @@ describe('Coordinator', () => {
 
     const runPromise = coordinator.run()
 
-    // Send 3 escalations to trigger circuit breaker
+    // Each attempt escalates once; 3 bound escalations trip the breaker.
     for (let i = 0; i < 3; i++) {
       await new Promise((r) => {
         setTimeout(r, 100)
       })
+      const attempt = db.getDispatchContext(task.id)
+      if (!attempt?.assignee_handle) {
+        throw new Error('expected an active attempt')
+      }
       db.insertMessage({
-        from: `term_${i === 0 ? 'a' : 'b'}`,
+        from: attempt.assignee_handle,
         to: 'coord',
         subject: `Failed attempt ${i + 1}`,
         type: 'escalation',
-        payload: JSON.stringify({ taskId: task.id })
+        payload: JSON.stringify({ taskId: task.id, dispatchId: attempt.id })
       })
     }
 
@@ -625,6 +645,139 @@ describe('Coordinator', () => {
 
     const result = await runPromise
     expect(result.status).toBe('failed')
+  })
+
+  describe('escalation attempt binding', () => {
+    type Sqlite = { prepare: (s: string) => { run: (...a: unknown[]) => void } }
+    const rawDb = (d: OrchestrationDb): Sqlite => (d as unknown as { db: Sqlite }).db
+
+    it('a stale, foreign or pre-dispatch escalation cannot fail the newer attempt', async () => {
+      db = new OrchestrationDb(':memory:')
+      const runtime = createMockRuntime()
+      const task = db.createTask({ spec: 'retried work' })
+      const first = db.createDispatchContext(task.id, 'term_a')
+      db.failDispatch(first.id, 'first attempt died')
+      const second = db.createDispatchContext(task.id, 'term_a')
+
+      // Late escalation from the first attempt, bound by dispatchId.
+      db.insertMessage({
+        from: 'term_a',
+        to: 'coord',
+        subject: 'late from attempt 1',
+        type: 'escalation',
+        payload: JSON.stringify({ taskId: task.id, dispatchId: first.id })
+      })
+      // Escalation naming the live attempt but sent by another terminal.
+      db.insertMessage({
+        from: 'term_b',
+        to: 'coord',
+        subject: 'not my attempt',
+        type: 'escalation',
+        payload: JSON.stringify({ taskId: task.id, dispatchId: second.id })
+      })
+      // Legacy escalation without dispatchId written before attempt 2 started.
+      const legacy = db.insertMessage({
+        from: 'term_a',
+        to: 'coord',
+        subject: 'legacy from attempt 1',
+        type: 'escalation',
+        payload: JSON.stringify({ taskId: task.id })
+      })
+      rawDb(db)
+        .prepare('UPDATE messages SET created_at = ? WHERE id = ?')
+        .run('2000-01-01 00:00:00', legacy.id)
+
+      const logs: string[] = []
+      const coordinator = new Coordinator(db, runtime, {
+        spec: 'go',
+        coordinatorHandle: 'coord',
+        pollIntervalMs: 20,
+        onLog: (m) => logs.push(m)
+      })
+      const runPromise = coordinator.run()
+      await waitFor(() => logs.filter((l) => l.startsWith('Escalation from')).length === 3)
+      coordinator.stop()
+      await runPromise
+
+      const live = db.getDispatchContextById(second.id)
+      expect(live?.status).toBe('dispatched')
+      expect(live?.failure_count).toBe(1)
+      expect(db.getTask(task.id)?.status).toBe('dispatched')
+    })
+
+    it('a duplicate escalation for one attempt counts one failure', async () => {
+      db = new OrchestrationDb(':memory:')
+      const runtime = createMockRuntime()
+      const task = db.createTask({ spec: 'work' })
+      const attempt = db.createDispatchContext(task.id, 'term_a')
+      const payload = JSON.stringify({ taskId: task.id, dispatchId: attempt.id })
+      for (const subject of ['Blocked', 'Blocked (resent)']) {
+        db.insertMessage({ from: 'term_a', to: 'coord', subject, type: 'escalation', payload })
+      }
+
+      const logs: string[] = []
+      const coordinator = new Coordinator(db, runtime, {
+        spec: 'go',
+        coordinatorHandle: 'coord',
+        pollIntervalMs: 20,
+        onLog: (m) => logs.push(m)
+      })
+      const runPromise = coordinator.run()
+      await waitFor(() => logs.filter((l) => l.startsWith('Escalation from')).length === 2)
+      coordinator.stop()
+      await runPromise
+
+      expect(db.getDispatchContextById(attempt.id)?.failure_count).toBe(1)
+      expect(db.getDispatchContextById(attempt.id)?.last_failure).toBe('Blocked')
+    })
+  })
+
+  describe('run task scope', () => {
+    it('two independent roots and old failed tasks converge without affecting each other', async () => {
+      db = new OrchestrationDb(':memory:')
+      const runtime = createMockRuntime()
+      runtime.terminals = [{ handle: 'term_a', worktreeId: 'wt1', connected: true, writable: true }]
+
+      const oldTask = db.createTask({ spec: 'old failure' })
+      db.updateTaskStatus(oldTask.id, 'failed', 'from an earlier run')
+      const rootA = db.createTask({ spec: 'root A' })
+
+      const coordinatorA = new Coordinator(db, runtime, {
+        spec: 'A',
+        coordinatorHandle: 'coord',
+        pollIntervalMs: 20
+      })
+      const runA = coordinatorA.run()
+      // Created after run A started: an unrelated root and a child of root A.
+      const rootB = db.createTask({ spec: 'root B' })
+      const childA = db.createTask({ spec: 'child of A', parentId: rootA.id })
+
+      await waitFor(() => db.getTask(rootA.id)?.status === 'dispatched')
+      insertWorkerDone(db, { taskId: rootA.id })
+      await waitFor(() => db.getTask(childA.id)?.status === 'dispatched')
+      insertWorkerDone(db, { taskId: childA.id })
+
+      const resultA = await runA
+      expect(resultA.status).toBe('completed')
+      expect(resultA.failedTasks).toEqual([])
+      expect(resultA.completedTasks.sort()).toEqual([rootA.id, childA.id].sort())
+      expect(db.getTask(rootB.id)?.status).toBe('ready')
+      expect(db.getDispatchContext(rootB.id)).toBeUndefined()
+
+      const coordinatorB = new Coordinator(db, runtime, {
+        spec: 'B',
+        coordinatorHandle: 'coord',
+        pollIntervalMs: 20
+      })
+      const runB = coordinatorB.run()
+      await waitFor(() => db.getTask(rootB.id)?.status === 'dispatched')
+      insertWorkerDone(db, { taskId: rootB.id })
+
+      const resultB = await runB
+      expect(resultB.status).toBe('completed')
+      expect(resultB.completedTasks).toEqual([rootB.id])
+      expect(db.getTask(oldTask.id)?.status).toBe('failed')
+    })
   })
 
   describe('stale-base dispatch guard', () => {

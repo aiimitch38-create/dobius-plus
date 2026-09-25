@@ -88,11 +88,29 @@ const MAX_CONCURRENT_DEFAULT = 4
 // the places this constant must be kept in sync.
 const HUNG_THRESHOLD_MS = 10 * 60 * 1000
 
+function isTerminalTaskStatus(status: TaskRow['status']): boolean {
+  return status === 'completed' || status === 'failed'
+}
+
+// Why: rows written by SQLite defaults are 'YYYY-MM-DD HH:MM:SS' (UTC, no
+// zone) while JS writes ISO strings; parse both as UTC before comparing.
+function parseDbTimestampMs(value: string | null): number {
+  if (!value) {
+    return Number.NaN
+  }
+  const iso = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`
+  return Date.parse(iso)
+}
+
 export class Coordinator {
   private db: OrchestrationDb
   private runtime: CoordinatorRuntime
   private state: CoordinatorState
   private stopped = false
+  // Why: the task table is global and outlives runs (old failed tasks,
+  // another root created mid-run). A run only decomposes, dispatches and
+  // converges over the tasks it claimed at start plus tasks linked to them.
+  private ownedTaskIds = new Set<string>()
   private opts: Required<Omit<CoordinatorOptions, 'onLog' | 'worktree'>> & {
     onLog: (msg: string) => void
     worktree?: string
@@ -169,8 +187,8 @@ export class Coordinator {
 
       // Why: if stopped early, treat it as failed since tasks are incomplete.
       // Also failed if any task explicitly failed.
-      const tasks = this.db.listTasks()
-      const allDone = tasks.every((t) => t.status === 'completed' || t.status === 'failed')
+      const tasks = this.listOwnedTasks()
+      const allDone = tasks.every((t) => isTerminalTaskStatus(t.status))
       const failedTasks = [
         ...new Set([
           ...this.state.failedTasks,
@@ -206,17 +224,52 @@ export class Coordinator {
   // itself is an LLM agent.
   private async decompose(): Promise<void> {
     this.state.phase = 'decomposing'
-    const existing = this.db.listTasks()
+    // Why: completed/failed tasks from earlier runs are history, not work for
+    // this run; claiming them made every later run report 'failed'.
+    const existing = this.db.listTasks().filter((t) => !isTerminalTaskStatus(t.status))
     if (existing.length === 0) {
       throw new Error(
         'No tasks found. Create tasks with orchestration.taskCreate before running the coordinator.'
       )
     }
+    for (const task of existing) {
+      this.ownedTaskIds.add(task.id)
+    }
     this.opts.onLog(`Found ${existing.length} tasks in DAG`)
     this.state.phase = 'dispatching'
   }
 
+  // Why: subtasks created during the run (parent or dependency on a task this
+  // run owns) belong to this run; unrelated roots created meanwhile do not.
+  private adoptLinkedTasks(): void {
+    const candidates = this.db
+      .listTasks()
+      .filter((t) => !this.ownedTaskIds.has(t.id) && !isTerminalTaskStatus(t.status))
+    let adopted = true
+    while (adopted) {
+      adopted = false
+      for (const task of candidates) {
+        if (this.ownedTaskIds.has(task.id)) {
+          continue
+        }
+        const deps: unknown = JSON.parse(task.deps)
+        const linked =
+          (task.parent_id !== null && this.ownedTaskIds.has(task.parent_id)) ||
+          (Array.isArray(deps) && deps.some((dep) => this.ownedTaskIds.has(String(dep))))
+        if (linked) {
+          this.ownedTaskIds.add(task.id)
+          adopted = true
+        }
+      }
+    }
+  }
+
+  private listOwnedTasks(filter?: Parameters<OrchestrationDb['listTasks']>[0]): TaskRow[] {
+    return this.db.listTasks(filter).filter((t) => this.ownedTaskIds.has(t.id))
+  }
+
   private async tick(): Promise<boolean> {
+    this.adoptLinkedTasks()
     this.processMessages()
     this.processEscalations()
     this.processDecisionGates()
@@ -276,7 +329,7 @@ export class Coordinator {
 
   private handleLifecycleMessage(msg: MessageRow): void {
     const result = reconcileLifecycleMessage(this.db, msg, this.opts.onLog)
-    if (result.action === 'completed') {
+    if (result.action === 'completed' && this.ownedTaskIds.has(result.taskId)) {
       if (!this.state.completedTasks.includes(result.taskId)) {
         this.state.completedTasks.push(result.taskId)
       }
@@ -288,12 +341,20 @@ export class Coordinator {
     this.state.escalations.push(msg)
 
     let taskId: string | undefined
+    let dispatchId: string | undefined
     if (msg.payload) {
       try {
-        const payload = JSON.parse(msg.payload)
-        taskId = payload.taskId
+        const payload: unknown = JSON.parse(msg.payload)
+        if (payload && typeof payload === 'object') {
+          const fields = payload as Record<string, unknown>
+          taskId = typeof fields.taskId === 'string' ? fields.taskId : undefined
+          dispatchId =
+            typeof fields.dispatchId === 'string' && fields.dispatchId.length > 0
+              ? fields.dispatchId
+              : undefined
+        }
       } catch {
-        // Escalation without structured payload — log subject as context
+        this.opts.onLog(`Escalation from ${msg.from_handle} has no structured payload`)
       }
     }
 
@@ -302,12 +363,35 @@ export class Coordinator {
     }
 
     const task = this.db.getTask(taskId)
-    if (!task || task.status === 'completed' || task.status === 'failed') {
+    if (!task || !this.ownedTaskIds.has(taskId) || task.status !== 'dispatched') {
       return
     }
 
+    // Why: an escalation may only fail the attempt that sent it. A delayed or
+    // duplicate escalation from an earlier attempt (or another terminal) must
+    // not fail, and eventually circuit-break, the replacement attempt.
     const dispatch = this.db.getDispatchContext(taskId)
-    if (!dispatch) {
+    if (!dispatch || dispatch.status !== 'dispatched') {
+      return
+    }
+    if (dispatchId !== undefined && dispatchId !== dispatch.id) {
+      this.opts.onLog(`Escalation for stale dispatch ${dispatchId} on task ${taskId} ignored`)
+      return
+    }
+    if (dispatch.assignee_handle !== msg.from_handle) {
+      this.opts.onLog(
+        `Escalation for task ${taskId} came from ${msg.from_handle}, expected ${dispatch.assignee_handle ?? '<unknown>'}; ignored`
+      )
+      return
+    }
+    // Why: without a dispatchId the only proof the message belongs to this
+    // attempt is that it was written after the attempt started. Same-second
+    // messages are ambiguous and are not allowed to fail the attempt.
+    if (
+      dispatchId === undefined &&
+      !(parseDbTimestampMs(msg.created_at) > parseDbTimestampMs(dispatch.dispatched_at))
+    ) {
+      this.opts.onLog(`Escalation for task ${taskId} predates dispatch ${dispatch.id}; ignored`)
       return
     }
 
@@ -315,12 +399,15 @@ export class Coordinator {
     // the threshold, the task returns to 'pending' and will be re-dispatched
     // to a (potentially different) terminal on the next tick.
     const updated = this.db.failDispatch(dispatch.id, msg.subject)
-    if (updated?.status === 'circuit_broken') {
+    if (!updated) {
+      return
+    }
+    if (updated.status === 'circuit_broken') {
       this.opts.onLog(`Task ${taskId} circuit broken after repeated failures`)
       this.db.updateTaskStatus(taskId, 'failed', `Circuit broken: ${msg.subject}`)
       this.state.failedTasks.push(taskId)
     } else {
-      this.opts.onLog(`Task ${taskId} will be retried (failure ${updated?.failure_count ?? 0}/3)`)
+      this.opts.onLog(`Task ${taskId} will be retried (failure ${updated.failure_count}/3)`)
     }
   }
 
@@ -374,7 +461,7 @@ export class Coordinator {
 
   private async dispatchReadyTasks(): Promise<void> {
     this.state.phase = 'dispatching'
-    const readyTasks = this.db.listTasks({ ready: true })
+    const readyTasks = this.listOwnedTasks({ ready: true })
     if (readyTasks.length === 0) {
       return
     }
@@ -547,12 +634,12 @@ export class Coordinator {
   }
 
   private checkConvergence(): boolean {
-    const tasks = this.db.listTasks()
+    const tasks = this.listOwnedTasks()
     if (tasks.length === 0) {
       return true
     }
 
-    const allDone = tasks.every((t) => t.status === 'completed' || t.status === 'failed')
+    const allDone = tasks.every((t) => isTerminalTaskStatus(t.status))
     if (allDone) {
       this.state.phase = 'done'
       return true

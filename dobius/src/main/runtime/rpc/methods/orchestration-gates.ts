@@ -7,8 +7,10 @@ import { assertExecutionAdmitted } from '../../../agents/execution-gate'
 
 // Why: the coordinator instance is stored at module scope so orchestration.runStop
 // can signal it to halt. Only one coordinator can run at a time (enforced by
-// the DB's active-run check), so a single reference suffices.
+// the DB's active-run check), so a single reference suffices. activeRunId is
+// the coordinator_runs row it owns; any other 'running' row is an orphan.
 let activeCoordinator: Coordinator | null = null
+let activeRunId: string | null = null
 
 const RunParams = z.object({
   spec: requiredString('Missing --spec'),
@@ -50,6 +52,9 @@ export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
       assertExecutionAdmitted('agent-run')
       const db = runtime.getOrchestrationDb()
 
+      // Why: a row left 'running' by a previous process (or a stopped run)
+      // has no live owner; retire it instead of blocking every new run.
+      db.failOrphanedCoordinatorRuns(activeCoordinator ? activeRunId : null)
       const existing = db.getActiveCoordinatorRun()
       if (existing) {
         throw new Error(`Coordinator already running: ${existing.id}`)
@@ -64,13 +69,13 @@ export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
         worktree: params.worktree
       })
 
-      activeCoordinator = coordinator
-
       const run = db.createCoordinatorRun({
         spec: params.spec,
         coordinatorHandle,
         pollIntervalMs: params.pollIntervalMs
       })
+      activeCoordinator = coordinator
+      activeRunId = run.id
 
       // Why: fire-and-forget — the coordinator loop runs in the event loop
       // background. Results are persisted to the DB; callers query via
@@ -78,6 +83,7 @@ export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
       coordinator.runFromExistingRun(run.id).finally(() => {
         if (activeCoordinator === coordinator) {
           activeCoordinator = null
+          activeRunId = null
         }
       })
 
@@ -90,15 +96,23 @@ export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
     params: RunStopParams,
     handler: (_params, { runtime }) => {
       const db = runtime.getOrchestrationDb()
+      // Why: stopping must work even when no in-memory coordinator owns the
+      // 'running' row (e.g. after a restart); retire such rows durably.
+      const orphaned = db.failOrphanedCoordinatorRuns(activeCoordinator ? activeRunId : null)
       const run = db.getActiveCoordinatorRun()
       if (!run) {
+        if (orphaned.length > 0) {
+          return { runId: orphaned[0], stopped: true }
+        }
         throw new Error('No active coordinator run')
       }
 
       if (activeCoordinator) {
         activeCoordinator.stop()
         activeCoordinator = null
+        activeRunId = null
       }
+      db.updateCoordinatorRun(run.id, 'failed')
 
       return { runId: run.id, stopped: true }
     }

@@ -2673,7 +2673,7 @@ export class DobiusRuntimeService {
     if (!this._orchestrationDb) {
       const { app } = require('electron')
       const dbPath = join(app.getPath('userData'), 'orchestration.db')
-      this._orchestrationDb = new OrchestrationDb(dbPath)
+      this._orchestrationDb = OrchestrationDb.openForProcess(dbPath)
     }
     return this._orchestrationDb
   }
@@ -8202,6 +8202,7 @@ export class DobiusRuntimeService {
         priority: 'high',
         payload: JSON.stringify({
           taskId: dispatch.task_id,
+          dispatchId: dispatch.id,
           exitCode,
           handle
         })

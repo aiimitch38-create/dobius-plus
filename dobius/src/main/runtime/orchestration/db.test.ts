@@ -532,6 +532,83 @@ describe('OrchestrationDb', () => {
       d.updateCoordinatorRun(run.id, 'completed')
       expect(d.getActiveCoordinatorRun()).toBeUndefined()
     })
+
+    it('failOrphanedCoordinatorRuns retires unowned running rows and keeps their tasks', () => {
+      const d = createDb()
+      const task = d.createTask({ spec: 'keep me' })
+      const orphan = d.createCoordinatorRun({ spec: 'old', coordinatorHandle: 'coord' })
+      const owned = d.createCoordinatorRun({ spec: 'live', coordinatorHandle: 'coord' })
+
+      expect(d.failOrphanedCoordinatorRuns(owned.id)).toEqual([orphan.id])
+      expect(d.getCoordinatorRun(orphan.id)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(owned.id)?.status).toBe('running')
+
+      expect(d.failOrphanedCoordinatorRuns()).toEqual([owned.id])
+      expect(d.getActiveCoordinatorRun()).toBeUndefined()
+      expect(d.getTask(task.id)?.status).toBe('ready')
+    })
+  })
+
+  describe('openForProcess', () => {
+    let dir: string | undefined
+    afterEach(() => {
+      if (dir) {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    it('retires a running row left by a previous process and keeps its tasks', () => {
+      dir = mkdtempSync(join(tmpdir(), 'orch-open-for-process-'))
+      const dbPath = join(dir, 'orchestration.db')
+      const previous = new OrchestrationDb(dbPath)
+      const task = previous.createTask({ spec: 'kept' })
+      const orphan = previous.createCoordinatorRun({ spec: 'crashed', coordinatorHandle: 'coord' })
+      previous.close()
+
+      const d = OrchestrationDb.openForProcess(dbPath)
+      db = d
+      expect(d.getCoordinatorRun(orphan.id)?.status).toBe('failed')
+      expect(d.getActiveCoordinatorRun()).toBeUndefined()
+      expect(d.getTask(task.id)?.spec).toBe('kept')
+    })
+  })
+
+  describe('failDispatch attempt binding', () => {
+    it('does not count a second failure for an attempt that already failed', () => {
+      const d = createDb()
+      const task = d.createTask({ spec: 'work' })
+      const ctx = d.createDispatchContext(task.id, 'term_a')
+
+      expect(d.failDispatch(ctx.id, 'first')?.failure_count).toBe(1)
+      expect(d.failDispatch(ctx.id, 'duplicate')).toBeUndefined()
+      expect(d.getDispatchContextById(ctx.id)?.failure_count).toBe(1)
+      expect(d.getDispatchContextById(ctx.id)?.last_failure).toBe('first')
+    })
+
+    it('a late failure for an old attempt leaves the newer attempt and task untouched', () => {
+      const d = createDb()
+      const task = d.createTask({ spec: 'work' })
+      const first = d.createDispatchContext(task.id, 'term_a')
+      d.completeDispatch(first.id)
+      d.updateTaskStatus(task.id, 'ready')
+      const second = d.createDispatchContext(task.id, 'term_b')
+
+      expect(d.failDispatch(first.id, 'late')).toBeUndefined()
+      expect(d.getDispatchContextById(second.id)?.status).toBe('dispatched')
+      expect(d.getDispatchContextById(second.id)?.failure_count).toBe(0)
+      expect(d.getTask(task.id)?.status).toBe('dispatched')
+    })
+
+    it('does not reopen a task a human already completed', () => {
+      const d = createDb()
+      const task = d.createTask({ spec: 'work' })
+      const ctx = d.createDispatchContext(task.id, 'term_a')
+      const sqlite = (d as unknown as { db: Database.Database }).db
+      sqlite.prepare("UPDATE tasks SET status = 'completed' WHERE id = ?").run(task.id)
+
+      expect(d.failDispatch(ctx.id, 'exit')?.status).toBe('failed')
+      expect(d.getTask(task.id)?.status).toBe('completed')
+    })
   })
 
   describe('lifecycle', () => {
@@ -648,6 +725,47 @@ describe('OrchestrationDb', () => {
 
       const stale = d.getStaleDispatches(iso(10 * 60 * 1000))
       expect(stale.map((s) => s.id)).toEqual([ctxB.id])
+    })
+
+    it('getStaleDispatches compares SQLite and ISO timestamps as instants across midnight', () => {
+      const d = createDb()
+      // Rows use the SQLite 'YYYY-MM-DD HH:MM:SS' shape that datetime('now')
+      // and message created_at write; the threshold is ISO (00:02Z - 10 min).
+      const rows = {
+        freshAcrossMidnight: { dispatchedAt: '2026-09-23 23:55:00', heartbeatAt: null },
+        staleNoHeartbeat: { dispatchedAt: '2026-09-23 23:40:00', heartbeatAt: null },
+        recentHeartbeat: { dispatchedAt: '2026-09-23 23:40:00', heartbeatAt: '2026-09-23 23:58:00' },
+        staleHeartbeat: { dispatchedAt: '2026-09-23 23:00:00', heartbeatAt: '2026-09-23 23:45:00' },
+        afterMidnight: { dispatchedAt: '2026-09-24 00:01:00', heartbeatAt: null }
+      }
+      const sqlite = (d as unknown as { db: Database.Database }).db
+      const ids: Record<string, string> = {}
+      for (const [name, row] of Object.entries(rows)) {
+        const task = d.createTask({ spec: name })
+        const ctx = d.createDispatchContext(task.id, `term_${name}`)
+        sqlite
+          .prepare(
+            'UPDATE dispatch_contexts SET dispatched_at = ?, last_heartbeat_at = ? WHERE id = ?'
+          )
+          .run(row.dispatchedAt, row.heartbeatAt, ctx.id)
+        ids[name] = ctx.id
+      }
+
+      const stale = d.getStaleDispatches('2026-09-23T23:52:00.000Z').map((s) => s.id)
+      expect(stale.sort()).toEqual([ids.staleNoHeartbeat, ids.staleHeartbeat].sort())
+    })
+
+    it('getStaleDispatches keeps a fresh same-day dispatch in its grace window', () => {
+      const d = createDb()
+      const task = d.createTask({ spec: 'fresh' })
+      const ctx = d.createDispatchContext(task.id, 'term_fresh')
+      const sqlite = (d as unknown as { db: Database.Database }).db
+      sqlite
+        .prepare('UPDATE dispatch_contexts SET dispatched_at = ? WHERE id = ?')
+        .run('2026-09-24 11:55:00', ctx.id)
+
+      expect(d.getStaleDispatches('2026-09-24T11:50:00.000Z')).toEqual([])
+      expect(d.getStaleDispatches('2026-09-24T12:05:00.000Z').map((s) => s.id)).toEqual([ctx.id])
     })
 
     it('getThreadMessagesFor returns only same-thread replies to a handle', () => {
