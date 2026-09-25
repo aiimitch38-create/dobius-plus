@@ -585,3 +585,70 @@ describe('agent hard rails: CX12 r2 review', () => {
     expect(bashIn(command)).toBeNull()
   })
 })
+
+describe('agent hard rails: CX12 r3 review (fail-closed data rules)', () => {
+  const originalHome = process.env.HOME
+  const fakeHome = '/Users/rails-test-user'
+  const repoCwd = `${fakeHome}/Projects/app`
+  const other = `${fakeHome}/.dobius/agents/other/M`
+
+  beforeEach(() => {
+    process.env.HOME = fakeHome
+  })
+
+  afterEach(() => {
+    process.env.HOME = originalHome
+  })
+
+  const bashIn = (command: string) =>
+    evaluateAgentHardRails({ ...ctx, cwd: repoCwd }, 'Bash', { command })
+
+  it.each([
+    ["cat <<'EOF' > x.ts\nconst a = `${b}/c`\nEOF"],
+    ["cat <<'EOF' > notes.md\nPrice: $5\nEOF"],
+    ['cat <<\'EOF\' > run.sh\n#!/bin/sh\ncd "$1" && ls\nEOF'],
+    ["cat <<'EOF'\nusage: $0 <dir>\nEOF"],
+    ["cat > notes.md <<'EOF'\ncost is $5 and $(date) literal\nEOF"],
+    ["cat > notes.md <<'EOF'\nwe block git push -f here\nEOF"],
+    ["cat <<'EOF' > notes.md\n| a | b |\nEOF"],
+    ["git commit -F- <<'EOF'\ndocs: explain why git push -f is blocked\nEOF"],
+    ["gh pr create --title t --body-file - <<'EOF'\n## Summary\nhandles $HOME\nEOF"],
+    ['gh pr create --title "$(git log -1 --format=%s)"'],
+    ['git commit -m "$(cat <<\'EOF\'\nfix\nEOF\n)" && bash scripts/check.sh'],
+    ['git commit -m "$(cat <<\'EOF\'\nfix: shell rails for sh -c and eval\nEOF\n)"'],
+    ['git commit -m "docs: explain why git push -f is blocked"'],
+    ['git stash push -m "wip"'],
+    ['git -C dobius push origin HEAD'],
+    ["python3 - <<'EOF'\nprint(1)\nEOF"]
+  ])('F3/F6: allows data heredocs and messages: %s', (command) => {
+    expect(bashIn(command)).toBeNull()
+  })
+
+  it.each([
+    [`python3 -c "$(cat <<'EOF'\nprint(open('${other}').read())\nEOF\n)"`],
+    [`echo "$(cat <<'EOF'\nprint(open('${other}').read())\nEOF\n)" | python3`],
+    [`python3 - <<'EOF'\nprint(open('${other}').read())\nEOF`],
+    ["perl -e \"$(cat <<'EOF'\nsystem('git push -f')\nEOF\n)\""],
+    ['echo "$(cat <<\'EOF\'\ngit push -f\nEOF\n)" | sh'],
+    ['printf %s "$(cat <<\'EOF\'\ngit push -f\nEOF\n)" > p.sh && sh p.sh'],
+    ["cat <<'EOF' > p.sh\ngit push --force origin main\nEOF\nchmod +x p.sh && ./p.sh"],
+    ['git commit -m "$(cat <<\'EOF\'\nx\nEOF\n)" | sh'],
+    ['x="$(cat <<\'EOF\'\ngit push -f\nEOF\n)"; $x'],
+    ['gh pr create --title "$(cat ~/.dobius/agents/other/M)"']
+  ])('F2/F4: interpreter or re-used heredocs are scanned: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it.each([
+    ['git --config-env core.x=Y push -f origin main'],
+    ['git --attr-source HEAD push -f origin main'],
+    ['git --super-prefix x/ push -f origin main'],
+    ['git --no-pager push --mirror origin'],
+    ['git push origin :main'],
+    ['git push --delete origin main'],
+    ['git --config-env=alias.p=X p'],
+    ["X='push -f' git --config-env alias.p=X p"]
+  ])('F1/F5: git push detection fails closed: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+})

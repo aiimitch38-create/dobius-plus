@@ -228,3 +228,42 @@ renderer post-create re-check off.
   previous commit's rail code: 17 of 25 fail (all 10 F1 shapes except the eval
   pair, 4 F2 cases, 3 F3 allows); the rest were already green and stay as
   regression guards.
+
+## Review r3 (fourth commit) — coarse, fail-closed text rail (last round)
+New `agent-hard-rails-bash-data.ts` `prepareBashCommand` decides what is data:
+- Message args: a quoted `-m/--message/--title/-t/--body/-b` argument of a
+  `git`/`gh` command (including `"$(cat <<'X' ... X)"`) becomes `"MSG"`. Any
+  `$(..)` inside it is evaluated as its own command. Not stripped when the
+  whole command has `|`, `<(`, `>(`, `eval`/`source`, or `$`/backtick in
+  command position.
+- Data heredocs (r3 F3, F6): the body of a quoted-delimiter heredoc fed to
+  `cat` (both operand orders), `git commit -F-/--file=-` or `gh --body-file -`
+  is removed only when the WHOLE remaining command has no code-runner word
+  (sh bash zsh dash ksh fish eval source exec env command xargs python python3
+  node deno bun perl ruby php awk gawk osascript lua, `.` as a command), no
+  `|`, no `<(`/`>(`, no `$`/backtick in command position, and no later run of
+  a written file (`./x`, `chmod +x`). A heredoc inside `$(..)`/backticks is
+  never data. Otherwise nothing is stripped and every rail (git, path,
+  identity, credential, sh -c) scans the whole text.
+- Git (r3 F1, F5): in any segment with a `git` token, any later `push` token
+  makes the whole segment's tokens subject to the force checks (-f/-d
+  clusters, --force*, --mirror, --delete, +refspec, :branch); no git option
+  parsing. `--config-env` keys count like `-c` for alias/remote.*.push writes;
+  `config` anywhere after git counts.
+- The r2 `stripLiteralHeredocs` was removed; `agent-hard-rails-shell-text.ts`
+  now only parses `sh -c`.
+
+Reviewer harness (cx12r3/probe.test.ts, 143 rows):
+- r3 review commit b8cded74 (reviewer's out.txt): 112 ok / 31 mismatch;
+  reviewer's older comparison (out-old.txt): 110 ok / 33 mismatch.
+- this commit: 142 ok / 1 mismatch (the documented home-cwd loop row).
+Repo tests: "CX12 r3 review" block (34 cases); against b8cded74's rail code
+22 fail (every F3/F6 heredoc row, the gh title substitution, 6 interpreter /
+re-used heredoc shapes, all 8 git fail-closed rows); the 12 others already
+passed and stay as regression guards.
+
+Documented limits (Decisions for Carson): interpreter code that builds paths or
+runs git through its own APIs (python subprocess, node fs, perl system with
+text the rail cannot see) is out of scope for text rails; files are covered by
+SBX (SDK sandbox). For force-push, turn on GitHub branch protection for main
+(server side, cannot be bypassed from this machine).

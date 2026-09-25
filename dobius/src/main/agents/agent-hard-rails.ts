@@ -18,7 +18,8 @@ import {
   UNRESOLVABLE_SHELL_PATH_REASON
 } from './agent-hard-rails-shell'
 import { rawStringMentionsCredential, stringsToInspect } from './agent-hard-rails-inputs'
-import { shellCInnerCommands, stripLiteralHeredocs } from './agent-hard-rails-shell-text'
+import { prepareBashCommand } from './agent-hard-rails-bash-data'
+import { shellCInnerCommands } from './agent-hard-rails-shell-text'
 
 type HardRailRunContext = {
   agentId: string
@@ -75,10 +76,7 @@ type InspectedString = {
 // once per tool call and shared by every rail.
 function inspectStrings(toolName: string, input: unknown): InspectedString[] {
   let resolveBudget = MAX_RESOLVED_PATH_TOKENS
-  return stringsToInspect(toolName, input).map(({ field, raw: original }) => {
-    // Why (r2 F3): a literal commit/PR heredoc body is message text, not paths.
-    const raw =
-      toolName === 'Bash' && field === 'command' ? stripLiteralHeredocs(original) : original
+  return stringsToInspect(toolName, input).map(({ field, raw }) => {
     const unquoted = toolName === 'Bash' ? raw.replace(/["'\\]/g, '') : raw
     const expanded = expandHomeReferences(unquoted)
     const candidates = new Set([comparablePath(normalizePathLike(raw))])
@@ -105,11 +103,10 @@ function commandTriggersHardRail(toolName: string, input: unknown): HardRailDeni
   if (toolName !== 'Bash' || typeof input !== 'object' || input === null) {
     return null
   }
-  const rawCommand = (input as { command?: unknown }).command
-  if (typeof rawCommand !== 'string') {
+  const command = (input as { command?: unknown }).command
+  if (typeof command !== 'string') {
     return null
   }
-  const command = stripLiteralHeredocs(rawCommand)
   if (isForcePush(command)) {
     return { reason: 'Hard rail: force-pushing is not allowed from agent runs.' }
   }
@@ -276,6 +273,23 @@ export function evaluateAgentHardRails(
   input: unknown,
   depth = 0
 ): HardRailDenial | null {
+  const rawCommand = toolName === 'Bash' ? (input as { command?: unknown }).command : undefined
+  if (typeof rawCommand === 'string') {
+    // Why (CX12 r3): message and file-content data is hidden from the rails
+    // only under coarse fail-closed conditions; `$(..)` inside a stripped
+    // message still runs, so it is evaluated as its own command.
+    const prepared = prepareBashCommand(rawCommand)
+    for (const inner of prepared.inner) {
+      const innerDenial =
+        depth >= MAX_SHELL_C_DEPTH
+          ? { reason: UNRESOLVABLE_SHELL_PATH_REASON }
+          : evaluateAgentHardRails(context, 'Bash', { command: inner }, depth + 1)
+      if (innerDenial) {
+        return innerDenial
+      }
+    }
+    input = { ...(input as object), command: prepared.effective }
+  }
   const commandDenial = commandTriggersHardRail(toolName, input)
   if (commandDenial) {
     return commandDenial

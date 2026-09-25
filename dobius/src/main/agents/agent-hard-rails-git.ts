@@ -36,40 +36,33 @@ function gitSegments(command: string): GitSegment[] {
   })
 }
 
-const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace'])
-
-// Index of git's subcommand (first non-option word after git), so `push` or
-// `config` inside a commit message is not read as the subcommand.
-function subcommandIndex({ tokens, gitIndex }: GitSegment): number {
-  for (let index = gitIndex + 1; index < tokens.length; index += 1) {
-    const token = tokens[index]
-    if (GIT_OPTIONS_WITH_VALUE.has(token)) {
-      index += 1
-    } else if (!token.startsWith('-')) {
-      return index
-    }
-  }
-  return -1
+// Why (CX12 r3): fail closed — any `push` word after git in the same segment
+// counts, whatever git options sit between (-C, --config-env, --attr-source...).
+function pushIndexOf({ tokens, gitIndex }: GitSegment): number {
+  return tokens.indexOf('push', gitIndex + 1)
 }
 
-function pushIndexOf(segment: GitSegment): number {
-  const index = subcommandIndex(segment)
-  return index !== -1 && segment.tokens[index] === 'push' ? index : -1
-}
-
-// `+branch` is refspec-syntax force-push — same rail as --force / -f.
+// `+branch` is refspec-syntax force-push; --mirror, --delete/-d and `:branch`
+// destroy remote refs too.
 function isForcePushArgument(token: string): boolean {
-  return token.startsWith('--force') || /^-[A-Za-z]*f[A-Za-z]*$/.test(token) || /^\+\S/.test(token)
+  return (
+    token.startsWith('--force') ||
+    token === '--mirror' ||
+    token === '--delete' ||
+    /^-[A-Za-z]*[fd][A-Za-z]*$/.test(token) ||
+    /^[+:]\S/.test(token)
+  )
 }
 
 // Why: flags belong to the command in their own shell segment only, so
-// `git push && rm -rf dist` must not read rm's `-rf` as a push flag. Global
-// options can sit between git and push (`git -C <path> push --force`).
+// `git push && rm -rf dist` must not read rm's `-rf` as a push flag. Every
+// token after git counts, so no git option can hide a force flag.
 export function isForcePush(command: string): boolean {
-  return gitSegments(command).some((segment) => {
-    const pushIndex = pushIndexOf(segment)
-    return pushIndex !== -1 && segment.tokens.slice(pushIndex + 1).some(isForcePushArgument)
-  })
+  return gitSegments(command).some(
+    (segment) =>
+      pushIndexOf(segment) !== -1 &&
+      segment.tokens.slice(segment.gitIndex + 1).some(isForcePushArgument)
+  )
 }
 
 const GIT_ENV_ASSIGNMENT = /(?:^|[\s;&|(])(?:export\s+|env\s+)?GIT_[A-Za-z0-9_]*\+?=/
@@ -114,18 +107,21 @@ export function isUnverifiablePush(command: string): boolean {
   })
 }
 
-/** `git config alias.x ...`, `git config remote.origin.push +...`, `git -c alias.x=...`. */
+/** `git config alias.x ...`, `git -c alias.x=...`, `git --config-env alias.x=VAR`. */
 export function writesPushRewritingGitConfig(command: string): boolean {
-  return gitSegments(command).some((segment) => {
-    const { tokens, gitIndex } = segment
+  return gitSegments(command).some(({ tokens, gitIndex }) => {
     const rest = tokens.slice(gitIndex + 1)
-    const subcommand = subcommandIndex(segment)
-    const configIndex =
-      subcommand !== -1 && tokens[subcommand] === 'config' ? subcommand - gitIndex - 1 : -1
+    const configIndex = rest.indexOf('config')
     const configKeys = configIndex === -1 ? [] : rest.slice(configIndex + 1)
-    const overrideKeys = rest.flatMap((token, index) =>
-      rest[index - 1] === '-c' ? [token] : token.startsWith('-c') ? [token.slice(2)] : []
-    )
+    const overrideKeys = rest.flatMap((token, index) => {
+      if (rest[index - 1] === '-c' || rest[index - 1] === '--config-env') {
+        return [token]
+      }
+      if (token.startsWith('--config-env=')) {
+        return [token.slice('--config-env='.length)]
+      }
+      return token.startsWith('-c') ? [token.slice(2)] : []
+    })
     return [...configKeys, ...overrideKeys].some(isConfigKeyThatRewritesPush)
   })
 }

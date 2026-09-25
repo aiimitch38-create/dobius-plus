@@ -1,43 +1,4 @@
-// Shell text transforms shared by the agent hard rails: literal heredoc bodies
-// and the inner command of `sh -c '<string>'`.
-
-// Exactly `"$(cat <<'X'\n...\nX\n)"` as one whole double-quoted argument.
-const HEREDOC_ARGUMENT =
-  /(^|[ \t=])"\$\([ \t]*cat[ \t]+<<-?[ \t]*(['"])([A-Za-z_][\w-]*)\2[ \t]*\n[\s\S]*?\n[ \t]*\3[ \t]*\n?[ \t]*\)"(?=$|[\s;&|)])/g
-const SEGMENT_START = /[;&|\n(`]/
-const SHELL_WORD = /^(?:ba|z|da|k|fi)?sh$/
-
-// Words that would run the argument as code instead of treating it as data.
-function isCodeRunner(token: string): boolean {
-  const word =
-    token
-      .replace(/["'\\]/g, '')
-      .split('/')
-      .pop() ?? ''
-  return SHELL_WORD.test(word) || word === 'eval' || word === 'source' || word === '.'
-}
-
-/**
- * Why (CX12 F5, r2 F1): `git commit -m "$(cat <<'EOF' ... EOF)"` is Claude
- * Code's standard commit/PR pattern; the quoted-delimiter body is literal data
- * and is removed before the rails scan. Only that exact argument shape is
- * stripped, and never when the segment runs a shell, eval or source: bare
- * `$(..)`, `<(..)`, `>(..)`, redirects and pipes keep their bodies scanned.
- */
-export function stripLiteralHeredocs(command: string): string {
-  return command.replace(HEREDOC_ARGUMENT, (match, lead: string, _quote, _tag, offset: number) => {
-    let start = offset
-    while (start > 0 && !SEGMENT_START.test(command[start - 1])) {
-      start -= 1
-    }
-    const words = command
-      .slice(start, offset + lead.length)
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-    return words.length === 0 || words.some(isCodeRunner) ? match : `${lead}"HEREDOC"`
-  })
-}
+// The inner command of `sh -c '<string>'` for the agent hard rails.
 
 const SHELL_INVOCATION = /(?:^|[\s;&|(`])(?:\S*\/)?(?:ba|z|da|k|fi)?sh(?=[ \t])/g
 
