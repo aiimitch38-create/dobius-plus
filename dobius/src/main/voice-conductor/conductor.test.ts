@@ -137,6 +137,7 @@ type RunOptions = {
   maxBudgetUsd?: number
   onResult(message: Record<string, unknown>): void
   onRunEnded(status: 'error' | 'cancelled', summary: string): void
+  onSettled(): void
 }
 
 // Each call to startAgentRun is a pending acceptance the test resolves by hand.
@@ -190,6 +191,10 @@ describe('#58 turns wait for the previous run to END, not just start', () => {
 
     calls[0].options.onResult(success())
     await flush()
+    // The result is in, but the runner still holds run-1's session lease.
+    expect(calls).toHaveLength(1)
+    calls[0].options.onSettled()
+    await flush()
     expect(calls).toHaveLength(2)
     expect(calls[1].prompt).toBe('[req-2] two')
     calls[1].accept('run-2')
@@ -197,6 +202,7 @@ describe('#58 turns wait for the previous run to END, not just start', () => {
     expect(calls).toHaveLength(2)
 
     calls[1].options.onRunEnded('error', 'Run ended unexpectedly without a result')
+    calls[1].options.onSettled()
     await flush()
     expect(calls).toHaveLength(3)
     expect(calls[2].prompt).toBe('[req-3] three')
@@ -210,10 +216,12 @@ describe('#58 turns wait for the previous run to END, not just start', () => {
     calls[0].accept('run-1')
     await first
     calls[0].options.onResult(success())
+    calls[0].options.onSettled()
     const second = conductor.postTranscript({ requestId: 'req-2', transcript: 'two' })
     await flush()
     calls[1].accept('run-2')
     await second
+    expect(conductor.getStatus().runId).toBe('run-2')
 
     // run-1's stream finishing after its result must not touch run-2.
     calls[0].options.onRunEnded('error', 'late')
@@ -233,6 +241,9 @@ describe('#58 turns wait for the previous run to END, not just start', () => {
     await conductor.stop()
 
     expect(stopAgentRun).toHaveBeenCalledWith('run-1')
+    // The runner reports the stopped run's end, then settles it after releasing its lease.
+    calls[0].options.onRunEnded('cancelled', 'stopped by user')
+    calls[0].options.onSettled()
     await flush()
     expect(calls).toHaveLength(1)
     expect(conductor.getReply('req-2')?.message).toBe('Voice Conductor was turned off before this request started.')
@@ -248,6 +259,7 @@ describe('#58 turns wait for the previous run to END, not just start', () => {
     await flush()
     expect(stopAgentRun).toHaveBeenCalledWith('run-3')
     expect(conductor.getStatus().runId).toBeNull()
+    calls[1].options.onSettled()
 
     // The chain is not wedged: a later start runs new turns.
     await conductor.start()

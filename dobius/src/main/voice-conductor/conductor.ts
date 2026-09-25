@@ -91,8 +91,8 @@ export function createVoiceConductor(): VoiceConductor {
   // Bumped by stop(): queued turns and late callbacks from an older generation
   // must not start runs or touch the current state.
   let generation = 0
-  // Every run this conductor started and has not seen end, with its settle hook.
-  const ownedRuns = new Map<string, () => void>()
+  // Every run this conductor started and has not seen end.
+  const ownedRuns = new Set<string>()
   let pendingTurns = 0
   // Serializes turns: the next one starts only after the previous run ENDS,
   // because two runs resuming the same session would cross or drop each other.
@@ -104,8 +104,9 @@ export function createVoiceConductor(): VoiceConductor {
     }
   }
 
-  // Resolves once the run is accepted; `settled` resolves when that run has ended.
-  // (Wrapped in an object because awaiting a promise of a promise flattens it.)
+  // Resolves once the run is accepted; `settled` resolves when the runner has
+  // finished with that run, including releasing its session lease, so the next
+  // turn can resume the same session. (Wrapped in an object because awaiting a promise of a promise flattens it.)
   async function startTurn(
     requestId: string,
     transcript: string,
@@ -141,7 +142,6 @@ export function createVoiceConductor(): VoiceConductor {
         lastError = error
         replyIfSilent(requestId, turnStartedAt, reply)
       }
-      settle()
     }
     running = true
     try {
@@ -170,6 +170,10 @@ export function createVoiceConductor(): VoiceConductor {
           },
           onRunEnded: (status, summary) => {
             end(status === 'error' ? summary : null, conductorTurnFailureReply({ ended: status }))
+          },
+          onSettled: () => {
+            end(null, null)
+            settle()
           }
         }
       })
@@ -183,13 +187,15 @@ export function createVoiceConductor(): VoiceConductor {
     if (ended) {
       return { settled }
     }
-    ownedRuns.set(runId, () => end(null, null))
     if (turnGeneration !== generation) {
       // stop() ran while this run was being accepted: it is ours, so stop it too.
-      ownedRuns.delete(runId)
-      await stopAgentRun(runId).finally(() => end(null, null))
+      // Still return `settled` so the next turn waits for this run's lease.
+      await stopAgentRun(runId).catch((error: unknown) => {
+        console.error('[voice-conductor] could not stop a run accepted during stop:', error instanceof Error ? error.message : String(error))
+      })
       return { settled }
     }
+    ownedRuns.add(runId)
     currentRunId = runId
     lastError = null
     return { settled }
@@ -222,7 +228,8 @@ export function createVoiceConductor(): VoiceConductor {
       const runs = Array.from(ownedRuns)
       ownedRuns.clear()
       const results = await Promise.allSettled(
-        runs.map(([runId, settle]) => stopAgentRun(runId).finally(settle))
+        // Each run's own onSettled releases the turn chain once the runner is done with it.
+        runs.map((runId) => stopAgentRun(runId))
       )
       const failed = results.find((result) => result.status === 'rejected')
       if (failed) {

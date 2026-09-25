@@ -41,6 +41,7 @@ function parsePayload(raw: unknown): WorkPayload | undefined {
 
 // A spawned run's completion callback lives only in the process that started
 // it, so after a restart nothing would ever release its reservation.
+// Correct only on the first load in a process: service.ts keeps one registry.
 function releaseInterruptedSpawns(items: WorkItem[]): WorkItem[] {
   return items.map((item) =>
     item.kind === 'spawn' && item.status === 'running'

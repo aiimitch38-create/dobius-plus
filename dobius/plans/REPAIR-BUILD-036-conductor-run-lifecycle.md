@@ -179,3 +179,59 @@ gain an optional `kind` field that older code drops on load (old code had no cap
 - A "wait until the run ends" contract needs an end signal on every path, including a clean
   stream end after cancel; check the runner before relying on callbacks.
 - A cap enforced by tracking after the side effect is advisory; reserve before acting.
+
+## Review round 1 (after merging stabilize/integration)
+- **F1 [medium] a turn settled before the runner released the session lease.** `onResult` and
+  `onRunEnded` fire inside `consumeRun`. `releaseRunSession` runs later, in its `finally`. So the
+  next queued turn (or the first turn after a quick stop and restart) found the key busy and
+  started a fresh session, losing the conversation.
+  - New `AgentRunOptions.onSettled`. It is called once, as the last step of `consumeRun`'s
+    `finally` (after `releaseRunSession`, `releaseAgentRun` and the slot count) and at the end of
+    `finishCodexRun`.
+  - The conductor's `settled` now waits for `onSettled` only. `stop()` just stops its owned runs
+    and no longer force-settles them: the chain waits for each stopped run's real `onSettled`,
+    so the turn after a restart resumes that run's session. A run accepted during stop is
+    stopped (a failure there is logged) and its `settled` is still returned.
+- **F2 [medium] off/on toggle built a second work registry.** The new registry's load marked the
+  still-live spawned worker as interrupted and freed the cap. The old registry later saved stale
+  items over the file.
+  - `service.ts` keeps one registry per process (`getWorkRegistry()`, like `leadTabStore ??=`).
+    So the interrupted-spawn release runs only on the first load in a process, which is the
+    only load where no spawned run from this process can be alive.
+  - Not done: the "better" runId-on-item variant. With one load per process, it adds nothing,
+    and it would need a runner liveness export.
+- **Exactly-once risk.** New `agents/agent-run-end-callbacks.ts`:
+  - `guardRunEndCallbacks` makes `onResult` / `onRunEnded` fire at most once in total. Each one
+    is try/catch-logged, so a caller's throw can't reach `consumeRun`'s catch. The same applies
+    to `onSettled`, once.
+  - `appendRunNotificationSafely` wraps the notification write, which used to turn a finished
+    run into `error` through the catch path. Used at the four run-end sites in the runner.
+  - The Asana `appendDeadLetterBrief` / `appendAgentNotification` calls run inside the Asana
+    `onRunEnded` callback, so the guard now covers them. `asana-auto-mode-service.ts` is not
+    edited.
+- Tests (each seen failing with its fix removed, stabilize-run/036/mut2.py, N1-N5 all killed):
+  - New `voice-conductor/conductor-session-resume.test.ts`: the real conductor, the real
+    agent-runner and the real `agent-session-lease` (SDK `query` scripted). A queued turn resumes
+    the first turn's session; a turn after stop + restart resumes the stopped run's session.
+    N1 (settle on onResult) and N2 (onSettled before lease release) fail it.
+  - `agents/agent-runner-cancel-end.test.ts` (extended):
+    - a throwing `onResult` does not also fire `onRunEnded`;
+    - a stream error after the result doesn't fire a second end (N3);
+    - a failed notification write keeps the run `success` with no second end (N4);
+    - the key is free inside `onSettled` (N2).
+  - New `voice-conductor/service-work-registry.test.ts`: off/on toggle returns the same registry
+    and the live spawn still holds the cap (N5).
+  - `conductor.test.ts` scripts now call `onSettled`. The overlap test also asserts that
+    nothing starts between run-1's result and its settle.
+- Targeted: voice-conductor, agents, dobius-cli, imessage-bridge, storage, communications and the
+  rpc voice-conductor test: 149 files, 1565 passed. 3 files failed, none because of this build:
+  - `communications/providers/agent-provider.test.ts` is in basefail.txt.
+  - `communications/verify/run-verification.test.ts` is the known port-3300 real-gateway env
+    failure (TRACKER w3).
+  - `communications/verify/auth-handshake-integration.test.ts` runs a real relay and fails the
+    same way alone. It imports none of the changed files.
+- Typecheck exit 0. Lint clean except `agent-runner.ts` `max-lines`: 494 at base, 502 now. The
+  onSettled plumbing and the import were kept small by passing one callbacks object; a split is
+  out of scope.
+- Not covered by a test: the Codex `onSettled` call in `finishCodexRun`. Codex is refused for the
+  conductor and for spawned workers, so no caller waits on it today.

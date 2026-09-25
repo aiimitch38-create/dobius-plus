@@ -27,6 +27,19 @@ const conductor = createVoiceConductor()
 let started = false
 let leadTabStore: ReturnType<typeof createLeadTabStore> | null = null
 
+// Why once per process: a spawned worker outlives a conductor off/on toggle. A
+// second registry would reload the file, mark that live worker "interrupted"
+// (freeing the cap for a second paid run), and the old one would later save
+// stale items over the file.
+let workRegistry: WorkRegistry | null = null
+
+function getWorkRegistry(): WorkRegistry {
+  workRegistry ??= createPersistentWorkRegistry(
+    path.join(app.getPath('userData'), 'voice-conductor-work.json')
+  )
+  return workRegistry
+}
+
 function getLeadTabStore(): ReturnType<typeof createLeadTabStore> {
   leadTabStore ??= createLeadTabStore(path.join(app.getPath('userData'), 'voice-conductor-tabs.json'))
   return leadTabStore
@@ -119,9 +132,7 @@ export function syncVoiceConductorFromSettings(
     if (unavailable) {
       console.warn(`[voice-conductor] iMessage approvals will be denied: ${unavailable}`)
     }
-    const workRegistry = createPersistentWorkRegistry(
-      path.join(app.getPath('userData'), 'voice-conductor-work.json')
-    )
+    const workRegistry = getWorkRegistry()
     const deps: ConductorCliDeps = {
       conductor,
       workRegistry,

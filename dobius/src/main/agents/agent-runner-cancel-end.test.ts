@@ -70,6 +70,8 @@ vi.mock('./codex-agent-execution', () => ({ startCodexAgentProcess: vi.fn() }))
 vi.mock('../codex-cli/command', () => ({ resolveClaudeCommand: () => 'claude' }))
 
 import { startAgentRun, stopAgentRun } from './agent-runner'
+import { appendAgentRunNotification } from './agent-notification-store'
+import { claimRunSession, releaseRunSession } from './agent-session-lease'
 
 // A stream that ends cleanly (no throw, no result) once the run is aborted.
 function streamEndingOnAbort({ options }: { options: { abortController: AbortController } }) {
@@ -112,3 +114,96 @@ describe('BUILD-036: a stopped run always reports that it ended', () => {
     expect(mocks.runs.get(runId)?.status).toBe('cancelled')
   })
 })
+
+function streamWithResult() {
+  async function* stream() {
+    yield { type: 'system', subtype: 'init', session_id: 'session-1' }
+    yield {
+      type: 'result',
+      subtype: 'success',
+      session_id: 'session-1',
+      result: 'ok',
+      errors: [],
+      num_turns: 1,
+      total_cost_usd: 0
+    }
+  }
+  return Object.assign(stream(), { setPermissionMode: vi.fn(), interrupt: vi.fn(async () => {}) })
+}
+
+describe('BUILD-036 review: end callbacks fire exactly once, then onSettled', () => {
+  async function run(options: Parameters<typeof startAgentRun>[0]['options']) {
+    mocks.query.mockImplementation(streamWithResult)
+    const runId = await startAgentRun({
+      agentId: 'a',
+      prompt: 'go',
+      prepareClaudeLaunch: vi.fn(async () => ({}) as never),
+      options
+    })
+    return runId
+  }
+
+  it('a throwing onResult does not also fire onRunEnded', async () => {
+    const onRunEnded = vi.fn()
+    const onSettled = vi.fn()
+    await run({
+      source: 'channel',
+      onResult: () => {
+        throw new Error('caller bug')
+      },
+      onRunEnded,
+      onSettled
+    })
+    await vi.waitFor(() => expect(onSettled).toHaveBeenCalledTimes(1))
+    expect(onRunEnded).not.toHaveBeenCalled()
+  })
+
+  it('a failed notification write does not turn a finished run into a second end', async () => {
+    vi.mocked(appendAgentRunNotification).mockImplementationOnce(() => {
+      throw new Error('notifications file unreadable')
+    })
+    const onResult = vi.fn()
+    const onRunEnded = vi.fn()
+    const onSettled = vi.fn()
+    const runId = await run({ source: 'channel', onResult, onRunEnded, onSettled })
+    await vi.waitFor(() => expect(onSettled).toHaveBeenCalledTimes(1))
+    expect(onResult).toHaveBeenCalledTimes(1)
+    expect(onRunEnded).not.toHaveBeenCalled()
+    expect(mocks.runs.get(runId)?.status).toBe('success')
+  })
+
+  it('a stream error after the result does not fire a second end', async () => {
+    mocks.query.mockImplementation(() => {
+      const result = streamWithResult()
+      async function* thenThrow() {
+        yield* result
+        throw new Error('transport closed')
+      }
+      return Object.assign(thenThrow(), { setPermissionMode: vi.fn(), interrupt: vi.fn(async () => {}) })
+    })
+    const onResult = vi.fn()
+    const onRunEnded = vi.fn()
+    const onSettled = vi.fn()
+    await startAgentRun({
+      agentId: 'a',
+      prompt: 'go',
+      prepareClaudeLaunch: vi.fn(async () => ({}) as never),
+      options: { source: 'channel', onResult, onRunEnded, onSettled }
+    })
+    await vi.waitFor(() => expect(onSettled).toHaveBeenCalledTimes(1))
+    expect(onResult).toHaveBeenCalledTimes(1)
+    expect(onRunEnded).not.toHaveBeenCalled()
+  })
+
+  it('onSettled fires after the session lease is released', async () => {
+    let keyFreeAtSettle: boolean | null = null
+    const onSettled = vi.fn(() => {
+      keyFreeAtSettle = claimRunSession('probe', 'a', 'default')
+      releaseRunSession('probe')
+    })
+    await run({ source: 'channel', onResult: vi.fn(), onSettled })
+    await vi.waitFor(() => expect(onSettled).toHaveBeenCalledTimes(1))
+    expect(keyFreeAtSettle).toBe(true)
+  })
+})
+
