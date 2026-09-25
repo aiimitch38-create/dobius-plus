@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Why: DB tests cover messages, tasks, dispatch contexts, decision gates, coordinator runs, and lifecycle in one suite to share the createDb() helper and afterEach cleanup. */
+import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -570,6 +571,78 @@ describe('OrchestrationDb', () => {
       expect(d.getCoordinatorRun(orphan.id)?.status).toBe('failed')
       expect(d.getActiveCoordinatorRun()).toBeUndefined()
       expect(d.getTask(task.id)?.spec).toBe('kept')
+    })
+
+    it('retires dead, reused-pid and legacy owners; a live other process keeps its run', () => {
+      dir = mkdtempSync(join(tmpdir(), 'orch-open-for-process-'))
+      const dbPath = join(dir, 'orchestration.db')
+      // Why: a child that has already exited gives a pid that is really dead.
+      const deadPid = spawnSync(process.execPath, ['-e', '']).pid
+      expect(deadPid).toBeGreaterThan(0)
+      const self = { pid: process.pid, sessionId: 'this-session' }
+      const runAs = (owner: { pid: number; sessionId: string }, spec: string): string => {
+        const other = new OrchestrationDb(dbPath, owner)
+        const run = other.createCoordinatorRun({ spec, coordinatorHandle: 'coord' })
+        other.close()
+        return run.id
+      }
+      const live = runAs({ pid: process.ppid, sessionId: 'parent' }, 'live elsewhere')
+      const dead = runAs({ pid: deadPid, sessionId: 'dead' }, 'dead owner')
+      const reused = runAs({ pid: process.pid, sessionId: 'earlier-process' }, 'reused pid')
+      const legacy = runAs({ pid: deadPid, sessionId: 'legacy' }, 'pre-v6')
+      const raw = new Database(dbPath)
+      raw
+        .prepare('UPDATE coordinator_runs SET owner_pid = NULL, owner_session = NULL WHERE id = ?')
+        .run(legacy)
+      raw.close()
+
+      const d = OrchestrationDb.openForProcess(dbPath, self)
+      db = d
+      expect(d.getCoordinatorRun(live)?.status).toBe('running')
+      expect(d.getCoordinatorRun(dead)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(reused)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(legacy)?.status).toBe('failed')
+
+      expect(d.failOrphanedCoordinatorRuns()).toEqual([])
+      expect(() =>
+        d.startCoordinatorRun({ spec: 'second', coordinatorHandle: 'coord' }, null)
+      ).toThrow(`Coordinator already running: ${live} (owned by another live process, pid ${process.ppid})`)
+      expect(d.getCoordinatorRun(live)?.status).toBe('running')
+      expect(d.getActiveCoordinatorRun()?.id).toBe(live)
+    })
+
+    it('upgrades a v5 DB additively; its ownerless running row is retired as legacy', () => {
+      dir = mkdtempSync(join(tmpdir(), 'orch-open-for-process-'))
+      const dbPath = join(dir, 'orchestration.db')
+      const raw = new Database(dbPath)
+      raw.exec(`
+        CREATE TABLE coordinator_runs (
+          id                  TEXT PRIMARY KEY,
+          spec                TEXT NOT NULL,
+          status              TEXT NOT NULL DEFAULT 'idle'
+            CHECK(status IN ('idle', 'running', 'completed', 'failed')),
+          coordinator_handle  TEXT NOT NULL,
+          poll_interval_ms    INTEGER NOT NULL DEFAULT 2000,
+          created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+          completed_at        TEXT
+        );
+        INSERT INTO coordinator_runs (id, spec, status, coordinator_handle)
+          VALUES ('run_v5', 'old', 'running', 'coord'), ('run_done', 'older', 'completed', 'coord');
+      `)
+      raw.pragma('user_version = 5')
+      raw.close()
+
+      const d = OrchestrationDb.openForProcess(dbPath)
+      db = d
+      expect(d.getCoordinatorRun('run_v5')).toMatchObject({
+        status: 'failed',
+        owner_pid: null,
+        owner_session: null
+      })
+      expect(d.getCoordinatorRun('run_done')?.status).toBe('completed')
+      const started = d.startCoordinatorRun({ spec: 'new', coordinatorHandle: 'coord' }, null)
+      expect(started.owner_pid).toBe(process.pid)
+      expect(d.ownsCoordinatorRun(started)).toBe(true)
     })
   })
 

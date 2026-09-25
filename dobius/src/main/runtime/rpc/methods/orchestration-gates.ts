@@ -11,6 +11,10 @@ import { assertExecutionAdmitted } from '../../../agents/execution-gate'
 // the coordinator_runs row it owns; any other 'running' row is an orphan.
 let activeCoordinator: Coordinator | null = null
 let activeRunId: string | null = null
+// Why: runStop clears activeCoordinator at once, but a stopped loop can still
+// be mid-tick (awaiting a terminal). Until its promise settles a new run must
+// not start, or both loops could dispatch the same ready task.
+const unsettledLoops = new Map<Coordinator, string>()
 
 const RunParams = z.object({
   spec: requiredString('Missing --spec'),
@@ -52,12 +56,10 @@ export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
       assertExecutionAdmitted('agent-run')
       const db = runtime.getOrchestrationDb()
 
-      // Why: a row left 'running' by a previous process (or a stopped run)
-      // has no live owner; retire it instead of blocking every new run.
-      db.failOrphanedCoordinatorRuns(activeCoordinator ? activeRunId : null)
-      const existing = db.getActiveCoordinatorRun()
-      if (existing) {
-        throw new Error(`Coordinator already running: ${existing.id}`)
+      for (const [loop, runId] of unsettledLoops) {
+        if (loop !== activeCoordinator) {
+          throw new Error(`Coordinator run ${runId} is still stopping; retry once it has exited`)
+        }
       }
 
       const coordinatorHandle = params.from ?? 'coordinator'
@@ -69,18 +71,26 @@ export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
         worktree: params.worktree
       })
 
-      const run = db.createCoordinatorRun({
-        spec: params.spec,
-        coordinatorHandle,
-        pollIntervalMs: params.pollIntervalMs
-      })
+      // Why: a row left 'running' by a dead process (or a stopped run) has no
+      // live owner and is retired; a live run, here or in another process
+      // sharing the DB, still refuses the start.
+      const run = db.startCoordinatorRun(
+        {
+          spec: params.spec,
+          coordinatorHandle,
+          pollIntervalMs: params.pollIntervalMs
+        },
+        activeCoordinator ? activeRunId : null
+      )
       activeCoordinator = coordinator
       activeRunId = run.id
+      unsettledLoops.set(coordinator, run.id)
 
       // Why: fire-and-forget — the coordinator loop runs in the event loop
       // background. Results are persisted to the DB; callers query via
       // orchestration.taskList or orchestration.runStatus.
       coordinator.runFromExistingRun(run.id).finally(() => {
+        unsettledLoops.delete(coordinator)
         if (activeCoordinator === coordinator) {
           activeCoordinator = null
           activeRunId = null
@@ -105,6 +115,13 @@ export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
           return { runId: orphaned[0], stopped: true }
         }
         throw new Error('No active coordinator run')
+      }
+      // Why: another live process owns this run; marking it failed here would
+      // not stop that loop and would let a second coordinator start.
+      if (!db.ownsCoordinatorRun(run)) {
+        throw new Error(
+          `Coordinator run ${run.id}${db.describeOwner(run)} must be stopped from that instance`
+        )
       }
 
       if (activeCoordinator) {

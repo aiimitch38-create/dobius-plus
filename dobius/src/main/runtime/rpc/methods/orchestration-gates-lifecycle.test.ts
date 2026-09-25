@@ -81,4 +81,60 @@ describe('orchestration coordinator run ownership', () => {
     expect(db.getCoordinatorRun(started.runId)?.status).toBe('failed')
     expect(() => call('orchestration.runStop', {}, ctx)).toThrow(/No active coordinator run/)
   })
+
+  it('leaves a run owned by another live process alone: run and runStop both refuse', () => {
+    const dbPath = join(testState.dir, 'orchestration.db')
+    // Why: a second dev instance shares this DB file; the parent pid stands in
+    // for that live process.
+    const other = new OrchestrationDb(dbPath, { pid: process.ppid, sessionId: 'other-instance' })
+    other.createTask({ spec: 'owned by the other instance' })
+    const foreign = other.createCoordinatorRun({ spec: 'elsewhere', coordinatorHandle: 'coord' })
+    other.close()
+
+    const db = OrchestrationDb.openForProcess(dbPath)
+    runtime.setOrchestrationDb(db)
+    expect(db.getCoordinatorRun(foreign.id)?.status).toBe('running')
+    expect(() => call('orchestration.run', { spec: 'second' }, ctx)).toThrow(
+      /Coordinator already running: .*owned by another live process/
+    )
+    expect(() => call('orchestration.runStop', {}, ctx)).toThrow(
+      /must be stopped from that instance/
+    )
+    expect(db.getCoordinatorRun(foreign.id)?.status).toBe('running')
+    expect(db.getActiveCoordinatorRun()?.id).toBe(foreign.id)
+    db.close()
+  })
+
+  it('refuses a new run until a stopped coordinator loop has exited', async () => {
+    const db = new OrchestrationDb(':memory:')
+    runtime.setOrchestrationDb(db)
+    const task = db.createTask({ spec: 'gated' })
+    db.createGate({ taskId: task.id, question: 'proceed?' })
+
+    const first = (await call(
+      'orchestration.run',
+      { spec: 'first', pollIntervalMs: 300 },
+      ctx
+    )) as { runId: string }
+    // Why: the first tick is done once the gate is re-checked; the loop then
+    // sits in its 300 ms sleep, still unsettled after runStop returns.
+    await new Promise((r) => {
+      setTimeout(r, 30)
+    })
+    expect(call('orchestration.runStop', {}, ctx)).toEqual({ runId: first.runId, stopped: true })
+    expect(() => call('orchestration.run', { spec: 'too soon' }, ctx)).toThrow(
+      new RegExp(`Coordinator run ${first.runId} is still stopping`)
+    )
+
+    await new Promise((r) => {
+      setTimeout(r, 400)
+    })
+    const second = (await call(
+      'orchestration.run',
+      { spec: 'after exit', pollIntervalMs: 10 },
+      ctx
+    )) as { runId: string; status: string }
+    expect(second.status).toBe('running')
+    expect(call('orchestration.runStop', {}, ctx)).toEqual({ runId: second.runId, stopped: true })
+  })
 })

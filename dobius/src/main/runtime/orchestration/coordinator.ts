@@ -241,21 +241,39 @@ export class Coordinator {
 
   // Why: subtasks created during the run (parent or dependency on a task this
   // run owns) belong to this run; unrelated roots created meanwhile do not.
+  // An owned task's own unfinished dependencies are adopted too, otherwise it
+  // would wait on a task nobody dispatches and the run would never converge.
   private adoptLinkedTasks(): void {
-    const candidates = this.db
-      .listTasks()
-      .filter((t) => !this.ownedTaskIds.has(t.id) && !isTerminalTaskStatus(t.status))
+    const tasks = this.db.listTasks()
+    const candidates = tasks.filter(
+      (t) => !this.ownedTaskIds.has(t.id) && !isTerminalTaskStatus(t.status)
+    )
+    const candidateIds = new Set(candidates.map((t) => t.id))
+    const depsOf = (task: TaskRow): string[] => {
+      const deps: unknown = JSON.parse(task.deps)
+      return Array.isArray(deps) ? deps.map(String) : []
+    }
     let adopted = true
     while (adopted) {
       adopted = false
+      for (const task of tasks) {
+        if (!this.ownedTaskIds.has(task.id)) {
+          continue
+        }
+        for (const dep of depsOf(task)) {
+          if (candidateIds.has(dep) && !this.ownedTaskIds.has(dep)) {
+            this.ownedTaskIds.add(dep)
+            adopted = true
+          }
+        }
+      }
       for (const task of candidates) {
         if (this.ownedTaskIds.has(task.id)) {
           continue
         }
-        const deps: unknown = JSON.parse(task.deps)
         const linked =
           (task.parent_id !== null && this.ownedTaskIds.has(task.parent_id)) ||
-          (Array.isArray(deps) && deps.some((dep) => this.ownedTaskIds.has(String(dep))))
+          depsOf(task).some((dep) => this.ownedTaskIds.has(dep))
         if (linked) {
           this.ownedTaskIds.add(task.id)
           adopted = true
@@ -474,6 +492,9 @@ export class Coordinator {
     }
 
     const terminals = await this.getAvailableTerminals()
+    if (this.stopped) {
+      return
+    }
     if (terminals.length === 0 && slotsAvailable > 0) {
       // Why: no idle terminals exist — create one for the next task.
       // Only create one per tick to avoid spawning many terminals at once.
@@ -490,7 +511,7 @@ export class Coordinator {
     }
 
     for (const task of readyTasks) {
-      if (slotsAvailable <= 0 || terminals.length === 0) {
+      if (this.stopped || slotsAvailable <= 0 || terminals.length === 0) {
         break
       }
 
@@ -548,6 +569,12 @@ export class Coordinator {
       }
     }
 
+    // Why: the awaits above can outlast a stop, and the task list was read
+    // before them; a stopped run, or a task another run already took, must
+    // not start a worker.
+    if (this.stopped || this.db.getTask(task.id)?.status !== 'ready') {
+      return
+    }
     const dispatch = this.db.createDispatchContext(task.id, targetHandle)
 
     // Why: agents dispatched by the coordinator must use dobius-dev in dev mode

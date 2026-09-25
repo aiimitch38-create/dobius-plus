@@ -778,6 +778,72 @@ describe('Coordinator', () => {
       expect(resultB.completedTasks).toEqual([rootB.id])
       expect(db.getTask(oldTask.id)?.status).toBe('failed')
     })
+
+    it('adopts the unowned dependencies of an adopted task so the run converges', async () => {
+      db = new OrchestrationDb(':memory:')
+      const runtime = createMockRuntime()
+      runtime.terminals = [
+        { handle: 'term_a', worktreeId: 'wt1', connected: true, writable: true },
+        { handle: 'term_b', worktreeId: 'wt1', connected: true, writable: true }
+      ]
+      const owned = db.createTask({ spec: 'owned root' })
+      const coordinator = new Coordinator(db, runtime, {
+        spec: 'run',
+        coordinatorHandle: 'coord',
+        pollIntervalMs: 20
+      })
+      const run = coordinator.run()
+      // Created after the run claimed its tasks: an unlinked root, then a task
+      // that depends on both the owned root and that unlinked root.
+      const unownedRoot = db.createTask({ spec: 'unlinked root' })
+      const joined = db.createTask({ spec: 'needs both', deps: [owned.id, unownedRoot.id] })
+
+      await waitFor(() => db.getTask(owned.id)?.status === 'dispatched')
+      insertWorkerDone(db, { taskId: owned.id })
+      await waitFor(() => db.getTask(unownedRoot.id)?.status === 'dispatched', 2_000)
+      insertWorkerDone(db, { taskId: unownedRoot.id })
+      await waitFor(() => db.getTask(joined.id)?.status === 'dispatched')
+      insertWorkerDone(db, { taskId: joined.id })
+
+      const result = await run
+      expect(result.status).toBe('completed')
+      expect(result.completedTasks.sort()).toEqual([owned.id, unownedRoot.id, joined.id].sort())
+    })
+  })
+
+  describe('stop during dispatch', () => {
+    it('a coordinator stopped while awaiting terminals dispatches nothing', async () => {
+      db = new OrchestrationDb(':memory:')
+      const runtime = createMockRuntime()
+      const task = db.createTask({ spec: 'must not start after stop' })
+      let releaseTerminals: () => void = () => {}
+      let listCalls = 0
+      runtime.listTerminals = async () => {
+        listCalls++
+        await new Promise<void>((resolve) => {
+          releaseTerminals = resolve
+        })
+        return {
+          terminals: [{ handle: 'term_a', worktreeId: 'wt1', connected: true, writable: true }]
+        }
+      }
+      const coordinator = new Coordinator(db, runtime, {
+        spec: 'run',
+        coordinatorHandle: 'coord',
+        pollIntervalMs: 20
+      })
+      const run = coordinator.run()
+      await waitFor(() => listCalls === 1)
+      coordinator.stop()
+      releaseTerminals()
+
+      const result = await run
+      expect(result.status).toBe('failed')
+      expect(runtime.sentMessages).toEqual([])
+      expect(runtime.createdTerminals).toEqual([])
+      expect(db.getDispatchContext(task.id)).toBeUndefined()
+      expect(db.getTask(task.id)?.status).toBe('ready')
+    })
   })
 
   describe('stale-base dispatch guard', () => {
