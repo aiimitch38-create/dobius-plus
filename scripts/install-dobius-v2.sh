@@ -6,5 +6,5 @@
 # There is now exactly ONE install path: scripts/install-dobius-gated.sh.
 echo "install-dobius-v2.sh is retired. Build, then install with the gated installer:" >&2
 echo "  pnpm --dir dobius run build:unpack" >&2
-echo "  scripts/install-dobius-gated.sh dobius/dist/mac-arm64/Dobius+.app [--take-over]" >&2
+echo "  scripts/install-dobius-gated.sh dobius/dist/mac-arm64/Dobius+.app [--take-over] [--allow-downgrade]" >&2
 exit 1

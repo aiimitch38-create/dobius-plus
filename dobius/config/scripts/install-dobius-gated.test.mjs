@@ -1,101 +1,32 @@
 // BUILD-043: the gated installer runs ONLY against temp fixture dirs here.
 // Every run sets DOBIUS_INSTALL_DEST (never /Applications) and a temp HOME, so
 // the script never quits, kills, relaunches or registers the real app.
-import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   chmodSync,
-  copyFileSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
-  rmSync,
   writeFileSync
 } from 'node:fs'
-import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import {
+  asarOf,
+  cleanupRoots,
+  dest,
+  makeBundle,
+  makeRoot,
+  repoRoot,
+  runGated,
+  runGatedAsync,
+  stageOf
+} from './install-dobius-gated-fixtures.mjs'
 
-const repoRoot = path.resolve(import.meta.dirname, '../../..')
-const gatedScript = path.join(repoRoot, 'scripts', 'install-dobius-gated.sh')
 const v2Script = path.join(repoRoot, 'scripts', 'install-dobius-v2.sh')
 const buildAndInstall = path.join(repoRoot, 'build-and-install.sh')
-
-const roots = []
-
-function makeRoot() {
-  const root = mkdtempSync(path.join(tmpdir(), 'dobius-gated-install-'))
-  roots.push(root)
-  mkdirSync(path.join(root, 'home'))
-  mkdirSync(path.join(root, 'Applications'))
-  return root
-}
-
-function makeBundle(bundlePath, { version = '2.0.0', asar = 'v1', withAsar = true } = {}) {
-  mkdirSync(path.join(bundlePath, 'Contents', 'MacOS'), { recursive: true })
-  mkdirSync(path.join(bundlePath, 'Contents', 'Resources'), { recursive: true })
-  writeFileSync(
-    path.join(bundlePath, 'Contents', 'Info.plist'),
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>FixtureApp</string>
-<key>CFBundleIdentifier</key><string>com.example.dobius-installer-fixture</string>
-<key>CFBundleShortVersionString</key><string>${version}</string>
-</dict></plist>
-`
-  )
-  // A real Mach-O (universal) binary so the arch validation runs for real.
-  copyFileSync('/bin/echo', path.join(bundlePath, 'Contents', 'MacOS', 'FixtureApp'))
-  chmodSync(path.join(bundlePath, 'Contents', 'MacOS', 'FixtureApp'), 0o755)
-  if (withAsar) {
-    writeFileSync(path.join(bundlePath, 'Contents', 'Resources', 'app.asar'), asar)
-  }
-  return bundlePath
-}
-
-function envFor(root, extra = {}) {
-  return {
-    PATH: process.env.PATH,
-    HOME: path.join(root, 'home'),
-    USER: 'fixture',
-    DOBIUS_INSTALL_DEST: path.join(root, 'Applications', 'Dobius+.app'),
-    DOBIUS_INSTALL_LOCK: path.join(root, 'install.lock'),
-    DOBIUS_INSTALL_LOCK_WAIT: '30',
-    DOBIUS_INSTALL_BACKUP_DIR: path.join(root, 'backups'),
-    DOBIUS_INSTALL_HISTORY_LOG: path.join(root, 'history.log'),
-    ...extra
-  }
-}
-
-function runGated(root, args, extraEnv) {
-  const env = envFor(root, extraEnv)
-  expect(env.DOBIUS_INSTALL_DEST.startsWith(root)).toBe(true)
-  return spawnSync('/bin/bash', [gatedScript, ...args], { env, encoding: 'utf8' })
-}
-
-function runGatedAsync(root, args, extraEnv) {
-  const env = envFor(root, extraEnv)
-  expect(env.DOBIUS_INSTALL_DEST.startsWith(root)).toBe(true)
-  return new Promise((resolve) => {
-    const child = spawn('/bin/bash', [gatedScript, ...args], {
-      env,
-      stdio: ['ignore', 'ignore', 'pipe']
-    })
-    let stderr = ''
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk
-    })
-    child.on('close', (status) => resolve({ status, stderr }))
-  })
-}
-
-const dest = (root) => path.join(root, 'Applications', 'Dobius+.app')
-const asarOf = (bundle) =>
-  readFileSync(path.join(bundle, 'Contents', 'Resources', 'app.asar'), 'utf8')
-const stageOf = (root) => path.join(root, 'Applications', 'Dobius+.new.app')
 
 function expectPriorBundleKept(root, result) {
   expect(result.status).not.toBe(0)
@@ -106,15 +37,7 @@ function expectPriorBundleKept(root, result) {
   expect(existsSync(path.join(root, 'backups'))).toBe(false)
 }
 
-afterEach(() => {
-  for (const root of roots.splice(0)) {
-    // A uchg flag from the rename-failure case would block cleanup.
-    spawnSync('chflags', ['-R', 'nouchg', root])
-    chmodSync(root, 0o755)
-    spawnSync('chmod', ['-R', 'u+rwX', root])
-    rmSync(root, { recursive: true, force: true })
-  }
-})
+afterEach(cleanupRoots)
 
 // Why the long timeout: each run spawns bash, python3 and PlistBuddy several times,
 // which takes seconds on a loaded machine.
