@@ -15,6 +15,9 @@ export const MOBILE_RPC_GRANTS = [
   'terminal.send',
   'git.push',
   'git.discard',
+  // Importing other refs or remotes (checkout, pull, fast-forward, rebase):
+  // brings in a fork's agent files, hooks or package scripts.
+  'git.sync',
   'worktree.create',
   // Removing worktrees or force-deleting branches.
   'worktree.rm',
@@ -39,7 +42,8 @@ const GRANT_SET: ReadonlySet<string> = new Set(MOBILE_RPC_GRANTS)
 // Why: these fields make the host spawn a caller-chosen command or agent, the
 // same power as terminal.send, so they need that grant on top of the method's.
 const TERMINAL_CREATE_METHODS = new Set(['terminal.create', 'session.tabs.createTerminal'])
-const TERMINAL_STARTUP_FIELDS = ['command', 'env', 'launchConfig']
+// `agent`/`launchAgent` start an agent (and mark the folder trusted).
+const TERMINAL_STARTUP_FIELDS = ['command', 'env', 'launchConfig', 'agent', 'launchAgent', 'launchToken']
 const WORKTREE_STARTUP_FIELDS = [
   'startupCommand',
   'startupEnv',
@@ -76,7 +80,24 @@ const REPO_UPDATE_REJECTED_FIELDS = [
 
 // Why: worktree push target / parent redirect where the owner's later pushes
 // and PRs go; a phone must not be able to repoint them.
-const WORKTREE_SET_REJECTED_FIELDS = ['pushTarget', 'parentWorktree']
+const WORKTREE_SET_REJECTED_FIELDS = ['pushTarget', 'parentWorktree', 'baseRef']
+// Why: worktree.create from a caller-chosen base or remote imports that ref's
+// content (and runs its checkout hooks), same as git.sync.
+const WORKTREE_CREATE_SYNC_FIELDS = ['baseBranch', 'pushTarget']
+// Why: hook trust / setup-prompt dismissal would silence the dobius.yaml
+// setup prompt; browser defaults and custom pets/sidekicks feed privileged
+// renderer surfaces; update dismissals would hide security updates.
+const UI_SET_REJECTED_FIELDS = [
+  'trustedDobiusHooks',
+  'setupScriptPromptDismissedRepoIds',
+  'browserDefaultUrl',
+  'browserKagiSessionLink',
+  'customPets',
+  'customSidekicks',
+  'dismissedUpdateVersion',
+  'dismissedUpdateNudgeId',
+  'pendingUpdateNudgeId'
+]
 
 // Why: the in-app browser also opens file: URLs and bare paths (local
 // previews), which would let a phone read any local file over the screencast.
@@ -104,6 +125,12 @@ function mobileRejection(method: string, record: Record<string, unknown>): strin
   }
   if (method === 'browser.tabCreate' && !isAllowedMobileBrowserUrl(record.url, true)) {
     return 'mobile clients may only open http(s) URLs'
+  }
+  if (method === 'ui.set') {
+    const fields = presentFields(record, UI_SET_REJECTED_FIELDS)
+    if (fields.length > 0) {
+      return `mobile clients cannot change ${fields.join(', ')}`
+    }
   }
   if (method === 'worktree.set') {
     const fields = presentFields(record, WORKTREE_SET_REJECTED_FIELDS)
@@ -177,6 +204,14 @@ export function mobileRpcRequirement(method: string, params: unknown): MobileRpc
       record.runHooks === true ||
       record.setupDecision === 'run')
   ) {
+    grants.add('terminal.send')
+  }
+  if (method === 'worktree.create' && presentFields(record, WORKTREE_CREATE_SYNC_FIELDS).length > 0) {
+    grants.add('git.sync')
+  }
+  // Why: a desktop-visible activation runs the renderer's activation flow,
+  // which resumes sleeping agent sessions. The phone app sends false.
+  if (method === 'worktree.activate' && record.notifyClients !== false) {
     grants.add('terminal.send')
   }
   return { grants: [...grants] }

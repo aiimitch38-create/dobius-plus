@@ -42,11 +42,12 @@ Grant categories (`MOBILE_RPC_GRANTS` in `mobile-rpc-grants.ts`), all **denied**
 
 | Grant | Covers |
 |---|---|
-| `terminal.send` | terminal.send, binary Input frames, terminal.close, session.tabs.close, worktree.sleep; terminal.create / session.tabs.createTerminal with command/env/launchConfig; worktree.create with startupCommand/Env/LaunchConfig/Agent/Prompt/Draft, `setupDecision:'run'`, `runHooks:true` |
+| `terminal.send` | terminal.send, binary Input frames, terminal.close, session.tabs.close, worktree.sleep; terminal.create / session.tabs.createTerminal with command/env/launchConfig/agent/launchAgent/launchToken; worktree.activate without `notifyClients:false` (desktop activation resumes sleeping agents); worktree.create with startupCommand/Env/LaunchConfig/Agent/Prompt/Draft, `setupDecision:'run'`, `runHooks:true` |
 | `worktree.create` | worktree.create (any) |
 | `worktree.rm` | worktree.rm, worktree.forceDeleteBranch |
 | `git.push` | git.push, git.forkSync (pushes to origin) |
 | `git.discard` | git.discard, git.abortMerge, git.abortRebase |
+| `git.sync` | git.checkout, git.pull, git.fastForward, git.rebaseFromBase; worktree.create with baseBranch/pushTarget (imports another ref's files and runs its checkout hooks) |
 | `settings.update` | settings.update, linear.connect, linear.selectWorkspace |
 | `files.write` | files.writeTerminalArtifact, files.createFile, markdown.saveTab (host-side path guard refuses protected files and Dobius data even with the grant) |
 | `remote.merge` | github.mergePR, github.setPRAutoMerge, github.updatePRState, github.project.updatePullRequestBySlug, gitlab.mergeMR, gitlab.updateMRState |
@@ -58,12 +59,15 @@ Rejected for mobile outright (no grant unlocks it): AI generation overrides
 git.generateCommitMessage / generatePullRequestFields / discoverCommitMessageModels) and
 repo.update of `hookSettings`, `sourceControlAi`, `worktreeBasePath`, `symlinkPaths`, `forkSyncMode`,
 `upstream`; any method not classified in `mobile-rpc-method-classes.ts` (default deny);
-worktree.set of `pushTarget` / `parentWorktree`; browser.goto / browser.tabCreate with any URL that is
+worktree.set of `pushTarget` / `parentWorktree` / `baseRef`; ui.set of `trustedDobiusHooks`,
+`setupScriptPromptDismissedRepoIds`, `browserDefaultUrl`, `browserKagiSessionLink`, `customPets`,
+`customSidekicks`, `dismissedUpdateVersion`, `dismissedUpdateNudgeId`, `pendingUpdateNudgeId`; browser.goto / browser.tabCreate with any URL that is
 not http(s) (file:, bare paths, javascript:, leading `-`); files.createFile / writeTerminalArtifact /
-markdown.saveTab to CLAUDE.md, CLAUDE.local.md, AGENTS.md, AGENTS.override.md, GEMINI.md,
-.cursorrules, dobius.yaml, .envrc, .mcp.json, package.json, .vscode/tasks.json,
-.vscode/settings.json, .github/copilot-instructions.md, anything under .git/, .claude/, .codex/,
-.cursor/, .gemini/, .dobius/, .husky/ (names APFS-folded, checked relative to the worktree), into
+markdown.saveTab to ANY dot-file or anything under ANY dot-directory (.git, .claude, .codex, .github,
+.clinerules, .kiro, .continue, .windsurf, .opencode, .factory, .roo, .amazonq, .husky, .vscode,
+.envrc, .mcp.json, .goosehints, ...), or a file named CLAUDE.md, CLAUDE.local.md, AGENTS.md,
+AGENTS.override.md, GEMINI.md, CRUSH.md, QWEN.md, CONVENTIONS.md, dobius.yaml or package.json
+anywhere (names APFS-folded, checked relative to the worktree), into
 the userData root or ~/.dobius, through a symlink, or (createFile/saveTab) outside the worktree.
 Removed from the mobile allowlist: `agentTeams.prepareLaunch`, `agentTeams.tmuxCompat` (no mobile
 caller; tmux `send-keys` types into shells).
@@ -196,6 +200,33 @@ file-symlink refusal 1, symlinked-ancestor refusal 2, data-root check off 2, dat
 lexical-only (symlink) 1, protected check on absolute instead of relative path 2 (the
 .claude/worktrees false positive), ~/.dobius root 1, writeTerminalArtifact handler wiring 2.
 
+## Review round 5 (final: 2 MEDIUM, 2 LOW + unverified item)
+Merged `stabilize/integration` first (clean, 621f5937).
+- F1: new `git.sync` grant (checkout, pull, fastForward, rebaseFromBase); worktree.set rejects
+  `baseRef`; also worktree.create with `baseBranch`/`pushTarget` needs `git.sync` (same import
+  path; beyond the finding). git.fetch stays ungated.
+- F2: ui.set rejects hook-trust / setup-prompt dismissal. Scanned the whole `UiUpdate` schema
+  (client-ui.ts) and also rejected browserDefaultUrl, browserKagiSessionLink, customPets,
+  customSidekicks (unvalidated records rendered in the privileged renderer) and the three update
+  dismissal fields. The rest is view/layout state. Note: the phone's own "approve setup hook" flow
+  (NewWorktreeModal / tasks.tsx) wrote trustedDobiusHooks and now gets `forbidden`.
+- F3: `agent`, `launchAgent`, `launchToken` added to the terminal startup fields.
+- F4: chose the class rule: every dot-file and dot-directory segment is refused, plus named agent
+  files (added CRUSH.md, QWEN.md, CONVENTIONS.md). Applies to all guarded writes.
+- Unverified item: worktree.activate without `notifyClients:false` triggers the renderer
+  activation flow, which calls `resumeSleepingAgentSessionsForWorktree`
+  (src/renderer/src/lib/worktree-activation.ts) → now needs `terminal.send`. isArchived: no hook
+  path (see sweep).
+- Integration note: after the merge, `src/main/runtime/dobius-runtime.test.ts` has 2 failures
+  ("pre-marks remote Codex workspaces trusted before pasting startup drafts / explicit startup
+  commands"). They passed before the merge, this round does not touch dobius-runtime.ts, and the
+  merge brought `remote-agent-trust-presets.ts` changes from BUILD-009C (a00389d5). Reported, not
+  fixed here.
+
+Mutation checks round 5 (failing tests): checkout→benign 1, pull→benign 1, baseRef reject 1,
+worktree.create sync fields 2, trustedDobiusHooks reject 1, browserDefaultUrl reject 1, agent
+fields 3, dot-segment rule off 24, CRUSH.md 1, activation resume gate 1.
+
 ## Mobile allowlist sweep (231 methods)
 The table of record is `src/main/runtime/mobile-rpc-method-classes.ts` (one line per method,
 enforced by test). Summary:
@@ -205,6 +236,7 @@ enforced by test). Summary:
 | grant `terminal.send` | terminal.send, terminal.close, session.tabs.close, worktree.sleep (+ startup fields on terminal.create, session.tabs.createTerminal, worktree.create; binary Input frames) |
 | grant `worktree.create` / `worktree.rm` | worktree.create / worktree.rm, worktree.forceDeleteBranch |
 | grant `git.push` / `git.discard` | git.push, git.forkSync / git.discard, git.abortMerge, git.abortRebase |
+| grant `git.sync` | git.checkout, git.pull, git.fastForward, git.rebaseFromBase |
 | grant `settings.update` | settings.update, linear.connect, linear.selectWorkspace |
 | grant `files.write` | files.createFile, files.writeTerminalArtifact, markdown.saveTab |
 | grant `remote.merge` / `remote.write` | see Decisions table |
@@ -214,11 +246,13 @@ enforced by test). Summary:
 benign-mutation (ungated), one-line reasons:
 - git.stage / unstage / bulkStage / bulkUnstage: index only, reversible.
 - git.commit: local commit, reversible; runs only repo-owned hooks (a phone can no longer write .husky/.git).
-- git.checkout / fetch / pull / fastForward / rebaseFromBase: make no push; git refuses to clobber dirty work (fetch/pull do contact the remote).
+- git.fetch: only reads from the configured remotes into remote-tracking refs; changes no working files.
 - git.generateCommitMessage / generatePullRequestFields / discoverCommitMessageModels: use stored AI settings only (overrides rejected); a paid model run, but no new command.
 - git.cancelGenerate*: cancel.
-- terminal.create / session.tabs.createTerminal without startup fields: idle shell or configured agent; input stays gated.
-- terminal.clearBuffer / focus / rename / setAutoRestoreFit / setDisplayMode / updateViewport, session.tabs.activate / move, worktree.activate: display state only.
+- terminal.create / session.tabs.createTerminal without startup or agent fields: idle shell; input stays gated.
+- terminal.clearBuffer / focus / rename / setAutoRestoreFit / setDisplayMode / updateViewport, session.tabs.activate / move: display state only.
+- worktree.activate with `notifyClients:false` (what the phone sends): mobile-only session hydration, no desktop activation; I did not trace `hydrateHeadlessMobileSessionTabsFromWorkspaceSession` to prove it never spawns a PTY.
+- worktree.set `isArchived`: metadata only. Archive hooks run only in removeManagedWorktree (worktree.rm, already gated; dobius-runtime.ts removeManagedWorktree `hooks?.scripts.archive && runHooks`); no renderer code acts on isArchived to run hooks or kill terminals (grep).
 - worktree.set (without pushTarget/parentWorktree), repo.update (without rejected fields), repo.saveSparsePreset, worktree.prefetchCreateBase: metadata / fetch only.
 - files.open / openDiff: opens a desktop tab.
 - clipboard.*: writes an uploaded image to a temp file.
@@ -226,7 +260,7 @@ benign-mutation (ungated), one-line reasons:
 - ssh.connect: connects an already-registered target only.
 - speech.dictation.*, speech.models.download / delete: dictation state; catalog models by id (inferred from the handler, not traced further).
 - preflight.check: re-runs fixed local tool detection.
-- ui.set, ui.recordFeatureInteraction: UI state.
+- ui.set (security-relevant fields rejected), ui.recordFeatureInteraction: UI state.
 - voice.intent: voice conductor, unchanged by design (C2/C3).
 
 ## Residual risk (not in scope)

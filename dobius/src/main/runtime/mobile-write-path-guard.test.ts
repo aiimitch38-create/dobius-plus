@@ -61,7 +61,23 @@ describe('mobile write path guard (BUILD-034)', () => {
     'package.json',
     'packages/app/pacKage.json',
     'dobius.yaml',
-    '.envrc'
+    '.envrc',
+    '.github/instructions/review.instructions.md',
+    '.github/prompts/fix.prompt.md',
+    '.clinerules/rules.md',
+    '.kiro/steering/x.md',
+    '.continue/config.yaml',
+    '.windsurf/rules/x.md',
+    '.opencode/agent.md',
+    '.factory/droids/x.md',
+    '.roo/rules/x.md',
+    '.amazonq/rules/x.md',
+    '.goosehints',
+    '.vscode/launch.json',
+    'docs/.hidden/notes.md',
+    'CRUSH.md',
+    'QWEN.md',
+    'CONVENTIONS.md'
   ])('refuses %s', async (relativePath) => {
     await expect(inWorktree(relativePath)).rejects.toThrow(/mobile write refused/)
   })
@@ -69,8 +85,9 @@ describe('mobile write path guard (BUILD-034)', () => {
   it('folds names the way APFS does', () => {
     expect(foldApfsName('AGENTſ.md')).toBe('agents.md')
     expect(foldApfsName('Key')).toBe('key')
-    expect(isProtectedMobileWritePath('.vscode/launch.json')).toBe(false)
     expect(isProtectedMobileWritePath('docs/tasks.json')).toBe(false)
+    expect(isProtectedMobileWritePath('docs/guide.md')).toBe(false)
+    expect(isProtectedMobileWritePath('README.md')).toBe(false)
   })
 
   it('refuses a file symlink even when it points at an unprotected file', async () => {

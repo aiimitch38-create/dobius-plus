@@ -8,33 +8,23 @@ import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, posix, relative, resolve } from 'node:path'
 import { getUserDataRoot } from '../storage/user-data-root'
 
-const PROTECTED_DIR_SEGMENTS = new Set([
-  '.git',
-  '.claude',
-  '.codex',
-  '.cursor',
-  '.gemini',
-  '.dobius',
-  '.husky'
-])
+// Why: every dot-file and dot-directory is refused (.git, .claude, .codex,
+// .github/instructions, .clinerules, .husky, .vscode, .envrc, .mcp.json, ...):
+// that closes the whole class of tool config instead of chasing each agent.
+// Top-level-style agent instruction files and host-executed files are named.
 const PROTECTED_FILE_NAMES = new Set([
   'claude.md',
   'claude.local.md',
   'agents.md',
   'agents.override.md',
   'gemini.md',
-  '.cursorrules',
+  'crush.md',
+  'qwen.md',
+  'conventions.md',
   'dobius.yaml',
-  '.envrc',
-  '.mcp.json',
   // Why: package scripts run on install/test.
   'package.json'
 ])
-const PROTECTED_SEGMENT_PAIRS: readonly (readonly [string, string])[] = [
-  ['.vscode', 'tasks.json'],
-  ['.vscode', 'settings.json'],
-  ['.github', 'copilot-instructions.md']
-]
 
 export class MobileWriteRefusedError extends Error {
   constructor(reason: string) {
@@ -63,12 +53,7 @@ export function isProtectedMobileWritePath(filePath: string): boolean {
   if (PROTECTED_FILE_NAMES.has(fileName)) {
     return true
   }
-  if (segments.some((segment) => PROTECTED_DIR_SEGMENTS.has(segment))) {
-    return true
-  }
-  return PROTECTED_SEGMENT_PAIRS.some(
-    ([dir, file]) => fileName === file && segments.at(-2) === dir
-  )
+  return segments.some((segment) => segment.startsWith('.'))
 }
 
 function isInsideFolded(child: string, parent: string): boolean {

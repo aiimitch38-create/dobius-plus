@@ -84,7 +84,7 @@ describe('mobile RPC grants (#18)', () => {
     })
     await expect(send(phone.token, 'settings.get')).resolves.toMatchObject({ ok: true })
     await expect(
-      send(phone.token, 'session.tabs.createTerminal', { worktree: 'id:wt', agent: 'codex' })
+      send(phone.token, 'session.tabs.createTerminal', { worktree: 'id:wt' })
     ).resolves.toMatchObject({ ok: true })
     expect(dispatchStreaming).toHaveBeenCalledTimes(3)
   })
@@ -531,5 +531,106 @@ describe('mobile RPC grants: round-3 review (default deny)', () => {
       send(phone.token, 'repo.update', { repo: 'id:r', updates: { [field]: value } })
     ).resolves.toMatchObject(forbidden)
     expect(dispatchStreaming).not.toHaveBeenCalled()
+  })
+})
+
+describe('mobile RPC grants: final review', () => {
+  it.each(['git.checkout', 'git.pull', 'git.fastForward', 'git.rebaseFromBase'])(
+    'F1: %s needs the git.sync grant',
+    async (method) => {
+      const { registry, dispatchStreaming, send } = setup()
+      const phone = registry.addDevice('phone', 'mobile')
+      await expect(send(phone.token, method, {})).resolves.toMatchObject(forbidden)
+      expect(dispatchStreaming).not.toHaveBeenCalled()
+      registry.getDevice(phone.deviceId)!.grants = ['git.sync']
+      await expect(send(phone.token, method, {})).resolves.toMatchObject({ ok: true })
+    }
+  )
+
+  it('F1: git.fetch stays ungated', async () => {
+    const { registry, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    await expect(send(phone.token, 'git.fetch', { worktree: 'id:wt' })).resolves.toMatchObject({
+      ok: true
+    })
+  })
+
+  it('F1: worktree.set rejects a mobile baseRef change even with every grant', async () => {
+    const { registry, dispatchStreaming, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    registry.getDevice(phone.deviceId)!.grants = [...MOBILE_RPC_GRANTS]
+    await expect(
+      send(phone.token, 'worktree.set', { worktree: 'id:wt', baseRef: 'fork/main' })
+    ).resolves.toMatchObject(forbidden)
+    expect(dispatchStreaming).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['baseBranch', 'fork/evil'],
+    ['pushTarget', { remoteName: 'fork', branchName: 'x' }]
+  ])('F1: worktree.create with %s also needs git.sync', async (field, value) => {
+    const { registry, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    registry.getDevice(phone.deviceId)!.grants = ['worktree.create']
+    await expect(
+      send(phone.token, 'worktree.create', { repo: 'id:r', [field]: value })
+    ).resolves.toMatchObject(forbidden)
+    registry.getDevice(phone.deviceId)!.grants = ['worktree.create', 'git.sync']
+    await expect(
+      send(phone.token, 'worktree.create', { repo: 'id:r', [field]: value })
+    ).resolves.toMatchObject({ ok: true })
+  })
+
+  it.each([
+    ['trustedDobiusHooks', { 'repo-1': { all: true } }],
+    ['setupScriptPromptDismissedRepoIds', ['repo-1']],
+    ['browserDefaultUrl', 'file:///etc/passwd'],
+    ['browserKagiSessionLink', 'https://evil.example'],
+    ['customPets', [{ src: 'file:///x' }]],
+    ['customSidekicks', [{ src: 'file:///x' }]],
+    ['dismissedUpdateVersion', '9.9.9'],
+    ['dismissedUpdateNudgeId', 'n'],
+    ['pendingUpdateNudgeId', 'n']
+  ])('F2: ui.set rejects a mobile %s change even with every grant', async (field, value) => {
+    const { registry, dispatchStreaming, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    registry.getDevice(phone.deviceId)!.grants = [...MOBILE_RPC_GRANTS]
+    await expect(send(phone.token, 'ui.set', { [field]: value })).resolves.toMatchObject(forbidden)
+    expect(dispatchStreaming).not.toHaveBeenCalled()
+  })
+
+  it('F2: ui.set of ordinary view state still works with no grants', async () => {
+    const { registry, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    await expect(
+      send(phone.token, 'ui.set', { taskResumeState: { linearQuery: 'x' }, sortBy: 'recent' })
+    ).resolves.toMatchObject({ ok: true })
+  })
+
+  it.each([
+    ['session.tabs.createTerminal', { worktree: 'id:wt', agent: 'codex' }],
+    ['terminal.create', { worktree: 'id:wt', launchAgent: 'claude' }],
+    ['terminal.create', { worktree: 'id:wt', launchToken: 't' }]
+  ])('F3: %s starting an agent needs terminal.send (%o)', async (method, params) => {
+    const { registry, dispatchStreaming, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    await expect(send(phone.token, method, params)).resolves.toMatchObject(forbidden)
+    expect(dispatchStreaming).not.toHaveBeenCalled()
+    registry.getDevice(phone.deviceId)!.grants = ['terminal.send']
+    await expect(send(phone.token, method, params)).resolves.toMatchObject({ ok: true })
+  })
+
+  it('worktree.activate that the desktop would act on (agent resume) needs terminal.send', async () => {
+    const { registry, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    await expect(send(phone.token, 'worktree.activate', { worktree: 'id:wt' })).resolves.toMatchObject(
+      forbidden
+    )
+    await expect(
+      send(phone.token, 'worktree.activate', { worktree: 'id:wt', notifyClients: true })
+    ).resolves.toMatchObject(forbidden)
+    await expect(
+      send(phone.token, 'worktree.activate', { worktree: 'id:wt', notifyClients: false })
+    ).resolves.toMatchObject({ ok: true })
   })
 })
