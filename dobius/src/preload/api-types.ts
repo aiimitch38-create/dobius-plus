@@ -374,6 +374,7 @@ import type {
   RateLimitState
 } from '../shared/rate-limit-types'
 import type {
+  ElevenLabsKeyStatus,
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
@@ -3244,10 +3245,10 @@ export type PreloadApi = {
     /** Mints a signed websocket URL for the configured ElevenLabs agent. */
     agentSignedUrl: () => Promise<{ ok: true; url: string } | { ok: false; error: string }>
     /** Whether an ElevenLabs key is saved; the key itself never reaches the renderer. */
-    getElevenLabsKeyStatus: () => Promise<{ configured: boolean; sessionOnly: boolean }>
+    getElevenLabsKeyStatus: () => Promise<ElevenLabsKeyStatus>
     /** Saves the key to the encrypted store (session-only when encryption is unavailable). */
-    saveElevenLabsKey: (apiKey: string) => Promise<{ configured: boolean; sessionOnly: boolean }>
-    clearElevenLabsKey: () => Promise<{ configured: boolean; sessionOnly: boolean }>
+    saveElevenLabsKey: (apiKey: string) => Promise<ElevenLabsKeyStatus>
+    clearElevenLabsKey: () => Promise<ElevenLabsKeyStatus>
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
     askAdamText: (utterance: string) => Promise<JarvisAskResult>
     onState: (callback: (event: JarvisStateEvent) => void) => () => void

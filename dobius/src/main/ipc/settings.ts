@@ -52,6 +52,17 @@ function keepStoredElevenLabsKey(
     : rest
 }
 
+// Why (#24): an unmigrated key may still sit in settings (encryption was
+// unavailable); it is used by main only and never sent to a renderer.
+function withoutElevenLabsKey<T extends Partial<GlobalSettings>>(settings: T): T {
+  if (!settings.voice || !('elevenlabsApiKey' in settings.voice)) {
+    return settings
+  }
+  const { elevenlabsApiKey: _key, ...voice } = settings.voice
+  void _key
+  return { ...settings, voice }
+}
+
 // Why: fields that appear in the View > Appearance submenu need the menu
 // rebuilt after any update so the checkbox `checked` state stays in sync
 // with the persisted value. Electron doesn't reactively re-render menu
@@ -71,13 +82,13 @@ export function registerSettingsHandlers(
       const isOrigin =
         originWebContentsId !== undefined && window.webContents.id === originWebContentsId
       if (!window.isDestroyed() && !isOrigin) {
-        window.webContents.send('settings:changed', updates)
+        window.webContents.send('settings:changed', withoutElevenLabsKey(updates))
       }
     }
   })
 
   ipcMain.handle('settings:get', () => {
-    return store.getSettings()
+    return withoutElevenLabsKey(store.getSettings())
   })
 
   // Why (#25): read-only; reports field names only, never secret values.
@@ -197,7 +208,7 @@ export function registerSettingsHandlers(
       })
     }
 
-    return result
+    return withoutElevenLabsKey(result)
   })
 
   ipcMain.handle('settings:listFonts', () => {

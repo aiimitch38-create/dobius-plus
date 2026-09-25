@@ -17,7 +17,7 @@ const safeStorageMock = vi.hoisted(() => ({
 }))
 
 vi.mock('electron', () => ({
-  app: { getPath: () => testState.dir },
+  app: { getPath: () => testState.dir, isPackaged: true },
   safeStorage: safeStorageMock
 }))
 

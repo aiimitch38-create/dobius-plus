@@ -16,9 +16,9 @@ const KEY = 'sk_fake_new_key'
 
 const jarvisApi = {
   status: vi.fn(async () => ({ shortcutActive: true, phase: 'idle' })),
-  getElevenLabsKeyStatus: vi.fn(async () => ({ configured: true, sessionOnly: false })),
-  saveElevenLabsKey: vi.fn(async (_key: string) => ({ configured: true, sessionOnly: false })),
-  clearElevenLabsKey: vi.fn(async () => ({ configured: false, sessionOnly: false })),
+  getElevenLabsKeyStatus: vi.fn(async () => ({ configured: true, sessionOnly: false, unreadable: false })),
+  saveElevenLabsKey: vi.fn(async (_key: string) => ({ configured: true, sessionOnly: false, unreadable: false })),
+  clearElevenLabsKey: vi.fn(async () => ({ configured: false, sessionOnly: false, unreadable: false })),
   speak: vi.fn()
 }
 
@@ -98,6 +98,17 @@ describe('JarvisSettingsSection ElevenLabs key (#24)', () => {
 
     expect(keyInput(container).value).toBe('')
     expect(keyInput(container).placeholder).toContain('Key saved')
+  })
+
+  it('tells the user to re-enter a saved key this build cannot read (F3)', async () => {
+    jarvisApi.getElevenLabsKeyStatus.mockResolvedValueOnce({
+      configured: true,
+      sessionOnly: false,
+      unreadable: true
+    })
+    const container = await render({ elevenlabsVoiceId: 'voice-a' }, vi.fn())
+
+    expect(keyInput(container).placeholder).toBe("Saved key can't be read on this build. Re-enter it.")
   })
 
   it('saves a new key through the key store, not through voice settings', async () => {

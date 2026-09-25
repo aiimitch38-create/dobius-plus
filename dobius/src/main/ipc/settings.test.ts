@@ -258,6 +258,53 @@ describe('registerSettingsHandlers', () => {
     expect(written.voice).toEqual({ enabled: false, elevenlabsApiKey: 'sk_fake_legacy' })
   })
 
+  it('settings:get never sends an unmigrated ElevenLabs key to the renderer (#24 F4)', async () => {
+    store.getSettings.mockReturnValue({
+      theme: 'dark',
+      voice: { enabled: true, elevenlabsApiKey: 'sk_fake_legacy', elevenlabsVoiceId: 'v' }
+    })
+    registerSettingsHandlers(store as never)
+    const handler = handleMock.mock.calls.find((call) => call[0] === 'settings:get')?.[1] as () => unknown
+
+    expect(await handler()).toEqual({
+      theme: 'dark',
+      voice: { enabled: true, elevenlabsVoiceId: 'v' }
+    })
+  })
+
+  it('settings:set returns settings without the ElevenLabs key (#24 F4)', async () => {
+    store.getSettings.mockReturnValue({ voice: { elevenlabsApiKey: 'sk_fake_legacy' } })
+    store.updateSettings.mockReturnValue({ voice: { enabled: false, elevenlabsApiKey: 'sk_fake_legacy' } })
+    registerSettingsHandlers(store as never)
+    const handler = handleMock.mock.calls.find((call) => call[0] === 'settings:set')?.[1] as (
+      _event: unknown,
+      args: unknown
+    ) => Promise<unknown>
+
+    expect(await handler(settingsInvokeEvent, { voice: { enabled: false } })).toEqual({
+      voice: { enabled: false }
+    })
+  })
+
+  it('settings-changed broadcasts never carry the ElevenLabs key (#24 F4)', () => {
+    const send = vi.fn()
+    browserWindowGetAllWindowsMock.mockReturnValue([
+      { isDestroyed: () => false, webContents: { id: 2, send } }
+    ])
+    registerSettingsHandlers(store as never)
+    const onSettingsChanged = store.onSettingsChanged as unknown as {
+      mock: { calls: [SettingsChangedListener][] }
+    }
+    const listener = onSettingsChanged.mock.calls[0]?.[0]
+    if (!listener) {
+      throw new Error('settings change listener was not registered')
+    }
+    const voice = { enabled: true, elevenlabsApiKey: 'sk_fake_legacy' }
+    listener({ voice }, { voice })
+
+    expect(send).toHaveBeenCalledWith('settings:changed', { voice: { enabled: true } })
+  })
+
   it('does not notify the agent awake service for unrelated setting changes', () => {
     const agentAwakeService = { setEnabled: vi.fn() }
     store.getSettings.mockReturnValue({ keepComputerAwakeWhileAgentsRun: false })

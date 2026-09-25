@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import type { VoiceSettings } from '../../../../shared/speech-types'
+import type { ElevenLabsKeyStatus, VoiceSettings } from '../../../../shared/speech-types'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -27,9 +27,10 @@ export function JarvisSettingsSection({
   // Why write-only (#24): the saved key lives in the encrypted store and is
   // never sent back here; the draft holds only a new key being entered.
   const [keyDraft, setKeyDraft] = useState('')
-  const [keyStatus, setKeyStatus] = useState<{ configured: boolean; sessionOnly: boolean }>({
+  const [keyStatus, setKeyStatus] = useState<ElevenLabsKeyStatus>({
     configured: false,
-    sessionOnly: false
+    sessionOnly: false,
+    unreadable: false
   })
   const [voiceDraft, setVoiceDraft] = useState(voiceSettings.elevenlabsVoiceId ?? '')
   const [agentDraft, setAgentDraft] = useState(voiceSettings.elevenlabsAgentId ?? '')
@@ -198,7 +199,11 @@ export function JarvisSettingsSection({
           autoComplete="off"
           spellCheck={false}
           placeholder={
-            keyStatus.configured ? 'Key saved — paste a new key to replace it' : 'ElevenLabs API key'
+            keyStatus.unreadable
+              ? "Saved key can't be read on this build. Re-enter it."
+              : keyStatus.configured
+                ? 'Key saved — paste a new key to replace it'
+                : 'ElevenLabs API key'
           }
           value={keyDraft}
           onChange={(event) => setKeyDraft(event.target.value)}

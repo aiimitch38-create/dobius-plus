@@ -102,6 +102,49 @@ communications/providers, and the two renderer settings tests. Result: 378/379 p
 failure is `communications/providers/agent-provider.test.ts` ("No app export on the electron
 mock", from agent-runs-store). It is listed in `basefail.txt` and is unrelated.
 
+## Review round 1 (coordinator findings F1-F6)
+- **F1** `persistEncryptedKey` now writes to a staged `<key file>.verify`, reads it back and
+  requires `decryptString(buf) === key` before renaming it over the real file. On a mismatch or a
+  throw, the staged file is removed, the previous key file stays byte-identical, and migration
+  returns `kept-in-settings` without touching settings.
+- **F2** Chose option (b), per-identity files. Packaged builds use `elevenlabs-token.enc` and
+  unpackaged builds (dev, e2e) use `elevenlabs-token.dev.enc`, keyed on `app.isPackaged`, so a
+  dev run can never overwrite or delete the installed app's key. Migration also refuses to
+  overwrite an existing key file this process cannot decrypt: it keeps the settings copy and warns
+  once. An explicit user save from Settings may still replace an unreadable file, because
+  re-entering the key is the requested remedy.
+- **F3** The status gains `unreadable`. The status call decrypts once, and the result is cached or
+  remembered. The IPC status clears it when a working legacy settings key exists. Settings shows
+  the placeholder "Saved key can't be read on this build. Re-enter it." This section uses plain
+  literals, not i18n (existing convention in the file), so no locale files changed. The status
+  type is shared as `ElevenLabsKeyStatus` in `shared/speech-types.ts`.
+- **F4** `ipc/settings.ts` `withoutElevenLabsKey` strips `voice.elevenlabsApiKey` from
+  `settings:get`, the `settings:set` return value and every `settings:changed` broadcast. The
+  `settings:set` guard still re-adds the stored legacy value, so the renderer cannot wipe it.
+- Found while fixing F1: the resolver used to prefer the protected file over a legacy settings
+  key. After a failed migration, that could shadow a newer settings key with an older file. New
+  order:
+  1. A key saved this session (session-only).
+  2. An unmigrated settings key.
+  3. The protected file.
+- New tests: 7 F1-F3 plus 1 precedence test in `elevenlabs-key-store.test.ts`, 3 F4 tests in
+  `ipc/settings.test.ts`, and 1 F3 renderer test.
+- Mutation checks, each seen failing and then restored:
+  - MF1 skip verify → 3 fail
+  - MF2a shared file name → 1 fail
+  - MF2b overwrite an unreadable file → 1 fail
+  - MF3 unreadable always false → 1 fail
+  - MF3r renderer ignores unreadable → 1 fail
+  - MF4 no stripping → 3 fail
+  - MF5 no session precedence → 1 fail
+- Targeted run: 390/391 passed. The one failure is the baseline agent-provider test.
+
+## Decisions for Carson
+- Old dobius-data.json.bak.* files and pre-migration copies still contain the ElevenLabs key.
+  They are not deleted. Rotating the key is the full fix.
+- Dev (unpackaged) builds keep their own ElevenLabs key file (`elevenlabs-token.dev.enc`). A key
+  saved in dev does not reach the installed app, and the other way round.
+
 ## Rollback
 Revert the commit. Keys already migrated stay in `~/.dobius/elevenlabs-token.enc`, which the
 reverted build does not read. Manual re-entry step after a rollback: paste the ElevenLabs key
@@ -123,6 +166,8 @@ their on-disk format (encrypted files unchanged). Session-only values were never
 - The ElevenLabs key file lives in `~/.dobius/` like every other token store, not in userData.
 
 ## Known limits
+- Jira/Linear session-only tokens still save site/workspace metadata. After a restart that entry
+  shows as disconnected, and any older encrypted token file is used again (F6: no change).
 - Jira/Linear/Asana/MiniMax/provider do not report `sessionOnly` to their UIs (no UI change here).
   The value works this session and is not on disk after restart.
 - Minimax still reads an existing `plaintext` envelope written by an older build (legacy

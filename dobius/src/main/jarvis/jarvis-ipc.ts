@@ -81,7 +81,12 @@ function elevenLabsKeyStatus(store: Store): ElevenLabsApiKeyStatus {
   const status = getElevenLabsApiKeyStatus()
   // A legacy settings key that could not be migrated still counts as configured.
   const legacy = store.getSettings().voice?.elevenlabsApiKey?.trim()
-  return { ...status, configured: status.configured || Boolean(legacy) }
+  return {
+    ...status,
+    configured: status.configured || Boolean(legacy),
+    // The legacy key still works, so an unreadable file is not a dead end.
+    unreadable: status.unreadable && !legacy
+  }
 }
 
 // Why separate channels: the key is written to the protected store only and is

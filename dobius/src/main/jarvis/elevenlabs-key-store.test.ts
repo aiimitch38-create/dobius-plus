@@ -12,14 +12,21 @@ const safeStorageMock = vi.hoisted(() => ({
   isEncryptionAvailable: vi.fn(() => true)
 }))
 
-const testState = vi.hoisted(() => ({ home: '' }))
+const testState = vi.hoisted(() => ({ home: '', isPackaged: true }))
 
 // Fake value only: these tests never touch a real credential.
 const KEY = 'sk_fake_elevenlabs_key'
 
 async function loadStoreModule() {
   vi.resetModules()
-  vi.doMock('electron', () => ({ safeStorage: safeStorageMock }))
+  vi.doMock('electron', () => ({
+    app: {
+      get isPackaged() {
+        return testState.isPackaged
+      }
+    },
+    safeStorage: safeStorageMock
+  }))
   vi.doMock('node:os', async () => {
     const actual = await vi.importActual<typeof Os>('node:os')
     return { ...actual, homedir: () => testState.home }
@@ -27,8 +34,13 @@ async function loadStoreModule() {
   return import('./elevenlabs-key-store')
 }
 
-function keyFile(): string {
-  return join(testState.home, '.dobius', 'elevenlabs-token.enc')
+function keyFile(fileName = 'elevenlabs-token.enc'): string {
+  return join(testState.home, '.dobius', fileName)
+}
+
+function writeKeyFile(contents: string, fileName?: string): void {
+  mkdirSync(join(testState.home, '.dobius'), { recursive: true })
+  writeFileSync(keyFile(fileName), contents)
 }
 
 function makeFakeStore(voice: Partial<VoiceSettings>) {
@@ -46,6 +58,7 @@ function makeFakeStore(voice: Partial<VoiceSettings>) {
 
 beforeEach(() => {
   testState.home = mkdtempSync(join(tmpdir(), 'dobius-elevenlabs-key-'))
+  testState.isPackaged = true
   safeStorageMock.isEncryptionAvailable.mockReset().mockReturnValue(true)
   safeStorageMock.encryptString
     .mockReset()
@@ -64,7 +77,8 @@ describe('ElevenLabs key store (#24, #25)', () => {
     const store = await loadStoreModule()
     expect(store.saveElevenLabsApiKey(`  ${KEY}  `)).toEqual({
       configured: true,
-      sessionOnly: false
+      sessionOnly: false,
+      unreadable: false
     })
     expect(readFileSync(keyFile(), 'utf8')).toBe(`enc:${KEY}`)
 
@@ -76,7 +90,7 @@ describe('ElevenLabs key store (#24, #25)', () => {
     safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
     const store = await loadStoreModule()
 
-    expect(store.saveElevenLabsApiKey(KEY)).toEqual({ configured: true, sessionOnly: true })
+    expect(store.saveElevenLabsApiKey(KEY)).toEqual({ configured: true, sessionOnly: true, unreadable: false })
     expect(existsSync(keyFile())).toBe(false)
     expect(store.readElevenLabsApiKey()).toBe(KEY)
   })
@@ -160,5 +174,127 @@ describe('migrateElevenLabsKeyOutOfSettings (#24)', () => {
     expect(keyStore.migrateElevenLabsKeyOutOfSettings(settingsStore)).toBe('none')
     expect(settingsStore.updateSettings).not.toHaveBeenCalled()
     expect(existsSync(keyFile())).toBe(false)
+  })
+})
+
+describe('ElevenLabs key store review fixes (F1-F3)', () => {
+  it('F1: keeps the settings key when the written file does not decrypt back to it', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    safeStorageMock.decryptString.mockImplementation(() => 'something-else')
+    const keyStore = await loadStoreModule()
+    const settingsStore = makeFakeStore({ elevenlabsApiKey: KEY })
+
+    expect(keyStore.migrateElevenLabsKeyOutOfSettings(settingsStore)).toBe('kept-in-settings')
+
+    expect(settingsStore.updateSettings).not.toHaveBeenCalled()
+    expect(existsSync(keyFile())).toBe(false)
+    expect(existsSync(`${keyFile()}.verify`)).toBe(false)
+    expect(keyStore.resolveElevenLabsApiKey(settingsStore.getSettings().voice)).toBe(KEY)
+    warn.mockRestore()
+  })
+
+  it('F1: leaves the previous key file byte-identical when the new one does not verify', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    writeKeyFile('enc:previous-key')
+    safeStorageMock.decryptString.mockImplementation(() => 'previous-key')
+    const keyStore = await loadStoreModule()
+    const settingsStore = makeFakeStore({ elevenlabsApiKey: KEY })
+
+    expect(keyStore.migrateElevenLabsKeyOutOfSettings(settingsStore)).toBe('kept-in-settings')
+
+    expect(readFileSync(keyFile(), 'utf8')).toBe('enc:previous-key')
+    expect(settingsStore.updateSettings).not.toHaveBeenCalled()
+    // The newer settings key, not the older file, is the one in use.
+    expect(keyStore.resolveElevenLabsApiKey(settingsStore.getSettings().voice)).toBe(KEY)
+    warn.mockRestore()
+  })
+
+  it('F1: keeps the settings key when the written file cannot be read back', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    safeStorageMock.decryptString.mockImplementation(() => {
+      throw new Error('keychain denied')
+    })
+    const keyStore = await loadStoreModule()
+    const settingsStore = makeFakeStore({ elevenlabsApiKey: KEY })
+
+    expect(keyStore.migrateElevenLabsKeyOutOfSettings(settingsStore)).toBe('kept-in-settings')
+    expect(settingsStore.updateSettings).not.toHaveBeenCalled()
+    expect(existsSync(keyFile())).toBe(false)
+    warn.mockRestore()
+  })
+
+  it('F2: an unpackaged build uses its own key file and never touches the packaged one', async () => {
+    writeKeyFile('enc:packaged-key')
+    testState.isPackaged = false
+    const keyStore = await loadStoreModule()
+
+    keyStore.saveElevenLabsApiKey(KEY)
+    expect(readFileSync(keyFile('elevenlabs-token.dev.enc'), 'utf8')).toBe(`enc:${KEY}`)
+    keyStore.clearElevenLabsApiKey()
+
+    expect(readFileSync(keyFile(), 'utf8')).toBe('enc:packaged-key')
+    expect(existsSync(keyFile('elevenlabs-token.dev.enc'))).toBe(false)
+  })
+
+  it('F2: migration never overwrites an existing key file it cannot decrypt', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    writeKeyFile('foreign-ciphertext')
+    safeStorageMock.decryptString.mockImplementation((value: Buffer) => {
+      const text = value.toString('utf8')
+      if (!text.startsWith('enc:')) {
+        throw new Error('wrong keychain identity')
+      }
+      return text.slice('enc:'.length)
+    })
+    const keyStore = await loadStoreModule()
+    const settingsStore = makeFakeStore({ elevenlabsApiKey: KEY })
+
+    expect(keyStore.migrateElevenLabsKeyOutOfSettings(settingsStore)).toBe('kept-in-settings')
+    expect(keyStore.migrateElevenLabsKeyOutOfSettings(settingsStore)).toBe('kept-in-settings')
+
+    expect(readFileSync(keyFile(), 'utf8')).toBe('foreign-ciphertext')
+    expect(settingsStore.updateSettings).not.toHaveBeenCalled()
+    expect(keyStore.resolveElevenLabsApiKey(settingsStore.getSettings().voice)).toBe(KEY)
+    const unreadableWarnings = warn.mock.calls.filter((call) =>
+      String(call[0]).includes('existing key file cannot be decrypted')
+    )
+    expect(unreadableWarnings).toHaveLength(1)
+    warn.mockRestore()
+  })
+
+  it('F3: status reports a key file this build cannot decrypt as unreadable', async () => {
+    writeKeyFile('foreign-ciphertext')
+    safeStorageMock.decryptString.mockImplementation(() => {
+      throw new Error('wrong keychain identity')
+    })
+    const keyStore = await loadStoreModule()
+
+    expect(keyStore.getElevenLabsApiKeyStatus()).toEqual({
+      configured: true,
+      sessionOnly: false,
+      unreadable: true
+    })
+  })
+
+  it('F3: status is not unreadable for a readable key file', async () => {
+    writeKeyFile(`enc:${KEY}`)
+    const keyStore = await loadStoreModule()
+
+    expect(keyStore.getElevenLabsApiKeyStatus()).toEqual({
+      configured: true,
+      sessionOnly: false,
+      unreadable: false
+    })
+  })
+})
+
+describe('resolveElevenLabsApiKey precedence', () => {
+  it('a key saved this session wins over an unmigrated settings key', async () => {
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
+    const keyStore = await loadStoreModule()
+
+    keyStore.saveElevenLabsApiKey('sk_fake_session_key')
+
+    expect(keyStore.resolveElevenLabsApiKey({ elevenlabsApiKey: KEY })).toBe('sk_fake_session_key')
   })
 })

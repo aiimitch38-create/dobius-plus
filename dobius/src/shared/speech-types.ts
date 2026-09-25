@@ -92,6 +92,15 @@ export type VoiceSettings = {
   elevenlabsAgentId?: string
 }
 
+/** ElevenLabs key status sent to Settings; the key itself never is (#24). */
+export type ElevenLabsKeyStatus = {
+  configured: boolean
+  /** Key could not be encrypted: works until quit, not on disk. */
+  sessionOnly: boolean
+  /** A key file exists but this build cannot decrypt it. */
+  unreadable: boolean
+}
+
 /** HUD-facing conversation phase for the Jarvis voice loop. */
 export type JarvisConversationPhase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error'
 

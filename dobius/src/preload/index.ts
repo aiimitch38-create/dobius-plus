@@ -168,6 +168,7 @@ import type {
 } from '../shared/agent-status-types'
 import type { AgentInterruptInferenceRequest } from '../shared/agent-interrupt-intent'
 import type {
+  ElevenLabsKeyStatus,
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
@@ -4491,11 +4492,11 @@ const api = {
       ipcRenderer.invoke('jarvis:status'),
     agentSignedUrl: (): Promise<{ ok: true; url: string } | { ok: false; error: string }> =>
       ipcRenderer.invoke('jarvis:agentSignedUrl'),
-    getElevenLabsKeyStatus: (): Promise<{ configured: boolean; sessionOnly: boolean }> =>
+    getElevenLabsKeyStatus: (): Promise<ElevenLabsKeyStatus> =>
       ipcRenderer.invoke('jarvis:getElevenLabsKeyStatus'),
-    saveElevenLabsKey: (apiKey: string): Promise<{ configured: boolean; sessionOnly: boolean }> =>
+    saveElevenLabsKey: (apiKey: string): Promise<ElevenLabsKeyStatus> =>
       ipcRenderer.invoke('jarvis:saveElevenLabsKey', apiKey),
-    clearElevenLabsKey: (): Promise<{ configured: boolean; sessionOnly: boolean }> =>
+    clearElevenLabsKey: (): Promise<ElevenLabsKeyStatus> =>
       ipcRenderer.invoke('jarvis:clearElevenLabsKey'),
     askAdamText: (utterance: string): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:askAdamText', utterance),
