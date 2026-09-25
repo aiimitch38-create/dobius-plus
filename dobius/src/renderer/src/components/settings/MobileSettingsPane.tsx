@@ -4,6 +4,7 @@ import { MobilePane } from './MobilePane'
 import { ImessageBridgeSetting } from './ImessageBridgeSetting'
 import { isMacUserAgent } from '@/components/terminal-pane/pane-helpers'
 import {
+  getMobileListenerSearchEntry,
   getMobileOverviewSearchEntry,
   getMobileSidebarShortcutSearchEntry,
   getMobileSettingsPaneSearchEntries
@@ -19,6 +20,7 @@ const DOBIUS_ANDROID_APK_URL = 'https://github.com/statusdigitalmarketing/dobius
 
 export function MobileSettingsPane(): React.JSX.Element {
   const showMobileButton = useAppStore((s) => s.settings?.showMobileButton !== false)
+  const mobileListenerEnabled = useAppStore((s) => s.settings?.mobileListenerEnabled === true)
   const updateSettings = useAppStore((s) => s.updateSettings)
 
   return (
@@ -84,6 +86,22 @@ export function MobileSettingsPane(): React.JSX.Element {
           )}
           checked={showMobileButton}
           onChange={() => updateSettings({ showMobileButton: !showMobileButton })}
+        />
+      </SearchableSetting>
+
+      <SearchableSetting
+        title={getMobileListenerSearchEntry().title}
+        description={getMobileListenerSearchEntry().description}
+        keywords={getMobileListenerSearchEntry().keywords}
+      >
+        {/* Why: main reads this once at startup (BUILD-003), so the label must
+            say a change only applies on the next launch. Saved through the
+            desktop settings IPC; the remote settings.update RPC rejects it. */}
+        <SettingsSwitchRow
+          label={getMobileListenerSearchEntry().title}
+          description={getMobileListenerSearchEntry().description}
+          checked={mobileListenerEnabled}
+          onChange={() => void updateSettings({ mobileListenerEnabled: !mobileListenerEnabled })}
         />
       </SearchableSetting>
 

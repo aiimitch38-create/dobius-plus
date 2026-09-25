@@ -3170,7 +3170,11 @@ export type PreloadApi = {
     revokeDevice: (args: { deviceId: string }) => Promise<{ revoked: boolean }>
     listRuntimeAccessGrants: () => Promise<{ grants: RuntimeAccessGrant[] }>
     revokeRuntimeAccess: (args: { deviceId: string }) => Promise<{ revoked: boolean }>
-    isWebSocketReady: () => Promise<{ ready: boolean; endpoint: string | null }>
+    isWebSocketReady: () => Promise<{
+      ready: boolean
+      endpoint: string | null
+      startedWithListenerEnabled: boolean
+    }>
   }
   speech: {
     getCatalog: () => Promise<SpeechModelManifest[]>

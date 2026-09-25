@@ -487,6 +487,12 @@ export class DobiusRuntimeRpcServer {
     return true
   }
 
+  // Why: lets the UI tell "listener off at launch" apart from "on at launch
+  // but failed to start" (e.g. port in use), which both have no endpoint.
+  isWebSocketEnabled(): boolean {
+    return this.enableWebSocket
+  }
+
   getWebSocketEndpoint(): string | null {
     const ws = this.transports.find((t) => t.kind === 'websocket')
     return ws?.endpoint ?? null

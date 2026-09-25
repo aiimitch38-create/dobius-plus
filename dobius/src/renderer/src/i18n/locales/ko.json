@@ -5619,7 +5619,10 @@
           "aa1263e881": "휴대폰 크기로 유지(기본값)",
           "6436e56546": "모바일 페어링을 위한 QR 코드",
           "1b1b70279a": "아직 페어링된 기기가 없습니다.",
-          "1592afcc7a": "아직 페어링된 기기가 없습니다. Dobius+ 모바일 앱으로 QR 코드를 스캔하세요."
+          "1592afcc7a": "아직 페어링된 기기가 없습니다. Dobius+ 모바일 앱으로 QR 코드를 스캔하세요.",
+          "listenerPendingRestart": "The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.",
+          "listenerOff": "The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.",
+          "listenerFailedToStart": "The phone listener was on at launch but failed to start (see logs). Restart Dobius+ to try again."
         },
         "MobileSettingsPane": {
           "9a3c280e49": "GitHub 릴리스",
@@ -7753,7 +7756,14 @@
               "671eb4173c": "휴대폰에서 terminals과 agents를 제어하세요.",
               "ffd52a96e4": "모바일",
               "1de96ec8a6": "Dobius+ Mobile 버튼 표시",
-              "682293cadf": "왼쪽 사이드바 상단에 Dobius+ Mobile 버튼을 표시합니다."
+              "682293cadf": "왼쪽 사이드바 상단에 Dobius+ Mobile 버튼을 표시합니다.",
+              "listenerTitle": "Phone Listener (takes effect on next launch)",
+              "listenerDescription": "Lets phones on your local network connect to Dobius+. Changes take effect the next time Dobius+ starts.",
+              "listenerKeywordListener": "listener",
+              "listenerKeywordNetwork": "local network",
+              "listenerKeywordLan": "lan",
+              "listenerKeywordPhone": "phone",
+              "listenerKeywordWebsocket": "websocket"
             }
           }
         },
@@ -8873,7 +8883,9 @@
           "buildAgentLabel": "Build agent",
           "buildAgentDescription": "Terminal agent used when dispatch_build creates a build worktree.",
           "intervalLabel": "Poll interval",
-          "intervalDescription": "Minutes between Asana refreshes while Auto Mode is enabled."
+          "intervalDescription": "Minutes between Asana refreshes while Auto Mode is enabled.",
+          "autoModeBlockedPaused": "Blocked: crew paused. Resume the crew on the Agents page to run Auto Mode.",
+          "autoModeBlockedUnreadable": "Blocked: crew control file could not be read ({{filePath}}). Fix or remove it, then resume the crew."
         },
         "asana": {
           "search": {

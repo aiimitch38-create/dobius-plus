@@ -279,6 +279,23 @@ describe('client UI RPC methods', () => {
     expect(response).toMatchObject({ ok: true, result: { ui: updated } })
   })
 
+  it('rejects remote attempts to turn on the phone listener', async () => {
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      updateClientSettings: vi.fn()
+    } as unknown as DobiusRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: CLIENT_UI_METHODS })
+
+    // Why: a paired phone must never be able to widen LAN exposure; the switch
+    // is desktop-only (renderer settings IPC), and read once at startup.
+    const response = await dispatcher.dispatch(
+      makeRequest('settings.update', { mobileListenerEnabled: true })
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'invalid_argument' } })
+    expect(runtime.updateClientSettings).not.toHaveBeenCalled()
+  })
+
   it('rejects unknown and malformed UI update fields', async () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
