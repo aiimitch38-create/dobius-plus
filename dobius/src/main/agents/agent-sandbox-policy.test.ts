@@ -1,16 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-const mocks = vi.hoisted(() => ({ userDataRoot: '' }))
-vi.mock('../storage/user-data-root', () => ({ getUserDataRoot: () => mocks.userDataRoot }))
-
-import {
-  buildAgentRunSandboxPolicy,
-  resolveAgentRunSandboxPolicy,
-  type AgentSandboxContext
-} from './agent-sandbox-policy'
+import { describe, expect, it } from 'vitest'
+import { buildAgentRunSandboxPolicy, type AgentSandboxContext } from './agent-sandbox-policy'
 
 const HOME = '/home/carson'
 const USER_DATA = '/home/carson/Library/Application Support/dobius-plus'
@@ -22,10 +12,21 @@ function context(overrides: Partial<AgentSandboxContext> = {}): AgentSandboxCont
     homeDir: HOME,
     userDataDir: USER_DATA,
     claudeConfigDir: null,
+    cwd: `${HOME}/code/repo-worktrees/feature`,
+    gitDirs: [`${HOME}/code/repo-worktrees/feature`, `${HOME}/code/repo/.git`],
     otherAgentEntries: ['nova', '_crew'],
-    tempDirs: ['/tmp'],
+    dobiusEntries: ['agent-hooks', 'asana-token.enc', 'agents-config.json'],
+    tempDirs: ['/tmp', '/private/var/folders'],
+    executableDirs: [`${HOME}/.local/bin`, `${HOME}/.hermes/node/lib/node_modules/@anthropic-ai/claude-code`],
     ...overrides
   }
+}
+
+// Expected permission-rule spelling: `~/rel` under home, `//abs` elsewhere.
+function rule(tool: 'Read' | 'Edit', target: string): string {
+  return target.startsWith(`${HOME}/`)
+    ? `${tool}(~/${target.slice(HOME.length + 1)})`
+    : `${tool}(/${target})`
 }
 
 function isWithin(target: string, root: string): boolean {
@@ -56,8 +57,8 @@ describe('buildAgentRunSandboxPolicy', () => {
     const { sandbox, disallowedTools } = buildAgentRunSandboxPolicy(context())
     for (const other of ['nova', '_crew']) {
       expect(sandbox.filesystem?.denyWrite).toContain(`${AGENTS}/${other}`)
-      expect(disallowedTools).toContain(`Read(/${AGENTS}/${other}/**)`)
-      expect(disallowedTools).toContain(`Edit(/${AGENTS}/${other}/**)`)
+      expect(disallowedTools).toContain(rule('Read', `${AGENTS}/${other}/**`))
+      expect(disallowedTools).toContain(rule('Edit', `${AGENTS}/${other}/**`))
     }
   })
 
@@ -75,7 +76,7 @@ describe('buildAgentRunSandboxPolicy', () => {
     )
     for (const file of [`${HOME}/.claude/.credentials*`, '/accounts/work/.claude/.credentials*']) {
       expect(sandbox.filesystem?.denyRead).toContain(file)
-      expect(disallowedTools).toContain(`Read(/${file})`)
+      expect(disallowedTools).toContain(rule('Read', file))
     }
   })
 
@@ -94,51 +95,109 @@ describe('buildAgentRunSandboxPolicy', () => {
         `${USER_DATA}/Partitions`
       ])
     )
-    expect(disallowedTools).toContain(`Read(/${HOME}/Library/Messages/**)`)
-    expect(disallowedTools).toContain(`Read(/${USER_DATA}/claude-accounts/**)`)
+    expect(disallowedTools).toContain(rule('Read', `${HOME}/Library/Messages/**`))
+    expect(disallowedTools).toContain(rule('Read', `${USER_DATA}/claude-accounts/**`))
     // The runtime file the dobius CLI needs stays readable.
     expect(denyRead.some((entry) => isWithin(`${USER_DATA}/dobius-runtime.json`, entry))).toBe(
       false
     )
   })
 
-  it('keeps the working folder, caches and temp writable', () => {
+  it('lets Bash write only the cwd, the repo git dirs, the own agent folder, temp and caches', () => {
     const { sandbox } = buildAgentRunSandboxPolicy(context())
     const allowWrite = sandbox.filesystem?.allowWrite ?? []
     const denyWrite = sandbox.filesystem?.denyWrite ?? []
+    const writable = (target: string) =>
+      allowWrite.some((root) => isWithin(target, root)) &&
+      !denyWrite.some((root) => isWithin(target, root))
+    expect(allowWrite).not.toContain(HOME)
     for (const target of [
-      `${HOME}/code/repo`,
-      `${HOME}/code/repo-worktrees/feature`,
+      `${HOME}/code/repo-worktrees/feature/src/a.ts`,
+      `${HOME}/code/repo/.git/objects/ab`,
       `${HOME}/.npm/_cacache`,
-      `${HOME}/Library/Caches/pnpm`,
+      `${HOME}/.pnpm-store/v3`,
+      `${HOME}/Library/pnpm/store`,
+      `${HOME}/Library/Caches/node-gyp`,
+      `${HOME}/.cache/corepack`,
       `${AGENTS}/atlas/MEMORY.md`,
-      '/tmp/build'
+      '/tmp/build',
+      '/private/var/folders/xy/T/vitest'
     ]) {
-      expect(allowWrite.some((root) => isWithin(target, root))).toBe(true)
-      expect(denyWrite.some((root) => isWithin(target, root))).toBe(false)
+      expect(writable(target)).toBe(true)
+    }
+    for (const target of [
+      `${HOME}/otherproj/src/a.ts`,
+      `${HOME}/.zshrc`,
+      `${HOME}/.dobius/agent-hooks/claude-hook.sh`,
+      `${HOME}/Library/LaunchAgents/x.plist`
+    ]) {
+      expect(writable(target)).toBe(false)
     }
   })
 
-  it('denies writes to dobius launchers, /Applications and Claude settings files', () => {
-    const { sandbox, disallowedTools } = buildAgentRunSandboxPolicy(context())
-    expect(sandbox.filesystem?.denyWrite).toEqual(
-      expect.arrayContaining([
-        `${HOME}/.local/bin/dobius-*`,
-        '/Applications',
-        `${HOME}/.claude/settings.json`,
-        `${HOME}/.claude/settings.local.json`,
-        `${HOME}/.claude.json`
-      ])
+  it('protects everything that later runs outside the sandbox, for Bash and for Write/Edit', () => {
+    const { sandbox, disallowedTools } = buildAgentRunSandboxPolicy(
+      context({ claudeConfigDir: '/accounts/work/.claude' })
     )
+    const protectedTargets = [
+      `${HOME}/.dobius/agent-hooks`,
+      `${HOME}/.dobius/agents-config.json`,
+      USER_DATA,
+      `${HOME}/.claude/settings.json`,
+      `${HOME}/.claude/hooks`,
+      `${HOME}/.claude/skills`,
+      `${HOME}/.claude/CLAUDE.md`,
+      '/accounts/work/.claude/settings.json',
+      '/accounts/work/.claude/hooks',
+      `${HOME}/.claude.json`,
+      `${HOME}/.zshrc`,
+      `${HOME}/.bash_profile`,
+      `${HOME}/.profile`,
+      `${HOME}/.gitconfig`,
+      `${HOME}/.config/git`,
+      `${HOME}/.ssh`,
+      `${HOME}/.npmrc`,
+      `${HOME}/.local/bin`,
+      `${HOME}/Library/LaunchAgents`,
+      `${HOME}/.hermes/node/lib/node_modules/@anthropic-ai/claude-code`,
+      '/Applications'
+    ]
+    for (const target of protectedTargets) {
+      expect(sandbox.filesystem?.denyWrite).toContain(target)
+      expect(disallowedTools).toContain(rule('Edit', target))
+      expect(disallowedTools).toContain(rule('Edit', `${target}/**`))
+    }
+    for (const glob of [`${HOME}/**/.claude/settings*.json`, `${HOME}/**/.mcp.json`]) {
+      expect(sandbox.filesystem?.denyWrite).toContain(glob)
+      expect(disallowedTools).toContain(rule('Edit', glob))
+    }
     expect(disallowedTools).toEqual(
       expect.arrayContaining([
-        `Edit(/${HOME}/.local/bin/dobius-*)`,
-        'Edit(//Applications/**)',
-        `Edit(/${HOME}/.claude/settings.json)`,
         'Edit(**/.claude/settings.json)',
-        'Edit(**/.claude/settings.local.json)'
+        'Edit(**/.claude/settings.local.json)',
+        'Edit(**/.mcp.json)'
       ])
     )
+    // The CLI's own transcripts and memory stay writable for the file tools.
+    expect(disallowedTools.some((rule) => rule.includes('/.claude/projects'))).toBe(false)
+  })
+
+  it('refuses the keychain secret-printing security subcommands', () => {
+    const { disallowedTools } = buildAgentRunSandboxPolicy(context())
+    expect(disallowedTools).toEqual(
+      expect.arrayContaining([
+        'Bash(security find-generic-password:*)',
+        'Bash(security find-internet-password:*)',
+        'Bash(security dump-keychain:*)',
+        'Bash(security export:*)'
+      ])
+    )
+  })
+
+  it('denies reading agent-folder backups', () => {
+    const { sandbox, disallowedTools } = buildAgentRunSandboxPolicy(context())
+    expect(sandbox.filesystem?.denyRead).toContain(`${HOME}/.dobius/agents-*`)
+    expect(disallowedTools).toContain(rule('Read', `${HOME}/.dobius/agents-*/**`))
   })
 
   it('keeps every public host reachable and unix sockets / local ports usable', () => {
@@ -150,51 +209,20 @@ describe('buildAgentRunSandboxPolicy', () => {
     })
   })
 
+  it('spells rules under home as ~/ paths and others as //absolute paths', () => {
+    const { disallowedTools } = buildAgentRunSandboxPolicy(
+      context({ claudeConfigDir: '/accounts/work/.claude' })
+    )
+    expect(disallowedTools).toContain('Edit(~/Library/Application Support/dobius-plus/**)')
+    expect(disallowedTools).toContain('Read(~/.dobius/agents/nova/**)')
+    expect(disallowedTools).toContain('Edit(//accounts/work/.claude/hooks/**)')
+    expect(disallowedTools).toContain('Edit(//Applications/**)')
+    expect(disallowedTools.some((entry) => entry.includes(`(/${HOME}`))).toBe(false)
+  })
+
   it('rejects an agent id that is not a single safe path segment', () => {
     expect(() => buildAgentRunSandboxPolicy(context({ agentId: '../nova' }))).toThrow(
       /invalid agent id/
     )
-  })
-})
-
-describe('resolveAgentRunSandboxPolicy', () => {
-  let home: string
-
-  beforeEach(() => {
-    home = mkdtempSync(path.join(os.tmpdir(), 'dobius-sbx-'))
-    vi.spyOn(os, 'homedir').mockReturnValue(home)
-    mocks.userDataRoot = path.join(home, 'user-data')
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-    rmSync(home, { recursive: true, force: true })
-  })
-
-  it('lists the other agents from the agents folder on disk', () => {
-    for (const id of ['atlas', 'nova', '_crew']) {
-      mkdirSync(path.join(home, '.dobius', 'agents', id), { recursive: true })
-    }
-    const { sandbox } = resolveAgentRunSandboxPolicy('atlas')
-    const agents = path.join(home, '.dobius', 'agents')
-    expect(sandbox.filesystem?.denyWrite).toEqual(
-      expect.arrayContaining([path.join(agents, 'nova'), path.join(agents, '_crew')])
-    )
-    expect(sandbox.filesystem?.denyWrite).not.toContain(path.join(agents, 'atlas'))
-    expect(sandbox.filesystem?.denyRead).toContain(
-      path.join(mocks.userDataRoot, 'claude-accounts')
-    )
-    expect(sandbox.filesystem?.allowWrite).toContain(os.tmpdir())
-  })
-
-  it('treats a missing agents folder as no other agents', () => {
-    const { sandbox } = resolveAgentRunSandboxPolicy('atlas')
-    expect(sandbox.filesystem?.denyRead).toContain(path.join(home, '.dobius', 'agents'))
-  })
-
-  it('fails closed when the agents folder cannot be listed', () => {
-    mkdirSync(path.join(home, '.dobius'), { recursive: true })
-    writeFileSync(path.join(home, '.dobius', 'agents'), 'not a folder')
-    expect(() => resolveAgentRunSandboxPolicy('atlas')).toThrow(/cannot list the agents folder/)
   })
 })

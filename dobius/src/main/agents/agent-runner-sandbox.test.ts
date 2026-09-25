@@ -71,7 +71,12 @@ type CapturedOptions = {
     enabled?: boolean
     allowUnsandboxedCommands?: boolean
     failIfUnavailable?: boolean
-    filesystem?: { allowRead?: string[]; denyRead?: string[]; denyWrite?: string[] }
+    filesystem?: {
+      allowRead?: string[]
+      allowWrite?: string[]
+      denyRead?: string[]
+      denyWrite?: string[]
+    }
   }
   disallowedTools?: string[]
   permissionMode?: string
@@ -109,7 +114,8 @@ function expectConfined(options: CapturedOptions): void {
   expect(options.sandbox?.filesystem?.denyRead).toContain(
     path.join(home, 'work-claude', '.credentials*')
   )
-  expect(options.disallowedTools).toContain(`Read(/${path.join(agents, 'nova', '**')})`)
+  expect(options.disallowedTools).toContain('Read(~/.dobius/agents/nova/**)')
+  expect(options.sandbox?.filesystem?.allowWrite).not.toContain(home)
 }
 
 beforeAll(() => {

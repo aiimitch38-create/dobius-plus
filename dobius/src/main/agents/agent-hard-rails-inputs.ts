@@ -1,3 +1,5 @@
+import { readsKeychainSecret } from './agent-hard-rails-keychain'
+
 // Which strings of a tool call's input the hard rails inspect.
 
 function collectStrings(value: unknown, strings: string[] = []): string[] {
@@ -28,7 +30,8 @@ export function rawStringMentionsCredential(value: string): boolean {
     /(^|[\s"'=:/\\])\.credentials\.json(?=$|[\s"'`;&|)])/i.test(value) ||
     /\.claude[/\\]credentials[^\s"'`;&|]*/i.test(value) ||
     /\.dobius[/\\][^\s"'`;&|]*[/\\]token[^\s"'`;&|]*/i.test(value) ||
-    /Library[/\\]Keychains(?:[/\\]|\s|$)/i.test(value)
+    /Library[/\\]Keychains(?:[/\\]|\s|$)/i.test(value) ||
+    readsKeychainSecret(value)
   )
 }
 
