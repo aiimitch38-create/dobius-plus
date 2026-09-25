@@ -2,19 +2,23 @@
 
 ## Canonical Workspace and Installed App
 
-This `dobius/` directory is the app source inside the active Dobius+ repo:
-`/Users/bayou/Projects (Code)/dobius-plus`.
+This `dobius/` directory is the app source (Dobius+ V2) inside the one real
+Dobius+ repo: `~/Projects (Code)/Dobius/dobius-plus`.
 
-- Edit this copy in place. Do not switch to `~/DobiusPlus` or sibling folders
-  such as `dobius-plus-redesign/`, `dobius-shell-rebrand/`, or
-  `dobius-parallel-worktrees/` unless the user explicitly says to.
-- Install builds into the existing local app at `/Applications/Dobius+.app`.
-  Do not create a side app, renamed app, or install from another checkout.
+- Edit this copy in place (or a git worktree of this repo). Do not switch to
+  `~/Projects (Code)/dobius-plus/` (older 1.0.x lane checkouts) or side copies
+  such as `dobius-plus-redesign`, `dobius-shell-rebrand`, or
+  `dobius-parallel-worktrees` unless the user explicitly says to.
+- Install builds into the existing local app at `/Applications/Dobius+.app`,
+  only through the gated installer, from the repo root:
+  `pnpm --dir dobius run build:unpack`, then
+  `scripts/install-dobius-gated.sh dobius/dist/mac-arm64/Dobius+.app`.
+  Flags, exit codes and rollback are in `../RELEASING.md`.
 - Work local-first: build, test, and install on this machine until the app is
   in a good working state. Push to `statusdigitalmarketing/dobius-plus` and
   open a PR only after reaching a stable checkpoint.
-- Before installing, verify the repo root with `git rev-parse --show-toplevel`
-  and make sure it is `/Users/bayou/Projects (Code)/dobius-plus`.
+- Before installing, verify with `git rev-parse --show-toplevel` that you are
+  in that repo (or one of its worktrees).
 
 ## Design System
 
