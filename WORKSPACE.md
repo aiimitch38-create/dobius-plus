@@ -137,8 +137,8 @@ Use `dobius/` as the only active application surface.
 6. **Install only from this checkout.** Confirm `git rev-parse --show-toplevel`,
    build with `pnpm --dir dobius build:unpack`, and use
    `scripts/install-dobius-gated.sh dobius/dist/mac-arm64/Dobius+.app`.
-   Verify the installed bundle's version, executable, process, and
-   `INSTALL-PROVENANCE.json` after relaunch.
+   Verify the installed bundle's version, executable, process, and its
+   install record (`INSTALL-PROVENANCE.json`, see `RELEASING.md`) after relaunch.
 
 ## Architecture map
 

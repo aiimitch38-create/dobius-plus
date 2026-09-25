@@ -2,13 +2,17 @@
 // sets DOBIUS_INSTALL_DEST inside a temp root (never /Applications) and a temp
 // HOME, so the script never quits, kills, relaunches or registers the real app.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   chmodSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   symlinkSync,
   writeFileSync
@@ -114,7 +118,14 @@ export const asarTagCommand = (asarPath) =>
 
 export function makeBundle(
   bundlePath,
-  { version = '2.0.0', bundleVersion = null, asar = 'v1', withAsar = true, omit = [] } = {}
+  {
+    version = '2.0.0',
+    bundleVersion = null,
+    asar = 'v1',
+    withAsar = true,
+    omit = [],
+    signed = false
+  } = {}
 ) {
   mkdirSync(path.join(bundlePath, 'Contents', 'MacOS'), { recursive: true })
   mkdirSync(path.join(bundlePath, 'Contents', 'Resources'), { recursive: true })
@@ -157,8 +168,45 @@ ${versionKey}${bundleVersionKey}</dict></plist>
     symlinkSync('A', path.join(framework, 'Versions', 'Current'))
     symlinkSync('Versions/Current/Electron Framework', path.join(framework, 'Electron Framework'))
   }
+  if (signed) {
+    signBundle(bundlePath)
+  }
   return bundlePath
 }
+
+// BUILD-044B: an ad-hoc signed bundle, so `codesign --verify --deep --strict`
+// can prove the installer leaves the seal intact. Every nested code item gets
+// a real Mach-O (a copy of /bin/echo) and the framework its Info.plist.
+function signBundle(bundlePath) {
+  const framework = path.join(bundlePath, 'Contents', 'Frameworks', 'Electron Framework.framework')
+  const versionA = path.join(framework, 'Versions', 'A')
+  for (const rel of [
+    path.join(versionA, 'Electron Framework'),
+    ...MANIFEST_EXECUTABLES.map((exe) => path.join(bundlePath, exe))
+  ]) {
+    copyFileSync('/bin/echo', rel)
+    chmodSync(rel, 0o755)
+  }
+  rmSync(path.join(versionA, '_CodeSignature'), { recursive: true, force: true })
+  mkdirSync(path.join(versionA, 'Resources'))
+  writeFileSync(
+    path.join(versionA, 'Resources', 'Info.plist'),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>Electron Framework</string>
+<key>CFBundleIdentifier</key><string>com.example.dobius-installer-fixture.framework</string>
+<key>CFBundlePackageType</key><string>FMWK</string>
+</dict></plist>
+`
+  )
+  symlinkSync('Versions/Current/Resources', path.join(framework, 'Resources'))
+  execFileSync('codesign', ['--force', '--deep', '--sign', '-', bundlePath], { stdio: 'ignore' })
+  expect(codesignVerify(bundlePath).status).toBe(0)
+}
+
+export const codesignVerify = (bundlePath) =>
+  spawnSync('codesign', ['--verify', '--deep', '--strict', bundlePath], { encoding: 'utf8' })
 
 export function envFor(root, extra = {}) {
   return {
@@ -238,9 +286,58 @@ export function makeRepo(root) {
   return repo
 }
 
-export const provenanceOf = (bundle) =>
-  JSON.parse(
-    readFileSync(path.join(bundle, 'Contents', 'Resources', 'INSTALL-PROVENANCE.json'), 'utf8')
+// BUILD-044B: install records live outside the bundles. The installed app's is
+// <backups>/INSTALL-PROVENANCE.json, the rollback copy's sits beside it.
+export const backupsOf = (root) => path.join(root, 'backups')
+export const rollbackOf = (root) => path.join(backupsOf(root), 'Dobius+.previous')
+export const currentRecordOf = (root) => path.join(backupsOf(root), 'INSTALL-PROVENANCE.json')
+export const rollbackRecordOf = (root) => `${rollbackOf(root)}.INSTALL-PROVENANCE.json`
+export const legacyRecordOf = (bundle) =>
+  path.join(bundle, 'Contents', 'Resources', 'INSTALL-PROVENANCE.json')
+
+export function bundleIdentityOf(bundle) {
+  const result = spawnSync(
+    'python3',
+    [path.join(repoRoot, 'scripts', 'install-record.py'), 'identity', bundle],
+    { encoding: 'utf8' }
   )
+  expect(result.status, result.stderr).toBe(0)
+  return result.stdout.trim()
+}
+
+// The record at recordPath, after checking it belongs to bundle.
+export function recordFor(bundle, recordPath) {
+  const record = JSON.parse(readFileSync(recordPath, 'utf8'))
+  expect(record.bundleIdentity).toBe(bundleIdentityOf(bundle))
+  return record
+}
+
+// The installed app's record: outside the bundle, never inside it.
+export function provenanceOf(bundle) {
+  expect(existsSync(legacyRecordOf(bundle))).toBe(false)
+  return recordFor(bundle, currentRecordOf(path.dirname(path.dirname(bundle))))
+}
+
+// Every path, type, mode, symlink target and file content of a bundle, as one
+// digest: equal digests mean nothing inside the bundle was added or changed.
+export function bundleDigest(bundle) {
+  const digest = createHash('sha256')
+  const walk = (dir) => {
+    for (const name of readdirSync(dir).sort()) {
+      const full = path.join(dir, name)
+      const stat = lstatSync(full)
+      digest.update(`${path.relative(bundle, full)}\0${stat.mode}\0`)
+      if (stat.isSymbolicLink()) {
+        digest.update(`link:${readlinkSync(full)}\0`)
+      } else if (stat.isDirectory()) {
+        walk(full)
+      } else {
+        digest.update(readFileSync(full))
+      }
+    }
+  }
+  walk(bundle)
+  return digest.digest('hex')
+}
 export const distBundle = (root, options) =>
   makeBundle(path.join(root, 'repo', 'dist', 'mac-arm64', 'Dobius+.app'), options)

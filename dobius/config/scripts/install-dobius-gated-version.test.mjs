@@ -351,8 +351,8 @@ describe.runIf(process.platform === 'darwin')(
       shim('pkill', 'exit 0')
       shim('lsregister', 'exit 0')
       shim('open', `echo "$*" >> "${trace}"`)
-      // The first `mkdir -p` after the swap is the rollback move: signal the
-      // installer there, exactly between the swap and the move.
+      // The first `mkdir -p` after the swap (BUILD-044B: the install-record
+      // move, just before the rollback move): signal the installer there.
       shim(
         'mkdir',
         `if [ "$1" = "-p" ] && [ ! -e "${mark}" ]; then touch "${mark}"; kill -TERM "$PPID"; fi\nexec /bin/mkdir "$@"`
@@ -368,6 +368,12 @@ describe.runIf(process.platform === 'darwin')(
       expect(result.status, result.stderr).toBe(130)
       expect(asarOf(dest(root))).toBe('v2')
       expect(asarOf(path.join(root, 'backups', 'Dobius+.previous'))).toBe('v1')
+      // BUILD-044B: the new app's record still lands, though the signal came first.
+      expect(provenanceOf(dest(root))).toMatchObject({ installedBy: 'fixture' })
+      expect(readdirSync(path.join(root, 'backups'))).toEqual([
+        'Dobius+.previous',
+        'INSTALL-PROVENANCE.json'
+      ])
       expect(readdirSync(path.join(root, 'Applications'))).toEqual(['Dobius+.app'])
       expect(existsSync(path.join(root, 'install.lock'))).toBe(false)
       expect(readFileSync(trace, 'utf8').trim()).toBe(

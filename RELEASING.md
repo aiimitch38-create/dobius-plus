@@ -44,18 +44,20 @@ The output path above is for an Apple-silicon Mac (it is the path the retired sc
 `scripts/install-dobius-gated.sh` then:
 
 1. checks that `python3` and its helpers (`scripts/semver-compare.py`, `scripts/source-state.py`,
-   `scripts/bundle-manifest.py`) are present;
+   `scripts/bundle-manifest.py`, `scripts/install-record.py`) are present;
 2. takes the lock `~/.dobius-install.lock` (waits up to 300 s for another install; a stale lock
    is reported, never broken);
 3. refuses a build from another branch than the installed one unless `--take-over`;
 4. refuses a build whose version is not valid SemVer, and one that is OLDER than the installed
    app (SemVer precedence: `2.0.0-rc.1` is older than `2.0.0`) unless `--allow-downgrade`;
-5. copies the build to a stage beside the app, stamps
-   `Contents/Resources/INSTALL-PROVENANCE.json`, and validates the stage (Info.plist, executable,
-   arch, `app.asar`, and every artifact in `scripts/bundle-manifest.py`);
+5. copies the build to a stage beside the app, prepares the install record, and validates the
+   stage (Info.plist, executable, arch, `app.asar`, and every artifact in
+   `scripts/bundle-manifest.py`). Nothing is written into the bundle, so its code signature stays
+   intact;
 6. only then quits the app (the terminal daemon and its shells keep running), swaps the stage in
-   with one atomic rename, keeps ONE rollback copy, removes the `dobius/dist` build copy,
-   re-registers the app with LaunchServices and relaunches it;
+   with one atomic rename, writes the install record, keeps ONE rollback copy (with its record),
+   removes the `dobius/dist` build copy, re-registers the app with LaunchServices and relaunches
+   it;
 7. logs the install to `~/.dobius-install-history.log`.
 
 Any failure before the swap leaves the installed app untouched and running.
@@ -81,7 +83,7 @@ check. Any other option is refused.
 | 6 | Copying the build to the stage failed | untouched |
 | 7 | The staged copy is not a runnable, complete build (lists the missing artifacts) | untouched, never quit |
 | 8 | The atomic swap failed | untouched, relaunched |
-| 9 | `python3` or an installer helper is missing, so the guards cannot run | untouched |
+| 9 | `python3` or an installer helper is missing, or the installed app's record cannot be looked up, so the guards cannot run | untouched |
 | 130 | Interrupted (Ctrl-C or TERM); a partial stage is removed, a swapped-out app is kept as the rollback | relaunched if it was quit |
 
 ### Rollback
@@ -93,6 +95,26 @@ so macOS never registers it as a second app). The installer prints the exact com
 ```bash
 scripts/install-dobius-gated.sh "$HOME/Library/Application Support/dobius-plus-install-backups/Dobius+.previous" --take-over --allow-downgrade
 ```
+
+### Install record
+
+The installer records whose build is installed (branch, commit, repo, dirty, tag, version,
+buildNumber, artifactSha256, install time) OUTSIDE the app, so the app's code signature stays
+valid (`codesign --verify --deep --strict "/Applications/Dobius+.app"` passes):
+
+- the installed app: `~/Library/Application Support/dobius-plus-install-backups/INSTALL-PROVENANCE.json`
+- the rollback copy:
+  `~/Library/Application Support/dobius-plus-install-backups/Dobius+.previous.INSTALL-PROVENANCE.json`. A rollback reinstall
+  takes its source state from this record when the bundle has no build record.
+
+```bash
+cat "$HOME/Library/Application Support/dobius-plus-install-backups/INSTALL-PROVENANCE.json"
+```
+
+Each record carries `bundleIdentity` (a hash of the bundle's Info.plist and code seal, see
+`scripts/install-record.py`); readers use it only for the bundle it names. An app installed
+before this change has its record inside the bundle at `Contents/Resources/INSTALL-PROVENANCE.json`,
+and readers fall back to that.
 
 ### Retired entry points
 
@@ -116,8 +138,8 @@ The installer's own quit uses `pkill -a -x "Dobius\+"` (main app only) and
   look newer.
 - Moving forward (rc.1 → rc.2 → 2.0.0 → 2.0.1) installs with no flag. Reinstalling the same
   version is allowed. Anything older needs `--allow-downgrade`.
-- A release is an annotated tag `v<version>` on a clean commit. The provenance in the installed
-  app (`tag`, `commit`, `dirty`, `version`, `artifactSha256`) lets you check an install against
+- A release is an annotated tag `v<version>` on a clean commit. The install record
+  (`tag`, `commit`, `dirty`, `version`, `artifactSha256`) lets you check an install against
   the tag.
 
 ## Signed release build (other Macs)
