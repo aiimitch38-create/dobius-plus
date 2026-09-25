@@ -12571,7 +12571,9 @@
           "notConnected": "Connect Asana in Settings → Automation to see your build and review lanes.",
           "title": "Tasks",
           "sync": "Sync",
-          "empty": "Nothing here."
+          "empty": "Nothing here.",
+          "requeue": "Re-queue",
+          "confirmRequeue": "Re-queue this task for Asana Auto Mode? It will be triaged again and may start a new build."
         },
         "PromptsPanel": {
           "title": "Prompts",
