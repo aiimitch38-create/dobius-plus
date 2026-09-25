@@ -5,16 +5,18 @@ import { tmpdir } from 'node:os'
 
 const testState = vi.hoisted(() => ({ dir: '' }))
 
+function fakeDecrypt(ciphertext: Buffer): string {
+  const decoded = ciphertext.toString('utf-8')
+  if (!decoded.startsWith('encrypted:')) {
+    throw new Error('invalid ciphertext')
+  }
+  return decoded.slice('encrypted:'.length)
+}
+
 const safeStorageMock = vi.hoisted(() => ({
   isEncryptionAvailable: vi.fn(() => true),
   encryptString: vi.fn((plaintext: string) => Buffer.from(`encrypted:${plaintext}`, 'utf-8')),
-  decryptString: vi.fn((ciphertext: Buffer) => {
-    const decoded = ciphertext.toString('utf-8')
-    if (!decoded.startsWith('encrypted:')) {
-      throw new Error('invalid ciphertext')
-    }
-    return decoded.slice('encrypted:'.length)
-  })
+  decryptString: vi.fn((_ciphertext: Buffer): string => '')
 }))
 
 vi.mock('electron', () => ({
@@ -81,6 +83,7 @@ describe('Store secret persistence fails closed (#25)', () => {
     safeStorageMock.encryptString
       .mockReset()
       .mockImplementation((plaintext: string) => Buffer.from(`encrypted:${plaintext}`, 'utf-8'))
+    safeStorageMock.decryptString.mockReset().mockImplementation(fakeDecrypt)
   })
 
   afterEach(() => {
@@ -106,7 +109,8 @@ describe('Store secret persistence fails closed (#25)', () => {
     expect(store.getUI().browserKagiSessionLink).toBe(KAGI)
     expect(store.getSecretStorageStatus()).toEqual({
       encryptionAvailable: false,
-      sessionOnlySecrets: ['opencodeSessionCookie', 'httpProxyUrl', 'browserKagiSessionLink']
+      sessionOnlySecrets: ['opencodeSessionCookie', 'httpProxyUrl', 'browserKagiSessionLink'],
+      undecryptableSecrets: []
     })
   })
 
@@ -173,7 +177,94 @@ describe('Store secret persistence fails closed (#25)', () => {
     expect(persisted.settings.httpProxyUrl).toBe(encryptedB64(PROXY))
     expect(store.getSecretStorageStatus()).toEqual({
       encryptionAvailable: true,
-      sessionOnlySecrets: []
+      sessionOnlySecrets: [],
+      undecryptableSecrets: []
     })
+  })
+
+  it('does not re-encrypt an unchanged secret on save', async () => {
+    writeDataFileWithEncryptedSecrets()
+    const store = await createStore()
+
+    store.updateSettings({ theme: 'light' })
+    store.flush()
+
+    expect(safeStorageMock.encryptString).not.toHaveBeenCalled()
+    expect(JSON.parse(readRawDataFile()).settings.opencodeSessionCookie).toBe(encryptedB64(COOKIE))
+  })
+
+  it('never uses or re-encrypts a secret it cannot decrypt, and recovers it once the keychain works', async () => {
+    writeDataFileWithEncryptedSecrets()
+    safeStorageMock.decryptString.mockImplementation(() => {
+      throw new Error('keychain access denied')
+    })
+    const store = await createStore()
+
+    expect(store.getSettings().opencodeSessionCookie).toBe('')
+    expect(store.getSettings().httpProxyUrl).toBe('')
+    expect(store.getUI().browserKagiSessionLink).toBeNull()
+    expect(store.getSecretStorageStatus().undecryptableSecrets).toEqual([
+      'opencodeSessionCookie',
+      'httpProxyUrl',
+      'browserKagiSessionLink'
+    ])
+
+    store.updateSettings({ theme: 'light' })
+    store.flush()
+
+    const persisted = JSON.parse(readRawDataFile())
+    expect(persisted.settings.theme).toBe('light')
+    expect(persisted.settings.opencodeSessionCookie).toBe(encryptedB64(COOKIE))
+    expect(persisted.settings.httpProxyUrl).toBe(encryptedB64(PROXY))
+    expect(persisted.ui.browserKagiSessionLink).toBe(encryptedB64(KAGI))
+
+    safeStorageMock.decryptString.mockImplementation(fakeDecrypt)
+    const relaunched = await createStore()
+    expect(relaunched.getSettings().opencodeSessionCookie).toBe(COOKIE)
+    expect(relaunched.getSettings().httpProxyUrl).toBe(PROXY)
+    expect(relaunched.getUI().browserKagiSessionLink).toBe(KAGI)
+  })
+
+  it('keeps an encrypted secret blank and intact when encryption is unavailable at load', async () => {
+    writeDataFileWithEncryptedSecrets()
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
+    const store = await createStore()
+
+    expect(store.getSettings().opencodeSessionCookie).toBe('')
+    store.updateSettings({ theme: 'light' })
+    store.flush()
+
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(true)
+    store.updateSettings({ theme: 'dark' })
+    store.flush()
+
+    expect(JSON.parse(readRawDataFile()).settings.opencodeSessionCookie).toBe(encryptedB64(COOKIE))
+  })
+
+  it('still reads legacy plaintext secrets and encrypts them on the next save', async () => {
+    mkdirSync(testState.dir, { recursive: true })
+    writeFileSync(
+      dataFile(),
+      JSON.stringify({
+        schemaVersion: 1,
+        repos: [],
+        worktreeMeta: {},
+        settings: { httpProxyUrl: PROXY },
+        ui: { browserKagiSessionLink: KAGI },
+        githubCache: { pr: {}, issue: {} },
+        workspaceSession: {}
+      }),
+      'utf-8'
+    )
+    const store = await createStore()
+    expect(store.getSettings().httpProxyUrl).toBe(PROXY)
+    expect(store.getUI().browserKagiSessionLink).toBe(KAGI)
+
+    store.updateSettings({ theme: 'light' })
+    store.flush()
+
+    const raw = readRawDataFile()
+    expectNoPlaintextSecrets(raw, [PROXY, KAGI])
+    expect(JSON.parse(raw).settings.httpProxyUrl).toBe(encryptedB64(PROXY))
   })
 })

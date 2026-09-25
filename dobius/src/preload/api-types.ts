@@ -38,6 +38,7 @@ import type {
   AgentProviderStatusSnapshot
 } from '../shared/agents'
 import type { DobiusPrompt } from '../shared/prompts'
+import type { SecretStorageStatus } from '../shared/secret-storage-status'
 import type { TerminalPaneSplitSource } from '../shared/feature-education-telemetry'
 import type { TaskSourceContext } from '../shared/task-source-context'
 import type { ProjectExecutionRuntimeResolution } from '../shared/project-execution-runtime'
@@ -2094,6 +2095,7 @@ export type PreloadApi = {
   telemetryAcknowledgeBanner: () => Promise<void>
   settings: {
     get: () => Promise<GlobalSettings>
+    getSecretStorageStatus: () => Promise<SecretStorageStatus>
     set: (args: Partial<GlobalSettings>) => Promise<GlobalSettings>
     listFonts: () => Promise<string[]>
     previewGhosttyImport: () => Promise<GhosttyImportPreview>

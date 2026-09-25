@@ -65,6 +65,11 @@ export function registerSettingsHandlers(
     return store.getSettings()
   })
 
+  // Why (#25): read-only; reports field names only, never secret values.
+  ipcMain.handle('settings:getSecretStorageStatus', () => {
+    return store.getSecretStorageStatus()
+  })
+
   ipcMain.handle('settings:set', async (event, args: Partial<GlobalSettings>) => {
     const sanitizedArgs = sanitizeRendererSettingsUpdate(args)
     // Why: Floating Workspace grants are trusted only when written by the

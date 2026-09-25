@@ -53,6 +53,40 @@ Both engine credential owners downgraded to plaintext when Electron `safeStorage
   machine load average 120-200 (parallel builders). Re-running exactly those 14 by name with
   `--testTimeout=180000` → 22 passed (all matching tests), 0 failed.
 
+## Review round 1 (coordinator findings F2, F3)
+- F3, a pre-existing bug that could permanently lose a secret. When `decryptString` threw at load (keychain denied or reset), `decrypt()` handed the
+  ciphertext to the app as if it were plaintext. A later save that could encrypt then encrypted it
+  a second time, and the real secret was lost. Fix:
+  - `decrypt()` → `decryptSecret()`, which returns `{ onDisk, plaintext, kind }`.
+  - `kind` is `encrypted` when decryption worked.
+  - It is `undecryptable` when decryption failed (or encryption is unavailable) and the value is a
+    strict base64 string of at least 24 characters. In that case the value in memory is blank, the
+    blob stays on disk and is never re-encrypted, and a blank save writes the blob back.
+  - Any other value is `legacyPlaintext` (written by a pre-encryption build). It stays readable and
+    is encrypted on the next save that can encrypt.
+  - `secretForDisk()` now writes an unchanged `encrypted` value back verbatim, with no re-encrypt
+    (this also means fewer keychain calls). A value the user types in replaces an undecryptable
+    blob only when that value can be encrypted.
+  - The status gains `undecryptableSecrets`.
+- F2: new read-only IPC `settings:getSecretStorageStatus` (main/ipc/settings.ts), plus the typed
+  preload method `window.api.settings.getSecretStorageStatus()`. The type lives in the new
+  `src/shared/secret-storage-status.ts`. The status carries field names only. No UI change.
+- New tests: unchanged secret is not re-encrypted. When decrypt throws at load, the value is blank
+  in memory, the file bytes are unchanged after an unrelated save, and a relaunch with a working
+  keychain decrypts the originals. When encryption is unavailable at load, the encrypted value
+  stays intact through saves before and after recovery. Legacy plaintext is still readable and
+  gets encrypted on save. The settings IPC handler returns the store status.
+- Mutation checks, each seen failing and then restored:
+  - M4a: the decrypt failure path treats every value as legacy plaintext → 2 tests fail.
+  - M4b: remove the unchanged-value shortcut → 1 test fails.
+  - M4c: a blank value drops the undecryptable blob → 2 tests fail.
+  - M5: handler channel renamed → 1 test fails.
+- Targeted run (persistence, new test, ipc/settings, speech dir, ipc/speech) with
+  `--testTimeout=180000`: 453/454 passed. The one failure was `returns empty repos when no data
+  file exists`, which has its own 15 s timeout, under load average ~112-155. Run alone, it passes.
+- Known limit: a legacy plaintext cookie that happens to be strict base64 of 24+ characters is
+  treated as undecryptable. It is blank in memory and kept on disk, not lost.
+
 ## Rollback
 Revert the commit. Nothing on disk changes format: encrypted values are the same base64
 safeStorage blobs as before.
@@ -61,16 +95,14 @@ safeStorage blobs as before.
 - Edited `ipc/speech.ts` and two type lines in `preload/index.ts` / `preload/api-types.ts` (outside
   the named files) so the session-only status actually reaches the renderer, per the brief's
   "surface a clear status the UI can show". No renderer/UI change.
-- Persistence status is exposed as `Store.getSecretStorageStatus()` only; it is not yet wired to IPC
-  or Settings UI (keeps the persistence diff to the secret code; UI is out of scope).
+- Persistence status is exposed via `settings:getSecretStorageStatus` IPC (review F2), which touches
+  `ipc/settings.ts`. It is not shown in any UI yet.
 - `communications/providers/provider-api-key-store.ts` (the Dobius part of #25) is BUILD-018's.
 
 ## Known limits (not changed here)
-- Read side: when encryption is unavailable at load, `decrypt()` still returns the stored string
-  as-is (pre-existing, keeps legacy plaintext values readable). If a legacy plaintext value is on
-  disk and encryption stays unavailable, the save writes that same existing value back (not new
-  plaintext; deleting it would destroy user data). It is encrypted on the first save once
-  safeStorage works.
+- If a legacy plaintext value is on disk and encryption stays unavailable, the save writes that
+  same existing value back (not new plaintext; deleting it would destroy user data). It is
+  encrypted on the first save once safeStorage works.
 - A session-only value is persisted on the next save after encryption recovers; the unchanged-state
   hash skip means a recovery with no other state change does not force a write.
 - Same for `openai-api-key-store.readOpenAiSpeechApiKey()` reading a legacy plaintext file.

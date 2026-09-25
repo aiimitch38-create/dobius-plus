@@ -26,6 +26,7 @@ import type {
   CustomHarnessDefinition
 } from '../shared/agents'
 import type { DobiusPrompt } from '../shared/prompts'
+import type { SecretStorageStatus } from '../shared/secret-storage-status'
 import type {
   ImessageBridgeConfig,
   ImessageBridgeSendResult,
@@ -1921,6 +1922,9 @@ const api = {
 
   settings: {
     get: (): Promise<unknown> => ipcRenderer.invoke('settings:get'),
+
+    getSecretStorageStatus: (): Promise<SecretStorageStatus> =>
+      ipcRenderer.invoke('settings:getSecretStorageStatus'),
 
     set: (args: Record<string, unknown>): Promise<unknown> =>
       ipcRenderer.invoke('settings:set', args),

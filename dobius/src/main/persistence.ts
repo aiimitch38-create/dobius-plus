@@ -225,16 +225,13 @@ import {
 import { track } from './telemetry/client'
 import { getCohortAtEmit } from './telemetry/cohort-classifier'
 import { isStartupDiagnosticsEnabled, logStartupDiagnostic } from './startup/startup-diagnostics'
+import type { PersistedSecretField, SecretStorageStatus } from '../shared/secret-storage-status'
 
-type PersistedSecretField = 'opencodeSessionCookie' | 'httpProxyUrl' | 'browserKagiSessionLink'
-type DurableSecrets = Partial<Record<PersistedSecretField, { onDisk: string; plaintext: string }>>
-
-export type SecretStorageStatus = {
-  encryptionAvailable: boolean
-  // Secrets changed this session that could not be encrypted: they live in
-  // memory only and the data file keeps its previous encrypted value.
-  sessionOnlySecrets: PersistedSecretField[]
-}
+// encrypted: onDisk is a safeStorage blob of plaintext. legacyPlaintext: written
+// by a pre-encryption build. undecryptable: a blob this session cannot read.
+type DurableSecretKind = 'encrypted' | 'legacyPlaintext' | 'undecryptable'
+type DurableSecret = { onDisk: string; plaintext: string; kind: DurableSecretKind }
+type DurableSecrets = Partial<Record<PersistedSecretField, DurableSecret>>
 
 // Why (#25): returns null instead of the plaintext when safeStorage cannot
 // encrypt, so a save fails closed rather than publishing the secret to disk.
@@ -250,21 +247,24 @@ function encryptSecret(plaintext: string): string | null {
   }
 }
 
-function decrypt(ciphertext: string): string {
-  if (!ciphertext || !safeStorage.isEncryptionAvailable()) {
-    return ciphertext
+const SAFE_STORAGE_BLOB_PATTERN = /^[A-Za-z0-9+/]{24,}={0,2}$/
+
+function decryptSecret(onDisk: string): DurableSecret {
+  if (safeStorage.isEncryptionAvailable()) {
+    try {
+      const plaintext = safeStorage.decryptString(Buffer.from(onDisk, 'base64'))
+      return { onDisk, plaintext, kind: 'encrypted' }
+    } catch {
+      console.warn('[persistence] safeStorage decryption failed. Possible keychain reset.')
+    }
   }
-  try {
-    return safeStorage.decryptString(Buffer.from(ciphertext, 'base64'))
-  } catch {
-    // Why: if decryption fails, it likely means the value was stored as
-    // plaintext (pre-encryption build) or the OS keychain changed. Fall
-    // back to the raw string so users don't lose their cookie after upgrade.
-    console.warn(
-      '[persistence] safeStorage decryption failed — returning ciphertext as-is. Possible keychain reset.'
-    )
-    return ciphertext
+  // Why (#25): a base64 blob that cannot be decrypted must never be used as a
+  // credential or re-encrypted (that would destroy the real secret). Values that
+  // are not base64 are plaintext from pre-encryption builds and stay readable.
+  if (onDisk.length % 4 === 0 && SAFE_STORAGE_BLOB_PATTERN.test(onDisk)) {
+    return { onDisk, plaintext: '', kind: 'undecryptable' }
   }
+  return { onDisk, plaintext: onDisk, kind: 'legacyPlaintext' }
 }
 
 function retireLegacyInstructionsForClearedTextActionRecipes(
@@ -2990,23 +2990,19 @@ export class Store {
         // Why: secret settings are stored encrypted on disk via safeStorage.
         // Decrypt at the load boundary so the rest of the app sees plaintext.
         if (parsed.settings?.opencodeSessionCookie) {
-          const onDisk = parsed.settings.opencodeSessionCookie
-          parsed.settings.opencodeSessionCookie = decrypt(onDisk)
-          candidateSecrets.opencodeSessionCookie = {
-            onDisk,
-            plaintext: parsed.settings.opencodeSessionCookie
-          }
+          const secret = decryptSecret(parsed.settings.opencodeSessionCookie)
+          parsed.settings.opencodeSessionCookie = secret.plaintext
+          candidateSecrets.opencodeSessionCookie = secret
         }
         if (parsed.settings?.httpProxyUrl) {
-          const onDisk = parsed.settings.httpProxyUrl
-          parsed.settings.httpProxyUrl = decrypt(onDisk)
-          candidateSecrets.httpProxyUrl = { onDisk, plaintext: parsed.settings.httpProxyUrl }
+          const secret = decryptSecret(parsed.settings.httpProxyUrl)
+          parsed.settings.httpProxyUrl = secret.plaintext
+          candidateSecrets.httpProxyUrl = secret
         }
         if (parsed.ui?.browserKagiSessionLink) {
-          const onDisk = parsed.ui.browserKagiSessionLink
-          const plaintext = decrypt(onDisk)
-          parsed.ui.browserKagiSessionLink = plaintext
-          candidateSecrets.browserKagiSessionLink = { onDisk, plaintext }
+          const secret = decryptSecret(parsed.ui.browserKagiSessionLink)
+          parsed.ui.browserKagiSessionLink = secret.plaintext || null
+          candidateSecrets.browserKagiSessionLink = secret
         }
 
         // Merge with defaults in case new fields were added
@@ -3760,23 +3756,31 @@ export class Store {
 
   // Why (#25): fail closed. When safeStorage cannot encrypt, the plaintext
   // stays in memory for this session and the file keeps the last encrypted
-  // value (or nothing, if there never was one).
+  // value (or nothing, if there never was one). An unchanged encrypted value
+  // or an undecryptable blob is written back verbatim, never re-encrypted.
   private secretForDisk(
     field: PersistedSecretField,
     plaintext: string | null | undefined
   ): string | null {
+    const durable = this.durableSecrets[field]
     if (!plaintext) {
       this.sessionOnlySecrets.delete(field)
+      if (durable?.kind === 'undecryptable') {
+        return durable.onDisk
+      }
       delete this.durableSecrets[field]
       return null
     }
+    if (durable?.kind === 'encrypted' && durable.plaintext === plaintext) {
+      this.sessionOnlySecrets.delete(field)
+      return durable.onDisk
+    }
     const encrypted = encryptSecret(plaintext)
     if (encrypted !== null) {
-      this.durableSecrets[field] = { onDisk: encrypted, plaintext }
+      this.durableSecrets[field] = { onDisk: encrypted, plaintext, kind: 'encrypted' }
       this.sessionOnlySecrets.delete(field)
       return encrypted
     }
-    const durable = this.durableSecrets[field]
     if (durable?.plaintext === plaintext) {
       this.sessionOnlySecrets.delete(field)
     } else if (!this.sessionOnlySecrets.has(field)) {
@@ -3791,7 +3795,10 @@ export class Store {
   getSecretStorageStatus(): SecretStorageStatus {
     return {
       encryptionAvailable: safeStorage.isEncryptionAvailable(),
-      sessionOnlySecrets: [...this.sessionOnlySecrets]
+      sessionOnlySecrets: [...this.sessionOnlySecrets],
+      undecryptableSecrets: (Object.keys(this.durableSecrets) as PersistedSecretField[]).filter(
+        (field) => this.durableSecrets[field]?.kind === 'undecryptable'
+      )
     }
   }
 
