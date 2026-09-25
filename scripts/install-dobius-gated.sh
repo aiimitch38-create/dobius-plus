@@ -12,8 +12,9 @@
 # to this file (BUILD-043): there is exactly one install path.
 #
 # Order (BUILD-043): lock → ownership/version checks → stage copy → validate
-# stage → quit app → atomic swap → move the old bundle to ONE rollback copy
-# outside /Applications and outside dobius/dist → remove the dist build copy.
+# stage (incl. the BUILD-045 artifact manifest) → quit app → atomic swap → move
+# the old bundle to ONE rollback copy outside /Applications and outside
+# dobius/dist → remove the dist build copy.
 # Any failure before the swap leaves the installed app untouched.
 #
 # Usage: install-dobius-gated.sh <path-to-built-Dobius+.app> [--take-over] [--allow-downgrade]
@@ -53,13 +54,14 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 SEMVER="$SCRIPT_DIR/semver-compare.py"
 SOURCE_STATE="$SCRIPT_DIR/source-state.py"
+MANIFEST="$SCRIPT_DIR/bundle-manifest.py"
 if ! command -v python3 >/dev/null 2>&1; then
   echo "REFUSED: python3 is not on PATH; the version guard needs it. Nothing was installed." >&2
   exit 9
 fi
-for helper in "$SEMVER" "$SOURCE_STATE"; do
+for helper in "$SEMVER" "$SOURCE_STATE" "$MANIFEST"; do
   if [ ! -f "$helper" ]; then
-    echo "REFUSED: installer helper $helper is missing; the version guard cannot run. Nothing was installed." >&2
+    echo "REFUSED: installer helper $helper is missing; the install guards cannot run. Nothing was installed." >&2
     exit 9
   fi
 done
@@ -285,6 +287,13 @@ case "$HOST_ARCH:$BIN_ARCHES" in
 esac
 python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$STAGE/$PROV_REL" 2>/dev/null \
   || stage_invalid "$PROV_REL was not written"
+# Artifact manifest (#101): a build that skipped part of the graph (CLI, relay,
+# web, native helper) looks installable but ADAM refuses it and features break.
+if ! MISSING_ARTIFACTS=$(python3 "$MANIFEST" "$STAGE"); then
+  echo "Missing build artifacts:" >&2
+  printf '%s\n' "$MISSING_ARTIFACTS" | sed 's/^/  /' >&2
+  stage_invalid "incomplete build (run the full 'pnpm run build:unpack')"
+fi
 
 # Quit only now that the build is staged and valid (a bad build never closes
 # the app). -a: pgrep/pkill skip their own ancestors by default, and an install
