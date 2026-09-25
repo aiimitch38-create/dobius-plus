@@ -11,16 +11,20 @@ import type { ClaudeUsageStore } from '../claude-usage/store'
 import type { CodexUsageStore } from '../codex-usage/store'
 import { runAutomationPrecheck } from './precheck-runner'
 import { resolveAutomationRunTarget, type AutomationRunTargetResult } from './run-target-resolution'
-import { collectAutomationRunUsage } from './run-usage-collection'
 import type { HeadlessAutomationDispatcher } from './headless-dispatch'
-import { clearAutomationDispatchTokens, createAutomationDispatchToken } from './dispatch-tokens'
+import { createAutomationDispatchToken } from './dispatch-tokens'
 import {
   buildUnavailablePrecheckResult,
   didAutomationPrecheckPass,
   formatAutomationPrecheckFailure
 } from '../../shared/automation-precheck'
-import { deliverAutomationRunNotification } from './run-notification-delivery'
-import { isFinalRunStatus } from './run-final-status'
+import {
+  finalizeAutomationRunResult,
+  markInterruptedAutomationRuns,
+  recordAutomationEvaluationFailure,
+  reportAutomationBackgroundFailure,
+  settleHeadlessCompletion
+} from './run-lifecycle'
 import {
   checkExecutionAdmission,
   ExecutionBlockedError,
@@ -57,6 +61,9 @@ export class AutomationService {
     this.codexUsage = opts.codexUsage ?? null
     this.allowRemoteHostScheduling = opts.allowRemoteHostScheduling ?? false
     this.headlessDispatcher = opts.headlessDispatcher ?? null
+    // Why: constructed once per process, before any dispatch, so every
+    // 'dispatching' run here was left by a previous process.
+    markInterruptedAutomationRuns(store)
   }
 
   setWebContents(webContents: WebContents | null): void {
@@ -133,33 +140,10 @@ export class AutomationService {
   }
 
   async markDispatchResult(result: AutomationDispatchResult): Promise<AutomationRun> {
-    const run = this.store.updateAutomationRun(result)
-    clearAutomationDispatchTokens(run.automationId, run.id)
-    if (!isFinalRunStatus(run.status)) {
-      return run
-    }
-    // Why: the renderer's mark-completed effect can re-fire for the same run
-    // before refresh() flips its status snapshot off 'dispatched'. Re-running
-    // collectRunUsage advances the attribution window and can rewrite an
-    // already-collected 'known' usage to 'unavailable'/'ambiguous_session'.
-    if (run.usage) {
-      return run
-    }
-    const usage = await collectAutomationRunUsage({
-      automation: this.store.listAutomations().find((entry) => entry.id === run.automationId),
-      run,
-      claudeUsage: this.claudeUsage,
-      codexUsage: this.codexUsage
-    })
-    deliverAutomationRunNotification(this.store, run)
-    return this.store.updateAutomationRun({
-      runId: run.id,
-      status: run.status,
-      workspaceId: run.workspaceId,
-      terminalSessionId: run.terminalSessionId,
-      usage,
-      error: run.error
-    })
+    return await finalizeAutomationRunResult(
+      { store: this.store, claudeUsage: this.claudeUsage, codexUsage: this.codexUsage },
+      result
+    )
   }
 
   private async evaluateDueRuns(): Promise<void> {
@@ -173,8 +157,14 @@ export class AutomationService {
         if (!automation.enabled || automation.nextRunAt > now) {
           continue
         }
-        await this.evaluateAutomation(automation, now)
+        try {
+          await this.evaluateAutomation(automation, now)
+        } catch (error) {
+          recordAutomationEvaluationFailure(this.store, automation, now, error)
+        }
       }
+    } catch (error) {
+      reportAutomationBackgroundFailure('scheduler tick failed', error)
     } finally {
       this.evaluating = false
     }
@@ -187,6 +177,13 @@ export class AutomationService {
       return
     }
     const run = this.store.createAutomationRun(automation, scheduledFor)
+    // Why: createAutomationRun returns the existing run for this occurrence. If
+    // it already left 'pending' (a crash before nextRunAt advanced), it was
+    // already launched or closed and must not be dispatched again.
+    if (run.status !== 'pending') {
+      this.store.advanceAutomationNextRun(automation.id, now)
+      return
+    }
     const graceMs = automation.missedRunGraceMinutes * 60 * 1000
     const missed = now - scheduledFor > graceMs
     // Why: scheduled runs are autonomous and must honor "Pause crew" (manual runNow
@@ -281,7 +278,15 @@ export class AutomationService {
       if (admission?.allowed === false) {
         throw new ExecutionBlockedError('agent-run', admission.reason, admission.message)
       }
-      const launch = await this.headlessDispatcher!({ automation, run, target })
+      // Why: persist the launch intent first; a crash mid-launch then leaves
+      // 'dispatching', which startup closes as interrupted instead of re-running.
+      const dispatching = this.store.updateAutomationRun({ runId: run.id, status: 'dispatching' })
+      const launch = await this.headlessDispatcher!({
+        automation,
+        run: dispatching,
+        target,
+        honorExecutionGate
+      })
       const launchRunTarget = {
         workspaceId: launch.workspaceId,
         workspaceDisplayName: launch.workspaceDisplayName ?? null,
@@ -296,25 +301,12 @@ export class AutomationService {
         error: null
       })
       if (launch.completion) {
-        void launch.completion
-          .then((completion) =>
-            this.markDispatchResult({
-              runId: run.id,
-              status: completion.status,
-              ...launchRunTarget,
-              precheckResult,
-              outputSnapshot: completion.outputSnapshot ?? null,
-              error: completion.error ?? null
-            })
-          )
-          .catch((error) =>
-            this.markDispatchResult({
-              runId: run.id,
-              status: 'dispatch_failed',
-              ...launchRunTarget,
-              error: error instanceof Error ? error.message : String(error)
-            })
-          )
+        settleHeadlessCompletion(
+          (result) => this.markDispatchResult(result),
+          { runId: run.id, ...launchRunTarget },
+          precheckResult,
+          launch.completion
+        )
       }
       return updated
     } catch (error) {

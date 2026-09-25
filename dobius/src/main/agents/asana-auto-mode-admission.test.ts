@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../asana/asana-config', () => ({
-  getAsanaConfig: () => ({ autoMode: { triageAgentId: 'triage' } })
+  getAsanaConfig: () => ({ allowedProjects: [], autoMode: { triageAgentId: 'triage' } })
 }))
 vi.mock('../asana/asana-queue-service', () => ({ refreshAsanaTasks: vi.fn() }))
 vi.mock('../asana/asana-token-store', () => ({ hasAsanaToken: () => true }))

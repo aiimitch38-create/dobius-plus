@@ -40,7 +40,25 @@ function getAutomationUsageProvider(
   return null
 }
 
-export async function collectAutomationRunUsage({
+// Why: the caller has already recorded the run as final; a failed usage scan
+// must not skip its notification or leave usage unset, so it is recorded as
+// an unavailable scan instead of rejecting.
+export async function collectAutomationRunUsage(
+  args: Parameters<typeof collectUsage>[0]
+): Promise<AutomationRunUsage> {
+  try {
+    return await collectUsage(args)
+  } catch (error) {
+    return createUnavailableAutomationUsage(
+      Date.now(),
+      getAutomationUsageProvider(args.automation),
+      'scan_failed',
+      `Usage scan failed: ${error instanceof Error ? error.message : String(error)}`
+    )
+  }
+}
+
+async function collectUsage({
   automation,
   run,
   claudeUsage,
