@@ -51,11 +51,37 @@ describe('DobiusRuntimeRpcServer phone listener switch', () => {
       expect(startSpy).not.toHaveBeenCalled()
       expect(server['wsTransport']).toBeNull()
       expect(server.getWebSocketEndpoint()).toBeNull()
+      expect(server.isWebSocketEnabled()).toBe(false)
       expect(server.getDeviceRegistry()).toBeNull()
       expect(server.createPairingOffer({ address: '192.168.1.5' })).toEqual({ available: false })
       const kinds = readRuntimeMetadata(userDataPath)?.transports?.map((t) => t.kind)
       expect(kinds).not.toContain('websocket')
       expect(kinds?.length).toBe(1)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('reports the listener as enabled at launch even when it fails to start', async () => {
+    // Why: e.g. port 6768 already taken; the UI must show a start failure,
+    // not "restart to apply", so enabled-at-launch must survive the failure.
+    vi.spyOn(WebSocketTransport.prototype, 'start').mockRejectedValue(new Error('EADDRINUSE'))
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const userDataPath = mkdtempSync(join(tmpdir(), 'dobius-listener-fail-'))
+    const server = new DobiusRuntimeRpcServer({
+      runtime: new DobiusRuntimeService(),
+      userDataPath,
+      enableWebSocket: shouldEnableRuntimeWebSocket({
+        settings: { mobileListenerEnabled: true },
+        isServeMode: false
+      }),
+      wsPort: 0
+    })
+
+    await server.start()
+    try {
+      expect(server.getWebSocketEndpoint()).toBeNull()
+      expect(server.isWebSocketEnabled()).toBe(true)
     } finally {
       await server.stop()
     }
@@ -78,6 +104,7 @@ describe('DobiusRuntimeRpcServer phone listener switch', () => {
     try {
       expect(startSpy).toHaveBeenCalledTimes(1)
       expect(server.getWebSocketEndpoint()).toMatch(/^ws:\/\/0\.0\.0\.0:\d+$/)
+      expect(server.isWebSocketEnabled()).toBe(true)
       expect(server.createPairingOffer({ address: '192.168.1.5' }).available).toBe(true)
     } finally {
       await server.stop()

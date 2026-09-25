@@ -14,13 +14,20 @@ import { MobileAutoRestoreFitSection } from './MobileAutoRestoreFitSection'
 import { translate } from '@/i18n/i18n'
 export { getMobilePaneSearchEntries } from './mobile-pane-search'
 
+type ListenerStatus = { ready: boolean; startedWithListenerEnabled: boolean }
+
+function isListenerOffAtLaunch(status: ListenerStatus | null): boolean {
+  return status !== null && !status.ready && !status.startedWithListenerEnabled
+}
+
 export function MobilePane(): React.JSX.Element {
   const autoRestoreFitMs = useAppStore((s) => s.settings?.mobileAutoRestoreFitMs ?? null)
   const updateSettings = useAppStore((s) => s.updateSettings)
   const mobileListenerEnabled = useAppStore((s) => s.settings?.mobileListenerEnabled === true)
-  // Why: null until checked; false means the phone listener is not running this
-  // launch (the setting is off, or was turned on after startup).
-  const [listenerRunning, setListenerRunning] = useState<boolean | null>(null)
+  // Why: null until checked. startedWithListenerEnabled separates "off at
+  // launch" (explain it, no error toast) from "on at launch but failed to
+  // start" (a real error, e.g. port in use).
+  const [listenerStatus, setListenerStatus] = useState<ListenerStatus | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [pairingUrl, setPairingUrl] = useState<string | null>(null)
   const [endpoint, setEndpoint] = useState<string | null>(null)
@@ -55,13 +62,17 @@ export function MobilePane(): React.JSX.Element {
     }
   }, [mountedRef])
 
-  const loadListenerStatus = useCallback(async (): Promise<boolean | null> => {
+  const loadListenerStatus = useCallback(async (): Promise<ListenerStatus | null> => {
     try {
       const result = await window.api.mobile.isWebSocketReady()
-      if (mountedRef.current) {
-        setListenerRunning(result.ready)
+      const status: ListenerStatus = {
+        ready: result.ready,
+        startedWithListenerEnabled: result.startedWithListenerEnabled
       }
-      return result.ready
+      if (mountedRef.current) {
+        setListenerStatus(status)
+      }
+      return status
     } catch {
       // Unknown status: callers fall back to the generic error message.
       return null
@@ -117,10 +128,10 @@ export function MobilePane(): React.JSX.Element {
             void loadDevices()
           }
         } else {
-          // Why: with the phone listener off, the inline notice explains why
-          // pairing is unavailable; a raw transport error toast would not.
-          const running = await loadListenerStatus()
-          if (running !== false && mountedRef.current) {
+          // Why: when the listener was off at launch, the inline notice
+          // explains why pairing is unavailable; a raw error toast would not.
+          const status = await loadListenerStatus()
+          if (!isListenerOffAtLaunch(status) && mountedRef.current) {
             toast.error(
               translate(
                 'auto.components.settings.MobilePane.cb9067c1c1',
@@ -181,20 +192,25 @@ export function MobilePane(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
-      {listenerRunning === false ? (
+      {listenerStatus && !listenerStatus.ready ? (
         <p
           role="status"
           className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
         >
-          {mobileListenerEnabled
+          {listenerStatus.startedWithListenerEnabled
             ? translate(
-                'auto.components.settings.MobilePane.listenerPendingRestart',
-                'The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.'
+                'auto.components.settings.MobilePane.listenerFailedToStart',
+                'The phone listener was on at launch but failed to start (see logs). Restart Dobius+ to try again.'
               )
-            : translate(
-                'auto.components.settings.MobilePane.listenerOff',
-                'The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.'
-              )}
+            : mobileListenerEnabled
+              ? translate(
+                  'auto.components.settings.MobilePane.listenerPendingRestart',
+                  'The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.'
+                )
+              : translate(
+                  'auto.components.settings.MobilePane.listenerOff',
+                  'The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.'
+                )}
         </p>
       ) : null}
 

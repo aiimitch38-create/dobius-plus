@@ -74,9 +74,9 @@ string needs entries in 5 locale catalogs.
   `i18n/no-top-level-translate.test.ts` (DestinationsSection.tsx, untouched),
   listed in `basefail.txt`.
 - oxlint + react-doctor config: clean on all changed files; oxfmt --check clean.
-- `verify-localization-catalog.mjs`: all references resolve; the only parity
-  error is pre-existing (`es.json` missing `AsanaPane.autoModeBlockedPaused` /
-  `autoModeBlockedUnreadable`, from another build), not from this change.
+- `verify-localization-catalog.mjs`: exit 0 after commit ceccf210, which added
+  the two `AsanaPane.autoModeBlocked*` keys from an earlier build to
+  es/ja/ko/zh (all four lacked them; the checker only names the first).
 
 ## Deviations
 - Other surfaces that toast when the listener is off (`mobile/MobilePage.tsx`,
@@ -85,6 +85,35 @@ string needs entries in 5 locale catalogs.
 - The Generate button stays enabled while the listener is off (disabling it
   would mean changing `MobileNetworkInterfaceSection` props); clicking it keeps
   the notice and shows no toast.
+
+## Review fix F1: off at launch vs failed to start
+Before this fix, `MobilePane` could not tell "setting turned on after launch"
+from "on at launch but the WebSocket failed to start" (`runtime-rpc.ts`
+start(): the catch sets `wsTransport = null`, e.g. port 6768 in use). Both
+showed "restart Dobius+" and suppressed the real error.
+- `runtime-rpc.ts`: read-only `isWebSocketEnabled()` returns the startup
+  decision (`this.enableWebSocket`), which survives a failed start.
+- `ipc/mobile.ts` `mobile:isWebSocketReady` adds `startedWithListenerEnabled`
+  (preload `api-types.ts` / `index.ts` types updated; the web preload stub
+  reports `true`, since a web client exists only via the host's listener, so
+  it never hides an error).
+- `MobilePane.tsx`: the toast is suppressed only when the listener was off
+  at launch (`isListenerOffAtLaunch`). When it was on at launch and is not
+  ready, the new notice reads "The phone listener was on at launch but failed
+  to start (see logs). Restart Dobius+ to try again." and the error toast
+  stays. New key `MobilePane.listenerFailedToStart` in all 5 locales.
+- Tests: `MobilePane.test.tsx` "reports a start failure, not a pending
+  restart…" (notice + toast kept); `ipc/mobile.test.ts` handler returns
+  `startedWithListenerEnabled` true/false; `mobile-listener-setting.test.ts`
+  "reports the listener as enabled at launch even when it fails to start"
+  (`WebSocketTransport.start` rejects with EADDRINUSE).
+- Mutation checks: E, where the renderer ignores `startedWithListenerEnabled`,
+  made 1 test fail ("reports a start failure…"). F plus G, where the handler
+  derives the flag from the endpoint and the getter returns
+  `wsTransport !== null`, made 2 tests fail: the handler test and "enabled at
+  launch even when it fails to start". (`ipc/mobile.test.ts` "generates
+  runtime-scoped pairing urls" fails with and without this change and is
+  listed in basefail.txt.)
 
 ## Rollback
 Revert the commit. The setting key stays inert-but-honored by main; the only

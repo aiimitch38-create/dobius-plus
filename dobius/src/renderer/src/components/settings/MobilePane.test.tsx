@@ -37,13 +37,15 @@ const LISTENER_OFF_TEXT =
   'The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.'
 const PENDING_RESTART_TEXT =
   'The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.'
+const FAILED_TO_START_TEXT =
+  'The phone listener was on at launch but failed to start (see logs). Restart Dobius+ to try again.'
 
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
 })
 
-function installMobileApi(args: { listenerRunning: boolean }) {
+function installMobileApi(args: { listenerRunning: boolean; startedWithListenerEnabled: boolean }) {
   const mobile = {
     listDevices: vi.fn(async () => ({ devices: [] })),
     listNetworkInterfaces: vi.fn(async () => ({
@@ -51,7 +53,8 @@ function installMobileApi(args: { listenerRunning: boolean }) {
     })),
     isWebSocketReady: vi.fn(async () => ({
       ready: args.listenerRunning,
-      endpoint: args.listenerRunning ? 'ws://0.0.0.0:6768' : null
+      endpoint: args.listenerRunning ? 'ws://0.0.0.0:6768' : null,
+      startedWithListenerEnabled: args.startedWithListenerEnabled
     })),
     getPairingQR: vi.fn(async () => ({ available: false as const })),
     revokeDevice: vi.fn()
@@ -83,7 +86,7 @@ async function clickGenerate(user: ReturnType<typeof userEvent.setup>) {
 
 describe('MobilePane with the phone listener off', () => {
   it('explains the listener is off instead of showing a raw error toast', async () => {
-    const mobile = installMobileApi({ listenerRunning: false })
+    const mobile = installMobileApi({ listenerRunning: false, startedWithListenerEnabled: false })
     const { user } = renderPane({ mobileListenerEnabled: false })
 
     expect(await screen.findByText(LISTENER_OFF_TEXT)).toBeInTheDocument()
@@ -95,16 +98,29 @@ describe('MobilePane with the phone listener off', () => {
     expect(screen.getByText(LISTENER_OFF_TEXT)).toBeInTheDocument()
   })
 
-  it('says a restart is needed when the setting is on but the listener is not running yet', async () => {
-    installMobileApi({ listenerRunning: false })
+  it('says a restart is needed when the setting was turned on after launch', async () => {
+    installMobileApi({ listenerRunning: false, startedWithListenerEnabled: false })
     renderPane({ mobileListenerEnabled: true })
 
     expect(await screen.findByText(PENDING_RESTART_TEXT)).toBeInTheDocument()
     expect(screen.queryByText(LISTENER_OFF_TEXT)).not.toBeInTheDocument()
   })
 
+  it('reports a start failure, not a pending restart, when the listener was on at launch', async () => {
+    const mobile = installMobileApi({ listenerRunning: false, startedWithListenerEnabled: true })
+    const { user } = renderPane({ mobileListenerEnabled: true })
+
+    expect(await screen.findByText(FAILED_TO_START_TEXT)).toBeInTheDocument()
+    expect(screen.queryByText(PENDING_RESTART_TEXT)).not.toBeInTheDocument()
+
+    await clickGenerate(user)
+    await waitFor(() => expect(mobile.getPairingQR).toHaveBeenCalledTimes(1))
+    // Why: a real start failure (e.g. port in use) must not be silenced.
+    await waitFor(() => expect(toastMocks.error).toHaveBeenCalledTimes(1))
+  })
+
   it('shows no listener notice and keeps the error toast when the listener is running', async () => {
-    const mobile = installMobileApi({ listenerRunning: true })
+    const mobile = installMobileApi({ listenerRunning: true, startedWithListenerEnabled: true })
     const { user } = renderPane({ mobileListenerEnabled: true })
 
     await clickGenerate(user)
@@ -112,5 +128,6 @@ describe('MobilePane with the phone listener off', () => {
     expect(mobile.getPairingQR).toHaveBeenCalledTimes(1)
     expect(screen.queryByText(LISTENER_OFF_TEXT)).not.toBeInTheDocument()
     expect(screen.queryByText(PENDING_RESTART_TEXT)).not.toBeInTheDocument()
+    expect(screen.queryByText(FAILED_TO_START_TEXT)).not.toBeInTheDocument()
   })
 })

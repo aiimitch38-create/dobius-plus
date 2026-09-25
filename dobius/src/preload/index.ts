@@ -4319,8 +4319,11 @@ const api = {
     revokeRuntimeAccess: (args: { deviceId: string }): Promise<{ revoked: boolean }> =>
       ipcRenderer.invoke('mobile:revokeRuntimeAccess', args),
 
-    isWebSocketReady: (): Promise<{ ready: boolean; endpoint: string | null }> =>
-      ipcRenderer.invoke('mobile:isWebSocketReady')
+    isWebSocketReady: (): Promise<{
+      ready: boolean
+      endpoint: string | null
+      startedWithListenerEnabled: boolean
+    }> => ipcRenderer.invoke('mobile:isWebSocketReady')
   },
 
   agentStatus: {

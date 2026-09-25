@@ -5658,7 +5658,8 @@
           "1b1b70279a": "まだデバイスがペアリングされていません。",
           "1592afcc7a": "まだデバイスがペアリングされていません。 Dobius+ モバイル アプリで QR コードをスキャンします。",
           "listenerPendingRestart": "The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.",
-          "listenerOff": "The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+."
+          "listenerOff": "The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.",
+          "listenerFailedToStart": "The phone listener was on at launch but failed to start (see logs). Restart Dobius+ to try again."
         },
         "MobileSettingsPane": {
           "9a3c280e49": "GitHub リリース",
