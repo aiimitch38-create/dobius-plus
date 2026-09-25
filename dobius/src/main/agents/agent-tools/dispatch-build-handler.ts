@@ -6,7 +6,7 @@ import {
   markBuildDispatched,
   mayDispatchBuild
 } from '../asana-dispatch-ledger'
-import { checkExecutionAdmission } from '../execution-gate'
+import { checkBuildDispatchAdmission, checkExecutionAdmission } from '../execution-gate'
 import type { DobiusToolContext } from './dobius-tool-handlers'
 import { errorResult, textResult, trimText, type TextToolResult } from './dobius-tool-result'
 
@@ -115,6 +115,12 @@ export function createDispatchBuildHandler(context: DobiusToolContext) {
     const dispatch = getBuildDispatcher()
     if (!dispatch) {
       return errorResult('build dispatch unavailable.')
+    }
+    // Why here: ADAM checks the repo path before the worktree or any paid agent
+    // exists, and before the ledger mark or capacity slot, so a refusal costs nothing.
+    const adamAdmission = await checkBuildDispatchAdmission(repo.path)
+    if (!adamAdmission.allowed) {
+      return errorResult(`build dispatch blocked: ${adamAdmission.message}`)
     }
     const name = args.branchName
       ? sanitizeSlug(args.branchName, slugFromBrief(brief))
