@@ -45,24 +45,29 @@ Grant categories (`MOBILE_RPC_GRANTS` in `mobile-rpc-grants.ts`), all **denied**
 | `terminal.send` | terminal.send, binary Input frames, terminal.close, session.tabs.close, worktree.sleep; terminal.create / session.tabs.createTerminal with command/env/launchConfig; worktree.create with startupCommand/Env/LaunchConfig/Agent/Prompt/Draft, `setupDecision:'run'`, `runHooks:true` |
 | `worktree.create` | worktree.create (any) |
 | `worktree.rm` | worktree.rm, worktree.forceDeleteBranch |
-| `git.push` | git.push |
+| `git.push` | git.push, git.forkSync (pushes to origin) |
 | `git.discard` | git.discard |
-| `settings.update` | settings.update |
-| `files.write` | files.writeTerminalArtifact |
+| `settings.update` | settings.update, linear.connect, linear.selectWorkspace |
+| `files.write` | files.writeTerminalArtifact, files.createFile, markdown.saveTab (agent-instruction / hook / `.git` paths refused even with the grant) |
 | `remote.merge` | github.mergePR, github.setPRAutoMerge, github.updatePRState, gitlab.mergeMR, gitlab.updateMRState |
+| `browser.control` | every mobile browser.* method except browser.screencast.unsubscribe (navigate, click, type, keys, dialogs, reload, viewport, tabCreate, screencast) |
 
 Rejected for mobile outright (no grant unlocks it): AI generation overrides
 (`commitMessageAi`, `sourceControlAi`, `sourceControlAiResolvedParams`, `agentCmdOverrides` on
 git.generateCommitMessage / generatePullRequestFields / discoverCommitMessageModels) and
-repo.update of `hookSettings`, `sourceControlAi`, `worktreeBasePath`, `symlinkPaths`.
+repo.update of `hookSettings`, `sourceControlAi`, `worktreeBasePath`, `symlinkPaths`;
+worktree.set of `pushTarget` / `parentWorktree`; browser.goto / browser.tabCreate with any URL that is
+not http(s) (file:, bare paths, javascript:, leading `-`); files.createFile / writeTerminalArtifact /
+markdown.saveTab to CLAUDE.md, CLAUDE.local.md, AGENTS.md, GEMINI.md, .cursorrules, dobius.yaml,
+.envrc, or anything under .git/, .claude/, .codex/, .cursor/, .gemini/, .dobius/.
 Removed from the mobile allowlist: `agentTeams.prepareLaunch`, `agentTeams.tmuxCompat` (no mobile
 caller; tmux `send-keys` types into shells).
 
 To grant: add e.g. `"grants": ["terminal.send", "worktree.create"]` to that device's entry in
 `<userData>/dobius-devices.json` **with the app closed** (grants are read at startup; a running
 app's next save would overwrite a live edit). No UI yet. Consequences with defaults: from the
-phone, no terminal typing/closing, no worktree create/sleep/remove, no discard, push, merge or
-settings change. The phone listener itself is off by default (BUILD-003).
+phone, no terminal typing/closing, no worktree create/sleep/remove, no discard, push, fork sync,
+merge, settings or Linear change, no file writes, and no in-app browser control or screencast. The phone listener itself is off by default (BUILD-003).
 
 ## Deviations from EXECUTION-ORDER.md
 - `rpc/dispatcher.ts` not changed: `dispatch()` is transport-agnostic and trusts its caller by
@@ -130,6 +135,29 @@ allowlist (1), AI override reject (4), repo.update reject (4), git.discard (1),
 setPRAutoMerge (1), forceDeleteBranch (1), terminal.close (1), files.writeTerminalArtifact (1),
 session.tabs.close (1), worktree.sleep (1).
 
+## Review round 3 (re-review: 1 HIGH, 3 MEDIUM, 2 LOW)
+Merged `stabilize/integration` first (clean merge, 78ce8616).
+- F1 HIGH: new `browser.control` grant over all driving/watching browser.* methods. Independently
+  of grants, mobile browser.goto/tabCreate accept only http(s) (after `normalizeBrowserNavigationUrl`,
+  so bare hosts like `example.com` and `localhost:3000` still work; file:, bare absolute paths,
+  javascript: and leading `-` are rejected). `AgentBrowserBridge.goto` now rejects a URL starting
+  with `-` for every caller (argv flag injection). **Not changed:** `will-attach-webview` /
+  `createBrowserTab`. They only see the webview `src`; an RPC-created tab and the desktop's own
+  "Open Preview to the Side" `file:` preview mount through the same renderer path, so telling them
+  apart would mean threading an origin flag through the renderer tab model. Runtime-scoped CLI
+  tokens also legitimately open local previews. Gating is at the mobile RPC boundary only.
+- F2 MEDIUM: markdown.saveTab and files.createFile under `files.write`; protected paths refused
+  even with the grant (files.createFile / writeTerminalArtifact at the transport from params;
+  markdown.saveTab in its handler, which reads the tab's host-side path when `clientKind` is
+  mobile, since the save params carry no path).
+- F3 MEDIUM: worktree.set rejects `pushTarget` / `parentWorktree` for mobile.
+- F4 MEDIUM: linear.connect / linear.selectWorkspace under `settings.update`.
+- Low: git.forkSync under `git.push`; sweep-table wording corrected.
+
+Mutation checks round 3 (failing tests): screencast grant 1, http(s) scheme check 5, leading `-`
+at RPC 2, saveTab grant 1, createFile grant 1, protected paths at RPC 8, saveTab handler path
+check 5, worktree.set fields 2, linear.connect 1, forkSync 1, bridge leading `-` 1.
+
 ## Mobile allowlist sweep (231 methods after removing agentTeams.*)
 R = read-only / subscription / cancel, G = gated (grant or reject), U = ungated mutating (reason).
 
@@ -147,7 +175,8 @@ R = read-only / subscription / cancel, G = gated (grant or reject), U = ungated 
 | worktree.create | G | worktree.create (+ terminal.send for spawn fields) |
 | worktree.rm, worktree.forceDeleteBranch | G | worktree.rm |
 | worktree.sleep | G | terminal.send |
-| worktree.activate, worktree.set | U | selection / metadata (names, links, pin, sparse dirs) |
+| worktree.set | G/U | pushTarget/parentWorktree rejected; rest U: names, links, pin, sparse dirs |
+| worktree.activate | U | selection only |
 | worktree.prefetchCreateBase | U | git fetch of a base ref, no local change to work |
 | worktree.ps, show, resolveMrBase, resolvePrBase | R | |
 | git.push | G | git.push |
@@ -155,7 +184,8 @@ R = read-only / subscription / cancel, G = gated (grant or reject), U = ungated 
 | git.generateCommitMessage, generatePullRequestFields, discoverCommitMessageModels | G | override fields rejected; stored settings only |
 | git.commit | U | local and reversible; runs only repo-owned hooks |
 | git.stage, unstage, bulkStage, bulkUnstage | U | index only, reversible |
-| git.checkout, fetch, pull, fastForward, rebaseFromBase, forkSync, abortMerge, abortRebase | U | normal git sync; git refuses to clobber dirty work; nothing leaves the Mac |
+| git.forkSync | G | git.push (pushes the synced default branch to origin) |
+| git.checkout, fetch, pull, fastForward, rebaseFromBase, abortMerge, abortRebase | U | local git operations that make no push; git refuses to clobber dirty work (fetch/pull do contact the remote) |
 | git.cancelGenerate* | R | cancel |
 | git.status, diff, history, localBranches, upstreamStatus, branchCompare, branchDiff, commitCompare, commitDiff | R | |
 | github.mergePR, setPRAutoMerge, updatePRState; gitlab.mergeMR, updateMRState | G | remote.merge |
@@ -165,16 +195,16 @@ R = read-only / subscription / cancel, G = gated (grant or reject), U = ungated 
 | hostedReview.create | U | opens a PR/MR from an existing remote branch (no push; checked `createHostedReview`) |
 | hostedReview.forBranch, getCreationEligibility | R | |
 | linear.addIssueComment, createIssue, createProject, updateIssue | U | tracker edits, same reason as GitHub |
-| linear.connect, selectWorkspace | U | swaps Linear account/workspace; no local code |
+| linear.connect, selectWorkspace | G | settings.update (stores a phone-supplied key / workspace) |
 | linear read methods | R | |
 | repo.update | G/U | hookSettings/sourceControlAi/worktreeBasePath/symlinkPaths rejected; rest U: display and discovery prefs |
 | repo.saveSparsePreset | U | preset metadata |
 | repo.list, baseRefDefault, gitAvailable, hooks, searchRefs, sparsePresets | R | |
 | files.writeTerminalArtifact | G | files.write |
-| files.createFile | U | creates an empty file in the worktree |
+| files.createFile | G | files.write; protected paths rejected |
 | files.open, files.openDiff | U | opens a tab on desktop |
 | files.read*, list, browseServerDir, resolveTerminalPath | R | resolveTerminalPath issues a read/write grant id; the write is gated |
-| markdown.saveTab | U | saves a markdown tab already open on desktop (renderer-owned); not verified to be .md-only |
+| markdown.saveTab | G | files.write; the handler reads the tab's path and refuses protected paths for mobile clients |
 | markdown.readTab | R | |
 | settings.update | G | settings.update |
 | settings.get, ui.get, status.get, stats.summary, diagnostics.memory, host.*, preflight.detectAgents/detectRemoteAgents | R | |
@@ -182,7 +212,8 @@ R = read-only / subscription / cancel, G = gated (grant or reject), U = ungated 
 | preflight.check | U | re-runs fixed local tool detection; no caller input |
 | accounts.selectClaude, selectCodex | U | switches between accounts already signed in on the Mac |
 | accounts.list/subscribe/unsubscribe, notifications.*, runtime.clientEvents.*, nativeChat.* | R | |
-| browser.* (goto, click, keys, tabCreate, dialogs, reload, viewport, screencast) | U | drives the in-app browser pane, which is sandboxed from the shell; it does carry desktop logins, so this is the largest remaining non-shell risk |
+| browser.* (goto, click, keys, tabCreate, dialogs, reload, viewport, screencast) | G | browser.control; goto/tabCreate also http(s)-only for mobile |
+| browser.screencast.unsubscribe | R | cleanup, must always work |
 | clipboard.* image upload / saveImageAsTempFile | U | writes an image to a temp file |
 | speech.dictation.*, speech.models.list | R/U | dictation session state |
 | speech.models.download, speech.models.delete | U | catalog model by id (inferred from handler, not traced further) |
@@ -192,4 +223,6 @@ R = read-only / subscription / cancel, G = gated (grant or reject), U = ungated 
 
 ## Residual risk (not in scope)
 See the sweep table: the remaining ungated mutating methods are listed with reasons. The biggest
-remaining non-shell surface is the in-app browser (`browser.*`) and `voice.intent` (by design).
+remaining surface is `voice.intent` (by design, C2/C3). With `browser.control` granted, a phone sees
+whatever the desktop browser pane shows, including a desktop-opened `file:` preview it navigates back
+to (browser.back/forward/reload stay within that tab's history); that is part of what the grant means.

@@ -1011,7 +1011,8 @@ describe('DobiusRuntimeRpcServer', () => {
     server['deviceRegistry']!.getDevice(mobile.deviceId)!.grants = [
       'git.push',
       'settings.update',
-      'remote.merge'
+      'remote.merge',
+      'browser.control'
     ]
     const replies: Record<string, unknown>[] = []
 

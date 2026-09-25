@@ -750,6 +750,11 @@ export class AgentBrowserBridge {
   }
 
   async goto(url: string, worktreeId?: string, browserPageId?: string): Promise<BrowserGotoResult> {
+    // Why: the URL is a positional argv entry; a leading '-' would be parsed
+    // by agent-browser as a flag instead of a navigation target.
+    if (url.trimStart().startsWith('-')) {
+      throw new BrowserError('invalid_argument', 'URL must not start with "-"')
+    }
     return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName) => {
       return (await this.execAgentBrowser(sessionName, ['goto', url])) as BrowserGotoResult
     })

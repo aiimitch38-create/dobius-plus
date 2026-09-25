@@ -308,7 +308,8 @@ describe('mobile RPC grants: review bypasses', () => {
         'worktree.rm',
         'settings.update',
         'files.write',
-        'remote.merge'
+        'remote.merge',
+        'browser.control'
       ]
       await expect(
         send(phone.token, method, { worktree: 'id:wt', [field]: { custom: 'sh -c x' } })
@@ -343,7 +344,17 @@ describe('mobile RPC grants: review bypasses', () => {
     ['F8', 'terminal.close', 'terminal.send'],
     ['sweep', 'files.writeTerminalArtifact', 'files.write'],
     ['sweep', 'session.tabs.close', 'terminal.send'],
-    ['sweep', 'worktree.sleep', 'terminal.send']
+    ['sweep', 'worktree.sleep', 'terminal.send'],
+    ['R2-F2', 'markdown.saveTab', 'files.write'],
+    ['R2-F2', 'files.createFile', 'files.write'],
+    ['R2-F4', 'linear.connect', 'settings.update'],
+    ['R2-F4', 'linear.selectWorkspace', 'settings.update'],
+    ['R2-low', 'git.forkSync', 'git.push'],
+    ['R2-F1', 'browser.screencast', 'browser.control'],
+    ['R2-F1', 'browser.mouseClick', 'browser.control'],
+    ['R2-F1', 'browser.keyboardInsertText', 'browser.control'],
+    ['R2-F1', 'browser.reload', 'browser.control'],
+    ['R2-F1', 'browser.tabCreate', 'browser.control']
   ] as const)('%s: %s needs the %s grant', async (_id, method, grant) => {
     const { registry, dispatchStreaming, send } = setup()
     const phone = registry.addDevice('phone', 'mobile')
@@ -351,5 +362,110 @@ describe('mobile RPC grants: review bypasses', () => {
     expect(dispatchStreaming).not.toHaveBeenCalled()
     registry.getDevice(phone.deviceId)!.grants = [grant]
     await expect(send(phone.token, method, {})).resolves.toMatchObject({ ok: true })
+  })
+})
+
+describe('mobile RPC grants: round-2 review', () => {
+  const allGrants = [
+    'terminal.send',
+    'git.push',
+    'git.discard',
+    'worktree.create',
+    'worktree.rm',
+    'settings.update',
+    'files.write',
+    'remote.merge',
+    'browser.control'
+  ] as const
+
+  const sendWithAllGrants = async (
+    method: string,
+    params: unknown
+  ): Promise<{ reply: Record<string, unknown>; dispatched: boolean }> => {
+    const { registry, dispatchStreaming, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    registry.getDevice(phone.deviceId)!.grants = [...allGrants]
+    const reply = await send(phone.token, method, params)
+    return { reply, dispatched: dispatchStreaming.mock.calls.length > 0 }
+  }
+
+  it.each([
+    ['browser.goto', { url: 'file:///etc/passwd' }],
+    ['browser.goto', { url: '/Users/me/.ssh/id_ed25519' }],
+    ['browser.goto', { url: 'C:\\Users\\me\\secrets.txt' }],
+    ['browser.goto', { url: '--help' }],
+    ['browser.goto', { url: 'javascript:alert(1)' }],
+    ['browser.goto', {}],
+    ['browser.tabCreate', { url: 'file:///etc/passwd' }],
+    ['browser.tabCreate', { url: '/etc/hosts' }],
+    ['browser.tabCreate', { url: '-x' }]
+  ])('F1: %s rejects a non-http(s) URL even with every grant (%o)', async (method, params) => {
+    const { reply, dispatched } = await sendWithAllGrants(method, params)
+    expect(reply).toMatchObject(forbidden)
+    expect(dispatched).toBe(false)
+  })
+
+  it.each([
+    ['browser.goto', { url: 'https://example.com' }],
+    ['browser.goto', { url: 'example.com' }],
+    ['browser.goto', { url: 'localhost:3000' }],
+    ['browser.tabCreate', {}],
+    ['browser.tabCreate', { url: 'about:blank' }],
+    ['browser.tabCreate', { url: 'http://example.com' }]
+  ])('F1: %s allows http(s) with browser.control (%o)', async (method, params) => {
+    const { reply, dispatched } = await sendWithAllGrants(method, params)
+    expect(reply).toMatchObject({ ok: true })
+    expect(dispatched).toBe(true)
+  })
+
+  it.each([
+    ['files.createFile', { worktree: 'id:wt', relativePath: 'CLAUDE.md' }],
+    ['files.createFile', { worktree: 'id:wt', relativePath: 'pkg/AGENTS.md' }],
+    ['files.createFile', { worktree: 'id:wt', relativePath: '.claude/settings.json' }],
+    ['files.createFile', { worktree: 'id:wt', relativePath: '.codex/config.toml' }],
+    ['files.createFile', { worktree: 'id:wt', relativePath: '.git/hooks/pre-commit' }],
+    ['files.createFile', { worktree: 'id:wt', relativePath: 'dobius.yaml' }],
+    ['files.writeTerminalArtifact', { absolutePath: '/repo/.git/config', grantId: 'g' }],
+    ['files.writeTerminalArtifact', { absolutePath: 'C:\\repo\\CLAUDE.md', grantId: 'g' }]
+  ])('F2: %s refuses agent-instruction, hook and .git paths even with files.write (%o)', async (method, params) => {
+    const { reply, dispatched } = await sendWithAllGrants(method, params)
+    expect(reply).toMatchObject(forbidden)
+    expect(dispatched).toBe(false)
+  })
+
+  it('F2: files.createFile of an ordinary file is allowed with files.write', async () => {
+    const { reply } = await sendWithAllGrants('files.createFile', {
+      worktree: 'id:wt',
+      relativePath: 'src/notes.md'
+    })
+    expect(reply).toMatchObject({ ok: true })
+  })
+
+  it.each([
+    ['pushTarget', { remoteName: 'evil', branchName: 'main' }],
+    ['parentWorktree', 'id:other']
+  ])('F3: worktree.set rejects a mobile %s change even with every grant', async (field, value) => {
+    const { reply, dispatched } = await sendWithAllGrants('worktree.set', {
+      worktree: 'id:wt',
+      [field]: value
+    })
+    expect(reply).toMatchObject(forbidden)
+    expect(dispatched).toBe(false)
+  })
+
+  it('F3: worktree.set metadata without those fields still works with no grants', async () => {
+    const { registry, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    await expect(
+      send(phone.token, 'worktree.set', { worktree: 'id:wt', displayName: 'x' })
+    ).resolves.toMatchObject({ ok: true })
+  })
+
+  it('leaves screencast cleanup ungated so a phone can always stop streaming', async () => {
+    const { registry, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    await expect(send(phone.token, 'browser.screencast.unsubscribe', {})).resolves.toMatchObject({
+      ok: true
+    })
   })
 })

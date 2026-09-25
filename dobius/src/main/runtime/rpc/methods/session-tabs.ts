@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineMethod, defineStreamingMethod, type RpcAnyMethod } from '../core'
+import { isProtectedMobileWritePath } from '../../mobile-rpc-grants'
 import {
   ActivateTab,
   CreateTerminalTab,
@@ -246,12 +247,21 @@ export const SESSION_TAB_METHODS: RpcAnyMethod[] = [
   defineMethod({
     name: 'markdown.saveTab',
     params: SaveMarkdownTab,
-    handler: async (params, { runtime }) =>
-      runtime.saveMobileMarkdownTab(
+    handler: async (params, { runtime, clientKind }) => {
+      // Why: the tab's file path is only known host-side, so the mobile
+      // agent-instruction / hook path block (mobile-rpc-grants.ts) runs here.
+      if (clientKind === 'mobile') {
+        const tab = await runtime.readMobileMarkdownTab(params.worktree, params.tabId)
+        if (isProtectedMobileWritePath(tab.filePath) || isProtectedMobileWritePath(tab.relativePath)) {
+          throw new Error('mobile clients cannot write agent-instruction, hook or .git files')
+        }
+      }
+      return runtime.saveMobileMarkdownTab(
         params.worktree,
         params.tabId,
         params.baseVersion,
         params.content
       )
+    }
   })
 ]
