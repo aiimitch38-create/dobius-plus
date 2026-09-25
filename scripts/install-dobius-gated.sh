@@ -7,17 +7,83 @@
 # always knowable, (b) refuses to clobber a different lane's install without
 # --take-over, and (c) is the one path allowed through the global
 # dobius-install-gate hook that blocks raw cp/rm/mv against the app bundle.
+# build-and-install.sh and scripts/install-dobius-v2.sh are retired pointers
+# to this file (BUILD-043): there is exactly one install path.
+#
+# Order (BUILD-043): lock → ownership/version checks → quit app → stage copy →
+# validate stage → atomic swap → move the old bundle to ONE rollback copy
+# outside /Applications and outside dobius/dist → remove the dist build copy.
+# Any failure before the swap leaves the installed app untouched.
 #
 # Usage: install-dobius-gated.sh <path-to-built-Dobius+.app> [--take-over]
+#
+# Test overrides (fixture dirs only). The app is quit/killed/relaunched and
+# LaunchServices touched ONLY when the destination is the real install path.
+#   DOBIUS_INSTALL_DEST         default /Applications/Dobius+.app
+#   DOBIUS_INSTALL_LOCK         default ~/.dobius-install.lock
+#   DOBIUS_INSTALL_LOCK_WAIT    seconds to wait for another install (default 300)
+#   DOBIUS_INSTALL_BACKUP_DIR   default ~/Library/Application Support/dobius-plus-install-backups
+#   DOBIUS_INSTALL_HISTORY_LOG  default ~/.dobius-install-history.log
 set -euo pipefail
 
 APP_SRC="${1:?usage: install-dobius-gated.sh <built .app path> [--take-over]}"
 TAKE_OVER="${2:-}"
-DEST="/Applications/Dobius+.app"
+REAL_DEST="/Applications/Dobius+.app"
+DEST="${DOBIUS_INSTALL_DEST:-$REAL_DEST}"
 PROV_REL="Contents/Resources/INSTALL-PROVENANCE.json"
-LOCK="$HOME/.dobius-install.lock"
+LOCK="${DOBIUS_INSTALL_LOCK:-$HOME/.dobius-install.lock}"
+LOCK_WAIT="${DOBIUS_INSTALL_LOCK_WAIT:-300}"
+BACKUP_DIR="${DOBIUS_INSTALL_BACKUP_DIR:-$HOME/Library/Application Support/dobius-plus-install-backups}"
+# Why no .app suffix: LaunchServices registers directories named *.app, and a
+# second bundle with the same ID is the duplicate-Dock-icon bug (#105).
+ROLLBACK="$BACKUP_DIR/Dobius+.previous"
+HISTORY_LOG="${DOBIUS_INSTALL_HISTORY_LOG:-$HOME/.dobius-install-history.log}"
+MANAGE_APP=0
+[ "$DEST" = "$REAL_DEST" ] && MANAGE_APP=1
 
 [ -d "$APP_SRC" ] || { echo "ERROR: no app bundle at $APP_SRC" >&2; exit 1; }
+[ -d "$(dirname "$DEST")" ] || { echo "ERROR: install folder $(dirname "$DEST") does not exist" >&2; exit 1; }
+APP_SRC="$(cd "$APP_SRC" && pwd -P)"
+DEST="$(cd "$(dirname "$DEST")" && pwd -P)/$(basename "$DEST")"
+STAGE="${DEST%.app}.new.app"
+case "$APP_SRC" in
+  "$DEST"|"$DEST"/*|"$STAGE"|"$STAGE"/*)
+    echo "ERROR: $APP_SRC is the installed app or its stage — pass a build" >&2
+    exit 1 ;;
+esac
+
+# Lock FIRST (#104): the ownership and version checks below must see the state
+# left by any install that finished while we waited, not a snapshot taken
+# before it. mkdir is atomic; the lock holds our pid for diagnosis.
+LOCK_HELD=0
+cleanup() {
+  # Whatever sits at $STAGE at exit is ours to remove: a partial/unvalidated
+  # new bundle, or the old bundle whose move to the rollback dir failed.
+  # Either way it must not linger as a second same-bundle-ID app.
+  if [ "$LOCK_HELD" = "1" ]; then
+    if [ -e "$STAGE" ]; then rm -rf "$STAGE"; fi
+    rm -rf "$LOCK"
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+WAITED=0
+until mkdir "$LOCK" 2>/dev/null; do
+  if [ "$WAITED" -ge "$LOCK_WAIT" ]; then
+    OWNER=$(cat "$LOCK/pid" 2>/dev/null || echo "?")
+    STATE="not running — the lock is stale"
+    kill -0 "$OWNER" 2>/dev/null && STATE="still running"
+    echo "REFUSED: another install holds $LOCK (pid $OWNER, $STATE) after ${LOCK_WAIT}s." >&2
+    echo "Remove the lock only if that install is dead." >&2
+    exit 4
+  fi
+  [ "$WAITED" = "0" ] && echo "Waiting for another install to finish (lock: $LOCK)…" >&2
+  sleep 1
+  WAITED=$((WAITED + 1))
+done
+LOCK_HELD=1
+echo "$$" > "$LOCK/pid"
 
 # Provenance of the build we're about to install.
 SRC_REPO=$(cd "$(dirname "$APP_SRC")" && git rev-parse --show-toplevel 2>/dev/null || echo "unknown")
@@ -26,9 +92,9 @@ SRC_COMMIT=$(cd "$SRC_REPO" 2>/dev/null && git rev-parse --short HEAD 2>/dev/nul
 
 # Ownership check: a different branch's install needs an explicit takeover.
 if [ -f "$DEST/$PROV_REL" ] && [ "$TAKE_OVER" != "--take-over" ]; then
-  CUR_BRANCH=$(python3 -c "import json;print(json.load(open('$DEST/$PROV_REL')).get('branch','unknown'))" 2>/dev/null || echo unknown)
+  CUR_BRANCH=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('branch','unknown'))" "$DEST/$PROV_REL" 2>/dev/null || echo unknown)
   if [ "$CUR_BRANCH" != "unknown" ] && [ "$CUR_BRANCH" != "$SRC_BRANCH" ]; then
-    echo "REFUSED: /Applications/Dobius+.app currently belongs to branch '$CUR_BRANCH'." >&2
+    echo "REFUSED: $DEST currently belongs to branch '$CUR_BRANCH'." >&2
     echo "Your build is from '$SRC_BRANCH'. Re-run with --take-over to replace it" >&2
     echo "(and tell the other lane), or merge the branches instead." >&2
     exit 3
@@ -40,8 +106,12 @@ fi
 # read as "months of work wiped". Branch ownership alone did not catch it — the
 # version going backwards is the signal that a stale lane is installing.
 if [ "$TAKE_OVER" != "--take-over" ]; then
-  SRC_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_SRC/Contents/Info.plist" 2>/dev/null || echo "")
-  DST_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$DEST/Contents/Info.plist" 2>/dev/null || echo "")
+  # Why the -f guards: on a missing plist PlistBuddy prints "File Doesn't Exist,
+  # Will Create: <path>" to stdout, and the digits in that path were compared
+  # as a version (a first install into a path with digits was refused).
+  SRC_VER=""; DST_VER=""
+  [ -f "$APP_SRC/Contents/Info.plist" ] && SRC_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_SRC/Contents/Info.plist" 2>/dev/null || echo "")
+  [ -f "$DEST/Contents/Info.plist" ] && DST_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$DEST/Contents/Info.plist" 2>/dev/null || echo "")
   if [ -n "$SRC_VER" ] && [ -n "$DST_VER" ]; then
     if ! python3 - "$SRC_VER" "$DST_VER" <<'PYVER'
 import re, sys
@@ -51,7 +121,7 @@ src, dst = key(sys.argv[1]), key(sys.argv[2])
 sys.exit(0 if src >= dst else 1)
 PYVER
     then
-      echo "REFUSED: that build is version $SRC_VER but /Applications/Dobius+.app is $DST_VER." >&2
+      echo "REFUSED: that build is version $SRC_VER but $DEST is $DST_VER." >&2
       echo "Installing it would DOWNGRADE the app (this is the 'my work disappeared' bug)." >&2
       echo "You are installing from: $SRC_REPO ($SRC_BRANCH)" >&2
       echo "Re-run with --take-over only if you really mean to go backwards." >&2
@@ -60,25 +130,28 @@ PYVER
   fi
 fi
 
-# Simple lock so two installs can't interleave.
-if ! mkdir "$LOCK" 2>/dev/null; then
-  echo "REFUSED: another install is in progress (lock: $LOCK). Remove it if stale." >&2
-  exit 4
+if [ "$MANAGE_APP" = "1" ]; then
+  osascript -e 'quit app "Dobius+"' 2>/dev/null || true
+  for _ in $(seq 1 10); do
+    pgrep -f "Dobius\\+.app/Contents/MacOS/Dobius\\+$" > /dev/null || break
+    sleep 1
+  done
+  # Kill only the main app (exact name) and Chromium helpers (--type= arg).
+  # NEVER pattern-match the bundle path: the detached terminal daemon runs
+  # "Dobius+ Helper … daemon-entry.js" from inside it, and killing it destroys
+  # every live terminal session. The + must be escaped (regex quantifier).
+  pkill -x "Dobius\+" 2>/dev/null || true
+  pkill -f "Dobius\+ Helper.*--type=" 2>/dev/null || true
 fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
-osascript -e 'quit app "Dobius+"' 2>/dev/null || true
-for _ in $(seq 1 10); do
-  pgrep -f "Dobius\\+.app/Contents/MacOS/Dobius\\+$" > /dev/null || break
-  sleep 1
-done
-
-# Staged swap: full copy beside the target, then instant rename — never a
-# half-copied bundle even if something relaunches the app mid-install.
-STAGE="/Applications/Dobius+.new.app"
+# Stage: full copy beside the target (same volume, so the swap is a rename).
+# The stage is always a fresh tree, so no file from an old bundle survives.
 export DOBIUS_INSTALL_GATE=1
 rm -rf "$STAGE"
-cp -R "$APP_SRC" "$STAGE"
+if ! cp -R "$APP_SRC" "$STAGE"; then
+  echo "ERROR: copying $APP_SRC to $STAGE failed — installed app left untouched." >&2
+  exit 6
+fi
 python3 - "$STAGE/$PROV_REL" "$SRC_BRANCH" "$SRC_COMMIT" "$SRC_REPO" <<'EOF'
 import json, sys, datetime, os
 path, branch, commit, repo = sys.argv[1:5]
@@ -90,31 +163,92 @@ json.dump({
     "installedBy": os.environ.get("USER", "unknown"),
 }, open(path, "w"), indent=2)
 EOF
-rm -rf "$DEST"
-mv "$STAGE" "$DEST"
 
-# LaunchServices keys apps by bundle ID, not path. rm+mv puts a fresh inode at
-# the same path every install, and if another copy with the same bundle ID
-# exists anywhere else on disk (a stray handoff/backup copy), LaunchServices
-# can bind the Dock tile to the wrong one — the app "acts broken"/relaunches
-# the old build right after an update, which reads as a crash even though
-# nothing crashed. See ~/.claude/skills/learned-dobius-duplicate-app-icon.
-LSR=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
-BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$DEST/Contents/Info.plist" 2>/dev/null || echo "")
-if [ -x "$LSR" ]; then
-  "$LSR" -f "$DEST" >/dev/null 2>&1 || true
-  if [ -n "$BUNDLE_ID" ]; then
-    DUPES=$("$LSR" -dump 2>/dev/null | grep -B2 "bundle id:.*$BUNDLE_ID" | grep "path:" | awk '{print $2}' | sort -u | grep -v "^$DEST$" || true)
-    if [ -n "$DUPES" ]; then
-      echo "WARNING: another app on disk shares this bundle ID ($BUNDLE_ID) — this is exactly" >&2
-      echo "the duplicate-icon/wrong-app-launches bug. Move (don't delete) it out of Spotlight's" >&2
-      echo "reach, then re-run this script:" >&2
-      echo "$DUPES" >&2
-    fi
+# Validate the STAGED copy (what will actually run), before touching $DEST.
+stage_invalid() {
+  echo "ERROR: staged bundle is not a runnable Dobius+ build: $1 — installed app left untouched." >&2
+  exit 7
+}
+EXE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$STAGE/Contents/Info.plist" 2>/dev/null || echo "")
+[ -n "$EXE_NAME" ] || stage_invalid "Contents/Info.plist has no CFBundleExecutable"
+/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$STAGE/Contents/Info.plist" >/dev/null 2>&1 \
+  || stage_invalid "Contents/Info.plist has no CFBundleIdentifier"
+[ -x "$STAGE/Contents/MacOS/$EXE_NAME" ] || stage_invalid "Contents/MacOS/$EXE_NAME missing or not executable"
+[ -f "$STAGE/Contents/Resources/app.asar" ] || stage_invalid "Contents/Resources/app.asar missing"
+HOST_ARCH="$(uname -m)"
+BIN_ARCHES="$(lipo -archs "$STAGE/Contents/MacOS/$EXE_NAME" 2>/dev/null || echo unknown)"
+case "$HOST_ARCH:$BIN_ARCHES" in
+  arm64:*arm64*|x86_64:*x86_64*) ;;
+  *) stage_invalid "binary arch ($BIN_ARCHES) does not run on this host ($HOST_ARCH)" ;;
+esac
+python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$STAGE/$PROV_REL" 2>/dev/null \
+  || stage_invalid "$PROV_REL was not written"
+
+# Swap (#104): with an app already installed, exchange the two bundles in ONE
+# atomic rename (renamex_np RENAME_SWAP) — there is never an instant with no
+# app at $DEST. Afterwards $STAGE holds the previous bundle.
+if [ -e "$DEST" ]; then
+  if ! python3 - "$STAGE" "$DEST" <<'PYSWAP'
+import ctypes, ctypes.util, os, sys
+libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+swap = libc.renamex_np
+swap.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+RENAME_SWAP = 0x2
+if swap(os.fsencode(sys.argv[1]), os.fsencode(sys.argv[2]), RENAME_SWAP) != 0:
+    sys.stderr.write("renamex_np: %s\n" % os.strerror(ctypes.get_errno()))
+    sys.exit(1)
+PYSWAP
+  then
+    echo "ERROR: swapping $STAGE into $DEST failed — installed app left untouched." >&2
+    exit 8
   fi
+  # One rollback copy, outside /Applications and outside dobius/dist. The
+  # previous one is dropped first so the disk never holds two.
+  ROLLBACK_NOTE="rollback: none (moving the previous bundle failed)"
+  if mkdir -p "$BACKUP_DIR" && rm -rf "$ROLLBACK" && mv "$STAGE" "$ROLLBACK"; then
+    ROLLBACK_NOTE="rollback: $ROLLBACK"
+  else
+    echo "WARNING: could not keep a rollback copy in $BACKUP_DIR; the previous bundle is removed." >&2
+  fi
+else
+  mv "$STAGE" "$DEST"
+  ROLLBACK_NOTE="rollback: none (first install)"
 fi
 
-open -a "$DEST"
+# The build output carries the same bundle ID as the installed app; left in
+# dobius/dist it can register with LaunchServices → two Dock icons (#105). It
+# is a regenerable artifact, so remove it. A bundle outside a dist/ folder may
+# be someone's handoff copy — never delete that, only warn.
+case "$APP_SRC" in
+  */dist/*) rm -rf "$APP_SRC" ;;
+  *) echo "NOTE: $APP_SRC shares the installed app's bundle ID; move it out of Spotlight's reach when done." >&2 ;;
+esac
 
-echo "INSTALLED: $SRC_BRANCH@$SRC_COMMIT -> $DEST"
-echo "$(date '+%F %T') install $SRC_BRANCH@$SRC_COMMIT from $SRC_REPO" >> "$HOME/.dobius-install-history.log"
+if [ "$MANAGE_APP" = "1" ]; then
+  # LaunchServices keys apps by bundle ID, not path. The swap puts a fresh inode
+  # at the same path every install, and if another copy with the same bundle ID
+  # exists anywhere else on disk (a stray handoff/backup copy), LaunchServices
+  # can bind the Dock tile to the wrong one — the app "acts broken"/relaunches
+  # the old build right after an update, which reads as a crash even though
+  # nothing crashed. See ~/.claude/skills/learned-dobius-duplicate-app-icon.
+  LSR=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+  BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$DEST/Contents/Info.plist" 2>/dev/null || echo "")
+  if [ -x "$LSR" ]; then
+    "$LSR" -f "$DEST" >/dev/null 2>&1 || true
+    if [ -n "$BUNDLE_ID" ]; then
+      DUPES=$("$LSR" -dump 2>/dev/null | grep -B2 "bundle id:.*$BUNDLE_ID" | grep "path:" | awk '{print $2}' | sort -u | grep -v "^$DEST$" || true)
+      if [ -n "$DUPES" ]; then
+        echo "WARNING: another app on disk shares this bundle ID ($BUNDLE_ID) — this is exactly" >&2
+        echo "the duplicate-icon/wrong-app-launches bug. Move (don't delete) it out of Spotlight's" >&2
+        echo "reach, then re-run this script:" >&2
+        echo "$DUPES" >&2
+      fi
+    fi
+  fi
+  open -a "$DEST"
+fi
+
+echo "INSTALLED: $SRC_BRANCH@$SRC_COMMIT -> $DEST ($ROLLBACK_NOTE)"
+[ "$ROLLBACK_NOTE" = "rollback: $ROLLBACK" ] && \
+  echo "To go back: $0 \"$ROLLBACK\" --take-over"
+echo "$(date '+%F %T') install $SRC_BRANCH@$SRC_COMMIT from $SRC_REPO ($ROLLBACK_NOTE)" >> "$HISTORY_LOG"
