@@ -6,7 +6,8 @@ import type { CustomAgent } from '../../../../shared/agents'
 export function useAgentDetailActions(args: {
   selectedAgentId: string | null
   selectedAgent: CustomAgent | null
-  memoryContent: string
+  saveMemoryFile: (agentId: string) => Promise<void>
+  reportSaveError: (error: unknown, fallback: string) => void
   setAgents: (agents: CustomAgent[]) => void
 }): {
   savingMemory: boolean
@@ -15,7 +16,7 @@ export function useAgentDetailActions(args: {
   resetSession: () => Promise<void>
   saveTagline: (value: string) => Promise<void>
 } {
-  const { selectedAgentId, selectedAgent, memoryContent, setAgents } = args
+  const { selectedAgentId, selectedAgent, saveMemoryFile, reportSaveError, setAgents } = args
   const [savingMemory, setSavingMemory] = useState(false)
   const [resettingSession, setResettingSession] = useState(false)
 
@@ -25,11 +26,10 @@ export function useAgentDetailActions(args: {
     }
     setSavingMemory(true)
     try {
-      await window.api.agents.writeFile(selectedAgentId, 'memory', memoryContent)
+      await saveMemoryFile(selectedAgentId)
       toast.success('Memory saved')
     } catch (error) {
-      console.error('Failed to save memory:', error)
-      toast.error(error instanceof Error ? error.message : 'Could not save memory')
+      reportSaveError(error, 'Could not save memory')
     } finally {
       setSavingMemory(false)
     }
