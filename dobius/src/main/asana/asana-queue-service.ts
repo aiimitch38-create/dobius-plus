@@ -82,12 +82,14 @@ export async function refreshAsanaTasks(): Promise<AsanaTasksSnapshot> {
   }
   refreshing = true
   try {
-    const { myGid, reviewGid } = getAsanaConfig()
+    const { myGid, reviewGid, allowedProjects } = getAsanaConfig()
+    // Empty allowedProjects = no project filter (see fetchLane).
+    const projectGids = allowedProjects.map((project) => project.gid)
     const [build, review] = await Promise.all([
-      fetchLane('build', myGid).catch((e) => {
+      fetchLane('build', myGid, projectGids).catch((e) => {
         throw e
       }),
-      fetchLane('review', reviewGid)
+      fetchLane('review', reviewGid, projectGids)
     ])
     buildTasks = build
     reviewTasks = review

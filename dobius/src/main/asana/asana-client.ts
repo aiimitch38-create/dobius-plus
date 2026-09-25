@@ -8,10 +8,33 @@ import { getAsanaToken } from './asana-token-store'
 // then read the fields the Tasks panel shows.
 const ASANA_HOST = 'app.asana.com'
 const TIMEOUT_MS = 15_000
-const MAX_TASKS = 50
+// Asana's maximum page size; larger result sets are followed via next_page.offset.
+const PAGE_SIZE = 100
+// Loop guard only (10k tasks per lane per workspace); hitting it fails the refresh
+// instead of silently truncating intake.
+const MAX_PAGES = 100
+const MAX_RATE_LIMIT_RETRIES = 2
+const MAX_RETRY_AFTER_SEC = 60
 const ASANA_STORY_TEXT_LIMIT = 65_000
 const REVIEW_WINDOW_MS = 48 * 60 * 60 * 1000
-const TASK_FIELDS = 'gid,name,due_on,completed,permalink_url,assignee.name,notes'
+const TASK_FIELDS = 'gid,name,due_on,completed,permalink_url,assignee.name,notes,projects.gid'
+
+export class AsanaHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfterSec: number | null
+  ) {
+    super(message)
+    this.name = 'AsanaHttpError'
+  }
+}
+
+function parseRetryAfter(value: string | string[] | undefined): number | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  const seconds = raw === undefined ? Number.NaN : Number(raw)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
+}
 
 function asanaGet<T>(path: string): Promise<T> {
   const token = getAsanaToken() // main-process only; throws if not configured
@@ -32,7 +55,13 @@ function asanaGet<T>(path: string): Promise<T> {
         res.on('end', () => {
           const code = res.statusCode ?? 0
           if (code < 200 || code >= 300) {
-            reject(new Error(`Asana HTTP ${code}: ${raw.slice(0, 200)}`))
+            reject(
+              new AsanaHttpError(
+                `Asana HTTP ${code}: ${raw.slice(0, 200)}`,
+                code,
+                parseRetryAfter(res.headers?.['retry-after'])
+              )
+            )
             return
           }
           try {
@@ -100,7 +129,52 @@ type TasksResponse = {
     completed?: boolean
     permalink_url?: string
     assignee?: { name?: string } | null
+    projects?: { gid?: string }[] | null
   }[]
+  next_page?: { offset?: string } | null
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Why: a 429 mid-pagination would otherwise fail the whole refresh; retry a
+// bounded number of times, honoring Asana's Retry-After (capped).
+async function asanaGetWithRetry<T>(path: string): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await asanaGet<T>(path)
+    } catch (error) {
+      if (
+        !(error instanceof AsanaHttpError) ||
+        error.status !== 429 ||
+        attempt >= MAX_RATE_LIMIT_RETRIES
+      ) {
+        throw error
+      }
+      await sleep(Math.min(error.retryAfterSec ?? 1, MAX_RETRY_AFTER_SEC) * 1000)
+    }
+  }
+}
+
+async function fetchAllTaskPages(basePath: string): Promise<NonNullable<TasksResponse['data']>> {
+  const tasks: NonNullable<TasksResponse['data']> = []
+  const seenOffsets = new Set<string>()
+  let offset: string | undefined
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const path = offset ? `${basePath}&offset=${encodeURIComponent(offset)}` : basePath
+    const res = await asanaGetWithRetry<TasksResponse>(path)
+    tasks.push(...(res.data ?? []))
+    offset = res.next_page?.offset || undefined
+    if (!offset) {
+      return tasks
+    }
+    if (seenOffsets.has(offset)) {
+      throw new Error('Asana pagination repeated an offset; intake aborted')
+    }
+    seenOffsets.add(offset)
+  }
+  throw new Error(`Asana returned more than ${MAX_PAGES} pages; intake aborted`)
 }
 
 async function fetchWorkspaces(): Promise<string[]> {
@@ -109,31 +183,42 @@ async function fetchWorkspaces(): Promise<string[]> {
 }
 
 /**
- * Fetch a lane's tasks by assignee across all the token owner's workspaces.
- * build lane = incomplete tasks; review lane = tasks modified in the last 48h,
- * keeping only completed ones (Sam's recently-finished work).
+ * Fetch a lane's tasks by assignee across all the token owner's workspaces,
+ * following every page and deduplicating by gid.
+ * build lane = incomplete tasks; review lane = tasks completed in the last 48h
+ * (Sam's recently-finished work). Asana's completed_since returns incomplete
+ * tasks plus tasks completed after that instant, so the review lane asks for
+ * "48h ago" and then keeps only the completed ones.
+ * allowedProjectGids: empty = every project (and tasks in no project);
+ * non-empty = only tasks that belong to at least one listed project.
  */
-export async function fetchLane(lane: AsanaLane, assigneeGid: string): Promise<AsanaTask[]> {
+export async function fetchLane(
+  lane: AsanaLane,
+  assigneeGid: string,
+  allowedProjectGids: readonly string[] = []
+): Promise<AsanaTask[]> {
   if (!ASANA_GID_RE.test(assigneeGid)) {
     return []
   }
+  const allowed = new Set(allowedProjectGids)
   const workspaces = await fetchWorkspaces()
   const seen = new Set<string>()
   const out: AsanaTask[] = []
   for (const ws of workspaces) {
-    const recent =
-      lane === 'review'
-        ? `&modified_since=${encodeURIComponent(new Date(Date.now() - REVIEW_WINDOW_MS).toISOString())}`
-        : ''
+    const completedSince =
+      lane === 'review' ? new Date(Date.now() - REVIEW_WINDOW_MS).toISOString() : 'now'
     const path =
       `/api/1.0/tasks?assignee=${assigneeGid}&workspace=${ws}` +
-      `&completed_since=now&limit=${MAX_TASKS}&opt_fields=${TASK_FIELDS}${recent}`
-    const res = await asanaGet<TasksResponse>(path)
-    for (const t of res.data ?? []) {
+      `&completed_since=${encodeURIComponent(completedSince)}&limit=${PAGE_SIZE}` +
+      `&opt_fields=${TASK_FIELDS}`
+    for (const t of await fetchAllTaskPages(path)) {
       if (!t.gid || seen.has(t.gid)) {
         continue
       }
       if (lane === 'review' && !t.completed) {
+        continue
+      }
+      if (allowed.size > 0 && !(t.projects ?? []).some((p) => p.gid && allowed.has(p.gid))) {
         continue
       }
       seen.add(t.gid)
