@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
+import { SafeJsonFile } from '../../storage/safe-json-file'
 
 const FILE_NAME = 'communications-global-agent-config.json'
 
@@ -27,8 +27,6 @@ const DEFAULT_CONFIG: GlobalAgentConfig = {
   model: null,
   preferred_runtime: null
 }
-
-let cached: StoredFile | null = null
 
 function filePath(): string {
   return path.join(app.getPath('userData'), FILE_NAME)
@@ -60,9 +58,11 @@ function sanitizeConfig(raw: unknown): GlobalAgentConfig {
   }
 }
 
-function sanitize(raw: unknown): StoredFile {
-  if (typeof raw !== 'object' || raw === null) {
-    return { config: { ...DEFAULT_CONFIG }, agentManagedProfiles: false }
+// Why: a file that is not an object is unreadable (never replaced by defaults
+// and then saved over).
+function sanitize(raw: unknown): StoredFile | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return undefined
   }
   const record = raw as { config?: unknown; agentManagedProfiles?: unknown }
   return {
@@ -71,33 +71,22 @@ function sanitize(raw: unknown): StoredFile {
   }
 }
 
+const file = new SafeJsonFile<StoredFile>({
+  filePath,
+  parse: sanitize,
+  fallback: () => ({ config: { ...DEFAULT_CONFIG }, agentManagedProfiles: false }),
+  label: `[communications/agents] ${FILE_NAME}`
+})
+
 function load(): StoredFile {
-  if (cached) {
-    return cached
-  }
-  const target = filePath()
-  if (!existsSync(target)) {
-    cached = { config: { ...DEFAULT_CONFIG }, agentManagedProfiles: false }
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(target, 'utf-8')))
-  } catch (error) {
-    console.warn(
-      '[communications/agents] failed to load global agent config:',
-      error instanceof Error ? error.message : String(error)
-    )
-    cached = { config: { ...DEFAULT_CONFIG }, agentManagedProfiles: false }
-  }
-  return cached
+  return file.get()
 }
 
+// Throws like the old writer did, so the RPC caller sees that nothing was saved.
 function persist(data: StoredFile): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  mkdirSync(path.dirname(target), { recursive: true })
-  writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf-8')
-  renameSync(tmp, target)
+  if (!file.set(data)) {
+    throw new Error('Global agent config could not be saved')
+  }
 }
 
 const RESERVED_ENV_KEYS = new Set(['PATH', 'HOME', 'ANTHROPIC_API_KEY'])
@@ -115,7 +104,6 @@ export function setGlobalAgentConfig(config: GlobalAgentConfig): GlobalAgentConf
   const sanitized = sanitizeConfig(config)
   const data = load()
   data.config = sanitized
-  cached = data
   persist(data)
   return { ...sanitized }
 }
@@ -127,7 +115,6 @@ export function getAgentManagedProfiles(): boolean {
 export function setAgentManagedProfiles(enabled: boolean): boolean {
   const data = load()
   data.agentManagedProfiles = enabled === true
-  cached = data
   persist(data)
   return data.agentManagedProfiles
 }

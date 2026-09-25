@@ -11,6 +11,7 @@ import {
   type CrashReportRecord,
   type CrashReportStatus
 } from '../../shared/crash-reporting'
+import { keepUnreadableCopy, readSafeJsonFile } from '../storage/safe-json-file'
 
 const MAX_REPORTS = 5
 const RELATED_CRASH_WINDOW_MS = 5_000
@@ -39,6 +40,8 @@ function isRelatedCrashEvent(anchor: CrashReportRecord, candidate: CrashReportRe
 
 export class CrashReportStore {
   private writeChain = Promise.resolve()
+  private unreadableDetail: string | null = null
+  private quarantinedFingerprint: string | null = null
 
   constructor(private readonly filePath: string) {}
 
@@ -136,6 +139,13 @@ export class CrashReportStore {
   ): Promise<T> {
     const run = this.writeChain.then(async () => {
       const reports = await this.readReports()
+      if (this.unreadableDetail !== null) {
+        // Why: the empty list stands in for an unreadable file; saving it
+        // would replace the real reports.
+        throw new Error(
+          `crash-reports.json is unreadable (${this.unreadableDetail}); not saved`
+        )
+      }
       const { reports: nextReports, result } = await mutate(reports)
       await this.writeReports(nextReports)
       return result
@@ -147,17 +157,30 @@ export class CrashReportStore {
     return run
   }
 
+  // Re-reads every call (no cache), so a repaired file recovers at once.
   private async readReports(): Promise<CrashReportRecord[]> {
-    try {
-      const raw = await fs.readFile(this.filePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<CrashReportFile>
-      return Array.isArray(parsed.reports) ? parsed.reports.slice(0, MAX_REPORTS) : []
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.warn('[crash-reporting] Failed to read crash reports:', error)
-      }
-      return []
+    const result = readSafeJsonFile<CrashReportRecord[]>(
+      this.filePath,
+      (raw) => {
+        const reports = (raw as Partial<CrashReportFile> | null)?.reports
+        return Array.isArray(reports) ? reports.slice(0, MAX_REPORTS) : undefined
+      },
+      () => []
+    )
+    if (result.status !== 'unreadable') {
+      this.unreadableDetail = null
+      return result.value
     }
+    if (this.unreadableDetail !== result.detail) {
+      console.warn(`[crash-reporting] crash-reports.json unreadable: ${result.detail}`)
+    }
+    this.unreadableDetail = result.detail ?? 'unreadable'
+    this.quarantinedFingerprint = keepUnreadableCopy(
+      this.filePath,
+      '[crash-reporting] crash-reports.json',
+      this.quarantinedFingerprint
+    )
+    return result.value
   }
 
   private async writeReports(reports: CrashReportRecord[]): Promise<void> {

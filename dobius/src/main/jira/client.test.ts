@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { join } from 'node:path'
@@ -482,3 +490,51 @@ function listFiles(dir: string): string[] {
     .filter((entry) => entry.isFile())
     .map((entry) => join(entry.parentPath, entry.name))
 }
+
+describe('Jira site file is never overwritten while unreadable (BUILD-009B)', () => {
+  const validSite = {
+    id: 'site-alpha',
+    siteUrl: 'https://example.atlassian.net',
+    email: 'ada@example.com',
+    displayName: 'Ada',
+    accountId: 'account-alpha'
+  }
+
+  it.each([
+    ['truncated JSON', '{"version": 1, "sites": [{"id"'],
+    ['a malformed site next to a valid one', JSON.stringify({ sites: [validSite, { id: 7 }] })],
+    ['sites that is not a list', JSON.stringify({ sites: 'nope' })]
+  ])('%s', async (_name, text) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const dobiusDir = join(tempHome, '.dobius')
+    const target = join(dobiusDir, 'jira-sites.json')
+    mkdirSync(join(dobiusDir, 'jira-tokens'), { recursive: true })
+    writeFileSync(tokenPathForSite(validSite.id), 'token-alpha')
+    writeFileSync(target, text, 'utf-8')
+    const before = statSync(target)
+    const jira = await loadClientModule()
+
+    expect(jira.getStatus().connected).toBe(false)
+    jira.selectSite('all')
+    jira.clearToken(validSite.id)
+    jira.disconnect()
+
+    expect(readFileSync(target, 'utf-8')).toBe(text)
+    expect(statSync(target).mtimeMs).toBe(before.mtimeMs)
+    const names = readdirSync(dobiusDir)
+    expect(names.filter((name) => name.endsWith('.tmp'))).toEqual([])
+    expect(names.filter((name) => name.startsWith('jira-sites.json.unreadable-'))).toHaveLength(1)
+  })
+
+  it('still saves a readable site list owner-only (0600)', async () => {
+    writeJiraFiles('site-alpha', 'token-alpha')
+    const target = join(tempHome, '.dobius', 'jira-sites.json')
+    const jira = await loadClientModule()
+
+    expect(jira.selectSite('all').connected).toBe(true)
+    expect(JSON.parse(readFileSync(target, 'utf-8')).selectedSiteId).toBe('all')
+    if (process.platform !== 'win32') {
+      expect(statSync(target).mode & 0o777).toBe(0o600)
+    }
+  })
+})

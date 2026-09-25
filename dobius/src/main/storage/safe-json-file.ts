@@ -30,6 +30,8 @@ export type SafeJsonFileOptions<T> = {
   fallback: () => T
   // Log prefix, e.g. '[agents] agents.json'.
   label: string
+  // File mode for newly written files (e.g. 0o600 for account metadata).
+  mode?: number
 }
 
 function errorCode(error: unknown): string | undefined {
@@ -88,6 +90,28 @@ export function parseEveryEntry<T>(
   return parsed
 }
 
+/**
+ * Same contract as parseEveryEntry for a JSON object keyed by id: undefined
+ * (-> unreadable) when the value is not a plain object or any entry is malformed.
+ */
+export function parseEveryValue<T>(
+  raw: unknown,
+  parseEntry: (entry: unknown, key: string) => T | null
+): Record<string, T> | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return undefined
+  }
+  const parsed: Record<string, T> = {}
+  for (const [key, entry] of Object.entries(raw)) {
+    const value = parseEntry(entry, key)
+    if (value === null) {
+      return undefined
+    }
+    parsed[key] = value
+  }
+  return parsed
+}
+
 export function uniqueTmpPath(target: string): string {
   // Why: pid alone collides when two writers in one process save the same file.
   return `${target}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`
@@ -95,11 +119,11 @@ export function uniqueTmpPath(target: string): string {
 
 // Throws on failure; the original file is untouched unless rename succeeded.
 // The unique temp file is removed on every failure, including a partial write.
-export function writeFileAtomic(target: string, data: string): void {
+export function writeFileAtomic(target: string, data: string, mode?: number): void {
   const tmp = uniqueTmpPath(target)
   mkdirSync(path.dirname(target), { recursive: true })
   try {
-    writeFileSync(tmp, data, 'utf-8')
+    writeFileSync(tmp, data, mode === undefined ? 'utf-8' : { encoding: 'utf-8', mode })
     renameSync(tmp, target)
   } catch (error) {
     removeTempFile(tmp)
@@ -107,8 +131,8 @@ export function writeFileAtomic(target: string, data: string): void {
   }
 }
 
-export function writeJsonFileAtomic(target: string, value: unknown): void {
-  writeFileAtomic(target, `${JSON.stringify(value, null, 2)}\n`)
+export function writeJsonFileAtomic(target: string, value: unknown, mode?: number): void {
+  writeFileAtomic(target, `${JSON.stringify(value, null, 2)}\n`, mode)
 }
 
 // Never throws: the temp may never have been created (ENOENT is expected).
@@ -262,7 +286,7 @@ export class SafeJsonFile<T> {
       return false
     }
     try {
-      writeJsonFileAtomic(this.options.filePath(), value)
+      writeJsonFileAtomic(this.options.filePath(), value, this.options.mode)
       this.status = 'ok'
       return true
     } catch (error) {
