@@ -3,8 +3,8 @@ import { appendBriefingItem } from '../agent-briefing-store'
 import { getBuildDispatcher, getRepoLister } from '../agent-dispatch-registry'
 import {
   clearBuildDispatched,
-  mayDispatchBuild,
-  recordBuildDispatched
+  markBuildDispatched,
+  mayDispatchBuild
 } from '../asana-dispatch-ledger'
 import { checkExecutionAdmission } from '../execution-gate'
 import type { DobiusToolContext } from './dobius-tool-handlers'
@@ -132,7 +132,8 @@ export function createDispatchBuildHandler(context: DobiusToolContext) {
     }
     // Why: mark the build before it can start, so an app crash mid-dispatch
     // leaves the task blocked (outcome unknown) instead of re-dispatchable.
-    if (!recordBuildDispatched(gid)) {
+    const mark = markBuildDispatched(gid)
+    if (!mark.saved) {
       return errorResult(
         'build dispatch refused: could not record it in the Asana dispatch ledger.'
       )
@@ -147,7 +148,7 @@ export function createDispatchBuildHandler(context: DobiusToolContext) {
       result = await waitForDispatch(pending)
     } catch (error) {
       inFlightBuildDispatches -= 1
-      clearBuildDispatched(gid)
+      clearBuildDispatched(gid, mark.created)
       // Why: keep the tool contract (return isError, never reject) local, in case
       // a future dispatcher registration throws instead of catching internally.
       return errorResult(
@@ -164,7 +165,7 @@ export function createDispatchBuildHandler(context: DobiusToolContext) {
       )
     }
     if (!result.ok) {
-      clearBuildDispatched(gid)
+      clearBuildDispatched(gid, mark.created)
       return errorResult(result.error || 'build dispatch failed.')
     }
     appendBriefingItem({

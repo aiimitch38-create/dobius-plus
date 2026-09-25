@@ -179,6 +179,73 @@ describe('asana dispatch ledger', () => {
       expect(ledger.claimTask('400004', 'review')).toMatchObject({ status: 'claimed' })
     })
 
+    function writeForeignClaim(gid: string, claimPid: number, claimedAt: number): void {
+      writeFileSync(
+        path.join(electronMock.userDataDir, 'asana-dispatch-ledger.json'),
+        JSON.stringify([
+          {
+            gid,
+            lane: 'build',
+            firstSeenAt: claimedAt,
+            lastAttemptAt: claimedAt,
+            attempts: 0,
+            status: 'claimed',
+            claimOwner: 'other-instance',
+            claimPid,
+            claimedAt
+          }
+        ])
+      )
+    }
+
+    it("leaves a live foreign instance's fresh claim alone (F1)", async () => {
+      writeForeignClaim('410001', process.ppid, Date.now())
+      const ledger = await loadLedger()
+      expect(ledger.reconcileInterruptedClaims()).toEqual([])
+      expect(ledger.claimTask('410001', 'build')).toBeNull()
+    })
+
+    it('reconciles a foreign claim whose process is dead (ESRCH), not one that is EPERM (F1)', async () => {
+      const deadPid = 2_000_001
+      const eprmPid = 2_000_002
+      const realKill = process.kill.bind(process)
+      vi.spyOn(process, 'kill').mockImplementation(((pid: number, signal?: string | number) => {
+        if (pid === deadPid || pid === eprmPid) {
+          throw Object.assign(new Error('probe'), { code: pid === deadPid ? 'ESRCH' : 'EPERM' })
+        }
+        return realKill(pid, signal)
+      }) as typeof process.kill)
+      writeForeignClaim('410002', deadPid, Date.now())
+      const ledger = await loadLedger()
+      expect(ledger.reconcileInterruptedClaims()).toEqual([
+        expect.objectContaining({ gid: '410002', status: 'failed', attempts: 1 })
+      ])
+      writeForeignClaim('410003', eprmPid, Date.now())
+      expect(ledger.reconcileInterruptedClaims()).toEqual([])
+    })
+
+    it('reconciles a live foreign claim held past the stale bound (F1)', async () => {
+      const ledger = await loadLedger()
+      writeForeignClaim('410004', process.ppid, Date.now() - ledger.CLAIM_STALE_MS - 1_000)
+      expect(ledger.reconcileInterruptedClaims()).toEqual([
+        expect.objectContaining({ gid: '410004', status: 'failed' })
+      ])
+    })
+
+    it("re-reads the ledger before claiming, so another instance's new claim is honoured (F1)", async () => {
+      const ledger = await loadLedger()
+      expect(ledger.listDispatchRecords()).toEqual([])
+      writeForeignClaim('410005', process.ppid, Date.now())
+      expect(ledger.claimTask('410005', 'build')).toBeNull()
+    })
+
+    it('rejects a malformed claimPid as an invalid record (CX12)', async () => {
+      writeForeignClaim('410006', -4, Date.now())
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const ledger = await loadLedger()
+      expect(ledger.claimTask('410007', 'build')).toBeNull()
+    })
+
     it('does nothing while the ledger is unreadable', async () => {
       writeFileSync(path.join(electronMock.userDataDir, 'asana-dispatch-ledger.json'), '{broken')
       vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -214,6 +281,29 @@ describe('asana dispatch ledger', () => {
       expect(reloaded.isDead('500001')).toBe(true)
       expect(reloaded.claimTask('500001', 'build')).toBeNull()
       expect(reloaded.mayDispatchBuild('500002')).toBe(false)
+    })
+  })
+
+  describe('build mark undo (BUILD-024 F2)', () => {
+    it('a failed dispatch mark on an unclaimed task leaves no blocking record', async () => {
+      const ledger = await loadLedger()
+      const mark = ledger.markBuildDispatched('450001')
+      expect(mark).toEqual({ saved: true, created: true })
+      ledger.clearBuildDispatched('450001', mark.created)
+      expect(ledger.listDispatchRecords()).toEqual([])
+      expect(ledger.claimTask('450001', 'build')).toMatchObject({ status: 'claimed' })
+    })
+
+    it('a failed dispatch mark on a claimed task keeps the claim', async () => {
+      const ledger = await loadLedger()
+      ledger.claimTask('450002', 'build')
+      const mark = ledger.markBuildDispatched('450002')
+      expect(mark.created).toBe(false)
+      ledger.clearBuildDispatched('450002', mark.created)
+      expect(ledger.listDispatchRecords()).toEqual([
+        expect.not.objectContaining({ buildDispatchedAt: expect.anything() })
+      ])
+      expect(ledger.hasBeenClaimed('450002')).toBe(true)
     })
   })
 

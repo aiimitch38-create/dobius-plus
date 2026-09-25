@@ -93,3 +93,27 @@ records. Old code would again prune them after 30 days.
 ## Lessons
 - The ledger's cached array is mutated in place by `findRecord()` callers; new functions work on
   the `load()` array and call `set()` on it, matching the existing pattern.
+
+## Review round 1 (F1-F3)
+- **F1 [medium] a second instance reconciled another instance's live claim.** Dev runs and
+  `DOBIUS_BYPASS_SINGLE_INSTANCE_LOCK` share userData with no single-instance lock. Claims now also
+  store `claimPid` and `claimedAt` (optional; strictly validated per CX12: positive integer / finite).
+  A claim that is not this process's is reconciled only when it is legacy (no pid), carries this
+  process's pid under another session (pid reuse, as in BUILD-026), its pid is dead (`ESRCH`; `EPERM`
+  counts as alive), or it is older than `CLAIM_STALE_MS` = 60 min. That bound is the triage cap
+  (15 turns / $0.30, about 30 min worst case) plus the 10 min dispatch_build timeout, plus a margin.
+  `isPidAlive` moved from `runtime/orchestration/db.ts` to the shared `src/main/lib/is-pid-alive.ts`
+  (db.ts imports it, and its behaviour is unchanged). Every public ledger entry point now re-reads
+  the file (`SafeJsonFile.invalidate()`, which is cheap: one small JSON read), so `claimTask` and
+  `mayDispatchBuild` see another instance's writes. Known multi-instance limit: there is no
+  cross-process lock, so two instances writing in the same instant can still lose one write. A
+  foreign live triage running past 60 min would be reconciled (and could be triaged twice).
+- **F2 [low]** `markBuildDispatched()` reports whether it had to create the record, and
+  `clearBuildDispatched(gid, created)` removes a record the mark created instead of leaving a
+  blocking 'briefed' record. `recordBuildDispatched()` is kept as a thin wrapper.
+- **F3 [low]** The no-agent brief is now one aggregate line per process ("N tasks waiting, no triage
+  agent set"), sent after a poll via `flushNoAgentBrief()`. It resets once a valid agent is present.
+- Mutation checks (each failed, then restored): N1 treat every foreign claim as interrupted (2 fail),
+  N2 EPERM counted as dead (1), N3 no stale bound (1), N4 no fresh re-read (1), N5 clear ignores
+  created-by-mark (2), N6 per-tick no-agent brief (1).
+- Deviation: edited `runtime/orchestration/db.ts` (import only) to share `isPidAlive`. Claim-owner logic lives in the new `asana-dispatch-claim-owner.ts` to keep the ledger under max-lines (300).

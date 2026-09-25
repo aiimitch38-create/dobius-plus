@@ -98,17 +98,24 @@ describe('Asana auto mode producer reconciliation', () => {
     )
   })
 
-  it('with no triage agent the task is blocked, not briefed, and is triaged once one is set (#45)', async () => {
+  it('with no triage agent tasks are blocked, not briefed, and are triaged once one is set (#45)', async () => {
     mocks.triageAgentId = null
     const { auto, ledger } = await startProcess()
     ledger.claimTask('700099', 'review')
+    const waiting = ['700001', '700002', '700003'].map((gid) => ({ ...task, gid }))
     for (let tick = 0; tick < 3; tick += 1) {
-      auto.maybeDispatchTask(task, 'build', prepare)
+      for (const each of waiting) {
+        auto.maybeDispatchTask(each, 'build', prepare)
+      }
+      auto.flushNoAgentBrief()
     }
     expect(ledger.listDispatchRecords().map((record) => record.gid)).toEqual(['700099'])
     expect(mocks.startAgentRun).not.toHaveBeenCalled()
+    // One aggregate brief for the whole process, not one per task or per tick (F3).
     expect(mocks.appendBriefingItem).toHaveBeenCalledTimes(1)
-    expect(String(mocks.appendBriefingItem.mock.calls[0]?.[0]?.summary)).toContain('blocked')
+    const summary = String(mocks.appendBriefingItem.mock.calls[0]?.[0]?.summary)
+    expect(summary).toContain('blocked')
+    expect(summary).toContain('3 tasks waiting')
 
     mocks.triageAgentId = 'triage'
     auto.maybeDispatchTask(task, 'build', prepare)

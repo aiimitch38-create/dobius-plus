@@ -37,24 +37,23 @@ let lastPollAt = 0
 const inFlightTriageGids = new Set<string>()
 // Triage agent ids already told they cannot triage on Codex (one brief, not one per tick).
 const codexTriageBriefed = new Set<string>()
-// Task gids already briefed as waiting for a triage agent (one brief per task, not per tick).
-const noAgentBriefed = new Set<string>()
-
-function taskLabel(task: AsanaTask): string {
-  return task.name.trim() || task.gid
-}
+// Tasks waiting because no triage agent is set; one aggregate brief per process.
+const noAgentWaiting = new Set<string>()
+let noAgentBriefSent = false
 
 // Why: no triage agent is a blocked configuration, not a finished intake, so
-// the task stays unclaimed and is triaged once an agent is picked.
-function appendNoAgentBrief(task: AsanaTask, lane: AsanaLane): void {
-  if (noAgentBriefed.has(task.gid)) {
+// the task stays unclaimed and is triaged once an agent is picked. Sent after
+// a poll, once per process, as one line for all waiting tasks.
+function flushNoAgentBrief(): void {
+  if (noAgentBriefSent || noAgentWaiting.size === 0) {
     return
   }
-  noAgentBriefed.add(task.gid)
+  noAgentBriefSent = true
+  const count = noAgentWaiting.size
   appendBriefingItem({
     agentId: ASANA_BRIEFING_AGENT_ID,
     urgency: 'digest',
-    summary: `Asana task in ${lane} lane is blocked: ${taskLabel(task)} (no triage agent set; it will be triaged once you pick one)`
+    summary: `Asana Auto Mode is blocked: ${count} ${count === 1 ? 'task' : 'tasks'} waiting, no triage agent set. They will be triaged once you pick one.`
   })
 }
 
@@ -220,12 +219,13 @@ function maybeDispatchTask(
     return
   }
   if (!triageAgentId || !triageAgent) {
-    appendNoAgentBrief(task, lane)
+    noAgentWaiting.add(task.gid)
     return
   }
   // A later switch back to a Codex agent, or to no agent, should brief again.
   codexTriageBriefed.clear()
-  noAgentBriefed.clear()
+  noAgentWaiting.clear()
+  noAgentBriefSent = false
   const record = claimTask(task.gid, lane)
   if (!record) {
     return
@@ -286,6 +286,7 @@ async function tick(prepareClaudeLaunch: PrepareClaudeLaunch): Promise<void> {
     for (const task of snapshot.review) {
       safeMaybeDispatchTask(task, 'review', prepareClaudeLaunch)
     }
+    flushNoAgentBrief()
   } finally {
     ticking = false
   }
@@ -309,4 +310,9 @@ export function stopAsanaAutoMode(): void {
 }
 
 // Test seam only.
-export const asanaAutoModeInternals = { maybeDispatchTask, dispatchTriage, reconcileInterrupted }
+export const asanaAutoModeInternals = {
+  maybeDispatchTask,
+  dispatchTriage,
+  reconcileInterrupted,
+  flushNoAgentBrief
+}

@@ -537,6 +537,8 @@ describe('dispatch_build authorization and capacity', () => {
     expect(seenDuringDispatch).toBe(false)
     // A definite failure clears the mark again, so the task may retry.
     expect(ledger.mayDispatchBuild(gid)).toBe(true)
+    // The mark created this task's record, so the undo removes it (no stray 'briefed' block).
+    expect(ledger.listDispatchRecords().some((record) => record.gid === gid)).toBe(false)
   })
 
   it('does not consume capacity when admission blocks', async () => {
