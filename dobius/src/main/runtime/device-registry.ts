@@ -20,7 +20,8 @@ export type DeviceEntry = {
   pairedAt: number
   lastSeenAt: number
   // Why: explicit per-device opt-in for the high-risk mobile methods (see
-  // mobile-rpc-grants.ts). Missing means none granted.
+  // mobile-rpc-grants.ts). Missing means none granted. Read at startup only;
+  // edit dobius-devices.json with the app closed or a later save overwrites it.
   grants?: MobileRpcGrant[]
 }
 

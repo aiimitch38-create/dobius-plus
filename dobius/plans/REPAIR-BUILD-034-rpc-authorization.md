@@ -24,7 +24,7 @@
   renderer's `runtime-rpc-client` keeps its normal error path). Webview guests, subframes,
   destroyed or unregistered webContents are denied.
 - `src/main/runtime/mobile-rpc-grants.ts` (new): `MOBILE_RPC_GRANTS` = the four spec methods;
-  `requiredMobileRpcGrant(method, params)` maps each to itself, and maps terminal creation that
+  (round 1; replaced by `mobileRpcRequirement`, see Review round 2) mapped each to itself, and maps terminal creation that
   carries `command`/`env`/`launchConfig` to `terminal.send`; `deviceHasMobileRpcGrant`.
 - `src/main/runtime/device-registry.ts`: `DeviceEntry.grants?: MobileRpcGrant[]`; parse keeps
   only known grant strings (unknown/malformed → none; never fails the registry read).
@@ -37,13 +37,32 @@
 - `MOBILE_RPC_METHOD_ALLOWLIST` itself is unchanged: the four methods remain "mobile-capable",
   so `mobile-rpc-allowlist.test.ts` (mobile app ⊂ allowlist) still holds.
 
-## Decision for Carson (implemented default = deny)
-A phone token gets every allowlisted method **except** `terminal.send` (including binary
-keystrokes and terminal creation with a startup command), `git.push`, `worktree.rm`,
-`settings.update`. To grant, add e.g. `"grants": ["terminal.send"]` to that device's entry in
-`<userData>/dobius-devices.json` (edit with the app closed). No UI yet. Consequence: typing
-into terminals from the phone app is off until granted. The phone listener itself is already
-off by default (BUILD-003).
+## Decision for Carson (implemented default = deny for every category)
+Grant categories (`MOBILE_RPC_GRANTS` in `mobile-rpc-grants.ts`), all **denied** by default:
+
+| Grant | Covers |
+|---|---|
+| `terminal.send` | terminal.send, binary Input frames, terminal.close, session.tabs.close, worktree.sleep; terminal.create / session.tabs.createTerminal with command/env/launchConfig; worktree.create with startupCommand/Env/LaunchConfig/Agent/Prompt/Draft, `setupDecision:'run'`, `runHooks:true` |
+| `worktree.create` | worktree.create (any) |
+| `worktree.rm` | worktree.rm, worktree.forceDeleteBranch |
+| `git.push` | git.push |
+| `git.discard` | git.discard |
+| `settings.update` | settings.update |
+| `files.write` | files.writeTerminalArtifact |
+| `remote.merge` | github.mergePR, github.setPRAutoMerge, github.updatePRState, gitlab.mergeMR, gitlab.updateMRState |
+
+Rejected for mobile outright (no grant unlocks it): AI generation overrides
+(`commitMessageAi`, `sourceControlAi`, `sourceControlAiResolvedParams`, `agentCmdOverrides` on
+git.generateCommitMessage / generatePullRequestFields / discoverCommitMessageModels) and
+repo.update of `hookSettings`, `sourceControlAi`, `worktreeBasePath`, `symlinkPaths`.
+Removed from the mobile allowlist: `agentTeams.prepareLaunch`, `agentTeams.tmuxCompat` (no mobile
+caller; tmux `send-keys` types into shells).
+
+To grant: add e.g. `"grants": ["terminal.send", "worktree.create"]` to that device's entry in
+`<userData>/dobius-devices.json` **with the app closed** (grants are read at startup; a running
+app's next save would overwrite a live edit). No UI yet. Consequences with defaults: from the
+phone, no terminal typing/closing, no worktree create/sleep/remove, no discard, push, merge or
+settings change. The phone listener itself is off by default (BUILD-003).
 
 ## Deviations from EXECUTION-ORDER.md
 - `rpc/dispatcher.ts` not changed: `dispatch()` is transport-agnostic and trusts its caller by
@@ -93,8 +112,84 @@ off by default (BUILD-003).
 ## Rollback
 Revert the commit. No data migration: `grants` is an optional field; older builds ignore it.
 
+## Review round 2 (coordinator security review, 4 HIGH / 4 MEDIUM / 1 LOW)
+Switched from per-field enumeration to grant categories + outright rejects
+(`mobileRpcRequirement(method, params)` → `{grants}` | `{rejected}`; runtime-rpc.ts
+`mobileRpcDenial`). F1 worktree.create (create grant + terminal.send for spawn fields),
+F2 agentTeams removed, F3 AI override fields rejected, F4 repo.update fields rejected,
+F5 git.discard, F6 remote.merge, F7 forceDeleteBranch→worktree.rm, F8 terminal.close→terminal.send
+(chosen over a separate grant: closing kills a running agent, same trust as typing into it).
+F9: comment corrected — the per-frame lookup hits the in-memory registry (in-app revoke is
+immediate); grants are read from disk only at startup.
+Sweep additions beyond the findings: files.writeTerminalArtifact → `files.write`;
+session.tabs.close and worktree.sleep → `terminal.send` (both kill PTYs).
+
+Mutation checks round 2 (each failed the named tests, then restored): create-method grant (1),
+worktree startup fields (5), runHooks (1), setupDecision run (1), agentTeams re-added to
+allowlist (1), AI override reject (4), repo.update reject (4), git.discard (1),
+setPRAutoMerge (1), forceDeleteBranch (1), terminal.close (1), files.writeTerminalArtifact (1),
+session.tabs.close (1), worktree.sleep (1).
+
+## Mobile allowlist sweep (231 methods after removing agentTeams.*)
+R = read-only / subscription / cancel, G = gated (grant or reject), U = ungated mutating (reason).
+
+| Method(s) | Class | Note |
+|---|---|---|
+| terminal.send, terminal.close | G | terminal.send |
+| terminal.create | G/U | G with command/env/launchConfig; else U: opens an idle shell, input still gated |
+| terminal.multiplex, terminal.subscribe | R | stream; binary Input gated by terminal.send |
+| terminal.read, list, agentStatus, isRunningAgent, getAutoRestoreFit, wait, unsubscribe | R | |
+| terminal.clearBuffer, focus, rename, setAutoRestoreFit, setDisplayMode, updateViewport | U | display state only |
+| session.tabs.close | G | terminal.send |
+| session.tabs.createTerminal | G/U | G with command/env/launchConfig; else U: agent-only launch picks a configured agent, no caller command |
+| session.tabs.activate, move | U | tab layout only |
+| session.tabs.list/listAll/subscribe/subscribeAll/unsubscribe/unsubscribeAll | R | |
+| worktree.create | G | worktree.create (+ terminal.send for spawn fields) |
+| worktree.rm, worktree.forceDeleteBranch | G | worktree.rm |
+| worktree.sleep | G | terminal.send |
+| worktree.activate, worktree.set | U | selection / metadata (names, links, pin, sparse dirs) |
+| worktree.prefetchCreateBase | U | git fetch of a base ref, no local change to work |
+| worktree.ps, show, resolveMrBase, resolvePrBase | R | |
+| git.push | G | git.push |
+| git.discard | G | git.discard |
+| git.generateCommitMessage, generatePullRequestFields, discoverCommitMessageModels | G | override fields rejected; stored settings only |
+| git.commit | U | local and reversible; runs only repo-owned hooks |
+| git.stage, unstage, bulkStage, bulkUnstage | U | index only, reversible |
+| git.checkout, fetch, pull, fastForward, rebaseFromBase, forkSync, abortMerge, abortRebase | U | normal git sync; git refuses to clobber dirty work; nothing leaves the Mac |
+| git.cancelGenerate* | R | cancel |
+| git.status, diff, history, localBranches, upstreamStatus, branchCompare, branchDiff, commitCompare, commitDiff | R | |
+| github.mergePR, setPRAutoMerge, updatePRState; gitlab.mergeMR, updateMRState | G | remote.merge |
+| github.createIssue, addIssueComment, addPRReviewComment(Reply), requestPRReviewers, removePRReviewers, rerunPRChecks, resolveReviewThread, setPRFileViewed, updateIssue, updatePR, updatePRTitle, project.* updates/comments/clearItemField | U | tracker text/metadata; visible, attributable, reversible; no code runs locally |
+| gitlab.createIssue, addIssueComment, addMRComment, resolveMRDiscussion, updateIssue, updateMR | U | same as GitHub tracker edits |
+| github/gitlab list/read methods (countWorkItems, listLabels, listWorkItems, prChecks, prCheckDetails, prFileContents, prForBranch, repoSlug, workItem, workItemDetails, project list/view/resolve, todos) | R | |
+| hostedReview.create | U | opens a PR/MR from an existing remote branch (no push; checked `createHostedReview`) |
+| hostedReview.forBranch, getCreationEligibility | R | |
+| linear.addIssueComment, createIssue, createProject, updateIssue | U | tracker edits, same reason as GitHub |
+| linear.connect, selectWorkspace | U | swaps Linear account/workspace; no local code |
+| linear read methods | R | |
+| repo.update | G/U | hookSettings/sourceControlAi/worktreeBasePath/symlinkPaths rejected; rest U: display and discovery prefs |
+| repo.saveSparsePreset | U | preset metadata |
+| repo.list, baseRefDefault, gitAvailable, hooks, searchRefs, sparsePresets | R | |
+| files.writeTerminalArtifact | G | files.write |
+| files.createFile | U | creates an empty file in the worktree |
+| files.open, files.openDiff | U | opens a tab on desktop |
+| files.read*, list, browseServerDir, resolveTerminalPath | R | resolveTerminalPath issues a read/write grant id; the write is gated |
+| markdown.saveTab | U | saves a markdown tab already open on desktop (renderer-owned); not verified to be .md-only |
+| markdown.readTab | R | |
+| settings.update | G | settings.update |
+| settings.get, ui.get, status.get, stats.summary, diagnostics.memory, host.*, preflight.detectAgents/detectRemoteAgents | R | |
+| ui.set, ui.recordFeatureInteraction | U | UI state only |
+| preflight.check | U | re-runs fixed local tool detection; no caller input |
+| accounts.selectClaude, selectCodex | U | switches between accounts already signed in on the Mac |
+| accounts.list/subscribe/unsubscribe, notifications.*, runtime.clientEvents.*, nativeChat.* | R | |
+| browser.* (goto, click, keys, tabCreate, dialogs, reload, viewport, screencast) | U | drives the in-app browser pane, which is sandboxed from the shell; it does carry desktop logins, so this is the largest remaining non-shell risk |
+| clipboard.* image upload / saveImageAsTempFile | U | writes an image to a temp file |
+| speech.dictation.*, speech.models.list | R/U | dictation session state |
+| speech.models.download, speech.models.delete | U | catalog model by id (inferred from handler, not traced further) |
+| ssh.connect | U | connects an already-registered SSH target only |
+| ssh.getState | R | |
+| voice.intent, voice.reply | U | voice conductor; by design (C2/C3), not changed here |
+
 ## Residual risk (not in scope)
-Other mobile-allowlisted mutating methods remain ungated: `git.commit`, `git.discard`,
-`worktree.forceDeleteBranch`, `worktree.create`, `repo.update`, `files.createFile`,
-`files.writeTerminalArtifact`, `github.mergePR`, `gitlab.mergeMR`, `terminal.close`. Some may
-be shell-equivalent (e.g. repo hooks / setup scripts via `repo.update`, `worktree.create`).
+See the sweep table: the remaining ungated mutating methods are listed with reasons. The biggest
+remaining non-shell surface is the in-app browser (`browser.*`) and `voice.intent` (by design).

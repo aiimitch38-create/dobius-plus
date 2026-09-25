@@ -31,7 +31,7 @@ import {
   TerminalStreamOpcode,
   type TerminalStreamFrame
 } from '../../shared/terminal-stream-protocol'
-import { deviceHasMobileRpcGrant, requiredMobileRpcGrant } from './mobile-rpc-grants'
+import { deviceHasMobileRpcGrant, mobileRpcRequirement } from './mobile-rpc-grants'
 
 const DEFAULT_WS_PORT = 6768
 
@@ -326,8 +326,6 @@ const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'speech.models.list',
   'stats.summary',
   'status.get',
-  'agentTeams.prepareLaunch',
-  'agentTeams.tmuxCompat',
   'terminal.clearBuffer',
   'terminal.close',
   'terminal.create',
@@ -375,6 +373,20 @@ function isLongPollRequest(request: RpcRequest): boolean {
     return params?.wait === true
   }
   return false
+}
+
+// Why: returns the forbidden message for a mobile request that is rejected
+// outright or lacks a grant (see mobile-rpc-grants.ts), else null.
+function mobileRpcDenial(device: DeviceEntry, request: RpcRequest): string | null {
+  const requirement = mobileRpcRequirement(request.method, request.params)
+  if ('rejected' in requirement) {
+    return `Method '${request.method}' rejected: ${requirement.rejected}`
+  }
+  const missing = requirement.grants.filter((grant) => !deviceHasMobileRpcGrant(device, grant))
+  if (missing.length === 0) {
+    return null
+  }
+  return `Method '${request.method}' needs the ${missing.map((g) => `'${g}'`).join(', ')} grant for this mobile device`
 }
 
 // Why: stamp the authenticated connection's scope onto the status.get success
@@ -990,18 +1002,9 @@ export class DobiusRuntimeRpcServer {
       )
       return
     }
-    const requiredGrant =
-      device.scope === 'mobile' ? requiredMobileRpcGrant(request.method, request.params) : null
-    if (requiredGrant && !deviceHasMobileRpcGrant(device, requiredGrant)) {
-      reply(
-        JSON.stringify(
-          this.buildError(
-            request.id,
-            'forbidden',
-            `Method '${request.method}' needs the '${requiredGrant}' grant for this mobile device`
-          )
-        )
-      )
+    const denial = device.scope === 'mobile' ? mobileRpcDenial(device, request) : null
+    if (denial) {
+      reply(JSON.stringify(this.buildError(request.id, 'forbidden', denial)))
       return
     }
 
@@ -1063,8 +1066,9 @@ export class DobiusRuntimeRpcServer {
   }
 
   // Why: binary Input frames on terminal.subscribe / terminal.multiplex type
-  // into the PTY exactly like terminal.send, so they need the same grant.
-  // Re-read the device per frame so a revoked token or grant stops input.
+  // into the PTY exactly like terminal.send, so they need the same grant. The
+  // lookup is per frame against the in-memory registry, so an in-app revoke
+  // stops input at once; grants themselves are read from disk only at startup.
   private guardMobileTerminalInput(
     token: string,
     handler: (frame: TerminalStreamFrame) => void

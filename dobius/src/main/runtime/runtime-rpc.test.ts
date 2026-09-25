@@ -1006,9 +1006,13 @@ describe('DobiusRuntimeRpcServer', () => {
     const server = new DobiusRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
     server['deviceRegistry'] = new DeviceRegistry(userDataPath)
     const mobile = server['deviceRegistry']!.addDevice('phone', 'mobile')
-    // Why: git.push and settings.update need an explicit per-device grant
+    // Why: high-risk mobile methods need an explicit per-device grant
     // (BUILD-034); this test covers their routing once granted.
-    server['deviceRegistry']!.getDevice(mobile.deviceId)!.grants = ['git.push', 'settings.update']
+    server['deviceRegistry']!.getDevice(mobile.deviceId)!.grants = [
+      'git.push',
+      'settings.update',
+      'remote.merge'
+    ]
     const replies: Record<string, unknown>[] = []
 
     await server['handleWebSocketMessage'](
