@@ -49,6 +49,7 @@ function toRegistryStatus(raw: string): 'done' | 'error' {
 // else, including "yes but wait", a timeout or a send failure, is a denial.
 const APPROVAL_RE = /^(y|yes|ok|okay|approve|approved|confirm)[.!]?$/i
 const MAX_ACTION_LENGTH = 500
+const MAX_ASK_TIMEOUT_MS = 5 * 60 * 1000
 
 export type ApprovalDecision = { approved: boolean; reason: string }
 
@@ -205,7 +206,10 @@ export async function handleConductorCliRequest(
         if (unavailable) {
           return { status: 200, body: { ok: false, error: unavailable } }
         }
-        const timeoutMs = typeof body.timeoutMs === 'number' ? body.timeoutMs : undefined
+        const timeoutMs =
+          typeof body.timeoutMs === 'number' && Number.isFinite(body.timeoutMs)
+            ? Math.min(MAX_ASK_TIMEOUT_MS, Math.max(1, Math.floor(body.timeoutMs)))
+            : undefined
         const answer = await d.imessage.ask(question, timeoutMs)
         return { status: 200, body: { ok: true, answer, timedOut: answer === '' } }
       }

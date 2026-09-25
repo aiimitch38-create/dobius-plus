@@ -430,7 +430,7 @@ export async function startAgentRun(args: {
     // Access is still gated per-agent by allowedTools — an MCP server being
     // loaded does not allow its tools unless the agent's allowlist names them.
     options.strictMcpConfig = false
-    options.hooks = buildAgentHardRailHooks({ agentId: agent.id })
+    options.hooks = buildAgentHardRailHooks({ agentId: agent.id, profile: profile.id })
     const source = args.options?.source ?? 'manual'
     // Only a person who pressed Run on the Agents page watches the decision
     // queue. Every other run (heartbeat, Asana, iMessage, workflows, RPC/CLI,

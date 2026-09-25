@@ -9,6 +9,7 @@ import type {
 import { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-config'
 import { extractChatDbMessageText } from './chat-db-message-text'
 import { countOutboundLastMinute, sendImessage } from './imessage-send'
+import { isDobiusAuthoredRow } from './outbound-ring'
 import { handleChannelMessage } from '../agents/agent-channel-service'
 import { checkExecutionAdmission } from '../agents/execution-gate'
 import type { PrepareClaudeLaunch } from '../agents/agent-runner'
@@ -242,7 +243,9 @@ async function handleIncomingMessage(
   triggerPrefix: string
 ): Promise<void> {
   const text = extractChatDbMessageText(row)?.trim()
-  if (!text) {
+  // Why: a conductor question or an agent's reply sits in this same self-chat;
+  // only Carson's own texts may reach an agent or a terminal.
+  if (!text || isDobiusAuthoredRow(text)) {
     return
   }
   if (await tryHandleChannelMessage(text, selfHandle)) {

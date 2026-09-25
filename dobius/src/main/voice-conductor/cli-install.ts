@@ -168,13 +168,23 @@ curl -sS -X POST "http://${HOST}:${PORT}/asana/fetch" ${base} --data-binary "$BO
   }
 }
 
+// Markers of a script Dobius wrote (this installer, the dobius-cli installer or
+// the v1 voice bridge). Anything else at that path is the user's own script.
+const DOBIUS_SCRIPT_MARKERS = ['# dobius-conductor-cli v', '# dobius-cli v', 'voice-bridge-token', '127.0.0.1:8421']
+
 function writeIfChanged(file: string, contents: string): void {
+  let existing: string | null = null
   try {
-    if (readFileSync(file, 'utf8') === contents) {
-      return
-    }
+    existing = readFileSync(file, 'utf8')
   } catch {
     // missing — write below
+  }
+  if (existing === contents) {
+    return
+  }
+  if (existing !== null && !DOBIUS_SCRIPT_MARKERS.some((marker) => existing.includes(marker))) {
+    console.warn(`[conductor-cli] not replacing ${path.basename(file)}: not a Dobius script`)
+    return
   }
   writeFileSync(file, contents, 'utf8')
   chmodSync(file, 0o755)

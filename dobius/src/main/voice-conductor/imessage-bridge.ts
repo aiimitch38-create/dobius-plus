@@ -5,6 +5,11 @@ import SyncDatabase from '../sqlite/sync-database'
 import { extractChatDbMessageText } from '../imessage-bridge/chat-db-message-text'
 import { isValidImessageHandle, sendImessage } from '../imessage-bridge/imessage-send'
 import { selfHandleSpellings } from '../imessage-bridge/self-handle-spellings'
+import {
+  CONDUCTOR_OUTBOUND_TAG,
+  outboundSince,
+  wasSentByDobius
+} from '../imessage-bridge/outbound-ring'
 import type { IMessageBridge } from './types'
 
 // Voice Conductor iMessage bridge (macOS only). Lets the background conductor
@@ -26,7 +31,6 @@ const DEFAULT_ASK_TIMEOUT_MS = 5 * 60 * 1000
 // Codes are never reused within a session until this many have been issued,
 // so a late reply to an expired question can't answer a newer one.
 const MAX_REMEMBERED_CODES = 5_000
-const MAX_REMEMBERED_OUTBOUND = 200
 
 export const IMESSAGE_HANDLE_MISSING =
   'iMessage handle not configured: set your handle in Settings → iMessage bridge'
@@ -110,6 +114,11 @@ export function parseCodedReply(text: string, code: string): string | null {
   return answer.length > 0 ? answer : null
 }
 
+function codeLeakedInOutbound(code: string, ownQuestion: string, since: number): boolean {
+  const own = ownQuestion.trim()
+  return outboundSince(since).some((record) => record.text !== own && record.text.includes(code))
+}
+
 /**
  * Create the Voice Conductor's iMessage bridge.
  *
@@ -119,15 +128,15 @@ export function parseCodedReply(text: string, code: string): string | null {
  * - `ask(question, timeoutMs = 5min)` — sends `question` with a fresh 4-digit
  *   reply code and resolves with the answer from the first NEW message in the
  *   exact chat that starts with that code (the code is stripped). Resolves ''
- *   on timeout. Messages without the code, other questions' codes, and texts
- *   this bridge sent itself are never taken as the answer.
+ *   on timeout. Messages without the code, other questions' codes, and any
+ *   text Dobius sent (outbound-ring) are never taken as the answer. Every
+ *   outbound text carries CONDUCTOR_OUTBOUND_TAG so the `d:` bridge ignores it.
  */
 export function createIMessageBridge(config: VoiceConductorImessageConfig): IMessageBridge {
   const platform = config.platform ?? process.platform
   const chatDbPath = config.chatDbPath ?? DEFAULT_CHAT_DB_PATH
   const pollIntervalMs = config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
   const issuedCodes = new Set<string>()
-  const outboundTexts = new Set<string>()
 
   function unavailableReason(): string | null {
     if (platform !== 'darwin') {
@@ -148,13 +157,6 @@ export function createIMessageBridge(config: VoiceConductorImessageConfig): IMes
     return (config.resolveHandle() ?? '').trim()
   }
 
-  function rememberOutbound(text: string): void {
-    if (outboundTexts.size >= MAX_REMEMBERED_OUTBOUND) {
-      outboundTexts.clear()
-    }
-    outboundTexts.add(text.trim())
-  }
-
   function issueCode(): string {
     if (issuedCodes.size >= MAX_REMEMBERED_CODES) {
       issuedCodes.clear()
@@ -169,8 +171,7 @@ export function createIMessageBridge(config: VoiceConductorImessageConfig): IMes
 
   async function send(text: string): Promise<void> {
     const handle = requireHandle()
-    rememberOutbound(text)
-    await sendImessage(handle, text)
+    await sendImessage(handle, `${CONDUCTOR_OUTBOUND_TAG}${text}`)
   }
 
   async function ask(question: string, timeoutMs = DEFAULT_ASK_TIMEOUT_MS): Promise<string> {
@@ -182,8 +183,8 @@ export function createIMessageBridge(config: VoiceConductorImessageConfig): IMes
       const baseline = maxRowid(db)
       const code = issueCode()
       const minutes = Math.max(1, Math.round(timeoutMs / 60_000))
-      const outbound = `${question.trim()}\n\nReply "${code} <your answer>" within ${minutes} min.`
-      rememberOutbound(outbound)
+      const outbound = `${CONDUCTOR_OUTBOUND_TAG}${question.trim()}\n\nReply "${code} <your answer>" within ${minutes} min.`
+      const askedAt = Date.now()
       await sendImessage(handle, outbound)
 
       const statement = db.prepare(NEW_REPLY_SQL)
@@ -192,11 +193,16 @@ export function createIMessageBridge(config: VoiceConductorImessageConfig): IMes
       let cursor = baseline
 
       while (Date.now() < deadline) {
+        // Why: if anything else Dobius sent since the question carries the code
+        // (an agent echoing it back), the code may be forged: deny this ask.
+        if (codeLeakedInOutbound(code, outbound, askedAt)) {
+          return ''
+        }
         const rows = statement.all(cursor, spellings, spellings, spellings) as ReplyRow[]
         for (const row of rows) {
           cursor = Math.max(cursor, row.rowid)
           const text = extractChatDbMessageText(row)?.trim()
-          if (!text || outboundTexts.has(text)) {
+          if (!text || wasSentByDobius(text)) {
             continue
           }
           const answer = parseCodedReply(text, code)

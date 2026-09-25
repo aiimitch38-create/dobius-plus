@@ -211,3 +211,39 @@ describe('X5 dobius-ask help names the configured recipient', () => {
     expect(script).toContain('Settings (iMessage bridge)')
   })
 })
+
+describe('F3 conductor installer never overwrites a user script', () => {
+  it('keeps a user-owned dobius-confirm, replaces a Dobius-marked one, writes a missing one', async () => {
+    state.home = mkdtempSync(path.join(tmpdir(), 'conductor-home-'))
+    state.userData = mkdtempSync(path.join(tmpdir(), 'conductor-userdata-'))
+    const { installConductorClis } = await import('./cli-install')
+    installConductorClis()
+    const bin = path.join(state.home, '.local', 'bin')
+    const userScript = '#!/bin/bash\necho mine\n'
+    writeFileSync(path.join(bin, 'dobius-confirm'), userScript)
+    writeFileSync(path.join(bin, 'dobius-ask'), '#!/bin/bash\n# dobius-conductor-cli v1\nold\n')
+
+    installConductorClis()
+
+    expect(readFileSync(path.join(bin, 'dobius-confirm'), 'utf8')).toBe(userScript)
+    expect(readFileSync(path.join(bin, 'dobius-ask'), 'utf8')).toContain('# dobius-conductor-cli v2')
+    expect(readFileSync(path.join(bin, 'dobius-send'), 'utf8')).toContain('/tabSend')
+  })
+})
+
+describe('F4 /ask clamps timeoutMs to 1..300000', () => {
+  it.each([
+    [1e12, 300_000],
+    [-5, 1],
+    [0.4, 1],
+    [1_000, 1_000],
+    ['60000', undefined]
+  ])('timeoutMs %s → %s', async (input, expected) => {
+    const imessage = fakeImessage('fine')
+    await handleConductorCliRequest('/ask', { question: 'q', timeoutMs: input }, {
+      authorized: true,
+      deps: depsWith(imessage)
+    })
+    expect(imessage.ask).toHaveBeenCalledWith('q', expected)
+  })
+})
