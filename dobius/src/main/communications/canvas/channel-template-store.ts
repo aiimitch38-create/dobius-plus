@@ -8,7 +8,6 @@
  */
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { app } from 'electron'
 import { parseEveryEntry, SafeJsonFile } from '../../storage/safe-json-file'
 import {
   assertValidTemplateName,
@@ -22,11 +21,12 @@ import {
   type ChannelTemplateInput,
   type ChannelTemplateUpdate
 } from './channel-template-record'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 const FILE_NAME = 'channel-templates.json'
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 // Why: a malformed row makes the whole file unreadable instead of being

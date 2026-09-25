@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import {
   COMMUNICATIONS_RELAY_STATUS_CHANNEL,
   type CommunicationsRelayStatus
@@ -15,6 +15,7 @@ import {
 } from './relay-startup-status'
 import { startRelayServer } from './relay-server'
 import type { RelayServerHandle } from './relay-server'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 /**
  * Process-wide relay singleton.
@@ -50,7 +51,7 @@ export function startCommunicationsRelay(): void {
   recordRelayStarting()
   void (async () => {
     try {
-      store = new RelayStore(join(app.getPath('userData'), 'relay.db'))
+      store = new RelayStore(join(getUserDataRoot(), 'relay.db'))
       handle = await startRelayServer({ store })
     } catch (err) {
       // Why swallow: Communications degrading to "can't reach the relay" is a

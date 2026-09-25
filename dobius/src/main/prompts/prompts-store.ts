@@ -1,14 +1,14 @@
 import path from 'node:path'
-import { app } from 'electron'
 import type { DobiusPrompt } from '../../shared/prompts'
 import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Reusable prompt snippets, self-owned JSON in userData (out of GlobalSettings,
 // same atomic tmp+rename pattern as the Asana config).
 const FILE_NAME = 'prompts.json'
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 // Why: a malformed entry makes the whole file unreadable instead of being

@@ -1,6 +1,6 @@
 import path from 'node:path'
-import { app } from 'electron'
 import { SafeJsonFile } from '../../storage/safe-json-file'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 const FILE_NAME = 'communications-global-agent-config.json'
 
@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: GlobalAgentConfig = {
 }
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function sanitizeConfig(raw: unknown): GlobalAgentConfig {

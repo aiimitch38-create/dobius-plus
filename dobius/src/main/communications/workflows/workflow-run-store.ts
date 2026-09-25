@@ -6,8 +6,8 @@
  * as workflow-store.ts.
  */
 import path from 'node:path'
-import { app } from 'electron'
 import { parseEveryEntry, parseEveryValue, SafeJsonFile } from '../../storage/safe-json-file'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 const FILE_NAME = 'workflow-runs.json'
 // Why: an unbounded run history for one workflow would grow the JSON file
@@ -47,7 +47,7 @@ export type WorkflowRun = {
 type RunsByWorkflow = Record<string, WorkflowRun[]>
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function cloneRun(run: WorkflowRun): WorkflowRun {

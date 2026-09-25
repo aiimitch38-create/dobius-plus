@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { basename, win32 as pathWin32 } from 'node:path'
 import { mkdirSync, writeFileSync, chmodSync, existsSync } from 'node:fs'
 import { app } from 'electron'
+import { getUserDataRoot } from '../storage/user-data-root'
 import type * as pty from 'node-pty'
 import {
   encodePowerShellCommand,
@@ -49,7 +50,10 @@ export type ShellReadySignal = {
 // ── Shell wrapper files ─────────────────────────────────────────────
 
 function getShellReadyWrapperRoot(): string {
-  const userDataPath = app?.getPath?.('userData') ?? process.env.DOBIUS_USER_DATA_PATH ?? tmpdir()
+  // Why: keeps the pre-existing fallback for contexts without an Electron
+  // `app` (plain Node loads, tests that mock electron without it).
+  const userDataPath =
+    (app ? getUserDataRoot() : undefined) ?? process.env.DOBIUS_USER_DATA_PATH ?? tmpdir()
   return `${userDataPath}/shell-ready`
 }
 

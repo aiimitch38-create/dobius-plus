@@ -45,6 +45,7 @@ import {
   rebindLocalProviderListeners
 } from '../ipc/pty'
 import { isStartupDiagnosticsEnabled, logStartupDiagnostic } from '../startup/startup-diagnostics'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Why: daemon init runs concurrently with window load, so harness-side stderr
 // arrival times are useless — in-process `t` lets the startup benchmark derive
@@ -66,13 +67,13 @@ let adapter: DaemonProvider | null = null
 let restartInFlight: Promise<RestartDaemonResult> | null = null
 
 function getRuntimeDir(): string {
-  const dir = join(app.getPath('userData'), 'daemon')
+  const dir = join(getUserDataRoot(), 'daemon')
   mkdirSync(dir, { recursive: true })
   return dir
 }
 
 function getHistoryDir(): string {
-  const dir = join(app.getPath('userData'), 'terminal-history')
+  const dir = join(getUserDataRoot(), 'terminal-history')
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -91,7 +92,7 @@ function scheduleHistoryRetentionSweep(): void {
         runHistoryRetentionSweep(
           adapter,
           getHistoryDir(),
-          join(app.getPath('userData'), 'terminal-history-retention.json')
+          join(getUserDataRoot(), 'terminal-history-retention.json')
         )
       )
       .then((result) => {
@@ -291,7 +292,7 @@ function createOutOfProcessLauncher(runtimeDir: string): DaemonLauncher {
     // before respawn so the new daemon does not race the stale process.
     await killStaleDaemon(runtimeDir, socketPath, tokenPath)
 
-    const userDataPath = app.getPath('userData')
+    const userDataPath = getUserDataRoot()
     const child = fork(entryPath, ['--socket', socketPath, '--token', tokenPath], {
       // Why: detached daemons can outlive dev worktrees. Starting from
       // userData keeps process.cwd() valid after a repo/worktree is deleted.

@@ -1,9 +1,9 @@
-import { app } from 'electron'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { getOpenCodeFamilyPluginSource } from '../opencode/hook-service'
 import { mirrorEntry, safeRemoveTree } from '../pty/overlay-mirror'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const DOBIUS_MIMOCODE_PLUGIN_FILE = 'dobius-mimocode-status.js'
 const MIMOCODE_HOOKS_DIR = 'mimocode-hooks'
@@ -53,7 +53,7 @@ export class MimoCodeHookService {
   buildPtyEnv(_ptyId: string, existingMimocodeHome?: string): Record<string, string> {
     // Why: MiMo currently uses a shared home; per-source subdirs can come
     // later if concurrent MiMo panes need isolated runtime state.
-    const home = join(app.getPath('userData'), MIMOCODE_HOOKS_DIR, MIMOCODE_SHARED_HOME)
+    const home = join(getUserDataRoot(), MIMOCODE_HOOKS_DIR, MIMOCODE_SHARED_HOME)
     try {
       for (const sub of ['config', 'data', 'cache', 'state'] as const) {
         mkdirSync(join(home, sub), { recursive: true })

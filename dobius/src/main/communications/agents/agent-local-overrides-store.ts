@@ -1,6 +1,6 @@
 import path from 'node:path'
-import { app } from 'electron'
 import { parseEveryValue, SafeJsonFile } from '../../storage/safe-json-file'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 const FILE_NAME = 'communications-agent-overrides.json'
 
@@ -22,7 +22,7 @@ export type AgentLocalOverrides = {
 type OverridesFile = Record<string, AgentLocalOverrides>
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 // Why: a malformed entry makes the whole file unreadable instead of being

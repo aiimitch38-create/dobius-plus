@@ -4,7 +4,6 @@ env-patch semantics together prevents PTY launch and quota fetch paths drifting.
 import { execFileSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { app } from 'electron'
 import type { ClaudeManagedAccount } from '../../shared/types'
 import type { Store } from '../persistence'
 import { writeFileAtomically } from '../codex-accounts/fs-utils'
@@ -36,6 +35,7 @@ import {
   setSelectedClaudeAccountIdForTarget,
   type ClaudeAccountSelectionTarget
 } from './runtime-selection'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 export type ClaudeRuntimeAuthPreparation = {
   configDir: string
@@ -1862,7 +1862,7 @@ export class ClaudeRuntimeAuthService {
   }
 
   private getRuntimeMetadataDir(): string {
-    const metadataDir = join(app.getPath('userData'), 'claude-runtime-auth')
+    const metadataDir = join(getUserDataRoot(), 'claude-runtime-auth')
     mkdirSync(metadataDir, { recursive: true })
     return metadataDir
   }

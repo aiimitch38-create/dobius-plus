@@ -108,6 +108,7 @@ import {
   isRegisteredRendererWebContents,
   rendererWindowContents
 } from '../window/renderer-window-registry'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // ─── Provider Registry ──────────────────────────────────────────────
 // Routes PTY operations by connectionId. null = local provider.
@@ -1326,7 +1327,7 @@ export function registerPtyHandlers(
         )
         const env = buildPtyHostEnv(id, baseEnv, {
           isPackaged: app.isPackaged,
-          userDataPath: app.getPath('userData'),
+          userDataPath: getUserDataRoot(),
           selectedCodexHomePath,
           skipCodexHomeEnv: ctx?.isWsl === true && !selectedCodexHomePath,
           githubAttributionEnabled: getSettings?.()?.enableGitHubAttribution ?? false,
@@ -2112,12 +2113,12 @@ export function registerPtyHandlers(
         shouldSkipCodexHomeEnvForWindowsShell(daemonShellOverride, cwd) &&
         !selectedCodexHomePath
       if (isDaemonHostSpawn && sessionId) {
-        if (!isSafePtySessionId(sessionId, app.getPath('userData'))) {
+        if (!isSafePtySessionId(sessionId, getUserDataRoot())) {
           throw new Error('Invalid PTY session id')
         }
         env = buildPtyHostEnv(sessionId, env ?? {}, {
           isPackaged: app.isPackaged,
-          userDataPath: app.getPath('userData'),
+          userDataPath: getUserDataRoot(),
           selectedCodexHomePath,
           skipCodexHomeEnv,
           githubAttributionEnabled: getSettings?.()?.enableGitHubAttribution ?? false,
@@ -2822,7 +2823,7 @@ export function registerPtyHandlers(
         // hook state and stale pre-migration Pi overlay cleanup; reject
         // traversal/path separators before a crafted IPC payload can escape
         // the expected roots.
-        if (!isSafePtySessionId(sessionIdForEnv, app.getPath('userData'))) {
+        if (!isSafePtySessionId(sessionIdForEnv, getUserDataRoot())) {
           throw new Error('Invalid PTY session id')
         }
         // Why: clone before mutating so we don't leak injections back into
@@ -2831,7 +2832,7 @@ export function registerPtyHandlers(
         try {
           buildPtyHostEnv(sessionIdForEnv, env, {
             isPackaged: app.isPackaged,
-            userDataPath: app.getPath('userData'),
+            userDataPath: getUserDataRoot(),
             selectedCodexHomePath,
             skipCodexHomeEnv,
             githubAttributionEnabled: getSettings?.()?.enableGitHubAttribution ?? false,

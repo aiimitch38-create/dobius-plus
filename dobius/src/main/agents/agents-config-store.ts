@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app } from 'electron'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agents-config.json'
 
@@ -34,7 +34,7 @@ function todayKey(): string {
 }
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function sanitize(raw: unknown): AgentsConfig {

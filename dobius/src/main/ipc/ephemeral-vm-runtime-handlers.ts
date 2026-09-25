@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import type { Store } from '../persistence'
 import { loadHooks } from '../hooks'
 import {
@@ -30,6 +30,7 @@ import {
   removeRuntimeOwnedSshTarget
 } from '../ephemeral-vm-runtime-ssh'
 import { getRecipeRepo, getRuntimeRecipeContext } from './ephemeral-vm-recipe-context'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 export type EphemeralVmCleanupCommandResult = {
   runtimeId: string
@@ -48,13 +49,13 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
   ipcMain.removeHandler('ephemeralVm:getCleanupCommand')
 
   ipcMain.handle('ephemeralVm:listRuntimes', (): EphemeralVmRuntimeRecord[] => {
-    return listEphemeralVmRuntimes(app.getPath('userData'))
+    return listEphemeralVmRuntimes(getUserDataRoot())
   })
 
   ipcMain.handle(
     'ephemeralVm:attachWorkspace',
     (_event, args: { runtimeId: string; workspaceId: string }): EphemeralVmRuntimeRecord => {
-      return updateEphemeralVmRuntimeStatus(app.getPath('userData'), args.runtimeId, {
+      return updateEphemeralVmRuntimeStatus(getUserDataRoot(), args.runtimeId, {
         status: 'running',
         workspaceId: args.workspaceId
       })
@@ -64,7 +65,7 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
   ipcMain.handle(
     'ephemeralVm:cleanup',
     async (_event, args: { runtimeId: string }): Promise<EphemeralVmRuntimeRecord> => {
-      const userDataPath = app.getPath('userData')
+      const userDataPath = getUserDataRoot()
       const runtime = listEphemeralVmRuntimes(userDataPath).find(
         (entry) => entry.id === args.runtimeId
       )
@@ -125,7 +126,7 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
   ipcMain.handle(
     'ephemeralVm:suspendWorkspace',
     async (_event, args: { workspaceId: string }): Promise<EphemeralVmRuntimeRecord | null> => {
-      const userDataPath = app.getPath('userData')
+      const userDataPath = getUserDataRoot()
       const runtime = listEphemeralVmRuntimes(userDataPath).find(
         (entry) =>
           entry.workspaceId === args.workspaceId &&
@@ -161,7 +162,7 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
   ipcMain.handle(
     'ephemeralVm:resumeWorkspace',
     async (_event, args: { workspaceId: string }): Promise<EphemeralVmRuntimeRecord | null> => {
-      const userDataPath = app.getPath('userData')
+      const userDataPath = getUserDataRoot()
       const runtime = listEphemeralVmRuntimes(userDataPath).find(
         (entry) =>
           entry.workspaceId === args.workspaceId &&
@@ -218,7 +219,7 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
   ipcMain.handle(
     'ephemeralVm:getCleanupCommand',
     (_event, args: { runtimeId: string }): EphemeralVmCleanupCommandResult => {
-      const userDataPath = app.getPath('userData')
+      const userDataPath = getUserDataRoot()
       const resolved = getRuntimeRecipeContext(store, userDataPath, args.runtimeId)
       const payload = buildEphemeralVmRecipeCleanupPayload({
         recipe: resolved.recipe,

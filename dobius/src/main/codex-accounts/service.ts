@@ -6,7 +6,6 @@ import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
-import { app } from 'electron'
 import { getSpawnArgsForWindows } from '../win32-utils'
 import type {
   CodexManagedAccount,
@@ -32,6 +31,7 @@ import {
   setSelectedCodexAccountIdForTarget,
   type CodexAccountSelectionTarget
 } from './runtime-selection'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const LOGIN_TIMEOUT_MS = 120_000
 const MAX_LOGIN_OUTPUT_CHARS = 4_000
@@ -525,7 +525,7 @@ export class CodexAccountService {
   }
 
   private getManagedAccountsRoot(): string {
-    const root = join(app.getPath('userData'), 'codex-accounts')
+    const root = join(getUserDataRoot(), 'codex-accounts')
     mkdirSync(root, { recursive: true })
     return root
   }

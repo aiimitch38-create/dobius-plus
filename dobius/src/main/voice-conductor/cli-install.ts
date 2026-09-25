@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { homedir } from 'node:os'
-import { app } from 'electron'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Auto-installer for the Voice Conductor's dobius-* CLIs. Ported from v1
 // electron/voice-bridge.js. Each script curls a token-authed JSON POST at the
@@ -27,7 +27,7 @@ export function conductorCliServerAddress(): { host: string; port: number; token
   return {
     host: HOST,
     port: PORT,
-    tokenFile: path.join(app.getPath('userData'), TOKEN_FILE_NAME)
+    tokenFile: path.join(getUserDataRoot(), TOKEN_FILE_NAME)
   }
 }
 

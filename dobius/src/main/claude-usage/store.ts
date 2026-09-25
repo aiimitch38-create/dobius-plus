@@ -1,5 +1,4 @@
 /* eslint-disable max-lines -- Why: this store is the single main-process owner for Claude usage persistence, scan gating, and query semantics. Keeping those policy decisions together avoids split-brain range/scope logic across multiple files. */
-import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type {
@@ -18,6 +17,7 @@ import type { Store } from '../persistence'
 import { loadKnownUsageWorktreesByRepo, type UsageWorktreeRef } from '../usage-worktree-metadata'
 import type { ClaudeUsagePersistedState } from './types'
 import { createWorktreeRefs, getSessionProjectLabel, scanClaudeUsageFiles } from './scanner'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const SCHEMA_VERSION = 3
 const STALE_MS = 5 * 60_000
@@ -121,12 +121,12 @@ function getDefaultState(): ClaudeUsagePersistedState {
 }
 
 export function initClaudeUsagePath(): void {
-  _claudeUsageFile = join(app.getPath('userData'), 'dobius-claude-usage.json')
+  _claudeUsageFile = join(getUserDataRoot(), 'dobius-claude-usage.json')
 }
 
 function getClaudeUsageFile(): string {
   if (!_claudeUsageFile) {
-    _claudeUsageFile = join(app.getPath('userData'), 'dobius-claude-usage.json')
+    _claudeUsageFile = join(getUserDataRoot(), 'dobius-claude-usage.json')
   }
   return _claudeUsageFile
 }

@@ -16,8 +16,8 @@ import { createHash } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { mkdir, open, rename, writeFile } from 'node:fs/promises'
 import { extname, join, resolve, relative, isAbsolute, sep } from 'node:path'
-import { app } from 'electron'
 import { removeTempFile, sweepStaleTempFiles, uniqueTmpPath } from '../../../storage/safe-json-file'
+import { getUserDataRoot } from '../../../storage/user-data-root'
 
 export type BlobDescriptor = {
   url: string
@@ -29,7 +29,7 @@ export type BlobDescriptor = {
 }
 
 function blobStoreDir(): string {
-  return join(app.getPath('userData'), 'workstation-media')
+  return join(getUserDataRoot(), 'workstation-media')
 }
 
 const MAGIC_SIGNATURES: { bytes: number[]; type: string; ext: string }[] = [

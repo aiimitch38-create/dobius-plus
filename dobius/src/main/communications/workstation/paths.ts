@@ -5,17 +5,17 @@
 // allowed root before any read/write touches disk (see the security note in
 // the coordinator's brief: path traversal is a direct risk for this slice).
 import { createHash } from 'node:crypto'
-import { app } from 'electron'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 /** Default root for cloned "project" repositories, when the caller omits reposDir. */
 export function defaultWorkstationReposDir(): string {
-  return join(app.getPath('userData'), 'workstation-repos')
+  return join(getUserDataRoot(), 'workstation-repos')
 }
 
 /** Default root for ephemeral remote-ref snapshots keyed by clone URL. */
 export function defaultWorkstationCacheDir(): string {
-  return join(app.getPath('userData'), 'workstation-cache')
+  return join(getUserDataRoot(), 'workstation-cache')
 }
 
 export class WorkstationPathError extends Error {}

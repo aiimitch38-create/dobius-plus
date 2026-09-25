@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { app } from 'electron'
 import { createHash } from 'node:crypto'
 import {
   DOBIUS_PI_AGENT_STATUS_EXTENSION_FILE,
@@ -18,6 +17,7 @@ import {
   safeRemoveOverlay
 } from '../pty/overlay-mirror'
 import type { PiAgentKind } from '../../shared/pi-agent-kind'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Why: the Pi test suite imports `isSafeDescendCandidate` from this module's
 // public surface to lock in the Windows-junction ordering invariant against
@@ -71,7 +71,7 @@ function withDobiusManagedExtensionMarker(source: string): string {
 
 export class PiTitlebarExtensionService {
   private getOverlayRoot(kind: PiAgentKind): string {
-    return join(app.getPath('userData'), OVERLAY_ROOT_DIR_NAME[kind])
+    return join(getUserDataRoot(), OVERLAY_ROOT_DIR_NAME[kind])
   }
 
   private getPtyOverlayDir(ptyId: string, kind: PiAgentKind): string {
@@ -113,7 +113,7 @@ export class PiTitlebarExtensionService {
   }
 
   private writeOmpFallbackStatusExtension(source: string): string | undefined {
-    const fallbackDir = join(app.getPath('userData'), OMP_MANAGED_STATUS_EXTENSION_DIR)
+    const fallbackDir = join(getUserDataRoot(), OMP_MANAGED_STATUS_EXTENSION_DIR)
     try {
       mkdirSync(fallbackDir, { recursive: true })
     } catch {

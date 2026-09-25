@@ -1,6 +1,6 @@
 import path from 'node:path'
-import { app } from 'electron'
 import { parseEveryValue, SafeJsonFile } from '../../storage/safe-json-file'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 const FILE_NAME = 'communications-custom-harnesses.json'
 
@@ -24,7 +24,7 @@ export type CustomHarnessDefinition = {
 type HarnessFile = Record<string, CustomHarnessDefinition>
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 // Why: a malformed entry makes the whole file unreadable instead of being

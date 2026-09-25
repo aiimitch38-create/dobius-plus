@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import type { Store } from '../persistence'
 import { loadHooks } from '../hooks'
 import {
@@ -30,6 +30,7 @@ import {
   type EphemeralVmRecipeCatalogEntry
 } from './ephemeral-vm-recipe-context'
 import { registerEphemeralVmRuntimeHandlers } from './ephemeral-vm-runtime-handlers'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const activeProvisionControllers = new Map<string, AbortController>()
 
@@ -132,7 +133,7 @@ export function registerEphemeralVmHandlers(store: Store): void {
       // promise's own .finally() would deregister it before SSH connect even starts.
       try {
         const result = await provisionEphemeralVmRuntime({
-          userDataPath: app.getPath('userData'),
+          userDataPath: getUserDataRoot(),
           repoPath: repo.repo.path,
           repoId: repo.repo.id,
           recipe,
@@ -160,7 +161,7 @@ export function registerEphemeralVmHandlers(store: Store): void {
               ...(controller ? { signal: controller.signal } : {})
             })
             const runtime = updateEphemeralVmRuntimeStatus(
-              app.getPath('userData'),
+              getUserDataRoot(),
               result.runtime.id,
               {
                 sshTargetId: ssh.targetId
@@ -176,7 +177,7 @@ export function registerEphemeralVmHandlers(store: Store): void {
             }
           } catch (error) {
             await cleanupEphemeralVmRuntime({
-              userDataPath: app.getPath('userData'),
+              userDataPath: getUserDataRoot(),
               repoPath: repo.repo.path,
               recipe,
               runtimeId: result.runtime.id
@@ -192,14 +193,14 @@ export function registerEphemeralVmHandlers(store: Store): void {
 
         let environment: ReturnType<typeof addEnvironmentFromPairingCode>
         try {
-          environment = addEnvironmentFromPairingCode(app.getPath('userData'), {
+          environment = addEnvironmentFromPairingCode(getUserDataRoot(), {
             name: buildEphemeralEnvironmentName(repo.repo.displayName, result.runtime.id),
             pairingCode: connection.pairingCode,
             source: 'ephemeral-vm'
           })
         } catch (error) {
           await cleanupEphemeralVmRuntime({
-            userDataPath: app.getPath('userData'),
+            userDataPath: getUserDataRoot(),
             repoPath: repo.repo.path,
             recipe,
             runtimeId: result.runtime.id
@@ -211,7 +212,7 @@ export function registerEphemeralVmHandlers(store: Store): void {
             stderr: redactEphemeralVmRecipeDiagnosticText(result.start.stderr)
           }
         }
-        const runtime = updateEphemeralVmRuntimeStatus(app.getPath('userData'), result.runtime.id, {
+        const runtime = updateEphemeralVmRuntimeStatus(getUserDataRoot(), result.runtime.id, {
           runtimeEnvironmentId: environment.id
         })
         return {

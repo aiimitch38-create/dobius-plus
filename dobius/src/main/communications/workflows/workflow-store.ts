@@ -13,7 +13,6 @@
  */
 import { randomBytes, randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { app } from 'electron'
 import { parseEveryEntry, SafeJsonFile } from '../../storage/safe-json-file'
 import {
   parseWorkflowYaml,
@@ -21,6 +20,7 @@ import {
   type WorkflowStep,
   isWorkflowStatus
 } from './workflow-yaml'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 const FILE_NAME = 'workflows.json'
 
@@ -53,7 +53,7 @@ export type WorkflowUpdateInput = {
 }
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function cloneWorkflow(workflow: Workflow): Workflow {

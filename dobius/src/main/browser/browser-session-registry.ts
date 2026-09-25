@@ -2,7 +2,7 @@
    browser session profiles, partition allowlisting, cookie import staging, and
    per-partition permission/download policies. Splitting further would scatter the
    security boundary across modules. */
-import { app, session } from 'electron'
+import { session } from 'electron'
 import type { Session } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs'
@@ -24,6 +24,7 @@ import {
   clearBrowserWebAuthnAccessHandlers,
   installBrowserWebAuthnAccessHandlers
 } from './browser-webauthn-access'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 type BrowserSessionMeta = {
   defaultSource: BrowserSessionProfile['source']
@@ -76,7 +77,7 @@ class BrowserSessionRegistry {
   // status. Cookies themselves persist in the Electron partition's SQLite DB,
   // but the registry is in-memory only.
   private get metadataPath(): string {
-    return join(app.getPath('userData'), 'browser-session-meta.json')
+    return join(getUserDataRoot(), 'browser-session-meta.json')
   }
 
   private loadPersistedSource(): BrowserSessionProfile['source'] {
@@ -85,7 +86,7 @@ class BrowserSessionRegistry {
 
   private static partitionCookiesPath(partition: string): string {
     const partitionName = partition.replace('persist:', '')
-    return join(app.getPath('userData'), 'Partitions', partitionName, 'Cookies')
+    return join(getUserDataRoot(), 'Partitions', partitionName, 'Cookies')
   }
 
   // Why: write-to-temp-then-rename is atomic on all supported platforms.
@@ -233,7 +234,7 @@ class BrowserSessionRegistry {
   // silently returns null. Re-reading here after app readiness ensures the
   // default profile's source is populated.
   initializeBrowserSessionsFromPersistedState(): void {
-    sweepStaleTempFiles(app.getPath('userData'), META_TEMP_RE)
+    sweepStaleTempFiles(getUserDataRoot(), META_TEMP_RE)
     const meta = this.loadPersistedMeta()
     if (meta.defaultSource) {
       const current = this.profiles.get('default')
