@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
   appendBriefingItem: vi.fn(),
   fetch: vi.fn(),
   getAsanaConfig: vi.fn(),
-  checkExecutionAdmission: vi.fn()
+  checkExecutionAdmission: vi.fn(),
+  checkBuildDispatchAdmission: vi.fn()
 }))
 
 // The real Asana dispatch ledger, in a throwaway userData dir.
@@ -19,7 +20,8 @@ const userDataDir = vi.hoisted(() => ({ path: '' }))
 vi.mock('electron', () => ({ app: { getPath: () => userDataDir.path } }))
 
 vi.mock('../execution-gate', () => ({
-  checkExecutionAdmission: mocks.checkExecutionAdmission
+  checkExecutionAdmission: mocks.checkExecutionAdmission,
+  checkBuildDispatchAdmission: mocks.checkBuildDispatchAdmission
 }))
 
 // Capture registrations instead of starting a real in-process MCP server.
@@ -168,6 +170,8 @@ beforeEach(() => {
   mocks.getAsanaConfig.mockReset()
   mocks.checkExecutionAdmission.mockReset()
   mocks.checkExecutionAdmission.mockReturnValue({ allowed: true })
+  mocks.checkBuildDispatchAdmission.mockReset()
+  mocks.checkBuildDispatchAdmission.mockResolvedValue({ allowed: true })
   mocks.appendDraft.mockReturnValue({ id: 'draft-1' })
   mocks.appendBriefingItem.mockReturnValue({ id: 'brief-1' })
   mocks.getAsanaConfig.mockReturnValue({
@@ -219,8 +223,8 @@ describe('Dobius tool handlers', () => {
     const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
     const dispatch = vi.fn(async () => ({ worktreeId: 'wt-1', ok: true }))
     setRepoLister(() => [
-      { id: 'repo-1', name: 'DobiusPlus' },
-      { id: 'repo-2', name: 'Other' }
+      { id: 'repo-1', name: 'DobiusPlus', path: '/repos/dobius-plus' },
+      { id: 'repo-2', name: 'Other', path: '/repos/other' }
     ])
     setBuildDispatcher(dispatch)
 
@@ -250,7 +254,7 @@ describe('Dobius tool handlers', () => {
   it('sanitizes a malicious branch name (no path traversal into the worktree name)', async () => {
     const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
     const dispatch = vi.fn(async () => ({ worktreeId: 'wt-9', ok: true }))
-    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus' }])
+    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus', path: '/repos/dobius-plus' }])
     setBuildDispatcher(dispatch)
     const handlers = createDobiusToolHandlers(context, store)
     await handlers.dispatchBuild({
@@ -268,7 +272,7 @@ describe('Dobius tool handlers', () => {
   it('dispatches build work by case-insensitive repo name with a slugged name', async () => {
     const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
     const dispatch = vi.fn(async () => ({ worktreeId: 'wt-2', ok: true }))
-    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus' }])
+    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus', path: '/repos/dobius-plus' }])
     setBuildDispatcher(dispatch)
 
     const handlers = createDobiusToolHandlers(context, store)
@@ -289,7 +293,7 @@ describe('Dobius tool handlers', () => {
   it('returns an error with available repos when dispatch repo cannot be resolved', async () => {
     const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
     const dispatch = vi.fn(async () => ({ worktreeId: 'wt-3', ok: true }))
-    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus' }])
+    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus', path: '/repos/dobius-plus' }])
     setBuildDispatcher(dispatch)
 
     const handlers = createDobiusToolHandlers(context, store)
@@ -303,7 +307,7 @@ describe('Dobius tool handlers', () => {
   it('blocks build dispatch while the crew is paused', async () => {
     const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
     const dispatch = vi.fn(async () => ({ worktreeId: 'wt-4', ok: true }))
-    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus' }])
+    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus', path: '/repos/dobius-plus' }])
     setBuildDispatcher(dispatch)
     mocks.checkExecutionAdmission.mockReturnValue({
       allowed: false,
@@ -421,7 +425,7 @@ describe('dispatch_build authorization and capacity', () => {
     dispatch: (req: unknown) => Promise<{ worktreeId: string; ok: boolean; error?: string }>
   ) {
     const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
-    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus' }])
+    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus', path: '/repos/dobius-plus' }])
     setBuildDispatcher(dispatch)
   }
 
@@ -457,6 +461,7 @@ describe('dispatch_build authorization and capacity', () => {
     expect(result.content[0].text).toContain('not permitted')
     expect(dispatch).not.toHaveBeenCalled()
     expect(mocks.checkExecutionAdmission).not.toHaveBeenCalled()
+    expect(mocks.checkBuildDispatchAdmission).not.toHaveBeenCalled()
   })
 
   it('reserves capacity so concurrent dispatches cannot oversubscribe, and releases it on success', async () => {
@@ -558,12 +563,95 @@ describe('dispatch_build authorization and capacity', () => {
   })
 })
 
+describe('dispatch_build ADAM handshake (BUILD-031, X12)', () => {
+  it('asks ADAM about the repo path before anything is recorded or created', async () => {
+    const ledger = await import('../asana-dispatch-ledger')
+    const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
+    const dispatch = vi.fn(async () => ({ worktreeId: 'wt-1', ok: true }))
+    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus', path: '/repos/dobius-plus' }])
+    setBuildDispatcher(dispatch)
+    mocks.checkBuildDispatchAdmission.mockResolvedValueOnce({
+      allowed: false,
+      reason: 'adam-refused',
+      message: 'ADAM refused this build (project_not_managed): project omniroute is read_only'
+    })
+    const run = buildRun('run-adam-refused')
+    const refused = await createDobiusToolHandlers(run, store).dispatchBuild({
+      repo: 'repo-1',
+      brief: 'Build'
+    })
+    expect(mocks.checkBuildDispatchAdmission).toHaveBeenCalledWith('/repos/dobius-plus')
+    expect(refused.isError).toBe(true)
+    expect(refused.content[0].text).toContain('project_not_managed')
+    expect(dispatch).not.toHaveBeenCalled()
+    // No ledger mark and no capacity held: the same task may try again later.
+    expect(ledger.mayDispatchBuild(run.asanaTaskGid as string)).toBe(true)
+    const retry = await createDobiusToolHandlers(run, store).dispatchBuild({
+      repo: 'repo-1',
+      brief: 'Build'
+    })
+    expect(retry.isError).toBeUndefined()
+    expect(dispatch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('dispatch_build repo selection (BUILD-031 review F1)', () => {
+  const twins = [
+    { id: 'repo-stale', name: 'dobius-plus', path: '/Projects/dobius-plus' },
+    { id: 'repo-real', name: 'dobius-plus', path: '/Projects/Dobius/dobius-plus' }
+  ]
+
+  it('refuses an ambiguous repo name and lists each match by id and path', async () => {
+    const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
+    const dispatch = vi.fn(async () => ({ worktreeId: 'wt-1', ok: true }))
+    setRepoLister(() => twins)
+    setBuildDispatcher(dispatch)
+    const result = await createDobiusToolHandlers(buildRun('run-twins'), store).dispatchBuild({
+      repo: 'Dobius-Plus',
+      brief: 'Build'
+    })
+    expect(result.isError).toBe(true)
+    const text = result.content[0].text
+    expect(text).toContain('matches more than one repo')
+    expect(text).toContain('repo-stale (/Projects/dobius-plus)')
+    expect(text).toContain('repo-real (/Projects/Dobius/dobius-plus)')
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(mocks.checkBuildDispatchAdmission).not.toHaveBeenCalled()
+  })
+
+  it('dispatches by id when names collide', async () => {
+    const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
+    const dispatch = vi.fn(async () => ({ worktreeId: 'wt-1', ok: true }))
+    setRepoLister(() => twins)
+    setBuildDispatcher(dispatch)
+    const result = await createDobiusToolHandlers(buildRun('run-by-id'), store).dispatchBuild({
+      repo: 'repo-real',
+      brief: 'Build'
+    })
+    expect(result.isError).toBeUndefined()
+    expect(mocks.checkBuildDispatchAdmission).toHaveBeenCalledWith('/Projects/Dobius/dobius-plus')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ repoId: 'repo-real' }))
+  })
+
+  it('lists name and id when the repo is not found', async () => {
+    const { setRepoLister } = await import('../agent-dispatch-registry')
+    setRepoLister(() => twins)
+    const result = await createDobiusToolHandlers(buildRun('run-missing'), store).dispatchBuild({
+      repo: 'nope',
+      brief: 'Build'
+    })
+    expect(result.content[0].text).toContain(
+      'Available repos: dobius-plus (repo-stale), dobius-plus (repo-real).'
+    )
+  })
+})
+
 describe('dispatch_build is one build per Asana task', () => {
   it('refuses a second dispatch after the first triage run fails and the task is re-claimed', async () => {
     const ledger = await import('../asana-dispatch-ledger')
     const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
     const dispatch = vi.fn(async () => ({ worktreeId: 'wt-1', ok: true }))
-    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus' }])
+    setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus', path: '/repos/dobius-plus' }])
     setBuildDispatcher(dispatch)
     const gid = freshGid()
     const run = (runId: string) =>
@@ -599,7 +687,7 @@ describe('dispatch_build is one build per Asana task', () => {
             lateFinish = resolve
           })
       )
-      setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus' }])
+      setRepoLister(() => [{ id: 'repo-1', name: 'DobiusPlus', path: '/repos/dobius-plus' }])
       setBuildDispatcher(dispatch)
       const stuck = buildRun('run-stuck')
 

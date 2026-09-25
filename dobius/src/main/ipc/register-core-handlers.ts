@@ -119,7 +119,9 @@ export function registerCoreHandlers(
   setTrustedUIRendererWebContentsId(mainWindowWebContentsId)
   setAgentBrowserBridgeRef(runtime.getAgentBrowserBridge())
   setRepoLister(() =>
-    runtime.listRepos().map((repo) => ({ id: repo.id, name: repo.displayName || repo.id }))
+    runtime
+      .listRepos()
+      .map((repo) => ({ id: repo.id, name: repo.displayName || repo.id, path: repo.path }))
   )
   setBuildDispatcher(async ({ repoId, name, baseBranch, brief, buildAgent }) => {
     try {
