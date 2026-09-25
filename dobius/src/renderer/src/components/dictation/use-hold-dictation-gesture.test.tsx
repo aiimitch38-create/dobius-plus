@@ -51,6 +51,26 @@ function Probe(): null {
   return null
 }
 
+function SettingsChurnProbe({
+  theme,
+  stop
+}: {
+  theme: string
+  stop: () => void
+}): null {
+  useHoldDictationGesture({
+    dictationStateRef,
+    holdGestureActiveRef,
+    insertionTargetRef,
+    intentionalTargetCancellationRef,
+    keybindings: {},
+    settings: { ...holdSettings(), theme } as GlobalSettings,
+    startDictation: () => startDictation(),
+    stopDictation: stop
+  })
+  return null
+}
+
 function dispatchKeyDown(init: KeyboardEventInit): KeyboardEvent {
   const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
   window.dispatchEvent(event)
@@ -225,5 +245,39 @@ describe('useHoldDictationGesture', () => {
     expect(startDictation).toHaveBeenCalledTimes(1)
     expect(stopDictation).toHaveBeenCalledTimes(1)
     expect(holdGestureActiveRef.current).toBe(false)
+  })
+
+  it('keeps recording and the insertion target when unrelated settings change mid-hold (#92)', async () => {
+    const firstStop = vi.fn<() => void>()
+    const latestStop = vi.fn<() => void>()
+    const target = { kind: 'element' } as unknown as DictationInsertionTarget
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(<SettingsChurnProbe theme="dark" stop={firstStop} />)
+    })
+
+    beginHold()
+    insertionTargetRef.current = target
+
+    // A theme switch hands the hook a new settings object and new callbacks.
+    await act(async () => {
+      root?.render(<SettingsChurnProbe theme="light" stop={latestStop} />)
+    })
+
+    expect(firstStop).not.toHaveBeenCalled()
+    expect(latestStop).not.toHaveBeenCalled()
+    expect(holdGestureActiveRef.current).toBe(true)
+    expect(insertionTargetRef.current).toBe(target)
+    expect(intentionalTargetCancellationRef.current).toBe(false)
+
+    act(() => {
+      dispatchKeyUp({ key: 'e', code: 'KeyE', metaKey: false })
+    })
+
+    expect(firstStop).not.toHaveBeenCalled()
+    expect(latestStop).toHaveBeenCalledTimes(1)
+    expect(insertionTargetRef.current).toBe(target)
   })
 })

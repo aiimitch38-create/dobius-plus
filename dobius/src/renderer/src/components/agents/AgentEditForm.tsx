@@ -274,7 +274,9 @@ export function AgentEditForm({
                 <span className="space-y-1">
                   <span className="block text-sm font-medium">Bypass permissions</span>
                   <span className="block text-xs text-muted-foreground">
-                    Runs tools without asking. Existing permission behavior is unchanged in Phase 1.
+                    Runs tools without asking on Agents page, CLI and Voice Conductor runs.
+                    Channel chat, heartbeat, Asana, iMessage and workflow runs still deny tools
+                    outside the allowlist. Hard rails still apply.
                   </span>
                 </span>
               </label>

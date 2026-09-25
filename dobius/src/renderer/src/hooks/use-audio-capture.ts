@@ -13,6 +13,9 @@ type BufferedAudioChunk = {
 type StartAudioCaptureOptions = {
   bufferAudio?: boolean
   sessionId?: string
+  /** Called once per capture when main rejects live audio (e.g. the cloud
+   *  10-minute limit), so the caller can stop instead of showing Listening. */
+  onFeedError?: (error: unknown) => void
 }
 
 type StopAudioCaptureOptions = {
@@ -155,6 +158,7 @@ export function useAudioCapture() {
         processor = context.createScriptProcessor(4096, 1, 1)
 
         const actualRate = context.sampleRate
+        let feedErrorReported = false
 
         processor.onaudioprocess = (e: AudioProcessingEvent) => {
           if (
@@ -178,7 +182,16 @@ export function useAudioCapture() {
           }
           void window.api.speech
             .feedAudio(samples, actualRate, sessionIdRef.current)
-            .catch(() => undefined)
+            .catch((error: unknown) => {
+              // Why: a swallowed rejection meant main was discarding audio while
+              // the UI still said Listening. Report the first failure of this
+              // capture only; later chunks fail for the same reason.
+              if (startRequestRef.current !== startRequest || feedErrorReported) {
+                return
+              }
+              feedErrorReported = true
+              options.onFeedError?.(error)
+            })
         }
 
         source.connect(processor)

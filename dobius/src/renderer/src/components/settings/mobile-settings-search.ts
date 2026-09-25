@@ -94,10 +94,46 @@ export const getMobileSidebarShortcutSearchEntry = createLocalizedCatalog(
   })
 )
 
+export const getMobileListenerSearchEntry = createLocalizedCatalog(
+  (): SettingsSearchEntry => ({
+    title: translate(
+      'auto.components.settings.mobile.settings.search.listenerTitle',
+      'Phone Listener (takes effect on next launch)'
+    ),
+    description: translate(
+      'auto.components.settings.mobile.settings.search.listenerDescription',
+      'Lets phones on your local network connect to Dobius+. Changes take effect the next time Dobius+ starts.'
+    ),
+    keywords: [
+      ...translateSearchKeyword(
+        'auto.components.settings.mobile.settings.search.listenerKeywordListener',
+        'listener'
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.mobile.settings.search.listenerKeywordNetwork',
+        'local network'
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.mobile.settings.search.listenerKeywordLan',
+        'lan'
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.mobile.settings.search.listenerKeywordPhone',
+        'phone'
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.mobile.settings.search.listenerKeywordWebsocket',
+        'websocket'
+      )
+    ]
+  })
+)
+
 export const getMobileSettingsPaneSearchEntries = createLocalizedCatalog(
   (): SettingsSearchEntry[] => [
     getMobileOverviewSearchEntry(),
     getMobileSidebarShortcutSearchEntry(),
+    getMobileListenerSearchEntry(),
     getImessageBridgeSearchEntry(),
     ...getMobilePaneSearchEntries()
   ]

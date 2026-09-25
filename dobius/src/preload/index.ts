@@ -1130,8 +1130,9 @@ const api = {
     writeFile: (
       agentId: string,
       name: AgentIdentityFileName | 'brief' | 'memory',
-      content: string
-    ): Promise<void> => ipcRenderer.invoke('agents:writeFile', agentId, name, content),
+      content: string,
+      expected?: string
+    ): Promise<void> => ipcRenderer.invoke('agents:writeFile', agentId, name, content, expected),
     readCrewFiles: (): Promise<AgentCrewFiles> => ipcRenderer.invoke('agents:readCrewFiles'),
     writeCrewFile: (name: AgentCrewFileName, content: string): Promise<void> =>
       ipcRenderer.invoke('agents:writeCrewFile', name, content),
@@ -4319,8 +4320,11 @@ const api = {
     revokeRuntimeAccess: (args: { deviceId: string }): Promise<{ revoked: boolean }> =>
       ipcRenderer.invoke('mobile:revokeRuntimeAccess', args),
 
-    isWebSocketReady: (): Promise<{ ready: boolean; endpoint: string | null }> =>
-      ipcRenderer.invoke('mobile:isWebSocketReady')
+    isWebSocketReady: (): Promise<{
+      ready: boolean
+      endpoint: string | null
+      startedWithListenerEnabled: boolean
+    }> => ipcRenderer.invoke('mobile:isWebSocketReady')
   },
 
   agentStatus: {

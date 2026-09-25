@@ -42,6 +42,7 @@ import { listDrafts, setDraftStatus } from '../agents/agent-draft-store'
 import { approveDraftAndPost } from '../agents/agent-draft-approval'
 import { setDobiusToolKnowledgeStore } from '../agents/agent-tools/dobius-tool-server'
 import {
+  parseExpectedAgentFile,
   readAgentFiles,
   readCrewFiles,
   writeAgentFile,
@@ -119,8 +120,14 @@ export function registerAgentsHandlers(
   ipcMain.removeHandler('agents:writeFile')
   ipcMain.handle(
     'agents:writeFile',
-    (_event, agentId: string, name: AgentIdentityFileName | 'brief' | 'memory', content: string) =>
-      writeAgentFile(requireAgentId(agentId), name, content)
+    (
+      _event,
+      agentId: string,
+      name: AgentIdentityFileName | 'brief' | 'memory',
+      content: string,
+      expected?: unknown
+    ) =>
+      writeAgentFile(requireAgentId(agentId), name, content, parseExpectedAgentFile(expected))
   )
 
   ipcMain.removeHandler('agents:readCrewFiles')

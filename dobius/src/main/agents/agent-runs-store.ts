@@ -1,5 +1,10 @@
 import path from 'node:path'
-import type { AgentRun, AgentRunContext, AgentRunOutboxItem } from '../../shared/agents'
+import type {
+  AgentRun,
+  AgentRunContext,
+  AgentRunOutboxItem,
+  AgentRunPermissionDenial
+} from '../../shared/agents'
 import { SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 
@@ -8,6 +13,29 @@ const MAX_RUNS = 50
 
 function runsPath(): string {
   return path.join(getUserDataRoot(), RUNS_FILE_NAME)
+}
+
+function sanitizePermissionDenials(raw: unknown): AgentRunPermissionDenial[] {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  return raw.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) {
+      return []
+    }
+    const denial = entry as Partial<Record<keyof AgentRunPermissionDenial, unknown>>
+    if (typeof denial.toolName !== 'string' || typeof denial.reason !== 'string') {
+      return []
+    }
+    return [
+      {
+        toolName: denial.toolName,
+        ...(typeof denial.toolUseId === 'string' ? { toolUseId: denial.toolUseId } : {}),
+        reason: denial.reason,
+        at: typeof denial.at === 'number' ? denial.at : 0
+      }
+    ]
+  })
 }
 
 function sanitizeRuns(raw: unknown): AgentRun[] {
@@ -74,6 +102,10 @@ function sanitizeRuns(raw: unknown): AgentRun[] {
     }
     if (typeof record.costUsd === 'number') {
       run.costUsd = record.costUsd
+    }
+    const denials = sanitizePermissionDenials(record.permissionDenials)
+    if (denials.length > 0) {
+      run.permissionDenials = denials
     }
     return [run]
   })

@@ -9,7 +9,7 @@ import type { ModelManager } from './model-manager'
 import { OpenAiTranscriptionSession } from './openai-transcription-client'
 import { readOpenAiSpeechApiKey } from './openai-api-key-store'
 import { assertEnoughMemoryForModel } from './stt-memory-preflight'
-import { VpsTranscriptionSession, DEFAULT_VPS_STT_ENDPOINT } from './vps-transcription-client'
+import { VpsTranscriptionSession, resolveVpsSttEndpoint } from './vps-transcription-client'
 
 /* Why an interface: the OpenAI and VPS transports differ only in where the
 audio goes, so the feed/stop paths below stay transport-agnostic. */
@@ -34,10 +34,10 @@ export type SttEventSink = (event: SttEvent) => void
 export class SttService {
   private worker: Worker | null = null
   private cloudSession: RemoteTranscriptionSession | null = null
-  /* Base URL of the self-hosted Parakeet server. Defaults to the Tailscale
-  address the dobius-stt service binds; Settings may override it. */
-  private vpsEndpoint: string = DEFAULT_VPS_STT_ENDPOINT
   private modelManager: ModelManager
+  // Why a reader, not a cached value: Settings can change the speech server
+  // between dictations, and each start must use the value saved right now.
+  private readVpsEndpoint: () => string | undefined
   private activeModelId: string | null = null
   private activeHotwordsFilePath: string | undefined
   private activeOwner: string | null = null
@@ -51,13 +51,12 @@ export class SttService {
   // stale workers must not retain this service after error, exit, or teardown.
   private cleanupWorkerLifecycleListeners: (() => void) | null = null
 
-  constructor(modelManager: ModelManager) {
+  constructor(
+    modelManager: ModelManager,
+    readVpsEndpoint: () => string | undefined = () => undefined
+  ) {
     this.modelManager = modelManager
-  }
-
-  /** Point dictation at a different speech server. Empty input restores the default. */
-  setVpsEndpoint(endpoint: string | undefined): void {
-    this.vpsEndpoint = endpoint?.trim() || DEFAULT_VPS_STT_ENDPOINT
+    this.readVpsEndpoint = readVpsEndpoint
   }
 
   async startDictation(
@@ -109,6 +108,7 @@ export class SttService {
     if (manifest.provider === 'vps') {
       // Why no model-state check: nothing is downloaded locally for this
       // provider; the weights live on the server.
+      const endpoint = resolveVpsSttEndpoint(this.readVpsEndpoint())
       if (this.worker) {
         await this.stopDictation(owner, { cancelStarting: false })
         await this.teardownIdleWorker()
@@ -117,7 +117,7 @@ export class SttService {
         await this.stopDictation(owner, { cancelStarting: false })
       }
 
-      this.cloudSession = new VpsTranscriptionSession(this.vpsEndpoint)
+      this.cloudSession = new VpsTranscriptionSession(endpoint)
       this.activeModelId = modelId
       this.activeHotwordsFilePath = undefined
       this.eventSink = sink

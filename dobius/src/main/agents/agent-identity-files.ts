@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type {
@@ -7,6 +7,8 @@ import type {
   AgentIdentityFileName,
   AgentReadableFiles
 } from '../../shared/agents'
+import { agentFileConflictMessage } from '../../shared/agent-file-conflict'
+import { writeFileAtomic } from '../storage/safe-json-file'
 
 const IDENTITY_FILE_NAMES: AgentIdentityFileName[] = ['soul', 'role', 'playbook', 'rules']
 const CREW_FILE_NAMES: AgentCrewFileName[] = ['USER', 'TOOLS']
@@ -58,10 +60,18 @@ function crewDir(): string {
 }
 
 function atomicWrite(filePath: string, content: string): void {
-  mkdirSync(path.dirname(filePath), { recursive: true })
-  const tmp = `${filePath}.${process.pid}.tmp`
-  writeFileSync(tmp, content, 'utf-8')
-  renameSync(tmp, filePath)
+  writeFileAtomic(filePath, content)
+}
+
+function readIfExists(filePath: string): string | null {
+  try {
+    return readFileSync(filePath, 'utf-8')
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+    throw error
+  }
 }
 
 function readOrCreate(filePath: string, template: string): string {
@@ -110,13 +120,36 @@ export function readAgentFiles(agentId: string): AgentReadableFiles {
   }
 }
 
+// Why: `expected` arrives over IPC — a malformed value must fail closed, never
+// fall back to an unchecked write.
+export function parseExpectedAgentFile(value: unknown): string | undefined {
+  if (value !== undefined && typeof value !== 'string') {
+    throw new Error('Invalid expected content for agent file write')
+  }
+  return value
+}
+
+// `expected` is the content the editor loaded. Why: agents append to memory.md
+// (and may edit other identity files) while the form is open — a save built on
+// an older copy must be refused, not written over the agent's newer content.
 export function writeAgentFile(
   agentId: string,
   name: AgentIdentityFileName | 'brief' | 'memory',
-  content: string
+  content: string,
+  expected?: string
 ): void {
   assertIdentityFileName(name)
-  atomicWrite(path.join(agentDir(agentId), `${name}.md`), content)
+  const filePath = path.join(agentDir(agentId), `${name}.md`)
+  if (expected !== undefined) {
+    const current = readIfExists(filePath)
+    if (current === content) {
+      return
+    }
+    if (current !== null && current !== expected) {
+      throw new Error(agentFileConflictMessage(`${name}.md`))
+    }
+  }
+  atomicWrite(filePath, content)
 }
 
 export function readCrewFiles(): AgentCrewFiles {

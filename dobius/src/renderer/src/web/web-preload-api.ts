@@ -694,7 +694,14 @@ function createWebPreloadApi(): Partial<PreloadApi> {
       revokeDevice: () => Promise.resolve({ revoked: false }),
       listRuntimeAccessGrants: () => Promise.resolve({ grants: [] }),
       revokeRuntimeAccess: () => Promise.resolve({ revoked: false }),
-      isWebSocketReady: () => Promise.resolve({ ready: Boolean(activeEnvironment), endpoint: null })
+      // Why: a web client only exists because the host's listener is on, so
+      // report it as enabled; this never hides a real pairing error.
+      isWebSocketReady: () =>
+        Promise.resolve({
+          ready: Boolean(activeEnvironment),
+          endpoint: null,
+          startedWithListenerEnabled: true
+        })
     },
     telemetryTrack: () => Promise.resolve(),
     telemetrySetOptIn: () => Promise.resolve(),

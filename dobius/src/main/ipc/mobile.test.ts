@@ -226,4 +226,26 @@ describe('registerMobileHandlers', () => {
     })
     expect(revokeRuntimeAccess).toHaveBeenCalledWith('runtime-1')
   })
+
+  it('reports whether the listener was enabled at launch alongside readiness', () => {
+    registerMobileHandlers({
+      getWebSocketEndpoint: () => null,
+      isWebSocketEnabled: () => true
+    } as never)
+    expect(handlers.get('mobile:isWebSocketReady')?.()).toEqual({
+      ready: false,
+      endpoint: null,
+      startedWithListenerEnabled: true
+    })
+
+    registerMobileHandlers({
+      getWebSocketEndpoint: () => null,
+      isWebSocketEnabled: () => false
+    } as never)
+    expect(handlers.get('mobile:isWebSocketReady')?.()).toEqual({
+      ready: false,
+      endpoint: null,
+      startedWithListenerEnabled: false
+    })
+  })
 })

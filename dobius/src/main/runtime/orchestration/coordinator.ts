@@ -80,6 +80,13 @@ type CoordinatorState = {
 
 const DEFAULT_POLL_MS = 2000
 const MAX_CONCURRENT_DEFAULT = 4
+// Why: bounds how long a stop can take to be noticed and keeps the run's
+// owner-heartbeat window (10 polls) at 10 minutes or less.
+export const MAX_POLL_MS = 60_000
+
+export function clampPollIntervalMs(ms: number): number {
+  return Math.min(ms, MAX_POLL_MS)
+}
 
 // Why: 10 min matches the preamble's documented heartbeat cadence (5 min) ×
 // 2, so a single missed heartbeat is the earliest a dispatch can look stale.
@@ -88,11 +95,30 @@ const MAX_CONCURRENT_DEFAULT = 4
 // the places this constant must be kept in sync.
 const HUNG_THRESHOLD_MS = 10 * 60 * 1000
 
+function isTerminalTaskStatus(status: TaskRow['status']): boolean {
+  return status === 'completed' || status === 'failed'
+}
+
+// Why: rows written by SQLite defaults are 'YYYY-MM-DD HH:MM:SS' (UTC, no
+// zone) while JS writes ISO strings; parse both as UTC before comparing.
+function parseDbTimestampMs(value: string | null): number {
+  if (!value) {
+    return Number.NaN
+  }
+  const iso = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`
+  return Date.parse(iso)
+}
+
 export class Coordinator {
   private db: OrchestrationDb
   private runtime: CoordinatorRuntime
   private state: CoordinatorState
   private stopped = false
+  private wakeSleep: (() => void) | null = null
+  // Why: the task table is global and outlives runs (old failed tasks,
+  // another root created mid-run). A run only decomposes, dispatches and
+  // converges over the tasks it claimed at start plus tasks linked to them.
+  private ownedTaskIds = new Set<string>()
   private opts: Required<Omit<CoordinatorOptions, 'onLog' | 'worktree'>> & {
     onLog: (msg: string) => void
     worktree?: string
@@ -104,7 +130,7 @@ export class Coordinator {
     this.opts = {
       spec: options.spec,
       coordinatorHandle: options.coordinatorHandle,
-      pollIntervalMs: options.pollIntervalMs ?? DEFAULT_POLL_MS,
+      pollIntervalMs: clampPollIntervalMs(options.pollIntervalMs ?? DEFAULT_POLL_MS),
       maxConcurrent: options.maxConcurrent ?? MAX_CONCURRENT_DEFAULT,
       worktree: options.worktree,
       onLog: options.onLog ?? (() => {})
@@ -169,8 +195,8 @@ export class Coordinator {
 
       // Why: if stopped early, treat it as failed since tasks are incomplete.
       // Also failed if any task explicitly failed.
-      const tasks = this.db.listTasks()
-      const allDone = tasks.every((t) => t.status === 'completed' || t.status === 'failed')
+      const tasks = this.listOwnedTasks()
+      const allDone = tasks.every((t) => isTerminalTaskStatus(t.status))
       const failedTasks = [
         ...new Set([
           ...this.state.failedTasks,
@@ -197,6 +223,7 @@ export class Coordinator {
 
   stop(): void {
     this.stopped = true
+    this.wakeSleep?.()
   }
 
   // Why: the coordinator decomposes the top-level spec into a task DAG.
@@ -206,17 +233,78 @@ export class Coordinator {
   // itself is an LLM agent.
   private async decompose(): Promise<void> {
     this.state.phase = 'decomposing'
-    const existing = this.db.listTasks()
+    // Why: completed/failed tasks from earlier runs are history, not work for
+    // this run; claiming them made every later run report 'failed'.
+    const existing = this.db.listTasks().filter((t) => !isTerminalTaskStatus(t.status))
     if (existing.length === 0) {
       throw new Error(
         'No tasks found. Create tasks with orchestration.taskCreate before running the coordinator.'
       )
     }
+    for (const task of existing) {
+      this.ownedTaskIds.add(task.id)
+    }
     this.opts.onLog(`Found ${existing.length} tasks in DAG`)
     this.state.phase = 'dispatching'
   }
 
+  // Why: subtasks created during the run (parent or dependency on a task this
+  // run owns) belong to this run; unrelated roots created meanwhile do not.
+  // An owned task's own unfinished dependencies are adopted too, otherwise it
+  // would wait on a task nobody dispatches and the run would never converge.
+  private adoptLinkedTasks(): void {
+    const tasks = this.db.listTasks()
+    const candidates = tasks.filter(
+      (t) => !this.ownedTaskIds.has(t.id) && !isTerminalTaskStatus(t.status)
+    )
+    const candidateIds = new Set(candidates.map((t) => t.id))
+    const depsOf = (task: TaskRow): string[] => {
+      const deps: unknown = JSON.parse(task.deps)
+      return Array.isArray(deps) ? deps.map(String) : []
+    }
+    let adopted = true
+    while (adopted) {
+      adopted = false
+      for (const task of tasks) {
+        if (!this.ownedTaskIds.has(task.id)) {
+          continue
+        }
+        for (const dep of depsOf(task)) {
+          if (candidateIds.has(dep) && !this.ownedTaskIds.has(dep)) {
+            this.ownedTaskIds.add(dep)
+            adopted = true
+          }
+        }
+      }
+      for (const task of candidates) {
+        if (this.ownedTaskIds.has(task.id)) {
+          continue
+        }
+        const linked =
+          (task.parent_id !== null && this.ownedTaskIds.has(task.parent_id)) ||
+          depsOf(task).some((dep) => this.ownedTaskIds.has(dep))
+        if (linked) {
+          this.ownedTaskIds.add(task.id)
+          adopted = true
+        }
+      }
+    }
+  }
+
+  private listOwnedTasks(filter?: Parameters<OrchestrationDb['listTasks']>[0]): TaskRow[] {
+    return this.db.listTasks(filter).filter((t) => this.ownedTaskIds.has(t.id))
+  }
+
   private async tick(): Promise<boolean> {
+    // Why: the heartbeat proves to other processes sharing the DB that this
+    // run is still owned. If the row is no longer 'running' (retired or
+    // stopped elsewhere) this loop no longer owns it and must not dispatch.
+    if (!this.db.touchCoordinatorRun(this.state.runId)) {
+      this.opts.onLog(`Coordinator run ${this.state.runId} is no longer running; stopping`)
+      this.stop()
+      return false
+    }
+    this.adoptLinkedTasks()
     this.processMessages()
     this.processEscalations()
     this.processDecisionGates()
@@ -276,7 +364,7 @@ export class Coordinator {
 
   private handleLifecycleMessage(msg: MessageRow): void {
     const result = reconcileLifecycleMessage(this.db, msg, this.opts.onLog)
-    if (result.action === 'completed') {
+    if (result.action === 'completed' && this.ownedTaskIds.has(result.taskId)) {
       if (!this.state.completedTasks.includes(result.taskId)) {
         this.state.completedTasks.push(result.taskId)
       }
@@ -288,12 +376,20 @@ export class Coordinator {
     this.state.escalations.push(msg)
 
     let taskId: string | undefined
+    let dispatchId: string | undefined
     if (msg.payload) {
       try {
-        const payload = JSON.parse(msg.payload)
-        taskId = payload.taskId
+        const payload: unknown = JSON.parse(msg.payload)
+        if (payload && typeof payload === 'object') {
+          const fields = payload as Record<string, unknown>
+          taskId = typeof fields.taskId === 'string' ? fields.taskId : undefined
+          dispatchId =
+            typeof fields.dispatchId === 'string' && fields.dispatchId.length > 0
+              ? fields.dispatchId
+              : undefined
+        }
       } catch {
-        // Escalation without structured payload — log subject as context
+        this.opts.onLog(`Escalation from ${msg.from_handle} has no structured payload`)
       }
     }
 
@@ -302,12 +398,35 @@ export class Coordinator {
     }
 
     const task = this.db.getTask(taskId)
-    if (!task || task.status === 'completed' || task.status === 'failed') {
+    if (!task || !this.ownedTaskIds.has(taskId) || task.status !== 'dispatched') {
       return
     }
 
+    // Why: an escalation may only fail the attempt that sent it. A delayed or
+    // duplicate escalation from an earlier attempt (or another terminal) must
+    // not fail, and eventually circuit-break, the replacement attempt.
     const dispatch = this.db.getDispatchContext(taskId)
-    if (!dispatch) {
+    if (!dispatch || dispatch.status !== 'dispatched') {
+      return
+    }
+    if (dispatchId !== undefined && dispatchId !== dispatch.id) {
+      this.opts.onLog(`Escalation for stale dispatch ${dispatchId} on task ${taskId} ignored`)
+      return
+    }
+    if (dispatch.assignee_handle !== msg.from_handle) {
+      this.opts.onLog(
+        `Escalation for task ${taskId} came from ${msg.from_handle}, expected ${dispatch.assignee_handle ?? '<unknown>'}; ignored`
+      )
+      return
+    }
+    // Why: without a dispatchId the only proof the message belongs to this
+    // attempt is that it was written after the attempt started. Same-second
+    // messages are ambiguous and are not allowed to fail the attempt.
+    if (
+      dispatchId === undefined &&
+      !(parseDbTimestampMs(msg.created_at) > parseDbTimestampMs(dispatch.dispatched_at))
+    ) {
+      this.opts.onLog(`Escalation for task ${taskId} predates dispatch ${dispatch.id}; ignored`)
       return
     }
 
@@ -315,12 +434,15 @@ export class Coordinator {
     // the threshold, the task returns to 'pending' and will be re-dispatched
     // to a (potentially different) terminal on the next tick.
     const updated = this.db.failDispatch(dispatch.id, msg.subject)
-    if (updated?.status === 'circuit_broken') {
+    if (!updated) {
+      return
+    }
+    if (updated.status === 'circuit_broken') {
       this.opts.onLog(`Task ${taskId} circuit broken after repeated failures`)
       this.db.updateTaskStatus(taskId, 'failed', `Circuit broken: ${msg.subject}`)
       this.state.failedTasks.push(taskId)
     } else {
-      this.opts.onLog(`Task ${taskId} will be retried (failure ${updated?.failure_count ?? 0}/3)`)
+      this.opts.onLog(`Task ${taskId} will be retried (failure ${updated.failure_count}/3)`)
     }
   }
 
@@ -374,7 +496,7 @@ export class Coordinator {
 
   private async dispatchReadyTasks(): Promise<void> {
     this.state.phase = 'dispatching'
-    const readyTasks = this.db.listTasks({ ready: true })
+    const readyTasks = this.listOwnedTasks({ ready: true })
     if (readyTasks.length === 0) {
       return
     }
@@ -387,6 +509,9 @@ export class Coordinator {
     }
 
     const terminals = await this.getAvailableTerminals()
+    if (this.stopped) {
+      return
+    }
     if (terminals.length === 0 && slotsAvailable > 0) {
       // Why: no idle terminals exist — create one for the next task.
       // Only create one per tick to avoid spawning many terminals at once.
@@ -403,7 +528,7 @@ export class Coordinator {
     }
 
     for (const task of readyTasks) {
-      if (slotsAvailable <= 0 || terminals.length === 0) {
+      if (this.stopped || slotsAvailable <= 0 || terminals.length === 0) {
         break
       }
 
@@ -461,6 +586,12 @@ export class Coordinator {
       }
     }
 
+    // Why: the awaits above can outlast a stop, and the task list was read
+    // before them; a stopped run, or a task another run already took, must
+    // not start a worker.
+    if (this.stopped || this.db.getTask(task.id)?.status !== 'ready') {
+      return
+    }
     const dispatch = this.db.createDispatchContext(task.id, targetHandle)
 
     // Why: agents dispatched by the coordinator must use dobius-dev in dev mode
@@ -547,12 +678,12 @@ export class Coordinator {
   }
 
   private checkConvergence(): boolean {
-    const tasks = this.db.listTasks()
+    const tasks = this.listOwnedTasks()
     if (tasks.length === 0) {
       return true
     }
 
-    const allDone = tasks.every((t) => t.status === 'completed' || t.status === 'failed')
+    const allDone = tasks.every((t) => isTerminalTaskStatus(t.status))
     if (allDone) {
       this.state.phase = 'done'
       return true
@@ -573,9 +704,22 @@ export class Coordinator {
     return false
   }
 
+  // Why: stop() wakes the pending sleep so a stopped loop settles at once
+  // instead of after a full poll interval.
   private sleep(ms: number): Promise<void> {
+    if (this.stopped) {
+      return Promise.resolve()
+    }
     return new Promise((resolve) => {
-      setTimeout(resolve, ms)
+      const timer = setTimeout(() => {
+        this.wakeSleep = null
+        resolve()
+      }, ms)
+      this.wakeSleep = () => {
+        clearTimeout(timer)
+        this.wakeSleep = null
+        resolve()
+      }
     })
   }
 }

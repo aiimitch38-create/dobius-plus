@@ -5634,7 +5634,10 @@
           "aa1263e881": "Mantener en tamaño de teléfono (predeterminado)",
           "6436e56546": "Código QR para emparejamiento móvil",
           "1b1b70279a": "Aún no hay dispositivos emparejados.",
-          "1592afcc7a": "Aún no hay dispositivos emparejados. Escanea el código QR con la aplicación móvil de Dobius+."
+          "1592afcc7a": "Aún no hay dispositivos emparejados. Escanea el código QR con la aplicación móvil de Dobius+.",
+          "listenerPendingRestart": "The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.",
+          "listenerOff": "The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.",
+          "listenerFailedToStart": "The phone listener was on at launch but failed to start (see logs). Restart Dobius+ to try again."
         },
         "MobileSettingsPane": {
           "9a3c280e49": "GitHub Releases",
@@ -7770,7 +7773,14 @@
               "671eb4173c": "Controla terminales y agentes desde tu teléfono.",
               "ffd52a96e4": "Móvil",
               "1de96ec8a6": "Mostrar botón de Dobius+ Mobile",
-              "682293cadf": "Mostrar el botón de Dobius+ Mobile en la parte superior de la barra lateral izquierda."
+              "682293cadf": "Mostrar el botón de Dobius+ Mobile en la parte superior de la barra lateral izquierda.",
+              "listenerTitle": "Phone Listener (takes effect on next launch)",
+              "listenerDescription": "Lets phones on your local network connect to Dobius+. Changes take effect the next time Dobius+ starts.",
+              "listenerKeywordListener": "listener",
+              "listenerKeywordNetwork": "local network",
+              "listenerKeywordLan": "lan",
+              "listenerKeywordPhone": "phone",
+              "listenerKeywordWebsocket": "websocket"
             }
           }
         },
@@ -8875,7 +8885,9 @@
           "buildAgentLabel": "Build agent",
           "buildAgentDescription": "Terminal agent used when dispatch_build creates a build worktree.",
           "intervalLabel": "Poll interval",
-          "intervalDescription": "Minutes between Asana refreshes while Auto Mode is enabled."
+          "intervalDescription": "Minutes between Asana refreshes while Auto Mode is enabled.",
+          "autoModeBlockedPaused": "Blocked: crew paused. Resume the crew on the Agents page to run Auto Mode.",
+          "autoModeBlockedUnreadable": "Blocked: crew control file could not be read ({{filePath}}). Fix or remove it, then resume the crew."
         },
         "asana": {
           "search": {

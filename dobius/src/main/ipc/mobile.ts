@@ -196,7 +196,8 @@ export function registerMobileHandlers(rpcServer: DobiusRuntimeRpcServer): void 
   ipcMain.handle('mobile:isWebSocketReady', () => {
     return {
       ready: rpcServer.getWebSocketEndpoint() !== null,
-      endpoint: rpcServer.getWebSocketEndpoint()
+      endpoint: rpcServer.getWebSocketEndpoint(),
+      startedWithListenerEnabled: rpcServer.isWebSocketEnabled()
     }
   })
 }
