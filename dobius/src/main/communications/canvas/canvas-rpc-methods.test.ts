@@ -279,7 +279,7 @@ describe('canvas-rpc-methods', () => {
         limit: 2,
         before: null,
         beforeId: null
-      })) as { notes: Array<{ id: string; content: string }>; next_cursor: { before: number; before_id: string } | null }
+      })) as { notes: { id: string; content: string }[]; next_cursor: { before: number; before_id: string } | null }
 
       expect(page1.notes.map((note) => note.content)).toEqual(['third', 'second'])
       const cursor = page1.next_cursor
@@ -293,7 +293,7 @@ describe('canvas-rpc-methods', () => {
         limit: 2,
         before: cursor.before,
         beforeId: cursor.before_id
-      })) as { notes: Array<{ content: string }>; next_cursor: unknown }
+      })) as { notes: { content: string }[]; next_cursor: unknown }
 
       expect(page2.notes.map((note) => note.content)).toEqual(['first'])
       expect(page2.next_cursor).toBeNull()
@@ -308,7 +308,7 @@ describe('canvas-rpc-methods', () => {
         limit: 10,
         before: null,
         beforeId: null
-      })) as { notes: Array<{ content: string }>; next_cursor: unknown }
+      })) as { notes: { content: string }[]; next_cursor: unknown }
 
       expect(page.notes.map((note) => note.content)).toEqual(['theirs', 'mine'])
       expect(page.next_cursor).toBeNull()
@@ -324,7 +324,7 @@ describe('canvas-rpc-methods', () => {
       const page = (await callMethod(methodNamed(methods, 'canvas.getNotesTimeline'), {
         pubkeys: [selfPubkey, AUTHOR_OTHER],
         limitPerUser: 1
-      })) as { notes: Array<{ content: string }> }
+      })) as { notes: { content: string }[] }
 
       expect(page.notes.map((note) => note.content)).toEqual(['other-new', 'self-new'])
     })
@@ -342,7 +342,7 @@ describe('canvas-rpc-methods', () => {
       const page = (await callMethod(methodNamed(methods, 'canvas.getLikedNotes'), {
         authorPubkey: AUTHOR_OTHER,
         limit: 10
-      })) as { notes: Array<{ content: string }>; next_cursor: unknown }
+      })) as { notes: { content: string }[]; next_cursor: unknown }
 
       expect(page.notes.map((note) => note.content)).toEqual(['liked note'])
       expect(page.next_cursor).toBeNull()
@@ -373,7 +373,7 @@ describe('canvas-rpc-methods', () => {
 
       const summaries = (await callMethod(methodNamed(methods, 'canvas.getNoteReactions'), {
         noteIds: [note.id]
-      })) as Array<{ note_id: string; emoji: string; count: number; pubkeys: string[] }>
+      })) as { note_id: string; emoji: string; count: number; pubkeys: string[] }[]
 
       expect(summaries).toHaveLength(2)
       expect(summaries).toContainEqual({ note_id: note.id, emoji: '+', count: 2, pubkeys: [likerA, likerB] })
