@@ -7,8 +7,16 @@ type StoredOpenAiKey = {
   encryptedKeyBase64: string
 }
 
+export type OpenAiSpeechApiKeyStatus = {
+  configured: boolean
+  // True when the key could not be encrypted: it works until the app quits
+  // but was not written to disk.
+  sessionOnly: boolean
+}
+
 const OPENAI_SPEECH_TOKEN_FILE = 'openai-speech-token.enc'
 let cachedOpenAiSpeechApiKey: string | null = null
+let openAiSpeechApiKeyIsSessionOnly = false
 
 function getDobiusDir(): string {
   return join(homedir(), '.dobius')
@@ -44,26 +52,46 @@ function readLegacyJsonStoredOpenAiKey(): StoredOpenAiKey | null {
 export function hasOpenAiSpeechApiKey(): boolean {
   // Why: Settings and model-state refresh call this on startup; checking file
   // existence avoids decrypting safeStorage and triggering macOS keychain prompts.
-  return existsSync(getOpenAiKeyPath())
+  return openAiSpeechApiKeyIsSessionOnly || existsSync(getOpenAiKeyPath())
 }
 
-export function saveOpenAiSpeechApiKey(apiKey: string): void {
+export function getOpenAiSpeechApiKeyStatus(): OpenAiSpeechApiKeyStatus {
+  return { configured: hasOpenAiSpeechApiKey(), sessionOnly: openAiSpeechApiKeyIsSessionOnly }
+}
+
+function tryEncryptOpenAiKey(apiKey: string): Buffer | null {
+  if (!safeStorage.isEncryptionAvailable()) {
+    return null
+  }
+  try {
+    return safeStorage.encryptString(apiKey)
+  } catch (err) {
+    console.error('[speech] safeStorage encryption failed:', err)
+    return null
+  }
+}
+
+export function saveOpenAiSpeechApiKey(apiKey: string): OpenAiSpeechApiKeyStatus {
   const trimmed = apiKey.trim()
   if (!trimmed) {
     throw new Error('OpenAI API key is required')
   }
-  ensureDobiusDir()
-  if (safeStorage.isEncryptionAvailable()) {
-    writeFileSync(getOpenAiKeyPath(), safeStorage.encryptString(trimmed), { mode: 0o600 })
+  const encrypted = tryEncryptOpenAiKey(trimmed)
+  if (encrypted === null) {
+    // Why (#25): fail closed. Never write the key in plaintext; leave any
+    // existing encrypted file untouched and keep the new key for this session.
+    console.warn(
+      '[speech] safeStorage encryption unavailable — OpenAI speech key kept for this session only'
+    )
     cachedOpenAiSpeechApiKey = trimmed
-    return
+    openAiSpeechApiKeyIsSessionOnly = true
+    return getOpenAiSpeechApiKeyStatus()
   }
-
-  console.warn(
-    '[speech] safeStorage encryption unavailable — storing OpenAI speech key in plaintext'
-  )
-  writeFileSync(getOpenAiKeyPath(), trimmed, { encoding: 'utf8', mode: 0o600 })
+  ensureDobiusDir()
+  writeFileSync(getOpenAiKeyPath(), encrypted, { mode: 0o600 })
   cachedOpenAiSpeechApiKey = trimmed
+  openAiSpeechApiKeyIsSessionOnly = false
+  return getOpenAiSpeechApiKeyStatus()
 }
 
 export function readOpenAiSpeechApiKey(): string {
@@ -95,5 +123,6 @@ export function readOpenAiSpeechApiKey(): string {
 
 export function clearOpenAiSpeechApiKey(): void {
   cachedOpenAiSpeechApiKey = null
+  openAiSpeechApiKeyIsSessionOnly = false
   rmSync(getOpenAiKeyPath(), { force: true })
 }

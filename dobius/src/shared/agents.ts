@@ -151,6 +151,16 @@ export type AgentRun = {
   summary?: string
   numTurns?: number
   costUsd?: number
+  /** Tool requests refused because nobody could approve them (headless runs). */
+  permissionDenials?: AgentRunPermissionDenial[]
+}
+
+export type AgentRunPermissionDenial = {
+  toolName: string
+  /** SDK tool_use id; dedupes the canUseTool, stream and result reports of one denial. */
+  toolUseId?: string
+  reason: string
+  at: number
 }
 
 export type PendingAgentDecision = {
@@ -165,6 +175,8 @@ export type PendingAgentDecision = {
   cwd: string
   branch?: string
   createdAt: number
+  /** Present when "Bypass run" cannot work for this run; the UI disables it with this text. */
+  bypassRunUnavailableReason?: string
 }
 
 export type AgentDecisionResolutionAction =

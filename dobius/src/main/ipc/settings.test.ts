@@ -64,7 +64,8 @@ const store = {
   updateSettings: vi.fn(),
   getGitHubCache: vi.fn(),
   setGitHubCache: vi.fn(),
-  onSettingsChanged: vi.fn(() => () => {})
+  onSettingsChanged: vi.fn(() => () => {}),
+  getSecretStorageStatus: vi.fn()
 }
 
 describe('registerSettingsHandlers', () => {
@@ -81,6 +82,25 @@ describe('registerSettingsHandlers', () => {
     store.getSettings.mockReset()
     store.updateSettings.mockReset()
     store.onSettingsChanged.mockClear()
+    store.getSecretStorageStatus.mockReset()
+  })
+
+  it('settings:getSecretStorageStatus returns the store status (field names only)', async () => {
+    const status = {
+      encryptionAvailable: false,
+      sessionOnlySecrets: ['httpProxyUrl'],
+      undecryptableSecrets: ['opencodeSessionCookie']
+    }
+    store.getSecretStorageStatus.mockReturnValue(status)
+    registerSettingsHandlers(store as never)
+
+    const handler = handleMock.mock.calls.find(
+      (call) => call[0] === 'settings:getSecretStorageStatus'
+    )?.[1] as () => unknown
+
+    expect(handler).toBeDefined()
+    expect(await handler()).toEqual(status)
+    expect(store.getSecretStorageStatus).toHaveBeenCalledOnce()
   })
 
   it('registers settings:previewGhosttyImport handler', () => {

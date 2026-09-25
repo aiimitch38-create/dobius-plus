@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useAudioCapture } from '@/hooks/use-audio-capture'
+import { useAppStore } from '@/store'
 import {
   AMBIENT_SESSION_ID,
   createJarvisSessionRegistry,
@@ -17,6 +19,7 @@ export type OrbHudState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'erro
 // the renderer-side armed hint expires on the same schedule without extra IPC.
 const WAKE_WORD_WINDOW_MS = 12_000
 const ERROR_STATE_CLEAR_MS = 4_000
+export const JARVIS_NO_MODEL_TEXT = 'No speech model selected. Download one in Settings > Voice.'
 
 type TurnSubPhase = 'idle' | 'starting' | 'listening'
 
@@ -194,7 +197,19 @@ export function useJarvisTurn(): JarvisTurn {
   const startTurn = useCallback((): void => {
     const modelId = flagsRef.current.sttModel
     if (!modelId) {
+      // Why specific + a route: a bare "Voice error" gave no hint that the
+      // fix is picking a speech model; mirrors DictationController's prompt.
+      setErrorText(JARVIS_NO_MODEL_TEXT)
       setPhase('error')
+      toast(JARVIS_NO_MODEL_TEXT, {
+        action: {
+          label: 'Open Settings',
+          onClick: () => {
+            useAppStore.getState().openSettingsTarget({ pane: 'voice', repoId: null })
+            useAppStore.getState().openSettingsPage()
+          }
+        }
+      })
       return
     }
     turnPhaseRef.current = 'starting'

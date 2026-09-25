@@ -1,5 +1,10 @@
 import path from 'node:path'
-import type { AgentRun, AgentRunContext, AgentRunOutboxItem } from '../../shared/agents'
+import type {
+  AgentRun,
+  AgentRunContext,
+  AgentRunOutboxItem,
+  AgentRunPermissionDenial
+} from '../../shared/agents'
 import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 
@@ -8,6 +13,29 @@ const MAX_RUNS = 50
 
 function runsPath(): string {
   return path.join(getUserDataRoot(), RUNS_FILE_NAME)
+}
+
+function sanitizePermissionDenials(raw: unknown): AgentRunPermissionDenial[] {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  return raw.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) {
+      return []
+    }
+    const denial = entry as Partial<Record<keyof AgentRunPermissionDenial, unknown>>
+    if (typeof denial.toolName !== 'string' || typeof denial.reason !== 'string') {
+      return []
+    }
+    return [
+      {
+        toolName: denial.toolName,
+        ...(typeof denial.toolUseId === 'string' ? { toolUseId: denial.toolUseId } : {}),
+        reason: denial.reason,
+        at: typeof denial.at === 'number' ? denial.at : 0
+      }
+    ]
+  })
 }
 
 function isRunStatus(value: unknown): value is AgentRun['status'] {
@@ -76,6 +104,11 @@ function sanitizeRun(entry: unknown): AgentRun | null {
   }
   if (typeof record.costUsd === 'number') {
     run.costUsd = record.costUsd
+  }
+  // Why: denials are best-effort diagnostics; a malformed one is dropped, never the file.
+  const denials = sanitizePermissionDenials(record.permissionDenials)
+  if (denials.length > 0) {
+    run.permissionDenials = denials
   }
   return run
 }

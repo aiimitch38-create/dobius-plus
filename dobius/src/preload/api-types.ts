@@ -38,6 +38,7 @@ import type {
   AgentProviderStatusSnapshot
 } from '../shared/agents'
 import type { DobiusPrompt } from '../shared/prompts'
+import type { SecretStorageStatus } from '../shared/secret-storage-status'
 import type { TerminalPaneSplitSource } from '../shared/feature-education-telemetry'
 import type { TaskSourceContext } from '../shared/task-source-context'
 import type { ProjectExecutionRuntimeResolution } from '../shared/project-execution-runtime'
@@ -2094,6 +2095,7 @@ export type PreloadApi = {
   telemetryAcknowledgeBanner: () => Promise<void>
   settings: {
     get: () => Promise<GlobalSettings>
+    getSecretStorageStatus: () => Promise<SecretStorageStatus>
     set: (args: Partial<GlobalSettings>) => Promise<GlobalSettings>
     listFonts: () => Promise<string[]>
     previewGhosttyImport: () => Promise<GhosttyImportPreview>
@@ -3172,8 +3174,8 @@ export type PreloadApi = {
   speech: {
     getCatalog: () => Promise<SpeechModelManifest[]>
     getModelStates: () => Promise<SpeechModelState[]>
-    getOpenAiApiKeyStatus: () => Promise<{ configured: boolean }>
-    saveOpenAiApiKey: (apiKey: string) => Promise<{ configured: boolean }>
+    getOpenAiApiKeyStatus: () => Promise<{ configured: boolean; sessionOnly?: boolean }>
+    saveOpenAiApiKey: (apiKey: string) => Promise<{ configured: boolean; sessionOnly?: boolean }>
     clearOpenAiApiKey: () => Promise<{ configured: boolean }>
     downloadModel: (modelId: string) => Promise<void>
     cancelDownload: (modelId: string) => Promise<void>
@@ -3214,10 +3216,14 @@ export type PreloadApi = {
       content: string,
       description: string
     ) => Promise<{ ok: true; id: string; displayPath: string } | { ok: false; error: string }>
-    /** Writes an approved change, keeping a backup. */
+    /** Writes an approved change, keeping a backup. Refuses (conflict) if the file changed since the proposal. */
     applySelfEdit: (
       id: string
-    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string }>
+    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string; conflict?: true }>
+    /** Restores the bytes from before an applied change. Refuses (conflict) if the file changed after it. */
+    undoSelfEdit: (
+      id: string
+    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string; conflict?: true }>
     /** Throws away a pending change. */
     discardSelfEdit: (id: string) => Promise<{ ok: boolean }>
     /** Review window subscription for incoming proposals. */

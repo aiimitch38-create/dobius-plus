@@ -221,6 +221,26 @@ describe('migrated stores never drop a malformed entry and save over it (CX12)',
     expect(readFileSync(target, 'utf-8')).toBe('[{"id":123}]')
   })
 
+  it('agent-runs-store: keeps permission denials and drops only a malformed denial', async () => {
+    const target = path.join(electronMock.userDataDir, 'agents-runs.json')
+    const run = {
+      id: 'r1',
+      agentId: 'a',
+      prompt: 'p',
+      startedAt: 5,
+      status: 'error',
+      permissionDenials: [{ toolName: 'Bash', reason: 'denied', at: 6 }, { toolName: 7 }]
+    }
+    writeFileSync(target, JSON.stringify([run]), 'utf-8')
+    const store = await import('../agents/agent-runs-store')
+
+    expect(store.listStoredAgentRuns()[0]?.permissionDenials).toEqual([
+      { toolName: 'Bash', reason: 'denied', at: 6 }
+    ])
+    const names = readdirSync(electronMock.userDataDir)
+    expect(names.filter((name) => name.includes('.unreadable-'))).toEqual([])
+  })
+
   it('asana-dispatch-ledger: a record with an invalid buildDispatchedAt fails closed', async () => {
     const target = path.join(electronMock.userDataDir, 'asana-dispatch-ledger.json')
     writeFileSync(target, JSON.stringify(malformedEntryFiles['asana-dispatch-ledger.json']))
