@@ -20,7 +20,11 @@ import {
   dest,
   makeBundle,
   makeRoot,
+  provenanceOf,
+  recordFor,
   repoRoot,
+  rollbackOf,
+  rollbackRecordOf,
   runGated,
   runGatedAsync,
   stageOf
@@ -65,14 +69,12 @@ describe.runIf(process.platform === 'darwin')(
       expect(existsSync(path.join(dest(root), 'Contents', 'Resources', 'stale-from-v1.txt'))).toBe(
         false
       )
-      const provenance = JSON.parse(
-        readFileSync(
-          path.join(dest(root), 'Contents', 'Resources', 'INSTALL-PROVENANCE.json'),
-          'utf8'
-        )
-      )
-      expect(provenance).toMatchObject({ branch: 'unknown', installedBy: 'fixture' })
-      expect(readdirSync(path.join(root, 'backups'))).toEqual(['Dobius+.previous'])
+      expect(provenanceOf(dest(root))).toMatchObject({ branch: 'unknown', installedBy: 'fixture' })
+      // v1 had no record, so the rollback copy has none beside it.
+      expect(readdirSync(path.join(root, 'backups'))).toEqual([
+        'Dobius+.previous',
+        'INSTALL-PROVENANCE.json'
+      ])
       expect(asarOf(path.join(root, 'backups', 'Dobius+.previous'))).toBe('v1')
       expect(readdirSync(path.join(root, 'Applications'))).toEqual(['Dobius+.app'])
       // #105: no second same-bundle-ID app left in dist.
@@ -90,8 +92,14 @@ describe.runIf(process.platform === 'darwin')(
       )
       expect(runGated(root, [next]).status).toBe(0)
       expect(asarOf(dest(root))).toBe('v3')
-      expect(readdirSync(path.join(root, 'backups'))).toEqual(['Dobius+.previous'])
+      expect(readdirSync(path.join(root, 'backups'))).toEqual([
+        'Dobius+.previous',
+        'Dobius+.previous.INSTALL-PROVENANCE.json',
+        'INSTALL-PROVENANCE.json'
+      ])
       expect(asarOf(path.join(root, 'backups', 'Dobius+.previous'))).toBe('v2')
+      provenanceOf(dest(root))
+      recordFor(rollbackOf(root), rollbackRecordOf(root))
     })
 
     it('does a first install with no prior app and never deletes a bundle outside a dist/ folder', () => {
@@ -103,7 +111,9 @@ describe.runIf(process.platform === 'darwin')(
       expect(result.status, result.stderr).toBe(0)
       expect(asarOf(dest(root))).toBe('v2')
       expect(existsSync(handoff)).toBe(true)
-      expect(existsSync(path.join(root, 'backups'))).toBe(false)
+      // No rollback copy on a first install; only the app's install record.
+      expect(readdirSync(path.join(root, 'backups'))).toEqual(['INSTALL-PROVENANCE.json'])
+      provenanceOf(dest(root))
     })
 
     it('keeps the prior bundle when the copy fails', () => {
@@ -212,7 +222,13 @@ describe.runIf(process.platform === 'darwin')(
         .map((line) => line.split(' ')[0])
       expect(events).toEqual(['start', 'end', 'start', 'end'])
       expect(['va', 'vb']).toContain(asarOf(dest(root)))
-      expect(readdirSync(path.join(root, 'backups'))).toEqual(['Dobius+.previous'])
+      expect(readdirSync(path.join(root, 'backups'))).toEqual([
+        'Dobius+.previous',
+        'Dobius+.previous.INSTALL-PROVENANCE.json',
+        'INSTALL-PROVENANCE.json'
+      ])
+      provenanceOf(dest(root))
+      recordFor(rollbackOf(root), rollbackRecordOf(root))
       expect(readdirSync(path.join(root, 'Applications'))).toEqual(['Dobius+.app'])
       expect(readFileSync(path.join(root, 'history.log'), 'utf8').trim().split('\n')).toHaveLength(
         2

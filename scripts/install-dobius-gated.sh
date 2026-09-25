@@ -3,18 +3,18 @@
 #
 # Why this exists (2026-09-02): multiple sessions/lanes kept silently
 # overwriting each other's installs — Carson watched his UI "revert" mid-test.
-# This script (a) stamps provenance INSIDE the installed app so the owner is
-# always knowable, (b) refuses to clobber a different lane's install without
-# --take-over and an older version without --allow-downgrade, and (c) is the
-# one path allowed through the global dobius-install-gate hook that blocks raw
-# cp/rm/mv against the app bundle.
+# This script (a) keeps provenance for the installed app (outside the bundle
+# since BUILD-044B) so the owner is always knowable, (b) refuses to clobber a
+# different lane's install without --take-over and an older version without
+# --allow-downgrade, and (c) is the one path allowed through the global
+# dobius-install-gate hook that blocks raw cp/rm/mv against the app bundle.
 # build-and-install.sh and scripts/install-dobius-v2.sh are retired pointers
 # to this file (BUILD-043): there is exactly one install path.
 #
 # Order (BUILD-043): lock → ownership/version checks → stage copy → validate
 # stage (incl. the BUILD-045 artifact manifest) → quit app → atomic swap → move
-# the old bundle to ONE rollback copy outside /Applications and outside
-# dobius/dist → remove the dist build copy.
+# in the install record → move the old bundle (and its record) to ONE rollback
+# copy outside /Applications and outside dobius/dist → remove the dist build copy.
 # Any failure before the swap leaves the installed app untouched.
 #
 # Usage: install-dobius-gated.sh <path-to-built-Dobius+.app> [--take-over] [--allow-downgrade]
@@ -55,11 +55,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 SEMVER="$SCRIPT_DIR/semver-compare.py"
 SOURCE_STATE="$SCRIPT_DIR/source-state.py"
 MANIFEST="$SCRIPT_DIR/bundle-manifest.py"
+RECORD="$SCRIPT_DIR/install-record.py"
 if ! command -v python3 >/dev/null 2>&1; then
   echo "REFUSED: python3 is not on PATH; the version guard needs it. Nothing was installed." >&2
   exit 9
 fi
-for helper in "$SEMVER" "$SOURCE_STATE" "$MANIFEST"; do
+for helper in "$SEMVER" "$SOURCE_STATE" "$MANIFEST" "$RECORD"; do
   if [ ! -f "$helper" ]; then
     echo "REFUSED: installer helper $helper is missing; the install guards cannot run. Nothing was installed." >&2
     exit 9
@@ -67,13 +68,19 @@ for helper in "$SEMVER" "$SOURCE_STATE" "$MANIFEST"; do
 done
 REAL_DEST="/Applications/Dobius+.app"
 DEST="${DOBIUS_INSTALL_DEST:-$REAL_DEST}"
-PROV_REL="Contents/Resources/INSTALL-PROVENANCE.json"
 LOCK="${DOBIUS_INSTALL_LOCK:-$HOME/.dobius-install.lock}"
 LOCK_WAIT="${DOBIUS_INSTALL_LOCK_WAIT:-300}"
 BACKUP_DIR="${DOBIUS_INSTALL_BACKUP_DIR:-$HOME/Library/Application Support/dobius-plus-install-backups}"
 # Why no .app suffix: LaunchServices registers directories named *.app, and a
 # second bundle with the same ID is the duplicate-Dock-icon bug (#105).
 ROLLBACK="$BACKUP_DIR/Dobius+.previous"
+# Install records live OUTSIDE the bundles (BUILD-044B): writing into the bundle
+# after it was signed broke its code-signature seal. The installed app's record
+# is CURRENT_REC (nothing may be written in /Applications); a bundle kept
+# elsewhere has its record beside it, e.g. the rollback copy's ROLLBACK_REC.
+# Each record names its bundle (bundleIdentity, scripts/install-record.py).
+CURRENT_REC="$BACKUP_DIR/INSTALL-PROVENANCE.json"
+ROLLBACK_REC="$ROLLBACK.INSTALL-PROVENANCE.json"
 HISTORY_LOG="${DOBIUS_INSTALL_HISTORY_LOG:-$HOME/.dobius-install-history.log}"
 [ -d "$APP_SRC" ] || { echo "ERROR: no app bundle at $APP_SRC" >&2; exit 1; }
 [ -d "$(dirname "$DEST")" ] || { echo "ERROR: install folder $(dirname "$DEST") does not exist" >&2; exit 1; }
@@ -96,16 +103,62 @@ esac
 # left by any install that finished while we waited, not a snapshot taken
 # before it. mkdir is atomic; the lock holds our pid for diagnosis.
 LOCK_HELD=0
+# The new record waits inside the lock dir until the swap (never in $BACKUP_DIR
+# before it), so a failed install never leaves a record for a bundle that is
+# not installed; the lock dir is removed on every exit.
+PENDING_REC="$LOCK/INSTALL-PROVENANCE.json"
 # PHASE says what $STAGE holds if we exit early: "prepare" = the new bundle
 # (partial or unvalidated), "swapped" = the PREVIOUS bundle, just swapped out
-# and not yet moved to the rollback dir, "done" = rollback handling finished.
+# and not yet moved to the rollback dir, "done" = rollback handling finished
+# (or the first install is in place). Past "prepare", the new bundle is at $DEST.
 PHASE="prepare"
 APP_QUIT=0
 APP_RELAUNCHED=0
+# Set when INT/TERM arrives during the critical section (quit → swap → record →
+# rollback move), which is deferred and acted on once that section is done.
+SIGNALLED=0
+# The stage's inode: after the swap (or first-install move) $DEST has it, which
+# tells an interrupted run whether the new bundle is already installed.
+STAGE_INODE=""
+swapped_in() {
+  [ -n "$STAGE_INODE" ] && [ -e "$DEST" ] && [ "$(stat -f %i "$DEST" 2>/dev/null)" = "$STAGE_INODE" ]
+}
+# Called once the new bundle is at $DEST: the swapped-out bundle's record goes
+# beside the rollback copy (it moves there next), and the pending record
+# becomes the installed app's, via a same-dir tmp + rename. Safe to call again
+# after a partial run: the rotation happens at most once (RECORD_ROTATED).
+RECORD_ROTATED=0
+promote_record() {
+  [ -f "$PENDING_REC" ] || return 0
+  mkdir -p "$BACKUP_DIR" || return 1
+  if [ "$RECORD_ROTATED" = "0" ]; then
+    if [ -f "$CURRENT_REC" ]; then
+      mv -f "$CURRENT_REC" "$ROLLBACK_REC" || return 1
+    else
+      rm -f "$ROLLBACK_REC" || return 1
+    fi
+    RECORD_ROTATED=1
+  fi
+  if cat "$PENDING_REC" > "$CURRENT_REC.tmp.$$" && mv -f "$CURRENT_REC.tmp.$$" "$CURRENT_REC"; then
+    rm -f "$PENDING_REC"
+  else
+    rm -f "$CURRENT_REC.tmp.$$"
+    return 1
+  fi
+}
 cleanup() {
   # A second Ctrl-C/TERM must not cut this short.
   trap '' INT TERM
   if [ "$LOCK_HELD" = "1" ]; then
+    # Exited between the swap and PHASE being set: $STAGE holds the PREVIOUS
+    # bundle and must be kept as the rollback, never deleted as a partial stage.
+    if [ "$PHASE" = "prepare" ] && swapped_in; then
+      if [ -e "$STAGE" ]; then PHASE="swapped"; else PHASE="done"; fi
+    fi
+    # Interrupted after the new bundle reached $DEST: its record must follow.
+    if [ "$PHASE" != "prepare" ] && ! promote_record; then
+      echo "WARNING: could not write the install record $CURRENT_REC." >&2
+    fi
     if [ "$PHASE" = "swapped" ] && [ -e "$STAGE" ]; then
       # Interrupted between the swap and the rollback move: $STAGE is the only
       # copy of the previous bundle. Keep it as the rollback, never delete it.
@@ -175,6 +228,16 @@ if [ -f "$BUILD_RECORD" ]; then
     echo "WARNING: $BUILD_RECORD is not a valid build record for this bundle; recording the source tree as it is now." >&2
   fi
 fi
+# A bundle without a build record that was installed before (the rollback copy)
+# keeps its install record: that source state beats the tree beside it.
+if [ -z "$SRC_STATE" ]; then
+  PAIRED_REC=$(python3 "$RECORD" find "$APP_SRC" "$APP_SRC.INSTALL-PROVENANCE.json") || PAIRED_REC=""
+  if [ -n "$PAIRED_REC" ] && SRC_STATE=$(python3 "$SOURCE_STATE" --from-build-record "$PAIRED_REC" "$BUILD_NUM" 2>/dev/null); then
+    SOURCE_FROM="previous-install"
+  else
+    SRC_STATE=""
+  fi
+fi
 [ -n "$SRC_STATE" ] || SRC_STATE=$(python3 "$SOURCE_STATE" "$(dirname "$APP_SRC")")
 state_field() {
   python3 -c "import json,sys;v=json.loads(sys.argv[1])[sys.argv[2]];print('' if v is None else v)" "$SRC_STATE" "$1"
@@ -184,8 +247,15 @@ SRC_BRANCH=$(state_field branch)
 SRC_COMMIT=$(state_field commit)
 
 # Ownership check: a different branch's install needs an explicit takeover.
-if [ -f "$DEST/$PROV_REL" ] && [ "$TAKE_OVER" != "1" ]; then
-  CUR_BRANCH=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('branch','unknown'))" "$DEST/$PROV_REL" 2>/dev/null || echo unknown)
+# The installed app's record: CURRENT_REC when it names this bundle, else the
+# legacy record inside a bundle installed before BUILD-044B.
+INSTALLED_REC=""
+if [ -e "$DEST" ] && ! INSTALLED_REC=$(python3 "$RECORD" find "$DEST" "$CURRENT_REC"); then
+  echo "REFUSED: could not look up the install record of $DEST; the ownership check cannot run. Nothing was installed." >&2
+  exit 9
+fi
+if [ -n "$INSTALLED_REC" ] && [ "$TAKE_OVER" != "1" ]; then
+  CUR_BRANCH=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('branch','unknown'))" "$INSTALLED_REC" 2>/dev/null || echo unknown)
   if [ "$CUR_BRANCH" != "unknown" ] && [ "$CUR_BRANCH" != "$SRC_BRANCH" ]; then
     echo "REFUSED: $DEST currently belongs to branch '$CUR_BRANCH'." >&2
     echo "Your build is from '$SRC_BRANCH'. Re-run with --take-over to replace it" >&2
@@ -240,9 +310,11 @@ fi
 # from (the build record, or the tree at install time), the bundle's own version
 # and build number, and a hash of the shipped app.asar, so each can be checked
 # on its own. A value that cannot be determined is null, never a guess.
-python3 - "$STAGE/$PROV_REL" "$SRC_STATE" "$SOURCE_FROM" "$SRC_VER" "$BUILD_NUM" "$STAGE/Contents/Resources/app.asar" <<'EOF'
+# Written to PENDING_REC, never into the (signed) stage (BUILD-044B).
+BUNDLE_IDENTITY=$(python3 "$RECORD" identity "$STAGE") || BUNDLE_IDENTITY=""
+python3 - "$PENDING_REC" "$SRC_STATE" "$SOURCE_FROM" "$SRC_VER" "$BUILD_NUM" "$STAGE/Contents/Resources/app.asar" "$BUNDLE_IDENTITY" <<'EOF'
 import json, sys, datetime, hashlib, os
-path, state_json, source_from, version, build_number, asar = sys.argv[1:7]
+path, state_json, source_from, version, build_number, asar, identity = sys.argv[1:8]
 state = json.loads(state_json)
 
 def sha256_file(file_path):
@@ -265,6 +337,7 @@ json.dump({
     "artifactSha256": sha256_file(asar) if os.path.isfile(asar) else None,
     "installedAt": datetime.datetime.now().isoformat(timespec="seconds"),
     "installedBy": os.environ.get("USER", "unknown"),
+    "bundleIdentity": identity,
 }, open(path, "w"), indent=2)
 EOF
 
@@ -285,8 +358,9 @@ case "$HOST_ARCH:$BIN_ARCHES" in
   arm64:*arm64*|x86_64:*x86_64*) ;;
   *) stage_invalid "binary arch ($BIN_ARCHES) does not run on this host ($HOST_ARCH)" ;;
 esac
-python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$STAGE/$PROV_REL" 2>/dev/null \
-  || stage_invalid "$PROV_REL was not written"
+[ -n "$BUNDLE_IDENTITY" ] || stage_invalid "Contents/Info.plist is unreadable"
+python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$PENDING_REC" 2>/dev/null \
+  || stage_invalid "the install record was not written"
 # Artifact manifest (#101): a build that skipped part of the graph (CLI, relay,
 # web, native helper) looks installable but ADAM refuses it and features break.
 if ! MISSING_ARTIFACTS=$(python3 "$MANIFEST" "$STAGE"); then
@@ -299,6 +373,11 @@ fi
 # the app). -a: pgrep/pkill skip their own ancestors by default, and an install
 # run from a Dobius+ terminal descends from the main app (main → detached
 # daemon → login → shell), so without -a the app is never seen or killed.
+# From here to the rollback move, INT/TERM only set SIGNALLED: an exit inside
+# the swap window would treat the swapped-out bundle as a partial stage and
+# delete it, and leave the new bundle without its record.
+STAGE_INODE=$(stat -f %i "$STAGE")
+trap 'SIGNALLED=1' INT TERM
 if [ "$MANAGE_APP" = "1" ]; then
   osascript -e 'quit app "Dobius+"' 2>/dev/null || true
   for _ in $(seq 1 10); do
@@ -319,9 +398,10 @@ fi
 
 # Swap (#104): with an app already installed, exchange the two bundles in ONE
 # atomic rename (renamex_np RENAME_SWAP) — there is never an instant with no
-# app at $DEST. Afterwards $STAGE holds the previous bundle.
+# app at $DEST. Afterwards $STAGE holds the previous bundle. Why swapped_in: a
+# python3 killed right after the rename reports failure although it swapped.
 if [ -e "$DEST" ]; then
-  if ! python3 - "$STAGE" "$DEST" <<'PYSWAP'
+  if ! python3 - "$STAGE" "$DEST" <<'PYSWAP' && ! swapped_in
 import ctypes, ctypes.util, os, sys
 libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
 swap = libc.renamex_np
@@ -339,19 +419,27 @@ PYSWAP
     exit 8
   fi
   PHASE="swapped"
+  promote_record || echo "WARNING: could not write the install record $CURRENT_REC." >&2
   # One rollback copy, outside /Applications and outside dobius/dist. The
   # previous one is dropped first so the disk never holds two.
   ROLLBACK_NOTE="rollback: none (moving the previous bundle failed)"
   if mkdir -p "$BACKUP_DIR" && rm -rf "$ROLLBACK" && mv "$STAGE" "$ROLLBACK"; then
     ROLLBACK_NOTE="rollback: $ROLLBACK"
   else
+    rm -f "$ROLLBACK_REC"
     echo "WARNING: could not keep a rollback copy in $BACKUP_DIR; the previous bundle is removed." >&2
   fi
   PHASE="done"
 else
   mv "$STAGE" "$DEST"
+  PHASE="done"
+  promote_record || echo "WARNING: could not write the install record $CURRENT_REC." >&2
   ROLLBACK_NOTE="rollback: none (first install)"
 fi
+# The critical section is over: honour a signal that arrived during it (the
+# cleanup trap relaunches the app).
+trap 'exit 130' INT TERM
+[ "$SIGNALLED" = "0" ] || exit 130
 
 # The build output carries the same bundle ID as the installed app; left in
 # dobius/dist it can register with LaunchServices → two Dock icons (#105). It
