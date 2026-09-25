@@ -98,3 +98,22 @@ Revert the commit. No persisted data format changes.
 ## Lessons
 - BUILD-029 had already split the journal; spec line anchors pointed at pre-029 code. Grep the
   symbols, not the line numbers.
+
+## Review fixes (second commit)
+- **F1** `DOBIUS_ADAM_PROJECT_DIR` could set the self-edit write root (a value of `/` or `$HOME` would
+  widen self-edit to the disk). `selfEditRoots` now uses `defaultAdamProjectDirectory(home)` (fixed
+  `~/dobius/projects/ADAM`); the override only locates ADAM and its token.
+- **F2** A Settings endpoint on any host received the bearer token and event text. New
+  `resolveAdamTarget()`: a Settings/default endpoint must be http(s) on localhost, 127.0.0.0/8, ::1,
+  100.64.0.0/10 or `*.ts.net`; anything else (including malformed) → `blocked-endpoint`. Converse
+  returns "ADAM endpoint blocked: Settings must point at this Mac or your tailnet" without a request;
+  delivery reports health `blocked-endpoint`, keeps its queue and cursor, and retries on backoff.
+  `ADAM_SERVICE_URL` (env) stays trusted as a developer override.
+- **F3** `jarvis-service.test.ts` now saves, clears and restores `ADAM_SERVICE_TOKEN`,
+  `ADAM_SERVICE_TOKEN_PATH` and `ADAM_SERVICE_URL`.
+- Test endpoints that used example hosts (`adam.one`, `adam.test`) now use loopback addresses.
+- Mutation checks: F1 self-edit root follows the override → self-edit F1 test fails; F2a allowlist
+  disabled → 4 fail; F2b askAdam skips the check → askAdam F2 test fails; F2c ingest skips the
+  check → journal F2 test fails; F3 env clearing removed + `ADAM_SERVICE_URL` set in the shell → 2
+  jarvis-service tests fail (they pass with the fix and the same polluted env).
+- Verification: typecheck exit 0; targeted vitest 34 files / 492 passed; oxlint clean.

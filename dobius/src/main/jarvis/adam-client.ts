@@ -1,10 +1,12 @@
 import { DEFAULT_ADAM_ENDPOINT } from '../../shared/constants'
 import type { JarvisAskResult } from '../../shared/speech-types'
-import { resolveAdamEndpoint, resolveAdamToken } from '../adam-connection'
+import { resolveAdamTarget, resolveAdamToken } from '../adam-connection'
 
 export const ADAM_CONVERSE_TIMEOUT_MS = 10_000
 export const ADAM_UNREACHABLE_TEXT = 'ADAM is unreachable'
 export const ADAM_NOT_INSTALLED_TEXT = 'ADAM is not installed on this Mac'
+export const ADAM_BLOCKED_ENDPOINT_TEXT =
+  'ADAM endpoint blocked: Settings must point at this Mac or your tailnet'
 
 export function parseAdamConverseResponse(payload: unknown): JarvisAskResult {
   if (!payload || typeof payload !== 'object') {
@@ -87,12 +89,16 @@ export type AskAdamArgs = {
  * folder is a named state, not a request that can only fail (#118).
  */
 export async function askAdam(args: AskAdamArgs): Promise<JarvisAskResult> {
+  const target = resolveAdamTarget(args.settingsEndpoint)
+  if (!target.ok) {
+    return { kind: 'error', text: ADAM_BLOCKED_ENDPOINT_TEXT }
+  }
   const tokenResult = await resolveAdamToken()
   if (tokenResult.token === undefined && tokenResult.state === 'not-installed') {
     return { kind: 'error', text: ADAM_NOT_INSTALLED_TEXT }
   }
   return converseWithAdam({
-    endpoint: resolveAdamEndpoint(args.settingsEndpoint),
+    endpoint: target.endpoint,
     // Why an empty token still asks: converse has always gone out without a
     // Bearer header when the token file is missing, and ADAM answers 401 itself.
     token: tokenResult.token ?? '',

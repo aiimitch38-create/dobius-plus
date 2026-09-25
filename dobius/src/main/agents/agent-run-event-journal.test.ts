@@ -271,21 +271,44 @@ describe('agent run event journal delivery', () => {
     writeFileSync(process.env.ADAM_SERVICE_TOKEN_PATH, `${FAKE_TOKEN}-1\n`)
     const journal = await loadJournal()
     const connection = await import('../adam-connection')
-    let endpoint = 'http://adam.one:9000/'
+    let endpoint = 'http://127.0.0.1:9001/'
     connection.setAdamEndpointSettingReader(() => endpoint)
     journal.startAgentRunEventDelivery()
     journal.appendAgentRunJournalEvent(event(1))
     await journal.whenAgentRunJournalIdle()
 
-    endpoint = 'http://adam.two:9000'
+    endpoint = 'http://localhost:9002'
     writeFileSync(process.env.ADAM_SERVICE_TOKEN_PATH, `${FAKE_TOKEN}-2\n`)
     journal.appendAgentRunJournalEvent(event(2))
     await journal.whenAgentRunJournalIdle()
 
     expect(fetchCalls.map((call) => [call.url, call.authorization])).toEqual([
-      ['http://adam.one:9000/v1/events/ingest', `Bearer ${FAKE_TOKEN}-1`],
-      ['http://adam.two:9000/v1/events/ingest', `Bearer ${FAKE_TOKEN}-2`]
+      ['http://127.0.0.1:9001/v1/events/ingest', `Bearer ${FAKE_TOKEN}-1`],
+      ['http://localhost:9002/v1/events/ingest', `Bearer ${FAKE_TOKEN}-2`]
     ])
+  })
+
+  it('holds the queue and sends nothing to a Settings endpoint off this machine (review F2)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    writeFileSync(journalFile(), `${record('a')}\n`)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const journal = await loadJournal()
+    const connection = await import('../adam-connection')
+    let endpoint = 'https://adam.example.com'
+    connection.setAdamEndpointSettingReader(() => endpoint)
+    journal.startAgentRunEventDelivery()
+    await journal.whenAgentRunJournalIdle()
+
+    expect(fetchCalls).toHaveLength(0)
+    expect(journal.getAdamEventDeliveryHealth().state).toBe('blocked-endpoint')
+    expect(existsSync(path.join(electronMock.userDataDir, 'agent-events.cursor.json'))).toBe(false)
+    expect(warn.mock.calls.flat().join(' ')).not.toContain(FAKE_TOKEN)
+
+    endpoint = 'http://127.0.0.1:8791'
+    await vi.advanceTimersByTimeAsync(1_000)
+    await journal.whenAgentRunJournalIdle()
+    expect(fetchCalls.map((call) => call.eventId)).toEqual(['a'])
+    expect(journal.getAdamEventDeliveryHealth().state).toBe('idle')
   })
 
   it('shows a not-installed state, keeps events queued and never crashes when ADAM is missing (#118)', async () => {

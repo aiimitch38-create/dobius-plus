@@ -10,7 +10,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { adamProjectDirectory } from '../adam-connection'
+import { defaultAdamProjectDirectory } from '../adam-connection'
 import { protectedReason } from './self-edit-path-policy'
 import {
   bytesDigest,
@@ -62,7 +62,9 @@ export const WINDOWS_WRITE_UNSUPPORTED =
  * what the model asks for.
  */
 export function selfEditRoots(home: string, repoRoot: string): string[] {
-  return [repoRoot, adamProjectDirectory(home)]
+  // Why the fixed default: DOBIUS_ADAM_PROJECT_DIR only locates ADAM; letting
+  // it set a write root would let `/` or $HOME widen self-edit to the disk.
+  return [repoRoot, defaultAdamProjectDirectory(home)]
 }
 
 function containedBy(child: string, parent: string): boolean {

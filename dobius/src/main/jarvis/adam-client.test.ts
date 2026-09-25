@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  ADAM_BLOCKED_ENDPOINT_TEXT,
   ADAM_CONVERSE_TIMEOUT_MS,
   ADAM_NOT_INSTALLED_TEXT,
   ADAM_UNREACHABLE_TEXT,
@@ -151,7 +152,7 @@ describe('askAdam (#81, #118)', () => {
     process.env.DOBIUS_ADAM_PROJECT_DIR = join(root, 'missing-adam')
     const fetchFn = vi.fn()
     await expect(
-      askAdam({ settingsEndpoint: 'http://adam.test', utterance: 'hi', fetchFn })
+      askAdam({ settingsEndpoint: 'http://localhost:8791', utterance: 'hi', fetchFn })
     ).resolves.toEqual({ kind: 'error', text: ADAM_NOT_INSTALLED_TEXT })
     expect(fetchFn).not.toHaveBeenCalled()
   })
@@ -165,19 +166,29 @@ describe('askAdam (#81, #118)', () => {
     writeFileSync(tokenFile, 'fake-one\n')
     const fetchFn = vi.fn().mockImplementation(async () => answer())
 
-    await askAdam({ settingsEndpoint: 'http://adam.one/', utterance: 'hi', fetchFn })
+    await askAdam({ settingsEndpoint: 'http://127.0.0.1:9001/', utterance: 'hi', fetchFn })
     writeFileSync(tokenFile, 'fake-two\n')
-    await askAdam({ settingsEndpoint: 'http://adam.two', utterance: 'hi', fetchFn })
+    await askAdam({ settingsEndpoint: 'http://localhost:9002', utterance: 'hi', fetchFn })
 
     const calls = fetchFn.mock.calls as [string, RequestInit][]
     expect(calls.map(([url]) => url)).toEqual([
-      'http://adam.one/v1/converse',
-      'http://adam.two/v1/converse'
+      'http://127.0.0.1:9001/v1/converse',
+      'http://localhost:9002/v1/converse'
     ])
     expect(calls.map(([, init]) => (init.headers as Record<string, string>).Authorization)).toEqual([
       'Bearer fake-one',
       'Bearer fake-two'
     ])
+  })
+
+  it('refuses a Settings endpoint off this machine and the tailnet, sending nothing (review F2)', async () => {
+    isolate()
+    process.env.ADAM_SERVICE_TOKEN = 'fake-token'
+    const fetchFn = vi.fn()
+    await expect(
+      askAdam({ settingsEndpoint: 'https://adam.example.com', utterance: 'hi', fetchFn })
+    ).resolves.toEqual({ kind: 'error', text: ADAM_BLOCKED_ENDPOINT_TEXT })
+    expect(fetchFn).not.toHaveBeenCalled()
   })
 
   it('still asks without a Bearer header when ADAM is installed but has no token file', async () => {

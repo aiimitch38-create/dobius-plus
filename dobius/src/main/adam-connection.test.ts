@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_ADAM_ENDPOINT } from '../shared/constants'
 import {
   adamProjectDirectory,
+  defaultAdamProjectDirectory,
   resolveAdamEndpoint,
+  resolveAdamTarget,
   resolveAdamToken,
   setAdamEndpointSettingReader
 } from './adam-connection'
@@ -58,6 +60,47 @@ describe('adamProjectDirectory (#118)', () => {
     expect(adamProjectDirectory()).toBe(join(homedir(), 'dobius', 'projects', 'ADAM'))
     process.env.DOBIUS_ADAM_PROJECT_DIR = '/opt/adam'
     expect(adamProjectDirectory('/home/alt')).toBe('/opt/adam')
+    expect(defaultAdamProjectDirectory('/home/alt')).toBe(join('/home/alt', 'dobius', 'projects', 'ADAM'))
+  })
+})
+
+describe('resolveAdamTarget (review F2)', () => {
+  it('allows loopback and tailnet hosts from Settings', () => {
+    for (const endpoint of [
+      'http://localhost:8791',
+      'http://127.0.0.1:8791',
+      'http://127.4.5.6',
+      'http://[::1]:8791/',
+      'http://100.64.0.1:8791',
+      'https://100.127.255.254',
+      'https://adam.tail1234.ts.net'
+    ]) {
+      expect(resolveAdamTarget(endpoint)).toEqual({ ok: true, endpoint: endpoint.replace(/\/+$/, '') })
+    }
+    expect(resolveAdamTarget(undefined)).toEqual({ ok: true, endpoint: DEFAULT_ADAM_ENDPOINT })
+  })
+
+  it('blocks every other host, scheme or malformed value from Settings', () => {
+    for (const endpoint of [
+      'http://adam.example.com',
+      'http://127.0.0.1.evil.com',
+      'http://100.128.0.1',
+      'http://100.63.255.255',
+      'http://10.0.0.5',
+      'http://8.8.8.8',
+      'http://ts.net.evil.com',
+      'file:///etc/passwd',
+      'not a url'
+    ]) {
+      expect(resolveAdamTarget(endpoint)).toMatchObject({ ok: false, state: 'blocked-endpoint' })
+    }
+  })
+
+  it('checks the live Settings reader, and trusts the ADAM_SERVICE_URL developer override', () => {
+    setAdamEndpointSettingReader(() => 'http://adam.example.com')
+    expect(resolveAdamTarget()).toMatchObject({ ok: false })
+    process.env.ADAM_SERVICE_URL = 'http://dev-box.example.com:8791/'
+    expect(resolveAdamTarget()).toEqual({ ok: true, endpoint: 'http://dev-box.example.com:8791' })
   })
 })
 

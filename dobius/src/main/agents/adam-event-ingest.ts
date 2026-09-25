@@ -1,20 +1,25 @@
-import { errorCode, resolveAdamEndpoint } from '../adam-connection'
+import { errorCode, resolveAdamTarget } from '../adam-connection'
 
 export { errorCode }
 
 export type IngestResult =
   | { outcome: 'delivered' }
   | { outcome: 'poison' }
-  | { outcome: 'retry'; state: 'offline' | 'unauthorized'; detail: string }
+  | { outcome: 'retry'; state: 'offline' | 'unauthorized' | 'blocked-endpoint'; detail: string }
 
 // Why: ADAM rejected the record itself; retrying the same bytes can never succeed.
 const POISON_STATUSES = new Set([400, 413, 422])
 
 export async function postEventToAdam(body: string, token: string): Promise<IngestResult> {
+  // Why the shared registry: the same endpoint Jarvis converse uses, read live
+  // (#81); a blocked host keeps the queue instead of sending the token away.
+  const target = resolveAdamTarget()
+  if (!target.ok) {
+    return { outcome: 'retry', state: target.state, detail: target.detail }
+  }
   let response: Response
   try {
-    // Why the shared registry: the same endpoint Jarvis converse uses, read live (#81).
-    response = await fetch(`${resolveAdamEndpoint()}/v1/events/ingest`, {
+    response = await fetch(`${target.endpoint}/v1/events/ingest`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`,

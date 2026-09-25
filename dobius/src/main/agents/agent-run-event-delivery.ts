@@ -14,6 +14,7 @@ export type AdamEventDeliveryState =
   | 'idle'
   | 'delivering'
   | 'not-installed'
+  | 'blocked-endpoint'
   | 'no-token'
   | 'unauthorized'
   | 'offline'
