@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app } from 'electron'
 import type { Store } from './persistence'
 import { hasAsanaToken, setAsanaToken } from './asana/asana-token-store'
 import { getAsanaConfig, updateAsanaConfig } from './asana/asana-config'
 import { ASANA_GID_RE, DEFAULT_ASANA_CONFIG, type AsanaConfig } from '../shared/asana'
 import { addLocalRepoFromPath } from './ipc/repos'
+import { getUserDataRoot } from './storage/user-data-root'
 
 const LEGACY_CONFIG_FILE = 'config.json'
 const MARKER_FILE = 'legacy-config-migrated.json'
@@ -43,7 +43,7 @@ type ImportMarker = {
 }
 
 function userDataPath(file: string): string {
-  return path.join(app.getPath('userData'), file)
+  return path.join(getUserDataRoot(), file)
 }
 
 function parseLegacyConfig(raw: unknown): LegacyConfig | null {
