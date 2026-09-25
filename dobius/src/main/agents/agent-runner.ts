@@ -42,6 +42,7 @@ import {
   type PrepareCodexLaunch
 } from './default-codex-launch'
 import { startCodexAgentProcess } from './codex-agent-execution'
+import { assertCodexRunSupported, DEFAULT_CODEX_MAX_STEPS } from './codex-run-policy'
 import {
   addStoredAgentRun,
   getStoredAgentRun,
@@ -304,6 +305,10 @@ export async function startAgentRun(args: {
   if (!prompt) {
     throw new Error('Prompt is required')
   }
+  if (agent.engine === 'codex') {
+    // Before any reservation or spawn: Codex cannot enforce restricted profiles.
+    assertCodexRunSupported(args.options)
+  }
   reservedRuns += 1
   reserveAgentRun(agent.id)
   const sessionKey = args.options?.sessionKey ?? 'default'
@@ -348,6 +353,8 @@ export async function startAgentRun(args: {
         prompt,
         resolvedCwd,
         codexHome,
+        model: args.options?.model,
+        maxSteps: args.options?.maxTurns ?? DEFAULT_CODEX_MAX_STEPS,
         onRunEnded: args.options?.onRunEnded
       })
       return runId
@@ -489,6 +496,8 @@ function startCodexRun(args: {
   prompt: string
   resolvedCwd: string
   codexHome: string | null
+  model?: string
+  maxSteps: number
   onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
 }): void {
   const child = startCodexAgentProcess({
@@ -496,6 +505,8 @@ function startCodexRun(args: {
     prompt: args.prompt,
     cwd: args.resolvedCwd,
     codexHome: args.codexHome,
+    model: args.model,
+    maxSteps: args.maxSteps,
     isCancelled: () => getStoredAgentRun(args.runId)?.status === 'cancelled',
     onAssistantText: (text) => {
       broadcastRunEvent({

@@ -40,6 +40,7 @@ vi.mock('./execution-gate', async (importOriginal) => {
   }
 })
 
+import { CodexRunUnsupportedError } from './codex-run-policy'
 import { ExecutionBlockedError } from './execution-gate'
 import { asanaAutoModeInternals } from './asana-auto-mode-service'
 
@@ -79,5 +80,20 @@ describe('Asana auto mode admission', () => {
     await asanaAutoModeInternals.dispatchTriage(task, 'build', 'triage', prepare)
     expect(mocks.recordFailure).toHaveBeenCalledWith('42')
     expect(mocks.releaseClaim).not.toHaveBeenCalled()
+  })
+
+  it('frees each triage slot once when a Codex triage agent is refused before spawn', async () => {
+    mocks.startAgentRun.mockRejectedValue(
+      new CodexRunUnsupportedError("Codex agents cannot run the 'asana' profile.")
+    )
+    for (const gid of ['1', '2', '3']) {
+      await asanaAutoModeInternals.dispatchTriage({ ...task, gid }, 'build', 'triage', prepare)
+    }
+    expect(mocks.recordFailure.mock.calls).toEqual([['1'], ['2'], ['3']])
+    // Both in-flight slots (cap 2) were released, so a new task still dispatches.
+    mocks.startAgentRun.mockReset()
+    mocks.startAgentRun.mockResolvedValue('run-1')
+    asanaAutoModeInternals.maybeDispatchTask(task, 'build', prepare)
+    expect(mocks.startAgentRun).toHaveBeenCalledTimes(1)
   })
 })
