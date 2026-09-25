@@ -13,6 +13,10 @@ export type VoiceConductorStatus = {
   runId: string | null
   sessionId: string | null
   lastError: string | null
+  /** The per-turn spending limit every conductor run is started with. */
+  maxBudgetUsd: number
+  /** Transcripts waiting for the running turn to end. */
+  queuedTurns: number
 }
 
 /**
@@ -28,7 +32,9 @@ export type VoiceConductor = {
    * Feed a voice/text transcript to the running session. Resumes the SAME
    * Claude session so context carries across turns (the v2 analog of writing
    * to the v1 conductor PTY's stdin). `requestId` tags the turn so the reply
-   * can be routed back via getReply.
+   * can be routed back via getReply. Turns run one at a time: the next starts
+   * only after the previous run has ended. Resolves once this turn's run is
+   * accepted, or at once when it is queued behind a running turn.
    */
   postTranscript(input: { transcript: string; requestId: string }): Promise<void>
   /** The conductor's one-line spoken reply for a turn, set by the dobius-reply CLI. */
@@ -46,10 +52,19 @@ export type WorkItem = {
   startedAt: number
   status: 'running' | 'done' | 'error'
   summary?: string
+  /** 'spawn' = a dobius-spawn agent run, released by the run itself. Absent = tab dispatch. */
+  kind?: 'spawn'
 }
 
+export type WorkTrackResult = { ok: true } | { ok: false; error: string; retryable: true }
+
 export type WorkRegistry = {
-  track(item: Pick<WorkItem, 'workId' | 'tabId' | 'requestId' | 'description'>): void
+  /** Refused while another item is running (the conductor's one-at-a-time work cap). */
+  track(
+    item: Pick<WorkItem, 'workId' | 'tabId' | 'requestId' | 'description' | 'kind'>
+  ): WorkTrackResult
+  /** The refusal track() would return for a new item right now, or null when there is room. */
+  capacityError(): string | null
   /** Snapshot, optionally filtered by a fuzzy target (workId/tabId/description substring). */
   status(target?: string): WorkItem[]
   markDone(workId: string, summary: string, status?: 'done' | 'error'): WorkItem | null

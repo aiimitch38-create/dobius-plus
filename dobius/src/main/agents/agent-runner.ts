@@ -225,6 +225,10 @@ async function consumeRun(
         appendAgentRunNotification(agent, finishedRun)
       }
       onRunEnded?.('error', 'Run ended unexpectedly without a result')
+    } else if (!sawResult && run?.status === 'cancelled') {
+      // Why: a stop can end the stream cleanly instead of throwing; callers
+      // holding a slot until the run ends must still hear about it.
+      onRunEnded?.('cancelled', 'stopped by user')
     }
   } catch (error) {
     if (options.resume && !sawSystemInit && !resumeRetriedFresh) {

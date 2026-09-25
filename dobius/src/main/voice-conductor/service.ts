@@ -21,6 +21,7 @@ import {
 import { createLeadTabStore } from './lead-tab-store'
 import { createConductorAgentSpawner } from './agent-spawn'
 import { createPersistentWorkRegistry } from './persistent-work-registry'
+import type { WorkRegistry } from './types'
 
 const conductor = createVoiceConductor()
 let started = false
@@ -37,14 +38,16 @@ function getLeadTabStore(): ReturnType<typeof createLeadTabStore> {
  */
 function buildTerminalDispatch(
   runtime: DobiusCliDispatcher,
-  imessage: ReturnType<typeof createIMessageBridge>
+  imessage: ReturnType<typeof createIMessageBridge>,
+  workRegistry: WorkRegistry
 ): ConductorTerminalDispatch {
   const tabs = getLeadTabStore()
   const agentSpawner = createConductorAgentSpawner({
     listAgents,
     getPrepareClaudeLaunch: getDefaultPrepareClaudeLaunch,
     startAgentRun,
-    notify: (message) => imessage.send(message)
+    notify: (message) => imessage.send(message),
+    workRegistry
   })
   return {
     resolveActiveTab: () => runtime.resolveActiveTerminal(),
@@ -124,7 +127,7 @@ export function syncVoiceConductorFromSettings(
       workRegistry,
       imessage,
       asana: createSettingsLaneAsanaQueue(),
-      terminals: buildTerminalDispatch(runtime, imessage)
+      terminals: buildTerminalDispatch(runtime, imessage, workRegistry)
     }
     started = true // reserve up front so a concurrent sync can't double-start
     startConductorCliServer(deps)

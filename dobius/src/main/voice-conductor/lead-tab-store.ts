@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { SafeJsonFile } from '../storage/safe-json-file'
 
 type LeadTabPayload = {
   version: 1
@@ -19,54 +19,42 @@ function normalizeProjectPath(value: string): string {
   return path.resolve(trimmed)
 }
 
-function normalizePayload(raw: unknown): LeadTabPayload {
-  const result: LeadTabPayload = { version: 1, leadTabIdByProjectPath: {} }
-  if (!raw || typeof raw !== 'object') {
-    return result
+function isValidTabId(tabId: unknown): tabId is string {
+  return typeof tabId === 'string' && tabId.length > 0 && tabId.length <= 512 && !tabId.includes('\u0000')
+}
+
+// Why: a malformed entry makes the file unreadable (kept, saves refused)
+// instead of being dropped and then saved over.
+function parsePayload(raw: unknown): LeadTabPayload | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined
   }
   const entries = (raw as { leadTabIdByProjectPath?: unknown }).leadTabIdByProjectPath
   if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
-    return result
+    return undefined
   }
+  const result: LeadTabPayload = { version: 1, leadTabIdByProjectPath: {} }
   for (const [projectPath, tabId] of Object.entries(entries)) {
-    if (
-      projectPath.length <= 4096 &&
-      typeof tabId === 'string' &&
-      tabId.length > 0 &&
-      tabId.length <= 512 &&
-      !tabId.includes('\u0000')
-    ) {
-      result.leadTabIdByProjectPath[projectPath] = tabId
+    if (projectPath.length > 4096 || !isValidTabId(tabId)) {
+      return undefined
     }
+    result.leadTabIdByProjectPath[projectPath] = tabId
   }
   return result
 }
 
 export function createLeadTabStore(filePath: string): LeadTabStore {
-  let payload: LeadTabPayload | null = null
-
-  function load(): LeadTabPayload {
-    if (payload) {
-      return payload
-    }
-    try {
-      payload = normalizePayload(JSON.parse(readFileSync(filePath, 'utf8')))
-    } catch {
-      payload = normalizePayload(null)
-    }
-    return payload
-  }
-
-  function persist(next: LeadTabPayload): void {
-    mkdirSync(path.dirname(filePath), { recursive: true })
-    const temporaryPath = `${filePath}.${process.pid}.tmp`
-    writeFileSync(temporaryPath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 })
-    renameSync(temporaryPath, filePath)
-  }
+  const file = new SafeJsonFile<LeadTabPayload>({
+    filePath: () => filePath,
+    parse: parsePayload,
+    fallback: () => ({ version: 1, leadTabIdByProjectPath: {} }),
+    label: '[voice-conductor] lead tabs',
+    mode: 0o600
+  })
 
   return {
     get(projectPath) {
-      return load().leadTabIdByProjectPath[normalizeProjectPath(projectPath)] ?? null
+      return file.get().leadTabIdByProjectPath[normalizeProjectPath(projectPath)] ?? null
     },
     set(projectPath, tabId) {
       const key = normalizeProjectPath(projectPath)
@@ -75,15 +63,15 @@ export function createLeadTabStore(filePath: string): LeadTabStore {
       }
       const next = {
         version: 1 as const,
-        leadTabIdByProjectPath: { ...load().leadTabIdByProjectPath }
+        leadTabIdByProjectPath: { ...file.get().leadTabIdByProjectPath }
       }
       if (tabId === null) {
         delete next.leadTabIdByProjectPath[key]
       } else {
         next.leadTabIdByProjectPath[key] = tabId
       }
-      persist(next)
-      payload = next
+      // Throws when the file is unreadable or the write fails, so the caller sees it.
+      file.save(next)
     }
   }
 }
