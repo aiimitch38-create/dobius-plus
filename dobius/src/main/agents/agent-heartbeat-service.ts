@@ -22,6 +22,7 @@ const TEN_MINUTES_MS = 10 * TICK_MS
 type PrepareClaudeLaunch = () => Promise<ClaudeRuntimeAuthPreparation>
 
 let interval: NodeJS.Timeout | null = null
+const warnedCodexAgents = new Set<string>()
 
 function minutesOfDay(value: string): number {
   const [hourText, minuteText] = value.split(':')
@@ -202,6 +203,17 @@ async function tick(prepareClaudeLaunch: PrepareClaudeLaunch): Promise<void> {
       continue
     }
     if (!isDue(agent, now)) {
+      continue
+    }
+    // Why: the runner refuses heartbeat runs on Codex (no cheap model, verdict
+    // schema or tool limits there); skipping here stops a refusal every tick.
+    if (agent.engine === 'codex') {
+      if (!warnedCodexAgents.has(agent.id)) {
+        warnedCodexAgents.add(agent.id)
+        console.warn(
+          `[agents] heartbeat skipped for ${agent.name}: Codex agents cannot run heartbeats`
+        )
+      }
       continue
     }
     void maybeStartHeartbeat(agent, prepareClaudeLaunch).catch((error) => {

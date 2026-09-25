@@ -1,7 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { CustomAgent } from '../../shared/agents'
+import { resolveCodexCommand } from '../codex-cli/command'
 import { getSpawnArgsForWindows } from '../win32-utils'
 import { buildSystemPrompt } from './agent-run-prompt'
+import { codexToolStepFromLine } from './codex-run-policy'
 
 function codexPrompt(agent: CustomAgent, prompt: string): string {
   const systemPrompt = buildSystemPrompt(agent).trim()
@@ -65,6 +67,10 @@ export function startCodexAgentProcess(args: {
   prompt: string
   cwd: string
   codexHome: string | null
+  /** Per-run model override; absent = the agent's configured model. */
+  model?: string
+  /** Tool steps allowed before the run is stopped (Codex has no turn option of its own). */
+  maxSteps: number
   onAssistantText: (text: string) => void
   onFinish: (status: 'success' | 'error' | 'cancelled', summary: string) => void
   isCancelled: () => boolean
@@ -73,18 +79,24 @@ export function startCodexAgentProcess(args: {
     'exec',
     '--json',
     '--skip-git-repo-check',
+    // Why: spawned sub-agents would run outside the step cap this run enforces.
+    '--disable',
+    'multi_agent',
     '--sandbox',
     args.agent.bypassPermissions ? 'danger-full-access' : 'workspace-write'
   ]
-  if (args.agent.model.trim()) {
-    commandArgs.push('--model', args.agent.model.trim())
+  const model = (args.model ?? args.agent.model).trim()
+  if (model) {
+    commandArgs.push('--model', model)
   }
   commandArgs.push('-')
   const environment = {
     ...process.env,
     ...(args.codexHome ? { CODEX_HOME: args.codexHome } : {})
   }
-  const spawnConfig = getSpawnArgsForWindows('codex', commandArgs)
+  // Why: a GUI-launched app has a minimal PATH, so a bare `codex` spawn fails
+  // with ENOENT even when Codex is installed under a version manager.
+  const spawnConfig = getSpawnArgsForWindows(resolveCodexCommand(), commandArgs)
   const child = spawn(spawnConfig.spawnCmd, spawnConfig.spawnArgs, {
     cwd: args.cwd,
     env: environment,
@@ -95,28 +107,62 @@ export function startCodexAgentProcess(args: {
   let stderr = ''
   let lastMessage = ''
   let lastError = ''
+  let stdinError = ''
+  let stopReason = ''
+  const toolSteps = new Set<string>()
+  // Why: a failed spawn emits 'error' and then 'close'; the run must settle once.
+  let settled = false
+  const finish = (status: 'success' | 'error' | 'cancelled', summary: string): void => {
+    if (settled) {
+      return
+    }
+    settled = true
+    args.onFinish(status, summary)
+  }
+  const readLine = (line: string): void => {
+    const error = codexErrorFromLine(line)
+    if (error) {
+      lastError = error
+    }
+    const step = codexToolStepFromLine(line)
+    if (step) {
+      toolSteps.add(step)
+      if (toolSteps.size > args.maxSteps) {
+        stopReason = `Codex run stopped: it exceeded its limit of ${args.maxSteps} tool steps.`
+        child.kill('SIGTERM')
+        return
+      }
+    }
+    const message = codexMessageFromLine(line)
+    if (message) {
+      lastMessage = message
+      args.onAssistantText(message)
+    }
+  }
   child.stdout?.on('data', (chunk: Buffer) => {
+    if (stopReason) {
+      return
+    }
     stdoutBuffer += chunk.toString('utf8')
     const lines = stdoutBuffer.split('\n')
     stdoutBuffer = lines.pop() ?? ''
     for (const line of lines) {
-      const error = codexErrorFromLine(line)
-      if (error) {
-        lastError = error
+      readLine(line)
+      if (stopReason) {
+        return
       }
-      const message = codexMessageFromLine(line)
-      if (!message) {
-        continue
-      }
-      lastMessage = message
-      args.onAssistantText(message)
     }
   })
   child.stderr?.on('data', (chunk: Buffer) => {
     stderr = `${stderr}${chunk.toString('utf8')}`.slice(-8_000)
   })
-  child.once('error', (error) => {
-    args.onFinish('error', error.message)
+  child.on('error', (error) => {
+    finish('error', error.message)
+  })
+  // Why: without a listener, EPIPE (Codex exited before reading the prompt) or a
+  // write to a never-spawned child is an uncaught exception in the main process.
+  child.stdin?.on('error', (error) => {
+    stdinError = error.message
   })
   child.once('close', (code) => {
     const trailingMessage = codexMessageFromLine(stdoutBuffer)
@@ -128,14 +174,22 @@ export function startCodexAgentProcess(args: {
       lastError = trailingError
     }
     if (args.isCancelled()) {
-      args.onFinish('cancelled', 'stopped by user')
+      finish('cancelled', 'stopped by user')
       return
     }
-    args.onFinish(
+    if (stopReason) {
+      finish('error', stopReason)
+      return
+    }
+    if (code === 0 && stdinError) {
+      finish('error', `Codex did not receive the prompt: ${stdinError}`)
+      return
+    }
+    finish(
       code === 0 ? 'success' : 'error',
       code === 0
         ? lastMessage || 'Codex completed the task.'
-        : stderr.trim() || lastError || `Codex exited with code ${code}`
+        : stderr.trim() || lastError || stdinError || `Codex exited with code ${code}`
     )
   })
   child.stdin?.end(codexPrompt(args.agent, args.prompt))

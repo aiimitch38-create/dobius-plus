@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { CustomAgent } from '../../shared/agents'
 import { handleChannelMessage, matchAgentMention } from './agent-channel-service'
+import { CodexRunUnsupportedError } from './codex-run-policy'
 import { ExecutionBlockedError } from './execution-gate'
 
 const mocks = vi.hoisted(() => ({
@@ -106,6 +107,13 @@ describe('handleChannelMessage start errors', () => {
     const reply = await replyFor(new ExecutionBlockedError('agent-run', 'paused', 'paused'))
     expect(reply).toContain('paused')
     expect(reply).not.toContain('busy')
+  })
+
+  it('tells the phone a Codex agent cannot answer iMessage instead of saying busy', async () => {
+    const reply = await replyFor(
+      new CodexRunUnsupportedError("Codex agents cannot run the 'imessage' profile.")
+    )
+    expect(reply).toBe("Auditor runs on Codex and can't answer iMessage.")
   })
 
   it('keeps the busy reply for other start errors', async () => {
