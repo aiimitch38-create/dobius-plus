@@ -43,7 +43,9 @@ export function useWelcomeAgentCreate({
   );
 
   const createManually = React.useCallback(() => {
-    if (!activeChannel) return;
+    if (!activeChannel) {
+      return;
+    }
     setIsOpen(false);
     requestOpenCreateAgent({
       channelId: activeChannel.id,

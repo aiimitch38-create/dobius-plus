@@ -24,7 +24,9 @@ export function resolveLinkAt(
   pos: number,
 ): LinkSelectionInfo | null {
   const linkType = state.schema.marks.link;
-  if (!linkType) return null;
+  if (!linkType) {
+    return null;
+  }
 
   const $pos = state.doc.resolve(pos);
   // A caret belongs to the character *before* it, so resolve the link from
@@ -44,10 +46,14 @@ export function resolveLinkAt(
   const mark = onBoundary
     ? markBefore || markAfter
     : linkType.isInSet($pos.marks());
-  if (!mark) return null;
+  if (!mark) {
+    return null;
+  }
 
   const rawHref = mark.attrs.href;
-  if (typeof rawHref !== "string") return null;
+  if (typeof rawHref !== "string") {
+    return null;
+  }
   const href = rawHref;
   const parent = $pos.parent;
   const parentStart = $pos.start();
@@ -70,13 +76,21 @@ export function resolveLinkAt(
     const childLink = linkType.isInSet(child.marks);
     const hasLink = childLink != null && childLink.attrs.href === href;
     const index = spans.length;
-    if (childFrom <= pos && pos < childTo) anchorIndex = index;
-    if (hasLink && childFrom <= pos && pos <= childTo) linkAnchorIndex = index;
+    if (childFrom <= pos && pos < childTo) {
+      anchorIndex = index;
+    }
+    if (hasLink && childFrom <= pos && pos <= childTo) {
+      linkAnchorIndex = index;
+    }
     spans.push({ from: childFrom, to: childTo, hasLink });
   });
-  if (linkAnchorIndex !== -1) anchorIndex = linkAnchorIndex;
+  if (linkAnchorIndex !== -1) {
+    anchorIndex = linkAnchorIndex;
+  }
 
-  if (anchorIndex === -1) return { href, text: "", from: pos, to: pos };
+  if (anchorIndex === -1) {
+    return { href, text: "", from: pos, to: pos };
+  }
 
   let from = spans[anchorIndex].from;
   let to = spans[anchorIndex].to;

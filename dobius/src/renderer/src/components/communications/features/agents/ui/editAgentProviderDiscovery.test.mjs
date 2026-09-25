@@ -721,7 +721,9 @@ function computeProviderCapability({
     effectiveRuntimeIdForSubmit.length > 0
       ? runtimes.find((r) => r.id === effectiveRuntimeIdForSubmit)
       : undefined;
-  if (matchedCatalogEntry === undefined) return "unknown";
+  if (matchedCatalogEntry === undefined) {
+    return "unknown";
+  }
   return runtimeSupportsLlmProviderSelection(matchedCatalogEntry.id)
     ? "capable"
     : "locked";

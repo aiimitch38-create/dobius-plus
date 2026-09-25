@@ -31,7 +31,9 @@ export const DEFAULT_STORE: ChannelSectionStore = Object.freeze({
  * one-time migration in `readChannelSectionsStore`).
  */
 export function storageKey(pubkey: string, relayUrl?: string): string {
-  if (!relayUrl) return `${STORAGE_KEY_PREFIX}:${pubkey}`;
+  if (!relayUrl) {
+    return `${STORAGE_KEY_PREFIX}:${pubkey}`;
+  }
   const normalized = normalizeRelayUrl(relayUrl);
   // Encode the normalized relay so it can't contain the `:` delimiter.
   return `${STORAGE_KEY_PREFIX}:${pubkey}:${encodeURIComponent(normalized)}`;
@@ -44,19 +46,24 @@ export function stripOrphanedAssignments(
   const cleaned = Object.fromEntries(
     Object.entries(store.assignments).filter(([, sid]) => sectionIds.has(sid)),
   );
-  if (Object.keys(cleaned).length === Object.keys(store.assignments).length)
+  if (Object.keys(cleaned).length === Object.keys(store.assignments).length) {
     return store;
+  }
   return { ...store, assignments: cleaned };
 }
 
 export function parseChannelSectionPayload(
   json: unknown,
 ): ChannelSectionStore | null {
-  if (typeof json !== "object" || json === null) return null;
+  if (typeof json !== "object" || json === null) {
+    return null;
+  }
   const obj = json as Record<string, unknown>;
   const sections: ChannelSection[] = Array.isArray(obj.sections)
     ? obj.sections.flatMap((entry: unknown): ChannelSection[] => {
-        if (typeof entry !== "object" || entry === null) return [];
+        if (typeof entry !== "object" || entry === null) {
+          return [];
+        }
         const section = entry as Record<string, unknown>;
         if (
           typeof section.id !== "string" ||
@@ -93,7 +100,9 @@ export function parseChannelSectionPayload(
 }
 
 function parseRaw(raw: string | null): ChannelSectionStore | null {
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
   try {
     const parsed = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null || parsed.version !== 1) {

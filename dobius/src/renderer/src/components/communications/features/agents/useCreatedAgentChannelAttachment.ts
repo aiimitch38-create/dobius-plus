@@ -54,7 +54,9 @@ export function useCreatedAgentChannelAttachment() {
 
   async function retryAttachment() {
     const targetChannel = targetChannelRef.current;
-    if (!createdAgent || !targetChannel || isRetryingAttachment) return;
+    if (!createdAgent || !targetChannel || isRetryingAttachment) {
+      return;
+    }
 
     setIsRetryingAttachment(true);
     try {

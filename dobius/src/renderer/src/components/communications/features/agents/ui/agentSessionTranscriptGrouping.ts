@@ -149,10 +149,18 @@ function classifyTurnItems(items: TranscriptItem[]): TranscriptTurnSegment[] {
   const steerContexts = items.filter(isSteerContext);
   const consumed = new Set<TranscriptItem>();
 
-  if (userPrompt) consumed.add(userPrompt);
-  for (const item of setupLifecycle) consumed.add(item);
-  if (promptContext) consumed.add(promptContext);
-  for (const item of steerContexts) consumed.add(item);
+  if (userPrompt) {
+    consumed.add(userPrompt);
+  }
+  for (const item of setupLifecycle) {
+    consumed.add(item);
+  }
+  if (promptContext) {
+    consumed.add(promptContext);
+  }
+  for (const item of steerContexts) {
+    consumed.add(item);
+  }
 
   const activity = items.filter((item) => !consumed.has(item));
   const pendingSteerContexts = [...steerContexts];
@@ -227,7 +235,9 @@ function groupSameKindSegments(
     let j = i + 1;
     while (j < segments.length) {
       const next = segments[j];
-      if (next.kind !== "item" || sameKindKey(next.item) !== key) break;
+      if (next.kind !== "item" || sameKindKey(next.item) !== key) {
+        break;
+      }
       run.push(next.item);
       j += 1;
     }
@@ -278,7 +288,9 @@ function groupMixedToolRuns(
     let j = i + 1;
     while (j < segments.length) {
       const next = segments[j];
-      if (!isBurstParticipant(next)) break;
+      if (!isBurstParticipant(next)) {
+        break;
+      }
       run.push(next);
       j += 1;
     }
@@ -349,7 +361,9 @@ const GROUPING_ELIGIBLE_RENDER_CLASSES = new Set<
  * stay visible.
  */
 function isGroupingEligible(item: TranscriptItem): boolean {
-  if (item.type !== "tool" || item.isError) return false;
+  if (item.type !== "tool" || item.isError) {
+    return false;
+  }
   const renderClass = getRenderClass(item);
   return (
     renderClass != null && GROUPING_ELIGIBLE_RENDER_CLASSES.has(renderClass)
@@ -357,25 +371,35 @@ function isGroupingEligible(item: TranscriptItem): boolean {
 }
 
 function sameKindKey(item: TranscriptItem): string | null {
-  if (!isGroupingEligible(item) || item.type !== "tool") return null;
+  if (!isGroupingEligible(item) || item.type !== "tool") {
+    return null;
+  }
   const descriptor = item.descriptor ?? classifyToolItem(item);
   return descriptor.groupKey ?? getRenderClass(item);
 }
 
 function sameKindLabel(item: TranscriptItem, count: number): string {
-  if (item.type !== "tool") return `${count} items`;
+  if (item.type !== "tool") {
+    return `${count} items`;
+  }
   const descriptor = item.descriptor ?? classifyToolItem(item);
   const renderClass = getRenderClass(item);
   const label = descriptor.label;
   if (renderClass === "file-edit") {
     return `Edited ${count} file${count === 1 ? "" : "s"}`;
   }
-  if (renderClass === "file-read") return `Read ${count} files`;
+  if (renderClass === "file-read") {
+    return `Read ${count} files`;
+  }
   if (renderClass === "skill-read") {
     return `Read ${count} skill${count === 1 ? "" : "s"}`;
   }
-  if (renderClass === "shell") return `Ran ${count} commands`;
-  if (renderClass === "relay-op") return `Ran ${count} Dobius relay ops`;
+  if (renderClass === "shell") {
+    return `Ran ${count} commands`;
+  }
+  if (renderClass === "relay-op") {
+    return `Ran ${count} Dobius relay ops`;
+  }
   return `${label} ×${count}`;
 }
 
@@ -384,7 +408,9 @@ function minimumSummaryRunLength(item: TranscriptItem): number {
 }
 
 function getRenderClass(item: TranscriptItem) {
-  if (item.type !== "tool") return item.renderClass;
+  if (item.type !== "tool") {
+    return item.renderClass;
+  }
   const descriptor = item.descriptor ?? classifyToolItem(item);
   return item.renderClass ?? descriptor.renderClass;
 }
@@ -426,8 +452,8 @@ function getRenderClass(item: TranscriptItem) {
  */
 function splitIntoSessionRuns(
   items: TranscriptItem[],
-): Array<{ sessionId: string; items: TranscriptItem[] }> {
-  const runs: Array<{ sessionId: string; items: TranscriptItem[] }> = [];
+): { sessionId: string; items: TranscriptItem[] }[] {
+  const runs: { sessionId: string; items: TranscriptItem[] }[] = [];
   let currentRun: { sessionId: string; items: TranscriptItem[] } | null = null;
   // Buffer for items that arrive before any session has resolved.
   const preSessionBuffer: TranscriptItem[] = [];
@@ -607,9 +633,10 @@ function buildBlocksForRun(
   const turnBuckets = new Map<string, TurnBucket>();
   // Callers pass a channel-scoped item stream; revisit this bare turnId bucket
   // if grouping ever receives multi-channel transcript items.
-  const displayOrder: Array<
-    { kind: "single"; item: TranscriptItem } | { kind: "turn"; turnId: string }
-  > = [];
+  const displayOrder: (
+    | { kind: "single"; item: TranscriptItem }
+    | { kind: "turn"; turnId: string }
+  )[] = [];
 
   // Strategy: accumulate null-session items into `openBatch` while no turn has
   // been seen. The batch opens on the first system-prompt item. When the first
@@ -795,7 +822,9 @@ export function formatTurnSetupLabel(
 export function turnSetupTimestamp(
   items: Extract<TranscriptItem, { type: "lifecycle" }>[],
 ): string | null {
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return null;
+  }
   return items.reduce(
     (earliest, item) =>
       Date.parse(item.timestamp) < Date.parse(earliest)
@@ -812,6 +841,8 @@ export function turnSetupDetail(
   const details = items
     .map((item) => item.text.trim())
     .filter((text) => text.length > 0);
-  if (details.length === 0) return null;
+  if (details.length === 0) {
+    return null;
+  }
   return details.join(" ");
 }

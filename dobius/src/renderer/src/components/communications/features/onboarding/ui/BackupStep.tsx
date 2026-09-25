@@ -85,7 +85,9 @@ export function BackupStep({
   const copiedTimerRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
-    if (introPlayed) return;
+    if (introPlayed) {
+      return;
+    }
     if (reduceMotion) {
       introPlayed = true;
       setCreated(true);
@@ -105,8 +107,9 @@ export function BackupStep({
       // nsec from memory on unmount (backup step is only on the fresh-key path).
       cancelledRef.current = true;
       setNsec(null);
-      if (copiedTimerRef.current !== null)
+      if (copiedTimerRef.current !== null) {
         window.clearTimeout(copiedTimerRef.current);
+      }
     };
   }, []);
 
@@ -116,15 +119,22 @@ export function BackupStep({
     try {
       const value = nsec ?? (await getNsec());
       await writeTextToClipboard(value);
-      if (cancelledRef.current) return;
+      if (cancelledRef.current) {
+        return;
+      }
       setCopyState("copied");
-      if (copiedTimerRef.current !== null)
+      if (copiedTimerRef.current !== null) {
         window.clearTimeout(copiedTimerRef.current);
+      }
       copiedTimerRef.current = window.setTimeout(() => {
-        if (!cancelledRef.current) setCopyState("idle");
+        if (!cancelledRef.current) {
+          setCopyState("idle");
+        }
       }, 2000);
     } catch (err) {
-      if (cancelledRef.current) return;
+      if (cancelledRef.current) {
+        return;
+      }
       setCopyState("idle");
       setCopyError(
         err instanceof Error ? err.message : "Failed to retrieve private key.",
@@ -141,11 +151,15 @@ export function BackupStep({
     try {
       // The raw key enters the DOM only after this explicit reveal action.
       const value = nsec ?? (await getNsec());
-      if (cancelledRef.current) return;
+      if (cancelledRef.current) {
+        return;
+      }
       setNsec(value);
       setIsRevealed(true);
     } catch (err) {
-      if (cancelledRef.current) return;
+      if (cancelledRef.current) {
+        return;
+      }
       setCopyError(
         err instanceof Error ? err.message : "Failed to retrieve private key.",
       );

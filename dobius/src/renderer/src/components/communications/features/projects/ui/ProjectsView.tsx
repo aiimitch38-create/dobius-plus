@@ -74,25 +74,25 @@ import { Button } from "@comms/shared/ui/button";
 import { PageHeader } from "@comms/shared/ui/PageHeader";
 
 const MANY_PROJECTS_THRESHOLD = 12;
-const REPOSITORY_SCOPE_OPTIONS: Array<{
+const REPOSITORY_SCOPE_OPTIONS: {
   label: string;
   value: ProjectsRepositoryScope;
-}> = [
+}[] = [
   { label: "All", value: "all" },
   { label: "My Repositories", value: "mine" },
   { label: "Local", value: "local" },
 ];
-const PULL_REQUEST_SCOPE_OPTIONS: Array<{
+const PULL_REQUEST_SCOPE_OPTIONS: {
   label: string;
   value: ProjectsWorkItemScope;
-}> = [
+}[] = [
   { label: "All", value: "all" },
   { label: "My Pull Requests", value: "mine" },
 ];
-const ISSUE_SCOPE_OPTIONS: Array<{
+const ISSUE_SCOPE_OPTIONS: {
   label: string;
   value: ProjectsWorkItemScope;
-}> = [
+}[] = [
   { label: "All", value: "all" },
   { label: "My Issues", value: "mine" },
 ];
@@ -111,7 +111,9 @@ export function ProjectsView() {
     (event: React.UIEvent<HTMLDivElement>) => {
       const element = event.currentTarget;
       const indicator = scrollIndicatorRef.current;
-      if (!indicator) return;
+      if (!indicator) {
+        return;
+      }
 
       const { clientHeight, scrollHeight, scrollTop } = element;
       if (scrollHeight <= clientHeight) {
@@ -295,14 +297,18 @@ export function ProjectsView() {
       .filter((project) => {
         const summary = activitySummariesQuery.data?.[project.repoAddress];
         const people = projectPeople(project, summary);
-        if (repositoryScope === "mine")
+        if (repositoryScope === "mine") {
           return isProjectMine(project, currentPubkey);
-        if (repositoryScope === "local")
+        }
+        if (repositoryScope === "local") {
           return hasLocalCheckout(project, localRepoNames);
+        }
         if (filter === "agents") {
           return projectHasAgent(project, people, profiles);
         }
-        if (filter === "users") return projectOwnerIsUser(project, profiles);
+        if (filter === "users") {
+          return projectOwnerIsUser(project, profiles);
+        }
         return true;
       })
       .sort((left, right) => {

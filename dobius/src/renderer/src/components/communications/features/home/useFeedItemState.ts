@@ -13,9 +13,13 @@ function unreadStorageKey(pubkey: string) {
 }
 
 function readStoredIds(key: string): string[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === "undefined") {
+    return [];
+  }
   const raw = window.localStorage.getItem(key);
-  if (!raw) return [];
+  if (!raw) {
+    return [];
+  }
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed)
@@ -29,7 +33,9 @@ function readStoredIds(key: string): string[] {
 }
 
 function writeStoredIds(key: string, ids: string[]) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") {
+    return;
+  }
   window.localStorage.setItem(key, JSON.stringify(ids.slice(-MAX_ITEMS)));
 }
 
@@ -52,12 +58,16 @@ export function useFeedItemState(pubkey: string | undefined) {
   }, [normalizedPubkey]);
 
   React.useEffect(() => {
-    if (loadedPubkey !== normalizedPubkey) return;
+    if (loadedPubkey !== normalizedPubkey) {
+      return;
+    }
     writeStoredIds(doneStorageKey(normalizedPubkey), doneIds);
   }, [loadedPubkey, normalizedPubkey, doneIds]);
 
   React.useEffect(() => {
-    if (loadedPubkey !== normalizedPubkey) return;
+    if (loadedPubkey !== normalizedPubkey) {
+      return;
+    }
     writeStoredIds(unreadStorageKey(normalizedPubkey), unreadIds);
   }, [loadedPubkey, normalizedPubkey, unreadIds]);
 

@@ -46,7 +46,9 @@ function canDeleteReply(
   reply: ThreadReply,
   currentPubkey: string | undefined,
 ): boolean {
-  if (!currentPubkey) return false;
+  if (!currentPubkey) {
+    return false;
+  }
   return reply.pubkey.toLowerCase() === currentPubkey.toLowerCase();
 }
 

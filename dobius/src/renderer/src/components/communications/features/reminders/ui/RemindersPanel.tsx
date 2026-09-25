@@ -62,7 +62,9 @@ export function useReminderSources(reminders: readonly Reminder[]) {
     const map = new Map<string, ReminderSource>();
     for (const reminder of reminders) {
       const target = reminder.content.target;
-      if (!hasNavigableTarget(target)) continue;
+      if (!hasNavigableTarget(target)) {
+        continue;
+      }
       const channel = channelsById.get(target.channelId);
       map.set(reminder.id, {
         authorLabel: resolveUserLabel({
@@ -88,20 +90,34 @@ function formatRelativeTime(timestamp: number): string {
 
   if (diff < 0) {
     const absDiff = Math.abs(diff);
-    if (absDiff < 60) return "just now";
-    if (absDiff < 3600) return `${Math.floor(absDiff / 60)}m overdue`;
-    if (absDiff < 86400) return `${Math.floor(absDiff / 3600)}h overdue`;
+    if (absDiff < 60) {
+      return "just now";
+    }
+    if (absDiff < 3600) {
+      return `${Math.floor(absDiff / 60)}m overdue`;
+    }
+    if (absDiff < 86400) {
+      return `${Math.floor(absDiff / 3600)}h overdue`;
+    }
     return `${Math.floor(absDiff / 86400)}d overdue`;
   }
 
-  if (diff < 60) return "in less than a minute";
-  if (diff < 3600) return `in ${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `in ${Math.floor(diff / 3600)}h`;
+  if (diff < 60) {
+    return "in less than a minute";
+  }
+  if (diff < 3600) {
+    return `in ${Math.floor(diff / 60)}m`;
+  }
+  if (diff < 86400) {
+    return `in ${Math.floor(diff / 3600)}h`;
+  }
   return `in ${Math.floor(diff / 86400)}d`;
 }
 
 function formatReminderSourceLocation(source: ReminderSource): string {
-  if (!source.channel) return source.channelLabel;
+  if (!source.channel) {
+    return source.channelLabel;
+  }
   return source.channel.channelType === "dm"
     ? `DM with ${source.channelLabel}`
     : `#${source.channelLabel}`;
@@ -179,8 +195,11 @@ function ReminderRow({
         className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left enabled:hover:opacity-80 disabled:cursor-default"
         disabled={!isInboxList && !isNavigable}
         onClick={() => {
-          if (isInboxList) onSelect?.(reminder);
-          else if (isNavigable) onNavigate(reminder);
+          if (isInboxList) {
+            onSelect?.(reminder);
+          } else if (isNavigable) {
+            onNavigate(reminder);
+          }
         }}
         type="button"
       >
@@ -312,7 +331,7 @@ export function RemindersPanel({
         <Bell className="h-8 w-8 text-muted-foreground/50" />
         <p className="text-sm text-muted-foreground">No reminders</p>
         <p className="text-xs text-muted-foreground/70">
-          Use "Remind me later" on any message to create one.
+          Use &quot;Remind me later&quot; on any message to create one.
         </p>
       </div>
     );
@@ -402,7 +421,9 @@ export function ReminderDetailPane({
     const destination = await resolveReminderDestination(
       reminder.content.target,
     );
-    if (!destination) return;
+    if (!destination) {
+      return;
+    }
     void goChannel(destination.channelId, {
       messageId: destination.messageId,
       threadRootId: destination.threadRootId,

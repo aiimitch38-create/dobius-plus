@@ -61,7 +61,9 @@ jobs:
           git diff --exit-code package.json pnpm-lock.yaml
 
       - name: Lint
-        run: pnpm exec oxlint --format github
+        # Why: pre-existing debt lives in config/lint-baseline.json (#115);
+        # this fails only when a file/rule error count grows past it.
+        run: node config/scripts/check-lint-baseline.mjs oxlint
 
       - name: Check styled scrollbars
         run: pnpm check:styled-scrollbars

@@ -32,10 +32,10 @@ import {
 import { Input } from "@comms/shared/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "@comms/shared/ui/popover";
 
-const ROLE_OPTIONS: Array<{
+const ROLE_OPTIONS: {
   value: RelayMemberRole;
   label: string;
-}> = [
+}[] = [
   {
     value: "member",
     label: "Member",
@@ -170,7 +170,9 @@ export function DirectAddMemberForm({
   }
 
   async function handleAdd() {
-    if (!canAdd) return;
+    if (!canAdd) {
+      return;
+    }
 
     try {
       for (const user of selectedUsers) {
@@ -267,7 +269,9 @@ export function DirectAddMemberForm({
                         ) {
                           event.preventDefault();
                           const lastUser = selectedUsers.at(-1);
-                          if (lastUser) removeUser(lastUser.pubkey);
+                          if (lastUser) {
+                            removeUser(lastUser.pubkey);
+                          }
                         }
                       }}
                       placeholder={

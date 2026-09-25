@@ -5,10 +5,14 @@ export function useScrollBoundaryLock(
 ) {
   React.useEffect(() => {
     const scrollElement = scrollRef.current;
-    if (!scrollElement) return;
+    if (!scrollElement) {
+      return;
+    }
 
     const handleWheel = (event: WheelEvent) => {
-      if (event.deltaY === 0) return;
+      if (event.deltaY === 0) {
+        return;
+      }
 
       const maxScrollTop =
         scrollElement.scrollHeight - scrollElement.clientHeight;

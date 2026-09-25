@@ -41,7 +41,9 @@ function readWatermark(pubkey: string): number {
   const stored = window.localStorage.getItem(key);
   if (stored !== null) {
     const parsed = Number(stored);
-    if (Number.isFinite(parsed)) return parsed;
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
   }
   const now = Math.floor(Date.now() / 1_000);
   window.localStorage.setItem(key, String(now));
@@ -58,7 +60,7 @@ function readWatermark(pubkey: string): number {
 export function useReminderNotifications(
   pubkey: string | undefined,
   settings: NotificationSettings,
-  channels: ReadonlyArray<{ id: string; name?: string | null }>,
+  channels: readonly { id: string; name?: string | null }[],
 ): void {
   const reminders = useRemindersQuery(pubkey).data;
   const queryClient = useQueryClient();
@@ -74,7 +76,9 @@ export function useReminderNotifications(
   // remindersRef.current is []. Without this guard, check() would advance
   // the watermark past any reminders that came due while the app was closed.
   const queryResolvedRef = React.useRef(false);
-  if (reminders !== undefined) queryResolvedRef.current = true;
+  if (reminders !== undefined) {
+    queryResolvedRef.current = true;
+  }
 
   const fire = React.useEffectEvent((due: Reminder[]) => {
     const current = settingsRef.current;
@@ -109,21 +113,26 @@ export function useReminderNotifications(
       title: formatNotificationTitle({ prefix: "Reminder due", channelLabel }),
       body,
     }).then((didSend) => {
-      if (!didSend) return;
+      if (!didSend) {
+        return;
+      }
       playNotificationSound(resolveSlotSound(current, "needs_action"));
       void requestDockBounce();
     });
   });
 
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
 
     const check = () => {
       // Defer until the query has resolved at least once — an empty array from
       // an unresolved query must not advance the watermark past reminders that
       // came due while the app was closed (the "missed-while-asleep" window).
-      if (remindersRef.current.length === 0 && !queryResolvedRef.current)
+      if (remindersRef.current.length === 0 && !queryResolvedRef.current) {
         return;
+      }
 
       const watermark = readWatermark(pubkey);
       const now = Math.floor(Date.now() / 1_000);

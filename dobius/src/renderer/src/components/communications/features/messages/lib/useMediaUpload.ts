@@ -83,7 +83,9 @@ type CapturedVideoPoster = {
 async function captureVideoPosterFrame(
   file: File,
 ): Promise<CapturedVideoPoster | null> {
-  if (!file.type.startsWith("video/")) return null;
+  if (!file.type.startsWith("video/")) {
+    return null;
+  }
 
   const objectUrl = URL.createObjectURL(file);
   const video = document.createElement("video");
@@ -109,7 +111,9 @@ async function captureVideoPosterFrame(
 
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
-    if (video.videoWidth === 0 || video.videoHeight === 0) return null;
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      return null;
+    }
 
     const maxWidth = 640;
     const scale = Math.min(1, maxWidth / video.videoWidth);
@@ -118,7 +122,9 @@ async function captureVideoPosterFrame(
     canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
 
     const context = canvas.getContext("2d");
-    if (!context) return null;
+    if (!context) {
+      return null;
+    }
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     return {
       dim: `${video.videoWidth}x${video.videoHeight}`,
@@ -156,7 +162,9 @@ export function useMediaUpload() {
           total: number;
         }>("media-upload-progress", (event) => {
           const { id, sent, total } = event.payload;
-          if (total <= 0) return;
+          if (total <= 0) {
+            return;
+          }
           const progress = Math.min(100, Math.round((sent / total) * 100));
           setUploadingPreviews((current) =>
             current.map((preview) =>
@@ -221,7 +229,9 @@ export function useMediaUpload() {
   /** Annotated URL → original URL (derived; handy for stable list keys). */
   const originalUrlByUrl = React.useMemo(() => {
     const map = new Map<string, string>();
-    for (const [url, original] of originalsByUrl) map.set(url, original.url);
+    for (const [url, original] of originalsByUrl) {
+      map.set(url, original.url);
+    }
     return map;
   }, [originalsByUrl]);
 
@@ -229,7 +239,9 @@ export function useMediaUpload() {
   // covers remove, cancel, send-clear, and draft restore in one place.
   React.useEffect(() => {
     setOriginalsByUrl((prev) => {
-      if (prev.size === 0) return prev;
+      if (prev.size === 0) {
+        return prev;
+      }
       const liveUrls = new Set(pendingImeta.map((d) => d.url));
       let changed = false;
       const next = new Map<string, BlobDescriptor>();
@@ -273,7 +285,9 @@ export function useMediaUpload() {
 
       if (file?.type.startsWith("video/")) {
         void captureVideoPosterFrame(file).then((poster) => {
-          if (!poster || isUploadCanceled(id)) return;
+          if (!poster || isUploadCanceled(id)) {
+            return;
+          }
           setUploadingPreviews((prev) =>
             prev.map((preview) =>
               preview.id === id ? { ...preview, ...poster } : preview,
@@ -290,7 +304,9 @@ export function useMediaUpload() {
   const finishUpload = React.useCallback(
     (previewId?: number) => {
       if (previewId !== undefined) {
-        if (!activeUploadingPreviewIdsRef.current.delete(previewId)) return;
+        if (!activeUploadingPreviewIdsRef.current.delete(previewId)) {
+          return;
+        }
         removeUploadingPreview(previewId);
       }
       setUploadingCount((c) => Math.max(0, c - 1));
@@ -306,7 +322,9 @@ export function useMediaUpload() {
       )?.slotIndex;
       if (slotIndex !== undefined) {
         setImetaSlots((prev) => {
-          if (slotIndex >= prev.length) return prev;
+          if (slotIndex >= prev.length) {
+            return prev;
+          }
           const next = [...prev];
           next[slotIndex] = null;
           return next;
@@ -335,7 +353,9 @@ export function useMediaUpload() {
   /** Fill a previously-reserved slot by index. */
   const fillSlot = React.useCallback(
     (index: number, descriptor: BlobDescriptor, previewId?: number) => {
-      if (isUploadCanceled(previewId)) return;
+      if (isUploadCanceled(previewId)) {
+        return;
+      }
       setImetaSlots((prev) => {
         const next = [...prev];
         next[index] = descriptor;
@@ -349,7 +369,9 @@ export function useMediaUpload() {
   /** Append a single descriptor (no pre-reserved slot). */
   const onUploaded = React.useCallback(
     (descriptor: BlobDescriptor, previewId?: number) => {
-      if (isUploadCanceled(previewId)) return;
+      if (isUploadCanceled(previewId)) {
+        return;
+      }
       nextSlotRef.current += 1;
       setImetaSlots((prev) => [...prev, descriptor]);
       finishUpload(previewId);
@@ -359,7 +381,9 @@ export function useMediaUpload() {
 
   const onUploadError = React.useCallback(
     (err: unknown, previewId?: number) => {
-      if (isUploadCanceled(previewId)) return;
+      if (isUploadCanceled(previewId)) {
+        return;
+      }
       finishUpload(previewId);
       setUploadState({ status: "error", message: String(err) });
     },
@@ -375,14 +399,18 @@ export function useMediaUpload() {
     setUploadingCount((c) => c + 1);
     try {
       const descriptors = await pickAndUploadMedia();
-      if (isUploadCanceled(previewId)) return;
+      if (isUploadCanceled(previewId)) {
+        return;
+      }
       finishUpload(previewId);
       for (const descriptor of descriptors) {
         nextSlotRef.current += 1;
         setImetaSlots((prev) => [...prev, descriptor]);
       }
     } catch (err) {
-      if (isUploadCanceled(previewId)) return;
+      if (isUploadCanceled(previewId)) {
+        return;
+      }
       onUploadError(err, previewId);
     }
   }, [finishUpload, isUploadCanceled, onUploadError, reserveUploadingPreview]);
@@ -393,7 +421,9 @@ export function useMediaUpload() {
       dragDepthRef.current = 0;
       setIsDragOver(false);
       const files = Array.from(event.dataTransfer.files);
-      if (files.length === 0) return;
+      if (files.length === 0) {
+        return;
+      }
 
       // Accept any file. The Tauri layer and the relay enforce the deny-list
       // (active-content + executables) and size caps; everything else uploads.
@@ -410,7 +440,9 @@ export function useMediaUpload() {
         (async () => {
           try {
             const buffer = await file.arrayBuffer();
-            if (isUploadCanceled(previewId)) return;
+            if (isUploadCanceled(previewId)) {
+              return;
+            }
             const descriptor = await uploadMediaBytes(
               [...new Uint8Array(buffer)],
               file.name,
@@ -434,7 +466,9 @@ export function useMediaUpload() {
 
   const handleDragEnter = React.useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (!isFileDrag(event)) return;
+      if (!isFileDrag(event)) {
+        return;
+      }
       event.preventDefault();
       dragDepthRef.current += 1;
       if (dragDepthRef.current === 1) {
@@ -446,7 +480,9 @@ export function useMediaUpload() {
 
   const handleDragLeave = React.useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (!isFileDrag(event)) return;
+      if (!isFileDrag(event)) {
+        return;
+      }
       event.preventDefault();
       dragDepthRef.current -= 1;
       if (dragDepthRef.current <= 0) {
@@ -493,7 +529,9 @@ export function useMediaUpload() {
         .filter((item) => item.kind === "file")
         .map((item) => item.getAsFile())
         .filter((f): f is File => f !== null);
-      if (mediaFiles.length === 0) return;
+      if (mediaFiles.length === 0) {
+        return;
+      }
 
       event.preventDefault();
 
@@ -507,7 +545,9 @@ export function useMediaUpload() {
         (async () => {
           try {
             const buffer = await file.arrayBuffer();
-            if (isUploadCanceled(previewId)) return;
+            if (isUploadCanceled(previewId)) {
+              return;
+            }
             const descriptor = await uploadMediaBytes(
               [...new Uint8Array(buffer)],
               file.name,
@@ -536,7 +576,9 @@ export function useMediaUpload() {
       setUploadingCount((c) => c + 1);
       try {
         const buffer = await file.arrayBuffer();
-        if (isUploadCanceled(previewId)) return;
+        if (isUploadCanceled(previewId)) {
+          return;
+        }
         const descriptor = await uploadMediaBytes(
           [...new Uint8Array(buffer)],
           file.name,
@@ -568,7 +610,9 @@ export function useMediaUpload() {
       const oldDescriptor = pendingImetaRef.current.find(
         (d) => d.url === oldUrl,
       );
-      if (!oldDescriptor) return null;
+      if (!oldDescriptor) {
+        return null;
+      }
 
       // The annotated output is always PNG — swap the extension accordingly.
       const stem = (oldDescriptor.filename ?? "image").replace(/\.[^.]+$/, "");
@@ -582,7 +626,9 @@ export function useMediaUpload() {
           filename,
           uploadProgressId(previewId),
         );
-        if (isUploadCanceled(previewId)) return null;
+        if (isUploadCanceled(previewId)) {
+          return null;
+        }
         finishUpload(previewId);
         setImetaSlots((prev) =>
           prev.map((d) => (d?.url === oldUrl ? descriptor : d)),
@@ -612,7 +658,9 @@ export function useMediaUpload() {
   const revertAttachment = React.useCallback(
     (url: string): BlobDescriptor | null => {
       const original = originalsByUrlRef.current.get(url);
-      if (!original) return null;
+      if (!original) {
+        return null;
+      }
       setImetaSlots((prev) => prev.map((d) => (d?.url === url ? original : d)));
       setOriginalsByUrl((prev) => {
         const next = new Map(prev);

@@ -48,7 +48,9 @@ export function WelcomeKickoffStage({
     [onExitComplete],
   );
 
-  if (phase === "hidden" || phase === "done") return null;
+  if (phase === "hidden" || phase === "done") {
+    return null;
+  }
 
   return (
     <div

@@ -45,7 +45,9 @@ export function AgentDefaultsDialog({
   }, [onOpenChange, returnFocusRef]);
 
   const requestClose = React.useCallback(() => {
-    if (saving) return;
+    if (saving) {
+      return;
+    }
     if (dirty) {
       setConfirmDiscard(true);
       return;
@@ -74,7 +76,9 @@ export function AgentDefaultsDialog({
       <Dialog
         open={open}
         onOpenChange={(nextOpen) => {
-          if (!nextOpen) requestClose();
+          if (!nextOpen) {
+            requestClose();
+          }
         }}
       >
         <DialogContent
@@ -120,7 +124,9 @@ export function AgentDefaultsDialog({
         <AlertDialogContent
           data-testid="discard-ai-defaults-dialog"
           onCloseAutoFocus={(event) => {
-            if (!restoreDefaultsFocusRef.current) return;
+            if (!restoreDefaultsFocusRef.current) {
+              return;
+            }
             event.preventDefault();
             restoreDefaultsFocusRef.current = false;
             requestAnimationFrame(() => secondaryActionRef.current?.focus());

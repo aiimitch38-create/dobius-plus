@@ -27,7 +27,9 @@ export function projectBranchErrorMessage(
   error: unknown,
   fallback: string,
 ): string {
-  if (!(error instanceof Error)) return fallback;
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
   if (isNoChannelBindingError(error.message)) {
     return NO_CHANNEL_BINDING_COPY;
   }

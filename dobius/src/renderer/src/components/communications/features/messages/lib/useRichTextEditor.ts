@@ -42,7 +42,9 @@ function hardBreakLineBounds($from: ResolvedPos) {
   let end = parentStart + $from.parent.content.size;
 
   $from.parent.forEach((node, offset) => {
-    if (node.type.name !== "hardBreak") return;
+    if (node.type.name !== "hardBreak") {
+      return;
+    }
     const breakPosition = parentStart + offset;
     if (breakPosition < $from.pos) {
       start = breakPosition + node.nodeSize;
@@ -130,7 +132,9 @@ const PASTED_LINK_AT_END_RE =
 
 function shouldAppendSpaceAfterPaste(text: string): boolean {
   const trimmedEnd = text.trimEnd();
-  if (!trimmedEnd || trimmedEnd.length !== text.length) return false;
+  if (!trimmedEnd || trimmedEnd.length !== text.length) {
+    return false;
+  }
   return PASTED_LINK_AT_END_RE.test(trimmedEnd);
 }
 
@@ -143,12 +147,18 @@ const LinkPasteTrailingSpace = Extension.create({
         props: {
           handlePaste(view, event) {
             const pastedText = event.clipboardData?.getData("text/plain") ?? "";
-            if (!shouldAppendSpaceAfterPaste(pastedText)) return false;
+            if (!shouldAppendSpaceAfterPaste(pastedText)) {
+              return false;
+            }
 
             window.setTimeout(() => {
-              if (!view.dom.isConnected) return;
+              if (!view.dom.isConnected) {
+                return;
+              }
               const { state } = view;
-              if (!state.selection.empty) return;
+              if (!state.selection.empty) {
+                return;
+              }
 
               const from = state.selection.from;
               if (from < state.doc.content.size) {
@@ -158,7 +168,9 @@ const LinkPasteTrailingSpace = Extension.create({
                   "\n",
                   "\n",
                 );
-                if (/^\s$/.test(nextText)) return;
+                if (/^\s$/.test(nextText)) {
+                  return;
+                }
               }
 
               let transaction = state.tr.insertText(" ", from, from);
@@ -275,26 +287,34 @@ export function useRichTextEditor({
             return {
               "Ctrl-a": ({ editor: ed }) => {
                 const { $from } = ed.state.selection;
-                if (!$from.parent.inlineContent) return false;
+                if (!$from.parent.inlineContent) {
+                  return false;
+                }
                 return ed.commands.setTextSelection(
                   hardBreakLineBounds($from).start,
                 );
               },
               "Ctrl-e": ({ editor: ed }) => {
                 const { $from } = ed.state.selection;
-                if (!$from.parent.inlineContent) return false;
+                if (!$from.parent.inlineContent) {
+                  return false;
+                }
                 return ed.commands.setTextSelection(
                   hardBreakLineBounds($from).end,
                 );
               },
               "Ctrl-b": ({ editor: ed }) => {
                 const { empty, from } = ed.state.selection;
-                if (!empty || from <= 0) return false;
+                if (!empty || from <= 0) {
+                  return false;
+                }
                 return ed.commands.setTextSelection(from - 1);
               },
               "Ctrl-f": ({ editor: ed }) => {
                 const { empty, from } = ed.state.selection;
-                if (!empty || from >= ed.state.doc.content.size) return false;
+                if (!empty || from >= ed.state.doc.content.size) {
+                  return false;
+                }
                 return ed.commands.setTextSelection(from + 1);
               },
               "Ctrl-k": ({ editor: ed }) => {
@@ -330,7 +350,9 @@ export function useRichTextEditor({
                   1,
                   true,
                 );
-                if (!nextSelection) return false;
+                if (!nextSelection) {
+                  return false;
+                }
 
                 const transaction = state.tr.delete(to, nextSelection.from);
                 view.dispatch(transaction.scrollIntoView());
@@ -348,7 +370,9 @@ export function useRichTextEditor({
             // paragraph after the list. Works for both single-item and
             // multi-item lists.
             const exitListIfEmptyLast = (ed: typeof this.editor): boolean => {
-              if (!ed.isActive("listItem")) return false;
+              if (!ed.isActive("listItem")) {
+                return false;
+              }
               const { $from } = ed.state.selection;
 
               // Walk up to find the listItem node (handles nested structures).
@@ -359,19 +383,25 @@ export function useRichTextEditor({
                   break;
                 }
               }
-              if (listItemDepth < 1) return false;
+              if (listItemDepth < 1) {
+                return false;
+              }
 
               const listItem = $from.node(listItemDepth);
               const isEmpty =
                 listItem.childCount === 1 &&
                 listItem.firstChild?.textContent === "";
-              if (!isEmpty) return false;
+              if (!isEmpty) {
+                return false;
+              }
 
               // Only trigger on the last item in the list.
               const listDepth = listItemDepth - 1;
               const list = $from.node(listDepth);
               const itemIndex = $from.index(listDepth);
-              if (itemIndex !== list.childCount - 1) return false;
+              if (itemIndex !== list.childCount - 1) {
+                return false;
+              }
 
               const { tr, schema } = ed.state;
               if (list.childCount === 1) {
@@ -406,7 +436,9 @@ export function useRichTextEditor({
                   return insertNewlineInCodeBlock(ed);
                 }
                 // Empty last list item → exit list to paragraph below.
-                if (exitListIfEmptyLast(ed)) return true;
+                if (exitListIfEmptyLast(ed)) {
+                  return true;
+                }
                 // Non-empty or non-last list item → split.
                 if (ed.isActive("listItem")) {
                   return ed.commands.splitListItem("listItem");
@@ -438,11 +470,17 @@ export function useRichTextEditor({
           addKeyboardShortcuts() {
             return {
               Enter: ({ editor: ed }) => {
-                if (isAutocompleteOpen?.current) return false;
-                if (!onSubmitRef.current) return false;
+                if (isAutocompleteOpen?.current) {
+                  return false;
+                }
+                if (!onSubmitRef.current) {
+                  return false;
+                }
 
                 const fenceResult = handleCodeFenceEnter(ed);
-                if (fenceResult !== undefined) return fenceResult;
+                if (fenceResult !== undefined) {
+                  return fenceResult;
+                }
 
                 onSubmitRef.current();
                 return true;
@@ -520,7 +558,9 @@ export function useRichTextEditor({
             (event.key.toLowerCase() === "a" || event.key.toLowerCase() === "e")
           ) {
             const { $from } = view.state.selection;
-            if (!$from.parent.inlineContent) return false;
+            if (!$from.parent.inlineContent) {
+              return false;
+            }
             const bounds = hardBreakLineBounds($from);
             const position =
               event.key.toLowerCase() === "a" ? bounds.start : bounds.end;
@@ -556,16 +596,28 @@ export function useRichTextEditor({
             return onLinkShortcutRef.current?.() ?? false;
           }
 
-          if (event.key !== "ArrowUp") return false;
+          if (event.key !== "ArrowUp") {
+            return false;
+          }
           // Respect the same guards as before: no modifiers (let ⌥↑/⇧↑/etc.
           // through), autocomplete closed, a handler exists, and the composer
           // is empty (never steal the arrow from drafted text or an in-flight
           // edit, whose loaded body makes the doc non-empty).
-          if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey)
+          if (
+            event.metaKey ||
+            event.ctrlKey ||
+            event.altKey ||
+            event.shiftKey
+          ) {
             return false;
-          if (isAutocompleteOpen?.current) return false;
+          }
+          if (isAutocompleteOpen?.current) {
+            return false;
+          }
           const handler = onEditLastOwnMessageRef.current;
-          if (!handler) return false;
+          if (!handler) {
+            return false;
+          }
           // Emptiness is read straight off the live ProseMirror doc rather
           // than a captured `editor` ref — the `editor` instance isn't in
           // scope at config time (useEditor deps are `[]`), and the view's
@@ -574,7 +626,9 @@ export function useRichTextEditor({
           const { doc } = view.state;
           const isEmptyDoc =
             doc.childCount <= 1 && doc.textContent.length === 0;
-          if (!isEmptyDoc) return false;
+          if (!isEmptyDoc) {
+            return false;
+          }
           // Consume only if a target was found and edit mode was entered;
           // otherwise let ArrowUp fall through to normal caret movement.
           return handler();
@@ -608,7 +662,9 @@ export function useRichTextEditor({
   // lost focus to the disable), so it can't steal focus from another composer.
   const hadFocusBeforeDisableRef = React.useRef(false);
   React.useEffect(() => {
-    if (!editor || editor.isEditable === editable) return;
+    if (!editor || editor.isEditable === editable) {
+      return;
+    }
     if (!editable) {
       // About to disable: remember whether we currently hold focus so we know
       // whether to restore it when re-enabled.
@@ -629,7 +685,9 @@ export function useRichTextEditor({
   // Update placeholder text without recreating the editor.
   // biome-ignore lint/correctness/useExhaustiveDependencies: placeholder triggers the ref update
   React.useEffect(() => {
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
     // Force ProseMirror to re-run decoration plugins so the Placeholder
     // extension picks up the new text from placeholderRef.
     editor.view.dispatch(editor.state.tr);
@@ -641,7 +699,9 @@ export function useRichTextEditor({
   // extension instance via extensionManager — the instance's `.storage` getter
   // returns a fresh spread-copy on every access, so mutations are silently lost.
   React.useEffect(() => {
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
     // biome-ignore lint/suspicious/noExplicitAny: TipTap's Storage type doesn't include dynamic extension keys
     const storage = (editor.storage as any).mentionHighlight as
       | { names: string[]; agentNames: string[]; channelNames: string[] }
@@ -659,17 +719,23 @@ export function useRichTextEditor({
   // Custom-emoji set changes: re-resolve the `src` attr on any existing
   // node in the doc (e.g. an emoji's image was just published).
   React.useEffect(() => {
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
     customEmojiWiring.syncEmojiSrc(editor);
   }, [editor, customEmojiWiring.syncEmojiSrc]);
 
   const getMarkdown = React.useCallback((): string => {
-    if (!editor) return "";
+    if (!editor) {
+      return "";
+    }
     return getMarkdownFromEditor(editor);
   }, [editor]);
 
   const isEmpty = React.useCallback((): boolean => {
-    if (!editor) return true;
+    if (!editor) {
+      return true;
+    }
     return editor.isEmpty;
   }, [editor]);
 
@@ -679,7 +745,9 @@ export function useRichTextEditor({
 
   const setContent = React.useCallback(
     (markdown: string) => {
-      if (!editor) return;
+      if (!editor) {
+        return;
+      }
       editor.commands.setContent(markdown);
     },
     [editor],
@@ -687,7 +755,9 @@ export function useRichTextEditor({
 
   const setContentAndFocusEnd = React.useCallback(
     (markdown: string) => {
-      if (!editor) return;
+      if (!editor) {
+        return;
+      }
       // The caller already synchronizes composer state. Keep this programmatic
       // restoration out of user-edit observers (autocomplete/reconciliation),
       // then move selection in the same command chain.
@@ -711,7 +781,9 @@ export function useRichTextEditor({
    * effect) where we don't want to yank the cursor to the end.
    */
   const focusPreserve = React.useCallback(() => {
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
     // `focus()` with no position argument preserves the current selection.
     editor.commands.focus();
   }, [editor]);
@@ -733,7 +805,9 @@ export function useRichTextEditor({
     text: string;
     cursor: number;
   } => {
-    if (!editor) return { text: "", cursor: 0 };
+    if (!editor) {
+      return { text: "", cursor: 0 };
+    }
     const projection = buildPlainTextProjection(editor.state.doc);
     const anchor = editor.state.selection.anchor;
     return {
@@ -766,7 +840,9 @@ export function useRichTextEditor({
       text: string,
       customEmojiShortcode?: string,
     ) => {
-      if (!editor) return;
+      if (!editor) {
+        return;
+      }
       const projection = buildPlainTextProjection(editor.state.doc);
       const fromPM = projection.mapTextOffsetToPM(fromOffset);
       const toPM = projection.mapTextOffsetToPM(toOffset);
@@ -786,7 +862,9 @@ export function useRichTextEditor({
           // Insert the trailing space after the node, then place the cursor
           // after it.
           const afterNode = tr.mapping.map(toPM);
-          if (text) tr = tr.insertText(text, afterNode);
+          if (text) {
+            tr = tr.insertText(text, afterNode);
+          }
           const cursorPM = afterNode + (text ? text.length : 0);
           tr = tr.setSelection(TextSelection.create(tr.doc, cursorPM));
           editor.view.dispatch(tr);
@@ -820,11 +898,17 @@ export function useRichTextEditor({
    */
   const getLinkSelectionInfo =
     React.useCallback((): LinkSelectionInfo | null => {
-      if (!editor) return null;
+      if (!editor) {
+        return null;
+      }
       const { from, to } = editor.state.selection;
       const onLink = resolveLinkAt(editor.state, from);
-      if (onLink) return onLink;
-      if (from === to) return null;
+      if (onLink) {
+        return onLink;
+      }
+      if (from === to) {
+        return null;
+      }
       // No existing link, but text is selected — seed the modal with the
       // selected text as the display value and the selection range.
       const text = editor.state.doc.textBetween(from, to, "\n", "\n");
@@ -852,7 +936,9 @@ export function useRichTextEditor({
       from?: number;
       to?: number;
     }) => {
-      if (!editor) return;
+      if (!editor) {
+        return;
+      }
       // Default to the live caret when no range is supplied, so an
       // empty-caret insert lands at the cursor rather than doc position 0.
       const selection = editor.state.selection;
@@ -875,7 +961,9 @@ export function useRichTextEditor({
    */
   const removeLink = React.useCallback(
     ({ from, to }: { from: number; to: number }) => {
-      if (!editor) return;
+      if (!editor) {
+        return;
+      }
       editor
         .chain()
         .focus()

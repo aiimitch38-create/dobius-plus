@@ -103,7 +103,7 @@ export function resolveHomeBadgeFeedItemReadAt(
   },
 ): number | null {
   const threadRootId = feedItemThreadRootId(item);
-  const markers: Array<number | null> = [];
+  const markers: (number | null)[] = [];
 
   if (item.channelId && !threadRootId) {
     markers.push(options.getChannelReadAt(item.channelId));

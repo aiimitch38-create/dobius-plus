@@ -22,15 +22,21 @@ function mergeLocalStorageKey(
   key: string,
 ): void {
   const raw = localStorage.getItem(key);
-  if (!raw) return;
+  if (!raw) {
+    return;
+  }
 
   try {
     const parsed = JSON.parse(raw);
-    if (!isPlainRecord(parsed)) return;
+    if (!isPlainRecord(parsed)) {
+      return;
+    }
 
     for (const [channelId, value] of Object.entries(parsed)) {
       const unixSeconds = localIsoToUnixSeconds(value);
-      if (unixSeconds === null) continue;
+      if (unixSeconds === null) {
+        continue;
+      }
       const current = contexts.get(channelId) ?? 0;
       if (unixSeconds > current) {
         contexts.set(channelId, unixSeconds);
@@ -45,11 +51,15 @@ function mergeLocalStorageKey(
 function readPublishableContextIds(pubkey: string): Set<string> {
   const result = new Set<string>();
   const raw = localStorage.getItem(localPublishableContextKey(pubkey));
-  if (!raw) return result;
+  if (!raw) {
+    return result;
+  }
 
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return result;
+    if (!Array.isArray(parsed)) {
+      return result;
+    }
 
     for (const value of parsed) {
       if (typeof value === "string") {
@@ -70,11 +80,15 @@ function readPublishableContextIds(pubkey: string): Set<string> {
 function readContextSourceCreatedAt(pubkey: string): Map<string, number> {
   const result = new Map<string, number>();
   const raw = localStorage.getItem(localSourceCreatedAtKey(pubkey));
-  if (!raw) return result;
+  if (!raw) {
+    return result;
+  }
 
   try {
     const parsed = JSON.parse(raw);
-    if (!isPlainRecord(parsed)) return result;
+    if (!isPlainRecord(parsed)) {
+      return result;
+    }
 
     for (const [key, value] of Object.entries(parsed)) {
       if (typeof value === "number" && Number.isInteger(value) && value >= 0) {

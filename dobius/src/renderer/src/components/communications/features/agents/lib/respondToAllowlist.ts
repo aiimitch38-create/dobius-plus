@@ -32,7 +32,9 @@ export function parsePubkeyInput(raw: string): ParsedAllowlist {
   const invalid: string[] = [];
   for (const piece of raw.split(/[\s,]+/)) {
     const trimmed = piece.trim();
-    if (trimmed.length === 0) continue;
+    if (trimmed.length === 0) {
+      continue;
+    }
     if (!HEX_64.test(trimmed)) {
       invalid.push(trimmed);
       continue;
@@ -52,10 +54,12 @@ export function parsePubkeyInput(raw: string): ParsedAllowlist {
  */
 export function mergeAllowlist(existing: string[], add: string[]): string[] {
   const seen = new Set(existing.map((p) => p.toLowerCase()));
-  const out = [...existing.map((p) => p.toLowerCase())];
+  const out = existing.map((p) => p.toLowerCase());
   for (const candidate of add) {
     const lower = candidate.toLowerCase();
-    if (!HEX_64.test(lower) || seen.has(lower)) continue;
+    if (!HEX_64.test(lower) || seen.has(lower)) {
+      continue;
+    }
     seen.add(lower);
     out.push(lower);
   }

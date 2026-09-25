@@ -31,7 +31,9 @@ export function activityScopeKey(
   pubkey: string | null,
   relayUrl: string,
 ): string {
-  if (!pubkey || !relayUrl) return "";
+  if (!pubkey || !relayUrl) {
+    return "";
+  }
   return `${pubkey}:${normalizeRelayUrl(relayUrl)}`;
 }
 
@@ -49,7 +51,9 @@ export function projectActivityForScope(
   currentScope: string,
   items: ThreadActivityItem[],
 ): ThreadActivityItem[] {
-  if (!currentScope || loadedScope !== currentScope) return [];
+  if (!currentScope || loadedScope !== currentScope) {
+    return [];
+  }
   return items;
 }
 
@@ -61,9 +65,13 @@ export function readActivityFromStorage(
     const raw = window.localStorage.getItem(
       activityStorageKey(pubkey, relayUrl),
     );
-    if (!raw) return [];
+    if (!raw) {
+      return [];
+    }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
     return parsed.filter(
       (item): item is ThreadActivityItem =>
         typeof item === "object" &&

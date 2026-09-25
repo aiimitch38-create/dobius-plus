@@ -4,7 +4,7 @@ type EmojiMartData = {
   emojis?: Record<
     string,
     {
-      skins?: Array<{ native?: string }>;
+      skins?: { native?: string }[];
     }
   >;
 };

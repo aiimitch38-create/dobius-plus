@@ -525,7 +525,9 @@ export function MessageThreadPanel({
       threadHead.tags,
       profiles,
     );
-    if (!mentionPubkeysByName) return [];
+    if (!mentionPubkeysByName) {
+      return [];
+    }
 
     return orderMentionPubkeysByText(
       threadHead.body,
@@ -916,20 +918,18 @@ export function MessageThreadPanel({
   );
 
   const threadHeaderContent = (
-    <>
-      <AuxiliaryPanelHeaderGroup
-        backButtonAriaLabel="Back to conversation"
-        backButtonTestId="message-thread-back"
-        // A focus drawer only sets `isSinglePanelView` to fill its container's
-        // width — it isn't the narrow single-column view, and it has the scrimmed
-        // sliver as its way back, so it takes no back control of its own. The
-        // narrow view still needs one.
-        leading={headerLeading}
-        onBack={isSinglePanelView && !isFocusMode ? onClose : undefined}
-      >
-        <AuxiliaryPanelTitle>Thread</AuxiliaryPanelTitle>
-      </AuxiliaryPanelHeaderGroup>
-    </>
+    <AuxiliaryPanelHeaderGroup
+      backButtonAriaLabel="Back to conversation"
+      backButtonTestId="message-thread-back"
+      // A focus drawer only sets `isSinglePanelView` to fill its container's
+      // width — it isn't the narrow single-column view, and it has the scrimmed
+      // sliver as its way back, so it takes no back control of its own. The
+      // narrow view still needs one.
+      leading={headerLeading}
+      onBack={isSinglePanelView && !isFocusMode ? onClose : undefined}
+    >
+      <AuxiliaryPanelTitle>Thread</AuxiliaryPanelTitle>
+    </AuxiliaryPanelHeaderGroup>
   );
 
   return (

@@ -49,8 +49,12 @@ export const BUZZ_DARK_BASE_THEME: SyntaxThemeName = "github-dark";
  * back to unhighlighted plain text.
  */
 export function resolveShikiThemeName(name: string): SyntaxThemeName {
-  if (name === BUZZ_THEME_NAME) return BUZZ_BASE_THEME;
-  if (name === BUZZ_DARK_THEME_NAME) return BUZZ_DARK_BASE_THEME;
+  if (name === BUZZ_THEME_NAME) {
+    return BUZZ_BASE_THEME;
+  }
+  if (name === BUZZ_DARK_THEME_NAME) {
+    return BUZZ_DARK_BASE_THEME;
+  }
   return name as SyntaxThemeName;
 }
 
@@ -295,26 +299,32 @@ export function resolveSystemTheme(
   const needsSwitch =
     (systemIsDark && selectedIsLight) || (!systemIsDark && !selectedIsLight);
 
-  if (!needsSwitch) return selectedTheme;
+  if (!needsSwitch) {
+    return selectedTheme;
+  }
 
   const pair = getThemePair(selectedTheme);
   return pair ?? selectedTheme;
 }
 
 // Theme settings type from Shiki
-interface ThemeSetting {
+type ThemeSetting = {
   scope?: string | string[];
   settings?: { foreground?: string };
-}
+};
 
 function extractCommentColor(
-  settings: ReadonlyArray<ThemeSetting> | undefined,
+  settings: readonly ThemeSetting[] | undefined,
   fallback: string,
 ): string {
-  if (!settings) return fallback;
+  if (!settings) {
+    return fallback;
+  }
 
   for (const setting of settings) {
-    if (!setting.scope || !setting.settings?.foreground) continue;
+    if (!setting.scope || !setting.settings?.foreground) {
+      continue;
+    }
     const scopes = Array.isArray(setting.scope)
       ? setting.scope
       : [setting.scope];
@@ -360,7 +370,9 @@ function extractGitColors(colors: Record<string, string> | undefined): {
   const findColor = (keys: string[]): string | null => {
     for (const key of keys) {
       const value = colors[key];
-      if (value) return stripAlpha(value);
+      if (value) {
+        return stripAlpha(value);
+      }
     }
     return null;
   };
@@ -372,7 +384,7 @@ function extractGitColors(colors: Record<string, string> | undefined): {
   };
 }
 
-export interface ThemeInfo {
+export type ThemeInfo = {
   name: string;
   bg: string;
   fg: string;
@@ -380,7 +392,7 @@ export interface ThemeInfo {
   added: string | null;
   deleted: string | null;
   modified: string | null;
-}
+};
 
 export function extractThemeInfo(
   themeName: string,
@@ -398,7 +410,7 @@ export function extractThemeInfo(
     bg,
     fg,
     comment: extractCommentColor(
-      theme.settings as ReadonlyArray<ThemeSetting> | undefined,
+      theme.settings as readonly ThemeSetting[] | undefined,
       fg,
     ),
     ...gitColors,

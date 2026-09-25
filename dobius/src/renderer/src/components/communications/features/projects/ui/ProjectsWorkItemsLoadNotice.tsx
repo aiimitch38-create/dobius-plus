@@ -25,7 +25,9 @@ export function ProjectsWorkItemsLoadNotice({
   onRetry,
   subject,
 }: ProjectsWorkItemsLoadNoticeProps) {
-  if (!error && failedSections.length === 0) return null;
+  if (!error && failedSections.length === 0) {
+    return null;
+  }
 
   const detailSubject =
     subject === "pull requests"

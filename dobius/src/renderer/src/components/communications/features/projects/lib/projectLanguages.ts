@@ -36,7 +36,7 @@ export function languageForPath(path: string): string | undefined {
 /** Top-5 languages (label + file count) from a language tally. */
 export function topLanguagesFromCounts(
   counts: Record<string, number>,
-): Array<[string, number]> {
+): [string, number][] {
   return Object.entries(counts)
     .sort(
       (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),

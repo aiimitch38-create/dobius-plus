@@ -65,13 +65,12 @@ const cardVariants = cva("text-card-foreground", {
   },
 });
 
-export interface CardProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof cardVariants> {
-  asChild?: boolean;
-  textureSize?: CardTextureSize;
-  textureTone?: CardTextureTone;
-}
+export type CardProps = React.HTMLAttributes<HTMLDivElement> &
+  VariantProps<typeof cardVariants> & {
+    asChild?: boolean;
+    textureSize?: CardTextureSize;
+    textureTone?: CardTextureTone;
+  };
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
   (

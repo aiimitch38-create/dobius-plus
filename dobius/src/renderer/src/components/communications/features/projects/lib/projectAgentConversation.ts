@@ -25,7 +25,9 @@ export function restoreProjectsAgentConversation<
 }): { channel: Channel; agent: Agent; visibleAfter: number } | null {
   // A zero cutoff would render the DM's full history; only pointers
   // anchored to a concrete Projects prompt are restorable.
-  if (!stored || stored.visibleAfter <= 0) return null;
+  if (!stored || stored.visibleAfter <= 0) {
+    return null;
+  }
   const channel = channels.find(
     (candidate) => candidate.id === stored.channelId,
   );
@@ -33,7 +35,9 @@ export function restoreProjectsAgentConversation<
   const agent = candidates.find(
     (candidate) => candidate.pubkey === agentPubkey,
   );
-  if (!channel || !agent) return null;
+  if (!channel || !agent) {
+    return null;
+  }
   return { agent, channel, visibleAfter: stored.visibleAfter };
 }
 

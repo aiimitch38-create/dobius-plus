@@ -317,7 +317,7 @@ test("no-tearing: all three decisions agree when fed one shared snapshot", () =>
 
   assert.equal(link.index, snapshot.length - 1);
   assert.equal(coveredCount, snapshot.length);
-  assert.equal(latestKey, snapshot[snapshot.length - 1].renderKey);
+  assert.equal(latestKey, snapshot.at(-1).renderKey);
 });
 
 test("no-tearing: stale snapshot keeps all three decisions internally consistent", () => {

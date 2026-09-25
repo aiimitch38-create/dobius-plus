@@ -47,7 +47,9 @@ export function useComposerCustomEmoji(customEmoji: CustomEmoji[] | undefined) {
       let tr = state.tr;
       let changed = false;
       state.doc.descendants((node, pos) => {
-        if (node.type.name !== CUSTOM_EMOJI_NODE_NAME) return;
+        if (node.type.name !== CUSTOM_EMOJI_NODE_NAME) {
+          return;
+        }
         const shortcode = String(node.attrs.shortcode ?? "").toLowerCase();
         const nextSrc =
           urlByShortcode.get(shortcode) ?? String(node.attrs.src ?? "");

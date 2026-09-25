@@ -10,7 +10,9 @@ import { buildKnownShortcodeAlternation } from "./customEmojiNode.ts";
 
 function ruleRegex(shortcodes) {
   const alt = buildKnownShortcodeAlternation(shortcodes);
-  if (!alt) return null;
+  if (!alt) {
+    return null;
+  }
   return new RegExp(`(:(?:${alt}):)$`, "i");
 }
 

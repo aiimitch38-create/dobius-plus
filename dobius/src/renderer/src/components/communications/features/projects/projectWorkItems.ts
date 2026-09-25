@@ -33,11 +33,11 @@ export type ProjectWorkItemSection =
 /** Aggregate work items plus any optional event groups that failed to load. */
 export type ProjectsWorkItemsResult<TProject extends ProjectReference> = {
   issues: {
-    items: Array<{ project: TProject; issue: ProjectIssue }>;
+    items: { project: TProject; issue: ProjectIssue }[];
     failedSections: ProjectWorkItemSection[];
   };
   pullRequests: {
-    items: Array<{ project: TProject; pullRequest: ProjectPullRequest }>;
+    items: { project: TProject; pullRequest: ProjectPullRequest }[];
     failedSections: ProjectWorkItemSection[];
   };
 };
@@ -46,7 +46,9 @@ function groupByRepoAddress(events: RelayEvent[]): Map<string, RelayEvent[]> {
   const grouped = new Map<string, RelayEvent[]>();
   for (const event of events) {
     const repoAddress = getTag(event, "a");
-    if (!repoAddress) continue;
+    if (!repoAddress) {
+      continue;
+    }
     const projectEvents = grouped.get(repoAddress) ?? [];
     projectEvents.push(event);
     grouped.set(repoAddress, projectEvents);

@@ -106,7 +106,9 @@ export function useInboxSelectionAnchor({
       // Commit once per anchor — don't overwrite a latch that is already for
       // this anchor so live feed updates don't retrigger unnecessary state.
       setLatchedContextItem((prev) => {
-        if (prev?.eventId === selectedEventId) return prev;
+        if (prev?.eventId === selectedEventId) {
+          return prev;
+        }
         return { eventId: selectedEventId, feedItem: match };
       });
     } else if (
@@ -233,8 +235,12 @@ export function useInboxSelectionAnchor({
       return;
     }
 
-    if (hasMatchingLatch) return;
-    if (hasMatchingCold) return;
+    if (hasMatchingLatch) {
+      return;
+    }
+    if (hasMatchingCold) {
+      return;
+    }
 
     // NOTE: do NOT clear coldRecoveredItem when coldMatchesAnchor && !coldChannelValid.
     // The candidate is retained; hasMatchingCold gates its active projection via
@@ -270,12 +276,16 @@ export function useInboxSelectionAnchor({
 
     void getEventById(fetchAnchor).then(
       (event) => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) {
+          return;
+        }
         // Anchor superseded — remove inflight status so a back-navigation can
         // restart the fetch rather than being silently deduped.
         if (latestSelectedEventIdRef.current !== fetchAnchor) {
           setColdAttempts((prev) => {
-            if (prev.get(fetchAnchor) !== "inflight") return prev;
+            if (prev.get(fetchAnchor) !== "inflight") {
+              return prev;
+            }
             const next = new Map(prev);
             next.delete(fetchAnchor);
             return next;
@@ -322,10 +332,14 @@ export function useInboxSelectionAnchor({
         });
       },
       () => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) {
+          return;
+        }
         // Network/not-found — terminal failure, never retry.
         setColdAttempts((prev) => {
-          if (prev.get(fetchAnchor) !== "inflight") return prev;
+          if (prev.get(fetchAnchor) !== "inflight") {
+            return prev;
+          }
           const next = new Map(prev);
           next.set(fetchAnchor, "terminal-failed");
           return next;

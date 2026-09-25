@@ -126,7 +126,9 @@ export function TeamDialog({
   }
 
   const removedPersonaIds = React.useMemo(() => {
-    if (!isEditMode || !initialValues || !("id" in initialValues)) return [];
+    if (!isEditMode || !initialValues || !("id" in initialValues)) {
+      return [];
+    }
     const currentSet = new Set(selectedPersonaIds);
     return initialValues.personaIds.filter(
       (id) => !currentSet.has(id) && personas.some((p) => p.id === id),
@@ -166,7 +168,9 @@ export function TeamDialog({
   }
 
   async function handleSubmit() {
-    if (!initialValues) return;
+    if (!initialValues) {
+      return;
+    }
 
     if (removedPersonaIds.length > 0 && isEditMode && onDeleteRemovedPersonas) {
       setConfirmRemovalOpen(true);
@@ -336,7 +340,7 @@ export function TeamDialog({
               <div className="space-y-2">
                 <span className="text-sm font-medium">Accounts</span>
                 <p className="text-xs text-muted-foreground">
-                  Choose which of your connected Dobius accounts this team's
+                  Choose which of your connected Dobius accounts this team&apos;s
                   agents run under.
                 </p>
                 {accountsQuery.isPending ? (

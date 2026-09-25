@@ -6,7 +6,7 @@ export function useOptimisticProjectBranches(input: {
   defaultBranch: string | null;
   observedBranches: ProjectBranch[];
   projectId: string;
-  referencedBranches: Array<string | null>;
+  referencedBranches: (string | null)[];
 }) {
   const [state, setState] = React.useState<{
     projectId: string;
@@ -44,9 +44,13 @@ export function useOptimisticProjectBranches(input: {
     const observedNames = new Set(
       input.observedBranches.map((branch) => branch.name),
     );
-    if (observedNames.size === 0) return;
+    if (observedNames.size === 0) {
+      return;
+    }
     setState((current) => {
-      if (current.projectId !== input.projectId) return current;
+      if (current.projectId !== input.projectId) {
+        return current;
+      }
       const pending = current.branches.filter(
         (branch) => !observedNames.has(branch.name),
       );
@@ -72,7 +76,9 @@ export function useOptimisticProjectBranches(input: {
   const forgetBranch = React.useCallback(
     (branchName: string) => {
       setState((current) => {
-        if (current.projectId !== input.projectId) return current;
+        if (current.projectId !== input.projectId) {
+          return current;
+        }
         return {
           ...current,
           branches: current.branches.filter(

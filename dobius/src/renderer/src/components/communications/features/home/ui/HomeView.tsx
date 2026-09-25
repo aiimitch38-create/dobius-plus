@@ -269,14 +269,18 @@ export function HomeView({
     return threadContextFeedItem?.channelId ?? null;
   }, [threadContextFeedItem]);
   const selectedChannel = React.useMemo(() => {
-    if (!selectedChannelIdCandidate || !channels) return null;
+    if (!selectedChannelIdCandidate || !channels) {
+      return null;
+    }
     return (
       channels.find((channel) => channel.id === selectedChannelIdCandidate) ??
       null
     );
   }, [channels, selectedChannelIdCandidate]);
   const managedChannel = React.useMemo(() => {
-    if (!managedChannelId || !channels) return null;
+    if (!managedChannelId || !channels) {
+      return null;
+    }
     return channels.find((channel) => channel.id === managedChannelId) ?? null;
   }, [channels, managedChannelId]);
   const isChannelManagementOpen = managedChannel !== null;
@@ -430,9 +434,13 @@ export function HomeView({
   // visible. The filter handler selects the next valid row in the same update,
   // so the detail pane never renders a stale conversation between states.
   const selectedItem = React.useMemo(() => {
-    if (!selectedEventId) return null;
+    if (!selectedEventId) {
+      return null;
+    }
     const fromFiltered = findInboxItemByEventId(filteredItems, selectedEventId);
-    if (fromFiltered) return fromFiltered;
+    if (fromFiltered) {
+      return fromFiltered;
+    }
     if (selectedConversationId) {
       return (
         filteredItems.find(
@@ -443,7 +451,9 @@ export function HomeView({
     return null;
   }, [filteredItems, selectedConversationId, selectedEventId]);
   const unreadBoundaryEventId = React.useMemo(() => {
-    if (!selectedItem) return null;
+    if (!selectedItem) {
+      return null;
+    }
     if (unreadBoundary?.conversationId === selectedItem.conversationId) {
       return unreadBoundary.eventId;
     }
@@ -462,7 +472,9 @@ export function HomeView({
     selectedItem,
   });
   const selectedItemReplies = React.useMemo<InboxReply[]>(() => {
-    if (!selectedItem) return [];
+    if (!selectedItem) {
+      return [];
+    }
     const localReplies =
       localRepliesByItemId[selectedItem.conversationId] ?? [];
     const contextIds = new Set(contextMessages.map((message) => message.id));

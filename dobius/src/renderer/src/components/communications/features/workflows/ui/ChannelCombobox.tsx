@@ -31,7 +31,9 @@ export function ChannelCombobox({
   const selected = channels.find((c) => c.id === value);
 
   const filtered = React.useMemo(() => {
-    if (!query) return channels;
+    if (!query) {
+      return channels;
+    }
     const q = query.toLowerCase();
     return channels.filter(
       (c) =>
@@ -55,7 +57,9 @@ export function ChannelCombobox({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (filtered.length === 0) return;
+    if (filtered.length === 0) {
+      return;
+    }
 
     switch (e.key) {
       case "ArrowDown": {
@@ -71,7 +75,9 @@ export function ChannelCombobox({
       case "Enter": {
         e.preventDefault();
         const target = filtered[highlightedIndex];
-        if (target) selectChannel(target.id);
+        if (target) {
+          selectChannel(target.id);
+        }
         break;
       }
       case "Escape": {

@@ -40,7 +40,9 @@ import {
 import { OnboardingFooter, OnboardingFooterProvider } from "./OnboardingFooter";
 
 function isRelayMembershipDeniedError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
+  if (!(error instanceof Error)) {
+    return false;
+  }
   return (
     error.message.includes("You must be a relay member") ||
     error.message.includes("relay_membership_required") ||
@@ -181,7 +183,9 @@ export function CommunityOnboardingFlow({
     transaction?.stage === "finalizing" ||
     transaction?.stage === "entering";
   React.useEffect(() => {
-    if (!isTeamIntroVisible) return;
+    if (!isTeamIntroVisible) {
+      return;
+    }
     void listPersonas()
       .then((personas) =>
         setStarterPersonas(
@@ -199,7 +203,9 @@ export function CommunityOnboardingFlow({
   useClaimInvite();
 
   React.useEffect(() => {
-    if (transaction?.stage === "connecting") onConnect();
+    if (transaction?.stage === "connecting") {
+      onConnect();
+    }
   }, [onConnect, transaction?.stage]);
 
   // "Entering" curtain: the app is mounting on the Welcome route underneath.
@@ -207,11 +213,15 @@ export function CommunityOnboardingFlow({
   // safety timeout so a slow load can never strand the user on this screen.
   const isEnteringStage = transaction?.stage === "entering";
   React.useEffect(() => {
-    if (!isEnteringStage) return;
+    if (!isEnteringStage) {
+      return;
+    }
 
     let fadeTimer: number | null = null;
     const beginFade = () => {
-      if (fadeTimer !== null) return;
+      if (fadeTimer !== null) {
+        return;
+      }
       setIsCurtainFading(true);
       fadeTimer = window.setTimeout(() => {
         clear();
@@ -226,7 +236,9 @@ export function CommunityOnboardingFlow({
     return () => {
       window.removeEventListener(WELCOME_SURFACE_READY_EVENT, beginFade);
       window.clearTimeout(safetyTimer);
-      if (fadeTimer !== null) window.clearTimeout(fadeTimer);
+      if (fadeTimer !== null) {
+        window.clearTimeout(fadeTimer);
+      }
     };
   }, [clear, isEnteringStage]);
 
@@ -237,13 +249,17 @@ export function CommunityOnboardingFlow({
     });
   const relayUrl = transaction?.relayUrl;
   const finish = React.useCallback(async () => {
-    if (!relayUrl) return;
+    if (!relayUrl) {
+      return;
+    }
     const identity = await getIdentity();
     markCommunityOnboardingComplete(identity.pubkey, relayUrl);
     clear();
   }, [clear, relayUrl]);
   const finalize = React.useCallback(async () => {
-    if (isPending || !relayUrl) return;
+    if (isPending || !relayUrl) {
+      return;
+    }
     setIsPending(true);
     update({ stage: "finalizing", error: undefined });
     try {
@@ -253,7 +269,9 @@ export function CommunityOnboardingFlow({
         pubkey: identity.pubkey,
         communityScope: relayUrl,
       });
-      if (!result.ok) throw new Error(result.reason);
+      if (!result.ok) {
+        throw new Error(result.reason);
+      }
       if (result.focusChannelId) {
         // Direct entry: point the router at the Welcome channel *before* the
         // app mounts, so it never lands on Home first. Consume the pending
@@ -278,15 +296,21 @@ export function CommunityOnboardingFlow({
   }, [finish, isPending, queryClient, relayUrl, update]);
 
   const backToProfile = React.useCallback(() => {
-    if (isPending) return;
+    if (isPending) {
+      return;
+    }
     setStarterChannelFailureCount(0);
     update({ stage: "profile", error: undefined });
   }, [isPending, update]);
 
   const isProfileStage = transaction?.stage === "profile";
   React.useEffect(() => {
-    if (!isProfileStage || !transaction) return;
-    if (checkedProfileTransactionRef.current === transaction.id) return;
+    if (!isProfileStage || !transaction) {
+      return;
+    }
+    if (checkedProfileTransactionRef.current === transaction.id) {
+      return;
+    }
 
     checkedProfileTransactionRef.current = transaction.id;
     void getProfile()
@@ -310,7 +334,9 @@ export function CommunityOnboardingFlow({
   // the user navigated Back). Only seeds fields that are still empty so that
   // any user edits are preserved.
   React.useEffect(() => {
-    if (!isProfileStage) return;
+    if (!isProfileStage) {
+      return;
+    }
     void getProfile()
       .then((profile) => {
         if (profile.displayName) {
@@ -342,7 +368,9 @@ export function CommunityOnboardingFlow({
     }
 
     const content = avatarEditorContentRef.current;
-    if (!content) return;
+    if (!content) {
+      return;
+    }
 
     const updateHeight = () => {
       setAvatarEditorDialogHeight(content.getBoundingClientRect().height + 64);
@@ -354,7 +382,9 @@ export function CommunityOnboardingFlow({
     return () => resizeObserver.disconnect();
   }, [isAvatarEditorOpen]);
 
-  if (!transaction) return null;
+  if (!transaction) {
+    return null;
+  }
 
   if (isMembershipDenied) {
     return (
@@ -396,7 +426,9 @@ export function CommunityOnboardingFlow({
   }
 
   const saveProfile = async () => {
-    if (!displayName.trim()) return;
+    if (!displayName.trim()) {
+      return;
+    }
     setIsPending(true);
     try {
       const candidateAvatarUrl = avatarUrl.trim();

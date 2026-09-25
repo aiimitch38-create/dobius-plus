@@ -7,11 +7,15 @@ export function useFocusDrawerPresence(open: boolean, onClose: () => void) {
   const [present, setPresent] = React.useState(false);
 
   React.useEffect(() => {
-    if (open) setPresent(true);
+    if (open) {
+      setPresent(true);
+    }
   }, [open]);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     return subscribeToFocusedThreadCloseRequest(onClose);
   }, [onClose, open]);
 

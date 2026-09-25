@@ -41,7 +41,9 @@ type DefaultConfigStepProps = {
 };
 
 function formatHarnessLabel(runtime: AcpRuntimeCatalogEntry | undefined) {
-  if (!runtime) return "Select a harness";
+  if (!runtime) {
+    return "Select a harness";
+  }
   return runtime.id === "buzz-agent" ? "Dobius" : runtime.label;
 }
 
@@ -79,7 +81,9 @@ function AgentDefaultsSection({
         getBakedBuildEnv(),
       ]);
 
-      if (unmounted) return;
+      if (unmounted) {
+        return;
+      }
 
       if (configResult.status === "fulfilled") {
         setConfig(configResult.value);
@@ -100,10 +104,14 @@ function AgentDefaultsSection({
       // counts); the coalescer round-trips the persisted config only.
       async (next) => (await setGlobalAgentConfig(next)).config,
       (saving) => {
-        if (!unmounted) setIsSaving(saving);
+        if (!unmounted) {
+          setIsSaving(saving);
+        }
       },
       (saved) => {
-        if (!unmounted) setConfig(saved);
+        if (!unmounted) {
+          setConfig(saved);
+        }
       },
     );
     coalescerRef.current = coalescer;
@@ -172,8 +180,12 @@ function AgentDefaultsSection({
   );
 
   React.useEffect(() => {
-    if (configSurfaceLoading || selectedRuntimeId) return;
-    if (readyRuntimes.length !== 1) return;
+    if (configSurfaceLoading || selectedRuntimeId) {
+      return;
+    }
+    if (readyRuntimes.length !== 1) {
+      return;
+    }
     handleHarnessChange(readyRuntimes[0].id);
   }, [
     configSurfaceLoading,
@@ -211,7 +223,7 @@ function AgentDefaultsSection({
         </div>
       ) : configSurfaceError ? (
         <p className="py-4 text-center text-sm text-destructive">
-          Couldn't load harness settings. Go back and try again.
+          Couldn&apos;t load harness settings. Go back and try again.
         </p>
       ) : (
         <div className="space-y-7">

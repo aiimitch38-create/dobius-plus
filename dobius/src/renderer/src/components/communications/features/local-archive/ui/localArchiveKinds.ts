@@ -16,14 +16,14 @@ export type KindGroup = {
   /** Group label shown as a section header. */
   label: string;
   /** Individual kinds in this group, each with a human-readable name. */
-  items: ReadonlyArray<{ kind: number; label: string }>;
+  items: readonly { kind: number; label: string }[];
 };
 
 /**
  * Ordered list of kind groups presented in the Step 2 checklist.
  * Every item derives its kind value from a named constant in kinds.ts.
  */
-export const KIND_GROUPS: ReadonlyArray<KindGroup> = [
+export const KIND_GROUPS: readonly KindGroup[] = [
   {
     label: "Messages & posts",
     items: [
@@ -152,7 +152,7 @@ export function parseCustomKinds(raw: string): ParsedCustomKinds {
  */
 export function buildFinalKinds(
   checkedKinds: ReadonlySet<number>,
-  customKinds: ReadonlyArray<number>,
+  customKinds: readonly number[],
 ): number[] {
   const merged = new Set<number>([...checkedKinds, ...customKinds]);
   return [...merged].sort((a, b) => a - b);
@@ -236,9 +236,11 @@ export function buildSubscriptionRequest(
   source: "channel_h" | "owner_p",
   scopeValue: string,
   checkedKinds: ReadonlySet<number>,
-  customKinds: ReadonlyArray<number>,
+  customKinds: readonly number[],
 ): SubscriptionRequest | null {
-  if (!scopeValue) return null;
+  if (!scopeValue) {
+    return null;
+  }
   if (source === "owner_p") {
     return {
       scopeType: "owner_p",
@@ -247,6 +249,8 @@ export function buildSubscriptionRequest(
     };
   }
   const kinds = buildFinalKinds(checkedKinds, customKinds);
-  if (kinds.length === 0) return null;
+  if (kinds.length === 0) {
+    return null;
+  }
   return { scopeType: "channel_h", scopeValue, kinds };
 }

@@ -33,7 +33,9 @@ type ForumViewProps = {
 };
 
 function canDelete(postPubkey: string, currentPubkey?: string): boolean {
-  if (!currentPubkey) return false;
+  if (!currentPubkey) {
+    return false;
+  }
   // Author can always delete their own posts. Admin check would need
   // channel member role data — for now, author-only is sufficient.
   return postPubkey.toLowerCase() === currentPubkey.toLowerCase();

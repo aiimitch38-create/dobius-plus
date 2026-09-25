@@ -35,7 +35,9 @@ export function WhereToRunSection({
     setProbeError(null);
     void probeBackendProvider(selectedBackendProvider.binaryPath)
       .then((result) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         const defaults: Record<string, string> = {};
         const properties =
           (result.config_schema as Record<string, unknown> | undefined)
@@ -44,8 +46,9 @@ export function WhereToRunSection({
           string,
           Record<string, unknown>,
         ][]) {
-          if (property.default != null)
+          if (property.default != null) {
             defaults[key] = String(property.default);
+          }
         }
         onDraftChange({
           ...draft,
@@ -63,7 +66,9 @@ export function WhereToRunSection({
     };
   }, [draft, isProviderMode, onDraftChange, selectedBackendProvider]);
 
-  if (backendProviders.length === 0) return null;
+  if (backendProviders.length === 0) {
+    return null;
+  }
 
   return (
     <div className="space-y-4">

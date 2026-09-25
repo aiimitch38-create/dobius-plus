@@ -267,7 +267,9 @@ export function WorkflowsView({
       <WorkflowDeleteDialog
         onConfirm={handleConfirmDelete}
         onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
+          if (!open) {
+            setDeleteTarget(null);
+          }
         }}
         open={deleteTarget !== null}
         workflow={deleteTarget}

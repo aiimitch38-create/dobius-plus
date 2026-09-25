@@ -17,7 +17,9 @@ const RETRY_MAX_DELAY_MS = 30_000;
 type LiveSubscription = Extract<RelaySubscription, { mode: "live" }>;
 
 export function clearClosedRetry(subscription: LiveSubscription) {
-  if (subscription.closedRetryTimeout === undefined) return;
+  if (subscription.closedRetryTimeout === undefined) {
+    return;
+  }
   window.clearTimeout(subscription.closedRetryTimeout);
   subscription.closedRetryTimeout = undefined;
 }
@@ -34,7 +36,9 @@ export function handleRelayClosed({
   sendReq: (subId: string, filter: RelaySubscriptionFilter) => Promise<void>;
 }) {
   const subscription = subscriptions.get(subId);
-  if (!subscription) return;
+  if (!subscription) {
+    return;
+  }
   if (subscription.mode !== "live") {
     // Classify before rejecting so a `rate-limited:` history CLOSED arms the
     // gate for concurrent ops. A history sub can't be retried (the caller holds
@@ -85,7 +89,9 @@ function recoverLiveSubscriptionFromClosed({
     return;
   }
 
-  if (subscription.closedRetryTimeout !== undefined) return;
+  if (subscription.closedRetryTimeout !== undefined) {
+    return;
+  }
 
   const attempt = subscription.closedRetryAttempt ?? 0;
   const backoffMs = Math.min(
@@ -110,9 +116,13 @@ function recoverLiveSubscriptionFromClosed({
   subscription.closedRetryAttempt = attempt + 1;
   subscription.closedRetryTimeout = window.setTimeout(() => {
     subscription.closedRetryTimeout = undefined;
-    if (subscriptions.get(subId) !== subscription) return;
+    if (subscriptions.get(subId) !== subscription) {
+      return;
+    }
     void sendReq(subId, subscription.filter).catch((error) => {
-      if (subscriptions.get(subId) !== subscription) return;
+      if (subscriptions.get(subId) !== subscription) {
+        return;
+      }
       console.error("Failed to restore closed relay subscription", error);
       recoverLiveSubscriptionFromClosed({
         subscriptions,
@@ -155,7 +165,9 @@ export function handleSubscriptionEose({
   closeSubscription: (subId: string) => Promise<void>;
 }) {
   const subscription = subscriptions.get(subId);
-  if (!subscription) return;
+  if (!subscription) {
+    return;
+  }
   if (subscription.mode === "live") {
     subscription.resolveReady?.();
     subscription.resolveReady = undefined;

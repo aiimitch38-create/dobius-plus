@@ -13,6 +13,7 @@ import {
   revealDesktopAppWindow,
   sendDesktopNotification,
 } from "@comms/features/notifications/lib/desktop";
+import type { DesktopNotificationTarget } from "@comms/features/notifications/lib/desktop";
 import {
   formatNotificationTitle,
   truncateNotificationBody,
@@ -21,7 +22,7 @@ import {
   playNotificationSound,
   resolveSlotSound,
 } from "@comms/features/notifications/lib/sound";
-import type { Channel, RelayEvent } from "@comms/shared/api/types";
+import type { Channel, RelayEvent, SearchHit } from "@comms/shared/api/types";
 
 export function useAppShellDesktopNotifications({
   channels,
@@ -35,15 +36,17 @@ export function useAppShellDesktopNotifications({
   goChannel: (channelId: string) => Promise<unknown>;
   goHome: () => Promise<unknown>;
   notificationSettings: NotificationSettings;
-  openSearchHit: (
-    hit: import("@comms/shared/api/types").SearchHit,
-  ) => Promise<unknown>;
+  openSearchHit: (hit: SearchHit) => Promise<unknown>;
   pubkey?: string;
 }) {
   const handleChannelNotification = React.useEffectEvent(
     (_channelId: string, event: RelayEvent) => {
-      if (!shouldBounceForChannelNotification(event.tags)) return;
-      if (!notificationSettings.desktopEnabled) return;
+      if (!shouldBounceForChannelNotification(event.tags)) {
+        return;
+      }
+      if (!notificationSettings.desktopEnabled) {
+        return;
+      }
       void requestDockBounce();
     },
   );
@@ -75,7 +78,9 @@ export function useAppShellDesktopNotifications({
           threadRootId,
         },
       }).then((didSend) => {
-        if (!didSend) return;
+        if (!didSend) {
+          return;
+        }
         playNotificationSound(resolveSlotSound(notificationSettings, "dm"));
         void requestDockBounce();
       });
@@ -120,7 +125,9 @@ export function useAppShellDesktopNotifications({
           threadRootId,
         },
       }).then((didSend) => {
-        if (!didSend) return;
+        if (!didSend) {
+          return;
+        }
         playNotificationSound(
           resolveSlotSound(notificationSettings, "thread_reply"),
         );
@@ -130,9 +137,7 @@ export function useAppShellDesktopNotifications({
   );
 
   const handleDesktopNotificationAction = React.useEffectEvent(
-    async (
-      target: import("@comms/features/notifications/lib/desktop").DesktopNotificationTarget,
-    ) => {
+    async (target: DesktopNotificationTarget) => {
       await revealDesktopAppWindow();
 
       if (!target.channelId) {

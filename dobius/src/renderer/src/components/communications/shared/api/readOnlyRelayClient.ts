@@ -55,8 +55,12 @@ export class ReadOnlyRelayClient {
   }
 
   async connect(): Promise<void> {
-    if (this.wsId !== null) return;
-    if (this.connectPromise) return this.connectPromise;
+    if (this.wsId !== null) {
+      return;
+    }
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
 
     const promise = this.openConnection();
     this.connectPromise = promise;
@@ -197,7 +201,9 @@ export class ReadOnlyRelayClient {
     message: unknown,
     generation: number,
   ): Promise<void> {
-    if (generation !== this.generation) return;
+    if (generation !== this.generation) {
+      return;
+    }
 
     if (
       typeof message === "object" &&
@@ -210,7 +216,9 @@ export class ReadOnlyRelayClient {
     }
 
     const payload = getTextPayload(message);
-    if (!payload) return;
+    if (!payload) {
+      return;
+    }
 
     let data: unknown;
     try {
@@ -218,7 +226,9 @@ export class ReadOnlyRelayClient {
     } catch {
       return;
     }
-    if (!Array.isArray(data) || data.length === 0) return;
+    if (!Array.isArray(data) || data.length === 0) {
+      return;
+    }
 
     const [type, ...rest] = data;
     if (type === "AUTH" && typeof rest[0] === "string") {
@@ -255,7 +265,9 @@ export class ReadOnlyRelayClient {
       relayUrl: this.relayUrl,
     });
 
-    if (generation !== this.generation || !this.authRequest) return;
+    if (generation !== this.generation || !this.authRequest) {
+      return;
+    }
     this.authRequest.pendingEventId = event.id;
     await this.sendRaw(["AUTH", event]);
   }
@@ -298,7 +310,9 @@ export class ReadOnlyRelayClient {
 
   private handleEose(subId: string): void {
     const pending = this.histories.get(subId);
-    if (!pending) return;
+    if (!pending) {
+      return;
+    }
 
     window.clearTimeout(pending.timeout);
     this.histories.delete(subId);

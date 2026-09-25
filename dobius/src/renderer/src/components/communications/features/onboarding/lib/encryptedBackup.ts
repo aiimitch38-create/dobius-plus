@@ -52,7 +52,9 @@ export function encryptedBackupReducer(
         createError: null,
       };
     case "encrypt-succeeded":
-      if (event.requestId !== state.requestId) return state;
+      if (event.requestId !== state.requestId) {
+        return state;
+      }
       if (state.downloadPending) {
         return {
           ...state,
@@ -70,7 +72,9 @@ export function encryptedBackupReducer(
         encrypted: event.ncryptsec,
       };
     case "encrypt-failed":
-      if (event.requestId !== state.requestId) return state;
+      if (event.requestId !== state.requestId) {
+        return state;
+      }
       return {
         ...state,
         passphrase: "",
@@ -83,8 +87,9 @@ export function encryptedBackupReducer(
         state.ncryptsec ||
         state.downloadPending ||
         (!state.encrypted && !effectivePassphrase(state))
-      )
+      ) {
         return state;
+      }
       return state.encrypted
         ? {
             ...state,
@@ -104,7 +109,9 @@ export function encryptedBackupReducer(
 }
 
 export function passphraseIssue(passphrase: string): string | null {
-  if (passphrase.length === 0) return null;
+  if (passphrase.length === 0) {
+    return null;
+  }
   return [...passphrase].length < MIN_PASSPHRASE_LEN
     ? `Use at least ${MIN_PASSPHRASE_LEN} characters.`
     : null;
@@ -119,15 +126,18 @@ export function effectivePassphrase(
 export function pendingEncryptPassphrase(
   state: EncryptedBackupState,
 ): string | null {
-  if (state.savedPassword || state.encrypted || state.requestId !== null)
+  if (state.savedPassword || state.encrypted || state.requestId !== null) {
     return null;
+  }
   return effectivePassphrase(state);
 }
 export function isEncrypting(state: EncryptedBackupState): boolean {
   return state.requestId !== null;
 }
 export function downloadDisabled(state: EncryptedBackupState): boolean {
-  if (state.savedPassword && state.ncryptsec) return false;
+  if (state.savedPassword && state.ncryptsec) {
+    return false;
+  }
   return (
     state.downloadPending ||
     (!state.encrypted && effectivePassphrase(state) === null)

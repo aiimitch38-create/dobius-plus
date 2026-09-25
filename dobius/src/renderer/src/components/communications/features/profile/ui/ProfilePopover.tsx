@@ -18,7 +18,7 @@ import type { PresenceStatus } from "@comms/shared/api/types";
 import { cn } from "@comms/shared/lib/cn";
 import { isMacPlatform } from "@comms/shared/lib/platform";
 
-interface ProfilePopoverProps {
+type ProfilePopoverProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   displayName: string;
@@ -41,7 +41,7 @@ interface ProfilePopoverProps {
   // Optional slot rendered before the profile actions. Used by the sidebar to
   // surface active-community actions inside the profile menu.
   communitySwitcherSlot?: React.ReactNode;
-}
+};
 
 const MENU_ITEM_CLASS =
   "flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-popover-foreground outline-hidden transition-colors hover:bg-muted/50 focus:outline-none focus-visible:bg-muted/50 focus-visible:outline-none";

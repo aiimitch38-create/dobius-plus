@@ -117,7 +117,9 @@ export function PullRequestReviewCard({
       fallbackErrorMessage: string,
       content?: string,
     ) => {
-      if (reviewDecisionInFlightRef.current) return;
+      if (reviewDecisionInFlightRef.current) {
+        return;
+      }
       reviewDecisionInFlightRef.current = true;
       const createdAt = Math.max(
         nextProjectPullRequestReviewCreatedAt(
@@ -173,7 +175,9 @@ export function PullRequestReviewCard({
     canClose ||
     canReopen;
 
-  if (!hasAvailableAction) return null;
+  if (!hasAvailableAction) {
+    return null;
+  }
 
   return (
     <>
@@ -280,9 +284,13 @@ export function PullRequestReviewCard({
       </div>
       <Dialog
         onOpenChange={(open) => {
-          if (!open && isApproving) return;
+          if (!open && isApproving) {
+            return;
+          }
           setApproveDialogOpen(open);
-          if (!open) setApprovalSummary("");
+          if (!open) {
+            setApprovalSummary("");
+          }
         }}
         open={approveDialogOpen}
       >

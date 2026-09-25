@@ -116,7 +116,9 @@ export function joinPolicyDocumentUrl(
 export function isJoinPolicyDiscoveryCandidate(relayWsUrl: string): boolean {
   try {
     const url = new URL(relayWsUrl);
-    if (url.protocol !== "ws:" && url.protocol !== "wss:") return false;
+    if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+      return false;
+    }
     return (
       url.hostname === "localhost" ||
       url.hostname === "127.0.0.1" ||
@@ -147,8 +149,12 @@ export async function getJoinPolicy(
     const base = relayHttpFromWs(relayWsUrl);
     const response = await fetch(`${base.replace(/\/+$/, "")}/api/join-policy`);
     // Relays predating join-policy support have no configured policy.
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
     raw =
       (
         (await response.json()) as {
@@ -186,7 +192,9 @@ export async function acceptJoinPolicy(
       }),
     },
   );
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
   return ((await response.json()) as { receipt: string }).receipt;
 }
 
@@ -197,8 +205,12 @@ export async function mintInvite(options?: {
 }): Promise<MintedInvite> {
   const base = await getRelayHttpUrl();
   const payload: Record<string, unknown> = {};
-  if (options?.ttlSecs != null) payload.ttl_secs = options.ttlSecs;
-  if (options?.maxUses != null) payload.max_uses = options.maxUses;
+  if (options?.ttlSecs != null) {
+    payload.ttl_secs = options.ttlSecs;
+  }
+  if (options?.maxUses != null) {
+    payload.max_uses = options.maxUses;
+  }
   const body = JSON.stringify(payload);
   const raw = await invitePost<{
     code: string;

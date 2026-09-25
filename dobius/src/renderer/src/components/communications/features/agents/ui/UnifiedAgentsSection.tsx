@@ -117,8 +117,11 @@ export function UnifiedAgentsSection(props: UnifiedAgentsSectionProps) {
   function toggle(key: string) {
     setCollapsed((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
       return next;
     });
   }
@@ -430,11 +433,13 @@ function StandaloneAgentCard({
 }
 
 function firstAvatarUrl(
-  ...candidates: Array<string | null | undefined>
+  ...candidates: (string | null | undefined)[]
 ): string | null {
   for (const candidate of candidates) {
     const trimmed = candidate?.trim();
-    if (trimmed) return trimmed;
+    if (trimmed) {
+      return trimmed;
+    }
   }
   return null;
 }

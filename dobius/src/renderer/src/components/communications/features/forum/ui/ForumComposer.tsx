@@ -62,11 +62,15 @@ export function ForumComposer({
   );
 
   const handleFormattingToggle = React.useCallback((pressed: boolean) => {
-    if (pressed) setIsEmojiPickerOpen(false);
+    if (pressed) {
+      setIsEmojiPickerOpen(false);
+    }
     setIsFormattingOpen(pressed);
   }, []);
   const expandCompactComposer = React.useCallback(() => {
-    if (compact) setIsCompactExpanded(true);
+    if (compact) {
+      setIsCompactExpanded(true);
+    }
   }, [compact]);
 
   const mentions = useMentions(channelId, members, profiles);
@@ -173,7 +177,9 @@ export function ForumComposer({
 
   const insertEmoji = React.useCallback(
     (emoji: string) => {
-      if (!richText.editor) return;
+      if (!richText.editor) {
+        return;
+      }
       richText.editor.chain().focus().insertContent(emoji).run();
       setIsEmojiPickerOpen(false);
       mentions.clearMentions();
@@ -183,7 +189,9 @@ export function ForumComposer({
 
   // ── @ mention picker (toolbar button) ───────────────────────────────
   const openMentionPicker = React.useCallback(() => {
-    if (!richText.editor) return;
+    if (!richText.editor) {
+      return;
+    }
     const { text, cursor } = richText.getPlainTextAndCursor();
 
     const beforeCursor = text.slice(0, cursor);
@@ -251,7 +259,9 @@ export function ForumComposer({
       const result = submitter(finalContent, pubkeys, mediaTags);
       const completeSubmission = () => {
         setSubmitMode("primary");
-        if (compact) setIsCompactExpanded(false);
+        if (compact) {
+          setIsCompactExpanded(false);
+        }
       };
 
       // If onSubmit returns a promise, restore draft on failure.
@@ -261,7 +271,9 @@ export function ForumComposer({
           contentRef.current = savedContent;
           richText.setContent(savedContent);
           media.setPendingImeta(savedImeta);
-          if (compact) setIsCompactExpanded(true);
+          if (compact) {
+            setIsCompactExpanded(true);
+          }
         });
       } else {
         completeSubmission();
@@ -320,7 +332,6 @@ export function ForumComposer({
         if (!linkEditor.focusCardFirstControl()) {
           requestAnimationFrame(linkEditor.focusCardFirstControl);
         }
-        return;
       }
     },
     [
@@ -338,7 +349,9 @@ export function ForumComposer({
   uploadFileRef.current = media.uploadFile;
 
   React.useEffect(() => {
-    if (!richText.editor) return;
+    if (!richText.editor) {
+      return;
+    }
 
     richText.editor.setOptions({
       editorProps: {
@@ -393,7 +406,9 @@ export function ForumComposer({
   const isCompactLayout = compact && !isExpanded;
   const handleFormBlur = React.useCallback(
     (event: React.FocusEvent<HTMLFormElement>) => {
-      if (!compact) return;
+      if (!compact) {
+        return;
+      }
 
       const nextTarget = event.relatedTarget;
       if (
@@ -414,7 +429,9 @@ export function ForumComposer({
         isEmojiPickerOpen ||
         isFormattingOpen;
 
-      if (!hasDraft) setIsCompactExpanded(false);
+      if (!hasDraft) {
+        setIsCompactExpanded(false);
+      }
     },
     [
       compact,
@@ -431,7 +448,9 @@ export function ForumComposer({
     const wasExpanded = wasCompactExpandedRef.current;
     wasCompactExpandedRef.current = isCompactExpanded;
 
-    if (!compact || !isCompactExpanded || wasExpanded) return;
+    if (!compact || !isCompactExpanded || wasExpanded) {
+      return;
+    }
 
     const frame = window.requestAnimationFrame(() => {
       richText.focus();

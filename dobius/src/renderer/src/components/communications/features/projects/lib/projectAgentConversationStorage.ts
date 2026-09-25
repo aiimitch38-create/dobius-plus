@@ -20,12 +20,16 @@ function scopedKey(prefix: string, workspaceId: string) {
 export function readStoredProjectsAgentConversation(
   workspaceId: string | null,
 ): StoredProjectsAgentConversation | null {
-  if (!workspaceId) return null;
+  if (!workspaceId) {
+    return null;
+  }
   try {
     const raw = globalThis.localStorage?.getItem(
       scopedKey(CONVERSATION_STORAGE_PREFIX, workspaceId),
     );
-    if (!raw) return null;
+    if (!raw) {
+      return null;
+    }
     const value = JSON.parse(raw) as Partial<StoredProjectsAgentConversation>;
     if (
       typeof value.agentPubkey !== "string" ||
@@ -55,7 +59,9 @@ export function writeStoredProjectsAgentConversation(
   workspaceId: string | null,
   conversation: StoredProjectsAgentConversation,
 ) {
-  if (!workspaceId) return;
+  if (!workspaceId) {
+    return;
+  }
   try {
     globalThis.localStorage?.setItem(
       scopedKey(CONVERSATION_STORAGE_PREFIX, workspaceId),
@@ -70,7 +76,9 @@ export function writeStoredProjectsAgentConversation(
 export function clearStoredProjectsAgentConversation(
   workspaceId: string | null,
 ) {
-  if (!workspaceId) return;
+  if (!workspaceId) {
+    return;
+  }
   try {
     globalThis.localStorage?.removeItem(
       scopedKey(CONVERSATION_STORAGE_PREFIX, workspaceId),

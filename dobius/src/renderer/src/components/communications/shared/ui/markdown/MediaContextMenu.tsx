@@ -34,7 +34,9 @@ export function useDismissMediaContextMenu(
   onDismiss: () => void,
 ) {
   React.useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
     let attached = false;
     const timer = window.setTimeout(() => {
       attached = true;

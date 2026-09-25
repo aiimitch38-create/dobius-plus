@@ -2,7 +2,9 @@ import type { TaskSource } from './kanban-types'
 
 export function getKanbanIpcSource(): TaskSource | null {
   const api = window.api?.vertexTasks
-  if (!api) return null
+  if (!api) {
+    return null
+  }
   return {
     list: () => api.list(),
     reload: () => api.reload(),

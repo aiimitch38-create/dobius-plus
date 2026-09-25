@@ -78,12 +78,16 @@ function isTimelineWidthClass(
 function parseTimelineSkeletonRows(
   rows: unknown,
 ): TimelineSkeletonRowShape[] | null {
-  if (!Array.isArray(rows)) return null;
+  if (!Array.isArray(rows)) {
+    return null;
+  }
 
   const parsed = rows
     .slice(0, 4)
     .filter((row: unknown): row is TimelineSkeletonRowShape => {
-      if (typeof row !== "object" || row === null) return false;
+      if (typeof row !== "object" || row === null) {
+        return false;
+      }
       const record = row as Record<string, unknown>;
       return (
         typeof record.key === "string" &&
@@ -109,16 +113,24 @@ function readTimelineSkeletonRows(
   channelId?: string | null,
 ): TimelineSkeletonRowShape[] | null {
   const cacheKey = timelineSkeletonCacheKey(channelId);
-  if (!cacheKey || typeof window === "undefined") return null;
+  if (!cacheKey || typeof window === "undefined") {
+    return null;
+  }
 
   try {
     const raw = window.localStorage.getItem(cacheKey);
-    if (!raw) return null;
+    if (!raw) {
+      return null;
+    }
 
     const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== "object" || parsed === null) return null;
+    if (typeof parsed !== "object" || parsed === null) {
+      return null;
+    }
     const payload = parsed as Record<string, unknown>;
-    if (payload.version !== 1) return null;
+    if (payload.version !== 1) {
+      return null;
+    }
 
     return parseTimelineSkeletonRows(payload.rows);
   } catch {
@@ -131,7 +143,9 @@ function writeTimelineSkeletonRows(
   rows: TimelineSkeletonRowShape[],
 ) {
   const cacheKey = timelineSkeletonCacheKey(channelId);
-  if (!cacheKey || rows.length === 0 || typeof window === "undefined") return;
+  if (!cacheKey || rows.length === 0 || typeof window === "undefined") {
+    return;
+  }
 
   const payload: TimelineSkeletonCachePayload = {
     rows: rows.slice(0, 4),
@@ -148,19 +162,35 @@ function writeTimelineSkeletonRows(
 
 function widthClassForText(text: string): TimelineSkeletonWidthClass {
   const length = text.trim().length;
-  if (length >= 18) return "w-32";
-  if (length >= 14) return "w-28";
-  if (length >= 10) return "w-24";
-  if (length >= 7) return "w-20";
+  if (length >= 18) {
+    return "w-32";
+  }
+  if (length >= 14) {
+    return "w-28";
+  }
+  if (length >= 10) {
+    return "w-24";
+  }
+  if (length >= 7) {
+    return "w-20";
+  }
   return "w-16";
 }
 
 function bodyLineWidthsForText(text: string): TimelineSkeletonWidthClass[] {
   const length = text.replace(/\s+/g, " ").trim().length;
-  if (length >= 140) return ["w-full", "w-11/12", "w-2/3"];
-  if (length >= 90) return ["w-full", "w-4/5"];
-  if (length >= 48) return ["w-5/6", "w-2/3"];
-  if (length >= 24) return ["w-2/3"];
+  if (length >= 140) {
+    return ["w-full", "w-11/12", "w-2/3"];
+  }
+  if (length >= 90) {
+    return ["w-full", "w-4/5"];
+  }
+  if (length >= 48) {
+    return ["w-5/6", "w-2/3"];
+  }
+  if (length >= 24) {
+    return ["w-2/3"];
+  }
   return ["w-1/2"];
 }
 
@@ -194,7 +224,9 @@ export function useTimelineSkeletonRows({
   );
 
   React.useEffect(() => {
-    if (isLoading || liveRows.length === 0) return;
+    if (isLoading || liveRows.length === 0) {
+      return;
+    }
     writeTimelineSkeletonRows(channelId, liveRows);
   }, [channelId, isLoading, liveRows]);
 

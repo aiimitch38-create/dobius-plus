@@ -82,7 +82,9 @@ export function useManagedAgentActions() {
         const activeScore = (s: string) =>
           s === "running" || s === "deployed" ? 1 : 0;
         const diff = activeScore(right.status) - activeScore(left.status);
-        if (diff !== 0) return diff;
+        if (diff !== 0) {
+          return diff;
+        }
         return left.name.localeCompare(right.name);
       }),
     [managedAgentsQuery.data],
@@ -125,8 +127,12 @@ export function useManagedAgentActions() {
     for (const ch of channelsQuery.data ?? []) {
       for (const pk of ch.memberPubkeys) {
         const key = normalizePubkey(pk);
-        if (!normalizedManaged.has(key)) continue;
-        if (!map[key]) map[key] = [];
+        if (!normalizedManaged.has(key)) {
+          continue;
+        }
+        if (!map[key]) {
+          map[key] = [];
+        }
         if (!map[key].some((entry) => entry.id === ch.id)) {
           map[key].push({ id: ch.id, name: ch.name });
         }
@@ -162,7 +168,9 @@ export function useManagedAgentActions() {
     clearFeedback();
     try {
       const agent = managedAgents.find((c) => c.pubkey === pubkey);
-      if (!agent) return;
+      if (!agent) {
+        return;
+      }
       await startManagedAgentWithRules({
         agent,
         startManagedAgent: startMutation.mutateAsync,
@@ -241,7 +249,9 @@ export function useManagedAgentActions() {
     clearFeedback();
     try {
       const agent = managedAgents.find((a) => a.pubkey === pubkey);
-      if (!agent) return;
+      if (!agent) {
+        return;
+      }
       const channels = await getChannelsForAction();
       const result = await stopManagedAgentWithRules({
         agent,
@@ -272,7 +282,9 @@ export function useManagedAgentActions() {
 
   async function removeAgentFromAllChannels(pubkey: string) {
     const channelIds = getAgentChannelIds(pubkey);
-    if (channelIds.length === 0) return;
+    if (channelIds.length === 0) {
+      return;
+    }
     await Promise.allSettled(
       channelIds.map((channelId) => removeChannelMember(channelId, pubkey)),
     );
@@ -282,7 +294,9 @@ export function useManagedAgentActions() {
     clearFeedback();
     try {
       const agent = managedAgents.find((a) => a.pubkey === pubkey);
-      if (!agent) return;
+      if (!agent) {
+        return;
+      }
       const channels = await getChannelsForAction();
       const result = await deleteManagedAgentWithRules({
         agent,
@@ -291,7 +305,9 @@ export function useManagedAgentActions() {
         presenceLookup: managedPresenceQuery.data,
         relayAgents: relayAgentsQuery.data ?? [],
       });
-      if (result.cancelled) return;
+      if (result.cancelled) {
+        return;
+      }
       await removeAgentFromAllChannels(pubkey);
       if (logAgentPubkey === pubkey) {
         setLogAgentPubkey(null);
@@ -351,11 +367,15 @@ export function useManagedAgentActions() {
     failureNoun: string,
     action: (agent: ManagedAgent) => Promise<unknown>,
   ): Promise<boolean> {
-    if (targets.length === 0) return false;
+    if (targets.length === 0) {
+      return false;
+    }
     const confirmed = window.confirm(
       `${confirmLabel} ${targets.length} agent${targets.length === 1 ? "" : "s"}?`,
     );
-    if (!confirmed) return false;
+    if (!confirmed) {
+      return false;
+    }
     clearFeedback();
     const results = await Promise.allSettled(targets.map(action));
     const failures = results.filter((r) => r.status === "rejected");

@@ -48,10 +48,10 @@ type SettingsViewProps = SettingsPanelProps & {
   section: SettingsSection;
 };
 
-const settingsNavGroups: Array<{
+const settingsNavGroups: {
   label: string;
   sections: SettingsSection[];
-}> = [
+}[] = [
   {
     label: "Personal",
     sections: [

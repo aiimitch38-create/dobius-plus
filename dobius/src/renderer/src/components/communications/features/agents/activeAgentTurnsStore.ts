@@ -121,9 +121,13 @@ function notifyListeners() {
  */
 function sampleClockOffset(agentKey: string, timestamp: string): boolean {
   const sample = Date.now() - Date.parse(timestamp);
-  if (Number.isNaN(sample)) return false;
+  if (Number.isNaN(sample)) {
+    return false;
+  }
   const prior = clockOffsetByAgent.get(agentKey);
-  if (prior !== undefined && sample >= prior) return false;
+  if (prior !== undefined && sample >= prior) {
+    return false;
+  }
   clockOffsetByAgent.set(agentKey, sample);
   invalidateCache(agentKey);
   return true;
@@ -173,10 +177,14 @@ function startTurn(
 }
 
 function recordActivity(agentPubkey: string, turnId: string | null): boolean {
-  if (!turnId) return false;
+  if (!turnId) {
+    return false;
+  }
   const key = normalizePubkey(agentPubkey);
   const agentTurns = activeTurnsByAgent.get(key);
-  if (!agentTurns) return false;
+  if (!agentTurns) {
+    return false;
+  }
   const turn = agentTurns.get(turnId);
   if (turn) {
     turn.lastActivityAt = Date.now();
@@ -196,7 +204,9 @@ function recordActivity(agentPubkey: string, turnId: string | null): boolean {
  * timestamp. Returns true on revive.
  */
 function resurrectTurn(agentPubkey: string, event: ObserverEvent): boolean {
-  if (!event.turnId || !event.channelId) return false;
+  if (!event.turnId || !event.channelId) {
+    return false;
+  }
   const key = normalizePubkey(agentPubkey);
   const terminalAt = terminalAtByAgent.get(key)?.get(event.turnId);
   const frameAt = parseTimestamp(event.timestamp);
@@ -219,7 +229,9 @@ function resurrectTurn(agentPubkey: string, event: ObserverEvent): boolean {
 }
 
 function recordTerminal(agentKey: string, turnId: string, terminalAt: number) {
-  if (!Number.isFinite(terminalAt)) return;
+  if (!Number.isFinite(terminalAt)) {
+    return;
+  }
   let terminals = terminalAtByAgent.get(agentKey);
   if (!terminals) {
     terminals = new Map();
@@ -233,7 +245,9 @@ function recordTerminal(agentKey: string, turnId: string, terminalAt: number) {
   // enough; the first key is the oldest survivor.
   if (terminals.size > MAX_TERMINAL_TOMBSTONES) {
     const oldest = terminals.keys().next().value;
-    if (oldest !== undefined) terminals.delete(oldest);
+    if (oldest !== undefined) {
+      terminals.delete(oldest);
+    }
   }
 }
 
@@ -253,7 +267,9 @@ function endTurn(
   }
 
   const agentTurns = activeTurnsByAgent.get(key);
-  if (!agentTurns) return;
+  if (!agentTurns) {
+    return;
+  }
 
   if (turnId) {
     agentTurns.delete(turnId);
@@ -282,7 +298,9 @@ function shouldPausePrune(
 ): boolean {
   let maxActivity = 0;
   for (const turn of agentTurns.values()) {
-    if (turn.lastActivityAt > maxActivity) maxActivity = turn.lastActivityAt;
+    if (turn.lastActivityAt > maxActivity) {
+      maxActivity = turn.lastActivityAt;
+    }
   }
   const silentFor = now - maxActivity;
   return (
@@ -300,7 +318,9 @@ function pruneExpired() {
     // genuinely dead and must still prune at 25s. Conversely, all of this
     // agent's turns going stale together identifies a per-agent frame-stream
     // gap, regardless of whether other agents keep reporting activity.
-    if (shouldPausePrune(agentTurns, now)) continue;
+    if (shouldPausePrune(agentTurns, now)) {
+      continue;
+    }
 
     for (const [turnId, turn] of agentTurns) {
       if (now - turn.lastActivityAt > REMOVE_AFTER_MS) {
@@ -392,7 +412,9 @@ function processEvent(agentPubkey: string, event: ObserverEvent) {
 }
 
 function ensurePruneInterval() {
-  if (pruneInterval) return;
+  if (pruneInterval) {
+    return;
+  }
   pruneInterval = setInterval(pruneExpired, PRUNE_INTERVAL_MS);
 }
 
@@ -425,13 +447,19 @@ export function subscribeActiveAgentTurns(listener: () => void) {
 export function getActiveTurnsForAgent(
   agentPubkey: string | null | undefined,
 ): ActiveTurnSummary[] {
-  if (!agentPubkey) return EMPTY_TURNS;
+  if (!agentPubkey) {
+    return EMPTY_TURNS;
+  }
   const key = normalizePubkey(agentPubkey);
   const agentTurns = activeTurnsByAgent.get(key);
-  if (!agentTurns || agentTurns.size === 0) return EMPTY_TURNS;
+  if (!agentTurns || agentTurns.size === 0) {
+    return EMPTY_TURNS;
+  }
 
   const cached = cachedTurnSummaries.get(key);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   const offset = clockOffsetByAgent.get(key) ?? 0;
 
@@ -464,8 +492,12 @@ const EMPTY_CHANNEL_TURNS: ActiveChannelTurnSummary[] = [];
  * channelId and anchored to the earliest live turn in each channel.
  */
 export function getActiveTurnsByChannel(): ActiveChannelTurnSummary[] {
-  if (cachedChannelTurnSummaries) return cachedChannelTurnSummaries;
-  if (activeTurnsByAgent.size === 0) return EMPTY_CHANNEL_TURNS;
+  if (cachedChannelTurnSummaries) {
+    return cachedChannelTurnSummaries;
+  }
+  if (activeTurnsByAgent.size === 0) {
+    return EMPTY_CHANNEL_TURNS;
+  }
 
   const summaries = new Map<
     string,
@@ -473,7 +505,9 @@ export function getActiveTurnsByChannel(): ActiveChannelTurnSummary[] {
   >();
 
   for (const [agentKey, agentTurns] of activeTurnsByAgent) {
-    if (agentTurns.size === 0) continue;
+    if (agentTurns.size === 0) {
+      continue;
+    }
     const offset = clockOffsetByAgent.get(agentKey) ?? 0;
 
     for (const turn of agentTurns.values()) {
@@ -555,7 +589,9 @@ export function syncActiveAgentTurnsFromObserver(
   agents: readonly { pubkey: string; status: string }[],
 ) {
   for (const agent of agents) {
-    if (agent.status !== "running" && agent.status !== "deployed") continue;
+    if (agent.status !== "running" && agent.status !== "deployed") {
+      continue;
+    }
     const snapshot = getAgentObserverSnapshot(agent.pubkey, true);
     syncAgentTurnsFromEvents(agent.pubkey, snapshot.events);
   }
@@ -596,7 +632,9 @@ export function useActiveAgentTurnsBridge(
 export function clearActiveTurnsForAgent(agentPubkey: string): void {
   const key = normalizePubkey(agentPubkey);
   const agentTurns = activeTurnsByAgent.get(key);
-  if (!agentTurns || agentTurns.size === 0) return;
+  if (!agentTurns || agentTurns.size === 0) {
+    return;
+  }
 
   const agentClockNow = Date.now() - (clockOffsetByAgent.get(key) ?? 0);
   for (const turnId of agentTurns.keys()) {
@@ -696,7 +734,9 @@ export function saveActiveAgentTurnsForCommunity(communityId: string): void {
  */
 export function restoreActiveAgentTurnsForCommunity(communityId: string): void {
   const snap = savedByCommunity.get(communityId);
-  if (!snap) return;
+  if (!snap) {
+    return;
+  }
   savedByCommunity.delete(communityId);
 
   // Clear before writing so this is a replace, not a merge.

@@ -58,9 +58,15 @@ export function todayDateString(): string {
  * no `min`, so a past time would otherwise fire immediately.
  */
 export function parseCustomDateTime(date: string, time: string): number | null {
-  if (!date || !time) return null;
+  if (!date || !time) {
+    return null;
+  }
   const timestamp = Math.floor(new Date(`${date}T${time}`).getTime() / 1_000);
-  if (Number.isNaN(timestamp)) return null;
-  if (timestamp <= nowSeconds()) return null;
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+  if (timestamp <= nowSeconds()) {
+    return null;
+  }
   return timestamp;
 }

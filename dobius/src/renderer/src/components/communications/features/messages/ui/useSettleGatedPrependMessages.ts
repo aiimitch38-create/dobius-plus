@@ -53,12 +53,18 @@ export function selectSettleGatedMessages<T extends { id: string }>({
   admitted: readonly T[];
   next: T[];
 }): SettleGateDecision<T> {
-  if (admitted.length === 0) return { kind: "pass" };
+  if (admitted.length === 0) {
+    return { kind: "pass" };
+  }
   const prependCount = next.findIndex(
     (message) => message.id === admitted[0].id,
   );
-  if (prependCount <= 0) return { kind: "pass" };
-  if (next.length - prependCount !== admitted.length) return { kind: "pass" };
+  if (prependCount <= 0) {
+    return { kind: "pass" };
+  }
+  if (next.length - prependCount !== admitted.length) {
+    return { kind: "pass" };
+  }
   for (let index = 0; index < admitted.length; index += 1) {
     if (next[prependCount + index].id !== admitted[index].id) {
       return { kind: "pass" };
@@ -127,7 +133,9 @@ export function useSettleGatedPrependMessages<T extends { id: string }, M>({
   latestMetaRef.current = meta;
 
   React.useEffect(() => {
-    if (!isHoldingPrepend) return;
+    if (!isHoldingPrepend) {
+      return;
+    }
     const scroller = scrollElementRef.current;
     if (!scroller) {
       // Nothing to observe — never strand the fetched page.
@@ -172,7 +180,9 @@ export function useSettleGatedPrependMessages<T extends { id: string }, M>({
     return () => {
       scroller.removeEventListener("scroll", markMotion);
       scroller.removeEventListener("wheel", markMotion);
-      if (frame !== null) cancelAnimationFrame(frame);
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
     };
   }, [isHoldingPrepend, scrollElementRef]);
 

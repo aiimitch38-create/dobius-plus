@@ -320,7 +320,9 @@ export function AgentsView() {
           isDefinitionPending={personas.isPending}
           mode="definition"
           onOpenChange={(open) => {
-            if (!open) setIsCreateDialogOpen(false);
+            if (!open) {
+              setIsCreateDialogOpen(false);
+            }
           }}
           onSubmitDefinition={personas.handleSubmit}
           runtimes={personas.acpRuntimesQuery.data ?? []}
@@ -353,7 +355,9 @@ export function AgentsView() {
         <SecretRevealDialog
           created={personas.createdAgent}
           onOpenChange={(open) => {
-            if (!open) personas.dismissCreatedAgent();
+            if (!open) {
+              personas.dismissCreatedAgent();
+            }
           }}
         />
       ) : null}
@@ -428,7 +432,9 @@ export function AgentsView() {
           effectiveAvatarUrl={personas.personaToShare.effectiveAvatarUrl}
           onCatalogShareLevelChange={(shareLevel) => {
             const shareTarget = personas.personaToShare;
-            if (!shareTarget) return;
+            if (!shareTarget) {
+              return;
+            }
             void personas.setPersonaCatalogShareLevel(
               shareTarget.persona,
               shareLevel,
@@ -436,7 +442,9 @@ export function AgentsView() {
           }}
           onExport={() => {
             const shareTarget = personas.personaToShare;
-            if (!shareTarget) return;
+            if (!shareTarget) {
+              return;
+            }
             personas.setPersonaToShare(null);
             personas.setPersonaToExportSnapshot(shareTarget);
           }}
@@ -645,7 +653,9 @@ export function AgentsView() {
         type="file"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (!file) return;
+          if (!file) {
+            return;
+          }
           const reader = new FileReader();
           reader.onload = () => {
             const buffer = reader.result as ArrayBuffer;

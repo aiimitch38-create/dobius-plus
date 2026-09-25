@@ -95,7 +95,9 @@ export function ModelPicker({
   // Dobius setting (which is already self-evident from the picker state).
   const modelOriginLabel = React.useMemo(() => {
     const origin = configSurface?.normalized.model?.origin;
-    if (!origin || origin === "buzzExplicit") return null;
+    if (!origin || origin === "buzzExplicit") {
+      return null;
+    }
     const labels: Record<string, string> = {
       acpNativeRead: "from ACP",
       acpConfigOption: "from ACP config",

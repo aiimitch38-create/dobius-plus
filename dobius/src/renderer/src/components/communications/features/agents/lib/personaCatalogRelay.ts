@@ -200,17 +200,27 @@ export function catalogPublicationsFromEvents(
   const publications: PersonaCatalogPublication[] = [];
 
   for (const event of sorted) {
-    if (event.kind !== KIND_PERSONA) continue;
+    if (event.kind !== KIND_PERSONA) {
+      continue;
+    }
     const sourcePersonaId = extractTag(event, "d");
-    if (!sourcePersonaId) continue;
+    if (!sourcePersonaId) {
+      continue;
+    }
     const ownerPubkey = event.pubkey.toLowerCase();
     const coordinate = `${ownerPubkey}:${sourcePersonaId}`;
-    if (seenCoordinates.has(coordinate)) continue;
+    if (seenCoordinates.has(coordinate)) {
+      continue;
+    }
     seenCoordinates.add(coordinate);
 
-    if (!personaEventIsShared(event)) continue;
+    if (!personaEventIsShared(event)) {
+      continue;
+    }
     const agent = parsePersonaContent(event);
-    if (!agent) continue;
+    if (!agent) {
+      continue;
+    }
     publications.push({
       eventId: event.id,
       ownerPubkey,

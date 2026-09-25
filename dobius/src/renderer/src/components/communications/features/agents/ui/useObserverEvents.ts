@@ -211,11 +211,11 @@ export function useLoadArchivedObserverEvents(
       try {
         const rows = await readUnindexedObserverRows();
 
-        const toIndex: Array<{
+        const toIndex: {
           eventId: string;
           channelId: string | null;
           createdAt: number;
-        }> = [];
+        }[] = [];
 
         for (const row of rows) {
           let parsed: RelayEvent;

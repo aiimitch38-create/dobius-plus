@@ -18,10 +18,10 @@ const TIMEOUT_PREFIX = "restricted: you are timed out until";
  * per-message author cluster (U2) and the report-queue timeout resolution.
  * Kept here as the single source of truth so the two surfaces can never drift.
  */
-export const TIMEOUT_PRESETS: ReadonlyArray<{
+export const TIMEOUT_PRESETS: readonly {
   label: string;
   seconds: number;
-}> = [
+}[] = [
   { label: "1 hour", seconds: 60 * 60 },
   { label: "24 hours", seconds: 24 * 60 * 60 },
   { label: "7 days", seconds: 7 * 24 * 60 * 60 },

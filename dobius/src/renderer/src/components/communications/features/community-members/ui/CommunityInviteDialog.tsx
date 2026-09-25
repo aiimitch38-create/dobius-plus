@@ -25,7 +25,9 @@ export function CommunityInviteDialog({
   const [ttlSecs, setTtlSecs] = React.useState(DEFAULT_INVITE_TTL_SECS);
 
   React.useEffect(() => {
-    if (open) setTtlSecs(DEFAULT_INVITE_TTL_SECS);
+    if (open) {
+      setTtlSecs(DEFAULT_INVITE_TTL_SECS);
+    }
   }, [open]);
 
   return (

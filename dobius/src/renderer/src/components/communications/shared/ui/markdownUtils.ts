@@ -8,7 +8,9 @@ import * as React from "react";
  * types in react-markdown v10.
  */
 function isBlockMedia(child: React.ReactNode): boolean {
-  if (!React.isValidElement(child)) return false;
+  if (!React.isValidElement(child)) {
+    return false;
+  }
 
   const props = child.props as {
     children?: React.ReactNode;
@@ -70,11 +72,19 @@ export function hasBlockMedia(childArray: React.ReactNode[]): boolean {
 }
 
 export function shallowArrayEqual(a?: string[], b?: string[]): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  if (a.length !== b.length) return false;
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
+    if (a[i] !== b[i]) {
+      return false;
+    }
   }
   return true;
 }
@@ -89,12 +99,20 @@ export function shallowRecordEqual(
   a?: Record<string, string>,
   b?: Record<string, string>,
 ): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
   const aKeys = Object.keys(a);
-  if (aKeys.length !== Object.keys(b).length) return false;
+  if (aKeys.length !== Object.keys(b).length) {
+    return false;
+  }
   for (const key of aKeys) {
-    if (a[key] !== b[key]) return false;
+    if (a[key] !== b[key]) {
+      return false;
+    }
   }
   return true;
 }

@@ -10,7 +10,9 @@ export const DAY_MS = 86_400_000
  *  puts a task on the wrong calendar cell. */
 export function parseDueDate(iso: string | undefined): number | null {
   const match = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null
-  if (!match) return null
+  if (!match) {
+    return null
+  }
   return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).getTime()
 }
 

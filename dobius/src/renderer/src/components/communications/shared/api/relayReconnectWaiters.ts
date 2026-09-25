@@ -14,8 +14,11 @@ export class RelayReconnectWaiters {
     const waiters = [...this.waiters];
     this.waiters.clear();
     for (const waiter of waiters) {
-      if (error) waiter.reject(error);
-      else waiter.resolve();
+      if (error) {
+        waiter.reject(error);
+      } else {
+        waiter.resolve();
+      }
     }
   }
 }

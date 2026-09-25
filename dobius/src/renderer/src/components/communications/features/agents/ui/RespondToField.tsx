@@ -148,7 +148,9 @@ export function CreateAgentRespondToField({
   }
 
   function handleAddFromPaste() {
-    if (pasteParsed.valid.length === 0) return;
+    if (pasteParsed.valid.length === 0) {
+      return;
+    }
     onAllowlistChange(mergeAllowlist(allowlist, pasteParsed.valid));
     setPasteText("");
   }

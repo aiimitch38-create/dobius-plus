@@ -97,10 +97,10 @@ export type AddChannelMembersInput = {
 
 export type AddChannelMembersResult = {
   added: string[];
-  errors: Array<{
+  errors: {
     pubkey: string;
     error: string;
-  }>;
+  }[];
 };
 
 export type { Identity, IdentityStorage } from "./identityTypes";

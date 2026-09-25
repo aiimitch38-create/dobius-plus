@@ -17,7 +17,9 @@ export function SendFeedbackController({
       onAttachImage={sendFeedback.attachImage}
       onOpenChange={(nextOpen) => {
         onOpenChange(nextOpen);
-        if (!nextOpen) sendFeedback.reset();
+        if (!nextOpen) {
+          sendFeedback.reset();
+        }
       }}
       onRemoveImage={sendFeedback.removeImage}
       onSubmit={sendFeedback.submit}

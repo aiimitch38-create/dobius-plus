@@ -157,7 +157,9 @@ export function canReviewProjectPullRequest(
     return false;
   }
   const viewer = normalizePubkey(viewerPubkey);
-  if (viewer === normalizePubkey(pullRequest.author)) return false;
+  if (viewer === normalizePubkey(pullRequest.author)) {
+    return false;
+  }
   return (
     viewer === normalizePubkey(project.owner) ||
     pullRequest.reviewers.some(
@@ -262,7 +264,9 @@ export function useUpdateProjectPullRequestStatusMutation(
       signAsManagedOwner?: boolean;
       status: ProjectPullRequestLifecycleStatus;
     }) => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return updateProjectPullRequestStatus({
         project,
         pullRequest,
@@ -291,7 +295,9 @@ export function useRequestProjectPullRequestReviewMutation(
       reviewerLabel: string;
       signAsManagedOwner: boolean;
     }) => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return requestProjectPullRequestReview({
         project,
         pullRequest,
@@ -320,7 +326,9 @@ function useProjectPullRequestReviewDecisionMutation(
       createdAt: number;
       pullRequest: ProjectPullRequest;
     }) => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return submitProjectPullRequestReview({
         content,
         createdAt,

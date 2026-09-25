@@ -14,14 +14,14 @@ import {
 import { hasMissingRequiredEnvKey } from "./personaRuntimeModel";
 
 /** Derived required-credential state for the Edit Agent dialog's Advanced section. */
-export interface RequiredCredentialState {
+export type RequiredCredentialState = {
   /** Required env keys still unset and not satisfied by the runtime file config. */
   requiredEnvKeys: string[];
   /** Required keys already satisfied by the runtime file config (shown as info rows). */
   fileSatisfiedEnvKeys: string[];
   /** Whether any required env key is still missing (blocks Save). */
   requiredEnvKeyMissing: boolean;
-}
+};
 
 /**
  * Compute runtime/provider-required credential state for the Edit Agent dialog.
@@ -98,7 +98,9 @@ export function useRequiredCredentialState(params: {
   );
 
   const fileSatisfiedEnvKeys = React.useMemo(() => {
-    if (!runtimeFileConfig) return [] as string[];
+    if (!runtimeFileConfig) {
+      return [] as string[];
+    }
     return allRequiredKeys.filter(
       (key) =>
         !(key in envVars) &&

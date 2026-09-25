@@ -27,7 +27,7 @@ export function dedupeMessagesById(messages: RelayEvent[]) {
     deduped.push(message);
   }
 
-  return deduped.reverse();
+  return deduped.toReversed();
 }
 
 export function sortMessages(messages: RelayEvent[]) {
@@ -54,7 +54,7 @@ function isOlderHistoryPage(current: RelayEvent[], history: RelayEvent[]) {
 
   const sortedCurrent = sortMessages(current);
   const sortedHistory = sortMessages(history);
-  const newestHistory = sortedHistory[sortedHistory.length - 1]?.created_at;
+  const newestHistory = sortedHistory.at(-1)?.created_at;
   const oldestCurrent = sortedCurrent[0]?.created_at;
 
   if (newestHistory === undefined || oldestCurrent === undefined) {

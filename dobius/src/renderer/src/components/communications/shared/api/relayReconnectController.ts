@@ -72,7 +72,9 @@ function withDeadline<T>(
     }, timeoutMs);
   });
   return Promise.race([promise, deadline]).finally(() => {
-    if (id !== null) clearTimeoutFn(id);
+    if (id !== null) {
+      clearTimeoutFn(id);
+    }
   });
 }
 
@@ -128,7 +130,9 @@ export class RelayReconnectController {
    * delivered asynchronously via state updates.
    */
   async start(deps: ReconnectDeps): Promise<boolean> {
-    if (this.state.isPending) return false;
+    if (this.state.isPending) {
+      return false;
+    }
 
     // Store timer-clear fns so cancel() can clear timers without caller deps.
     this.clearTimeoutFn = deps.clearTimeout;
@@ -149,11 +153,15 @@ export class RelayReconnectController {
         deps.setTimeout,
         deps.clearTimeout,
       );
-      if (cancelled()) return false;
+      if (cancelled()) {
+        return false;
+      }
       this.finish(deps.onSuccess, true);
       return true;
     } catch {
-      if (cancelled()) return false;
+      if (cancelled()) {
+        return false;
+      }
       // Fast path failed — continue to escalation or background reconnect.
     }
 
@@ -167,7 +175,9 @@ export class RelayReconnectController {
         err,
       );
     }
-    if (cancelled()) return false;
+    if (cancelled()) {
+      return false;
+    }
 
     if (hookConfigured) {
       try {
@@ -180,7 +190,9 @@ export class RelayReconnectController {
           err,
         );
       }
-      if (cancelled()) return false;
+      if (cancelled()) {
+        return false;
+      }
       this.setState({ isPending: true, isWaitingOnReconnectHook: true });
     }
 
@@ -196,7 +208,9 @@ export class RelayReconnectController {
     const { onSuccess, onBackstop } = deps;
 
     const onConnected = () => {
-      if (resolved || cancelled()) return;
+      if (resolved || cancelled()) {
+        return;
+      }
       resolved = true;
       this.finish(onSuccess, true);
     };
@@ -210,7 +224,9 @@ export class RelayReconnectController {
     // block below handles that late-assignment cleanup.
     this.unsubscribeConnectionState = deps.subscribeToConnectionState(
       (state) => {
-        if (state === "connected") onConnected();
+        if (state === "connected") {
+          onConnected();
+        }
       },
     );
 
@@ -226,7 +242,9 @@ export class RelayReconnectController {
     }
 
     this.backstopId = deps.setTimeout(() => {
-      if (resolved || cancelled()) return;
+      if (resolved || cancelled()) {
+        return;
+      }
       resolved = true;
       // The session's exponential-backoff reconnect loop remains armed.
       onBackstop();
@@ -255,7 +273,9 @@ export class RelayReconnectController {
   private finish(onSuccess: () => void, success: boolean): void {
     this.cancelTimers();
     this.setState({ isPending: false, isWaitingOnReconnectHook: false });
-    if (success) onSuccess();
+    if (success) {
+      onSuccess();
+    }
   }
 
   private cancelTimers(): void {

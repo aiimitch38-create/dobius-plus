@@ -54,7 +54,9 @@ function recoverEmbeddedCode(trimmed: string): {
   remainder: string;
 } | null {
   const match = EMBEDDED_CODE_RE.exec(trimmed);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   return {
     code: Number(match[1]),
     remainder: trimmed.slice(match[0].length),
@@ -65,9 +67,13 @@ export function friendlyAgentLastError(
   raw: string | null,
   code?: number | null,
 ): FriendlyAgentLastError | null {
-  if (raw == null) return null;
+  if (raw == null) {
+    return null;
+  }
   const trimmed = raw.trim();
-  if (trimmed.length === 0) return null;
+  if (trimmed.length === 0) {
+    return null;
+  }
 
   // Structured code first; a code embedded in the message string is the
   // same signal recovered from a record that lost the field.

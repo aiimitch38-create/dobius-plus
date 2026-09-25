@@ -128,7 +128,9 @@ export function ChannelRouteScreen({
   );
   React.useEffect(() => {
     const resetKey = `${channelId}::${selectedPostId ?? ""}`;
-    if (previousResetKeyRef.current === resetKey) return;
+    if (previousResetKeyRef.current === resetKey) {
+      return;
+    }
     previousResetKeyRef.current = resetKey;
     setTargetMessageEvents([]);
   }, [channelId, selectedPostId]);

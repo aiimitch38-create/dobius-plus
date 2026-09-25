@@ -41,7 +41,9 @@ function getSelectionRect(editor: Editor): DOMRect | null {
     const rect = clientRects[0] ?? range.getBoundingClientRect();
     range.detach();
 
-    if (rect.width > 0 || rect.height > 0) return rect;
+    if (rect.width > 0 || rect.height > 0) {
+      return rect;
+    }
   } catch {
     // Fall back to the caret coordinates below.
   }
@@ -53,7 +55,9 @@ function getSelectionRect(editor: Editor): DOMRect | null {
   const top = Math.min(startCoords.top, endCoords.top);
   const bottom = Math.max(startCoords.bottom, endCoords.bottom);
 
-  if (right <= left && bottom <= top) return null;
+  if (right <= left && bottom <= top) {
+    return null;
+  }
   return new DOMRect(left, top, Math.max(1, right - left), bottom - top);
 }
 
@@ -62,7 +66,9 @@ function getTrayPosition(
   trayWidth: number,
 ): TrayPosition | null {
   const { selection } = editor.state;
-  if (selection.empty || selection.from === selection.to) return null;
+  if (selection.empty || selection.from === selection.to) {
+    return null;
+  }
 
   const selectedText = editor.state.doc.textBetween(
     selection.from,
@@ -70,10 +76,14 @@ function getTrayPosition(
     "\n",
     "\n",
   );
-  if (selectedText.trim().length === 0) return null;
+  if (selectedText.trim().length === 0) {
+    return null;
+  }
 
   const rect = getSelectionRect(editor);
-  if (!rect) return null;
+  if (!rect) {
+    return null;
+  }
 
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
@@ -167,7 +177,9 @@ export function SelectionFormattingTray({
   }, [editor, scheduleUpdate]);
 
   React.useLayoutEffect(() => {
-    if (!position || !trayRef.current) return;
+    if (!position || !trayRef.current) {
+      return;
+    }
 
     const updateTrayWidth = () => {
       const nextWidth = trayRef.current?.getBoundingClientRect().width ?? 0;
@@ -178,13 +190,17 @@ export function SelectionFormattingTray({
 
     updateTrayWidth();
 
-    if (typeof ResizeObserver === "undefined") return;
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
     const observer = new ResizeObserver(updateTrayWidth);
     observer.observe(trayRef.current);
     return () => observer.disconnect();
   }, [position]);
 
-  if (!position || typeof document === "undefined") return null;
+  if (!position || typeof document === "undefined") {
+    return null;
+  }
 
   return createPortal(
     <div

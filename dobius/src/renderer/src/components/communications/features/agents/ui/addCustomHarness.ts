@@ -57,7 +57,7 @@ export function runtimeDropdownAction(value: string): RuntimeDropdownAction {
  * availability, and the instance dialog could not read the command to pin.
  */
 export function readyHarnessId(
-  runtimes: ReadonlyArray<{ id: string }>,
+  runtimes: readonly { id: string }[],
   pendingId: string | null,
 ): string | null {
   return runtimes.some((runtime) => runtime.id === pendingId)
@@ -81,7 +81,7 @@ export function readyHarnessId(
  * it: the field holds one harness, so the latest save wins.
  */
 export function usePendingHarnessSelection(
-  runtimes: ReadonlyArray<{ id: string }>,
+  runtimes: readonly { id: string }[],
   onReady: (id: string) => void,
   active: boolean,
 ): (id: string) => void {
@@ -95,7 +95,9 @@ export function usePendingHarnessSelection(
       setPendingId(null);
       return;
     }
-    if (readyId === null) return;
+    if (readyId === null) {
+      return;
+    }
     setPendingId(null);
     onReady(readyId);
   }, [active, onReady, readyId]);

@@ -74,7 +74,9 @@ function parseSystemMessagePayload(
 function buildGroupedMembershipPayload(
   messages: readonly TimelineMessage[],
 ): SystemMessagePayload | null {
-  if (messages.length < 2) return null;
+  if (messages.length < 2) {
+    return null;
+  }
 
   const payloads = messages.map(parseSystemMessagePayload);
   const firstPayload = payloads[0];
@@ -84,7 +86,9 @@ function buildGroupedMembershipPayload(
   const firstTarget = firstPayload?.target
     ? normalizePubkey(firstPayload.target)
     : null;
-  if (!actor || !firstTarget) return null;
+  if (!actor || !firstTarget) {
+    return null;
+  }
   const isSelfJoinGroup = actor === firstTarget;
 
   const targets: string[] = [];
@@ -172,7 +176,9 @@ function resolveAvatarUrl(
   pubkey: string | undefined,
   profiles: UserProfileLookup | undefined,
 ): string | null {
-  if (!pubkey || !profiles) return null;
+  if (!pubkey || !profiles) {
+    return null;
+  }
   return profiles[pubkey.toLowerCase()]?.avatarUrl ?? null;
 }
 
@@ -549,7 +555,9 @@ function describeSystemEvent(
 
   switch (payload.type) {
     case "members_added":
-      if (!payload.actor || !payload.targets?.length) return null;
+      if (!payload.actor || !payload.targets?.length) {
+        return null;
+      }
       return {
         title: membershipTitle,
         action: (
@@ -574,7 +582,9 @@ function describeSystemEvent(
         ),
       };
     case "members_joined":
-      if (!payload.targets?.length) return null;
+      if (!payload.targets?.length) {
+        return null;
+      }
       return {
         title: membershipTitle,
         action: (
@@ -591,7 +601,9 @@ function describeSystemEvent(
         ),
       };
     case "member_joined": {
-      if (!payload.actor || !payload.target) return null;
+      if (!payload.actor || !payload.target) {
+        return null;
+      }
       if (normalizePubkey(payload.actor) === normalizePubkey(payload.target)) {
         return {
           title: membershipTitle,
@@ -714,7 +726,9 @@ export const SystemMessageRow = React.memo(function SystemMessageRow({
   );
   const handleGroupedReaction = React.useCallback(
     async (_groupMessage: TimelineMessage, emoji: string, remove: boolean) => {
-      if (!onToggleReaction) return;
+      if (!onToggleReaction) {
+        return;
+      }
       if (!remove) {
         await onToggleReaction(message, emoji, false);
         return;
@@ -750,7 +764,9 @@ export const SystemMessageRow = React.memo(function SystemMessageRow({
   );
 
   const payload = groupedPayload ?? parseSystemMessagePayload(message);
-  if (!payload) return null;
+  if (!payload) {
+    return null;
+  }
 
   const description = describeSystemEvent(
     payload,

@@ -146,7 +146,9 @@ export function FocusThreadDrawer({
 
   React.useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape") {
+        return;
+      }
       event.preventDefault();
       event.stopImmediatePropagation();
       onClose();

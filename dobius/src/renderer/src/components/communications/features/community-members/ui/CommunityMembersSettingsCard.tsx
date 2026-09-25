@@ -258,7 +258,9 @@ export function CommunityMembersSettingsCard({
 
   const filteredMembers = React.useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return members;
+    if (!q) {
+      return members;
+    }
     return members.filter((member) => {
       const normalizedPubkey = normalizePubkey(member.pubkey);
       const profile = profiles?.[normalizedPubkey];

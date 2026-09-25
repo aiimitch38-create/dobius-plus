@@ -206,7 +206,9 @@ function getTeamFooterModelLabel(personas: AgentPersona[]) {
     .map((persona) => formatAgentModelLabel(persona.model))
     .filter((model): model is string => Boolean(model));
 
-  if (modelLabels.length === 0) return "Auto";
+  if (modelLabels.length === 0) {
+    return "Auto";
+  }
 
   const uniqueModels = new Map(
     modelLabels.map((model) => [model.toLowerCase(), model]),

@@ -57,9 +57,13 @@ type SnapshotPayload = {
 };
 
 function parseSnapshotPayload(json: unknown): SnapshotPayload | null {
-  if (typeof json !== "object" || json === null) return null;
+  if (typeof json !== "object" || json === null) {
+    return null;
+  }
   const obj = json as Record<string, unknown>;
-  if (obj.version !== 1 || !Array.isArray(obj.events)) return null;
+  if (obj.version !== 1 || !Array.isArray(obj.events)) {
+    return null;
+  }
   const updatedAt =
     typeof obj.updatedAt === "number" && Number.isFinite(obj.updatedAt)
       ? obj.updatedAt
@@ -79,9 +83,13 @@ export function readMessageSnapshot(
     const raw = window.localStorage.getItem(
       messageSnapshotKey(relayUrl, channelId),
     );
-    if (!raw) return null;
+    if (!raw) {
+      return null;
+    }
     const parsed = parseSnapshotPayload(JSON.parse(raw));
-    if (!parsed || parsed.events.length === 0) return null;
+    if (!parsed || parsed.events.length === 0) {
+      return null;
+    }
     return parsed.events;
   } catch {
     return null;

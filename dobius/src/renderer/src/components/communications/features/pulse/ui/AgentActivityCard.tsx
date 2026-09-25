@@ -18,10 +18,18 @@ function formatRelativeTime(unixSeconds: number): string {
   const now = Date.now() / 1_000;
   const diff = now - unixSeconds;
 
-  if (diff < 60) return "just now";
-  if (diff < 3_600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86_400) return `${Math.floor(diff / 3_600)}h ago`;
-  if (diff < 604_800) return `${Math.floor(diff / 86_400)}d ago`;
+  if (diff < 60) {
+    return "just now";
+  }
+  if (diff < 3_600) {
+    return `${Math.floor(diff / 60)}m ago`;
+  }
+  if (diff < 86_400) {
+    return `${Math.floor(diff / 3_600)}h ago`;
+  }
+  if (diff < 604_800) {
+    return `${Math.floor(diff / 86_400)}d ago`;
+  }
 
   return new Date(unixSeconds * 1_000).toLocaleDateString(undefined, {
     month: "short",

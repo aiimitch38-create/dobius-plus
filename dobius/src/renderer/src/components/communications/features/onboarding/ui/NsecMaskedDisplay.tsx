@@ -65,7 +65,9 @@ export function NsecMaskedDisplay({
   }, []);
 
   function handleRevealToggle() {
-    if (!isRevealed) onKeyInteraction?.();
+    if (!isRevealed) {
+      onKeyInteraction?.();
+    }
     setIsRevealed((prev) => !prev);
   }
 
@@ -73,7 +75,9 @@ export function NsecMaskedDisplay({
     await writeTextToClipboard(nsec);
     onKeyInteraction?.();
     setIsCopied(true);
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+    }
     copyTimerRef.current = setTimeout(() => setIsCopied(false), 2000);
   }
 

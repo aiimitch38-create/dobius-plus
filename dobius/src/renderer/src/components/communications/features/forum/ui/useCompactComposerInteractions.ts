@@ -15,7 +15,9 @@ export function useCompactComposerInteractions({
   const isToolbarInteractionActiveRef = React.useRef(false);
 
   const handlePaperclipClick = React.useCallback(() => {
-    if (compact) onExpand();
+    if (compact) {
+      onExpand();
+    }
     isMediaPickerActiveRef.current = true;
     void onPaperclip().finally(() => {
       isMediaPickerActiveRef.current = false;
@@ -23,7 +25,9 @@ export function useCompactComposerInteractions({
   }, [compact, onExpand, onPaperclip]);
 
   const handleToolbarMouseDown = React.useCallback(() => {
-    if (compact) onExpand();
+    if (compact) {
+      onExpand();
+    }
     isToolbarInteractionActiveRef.current = true;
     window.setTimeout(() => {
       isToolbarInteractionActiveRef.current = false;

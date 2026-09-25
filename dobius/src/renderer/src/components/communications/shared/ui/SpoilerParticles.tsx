@@ -60,10 +60,14 @@ export function SpoilerParticles({
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
 
   React.useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      return;
+    }
     const canvas = canvasRef.current;
     const content = contentRef.current;
-    if (!canvas || !content) return;
+    if (!canvas || !content) {
+      return;
+    }
 
     return mountSpoilerParticleCanvas({ canvas, content });
   }, [active, contentRef]);
@@ -77,7 +81,9 @@ export function mountSpoilerParticleCanvas({
   syncCanvas,
 }: SpoilerParticleCanvasOptions): () => void {
   const context = canvas.getContext("2d");
-  if (!context) return () => {};
+  if (!context) {
+    return () => {};
+  }
 
   let animationFrame = 0;
   let lastFrameTime = 0;
@@ -115,7 +121,9 @@ export function mountSpoilerParticleCanvas({
 
   const draw = (timeMs: number) => {
     const currentScene = ensureScene();
-    if (!currentScene) return;
+    if (!currentScene) {
+      return;
+    }
 
     drawParticles(context, currentScene, reducedMotion ? 0 : timeMs / 1000);
   };
@@ -136,7 +144,9 @@ export function mountSpoilerParticleCanvas({
   };
 
   const start = () => {
-    if (!visible || animationFrame) return;
+    if (!visible || animationFrame) {
+      return;
+    }
     if (reducedMotion) {
       draw(0);
       return;
@@ -214,8 +224,12 @@ function buildScene(
   const pixelWidth = Math.max(1, Math.ceil(cssWidth * dpr));
   const pixelHeight = Math.max(1, Math.ceil(cssHeight * dpr));
 
-  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
-  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+  if (canvas.width !== pixelWidth) {
+    canvas.width = pixelWidth;
+  }
+  if (canvas.height !== pixelHeight) {
+    canvas.height = pixelHeight;
+  }
 
   const accent = readAccent(canvas);
   const maskPoints = buildWordMaskPoints(content, canvas, cssWidth, cssHeight);
@@ -330,7 +344,9 @@ function addRectPoints(
   points: Point[],
   rect: { x: number; y: number; width: number; height: number },
 ) {
-  if (rect.width <= 0 || rect.height <= 0) return;
+  if (rect.width <= 0 || rect.height <= 0) {
+    return;
+  }
 
   const verticalGap = Math.min(DEFAULT_GAP, rect.height / GAP_RATIO);
   const yStart = rect.y + verticalGap;
@@ -377,7 +393,9 @@ function drawParticles(
     const visibility = trapezoidalWave(particle.lifetime, 0.15, 0.3)(t);
     const alpha = clamp(1 - t / particle.lifetime, 0, 1);
     const size = particle.size * visibility;
-    if (size <= 0) continue;
+    if (size <= 0) {
+      continue;
+    }
 
     const x = particle.originX + particle.vx * t;
     const y = particle.originY + particle.vy * t;
@@ -411,7 +429,9 @@ function readAccent(canvas: HTMLCanvasElement): Hsl {
 
 function parseRgb(value: string): { r: number; g: number; b: number } | null {
   const match = value.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   return {
     b: Number(match[3]),
     g: Number(match[2]),
@@ -470,8 +490,12 @@ function trapezoidalWave(length: number, a: number, b: number) {
   const stop = Math.max(a, length - b);
 
   return (time: number) => {
-    if (time < a) return Math.max(0, time / a);
-    if (time > stop) return Math.max(0, 1 - (time - stop) / (length - stop));
+    if (time < a) {
+      return Math.max(0, time / a);
+    }
+    if (time > stop) {
+      return Math.max(0, 1 - (time - stop) / (length - stop));
+    }
     return 1;
   };
 }
@@ -486,13 +510,19 @@ function lcgrand(seed = 1) {
 }
 
 function cycle(value: number, max: number): number {
-  if (max <= 0) return 0;
+  if (max <= 0) {
+    return 0;
+  }
   return ((value % max) + max) % max;
 }
 
 function mirror(value: number, max: number, radius: number): number {
-  if (value < radius) return max + value;
-  if (value > max - radius) return value - max;
+  if (value < radius) {
+    return max + value;
+  }
+  if (value > max - radius) {
+    return value - max;
+  }
   return value;
 }
 

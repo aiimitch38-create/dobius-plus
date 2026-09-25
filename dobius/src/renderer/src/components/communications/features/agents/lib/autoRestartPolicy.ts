@@ -68,17 +68,31 @@ export function decideAutoRestart(
   } = inputs;
 
   // Never-fire gates. Each resets the continuity window ("hold").
-  if (!autoRestartEnabled) return "hold";
-  if (!needsRestart) return "hold";
-  if (!isLocalBackend) return "hold";
-  if (!isRunning) return "hold";
-  if (!connected) return "hold";
+  if (!autoRestartEnabled) {
+    return "hold";
+  }
+  if (!needsRestart) {
+    return "hold";
+  }
+  if (!isLocalBackend) {
+    return "hold";
+  }
+  if (!isRunning) {
+    return "hold";
+  }
+  if (!connected) {
+    return "hold";
+  }
   // Any working signal — observer OR typing — defers. `working` and
   // `workingSource` travel together, but check both so a partial reader
   // can never slip through.
-  if (working || workingSource !== "none") return "hold";
+  if (working || workingSource !== "none") {
+    return "hold";
+  }
   // One attempt per rising edge: a consumed edge badges until it cycles.
-  if (edgeConsumed) return "hold";
+  if (edgeConsumed) {
+    return "hold";
+  }
 
   return quiescentForMs >= AUTO_RESTART_QUIESCENCE_MS ? "fire" : "arm";
 }

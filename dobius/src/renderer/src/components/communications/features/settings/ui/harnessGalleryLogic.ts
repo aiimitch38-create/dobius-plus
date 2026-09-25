@@ -25,13 +25,17 @@ export function isEditableEntry(entry: AcpRuntimeCatalogEntry): boolean {
  */
 export function countAgentsReferencingHarness(
   harnessId: string,
-  agents: ReadonlyArray<{ runtime: string | null; personaId: string | null }>,
-  personas: ReadonlyArray<{ id: string; runtime: string | null }>,
+  agents: readonly { runtime: string | null; personaId: string | null }[],
+  personas: readonly { id: string; runtime: string | null }[],
 ): number {
   const personaRuntime = new Map(personas.map((p) => [p.id, p.runtime]));
   return agents.filter((agent) => {
-    if (agent.runtime !== null) return agent.runtime === harnessId;
-    if (agent.personaId === null) return false;
+    if (agent.runtime !== null) {
+      return agent.runtime === harnessId;
+    }
+    if (agent.personaId === null) {
+      return false;
+    }
     return personaRuntime.get(agent.personaId) === harnessId;
   }).length;
 }
@@ -44,7 +48,9 @@ export function deleteHarnessConfirmMessage(
   label: string,
   referencingAgents: number,
 ): string {
-  if (referencingAgents === 0) return `Delete ${label}?`;
+  if (referencingAgents === 0) {
+    return `Delete ${label}?`;
+  }
   const noun = referencingAgents === 1 ? "agent uses" : "agents use";
   return `${referencingAgents} ${noun} this harness and will stop launching. Delete ${label}?`;
 }
@@ -79,11 +85,9 @@ export function deleteConfirmState(
   harnessId: string,
   label: string,
   agents: BlastRadiusQuery<
-    ReadonlyArray<{ runtime: string | null; personaId: string | null }>
+    readonly { runtime: string | null; personaId: string | null }[]
   >,
-  personas: BlastRadiusQuery<
-    ReadonlyArray<{ id: string; runtime: string | null }>
-  >,
+  personas: BlastRadiusQuery<readonly { id: string; runtime: string | null }[]>,
 ): DeleteConfirmState {
   if (agents.isPending || personas.isPending) {
     return {

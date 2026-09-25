@@ -11,7 +11,7 @@ type AgentObserverEvents = {
 function latestEventKey(
   events: readonly ObserverEventSummary[],
 ): string | null {
-  const latest = events.length > 0 ? events[events.length - 1] : undefined;
+  const latest = events.length > 0 ? events.at(-1) : undefined;
   return latest ? `${latest.timestamp}:${latest.seq}` : null;
 }
 
@@ -24,7 +24,9 @@ export function createPreventSleepActivityTracker() {
 
       for (const agent of agents) {
         const latestKey = latestEventKey(agent.events);
-        if (!latestKey) continue;
+        if (!latestKey) {
+          continue;
+        }
 
         const previousKey = lastEventByAgent.get(agent.pubkey);
         lastEventByAgent.set(agent.pubkey, latestKey);

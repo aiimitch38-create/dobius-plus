@@ -75,8 +75,12 @@ type ComposerAttachmentsProps = {
 };
 
 function formatAttachmentSize(size: number): string {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -84,7 +88,9 @@ type SnapshotKind = "agent" | "team";
 
 function getSnapshotKind(attachment: ImetaMedia): SnapshotKind | null {
   const filename = attachment.filename?.toLowerCase();
-  if (attachment.sha256.length !== 64) return null;
+  if (attachment.sha256.length !== 64) {
+    return null;
+  }
   if (filename?.endsWith(".agent.png") || filename?.endsWith(".agent.json")) {
     return "agent";
   }
@@ -250,7 +256,9 @@ const MediaAttachmentItem = React.forwardRef<
 
   const handleOpenChange = React.useCallback((next: boolean) => {
     setOpen(next);
-    if (!next) setMode("view");
+    if (!next) {
+      setMode("view");
+    }
   }, []);
 
   // Read `mode` via a ref: Radix's dismissable layer (>=1.1.14) registers a
@@ -267,13 +275,17 @@ const MediaAttachmentItem = React.forwardRef<
     if (modeRef.current === "edit") {
       // Escape leaves canvas mode but keeps the lightbox open.
       event.preventDefault();
-      if (!editorSavingRef.current) setMode("view");
+      if (!editorSavingRef.current) {
+        setMode("view");
+      }
     }
   }, []);
 
   const handleEditorSave = React.useCallback(
     async (bytes: Uint8Array) => {
-      if (!onEditSave) return;
+      if (!onEditSave) {
+        return;
+      }
       await onEditSave(attachment.url, bytes);
       // Close on save so rapid save/redraw cycles don't orphan a blob per iteration.
       setMode("view");
@@ -518,7 +530,9 @@ export const ComposerAttachments = React.memo(function ComposerAttachments({
   onToggleSpoiler,
   spoileredUrls,
 }: ComposerAttachmentsProps) {
-  if (attachments.length === 0 && !isUploading) return null;
+  if (attachments.length === 0 && !isUploading) {
+    return null;
+  }
 
   const uploadPlaceholders: UploadingAttachmentPreview[] =
     uploadingPreviews.length > 0

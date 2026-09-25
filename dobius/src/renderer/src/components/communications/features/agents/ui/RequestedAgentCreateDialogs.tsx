@@ -30,7 +30,9 @@ export function RequestedAgentCreateDialogs() {
 
   React.useEffect(() => {
     const pending = consumePendingOpenCreateAgent();
-    if (pending) openCreate(pending);
+    if (pending) {
+      openCreate(pending);
+    }
     return subscribeOpenCreateAgent(openCreate);
   }, []);
 
@@ -64,7 +66,9 @@ export function RequestedAgentCreateDialogs() {
           created={personas.createdAgent}
           isRetryingAttachment={personas.isRetryingAttachment}
           onOpenChange={(open) => {
-            if (!open) personas.dismissCreatedAgent();
+            if (!open) {
+              personas.dismissCreatedAgent();
+            }
           }}
           onRetryAttachment={() => {
             void personas.retryAttachment();

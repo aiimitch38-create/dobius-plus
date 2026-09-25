@@ -16,7 +16,9 @@ export function useComposerSpoilerParticles(
   scrollRef: React.RefObject<HTMLElement | null>,
 ) {
   React.useEffect(() => {
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
 
     let cancelled = false;
     let setupFrame = 0;
@@ -27,13 +29,17 @@ export function useComposerSpoilerParticles(
       try {
         editorRoot = editor.view.dom as HTMLElement;
       } catch {
-        if (!cancelled) setupFrame = window.requestAnimationFrame(setup);
+        if (!cancelled) {
+          setupFrame = window.requestAnimationFrame(setup);
+        }
         return;
       }
 
       const scrollRoot = scrollRef.current ?? editorRoot.parentElement;
       if (!scrollRoot) {
-        if (!cancelled) setupFrame = window.requestAnimationFrame(setup);
+        if (!cancelled) {
+          setupFrame = window.requestAnimationFrame(setup);
+        }
         return;
       }
 
@@ -142,7 +148,9 @@ function mountComposerSpoilerParticles(
   };
 
   const scheduleSync = () => {
-    if (syncFrame) return;
+    if (syncFrame) {
+      return;
+    }
     syncFrame = window.requestAnimationFrame(syncSpoilers);
   };
 

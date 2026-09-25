@@ -23,15 +23,21 @@ export function nextRetainedTimelineKeys(
 
   for (let index = evictionStart; index <= evictionEnd; index += 1) {
     const key = keys[index];
-    if (key && previous.has(key)) next.add(key);
+    if (key && previous.has(key)) {
+      next.add(key);
+    }
   }
   for (let index = admissionStart; index <= admissionEnd; index += 1) {
     const key = keys[index];
-    if (key) next.add(key);
+    if (key) {
+      next.add(key);
+    }
   }
   for (let index = tailStart; index < keys.length; index += 1) {
     const key = keys[index];
-    if (key) next.add(key);
+    if (key) {
+      next.add(key);
+    }
   }
 
   return next.size === previous.size &&

@@ -70,9 +70,13 @@ export function skipKeysEqual(
   a: ReadonlySet<string>,
   b: ReadonlySet<string>,
 ): boolean {
-  if (a.size !== b.size) return false;
+  if (a.size !== b.size) {
+    return false;
+  }
   for (const key of a) {
-    if (!b.has(key)) return false;
+    if (!b.has(key)) {
+      return false;
+    }
   }
   return true;
 }
@@ -239,7 +243,9 @@ export function EnvVarsEditor({
   function buildRecord(nextRows: Row[]): EnvVarsValue {
     const base: EnvVarsValue = {};
     for (const key of [...requiredKeys, ...hiddenKeys]) {
-      if (key in value) base[key] = value[key];
+      if (key in value) {
+        base[key] = value[key];
+      }
     }
     return { ...base, ...toRecord(nextRows) };
   }
@@ -266,12 +272,20 @@ export function EnvVarsEditor({
   // file-config query completes after the card click). The one-shot guard
   // ensures each requested target focuses exactly once.
   React.useEffect(() => {
-    if (!focusKey) return;
-    if (focusFiredRef.current) return;
-    if (!requiredKeys.includes(focusKey)) return;
+    if (!focusKey) {
+      return;
+    }
+    if (focusFiredRef.current) {
+      return;
+    }
+    if (!requiredKeys.includes(focusKey)) {
+      return;
+    }
 
     const inputEl = requiredValueRefs.current.get(focusKey);
-    if (!inputEl) return;
+    if (!inputEl) {
+      return;
+    }
 
     focusFiredRef.current = true;
 
@@ -391,7 +405,9 @@ export function EnvVarsEditor({
               </div>
               {(() => {
                 const inheritedValue = inheritedFrom?.[key];
-                if (inheritedValue === undefined) return null;
+                if (inheritedValue === undefined) {
+                  return null;
+                }
                 // If the key is explicitly present in the agent-local map
                 // (even as ""), it is an intentional override — show "Overrides"
                 // not "Inherited from". Only show "Inherited from" when the local
@@ -584,11 +600,15 @@ export function EnvVarsEditor({
                 </p>
               ) : null}
               {(() => {
-                if (row.key.length === 0) return null;
+                if (row.key.length === 0) {
+                  return null;
+                }
                 const override = inheritedRows.find(
                   (irow) => irow.key === row.key,
                 );
-                if (!override) return null;
+                if (!override) {
+                  return null;
+                }
                 return (
                   <p className="ml-1 text-xs text-muted-foreground">
                     Overrides {inheritedRowsLabel} default{" "}
@@ -623,20 +643,30 @@ export function EnvVarsEditor({
  * set at all.
  */
 function maskInherited(value: string): string {
-  if (value.length === 0) return "(empty)";
-  if (value.length <= 4) return "•".repeat(value.length);
+  if (value.length === 0) {
+    return "(empty)";
+  }
+  if (value.length <= 4) {
+    return "•".repeat(value.length);
+  }
   return `••••${value.slice(-4)}`;
 }
 
 function recordsEqual(a: EnvVarsValue, b: EnvVarsValue): boolean {
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
-  if (aKeys.length !== bKeys.length) return false;
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
   for (const key of aKeys) {
     // `in` walks the prototype, but EnvVarsValue is always a plain Record
     // built from `toRecord` (Object.create-less), so this is safe here.
-    if (!(key in b)) return false;
-    if (a[key] !== b[key]) return false;
+    if (!(key in b)) {
+      return false;
+    }
+    if (a[key] !== b[key]) {
+      return false;
+    }
   }
   return true;
 }

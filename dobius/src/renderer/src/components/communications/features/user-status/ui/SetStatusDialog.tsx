@@ -87,7 +87,7 @@ export function SetStatusDialog({
         <DialogHeader>
           <DialogTitle>Set a status</DialogTitle>
           <DialogDescription>
-            Let others know what you're up to.
+            Let others know what you&apos;re up to.
           </DialogDescription>
         </DialogHeader>
 

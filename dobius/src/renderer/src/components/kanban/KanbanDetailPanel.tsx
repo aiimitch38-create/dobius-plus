@@ -117,7 +117,9 @@ export function KanbanDetailPanel({
     .filter((item): item is Task => Boolean(item))
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        onClose()
+      }
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
@@ -271,7 +273,9 @@ export function KanbanDetailPanel({
                     type="button"
                     onClick={() => {
                       setAssigneeOpen(false)
-                      if (!task.assignee) return
+                      if (!task.assignee) {
+                        return
+                      }
                       onUpdate({ assignee: undefined })
                       toast.success(`Unassigned "${task.title}"`)
                     }}
@@ -285,7 +289,9 @@ export function KanbanDetailPanel({
                       type="button"
                       onClick={() => {
                         setAssigneeOpen(false)
-                        if (task.assignee?.id === person.id) return
+                        if (task.assignee?.id === person.id) {
+                          return
+                        }
                         onUpdate({ assignee: person })
                         // Why a toast: assigning has no other visible effect on
                         // this panel, so without it the click reads as a no-op.
@@ -320,7 +326,9 @@ export function KanbanDetailPanel({
                 value={task.destination}
                 onValueChange={(value) => {
                   const next = value as VertexTaskDestination
-                  if (next === task.destination) return
+                  if (next === task.destination) {
+                    return
+                  }
                   onUpdate({ destination: next })
                   toast.success(
                     next === 'asana' ? 'Destination set to Asana' : 'Destination set to system',
@@ -440,9 +448,13 @@ export function KanbanDetailPanel({
                       value={newLabel}
                       onChange={(event) => setNewLabel(event.target.value)}
                       onKeyDown={(event) => {
-                        if (event.key !== 'Enter') return
+                        if (event.key !== 'Enter') {
+                          return
+                        }
                         const next = newLabel.trim()
-                        if (!next || task.labels.includes(next)) return
+                        if (!next || task.labels.includes(next)) {
+                          return
+                        }
                         onUpdate({ labels: [...task.labels, next] })
                         setNewLabel('')
                       }}
@@ -557,7 +569,9 @@ export function KanbanDetailPanel({
               defaultValue={task.description}
               onBlur={(event) => {
                 const next = event.target.value
-                if (next !== task.description) onUpdate({ description: next })
+                if (next !== task.description) {
+                  onUpdate({ description: next })
+                }
               }}
               placeholder="What needs to be done?"
               rows={6}
@@ -571,7 +585,9 @@ export function KanbanDetailPanel({
               defaultValue={task.resultNote ?? ''}
               onBlur={(event) => {
                 const next = event.target.value.trim()
-                if (next !== (task.resultNote ?? '')) onUpdate({ resultNote: next || undefined })
+                if (next !== (task.resultNote ?? '')) {
+                  onUpdate({ resultNote: next || undefined })
+                }
               }}
               placeholder="Required before Done."
               rows={3}

@@ -74,7 +74,9 @@ export function AgentSnapshotCard({
   const [thumbError, setThumbError] = React.useState(false);
 
   async function handleImport() {
-    if (inFlightRef.current) return; // prevent double-click
+    if (inFlightRef.current) {
+      return;
+    } // prevent double-click
     inFlightRef.current = true;
     setImportState({ phase: "fetching" });
     try {

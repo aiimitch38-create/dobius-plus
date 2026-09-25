@@ -771,7 +771,7 @@ test("buildTranscriptDisplayBlocks_threeSessions_twoBoundaries", () => {
   const boundaryBlocks = blocks.filter((b) => b.kind === "session-boundary");
   assert.equal(boundaryBlocks.length, 2, "two boundaries for three sessions");
   // With no live id: newest (sess-3) boundary = "most-recent"; older = "earlier".
-  const newestBoundary = boundaryBlocks[boundaryBlocks.length - 1];
+  const newestBoundary = boundaryBlocks.at(-1);
   const olderBoundary = boundaryBlocks[0];
   assert.equal(
     newestBoundary.labelState,

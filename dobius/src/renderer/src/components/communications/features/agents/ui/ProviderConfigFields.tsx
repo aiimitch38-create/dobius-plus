@@ -7,7 +7,9 @@ export function coerceConfigValues(
   config: Record<string, string>,
   schema: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  if (!schema) return { ...config };
+  if (!schema) {
+    return { ...config };
+  }
   const properties = ((schema as Record<string, unknown>)?.properties ??
     {}) as Record<string, Record<string, unknown>>;
   const result: Record<string, unknown> = {};

@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 import { useFeatureEnabled } from "./useFeatureEnabled";
 
-interface FeatureGateProps {
+type FeatureGateProps = {
   /** The feature id from the manifest */
   feature: string;
   /** Content to render when the feature is enabled */
   children: ReactNode;
   /** Optional fallback when the feature is disabled */
   fallback?: ReactNode;
-}
+};
 
 /**
  * Conditionally renders children based on whether a feature is enabled.

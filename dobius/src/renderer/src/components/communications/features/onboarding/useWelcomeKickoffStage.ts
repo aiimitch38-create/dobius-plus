@@ -63,14 +63,24 @@ export function resolveWelcomeKickoffStagePhase(
   // Checked before `isWelcome` so the terminal state can never be laundered
   // back into `hidden` (and from there into a replay) by a channel that
   // momentarily reads as non-Welcome. Real channel changes reset the hook.
-  if (current === "done") return "done";
-  if (!input.isWelcome) return "hidden";
+  if (current === "done") {
+    return "done";
+  }
+  if (!input.isWelcome) {
+    return "hidden";
+  }
   if (current === "hidden") {
     return input.timelineSettled && !input.hasMessages ? "active" : "hidden";
   }
-  if (current === "exiting") return "exiting";
-  if (input.hasMessages) return "exiting";
-  if (input.timedOut && current === "active") return "timed-out";
+  if (current === "exiting") {
+    return "exiting";
+  }
+  if (input.hasMessages) {
+    return "exiting";
+  }
+  if (input.timedOut && current === "active") {
+    return "timed-out";
+  }
   return current;
 }
 
@@ -129,7 +139,9 @@ export function useWelcomeKickoffStage(
   }, [hasTimelineMessages, isWelcome, timedOut, timelineLoading]);
 
   React.useEffect(() => {
-    if (phase !== "active") return;
+    if (phase !== "active") {
+      return;
+    }
     const timer = globalThis.setTimeout(
       () => setTimedOut(true),
       WELCOME_KICKOFF_STAGE_TIMEOUT_MS,

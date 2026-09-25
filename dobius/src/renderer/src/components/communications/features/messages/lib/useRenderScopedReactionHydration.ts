@@ -28,7 +28,9 @@ export function useRenderScopedReactionHydration(input: {
       threadHeadMessage: input.threadHeadMessage,
       threadEntries: input.threadMessages,
     });
-    if (messageIds.length === 0) return;
+    if (messageIds.length === 0) {
+      return;
+    }
 
     const timeout = window.setTimeout(() => {
       void hydrateRenderScopedReactions({

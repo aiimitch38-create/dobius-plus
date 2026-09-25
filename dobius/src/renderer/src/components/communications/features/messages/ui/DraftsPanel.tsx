@@ -208,8 +208,12 @@ export function canSendDraft(
   source: DraftSource,
   rootStatus: RootStatus,
 ): boolean {
-  if (!canOpenDraft(draft, source)) return false;
-  if (rootStatus === "deleted") return false;
+  if (!canOpenDraft(draft, source)) {
+    return false;
+  }
+  if (rootStatus === "deleted") {
+    return false;
+  }
   // Mirror the destination composer's stable disabled states so we never
   // offer a Send that will silently no-op:
   //   - not a member: the composer rejects sends
@@ -217,10 +221,18 @@ export function canSendDraft(
   //   - forum: forum posting is not wired
   // `isSending` is transient runtime state not visible from the panel — omit.
   const ch = source.channel;
-  if (ch === null) return false;
-  if (!ch.isMember) return false;
-  if (ch.archivedAt !== null) return false;
-  if (ch.channelType === "forum") return false;
+  if (ch === null) {
+    return false;
+  }
+  if (!ch.isMember) {
+    return false;
+  }
+  if (ch.archivedAt !== null) {
+    return false;
+  }
+  if (ch.channelType === "forum") {
+    return false;
+  }
   return true;
 }
 
@@ -230,7 +242,9 @@ export async function openDraftEntry(
   entry: DraftListEntry,
   goChannel: GoChannel,
 ): Promise<void> {
-  if (!entry.draft.channelId) return;
+  if (!entry.draft.channelId) {
+    return;
+  }
 
   if (entry.key.startsWith(INBOX_REPLY_PREFIX)) {
     const migrated = await migrateInboxReplyDraft(entry.key, entry.draft, {
@@ -239,7 +253,9 @@ export async function openDraftEntry(
       getThreadReference,
       renameDraftEntry,
     });
-    if (!migrated) return;
+    if (!migrated) {
+      return;
+    }
     await goChannel(migrated.channelId, {
       messageId: migrated.conversationId,
       threadRootId: migrated.conversationId,
@@ -258,7 +274,9 @@ export async function sendDraftEntry(
   entry: DraftListEntry,
   goChannel: GoChannel,
 ): Promise<void> {
-  if (!entry.draft.channelId) return;
+  if (!entry.draft.channelId) {
+    return;
+  }
 
   if (entry.key.startsWith(INBOX_REPLY_PREFIX)) {
     const migrated = await migrateInboxReplyDraft(entry.key, entry.draft, {
@@ -267,7 +285,9 @@ export async function sendDraftEntry(
       getThreadReference,
       renameDraftEntry,
     });
-    if (!migrated) return;
+    if (!migrated) {
+      return;
+    }
     await goChannel(migrated.channelId, {
       autoSend: migrated.newDraftKey,
       messageId: migrated.conversationId,
@@ -473,7 +493,7 @@ function DraftRow({
  * @returns             Count of active drafts whose root is NOT deleted.
  */
 export function deriveActiveDraftCount(
-  activeDrafts: Array<{ key: string; draft: DraftState }>,
+  activeDrafts: { key: string; draft: DraftState }[],
   rootStatusMap: Map<string, RootStatus>,
 ): number {
   return activeDrafts.filter((entry) => {
@@ -618,7 +638,9 @@ export function DraftsPanel({
   }, []);
 
   const handleSendConfirm = React.useCallback(() => {
-    if (!sendTarget) return;
+    if (!sendTarget) {
+      return;
+    }
     const entry = sendTarget;
     setSendTarget(null);
     void sendDraftEntry(entry, goChannel);

@@ -208,7 +208,7 @@ export function resolveInheritedRuntimeSubmission(input: {
 }
 
 /** Inputs for {@link computeEditAgentFormValidity} — all pre-derived primitives. */
-export interface EditAgentFormValidityInput {
+export type EditAgentFormValidityInput = {
   name: string;
   parallelism: string;
   /** The command already persisted on the agent (empty when inheriting). */
@@ -226,7 +226,7 @@ export interface EditAgentFormValidityInput {
    * {@link hasMissingRequiredEnvKey}.
    */
   requiredEnvKeyMissing: boolean;
-}
+};
 
 /**
  * Pure field-validity check for the Edit Agent dialog's Save button.
@@ -283,8 +283,12 @@ export function isEditAgentProviderSaveValid({
   globalProvider: string | null | undefined;
   originalRuntimeSupportsProvider: boolean;
 }): boolean {
-  if (!llmProviderFieldVisible) return true;
-  if (currentProvider.trim() || (globalProvider ?? "").trim()) return true;
+  if (!llmProviderFieldVisible) {
+    return true;
+  }
+  if (currentProvider.trim() || (globalProvider ?? "").trim()) {
+    return true;
+  }
   return (
     (originalProvider ?? "").trim().length === 0 &&
     originalRuntimeSupportsProvider

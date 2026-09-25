@@ -133,9 +133,12 @@ export async function banMember(input: {
   reason?: string;
 }): Promise<void> {
   const tags: string[][] = [["p", normalizePubkey(input.pubkey)]];
-  if (input.expiresAt != null)
+  if (input.expiresAt != null) {
     tags.push(["expiration", String(input.expiresAt)]);
-  if (input.reason?.trim()) tags.push(["reason", input.reason.trim()]);
+  }
+  if (input.reason?.trim()) {
+    tags.push(["reason", input.reason.trim()]);
+  }
   await publishModerationEvent(
     KIND_MODERATION_BAN,
     tags,
@@ -164,7 +167,9 @@ export async function timeoutMember(input: {
     ["p", normalizePubkey(input.pubkey)],
     ["expiration", String(input.expiresAt)],
   ];
-  if (input.reason?.trim()) tags.push(["reason", input.reason.trim()]);
+  if (input.reason?.trim()) {
+    tags.push(["reason", input.reason.trim()]);
+  }
   await publishModerationEvent(
     KIND_MODERATION_TIMEOUT,
     tags,
@@ -200,7 +205,9 @@ export async function resolveReport(input: {
     ["status", input.status],
     ["action", input.action],
   ];
-  if (input.reason?.trim()) tags.push(["reason", input.reason.trim()]);
+  if (input.reason?.trim()) {
+    tags.push(["reason", input.reason.trim()]);
+  }
   await publishModerationEvent(
     KIND_MODERATION_RESOLVE_REPORT,
     tags,
@@ -346,8 +353,12 @@ export async function listReports(options?: {
   limit?: number;
 }): Promise<ModerationReport[]> {
   const params = new URLSearchParams();
-  if (options?.limit != null) params.set("limit", String(options.limit));
-  if (options?.status) params.set("status", options.status);
+  if (options?.limit != null) {
+    params.set("limit", String(options.limit));
+  }
+  if (options?.status) {
+    params.set("status", options.status);
+  }
   const query = params.toString();
   const rows = await moderationGet<RawReport[]>(
     query ? `/moderation/reports?${query}` : "/moderation/reports",

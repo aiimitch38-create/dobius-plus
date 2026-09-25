@@ -18,7 +18,9 @@ export function buildThreadActivityFeedItems(
       // a different relay's scope key should never reach this function, but
       // this filter is the last line of defense against cross-community leaks.
       const channel = channelById.get(item.channelId);
-      if (channel === undefined) return false;
+      if (channel === undefined) {
+        return false;
+      }
       const rootId = getThreadReference(item.tags).rootId;
       return !rootId || !mutedRootIds.has(rootId);
     })

@@ -222,9 +222,9 @@ export function classifyTimelineMessageDelta({
   }
 
   const previousFirstId = previous[0]?.id;
-  const previousLastId = previous[previous.length - 1]?.id;
+  const previousLastId = previous.at(-1)?.id;
   const currentFirstId = current[0]?.id;
-  const currentLastId = current[current.length - 1]?.id;
+  const currentLastId = current.at(-1)?.id;
 
   if (previousFirstId === currentFirstId && previousLastId === currentLastId) {
     if (previous.length === current.length) {

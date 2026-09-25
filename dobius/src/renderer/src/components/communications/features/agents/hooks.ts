@@ -399,7 +399,9 @@ export function useUpdateManagedAgentMutation() {
       queryClient.setQueryData<ManagedAgent[]>(
         managedAgentsQueryKey,
         (current) => {
-          if (!current) return current;
+          if (!current) {
+            return current;
+          }
           return current.map((agent) =>
             agent.pubkey === result.agent.pubkey ? result.agent : agent,
           );
@@ -540,7 +542,9 @@ export function useStartManagedAgentMutation() {
       queryClient.setQueryData<ManagedAgent[]>(
         managedAgentsQueryKey,
         (current) => {
-          if (!current) return current;
+          if (!current) {
+            return current;
+          }
           return current.map((agent) =>
             agent.pubkey === updated.pubkey ? updated : agent,
           );

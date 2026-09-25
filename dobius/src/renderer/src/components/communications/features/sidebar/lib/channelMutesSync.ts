@@ -25,7 +25,9 @@ async function decryptAndParse(event: RelayEvent): Promise<RemoteMutes | null> {
   try {
     const plaintext = await nip44DecryptFromSelf(event.content);
     const store = parseMutePayload(JSON.parse(plaintext));
-    if (!store) return null;
+    if (!store) {
+      return null;
+    }
     return { store, createdAt: event.created_at, eventId: event.id };
   } catch {
     return null;
@@ -51,8 +53,12 @@ export class ChannelMuteSyncManager {
         "#d": [D_TAG],
         limit: 1,
       });
-      if (events.length === 0) return null;
-      if (events[0].pubkey !== this.pubkey) return null;
+      if (events.length === 0) {
+        return null;
+      }
+      if (events[0].pubkey !== this.pubkey) {
+        return null;
+      }
       const result = await decryptAndParse(events[0]);
       if (result) {
         this.lastRemoteCreatedAt = Math.max(
@@ -98,9 +104,13 @@ export class ChannelMuteSyncManager {
         "#d": [D_TAG],
         limit: 1,
       });
-      if (events.length === 0 || events[0].pubkey !== this.pubkey) return store;
+      if (events.length === 0 || events[0].pubkey !== this.pubkey) {
+        return store;
+      }
       const remote = await decryptAndParse(events[0]);
-      if (!remote) return store;
+      if (!remote) {
+        return store;
+      }
       this.lastRemoteCreatedAt = Math.max(
         this.lastRemoteCreatedAt,
         remote.createdAt,
@@ -112,10 +122,14 @@ export class ChannelMuteSyncManager {
   }
 
   private isIdenticalToLastPublished(store: ChannelMuteStore): boolean {
-    if (!this.lastPublishedStore) return false;
+    if (!this.lastPublishedStore) {
+      return false;
+    }
     const lastKeys = Object.keys(this.lastPublishedStore.channels);
     const currentKeys = Object.keys(store.channels);
-    if (lastKeys.length !== currentKeys.length) return false;
+    if (lastKeys.length !== currentKeys.length) {
+      return false;
+    }
     for (const key of currentKeys) {
       const last = this.lastPublishedStore.channels[key];
       const current = store.channels[key];
@@ -123,8 +137,9 @@ export class ChannelMuteSyncManager {
         !last ||
         last.muted !== current.muted ||
         last.updatedAt !== current.updatedAt
-      )
+      ) {
         return false;
+      }
     }
     return true;
   }
@@ -181,7 +196,9 @@ export class ChannelMuteSyncManager {
         limit: 0,
       },
       (event: RelayEvent) => {
-        if (event.pubkey !== this.pubkey) return;
+        if (event.pubkey !== this.pubkey) {
+          return;
+        }
         void decryptAndParse(event).then((result) => {
           if (result) {
             this.lastRemoteCreatedAt = Math.max(

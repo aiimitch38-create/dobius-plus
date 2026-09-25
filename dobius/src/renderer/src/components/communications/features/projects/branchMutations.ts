@@ -19,7 +19,9 @@ export function useCreateProjectRemoteBranchMutation(
       expectedCommit: string;
       newBranch: string;
     }) => {
-      if (!project?.cloneUrls[0]) throw new Error("No project selected.");
+      if (!project?.cloneUrls[0]) {
+        throw new Error("No project selected.");
+      }
       return createProjectRemoteBranch({
         cloneUrl: project.cloneUrls[0],
         ...input,
@@ -39,7 +41,9 @@ export function useDeleteProjectRemoteBranchMutation(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { branch: string; expectedCommit: string }) => {
-      if (!project?.cloneUrls[0]) throw new Error("No project selected.");
+      if (!project?.cloneUrls[0]) {
+        throw new Error("No project selected.");
+      }
       return deleteProjectRemoteBranch({
         cloneUrl: project.cloneUrls[0],
         ...input,

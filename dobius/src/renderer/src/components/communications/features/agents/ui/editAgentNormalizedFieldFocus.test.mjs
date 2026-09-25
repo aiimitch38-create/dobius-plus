@@ -70,19 +70,30 @@ function dispatchNormalizedFieldFocus(
   domMap,
   firedRef,
 ) {
-  if (!open || !initialFocus) return false;
-  if (initialFocus.type !== "normalized_field") return false;
-  if (firedRef.current) return false;
+  if (!open || !initialFocus) {
+    return false;
+  }
+  if (initialFocus.type !== "normalized_field") {
+    return false;
+  }
+  if (firedRef.current) {
+    return false;
+  }
 
   // Provider field only renders when the runtime catalog has resolved.
-  if (initialFocus.field === "provider" && !llmProviderFieldVisible)
+  if (initialFocus.field === "provider" && !llmProviderFieldVisible) {
     return false;
+  }
 
   const targetId = EDIT_FIELD_IDS[initialFocus.field];
-  if (!targetId) return false;
+  if (!targetId) {
+    return false;
+  }
 
   const el = domMap.get(targetId);
-  if (!el) return false;
+  if (!el) {
+    return false;
+  }
 
   firedRef.current = true;
   el.scrollIntoView({ block: "nearest" });

@@ -83,8 +83,8 @@ export type Project = {
 };
 
 export type RepoState = {
-  branches: Array<{ name: string; commit: string }>;
-  tags: Array<{ name: string; commit: string }>;
+  branches: { name: string; commit: string }[];
+  tags: { name: string; commit: string }[];
   head: string | null;
   updatedAt: number;
 };
@@ -312,7 +312,9 @@ async function fetchProject(projectId: string): Promise<Project | null> {
     limit: 10,
   });
 
-  if (isDeletedByA(project, deletionEvents)) return null;
+  if (isDeletedByA(project, deletionEvents)) {
+    return null;
+  }
   const repoState = await fetchRepoState(project);
   return {
     ...project,
@@ -330,7 +332,9 @@ function eventToRepoState(event: RelayEvent): RepoState {
 
   for (const tag of event.tags) {
     const [name, value] = tag;
-    if (!name || !value) continue;
+    if (!name || !value) {
+      continue;
+    }
 
     if (name.startsWith("refs/heads/")) {
       branches.push({ name: name.slice("refs/heads/".length), commit: value });
@@ -571,7 +575,9 @@ async function fetchProjectRepoSnapshot(
   tag?: { name: string; commit: string } | null,
 ): Promise<ProjectRepoSnapshot | null> {
   const cloneUrl = pullRequest?.cloneUrls[0] ?? project.cloneUrls[0];
-  if (!cloneUrl) return null;
+  if (!cloneUrl) {
+    return null;
+  }
 
   return getProjectRepoSnapshot({
     cloneUrl,
@@ -592,7 +598,9 @@ async function fetchProjectRepoDiff(
   pullRequest?: ProjectPullRequest | null,
 ): Promise<ProjectRepoDiff | null> {
   const cloneUrl = pullRequest?.cloneUrls[0] ?? project.cloneUrls[0];
-  if (!cloneUrl) return null;
+  if (!cloneUrl) {
+    return null;
+  }
 
   return getProjectRepoDiff({
     cloneUrl,
@@ -641,7 +649,9 @@ async function fetchProjectLocalRepoSnapshot(
 async function fetchProjectActivitySummaries(
   projects: Project[],
 ): Promise<Record<string, ProjectActivitySummary>> {
-  if (projects.length === 0) return {};
+  if (projects.length === 0) {
+    return {};
+  }
 
   const events = await relayClient.fetchEvents({
     kinds: [
@@ -706,7 +716,9 @@ export function useRepoStateQuery(project: Project | null | undefined) {
     enabled: Boolean(project),
     queryKey: ["project", project?.id ?? "none", "repo-state"],
     queryFn: () => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return fetchRepoState(project);
     },
     staleTime: 30_000,
@@ -734,7 +746,9 @@ export function useProjectRepoSnapshotQuery(
       tag?.commit ?? "no-tag-commit",
     ],
     queryFn: () => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return fetchProjectRepoSnapshot(
         project,
         selectedBranch,
@@ -766,7 +780,9 @@ export function useProjectRepoDiffQuery(
       pullRequest?.commit ?? "none",
     ],
     queryFn: () => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return fetchProjectRepoDiff(project, selectedBranch, pullRequest);
     },
     staleTime: 30_000,
@@ -795,7 +811,9 @@ export function useProjectLocalRepoDiffQuery(
       pullRequest?.commit ?? "none",
     ],
     queryFn: () => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return fetchProjectLocalRepoDiff(
         project,
         reposDir,
@@ -825,7 +843,9 @@ export function useProjectLocalRepoSnapshotQuery(
       selectedBranch ?? "default",
     ],
     queryFn: () => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return fetchProjectLocalRepoSnapshot(project, reposDir, selectedBranch);
     },
     staleTime: 10_000,
@@ -847,7 +867,9 @@ export function useProjectIssuesQuery(project: Project | null | undefined) {
     enabled: Boolean(project),
     queryKey: ["project", project?.id ?? "none", "issues"],
     queryFn: () => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return fetchProjectIssues(project);
     },
     staleTime: 30_000,
@@ -861,7 +883,9 @@ export function useProjectPullRequestsQuery(
     enabled: Boolean(project),
     queryKey: ["project", project?.id ?? "none", "pull-requests"],
     queryFn: () => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return fetchProjectPullRequests(project);
     },
     staleTime: 30_000,
@@ -895,7 +919,9 @@ export function useCreateProjectIssueCommentMutation(
       mentionPubkeys?: string[];
       issue: ProjectIssue;
     }) => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return createProjectIssueComment({
         content,
         mediaTags,
@@ -939,7 +965,9 @@ export function useCreateProjectPullRequestCommentMutation(
       mentionPubkeys?: string[];
       pullRequest: ProjectPullRequest;
     }) => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return createProjectPullRequestComment({
         anchor,
         content,

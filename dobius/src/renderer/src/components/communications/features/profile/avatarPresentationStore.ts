@@ -25,7 +25,9 @@ const listeners = new Set<() => void>();
 let nextGeneration = 1;
 
 function emitChange(): void {
-  for (const listener of listeners) listener();
+  for (const listener of listeners) {
+    listener();
+  }
 }
 
 function toastId(remoteUrl: string): string {
@@ -33,7 +35,9 @@ function toastId(remoteUrl: string): string {
 }
 
 function releaseLocalPreview(entry: AvatarPresentationEntry): void {
-  if (!entry.localPreviewUrl) return;
+  if (!entry.localPreviewUrl) {
+    return;
+  }
   URL.revokeObjectURL(entry.localPreviewUrl);
   entry.localPreviewUrl = null;
 }
@@ -68,7 +72,9 @@ function probeImage(
     let settled = false;
     const verifiedUrl = buildProbeUrl(remoteUrl, attempt);
     const finish = (result: string | null) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
       window.clearTimeout(timeoutId);
       image.onload = null;
@@ -89,25 +95,35 @@ async function verifyPresentation(
 ): Promise<void> {
   for (const [attempt, delayMs] of PROBE_DELAYS_MS.entries()) {
     await wait(delayMs);
-    if (!isCurrent(entry) || entry.snapshot.state !== "pending") return;
+    if (!isCurrent(entry) || entry.snapshot.state !== "pending") {
+      return;
+    }
 
     const verifiedUrl = await probeImage(entry.remoteUrl, attempt);
-    if (!isCurrent(entry) || entry.snapshot.state !== "pending") return;
-    if (!verifiedUrl) continue;
+    if (!isCurrent(entry) || entry.snapshot.state !== "pending") {
+      return;
+    }
+    if (!verifiedUrl) {
+      continue;
+    }
 
     releaseLocalPreview(entry);
     entry.snapshot = { displayUrl: verifiedUrl, state: "ready" };
     toast.dismiss(toastId(entry.remoteUrl));
     emitChange();
     window.setTimeout(() => {
-      if (!isCurrent(entry) || entry.snapshot.state !== "ready") return;
+      if (!isCurrent(entry) || entry.snapshot.state !== "ready") {
+        return;
+      }
       presentations.delete(entry.remoteUrl);
       emitChange();
     }, READY_PRESENTATION_TTL_MS);
     return;
   }
 
-  if (!isCurrent(entry) || entry.snapshot.state !== "pending") return;
+  if (!isCurrent(entry) || entry.snapshot.state !== "pending") {
+    return;
+  }
   entry.snapshot = {
     displayUrl: entry.remoteUrl,
     state: "failed",
@@ -144,7 +160,9 @@ export function beginAvatarPresentation(remoteUrl: string, image: Blob): void {
 
 export function disposeAvatarPresentation(remoteUrl: string): void {
   const entry = presentations.get(remoteUrl);
-  if (!entry) return;
+  if (!entry) {
+    return;
+  }
 
   entry.generation = nextGeneration++;
   toast.dismiss(toastId(remoteUrl));
@@ -165,7 +183,9 @@ export function resetAvatarPresentations(): void {
 
 export function retryAvatarPresentation(remoteUrl: string): void {
   const entry = presentations.get(remoteUrl);
-  if (entry?.snapshot.state !== "failed") return;
+  if (entry?.snapshot.state !== "failed") {
+    return;
+  }
   entry.generation = nextGeneration++;
   entry.snapshot = {
     displayUrl: entry.localPreviewUrl ?? entry.remoteUrl,
@@ -178,7 +198,9 @@ export function retryAvatarPresentation(remoteUrl: string): void {
 export function getAvatarPresentation(
   remoteUrl: string | null,
 ): AvatarPresentation | null {
-  if (!remoteUrl) return null;
+  if (!remoteUrl) {
+    return null;
+  }
   return presentations.get(remoteUrl)?.snapshot ?? null;
 }
 
@@ -203,7 +225,9 @@ export function useAvatarSelection(
 ): (avatarUrl: string) => void {
   return React.useCallback(
     (nextAvatarUrl: string) => {
-      if (avatarUrl !== nextAvatarUrl) disposeAvatarPresentation(avatarUrl);
+      if (avatarUrl !== nextAvatarUrl) {
+        disposeAvatarPresentation(avatarUrl);
+      }
       onUrlChange(nextAvatarUrl);
     },
     [avatarUrl, onUrlChange],

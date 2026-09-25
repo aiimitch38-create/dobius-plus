@@ -184,18 +184,20 @@ export function resolvePanelProfile({
 }
 
 export function resolveProfileAvatarUrl(
-  ...candidates: Array<string | null | undefined>
+  ...candidates: (string | null | undefined)[]
 ): string | null {
   for (const candidate of candidates) {
     const trimmed = candidate?.trim();
-    if (trimmed) return trimmed;
+    if (trimmed) {
+      return trimmed;
+    }
   }
   return null;
 }
 
 export function withProfileAvatarFallback(
   profile: Profile | undefined,
-  fallbackAvatarUrls: Array<string | null | undefined>,
+  fallbackAvatarUrls: (string | null | undefined)[],
 ): Profile | undefined {
   const profileAvatarUrl = normalizeProfileFallbackAvatarUrl(
     profile?.avatarUrl,
@@ -215,7 +217,9 @@ function normalizeProfileFallbackAvatarUrl(
   avatarUrl: string | null | undefined,
 ): string | null {
   const trimmed = avatarUrl?.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return null;
+  }
   return trimmed;
 }
 
@@ -267,7 +271,9 @@ export function personaManagedAgentUpdate(
     runtimes?: readonly AcpRuntimeCatalogEntry[];
   } = {},
 ): UpdateManagedAgentInput | null {
-  if (agent.personaId !== persona.id) return null;
+  if (agent.personaId !== persona.id) {
+    return null;
+  }
 
   const input: UpdateManagedAgentInput = { pubkey: agent.pubkey };
   let hasChanges = false;
@@ -320,7 +326,9 @@ export function personaManagedAgentUpdate(
 }
 
 function stringArrayEqual(left: readonly string[], right: readonly string[]) {
-  if (left.length !== right.length) return false;
+  if (left.length !== right.length) {
+    return false;
+  }
 
   return left.every((value, index) => value === right[index]);
 }
@@ -331,7 +339,9 @@ function stringRecordEqual(
 ) {
   const leftKeys = Object.keys(left);
   const rightKeys = Object.keys(right);
-  if (leftKeys.length !== rightKeys.length) return false;
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
 
   return leftKeys.every((key) => left[key] === right[key]);
 }
@@ -346,7 +356,9 @@ export function useRetainedPersona(
   } | null>(null);
 
   React.useEffect(() => {
-    if (!sourcePersona) return;
+    if (!sourcePersona) {
+      return;
+    }
     setRetainedPersona({ key: profileIdentityKey, persona: sourcePersona });
   }, [profileIdentityKey, sourcePersona]);
 

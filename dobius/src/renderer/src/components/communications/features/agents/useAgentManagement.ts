@@ -77,7 +77,7 @@ export function useAgentManagement() {
   const managedAgentsRef = React.useRef(managedAgentsQuery.data);
   const channelsRef = React.useRef(channelsQuery.data);
   const bufferedRequestsRef = React.useRef<
-    Array<{ agentPubkey: string; request: AgentManagementRequest }>
+    { agentPubkey: string; request: AgentManagementRequest }[]
   >([]);
 
   const acceptOwnedRequest = React.useEffectEvent(
@@ -141,7 +141,9 @@ export function useAgentManagement() {
   );
 
   const matchingPersonas = React.useMemo(() => {
-    if (request?.action !== "update") return [];
+    if (request?.action !== "update") {
+      return [];
+    }
     const target = request.request.agentName.trim().toLocaleLowerCase();
     return (personasQuery.data ?? []).filter(
       (persona) =>
@@ -213,7 +215,9 @@ export function useAgentManagement() {
             backendIntent ?? undefined,
           ),
         );
-        if (created.spawnError) throw new Error(created.spawnError);
+        if (created.spawnError) {
+          throw new Error(created.spawnError);
+        }
         const targetChannel = (channelsQuery.data ?? []).find(
           (channel) => channel.id === request.request.channelId,
         );
@@ -272,7 +276,9 @@ export function useAgentManagement() {
   );
 
   const editInitialValues = React.useMemo(() => {
-    if (request?.action !== "update" || !currentPersona) return null;
+    if (request?.action !== "update" || !currentPersona) {
+      return null;
+    }
     return updateInputFromRequest(
       request,
       editPersonaDialogState(currentPersona)
@@ -281,8 +287,12 @@ export function useAgentManagement() {
   }, [currentPersona, request]);
 
   const editError = React.useMemo(() => {
-    if (request?.action !== "update") return error;
-    if (error) return error;
+    if (request?.action !== "update") {
+      return error;
+    }
+    if (error) {
+      return error;
+    }
     if (matchingPersonas.length > 1) {
       return "More than one personal agent has that name. Rename it in Agents, then ask the agent again.";
     }

@@ -26,7 +26,9 @@ export function runtimeIsVisibleInOnboarding(runtimeId: string) {
 
 /** Sort key: built-in Dobius runtimes lead, then the fixed upstream order. */
 function onboardingRuntimeRank(runtimeId: string) {
-  if (runtimeId.startsWith(DOBIUS_RUNTIME_ID_PREFIX)) return -1;
+  if (runtimeId.startsWith(DOBIUS_RUNTIME_ID_PREFIX)) {
+    return -1;
+  }
   return ONBOARDING_RUNTIME_ORDER.indexOf(runtimeId);
 }
 

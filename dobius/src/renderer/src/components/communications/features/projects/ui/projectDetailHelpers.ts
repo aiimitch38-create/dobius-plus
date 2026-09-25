@@ -15,7 +15,9 @@ export function pushPullTitle(
   count: number | undefined,
   side: "local" | "remote",
 ) {
-  if (!count) return `${verb} ${side} commits`;
+  if (!count) {
+    return `${verb} ${side} commits`;
+  }
   return `${verb} ${count} ${side} ${count === 1 ? "commit" : "commits"}`;
 }
 

@@ -268,7 +268,7 @@ function AgentSummary({
           </div>
           {agent.personaOrphaned ? (
             <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-              This agent's configuration is missing — it may still be syncing or
+              This agent&apos;s configuration is missing — it may still be syncing or
               was deleted on another device.
             </p>
           ) : agent.needsRestart ? (

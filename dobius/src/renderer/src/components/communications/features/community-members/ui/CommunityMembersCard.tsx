@@ -28,12 +28,20 @@ function formatRelativeDate(dateString: string): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60_000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffMins < 1) {
+    return "just now";
+  }
+  if (diffMins < 60) {
+    return `${diffMins}m ago`;
+  }
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) return `${diffDays}d ago`;
+  if (diffDays < 30) {
+    return `${diffDays}d ago`;
+  }
   return date.toLocaleDateString();
 }
 
@@ -280,7 +288,9 @@ export function CommunityMembersCard({
             : null
         }
         onOpenChange={(open) => {
-          if (!open) setRemoveTarget(null);
+          if (!open) {
+            setRemoveTarget(null);
+          }
         }}
         open={removeTarget !== null}
       />

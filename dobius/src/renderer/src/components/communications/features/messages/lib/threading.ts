@@ -34,7 +34,7 @@ export function getThreadReference(tags: string[][]): ThreadReference {
 
   const rootTag = eventTags.find((tag) => tag[3] === "root");
   const replyTag =
-    [...eventTags].reverse().find((tag) => tag[3] === "reply") ?? null;
+    eventTags.toReversed().find((tag) => tag[3] === "reply") ?? null;
 
   if (!replyTag) {
     return {

@@ -357,7 +357,9 @@ function CommunityApp({
   const transitionCommunity = useCallback(
     async (targetCommunityId: string) => {
       const activeCommunityId = activeCommunity?.id;
-      if (targetCommunityId === activeCommunityId) return;
+      if (targetCommunityId === activeCommunityId) {
+        return;
+      }
       if (activeCommunityId) {
         const route = deriveShellRoute(router.state.location.pathname);
         saveCommunityDestination(
@@ -383,8 +385,12 @@ function CommunityApp({
 
   const handleCommunityOnboardingConnect = useCallback(async () => {
     const transaction = communityOnboarding.transaction;
-    if (transaction?.stage !== "connecting") return;
-    if (connectingTransactionRef.current === transaction.id) return;
+    if (transaction?.stage !== "connecting") {
+      return;
+    }
+    if (connectingTransactionRef.current === transaction.id) {
+      return;
+    }
     connectingTransactionRef.current = transaction.id;
     if (transaction.communityId) {
       await transitionCommunity(transaction.communityId);
@@ -425,7 +431,9 @@ function CommunityApp({
     const transaction = communityOnboarding.transaction;
     communityOnboarding.clear();
 
-    if (!transaction?.communityId) return;
+    if (!transaction?.communityId) {
+      return;
+    }
     if (!transaction.addedCommunity) {
       if (transaction.previousCommunityId) {
         await transitionCommunity(transaction.previousCommunityId);
@@ -465,10 +473,14 @@ function CommunityApp({
     community.isReady &&
     community.appliedKey === communityKey;
   useEffect(() => {
-    if (transaction?.stage !== "connecting" || !targetIsReady) return;
+    if (transaction?.stage !== "connecting" || !targetIsReady) {
+      return;
+    }
     const transactionId = transaction.id;
     const relayUrl = transaction.relayUrl;
-    if (profileCheckTransactionRef.current === transactionId) return;
+    if (profileCheckTransactionRef.current === transactionId) {
+      return;
+    }
     profileCheckTransactionRef.current = transactionId;
 
     // resolveProfileCheckAction resolves exactly once (Promise.race + timer
@@ -478,8 +490,11 @@ function CommunityApp({
       // transaction must still be the same one that launched this request
       // AND still be in connecting. Covers cancel+replacement (B's ID !== A's)
       // and cancel-without-replacement (transactionRef.current is null).
-      if (!isTransactionStillConnecting(transactionRef.current, transactionId))
+      if (
+        !isTransactionStillConnecting(transactionRef.current, transactionId)
+      ) {
         return;
+      }
 
       if (result.action === "skip") {
         markCommunityOnboardingComplete(result.profile.pubkey, relayUrl);
@@ -681,10 +696,18 @@ function MachineBootstrap({ sharedIdentity }: { sharedIdentity: boolean }) {
     };
   }, [communityOnboarding.start, openAddCommunity]);
 
-  if (machine.stage === "reset-failed") return <ResetFailedScreen />;
-  if (machine.stage === "keyring-locked") return <KeyringLockedScreen />;
-  if (machine.stage === "relaunch-required") return <RelaunchRequiredScreen />;
-  if (machine.stage === "blocking") return <AppLoadingGate />;
+  if (machine.stage === "reset-failed") {
+    return <ResetFailedScreen />;
+  }
+  if (machine.stage === "keyring-locked") {
+    return <KeyringLockedScreen />;
+  }
+  if (machine.stage === "relaunch-required") {
+    return <RelaunchRequiredScreen />;
+  }
+  if (machine.stage === "blocking") {
+    return <AppLoadingGate />;
+  }
   if (machine.stage === "ready") {
     return (
       <CommunityApp
@@ -738,7 +761,9 @@ export function App() {
       });
   }, []);
 
-  if (sharedIdentity === null) return <AppLoadingGate />;
+  if (sharedIdentity === null) {
+    return <AppLoadingGate />;
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -105,10 +105,16 @@ function formatReactionUsers(reaction: TimelineReaction): string {
     const others = names.filter((name) => name !== "You");
     names.splice(0, names.length, "You (click to remove)", ...others);
   }
-  if (names.length === 0) return `${reaction.count} people`;
-  if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+  if (names.length === 0) {
+    return `${reaction.count} people`;
+  }
+  if (names.length === 1) {
+    return names[0];
+  }
+  if (names.length === 2) {
+    return `${names[0]} and ${names[1]}`;
+  }
+  return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
 }
 
 function ReactionPopoverContent({ reaction }: { reaction: TimelineReaction }) {
@@ -187,7 +193,9 @@ export function MessageReactions({
       (candidate) =>
         candidate.emoji === badgeBurstEmoji && candidate.reactedByCurrentUser,
     );
-    if (!reaction || !pillRefs.current.get(badgeBurstEmoji)) return;
+    if (!reaction || !pillRefs.current.get(badgeBurstEmoji)) {
+      return;
+    }
 
     let frameId: number | null = null;
     let frameCount = 0;
@@ -195,7 +203,9 @@ export function MessageReactions({
     let previousRect: BadgeBurstRect | null = null;
 
     const cancelFrame = () => {
-      if (frameId === null) return;
+      if (frameId === null) {
+        return;
+      }
       window.cancelAnimationFrame(frameId);
       frameId = null;
     };
@@ -204,10 +214,14 @@ export function MessageReactions({
       frameId = null;
 
       const pill = pillRefs.current.get(badgeBurstEmoji);
-      if (!pill || !document.documentElement.contains(pill)) return;
+      if (!pill || !document.documentElement.contains(pill)) {
+        return;
+      }
 
       const nextRect = toBadgeBurstRect(pill.getBoundingClientRect());
-      if (!nextRect.width && !nextRect.height) return;
+      if (!nextRect.width && !nextRect.height) {
+        return;
+      }
 
       stableFrameCount = isSameBadgeBurstRect(previousRect, nextRect)
         ? stableFrameCount + 1
@@ -374,7 +388,9 @@ function ReactionPill({
   }, []);
 
   const handleMouseEnter = React.useCallback(() => {
-    if (reaction.users.length === 0) return;
+    if (reaction.users.length === 0) {
+      return;
+    }
     clearTimers();
     openTimeout.current = setTimeout(() => setOpen(true), 200);
   }, [reaction.users.length, clearTimers]);
@@ -385,7 +401,9 @@ function ReactionPill({
   }, [clearTimers]);
 
   const handleFocus = React.useCallback(() => {
-    if (reaction.users.length === 0) return;
+    if (reaction.users.length === 0) {
+      return;
+    }
     clearTimers();
     setOpen(true);
   }, [reaction.users.length, clearTimers]);
@@ -415,7 +433,9 @@ function ReactionPill({
   );
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (!canToggle) return;
+    if (!canToggle) {
+      return;
+    }
     if (
       !reaction.reactedByCurrentUser &&
       isPositiveEmojiParticle(reaction.emoji)

@@ -35,7 +35,9 @@ export function mergeOwnedAgentPubkeys(
     pubkeys.add(normalizePubkey(agent.pubkey));
   }
 
-  if (!currentPubkey) return pubkeys;
+  if (!currentPubkey) {
+    return pubkeys;
+  }
 
   const ownerPubkey = normalizePubkey(currentPubkey);
   for (const [pubkey, profile] of Object.entries(profiles ?? {})) {

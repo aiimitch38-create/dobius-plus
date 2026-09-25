@@ -53,7 +53,9 @@ export function UserMessageBubble({
     : item.title || "User";
   const handleBubbleClick = React.useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      if (!messageLink || isNestedInteractiveTarget(event)) return;
+      if (!messageLink || isNestedInteractiveTarget(event)) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       void goChannel(messageLink.channelId, {

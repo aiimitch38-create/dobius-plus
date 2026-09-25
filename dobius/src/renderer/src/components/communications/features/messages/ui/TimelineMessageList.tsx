@@ -476,9 +476,13 @@ function VirtualizedTimelineRows({
   const messageItemIndexById = React.useMemo(() => {
     const byId = new Map<string, number>();
     items.forEach((item, index) => {
-      if (item.kind !== "timeline-item") return;
+      if (item.kind !== "timeline-item") {
+        return;
+      }
       const messageId = timelineItemMessageId(item.item);
-      if (messageId) byId.set(messageId, index);
+      if (messageId) {
+        byId.set(messageId, index);
+      }
     });
     return byId;
   }, [items]);
@@ -499,7 +503,9 @@ function VirtualizedTimelineRows({
   }, [onVirtualizerScrollerChange]);
 
   React.useLayoutEffect(() => {
-    if (!onVirtualizerApiChange) return;
+    if (!onVirtualizerApiChange) {
+      return;
+    }
     const api: TimelineVirtualizerApi = {
       cancelBottomIntent: cancelBottomSettle,
       scrollToBottom() {
@@ -509,7 +515,9 @@ function VirtualizedTimelineRows({
       scrollToMessage(messageId) {
         cancelBottomSettle();
         const index = messageItemIndexByIdRef.current.get(messageId);
-        if (index === undefined) return false;
+        if (index === undefined) {
+          return false;
+        }
         listRef.current?.scrollToIndex(index, { align: "center" });
         return true;
       },
@@ -520,7 +528,9 @@ function VirtualizedTimelineRows({
 
   React.useLayoutEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!host) {
+      return;
+    }
     const updateBufferSize = () => {
       // Measure rows three viewports ahead of the reader. Virtua deliberately
       // hides each newly mounted row until its first ResizeObserver result; a
@@ -543,7 +553,9 @@ function VirtualizedTimelineRows({
     (offset: number) => {
       const list = listRef.current;
       const scroller = hostRef.current?.firstElementChild;
-      if (!list || !(scroller instanceof HTMLDivElement)) return;
+      if (!list || !(scroller instanceof HTMLDivElement)) {
+        return;
+      }
       onVirtualizerRangeChanged?.();
       const distanceFromBottom = list.scrollSize - list.viewportSize - offset;
       // Do not infer reader intent from an intermediate virtualizer offset.
@@ -675,7 +687,9 @@ function SystemRow({
     () => entries?.map((systemEntry) => systemEntry.message),
     [entries],
   );
-  if (!firstEntry) return null;
+  if (!firstEntry) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col gap-1 pb-2.5">

@@ -54,7 +54,9 @@ export function ReportMessageDialog({
   }, [open]);
 
   const submit = () => {
-    if (!category || submitReport.isPending) return;
+    if (!category || submitReport.isPending) {
+      return;
+    }
     submitReport.mutate(
       {
         authorPubkey,
@@ -81,7 +83,7 @@ export function ReportMessageDialog({
             Report message
           </DialogTitle>
           <DialogDescription>
-            Reports go to this community's moderators for review. The author is
+            Reports go to this community&apos;s moderators for review. The author is
             not notified of who reported them.
           </DialogDescription>
         </DialogHeader>

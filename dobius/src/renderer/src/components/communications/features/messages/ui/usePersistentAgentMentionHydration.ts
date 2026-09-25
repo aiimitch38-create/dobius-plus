@@ -27,7 +27,9 @@ export function usePersistentAgentMentionHydration({
   const isEditingRef = React.useRef(isEditing);
   isEditingRef.current = isEditing;
   React.useEffect(() => {
-    if (!audienceScope || !initialAgentPubkeys) return;
+    if (!audienceScope || !initialAgentPubkeys) {
+      return;
+    }
     audience.initialize(initialAgentPubkeys);
   }, [audience.initialize, audienceScope, initialAgentPubkeys]);
   const isRestoringRef = React.useRef(false);
@@ -56,10 +58,11 @@ export function usePersistentAgentMentionHydration({
       .filter((target): target is { pubkey: string; displayName: string } =>
         Boolean(target.displayName),
       );
-    for (const target of targets)
+    for (const target of targets) {
       mentions.registerMentionPubkey(target.displayName, target.pubkey, {
         isAgent: true,
       });
+    }
     if (scopeRef.current !== capturedScope) {
       isRestoringRef.current = false;
       return;
@@ -69,7 +72,9 @@ export function usePersistentAgentMentionHydration({
     for (const target of targets.filter(
       (candidate) => !present.has(candidate.pubkey),
     )) {
-      if (scopeRef.current !== capturedScope) break;
+      if (scopeRef.current !== capturedScope) {
+        break;
+      }
       const edit = mentions.insertResolvedMention({
         ...target,
         isAgent: true,
@@ -101,11 +106,14 @@ export function usePersistentAgentMentionHydration({
         isRestoringRef.current ||
         isSubmittingRef.current ||
         isEditingRef.current
-      )
+      ) {
         return;
+      }
       const present = new Set(mentions.extractMentionPubkeys(text));
       for (const pubkey of audienceRef.current.pubkeys) {
-        if (!present.has(pubkey)) audienceRef.current.removePubkey(pubkey);
+        if (!present.has(pubkey)) {
+          audienceRef.current.removePubkey(pubkey);
+        }
       }
     },
     [mentions.extractMentionPubkeys],
@@ -117,7 +125,9 @@ export function usePersistentAgentMentionHydration({
     (cancelAutocomplete = false) =>
       requestAnimationFrame(() => {
         hydrateRef.current();
-        if (cancelAutocomplete) mentions.cancelMentionAutocomplete();
+        if (cancelAutocomplete) {
+          mentions.cancelMentionAutocomplete();
+        }
       }),
     [mentions.cancelMentionAutocomplete],
   );
@@ -130,8 +140,9 @@ export function usePersistentAgentMentionHydration({
 
   const resolvePostSendContent = React.useCallback(
     (explicitAgentPubkeys: string[]) => {
-      if (!audience.enabled || !audienceScope || isEditingRef.current)
+      if (!audience.enabled || !audienceScope || isEditingRef.current) {
         return "";
+      }
       const orderedPubkeys = [
         ...new Set([...explicitAgentPubkeys, ...audience.pubkeys]),
       ];

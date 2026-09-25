@@ -84,7 +84,9 @@ export function CustomEmojiSettingsCard() {
   }, [name]);
 
   const handleAdd = React.useCallback(async () => {
-    if (normalized === null || pendingUpload === null) return;
+    if (normalized === null || pendingUpload === null) {
+      return;
+    }
     try {
       const stored = await setEmoji.mutateAsync({
         shortcode: normalized,
@@ -140,7 +142,9 @@ export function CustomEmojiSettingsCard() {
           className="w-full"
           onSubmit={(event) => {
             event.preventDefault();
-            if (canSubmit) void handleAdd();
+            if (canSubmit) {
+              void handleAdd();
+            }
           }}
         >
           <SettingsOptionGroup>

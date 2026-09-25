@@ -10,15 +10,11 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { RUNTIME_MARKS } from "./HarnessMarks.tsx";
 import { PRESET_LOGOS } from "./RuntimeIcon.tsx";
 
-const desktopRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../../..",
-);
+const desktopRoot = path.resolve(import.meta.dirname, "../../../..");
 
 const presetIds = Object.keys(PRESET_LOGOS);
 

@@ -26,7 +26,9 @@ const THREAD_REPLY_AVATAR_CENTER_Y_REM =
   THREAD_REPLY_ROW_PADDING_TOP_REM + THREAD_REPLY_AVATAR_SIZE_REM / 2;
 
 export function threadReplyLength(valueRem: number) {
-  if (valueRem === 0) return "0";
+  if (valueRem === 0) {
+    return "0";
+  }
   return `${Number(valueRem.toFixed(5))}rem`;
 }
 

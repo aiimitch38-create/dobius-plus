@@ -27,8 +27,12 @@ function shouldResolveTitle(preview: SupportedLinkPreview): boolean {
 
 function cacheTitle(href: string): Promise<string | null> {
   const cached = titleCache.get(href);
-  if (cached instanceof Promise) return cached;
-  if (cached !== undefined) return Promise.resolve(cached);
+  if (cached instanceof Promise) {
+    return cached;
+  }
+  if (cached !== undefined) {
+    return Promise.resolve(cached);
+  }
 
   const promise = fetchLinkPreviewTitle(href)
     .then((title) => {
@@ -53,7 +57,9 @@ export function useResolvedLinkPreviews(
   React.useEffect(() => {
     let cancelled = false;
     const pending = previews.filter(shouldResolveTitle);
-    if (pending.length === 0) return undefined;
+    if (pending.length === 0) {
+      return undefined;
+    }
 
     for (const preview of pending) {
       const cached = titleCache.get(preview.href);
@@ -67,7 +73,9 @@ export function useResolvedLinkPreviews(
       }
 
       void cacheTitle(preview.href).then((title) => {
-        if (cancelled || !title) return;
+        if (cancelled || !title) {
+          return;
+        }
         setResolvedTitles((current) =>
           current[preview.href] === title
             ? current

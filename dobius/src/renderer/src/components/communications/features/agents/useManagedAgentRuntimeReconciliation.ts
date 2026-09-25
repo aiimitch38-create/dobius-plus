@@ -65,10 +65,14 @@ export function useManagedAgentRuntimeReconciliation(
         }
       }
       clearRetryTimer();
-      if (soonest === null) return; // all failing relays hit the retry cap
+      if (soonest === null) {
+        return;
+      } // all failing relays hit the retry cap
       retryTimerRef.current = setTimeout(() => {
         retryTimerRef.current = null;
-        if (!cancelled) runReconcile();
+        if (!cancelled) {
+          runReconcile();
+        }
       }, soonest);
     };
 
@@ -80,7 +84,9 @@ export function useManagedAgentRuntimeReconciliation(
       // Forget bookkeeping for relays that are no longer configured so the sets
       // stay bounded and re-adding a removed community reconciles it afresh.
       for (const done of [...reconciledRef.current]) {
-        if (!canonicalToRequested.has(done)) reconciledRef.current.delete(done);
+        if (!canonicalToRequested.has(done)) {
+          reconciledRef.current.delete(done);
+        }
       }
       for (const failing of [...failuresRef.current.keys()]) {
         if (!canonicalToRequested.has(failing)) {
@@ -98,7 +104,9 @@ export function useManagedAgentRuntimeReconciliation(
         return;
       }
 
-      for (const relay of pending) inFlightRef.current.add(relay);
+      for (const relay of pending) {
+        inFlightRef.current.add(relay);
+      }
       const targets = pending.map((relay) => ({
         relayUrl: canonicalToRequested.get(relay) as string,
       }));
@@ -116,12 +124,16 @@ export function useManagedAgentRuntimeReconciliation(
           return classifyReconcileResult(pending, null, canonicalRelayUrl);
         })
         .then(({ succeeded, failed }) => {
-          for (const relay of pending) inFlightRef.current.delete(relay);
+          for (const relay of pending) {
+            inFlightRef.current.delete(relay);
+          }
           for (const relay of succeeded) {
             reconciledRef.current.add(relay);
             failuresRef.current.delete(relay);
           }
-          if (!cancelled && failed.length > 0) scheduleRetry(failed);
+          if (!cancelled && failed.length > 0) {
+            scheduleRetry(failed);
+          }
         });
     };
 

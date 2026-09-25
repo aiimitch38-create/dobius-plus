@@ -6,10 +6,10 @@ import {
   observerArchiveDefaultEnabled,
 } from "@comms/shared/api/tauriArchive";
 
-export interface ObserverArchiveSeedDeps {
+export type ObserverArchiveSeedDeps = {
   observerArchiveDefaultEnabled: () => Promise<boolean>;
   mergeSaveSubscriptionKinds: (kind: number) => Promise<void>;
-}
+};
 
 const defaultDeps: ObserverArchiveSeedDeps = {
   observerArchiveDefaultEnabled,
@@ -32,7 +32,9 @@ export async function reconcileObserverArchive(
   deps: ObserverArchiveSeedDeps = defaultDeps,
 ): Promise<void> {
   const policyOn = await deps.observerArchiveDefaultEnabled();
-  if (!policyOn) return;
+  if (!policyOn) {
+    return;
+  }
 
   await deps.mergeSaveSubscriptionKinds(KIND_AGENT_OBSERVER_FRAME);
 }
@@ -75,7 +77,9 @@ export function startReconciliation(
 
   reconcileObserverArchive(deps)
     .then(() => {
-      if (!cancelled) onReady(pubkey);
+      if (!cancelled) {
+        onReady(pubkey);
+      }
     })
     .catch((err) => {
       console.warn("[useObserverArchiveReconciliation] failed:", err);
@@ -106,7 +110,9 @@ export function useObserverArchiveReconciliation(
   );
 
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
     return startReconciliation(pubkey, deps, setReconciledPubkey);
   }, [pubkey, deps]);
 

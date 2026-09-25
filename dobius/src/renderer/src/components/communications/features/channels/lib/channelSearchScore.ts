@@ -39,12 +39,16 @@ function collapseSeparators(value: string): string {
  * contiguously). e.g. `reln` is a subsequence of `release-notes`.
  */
 function isSubsequence(query: string, text: string): boolean {
-  if (query.length === 0) return true;
+  if (query.length === 0) {
+    return true;
+  }
   let queryIndex = 0;
   for (const char of text) {
     if (char === query[queryIndex]) {
       queryIndex += 1;
-      if (queryIndex === query.length) return true;
+      if (queryIndex === query.length) {
+        return true;
+      }
     }
   }
   return false;
@@ -59,20 +63,30 @@ export function scoreChannelName(
   name: string,
   lowerQuery: string,
 ): number | null {
-  if (lowerQuery.length === 0) return SCORE_EXACT;
+  if (lowerQuery.length === 0) {
+    return SCORE_EXACT;
+  }
 
   const lower = name.toLowerCase();
 
-  if (lower === lowerQuery) return SCORE_EXACT;
-  if (lower.startsWith(lowerQuery)) return SCORE_PREFIX;
+  if (lower === lowerQuery) {
+    return SCORE_EXACT;
+  }
+  if (lower.startsWith(lowerQuery)) {
+    return SCORE_PREFIX;
+  }
 
   const words = lower.split(WORD_SEPARATORS).filter(Boolean);
-  if (words.some((word) => word === lowerQuery)) return SCORE_WORD_EXACT;
+  if (words.some((word) => word === lowerQuery)) {
+    return SCORE_WORD_EXACT;
+  }
   if (words.some((word) => word.startsWith(lowerQuery))) {
     return SCORE_WORD_PREFIX;
   }
 
-  if (lower.includes(lowerQuery)) return SCORE_SUBSTRING;
+  if (lower.includes(lowerQuery)) {
+    return SCORE_SUBSTRING;
+  }
 
   // `releasenotes` → matches `release-notes` once separators are removed.
   const collapsedName = collapseSeparators(lower);
@@ -104,10 +118,14 @@ export function scoreChannelMatch(
   channel: ChannelSearchable,
   lowerQuery: string,
 ): number | null {
-  if (lowerQuery.length === 0) return SCORE_EXACT;
+  if (lowerQuery.length === 0) {
+    return SCORE_EXACT;
+  }
 
   const nameScore = scoreChannelName(channel.name, lowerQuery);
-  if (nameScore !== null) return nameScore;
+  if (nameScore !== null) {
+    return nameScore;
+  }
 
   // Description only does plain substring — it's supplementary context, so we
   // don't want fuzzy description hits outranking or crowding out name matches.

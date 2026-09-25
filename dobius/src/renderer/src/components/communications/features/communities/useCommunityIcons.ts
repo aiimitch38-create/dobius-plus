@@ -59,7 +59,9 @@ export function useActiveCommunityIcon(relayUrl: string | undefined) {
     queryKey: communityIconQueryKey(relayUrl ?? ""),
     queryFn: async () => {
       const icon = await fetchCommunityIcon(relayUrl ?? "");
-      if (relayUrl) saveCachedCommunityIcon(relayUrl, icon);
+      if (relayUrl) {
+        saveCachedCommunityIcon(relayUrl, icon);
+      }
       return icon;
     },
     enabled: relayUrl !== undefined,

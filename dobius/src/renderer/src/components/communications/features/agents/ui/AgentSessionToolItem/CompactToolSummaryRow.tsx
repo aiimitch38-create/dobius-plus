@@ -41,7 +41,9 @@ export function CompactToolSummaryRow({
   const isCompactPreview = variant === "compactPreview";
   const mutedTone = compactSummaryTone();
   const resolvedThumbnail = React.useMemo(() => {
-    if (!thumbnailSrc || thumbnailFailed) return null;
+    if (!thumbnailSrc || thumbnailFailed) {
+      return null;
+    }
     return resolveToolImageSrc(thumbnailSrc);
   }, [thumbnailFailed, thumbnailSrc]);
   const actionLabel = fileEditSummary
@@ -121,9 +123,13 @@ function getCompactToolActionLabel(
   }
 
   const parts = splitActivityRowLabel(label);
-  if (!parts) return null;
+  if (!parts) {
+    return null;
+  }
 
-  if (!preview) return parts;
+  if (!preview) {
+    return parts;
+  }
 
   if (
     kind === "shell" ||

@@ -148,11 +148,11 @@ export async function getContactList(
 }
 
 export async function setContactList(
-  contacts: Array<{
+  contacts: {
     pubkey: string;
     relayUrl?: string;
     petname?: string;
-  }>,
+  }[],
 ): Promise<PublishNoteResult> {
   const raw = await invokeTauri<RawPublishNoteResult>("set_contact_list", {
     contacts: contacts.map((c) => ({

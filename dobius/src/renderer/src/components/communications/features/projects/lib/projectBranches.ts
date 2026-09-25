@@ -29,7 +29,9 @@ export function projectBranchNameError(
   existingBranches: string[],
 ): string | null {
   const branch = normalizeProjectBranchName(value);
-  if (!branch) return "Enter a valid Git branch name.";
+  if (!branch) {
+    return "Enter a valid Git branch name.";
+  }
   if (existingBranches.includes(branch)) {
     return "A branch with this name already exists.";
   }
@@ -64,8 +66,12 @@ export function projectBranchCreationReason(input: {
   activeBranchCommit: string | null;
   localHead?: string | null;
 }): string | null {
-  if (!input.activeBranch) return "Choose a branch first.";
-  if (input.activeBranchCommit) return null;
+  if (!input.activeBranch) {
+    return "Choose a branch first.";
+  }
+  if (input.activeBranchCommit) {
+    return null;
+  }
   return input.localHead
     ? `Push the first local commit to ${input.activeBranch} before creating another branch.`
     : "Create the repository's first commit before creating another branch.";
@@ -75,7 +81,7 @@ export function projectBranchCreationReason(input: {
 export function resolveProjectDefaultBranch(
   announcedBranch: string,
   repoState?: {
-    branches: Array<{ name: string }>;
+    branches: { name: string }[];
     head: string | null;
   } | null,
 ): string {
@@ -83,17 +89,25 @@ export function resolveProjectDefaultBranch(
     return repoState?.head ?? announcedBranch;
   }
   const published = new Set(repoState.branches.map((branch) => branch.name));
-  if (repoState.head && published.has(repoState.head)) return repoState.head;
-  if (published.has(announcedBranch)) return announcedBranch;
-  if (published.has("main")) return "main";
-  if (published.has("master")) return "master";
+  if (repoState.head && published.has(repoState.head)) {
+    return repoState.head;
+  }
+  if (published.has(announcedBranch)) {
+    return announcedBranch;
+  }
+  if (published.has("main")) {
+    return "main";
+  }
+  if (published.has("master")) {
+    return "master";
+  }
   return repoState.branches[0]?.name ?? announcedBranch;
 }
 
 export function projectBranchManagementState(input: {
   activeBranch: string | null;
   defaultBranch: string | null;
-  branches: Array<{ name: string; commit: string }>;
+  branches: { name: string; commit: string }[];
   remoteBranch?: string | null;
   remoteHead?: string | null;
   snapshotCommit?: string | null;

@@ -13,7 +13,9 @@ export function AdvancedRequiredBadge({
 }) {
   const visible =
     show ?? hasMissingRequiredEnvKey(requiredEnvKeys ?? [], envVars ?? {});
-  if (!visible) return null;
+  if (!visible) {
+    return null;
+  }
   return (
     <span
       aria-hidden="true"

@@ -50,7 +50,9 @@ function pluralize(count: number, singular: string) {
 }
 
 export function formatLastChangedAt(timestamp: number | null) {
-  if (!timestamp) return "—";
+  if (!timestamp) {
+    return "—";
+  }
   return new Date(timestamp * 1_000).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
@@ -60,9 +62,15 @@ export function formatLastChangedAt(timestamp: number | null) {
 }
 
 function formatFileSize(size: number | null) {
-  if (size === null) return "—";
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  if (size === null) {
+    return "—";
+  }
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -83,11 +91,15 @@ function profileMatchesCommitAuthor(
   profile: CommitAuthorProfile,
   pubkey?: string,
 ) {
-  if (!commit) return false;
+  if (!commit) {
+    return false;
+  }
 
   const authorName = normalizeAuthorLookupValue(commit.authorName);
   const authorEmail = normalizeAuthorLookupValue(commit.authorEmail);
-  if (!authorName && !authorEmail) return false;
+  if (!authorName && !authorEmail) {
+    return false;
+  }
 
   const candidates = [
     pubkey,
@@ -103,7 +115,9 @@ function profileForCommitAuthor(
   commit: ProjectRepoFile["latestCommit"],
   profiles: UserProfileLookup | undefined,
 ) {
-  if (!commit || !profiles) return null;
+  if (!commit || !profiles) {
+    return null;
+  }
 
   for (const [pubkey, profile] of Object.entries(profiles)) {
     if (profileMatchesCommitAuthor(commit, profile, pubkey)) {
@@ -118,7 +132,9 @@ function searchedProfileForCommitAuthor(
   commit: ProjectRepoFile["latestCommit"],
   users: UserSearchResult[] | undefined,
 ) {
-  if (!commit || !users?.length) return null;
+  if (!commit || !users?.length) {
+    return null;
+  }
 
   return (
     users.find((user) =>
@@ -131,7 +147,9 @@ function commitAuthorLabel(
   commit: ProjectRepoFile["latestCommit"],
   profile?: CommitAuthorProfile | null,
 ) {
-  if (!commit) return "";
+  if (!commit) {
+    return "";
+  }
 
   return (
     profile?.displayName?.trim() ||
@@ -147,7 +165,9 @@ function RepositoryCommitCell({
   commit: ProjectRepoFile["latestCommit"];
   profiles?: UserProfileLookup;
 }) {
-  if (!commit) return <span className="text-muted-foreground">—</span>;
+  if (!commit) {
+    return <span className="text-muted-foreground">—</span>;
+  }
 
   return (
     <p className="truncate text-sm text-foreground">
@@ -200,8 +220,12 @@ const FILE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
 
 export function languageForPath(path: string) {
   const fileName = baseName(path).toLowerCase();
-  if (fileName === "dockerfile") return "dockerfile";
-  if (fileName === "makefile") return "make";
+  if (fileName === "dockerfile") {
+    return "dockerfile";
+  }
+  if (fileName === "makefile") {
+    return "make";
+  }
   const extension = fileName.split(".").pop();
   return extension ? FILE_LANGUAGE_BY_EXTENSION[extension] : undefined;
 }
@@ -259,7 +283,9 @@ const TEXT_EXTENSIONS = new Set(["md", "mdx", "rst", "txt"]);
 
 function extensionForPath(path: string) {
   const name = baseName(path).toLowerCase();
-  if (!name.includes(".")) return "";
+  if (!name.includes(".")) {
+    return "";
+  }
   return name.split(".").pop() ?? "";
 }
 
@@ -452,13 +478,17 @@ function repositoryEntries(
   const prefix = currentPath ? `${currentPath}/` : "";
 
   for (const file of files) {
-    if (currentPath && !file.path.startsWith(prefix)) continue;
+    if (currentPath && !file.path.startsWith(prefix)) {
+      continue;
+    }
 
     const relativePath = currentPath
       ? file.path.slice(prefix.length)
       : file.path;
     const [name, ...rest] = relativePath.split("/");
-    if (!name) continue;
+    if (!name) {
+      continue;
+    }
 
     if (rest.length > 0) {
       const path = currentPath ? `${currentPath}/${name}` : name;
@@ -495,7 +525,9 @@ function repositoryEntries(
   }
 
   return [...directories.values(), ...entries].sort((left, right) => {
-    if (left.type !== right.type) return left.type === "directory" ? -1 : 1;
+    if (left.type !== right.type) {
+      return left.type === "directory" ? -1 : 1;
+    }
     return left.name.localeCompare(right.name);
   });
 }
@@ -510,14 +542,18 @@ function openRepositoryEntry(
     return;
   }
 
-  if (entry.file) setSelectedFile(entry.file);
+  if (entry.file) {
+    setSelectedFile(entry.file);
+  }
 }
 
 function handleRepositoryEntryKeyDown(
   event: React.KeyboardEvent<HTMLTableRowElement>,
   onOpen: () => void,
 ) {
-  if (event.key !== "Enter" && event.key !== " ") return;
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
 
   event.preventDefault();
   onOpen();
@@ -550,7 +586,7 @@ function FileContentPanel({
 }) {
   const language = languageForPath(file.path);
   const pathSegments = file.path.split("/").filter(Boolean);
-  const fileName = pathSegments[pathSegments.length - 1] ?? file.path;
+  const fileName = pathSegments.at(-1) ?? file.path;
   const directorySegments = pathSegments.slice(0, -1);
 
   return (
@@ -674,7 +710,9 @@ export function RepositoryFilesPanel({
   );
 
   React.useEffect(() => {
-    if (!filesKey) return;
+    if (!filesKey) {
+      return;
+    }
     setCurrentPath("");
     setSelectedFile(null);
   }, [filesKey]);

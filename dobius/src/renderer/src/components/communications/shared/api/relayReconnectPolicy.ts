@@ -30,10 +30,18 @@ export type RelayReconnectInputs = {
 };
 
 export function shouldScheduleReconnect(inputs: RelayReconnectInputs): boolean {
-  if (inputs.terminal) return false;
-  if (inputs.hasPendingReconnect) return false;
-  if (inputs.hasLiveSocket) return false;
-  if (!inputs.keepAliveRequested && !inputs.hasLiveSubscriptions) return false;
+  if (inputs.terminal) {
+    return false;
+  }
+  if (inputs.hasPendingReconnect) {
+    return false;
+  }
+  if (inputs.hasLiveSocket) {
+    return false;
+  }
+  if (!inputs.keepAliveRequested && !inputs.hasLiveSubscriptions) {
+    return false;
+  }
   return true;
 }
 
@@ -60,8 +68,12 @@ export function isWebSocketClose(
 }
 
 export function isServiceRestartClose(message: unknown): boolean {
-  if (!isWebSocketClose(message)) return false;
-  if (!("data" in message)) return false;
+  if (!isWebSocketClose(message)) {
+    return false;
+  }
+  if (!("data" in message)) {
+    return false;
+  }
   const data = message.data;
   return (
     typeof data === "object" &&

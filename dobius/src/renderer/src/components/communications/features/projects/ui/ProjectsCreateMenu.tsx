@@ -23,7 +23,9 @@ export function ProjectsCreateMenu({
   const containerRef = React.useRef<HTMLElement>(null);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     function handlePointerDown(event: PointerEvent) {
       if (!containerRef.current?.contains(event.target as Node)) {
         setOpen(false);

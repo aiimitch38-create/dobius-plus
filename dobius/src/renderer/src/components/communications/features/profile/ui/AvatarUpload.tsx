@@ -127,8 +127,9 @@ export function AvatarUpload({
           onDragLeave={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (e.currentTarget.contains(e.relatedTarget as Node | null))
+            if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
               return;
+            }
             setIsDragging(false);
           }}
           onDragOver={(e) => {

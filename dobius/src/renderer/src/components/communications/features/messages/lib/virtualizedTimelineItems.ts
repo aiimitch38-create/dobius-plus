@@ -30,16 +30,28 @@ export type VirtualizedTimelineItem =
 export function estimateVirtualizedTimelineItemHeight(
   item: VirtualizedTimelineItem,
 ): number {
-  if (item.kind === "bottom-spacer") return 96;
-  if (item.kind === "leading-content") return 60;
-  if (item.kind === "day-divider") return 32;
+  if (item.kind === "bottom-spacer") {
+    return 96;
+  }
+  if (item.kind === "leading-content") {
+    return 60;
+  }
+  if (item.kind === "day-divider") {
+    return 32;
+  }
   return estimateTimelineItemHeight(item.item);
 }
 
 export function virtualizedItemKey(item: VirtualizedTimelineItem): string {
-  if (item.kind === "bottom-spacer") return "bottom-spacer";
-  if (item.kind === "leading-content") return "leading-content";
-  if (item.kind === "day-divider") return item.key;
+  if (item.kind === "bottom-spacer") {
+    return "bottom-spacer";
+  }
+  if (item.kind === "leading-content") {
+    return "leading-content";
+  }
+  if (item.kind === "day-divider") {
+    return item.key;
+  }
   return getTimelineItemKey(item.item);
 }
 

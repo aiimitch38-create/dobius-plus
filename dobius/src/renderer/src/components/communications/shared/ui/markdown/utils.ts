@@ -15,9 +15,13 @@ export function useStableArray<T>(arr: T[]): T[] {
 }
 
 export function aspectRatioFromDim(dim?: string): number | undefined {
-  if (!dim) return undefined;
+  if (!dim) {
+    return undefined;
+  }
   const match = dim.match(/^(\d+)x(\d+)$/i);
-  if (!match) return undefined;
+  if (!match) {
+    return undefined;
+  }
   const width = Number(match[1]);
   const height = Number(match[2]);
   if (!Number.isFinite(width) || !Number.isFinite(height) || height <= 0) {
@@ -36,9 +40,13 @@ export function aspectRatioFromDim(dim?: string): number | undefined {
 export function dimensionsFromDim(
   dim?: string,
 ): { width: number; height: number } | undefined {
-  if (!dim) return undefined;
+  if (!dim) {
+    return undefined;
+  }
   const match = dim.match(/^(\d+)x(\d+)$/i);
-  if (!match) return undefined;
+  if (!match) {
+    return undefined;
+  }
   const width = Number(match[1]);
   const height = Number(match[2]);
   if (
@@ -66,8 +74,12 @@ export function rememberDecodedImageDimensions(
   width: number,
   height: number,
 ): void {
-  if (!url || !Number.isFinite(width) || !Number.isFinite(height)) return;
-  if (width <= 0 || height <= 0) return;
+  if (!url || !Number.isFinite(width) || !Number.isFinite(height)) {
+    return;
+  }
+  if (width <= 0 || height <= 0) {
+    return;
+  }
   decodedImageDimensions.set(url, { height, width });
 }
 

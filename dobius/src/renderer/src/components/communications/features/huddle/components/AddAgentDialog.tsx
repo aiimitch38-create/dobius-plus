@@ -56,7 +56,9 @@ export function AddAgentDialog({
   );
 
   async function handleAdd(pubkey: string) {
-    if (adding) return;
+    if (adding) {
+      return;
+    }
     setAdding(pubkey);
     setError(null);
     setWarning(null);
@@ -83,7 +85,9 @@ export function AddAgentDialog({
   return (
     <Dialog
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) {
+          onClose();
+        }
       }}
       open
     >

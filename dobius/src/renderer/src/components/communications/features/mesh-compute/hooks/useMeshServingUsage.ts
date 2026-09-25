@@ -24,7 +24,9 @@ export function useMeshServingUsage(enabled: boolean): MeshServingUsage | null {
       (async () => {
         try {
           const value = await meshServingUsage();
-          if (!cancelled) setUsage(value);
+          if (!cancelled) {
+            setUsage(value);
+          }
         } catch {
           // Usage is best-effort; a failed poll leaves the last value in place
           // rather than flapping the indicator.

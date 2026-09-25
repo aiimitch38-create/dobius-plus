@@ -21,8 +21,9 @@ function installDOMShim() {
     }
 
     dispatchEvent(event) {
-      for (const listener of this.listeners.get(event.type) ?? [])
+      for (const listener of this.listeners.get(event.type) ?? []) {
         listener(event);
+      }
       return true;
     }
   }
@@ -79,9 +80,13 @@ function installDOMShim() {
     }
 
     insertBefore(child, reference) {
-      if (!reference) return this.appendChild(child);
+      if (!reference) {
+        return this.appendChild(child);
+      }
       const index = this.children.indexOf(reference);
-      if (index < 0) return this.appendChild(child);
+      if (index < 0) {
+        return this.appendChild(child);
+      }
       this.children.splice(index, 0, child);
       this.childNodes.splice(index, 0, child);
       child.parentNode = this;
@@ -169,8 +174,9 @@ function makePinnedCenterNodes() {
       this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
     },
     dispatchEvent(event) {
-      for (const listener of this.listeners.get(event.type) ?? [])
+      for (const listener of this.listeners.get(event.type) ?? []) {
         listener(event);
+      }
     },
     getBoundingClientRect() {
       return { bottom: this.clientHeight, top: 0 };
@@ -284,7 +290,9 @@ function VirtualTargetHarness({ refs }) {
     virtualScrollToMessage: () => true,
   });
   React.useLayoutEffect(() => {
-    if (didRun.current) return;
+    if (didRun.current) {
+      return;
+    }
     didRun.current = true;
     bottomApi.settle();
     refs.targetResult.current = anchored.scrollToMessage("selected");

@@ -129,7 +129,9 @@ export function collectRuntimeWarnings(
   // When no fallback runtime exists, the caller's UI is responsible for
   // showing the global "no runtimes found" state. Per-persona warnings
   // would be redundant noise alongside that.
-  if (!fallbackRuntime) return [];
+  if (!fallbackRuntime) {
+    return [];
+  }
   const warnings: string[] = [];
   for (const persona of personas) {
     const { warnings: w } = resolvePersonaRuntime(

@@ -215,7 +215,9 @@ export function useMentions(
     for (const agent of agents) {
       if (agent.personaId) {
         const name = personaById.get(agent.personaId);
-        if (name) lookup.set(normalizePubkey(agent.pubkey), name);
+        if (name) {
+          lookup.set(normalizePubkey(agent.pubkey), name);
+        }
       }
     }
     return lookup;
@@ -771,7 +773,9 @@ export function useMentions(
 
       debounceTimerRef.current = setTimeout(() => {
         debounceTimerRef.current = null;
-        if (generation !== autocompleteGenerationRef.current) return;
+        if (generation !== autocompleteGenerationRef.current) {
+          return;
+        }
 
         const mention = detectPrefixQuery(
           "@",

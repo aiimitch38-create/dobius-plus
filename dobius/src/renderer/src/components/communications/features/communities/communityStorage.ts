@@ -64,7 +64,7 @@ export function loadCommunities(): Community[] {
     // any lingering `nsec` from existing entries on read and persist the
     // cleaned list back so it cannot leak into future sessions.
     let didStrip = false;
-    const cleaned = (parsed as Array<Record<string, unknown>>).map((entry) => {
+    const cleaned = (parsed as Record<string, unknown>[]).map((entry) => {
       if (entry && typeof entry === "object" && "nsec" in entry) {
         const { nsec: _nsec, ...rest } = entry;
         didStrip = true;

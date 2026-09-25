@@ -65,7 +65,9 @@ const SOUND_NAME_SET = new Set<SoundName>(SOUND_NAMES);
 
 function sanitizeSoundsMap(value: unknown): SlotSounds {
   const result = { ...DEFAULT_SLOT_SOUNDS };
-  if (!value || typeof value !== "object") return result;
+  if (!value || typeof value !== "object") {
+    return result;
+  }
   const candidate = value as Partial<Record<SoundSlot, unknown>>;
   for (const slot of SOUND_SLOTS) {
     const picked = candidate[slot];
@@ -78,7 +80,9 @@ function sanitizeSoundsMap(value: unknown): SlotSounds {
 
 function sanitizeSlotAlertsEnabled(value: unknown): Record<SoundSlot, boolean> {
   const result = { ...DEFAULT_SLOT_ALERTS_ENABLED };
-  if (!value || typeof value !== "object") return result;
+  if (!value || typeof value !== "object") {
+    return result;
+  }
   const candidate = value as Partial<Record<SoundSlot, unknown>>;
   for (const slot of SOUND_SLOTS) {
     const picked = candidate[slot];
@@ -376,7 +380,7 @@ export function useHomeFeedNotificationState(
   // has been revealed in-channel, even if the aggregate `thread:<root>` marker
   // has not been advanced by opening Home.
   getMessageReadAt: (messageId: string) => number | null = () => null,
-  channels: ReadonlyArray<Pick<Channel, "id" | "name" | "channelType">> = [],
+  channels: readonly Pick<Channel, "id" | "name" | "channelType">[] = [],
 ) {
   useFeedDesktopNotifications(
     feed,
@@ -453,7 +457,9 @@ export function useHomeFeedNotificationState(
         isLocallyUnread,
         seenFeedIdSet,
       });
-      if (!isUnread) continue;
+      if (!isUnread) {
+        continue;
+      }
       total++;
       if (
         shouldCountTowardHomeBadgeSubtotal(

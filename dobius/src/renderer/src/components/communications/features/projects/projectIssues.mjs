@@ -40,7 +40,9 @@ function repoOwnerFromAddress(repoAddress) {
 export function allowedActorsForRoot(rootEvent) {
   const allowed = new Set([rootEvent.pubkey.toLowerCase()]);
   const owner = repoOwnerFromAddress(getTag(rootEvent, "a"));
-  if (owner) allowed.add(owner);
+  if (owner) {
+    allowed.add(owner);
+  }
   return allowed;
 }
 
@@ -56,11 +58,17 @@ function latestStatusForIssue(issue, statusEvents) {
 }
 
 function statusFromEvent(issue, statusEvent) {
-  if (statusEvent?.kind === 1631) return PROJECT_ISSUE_STATUS.DONE;
-  if (statusEvent?.kind === 1632) return PROJECT_ISSUE_STATUS.CLOSED;
+  if (statusEvent?.kind === 1631) {
+    return PROJECT_ISSUE_STATUS.DONE;
+  }
+  if (statusEvent?.kind === 1632) {
+    return PROJECT_ISSUE_STATUS.CLOSED;
+  }
   // NIP-34 calls 1633 "Draft"; we surface it as Triage for issues. The
   // label-based fallbacks below are client-side heuristics, not protocol.
-  if (statusEvent?.kind === 1633) return PROJECT_ISSUE_STATUS.TRIAGE;
+  if (statusEvent?.kind === 1633) {
+    return PROJECT_ISSUE_STATUS.TRIAGE;
+  }
 
   const labels = getAllTags(issue, "t").map((label) => label.toLowerCase());
   if (labels.includes("in-review") || labels.includes("review")) {
@@ -69,7 +77,9 @@ function statusFromEvent(issue, statusEvent) {
   if (labels.includes("in-progress") || labels.includes("active")) {
     return PROJECT_ISSUE_STATUS.IN_PROGRESS;
   }
-  if (labels.includes("triage")) return PROJECT_ISSUE_STATUS.TRIAGE;
+  if (labels.includes("triage")) {
+    return PROJECT_ISSUE_STATUS.TRIAGE;
+  }
   return PROJECT_ISSUE_STATUS.BACKLOG;
 }
 
@@ -162,7 +172,9 @@ export function buildGitIssueTags({
 
   for (const label of labels) {
     const trimmed = label.trim();
-    if (trimmed) tags.push(["t", trimmed]);
+    if (trimmed) {
+      tags.push(["t", trimmed]);
+    }
   }
 
   return tags;
@@ -173,7 +185,9 @@ export function buildGitStatusTags({ issueId, repoAddress, repoOwner }) {
     throw new Error("Issue ID must be 64 hex characters.");
   }
   const tags = [["e", issueId, "", "root"]];
-  if (repoAddress) tags.push(["a", repoAddress]);
+  if (repoAddress) {
+    tags.push(["a", repoAddress]);
+  }
   if (repoOwner && /^[a-fA-F0-9]{64}$/.test(repoOwner)) {
     tags.push(["p", repoOwner.toLowerCase()]);
   }

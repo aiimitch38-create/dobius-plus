@@ -166,10 +166,14 @@ export function ChannelBrowserDialog({
   // and relevance-ordering share one source of truth. Empty when no query.
   const matchScoreById = React.useMemo(() => {
     const scores = new Map<string, number>();
-    if (deferredQuery.length === 0) return scores;
+    if (deferredQuery.length === 0) {
+      return scores;
+    }
     for (const channel of channels) {
       const score = scoreChannelMatch(channel, deferredQuery);
-      if (score !== null) scores.set(channel.id, score);
+      if (score !== null) {
+        scores.set(channel.id, score);
+      }
     }
     return scores;
   }, [channels, deferredQuery]);
@@ -227,7 +231,9 @@ export function ChannelBrowserDialog({
           )
         : sortChannelsForSidebar(visibleChannels, sort);
 
-    if (!isSearching) return sorted;
+    if (!isSearching) {
+      return sorted;
+    }
 
     return sorted.sort(
       (a, b) =>
@@ -347,7 +353,6 @@ export function ChannelBrowserDialog({
       setJoiningChannelId(null);
       setMode("browse");
       setCreateInitialName("");
-      return;
     }
   }, [open]);
 

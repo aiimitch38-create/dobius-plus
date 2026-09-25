@@ -125,7 +125,7 @@ const BUZZ_TOOL_NAMES_BY_LENGTH = [...BUZZ_TOOL_NAMES].sort(
   (left, right) => right.length - left.length,
 );
 
-const BUZZ_TOOL_TITLE_ALIASES: Array<[RegExp, string]> = [
+const BUZZ_TOOL_TITLE_ALIASES: [RegExp, string][] = [
   [/\bsending message to channel\b/, "send_message"],
   [/\bretrieving recent messages from channel\b/, "get_messages"],
   [/\bgetting channel details\b/, "get_channel"],
@@ -207,7 +207,9 @@ export function getBuzzToolInfo(title: string): BuzzToolInfo | null {
 
 export function normalizeToolName(title: string): string {
   const knownName = findBuzzToolName(title, true);
-  if (knownName) return knownName;
+  if (knownName) {
+    return knownName;
+  }
 
   const normalized = normalizeToolNameText(title).replace(/^buzz_/, "");
   return normalized.match(/[a-z][a-z0-9_]+/)?.[0] ?? normalized;
@@ -224,7 +226,9 @@ export function normalizeToolNameText(value: string): string {
 
 export function findBuzzToolName(value: string, includeShortNames: boolean) {
   const alias = findBuzzToolAlias(value);
-  if (alias) return alias;
+  if (alias) {
+    return alias;
+  }
 
   const normalized = normalizeToolNameText(value);
   return (

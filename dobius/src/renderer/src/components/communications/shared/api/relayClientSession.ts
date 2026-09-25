@@ -87,7 +87,7 @@ export class RelayClient {
   } | null = null;
   private subscriptions = new Map<string, RelaySubscription>();
   private pendingEvents = new Map<string, PendingEvent>();
-  private eventBuffer: Array<{ subId: string; event: RelayEvent }> = [];
+  private eventBuffer: { subId: string; event: RelayEvent }[] = [];
   private flushTimeout: number | null = null;
   private reconnectListeners = new Set<() => void>();
   private hasConnectedOnce = false;
@@ -383,7 +383,9 @@ export class RelayClient {
   async publishUserStatus(text: string, emoji: string): Promise<void> {
     await this.ensureConnected();
     const tags: string[][] = [["d", "general"]];
-    if (emoji) tags.push(["emoji", emoji]);
+    if (emoji) {
+      tags.push(["emoji", emoji]);
+    }
     const event = await signRelayEvent({
       kind: KIND_USER_STATUS,
       content: text,
@@ -524,7 +526,9 @@ export class RelayClient {
     const generation = ++this.connectionGeneration;
     const handleMessage = (message: unknown) => {
       void this.handleWsMessage(message, generation).catch((error) => {
-        if (generation !== this.connectionGeneration) return;
+        if (generation !== this.connectionGeneration) {
+          return;
+        }
         this.resetConnection(
           this.normalizeRelayError(error, "Relay connection errored."),
         );
@@ -736,12 +740,15 @@ export class RelayClient {
   }
 
   private async handleWsMessage(message: unknown, generation: number) {
-    if (generation !== this.connectionGeneration) return;
+    if (generation !== this.connectionGeneration) {
+      return;
+    }
     this.stallWatchdog.recordInbound();
 
     if (isWebSocketClose(message)) {
-      if (isServiceRestartClose(message))
+      if (isServiceRestartClose(message)) {
         this.reconnectDelayMs = RECONNECT_BASE_DELAY_MS;
+      }
       this.resetConnection(new Error("Relay connection closed."));
       return;
     }
@@ -852,7 +859,9 @@ export class RelayClient {
       return;
     }
 
-    if (!prepareSubscriptionEvent(subscription, event)) return;
+    if (!prepareSubscriptionEvent(subscription, event)) {
+      return;
+    }
     this.eventBuffer.push({ subId, event });
     this.flushTimeout ??= window.setTimeout(
       () => this.flushEventBuffer(),
@@ -1019,7 +1028,9 @@ export class RelayClient {
       window.clearTimeout(this.stabilityTimer);
       this.stabilityTimer = null;
     }
-    if (this.flushTimeout !== null) window.clearTimeout(this.flushTimeout);
+    if (this.flushTimeout !== null) {
+      window.clearTimeout(this.flushTimeout);
+    }
     this.flushTimeout = null;
     this.eventBuffer = [];
 

@@ -21,9 +21,11 @@ const SHORTCODE_SCAN = /:([a-z0-9_-]+):/gi;
  */
 export function buildCustomEmojiTags(
   content: string,
-  customEmoji: ReadonlyArray<CustomEmoji>,
+  customEmoji: readonly CustomEmoji[],
 ): string[][] {
-  if (customEmoji.length === 0) return [];
+  if (customEmoji.length === 0) {
+    return [];
+  }
   const urlByShortcode = new Map(customEmoji.map((e) => [e.shortcode, e.url]));
 
   const emitted = new Set<string>();
@@ -33,11 +35,17 @@ export function buildCustomEmojiTags(
   let match: RegExpExecArray | null = null;
   while (true) {
     match = SHORTCODE_SCAN.exec(content);
-    if (!match) break;
+    if (!match) {
+      break;
+    }
     const shortcode = match[1].toLowerCase();
-    if (emitted.has(shortcode)) continue;
+    if (emitted.has(shortcode)) {
+      continue;
+    }
     const url = urlByShortcode.get(shortcode);
-    if (!url) continue;
+    if (!url) {
+      continue;
+    }
     emitted.add(shortcode);
     tags.push(["emoji", shortcode, url]);
   }

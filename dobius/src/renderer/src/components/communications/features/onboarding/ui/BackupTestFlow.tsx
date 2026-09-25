@@ -216,13 +216,17 @@ export function BackupTestFlow({
     // dragenter/dragleave fire per nested element, so track depth to know
     // when the drag has actually left the window.
     const handleDragEnter = (event: DragEvent) => {
-      if (!event.dataTransfer?.types.includes("Files")) return;
+      if (!event.dataTransfer?.types.includes("Files")) {
+        return;
+      }
       dragDepthRef.current += 1;
       setIsWindowDragging(true);
     };
     const handleDragLeave = () => {
       dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-      if (dragDepthRef.current === 0) setIsWindowDragging(false);
+      if (dragDepthRef.current === 0) {
+        setIsWindowDragging(false);
+      }
     };
     const handleDragEnd = () => {
       dragDepthRef.current = 0;
@@ -270,7 +274,9 @@ export function BackupTestFlow({
   }, []);
 
   React.useEffect(() => {
-    if (stage === "password") passwordInputRef.current?.focus();
+    if (stage === "password") {
+      passwordInputRef.current?.focus();
+    }
   }, [stage]);
 
   const handleFile = React.useCallback(
@@ -279,10 +285,14 @@ export function BackupTestFlow({
       try {
         text = (await file.text()).trim();
       } catch {
-        if (mountedRef.current) setError("Could not read that file.");
+        if (mountedRef.current) {
+          setError("Could not read that file.");
+        }
         return;
       }
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        return;
+      }
       if (!text.toLowerCase().startsWith("ncryptsec1")) {
         setError(
           expectedNcryptsec
@@ -308,7 +318,9 @@ export function BackupTestFlow({
   );
 
   const handleVerify = React.useCallback(async () => {
-    if (!ncryptsec || !attempt || isVerifying) return;
+    if (!ncryptsec || !attempt || isVerifying) {
+      return;
+    }
     const password = attempt;
     const requestId = ++requestRef.current;
     setIsVerifying(true);
@@ -319,7 +331,9 @@ export function BackupTestFlow({
     setAttempt("");
     try {
       const verified = await verifyNcryptsecBackup(ncryptsec, password);
-      if (!mountedRef.current || requestId !== requestRef.current) return;
+      if (!mountedRef.current || requestId !== requestRef.current) {
+        return;
+      }
       onProgressChange((prev) => ({
         ...prev,
         stage: "success",
@@ -327,13 +341,15 @@ export function BackupTestFlow({
       }));
       onVerified?.();
     } catch (err) {
-      if (mountedRef.current && requestId === requestRef.current)
+      if (mountedRef.current && requestId === requestRef.current) {
         setError(
           err instanceof Error ? err.message : "Could not verify this backup.",
         );
+      }
     } finally {
-      if (mountedRef.current && requestId === requestRef.current)
+      if (mountedRef.current && requestId === requestRef.current) {
         setIsVerifying(false);
+      }
     }
   }, [attempt, isVerifying, ncryptsec, onProgressChange, onVerified]);
 
@@ -350,16 +366,22 @@ export function BackupTestFlow({
     setSuccessNsecError(null);
     try {
       const value = await getNsec();
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        return;
+      }
       setSuccessNsec(value);
       setIsSuccessNsecRevealed(true);
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        return;
+      }
       setSuccessNsecError(
         err instanceof Error ? err.message : "Could not retrieve your key.",
       );
     } finally {
-      if (mountedRef.current) setIsLoadingSuccessNsec(false);
+      if (mountedRef.current) {
+        setIsLoadingSuccessNsec(false);
+      }
     }
   }, [isSuccessNsecRevealed, successNsec]);
 
@@ -513,7 +535,9 @@ export function BackupTestFlow({
               const file = event.target.files?.[0];
               // Allow re-selecting the same file after an error.
               event.target.value = "";
-              if (file) void handleFile(file);
+              if (file) {
+                void handleFile(file);
+              }
             }}
             ref={fileInputRef}
             tabIndex={-1}
@@ -547,7 +571,9 @@ export function BackupTestFlow({
               onDrop={(event) => {
                 event.preventDefault();
                 const file = event.dataTransfer.files?.[0];
-                if (file) void handleFile(file);
+                if (file) {
+                  void handleFile(file);
+                }
               }}
             >
               <Card

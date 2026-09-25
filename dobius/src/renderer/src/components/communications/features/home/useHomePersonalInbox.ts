@@ -53,8 +53,12 @@ export function useHomePersonalInbox({
       selectReminder(null);
       return;
     }
-    if (!isReminders) return;
-    if (viewportWidthPx === 0 || selectedReminder !== null) return;
+    if (!isReminders) {
+      return;
+    }
+    if (viewportWidthPx === 0 || selectedReminder !== null) {
+      return;
+    }
     selectReminder(
       isNarrowHomeViewport ? null : (pendingReminders[0]?.id ?? null),
     );

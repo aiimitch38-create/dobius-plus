@@ -123,7 +123,9 @@ export function MergePullRequestButton({
 
   const handleOpenRecoveryTerminal = React.useCallback(async () => {
     const sourceCloneUrl = pullRequest.cloneUrls[0] ?? project.cloneUrls[0];
-    if (!conflictRecovery || !pullRequest.commit || !sourceCloneUrl) return;
+    if (!conflictRecovery || !pullRequest.commit || !sourceCloneUrl) {
+      return;
+    }
     setIsPreparingRecovery(true);
     try {
       const result = await onOpenTerminal?.({
@@ -132,7 +134,9 @@ export function MergePullRequestButton({
         sourceCloneUrl,
         targetBranch: conflictRecovery.targetBranch,
       });
-      if (!result) return;
+      if (!result) {
+        return;
+      }
       setPreparedRecoveryState({
         pullRequestId: pullRequest.id,
         recoveryRef: result.recoveryRef,
@@ -158,7 +162,9 @@ export function MergePullRequestButton({
   ]);
 
   const handlePublishMergedStatus = React.useCallback(async () => {
-    if (!unpublishedStatusEvent) return;
+    if (!unpublishedStatusEvent) {
+      return;
+    }
     try {
       await publishMergedMutation.mutateAsync({
         statusEvent: unpublishedStatusEvent,

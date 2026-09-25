@@ -55,8 +55,8 @@ function findCrossedSliderTick(
   }
 
   return (
-    [...ticks]
-      .reverse()
+    ticks
+      .toReversed()
       .find((tick) => tick < previousValue && tick >= nextValue) ?? null
   );
 }

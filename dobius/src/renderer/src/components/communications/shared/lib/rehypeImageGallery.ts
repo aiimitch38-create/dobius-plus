@@ -12,24 +12,24 @@
  */
 
 // Minimal HAST types — avoids adding @types/hast as a dependency.
-interface HastText {
+type HastText = {
   type: "text";
   value: string;
-}
+};
 
-interface HastElement {
+type HastElement = {
   type: "element";
   tagName: string;
   properties: Record<string, unknown>;
   children: HastNode[];
-}
+};
 
 type HastNode = HastElement | HastText | { type: string };
 
-interface HastRoot {
+type HastRoot = {
   type: "root";
   children: HastNode[];
-}
+};
 
 function isElement(node: HastNode): node is HastElement {
   return node.type === "element";
@@ -71,7 +71,9 @@ function isImageOnlyParagraph(node: HastNode): node is HastElement {
  * separated by meaningful content retain their original Markdown flow.
  */
 function splitTrailingImageRun(node: HastNode): HastNode[] {
-  if (!isElement(node) || node.tagName !== "p") return [node];
+  if (!isElement(node) || node.tagName !== "p") {
+    return [node];
+  }
 
   let cursor = node.children.length - 1;
   const trailingImages: HastElement[] = [];
@@ -90,7 +92,9 @@ function splitTrailingImageRun(node: HastNode): HastNode[] {
     break;
   }
 
-  if (trailingImages.length < 2 || cursor < 0) return [node];
+  if (trailingImages.length < 2 || cursor < 0) {
+    return [node];
+  }
 
   return [
     { ...node, children: node.children.slice(0, cursor + 1) },

@@ -79,7 +79,9 @@ export function useLinkEditor(richText: UseRichTextEditorResult) {
   const getLinkRect = React.useCallback(
     (info: LinkSelectionInfo): LinkCardState["rect"] | null => {
       const editor = richText.editor;
-      if (!editor) return null;
+      if (!editor) {
+        return null;
+      }
 
       try {
         const range = document.createRange();
@@ -137,7 +139,9 @@ export function useLinkEditor(richText: UseRichTextEditorResult) {
           prev.rect.top === rect.top &&
           prev.rect.width === rect.width &&
           prev.rect.height === rect.height;
-        if (sameLink && sameRect) return prev;
+        if (sameLink && sameRect) {
+          return prev;
+        }
         return { info, rect };
       });
     },
@@ -190,7 +194,9 @@ export function useLinkEditor(richText: UseRichTextEditorResult) {
    */
   const openFromShortcut = React.useCallback((): boolean => {
     const info = getLinkSelectionInfo();
-    if (!info) return false;
+    if (!info) {
+      return false;
+    }
     setCardState(null);
     openDialogFromInfo(info);
     return true;
@@ -201,9 +207,13 @@ export function useLinkEditor(richText: UseRichTextEditorResult) {
   const closeCard = React.useCallback(() => setCardState(null), []);
 
   const save = React.useCallback(() => {
-    if (!draft) return;
+    if (!draft) {
+      return;
+    }
     const url = draft.url.trim();
-    if (!url) return;
+    if (!url) {
+      return;
+    }
     if (draft.hasRange) {
       applyLink({
         href: url,
@@ -227,19 +237,25 @@ export function useLinkEditor(richText: UseRichTextEditorResult) {
   }, [draft, applyLink, getLinkSelectionInfo, close]);
 
   const remove = React.useCallback(() => {
-    if (!draft) return;
+    if (!draft) {
+      return;
+    }
     removeLink({ from: draft.from, to: draft.to });
     close();
   }, [draft, removeLink, close]);
 
   const removeFromCard = React.useCallback(() => {
-    if (!cardState) return;
+    if (!cardState) {
+      return;
+    }
     removeLink({ from: cardState.info.from, to: cardState.info.to });
     closeCard();
   }, [cardState, removeLink, closeCard]);
 
   const editFromCard = React.useCallback(() => {
-    if (!cardState) return;
+    if (!cardState) {
+      return;
+    }
     openDialogFromInfo(cardState.info);
     closeCard();
   }, [cardState, openDialogFromInfo, closeCard]);
@@ -249,7 +265,9 @@ export function useLinkEditor(richText: UseRichTextEditorResult) {
   const openCardUrl = React.useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
       const href = cardState?.info.href.trim();
-      if (!href) return;
+      if (!href) {
+        return;
+      }
       event.preventDefault();
       openPopoverLink(href, {
         openExternal: (url) => void openUrl(url),
@@ -265,14 +283,18 @@ export function useLinkEditor(richText: UseRichTextEditorResult) {
 
   const refreshCardRect = React.useCallback(() => {
     setCardState((prev) => {
-      if (!prev) return prev;
+      if (!prev) {
+        return prev;
+      }
       const rect = getLinkRect(prev.info);
       return rect ? { ...prev, rect } : null;
     });
   }, [getLinkRect]);
 
   React.useEffect(() => {
-    if (!cardState) return;
+    if (!cardState) {
+      return;
+    }
 
     window.addEventListener("resize", refreshCardRect);
     window.addEventListener("scroll", refreshCardRect, true);
@@ -284,11 +306,15 @@ export function useLinkEditor(richText: UseRichTextEditorResult) {
   }, [cardState, refreshCardRect]);
 
   const focusCardFirstControl = React.useCallback((): boolean => {
-    if (!cardState) return false;
+    if (!cardState) {
+      return false;
+    }
     const target = cardContentRef.current?.querySelector<HTMLElement>(
       "a[href], button:not([disabled])",
     );
-    if (!target) return false;
+    if (!target) {
+      return false;
+    }
     target.focus();
     return true;
   }, [cardState]);
@@ -297,7 +323,9 @@ export function useLinkEditor(richText: UseRichTextEditorResult) {
     <Popover
       open={cardState !== null}
       onOpenChange={(open) => {
-        if (!open) closeCard();
+        if (!open) {
+          closeCard();
+        }
       }}
     >
       {cardState ? (
@@ -374,7 +402,9 @@ export function useLinkEditor(richText: UseRichTextEditorResult) {
     <Dialog
       open={draft !== null}
       onOpenChange={(open) => {
-        if (!open) close();
+        if (!open) {
+          close();
+        }
       }}
     >
       <DialogContent className="max-w-md">

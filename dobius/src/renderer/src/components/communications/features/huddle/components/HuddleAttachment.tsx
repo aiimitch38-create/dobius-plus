@@ -87,18 +87,28 @@ function reconstructHuddleLifecycle(
     switch (event.kind) {
       case KIND_HUDDLE_STARTED:
         ended = false;
-        if (event.pubkey) participants.add(event.pubkey);
+        if (event.pubkey) {
+          participants.add(event.pubkey);
+        }
         break;
       case KIND_HUDDLE_PARTICIPANT_JOINED: {
-        if (ended) break;
+        if (ended) {
+          break;
+        }
         const pubkey = lifecycleParticipant(event);
-        if (pubkey) participants.add(pubkey);
+        if (pubkey) {
+          participants.add(pubkey);
+        }
         break;
       }
       case KIND_HUDDLE_PARTICIPANT_LEFT: {
-        if (ended) break;
+        if (ended) {
+          break;
+        }
         const pubkey = lifecycleParticipant(event);
-        if (pubkey) participants.delete(pubkey);
+        if (pubkey) {
+          participants.delete(pubkey);
+        }
         break;
       }
       case KIND_HUDDLE_ENDED:
@@ -134,7 +144,9 @@ export function HuddleAttachment({
     }));
 
   React.useEffect(() => {
-    if (!channelId || !ephemeralChannelId) return;
+    if (!channelId || !ephemeralChannelId) {
+      return;
+    }
 
     const huddleChannelId = ephemeralChannelId;
     let disposed = false;
@@ -155,7 +167,9 @@ export function HuddleAttachment({
     ]);
 
     function updateState() {
-      if (disposed) return;
+      if (disposed) {
+        return;
+      }
       setLifecycleState(
         reconstructHuddleLifecycle(
           seenEvents.values(),
@@ -168,8 +182,12 @@ export function HuddleAttachment({
     updateState();
     relayClient
       .subscribeToHuddleEvents(channelId, (event) => {
-        if (disposed || seenEvents.has(event.id)) return;
-        if (lifecycleEventChannelId(event) !== huddleChannelId) return;
+        if (disposed || seenEvents.has(event.id)) {
+          return;
+        }
+        if (lifecycleEventChannelId(event) !== huddleChannelId) {
+          return;
+        }
         seenEvents.set(event.id, event);
         updateState();
       })
@@ -216,7 +234,9 @@ export function HuddleAttachment({
   const displayEnded = isEnded || isStaleUnconfirmedHuddle;
 
   async function handleJoin() {
-    if (!channelId || !ephemeralChannelId || isJoining || isStarting) return;
+    if (!channelId || !ephemeralChannelId || isJoining || isStarting) {
+      return;
+    }
     setIsJoining(true);
     try {
       await joinHuddle(channelId, ephemeralChannelId);

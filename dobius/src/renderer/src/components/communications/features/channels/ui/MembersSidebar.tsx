@@ -103,8 +103,12 @@ function addMemberCandidateWithAgentMetadata(
 }
 
 function memberModalRoleRank(member: ChannelMember) {
-  if (member.role === "owner") return 0;
-  if (member.role === "admin") return 1;
+  if (member.role === "owner") {
+    return 0;
+  }
+  if (member.role === "admin") {
+    return 1;
+  }
   return 2;
 }
 function compareMembersForModal(
@@ -117,8 +121,12 @@ function compareMembersForModal(
     return rankDelta;
   }
 
-  if (currentPubkey && left.pubkey === currentPubkey) return -1;
-  if (currentPubkey && right.pubkey === currentPubkey) return 1;
+  if (currentPubkey && left.pubkey === currentPubkey) {
+    return -1;
+  }
+  if (currentPubkey && right.pubkey === currentPubkey) {
+    return 1;
+  }
 
   return formatMemberName(left).localeCompare(formatMemberName(right));
 }
@@ -158,7 +166,9 @@ export function MembersSidebar({
   const addMembersMutation = useAddChannelMembersMutation(channelId);
   const changeRoleMutation = useMutation({
     mutationFn: async ({ pubkey, role }: { pubkey: string; role: string }) => {
-      if (!channelId) throw new Error("No channel selected.");
+      if (!channelId) {
+        throw new Error("No channel selected.");
+      }
       await changeChannelMemberRole(channelId, pubkey, role);
     },
     onSettled: async () => {
@@ -867,7 +877,9 @@ export function MembersSidebar({
         agent={editRespondToAgent}
         currentPubkey={currentPubkey}
         onOpenChange={(dialogOpen) => {
-          if (!dialogOpen) setEditRespondToAgent(null);
+          if (!dialogOpen) {
+            setEditRespondToAgent(null);
+          }
         }}
         open={editRespondToAgent !== null}
       />

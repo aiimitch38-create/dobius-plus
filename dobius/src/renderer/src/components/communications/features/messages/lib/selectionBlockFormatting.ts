@@ -40,7 +40,9 @@ function mapRangeThroughLatestStep(
  */
 function isolateCaretLineForBlockFormatting(transaction: Transaction): boolean {
   const { $from } = transaction.selection;
-  if (!$from.parent.isTextblock || !$from.parent.inlineContent) return false;
+  if (!$from.parent.isTextblock || !$from.parent.inlineContent) {
+    return false;
+  }
 
   const blockStart = $from.start();
   const blockEnd = $from.end();
@@ -49,16 +51,24 @@ function isolateCaretLineForBlockFormatting(transaction: Transaction): boolean {
   let lineFrom = blockStart;
   let lineTo = blockEnd;
   $from.parent.forEach((child, offset) => {
-    if (child.type.name !== "hardBreak") return;
+    if (child.type.name !== "hardBreak") {
+      return;
+    }
     const breakFrom = blockStart + offset;
     const breakTo = breakFrom + child.nodeSize;
-    if (breakTo <= caret) lineFrom = breakTo;
-    if (breakFrom >= caret) lineTo = Math.min(lineTo, breakFrom);
+    if (breakTo <= caret) {
+      lineFrom = breakTo;
+    }
+    if (breakFrom >= caret) {
+      lineTo = Math.min(lineTo, breakFrom);
+    }
   });
 
   // No hard breaks around the caret — the line already is the whole
   // textblock, so the block toggle is correctly scoped as-is.
-  if (lineFrom === blockStart && lineTo === blockEnd) return false;
+  if (lineFrom === blockStart && lineTo === blockEnd) {
+    return false;
+  }
 
   const nodeAfterLine = transaction.doc.resolve(lineTo).nodeAfter;
   if (nodeAfterLine?.type.name === "hardBreak") {
@@ -84,7 +94,9 @@ function isolateCaretLineForBlockFormatting(transaction: Transaction): boolean {
     if (canSplit(transaction.doc, lineFrom)) {
       transaction.split(lineFrom);
       stepMap = transaction.steps.at(-1)?.getMap();
-      if (stepMap) caret = stepMap.map(caret, 1);
+      if (stepMap) {
+        caret = stepMap.map(caret, 1);
+      }
     }
   }
 
@@ -102,14 +114,18 @@ function listItemTextRange(
       break;
     }
   }
-  if (itemDepth < 0) return null;
+  if (itemDepth < 0) {
+    return null;
+  }
 
   const item = $position.node(itemDepth);
   const itemPosition = $position.before(itemDepth);
   let from: number | null = null;
   let to: number | null = null;
   item.descendants((node, relativePosition) => {
-    if (!node.isTextblock) return true;
+    if (!node.isTextblock) {
+      return true;
+    }
     const position = itemPosition + 1 + relativePosition;
     from ??= position + 1;
     to = position + node.nodeSize - 1;
@@ -121,11 +137,15 @@ function listItemTextRange(
 /** Expand partial list endpoint selections to whole list-item textblocks. */
 function expandSelectionToListItems(transaction: Transaction): boolean {
   const selection = transaction.selection;
-  if (!(selection instanceof TextSelection) || selection.empty) return false;
+  if (!(selection instanceof TextSelection) || selection.empty) {
+    return false;
+  }
 
   const startItem = listItemTextRange(selection.$from);
   const endItem = listItemTextRange(selection.$to);
-  if (!(startItem || endItem)) return false;
+  if (!(startItem || endItem)) {
+    return false;
+  }
 
   const isBackward = selection.anchor > selection.head;
   const from = startItem?.from ?? selection.from;
@@ -155,7 +175,9 @@ export function selectionIncludesList(transaction: Transaction): boolean {
 
 function normalizeSelectionBlockBoundaries(transaction: Transaction): boolean {
   const selection = transaction.selection;
-  if (!(selection instanceof TextSelection) || selection.empty) return false;
+  if (!(selection instanceof TextSelection) || selection.empty) {
+    return false;
+  }
 
   const isBackward = selection.anchor > selection.head;
   let { from, to } = selection;
@@ -173,7 +195,9 @@ function normalizeSelectionBlockBoundaries(transaction: Transaction): boolean {
   ) {
     to = selection.$to.before();
   }
-  if (from >= to) return false;
+  if (from >= to) {
+    return false;
+  }
 
   transaction.setSelection(
     TextSelection.create(
@@ -250,7 +274,9 @@ export function isolateSelectionForBlockFormatting(
 export function splitSelectedLinesForListFormatting(
   transaction: Transaction,
 ): boolean {
-  if (!(transaction.selection instanceof TextSelection)) return false;
+  if (!(transaction.selection instanceof TextSelection)) {
+    return false;
+  }
   if (transaction.selection.empty) {
     return isolateCaretLineForBlockFormatting(transaction);
   }
@@ -261,13 +287,17 @@ export function splitSelectedLinesForListFormatting(
   const breakPositions: number[] = [];
 
   transaction.doc.nodesBetween(from, to, (node, position) => {
-    if (node.type.name === "hardBreak") breakPositions.push(position);
+    if (node.type.name === "hardBreak") {
+      breakPositions.push(position);
+    }
   });
 
-  for (const position of breakPositions.reverse()) {
+  for (const position of breakPositions.toReversed()) {
     transaction.delete(position, position + 1);
     ({ from, to } = mapRangeThroughLatestStep(transaction, from, to));
-    if (!canSplit(transaction.doc, position)) continue;
+    if (!canSplit(transaction.doc, position)) {
+      continue;
+    }
     transaction.split(position);
     ({ from, to } = mapRangeThroughLatestStep(transaction, from, to));
   }
@@ -284,8 +314,8 @@ export function splitSelectedLinesForListFormatting(
 
 function selectedTextblocks(
   transaction: Transaction,
-): Array<{ node: ProseMirrorNode; position: number }> {
-  const blocks: Array<{ node: ProseMirrorNode; position: number }> = [];
+): { node: ProseMirrorNode; position: number }[] {
+  const blocks: { node: ProseMirrorNode; position: number }[] = [];
   const { from, to } = transaction.selection;
   transaction.doc.nodesBetween(from, to, (node, position) => {
     if (node.isTextblock) {
@@ -298,17 +328,25 @@ function selectedTextblocks(
 }
 
 function leafTextForCode(leaf: ProseMirrorNode): string {
-  if (leaf.type.name === "hardBreak") return "\n";
+  if (leaf.type.name === "hardBreak") {
+    return "\n";
+  }
 
   const schemaText = leaf.type.spec.leafText?.(leaf);
-  if (schemaText !== undefined) return schemaText;
+  if (schemaText !== undefined) {
+    return schemaText;
+  }
 
   // Inline atoms should survive conversion whenever they expose a meaningful
   // textual identity. Unknown leaves intentionally fall back to an empty
   // string rather than leaking implementation attributes into user content.
   const attrs = leaf.attrs as Record<string, unknown>;
-  if (typeof attrs.label === "string") return attrs.label;
-  if (typeof attrs.shortcode === "string") return `:${attrs.shortcode}:`;
+  if (typeof attrs.label === "string") {
+    return attrs.label;
+  }
+  if (typeof attrs.shortcode === "string") {
+    return `:${attrs.shortcode}:`;
+  }
   return "";
 }
 
@@ -320,14 +358,20 @@ function textblockTextForCode(node: ProseMirrorNode): string {
 export function mergeSelectedTextblocksIntoCodeBlock(
   transaction: Transaction,
 ): boolean {
-  if (!(transaction.selection instanceof TextSelection)) return false;
-  if (transaction.selection.empty) return false;
+  if (!(transaction.selection instanceof TextSelection)) {
+    return false;
+  }
+  if (transaction.selection.empty) {
+    return false;
+  }
 
   const blocks = selectedTextblocks(transaction);
   const codeBlock = transaction.doc.type.schema.nodes.codeBlock;
   const first = blocks[0];
   const last = blocks.at(-1);
-  if (!(codeBlock && first && last)) return false;
+  if (!(codeBlock && first && last)) {
+    return false;
+  }
 
   const text = blocks.map(({ node }) => textblockTextForCode(node)).join("\n");
   const from = first.position;

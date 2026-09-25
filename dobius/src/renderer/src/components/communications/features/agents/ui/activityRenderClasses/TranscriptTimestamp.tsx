@@ -27,7 +27,9 @@ export function TranscriptTimestamp({
   const href = messageLink ? buildMessageLink(messageLink) : null;
   const openMessage = React.useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
-      if (!messageLink) return;
+      if (!messageLink) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       void goChannel(messageLink.channelId, {
@@ -37,7 +39,9 @@ export function TranscriptTimestamp({
     [goChannel, messageLink],
   );
 
-  if (!formatted) return null;
+  if (!formatted) {
+    return null;
+  }
   const fullDateTime = formatTranscriptTimestampTitle(timestamp);
 
   if (href) {

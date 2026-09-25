@@ -34,7 +34,9 @@ function getInitialYaml(
   mode: DialogMode,
   workflow: Workflow | null | undefined,
 ): string {
-  if (!workflow) return "";
+  if (!workflow) {
+    return "";
+  }
   const def = { ...workflow.definition };
   if (mode === "duplicate") {
     def.name = `${def.name ?? workflow.name} (copy)`;
@@ -129,7 +131,9 @@ export function WorkflowDialog({
   );
 
   async function handleSubmit() {
-    if (!selectedChannelId || !yamlDefinition.trim()) return;
+    if (!selectedChannelId || !yamlDefinition.trim()) {
+      return;
+    }
 
     try {
       const saved = await mutation.mutateAsync(yamlDefinition);

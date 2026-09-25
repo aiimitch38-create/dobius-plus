@@ -23,15 +23,21 @@ function getMentionCandidateGroupRank(
   candidate: MentionCandidateForRanking,
   activePersonaIds: ReadonlySet<string>,
 ) {
-  if (candidate.isMember) return 0;
+  if (candidate.isMember) {
+    return 0;
+  }
 
   const isRunnablePersona =
     candidate.kind === "team" ||
     candidate.kind === "persona" ||
     (candidate.personaId ? activePersonaIds.has(candidate.personaId) : false);
-  if (isRunnablePersona) return 1;
+  if (isRunnablePersona) {
+    return 1;
+  }
 
-  if (!candidate.isAgent) return 2;
+  if (!candidate.isAgent) {
+    return 2;
+  }
 
   return 3;
 }
@@ -41,12 +47,20 @@ function scoreMentionCandidateLabel(
   lowerQuery: string,
 ): number | null {
   const lower = label.toLowerCase();
-  if (lower === lowerQuery) return 0;
-  if (lower.startsWith(lowerQuery)) return 1;
+  if (lower === lowerQuery) {
+    return 0;
+  }
+  if (lower.startsWith(lowerQuery)) {
+    return 1;
+  }
 
   const words = lower.split(/[\s\-_]+/).filter(Boolean);
-  if (words.some((word) => word === lowerQuery)) return 2;
-  if (words.some((word) => word.startsWith(lowerQuery))) return 3;
+  if (words.some((word) => word === lowerQuery)) {
+    return 2;
+  }
+  if (words.some((word) => word.startsWith(lowerQuery))) {
+    return 3;
+  }
 
   return null;
 }

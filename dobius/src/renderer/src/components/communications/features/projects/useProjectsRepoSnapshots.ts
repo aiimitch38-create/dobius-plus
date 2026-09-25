@@ -35,13 +35,17 @@ async function fetchProjectSnapshot(
       defaultBranch: project.defaultBranch,
       baseBranch: project.defaultBranch,
     });
-    if (snapshotHasData(local?.snapshot)) return local?.snapshot ?? null;
+    if (snapshotHasData(local?.snapshot)) {
+      return local?.snapshot ?? null;
+    }
   } catch {
     // Best-effort: fall through to the remote snapshot.
   }
 
   const cloneUrl = project.cloneUrls[0];
-  if (!cloneUrl) return null;
+  if (!cloneUrl) {
+    return null;
+  }
   return getProjectRepoSnapshot({
     cloneUrl,
     defaultBranch: project.defaultBranch,
@@ -61,10 +65,14 @@ async function fetchProjectsRepoSnapshots(
     async () => {
       for (;;) {
         const project = queue.shift();
-        if (!project) return;
+        if (!project) {
+          return;
+        }
         try {
           const snapshot = await fetchProjectSnapshot(project, reposDir);
-          if (snapshot) snapshots[project.id] = snapshot;
+          if (snapshot) {
+            snapshots[project.id] = snapshot;
+          }
         } catch {
           // Best-effort: unreachable or empty repositories are skipped.
         }

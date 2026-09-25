@@ -8,7 +8,9 @@ import {
 export function findTopVisibleThreadMessageId(
   body: HTMLElement | null,
 ): string | null {
-  if (!body) return null;
+  if (!body) {
+    return null;
+  }
 
   const bodyTop = body.getBoundingClientRect().top;
   const visibleReply = Array.from(
@@ -110,7 +112,9 @@ export function useThreadViewModeSwitch({
         externalTargetId: externalScrollTargetId,
         layoutTargetId: layoutScrollTargetId,
       });
-      if (resolution.resolveExternal) onExternalTargetResolved();
+      if (resolution.resolveExternal) {
+        onExternalTargetResolved();
+      }
       if (settledMessageId) {
         setLayoutScrollTarget((current) =>
           current?.threadHeadId === activeThreadHeadId &&

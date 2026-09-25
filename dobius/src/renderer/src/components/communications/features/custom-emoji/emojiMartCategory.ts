@@ -8,7 +8,9 @@ import { rewriteRelayUrl } from "@comms/shared/lib/mediaUrl";
  * — so select handlers must insert `:id:` for these.
  */
 export function buildCustomEmojiCategory(customEmoji: CustomEmoji[]) {
-  if (customEmoji.length === 0) return undefined;
+  if (customEmoji.length === 0) {
+    return undefined;
+  }
   return [
     {
       id: "buzz-custom",

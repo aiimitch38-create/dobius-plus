@@ -104,7 +104,9 @@ export function useCommunityUnread(
     };
 
     const scheduleNextPoll = () => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       pollTimer = window.setTimeout(() => {
         void pollInactiveCommunities();
       }, COMMUNITY_UNREAD_POLL_MS);
@@ -120,7 +122,9 @@ export function useCommunityUnread(
         pubkey = (await getIdentity()).pubkey;
       } catch {
         for (const community of inactiveCommunities) {
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           markError(community.id);
         }
         scheduleNextPoll();
@@ -128,18 +132,24 @@ export function useCommunityUnread(
       }
 
       for (const community of inactiveCommunities) {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         markLoading(community.id);
         try {
           const result = await pollCommunityUnread(community, pubkey);
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           markReady(community.id, result);
         } catch (error) {
           console.debug(
             `[CommunityUnread] poll failed community=${community.id}:`,
             error,
           );
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           markError(community.id);
         }
       }
@@ -165,7 +175,9 @@ export function useCommunityUnread(
       const community = communitiesRef.current.find(
         (candidate) => candidate.id === communityId,
       );
-      if (!community || communityId === activeCommunityId) return;
+      if (!community || communityId === activeCommunityId) {
+        return;
+      }
 
       const { pubkey } = await getIdentity();
       await markCommunityRead(community, pubkey);

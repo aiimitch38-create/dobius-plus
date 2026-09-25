@@ -48,7 +48,9 @@ export function CreateProjectBranchDialog({
   const validationError = projectBranchNameError(branchName, existingBranches);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     setBranchName("");
     setSubmitError(null);
   }, [open]);
@@ -56,7 +58,9 @@ export function CreateProjectBranchDialog({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const branch = normalizeProjectBranchName(branchName);
-    if (!branch || validationError || !sourceCommit) return;
+    if (!branch || validationError || !sourceCommit) {
+      return;
+    }
     setSubmitError(null);
     try {
       await onCreate(branch);
@@ -71,7 +75,9 @@ export function CreateProjectBranchDialog({
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
-        if (!pending) onOpenChange(nextOpen);
+        if (!pending) {
+          onOpenChange(nextOpen);
+        }
       }}
       open={open}
     >
@@ -151,7 +157,9 @@ export function DeleteProjectBranchDialog({
   const [submitError, setSubmitError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (open) setSubmitError(null);
+    if (open) {
+      setSubmitError(null);
+    }
   }, [open]);
 
   async function handleDelete() {
@@ -169,7 +177,9 @@ export function DeleteProjectBranchDialog({
   return (
     <AlertDialog
       onOpenChange={(nextOpen) => {
-        if (!pending) onOpenChange(nextOpen);
+        if (!pending) {
+          onOpenChange(nextOpen);
+        }
       }}
       open={open}
     >

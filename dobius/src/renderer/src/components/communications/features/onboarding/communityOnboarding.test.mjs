@@ -204,7 +204,9 @@ function makeScheduler() {
     schedule: (fn, _ms) => callbacks.push(fn),
     fireTimeout: () => {
       const fn = callbacks.shift();
-      if (fn) fn();
+      if (fn) {
+        fn();
+      }
     },
     pendingCount: () => callbacks.length,
   };

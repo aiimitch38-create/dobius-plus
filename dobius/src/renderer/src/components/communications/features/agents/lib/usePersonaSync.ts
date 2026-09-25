@@ -36,7 +36,9 @@ export function startPersonaSync(
   onCancelled: () => boolean,
 ): () => Promise<void> {
   const reconcile = (event: RelayEvent) => {
-    if (event.pubkey !== pubkey) return;
+    if (event.pubkey !== pubkey) {
+      return;
+    }
     void reconcileInboundPersonaEvent(JSON.stringify(event), relayUrl).catch(
       (error) => {
         console.warn("[usePersonaSync] reconcile failed:", error);
@@ -49,8 +51,12 @@ export function startPersonaSync(
   void relayClient
     .fetchEvents({ kinds: PERSONA_SYNC_KINDS, authors: [pubkey], limit: 500 })
     .then((events) => {
-      if (onCancelled()) return;
-      for (const event of events) reconcile(event);
+      if (onCancelled()) {
+        return;
+      }
+      for (const event of events) {
+        reconcile(event);
+      }
     })
     .catch((error) => {
       console.warn("[usePersonaSync] backfill failed:", error);
@@ -71,7 +77,9 @@ export function startPersonaSync(
     });
 
   return async () => {
-    if (unsub) await unsub();
+    if (unsub) {
+      await unsub();
+    }
   };
 }
 
@@ -92,7 +100,9 @@ export function usePersonaSync(
   relayUrl: string | undefined,
 ): void {
   React.useEffect(() => {
-    if (!pubkey || !relayUrl) return;
+    if (!pubkey || !relayUrl) {
+      return;
+    }
     let cancelled = false;
     const dispose = startPersonaSync(pubkey, relayUrl, () => cancelled);
     return () => {

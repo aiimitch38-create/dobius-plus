@@ -165,13 +165,17 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
   const handleSelectedPullRequestIdChange = React.useCallback(
     (id: string | null) => {
       setSelectedPullRequestId(id);
-      if (id) setSelectedCommitHash(null);
+      if (id) {
+        setSelectedCommitHash(null);
+      }
     },
     [],
   );
   const handleSelectedIssueIdChange = React.useCallback((id: string | null) => {
     setSelectedIssueId(id);
-    if (id) setSelectedCommitHash(null);
+    if (id) {
+      setSelectedCommitHash(null);
+    }
   }, []);
   const handleSelectedCommitHashChange = React.useCallback(
     (hash: string | null) => {
@@ -425,7 +429,9 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
       // While the project query is still loading, keep the URL-seeded
       // pullRequestId/issueId selections — clearing here would discard them
       // before the detail view ever gets a chance to open.
-      if (projectPending) return;
+      if (projectPending) {
+        return;
+      }
       setSelectedPullRequestId(null);
       setSelectedIssueId(null);
       setSelectedCommitHash(null);
@@ -433,8 +439,12 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
   }, [project, projectPending]);
   React.useEffect(() => {
     setRepoSource((currentSource) => {
-      if (selectedTag) return "remote";
-      if (currentSource === "local" && !hasLocalCheckout) return "remote";
+      if (selectedTag) {
+        return "remote";
+      }
+      if (currentSource === "local" && !hasLocalCheckout) {
+        return "remote";
+      }
       if (
         currentSource === "remote" &&
         !hasRemoteSnapshot &&
@@ -446,7 +456,9 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
     });
   }, [hasLocalCheckout, hasRemoteSnapshot, selectedTag]);
   const peoplePubkeys = React.useMemo(() => {
-    if (!project) return [];
+    if (!project) {
+      return [];
+    }
     // Include PR authors/updaters so commit rows can resolve avatars for
     // publishers who are not listed as project contributors.
     const pullRequestPubkeys = (pullRequestsQuery.data ?? []).flatMap(
@@ -487,7 +499,9 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
   const gitIdentityQuery = useGitIdentityQuery();
   const viewerGitIdentity = React.useMemo<ViewerGitIdentity | null>(() => {
     const pubkey = identityQuery.data?.pubkey ?? null;
-    if (!pubkey || !gitIdentityQuery.data) return null;
+    if (!pubkey || !gitIdentityQuery.data) {
+      return null;
+    }
     return {
       pubkey,
       name: gitIdentityQuery.data.name,
@@ -593,7 +607,9 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
   );
   const handleUpdatePullRequest = React.useCallback(async () => {
     const commit = repoSyncStatusQuery.data?.remoteHead;
-    if (!commit) return;
+    if (!commit) {
+      return;
+    }
     try {
       const updated = await updatePullRequestMutation.mutateAsync({
         commit,
@@ -640,7 +656,9 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
   ]);
   const openTerminal = useOpenProjectTerminal(activeCommunity?.reposDir);
   const handleOpenTerminal = React.useCallback(() => {
-    if (!project) return Promise.resolve();
+    if (!project) {
+      return Promise.resolve();
+    }
     return openTerminal(project, {
       branch: activeBranch,
       hasLocalCheckout,

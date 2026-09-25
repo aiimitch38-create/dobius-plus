@@ -553,7 +553,9 @@ export function isGloballySatisfiedCredentialKey(
   envVars: Record<string, string>,
 ): boolean {
   const globalValue = globalEnvVars?.[key] ?? "";
-  if (globalValue.length === 0) return false;
+  if (globalValue.length === 0) {
+    return false;
+  }
   // Agent-local "" explicitly shadows the global — effective value is empty.
   const agentExplicitlyClearedKey =
     key in envVars && (envVars[key] ?? "").length === 0;
@@ -585,7 +587,9 @@ export function getBakedSatisfiedEnvKeys(
   envVars: Record<string, string>,
   bakedEnvKeys: readonly string[] | undefined,
 ): string[] {
-  if (!bakedEnvKeys || bakedEnvKeys.length === 0) return [];
+  if (!bakedEnvKeys || bakedEnvKeys.length === 0) {
+    return [];
+  }
   const bakedSet = new Set(bakedEnvKeys);
   return requiredKeys.filter((key) => !(key in envVars) && bakedSet.has(key));
 }
@@ -695,9 +699,12 @@ export function computeLocalModeGate({
 
   const missingNormalizedFields: string[] = [];
   if (needsProviderSelection) {
-    if (effectiveProvider.length === 0)
+    if (effectiveProvider.length === 0) {
       missingNormalizedFields.push("provider");
-    if (effectiveModel.length === 0) missingNormalizedFields.push("model");
+    }
+    if (effectiveModel.length === 0) {
+      missingNormalizedFields.push("model");
+    }
   }
 
   // Credential keys depend on the selected provider (empty provider → no keys

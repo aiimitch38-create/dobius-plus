@@ -196,27 +196,43 @@ export function buildPlainTextProjection(
   const text = textParts.join("");
 
   function mapPMToTextOffset(pm: number): number {
-    if (pm <= 0) return 0;
+    if (pm <= 0) {
+      return 0;
+    }
     for (const seg of segments) {
       if (seg.kind === "text") {
         if (pm <= seg.pmTo) {
-          if (pm <= seg.pmFrom) return seg.textFrom;
+          if (pm <= seg.pmFrom) {
+            return seg.textFrom;
+          }
           return seg.textFrom + (pm - seg.pmFrom);
         }
       } else if (seg.kind === "hardBreak") {
-        if (pm <= seg.pmFrom) return seg.textFrom;
-        if (pm <= seg.pmTo) return seg.textTo;
+        if (pm <= seg.pmFrom) {
+          return seg.textFrom;
+        }
+        if (pm <= seg.pmTo) {
+          return seg.textTo;
+        }
       } else if (seg.kind === "atom") {
         // 1 PM wide; either before (pmFrom → textFrom) or after
         // (pmTo → textTo). No interior position exists.
-        if (pm <= seg.pmFrom) return seg.textFrom;
-        if (pm <= seg.pmTo) return seg.textTo;
+        if (pm <= seg.pmFrom) {
+          return seg.textFrom;
+        }
+        if (pm <= seg.pmTo) {
+          return seg.textTo;
+        }
       } else if (seg.kind === "blockBoundary") {
         // Zero PM-width.
-        if (pm <= seg.pmAt) return seg.textFrom;
+        if (pm <= seg.pmAt) {
+          return seg.textFrom;
+        }
       } else {
         // emptyBlockContent — interior of an empty leaf block.
-        if (pm <= seg.pmAt) return seg.textAt;
+        if (pm <= seg.pmAt) {
+          return seg.textAt;
+        }
       }
     }
     return text.length;
@@ -258,25 +274,39 @@ export function buildPlainTextProjection(
         // the atom — snap to just before it. At the right edge fall
         // through so the position lands after the atom (pmTo, claimed by
         // the following segment or the end-of-doc tail).
-        if (offset < seg.textTo) return seg.pmFrom;
+        if (offset < seg.textTo) {
+          return seg.pmFrom;
+        }
         // offset === seg.textTo → fall through.
       } else if (seg.kind === "blockBoundary") {
         // Zero PM-width.
         // offset <  textTo → "end of previous block" → pmAt
         // offset === textTo → "start of next block" → fall through.
-        if (offset < seg.textTo) return seg.pmAt;
+        if (offset < seg.textTo) {
+          return seg.pmAt;
+        }
       } else {
         // emptyBlockContent — interior of an empty leaf block.
         // offset === textAt → land inside the empty block at pmAt.
-        if (offset <= seg.textAt) return seg.pmAt;
+        if (offset <= seg.textAt) {
+          return seg.pmAt;
+        }
       }
     }
     // Beyond all content → end-of-doc text position.
-    const last = segments[segments.length - 1];
-    if (!last) return doc.content.size > 0 ? 1 : 0;
-    if (last.kind === "text" || last.kind === "hardBreak") return last.pmTo;
-    if (last.kind === "atom") return last.pmTo;
-    if (last.kind === "emptyBlockContent") return last.pmAt;
+    const last = segments.at(-1);
+    if (!last) {
+      return doc.content.size > 0 ? 1 : 0;
+    }
+    if (last.kind === "text" || last.kind === "hardBreak") {
+      return last.pmTo;
+    }
+    if (last.kind === "atom") {
+      return last.pmTo;
+    }
+    if (last.kind === "emptyBlockContent") {
+      return last.pmAt;
+    }
     return last.pmAt;
   }
 

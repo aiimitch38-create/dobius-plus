@@ -5,7 +5,7 @@ export function useProjectRepositoryRefSelection(input: {
   defaultBranch: string | null;
   projectAvailable: boolean;
   projectPending: boolean;
-  tags: Array<{ name: string }>;
+  tags: { name: string }[];
 }) {
   const [selectedBranch, setSelectedBranch] = React.useState<string | null>(
     null,
@@ -16,7 +16,9 @@ export function useProjectRepositoryRefSelection(input: {
 
   React.useEffect(() => {
     if (!input.projectAvailable) {
-      if (input.projectPending) return;
+      if (input.projectPending) {
+        return;
+      }
       setSelectedBranch(null);
       setSelectedTag(null);
       return;

@@ -18,7 +18,9 @@ type ToggleMessageReaction = (
 ) => Promise<void>;
 
 export function hasVideoAttachment(message: TimelineMessage): boolean {
-  if (message.body.includes("![video](")) return true;
+  if (message.body.includes("![video](")) {
+    return true;
+  }
 
   return (
     message.tags?.some(
@@ -140,7 +142,9 @@ export function buildVideoReviewContextForMessage({
           const sourceComment = comments.find(
             (candidate) => candidate.id === comment.id,
           );
-          if (!sourceComment) return Promise.resolve();
+          if (!sourceComment) {
+            return Promise.resolve();
+          }
           return onToggleReaction(sourceComment, emoji, remove);
         }
       : undefined,

@@ -29,7 +29,9 @@
  * When `editTags` is undefined, returns `originalTags` unchanged.
  */
 export function applyEditTagOverlay(originalTags, editTags) {
-  if (!editTags) return originalTags;
+  if (!editTags) {
+    return originalTags;
+  }
   const editEmoji = editTags.filter((t) => t[0] === "emoji");
   // imeta is always fully replaced by the edit. emoji is replaced only when
   // the edit actually supplies emoji tags; otherwise the original's are kept.

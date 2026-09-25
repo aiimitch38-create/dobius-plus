@@ -44,7 +44,7 @@ export function KeyringLockedScreen() {
           Unlock your system keyring
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Your identity is safe in the OS keyring, but it's unreachable this
+          Your identity is safe in the OS keyring, but it&apos;s unreachable this
           session. Unlock your keyring or sign into your desktop session, then
           relaunch Dobius.
         </p>

@@ -149,7 +149,9 @@ function classifyLoadSkillTool(
   const isLoadSkill = [input.toolName, input.title, input.buzzToolName].some(
     (value) => value && normalizeToolNameText(value) === "load_skill",
   );
-  if (!isLoadSkill) return null;
+  if (!isLoadSkill) {
+    return null;
+  }
 
   const skillRef = getToolString(input.args, ["name"]);
   const object = skillRef ?? "skill";
@@ -169,7 +171,9 @@ function classifyDeveloperHarnessTool(
   input: ToolClassificationInput,
 ): AgentActivityDescriptor | null {
   const kind = resolveDeveloperToolKind(input);
-  if (!kind) return null;
+  if (!kind) {
+    return null;
+  }
 
   if (kind === "shell") {
     const command = getToolString(input.args, ["command"]);
@@ -277,10 +281,14 @@ function classifyBuzzTool(
   const name = [input.buzzToolName, input.toolName, input.title].find(
     (value) => value && getBuzzToolInfo(value),
   );
-  if (!name) return null;
+  if (!name) {
+    return null;
+  }
 
   const info = getBuzzToolInfo(name);
-  if (!info) return null;
+  if (!info) {
+    return null;
+  }
 
   const operation = normalizeToolNameText(name);
   const label = formatToolTitle(name, input.title);
@@ -326,27 +334,42 @@ function resolveDeveloperToolKind(
   | null {
   for (const value of [input.toolName, input.title, input.buzzToolName]) {
     const kind = classifyDeveloperToolName(value);
-    if (kind) return kind;
+    if (kind) {
+      return kind;
+    }
   }
   return null;
 }
 
 function classifyDeveloperToolName(value: string | null | undefined) {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   const normalized = normalizeToolNameText(value);
   const base = normalized.replace(/^buzz_dev_mcp_/, "");
 
-  if (base === "shell" || normalized.endsWith("_shell")) return "shell";
-  if (base === "read_file" || normalized.endsWith("_read_file"))
+  if (base === "shell" || normalized.endsWith("_shell")) {
+    return "shell";
+  }
+  if (base === "read_file" || normalized.endsWith("_read_file")) {
     return "read_file";
-  if (base === "view_image" || normalized.endsWith("_view_image"))
+  }
+  if (base === "view_image" || normalized.endsWith("_view_image")) {
     return "view_image";
-  if (base === "str_replace" || normalized.endsWith("_str_replace"))
+  }
+  if (base === "str_replace" || normalized.endsWith("_str_replace")) {
     return "str_replace";
-  if (base === "todo") return "todo";
-  if (base === "stop") return "stop_hook";
-  if (base === "postcompact") return "post_compact_hook";
+  }
+  if (base === "todo") {
+    return "todo";
+  }
+  if (base === "stop") {
+    return "stop_hook";
+  }
+  if (base === "postcompact") {
+    return "post_compact_hook";
+  }
   if (DEVELOPER_TOOL_BASES.has(base) || normalized.includes("buzz_dev_mcp")) {
     return "dev_mcp";
   }
@@ -358,7 +381,9 @@ export function parseBuzzCliCommand(
 ): AgentActivityDescriptor | null {
   const tokens = tokenizeShellCommand(command);
   const range = findBuzzCommand(tokens);
-  if (!range) return null;
+  if (!range) {
+    return null;
+  }
 
   const group = tokens[range.groupIndex];
   const verb = tokens[range.verbIndex] ?? "run";
@@ -382,7 +407,9 @@ export function parseBuzzCliCommand(
 }
 
 function titleForBuzzCli(group: string, verb: string) {
-  if (group === "messages" && verb === "send") return "Send Message";
+  if (group === "messages" && verb === "send") {
+    return "Send Message";
+  }
   return [group, verb]
     .map((part) =>
       part
@@ -415,23 +442,49 @@ function buzzOperationVerbToken(operation: string) {
 }
 
 function buzzOperationVerb(verb: string, tone: AgentActivityTone) {
-  if (verb === "add") return "Added";
-  if (verb === "archive") return "Archived";
-  if (verb === "create") return "Created";
-  if (verb === "delete") return "Deleted";
-  if (verb === "get" || verb === "list" || verb === "members") return "Read";
-  if (verb === "remove") return "Removed";
-  if (verb === "runs") return "Read";
-  if (verb === "search") return "Searched";
-  if (verb === "send") return "Sent";
-  if (verb === "thread") return "Read";
-  if (verb === "unarchive") return "Unarchived";
-  if (tone === "read") return "Read";
+  if (verb === "add") {
+    return "Added";
+  }
+  if (verb === "archive") {
+    return "Archived";
+  }
+  if (verb === "create") {
+    return "Created";
+  }
+  if (verb === "delete") {
+    return "Deleted";
+  }
+  if (verb === "get" || verb === "list" || verb === "members") {
+    return "Read";
+  }
+  if (verb === "remove") {
+    return "Removed";
+  }
+  if (verb === "runs") {
+    return "Read";
+  }
+  if (verb === "search") {
+    return "Searched";
+  }
+  if (verb === "send") {
+    return "Sent";
+  }
+  if (verb === "thread") {
+    return "Read";
+  }
+  if (verb === "unarchive") {
+    return "Unarchived";
+  }
+  if (tone === "read") {
+    return "Read";
+  }
   return "Updated";
 }
 
 function buzzOperationObject(operation: string) {
-  if (isBuzzMessageSend(operation)) return "message";
+  if (isBuzzMessageSend(operation)) {
+    return "message";
+  }
   if (operation.includes(".")) {
     const [group] = operation.split(".");
     return group ? group.replace(/[-_]+/g, " ") : "Dobius";
@@ -444,9 +497,15 @@ function buzzOperationObject(operation: string) {
 }
 
 function buzzCliTone(group: string, verb: string): AgentActivityTone {
-  if (BUZZ_CLI_ADMIN_VERBS.has(verb)) return "admin";
-  if (BUZZ_CLI_READ_VERBS.has(verb)) return "read";
-  if (group === "feed" && verb === "get") return "read";
+  if (BUZZ_CLI_ADMIN_VERBS.has(verb)) {
+    return "admin";
+  }
+  if (BUZZ_CLI_READ_VERBS.has(verb)) {
+    return "read";
+  }
+  if (group === "feed" && verb === "get") {
+    return "read";
+  }
   return "write";
 }
 
@@ -455,8 +514,12 @@ function extractBuzzCliInlineContent(
   range: BuzzCommandRange,
 ): string | null {
   const content = getFlagValue(tokens, range.verbIndex + 1, "--content");
-  if (!content || content === "-") return null;
-  if (content.includes("$") || content.includes("`")) return null;
+  if (!content || content === "-") {
+    return null;
+  }
+  if (content.includes("$") || content.includes("`")) {
+    return null;
+  }
   return content;
 }
 
@@ -470,7 +533,9 @@ function extractBuzzCliObjectPreview(
     getFlagValue(tokens, range.verbIndex + 1, "--query") ??
     getFlagValue(tokens, range.verbIndex + 1, "--name") ??
     getFlagValue(tokens, range.verbIndex + 1, "--file");
-  if (flagPreview) return flagPreview;
+  if (flagPreview) {
+    return flagPreview;
+  }
 
   const next = tokens[range.verbIndex + 1];
   return next && !isCommandSeparator(next) && !next.startsWith("-")
@@ -486,10 +551,14 @@ type BuzzCommandRange = {
 
 function findBuzzCommand(tokens: string[]): BuzzCommandRange | null {
   for (let i = 0; i < tokens.length; i++) {
-    if (!isBuzzExecutable(tokens[i])) continue;
+    if (!isBuzzExecutable(tokens[i])) {
+      continue;
+    }
 
     for (let j = i + 1; j < tokens.length; j++) {
-      if (isCommandSeparator(tokens[j])) break;
+      if (isCommandSeparator(tokens[j])) {
+        break;
+      }
       if (tokens[j].startsWith("-")) {
         if (
           !tokens[j].includes("=") &&
@@ -499,7 +568,9 @@ function findBuzzCommand(tokens: string[]): BuzzCommandRange | null {
         }
         continue;
       }
-      if (!BUZZ_CLI_GROUPS.has(tokens[j])) continue;
+      if (!BUZZ_CLI_GROUPS.has(tokens[j])) {
+        continue;
+      }
       const verbIndex = j + 1;
       if (!tokens[verbIndex] || isCommandSeparator(tokens[verbIndex])) {
         return null;
@@ -534,8 +605,11 @@ export function tokenizeShellCommand(command: string): string[] {
       continue;
     }
     if (quote) {
-      if (char === quote) quote = null;
-      else current += char;
+      if (char === quote) {
+        quote = null;
+      } else {
+        current += char;
+      }
       continue;
     }
     if (char === "'" || char === '"') {
@@ -554,7 +628,9 @@ export function tokenizeShellCommand(command: string): string[] {
     current += char;
   }
 
-  if (escaping) current += "\\";
+  if (escaping) {
+    current += "\\";
+  }
   pushCurrent();
   return tokens;
 }
@@ -570,29 +646,45 @@ function isCommandSeparator(token: string) {
 function getFlagValue(tokens: string[], start: number, flag: string) {
   for (let i = start; i < tokens.length; i++) {
     const token = tokens[i];
-    if (isCommandSeparator(token)) return null;
+    if (isCommandSeparator(token)) {
+      return null;
+    }
     if (token === flag) {
       return tokens[i + 1] && !isCommandSeparator(tokens[i + 1])
         ? tokens[i + 1]
         : null;
     }
-    if (token.startsWith(`${flag}=`)) return token.slice(flag.length + 1);
+    if (token.startsWith(`${flag}=`)) {
+      return token.slice(flag.length + 1);
+    }
   }
   return null;
 }
 
 function extractBuzzToolPreview(args: Record<string, unknown>): string | null {
   const content = getToolString(args, ["content", "message", "text", "body"]);
-  if (content) return content;
+  if (content) {
+    return content;
+  }
   const query = getToolString(args, ["query", "search"]);
-  if (query) return query;
+  if (query) {
+    return query;
+  }
   const channelId = getToolString(args, ["channel_id", "channelId"]);
-  if (channelId) return channelId;
+  if (channelId) {
+    return channelId;
+  }
   const workflowId = getToolString(args, ["workflow_id", "workflowId"]);
-  if (workflowId) return workflowId;
+  if (workflowId) {
+    return workflowId;
+  }
   const pubkeys = getToolStringList(args, ["pubkeys", "pubkey"]);
-  if (pubkeys.length === 1) return pubkeys[0];
-  if (pubkeys.length > 1) return `${pubkeys.length} users`;
+  if (pubkeys.length === 1) {
+    return pubkeys[0];
+  }
+  if (pubkeys.length > 1) {
+    return `${pubkeys.length} users`;
+  }
   return getToolString(args, ["event_id", "eventId", "name"]);
 }
 
@@ -628,14 +720,19 @@ function basenameOrUrl(source: string): string {
 
 function getTodoPreview(args: Record<string, unknown>): string | null {
   const todos = args.todos;
-  if (!Array.isArray(todos)) return "todo list";
-  if (todos.length === 0) return "empty list";
+  if (!Array.isArray(todos)) {
+    return "todo list";
+  }
+  if (todos.length === 0) {
+    return "empty list";
+  }
   const first = todos[0];
   const firstText =
     first && typeof first === "object"
       ? getToolString(asRecord(first), ["text"])
       : null;
-  if (firstText)
+  if (firstText) {
     return todos.length > 1 ? `${firstText} (+${todos.length - 1})` : firstText;
+  }
   return `${todos.length} item${todos.length === 1 ? "" : "s"}`;
 }

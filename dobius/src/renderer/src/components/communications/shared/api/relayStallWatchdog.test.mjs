@@ -53,7 +53,9 @@ test("idle timeout without inbound frames triggers onStall", async () => {
   const { advance, stalls, wd } = makeWatchdog();
   wd.start();
   advance(60);
-  for (let i = 0; i < 20 && stalls.length === 0; i++) await sleep(5);
+  for (let i = 0; i < 20 && stalls.length === 0; i++) {
+    await sleep(5);
+  }
   wd.stop();
   assert.equal(stalls.length, 1);
   assert.match(stalls[0].message, /no inbound frames/i);
@@ -72,7 +74,9 @@ test("inbound frames reset the idle timer", async () => {
     "recent inbound frame should keep socket alive",
   );
   advance(20);
-  for (let i = 0; i < 20 && stalls.length === 0; i++) await sleep(5);
+  for (let i = 0; i < 20 && stalls.length === 0; i++) {
+    await sleep(5);
+  }
   wd.stop();
   assert.equal(stalls.length, 1);
 });
@@ -100,7 +104,9 @@ test("start() is idempotent — does not create duplicate intervals", async () =
   wd.start();
   wd.start();
   advance(60);
-  for (let i = 0; i < 20 && stalls.length === 0; i++) await sleep(5);
+  for (let i = 0; i < 20 && stalls.length === 0; i++) {
+    await sleep(5);
+  }
   wd.stop();
   assert.equal(stalls.length, 1);
 });

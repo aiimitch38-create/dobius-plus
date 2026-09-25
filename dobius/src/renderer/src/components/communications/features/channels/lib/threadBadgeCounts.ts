@@ -38,10 +38,16 @@ export function computeThreadBadgeCounts(
 ): Map<string, number> {
   const counts = new Map<string, number>();
   for (const message of messages) {
-    if (message.parentId) continue;
-    if (!isNotified(message.id)) continue;
+    if (message.parentId) {
+      continue;
+    }
+    if (!isNotified(message.id)) {
+      continue;
+    }
     const subtreeReplies = repliesByRootId.get(message.id);
-    if (!subtreeReplies || subtreeReplies.length === 0) continue;
+    if (!subtreeReplies || subtreeReplies.length === 0) {
+      continue;
+    }
     const { unreadCount } = computeThreadUnreadMarker(
       subtreeReplies,
       getReadAt,

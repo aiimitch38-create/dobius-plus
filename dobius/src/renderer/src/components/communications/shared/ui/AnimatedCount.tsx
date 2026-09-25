@@ -24,8 +24,12 @@ type AnimatedCountProps = {
 const ANIMATED_COUNT_SETTLE_DELAY_MS = 260;
 
 function directionFor(previous: number, current: number): CountDirection {
-  if (current > previous) return 1;
-  if (current < previous) return -1;
+  if (current > previous) {
+    return 1;
+  }
+  if (current < previous) {
+    return -1;
+  }
   return 0;
 }
 

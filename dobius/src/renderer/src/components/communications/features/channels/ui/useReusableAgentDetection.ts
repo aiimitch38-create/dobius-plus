@@ -29,7 +29,9 @@ export function useReusableAgentDetection(
   return React.useMemo(() => {
     const agents = managedAgentsQuery.data;
     const members = channelMembersQuery.data;
-    if (!agents || !members || !selectedRuntime) return undefined;
+    if (!agents || !members || !selectedRuntime) {
+      return undefined;
+    }
     const memberPubkeys = new Set(
       members.map((m) => normalizePubkey(m.pubkey)),
     );

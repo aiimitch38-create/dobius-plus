@@ -55,7 +55,9 @@ function disableSearchInputCorrections(
 
   function applyAttributes() {
     const input = root.querySelector<HTMLInputElement>('input[type="search"]');
-    if (!input) return false;
+    if (!input) {
+      return false;
+    }
     input.spellcheck = false;
     input.setAttribute("autocorrect", "off");
     input.setAttribute("autocapitalize", "off");
@@ -119,7 +121,9 @@ export const EmojiPicker = React.memo(function EmojiPicker({
   const hostRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    if (!hostRef.current) return;
+    if (!hostRef.current) {
+      return;
+    }
     return disableSearchInputCorrections(hostRef.current, autoFocus);
   }, [autoFocus]);
 

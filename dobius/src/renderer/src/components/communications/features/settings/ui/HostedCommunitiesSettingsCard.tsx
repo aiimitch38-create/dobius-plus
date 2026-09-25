@@ -55,7 +55,9 @@ import { Input } from "@comms/shared/ui/input";
 import { SettingsSectionHeader } from "./SettingsSectionHeader";
 
 function relayHost(url: string | null | undefined) {
-  if (!url) return null;
+  if (!url) {
+    return null;
+  }
   try {
     return new URL(url).host.toLowerCase();
   } catch {
@@ -116,15 +118,23 @@ export function HostedCommunitiesSettingsCard() {
     let active = true;
     void invoke<BuilderlabAuth | null>("get_builderlab_auth")
       .then(async (nextAuth) => {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
         setAuth(nextAuth);
-        if (nextAuth) await loadAccount();
+        if (nextAuth) {
+          await loadAccount();
+        }
       })
       .catch((cause) => {
-        if (active) setError(String(cause));
+        if (active) {
+          setError(String(cause));
+        }
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       });
     return () => {
       active = false;
@@ -256,7 +266,9 @@ export function HostedCommunitiesSettingsCard() {
     });
 
   const archiveCommunity = (community: HostedCommunity) => {
-    if (!community.id) return Promise.resolve(false);
+    if (!community.id) {
+      return Promise.resolve(false);
+    }
     return run("Archiving community…", async () => {
       const response = await invoke<CommunityMutationResponse>(
         "archive_builderlab_community",
@@ -278,7 +290,9 @@ export function HostedCommunitiesSettingsCard() {
   };
 
   const unarchiveCommunity = (community: HostedCommunity) => {
-    if (!community.id) return Promise.resolve(false);
+    if (!community.id) {
+      return Promise.resolve(false);
+    }
     return run("Unarchiving community…", async () => {
       const response = await invoke<CommunityMutationResponse>(
         "unarchive_builderlab_community",
@@ -337,14 +351,20 @@ export function HostedCommunitiesSettingsCard() {
             "check_builderlab_community_name",
             { name: normalizedName },
           );
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           setAvailability(
             response.error ? null : (response.available ?? false),
           );
         } catch {
-          if (!cancelled) setAvailability(null);
+          if (!cancelled) {
+            setAvailability(null);
+          }
         } finally {
-          if (!cancelled) setCheckingName(false);
+          if (!cancelled) {
+            setCheckingName(false);
+          }
         }
       })();
     }, 500);
@@ -361,8 +381,9 @@ export function HostedCommunitiesSettingsCard() {
       !identity ||
       identityMismatch ||
       communities.length >= MAX_COMMUNITIES
-    )
+    ) {
       return;
+    }
     void run("Creating community…", async () => {
       const availabilityResponse = await invoke<AvailabilityResponse>(
         "check_builderlab_community_name",
@@ -392,8 +413,9 @@ export function HostedCommunitiesSettingsCard() {
         );
       }
       const url = relayUrl(response.community);
-      if (!url)
+      if (!url) {
         throw new Error("The new community did not return a relay address.");
+      }
       setName("");
       setAvailability(null);
       await loadAccount();
@@ -591,12 +613,13 @@ export function HostedCommunitiesSettingsCard() {
                       }
                       onConnect={() => {
                         const url = relayUrl(community);
-                        if (url)
+                        if (url) {
                           onboarding.start({
                             source: "add-community",
                             relayUrl: url,
                             communityName: community.name,
                           });
+                        }
                       }}
                       onArchive={() => void archiveCommunity(community)}
                       onUnarchive={() => void unarchiveCommunity(community)}
@@ -885,13 +908,19 @@ function TransferOwnershipDialog({
   const npubIsValid = npub.startsWith("npub1") && npub.length >= 50;
 
   React.useEffect(() => {
-    if (!open) setNpub("");
+    if (!open) {
+      setNpub("");
+    }
   }, [open]);
 
   const submit = async () => {
-    if (!npubIsValid) return;
+    if (!npubIsValid) {
+      return;
+    }
     const ok = await onTransfer(npub.trim());
-    if (ok) onOpenChange(false);
+    if (ok) {
+      onOpenChange(false);
+    }
   };
 
   return (

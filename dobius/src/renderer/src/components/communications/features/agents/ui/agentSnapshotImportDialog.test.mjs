@@ -16,13 +16,19 @@ import { ResultBody } from "./AgentSnapshotImportDialog.tsx";
  * match a predicate.
  */
 function findAll(element, predicate) {
-  if (!element || typeof element !== "object") return [];
+  if (!element || typeof element !== "object") {
+    return [];
+  }
   const matches = [];
   const queue = [element];
   while (queue.length > 0) {
     const node = queue.shift();
-    if (!node || typeof node !== "object") continue;
-    if (predicate(node)) matches.push(node);
+    if (!node || typeof node !== "object") {
+      continue;
+    }
+    if (predicate(node)) {
+      matches.push(node);
+    }
     const children = node.props?.children;
     if (Array.isArray(children)) {
       queue.push(...children.flat(Infinity).filter(Boolean));
@@ -45,7 +51,9 @@ function collectText(element) {
       texts.push(node);
       continue;
     }
-    if (!node || typeof node !== "object") continue;
+    if (!node || typeof node !== "object") {
+      continue;
+    }
     const children = node.props?.children;
     if (Array.isArray(children)) {
       queue.push(...children.flat(Infinity).filter(Boolean));

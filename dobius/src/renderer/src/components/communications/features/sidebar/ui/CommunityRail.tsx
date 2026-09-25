@@ -346,7 +346,9 @@ export function CommunityRail({
   const handleDragEnd = (event: DragEndEvent) => {
     setDraggingId(null);
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over || active.id === over.id) {
+      return;
+    }
     const oldIdx = communityIds.indexOf(active.id as string);
     const newIdx = communityIds.indexOf(over.id as string);
     if (oldIdx !== -1 && newIdx !== -1) {
@@ -425,7 +427,9 @@ export function CommunityRail({
       <EditCommunityDialog
         canRemove={communities.length > 1}
         onOpenChange={(open) => {
-          if (!open) setEditingCommunity(null);
+          if (!open) {
+            setEditingCommunity(null);
+          }
         }}
         onRemove={onRemoveCommunity}
         onSave={onUpdateCommunity}

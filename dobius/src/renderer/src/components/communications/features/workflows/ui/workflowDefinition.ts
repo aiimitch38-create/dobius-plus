@@ -38,10 +38,14 @@ export function getWorkflowTriggerSummary(
   definition: Record<string, unknown>,
 ): string | null {
   const trigger = asRecord(definition.trigger);
-  if (!trigger) return null;
+  if (!trigger) {
+    return null;
+  }
 
   const on = trigger.on;
-  if (typeof on !== "string") return null;
+  if (typeof on !== "string") {
+    return null;
+  }
 
   const label = TRIGGER_LABELS[on as TriggerType] ?? on;
   switch (on) {

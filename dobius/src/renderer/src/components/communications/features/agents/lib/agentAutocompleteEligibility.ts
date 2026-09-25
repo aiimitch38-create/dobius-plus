@@ -77,12 +77,18 @@ export function shouldHideAgentFromMentions({
   mentionableAgentPubkeys: ReadonlySet<string>;
   directoryAgentPubkeys: ReadonlySet<string>;
 }) {
-  if (!isAgent) return false;
+  if (!isAgent) {
+    return false;
+  }
   const normalized = normalizePubkey(pubkey);
   // Invocable => always show.
-  if (mentionableAgentPubkeys.has(normalized)) return false;
+  if (mentionableAgentPubkeys.has(normalized)) {
+    return false;
+  }
   // Non-member, non-invocable => hide (preserves prior behavior).
-  if (!isMember) return true;
+  if (!isMember) {
+    return true;
+  }
   // Member (Option B): hide only when we have an explicit not-invocable
   // signal — a relay directory (kind:10100) entry that excludes us.
   // Unknown invocability (not in directory) => show.

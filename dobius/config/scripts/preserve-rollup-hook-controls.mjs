@@ -17,9 +17,8 @@
 // build:electron-vite, then restores it right after build:cli overwrites it.
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 
-const dobiusRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+const dobiusRoot = path.resolve(import.meta.dirname, '..', '..')
 const targetPath = path.join(
   dobiusRoot,
   'out',

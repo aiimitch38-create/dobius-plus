@@ -6,10 +6,7 @@
  * and text-splitting logic — this factory captures that once.
  */
 
-type Node = {
-  // biome-ignore lint/suspicious/noExplicitAny: building mdast-compatible nodes
-  [key: string]: any;
-};
+type Node = Record<string, any>;
 
 type NodeBuilderResult = Node | { node: Node; trailing?: string };
 
