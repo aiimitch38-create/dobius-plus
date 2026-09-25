@@ -61,6 +61,9 @@ vi.mock('./agent-run-events', () => ({
 }))
 vi.mock('./agent-tools/dobius-tool-server', () => ({ buildDobiusToolServer: vi.fn(() => ({})) }))
 vi.mock('./agent-hard-rails', () => ({ buildAgentHardRailHooks: vi.fn(() => ({})) }))
+vi.mock('./agent-sandbox-policy', () => ({
+  resolveAgentRunSandboxPolicy: () => ({ sandbox: { enabled: true }, disallowedTools: [] })
+}))
 vi.mock('./agent-notification-store', () => ({
   appendAgentNotification: vi.fn(),
   appendAgentRunNotification: vi.fn()

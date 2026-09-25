@@ -58,6 +58,9 @@ vi.mock('./agent-decision-queue', () => ({
   setDecisionBypassRunHandler: vi.fn()
 }))
 vi.mock('./agent-hard-rails', () => ({ buildAgentHardRailHooks: vi.fn(() => ({})) }))
+vi.mock('./agent-sandbox-policy', () => ({
+  resolveAgentRunSandboxPolicy: () => ({ sandbox: { enabled: true }, disallowedTools: [] })
+}))
 vi.mock('./agent-notification-store', () => ({
   appendAgentRunNotification: mocks.appendAgentRunNotification
 }))
