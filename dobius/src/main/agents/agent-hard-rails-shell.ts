@@ -10,8 +10,8 @@ import { comparablePath } from '../communications/providers/protected-path-guard
 // variables used as whole words (`echo $PATH`) and `for` loop variables over
 // literal relative words (`for f in *.ts; do wc -l "$f"; done`) when the run's
 // working directory cannot reach ~/.dobius.
-
-export const SHELL_SEGMENT_SEPARATOR = /&&|\|\||[;|&\n()`]/
+// Known residual (covered by the SDK sandbox build, SBX): globs such as
+// `cat ~/.dob*/agents/*/MEMORY.md` and whole-home walkers (`find ~ | xargs cat`).
 
 // Never under ~/.dobius; allowed unless used as a directory prefix (`$PATH/..`).
 const SAFE_ENV_VARS = new Set(['PATH', 'SHELL', 'TERM', 'LANG', 'HOSTNAME', 'CI', 'NODE_ENV'])
@@ -27,21 +27,26 @@ const DOT_DOT_SEGMENT = /(?:^|[\s/=:(<>])\.\.(?:\/|$|[\s;&|)<>])/
 export const UNRESOLVABLE_SHELL_PATH_REASON =
   'Hard rail: this command builds a path from a shell variable or command substitution the rail cannot check against protected folders; write the paths out literally.'
 
-export const UNVERIFIABLE_PUSH_REASON =
-  'Hard rail: git push with shell variables, command substitution, preceding assignments or -c overrides cannot be checked for force; write the push out literally.'
-
 export type ShellConstructionContext = {
   home: string
   // The run's current working directory, when the caller knows it.
   cwd?: string
 }
 
+type ExpandableText = {
+  // Unquoted and double-quoted text: where `$` expansions happen.
+  expanding: string
+  // Unquoted text only: where brace expansion happens.
+  unquoted: string
+}
+
 // What the shell would expand: single-quoted text and backslash-escaped
 // characters are literal, so `awk '{print $1}'` is not an expansion. Quote
 // characters are dropped so word boundaries match the shell's. Returns null for
 // ANSI-C / locale quoting (`$'\x2e'`), which builds text from escapes.
-function expandableText(command: string): string | null {
-  let text = ''
+function expandableText(command: string): ExpandableText | null {
+  let expanding = ''
+  let unquoted = ''
   let quote: '"' | "'" | null = null
   for (let index = 0; index < command.length; index += 1) {
     const char = command[index]
@@ -56,10 +61,39 @@ function expandableText(command: string): string | null {
     } else if (char === '"') {
       quote = quote === '"' ? null : '"'
     } else {
-      text += char
+      expanding += char
+      unquoted += quote === null ? char : ' '
     }
   }
-  return text
+  return { expanding, unquoted }
+}
+
+// CX12 F2 stopgaps: shell features that assemble a path from pieces the rail
+// never sees whole.
+const BRACE_EXPANSION = /\{[^{}\s]*(?:,|\.\.)[^{}\s]*\}/g
+const NUMERIC_BRACE_WORD = /^\{-?\d+\.\.-?\d+(?:\.\.-?\d+)?\}$/
+const WORD_CONTINUATION = /[^\s\\]\\\n[^\s]/
+const XARGS_REPLACE = /\bxargs\b[^;&|\n]*\s-[A-Za-z]*[IJ]/
+const MENTIONS_AGENTS = /agents\/|\.dob/i
+const ANY_CD = /(?:^|[\s;&|(])(?:cd|pushd)(?:\s|$|[;&|)])/
+
+function assemblesPathFromPieces(rawCommand: string, unquoted: string): boolean {
+  if (WORD_CONTINUATION.test(rawCommand)) {
+    return true
+  }
+  if (XARGS_REPLACE.test(rawCommand) && MENTIONS_AGENTS.test(rawCommand)) {
+    return true
+  }
+  for (const match of unquoted.matchAll(BRACE_EXPANSION)) {
+    const start = match.index ?? 0
+    const word = `${wordPrefix(unquoted, start)}${match[0]}`
+    const next = unquoted[start + match[0].length]
+    const wholeWord = word === match[0] && (next === undefined || WORD_BOUNDARY.test(next))
+    if (!(wholeWord && NUMERIC_BRACE_WORD.test(match[0]))) {
+      return true
+    }
+  }
+  return false
 }
 
 function isWithinOrEqual(root: string, candidate: string): boolean {
@@ -127,8 +161,12 @@ export function buildsUnresolvableShellPath(
   rawCommand: string,
   context: ShellConstructionContext
 ): boolean {
-  const command = expandableText(rawCommand)
-  if (command === null || /(?:^|[\s;&|(])eval(?:$|\s)/.test(command)) {
+  const views = expandableText(rawCommand)
+  if (views === null || assemblesPathFromPieces(rawCommand, views.unquoted)) {
+    return true
+  }
+  const command = views.expanding
+  if (/(?:^|[\s;&|(])eval(?:$|\s)/.test(command)) {
     return true
   }
   const loopVariables = cwdReachesAgents(context) ? new Set<string>() : safeLoopVariables(command)
@@ -150,70 +188,14 @@ export function buildsUnresolvableShellPath(
     if (SAFE_ENV_VARS.has(name) && plain && command[start + text.length] !== '/') {
       continue
     }
-    if (loopVariables.has(name) && !wordPrefix(command, start).startsWith('/')) {
+    const usedAsPrefix = command[start + text.length] === '/'
+    // Why (split-cd): after any `cd` the loop word's base directory is unknown.
+    const splitCd = usedAsPrefix && ANY_CD.test(command)
+    if (loopVariables.has(name) && !splitCd && !wordPrefix(command, start).startsWith('/')) {
       usesLoopVariable = true
       continue
     }
     return true
   }
   return usesLoopVariable && anchorsNearHome(command, context.home)
-}
-
-// Why: flags belong to the command in their own shell segment only, so
-// `git push && rm -rf dist` must not read rm's `-rf` as a push flag. Global
-// options can sit between git and push (`git -C <path> push --force`).
-export function isForcePush(command: string): boolean {
-  for (const segment of command.split(SHELL_SEGMENT_SEPARATOR)) {
-    const tokens = segment
-      .trim()
-      .split(/\s+/)
-      .map((token) => token.replace(/^["']|["']$/g, ''))
-    const gitIndex = tokens.findIndex((token) => token === 'git' || token.endsWith('/git'))
-    const pushIndex = gitIndex === -1 ? -1 : tokens.indexOf('push', gitIndex + 1)
-    if (pushIndex !== -1 && tokens.slice(pushIndex + 1).some(isForcePushArgument)) {
-      return true
-    }
-  }
-  return false
-}
-
-// `+branch` is refspec-syntax force-push — same rail as --force / -f.
-function isForcePushArgument(token: string): boolean {
-  return token.startsWith('--force') || /^-[A-Za-z]*f[A-Za-z]*$/.test(token) || /^\+\S/.test(token)
-}
-
-// Both only in command position, so `find . -name x` or `-m a=b` do not count.
-const ASSIGNMENT_WORD =
-  /(?:^|[;&|(\n])\s*(?:env\s+|export\s+|declare\s+|local\s+|readonly\s+|typeset\s+)?[A-Za-z_][A-Za-z0-9_]*\+?=/
-const VARIABLE_SETTER =
-  /(?:^|[;&|(\n])\s*(?:read|readarray|mapfile|export|declare|typeset|local|eval|source|\.|alias)(?:$|\s)/
-
-/**
- * CX12 F7: `F=--force; git push "$F"` hides the flag in a variable. A push whose
- * segment holds an expansion or escape, in a command with command substitution,
- * an assignment or a variable setter (a variable or GIT_CONFIG_* env could supply
- * `--force` or a `+` refspec), or that passes a `-c` override cannot be verified
- * as non-force.
- */
-export function isUnverifiablePush(command: string): boolean {
-  const pushSegments = command.split(SHELL_SEGMENT_SEPARATOR).flatMap((segment) => {
-    const tokens = segment
-      .trim()
-      .split(/\s+/)
-      .map((token) => token.replace(/^["']|["']$/g, ''))
-    const gitIndex = tokens.findIndex((token) => token === 'git' || token.endsWith('/git'))
-    const pushIndex = gitIndex === -1 ? -1 : tokens.indexOf('push', gitIndex + 1)
-    return pushIndex === -1 ? [] : [{ segment, globals: tokens.slice(gitIndex + 1, pushIndex) }]
-  })
-  if (pushSegments.length === 0) {
-    return false
-  }
-  if (/\$\(|`/.test(command) || ASSIGNMENT_WORD.test(command) || VARIABLE_SETTER.test(command)) {
-    return true
-  }
-  return pushSegments.some(
-    ({ segment, globals }) =>
-      /[$\\]/.test(segment) ||
-      globals.some((token) => token === '-c' || token.startsWith('--config-env'))
-  )
 }

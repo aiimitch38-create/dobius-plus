@@ -164,3 +164,45 @@ BUILD-008 adds `permissionDenials` to the run record and a
 ignores unknown fields, so that field never makes a file unreadable; the
 merge must add its parse line inside `sanitizeRun` (this build de-indented the
 old `flatMap` body into that function, so a textual conflict is expected).
+
+## Review follow-up (second commit)
+Merge first: `stabilize/integration` (ceee29a5, BUILD-008) merged; the
+`sanitizePermissionDenials` parse sits inside `sanitizeRun` (a malformed denial
+is dropped, the file stays readable). Test added in
+`safe-json-store-migrations.test.ts`.
+
+The F6 root fix (SDK sandbox) moved to build SBX; the text rail now closes the
+reviewer's concrete bypasses and false positives only.
+
+- F5 (false positives): quoted-delimiter `cat` heredoc bodies are literal and
+  are stripped before the expansion and git rails (`agent-hard-rails-shell-text.ts`
+  `stripLiteralHeredocs`); `$(cat <<'X' ... X)` becomes a literal. A heredoc
+  piped on (`cat <<'EOF' | bash`) is kept. The F7 assignment check is scoped to
+  the push segment's own prefix plus `GIT_*` assignments anywhere, so
+  `NODE_ENV=test npm test && git push` is allowed.
+- F3: git tokens are dequoted like the shell (`'`, `"`, `\` dropped) before
+  matching git/push/flags; `xargs|parallel|-exec ... git push` is unverifiable;
+  `git config` / `git -c` writes to `alias.*` or `remote.*.push|mirror` are
+  denied; redefining `git` as a function/alias next to a push is denied.
+  Known limit: an alias or config written by an EARLIER tool call cannot be
+  seen by a per-command rail (the write itself is denied; SBX covers the rest).
+  Git rails moved to `agent-hard-rails-git.ts`.
+- F1: the inner string of `sh|bash|zsh|dash|ksh|fish -c` (also via env,
+  command, exec, xargs) runs through every rail recursively (depth cap 4, then
+  deny).
+- F2 stopgaps: brace expansion `{a,b}` / `{x..y}` in unquoted text (a whole-word
+  numeric range like `{1..3}` stays allowed), backslash-newline inside a word,
+  `xargs -I/-J` when the command mentions `agents/` or `.dob`, and a loop
+  variable used as a path prefix whenever any `cd` appears. Residual covered by
+  SBX: globs (`~/.dob*`), whole-home walkers.
+- F4: the renderer re-checks Pause crew right after the worktree resolves
+  (before setup tabs), after `listRuns` on the reuse-session path, and right
+  before `launchAgentBackgroundSession`.
+- Line budget: `collectStrings`/`stringsToInspect`/`rawStringMentionsCredential`
+  moved unchanged to `agent-hard-rails-inputs.ts`.
+
+Mutation checks (each seen failing, then restored): heredoc strip off (4 F5
+tests), global assignment check restored (NODE_ENV test), no dequote (6 tests),
+no xargs push rule, no config-write rule (2), no sh -c recursion (2), F2
+stopgaps off (4), xargs -I rule off, split-cd off, backslash-newline off,
+renderer post-create re-check off.

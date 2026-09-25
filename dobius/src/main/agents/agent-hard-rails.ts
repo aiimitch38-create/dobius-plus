@@ -6,13 +6,19 @@ import {
   realpathPreservingMissingTail
 } from '../communications/providers/protected-path-guard'
 import {
-  buildsUnresolvableShellPath,
+  GIT_CONFIG_WRITE_REASON,
   isForcePush,
   isUnverifiablePush,
   SHELL_SEGMENT_SEPARATOR,
-  UNRESOLVABLE_SHELL_PATH_REASON,
-  UNVERIFIABLE_PUSH_REASON
+  UNVERIFIABLE_PUSH_REASON,
+  writesPushRewritingGitConfig
+} from './agent-hard-rails-git'
+import {
+  buildsUnresolvableShellPath,
+  UNRESOLVABLE_SHELL_PATH_REASON
 } from './agent-hard-rails-shell'
+import { rawStringMentionsCredential, stringsToInspect } from './agent-hard-rails-inputs'
+import { shellCInnerCommands, stripLiteralHeredocs } from './agent-hard-rails-shell-text'
 
 type HardRailRunContext = {
   agentId: string
@@ -92,75 +98,28 @@ function protectedForms(literal: string): string[] {
   return [...new Set([literal, `${real.replace(/\/$/, '')}${trailing}`])].map(comparablePath)
 }
 
-function collectStrings(value: unknown, strings: string[] = []): string[] {
-  if (typeof value === 'string') {
-    strings.push(value)
-    return strings
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      collectStrings(item, strings)
-    }
-    return strings
-  }
-  if (typeof value === 'object' && value !== null) {
-    for (const item of Object.values(value)) {
-      collectStrings(item, strings)
-    }
-  }
-  return strings
-}
-
 function commandTriggersHardRail(toolName: string, input: unknown): HardRailDenial | null {
   if (toolName !== 'Bash' || typeof input !== 'object' || input === null) {
     return null
   }
-  const command = (input as { command?: unknown }).command
-  if (typeof command !== 'string') {
+  const rawCommand = (input as { command?: unknown }).command
+  if (typeof rawCommand !== 'string') {
     return null
   }
+  const command = stripLiteralHeredocs(rawCommand)
   if (isForcePush(command)) {
     return { reason: 'Hard rail: force-pushing is not allowed from agent runs.' }
   }
   if (isUnverifiablePush(command)) {
     return { reason: UNVERIFIABLE_PUSH_REASON }
   }
+  if (writesPushRewritingGitConfig(command)) {
+    return { reason: GIT_CONFIG_WRITE_REASON }
+  }
   if (/\brm\s+(?:-[^\s]*r[^\s]*f|-+[^\s]*f[^\s]*r)\s+(?:--\s+)?\/(?:\*|\s|$)/.test(command)) {
     return { reason: 'Hard rail: recursive root deletes are not allowed from agent runs.' }
   }
   return null
-}
-
-// Why: prefix-agnostic on purpose — `/Users/$USER/.claude/...` or a variable
-// holding the home dir cannot be expanded here, but the credential file names
-// themselves are distinctive enough to deny wherever they appear.
-function rawStringMentionsCredential(value: string): boolean {
-  return (
-    /(^|[\s"'=:/\\])\.env(?:\.[^\s"'`;&|]*)?(?=$|[\s"'`;&|])/i.test(value) ||
-    /(^|[\s"'=:/\\])\.credentials\.json(?=$|[\s"'`;&|)])/i.test(value) ||
-    /\.claude[/\\]credentials[^\s"'`;&|]*/i.test(value) ||
-    /\.dobius[/\\][^\s"'`;&|]*[/\\]token[^\s"'`;&|]*/i.test(value) ||
-    /Library[/\\]Keychains(?:[/\\]|\s|$)/i.test(value)
-  )
-}
-
-const FILE_EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
-
-// Why: for file-editing tools only the TARGET PATH matters — scanning the content
-// payload false-denies writing ".env" into a .gitignore or a README that mentions it.
-function stringsToInspect(toolName: string, input: unknown): { field: string; raw: string }[] {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    return collectStrings(input).map((raw) => ({ field: '', raw }))
-  }
-  const record = input as Record<string, unknown>
-  if (FILE_EDIT_TOOLS.includes(toolName)) {
-    return ['file_path', 'path', 'notebook_path']
-      .map((field) => ({ field, raw: record[field] }))
-      .filter((entry): entry is { field: string; raw: string } => typeof entry.raw === 'string')
-  }
-  return Object.entries(record).flatMap(([field, value]) =>
-    collectStrings(value).map((raw) => ({ field, raw }))
-  )
 }
 
 function targetsCredentials(inspected: InspectedString[]): HardRailDenial | null {
@@ -306,14 +265,29 @@ function targetsOtherAgentIdentity(
   return null
 }
 
+const MAX_SHELL_C_DEPTH = 4
+
 export function evaluateAgentHardRails(
   context: HardRailRunContext,
   toolName: string,
-  input: unknown
+  input: unknown,
+  depth = 0
 ): HardRailDenial | null {
   const commandDenial = commandTriggersHardRail(toolName, input)
   if (commandDenial) {
     return commandDenial
+  }
+  // Why (CX12 F1): `bash -c '<string>'` runs a whole second command the outer
+  // scan sees only as quoted text, so every rail runs on it too.
+  const command = toolName === 'Bash' ? (input as { command?: unknown }).command : undefined
+  for (const inner of typeof command === 'string' ? shellCInnerCommands(command) : []) {
+    const innerDenial =
+      depth >= MAX_SHELL_C_DEPTH
+        ? { reason: UNRESOLVABLE_SHELL_PATH_REASON }
+        : evaluateAgentHardRails(context, 'Bash', { command: inner }, depth + 1)
+    if (innerDenial) {
+      return innerDenial
+    }
   }
   const inspected = inspectStrings(toolName, input)
   const pathDenial =
@@ -324,7 +298,10 @@ export function evaluateAgentHardRails(
     inspected.some(
       ({ field, raw }) =>
         field === 'command' &&
-        buildsUnresolvableShellPath(expandHomeReferences(raw), { home, cwd: context.cwd })
+        buildsUnresolvableShellPath(expandHomeReferences(stripLiteralHeredocs(raw)), {
+          home,
+          cwd: context.cwd
+        })
     )
   return pathDenial ?? (buildsUnresolvablePath ? { reason: UNRESOLVABLE_SHELL_PATH_REASON } : null)
 }

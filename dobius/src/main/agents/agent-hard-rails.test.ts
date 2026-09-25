@@ -433,7 +433,7 @@ describe('agent hard rails: force-push hidden in shell variables (CX12 F7)', () 
     [
       'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=+main:main git push'
     ],
-    ['export F=-f && git push origin main'],
+    ['export GIT_CONFIG_PARAMETERS=x && git push origin main'],
     ['git -c remote.origin.push=+main:main push origin'],
     ['git push --\\force origin main']
   ])('denies an unverifiable push: %s', (command) => {
@@ -444,5 +444,87 @@ describe('agent hard rails: force-push hidden in shell variables (CX12 F7)', () 
     expect(bash('git push origin main')).toBeNull()
     expect(bash('git push -u origin feature/x')).toBeNull()
     expect(bash('npm test && git push origin main')).toBeNull()
+  })
+})
+
+describe('agent hard rails: CX12 review follow-ups', () => {
+  const originalHome = process.env.HOME
+  const fakeHome = '/Users/rails-test-user'
+  const repoCwd = `${fakeHome}/Projects/app`
+
+  beforeEach(() => {
+    process.env.HOME = fakeHome
+  })
+
+  afterEach(() => {
+    process.env.HOME = originalHome
+  })
+
+  const bashIn = (command: string) =>
+    evaluateAgentHardRails({ ...ctx, cwd: repoCwd }, 'Bash', { command })
+
+  const commitHeredoc = [
+    "git commit -m \"$(cat <<'EOF'",
+    "fix(x): it's done, costs $5 and `backticks` too",
+    '',
+    'git push --force is never used here',
+    'EOF',
+    ')"'
+  ].join('\n')
+
+  it.each([
+    [commitHeredoc],
+    [`${commitHeredoc} && git push origin HEAD`],
+    [commitHeredoc.replace(/'EOF'/, '"EOF"')],
+    ['gh pr create --title t --body "$(cat <<\'EOF\'\n## Summary\n- $x\nEOF\n)"'],
+    ['NODE_ENV=test npm test && git push origin HEAD'],
+    ['for i in {1..3}; do echo "$i"; done'],
+    ["awk '{print}' a.txt"],
+    ['curl -d "{\\"a\\":1,\\"b\\":2}" http://localhost:3000'],
+    ['npm run build \\\n  --silent']
+  ])('F5: allows normal agent work: %s', (command) => {
+    expect(bashIn(command)).toBeNull()
+  })
+
+  it.each([
+    ['F=--force; git push "$F" origin main'],
+    ['git push origin main "--fo"rce'],
+    ["git push origin ''+main"],
+    ['\\git push --force origin main'],
+    ['git pu""sh --force origin main'],
+    ['g""it push -f origin main'],
+    ['echo --force | xargs git push origin main'],
+    ["git config remote.origin.push '+HEAD:refs/heads/main'"],
+    ["git config --global alias.p 'push -f'"],
+    ["git -c alias.p='push -f' p origin main"],
+    ['git() { command git push -f "$@"; }; git push origin main'],
+    ["cat <<'EOF' | bash\ngit push -f\nEOF"]
+  ])('F3: denies a hidden or rewritten force-push: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it.each([
+    ["bash -c 'd=$HOME/.do; cat ${d}bius/agents/other/MEMORY.md'"],
+    ["sh -c 'cat ~/.$0/agents/other/MEMORY.md' dobius"],
+    ["env bash -c 'cat ~/.dobius/agents/other/MEMORY.md'"],
+    ['xargs -0 zsh -c "git push --force"'],
+    ['bash -c "sh -c \'cat \\$0/x\' ~/.dobius/agents/other"']
+  ])('F1: checks the inner command of sh -c: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it('F1: allows an ordinary sh -c', () => {
+    expect(bashIn("bash -c 'npm run build && git status'")).toBeNull()
+  })
+
+  it.each([
+    ['cat ~/.{dobius,x}/agents/other/MEMORY.md'],
+    ['cat ~/.do{b,}ius/agents/other/MEMORY.md'],
+    ['cat ~/.dob{i..i}us/agents/other/MEMORY.md'],
+    ['cat ~/.dob\\\nius/agents/other/MEMORY.md'],
+    ['echo agents/other/MEMORY.md | xargs -I@ cat ~/.dobius/@'],
+    ['cd /; cd Users; cd rails-test-user; cd .dobius; for f in agents; do cat $f/other/x; done']
+  ])('F2: denies stopgap path assembly: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
   })
 })

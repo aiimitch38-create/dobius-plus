@@ -371,4 +371,25 @@ describe('useAutomationDispatchEvents setup launch', () => {
       expect.objectContaining({ status: 'skipped_unavailable' })
     )
   })
+
+  it('re-checks after workspace creation and skips when paused during it', async () => {
+    mockCreateWorktree.mockImplementation(async () => {
+      mockGetExecutionState.mockResolvedValue({
+        paused: true,
+        status: 'ok',
+        detail: null,
+        filePath: '/x'
+      })
+      return { worktree: createdWorktree, setup: setupLaunch }
+    })
+
+    await registerAndDispatch()
+
+    expect(mockCreateWorktree).toHaveBeenCalled()
+    expect(mockLaunchWorktreeBackgroundTerminals).not.toHaveBeenCalled()
+    expect(mockLaunchAgentBackgroundSession).not.toHaveBeenCalled()
+    expect(mockMarkDispatchResult).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'skipped_unavailable', workspaceId: 'wt-created' })
+    )
+  })
 })

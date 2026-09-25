@@ -275,6 +275,10 @@ export function useAutomationDispatchEvents(): void {
           }
           dispatchWorkspaceId = worktree.id
           dispatchWorkspaceDisplayName = worktree.displayName
+          // Why: workspace creation is awaited; Pause crew may have turned on during it.
+          if (await skipIfExecutionBlocked()) {
+            return
+          }
           if (createResult?.setup || createResult?.defaultTabs) {
             void launchWorktreeBackgroundTerminals({
               worktreeId: worktree.id,
@@ -380,12 +384,16 @@ export function useAutomationDispatchEvents(): void {
           }
           const dispatchStartedAt = Date.now()
           if (automation.reuseSession) {
+            const priorRuns = await window.api.automations.listRuns({ automationId: automation.id })
+            if (await skipIfExecutionBlocked()) {
+              return
+            }
             const reusableSession = findReusableAutomationSession({
               automationId: automation.id,
               agentId: automation.agentId,
               worktreeId: worktree.id,
               currentRunId: run.id,
-              runs: await window.api.automations.listRuns({ automationId: automation.id }),
+              runs: priorRuns,
               state: useAppStore.getState()
             })
             if (reusableSession) {
@@ -463,6 +471,9 @@ export function useAutomationDispatchEvents(): void {
                 }
               }
             }
+          }
+          if (await skipIfExecutionBlocked()) {
+            return
           }
           const result = await launchAgentBackgroundSession({
             agent: automation.agentId,
