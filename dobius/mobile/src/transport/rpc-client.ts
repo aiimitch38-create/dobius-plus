@@ -13,7 +13,8 @@ import {
   encrypt,
   decrypt,
   decryptBytes,
-  enableE2EESequencing
+  enableE2EESequencing,
+  isE2EESequenceViolated
 } from './e2ee'
 import {
   handleTerminalBinaryFrame,
@@ -358,6 +359,14 @@ export function connect(
 
     ws = new WebSocket(endpoint)
     const openingWs = ws
+    // Why: v2 frames are numbered and must be decrypted in arrival order. An
+    // ArrayBuffer is available synchronously; a Blob would be read async and
+    // could let a later text frame be decrypted first.
+    openingWs.binaryType = 'arraybuffer'
+    // Why: true once this socket's e2ee_ready offered handshake v2. A
+    // client_update_required after a v1-looking ready is contradictory (a real
+    // older desktop never sends it), so it is retried, not latched.
+    let serverOfferedV2 = false
     const ignoreStaleSocketEvent = (eventName: string): boolean => {
       if (ws === openingWs) {
         return false
@@ -465,6 +474,7 @@ export function connect(
               msg.version >= E2EE_HANDSHAKE_VERSION &&
               typeof msg.challenge === 'string' &&
               msg.challenge.length > 0
+            serverOfferedV2 = isV2
             if (isV2 && sharedKey) {
               enableE2EESequencing(sharedKey, 'client')
             }
@@ -485,6 +495,7 @@ export function connect(
 
         const plaintext = decrypt(raw, sharedKey)
         if (plaintext === null) {
+          dropIfOutOfSequence(openingWs)
           return
         }
 
@@ -536,7 +547,12 @@ export function connect(
               clearTimeout(handshakeTimer)
               handshakeTimer = null
             }
-            handleUpdateRequired()
+            if (serverOfferedV2) {
+              handleUpdateRequired()
+            } else {
+              emitLog('warn', 'Handshake downgraded', 'Retrying the connection')
+              openingWs.close()
+            }
           } else if (msg.type === 'e2ee_error' || (!msg.ok && msg.error?.code === 'unauthorized')) {
             console.log('[net] e2ee auth FAILED', { msgType: msg.type, error: msg.error })
             if (handshakeTimer) {
@@ -567,6 +583,7 @@ export function connect(
         }
         const plaintextBytes = decryptBytes(bytes, sharedKey)
         if (!plaintextBytes) {
+          dropIfOutOfSequence(openingWs)
           return
         }
         handleBinaryFrame(plaintextBytes)
@@ -575,6 +592,7 @@ export function connect(
 
       const plaintext = decrypt(raw, sharedKey)
       if (plaintext === null) {
+        dropIfOutOfSequence(openingWs)
         return
       }
 
@@ -775,6 +793,16 @@ export function connect(
   // up to AUTH_RETRY_BUDGET times before declaring auth dead, so a one-off
   // glitch self-heals instead of forcing the user to re-pair. A genuinely
   // revoked token fails every retry and latches auth-failed within seconds.
+  // Why: an authentic frame out of sequence means frames were replayed,
+  // reordered or deleted on the path. Close this socket; the close handler
+  // reconnects with a fresh key and counters.
+  function dropIfOutOfSequence(socket: WebSocket): void {
+    if (sharedKey && isE2EESequenceViolated(sharedKey)) {
+      emitLog('warn', 'Out-of-sequence frame', 'Reconnecting')
+      socket.close()
+    }
+  }
+
   // Why: the desktop speaks a newer handshake than this app. Retrying cannot
   // help and it is not a pairing problem, so latch a distinct state.
   function handleUpdateRequired(): void {

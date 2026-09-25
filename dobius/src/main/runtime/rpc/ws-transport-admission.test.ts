@@ -18,7 +18,10 @@ describe('WebSocketTransport slot admission (#20)', () => {
     transports.length = 0
   })
 
-  async function startTransport(maxPreAuthPerAddress = 1_000): Promise<WebSocketTransport> {
+  async function startTransport(
+    maxPreAuthPerAddress = 1_000,
+    silentEvictionMinAgeMs?: number
+  ): Promise<WebSocketTransport> {
     // Why: port 0 = ephemeral port; a long pre-auth timeout keeps the idle
     // sockets alive so only the slot policy can remove them. Every test socket
     // comes from 127.0.0.1, so the per-address cap is lifted unless under test.
@@ -26,7 +29,8 @@ describe('WebSocketTransport slot admission (#20)', () => {
       host: '127.0.0.1',
       port: 0,
       preAuthTimeoutMs: 60_000,
-      maxPreAuthPerAddress
+      maxPreAuthPerAddress,
+      silentEvictionMinAgeMs
     })
     transport.onMessage(() => {})
     transports.push(transport)
@@ -115,7 +119,8 @@ describe('WebSocketTransport slot admission (#20)', () => {
   }, 15_000)
 
   it('evicts sockets that never sent a frame before ones that started a handshake', async () => {
-    const transport = await startTransport()
+    // Age threshold 0: every silent socket here counts as long-silent.
+    const transport = await startTransport(1_000, 0)
     const talker = await connect(transport)
     talker.send('{"type":"e2ee_hello"}')
     await waitFor(() => serverSockets(transport).length === 1)
@@ -149,5 +154,23 @@ describe('WebSocketTransport slot admission (#20)', () => {
     const afterLogin = await connect(transport)
     expect(await closeCode(afterLogin, 300)).toBe('open')
     expect(await closeCode(first[1]!, 50)).toBe('open')
+  }, 15_000)
+
+  it('does not pick a brand-new silent socket (the phone mid-connect) over older ones (round 2 F4)', async () => {
+    const transport = await startTransport()
+    const talkers = await Promise.all(
+      Array.from({ length: SLOT_CAP - 1 }, () => connect(transport))
+    )
+    for (const talker of talkers) {
+      talker.send('{"type":"e2ee_hello"}')
+    }
+    await waitFor(() => serverSockets(transport).length === SLOT_CAP - 1)
+    const phone = await connect(transport)
+    await waitFor(() => serverSockets(transport).length === SLOT_CAP)
+
+    await connect(transport)
+
+    expect(await closeCode(talkers[0]!)).not.toBe('open')
+    expect(await closeCode(phone, 300)).toBe('open')
   }, 15_000)
 })

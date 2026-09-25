@@ -182,7 +182,7 @@ export default function PairScanScreen() {
       }
       if (response.error.code === 'unauthorized') {
         setStatus('error')
-        setErrorMessage('Authentication failed — token may be expired')
+        setErrorMessage('Authentication failed — scan a fresh QR code from your computer')
         processingRef.current = false
         return
       }
@@ -216,7 +216,7 @@ export default function PairScanScreen() {
       console.warn('[pair] save failed', err)
       setStatus('error')
       setErrorMessage(
-        `Pairing succeeded but couldn't save the host: ${err instanceof Error ? err.message : String(err)}`
+        `Couldn't save the pairing on this phone (${err instanceof Error ? err.message : String(err)}). Scan a fresh QR code from your computer.`
       )
       processingRef.current = false
     }

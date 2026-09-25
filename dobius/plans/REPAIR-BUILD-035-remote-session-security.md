@@ -187,7 +187,7 @@ Branch first merged `stabilize/integration` (brings the 009C2 fix; the two
   RPC/terminal frame format (text JSON and binary stream frames) stays untouched. The random
   tail keeps nonces unique if a replayed hello makes the server re-derive a key it used before.
   Receiver rule: open the box first, then require the peer's direction byte and a counter
-  strictly above the last accepted one (forged frames never move the counter). Implemented once in
+  exactly one above the last accepted one (round 2; forged frames never move the counter). Implemented once in
   `src/shared/e2ee-sequencing.ts` (per shared-key object, via WeakMap, so no call-site signature
   changes) and used by `shared/e2ee-crypto.ts` (server + CLI + desktop remote hosts) and
   `renderer/web/web-e2ee.ts`; the Expo app has a byte-identical copy
@@ -237,3 +237,55 @@ than the reuse window (1).
 ### Decisions for Carson (added)
 - Runtime/web/CLI pairing links are not single-use (reason above); they remain revocable.
 - If saving the swapped phone token fails, the pairing attempt fails and the user scans a new QR.
+
+## Review round 2 (re-review: F1 medium, F2–F4 low)
+- **F1 deleted frames.** `acceptE2EEReceivedNonce` (shared + byte-identical mobile mirror) now
+  accepts only `counter === received + 1`; WebSocket over TCP is in-order and lossless, so any
+  gap is a frame removed on the path. An authentic frame that fails the rule marks the key
+  `violated` (`isE2EESequenceViolated`); a frame that merely fails to authenticate does not.
+  Server: `E2EEChannel` closes at once with 4004 "Out-of-sequence frame" (not via the 5-strike
+  decrypt counter, which still applies to unauthenticated noise). Web client and phone: close
+  the socket; the existing close handler reconnects with a fresh key and counters. Shared
+  desktop/CLI clients already treat any undecryptable frame as fatal (one-shot request fails,
+  request/shared-control connections close); now covered by tests. Phone sockets set
+  `binaryType = 'arraybuffer'` so binary frames are read synchronously and decrypt in arrival
+  order (a Blob read is async and could let a later text frame decrypt first).
+- **F2 stripped ready.** The phone remembers whether this socket's `e2ee_ready` offered v2. A
+  `client_update_required` after a v1-looking ready is contradictory (a real older desktop never
+  sends it), so the phone closes and reconnects with backoff instead of latching
+  `update-required`. After a v2+ ready it still latches (a future desktop rejecting this app).
+- **F3 grace for the consumed QR.** On first use the registry stores the QR token as
+  `pairingToken` with `pairingTokenExpiresAt = now + 10 min` (`MOBILE_PAIRING_TOKEN_GRACE_MS`),
+  persisted and validated on load. While it is live the QR still authenticates, and each such
+  login mints yet another token (the previous issued token dies), so two parties never share one
+  token. The first login with the phone's own token (a later connection, since
+  `consumePairingOffer` runs only at handshake time) retires the QR at once; otherwise it dies
+  when the window ends. Pair screens now say "scan a fresh QR code from your computer" on auth
+  failure and on a local save failure.
+- **F4** Silent-first eviction applies only to sockets silent for at least 1 s
+  (`SILENT_EVICTION_MIN_AGE_MS`, test override `silentEvictionMinAgeMs`); otherwise the oldest
+  pre-auth socket goes. A phone's socket mid-connect is no longer the preferred victim.
+
+Tests (all seen failing with the fix removed): `shared/e2ee-sequencing.test.ts` (deleted frame,
+violation flag set for replay/reorder, not set for noise), `rpc/e2ee-channel-session.test.ts`
+(4004 on replay, reorder, replayed auth, deleted frame; 4 noise frames tolerated),
+`renderer/src/web/web-runtime-client-sequence.test.ts` (gap and replayed binary drop the socket;
+noise does not), `shared/remote-runtime-client-sequence.test.ts` (one-shot and persistent shared
+clients fail on a gap from a v2 mock server), `mobile/.../rpc-client-handshake-v2.test.ts`
+(out-of-sequence → close + reconnect, stripped ready + update_required → retry, v3 ready +
+update_required → latch, arraybuffer), `device-registry-consume.test.ts` (rescan in grace with a
+new token each time and after restart, retire on own-token login, expiry at 10 min),
+`runtime-rpc-pairing-consume.test.ts` (real server: rescan, own-token login, then QR refused),
+`ws-transport-admission.test.ts` (brand-new silent phone socket survives).
+Existing channel/integration tests read the auth ack before later server frames.
+
+Mutation checks: R1 gaps accepted (4 fail); R2 server not fatal (4); R3 web keeps socket (2);
+R4 phone keeps socket (1); R5 shared-client test with the gap removed (2, proves the test);
+R6 latch after stripped ready (1); R7 no arraybuffer (1); R8 no grace (2); R9 never retired
+early (1); R10 grace never expires (1); R11 new silent socket evicted (1).
+
+### Decisions for Carson (round 2)
+- A used phone QR stays valid for up to 10 minutes, or until the phone first connects with its
+  own token, whichever comes first, so a failed save on the phone can rescan the same QR. Within
+  that window anyone holding the QR can still pair; each use rotates the issued token.
+- An out-of-sequence frame drops the connection (phone/web reconnect automatically).

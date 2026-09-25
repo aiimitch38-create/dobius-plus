@@ -57,17 +57,19 @@ describe('E2EEChannel in-session sequencing (F5)', () => {
     s.channel.handleRawMessage(frame)
     s.channel.handleRawMessage(frame)
     expect(received).toEqual(['{"id":"1","method":"terminal.send"}'])
+    // Round 2 F1: fatal at once, not after the 5-strike decrypt counter.
+    expect(s.onError).toHaveBeenCalledWith(4004, 'Out-of-sequence frame')
   })
 
   it('drops frames delivered out of order', () => {
     const s = openSession()
     const received: string[] = []
     s.channel.onMessage((plaintext) => received.push(plaintext))
-    const first = encrypt('{"id":"1"}', s.sharedKey)
+    encrypt('{"id":"1"}', s.sharedKey)
     const second = encrypt('{"id":"2"}', s.sharedKey)
     s.channel.handleRawMessage(second)
-    s.channel.handleRawMessage(first)
-    expect(received).toEqual(['{"id":"2"}'])
+    expect(received).toEqual([])
+    expect(s.onError).toHaveBeenCalledWith(4004, 'Out-of-sequence frame')
   })
 
   it('drops the auth frame replayed after login', () => {
@@ -75,8 +77,27 @@ describe('E2EEChannel in-session sequencing (F5)', () => {
     const received: string[] = []
     s.channel.onMessage((plaintext) => received.push(plaintext))
     s.channel.handleRawMessage(s.authFrame)
-    s.channel.handleRawMessage(encrypt('{"id":"3"}', s.sharedKey))
-    expect(received).toEqual(['{"id":"3"}'])
+    expect(received).toEqual([])
+    expect(s.onError).toHaveBeenCalledWith(4004, 'Out-of-sequence frame')
+  })
+
+  it('closes at once when a frame is deleted in transit (round 2 F1)', () => {
+    const s = openSession()
+    const received: string[] = []
+    s.channel.onMessage((plaintext) => received.push(plaintext))
+    encrypt('{"id":"dropped"}', s.sharedKey)
+    s.channel.handleRawMessage(encrypt('{"id":"after-gap"}', s.sharedKey))
+    expect(received).toEqual([])
+    expect(s.onError).toHaveBeenCalledWith(4004, 'Out-of-sequence frame')
+  })
+
+  it('still tolerates up to 4 frames that fail authentication', () => {
+    const s = openSession()
+    const stranger = deriveSharedKey(generateKeyPair().secretKey, serverKeys.publicKey)
+    for (let i = 0; i < 4; i++) {
+      s.channel.handleRawMessage(encrypt('noise', stranger))
+    }
+    expect(s.onError).not.toHaveBeenCalled()
   })
 
   it('refuses a v2 auth whose frame is not sequenced', () => {

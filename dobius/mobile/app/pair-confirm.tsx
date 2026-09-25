@@ -137,7 +137,7 @@ export default function PairConfirmScreen() {
       setStatus('error')
       setErrorMessage(
         response.error.code === 'unauthorized'
-          ? 'Authentication failed — token may be expired'
+          ? 'Authentication failed — scan a fresh QR code from your computer'
           : `Server error: ${response.error.message}`
       )
       return
@@ -167,7 +167,7 @@ export default function PairConfirmScreen() {
       console.warn('[pair-confirm] save failed', err)
       setStatus('error')
       setErrorMessage(
-        `Pairing succeeded but couldn't save the host: ${err instanceof Error ? err.message : String(err)}`
+        `Couldn't save the pairing on this phone (${err instanceof Error ? err.message : String(err)}). Scan a fresh QR code from your computer.`
       )
     }
   }

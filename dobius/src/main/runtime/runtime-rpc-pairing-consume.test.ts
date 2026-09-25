@@ -58,7 +58,7 @@ async function login(pairingUrl: string, token: string): Promise<AuthReply> {
 }
 
 describe('single-use mobile pairing QR (F1)', () => {
-  it('swaps the QR token for the phone’s own token on first login', async () => {
+  it('swaps the QR token on first login and retires it once the phone uses its own', async () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'dobius-pairing-consume-'))
     const server = new DobiusRuntimeRpcServer({
       runtime: new DobiusRuntimeService(),
@@ -79,11 +79,17 @@ describe('single-use mobile pairing QR (F1)', () => {
       expect(first.deviceToken).toMatch(/^[0-9a-f]{48}$/)
       expect(first.deviceToken).not.toBe(qrToken)
 
+      // Grace window: the phone lost its token and rescans the same QR.
+      const rescan = await login(offer.pairingUrl, qrToken)
+      expect(rescan.type).toBe('e2ee_authenticated')
+      expect(rescan.deviceToken).not.toBe(first.deviceToken)
+
+      // A later connection with the phone's own token retires the QR at once.
+      const phone = await login(offer.pairingUrl, rescan.deviceToken!)
+      expect(phone).toEqual({ type: 'e2ee_authenticated' })
+
       const replayedQr = await login(offer.pairingUrl, qrToken)
       expect(replayedQr).toMatchObject({ type: 'e2ee_error', error: { code: 'unauthorized' } })
-
-      const phone = await login(offer.pairingUrl, first.deviceToken!)
-      expect(phone).toEqual({ type: 'e2ee_authenticated' })
 
       // The paired phone is listed and a new QR carries a new token.
       expect(server.getDeviceRegistry()!.getDevice(offer.deviceId)!.lastSeenAt).toBeGreaterThan(0)

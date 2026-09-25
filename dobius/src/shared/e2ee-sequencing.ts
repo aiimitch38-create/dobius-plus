@@ -21,6 +21,7 @@ type SequenceState = {
   receiveDirection: number
   sent: number
   received: number
+  violated: boolean
 }
 
 const sequenceStates = new WeakMap<Uint8Array, SequenceState>()
@@ -30,7 +31,8 @@ export function enableE2EESequencing(sharedKey: Uint8Array, role: E2EERole): voi
     sendDirection: role === 'client' ? CLIENT_TO_SERVER : SERVER_TO_CLIENT,
     receiveDirection: role === 'client' ? SERVER_TO_CLIENT : CLIENT_TO_SERVER,
     sent: 0,
-    received: 0
+    received: 0,
+    violated: false
   })
 }
 
@@ -72,22 +74,32 @@ export function nextE2EESendNonce(sharedKey: Uint8Array, randomNonce: Uint8Array
 }
 
 // Call only AFTER the ciphertext authenticated, so forged frames can never
-// advance the counter. Returns false for a replayed, reordered or reflected
-// frame (wrong direction byte).
+// advance the counter. WebSocket over TCP is in-order and lossless, so the
+// next frame must carry exactly the next counter: a replayed, reordered,
+// reflected (wrong direction byte) or deleted-in-transit frame is refused and
+// the key is marked violated so the caller drops the connection.
 export function acceptE2EEReceivedNonce(sharedKey: Uint8Array, nonce: Uint8Array): boolean {
   const state = sequenceStates.get(sharedKey)
   if (!state) {
     return true
   }
-  if (nonce.length !== E2EE_NONCE_LENGTH || nonce[0] !== state.receiveDirection) {
+  if (
+    nonce.length !== E2EE_NONCE_LENGTH ||
+    nonce[0] !== state.receiveDirection ||
+    readCounter(nonce) !== state.received + 1
+  ) {
+    state.violated = true
     return false
   }
-  const counter = readCounter(nonce)
-  if (counter <= state.received) {
-    return false
-  }
-  state.received = counter
+  state.received += 1
   return true
+}
+
+// Why: a null from decrypt is either a frame that failed authentication
+// (noise, a wrong key) or an authentic frame out of sequence. Only the second
+// proves someone is tampering with the stream, and it is always fatal.
+export function isE2EESequenceViolated(sharedKey: Uint8Array): boolean {
+  return sequenceStates.get(sharedKey)?.violated === true
 }
 
 function writeCounter(nonce: Uint8Array, counter: number): void {

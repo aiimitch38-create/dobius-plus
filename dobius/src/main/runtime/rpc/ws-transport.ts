@@ -20,6 +20,10 @@ const PRE_AUTH_TIMEOUT_MS = 10_000
 // Why: one LAN host cannot hold more than this many sockets that have not
 // logged in; the phone connects from its own address and is never affected.
 const MAX_PRE_AUTH_PER_ADDRESS = 16
+// Why: a phone's socket is silent for the first moments after connect (TCP +
+// upgrade before e2ee_hello). Only a socket silent for longer than this is
+// preferred for eviction, so a brand-new phone socket is not the victim.
+const SILENT_EVICTION_MIN_AGE_MS = 1_000
 type WebSocketMessagePayload = string | Uint8Array<ArrayBufferLike>
 type WebSocketMessageHandler = {
   bivarianceHack(
@@ -50,6 +54,8 @@ export type WebSocketTransportOptions = {
   preAuthTimeoutMs?: number
   // Why: test-only override. Production uses MAX_PRE_AUTH_PER_ADDRESS.
   maxPreAuthPerAddress?: number
+  // Why: test-only override. Production uses SILENT_EVICTION_MIN_AGE_MS.
+  silentEvictionMinAgeMs?: number
   // Why: the pairing server can also serve the browser client, so users do
   // not need a second dev/static server once the web bundle is built.
   staticRoot?: string
@@ -61,6 +67,7 @@ export class WebSocketTransport implements RpcTransport {
   private readonly heartbeatIntervalMs: number
   private readonly preAuthTimeoutMs: number
   private readonly maxPreAuthPerAddress: number
+  private readonly silentEvictionMinAgeMs: number
   private readonly staticRoot: string | undefined
   private httpServer: HttpServer | null = null
   private wss: WebSocketServer | null = null
@@ -80,8 +87,11 @@ export class WebSocketTransport implements RpcTransport {
   // Why: sockets that have not authenticated yet, oldest first (Map keeps
   // insertion order). When the slot cap is hit one of these is evicted so
   // unauthenticated LAN clients can never lock a paired phone out; sockets
-  // that never sent a frame (not even e2ee_hello) go first.
-  private unauthenticatedSockets = new Map<WebSocket, { address: string; spoke: boolean }>()
+  // that have stayed silent past SILENT_EVICTION_MIN_AGE_MS go first.
+  private unauthenticatedSockets = new Map<
+    WebSocket,
+    { address: string; spoke: boolean; connectedAt: number }
+  >()
 
   constructor({
     host,
@@ -89,6 +99,7 @@ export class WebSocketTransport implements RpcTransport {
     heartbeatIntervalMs,
     preAuthTimeoutMs,
     maxPreAuthPerAddress,
+    silentEvictionMinAgeMs,
     staticRoot
   }: WebSocketTransportOptions) {
     this.host = host
@@ -96,6 +107,7 @@ export class WebSocketTransport implements RpcTransport {
     this.heartbeatIntervalMs = heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS
     this.preAuthTimeoutMs = preAuthTimeoutMs ?? PRE_AUTH_TIMEOUT_MS
     this.maxPreAuthPerAddress = maxPreAuthPerAddress ?? MAX_PRE_AUTH_PER_ADDRESS
+    this.silentEvictionMinAgeMs = silentEvictionMinAgeMs ?? SILENT_EVICTION_MIN_AGE_MS
     this.staticRoot = staticRoot
   }
 
@@ -225,8 +237,9 @@ export class WebSocketTransport implements RpcTransport {
 
   private evictOldestUnauthenticated(): boolean {
     let victim: WebSocket | null = null
+    const now = Date.now()
     for (const [ws, entry] of this.unauthenticatedSockets) {
-      if (!entry.spoke) {
+      if (!entry.spoke && now - entry.connectedAt >= this.silentEvictionMinAgeMs) {
         victim = ws
         break
       }
@@ -386,7 +399,7 @@ export class WebSocketTransport implements RpcTransport {
       preAuthTimer.unref()
     }
     this.preAuthTimers.set(ws, preAuthTimer)
-    this.unauthenticatedSockets.set(ws, { address, spoke: false })
+    this.unauthenticatedSockets.set(ws, { address, spoke: false, connectedAt: Date.now() })
 
     // Why: seed alive=true so the first heartbeat tick after connect doesn't
     // treat a fresh socket as dead. Subsequent pongs (or any inbound traffic)

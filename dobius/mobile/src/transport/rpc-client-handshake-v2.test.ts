@@ -3,6 +3,8 @@ import { connect } from './rpc-client'
 
 const e2eeSpies = vi.hoisted(() => ({ enableE2EESequencing: vi.fn() }))
 
+const e2eeViolation = vi.hoisted(() => ({ value: false }))
+
 vi.mock('./e2ee', () => ({
   generateKeyPair: () => ({
     publicKey: new Uint8Array(32),
@@ -14,7 +16,8 @@ vi.mock('./e2ee', () => ({
   encrypt: (plaintext: string) => `encrypted:${plaintext}`,
   decrypt: (raw: string) => (raw === 'undecryptable' ? null : raw.replace(/^encrypted:/, '')),
   decryptBytes: (bytes: Uint8Array) => bytes,
-  enableE2EESequencing: e2eeSpies.enableE2EESequencing
+  enableE2EESequencing: e2eeSpies.enableE2EESequencing,
+  isE2EESequenceViolated: () => e2eeViolation.value
 }))
 
 class MockWebSocket {
@@ -129,7 +132,24 @@ describe('mobile rpc-client handshake v2 (#17, F1, F5)', () => {
     client.close()
   })
 
-  it('shows "Update the Dobius+ app" instead of an auth failure for an outdated app', () => {
+  it('shows "Update the Dobius+ app" when a newer desktop rejects this app', () => {
+    const client = connect('ws://desktop.invalid', 'token', 'server-key')
+    const socket = mockSockets[0]!
+
+    socket.open()
+    socket.receive(JSON.stringify({ type: 'e2ee_ready', version: 3, challenge: 'c' }))
+    socket.receive(
+      'encrypted:{"type":"e2ee_error","error":{"code":"client_update_required","message":"old"}}'
+    )
+
+    expect(client.getState()).toBe('update-required')
+    // No auth retry loop: the socket is closed and nothing reconnects.
+    vi.advanceTimersByTime(60_000)
+    expect(mockSockets).toHaveLength(1)
+    client.close()
+  })
+
+  it('retries instead of latching when update_required follows a stripped v1 ready (round 2 F2)', () => {
     const client = connect('ws://desktop.invalid', 'token', 'server-key')
     const socket = mockSockets[0]!
 
@@ -139,10 +159,40 @@ describe('mobile rpc-client handshake v2 (#17, F1, F5)', () => {
       'encrypted:{"type":"e2ee_error","error":{"code":"client_update_required","message":"old"}}'
     )
 
-    expect(client.getState()).toBe('update-required')
-    // No auth retry loop: the socket is closed and nothing reconnects.
-    vi.advanceTimersByTime(60_000)
-    expect(mockSockets).toHaveLength(1)
+    expect(client.getState()).not.toBe('update-required')
+    expect(socket.close).toHaveBeenCalled()
+    vi.advanceTimersByTime(1_000)
+    expect(mockSockets.length).toBeGreaterThan(1)
+    client.close()
+  })
+
+  it('drops and reconnects the socket on an out-of-sequence frame (round 2 F1)', () => {
+    const client = connect('ws://desktop.invalid', 'token', 'server-key')
+    const socket = mockSockets[0]!
+    socket.open()
+    socket.receive(JSON.stringify({ type: 'e2ee_ready', version: 2, challenge: 'c' }))
+    socket.receive('encrypted:{"type":"e2ee_authenticated"}')
+    expect(client.getState()).toBe('connected')
+
+    socket.receive('undecryptable')
+    expect(socket.close).not.toHaveBeenCalled()
+
+    e2eeViolation.value = true
+    try {
+      socket.receive('undecryptable')
+    } finally {
+      e2eeViolation.value = false
+    }
+    expect(socket.close).toHaveBeenCalledTimes(1)
+    expect(client.getState()).toBe('reconnecting')
+    vi.advanceTimersByTime(1_000)
+    expect(mockSockets.length).toBeGreaterThan(1)
+    client.close()
+  })
+
+  it('reads binary frames as ArrayBuffer so they decrypt in arrival order', () => {
+    const client = connect('ws://desktop.invalid', 'token', 'server-key')
+    expect((mockSockets[0] as unknown as { binaryType?: string }).binaryType).toBe('arraybuffer')
     client.close()
   })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decrypt, deriveSharedKey, encrypt, generateKeyPair } from './e2ee-crypto'
-import { enableE2EESequencing } from './e2ee-sequencing'
+import { enableE2EESequencing, isE2EESequenceViolated } from './e2ee-sequencing'
 
 // Why: F5 — inside one v2 session a captured frame must not be accepted
 // twice, out of order, or bounced back at its sender.
@@ -22,19 +22,38 @@ describe('E2EE frame sequencing (F5)', () => {
     expect(decrypt(encrypt('reply', serverKey), clientKey)).toBe('reply')
   })
 
-  it('rejects a replayed frame', () => {
+  it('rejects a replayed frame and flags the stream', () => {
     const { clientKey, serverKey } = pair()
     const frame = encrypt('terminal input', clientKey)
     expect(decrypt(frame, serverKey)).toBe('terminal input')
+    expect(isE2EESequenceViolated(serverKey)).toBe(false)
     expect(decrypt(frame, serverKey)).toBeNull()
+    expect(isE2EESequenceViolated(serverKey)).toBe(true)
   })
 
   it('rejects reordered frames', () => {
     const { clientKey, serverKey } = pair()
-    const first = encrypt('1', clientKey)
+    encrypt('1', clientKey)
     const second = encrypt('2', clientKey)
-    expect(decrypt(second, serverKey)).toBe('2')
-    expect(decrypt(first, serverKey)).toBeNull()
+    expect(decrypt(second, serverKey)).toBeNull()
+    expect(isE2EESequenceViolated(serverKey)).toBe(true)
+  })
+
+  it('detects a frame deleted in transit (round 2 F1)', () => {
+    const { clientKey, serverKey } = pair()
+    const first = encrypt('1', clientKey)
+    encrypt('deleted on the path', clientKey)
+    const third = encrypt('3', clientKey)
+    expect(decrypt(first, serverKey)).toBe('1')
+    expect(decrypt(third, serverKey)).toBeNull()
+    expect(isE2EESequenceViolated(serverKey)).toBe(true)
+  })
+
+  it('does not flag a frame that merely fails authentication', () => {
+    const { serverKey } = pair()
+    const strangerKey = deriveSharedKey(generateKeyPair().secretKey, generateKeyPair().publicKey)
+    expect(decrypt(encrypt('noise', strangerKey), serverKey)).toBeNull()
+    expect(isE2EESequenceViolated(serverKey)).toBe(false)
   })
 
   it('rejects a frame reflected back at its sender', () => {

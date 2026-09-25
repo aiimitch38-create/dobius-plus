@@ -191,7 +191,9 @@ describe('E2EEChannel', () => {
 
       ctx.channel.handleRawMessage(encrypt('{"id":"rpc-1","method":"status.get"}', sharedKey))
 
-      // The reply (ws.sent[2], after ready + authenticated) should be encrypted
+      // The reply (ws.sent[2], after ready + authenticated) should be encrypted;
+      // frames are numbered, so the client reads the auth ack first.
+      decrypt(ctx.ws.sent[1]!, sharedKey)
       const replyEncrypted = ctx.ws.sent[2]!
       const replyPlain = decrypt(replyEncrypted, sharedKey)
       expect(replyPlain).toBe('{"id":"rpc-1","ok":true}')

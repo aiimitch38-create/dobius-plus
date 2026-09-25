@@ -4,7 +4,10 @@
 import { randomBytes } from 'node:crypto'
 import type { WebSocket } from 'ws'
 import { E2EE_CLIENT_UPDATE_REQUIRED, E2EE_HANDSHAKE_VERSION } from '../../../shared/e2ee-handshake'
-import { enableE2EESequencingFromFirstFrame } from '../../../shared/e2ee-sequencing'
+import {
+  enableE2EESequencingFromFirstFrame,
+  isE2EESequenceViolated
+} from '../../../shared/e2ee-sequencing'
 import { constantTimeEqual } from '../../lib/constant-time-equal'
 import { deriveSharedKey, encrypt, decrypt, encryptBytes, decryptBytes } from './e2ee-crypto'
 
@@ -17,6 +20,7 @@ const HANDSHAKE_CHALLENGE_BYTES = 32
 const AUTH_NONCE_BYTES = 24
 // Why: distinct from 4001 so logs tell an outdated client from a bad token.
 const CLOSE_CLIENT_UPDATE_REQUIRED = 4010
+const CLOSE_OUT_OF_SEQUENCE = 4004
 
 type E2EEHello = {
   type: 'e2ee_hello'
@@ -111,7 +115,7 @@ export class E2EEChannel {
     if (typeof raw !== 'string') {
       const plaintextBytes = decryptBytes(raw, this.sharedKey)
       if (plaintextBytes === null) {
-        this.trackDecryptFailure()
+        this.handleDecryptFailure(this.sharedKey)
         return
       }
       this.consecutiveFailures = 0
@@ -125,7 +129,7 @@ export class E2EEChannel {
 
     const plaintext = decrypt(raw, this.sharedKey)
     if (plaintext === null) {
-      this.trackDecryptFailure()
+      this.handleDecryptFailure(this.sharedKey)
       return
     }
 
@@ -158,6 +162,16 @@ export class E2EEChannel {
       return true
     }
     this.messageHandler?.(plaintext, encryptedReply, encryptedBinaryReply)
+  }
+
+  // Why: an authentic frame out of sequence means a frame was replayed,
+  // reordered or deleted on the path; the session cannot be trusted any more.
+  private handleDecryptFailure(sharedKey: Uint8Array): void {
+    if (isE2EESequenceViolated(sharedKey)) {
+      this.onError(CLOSE_OUT_OF_SEQUENCE, 'Out-of-sequence frame')
+      return
+    }
+    this.trackDecryptFailure()
   }
 
   private trackDecryptFailure(): void {

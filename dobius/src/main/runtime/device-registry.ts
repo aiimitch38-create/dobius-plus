@@ -8,7 +8,8 @@ import { hardenExistingSecureFile, writeSecureJsonFile } from '../../shared/secu
 import type { DeviceScope } from '../../shared/runtime-types'
 import {
   MOBILE_PAIRING_OFFER_MIN_REMAINING_MS,
-  MOBILE_PAIRING_OFFER_TTL_MS
+  MOBILE_PAIRING_OFFER_TTL_MS,
+  MOBILE_PAIRING_TOKEN_GRACE_MS
 } from '../../shared/mobile-pairing-offer-lifetime'
 import { constantTimeEqual } from '../lib/constant-time-equal'
 import { readSafeJsonFile } from '../storage/safe-json-file'
@@ -17,7 +18,19 @@ import { isMobileRpcGrant, type MobileRpcGrant } from './mobile-rpc-grants'
 
 export type { DeviceScope }
 
-export { MOBILE_PAIRING_OFFER_MIN_REMAINING_MS, MOBILE_PAIRING_OFFER_TTL_MS }
+export {
+  MOBILE_PAIRING_OFFER_MIN_REMAINING_MS,
+  MOBILE_PAIRING_OFFER_TTL_MS,
+  MOBILE_PAIRING_TOKEN_GRACE_MS
+}
+
+function isLivePairingToken(device: DeviceEntry, token: string, now: number): boolean {
+  return (
+    device.pairingToken !== undefined &&
+    (device.pairingTokenExpiresAt ?? 0) > now &&
+    constantTimeEqual(token, device.pairingToken)
+  )
+}
 
 function isExpiredPairingOffer(device: DeviceEntry, now: number): boolean {
   return (
@@ -38,6 +51,10 @@ export type DeviceEntry = {
   // mobile-rpc-grants.ts). Missing means none granted. Read at startup only;
   // edit dobius-devices.json with the app closed or a later save overwrites it.
   grants?: MobileRpcGrant[]
+  // Why: the consumed QR token and when its grace window ends (see
+  // consumePairingOffer). Absent once the phone logs in with its own token.
+  pairingToken?: string
+  pairingTokenExpiresAt?: number
 }
 
 // Why: an unreadable registry still holds every paired device on disk. Any
@@ -76,11 +93,23 @@ function parseDevices(raw: unknown): DeviceEntry[] | undefined {
     ) {
       return undefined
     }
-    const { grants: rawGrants, ...device } = item as DeviceEntry & { grants?: unknown }
+    const {
+      grants: rawGrants,
+      pairingToken,
+      pairingTokenExpiresAt,
+      ...device
+    } = item as DeviceEntry & {
+      grants?: unknown
+      pairingToken?: unknown
+      pairingTokenExpiresAt?: unknown
+    }
     // Why: unknown or malformed grant values never authorize anything.
     const grants = Array.isArray(rawGrants) ? rawGrants.filter(isMobileRpcGrant) : []
+    const hasPairingGrace =
+      typeof pairingToken === 'string' && typeof pairingTokenExpiresAt === 'number'
     entries.push({
       ...device,
+      ...(hasPairingGrace ? { pairingToken, pairingTokenExpiresAt } : {}),
       // Why: older registries only existed for phone pairing. Treat missing
       // scope as mobile so legacy device tokens do not gain new CLI powers.
       scope: device.scope === 'runtime' ? 'runtime' : 'mobile',
@@ -171,36 +200,73 @@ export class DeviceRegistry {
 
   validateToken(token: string): DeviceEntry | null {
     this.reloadIfUnreadable()
-    const device = this.devices.find((d) => constantTimeEqual(token, d.token)) ?? null
-    if (device && isExpiredPairingOffer(device, Date.now())) {
+    const now = Date.now()
+    const device =
+      this.devices.find(
+        (d) => constantTimeEqual(token, d.token) || isLivePairingToken(d, token, now)
+      ) ?? null
+    if (device && isExpiredPairingOffer(device, now)) {
       return null
     }
     return device
   }
 
-  // Why: a mobile pairing QR is single-use. The first login with it swaps in a
-  // new token that only the phone receives (inside the E2EE channel), so a
-  // photo or screenshot of the QR is worthless once the phone has paired.
-  // Runtime links are shared by parallel short-lived sockets (CLI, desktop
-  // remote hosts, browser tabs) and keep their token; they stay listed and
-  // revocable instead. Throws if the swap cannot be saved (nothing changes).
+  // Why: a mobile pairing QR is single-use. Called on every successful phone
+  // login: the first login with the QR swaps in a new token that only the
+  // phone receives (inside the E2EE channel). The QR token then keeps working
+  // for MOBILE_PAIRING_TOKEN_GRACE_MS, each use minting yet another token,
+  // so a phone that failed to save its token can rescan; the first login
+  // with the phone's own token (a later connection) retires the QR token at
+  // once. Runtime links are shared by parallel short-lived sockets (CLI,
+  // desktop remote hosts, browser tabs) and keep their token; they stay
+  // listed and revocable instead. Throws if a swap cannot be saved (nothing
+  // changes).
   consumePairingOffer(token: string): string | null {
     const device = this.validateToken(token)
-    if (!device || device.scope !== 'mobile' || device.lastSeenAt !== 0) {
+    if (!device || device.scope !== 'mobile') {
+      return null
+    }
+    const now = Date.now()
+    const firstUse = device.lastSeenAt === 0
+    if (!firstUse && !isLivePairingToken(device, token, now)) {
+      if (device.pairingToken !== undefined) {
+        this.retirePairingToken(device)
+      }
       return null
     }
     this.assertWritable()
-    const previous = { token: device.token, lastSeenAt: device.lastSeenAt }
+    const previous = { ...device }
+    if (firstUse) {
+      device.pairingToken = token
+      device.pairingTokenExpiresAt = now + MOBILE_PAIRING_TOKEN_GRACE_MS
+    }
     device.token = randomBytes(24).toString('hex')
-    device.lastSeenAt = Date.now()
+    device.lastSeenAt = now
     try {
       this.save()
     } catch (error) {
-      device.token = previous.token
-      device.lastSeenAt = previous.lastSeenAt
+      Object.assign(device, previous)
+      if (firstUse) {
+        delete device.pairingToken
+        delete device.pairingTokenExpiresAt
+      }
       throw error
     }
     return device.token
+  }
+
+  private retirePairingToken(device: DeviceEntry): void {
+    const { pairingToken, pairingTokenExpiresAt } = device
+    delete device.pairingToken
+    delete device.pairingTokenExpiresAt
+    try {
+      this.save()
+    } catch (error) {
+      // Why: keep memory and disk in step; the grace window still ends on time.
+      device.pairingToken = pairingToken
+      device.pairingTokenExpiresAt = pairingTokenExpiresAt
+      console.warn('[mobile] could not retire used pairing token:', error)
+    }
   }
 
   updateLastSeen(deviceId: string): void {

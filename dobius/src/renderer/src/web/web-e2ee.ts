@@ -1,6 +1,8 @@
 import nacl from 'tweetnacl'
 import { acceptE2EEReceivedNonce, nextE2EESendNonce } from '../../../shared/e2ee-sequencing'
 
+export { isE2EESequenceViolated } from '../../../shared/e2ee-sequencing'
+
 if (globalThis.crypto?.getRandomValues) {
   nacl.setPRNG((bytes, count) => {
     globalThis.crypto.getRandomValues(bytes.subarray(0, count) as Uint8Array<ArrayBuffer>)

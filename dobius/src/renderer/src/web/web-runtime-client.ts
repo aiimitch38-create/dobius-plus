@@ -13,6 +13,7 @@ import {
   encrypt,
   encryptBytes,
   generateKeyPair,
+  isE2EESequenceViolated,
   publicKeyFromBase64,
   publicKeyToBase64
 } from './web-e2ee'
@@ -439,6 +440,7 @@ export class WebRuntimeClient {
 
       const plaintext = decrypt(raw, this.sharedKey)
       if (plaintext === null) {
+        this.dropIfOutOfSequence()
         return
       }
       try {
@@ -477,6 +479,7 @@ export class WebRuntimeClient {
       }
       const plaintext = decryptBytes(encrypted, this.sharedKey)
       if (!plaintext) {
+        this.dropIfOutOfSequence()
         return
       }
       for (const subscription of this.subscriptions.values()) {
@@ -487,6 +490,7 @@ export class WebRuntimeClient {
 
     const plaintext = decrypt(raw, this.sharedKey)
     if (plaintext === null) {
+      this.dropIfOutOfSequence()
       return
     }
 
@@ -584,6 +588,15 @@ export class WebRuntimeClient {
         }
       })
     })
+  }
+
+  // Why: an authentic frame out of sequence means frames were replayed,
+  // reordered or deleted on the path. Drop this socket; the close handler
+  // reconnects with a fresh key and counters.
+  private dropIfOutOfSequence(): void {
+    if (this.sharedKey && isE2EESequenceViolated(this.sharedKey)) {
+      this.ws?.close()
+    }
   }
 
   private handleSocketClosed(closedWs: WebSocket): void {

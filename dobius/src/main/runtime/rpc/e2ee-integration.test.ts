@@ -181,6 +181,8 @@ describe('E2EE integration (simulated mobile ↔ desktop)', () => {
     // 1 plaintext ready + 1 encrypted auth ack + 3 streaming responses
     expect(wsSent).toHaveLength(5)
 
+    // Why: frames are numbered; the client reads the auth ack first (F5).
+    expect(JSON.parse(decrypt(wsSent[1]!, mobileShared)!).type).toBe('e2ee_authenticated')
     for (let i = 2; i < 5; i++) {
       const plain = decrypt(wsSent[i]!, mobileShared)
       const parsed = JSON.parse(plain!)

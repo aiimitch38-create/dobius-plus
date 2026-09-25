@@ -6,7 +6,7 @@ import nacl from 'tweetnacl'
 import * as ExpoCrypto from 'expo-crypto'
 import { acceptE2EEReceivedNonce, nextE2EESendNonce } from './e2ee-sequencing'
 
-export { enableE2EESequencing } from './e2ee-sequencing'
+export { enableE2EESequencing, isE2EESequenceViolated } from './e2ee-sequencing'
 
 // Why: Hermes (React Native's JS engine) lacks crypto.getRandomValues,
 // which tweetnacl requires. expo-crypto provides a native secure RNG
