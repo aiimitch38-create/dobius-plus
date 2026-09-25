@@ -226,6 +226,38 @@ describe('registerSettingsHandlers', () => {
     expect(agentAwakeService.setEnabled).toHaveBeenCalledWith(true)
   })
 
+  it('never lets a renderer voice update write an ElevenLabs key into settings (#24)', () => {
+    store.getSettings.mockReturnValue({ voice: { enabled: true } })
+    store.updateSettings.mockReturnValue({})
+    registerSettingsHandlers(store as never)
+    const handler = handleMock.mock.calls.find((call) => call[0] === 'settings:set')?.[1] as (
+      _event: unknown,
+      args: unknown
+    ) => unknown
+
+    handler(settingsInvokeEvent, {
+      voice: { enabled: true, elevenlabsApiKey: 'sk_fake_renderer_key', elevenlabsVoiceId: 'v' }
+    })
+
+    const written = store.updateSettings.mock.calls[0]?.[0] as { voice: Record<string, unknown> }
+    expect(written.voice).toEqual({ enabled: true, elevenlabsVoiceId: 'v' })
+  })
+
+  it('keeps an unmigrated settings key when a renderer voice update omits it (#24)', () => {
+    store.getSettings.mockReturnValue({ voice: { elevenlabsApiKey: 'sk_fake_legacy' } })
+    store.updateSettings.mockReturnValue({})
+    registerSettingsHandlers(store as never)
+    const handler = handleMock.mock.calls.find((call) => call[0] === 'settings:set')?.[1] as (
+      _event: unknown,
+      args: unknown
+    ) => unknown
+
+    handler(settingsInvokeEvent, { voice: { enabled: false } })
+
+    const written = store.updateSettings.mock.calls[0]?.[0] as { voice: Record<string, unknown> }
+    expect(written.voice).toEqual({ enabled: false, elevenlabsApiKey: 'sk_fake_legacy' })
+  })
+
   it('does not notify the agent awake service for unrelated setting changes', () => {
     const agentAwakeService = { setEnabled: vi.fn() }
     store.getSettings.mockReturnValue({ keepComputerAwakeWhileAgentsRun: false })

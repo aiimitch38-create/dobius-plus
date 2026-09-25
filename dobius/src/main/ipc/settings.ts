@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain, nativeTheme } from 'electron'
 import type { Store } from '../persistence'
 import type { GlobalSettings, PersistedState } from '../../shared/types'
+import type { VoiceSettings } from '../../shared/speech-types'
 import { listSystemFontFamilies } from '../system-fonts'
 import { previewGhosttyImport } from '../ghostty/index'
 import { previewWarpThemeImport } from '../warp-themes'
@@ -35,6 +36,20 @@ function sanitizeRendererSettingsUpdate(args: Partial<GlobalSettings>): Partial<
     args as LegacyTerminalScrollbackSettingsUpdate
   void _legacyScrollbackBytes
   return sanitizedArgs
+}
+
+// Why (#24): the ElevenLabs key lives in the encrypted key store
+// (jarvis:saveElevenLabsKey); a renderer's voice object may never put a key
+// back into plaintext settings, so only the value already stored survives.
+function keepStoredElevenLabsKey(
+  voice: VoiceSettings,
+  current: VoiceSettings | undefined
+): VoiceSettings {
+  const { elevenlabsApiKey: _rendererKey, ...rest } = voice
+  void _rendererKey
+  return current?.elevenlabsApiKey !== undefined
+    ? { ...rest, elevenlabsApiKey: current.elevenlabsApiKey }
+    : rest
 }
 
 // Why: fields that appear in the View > Appearance submenu need the menu
@@ -75,6 +90,9 @@ export function registerSettingsHandlers(
     // Why: Floating Workspace grants are trusted only when written by the
     // main-process directory picker, never by renderer-provided settings IPC.
     delete sanitizedArgs.floatingTerminalTrustedCwds
+    if (sanitizedArgs.voice) {
+      sanitizedArgs.voice = keepStoredElevenLabsKey(sanitizedArgs.voice, store.getSettings().voice)
+    }
     if (typeof args.floatingTerminalCwd === 'string') {
       sanitizedArgs.floatingTerminalCwd = await sanitizeFloatingWorkspaceDirectorySetting(
         store,

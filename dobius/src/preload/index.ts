@@ -4491,6 +4491,12 @@ const api = {
       ipcRenderer.invoke('jarvis:status'),
     agentSignedUrl: (): Promise<{ ok: true; url: string } | { ok: false; error: string }> =>
       ipcRenderer.invoke('jarvis:agentSignedUrl'),
+    getElevenLabsKeyStatus: (): Promise<{ configured: boolean; sessionOnly: boolean }> =>
+      ipcRenderer.invoke('jarvis:getElevenLabsKeyStatus'),
+    saveElevenLabsKey: (apiKey: string): Promise<{ configured: boolean; sessionOnly: boolean }> =>
+      ipcRenderer.invoke('jarvis:saveElevenLabsKey', apiKey),
+    clearElevenLabsKey: (): Promise<{ configured: boolean; sessionOnly: boolean }> =>
+      ipcRenderer.invoke('jarvis:clearElevenLabsKey'),
     askAdamText: (utterance: string): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:askAdamText', utterance),
     onState: (callback: (event: JarvisStateEvent) => void): (() => void) => {

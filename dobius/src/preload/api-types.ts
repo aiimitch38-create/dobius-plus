@@ -3243,6 +3243,11 @@ export type PreloadApi = {
     status: () => Promise<{ shortcutActive: boolean; phase: string }>
     /** Mints a signed websocket URL for the configured ElevenLabs agent. */
     agentSignedUrl: () => Promise<{ ok: true; url: string } | { ok: false; error: string }>
+    /** Whether an ElevenLabs key is saved; the key itself never reaches the renderer. */
+    getElevenLabsKeyStatus: () => Promise<{ configured: boolean; sessionOnly: boolean }>
+    /** Saves the key to the encrypted store (session-only when encryption is unavailable). */
+    saveElevenLabsKey: (apiKey: string) => Promise<{ configured: boolean; sessionOnly: boolean }>
+    clearElevenLabsKey: () => Promise<{ configured: boolean; sessionOnly: boolean }>
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
     askAdamText: (utterance: string) => Promise<JarvisAskResult>
     onState: (callback: (event: JarvisStateEvent) => void) => () => void

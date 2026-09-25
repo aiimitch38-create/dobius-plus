@@ -7,6 +7,9 @@ import { hardenExistingSecureFile, writeSecureFile } from '../../shared/secure-f
 const MINIMAX_COOKIE_FILE = 'minimax-session-cookie.enc'
 const COOKIE_ENVELOPE_PREFIX = 'dobius-minimax-cookie:v1:'
 let cachedMiniMaxCookie: string | null = null
+// True when the cookie could not be encrypted: it works until the app quits but
+// was not written to disk (#25).
+let miniMaxCookieIsSessionOnly = false
 let warnedMiniMaxCookieStatusHardenFailure = false
 
 type MiniMaxCookieEnvelope = {
@@ -97,6 +100,9 @@ function readLegacyCookie(raw: Buffer): string {
 }
 
 export function hasMiniMaxSessionCookie(): boolean {
+  if (miniMaxCookieIsSessionOnly) {
+    return true
+  }
   const keyPath = getMiniMaxCookiePath()
   if (!existsSync(keyPath)) {
     return false
@@ -117,20 +123,33 @@ export function saveMiniMaxSessionCookie(cookie: string): void {
   if (!trimmed) {
     throw new Error('MiniMax session cookie is required')
   }
-  if (safeStorage.isEncryptionAvailable()) {
-    writeSecureFile(
-      getMiniMaxCookiePath(),
-      encodeCookieEnvelope('encrypted', safeStorage.encryptString(trimmed))
-    )
+  const encrypted = tryEncryptMiniMaxCookie(trimmed)
+  if (encrypted === null) {
+    // Why (#25): fail closed. Never write the cookie in plaintext; leave any
+    // existing file untouched and keep the new cookie for this session.
+    console.warn('[minimax] safeStorage encryption unavailable — MiniMax cookie kept for this session only')
     cachedMiniMaxCookie = trimmed
+    miniMaxCookieIsSessionOnly = true
     return
   }
-  console.warn('[minimax] safeStorage encryption unavailable — storing MiniMax cookie in plaintext')
-  writeSecureFile(
-    getMiniMaxCookiePath(),
-    encodeCookieEnvelope('plaintext', Buffer.from(trimmed, 'utf8'))
-  )
+  writeSecureFile(getMiniMaxCookiePath(), encodeCookieEnvelope('encrypted', encrypted))
   cachedMiniMaxCookie = trimmed
+  miniMaxCookieIsSessionOnly = false
+}
+
+function tryEncryptMiniMaxCookie(cookie: string): Buffer | null {
+  if (!safeStorage.isEncryptionAvailable()) {
+    return null
+  }
+  try {
+    return safeStorage.encryptString(cookie)
+  } catch (error) {
+    console.error(
+      '[minimax] safeStorage encryption failed:',
+      error instanceof Error ? error.message : String(error)
+    )
+    return null
+  }
 }
 
 export function readMiniMaxSessionCookie(): string | null {
@@ -161,5 +180,6 @@ export function readMiniMaxSessionCookie(): string | null {
 
 export function clearMiniMaxSessionCookie(): void {
   cachedMiniMaxCookie = null
+  miniMaxCookieIsSessionOnly = false
   rmSync(getMiniMaxCookiePath(), { force: true })
 }

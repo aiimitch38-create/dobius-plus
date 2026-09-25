@@ -106,15 +106,31 @@ describe('minimax-cookie-store', () => {
     )
   })
 
-  it('warns and writes plaintext when safeStorage is unavailable', async () => {
+  it('writes nothing when safeStorage is unavailable and keeps the cookie for the session (#25)', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
     existsSyncMock.mockReturnValue(false)
     const store = await loadStore()
     store.saveMiniMaxSessionCookie('_token=abc')
-    expect(writeSecureFileMock).toHaveBeenCalledWith(storePath, envelope('plaintext', '_token=abc'))
+    expect(writeSecureFileMock).not.toHaveBeenCalled()
+    expect(store.readMiniMaxSessionCookie()).toBe('_token=abc')
+    expect(store.hasMiniMaxSessionCookie()).toBe(true)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('safeStorage encryption unavailable'))
     warn.mockRestore()
+  })
+
+  it('writes nothing when encryptString throws (#25)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    safeStorageMock.encryptString.mockImplementation(() => {
+      throw new Error('keychain locked')
+    })
+    const store = await loadStore()
+    store.saveMiniMaxSessionCookie('_token=abc')
+    expect(writeSecureFileMock).not.toHaveBeenCalled()
+    expect(store.readMiniMaxSessionCookie()).toBe('_token=abc')
+    warn.mockRestore()
+    error.mockRestore()
   })
 
   it('refuses empty cookies', async () => {
