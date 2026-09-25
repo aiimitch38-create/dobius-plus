@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useAppStore } from '@/store'
 import { getRelativePathInsideRoot, normalizeRelativePath } from '@/lib/path'
 import { isMarkdownComment } from '@/lib/diff-comment-compat'
 import {
@@ -40,13 +41,21 @@ export function useRichMarkdownReviewData({
         : getRelativePathInsideRoot(filePath, worktreeRoot),
     [filePath, markdownAnnotationFilePath, worktreeRoot]
   )
-  const canAnnotateRichMarkdown = Boolean(markdownAnnotationsEnabled && sourceRelativePath !== null)
+  // Why: Settings > Editor "Markdown Review Notes" (#122 F8). Off hides the
+  // rich-editor note controls, saved-note rail and agent handoff actions; the
+  // notes themselves stay stored. A missing setting keeps the default (on).
+  const reviewToolsEnabled = useAppStore((s) => s.settings?.markdownReviewToolsEnabled !== false)
+  const canAnnotateRichMarkdown = Boolean(
+    reviewToolsEnabled && markdownAnnotationsEnabled && sourceRelativePath !== null
+  )
   const markdownComments = useMemo(
     () =>
-      (allDiffComments ?? []).filter(
-        (comment) => comment.filePath === sourceRelativePath && isMarkdownComment(comment)
-      ),
-    [allDiffComments, sourceRelativePath]
+      reviewToolsEnabled
+        ? (allDiffComments ?? []).filter(
+            (comment) => comment.filePath === sourceRelativePath && isMarkdownComment(comment)
+          )
+        : [],
+    [allDiffComments, reviewToolsEnabled, sourceRelativePath]
   )
   const markdownReviewNotes = useMemo(
     () => sortMarkdownReviewNotes(markdownComments as MarkdownReviewNote[]),

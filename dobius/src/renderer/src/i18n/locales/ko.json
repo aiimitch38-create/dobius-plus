@@ -5768,7 +5768,9 @@
           "fe904ac984": "익명의 사용 데이터 공유",
           "77410e0566": "개인 정보 보호 정책",
           "8bfdd23a88": "다음에 무엇을 빌드할지 알아내도록 도와주세요. Dobius+는 귀하가 사용하는 기능과 문제가 발생한 부분에 대한 개수를 익명으로 보냅니다.",
-          "afec8b03be": "ci"
+          "afec8b03be": "ci",
+          "transportUnavailable": "Not available in this build: Dobius+ sends no usage data, so this switch has no effect.",
+          "transportUnavailableDescription": "This build of Dobius+ does not send usage data."
         },
         "QuickCommandsPane": {
           "8764c6e9e4": "{{value0}} 제거",

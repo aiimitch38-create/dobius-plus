@@ -31,6 +31,7 @@ import { initObservability, shutdownObservability } from './observability'
 import { startSpan } from './observability/tracer'
 import { registerMobileHandlers } from './ipc/mobile'
 import { initTelemetry, shutdownTelemetry, trackAppOpenedOnce } from './telemetry/client'
+import { setClaudeSettingsOverrideReader } from './codex-cli/command'
 import { runManagedHookInstallers } from './agent-hooks/install-telemetry'
 import {
   isAgentStatusHooksEnabled,
@@ -1639,6 +1640,9 @@ app.whenReady().then(async () => {
   store = new Store()
   await migrateLegacyDobiusConfig(store)
   logStartupMilestone('store-loaded')
+  // Why: headless Claude spawns must honor the Settings command override ahead
+  // of the DOBIUS_CLAUDE_CLI_PATH env var (X9); read live so edits apply.
+  setClaudeSettingsOverrideReader(() => store?.getSettings().agentCmdOverrides?.claude)
   // Why: after the store, and a background drain that resumes from the saved
   // cursor instead of re-posting the last 1,000 events on every launch (N5).
   void import('./agents/agent-run-event-journal')
