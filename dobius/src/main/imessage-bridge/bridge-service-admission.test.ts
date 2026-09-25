@@ -27,6 +27,7 @@ import { bridgeServiceInternals } from './bridge-service'
 function terminal() {
   return {
     resolveActiveTerminal: vi.fn(async () => 'term-1'),
+    getTerminalAgentStatus: vi.fn(async () => ({ isRunningAgent: true, status: 'working' })),
     sendTerminal: vi.fn(async () => undefined)
   }
 }
@@ -54,6 +55,10 @@ describe('iMessage d: command admission', () => {
     await bridgeServiceInternals.dispatchCommand('echo hi', 'me', target)
 
     expect(target.resolveActiveTerminal).toHaveBeenCalledTimes(1)
-    expect(target.sendTerminal).toHaveBeenCalledWith('term-1', { text: 'echo hi', enter: true })
+    expect(target.sendTerminal).toHaveBeenCalledWith(
+      'term-1',
+      { text: 'echo hi', enter: true },
+      expect.objectContaining({ beforeWrite: expect.any(Function) })
+    )
   })
 })
