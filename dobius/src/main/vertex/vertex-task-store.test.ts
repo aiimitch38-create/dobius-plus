@@ -456,3 +456,157 @@ describe('re-parenting', () => {
     expect(childIdsOf(p1.id)).toEqual([a.id])
   })
 })
+
+describe('interrupted dispatch claims (#94)', () => {
+  const DEAD_PID = 999_991
+  const LIVE_OTHER_PID = 999_992
+  const agent = { kind: 'agent' as const, id: 'agent-watson-uuid', name: 'Watson', initials: 'WA' }
+
+  // Why a stub: a real crashed pid can be reused by the OS mid-test.
+  function stubPids(): void {
+    const realKill = process.kill.bind(process)
+    vi.spyOn(process, 'kill').mockImplementation(((pid: number, signal?: string | number) => {
+      if (pid === DEAD_PID) {
+        throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' })
+      }
+      if (pid === LIVE_OTHER_PID) {
+        return true
+      }
+      return realKill(pid, signal)
+    }) as typeof process.kill)
+  }
+
+  function writeClaim(
+    dispatch: Record<string, unknown>,
+    status: VertexTaskStatus = 'in-progress'
+  ): void {
+    const row = {
+      id: 'card',
+      title: 'crashed card',
+      status,
+      order: 1000,
+      assignee: agent,
+      dispatch: {
+        status: 'running',
+        agentId: agent.id,
+        agentName: agent.name,
+        attempts: 1,
+        updatedAt: 1,
+        ...dispatch
+      }
+    }
+    writeFileSync(join(dir, 'vertex-tasks.json'), JSON.stringify([row]), 'utf8')
+    setVertexTaskStorageDir(dir)
+  }
+
+  const onDisk = (): { status: string; dispatch: Record<string, unknown> } =>
+    (
+      JSON.parse(readFileSync(join(dir, 'vertex-tasks.json'), 'utf8')) as {
+        status: string
+        dispatch: Record<string, unknown>
+      }[]
+    )[0]
+
+  beforeEach(stubPids)
+
+  it('marks a claim of a dead process failed, on disk, so the operator can retry', () => {
+    writeClaim({ ownerPid: DEAD_PID, ownerSessionId: 'crashed' })
+
+    const [task] = vertexTaskStore.list()
+
+    expect(task.status).toBe('in-progress')
+    expect(task.dispatch).toMatchObject({ status: 'failed', attempts: 1 })
+    expect(task.dispatch?.error).toContain('Move to To Do to retry')
+    expect(task.dispatch?.ownerPid).toBeUndefined()
+    expect(onDisk().dispatch.status).toBe('failed')
+    // The operator's retry: move to To Do. The dispatcher picks up failed + todo.
+    expect(vertexTaskStore.move('card', 'todo', 0)?.dispatch?.status).toBe('failed')
+  })
+
+  it('leaves a live other instance claim running (shared userData in dev)', () => {
+    writeClaim({ ownerPid: LIVE_OTHER_PID, ownerSessionId: 'other' })
+
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('running')
+    expect(onDisk().dispatch.status).toBe('running')
+  })
+
+  it('treats an earlier process with this same pid as gone', () => {
+    writeClaim({ ownerPid: process.pid, ownerSessionId: 'before-the-crash' })
+
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('failed')
+  })
+
+  it('treats a claim written before owner stamping as orphaned', () => {
+    writeClaim({})
+
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('failed')
+  })
+
+  it('dead-letters a claim that had used its last attempt', () => {
+    writeClaim({ ownerPid: DEAD_PID, attempts: 2 })
+
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('dead')
+  })
+
+  it('takes a crashed claim out of To Do so nothing relaunches it by itself', () => {
+    writeClaim({ ownerPid: DEAD_PID }, 'todo')
+
+    const [task] = reloadVertexTasksFromDisk()
+
+    expect(task.status).toBe('in-progress')
+    expect(task.dispatch?.status).toBe('failed')
+  })
+
+  it('still shows the board when the recovery write fails', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    writeClaim({ ownerPid: DEAD_PID })
+    chmodSync(dir, 0o500)
+    try {
+      expect(vertexTaskStore.list()[0].dispatch?.status).toBe('running')
+      expect(warn).toHaveBeenCalled()
+    } finally {
+      chmodSync(dir, 0o700)
+    }
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('failed')
+  })
+
+  it('stamps this process on a claim and keeps it running across reads', () => {
+    const created = vertexTaskStore.create({ title: 'live', status: 'todo', assignee: agent })
+    const claimed = vertexTaskStore.update(created.id, {
+      status: 'in-progress',
+      dispatch: {
+        status: 'running',
+        agentId: agent.id,
+        agentName: agent.name,
+        attempts: 1,
+        updatedAt: 1,
+        // A renderer cannot claim on another process's behalf.
+        ownerPid: DEAD_PID,
+        ownerSessionId: 'forged'
+      }
+    })
+
+    expect(claimed?.dispatch?.ownerPid).toBe(process.pid)
+    expect(claimed?.dispatch?.ownerSessionId).not.toBe('forged')
+    setVertexTaskStorageDir(dir)
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('running')
+  })
+
+  it('drops the owner once the run settles', () => {
+    writeClaim({ ownerPid: LIVE_OTHER_PID, ownerSessionId: 'other' })
+
+    const settled = vertexTaskStore.update('card', {
+      dispatch: {
+        status: 'succeeded',
+        agentId: agent.id,
+        agentName: agent.name,
+        attempts: 1,
+        updatedAt: 2,
+        ownerPid: LIVE_OTHER_PID
+      }
+    })
+
+    expect(settled?.dispatch?.ownerPid).toBeUndefined()
+  })
+})

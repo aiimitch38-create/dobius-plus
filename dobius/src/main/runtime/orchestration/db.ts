@@ -15,6 +15,7 @@ import type {
   CoordinatorRun
 } from './types'
 import { buildOrchestrationTaskDisplayMetadata } from '../../../shared/orchestration-task-display'
+import { isPidAlive } from '../process-liveness'
 
 export type {
   MessageType,
@@ -59,18 +60,6 @@ const OWNER_HEARTBEAT_POLLS = 10
 const PROCESS_OWNER: CoordinatorRunOwner = {
   pid: process.pid,
   sessionId: randomBytes(8).toString('hex')
-}
-
-// Why: signal 0 probes existence without delivering anything. ESRCH is the
-// only proof of death; EPERM (someone else's live process) and any other
-// error count as alive so a run is never retired on a guess.
-function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code !== 'ESRCH'
-  }
 }
 
 export class OrchestrationDb {

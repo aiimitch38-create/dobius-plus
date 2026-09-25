@@ -672,6 +672,12 @@ const REVIVAL_WINDOW_MS = 2 * 60 * 60 * 1000;
 const MAX_REVIVALS_PER_BOOT = 4;
 let revivalStarted = false;
 
+// First words of every Kanban board-task prompt (board-dispatch.ts builds it).
+// Why revival skips them: the Kanban store marks the interrupted card failed
+// for the operator to retry, and a revived run is an unrequested, uncapped
+// paid run the card never hears about.
+export const BOARD_TASK_PROMPT_LEAD = "You have been assigned a Dobius board task";
+
 export async function reviveInterruptedChannelRuns(): Promise<void> {
   if (revivalStarted) return;
   revivalStarted = true;
@@ -697,6 +703,7 @@ export async function reviveInterruptedChannelRuns(): Promise<void> {
         run.sessionKey !== "default" &&
         // Not a channel id: iMessage runs (IMESSAGE_SESSION_KEY in shared/agents.ts).
         run.sessionKey !== "imessage" &&
+        !String(run.prompt ?? "").startsWith(BOARD_TASK_PROMPT_LEAD) &&
         run.status === "error" &&
         run.summary === "app restarted during run" &&
         typeof run.startedAt === "number" &&
