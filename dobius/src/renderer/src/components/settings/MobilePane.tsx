@@ -17,6 +17,10 @@ export { getMobilePaneSearchEntries } from './mobile-pane-search'
 export function MobilePane(): React.JSX.Element {
   const autoRestoreFitMs = useAppStore((s) => s.settings?.mobileAutoRestoreFitMs ?? null)
   const updateSettings = useAppStore((s) => s.updateSettings)
+  const mobileListenerEnabled = useAppStore((s) => s.settings?.mobileListenerEnabled === true)
+  // Why: null until checked; false means the phone listener is not running this
+  // launch (the setting is off, or was turned on after startup).
+  const [listenerRunning, setListenerRunning] = useState<boolean | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [pairingUrl, setPairingUrl] = useState<string | null>(null)
   const [endpoint, setEndpoint] = useState<string | null>(null)
@@ -48,6 +52,19 @@ export function MobilePane(): React.JSX.Element {
       }
     } catch {
       // Silently fail — device list is non-critical
+    }
+  }, [mountedRef])
+
+  const loadListenerStatus = useCallback(async (): Promise<boolean | null> => {
+    try {
+      const result = await window.api.mobile.isWebSocketReady()
+      if (mountedRef.current) {
+        setListenerRunning(result.ready)
+      }
+      return result.ready
+    } catch {
+      // Unknown status: callers fall back to the generic error message.
+      return null
     }
   }, [mountedRef])
 
@@ -100,7 +117,10 @@ export function MobilePane(): React.JSX.Element {
             void loadDevices()
           }
         } else {
-          if (mountedRef.current) {
+          // Why: with the phone listener off, the inline notice explains why
+          // pairing is unavailable; a raw transport error toast would not.
+          const running = await loadListenerStatus()
+          if (running !== false && mountedRef.current) {
             toast.error(
               translate(
                 'auto.components.settings.MobilePane.cb9067c1c1',
@@ -124,13 +144,14 @@ export function MobilePane(): React.JSX.Element {
         }
       }
     },
-    [clearCodeCopiedResetTimer, loadDevices, mountedRef, selectedAddress]
+    [clearCodeCopiedResetTimer, loadDevices, loadListenerStatus, mountedRef, selectedAddress]
   )
 
   useEffect(() => {
     void loadDevices()
     void loadNetworkInterfaces()
-  }, [loadDevices, loadNetworkInterfaces])
+    void loadListenerStatus()
+  }, [loadDevices, loadListenerStatus, loadNetworkInterfaces])
 
   useMobilePairingDevicePolling({
     deviceCountAtQr,
@@ -160,6 +181,23 @@ export function MobilePane(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
+      {listenerRunning === false ? (
+        <p
+          role="status"
+          className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+        >
+          {mobileListenerEnabled
+            ? translate(
+                'auto.components.settings.MobilePane.listenerPendingRestart',
+                'The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.'
+              )
+            : translate(
+                'auto.components.settings.MobilePane.listenerOff',
+                'The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.'
+              )}
+        </p>
+      ) : null}
+
       <MobileNetworkInterfaceSection
         networkInterfaces={networkInterfaces}
         selectedAddress={selectedAddress}

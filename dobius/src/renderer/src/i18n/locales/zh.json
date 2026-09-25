@@ -5619,7 +5619,9 @@
           "aa1263e881": "保持手机尺寸（默认）",
           "6436e56546": "用于手机配对的二维码",
           "1b1b70279a": "尚未配对任何设备。",
-          "1592afcc7a": "尚未配对任何设备。使用 Dobius+ 手机应用程序扫描二维码。"
+          "1592afcc7a": "尚未配对任何设备。使用 Dobius+ 手机应用程序扫描二维码。",
+          "listenerPendingRestart": "The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.",
+          "listenerOff": "The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+."
         },
         "MobileSettingsPane": {
           "9a3c280e49": "GitHub 发布",
@@ -7753,7 +7755,14 @@
               "671eb4173c": "通过手机控制终端和智能体。",
               "ffd52a96e4": "移动端",
               "1de96ec8a6": "显示 Dobius+ Mobile 按钮",
-              "682293cadf": "在左侧边栏顶部显示 Dobius+ Mobile 按钮。"
+              "682293cadf": "在左侧边栏顶部显示 Dobius+ Mobile 按钮。",
+              "listenerTitle": "Phone Listener (takes effect on next launch)",
+              "listenerDescription": "Lets phones on your local network connect to Dobius+. Changes take effect the next time Dobius+ starts.",
+              "listenerKeywordListener": "listener",
+              "listenerKeywordNetwork": "local network",
+              "listenerKeywordLan": "lan",
+              "listenerKeywordPhone": "phone",
+              "listenerKeywordWebsocket": "websocket"
             }
           }
         },
