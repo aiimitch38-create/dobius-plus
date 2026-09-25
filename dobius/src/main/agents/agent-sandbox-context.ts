@@ -3,7 +3,16 @@ import { existsSync, readdirSync, realpathSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { getUserDataRoot } from '../storage/user-data-root'
-import { buildAgentRunSandboxPolicy, type AgentRunSandboxPolicy } from './agent-sandbox-policy'
+import type { Options } from '@anthropic-ai/claude-agent-sdk'
+import { buildAgentRunSandboxPolicy } from './agent-sandbox-policy'
+
+// Unset (tests, early boot) means on: the sandbox never defaults off.
+let readAgentSandboxEnabled: () => boolean = () => true
+
+/** Wired from main to the live `agentSandboxEnabled` setting (local Settings UI only). */
+export function setAgentSandboxEnabledReader(reader: () => boolean): void {
+  readAgentSandboxEnabled = reader
+}
 
 function isWithin(target: string, root: string): boolean {
   const relative = path.relative(root, target)
@@ -94,12 +103,12 @@ export function resolveAgentRunSandboxPolicy(args: {
   cwd: string
   claudeConfigDir?: string | null
   claudeExecutable?: string
-}): AgentRunSandboxPolicy {
+}): Pick<Options, 'sandbox' | 'disallowedTools'> {
   const homeDir = os.homedir()
   const dobiusDir = path.join(homeDir, '.dobius')
   const gitDirs = repoDirs(args.cwd, homeDir)
   const tempDirs = scratchDirs()
-  return buildAgentRunSandboxPolicy({
+  const policy = buildAgentRunSandboxPolicy({
     agentId: args.agentId,
     homeDir,
     userDataDir: getUserDataRoot(),
@@ -117,4 +126,14 @@ export function resolveAgentRunSandboxPolicy(args: {
       [args.cwd, ...gitDirs]
     )
   })
+  if (readAgentSandboxEnabled()) {
+    return policy
+  }
+  // Why: the switch drops only the kernel sandbox. The deny rules (protected
+  // files, other agents, credentials, keychain) and the text rails stay on.
+  console.warn(
+    `[agents] Agent sandbox is OFF (Settings > Agents): run for agent ${args.agentId} is not ` +
+      'kernel-sandboxed; its Bash commands can write anywhere in the home folder.'
+  )
+  return { disallowedTools: policy.disallowedTools }
 }

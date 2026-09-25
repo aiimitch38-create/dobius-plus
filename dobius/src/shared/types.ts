@@ -2806,6 +2806,10 @@ export type GlobalSettings = {
   /** Why: disabling must persist so startup does not reinstall global agent
    *  hook entries right after the user removes them from Settings or CLI. */
   agentStatusHooksEnabled: boolean
+  /** Why: kernel sandbox for Claude agent runs (Bash file writes/reads).
+   *  Local-only escape valve: never accepted over RPC (`settings.update`),
+   *  and absent means on. Off keeps the rails and the file-tool deny rules. */
+  agentSandboxEnabled?: boolean
   /** Why: generated tab titles are semantic but subjective, so they stay opt-in
    *  and manual renames remain the stronger user intent. */
   tabAutoGenerateTitle: boolean

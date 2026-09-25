@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ userDataRoot: '' }))
 vi.mock('../storage/user-data-root', () => ({ getUserDataRoot: () => mocks.userDataRoot }))
 
-import { resolveAgentRunSandboxPolicy } from './agent-sandbox-context'
+import { resolveAgentRunSandboxPolicy, setAgentSandboxEnabledReader } from './agent-sandbox-context'
 
 let home: string
 let originalPath: string | undefined
@@ -33,6 +33,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  setAgentSandboxEnabledReader(() => true)
   process.env.PATH = originalPath
   vi.restoreAllMocks()
   rmSync(home, { recursive: true, force: true })
@@ -45,7 +46,7 @@ describe('resolveAgentRunSandboxPolicy', () => {
     }
     mkdirSync(path.join(home, '.dobius', 'agent-hooks'), { recursive: true })
     writeFileSync(path.join(home, '.dobius', 'agents-config.json'), '{}')
-    const denyWrite = resolve().sandbox.filesystem?.denyWrite ?? []
+    const denyWrite = resolve().sandbox?.filesystem?.denyWrite ?? []
     const dobius = path.join(home, '.dobius')
     expect(denyWrite).toEqual(
       expect.arrayContaining([
@@ -61,7 +62,7 @@ describe('resolveAgentRunSandboxPolicy', () => {
 
   it('treats a missing agents or Dobius folder as empty', () => {
     const { sandbox } = resolve()
-    expect(sandbox.filesystem?.denyRead).toContain(path.join(home, '.dobius', 'agents'))
+    expect(sandbox?.filesystem?.denyRead).toContain(path.join(home, '.dobius', 'agents'))
   })
 
   it('fails closed when the agents folder cannot be listed', () => {
@@ -77,13 +78,13 @@ describe('resolveAgentRunSandboxPolicy', () => {
     git(repo, '-c', 'user.email=a@b', '-c', 'user.name=a', 'commit', '-q', '--allow-empty', '-m', 'i')
     const worktree = path.join(home, 'repo-wt')
     git(repo, 'worktree', 'add', '-q', worktree, '-b', 'feature')
-    const allowWrite = resolve({ cwd: worktree }).sandbox.filesystem?.allowWrite ?? []
+    const allowWrite = resolve({ cwd: worktree }).sandbox?.filesystem?.allowWrite ?? []
     expect(allowWrite).toEqual(expect.arrayContaining([worktree, path.join(repo, '.git')]))
     expect(allowWrite).not.toContain(home)
   })
 
   it('grants the temp roots', () => {
-    const allowWrite = resolve().sandbox.filesystem?.allowWrite ?? []
+    const allowWrite = resolve().sandbox?.filesystem?.allowWrite ?? []
     expect(allowWrite).toContain(os.tmpdir())
     if (process.platform === 'darwin') {
       expect(allowWrite).toEqual(
@@ -108,7 +109,7 @@ describe('resolveAgentRunSandboxPolicy', () => {
       'relative/bin'
     ].join(path.delimiter)
     const denyWrite =
-      resolve({ cwd, claudeExecutable: path.join(launcherDir, 'claude') }).sandbox.filesystem
+      resolve({ cwd, claudeExecutable: path.join(launcherDir, 'claude') }).sandbox?.filesystem
         ?.denyWrite ?? []
     expect(denyWrite).toEqual(
       expect.arrayContaining([install, launcherDir, path.join(home, 'homebrew', 'bin')])
@@ -116,5 +117,31 @@ describe('resolveAgentRunSandboxPolicy', () => {
     expect(denyWrite).not.toContain(path.join(cwd, 'node_modules', '.bin'))
     expect(denyWrite).not.toContain(home)
     expect(denyWrite).not.toContain('relative/bin')
+  })
+
+  it('the Settings switch on (the default) keeps the kernel sandbox', () => {
+    expect(resolve().sandbox).toMatchObject({ enabled: true, allowUnsandboxedCommands: false })
+  })
+
+  it('the Settings switch off drops only the kernel sandbox, keeps every deny rule, and warns', () => {
+    mkdirSync(path.join(home, '.dobius', 'agents', 'nova'), { recursive: true })
+    mkdirSync(path.join(home, '.dobius', 'agent-hooks'), { recursive: true })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const sandboxed = resolve()
+    setAgentSandboxEnabledReader(() => false)
+    const unsandboxed = resolve()
+    expect(unsandboxed.sandbox).toBeUndefined()
+    expect(unsandboxed.disallowedTools).toEqual(sandboxed.disallowedTools)
+    expect(unsandboxed.disallowedTools).toEqual(
+      expect.arrayContaining([
+        'Edit(~/.dobius/agent-hooks/**)',
+        'Edit(~/.zshrc)',
+        'Edit(~/**/.claude/settings*.json)',
+        'Read(~/.dobius/agents/nova/**)',
+        'Bash(security find-generic-password:*)'
+      ])
+    )
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/Agent sandbox is OFF/)
   })
 })

@@ -8942,6 +8942,10 @@
           "remove": "Remove",
           "configured": "A key is stored, encrypted on this machine. It is never shown again.",
           "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "agent-sandbox-copy": {
+          "title": "Agent sandbox (recommended)",
+          "description": "Commands run by Claude agents can only write to the agent's working folder, its git repository, temp folders and package caches, and cannot read other agents' memory or saved credentials. Turning this off lets agents write anywhere in your home folder. Hook, settings and shell startup files stay protected either way."
         }
       },
       "right": {

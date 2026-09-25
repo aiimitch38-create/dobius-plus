@@ -14,6 +14,7 @@ import { AgentAwakeSetting } from './AgentAwakeSetting'
 import { VertexAutoModeSetting } from './VertexAutoModeSetting'
 import { AgentCacheTimerSection } from './AgentCacheTimerSection'
 import { AgentRuntimeSetting } from './AgentRuntimeSetting'
+import { AgentSandboxSetting } from './AgentSandboxSetting'
 import {
   getAgentGeneratedTabTitlesDescription,
   getAgentGeneratedTabTitlesTitle
@@ -838,6 +839,8 @@ export function AgentsPane({
         wslDistros={wslDistros}
         wslCapabilitiesLoading={wslCapabilitiesLoading}
       />
+
+      <AgentSandboxSetting settings={settings} updateSettings={updateSettings} />
 
       <AgentStatusHooksSetting settings={settings} updateSettings={updateSettings} />
 

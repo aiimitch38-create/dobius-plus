@@ -315,3 +315,54 @@ oxlint clean on new files; `agent-runner.ts` max-lines pre-existing (496 → 501
   that already ships `.claude/settings*.json` with `allowRead` or hooks is trusted.
 - Globs in `denyWrite` are skipped on Linux by the CLI (`~/**/.claude/settings*.json`, `.mcp.json`);
   the Edit rules still cover them for the file tools, and Bash cannot reach other projects anyway.
+
+---
+
+# Round 3: local-only escape valve for the kernel sandbox (after merging `stabilize/integration`)
+
+Why: Decision 2 (Bash writes only the run folder, git dirs, own agent folder, temp, caches) breaks some
+real agent work (`~/.config` tool state, `npm -g`, clones/worktrees outside the run folder, cargo/go).
+Carson is away, so there is a switch that defaults ON.
+
+- Setting `agentSandboxEnabled?: boolean` (`shared/types.ts`), default `true` (`shared/constants.ts`);
+  missing counts as on. Main reads it live per run: `index.ts` wires
+  `setAgentSandboxEnabledReader(() => store?.getSettings().agentSandboxEnabled !== false)`; an unset
+  reader (tests, early boot) means on.
+- The branch lives in `agent-sandbox-context.ts` (`resolveAgentRunSandboxPolicy`); `agent-runner.ts`
+  is unchanged this round. Off → no `sandbox` option, the SAME `disallowedTools` (protected-file Edit
+  rules, other-agent/credential Read rules, keychain `security` rules), and the hard-rail hooks are
+  still built by the runner (keychain text rail included). One `console.warn` per run:
+  "Agent sandbox is OFF … can write anywhere in the home folder".
+- Settings UI: `AgentSandboxSetting.tsx` in Settings > Agents, above "Agent status hooks", plus a
+  settings-search entry. Copy: "Agent sandbox (recommended)" + what it blocks and that off lets agents
+  write anywhere in the home folder. en via `pnpm run sync:localization-catalog`; es/ja/ko/zh
+  translated by hand. `verify:localization-catalog` exit 0.
+- No remote writes: `settings.update` (`client-ui.ts` `SettingsUpdate`, `.strict()`) and `ui.set`
+  (`UiUpdate`, `.strict()`) both reject `agentSandboxEnabled` with `invalid_argument`; the runtime
+  is never called. Mobile `ui.set` goes through the same strict schema after the mobile grant check,
+  and `settings.update` is the only settings write method in RPC. The only writer is the local
+  renderer IPC settings path. With the sandbox on, agents cannot flip it themselves: userData
+  (where settings persist) is write-denied to Bash and to Write/Edit.
+- Merge fixups: the new integration tests `agent-runner-cancel-end.test.ts` and
+  `conductor-session-resume.test.ts` got the same `agent-sandbox-context` mock as the other runner
+  tests (their harness has no Electron `app`).
+
+Tests: `agent-sandbox-context.test.ts` (+2: on keeps the sandbox; off drops it, keeps identical deny
+rules incl. hooks/rc/settings/other-agent/keychain, warns once), `agent-runner-sandbox.test.ts` (+1:
+off → no sandbox, deny rules present, rail hooks still built, one warning), `client-ui.test.ts` (+3:
+`settings.update` alone and mixed, `ui.set`), `AgentSandboxSetting.test.tsx` (new, 2).
+
+Mutation checks (each failed, then restored): switch ignored (2 failed), off drops the deny rules (2),
+reader default off (8), `settings.update` schema accepts the key (2), UI treats a missing value as off (1).
+
+Verification: typecheck exit 0; targeted (agents, voice-conductor, rpc methods, mobile grants,
+settings components, i18n, constants, persistence, docs refs) 1988 passed, 2 failed, both in
+`basefail.txt` (`agent-provider.test.ts`, `no-top-level-translate.test.ts` via `DestinationsSection.tsx`).
+oxlint clean on changed files; `agent-runner.ts` max-lines is pre-existing (509 after the merge,
+untouched this round).
+
+Decision for Carson (new): the "Agent sandbox (recommended)" switch is ON by default. Turning it off
+removes only the kernel sandbox for Claude agent runs (Bash can then write anywhere in home and read
+anything the text rails and deny rules do not catch). Hooks, settings, rc files, other agents,
+credentials and the keychain commands stay denied through the permission rules and rails. It can only
+be changed in the desktop Settings UI.

@@ -65,6 +65,8 @@ vi.mock('./codex-agent-execution', () => ({ startCodexAgentProcess: vi.fn() }))
 vi.mock('../codex-cli/command', () => ({ resolveClaudeCommand: () => 'claude' }))
 
 import { startAgentRun } from './agent-runner'
+import { buildAgentHardRailHooks } from './agent-hard-rails'
+import { setAgentSandboxEnabledReader } from './agent-sandbox-context'
 
 type CapturedOptions = {
   sandbox?: {
@@ -96,7 +98,8 @@ let agents: string
 const prepareClaudeLaunch = vi.fn(async () => ({ configDir: path.join(home, 'work-claude') }) as never)
 
 async function launch(options: Parameters<typeof startAgentRun>[0]['options']) {
-  // Each launch holds a slot (the query never ends); this file stays under the cap of 8.
+  // Each launch holds a slot (the query never ends); this file stays at the cap of 8, with the
+  // policy-failure test (which holds none) before the last launch.
   await startAgentRun({ agentId: 'atlas', prompt: 'go', prepareClaudeLaunch, options })
   const captured = mocks.query.mock.calls.at(-1)?.at(0) as { options: CapturedOptions }
   return captured.options
@@ -169,6 +172,23 @@ describe('startAgentRun sandbox (SDK query arguments)', () => {
       expect(mocks.query).not.toHaveBeenCalled()
     } finally {
       rmSync(brokenHome, { recursive: true, force: true })
+    }
+  })
+
+  it('with the Settings switch off: no kernel sandbox, but deny rules and rails stay', async () => {
+    setAgentSandboxEnabledReader(() => false)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const options = await launch(undefined)
+      expect(options.sandbox).toBeUndefined()
+      expect(options.disallowedTools).toContain('Read(~/.dobius/agents/nova/**)')
+      expect(options.disallowedTools).toContain('Bash(security find-generic-password:*)')
+      expect(vi.mocked(buildAgentHardRailHooks)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ agentId: 'atlas' })
+      )
+      expect(warn).toHaveBeenCalledTimes(1)
+    } finally {
+      setAgentSandboxEnabledReader(() => true)
     }
   })
 })
