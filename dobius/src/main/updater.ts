@@ -1,8 +1,7 @@
 /* eslint-disable max-lines */
 import { app, BrowserWindow, powerMonitor } from 'electron'
 import type { NsisUpdater } from 'electron-updater'
-import { is } from '@electron-toolkit/utils'
-import { DOBIUS_SERVICES_DISCONNECTED } from './dobius-disconnect'
+import { getUpdatePolicy, type UpdatePolicy } from './updater-policy'
 import type { UpdateCheckOptions, UpdateStatus } from '../shared/types'
 import { killAllPty } from './ipc/pty'
 import { withUpdaterSpan } from './observability/instrumentation'
@@ -148,11 +147,16 @@ function getPersistedPendingUpdateNudgeId(): string | null {
 function decorateStatusWithActiveNudge(status: UpdateStatus): UpdateStatus {
   // Why: only actionable/error states carry the nudge marker so the renderer
   // can tell whether a dismiss should also acknowledge the campaign. Cycle-
-  // boundary states (idle, checking, not-available) never need it.
+  // boundary states (idle, checking, not-available, disabled) never need it.
   if (!activeUpdateNudgeId) {
     return status
   }
-  if (status.state === 'idle' || status.state === 'checking' || status.state === 'not-available') {
+  if (
+    status.state === 'idle' ||
+    status.state === 'checking' ||
+    status.state === 'not-available' ||
+    status.state === 'disabled'
+  ) {
     return status
   }
   return { ...status, activeNudgeId: activeUpdateNudgeId }
@@ -687,8 +691,18 @@ async function sendCheckFailureStatus(
   return pendingCheckFailurePromise
 }
 
+function getDisabledStatus(
+  policy: Extract<UpdatePolicy, { enabled: false }>,
+  userInitiated?: boolean
+): UpdateStatus {
+  return { state: 'disabled', reason: policy.reason, userInitiated }
+}
+
 export function getUpdateStatus(): UpdateStatus {
-  return currentStatus
+  const policy = getUpdatePolicy()
+  // Why: when setup never ran, currentStatus stays 'idle' and Settings would
+  // read "checked automatically on launch" for an updater that never checks.
+  return policy.enabled ? currentStatus : getDisabledStatus(policy)
 }
 
 function scheduleAutomaticUpdateCheck(delayMs: number): void {
@@ -951,8 +965,11 @@ function runBackgroundUpdateCheck(
   if (backgroundCheckLaunchPending || currentStatus.state === 'checking') {
     return
   }
-  if (!app.isPackaged || is.dev) {
-    sendStatus({ state: 'not-available' })
+  // Why: startup, wake, the 24h timer and nudges all funnel through here, so
+  // this is the one gate that keeps background checks behind the policy.
+  const policy = getUpdatePolicy()
+  if (!policy.enabled) {
+    sendStatus(getDisabledStatus(policy))
     return
   }
   // Why: scope the nudge marker to the updater cycle being launched right now.
@@ -998,7 +1015,7 @@ function runBackgroundUpdateCheck(
 export function checkForUpdates(): void {
   // Why: the update feed is upstream dobius's GitHub releases — a live check can
   // download and silently install an dobius build over this fork.
-  if (DOBIUS_SERVICES_DISCONNECTED) {
+  if (!getUpdatePolicy().enabled) {
     return
   }
   // Fire-and-forget the span so the public function signature stays
@@ -1037,12 +1054,11 @@ function enableIncludePrerelease(): void {
 
 /** Menu-triggered check — delegates feedback to renderer toasts via userInitiated flag */
 export function checkForUpdatesFromMenu(options?: UpdateCheckOptions): void {
-  if (DOBIUS_SERVICES_DISCONNECTED) {
-    sendStatus({ state: 'not-available', userInitiated: true })
-    return
-  }
-  if (!app.isPackaged || is.dev) {
-    sendStatus({ state: 'not-available', userInitiated: true })
+  const policy = getUpdatePolicy()
+  if (!policy.enabled) {
+    // Why: 'not-available' renders "You're on the latest version", which is a
+    // claim nobody checked. Report that updates are off instead.
+    sendStatus(getDisabledStatus(policy, true))
     return
   }
 
@@ -1121,6 +1137,9 @@ export function isQuittingForUpdate(): boolean {
 }
 
 export function quitAndInstall(): void {
+  if (!getUpdatePolicy().enabled) {
+    return
+  }
   if (pendingQuitAndInstallTimer || quitAndInstallInProgress) {
     return
   }
@@ -1146,7 +1165,7 @@ export function quitAndInstall(): void {
 }
 
 async function checkForUpdateNudge(): Promise<void> {
-  if (!app.isPackaged || is.dev) {
+  if (!getUpdatePolicy().enabled) {
     return
   }
   if (nudgeCheckInFlight) {
@@ -1231,10 +1250,11 @@ export function setupAutoUpdater(
   _setPendingUpdateNudgeId = opts?.setPendingUpdateNudgeId ?? null
   _setDismissedUpdateNudgeId = opts?.setDismissedUpdateNudgeId ?? null
 
-  if (!app.isPackaged && !is.dev) {
-    return
-  }
-  if (is.dev) {
+  const policy = getUpdatePolicy()
+  if (!policy.enabled) {
+    // Why: no feed URL, no wake/focus listeners, no timers. Callers may skip
+    // setup entirely, but this keeps the updater closed even if one doesn't.
+    sendStatus(getDisabledStatus(policy))
     return
   }
 
@@ -1358,7 +1378,7 @@ export function setupAutoUpdater(
 }
 
 export function downloadUpdate(): void {
-  if (DOBIUS_SERVICES_DISCONNECTED) {
+  if (!getUpdatePolicy().enabled) {
     return
   }
   if (downloadInFlight) {

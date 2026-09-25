@@ -2195,6 +2195,8 @@ export type UpdateCheckOptions = {
   includePerfPrerelease?: boolean
 }
 
+export type UpdateDisabledReason = 'disconnected' | 'not-enabled' | 'dev-build'
+
 export type UpdateStatus =
   | { state: 'idle' }
   | { state: 'checking'; userInitiated?: boolean }
@@ -2215,6 +2217,9 @@ export type UpdateStatus =
       changelog: ChangelogData | null
     }
   | { state: 'not-available'; userInitiated?: boolean }
+  // Why: 'disabled' is distinct from 'not-available' so a build whose updater is
+  // off (disconnected, not opted in, or dev) never claims to be up to date.
+  | { state: 'disabled'; reason: UpdateDisabledReason; userInitiated?: boolean }
   | { state: 'downloading'; percent: number; version: string; activeNudgeId?: string }
   | { state: 'downloaded'; version: string; releaseUrl?: string; activeNudgeId?: string }
   | { state: 'error'; message: string; userInitiated?: boolean; activeNudgeId?: string }
