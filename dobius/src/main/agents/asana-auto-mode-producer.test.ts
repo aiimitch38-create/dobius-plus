@@ -9,13 +9,17 @@ import type { AsanaTask } from '../../shared/asana'
 const mocks = vi.hoisted(() => ({
   userDataDir: '',
   triageAgentId: null as string | null,
+  allowedProjects: [] as { name: string; gid: string }[],
   startAgentRun: vi.fn(),
   appendBriefingItem: vi.fn()
 }))
 
 vi.mock('electron', () => ({ app: { getPath: () => mocks.userDataDir } }))
 vi.mock('../asana/asana-config', () => ({
-  getAsanaConfig: () => ({ autoMode: { triageAgentId: mocks.triageAgentId } })
+  getAsanaConfig: () => ({
+    allowedProjects: mocks.allowedProjects,
+    autoMode: { triageAgentId: mocks.triageAgentId }
+  })
 }))
 vi.mock('../asana/asana-queue-service', () => ({ refreshAsanaTasks: vi.fn() }))
 vi.mock('../asana/asana-token-store', () => ({ hasAsanaToken: () => true }))
@@ -45,6 +49,7 @@ async function startProcess() {
 beforeEach(() => {
   mocks.userDataDir = mkdtempSync(path.join(tmpdir(), 'dobius-asana-producer-'))
   mocks.triageAgentId = 'triage'
+  mocks.allowedProjects = []
   mocks.startAgentRun.mockReset()
   // A triage run that never reports back, as when the app dies mid-run.
   mocks.startAgentRun.mockReturnValue(new Promise(() => {}))
@@ -130,5 +135,29 @@ describe('Asana auto mode producer reconciliation', () => {
     auto.maybeDispatchTask(task, 'build', prepare)
     expect(ledger.listDispatchRecords()).toEqual([])
     expect(mocks.startAgentRun).not.toHaveBeenCalled()
+  })
+
+  it('allowedProjects limits Auto Mode only: listed project dispatches, others and project-less skip', async () => {
+    mocks.allowedProjects = [{ name: 'Site', gid: '123123' }]
+    const { auto, ledger } = await startProcess()
+    auto.maybeDispatchTask({ ...task, gid: '710001', projectGids: ['999000'] }, 'build', prepare)
+    auto.maybeDispatchTask({ ...task, gid: '710002', projectGids: [] }, 'build', prepare)
+    auto.maybeDispatchTask({ ...task, gid: '710003' }, 'review', prepare)
+    expect(mocks.startAgentRun).not.toHaveBeenCalled()
+    expect(ledger.listDispatchRecords()).toEqual([])
+    auto.maybeDispatchTask(
+      { ...task, gid: '710004', projectGids: ['555555', '123123'] },
+      'build',
+      prepare
+    )
+    expect(mocks.startAgentRun).toHaveBeenCalledTimes(1)
+    expect(ledger.listDispatchRecords()).toEqual([expect.objectContaining({ gid: '710004' })])
+  })
+
+  it('an empty allowedProjects lets Auto Mode process tasks from any project, or none', async () => {
+    const { auto } = await startProcess()
+    auto.maybeDispatchTask({ ...task, gid: '720001', projectGids: ['999000'] }, 'build', prepare)
+    auto.maybeDispatchTask({ ...task, gid: '720002' }, 'build', prepare)
+    expect(mocks.startAgentRun).toHaveBeenCalledTimes(2)
   })
 })

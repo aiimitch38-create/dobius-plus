@@ -39,6 +39,8 @@ export type AsanaTask = {
   completed: boolean
   lane: AsanaLane
   assignee: string | null
+  // Gids of the Asana projects the task belongs to; used by the Auto Mode allowlist.
+  projectGids?: string[]
 }
 
 export type AsanaTasksSnapshot = {
