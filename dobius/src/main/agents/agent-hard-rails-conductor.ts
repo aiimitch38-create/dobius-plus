@@ -16,7 +16,7 @@ const BASH_DENY_PATTERNS: readonly RegExp[] = [
   /(^|[^\w-])osascript(?![\w-])/i,
   /(^|[^\w-])sqlite3(?![\w-])/i,
   /Library\/+Messages/i,
-  /chat\.db(?![\w-])/i,
+  /chat\.db(?:-wal|-shm|-journal)?(?![\w-])/i,
   /\.local\/+bin\/+dobius-/i,
   new RegExp(`(?:/|>\\s*)dobius-${DOBIUS_CLI_NAMES}(?![\\w-])`, 'i'),
   new RegExp(
@@ -27,7 +27,7 @@ const BASH_DENY_PATTERNS: readonly RegExp[] = [
 
 const PATH_DENY_PATTERNS: readonly RegExp[] = [
   /Library\/+Messages/i,
-  /chat\.db(?![\w-])/i,
+  /chat\.db(?:-wal|-shm|-journal)?(?![\w-])/i,
   new RegExp(`(^|/)dobius-${DOBIUS_CLI_NAMES}$`, 'i')
 ]
 
@@ -40,6 +40,8 @@ function unquoted(value: string): string {
 export type ConductorRailContext = {
   // Run profile id (agent-runner-dobius-tools.ts).
   profile?: string
+  // Why: a worker the conductor spawns could otherwise forge approvals for it.
+  spawnedBy?: string
 }
 
 export function conductorProfileDenial(
@@ -47,7 +49,7 @@ export function conductorProfileDenial(
   toolName: string,
   input: unknown
 ): { reason: string } | null {
-  if (context.profile !== 'voice-conductor') {
+  if (context.profile !== 'voice-conductor' && context.spawnedBy !== 'voice-conductor') {
     return null
   }
   const strings = stringsToInspect(toolName, input).map(({ raw }) => unquoted(raw))

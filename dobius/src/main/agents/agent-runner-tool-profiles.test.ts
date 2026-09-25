@@ -205,7 +205,8 @@ describe('startAgentRun tool profiles (SDK query arguments)', () => {
     // BUILD-033: the hard rails get the profile so conductor-only rails apply.
     expect(vi.mocked(buildAgentHardRailHooks)).toHaveBeenLastCalledWith({
       agentId: 'a',
-      profile: 'voice-conductor'
+      profile: 'voice-conductor',
+      spawnedBy: undefined
     })
   })
 })

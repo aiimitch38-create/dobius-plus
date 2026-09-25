@@ -26,7 +26,8 @@ vi.mock('../imessage-bridge/imessage-send', async () => {
       const ring = await vi.importActual<typeof OutboundRing>(
         '../imessage-bridge/outbound-ring'
       )
-      ring.recordOutbound(text)
+      // Why: the real sendImessage records the control-char-stripped text.
+      ring.recordOutbound(actual.stripControlChars(text))
       sent.calls.push({ handle, text })
     })
   }
@@ -311,6 +312,25 @@ describe('#11 ask() binds the reply to its own question', () => {
     recordOutbound('agent-x: 4822 yes')
     writeRows(file, [{ text: '4822 yes', fromMe: true, handleId: 1, chatId: 10 }])
     await expect(pending).resolves.toBe('')
+  })
+
+  it('round 2 F1: control chars in the question never make its own send look like a leak', async () => {
+    const file = createChatDbFile()
+    fixCodes(4823)
+    const pending = makeBridge(file).ask('Tab\there, CR\rhere, ESC\u001b[1m bold?', 2_000)
+    await waitForSends(1)
+    writeRows(file, [{ text: '4823 yes', fromMe: false, handleId: 1, chatId: 10 }])
+    await expect(pending).resolves.toBe('yes')
+  })
+
+  it('round 2 F2: the leak check matches the code as a whole number only', async () => {
+    const file = createChatDbFile()
+    fixCodes(4824)
+    const pending = makeBridge(file).ask('Merge?', 2_000)
+    await waitForSends(1)
+    recordOutbound('build 148245 finished in 24824 ms')
+    writeRows(file, [{ text: '4824 yes', fromMe: false, handleId: 1, chatId: 10 }])
+    await expect(pending).resolves.toBe('yes')
   })
 
   it('F1c: every conductor text starts with the fixed tag', async () => {

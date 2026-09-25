@@ -4,6 +4,7 @@ import { CONDUCTOR_MESSAGING_REASON } from './agent-hard-rails-conductor'
 
 const conductor = { agentId: 'conductor', profile: 'voice-conductor' }
 const other = { agentId: 'builder', profile: 'manual' }
+const spawned = { agentId: 'worker', profile: 'channel', spawnedBy: 'voice-conductor' }
 
 function reason(ctx: typeof conductor, tool: string, input: unknown): string | null {
   return evaluateAgentHardRails(ctx, tool, input)?.reason ?? null
@@ -17,6 +18,9 @@ describe('BUILD-033 F2: conductor can not forge its own iMessage approval', () =
     `cat $HOME/Library/Messages/chat.db | strings`,
     `python3 -c "import sqlite3; sqlite3.connect('/Users/x/Library/Mess\\ages/chat.db')"`,
     `cp chat.db /tmp/x`,
+    `cp ~/Library/Mess""ages/chat.db-wal /tmp/w`,
+    `strings chat.db-wal | grep 4821`,
+    `cat chat.db-shm`,
     `echo 'exit 0' > ~/.local/bin/dobius-confirm`,
     `printf 'x' >> /opt/homebrew/bin/dobius-confirm`,
     `ln -sf /usr/bin/true dobius-confirm`,
@@ -43,6 +47,12 @@ describe('BUILD-033 F2: conductor can not forge its own iMessage approval', () =
     'grep -rn chatter src/'
   ])('allows ordinary conductor Bash: %s', (command) => {
     expect(reason(conductor, 'Bash', { command })).toBeNull()
+  })
+
+  it('F3: applies to workers the conductor spawned', () => {
+    expect(reason(spawned, 'Bash', { command: 'osascript -e x' })).toBe(CONDUCTOR_MESSAGING_REASON)
+    expect(reason(spawned, 'Read', { file_path: '/tmp/chat.db-wal' })).toBe(CONDUCTOR_MESSAGING_REASON)
+    expect(reason(spawned, 'Bash', { command: 'git status' })).toBeNull()
   })
 
   it('is scoped to the voice-conductor profile', () => {

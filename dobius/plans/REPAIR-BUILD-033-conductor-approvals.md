@@ -198,3 +198,40 @@ when the content changes (marker v2). The old retired stub text is still recogni
 - `/tabSend` stays by design (C3). It still lets the conductor type into any live terminal, and
   from there an unrestricted shell has no conductor rails.
 - The conductor rails deny any Bash that names `sqlite3` or `osascript`, even for harmless uses.
+
+## Review round 2 (after merging stabilize/integration)
+- **F3 [medium]** Workers spawned by the conductor ran under the `channel` profile, with no
+  conductor rails, and the approval text did not show the prompt. So one approved spawn could
+  install a self-approving worker.
+  - `/spawn` now puts `initialPrompt` into the approval question, cut at 300 chars and marked `…`.
+  - `agent-spawn.ts` passes `spawnedBy: 'voice-conductor'`. `AgentRunOptions.spawnedBy` reaches
+    `buildAgentHardRailHooks`, and `conductorProfileDenial` applies when
+    `profile === 'voice-conductor'` or `spawnedBy === 'voice-conductor'`.
+  - Codex agents can't be spawned this way: they are already refused for the `channel` profile
+    (`codex-run-policy.ts`).
+- **F1 [low]** `ask()` strips the question with the same `stripControlChars` used by
+  `sendImessage` (now exported). So its own ring copy equals `outbound`, and a tab/CR/ESC in the
+  question no longer voids the ask.
+- **F2 [low]** The leak check matches the code as a whole number, `(?<!\d)CODE(?!\d)`. It still
+  looks anywhere in the text, not only at the reply position, because a channel agent's reply is
+  sent as `<agent name>: <text>`.
+- **F4 [low]** The rail regexes now match `chat.db`, `chat.db-wal`, `chat.db-shm` and
+  `chat.db-journal`.
+- **F5 [low]** `startImessageBridge` moves `lastSeenRowid` to MAX(ROWID) on every start/enable,
+  not only the first. If that read fails, the bridge doesn't poll, so it fails closed.
+  - The conductor bridge keeps no persistent watermark: each ask uses its own fresh baseline, so
+    nothing was needed there.
+  - Side effect: `d:` commands Carson sends while Dobius is closed are no longer run at launch.
+- Tests:
+  - Extended: `conductor-approvals.test.ts` (spawn prompt shown), `agent-spawn.test.ts`
+    (spawnedBy), `agent-hard-rails-conductor.test.ts` (spawned worker covered; wal/shm/`L""ibrary`
+    variants), `imessage-bridge.test.ts` (control-char question, whole-number leak match; the
+    fake send now records the stripped text like the real one).
+  - New: `agents/agent-runner-conductor-rails.test.ts` (runner forwards spawnedBy; its own file
+    because the profiles test is near the 8-run cap) and
+    `imessage-bridge/bridge-service-start.test.ts` (watermark advance and fail-closed start).
+- Mutation checks R1-R10 (stabilize-run/033/mut3.py): each broke its test and was restored.
+- Targeted: imessage-bridge, voice-conductor, dobius-cli and agents: 44 files, 551 tests green.
+  Typecheck exit 0.
+- Lint: clean, except `agent-runner.ts` `max-lines`, which was already over the limit (494 after
+  the merge; +1 from the `spawnedBy` field).

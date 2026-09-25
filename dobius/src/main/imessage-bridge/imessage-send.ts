@@ -47,7 +47,7 @@ export function isValidImessageHandle(handle: string): boolean {
   return PHONE_HANDLE.test(handle) || EMAIL_HANDLE.test(handle)
 }
 
-function stripControlChars(text: string): string {
+export function stripControlChars(text: string): string {
   // Why: keep the old literal's rule (drop control chars except newline); a
   // NUL would also make execFile reject the argument.
   // eslint-disable-next-line no-control-regex -- control chars are exactly what is being removed

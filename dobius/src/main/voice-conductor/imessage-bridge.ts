@@ -3,7 +3,11 @@ import os from 'node:os'
 import path from 'node:path'
 import SyncDatabase from '../sqlite/sync-database'
 import { extractChatDbMessageText } from '../imessage-bridge/chat-db-message-text'
-import { isValidImessageHandle, sendImessage } from '../imessage-bridge/imessage-send'
+import {
+  isValidImessageHandle,
+  sendImessage,
+  stripControlChars
+} from '../imessage-bridge/imessage-send'
 import { selfHandleSpellings } from '../imessage-bridge/self-handle-spellings'
 import {
   CONDUCTOR_OUTBOUND_TAG,
@@ -116,7 +120,8 @@ export function parseCodedReply(text: string, code: string): string | null {
 
 function codeLeakedInOutbound(code: string, ownQuestion: string, since: number): boolean {
   const own = ownQuestion.trim()
-  return outboundSince(since).some((record) => record.text !== own && record.text.includes(code))
+  const codeToken = new RegExp(`(?<!\\d)${code}(?!\\d)`)
+  return outboundSince(since).some((record) => record.text !== own && codeToken.test(record.text))
 }
 
 /**
@@ -183,7 +188,9 @@ export function createIMessageBridge(config: VoiceConductorImessageConfig): IMes
       const baseline = maxRowid(db)
       const code = issueCode()
       const minutes = Math.max(1, Math.round(timeoutMs / 60_000))
-      const outbound = `${CONDUCTOR_OUTBOUND_TAG}${question.trim()}\n\nReply "${code} <your answer>" within ${minutes} min.`
+      // Why: stripped the way sendImessage will, so the ring copy equals `outbound`
+      // and the ask never mistakes its own question for a leak.
+      const outbound = `${CONDUCTOR_OUTBOUND_TAG}${stripControlChars(question).trim()}\n\nReply "${code} <your answer>" within ${minutes} min.`
       const askedAt = Date.now()
       await sendImessage(handle, outbound)
 

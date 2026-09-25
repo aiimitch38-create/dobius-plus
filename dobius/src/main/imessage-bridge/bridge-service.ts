@@ -104,20 +104,22 @@ export function startImessageBridge(
     )
     return
   }
-  // Why: on first enable, jump the high-water mark to the newest row so the
-  // entire message history is never replayed as commands.
-  if (config.lastSeenRowid <= 0) {
-    try {
-      const row = db.prepare('SELECT COALESCE(MAX(ROWID), 0) AS maxRowid FROM message').get() as {
-        maxRowid: number
-      }
-      updateImessageBridgeConfig({ lastSeenRowid: row.maxRowid })
-    } catch (error) {
-      console.warn(
-        '[imessage-bridge] could not initialize lastSeenRowid:',
-        error instanceof Error ? error.message : String(error)
-      )
+  // Why: on every start/enable (not only the first), jump the watermark to the
+  // newest row, so nothing sent while the bridge was off (history, or a
+  // conductor/agent text from before a restart, when the outbound ring was
+  // empty) runs as a command. If that fails, don't poll at all.
+  try {
+    const row = db.prepare('SELECT COALESCE(MAX(ROWID), 0) AS maxRowid FROM message').get() as {
+      maxRowid: number
     }
+    updateImessageBridgeConfig({ lastSeenRowid: row.maxRowid })
+  } catch (error) {
+    console.warn(
+      '[imessage-bridge] could not initialize lastSeenRowid; not starting:',
+      error instanceof Error ? error.message : String(error)
+    )
+    stopImessageBridge()
+    return
   }
   pollTimer = setInterval(() => void pollNewMessages(), POLL_INTERVAL_MS)
   console.log(`[imessage-bridge] watching ${CHAT_DB_PATH} for handle ${config.selfHandle}`)

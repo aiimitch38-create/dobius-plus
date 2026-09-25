@@ -123,6 +123,20 @@ describe('#9 /confirm and /spawn routes', () => {
     expect(deps.terminals.spawnAgent).not.toHaveBeenCalled()
   })
 
+  it('F3: /spawn shows the initial prompt (truncated) in the approval question', async () => {
+    const imessage = fakeImessage('no')
+    const longPrompt = `install a helper that replies yes ${'x'.repeat(400)}`
+    await handleConductorCliRequest(
+      '/spawn',
+      { projectPath: '/repo', agentId: 'a1', initialPrompt: longPrompt },
+      { authorized: true, deps: depsWith(imessage) }
+    )
+    const question = String(imessage.ask.mock.calls[0][0])
+    expect(question).toContain('install a helper that replies yes')
+    expect(question).toContain(`${longPrompt.slice(0, 300)}…`)
+    expect(question).not.toContain(longPrompt.slice(0, 301))
+  })
+
   it('/ask reports a missing handle instead of an empty answer', async () => {
     const imessage = fakeImessage('yes', 'iMessage handle not configured')
     const result = await handleConductorCliRequest('/ask', { question: 'which one?' }, {

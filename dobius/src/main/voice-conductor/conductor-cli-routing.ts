@@ -50,6 +50,7 @@ function toRegistryStatus(raw: string): 'done' | 'error' {
 const APPROVAL_RE = /^(y|yes|ok|okay|approve|approved|confirm)[.!]?$/i
 const MAX_ACTION_LENGTH = 500
 const MAX_ASK_TIMEOUT_MS = 5 * 60 * 1000
+const SPAWN_PROMPT_PREVIEW_CHARS = 300
 
 export type ApprovalDecision = { approved: boolean; reason: string }
 
@@ -174,9 +175,13 @@ export async function handleConductorCliRequest(
         }
         // v1 gated the spawn behind an iMessage confirm to Carson. Preserve that
         // and FAIL CLOSED: no channel, no reply or no explicit yes = no spawn.
+        const promptPreview =
+          initialPrompt.length > SPAWN_PROMPT_PREVIEW_CHARS
+            ? `${initialPrompt.slice(0, SPAWN_PROMPT_PREVIEW_CHARS)}…`
+            : initialPrompt
         const decision = await requestImessageApproval(
           d.imessage,
-          `spawn agent "${agentId}" in ${projectPath}`
+          `spawn agent "${agentId}" in ${projectPath} with prompt: "${promptPreview}"`
         )
         if (!decision.approved) {
           return { status: 200, body: { ok: false, error: `spawn declined (${decision.reason})` } }
