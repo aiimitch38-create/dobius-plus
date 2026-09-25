@@ -3,6 +3,13 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import process from 'node:process'
 
+import {
+  compareToBaseline,
+  countByFileAndRule,
+  readBaseline,
+  shrinkSection,
+  writeBaselineSection
+} from './lint-baseline/lint-baseline.mjs'
 import { reportUnstyledScrollbars } from './styled-scrollbars/styled-scrollbar-jsx-check.mjs'
 export {
   plainClassName,
@@ -11,6 +18,8 @@ export {
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts'])
 const SKIP_PATH_PARTS = new Set(['node_modules', 'dist', 'out', '.git', '__snapshots__'])
+const BASELINE_SECTION = 'styled-scrollbars'
+const BASELINE_RULE = 'styled-scrollbar'
 
 export function normalizePath(root, filePath) {
   return path.relative(root, filePath).split(path.sep).join('/')
@@ -68,8 +77,28 @@ function formatReports(root, reports) {
     .join('\n')
 }
 
-export async function main(root = process.cwd()) {
-  const reports = await collectUnstyledScrollbarReports(root)
+function countReports(root, reports) {
+  return countByFileAndRule(
+    reports.map((report) => ({ file: normalizePath(root, report.filePath), rule: BASELINE_RULE }))
+  )
+}
+
+// Why: pre-existing unstyled containers live in config/lint-baseline.json
+// (#115); only files whose count grows past their baseline fail the check.
+export function reportsOverBaseline(root, reports, section) {
+  const counts = countReports(root, reports)
+  const grownFiles = new Set(compareToBaseline(counts, section).grown.map((entry) => entry.file))
+  return reports.filter((report) => grownFiles.has(normalizePath(root, report.filePath)))
+}
+
+export async function main(root = process.cwd(), argv = process.argv.slice(2)) {
+  const allReports = await collectUnstyledScrollbarReports(root)
+  if (argv.includes('--update')) {
+    const counts = countReports(root, allReports)
+    const section = readBaseline(root)[BASELINE_SECTION]
+    writeBaselineSection(root, BASELINE_SECTION, shrinkSection(section, counts))
+  }
+  const reports = reportsOverBaseline(root, allReports, readBaseline(root)[BASELINE_SECTION])
   if (reports.length === 0) {
     return 0
   }
