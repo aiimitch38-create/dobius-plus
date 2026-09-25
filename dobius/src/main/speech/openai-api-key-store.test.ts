@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { join } from 'node:path'
@@ -30,6 +30,7 @@ beforeEach(() => {
   safeStorageMock.encryptString.mockClear()
   safeStorageMock.isEncryptionAvailable.mockClear()
   safeStorageMock.isEncryptionAvailable.mockReturnValue(true)
+  safeStorageMock.encryptString.mockImplementation((value: string) => Buffer.from(value))
 })
 
 function mkdtempLike(prefix: string): string {
@@ -84,5 +85,64 @@ describe('OpenAI speech API key store', () => {
     expect(store.hasOpenAiSpeechApiKey()).toBe(false)
     expect(existsSync(join(tempHome, '.dobius'))).toBe(false)
     expect(safeStorageMock.decryptString).not.toHaveBeenCalled()
+  })
+
+  describe('when safeStorage cannot encrypt (#25)', () => {
+    const FAKE_KEY = 'sk-test-fake-session-key'
+
+    function keyPath(): string {
+      return join(tempHome, '.dobius', 'openai-speech-token.enc')
+    }
+
+    it('never writes the key when encryption is unavailable, but keeps it for the session', async () => {
+      safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
+      const store = await loadStoreModule()
+
+      expect(store.saveOpenAiSpeechApiKey(FAKE_KEY)).toEqual({
+        configured: true,
+        sessionOnly: true
+      })
+
+      expect(existsSync(keyPath())).toBe(false)
+      expect(store.readOpenAiSpeechApiKey()).toBe(FAKE_KEY)
+      expect(store.getOpenAiSpeechApiKeyStatus()).toEqual({ configured: true, sessionOnly: true })
+    })
+
+    it('never writes the key when encryptString throws', async () => {
+      safeStorageMock.encryptString.mockImplementation(() => {
+        throw new Error('keychain locked')
+      })
+      const store = await loadStoreModule()
+
+      expect(store.saveOpenAiSpeechApiKey(FAKE_KEY).sessionOnly).toBe(true)
+
+      expect(existsSync(keyPath())).toBe(false)
+      expect(store.readOpenAiSpeechApiKey()).toBe(FAKE_KEY)
+    })
+
+    it('leaves an existing encrypted key file byte-for-byte intact', async () => {
+      writeStoredOpenAiKey('existing-ciphertext')
+      safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
+      const store = await loadStoreModule()
+
+      store.saveOpenAiSpeechApiKey(FAKE_KEY)
+
+      expect(readFileSync(keyPath(), 'utf8')).toBe('existing-ciphertext')
+      expect(store.readOpenAiSpeechApiKey()).toBe(FAKE_KEY)
+    })
+
+    it('reports a durable key once encryption works again', async () => {
+      safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
+      const store = await loadStoreModule()
+      store.saveOpenAiSpeechApiKey(FAKE_KEY)
+
+      safeStorageMock.isEncryptionAvailable.mockReturnValue(true)
+
+      expect(store.saveOpenAiSpeechApiKey(FAKE_KEY)).toEqual({
+        configured: true,
+        sessionOnly: false
+      })
+      expect(existsSync(keyPath())).toBe(true)
+    })
   })
 })

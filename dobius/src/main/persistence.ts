@@ -226,15 +226,27 @@ import { track } from './telemetry/client'
 import { getCohortAtEmit } from './telemetry/cohort-classifier'
 import { isStartupDiagnosticsEnabled, logStartupDiagnostic } from './startup/startup-diagnostics'
 
-function encrypt(plaintext: string): string {
-  if (!plaintext || !safeStorage.isEncryptionAvailable()) {
-    return plaintext
+type PersistedSecretField = 'opencodeSessionCookie' | 'httpProxyUrl' | 'browserKagiSessionLink'
+type DurableSecrets = Partial<Record<PersistedSecretField, { onDisk: string; plaintext: string }>>
+
+export type SecretStorageStatus = {
+  encryptionAvailable: boolean
+  // Secrets changed this session that could not be encrypted: they live in
+  // memory only and the data file keeps its previous encrypted value.
+  sessionOnlySecrets: PersistedSecretField[]
+}
+
+// Why (#25): returns null instead of the plaintext when safeStorage cannot
+// encrypt, so a save fails closed rather than publishing the secret to disk.
+function encryptSecret(plaintext: string): string | null {
+  if (!safeStorage.isEncryptionAvailable()) {
+    return null
   }
   try {
     return safeStorage.encryptString(plaintext).toString('base64')
   } catch (err) {
     console.error('[persistence] Encryption failed:', err)
-    return plaintext
+    return null
   }
 }
 
@@ -253,14 +265,6 @@ function decrypt(ciphertext: string): string {
     )
     return ciphertext
   }
-}
-
-function encryptOptionalSecret(value: string | null | undefined): string | null {
-  return value ? encrypt(value) : null
-}
-
-function decryptOptionalSecret(value: string | null | undefined): string | null {
-  return value ? decrypt(value) : null
 }
 
 function retireLegacyInstructionsForClearedTextActionRecipes(
@@ -2658,9 +2662,14 @@ export class Store {
   // Why: hash of the plaintext state as of the last successful write. Saves
   // triggered by mutations that net out to identical state skip the full
   // 1.6MB pretty-print + tmp write + rename. Hashing plaintext (not the
-  // written payload) because encrypt() uses a random IV per call, so the
+  // written payload) because encryptSecret() uses a random IV per call, so the
   // on-disk bytes differ even for identical state.
   private lastWrittenStateHash: string | null = null
+  // Why (#25): each secret's on-disk value and the plaintext it stands for, as
+  // last loaded or encrypted. A save that cannot encrypt writes this value back
+  // untouched instead of plaintext, and never drops an existing secret.
+  private durableSecrets: DurableSecrets = {}
+  private sessionOnlySecrets = new Set<PersistedSecretField>()
   private firstPendingSaveAt: number | null = null
   private githubCacheDirty = false
   private gitUsernameCache = new Map<string, string>()
@@ -2962,6 +2971,7 @@ export class Store {
   // anything, so primary and backups are judged on their complete loaded state.
   private readStateFile(sourceFile: string): PersistedState | null {
     let result: PersistedState | null = null
+    const candidateSecrets: DurableSecrets = {}
     let stage: 'read' | 'parse' | 'migrate/normalize' = 'read'
     try {
       if (existsSync(sourceFile)) {
@@ -2980,13 +2990,23 @@ export class Store {
         // Why: secret settings are stored encrypted on disk via safeStorage.
         // Decrypt at the load boundary so the rest of the app sees plaintext.
         if (parsed.settings?.opencodeSessionCookie) {
-          parsed.settings.opencodeSessionCookie = decrypt(parsed.settings.opencodeSessionCookie)
+          const onDisk = parsed.settings.opencodeSessionCookie
+          parsed.settings.opencodeSessionCookie = decrypt(onDisk)
+          candidateSecrets.opencodeSessionCookie = {
+            onDisk,
+            plaintext: parsed.settings.opencodeSessionCookie
+          }
         }
         if (parsed.settings?.httpProxyUrl) {
-          parsed.settings.httpProxyUrl = decrypt(parsed.settings.httpProxyUrl)
+          const onDisk = parsed.settings.httpProxyUrl
+          parsed.settings.httpProxyUrl = decrypt(onDisk)
+          candidateSecrets.httpProxyUrl = { onDisk, plaintext: parsed.settings.httpProxyUrl }
         }
         if (parsed.ui?.browserKagiSessionLink) {
-          parsed.ui.browserKagiSessionLink = decryptOptionalSecret(parsed.ui.browserKagiSessionLink)
+          const onDisk = parsed.ui.browserKagiSessionLink
+          const plaintext = decrypt(onDisk)
+          parsed.ui.browserKagiSessionLink = plaintext
+          candidateSecrets.browserKagiSessionLink = { onDisk, plaintext }
         }
 
         // Merge with defaults in case new fields were added
@@ -3502,6 +3522,9 @@ export class Store {
     } catch (err) {
       console.error(`[persistence] Failed to load ${sourceFile} (${stage} failed):`, err)
     }
+    if (result !== null) {
+      this.durableSecrets = candidateSecrets
+    }
     return result
   }
 
@@ -3719,15 +3742,57 @@ export class Store {
       ...this.getDurableState(),
       settings: {
         ...this.state.settings,
-        opencodeSessionCookie: encrypt(this.state.settings.opencodeSessionCookie),
-        httpProxyUrl: encrypt(this.state.settings.httpProxyUrl ?? '')
+        opencodeSessionCookie:
+          this.secretForDisk('opencodeSessionCookie', this.state.settings.opencodeSessionCookie) ??
+          '',
+        httpProxyUrl: this.secretForDisk('httpProxyUrl', this.state.settings.httpProxyUrl) ?? ''
       },
       ui: {
         ...this.state.ui,
-        browserKagiSessionLink: encryptOptionalSecret(this.state.ui.browserKagiSessionLink)
+        browserKagiSessionLink: this.secretForDisk(
+          'browserKagiSessionLink',
+          this.state.ui.browserKagiSessionLink
+        )
       }
     }
     return JSON.stringify(stateToSave, null, 2)
+  }
+
+  // Why (#25): fail closed. When safeStorage cannot encrypt, the plaintext
+  // stays in memory for this session and the file keeps the last encrypted
+  // value (or nothing, if there never was one).
+  private secretForDisk(
+    field: PersistedSecretField,
+    plaintext: string | null | undefined
+  ): string | null {
+    if (!plaintext) {
+      this.sessionOnlySecrets.delete(field)
+      delete this.durableSecrets[field]
+      return null
+    }
+    const encrypted = encryptSecret(plaintext)
+    if (encrypted !== null) {
+      this.durableSecrets[field] = { onDisk: encrypted, plaintext }
+      this.sessionOnlySecrets.delete(field)
+      return encrypted
+    }
+    const durable = this.durableSecrets[field]
+    if (durable?.plaintext === plaintext) {
+      this.sessionOnlySecrets.delete(field)
+    } else if (!this.sessionOnlySecrets.has(field)) {
+      this.sessionOnlySecrets.add(field)
+      console.warn(
+        `[persistence] safeStorage cannot encrypt; ${field} is kept for this session only and not written to disk`
+      )
+    }
+    return durable?.onDisk ?? null
+  }
+
+  getSecretStorageStatus(): SecretStorageStatus {
+    return {
+      encryptionAvailable: safeStorage.isEncryptionAvailable(),
+      sessionOnlySecrets: [...this.sessionOnlySecrets]
+    }
   }
 
   // Why: async writes avoid blocking the main Electron thread on every

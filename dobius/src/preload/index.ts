@@ -4373,9 +4373,9 @@ const api = {
   speech: {
     getCatalog: (): Promise<SpeechModelManifest[]> => ipcRenderer.invoke('speech:getCatalog'),
     getModelStates: (): Promise<SpeechModelState[]> => ipcRenderer.invoke('speech:getModelStates'),
-    getOpenAiApiKeyStatus: (): Promise<{ configured: boolean }> =>
+    getOpenAiApiKeyStatus: (): Promise<{ configured: boolean; sessionOnly?: boolean }> =>
       ipcRenderer.invoke('speech:getOpenAiApiKeyStatus'),
-    saveOpenAiApiKey: (apiKey: string): Promise<{ configured: boolean }> =>
+    saveOpenAiApiKey: (apiKey: string): Promise<{ configured: boolean; sessionOnly?: boolean }> =>
       ipcRenderer.invoke('speech:saveOpenAiApiKey', apiKey),
     clearOpenAiApiKey: (): Promise<{ configured: boolean }> =>
       ipcRenderer.invoke('speech:clearOpenAiApiKey'),
