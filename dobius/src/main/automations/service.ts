@@ -15,12 +15,17 @@ import { collectAutomationRunUsage } from './run-usage-collection'
 import type { HeadlessAutomationDispatcher } from './headless-dispatch'
 import { clearAutomationDispatchTokens, createAutomationDispatchToken } from './dispatch-tokens'
 import {
+  buildUnavailablePrecheckResult,
   didAutomationPrecheckPass,
   formatAutomationPrecheckFailure
 } from '../../shared/automation-precheck'
 import { deliverAutomationRunNotification } from './run-notification-delivery'
 import { isFinalRunStatus } from './run-final-status'
-import { checkExecutionAdmission } from '../agents/execution-gate'
+import {
+  checkExecutionAdmission,
+  ExecutionBlockedError,
+  isExecutionBlockedError
+} from '../agents/execution-gate'
 
 const DEFAULT_TICK_MS = 60 * 1000
 
@@ -86,13 +91,18 @@ export class AutomationService {
     this.timer = null
   }
 
-  async runNow(automationId: string): Promise<AutomationRun> {
+  /**
+   * `humanTrigger` is true only for the desktop UI's IPC. Why: RPC/CLI callers
+   * can be any local process (including an agent), so their runNow honors
+   * "Pause crew" like a scheduled run.
+   */
+  async runNow(automationId: string, humanTrigger = false): Promise<AutomationRun> {
     const automation = this.store.listAutomations().find((entry) => entry.id === automationId)
     if (!automation) {
       throw new Error('Automation not found.')
     }
     const run = this.store.createAutomationRun(automation, Date.now(), 'manual')
-    return await this.requestDispatch(automation, run)
+    return await this.requestDispatch(automation, run, !humanTrigger)
   }
 
   async runPrecheck(automationId: string, runId: string): Promise<AutomationPrecheckResult | null> {
@@ -111,19 +121,7 @@ export class AutomationService {
       allowRemoteHostScheduling: this.allowRemoteHostScheduling
     })
     if (!target.ok) {
-      return {
-        command: automation.precheck.command,
-        exitCode: null,
-        timedOut: false,
-        durationMs: 0,
-        stdout: '',
-        stderr: '',
-        stdoutTruncated: false,
-        stderrTruncated: false,
-        error: target.error,
-        startedAt: Date.now(),
-        completedAt: Date.now()
-      }
+      return buildUnavailablePrecheckResult(automation.precheck.command, target.error)
     }
     return await runAutomationPrecheck({
       precheck: automation.precheck,
@@ -208,29 +206,32 @@ export class AutomationService {
       return
     }
 
-    await this.requestDispatch(automation, run)
+    await this.requestDispatch(automation, run, true)
     this.store.advanceAutomationNextRun(automation.id, now)
   }
 
   private async requestDispatch(
     automation: Automation,
-    run: AutomationRun
+    run: AutomationRun,
+    honorExecutionGate: boolean
   ): Promise<AutomationRun> {
     const target = resolveAutomationRunTarget(this.store, automation, {
       allowRemoteHostScheduling: this.allowRemoteHostScheduling
     })
-    if (!target.ok) {
+    // Why: re-checked at launch; Pause crew can be turned on after the scheduler's check.
+    const admission = honorExecutionGate ? checkExecutionAdmission('agent-run') : null
+    if (!target.ok || admission?.allowed === false) {
       return this.store.updateAutomationRun({
         runId: run.id,
         status: 'skipped_unavailable',
         workspaceId: automation.workspaceId,
-        error: target.error
+        error: admission?.allowed === false ? admission.message : target.ok ? null : target.error
       })
     }
     const webContents = this.webContents
     if (!webContents || webContents.isDestroyed() || !this.rendererReady) {
       if (this.headlessDispatcher) {
-        return await this.requestHeadlessDispatch(automation, run, target)
+        return await this.requestHeadlessDispatch(automation, run, target, honorExecutionGate)
       }
       return this.store.updateAutomationRun({
         runId: run.id,
@@ -248,7 +249,8 @@ export class AutomationService {
     const payload: AutomationDispatchRequest = {
       automation,
       run: updated,
-      dispatchToken: createAutomationDispatchToken(automation.id, updated.id)
+      dispatchToken: createAutomationDispatchToken(automation.id, updated.id),
+      honorExecutionGate
     }
     webContents.send('automations:dispatchRequested', payload)
     return updated
@@ -257,7 +259,8 @@ export class AutomationService {
   private async requestHeadlessDispatch(
     automation: Automation,
     run: AutomationRun,
-    target: Extract<AutomationRunTargetResult, { ok: true }>
+    target: Extract<AutomationRunTargetResult, { ok: true }>,
+    honorExecutionGate: boolean
   ): Promise<AutomationRun> {
     const precheckResult =
       run.trigger === 'scheduled' && automation.precheck
@@ -273,6 +276,11 @@ export class AutomationService {
       })
     }
     try {
+      // Why: the precheck await above gives Pause crew time to turn on.
+      const admission = honorExecutionGate ? checkExecutionAdmission('agent-run') : null
+      if (admission?.allowed === false) {
+        throw new ExecutionBlockedError('agent-run', admission.reason, admission.message)
+      }
       const launch = await this.headlessDispatcher!({ automation, run, target })
       const launchRunTarget = {
         workspaceId: launch.workspaceId,
@@ -312,7 +320,7 @@ export class AutomationService {
     } catch (error) {
       return this.store.updateAutomationRun({
         runId: run.id,
-        status: 'dispatch_failed',
+        status: isExecutionBlockedError(error) ? 'skipped_unavailable' : 'dispatch_failed',
         workspaceId: automation.workspaceId,
         error: error instanceof Error ? error.message : String(error)
       })

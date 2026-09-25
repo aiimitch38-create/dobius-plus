@@ -1,6 +1,6 @@
 import path from 'node:path'
 import type { AsanaLane } from '../../shared/asana'
-import { SafeJsonFile } from '../storage/safe-json-file'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'asana-dispatch-ledger.json'
@@ -22,8 +22,16 @@ function filePath(): string {
   return path.join(getUserDataRoot(), FILE_NAME)
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+// Why: a dropped record (above all one carrying buildDispatchedAt) makes its
+// task look new and re-dispatches a paid build, so any malformed record makes
+// the whole ledger unreadable: claimTask and mayDispatchBuild then fail closed.
+// Every writer since caee2df0 sets all six required fields.
 function sanitizeRecord(raw: unknown): AsanaDispatchRecord | null {
-  if (typeof raw !== 'object' || raw === null) {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return null
   }
   const record = raw as Partial<Record<keyof AsanaDispatchRecord, unknown>>
@@ -36,24 +44,25 @@ function sanitizeRecord(raw: unknown): AsanaDispatchRecord | null {
     record.status === 'dead'
       ? record.status
       : null
-  if (!gid || !lane || !status) {
+  const { firstSeenAt, lastAttemptAt, attempts, buildDispatchedAt } = record
+  if (
+    !gid ||
+    !lane ||
+    !status ||
+    !isFiniteNumber(firstSeenAt) ||
+    !isFiniteNumber(lastAttemptAt) ||
+    !isFiniteNumber(attempts) ||
+    attempts < 0 ||
+    (buildDispatchedAt !== undefined && !isFiniteNumber(buildDispatchedAt))
+  ) {
     return null
   }
-  const firstSeenAt = typeof record.firstSeenAt === 'number' ? record.firstSeenAt : Date.now()
-  const lastAttemptAt =
-    typeof record.lastAttemptAt === 'number' ? record.lastAttemptAt : firstSeenAt
-  const attempts =
-    typeof record.attempts === 'number' && Number.isFinite(record.attempts)
-      ? Math.max(0, Math.floor(record.attempts))
-      : 0
-  const buildDispatchedAt =
-    typeof record.buildDispatchedAt === 'number' ? record.buildDispatchedAt : undefined
   return {
     gid,
     lane,
     firstSeenAt,
     lastAttemptAt,
-    attempts,
+    attempts: Math.floor(attempts),
     status,
     ...(buildDispatchedAt === undefined ? {} : { buildDispatchedAt })
   }
@@ -61,13 +70,7 @@ function sanitizeRecord(raw: unknown): AsanaDispatchRecord | null {
 
 const file = new SafeJsonFile<AsanaDispatchRecord[]>({
   filePath,
-  parse: (raw) =>
-    Array.isArray(raw)
-      ? raw.flatMap((entry) => {
-          const record = sanitizeRecord(entry)
-          return record ? [record] : []
-        })
-      : undefined,
+  parse: (raw) => (Array.isArray(raw) ? parseEveryEntry(raw, sanitizeRecord) : undefined),
   fallback: () => [],
   label: '[agents] asana-dispatch-ledger.json'
 })

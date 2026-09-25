@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { BrowserWindow } from 'electron'
 import type { AgentDraftComment } from '../../shared/agents'
-import { SafeJsonFile } from '../storage/safe-json-file'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agent-drafts.json'
@@ -17,44 +17,40 @@ function sanitizeStatus(value: unknown): AgentDraftComment['status'] {
   return value === 'approved' || value === 'discarded' ? value : 'pending'
 }
 
-function sanitize(raw: unknown): AgentDraftComment[] {
-  if (!Array.isArray(raw)) {
-    return []
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitizeDraft(entry: unknown): AgentDraftComment | null {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return null
   }
-  return raw.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) {
-      return []
-    }
-    const record = entry as Partial<Record<keyof AgentDraftComment, unknown>>
-    const target = record.target
-    const targetRecord =
-      typeof target === 'object' && target !== null
-        ? (target as Partial<AgentDraftComment['target']>)
-        : null
-    const id = typeof record.id === 'string' ? record.id : ''
-    const agentId = typeof record.agentId === 'string' ? record.agentId : ''
-    const gid = typeof targetRecord?.gid === 'string' ? targetRecord.gid : ''
-    const body = typeof record.body === 'string' ? record.body : ''
-    const createdAt = typeof record.createdAt === 'number' ? record.createdAt : 0
-    if (!id || !agentId || !gid || !createdAt) {
-      return []
-    }
-    return [
-      {
-        id,
-        agentId,
-        target: { kind: 'asana', gid },
-        body,
-        createdAt,
-        status: sanitizeStatus(record.status)
-      }
-    ]
-  })
+  const record = entry as Partial<Record<keyof AgentDraftComment, unknown>>
+  const target = record.target
+  const targetRecord =
+    typeof target === 'object' && target !== null
+      ? (target as Partial<AgentDraftComment['target']>)
+      : null
+  const id = typeof record.id === 'string' ? record.id : ''
+  const agentId = typeof record.agentId === 'string' ? record.agentId : ''
+  const gid = typeof targetRecord?.gid === 'string' ? targetRecord.gid : ''
+  const body = typeof record.body === 'string' ? record.body : ''
+  const createdAt = typeof record.createdAt === 'number' ? record.createdAt : 0
+  if (!id || !agentId || !gid || !createdAt) {
+    return null
+  }
+  return {
+    id,
+    agentId,
+    target: { kind: 'asana', gid },
+    body,
+    createdAt,
+    status: sanitizeStatus(record.status)
+  }
 }
 
 const file = new SafeJsonFile<AgentDraftComment[]>({
   filePath,
-  parse: (raw) => (Array.isArray(raw) ? sanitize(raw).slice(-MAX_DRAFTS) : undefined),
+  parse: (raw) =>
+    Array.isArray(raw) ? parseEveryEntry(raw, sanitizeDraft)?.slice(-MAX_DRAFTS) : undefined,
   fallback: () => [],
   label: '[agents] agent-drafts.json'
 })

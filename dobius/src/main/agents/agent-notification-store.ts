@@ -7,7 +7,7 @@ import type {
   AgentNotificationsSnapshot
 } from '../../shared/agents'
 import type { CustomAgent } from '../../shared/agents'
-import { SafeJsonFile } from '../storage/safe-json-file'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agents-notifications.json'
@@ -55,18 +55,20 @@ function sanitizeEntry(raw: unknown): AgentNotificationEntry | null {
   }
 }
 
-function sanitize(raw: unknown): PersistedNotifications {
-  if (typeof raw !== 'object' || raw === null) {
-    return { entries: [], lastReadTs: 0 }
-  }
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitize(raw: object): PersistedNotifications | undefined {
   const record = raw as Partial<PersistedNotifications>
+  const entries = Array.isArray(record.entries)
+    ? parseEveryEntry(record.entries, sanitizeEntry)
+    : record.entries === undefined
+      ? []
+      : undefined
+  if (!entries) {
+    return undefined
+  }
   return {
-    entries: Array.isArray(record.entries)
-      ? record.entries.flatMap((entry) => {
-          const sanitized = sanitizeEntry(entry)
-          return sanitized ? [sanitized] : []
-        })
-      : [],
+    entries,
     lastReadTs: typeof record.lastReadTs === 'number' ? record.lastReadTs : 0
   }
 }

@@ -68,6 +68,26 @@ export function readSafeJsonFile<T>(
   return { status: 'ok', value, detail: null }
 }
 
+/**
+ * Parses every entry of a stored list, or returns undefined (-> unreadable)
+ * when any entry is malformed. Why: dropping the bad entry and loading as ok
+ * lets the next save write the filtered list over the original file.
+ */
+export function parseEveryEntry<T>(
+  entries: unknown[],
+  parseEntry: (entry: unknown) => T | null
+): T[] | undefined {
+  const parsed: T[] = []
+  for (const entry of entries) {
+    const value = parseEntry(entry)
+    if (value === null) {
+      return undefined
+    }
+    parsed.push(value)
+  }
+  return parsed
+}
+
 export function uniqueTmpPath(target: string): string {
   // Why: pid alone collides when two writers in one process save the same file.
   return `${target}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`

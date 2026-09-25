@@ -1,6 +1,6 @@
 import path from 'node:path'
 import type { AgentRun, AgentRunContext, AgentRunOutboxItem } from '../../shared/agents'
-import { SafeJsonFile } from '../storage/safe-json-file'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 
 const RUNS_FILE_NAME = 'agents-runs.json'
@@ -10,78 +10,80 @@ function runsPath(): string {
   return path.join(getUserDataRoot(), RUNS_FILE_NAME)
 }
 
-function sanitizeRuns(raw: unknown): AgentRun[] {
-  if (!Array.isArray(raw)) {
-    return []
+function isRunStatus(value: unknown): value is AgentRun['status'] {
+  return value === 'success' || value === 'error' || value === 'cancelled' || value === 'running'
+}
+
+// Why: a malformed entry makes the whole file unreadable (never dropped and
+// saved over); every writer since caee2df0 sets the five required fields.
+function sanitizeRun(entry: unknown): AgentRun | null {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return null
   }
-  return raw.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) {
-      return []
-    }
-    const record = entry as Partial<Record<keyof AgentRun, unknown>>
-    const id = typeof record.id === 'string' ? record.id : ''
-    const agentId = typeof record.agentId === 'string' ? record.agentId : ''
-    const prompt = typeof record.prompt === 'string' ? record.prompt : ''
-    const startedAt = typeof record.startedAt === 'number' ? record.startedAt : 0
-    if (!id || !agentId || !startedAt) {
-      return []
-    }
-    const status =
-      record.status === 'success' ||
-      record.status === 'error' ||
-      record.status === 'cancelled' ||
-      record.status === 'running'
-        ? record.status
-        : 'error'
-    const run: AgentRun = {
-      id,
-      agentId,
-      prompt,
-      source:
-        record.source === 'heartbeat' || record.source === 'channel' || record.source === 'asana'
-          ? record.source
-          : 'manual',
-      // Preserved across restarts on purpose: channel revival matches
-      // interrupted runs back to their channel by this key.
-      ...(typeof record.sessionKey === 'string' ? { sessionKey: record.sessionKey } : {}),
-      startedAt,
-      status: status === 'running' ? 'error' : status,
-      summary:
-        status === 'running'
-          ? 'app restarted during run'
-          : typeof record.summary === 'string'
-            ? record.summary
-            : undefined
-    }
-    if (typeof record.context === 'object' && record.context !== null) {
-      const context = record.context as Partial<AgentRunContext>
-      if (typeof context.correlationId === 'string' && context.correlationId.length > 0) {
-        run.context = {
-          correlationId: context.correlationId,
-          ...(typeof context.adamJobId === 'string' ? { adamJobId: context.adamJobId } : {}),
-          ...(typeof context.adamTaskId === 'string' ? { adamTaskId: context.adamTaskId } : {}),
-          ...(typeof context.projectId === 'string' ? { projectId: context.projectId } : {}),
-          ...(typeof context.worktreeId === 'string' ? { worktreeId: context.worktreeId } : {}),
-          ...(typeof context.requestedBy === 'string' ? { requestedBy: context.requestedBy } : {})
-        }
+  const record = entry as Partial<Record<keyof AgentRun, unknown>>
+  const { id, agentId, prompt, startedAt, status } = record
+  if (
+    typeof id !== 'string' ||
+    !id ||
+    typeof agentId !== 'string' ||
+    !agentId ||
+    typeof prompt !== 'string' ||
+    typeof startedAt !== 'number' ||
+    !Number.isFinite(startedAt) ||
+    startedAt <= 0 ||
+    !isRunStatus(status)
+  ) {
+    return null
+  }
+  const run: AgentRun = {
+    id,
+    agentId,
+    prompt,
+    source:
+      record.source === 'heartbeat' || record.source === 'channel' || record.source === 'asana'
+        ? record.source
+        : 'manual',
+    // Preserved across restarts on purpose: channel revival matches
+    // interrupted runs back to their channel by this key.
+    ...(typeof record.sessionKey === 'string' ? { sessionKey: record.sessionKey } : {}),
+    startedAt,
+    status: status === 'running' ? 'error' : status,
+    summary:
+      status === 'running'
+        ? 'app restarted during run'
+        : typeof record.summary === 'string'
+          ? record.summary
+          : undefined
+  }
+  if (typeof record.context === 'object' && record.context !== null) {
+    const context = record.context as Partial<AgentRunContext>
+    if (typeof context.correlationId === 'string' && context.correlationId.length > 0) {
+      run.context = {
+        correlationId: context.correlationId,
+        ...(typeof context.adamJobId === 'string' ? { adamJobId: context.adamJobId } : {}),
+        ...(typeof context.adamTaskId === 'string' ? { adamTaskId: context.adamTaskId } : {}),
+        ...(typeof context.projectId === 'string' ? { projectId: context.projectId } : {}),
+        ...(typeof context.worktreeId === 'string' ? { worktreeId: context.worktreeId } : {}),
+        ...(typeof context.requestedBy === 'string' ? { requestedBy: context.requestedBy } : {})
       }
     }
-    if (typeof record.endedAt === 'number' || status === 'running') {
-      run.endedAt = typeof record.endedAt === 'number' ? record.endedAt : Date.now()
-    }
-    if (typeof record.numTurns === 'number') {
-      run.numTurns = record.numTurns
-    }
-    if (typeof record.costUsd === 'number') {
-      run.costUsd = record.costUsd
-    }
-    return [run]
-  })
+  }
+  if (typeof record.endedAt === 'number' || status === 'running') {
+    run.endedAt = typeof record.endedAt === 'number' ? record.endedAt : Date.now()
+  }
+  if (typeof record.numTurns === 'number') {
+    run.numTurns = record.numTurns
+  }
+  if (typeof record.costUsd === 'number') {
+    run.costUsd = record.costUsd
+  }
+  return run
 }
 
 const file = new SafeJsonFile<AgentRun[]>({
   filePath: runsPath,
-  parse: (raw) => (Array.isArray(raw) ? sanitizeRuns(raw).slice(-MAX_RUNS) : undefined),
+  parse: (raw) =>
+    Array.isArray(raw) ? parseEveryEntry(raw, sanitizeRun)?.slice(-MAX_RUNS) : undefined,
   fallback: () => [],
   label: '[agents] agents-runs.json'
 })
