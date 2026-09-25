@@ -4,7 +4,12 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { VoiceSettings } from '../../../../shared/speech-types'
-import { JARVIS_NO_MODEL_TEXT, useJarvisTurn, type JarvisTurn } from './use-jarvis-turn'
+import {
+  JARVIS_NO_MODEL_TEXT,
+  JARVIS_SHORTCUT_UNAVAILABLE_TEXT,
+  useJarvisTurn,
+  type JarvisTurn
+} from './use-jarvis-turn'
 
 const toastMock = vi.hoisted(() => vi.fn())
 const storeActions = vi.hoisted(() => ({
@@ -57,6 +62,8 @@ class FakeAudioContext {
   }
 }
 
+let shortcutActive = true
+
 function installApi(voice: VoiceSettings): void {
   const noopUnsubscribe = (): (() => void) => () => undefined
   ;(window as unknown as { api: unknown }).api = {
@@ -87,6 +94,7 @@ function installApi(voice: VoiceSettings): void {
         }
       }),
       onPttReleased: vi.fn(noopUnsubscribe),
+      status: vi.fn(async () => ({ shortcutActive, phase: 'idle' })),
       ask: vi.fn(),
       speak: vi.fn()
     }
@@ -103,6 +111,7 @@ async function renderProbe(): Promise<void> {
 }
 
 beforeEach(() => {
+  shortcutActive = true
   renderCount = 0
   latest = null
   pushSettings = null
@@ -200,5 +209,37 @@ describe('useJarvisTurn missing model (#88)', () => {
     options.action.onClick()
     expect(storeActions.openSettingsTarget).toHaveBeenCalledWith({ pane: 'voice', repoId: null })
     expect(storeActions.openSettingsPage).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useJarvisTurn refused ⌘T at launch (#122-F9)', () => {
+  it('toasts once when Jarvis is on but the shortcut is not held', async () => {
+    shortcutActive = false
+    installApi({ jarvisEnabled: true, sttModel: 'model-a' } as VoiceSettings)
+    await renderProbe()
+    await act(async () => {
+      pushSettings?.({ voice: { jarvisEnabled: true, sttModel: 'model-b' } as VoiceSettings })
+    })
+
+    const shortcutToasts = toastMock.mock.calls.filter(
+      ([message]) => message === JARVIS_SHORTCUT_UNAVAILABLE_TEXT
+    )
+    expect(shortcutToasts).toHaveLength(1)
+    const [, options] = shortcutToasts[0] as [string, { action: { onClick: () => void } }]
+    options.action.onClick()
+    expect(storeActions.openSettingsTarget).toHaveBeenCalledWith({ pane: 'voice', repoId: null })
+  })
+
+  it('stays quiet when the shortcut is held', async () => {
+    installApi({ jarvisEnabled: true, sttModel: 'model-a' } as VoiceSettings)
+    await renderProbe()
+    expect(toastMock).not.toHaveBeenCalled()
+  })
+
+  it('does not ask while Jarvis is off', async () => {
+    shortcutActive = false
+    installApi({ jarvisEnabled: false, sttModel: 'model-a' } as VoiceSettings)
+    await renderProbe()
+    expect(toastMock).not.toHaveBeenCalled()
   })
 })

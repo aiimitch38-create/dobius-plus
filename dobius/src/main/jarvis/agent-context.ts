@@ -11,6 +11,8 @@ const MAX_OUTPUT_CHARS = 4_000
  * Why: a hand-maintained list drifted badly — it advertised groups that do not
  * exist (so Adam promised capabilities he lacked) while hiding the entire
  * browser-automation set (so he denied capabilities he had).
+ * Only a successful discovery is cached (#87): a failed `--help` must not pin
+ * an empty group list for the rest of the session.
  */
 let cachedGroups: Set<string> | null = null
 
@@ -74,7 +76,9 @@ export function parseCommandArgs(command: string): string[] {
   return matches.map((token) => token.replace(/^"|"$/g, ''))
 }
 
-function runCli(args: string[]): Promise<string> {
+type CliResult = { ok: boolean; output: string }
+
+function execCli(args: string[]): Promise<CliResult> {
   return new Promise((resolve) => {
     execFile(
       DOBIUS_CLI,
@@ -83,25 +87,43 @@ function runCli(args: string[]): Promise<string> {
       (error, stdout, stderr) => {
         const output = `${stdout ?? ''}${stderr ?? ''}`.trim()
         if (error && !output) {
-          resolve(`(failed: ${error.message})`)
+          resolve({ ok: false, output: `(failed: ${error.message})` })
           return
         }
-        resolve(output.slice(0, MAX_OUTPUT_CHARS))
+        resolve({ ok: !error, output: output.slice(0, MAX_OUTPUT_CHARS) })
       }
     )
   })
 }
 
-async function loadCommandGroups(): Promise<Set<string>> {
-  cachedGroups ??= parseCommandGroups(await runCli(['--help']))
-  return cachedGroups
+async function runCli(args: string[]): Promise<string> {
+  return (await execCli(args)).output
+}
+
+/** Resolves null when discovery failed; the next command retries it. */
+async function loadCommandGroups(): Promise<Set<string> | null> {
+  if (cachedGroups) {
+    return cachedGroups
+  }
+  const help = await execCli(['--help'])
+  const groups = help.ok ? parseCommandGroups(help.output) : new Set<string>()
+  if (groups.size === 0) {
+    return null
+  }
+  cachedGroups = groups
+  return groups
 }
 
 export async function runDobiusCommand(command: string): Promise<string> {
   const args = parseCommandArgs(command)
-  const decision = decideDobiusCommand(args, await loadCommandGroups())
+  const groups = await loadCommandGroups()
+  const decision = decideDobiusCommand(args, groups ?? new Set())
   if (!decision.allowed) {
-    return decision.reason
+    // Why a distinct reason: "not a dobius command" would be false when the
+    // command list itself could not be read, and would read as permanent.
+    return groups
+      ? decision.reason
+      : 'Could not read the dobius command list just now, so nothing was run. Try again in a moment.'
   }
   return runCli(args)
 }

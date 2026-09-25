@@ -21,6 +21,7 @@ describe('workflow-store', () => {
 
   afterEach(() => {
     rmSync(testState.dir, { recursive: true, force: true })
+    vi.restoreAllMocks()
   })
 
   it('creates, gets, lists by channel, updates, and deletes a workflow', async () => {
@@ -110,18 +111,24 @@ describe('workflow-store', () => {
     expect(onDisk[0].id).toBe(created.id)
   })
 
-  it('drops a workflow record whose stored YAML no longer parses (corrupt-on-disk)', async () => {
+  it('never serves or saves over a record whose stored YAML no longer parses (BUILD-009B)', async () => {
     const mod1 = await import('./workflow-store')
     const created = mod1.createWorkflow({ ownerPubkey: 'owner', channelId: null, yamlDefinition: 'name: Good' })
     const filePath = join(testState.dir, 'workflows.json')
     const onDisk = JSON.parse(readFileSync(filePath, 'utf-8'))
     onDisk[0].definitionYaml = '[not a mapping]'
     const { writeFileSync } = await import('node:fs')
-    writeFileSync(filePath, JSON.stringify(onDisk, null, 2))
+    const text = JSON.stringify(onDisk, null, 2)
+    writeFileSync(filePath, text)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     vi.resetModules()
     const mod2 = await import('./workflow-store')
     expect(mod2.getWorkflow(created.id)).toBeNull()
     expect(mod2.listWorkflowsByChannel('anything')).toEqual([])
+    expect(() =>
+      mod2.createWorkflow({ ownerPubkey: 'owner', channelId: null, yamlDefinition: 'name: New' })
+    ).toThrow("workflows.json can't be read, so changes are not saved; repair or remove it")
+    expect(readFileSync(filePath, 'utf-8')).toBe(text)
   })
 })

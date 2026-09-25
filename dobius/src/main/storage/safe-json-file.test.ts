@@ -6,12 +6,18 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SafeJsonFile, uniqueTmpPath, writeJsonFileAtomic } from './safe-json-file'
+import {
+  parseEveryValue,
+  SafeJsonFile,
+  uniqueTmpPath,
+  writeJsonFileAtomic
+} from './safe-json-file'
 
 const isRoot = typeof process.getuid === 'function' && process.getuid() === 0
 
@@ -192,6 +198,24 @@ describe('SafeJsonFile missing and ok files', () => {
     expect(readdirSync(dir).sort()).toEqual(['occupied'])
   })
 
+  it('writes new files with the requested mode (BUILD-009B)', () => {
+    if (process.platform === 'win32') {
+      return
+    }
+    const file = new SafeJsonFile<string[]>({
+      filePath: () => target,
+      parse: (raw) => (Array.isArray(raw) ? (raw as string[]) : undefined),
+      fallback: () => [],
+      label: '[test] list.json',
+      mode: 0o600
+    })
+    file.get()
+    expect(file.set(['private'])).toBe(true)
+    expect(statSync(target).mode & 0o777).toBe(0o600)
+    expect(file.set(['still private'])).toBe(true)
+    expect(statSync(target).mode & 0o777).toBe(0o600)
+  })
+
   it('two writers use unique temp names and leave one valid file', () => {
     const first = uniqueTmpPath(target)
     const second = uniqueTmpPath(target)
@@ -206,5 +230,59 @@ describe('SafeJsonFile missing and ok files', () => {
     expect(writerB.set(['b'])).toBe(true)
     expect(JSON.parse(readFileSync(target, 'utf-8'))).toEqual(['b'])
     expect(tmpLeftovers()).toEqual([])
+  })
+})
+
+describe('parseEveryValue (BUILD-009B)', () => {
+  const parseNumber = (entry: unknown): number | null => (typeof entry === 'number' ? entry : null)
+
+  it('parses every value of a plain object', () => {
+    expect(parseEveryValue({ a: 1, b: 2 }, parseNumber)).toEqual({ a: 1, b: 2 })
+    expect(parseEveryValue({}, parseNumber)).toEqual({})
+  })
+
+  it('is undefined for a malformed value or a non-object', () => {
+    expect(parseEveryValue({ a: 1, b: 'x' }, parseNumber)).toBeUndefined()
+    expect(parseEveryValue([1], parseNumber)).toBeUndefined()
+    expect(parseEveryValue(null, parseNumber)).toBeUndefined()
+    expect(parseEveryValue('x', parseNumber)).toBeUndefined()
+  })
+})
+
+describe('SafeJsonFile save() for user-edit paths (BUILD-009B review F1)', () => {
+  it('throws a readable error, keeps the file, and drops the refused change', () => {
+    writeFileSync(target, '["kept", ', 'utf-8')
+    const file = makeFile()
+    const list = file.get()
+    list.push('edit')
+
+    expect(() => file.save(list)).toThrow(
+      "list.json can't be read, so changes are not saved; repair or remove it"
+    )
+    expect(readFileSync(target, 'utf-8')).toBe('["kept", ')
+    expect(file.get()).toEqual([])
+    expect(quarantineCopies()).toHaveLength(1)
+  })
+
+  it('throws "could not be saved" when a readable file cannot be written', () => {
+    if (isRoot) {
+      return
+    }
+    writeFileSync(target, '["original"]', 'utf-8')
+    const file = makeFile()
+    const list = file.get()
+    list.push('edit')
+    chmodSync(dir, 0o555)
+
+    expect(() => file.save(list)).toThrow('list.json could not be saved')
+    chmodSync(dir, 0o755)
+    expect(file.get()).toEqual(['original'])
+  })
+
+  it('saves normally when the file is readable', () => {
+    const file = makeFile()
+    file.get()
+    file.save(['a'])
+    expect(JSON.parse(readFileSync(target, 'utf-8'))).toEqual(['a'])
   })
 })

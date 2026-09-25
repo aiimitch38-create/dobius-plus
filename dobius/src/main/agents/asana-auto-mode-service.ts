@@ -1,5 +1,5 @@
 import type { SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AsanaLane, AsanaTask } from '../../shared/asana'
+import type { AsanaLane, AsanaProjectRef, AsanaTask } from '../../shared/asana'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
 import { getAsanaConfig } from '../asana/asana-config'
 import { refreshAsanaTasks } from '../asana/asana-queue-service'
@@ -192,6 +192,15 @@ async function dispatchTriage(
   }
 }
 
+// Empty allowlist = every project (and tasks in no project); see asana-config.ts.
+function isAllowedForAutoMode(task: AsanaTask, allowedProjects: AsanaProjectRef[]): boolean {
+  if (allowedProjects.length === 0) {
+    return true
+  }
+  const taskProjects = new Set(task.projectGids ?? [])
+  return allowedProjects.some((project) => taskProjects.has(project.gid))
+}
+
 function maybeDispatchTask(
   task: AsanaTask,
   lane: AsanaLane,
@@ -200,6 +209,10 @@ function maybeDispatchTask(
   // Why: the review lane holds Sam's *completed* work (that's what to review), so
   // only the build lane skips completed tasks. Idempotency comes from the ledger.
   if (lane === 'build' && task.completed) {
+    return
+  }
+  const config = getAsanaConfig()
+  if (!isAllowedForAutoMode(task, config.allowedProjects)) {
     return
   }
   if (hasBeenClaimed(task.gid) || isDead(task.gid)) {
@@ -212,7 +225,7 @@ function maybeDispatchTask(
   if (!checkExecutionAdmission('agent-run').allowed) {
     return
   }
-  const triageAgentId = getAsanaConfig().autoMode.triageAgentId
+  const triageAgentId = config.autoMode.triageAgentId
   const triageAgent = triageAgentId ? getAgent(triageAgentId) : null
   if (triageAgentId && triageAgent?.engine === 'codex') {
     appendCodexTriageBrief(triageAgentId, triageAgent.name)

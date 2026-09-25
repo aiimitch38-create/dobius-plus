@@ -16,11 +16,15 @@ const task = {
   dependencies: []
 }
 
-function mountWith(list: () => Promise<unknown>): void {
+function mountWith(
+  list: () => Promise<unknown>,
+  agents: unknown[] = [],
+  runs: unknown[] = []
+): void {
   Object.assign(window, {
     api: {
       vertexTasks: { list },
-      agents: { list: async () => [], listRuns: async () => [] }
+      agents: { list: async () => agents, listRuns: async () => runs }
     }
   })
   render(<AgentsOverview />)
@@ -54,5 +58,21 @@ describe('AgentsOverview board load failure', () => {
     })
     expect(screen.getByText('Board could not be loaded')).toBeTruthy()
     expect(screen.getByText('Ship it')).toBeTruthy()
+  })
+})
+
+describe('AgentsOverview crew running count (BUILD-041, #99)', () => {
+  it('shows two running runs of one agent as one running agent and two runs', async () => {
+    const agent = { id: 'a1', name: 'Scout', description: 'Scouts', model: 'm' }
+    const running = (id: string) => ({
+      id,
+      agentId: 'a1',
+      prompt: 'p',
+      startedAt: Date.now(),
+      status: 'running'
+    })
+    mountWith(async () => [], [agent], [running('r1'), running('r2')])
+    expect(await screen.findByText('1 agents · 1 running · 2 runs active')).toBeTruthy()
+    expect(screen.queryByText('1 agents · 2 running')).toBeNull()
   })
 })

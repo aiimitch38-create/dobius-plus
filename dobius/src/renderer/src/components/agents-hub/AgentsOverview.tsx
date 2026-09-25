@@ -18,6 +18,7 @@ import { Activity, Bot, LayoutList, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CustomAgent, AgentRun } from '../../../../shared/agents'
 import type { VertexTask, VertexTaskStatus } from '../../../../shared/vertex-task-types'
+import { crewSubtitle } from './crew-running-counts'
 
 const REFRESH_MS = 5_000
 
@@ -147,7 +148,6 @@ export function AgentsOverview(): React.JSX.Element {
   )
   // Real money, summed from real runs — not a mockup percentage.
   const spend = useMemo(() => runs.reduce((sum, run) => sum + (run.costUsd ?? 0), 0), [runs])
-  const running = useMemo(() => runs.filter((run) => run.status === 'running').length, [runs])
 
   return (
     <main className="ops-dashboard h-full min-h-0 bg-background p-2 text-foreground">
@@ -182,11 +182,7 @@ export function AgentsOverview(): React.JSX.Element {
         <Panel
           icon={Bot}
           title="Crew"
-          subtitle={
-            agents.length
-              ? `${agents.length} agents · ${running} running`
-              : 'No agents configured'
-          }
+          subtitle={crewSubtitle(agents, runs)}
           tone="bg-ops-blue-soft text-ops-blue"
         >
           {agents.length ? (
