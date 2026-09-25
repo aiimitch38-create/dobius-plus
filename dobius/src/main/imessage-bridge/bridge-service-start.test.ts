@@ -27,6 +27,7 @@ vi.mock('../sqlite/sync-database', async () => {
 vi.mock('./imessage-send', () => ({ sendImessage: vi.fn(), countOutboundLastMinute: () => 0 }))
 vi.mock('./bridge-config', () => ({
   getImessageBridgeConfig: () => ({ ...mocks.config }),
+  getImessageBridgeConfigUnreadableDetail: () => null,
   updateImessageBridgeConfig: (updates: Partial<typeof mocks.config>) => {
     mocks.config = { ...mocks.config, ...updates }
     return { ...mocks.config }

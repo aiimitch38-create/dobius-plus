@@ -6,6 +6,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -29,6 +30,7 @@ const testState = {
   throwScopedKeychainRead: false,
   throwLegacyKeychainRead: false,
   throwRuntimeKeychainWrite: false,
+  onRuntimeKeychainWriteFailure: null as (() => void) | null,
   throwLegacyRuntimeKeychainWrite: false,
   throwScopedKeychainWrite: false,
   runtimeWriteConfigDir: null as string | null,
@@ -125,6 +127,7 @@ vi.mock('./keychain', () => ({
         throw new Error(`Unexpected Claude config dir: ${configDir}`)
       }
       if (testState.throwRuntimeKeychainWrite) {
+        testState.onRuntimeKeychainWriteFailure?.()
         throw new Error('runtime keychain write failed')
       }
       testState.runtimeWriteConfigDir = configDir
@@ -248,6 +251,12 @@ function readManagedCredentialsForTest(accountId: string, managedAuthPath: strin
   return readFileSync(join(managedAuthPath, '.credentials.json'), 'utf-8')
 }
 
+// Why (BUILD-009C): an invalid snapshot is set aside, never deleted.
+function snapshotAsideCopies(snapshotPath: string): string[] {
+  const dir = join(snapshotPath, '..')
+  return readdirSync(dir).filter((name) => name.startsWith('system-default-auth.json.unreadable-'))
+}
+
 function readRuntimeOauthAccountForTest(): unknown {
   const configPath = join(testState.fakeHomeDir, '.claude.json')
   if (!existsSync(configPath)) {
@@ -269,6 +278,7 @@ describe('ClaudeRuntimeAuthService', () => {
     testState.throwScopedKeychainRead = false
     testState.throwLegacyKeychainRead = false
     testState.throwRuntimeKeychainWrite = false
+    testState.onRuntimeKeychainWriteFailure = null
     testState.throwLegacyRuntimeKeychainWrite = false
     testState.throwScopedKeychainWrite = false
     testState.runtimeWriteConfigDir = null
@@ -2088,6 +2098,54 @@ describe('ClaudeRuntimeAuthService', () => {
     expect(testState.legacyKeychainCredentials).toBe(systemCredentials)
   })
 
+  it.runIf(hostPlatform !== 'win32' && process.getuid?.() !== 0)(
+    'keeps the Keychain error when the rollback snapshot is unreadable (BUILD-009C F2)',
+    async () => {
+      const runtimeCredentialsPath = join(testState.fakeHomeDir, '.claude', '.credentials.json')
+      const snapshotPath = join(
+        testState.userDataDir,
+        'claude-runtime-auth',
+        'system-default-auth.json'
+      )
+      const systemCredentials = createClaudeCredentialsJson('system@example.com', 'system')
+      const managedCredentials = createClaudeCredentialsJson('user@example.com', 'managed')
+      writeFileSync(runtimeCredentialsPath, systemCredentials, 'utf-8')
+      testState.scopedKeychainCredentials = systemCredentials
+      testState.legacyKeychainCredentials = systemCredentials
+      const managedAuthPath = createManagedClaudeAuth(
+        testState.userDataDir,
+        'account-1',
+        managedCredentials
+      )
+      const settings = createSettings({
+        claudeManagedAccounts: [createClaudeAccount('account-1', managedAuthPath)]
+      })
+      const store = createStore(settings)
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      // The snapshot captured on entry becomes unreadable before the rollback reads it.
+      testState.onRuntimeKeychainWriteFailure = () => chmodSync(snapshotPath, 0o000)
+
+      const { ClaudeRuntimeAuthService } = await import('./runtime-auth-service')
+      const service = new ClaudeRuntimeAuthService(store as never)
+      // Let the constructor's own sync finish before switching accounts.
+      await service.syncForCurrentSelection()
+      settings.activeClaudeManagedAccountId = 'account-1'
+      testState.throwRuntimeKeychainWrite = true
+      try {
+        await expect(service.syncForCurrentSelection()).rejects.toThrow(
+          'runtime keychain write failed'
+        )
+        expect(warn).toHaveBeenCalledWith(
+          '[claude-runtime-auth] Rollback after Keychain write failure did not complete:',
+          expect.stringContaining('EACCES')
+        )
+      } finally {
+        chmodSync(snapshotPath, 0o600)
+        warn.mockRestore()
+      }
+    }
+  )
+
   it('restores scoped keychain after legacy runtime keychain write fails', async () => {
     const runtimeCredentialsPath = join(testState.fakeHomeDir, '.claude', '.credentials.json')
     const systemCredentials = createClaudeCredentialsJson('system@example.com', 'system')
@@ -2260,6 +2318,10 @@ describe('ClaudeRuntimeAuthService', () => {
     await service.syncForCurrentSelection()
 
     expect(existsSync(snapshotPath)).toBe(false)
+    expect(snapshotAsideCopies(snapshotPath)).toHaveLength(1)
+    expect(
+      readFileSync(join(snapshotPath, '..', snapshotAsideCopies(snapshotPath)[0]), 'utf-8')
+    ).toBe('{not-json')
     expect(existsSync(runtimeCredentialsPath)).toBe(false)
     expect(readRuntimeOauthAccountForTest()).toBeNull()
     expect(testState.scopedKeychainCredentials).toBeNull()
@@ -2314,6 +2376,7 @@ describe('ClaudeRuntimeAuthService', () => {
     await service.syncForCurrentSelection()
 
     expect(existsSync(snapshotPath)).toBe(false)
+    expect(snapshotAsideCopies(snapshotPath)).toHaveLength(1)
     expect(existsSync(runtimeCredentialsPath)).toBe(false)
     expect(readRuntimeOauthAccountForTest()).toBeNull()
     expect(testState.scopedKeychainCredentials).toBeNull()
@@ -2360,10 +2423,108 @@ describe('ClaudeRuntimeAuthService', () => {
     await service.syncForCurrentSelection()
 
     expect(existsSync(snapshotPath)).toBe(false)
+    expect(snapshotAsideCopies(snapshotPath)).toHaveLength(1)
     expect(existsSync(runtimeCredentialsPath)).toBe(false)
     expect(testState.scopedKeychainCredentials).toBeNull()
     expect(testState.legacyKeychainCredentials).toBeNull()
     warn.mockRestore()
+  })
+
+  describe('unreadable system-default snapshot (BUILD-009C)', () => {
+    const canTestEacces =
+      hostPlatform !== 'win32' && (typeof process.getuid !== 'function' || process.getuid() !== 0)
+
+    function writeUnreadableSnapshot(): { snapshotPath: string; bytes: string } {
+      const snapshotPath = join(
+        testState.userDataDir,
+        'claude-runtime-auth',
+        'system-default-auth.json'
+      )
+      const systemCredentials = createClaudeCredentialsJson('system@example.com', 'system')
+      const bytes = `${JSON.stringify({
+        credentialsJson: systemCredentials,
+        configOauthAccount: null,
+        keychainCredentialsJson: systemCredentials,
+        capturedAt: 1
+      })}\n`
+      mkdirSync(join(testState.userDataDir, 'claude-runtime-auth'), { recursive: true })
+      writeFileSync(snapshotPath, bytes, 'utf-8')
+      chmodSync(snapshotPath, 0o000)
+      return { snapshotPath, bytes }
+    }
+
+    function expectSnapshotIntact(snapshotPath: string, bytes: string): void {
+      chmodSync(snapshotPath, 0o600)
+      expect(readFileSync(snapshotPath, 'utf-8')).toBe(bytes)
+      expect(snapshotAsideCopies(snapshotPath)).toHaveLength(0)
+    }
+
+    it.runIf(canTestEacces)(
+      'EACCES on restore: keeps the snapshot and the runtime auth, and reports the error',
+      async () => {
+        const runtimeCredentialsPath = join(testState.fakeHomeDir, '.claude', '.credentials.json')
+        const managedCredentials = createClaudeCredentialsJson('user@example.com', 'managed')
+        const { snapshotPath, bytes } = writeUnreadableSnapshot()
+        writeFileSync(runtimeCredentialsPath, managedCredentials, 'utf-8')
+        testState.scopedKeychainCredentials = managedCredentials
+        testState.legacyKeychainCredentials = managedCredentials
+        const managedAuthPath = createManagedClaudeAuth(
+          testState.userDataDir,
+          'account-1',
+          managedCredentials
+        )
+        const settings = createSettings({
+          claudeManagedAccounts: [createClaudeAccount('account-1', managedAuthPath)],
+          activeClaudeManagedAccountId: 'account-1'
+        })
+        const store = createStore(settings)
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+        const { ClaudeRuntimeAuthService } = await import('./runtime-auth-service')
+        const service = new ClaudeRuntimeAuthService(store as never)
+        settings.activeClaudeManagedAccountId = null
+        await expect(service.syncForCurrentSelection()).rejects.toThrow(/EACCES/)
+
+        expectSnapshotIntact(snapshotPath, bytes)
+        expect(readFileSync(runtimeCredentialsPath, 'utf-8')).toBe(managedCredentials)
+        expect(testState.scopedKeychainCredentials).toBe(managedCredentials)
+        expect(testState.legacyKeychainCredentials).toBe(managedCredentials)
+        warn.mockRestore()
+      }
+    )
+
+    it.runIf(canTestEacces)(
+      'EACCES on entering managed mode: does not overwrite the snapshot or switch accounts',
+      async () => {
+        const runtimeCredentialsPath = join(testState.fakeHomeDir, '.claude', '.credentials.json')
+        const systemCredentials = createClaudeCredentialsJson('system@example.com', 'system')
+        const managedCredentials = createClaudeCredentialsJson('user@example.com', 'managed')
+        const { snapshotPath, bytes } = writeUnreadableSnapshot()
+        writeFileSync(runtimeCredentialsPath, systemCredentials, 'utf-8')
+        testState.scopedKeychainCredentials = systemCredentials
+        testState.legacyKeychainCredentials = systemCredentials
+        const managedAuthPath = createManagedClaudeAuth(
+          testState.userDataDir,
+          'account-1',
+          managedCredentials
+        )
+        const settings = createSettings({
+          claudeManagedAccounts: [createClaudeAccount('account-1', managedAuthPath)]
+        })
+        const store = createStore(settings)
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+        const { ClaudeRuntimeAuthService } = await import('./runtime-auth-service')
+        const service = new ClaudeRuntimeAuthService(store as never)
+        settings.activeClaudeManagedAccountId = 'account-1'
+        await expect(service.syncForCurrentSelection()).rejects.toThrow(/EACCES/)
+
+        expectSnapshotIntact(snapshotPath, bytes)
+        expect(readFileSync(runtimeCredentialsPath, 'utf-8')).toBe(systemCredentials)
+        expect(testState.scopedKeychainCredentials).toBe(systemCredentials)
+        warn.mockRestore()
+      }
+    )
   })
 
   it('treats snapshots missing credentialsJson as invalid and clears missing-managed runtime auth', async () => {

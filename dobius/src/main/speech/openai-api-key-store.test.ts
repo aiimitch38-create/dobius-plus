@@ -145,4 +145,39 @@ describe('OpenAI speech API key store', () => {
       expect(existsSync(keyPath())).toBe(true)
     })
   })
+
+  describe('legacy JSON key file (BUILD-009C)', () => {
+    function keyPath(): string {
+      return join(tempHome, '.dobius', 'openai-speech-token.enc')
+    }
+
+    it('decrypts a well-formed legacy JSON key', async () => {
+      writeStoredOpenAiKey(
+        JSON.stringify({ encryptedKeyBase64: Buffer.from('legacy-key').toString('base64') })
+      )
+      const store = await loadStoreModule()
+
+      expect(store.readOpenAiSpeechApiKey()).toBe('legacy-key')
+    })
+
+    it.each([
+      ['truncated JSON', '{"encryptedKeyBase64":"c2stZmFr'],
+      ['missing field', '{"somethingElse":"x"}'],
+      ['empty field', '{"encryptedKeyBase64":""}']
+    ])(
+      '%s: fails closed with encryption available or not, file kept',
+      async (_label, bytes) => {
+        writeStoredOpenAiKey(bytes)
+        for (const available of [true, false]) {
+          safeStorageMock.isEncryptionAvailable.mockReturnValue(available)
+          const store = await loadStoreModule()
+
+          expect(() => store.readOpenAiSpeechApiKey()).toThrow(/malformed/)
+          expect(safeStorageMock.decryptString).not.toHaveBeenCalled()
+          expect(readFileSync(keyPath(), 'utf8')).toBe(bytes)
+          expect(store.hasOpenAiSpeechApiKey()).toBe(true)
+        }
+      }
+    )
+  })
 })

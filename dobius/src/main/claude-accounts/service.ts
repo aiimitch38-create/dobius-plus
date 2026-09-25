@@ -174,7 +174,7 @@ export class ClaudeAccountService {
       return this.getSnapshot()
     } catch (error) {
       this.restoreClaudeSettings(previousSettings)
-      await this.runtimeAuth.forceMaterializeCurrentSelectionForRollback()
+      await this.rollbackRuntimeAuthBestEffort()
       await this.safeRemoveManagedAuth(accountId, managedAuthPath)
       throw error
     }
@@ -250,7 +250,7 @@ export class ClaudeAccountService {
       }
       if (restoredManagedCredentials) {
         this.restoreClaudeSettings(previousSettings)
-        await this.runtimeAuth.forceMaterializeCurrentSelectionForRollback()
+        await this.rollbackRuntimeAuthBestEffort()
       } else if (wroteManagedCredentials) {
         this.store.updateSettings({ claudeManagedAccounts: reauthenticatedAccounts })
       } else {
@@ -306,7 +306,7 @@ export class ClaudeAccountService {
       return this.getSnapshot()
     } catch (error) {
       this.restoreClaudeSettings(settings)
-      await this.runtimeAuth.forceMaterializeCurrentSelectionForRollback()
+      await this.rollbackRuntimeAuthBestEffort()
       throw error
     }
   }
@@ -345,7 +345,7 @@ export class ClaudeAccountService {
       return this.getSnapshot()
     } catch (error) {
       this.restoreClaudeSettings(previousSettings)
-      await this.runtimeAuth.forceMaterializeCurrentSelectionForRollback()
+      await this.rollbackRuntimeAuthBestEffort()
       throw error
     }
   }
@@ -869,6 +869,22 @@ export class ClaudeAccountService {
     const relativePath = relative(resolve(rootPath), resolve(candidatePath))
     const parts = relativePath.split(sep)
     return parts.length === 2 && parts[1] === 'auth' ? parts[0] : null
+  }
+
+  /**
+   * Never throws. Why: rollback runs inside a catch; a rollback failure (e.g.
+   * an unreadable system-default snapshot) must not skip the cleanup after it
+   * or replace the original error the caller rethrows.
+   */
+  private async rollbackRuntimeAuthBestEffort(): Promise<void> {
+    try {
+      await this.runtimeAuth.forceMaterializeCurrentSelectionForRollback()
+    } catch (rollbackError) {
+      console.warn(
+        '[claude-accounts] Failed to restore runtime auth during rollback:',
+        rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+      )
+    }
   }
 
   private async safeRemoveManagedAuth(accountId: string, candidatePath: string): Promise<void> {

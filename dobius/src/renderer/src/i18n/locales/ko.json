@@ -8852,7 +8852,8 @@
           "testButton": "Test",
           "statusLine": "Status: {{state}} · last message row: {{rowid}} · sent in last minute: {{outbound}}",
           "statusRunning": "running",
-          "statusStopped": "stopped"
+          "statusStopped": "stopped",
+          "configUnreadable": "imessage-bridge.json can't be read ({{detail}}), so changes are not saved; repair or remove it"
         },
         "imessage": {
           "bridge": {
