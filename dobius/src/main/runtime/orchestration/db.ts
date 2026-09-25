@@ -16,7 +16,6 @@ import type {
   CoordinatorRun
 } from './types'
 import { buildOrchestrationTaskDisplayMetadata } from '../../../shared/orchestration-task-display'
-import { isPidAlive } from '../process-liveness'
 
 export type {
   MessageType,

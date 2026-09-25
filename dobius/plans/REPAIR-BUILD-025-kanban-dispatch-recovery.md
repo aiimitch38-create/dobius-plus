@@ -42,8 +42,8 @@
   - Reconciliation runs on every `list()` (not only at startup) so a claim of a dev instance that
     crashes while this one is running also converges within one board poll. Cost: one
     `kill(pid, 0)` per running card per read.
-- New `main/runtime/process-liveness.ts`: `isPidAlive` moved verbatim out of
-  `runtime/orchestration/db.ts` (BUILD-026), which now imports it.
+- `isPidAlive` comes from `main/lib/is-pid-alive.ts` (moved there by BUILD-024 out of
+  `runtime/orchestration/db.ts`, BUILD-026). An earlier commit of this build had moved it to `runtime/process-liveness.ts`; that file was dropped on merge.
 - `dobiusCommunications.ts`: exports `BOARD_TASK_PROMPT_LEAD`; revival skips runs whose prompt
   starts with it (one line, same shape as BUILD-023's iMessage guard).
 
@@ -81,8 +81,8 @@ recovery-write failure rethrown (M12). Every one failed at least one test.
 
 ## Deviations from EXECUTION-ORDER.md
 - Files outside the spec: new `main/vertex/vertex-dispatch-recovery.ts` (keeps the store under
-  max-lines), new `main/runtime/process-liveness.ts` + `orchestration/db.ts` import (shared
-  liveness, as the brief asked), `shared/vertex-task-types.ts` (owner fields + shared max attempts),
+  max-lines), shared liveness from `main/lib/is-pid-alive.ts` (BUILD-024; `db.ts` now identical to integration,
+  as the brief asked), `shared/vertex-task-types.ts` (owner fields + shared max attempts),
   `dobiusCommunications.ts` (revival guard + exported prompt lead).
 - Reconciliation runs on every read, not only at startup (covers another instance crashing later).
 - Not linked to the agent run id / BUILD-023 lease: the board only learns the run id when the run

@@ -12,7 +12,7 @@ import {
   type VertexTaskDispatch,
   type VertexTaskPatch,
 } from '../../shared/vertex-task-types'
-import { isPidAlive } from '../runtime/process-liveness'
+import { isPidAlive } from '../lib/is-pid-alive'
 
 const INTERRUPTED = 'Interrupted: Dobius stopped before this run finished.'
 
