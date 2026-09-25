@@ -14,7 +14,6 @@ import {
   tapSttFinalTranscripts
 } from './jarvis-service'
 import type { JarvisBroadcastPort, JarvisShortcutPort } from './jarvis-service'
-import { resetAdamServiceTokenCacheForTests } from './adam-client'
 
 const BASE_VOICE: VoiceSettings = {
   enabled: false,
@@ -26,7 +25,7 @@ const BASE_VOICE: VoiceSettings = {
   userModels: [],
   openAiApiKeyConfigured: false,
   conductorEnabled: false,
-  adamEndpoint: 'http://adam.test'
+  adamEndpoint: 'http://localhost:8799'
 }
 
 type TestHarness = {
@@ -71,16 +70,30 @@ function statesOf(broadcast: ReturnType<typeof vi.fn>): string[] {
     .map(([, payload]) => (payload as { state: string }).state)
 }
 
+// Why cleared: an inherited ADAM env var would redirect ask() or bypass the
+// temp token path below.
+const ADAM_ENV_KEYS = ['ADAM_SERVICE_TOKEN', 'ADAM_SERVICE_TOKEN_PATH', 'ADAM_SERVICE_URL']
+let savedAdamEnv: Record<string, string | undefined> = {}
+
 beforeEach(() => {
-  // Why a throwaway token path: ask() reads the machine-local ADAM token once;
+  savedAdamEnv = Object.fromEntries(ADAM_ENV_KEYS.map((key) => [key, process.env[key]]))
+  for (const key of ADAM_ENV_KEYS) {
+    delete process.env[key]
+  }
+  // Why a throwaway token path: ask() reads the machine-local ADAM token;
   // pointing the env override at a temp location keeps tests off Carson's disk.
   process.env.DOBIUS_ADAM_TOKEN_PATH = join(mkdtempSync(join(tmpdir(), 'jarvis-test-')), 'token')
-  resetAdamServiceTokenCacheForTests()
 })
 
 afterEach(() => {
-  resetAdamServiceTokenCacheForTests()
   delete process.env.DOBIUS_ADAM_TOKEN_PATH
+  for (const key of ADAM_ENV_KEYS) {
+    if (savedAdamEnv[key] === undefined) {
+      delete process.env[key]
+    } else {
+      process.env[key] = savedAdamEnv[key]
+    }
+  }
   vi.useRealTimers()
 })
 
@@ -159,7 +172,7 @@ describe('JarvisService.ask', () => {
     expect(h.speakQueue).toHaveBeenCalledWith('All good')
     expect(statesOf(h.broadcast)).toEqual(['thinking', 'speaking', 'idle'])
     expect(h.fetchFn).toHaveBeenCalledWith(
-      'http://adam.test/v1/converse',
+      'http://localhost:8799/v1/converse',
       expect.objectContaining({ method: 'POST' })
     )
   })
@@ -253,7 +266,7 @@ describe('wake-word ambient mode', () => {
 
     await vi.waitFor(() => expect(h.fetchFn).toHaveBeenCalled())
     const [url, init] = h.fetchFn.mock.calls[0] as [string, { body: string }]
-    expect(url).toBe('http://adam.test/v1/converse')
+    expect(url).toBe('http://localhost:8799/v1/converse')
     expect(JSON.parse(init.body)).toEqual({ utterance: 'what is shipping' })
   })
 })
