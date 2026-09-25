@@ -4,12 +4,22 @@ import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
-import { adamProjectDirectory, converseWithAdam, loadAdamServiceToken } from './adam-client'
+import { adamProjectDirectory } from '../adam-connection'
+import { askAdam } from './adam-client'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
 import { SelfEditStore, selfEditRoots } from './self-edit'
 import { resolveSelfEditRepoRoot } from './self-edit-repo-root'
 import { closeSelfEditWindow, showSelfEditProposal } from '../window/self-edit-window'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
+import {
+  clearElevenLabsApiKey,
+  dropLegacyElevenLabsKeyFromSettings,
+  getElevenLabsApiKeyStatus,
+  migrateElevenLabsKeyOutOfSettings,
+  resolveElevenLabsApiKey,
+  saveElevenLabsApiKey,
+  type ElevenLabsApiKeyStatus
+} from './elevenlabs-key-store'
 import {
   fetchRecentConversationSummaries,
   formatConversationMemory
@@ -58,10 +68,49 @@ function persistVoicePatch(store: Store, patch: Partial<VoiceSettings>): void {
 }
 
 export function registerJarvisIpcHandlers(store: Store): void {
+  // Why (#24): move a plaintext settings key into the protected store before
+  // any handler reads it. Failure leaves it in settings, so it still works.
+  migrateElevenLabsKeyOutOfSettings(store)
   const service = getJarvisService(createJarvisDeps(store))
   registerHandlers(store, service)
+  registerElevenLabsKeyHandlers(store)
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)
+}
+
+function elevenLabsKeyStatus(store: Store): ElevenLabsApiKeyStatus {
+  const status = getElevenLabsApiKeyStatus()
+  // A legacy settings key that could not be migrated still counts as configured.
+  const legacy = store.getSettings().voice?.elevenlabsApiKey?.trim()
+  return {
+    ...status,
+    configured: status.configured || Boolean(legacy),
+    // The legacy key still works, so an unreadable file is not a dead end.
+    unreadable: status.unreadable && !legacy
+  }
+}
+
+// Why separate channels: the key is written to the protected store only and is
+// never sent back to the renderer (#24); Settings learns only whether one exists.
+function registerElevenLabsKeyHandlers(store: Store): void {
+  ipcMain.removeHandler('jarvis:getElevenLabsKeyStatus')
+  ipcMain.handle('jarvis:getElevenLabsKeyStatus', () => elevenLabsKeyStatus(store))
+
+  ipcMain.removeHandler('jarvis:saveElevenLabsKey')
+  ipcMain.handle('jarvis:saveElevenLabsKey', (_event, apiKey: unknown) => {
+    const status = saveElevenLabsApiKey(typeof apiKey === 'string' ? apiKey : '')
+    if (!status.sessionOnly) {
+      dropLegacyElevenLabsKeyFromSettings(store)
+    }
+    return elevenLabsKeyStatus(store)
+  })
+
+  ipcMain.removeHandler('jarvis:clearElevenLabsKey')
+  ipcMain.handle('jarvis:clearElevenLabsKey', () => {
+    clearElevenLabsApiKey()
+    dropLegacyElevenLabsKeyFromSettings(store)
+    return elevenLabsKeyStatus(store)
+  })
 }
 
 function registerHandlers(store: Store, service: JarvisService): void {
@@ -162,7 +211,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.handle('jarvis:conversationMemory', async () => {
     const voice = store.getSettings().voice
     const summaries = await fetchRecentConversationSummaries(
-      voice?.elevenlabsApiKey ?? '',
+      resolveElevenLabsApiKey(voice),
       voice?.elevenlabsAgentId ?? ''
     )
     return formatConversationMemory(summaries)
@@ -187,16 +236,15 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.removeHandler('jarvis:agentSignedUrl')
   ipcMain.handle('jarvis:agentSignedUrl', () => {
     const voice = store.getSettings().voice
-    return fetchAgentSignedUrl(voice?.elevenlabsApiKey ?? '', voice?.elevenlabsAgentId ?? '')
+    return fetchAgentSignedUrl(resolveElevenLabsApiKey(voice), voice?.elevenlabsAgentId ?? '')
   })
 
   // Why a text-only ask: during a live conversation the AGENT speaks, so
   // service.ask() would talk over it with a second voice.
   ipcMain.removeHandler('jarvis:askAdamText')
   ipcMain.handle('jarvis:askAdamText', async (_event, utterance: string) => {
-    const result = await converseWithAdam({
-      endpoint: store.getSettings().voice?.adamEndpoint,
-      token: loadAdamServiceToken(),
+    const result = await askAdam({
+      settingsEndpoint: store.getSettings().voice?.adamEndpoint,
       utterance: typeof utterance === 'string' ? utterance : ''
     })
     return result

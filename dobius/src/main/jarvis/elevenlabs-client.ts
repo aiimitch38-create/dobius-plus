@@ -3,6 +3,7 @@ import { writeFile as writeFileAsync } from 'node:fs/promises'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { resolveElevenLabsApiKey } from './elevenlabs-key-store'
 
 export type ElevenLabsConfig = {
   apiKey: string
@@ -20,16 +21,20 @@ export type ElevenLabsSettings = {
 /**
  * Settings win over env: the in-app Voice pane is where a user can actually
  * change this, and a GUI app launched from Finder inherits no shell exports.
+ * The key comes from the protected key store (#24), which also covers a legacy
+ * settings key that has not been migrated out yet.
  */
 export function resolveElevenLabsConfig(
   settings?: ElevenLabsSettings | null,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  readStoredApiKey: () => string = () => resolveElevenLabsApiKey(settings ?? undefined)
 ): ElevenLabsConfig | null {
-  const apiKey = settings?.elevenlabsApiKey?.trim() || env.ELEVENLABS_API_KEY?.trim()
   const voiceId = settings?.elevenlabsVoiceId?.trim() || env.ELEVENLABS_VOICE_ID?.trim()
   // No key or no voice pinned -> stay on the free local engine rather than
   // guessing a billed voice or failing a spoken reply over missing config.
-  if (!apiKey || !voiceId) {return null}
+  if (!voiceId) {return null}
+  const apiKey = readStoredApiKey().trim() || env.ELEVENLABS_API_KEY?.trim()
+  if (!apiKey) {return null}
   const modelId =
     settings?.elevenlabsModelId?.trim() || env.ELEVENLABS_MODEL_ID?.trim() || 'eleven_turbo_v2_5'
   return { apiKey, voiceId, modelId }

@@ -7,11 +7,7 @@ import type { VoiceSettings } from '../../shared/speech-types'
 import type { SpeakOutcome } from '../communications/huddles/huddle-speech-synthesis'
 import { getHuddleSpeechQueue } from '../communications/huddles/huddle-speech-synthesis'
 import type { SttEventSink } from '../speech/stt-service'
-import {
-  ADAM_UNREACHABLE_TEXT,
-  converseWithAdam,
-  loadAdamServiceToken
-} from './adam-client'
+import { ADAM_UNREACHABLE_TEXT, askAdam } from './adam-client'
 import { resolveElevenLabsConfig, speakWithElevenLabs } from './elevenlabs-client'
 import { JARVIS_PTT_AUTO_RELEASE_MS, applyJarvisSignal, type JarvisSignal } from './jarvis-state'
 import { createWakeWordMatcher, type WakeWordMatcher } from './wake-word-matcher'
@@ -108,9 +104,8 @@ export class JarvisService {
     this.transition({ type: 'ask-started' })
     let result: JarvisAskResult
     try {
-      result = await converseWithAdam({
-        endpoint: this.deps.store.getSettings().voice?.adamEndpoint,
-        token: loadAdamServiceToken(),
+      result = await askAdam({
+        settingsEndpoint: this.deps.store.getSettings().voice?.adamEndpoint,
         utterance,
         fetchFn: this.deps.fetchFn
       })

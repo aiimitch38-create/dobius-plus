@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineMethod, type RpcMethod } from '../core'
 import { OptionalFiniteNumber, OptionalString, requiredString } from '../schemas'
-import type { GateStatus } from '../../orchestration/db'
+import type { GateStatus, OrchestrationDb } from '../../orchestration/db'
 import { Coordinator, clampPollIntervalMs } from '../../orchestration/coordinator'
 import { assertExecutionAdmitted } from '../../../agents/execution-gate'
 
@@ -43,6 +43,37 @@ const GateListParams = z.object({
   task: OptionalString,
   status: z.enum(['pending', 'resolved', 'timeout']).optional()
 })
+
+// Why: the loop runs detached from the RPC call, so this is the owner of its
+// rejection: the row must end 'failed' and the reason must reach the
+// coordinator's inbox (orchestration.check) instead of an unhandled rejection.
+function recordCoordinatorFailure(
+  db: OrchestrationDb,
+  runId: string,
+  coordinatorHandle: string,
+  error: unknown
+): void {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(`[orchestration] coordinator run ${runId} failed: ${message}`)
+  try {
+    if (db.getCoordinatorRun(runId)?.status === 'running') {
+      db.updateCoordinatorRun(runId, 'failed')
+    }
+    db.insertMessage({
+      from: 'orchestration',
+      to: coordinatorHandle,
+      subject: `Coordinator run ${runId} failed`,
+      body: message,
+      type: 'status',
+      priority: 'high'
+    })
+  } catch (recordError) {
+    console.error(
+      `[orchestration] could not record the failure of coordinator run ${runId}:`,
+      recordError instanceof Error ? recordError.message : String(recordError)
+    )
+  }
+}
 
 export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
   // Why: Section 4.12 — orchestration.run returns immediately with a run ID.
@@ -91,13 +122,16 @@ export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
       // Why: fire-and-forget — the coordinator loop runs in the event loop
       // background. Results are persisted to the DB; callers query via
       // orchestration.taskList or orchestration.runStatus.
-      coordinator.runFromExistingRun(run.id).finally(() => {
-        unsettledLoops.delete(coordinator)
-        if (activeCoordinator === coordinator) {
-          activeCoordinator = null
-          activeRunId = null
-        }
-      })
+      coordinator
+        .runFromExistingRun(run.id)
+        .catch((error: unknown) => recordCoordinatorFailure(db, run.id, coordinatorHandle, error))
+        .finally(() => {
+          unsettledLoops.delete(coordinator)
+          if (activeCoordinator === coordinator) {
+            activeCoordinator = null
+            activeRunId = null
+          }
+        })
 
       return { runId: run.id, status: 'running' }
     }

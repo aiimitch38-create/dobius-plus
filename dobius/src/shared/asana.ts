@@ -49,6 +49,13 @@ export type AsanaTasksSnapshot = {
   error: string | null
 }
 
+/** Result of a human re-queue; blockedGids is the refreshed list of tasks Auto Mode skips for good. */
+export type AsanaRequeueResult = {
+  ok: boolean
+  error: string | null
+  blockedGids: string[]
+}
+
 export const EMPTY_ASANA_SNAPSHOT: AsanaTasksSnapshot = {
   build: [],
   review: [],

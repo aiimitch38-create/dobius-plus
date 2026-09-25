@@ -16,6 +16,9 @@ const KEY_FILES: Record<ProviderKeyId, string> = {
 }
 
 const cache = new Map<ProviderKeyId, string>()
+// Keys that could not be encrypted: usable until the app quits, never written
+// to disk (#25).
+const sessionOnly = new Set<ProviderKeyId>()
 
 function dobiusDir(): string {
   return join(homedir(), '.dobius')
@@ -28,7 +31,22 @@ function keyPath(provider: ProviderKeyId): string {
 export function hasProviderApiKey(provider: ProviderKeyId): boolean {
   // Existence only: called on every Settings render, and decrypting here would
   // trigger a macOS keychain prompt each time.
-  return existsSync(keyPath(provider))
+  return sessionOnly.has(provider) || existsSync(keyPath(provider))
+}
+
+function tryEncryptProviderKey(provider: ProviderKeyId, apiKey: string): Buffer | null {
+  if (!safeStorage.isEncryptionAvailable()) {
+    return null
+  }
+  try {
+    return safeStorage.encryptString(apiKey)
+  } catch (error) {
+    console.error(
+      `[providers] safeStorage encryption failed for ${provider}:`,
+      error instanceof Error ? error.message : String(error)
+    )
+    return null
+  }
 }
 
 export function saveProviderApiKey(provider: ProviderKeyId, apiKey: string): void {
@@ -36,17 +54,22 @@ export function saveProviderApiKey(provider: ProviderKeyId, apiKey: string): voi
   if (!trimmed) {
     throw new Error('API key is required')
   }
+  const encrypted = tryEncryptProviderKey(provider, trimmed)
+  if (encrypted === null) {
+    // Why (#25): fail closed. Never write the key in plaintext; leave any
+    // existing encrypted file untouched and keep the new key for this session.
+    console.warn(`[providers] safeStorage unavailable — ${provider} key kept for this session only`)
+    cache.set(provider, trimmed)
+    sessionOnly.add(provider)
+    return
+  }
   const dir = dobiusDir()
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
   }
-  if (safeStorage.isEncryptionAvailable()) {
-    writeFileSync(keyPath(provider), safeStorage.encryptString(trimmed), { mode: 0o600 })
-  } else {
-    console.warn(`[providers] safeStorage unavailable — storing ${provider} key in plaintext`)
-    writeFileSync(keyPath(provider), trimmed, { encoding: 'utf8', mode: 0o600 })
-  }
+  writeFileSync(keyPath(provider), encrypted, { mode: 0o600 })
   cache.set(provider, trimmed)
+  sessionOnly.delete(provider)
 }
 
 export function readProviderApiKey(provider: ProviderKeyId): string {
@@ -72,5 +95,6 @@ export function readProviderApiKey(provider: ProviderKeyId): string {
 
 export function clearProviderApiKey(provider: ProviderKeyId): void {
   cache.delete(provider)
+  sessionOnly.delete(provider)
   rmSync(keyPath(provider), { force: true })
 }
