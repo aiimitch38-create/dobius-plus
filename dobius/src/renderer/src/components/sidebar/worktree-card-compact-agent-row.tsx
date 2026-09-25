@@ -126,7 +126,9 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
   const pendingSingleClickRef = useRef<number | null>(null)
   useEffect(
     () => () => {
-      if (pendingSingleClickRef.current !== null) window.clearTimeout(pendingSingleClickRef.current)
+      if (pendingSingleClickRef.current !== null) {
+        window.clearTimeout(pendingSingleClickRef.current)
+      }
     },
     []
   )
@@ -138,7 +140,9 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
         onActivate(agent.tab.id, agent.paneKey)
         return
       }
-      if (pendingSingleClickRef.current !== null) window.clearTimeout(pendingSingleClickRef.current)
+      if (pendingSingleClickRef.current !== null) {
+        window.clearTimeout(pendingSingleClickRef.current)
+      }
       pendingSingleClickRef.current = window.setTimeout(() => {
         pendingSingleClickRef.current = null
         onActivate(agent.tab.id, agent.paneKey)
@@ -148,7 +152,9 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
   )
   const handleOpenTerminal = useCallback(
     (e: React.MouseEvent) => {
-      if (!onOpenTerminal) return
+      if (!onOpenTerminal) {
+        return
+      }
       e.stopPropagation()
       if (pendingSingleClickRef.current !== null) {
         window.clearTimeout(pendingSingleClickRef.current)
