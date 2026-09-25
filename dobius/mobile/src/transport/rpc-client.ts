@@ -12,7 +12,9 @@ import {
   publicKeyToBase64,
   encrypt,
   decrypt,
-  decryptBytes
+  decryptBytes,
+  enableE2EESequencing,
+  isE2EESequenceViolated
 } from './e2ee'
 import {
   handleTerminalBinaryFrame,
@@ -78,6 +80,9 @@ export type RpcClient = {
     viewport: { cols: number; rows: number }
   ) => void
   getState: () => ConnectionState
+  // Why: a pairing QR token is single-use; the desktop swaps in a new one on
+  // first login. Pairing screens persist this, not the scanned token.
+  getDeviceToken: () => string
   // Why: UI escalates "Reconnecting…" to "Can't connect" once attempts cross
   // a threshold. 0 means never failed; counter is reset on successful open.
   getReconnectAttempt: () => number
@@ -141,11 +146,19 @@ export type ConnectOptions = {
   // detailed connection log. Useful when 'Connecting…' hangs forever
   // (e.g. broken Tailscale route) and you need to see *where* it's stuck.
   onLog?: ConnectionLogSink
+  // Why: fires when the desktop replaced the pairing token (first login with
+  // a QR). The caller must persist it; the scanned token no longer works.
+  onDeviceTokenRotated?: (deviceToken: string) => void
 }
+
+// Mirrors E2EE_HANDSHAKE_VERSION / E2EE_CLIENT_UPDATE_REQUIRED in
+// src/shared/e2ee-handshake.ts.
+const E2EE_HANDSHAKE_VERSION = 2
+const E2EE_CLIENT_UPDATE_REQUIRED = 'client_update_required'
 
 export function connect(
   endpoint: string,
-  deviceToken: string,
+  initialDeviceToken: string,
   serverPublicKeyB64: string,
   optionsOrLegacy?: ConnectOptions | ((state: ConnectionState) => void)
 ): RpcClient {
@@ -156,6 +169,7 @@ export function connect(
       : (optionsOrLegacy ?? {})
   const onStateChange = options.onStateChange
   const onLog = options.onLog
+  let deviceToken = initialDeviceToken
   let logCounter = 0
   function emitLog(level: ConnectionLogLevel, message: string, detail?: string) {
     if (!onLog) {
@@ -252,9 +266,13 @@ export function connect(
         }
         waiter.resolve()
       }
-    } else if (next === 'disconnected' || next === 'auth-failed') {
+    } else if (next === 'disconnected' || next === 'auth-failed' || next === 'update-required') {
       const reason =
-        next === 'auth-failed' ? 'Unauthorized — pairing may be revoked' : 'Connection closed'
+        next === 'auth-failed'
+          ? 'Unauthorized — pairing may be revoked'
+          : next === 'update-required'
+            ? 'Update the Dobius+ app'
+            : 'Connection closed'
       rejectConnectWaiters(reason)
     }
     for (const listener of stateListeners) {
@@ -341,6 +359,14 @@ export function connect(
 
     ws = new WebSocket(endpoint)
     const openingWs = ws
+    // Why: v2 frames are numbered and must be decrypted in arrival order. An
+    // ArrayBuffer is available synchronously; a Blob would be read async and
+    // could let a later text frame be decrypted first.
+    openingWs.binaryType = 'arraybuffer'
+    // Why: true once this socket's e2ee_ready offered handshake v2. A
+    // client_update_required after a v1-looking ready is contradictory (a real
+    // older desktop never sends it), so it is retried, not latched.
+    let serverOfferedV2 = false
     const ignoreStaleSocketEvent = (eventName: string): boolean => {
       if (ws === openingWs) {
         return false
@@ -438,7 +464,25 @@ export function connect(
           const msg = JSON.parse(raw)
           if (msg.type === 'e2ee_ready') {
             emitLog('success', 'Received e2ee_ready', 'Sending device token')
-            sendEncrypted({ type: 'e2ee_auth', deviceToken })
+            // Why: handshake v2 — echo the server's per-connection challenge so
+            // a captured auth frame cannot be replayed, and number every frame
+            // so one cannot be replayed inside the session. Mirrors
+            // beginE2EEAuth in src/shared/e2ee-handshake.ts (Metro can't import
+            // it); older desktops send neither and keep the v1 frame format.
+            const isV2 =
+              typeof msg.version === 'number' &&
+              msg.version >= E2EE_HANDSHAKE_VERSION &&
+              typeof msg.challenge === 'string' &&
+              msg.challenge.length > 0
+            serverOfferedV2 = isV2
+            if (isV2 && sharedKey) {
+              enableE2EESequencing(sharedKey, 'client')
+            }
+            sendEncrypted(
+              isV2
+                ? { type: 'e2ee_auth', deviceToken, challenge: msg.challenge }
+                : { type: 'e2ee_auth', deviceToken }
+            )
             return
           }
         } catch {
@@ -451,6 +495,7 @@ export function connect(
 
         const plaintext = decrypt(raw, sharedKey)
         if (plaintext === null) {
+          dropIfOutOfSequence(openingWs)
           return
         }
 
@@ -460,6 +505,11 @@ export function connect(
             if (handshakeTimer) {
               clearTimeout(handshakeTimer)
               handshakeTimer = null
+            }
+            if (typeof msg.deviceToken === 'string' && msg.deviceToken.length > 0) {
+              deviceToken = msg.deviceToken
+              emitLog('info', 'Pairing code used', 'Desktop issued this phone its own token')
+              options.onDeviceTokenRotated?.(deviceToken)
             }
             console.log('[net] e2ee_authenticated — connected', {
               streamCount: streamListeners.size
@@ -492,6 +542,17 @@ export function connect(
                 removeStreamListener(id)
               }
             }
+          } else if (msg.type === 'e2ee_error' && msg.error?.code === E2EE_CLIENT_UPDATE_REQUIRED) {
+            if (handshakeTimer) {
+              clearTimeout(handshakeTimer)
+              handshakeTimer = null
+            }
+            if (serverOfferedV2) {
+              handleUpdateRequired()
+            } else {
+              emitLog('warn', 'Handshake downgraded', 'Retrying the connection')
+              openingWs.close()
+            }
           } else if (msg.type === 'e2ee_error' || (!msg.ok && msg.error?.code === 'unauthorized')) {
             console.log('[net] e2ee auth FAILED', { msgType: msg.type, error: msg.error })
             if (handshakeTimer) {
@@ -522,6 +583,7 @@ export function connect(
         }
         const plaintextBytes = decryptBytes(bytes, sharedKey)
         if (!plaintextBytes) {
+          dropIfOutOfSequence(openingWs)
           return
         }
         handleBinaryFrame(plaintextBytes)
@@ -530,6 +592,7 @@ export function connect(
 
       const plaintext = decrypt(raw, sharedKey)
       if (plaintext === null) {
+        dropIfOutOfSequence(openingWs)
         return
       }
 
@@ -730,6 +793,29 @@ export function connect(
   // up to AUTH_RETRY_BUDGET times before declaring auth dead, so a one-off
   // glitch self-heals instead of forcing the user to re-pair. A genuinely
   // revoked token fails every retry and latches auth-failed within seconds.
+  // Why: an authentic frame out of sequence means frames were replayed,
+  // reordered or deleted on the path. Close this socket; the close handler
+  // reconnects with a fresh key and counters.
+  function dropIfOutOfSequence(socket: WebSocket): void {
+    if (sharedKey && isE2EESequenceViolated(sharedKey)) {
+      emitLog('warn', 'Out-of-sequence frame', 'Reconnecting')
+      socket.close()
+    }
+  }
+
+  // Why: the desktop speaks a newer handshake than this app. Retrying cannot
+  // help and it is not a pairing problem, so latch a distinct state.
+  function handleUpdateRequired(): void {
+    emitLog('error', 'Update the Dobius+ app', 'This desktop needs a newer app version')
+    activeBrowserScreencastRequestId = null
+    pendingBrowserScreencastRequestId = null
+    intentionallyClosed = true
+    ws?.close()
+    ws = null
+    setState('update-required')
+    rejectAllPending('Update the Dobius+ app')
+  }
+
   function handleAuthRejection(reason: string): void {
     activeBrowserScreencastRequestId = null
     pendingBrowserScreencastRequestId = null
@@ -1144,6 +1230,9 @@ export function connect(
       updateCachedTerminalSubscriptionViewport(streamListeners.values(), terminal, viewport)
     },
 
+    getDeviceToken(): string {
+      return deviceToken
+    },
     getState(): ConnectionState {
       return state
     },

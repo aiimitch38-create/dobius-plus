@@ -4,6 +4,9 @@
 // stream frames use the raw byte bundle.
 import nacl from 'tweetnacl'
 import * as ExpoCrypto from 'expo-crypto'
+import { acceptE2EEReceivedNonce, nextE2EESendNonce } from './e2ee-sequencing'
+
+export { enableE2EESequencing, isE2EESequenceViolated } from './e2ee-sequencing'
 
 // Why: Hermes (React Native's JS engine) lacks crypto.getRandomValues,
 // which tweetnacl requires. expo-crypto provides a native secure RNG
@@ -74,7 +77,7 @@ export function decrypt(encrypted: string, sharedKey: Uint8Array): string | null
 }
 
 function encryptBytes(plaintext: Uint8Array, sharedKey: Uint8Array): Uint8Array {
-  const nonce = u8(nacl.randomBytes(nacl.box.nonceLength))
+  const nonce = u8(nextE2EESendNonce(sharedKey, u8(nacl.randomBytes(nacl.box.nonceLength))))
   const ciphertext = nacl.box.after(u8(plaintext), nonce, u8(sharedKey))
 
   const bundle = new Uint8Array(nonce.length + ciphertext.length)
@@ -93,7 +96,7 @@ export function decryptBytes(bundle: Uint8Array, sharedKey: Uint8Array): Uint8Ar
   const ciphertext = u8(bundle.subarray(nacl.box.nonceLength))
   const plaintext = nacl.box.open.after(ciphertext, nonce, u8(sharedKey))
 
-  if (!plaintext) {
+  if (!plaintext || !acceptE2EEReceivedNonce(sharedKey, nonce)) {
     return null
   }
 

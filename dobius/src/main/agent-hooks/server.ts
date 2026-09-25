@@ -15,6 +15,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { constantTimeEqual } from '../lib/constant-time-equal'
 import { removeTempFile, sweepStaleTempFiles } from '../storage/safe-json-file'
 import { track } from '../telemetry/client'
 import { getCohortAtEmit } from '../telemetry/cohort-classifier'
@@ -1190,7 +1191,7 @@ export class AgentHookServer {
         return
       }
 
-      if (req.headers['x-dobius-agent-hook-token'] !== this.token) {
+      if (!constantTimeEqual(req.headers['x-dobius-agent-hook-token'], this.token)) {
         res.writeHead(403)
         res.end()
         return

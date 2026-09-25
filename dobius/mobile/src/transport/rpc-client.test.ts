@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { connect } from './rpc-client'
 import { encodeTerminalStreamFrame, TerminalStreamOpcode } from './terminal-stream-protocol'
 
+const e2eeViolation = vi.hoisted(() => ({ value: false }))
+
 vi.mock('./e2ee', () => ({
   generateKeyPair: () => ({
     publicKey: new Uint8Array(32),
@@ -12,7 +14,9 @@ vi.mock('./e2ee', () => ({
   publicKeyToBase64: () => 'client-public-key',
   encrypt: (plaintext: string) => `encrypted:${plaintext}`,
   decrypt: (raw: string) => (raw === 'undecryptable' ? null : raw.replace(/^encrypted:/, '')),
-  decryptBytes: (bytes: Uint8Array) => bytes
+  decryptBytes: (bytes: Uint8Array) => bytes,
+  enableE2EESequencing: () => {},
+  isE2EESequenceViolated: () => e2eeViolation.value
 }))
 
 class MockWebSocket {

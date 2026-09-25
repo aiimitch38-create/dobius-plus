@@ -49,7 +49,7 @@ function toRuntimeAccessGrant(device: DeviceEntry): RuntimeAccessGrant {
 
 // Why: the mobile IPC handlers provide the renderer with QR code pairing data,
 // device management, and WebSocket readiness status. They depend on the
-// DobiusRuntimeRpcServer because it owns the device registry and TLS state.
+// DobiusRuntimeRpcServer because it owns the device registry and E2EE state.
 
 export function registerMobileHandlers(rpcServer: DobiusRuntimeRpcServer): void {
   ipcMain.handle('mobile:listNetworkInterfaces', (): { interfaces: NetworkInterface[] } => ({

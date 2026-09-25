@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { useAppStore } from '../../store'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { useMobilePairingDevicePolling } from './mobile-pairing-device-polling'
+import { usePairingQrAutoRefresh } from '../mobile/use-pairing-qr-auto-refresh'
 import {
   selectRefreshedNetworkAddress,
   type MobileNetworkInterface
@@ -163,6 +164,9 @@ export function MobilePane(): React.JSX.Element {
     void loadNetworkInterfaces()
     void loadListenerStatus()
   }, [loadDevices, loadListenerStatus, loadNetworkInterfaces])
+
+  // Why: keep the shown QR inside its 15 min lifetime while this pane is open.
+  usePairingQrAutoRefresh(qrDataUrl != null, () => void generateQR())
 
   useMobilePairingDevicePolling({
     deviceCountAtQr,

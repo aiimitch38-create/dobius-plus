@@ -82,6 +82,21 @@ exit 1
 `
 }
 
+// Why: the Voice Conductor installer (voice-conductor/cli-install.ts) also
+// writes dobius-send / dobius-tabs / dobius-status, with different arguments
+// and a different server. Rewriting its copies on every boot made whichever
+// installer ran last win. The conductor copy is kept; a user's own script
+// with the same name is never replaced either.
+function mayWriteScript(file: string): boolean {
+  let existing: string
+  try {
+    existing = readFileSync(file, 'utf8')
+  } catch {
+    return true
+  }
+  return existing.includes('# dobius-cli v') || LEGACY_MARKERS.some((m) => existing.includes(m))
+}
+
 // A stub this installer wrote earlier (any version) — safe to rewrite.
 function isOwnRetiredStub(contents: string): boolean {
   return (
@@ -159,7 +174,12 @@ BODY=$(python3 -c 'import json,sys; print(json.dumps({"ref": sys.argv[1]}))' "$R
 
   for (const [name, body] of Object.entries(scripts)) {
     try {
-      writeIfChanged(path.join(dir, name), body)
+      const file = path.join(dir, name)
+      if (!mayWriteScript(file)) {
+        console.warn(`[dobius-cli] not replacing ${name}: owned by another installer or the user`)
+        continue
+      }
+      writeIfChanged(file, body)
     } catch (err) {
       console.warn(`[dobius-cli] could not install ${name}: ${(err as Error).message}`)
     }

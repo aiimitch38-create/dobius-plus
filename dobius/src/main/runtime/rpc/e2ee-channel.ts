@@ -1,7 +1,14 @@
 // Why: the E2EE channel sits between the WebSocket transport and the RPC handler.
 // It owns the handshake state machine and transparent encrypt/decrypt so the RPC
 // handler only sees plaintext JSON, identical to the Unix socket path.
+import { randomBytes } from 'node:crypto'
 import type { WebSocket } from 'ws'
+import { E2EE_CLIENT_UPDATE_REQUIRED, E2EE_HANDSHAKE_VERSION } from '../../../shared/e2ee-handshake'
+import {
+  enableE2EESequencingFromFirstFrame,
+  isE2EESequenceViolated
+} from '../../../shared/e2ee-sequencing'
+import { constantTimeEqual } from '../../lib/constant-time-equal'
 import { deriveSharedKey, encrypt, decrypt, encryptBytes, decryptBytes } from './e2ee-crypto'
 
 type ChannelState = 'awaiting_hello' | 'awaiting_auth' | 'ready'
@@ -9,6 +16,11 @@ type ChannelState = 'awaiting_hello' | 'awaiting_auth' | 'ready'
 const HANDSHAKE_TIMEOUT_MS = 10_000
 const MAX_CONSECUTIVE_DECRYPT_FAILURES = 5
 const MAX_BINARY_BUFFERED_AMOUNT = 8 * 1024 * 1024
+const HANDSHAKE_CHALLENGE_BYTES = 32
+const AUTH_NONCE_BYTES = 24
+// Why: distinct from 4001 so logs tell an outdated client from a bad token.
+const CLOSE_CLIENT_UPDATE_REQUIRED = 4010
+const CLOSE_OUT_OF_SEQUENCE = 4004
 
 type E2EEHello = {
   type: 'e2ee_hello'
@@ -18,11 +30,16 @@ type E2EEHello = {
 type E2EEAuth = {
   type: 'e2ee_auth'
   deviceToken: string
+  challenge?: unknown
 }
 
 export type E2EEChannelOptions = {
   serverSecretKey: Uint8Array
   validateToken: (token: string) => boolean
+  // Why: a pairing QR token is single-use. Called right after validateToken in
+  // the same tick, it returns the replacement token when this login consumed a
+  // pairing offer (sent to the client inside the encrypted channel), or null.
+  claimToken?: (token: string) => string | null
   onReady: (channel: E2EEChannel) => void
   onError: (code: number, reason: string) => void
 }
@@ -30,11 +47,14 @@ export type E2EEChannelOptions = {
 export class E2EEChannel {
   private state: ChannelState = 'awaiting_hello'
   private sharedKey: Uint8Array | null = null
+  // Why: fresh per connection; the auth frame must echo it (handshake v2).
+  private challenge: string | null = null
   private consecutiveFailures = 0
   private handshakeTimer: ReturnType<typeof setTimeout> | null = null
   private readonly ws: WebSocket
   private readonly serverSecretKey: Uint8Array
   private readonly validateToken: (token: string) => boolean
+  private readonly claimToken: ((token: string) => string | null) | undefined
   private readonly onReady: (channel: E2EEChannel) => void
   private readonly onError: (code: number, reason: string) => void
   // Why: the RPC handler is set after the channel is ready, so the channel
@@ -55,6 +75,7 @@ export class E2EEChannel {
     this.ws = ws
     this.serverSecretKey = options.serverSecretKey
     this.validateToken = options.validateToken
+    this.claimToken = options.claimToken
     this.onReady = options.onReady
     this.onError = options.onError
 
@@ -94,7 +115,7 @@ export class E2EEChannel {
     if (typeof raw !== 'string') {
       const plaintextBytes = decryptBytes(raw, this.sharedKey)
       if (plaintextBytes === null) {
-        this.trackDecryptFailure()
+        this.handleDecryptFailure(this.sharedKey)
         return
       }
       this.consecutiveFailures = 0
@@ -108,13 +129,13 @@ export class E2EEChannel {
 
     const plaintext = decrypt(raw, this.sharedKey)
     if (plaintext === null) {
-      this.trackDecryptFailure()
+      this.handleDecryptFailure(this.sharedKey)
       return
     }
 
     this.consecutiveFailures = 0
     if (this.state === 'awaiting_auth') {
-      this.handleAuth(plaintext)
+      this.handleAuth(plaintext, Buffer.from(raw, 'base64').subarray(0, AUTH_NONCE_BYTES))
       return
     }
 
@@ -141,6 +162,16 @@ export class E2EEChannel {
       return true
     }
     this.messageHandler?.(plaintext, encryptedReply, encryptedBinaryReply)
+  }
+
+  // Why: an authentic frame out of sequence means a frame was replayed,
+  // reordered or deleted on the path; the session cannot be trusted any more.
+  private handleDecryptFailure(sharedKey: Uint8Array): void {
+    if (isE2EESequenceViolated(sharedKey)) {
+      this.onError(CLOSE_OUT_OF_SEQUENCE, 'Out-of-sequence frame')
+      return
+    }
+    this.trackDecryptFailure()
   }
 
   private trackDecryptFailure(): void {
@@ -173,16 +204,25 @@ export class E2EEChannel {
     }
 
     this.sharedKey = deriveSharedKey(this.serverSecretKey, clientPublicKey)
+    this.challenge = randomBytes(HANDSHAKE_CHALLENGE_BYTES).toString('base64')
     this.state = 'awaiting_auth'
 
     // Why: send e2ee_ready as plaintext — the client needs it to know the
     // key exchange succeeded before it can send encrypted authentication.
+    // The challenge may be public: a replayer still cannot encrypt it
+    // without the client's ephemeral secret key.
     if (this.ws.readyState === this.ws.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'e2ee_ready' }))
+      this.ws.send(
+        JSON.stringify({
+          type: 'e2ee_ready',
+          version: E2EE_HANDSHAKE_VERSION,
+          challenge: this.challenge
+        })
+      )
     }
   }
 
-  private handleAuth(plaintext: string): void {
+  private handleAuth(plaintext: string, authNonce: Uint8Array): void {
     let auth: E2EEAuth
     try {
       auth = JSON.parse(plaintext) as E2EEAuth
@@ -197,13 +237,51 @@ export class E2EEChannel {
       this.onError(4001, 'Invalid e2ee_auth')
       return
     }
+    if (auth.challenge === undefined) {
+      // Why: a pre-v2 client cannot prove freshness, so accepting it would
+      // reopen the replay hole. Reject with a reason it can show and log.
+      this.sendEncryptedControl({
+        type: 'e2ee_error',
+        error: {
+          code: E2EE_CLIENT_UPDATE_REQUIRED,
+          message: 'This Dobius app is too old for this desktop. Update the app, then reconnect.'
+        }
+      })
+      this.onError(CLOSE_CLIENT_UPDATE_REQUIRED, 'Client update required')
+      return
+    }
+    if (!this.challenge || !constantTimeEqual(auth.challenge, this.challenge)) {
+      this.sendEncryptedControl({ type: 'e2ee_error', error: { code: 'bad_auth' } })
+      this.onError(4001, 'Stale e2ee_auth')
+      return
+    }
+    if (
+      !this.sharedKey ||
+      !enableE2EESequencingFromFirstFrame(this.sharedKey, 'server', authNonce)
+    ) {
+      this.sendEncryptedControl({ type: 'e2ee_error', error: { code: 'bad_auth' } })
+      this.onError(4001, 'Unsequenced e2ee_auth')
+      return
+    }
     if (!this.validateToken(auth.deviceToken)) {
       this.sendEncryptedControl({ type: 'e2ee_error', error: { code: 'unauthorized' } })
       this.onError(4001, 'Unauthorized')
       return
     }
+    let rotatedToken: string | null
+    try {
+      rotatedToken = this.claimToken?.(auth.deviceToken) ?? null
+    } catch (error) {
+      // Why: if the single-use swap cannot be saved, fail the login rather
+      // than leave the QR token valid or hand out a token that is not on disk.
+      console.error('[e2ee] could not consume pairing offer:', error)
+      this.sendEncryptedControl({ type: 'e2ee_error', error: { code: 'unauthorized' } })
+      this.onError(4001, 'Unauthorized')
+      return
+    }
 
-    this.deviceToken = auth.deviceToken
+    this.deviceToken = rotatedToken ?? auth.deviceToken
+    this.challenge = null
     this.state = 'ready'
 
     if (this.handshakeTimer) {
@@ -211,7 +289,11 @@ export class E2EEChannel {
       this.handshakeTimer = null
     }
 
-    this.sendEncryptedControl({ type: 'e2ee_authenticated' })
+    this.sendEncryptedControl(
+      rotatedToken
+        ? { type: 'e2ee_authenticated', deviceToken: rotatedToken }
+        : { type: 'e2ee_authenticated' }
+    )
     this.onReady(this)
   }
 
@@ -227,6 +309,7 @@ export class E2EEChannel {
       this.handshakeTimer = null
     }
     this.sharedKey = null
+    this.challenge = null
     this.messageHandler = null
     this.binaryMessageHandler = null
   }

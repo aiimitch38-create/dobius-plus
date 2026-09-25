@@ -15,6 +15,7 @@ import {
 } from './mobile-page-stage'
 import { translate } from '@/i18n/i18n'
 import { useMobilePageEscape } from './use-mobile-page-escape'
+import { usePairingQrAutoRefresh } from './use-pairing-qr-auto-refresh'
 import { MobilePageContent } from './MobilePageContent'
 import { useMobileInstallQr } from './use-mobile-install-qr'
 
@@ -299,6 +300,12 @@ export default function MobilePage(): React.JSX.Element {
     }
     void generatePairing(false)
   }, [stage, stepIdx, generatePairing])
+
+  // Why: keep the Step 2 QR inside its 15 min lifetime while it is shown.
+  usePairingQrAutoRefresh(
+    stage === 'flow' && stepIdx === 1 && pairQrDataUrl != null,
+    () => void generatePairing(false)
+  )
 
   // Why: poll for new pairings while the user is on Step 2 so we can
   // auto-transition to the paired summary the moment their phone connects.

@@ -1,21 +1,9 @@
 /* eslint-disable max-lines -- Why: these tests exercise one stateful transport
    boundary across connection lifecycle, heartbeat, pre-auth timeout, and
    shutdown behavior; splitting the setup would obscure the shared invariants. */
-import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { describe, expect, it, afterEach, vi } from 'vitest'
 import WebSocket from 'ws'
 import { WebSocketTransport } from './ws-transport'
-import { loadOrCreateTlsCertificate } from '../tls-certificate'
-
-// Why: disable TLS verification for self-signed certs in tests.
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-
-function makeTls() {
-  const userDataPath = mkdtempSync(join(tmpdir(), 'ws-transport-test-'))
-  return loadOrCreateTlsCertificate(userDataPath)
-}
 
 describe('WebSocketTransport', () => {
   const transports: WebSocketTransport[] = []
@@ -29,29 +17,24 @@ describe('WebSocketTransport', () => {
     handler?: (msg: string, reply: (response: string) => void) => void,
     options: { preAuthTimeoutMs?: number } = {}
   ) {
-    const tls = makeTls()
     const transport = new WebSocketTransport({
       host: '127.0.0.1',
       // Why: random "free" ports can still collide before listen() binds.
       // Port 0 lets the OS reserve an available port atomically.
       port: 0,
-      tlsCert: tls.cert,
-      tlsKey: tls.key,
       preAuthTimeoutMs: options.preAuthTimeoutMs
     })
     if (handler) {
       transport.onMessage(handler)
     }
     transports.push(transport)
-    return { transport, tls }
+    return { transport }
   }
 
   function connectWs(target: number | WebSocketTransport): Promise<WebSocket> {
     const port = typeof target === 'number' ? target : target.resolvedPort
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`wss://127.0.0.1:${port}`, {
-        rejectUnauthorized: false
-      })
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`)
       ws.once('open', () => resolve(ws))
       ws.once('error', reject)
     })
@@ -372,12 +355,9 @@ describe('WebSocketTransport', () => {
 
     // Why: second transport requests the same port, which is now occupied.
     // It should silently fall back to an OS-assigned port instead of throwing.
-    const tls = makeTls()
     const second = new WebSocketTransport({
       host: '127.0.0.1',
-      port: occupiedPort,
-      tlsCert: tls.cert,
-      tlsKey: tls.key
+      port: occupiedPort
     })
     transports.push(second)
 
@@ -397,12 +377,9 @@ describe('WebSocketTransport', () => {
     // ticks without a pong should cause terminate() to fire and free the
     // slot. Verifying via the server's connection-close handler, which
     // is what frees up the MAX_WS_CONNECTIONS budget in production.
-    const tls = makeTls()
     const transport = new WebSocketTransport({
       host: '127.0.0.1',
       port: 0,
-      tlsCert: tls.cert,
-      tlsKey: tls.key,
       heartbeatIntervalMs: 50
     })
     transport.onMessage(() => {})

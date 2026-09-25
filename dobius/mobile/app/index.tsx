@@ -832,7 +832,8 @@ export default function HomeScreen() {
             const isError =
               verdict.kind === 'warning' ||
               verdict.kind === 'unreachable' ||
-              verdict.kind === 'auth-failed'
+              verdict.kind === 'auth-failed' ||
+              verdict.kind === 'update-required'
             return (
               <Pressable
                 style={({ pressed }) => [styles.hostCard, pressed && styles.hostCardPressed]}

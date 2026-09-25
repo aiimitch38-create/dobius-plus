@@ -96,7 +96,12 @@ import type { WorkspaceStatusDefinition } from '../../../../src/shared/types'
 import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../../../src/worktree/mobile-workspace-statuses'
 
 function isErrorVerdict(v: ConnectionVerdict): boolean {
-  return v.kind === 'warning' || v.kind === 'unreachable' || v.kind === 'auth-failed'
+  return (
+    v.kind === 'warning' ||
+    v.kind === 'unreachable' ||
+    v.kind === 'auth-failed' ||
+    v.kind === 'update-required'
+  )
 }
 
 const REPO_METADATA_REFRESH_MS = 60_000
@@ -883,7 +888,12 @@ export function HostScreen({
                     // Reconnect button for that case.
                     const verdict = headerVerdict
                     const isError = isErrorVerdict(verdict)
-                    const showReconnectButton = isError && hostId && verdict.kind !== 'auth-failed'
+                    // Why: reconnecting cannot fix an outdated app either.
+                    const showReconnectButton =
+                      isError &&
+                      hostId &&
+                      verdict.kind !== 'auth-failed' &&
+                      verdict.kind !== 'update-required'
                     if (!showReconnectButton) {
                       return null
                     }

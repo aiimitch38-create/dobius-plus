@@ -21,7 +21,7 @@ import {
 } from 'react'
 import { connect, type RpcClient } from './rpc-client'
 import { subscribeConnectionRevivalTriggers } from './connection-revival-triggers'
-import { loadHosts } from './host-store'
+import { loadHosts, saveHost } from './host-store'
 import type { ConnectionState, HostProfile } from './types'
 
 type StoreEntry = {
@@ -145,7 +145,17 @@ export function RpcClientProvider({ children }: { children: ReactNode }) {
 
       let client: RpcClient
       try {
-        client = connect(host.endpoint, host.deviceToken, host.publicKeyB64)
+        const profile = host
+        client = connect(host.endpoint, host.deviceToken, host.publicKeyB64, {
+          // Why: only a never-used pairing token is swapped, so this is rare
+          // (e.g. a host saved before handshake v2); persist it or the next
+          // launch would present a dead token.
+          onDeviceTokenRotated: (deviceToken) => {
+            void saveHost({ ...profile, deviceToken }).catch((err: unknown) => {
+              console.warn('[host] could not save rotated device token', err)
+            })
+          }
+        })
       } catch {
         // Why: connect() can throw synchronously if the public key is
         // malformed or the endpoint URL is invalid. Notify so the UI
