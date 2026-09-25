@@ -1363,7 +1363,8 @@ export type PreloadApi = {
     writeFile: (
       agentId: string,
       name: AgentIdentityFileName | 'brief' | 'memory',
-      content: string
+      content: string,
+      expected?: string
     ) => Promise<void>
     readCrewFiles: () => Promise<AgentCrewFiles>
     writeCrewFile: (name: AgentCrewFileName, content: string) => Promise<void>

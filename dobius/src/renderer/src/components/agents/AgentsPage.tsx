@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type {
   AgentIdentityFileName,
-  AgentReadableFiles,
   AgentRun,
   AgentRunEvent,
   AgentsExecutionState,
@@ -15,7 +14,8 @@ import { AgentMissionControlPanel } from './AgentMissionControlPanel'
 import { AgentPageDialogs } from './AgentPageDialogs'
 import { AgentsPageHeader, CrewControlUnreadableNotice } from './AgentsPageHeader'
 import { countSilentHeartbeatRunsToday } from './agent-briefing-count'
-import { DEFAULT_AGENT_FILES } from './agent-default-files'
+import { useAgentIdentityFiles } from './use-agent-identity-files'
+import { useSelectedAgentSync } from './use-selected-agent-sync'
 import { useCrewFiles } from './use-crew-files'
 import { useAgentDecisions } from './use-agent-decisions'
 import { useAgentDetailActions } from './use-agent-detail-actions'
@@ -39,7 +39,6 @@ export default function AgentsPage(): React.JSX.Element {
   const [mode, setMode] = useState<AgentPageMode>('run')
   const [editOpen, setEditOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
-  const [agentFiles, setAgentFiles] = useState<AgentReadableFiles>(DEFAULT_AGENT_FILES)
   const [activeIdentityFile, setActiveIdentityFile] = useState<AgentIdentityFileName>('soul')
   const [prompt, setPrompt] = useState('')
   const [transcript, setTranscript] = useState<AgentRunEvent[]>([])
@@ -100,11 +99,14 @@ export default function AgentsPage(): React.JSX.Element {
     setSelectedAgentId,
     setMode
   })
+  const identityFiles = useAgentIdentityFiles(selectedAgentId)
+  const { agentFiles, setAgentFiles } = identityFiles
   const { savingMemory, resettingSession, saveMemory, resetSession, saveTagline } =
     useAgentDetailActions({
       selectedAgentId,
       selectedAgent,
-      memoryContent: agentFiles.memory,
+      saveMemoryFile: (agentId) => identityFiles.saveAgentFiles(agentId, { names: ['memory'] }),
+      reportSaveError: identityFiles.reportAgentFileSaveError,
       setAgents
     })
 
@@ -133,25 +135,13 @@ export default function AgentsPage(): React.JSX.Element {
 
   useAgentPageInitialLoad({ loadAgents, loadRuns, loadBriefing, loadPaused })
 
-  useEffect(() => {
-    selectedAgentIdRef.current = selectedAgentId
-    setDraft(agentToDraft(selectedAgent))
-    setTranscript([])
-  }, [selectedAgent, selectedAgentId])
-
-  useEffect(() => {
-    if (!selectedAgentId) {
-      setAgentFiles(DEFAULT_AGENT_FILES)
-      return
-    }
-    void window.api.agents
-      .readFiles(selectedAgentId)
-      .then(setAgentFiles)
-      .catch((error) => {
-        console.error('Failed to load agent files:', error)
-        toast.error('Could not load agent files')
-      })
-  }, [selectedAgentId])
+  useSelectedAgentSync({
+    selectedAgent,
+    selectedAgentId,
+    selectedAgentIdRef,
+    setDraft,
+    setTranscript
+  })
 
   useEffect(() => {
     const unsubscribeRunEvent = window.api.agents.onRunEvent((event) => {
@@ -181,7 +171,7 @@ export default function AgentsPage(): React.JSX.Element {
     setSelectedTerminalId(null)
     setSelectedAgentId(null)
     setDraft(agentToDraft(null))
-    setAgentFiles(DEFAULT_AGENT_FILES)
+    identityFiles.resetAgentFiles()
     setActiveIdentityFile('soul')
     setEditOpen(true)
     setMode('run')
@@ -201,7 +191,7 @@ export default function AgentsPage(): React.JSX.Element {
       model: template.model,
       allowedTools: [...template.allowedTools]
     })
-    setAgentFiles(DEFAULT_AGENT_FILES)
+    identityFiles.resetAgentFiles()
     setActiveIdentityFile('soul')
     setTemplatesOpen(false)
     setEditOpen(true)
@@ -228,18 +218,13 @@ export default function AgentsPage(): React.JSX.Element {
       const saved =
         (draft.id ? nextAgents.find((agent) => agent.id === draft.id) : nextAgents.at(-1)) ?? null
       if (saved) {
-        await Promise.all(
-          (['soul', 'role', 'playbook', 'rules', 'brief', 'memory'] as const).map((name) =>
-            window.api.agents.writeFile(saved.id, name, agentFiles[name])
-          )
-        )
+        await identityFiles.saveAgentFiles(saved.id, { isNew: !draft.id })
       }
       setSelectedAgentId(saved?.id ?? null)
       setEditOpen(false)
       toast.success('Agent saved')
     } catch (error) {
-      console.error('Failed to save agent:', error)
-      toast.error(error instanceof Error ? error.message : 'Could not save agent')
+      identityFiles.reportAgentFileSaveError(error, 'Could not save agent')
     } finally {
       setSaving(false)
     }
@@ -418,13 +403,7 @@ export default function AgentsPage(): React.JSX.Element {
           setEditOpen(open)
           // Why: cancelled edits must not survive into the next save.
           if (!open && selectedAgentId) {
-            void window.api.agents
-              .readFiles(selectedAgentId)
-              .then(setAgentFiles)
-              .catch((error) => {
-                console.error('Failed to reload agent files after closing editor:', error)
-                setAgentFiles(DEFAULT_AGENT_FILES)
-              })
+            void identityFiles.reloadAgentFiles(selectedAgentId)
           }
         }}
         onSaveAgent={() => void saveAgent()}
