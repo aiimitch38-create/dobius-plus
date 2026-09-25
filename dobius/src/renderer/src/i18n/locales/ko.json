@@ -8942,6 +8942,10 @@
           "remove": "Remove",
           "configured": "A key is stored, encrypted on this machine. It is never shown again.",
           "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "agent-sandbox-copy": {
+          "title": "에이전트 샌드박스(권장)",
+          "description": "Claude 에이전트가 실행하는 명령은 에이전트의 작업 폴더, 해당 git 저장소, 임시 폴더, 패키지 캐시에만 쓸 수 있으며 다른 에이전트의 메모리나 저장된 자격 증명을 읽을 수 없습니다. 끄면 에이전트가 홈 폴더 어디에나 쓸 수 있습니다. 훅, 설정, 셸 시작 파일은 어느 경우에도 보호됩니다."
         }
       },
       "right": {

@@ -8942,6 +8942,10 @@
           "remove": "Remove",
           "configured": "A key is stored, encrypted on this machine. It is never shown again.",
           "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "agent-sandbox-copy": {
+          "title": "Sandbox de agentes (recomendado)",
+          "description": "Los comandos que ejecutan los agentes de Claude solo pueden escribir en la carpeta de trabajo del agente, su repositorio git, las carpetas temporales y las cachés de paquetes, y no pueden leer la memoria de otros agentes ni las credenciales guardadas. Si lo desactivas, los agentes podrán escribir en cualquier parte de tu carpeta personal. Los archivos de hooks, de configuración y de inicio del shell siguen protegidos en ambos casos."
         }
       },
       "right": {
