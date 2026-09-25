@@ -21,6 +21,7 @@ import {
 import { buildAgentHardRailHooks } from './agent-hard-rails'
 import {
   createHeadlessCanUseTool,
+  forgetPermissionDenials,
   recordStreamPermissionDenials,
   withPermissionDenialNote
 } from './agent-headless-permissions'
@@ -274,6 +275,7 @@ async function consumeRun(
         appendRunProgress(agent.id, finalRun.status, finalRun.summary)
       }
       liveRuns.delete(runId)
+      forgetPermissionDenials(runId)
       releaseAgentRun(agent.id)
       reservedRuns -= 1
       broadcastRunsChanged()

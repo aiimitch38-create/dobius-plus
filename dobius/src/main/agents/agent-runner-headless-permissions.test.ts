@@ -220,14 +220,45 @@ describe('headless runs never wait on a permission prompt (#74, N1)', () => {
         expect.objectContaining({ runId, kind: 'error', toolName: 'Bash' })
       )
 
-      // The result's own denial list repeats tool-1: recorded once, then shown in the summary.
+      // The result's own denial list repeats tool-1: recorded once, then shown in the summary
+      // (except for channel runs, whose summary is the chat reply; see the F1 test below).
       query.finish([resultMessage([{ tool_name: 'Bash', tool_use_id: 'tool-1' }])])
       const run = await waitForEnd(runId)
       expect(run.permissionDenials).toHaveLength(1)
-      expect(run.summary).toContain('done')
-      expect(run.summary).toContain('Blocked: 1 tool request(s) needed approval and were denied (Bash)')
+      if (options?.source === 'channel') {
+        expect(run.summary).toBe('done')
+      } else {
+        expect(run.summary).toContain('done')
+        expect(run.summary).toContain(
+          'Blocked: 1 tool request(s) needed approval and were denied (Bash)'
+        )
+      }
     }
   )
+
+  it('channel run: the Blocked note stays out of the chat reply, denials stay on the run', async () => {
+    const { options, query, runId } = await rpcRun({ source: 'channel', sessionKey: 'c1' })
+    await askTool(options.canUseTool as CanUseTool, 'Bash', 'ch-1')
+    query.finish([resultMessage([{ tool_name: 'Edit', tool_use_id: 'ch-2' }])])
+    const run = await waitForEnd(runId)
+    expect(run.summary).toBe('done')
+    expect(run.permissionDenials?.map((denial) => denial.toolUseId)).toEqual(['ch-1', 'ch-2'])
+    expect(mocks.events.filter((event) => event.kind === 'error')).toHaveLength(2)
+  })
+
+  it('past the saved cap: each denial broadcasts once and the note counts every one', async () => {
+    const { options, query, runId } = await launch({ source: 'heartbeat', permissionMode: 'dontAsk' })
+    const ids = Array.from({ length: 200 }, (_, index) => `many-${index}`)
+    for (const id of ids) {
+      await askTool(options.canUseTool as CanUseTool, 'Bash', id)
+    }
+    // The result repeats all 200 ids; none may broadcast or count a second time.
+    query.finish([resultMessage(ids.map((id) => ({ tool_name: 'Bash', tool_use_id: id })))])
+    const run = await waitForEnd(runId)
+    expect(run.permissionDenials).toHaveLength(20)
+    expect(mocks.events.filter((event) => event.kind === 'error')).toHaveLength(200)
+    expect(run.summary).toContain('Blocked: 200 tool request(s) needed approval and were denied (Bash)')
+  })
 
   it('RPC run without a source (CLI "agents run") is headless, not queued for a person', async () => {
     const { options, query, runId } = await rpcRun({})

@@ -13,6 +13,19 @@ type DenialRunContext = {
   agentId: string
 }
 
+// Why: the saved list is capped, so it cannot dedupe or count past the cap. This
+// per-run tally does both, and lives only until the run is finalized.
+type DenialTally = {
+  seenToolUseIds: Set<string>
+  total: number
+  toolNames: Set<string>
+}
+const denialTallies = new Map<string, DenialTally>()
+
+export function forgetPermissionDenials(runId: string): void {
+  denialTallies.delete(runId)
+}
+
 function headlessLabel(source: AgentRunSource): string {
   return source === 'manual' ? 'CLI/RPC' : source
 }
@@ -33,9 +46,19 @@ export function recordPermissionDenial(
     return
   }
   const existing = run.permissionDenials ?? []
-  if (denial.toolUseId && existing.some((entry) => entry.toolUseId === denial.toolUseId)) {
-    return
+  let tally = denialTallies.get(context.runId)
+  if (!tally) {
+    tally = { seenToolUseIds: new Set(), total: 0, toolNames: new Set() }
+    denialTallies.set(context.runId, tally)
   }
+  if (denial.toolUseId) {
+    if (tally.seenToolUseIds.has(denial.toolUseId)) {
+      return
+    }
+    tally.seenToolUseIds.add(denial.toolUseId)
+  }
+  tally.total += 1
+  tally.toolNames.add(denial.toolName)
   const reason = denial.reason.slice(0, MAX_REASON_LENGTH)
   if (existing.length < MAX_RECORDED_DENIALS) {
     const entry: AgentRunPermissionDenial = {
@@ -101,13 +124,25 @@ export function recordStreamPermissionDenials(
 
 /** Appends the blocked-tools outcome to a finished run's summary. */
 export function withPermissionDenialNote(runId: string, summary: string): string {
-  const denials = getStoredAgentRun(runId)?.permissionDenials ?? []
-  if (denials.length === 0) {
+  const run = getStoredAgentRun(runId)
+  // Why: a channel run's summary is the reply posted into the chat (and read by
+  // other agents). Its denials stay on permissionDenials and the error events.
+  if (run?.source === 'channel') {
     return summary
   }
-  const tools = [...new Set(denials.map((denial) => denial.toolName))].join(', ')
+  const denials = run?.permissionDenials ?? []
+  const tally = denialTallies.get(runId)
+  const total = Math.max(tally?.total ?? 0, denials.length)
+  if (total === 0) {
+    return summary
+  }
+  const toolNames = new Set([
+    ...(tally?.toolNames ?? []),
+    ...denials.map((denial) => denial.toolName)
+  ])
+  const tools = [...toolNames].join(', ')
   const note =
-    `Blocked: ${denials.length} tool request(s) needed approval and were denied (${tools}). ` +
+    `Blocked: ${total} tool request(s) needed approval and were denied (${tools}). ` +
     'Nobody could approve them during this run.'
   return summary ? `${summary}\n\n${note}` : note
 }

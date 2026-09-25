@@ -147,3 +147,30 @@ already drops unknown fields on load.
 - A "headless" check keyed on `source` alone is not enough: an RPC caller can send
   `source: 'manual'`. Only `origin`, which is set by the IPC handler and not by the caller, can
   tell a watched run from an unwatched one.
+
+## Review follow-up (F1, F2)
+- **F1 — Blocked note leaked into Communications chat.** For `source: 'channel'` runs the
+  summary is the reply `awaitDobiusAgentRun` (dobiusCommunications.ts) posts into the channel
+  and feeds to other agents. `withPermissionDenialNote` now returns the summary unchanged for
+  channel runs (it reads the stored run's `source`). Denials stay on `permissionDenials` and
+  the error events still fire. Other headless sources keep the note.
+  - Test: `channel run: the Blocked note stays out of the chat reply, denials stay on the run`;
+    the `it.each` channel rows (iMessage, workflow, Communications provider) now expect the
+    summary to be exactly `done`.
+  - Mutation: guard disabled → 4 tests fail (`expected 'done\n\nBlocked: …' to be 'done'`).
+- **F2 — duplicates and wrong count past the 20-entry cap.** Dedupe used the saved list, which
+  stops growing at 20, so every later denial broadcast twice (canUseTool + result list) and the
+  note said 20. `agent-headless-permissions.ts` now keeps a per-run in-memory tally (seen
+  toolUseIds, true total, tool names) separate from the capped saved list. A seen id returns
+  before storing or broadcasting. The note reports the tally total. `consumeRun`'s `finally`
+  calls `forgetPermissionDenials(runId)` so the tally does not outlive the run (cancel path
+  included).
+  - Test: `past the saved cap: each denial broadcasts once and the note counts every one`
+    (200 denials via canUseTool, repeated in result.permission_denials).
+  - Mutation: old list-based dedupe → `expected [ Array(380) ] to have a length of 200`;
+    count from the saved list → `expected 'done\n\nBlocked: 20 tool request(s)…' to contain
+    'Blocked: 200 tool request(s)…'`.
+- Verification: `pnpm run typecheck` exit 0; `vitest src/main/agents
+  src/renderer/src/components/agents` 22 files / 210 tests passed. oxlint: only the
+  pre-existing `max-lines` error on `agent-runner.ts` (484 → 486 lines; 2 added lines for the
+  cleanup call; a split is out of scope). `sanitizeRuns`/`sanitizePermissionDenials` untouched.
