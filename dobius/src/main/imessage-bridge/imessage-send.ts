@@ -39,6 +39,10 @@ const PHONE_HANDLE = /^\+?[0-9][0-9 ().-]{1,30}$/
 const EMAIL_HANDLE = /^[^\s@"\\]+@[^\s@"\\]+\.[^\s@"\\]+$/
 
 export function isValidImessageHandle(handle: string): boolean {
+  // Why: a leading '-' would be read by osascript as an option, not an argument.
+  if (handle.startsWith('-')) {
+    return false
+  }
   return PHONE_HANDLE.test(handle) || EMAIL_HANDLE.test(handle)
 }
 
@@ -73,7 +77,8 @@ export async function sendImessage(handle: string, text: string): Promise<void> 
 
   const { stderr } = await execFileAsync(
     '/usr/bin/osascript',
-    ['-e', SEND_SCRIPT, handle, stripControlChars(text)],
+    // '--' ends osascript's option parsing, so no argument is ever read as a flag.
+    ['-e', SEND_SCRIPT, '--', handle, stripControlChars(text)],
     { timeout: OSASCRIPT_TIMEOUT_MS }
   )
   if (stderr) {

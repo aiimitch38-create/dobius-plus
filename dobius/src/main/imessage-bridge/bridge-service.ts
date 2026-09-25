@@ -18,6 +18,7 @@ import {
   PAUSED_REPLY,
   type ImessageBridgeTerminalDispatcher
 } from './terminal-send-guard'
+import { selfHandleSpellings } from './self-handle-spellings'
 
 export { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-config'
 export type { ImessageBridgeTerminalDispatcher } from './terminal-send-guard'
@@ -27,11 +28,12 @@ const POLL_INTERVAL_MS = 2_000
 const MAX_COMMAND_LENGTH = 4_000
 
 // Self-thread filter: only messages the user sent (is_from_me) in the 1:1
-// chat whose identifier is exactly their own handle. Why exact: a substring
-// match on chat.guid also accepted longer numbers/emails containing the handle
-// and group chats. Group chat guids carry ';+;' (1:1 chats carry ';-;').
-// Rows with no chat join fall back to an exact handle match, which covers the
-// self-chat rows some macOS versions store without a chat link.
+// chat whose identifier exactly equals one spelling of their own handle
+// (selfHandleSpellings). Why exact: a substring match on chat.guid also
+// accepted longer numbers/emails containing the handle and group chats. Group
+// chat guids carry ';+;' (1:1 chats carry ';-;'). Rows with no chat join fall
+// back to an exact handle match, which covers the self-chat rows some macOS
+// versions store without a chat link.
 const NEW_MESSAGES_SQL = `
   SELECT message.ROWID AS rowid, message.text AS text, message.attributedBody AS attributedBody
   FROM message
@@ -42,9 +44,9 @@ const NEW_MESSAGES_SQL = `
     AND message.is_from_me = 1
     AND (
       (chat.ROWID IS NOT NULL
-        AND lower(chat.chat_identifier) = lower(?)
+        AND lower(chat.chat_identifier) IN (SELECT value FROM json_each(?))
         AND instr(chat.guid, ';+;') = 0)
-      OR (chat.ROWID IS NULL AND lower(handle.id) = lower(?))
+      OR (chat.ROWID IS NULL AND lower(handle.id) IN (SELECT value FROM json_each(?)))
     )
   GROUP BY message.ROWID
   ORDER BY message.ROWID ASC
@@ -193,9 +195,10 @@ function readNewSelfMessages(
   lastSeenRowid: number,
   selfHandle: string
 ): NewMessageRow[] {
+  const spellings = JSON.stringify(selfHandleSpellings(selfHandle))
   return database
     .prepare(NEW_MESSAGES_SQL)
-    .all(lastSeenRowid, selfHandle, selfHandle) as NewMessageRow[]
+    .all(lastSeenRowid, spellings, spellings) as NewMessageRow[]
 }
 
 async function pollNewMessages(database: SyncDatabase.Database | null = db): Promise<void> {

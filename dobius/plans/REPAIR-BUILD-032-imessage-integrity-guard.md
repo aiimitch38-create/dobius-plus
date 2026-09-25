@@ -110,3 +110,23 @@ Revert the commit. No data format changes (`imessage-bridge.json` shape unchange
 - `runtime.sendTerminal(handle, action, { beforeWrite })` already rechecks before each chunk and
   before Enter; reuse it rather than re-implementing two-phase guarded sends.
 - zsh: expand a file list with an array (`"${F[@]}"`), not an unquoted string.
+
+## Review round 1 (coordinator findings)
+- **F1 [high]** exact match broke a bare 10-digit US `selfHandle` (chat.db stores `+1XXXXXXXXXX`).
+  New `imessage-bridge/self-handle-spellings.ts` builds the exact candidate set: emails lower-cased;
+  phones by digits: 10 digits or 11 starting with 1 → `+1N`, `1N`, `N`; otherwise `+D`, `D`; plus
+  the trimmed original. SQL compares `lower(chat_identifier)` / `lower(handle.id)` with
+  `IN (SELECT value FROM json_each(?))`: exact only, never LIKE. Group exclusion kept. Split into its
+  own file for max-lines. No other place in the bridge compares the configured handle
+  (dispatch-server `knownHandle` compares terminal handles, unrelated).
+  Tests: configured `5551234567`, `+15551234567`, `15551234567`, `(555) 123-4567`, `+1 555-123-4567`
+  each match only the E.164 self chat and its unlinked row. They do not match a last-digit-different
+  number, a superset number, another country code with the same national digits, or a group chat.
+  `1234567` / `555123456` match nothing.
+- **F2 [low]** handles starting with `-` are rejected, and `--` now precedes the argv values.
+  Verified harmlessly (no Messages): `osascript -e 'on run argv' … -- -x` returns `-x` as item 1 and
+  consumes `--` (count stays exact). Without it, `-e@x.com` is parsed as a `-e` script (syntax error).
+- Mutation checks: M9 single-spelling lookup → 4 US-spelling tests fail; M10 drop leading-dash
+  check → 2 tests fail; M11 drop `--` → 2 tests fail. All restored (diff-verified).
+- Targeted: 5 files, 35 tests green. Typecheck exit 0. Lint clean on changed files (dispatch-server
+  max-lines pre-existing, untouched this round).

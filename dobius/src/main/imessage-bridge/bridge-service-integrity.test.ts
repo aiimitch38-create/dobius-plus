@@ -256,6 +256,43 @@ describe('#14 exact self-chat identity', () => {
     expect(bridgeServiceInternals.readNewSelfMessages(seed(), 0, '%')).toEqual([])
     expect(bridgeServiceInternals.readNewSelfMessages(seed(), 0, '+1555123_')).toEqual([])
   })
+
+  describe('US phone spellings (setting typed without +1)', () => {
+    function seedUs(): SyncDatabase.Database {
+      const database = createChatDb()
+      database.exec(`
+        INSERT INTO handle (ROWID, id) VALUES
+          (1, '+15551234567'), (2, '+15551234568'), (3, '+155512345670'), (4, '+445551234567');
+        INSERT INTO chat (ROWID, guid, chat_identifier) VALUES
+          (10, 'iMessage;-;+15551234567', '+15551234567'),
+          (11, 'iMessage;-;+15551234568', '+15551234568'),
+          (12, 'iMessage;-;+155512345670', '+155512345670'),
+          (13, 'iMessage;-;+445551234567', '+445551234567'),
+          (14, 'iMessage;+;chat555', 'chat555');
+      `)
+      addMessage(database, { rowid: 1, text: 'self chat', handleId: 1, chatIds: [10] })
+      addMessage(database, { rowid: 2, text: 'last digit differs', handleId: 2, chatIds: [11] })
+      addMessage(database, { rowid: 3, text: 'superset number', handleId: 3, chatIds: [12] })
+      addMessage(database, { rowid: 4, text: 'other country', handleId: 4, chatIds: [13] })
+      addMessage(database, { rowid: 5, text: 'group with self', handleId: 1, chatIds: [14] })
+      addMessage(database, { rowid: 6, text: 'no chat link', handleId: 1 })
+      addMessage(database, { rowid: 7, text: 'no link, other', handleId: 2 })
+      return database
+    }
+
+    it.each(['5551234567', '+15551234567', '15551234567', '(555) 123-4567', '+1 555-123-4567'])(
+      'configured %j matches only the E.164 self chat',
+      (configured) => {
+        const rows = bridgeServiceInternals.readNewSelfMessages(seedUs(), 0, configured)
+        expect(rows.map((row) => row.rowid)).toEqual([1, 6])
+      }
+    )
+
+    it('a shorter or partial number matches nothing', () => {
+      expect(bridgeServiceInternals.readNewSelfMessages(seedUs(), 0, '1234567')).toEqual([])
+      expect(bridgeServiceInternals.readNewSelfMessages(seedUs(), 0, '555123456')).toEqual([])
+    })
+  })
 })
 
 describe('#13 watermark is coupled to dispatch', () => {

@@ -39,7 +39,7 @@ describe('#16 AppleScript send cannot be altered by the handle or text', () => {
     expect(args[1]).toBe(firstScript)
     expect(args[1]).not.toContain('555')
     expect(args[1]).not.toContain('do shell script')
-    expect(args.slice(2)).toEqual(['+1 (555) 123-4567', hostileText])
+    expect(args.slice(2)).toEqual(['--', '+1 (555) 123-4567', hostileText])
   })
 
   it.each([
@@ -47,6 +47,8 @@ describe('#16 AppleScript send cannot be altered by the handle or text', () => {
     'a\\" & (do shell script "id") & "@x.com',
     '+1555"; do shell script "id"',
     '-e',
+    '-e@x.com',
+    '-x@y.org',
     'me@x.com\n',
     ''
   ])('refuses handle %j before osascript runs', async (handle) => {
@@ -62,6 +64,6 @@ describe('#16 AppleScript send cannot be altered by the handle or text', () => {
 
   it('still strips control characters from the text but keeps newlines', async () => {
     await sendImessage('me@x.com', 'line1\nline2\u0000\u0007end')
-    expect(lastArgs()[3]).toBe('line1\nline2end')
+    expect(lastArgs()[4]).toBe('line1\nline2end')
   })
 })
