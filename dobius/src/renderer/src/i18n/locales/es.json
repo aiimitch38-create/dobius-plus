@@ -12209,7 +12209,12 @@
           "a21f6c33ad": "Origen de automatización actualizado.",
           "53f06f0ad5": "Reintentar origen",
           "pendingAutomationMissing": "La automatización ya no está disponible.",
-          "pendingAutomationRunMissing": "El historial de ejecuciones ya no está disponible."
+          "pendingAutomationRunMissing": "El historial de ejecuciones ya no está disponible.",
+          "pauseFailed": "Failed to pause automation.",
+          "resumeFailed": "Failed to resume automation.",
+          "deleteFailed": "Failed to delete automation.",
+          "runNowFailed": "Failed to run automation.",
+          "runNowNotStarted": "Automation run did not start."
         },
         "CreateFromPicker": {
           "f061f49e3f": "Buscar ramas del repositorio...",
