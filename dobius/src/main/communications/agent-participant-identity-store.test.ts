@@ -137,11 +137,27 @@ describe('agent participant identity store', () => {
     )
   })
 
-  it('clearAgentIdentityRegistry removes the on-disk file and cache', async () => {
+  it('clearAgentIdentityRegistry moves the registry aside instead of deleting it', async () => {
     const store = await loadStoreModule()
-    store.ensureAgentIdentity('agent-1')
+    const original = store.ensureAgentIdentity('agent-1')
+    const bytesBefore = readFileSync(registryPath())
     store.clearAgentIdentityRegistry()
-    expect(existsSync(join(tempHome, '.dobius', 'communications-agent-identities.enc'))).toBe(false)
+    expect(existsSync(registryPath())).toBe(false)
+    const kept = dobiusDirListing().filter((name) => name.includes('.signed-out-'))
+    expect(kept).toHaveLength(1)
+    expect(readFileSync(join(tempHome, '.dobius', kept[0] as string)).equals(bytesBefore)).toBe(true)
+    expect(store.ensureAgentIdentity('agent-1').pubkey).not.toBe(original.pubkey)
+  })
+
+  it('refuses to reset the registry when it cannot be kept aside, and deletes nothing', async () => {
+    const store = await loadStoreModule()
+    const original = store.ensureAgentIdentity('agent-1')
+    const bytesBefore = readFileSync(registryPath())
+
+    fsFaults.renameError = Object.assign(new Error('permission denied'), { code: 'EPERM' })
+    expect(() => store.clearAgentIdentityRegistry()).toThrow(/Reset refused.*EPERM/)
+    expect(readFileSync(registryPath()).equals(bytesBefore)).toBe(true)
+    expect(store.ensureAgentIdentity('agent-1')).toEqual(original)
   })
 
   it('fails closed on a transient decrypt failure and keeps every agent identity', async () => {

@@ -128,3 +128,25 @@ names); old code reads files written by this build.
 - A mock `safeStorage` whose ciphertext equals the plaintext hides plaintext-fallback bugs; make
   the fake ciphertext non-JSON.
 - `username ?? readSomething()` short-circuits a side effect; call it unconditionally.
+
+## Review round 1 (coordinator findings F1, F2)
+- F1 [medium] sign-out deleted a possibly only-temporarily-unreadable key. `clearParticipantIdentity()`
+  (used by `identity-lifecycle.signOut`) and `clearAgentIdentityRegistry()` now rename the file to
+  `<file>.signed-out-<ms>` instead of `rmSync`. ENOENT is a no-op. Any other rename failure throws
+  ("Sign-out refused … nothing was deleted" / "Reset refused …"), and the file and cache stay as
+  they were, so `signOut` throws before relaunching.
+  - Tests: the sign-out-after-unavailable test now asserts the `.signed-out-*` copy holds the old
+    bytes. New tests: rename EPERM refuses sign-out, bytes and listing unchanged, same identity.
+    Sign-out with no file is a no-op. Agent: the clear test asserts the file was moved aside,
+    plus a refuse-on-EPERM test.
+  - Mutations: `rmSync` restored in participant (2 fail) and in agent (2 fail).
+- F2 [low] every GET/HEAD re-hashed the whole blob. `readVerifiedBlob` now opens one handle, runs
+  `fstat` and reads the file through it. It skips the hash when a bounded LRU (Map, 4096
+  entries) has the same `size:mtimeMs:ino` for that path. A failed verification evicts the entry.
+  `stopMediaServerForTests` clears the cache.
+  - Tests (`node:crypto` createHash counted via pass-through mock): the second GET, a HEAD and
+    `readBlobBytesByUrl` of an unchanged blob hash 0 times. An mtime change re-hashes (still 200).
+    An in-place truncation re-hashes and returns 404.
+  - Mutations: cache never hits (1 fail); cache keyed by path only (1 fail).
+- Verification: typecheck exit 0; oxlint + react-doctor clean on the 6 changed files. Targeted run
+  (both identity tests, workstation, identity dir, buzz migration): 198/198 passed.

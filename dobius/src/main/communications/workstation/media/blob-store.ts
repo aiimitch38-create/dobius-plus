@@ -14,7 +14,7 @@
 // else in this local relay setup does either.
 import { createHash } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, open, rename, writeFile } from 'node:fs/promises'
 import { extname, join, resolve, relative, isAbsolute, sep } from 'node:path'
 import { app } from 'electron'
 import { removeTempFile, sweepStaleTempFiles, uniqueTmpPath } from '../../../storage/safe-json-file'
@@ -132,19 +132,53 @@ function sha256Hex(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
+// Why: hashing a large blob on every GET/HEAD blocks the main process. A blob
+// is immutable once renamed into place, so a file whose size/mtime/inode are
+// unchanged since it last verified does not need hashing again.
+const VERIFIED_CACHE_LIMIT = 4096
+const verifiedBlobs = new Map<string, string>()
+
+function rememberVerified(filePath: string, fingerprint: string): void {
+  verifiedBlobs.delete(filePath)
+  verifiedBlobs.set(filePath, fingerprint)
+  if (verifiedBlobs.size > VERIFIED_CACHE_LIMIT) {
+    const oldest = verifiedBlobs.keys().next().value
+    if (oldest !== undefined) {verifiedBlobs.delete(oldest)}
+  }
+}
+
 /**
  * Returns the blob's bytes only when they hash to `sha256`; null when the
  * file is missing or incomplete, so a partial file is never served as the blob.
  */
 async function readVerifiedBlob(sha256: string, ext: string): Promise<Buffer | null> {
+  const filePath = blobFilePath(sha256, ext)
   let bytes: Buffer
+  let fingerprint: string
   try {
-    bytes = await readFile(blobFilePath(sha256, ext))
+    // One handle for stat + read, so the fingerprint describes the bytes read.
+    const handle = await open(filePath, 'r')
+    try {
+      const stat = await handle.stat()
+      fingerprint = `${stat.size}:${stat.mtimeMs}:${stat.ino}`
+      bytes = await handle.readFile()
+    } finally {
+      await handle.close()
+    }
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {return null}
     throw error
   }
-  return sha256Hex(bytes) === sha256 ? bytes : null
+  if (verifiedBlobs.get(filePath) === fingerprint) {
+    rememberVerified(filePath, fingerprint)
+    return bytes
+  }
+  if (sha256Hex(bytes) !== sha256) {
+    verifiedBlobs.delete(filePath)
+    return null
+  }
+  rememberVerified(filePath, fingerprint)
+  return bytes
 }
 
 // <sha256>.<ext>.<pid>.<random>.tmp, from uniqueTmpPath.
@@ -219,4 +253,5 @@ export async function stopMediaServerForTests(): Promise<void> {
   serverPort = 0
   startPromise = null
   staleTempsSwept = false
+  verifiedBlobs.clear()
 }

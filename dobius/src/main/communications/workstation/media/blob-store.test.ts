@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import type * as Crypto from 'node:crypto'
 import type * as FsPromises from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
@@ -7,6 +8,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let userDataDir: string
 vi.mock('electron', () => ({ app: { getPath: () => userDataDir } }))
+
+// Counts sha256 hashing so tests can see when a served blob is re-verified.
+const hashCalls = vi.hoisted(() => ({ count: 0 }))
+vi.mock('node:crypto', async () => {
+  const actual = await vi.importActual<typeof Crypto>('node:crypto')
+  return {
+    ...actual,
+    createHash: (algorithm: string) => {
+      hashCalls.count += 1
+      return actual.createHash(algorithm)
+    }
+  }
+})
 
 // One-shot crash simulation: the next blob write lands only half its bytes, then fails.
 const writeFaults = vi.hoisted(() => ({ interruptNextWrite: false }))
@@ -131,5 +145,40 @@ describe('blob-store', () => {
     const names = readdirSync(mediaDir())
     expect(names).not.toContain(stale)
     expect(names).toContain(fresh)
+  })
+
+  it('does not re-hash an unchanged blob on repeated serves', async () => {
+    const bytes = pngBytes()
+    const descriptor = await storeBlob(bytes, 'photo.png')
+
+    let before = hashCalls.count
+    expect(Buffer.from(await (await fetch(descriptor.url)).arrayBuffer()).equals(bytes)).toBe(true)
+    expect(hashCalls.count - before).toBe(1)
+
+    before = hashCalls.count
+    expect(Buffer.from(await (await fetch(descriptor.url)).arrayBuffer()).equals(bytes)).toBe(true)
+    expect((await fetch(descriptor.url, { method: 'HEAD' })).status).toBe(200)
+    expect((await readBlobBytesByUrl(descriptor.url)).equals(bytes)).toBe(true)
+    expect(hashCalls.count - before).toBe(0)
+  })
+
+  it('re-verifies a served blob after its size or mtime changes', async () => {
+    const bytes = pngBytes()
+    const descriptor = await storeBlob(bytes, 'photo.png')
+    const blobPath = path.join(mediaDir(), `${descriptor.sha256}.png`)
+    await fetch(descriptor.url)
+
+    // mtime only: re-hashed, still valid.
+    const later = new Date(Date.now() + 60_000)
+    utimesSync(blobPath, later, later)
+    let before = hashCalls.count
+    expect((await fetch(descriptor.url)).status).toBe(200)
+    expect(hashCalls.count - before).toBe(1)
+
+    // size changed (truncated in place): re-hashed, rejected.
+    writeFileSync(blobPath, bytes.subarray(0, 100))
+    before = hashCalls.count
+    expect((await fetch(descriptor.url)).status).toBe(404)
+    expect(hashCalls.count - before).toBe(1)
   })
 })

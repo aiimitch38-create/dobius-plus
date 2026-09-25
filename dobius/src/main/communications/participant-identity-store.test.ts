@@ -321,10 +321,34 @@ describe('participant identity store', () => {
     })
     expect(() => reloaded.ensureParticipantIdentity()).toThrow(reloaded.ParticipantIdentityUnavailableError)
 
+    const unavailableBytes = readFileSync(identityPath())
     reloaded.clearParticipantIdentity()
+    // The possibly only-temporarily-unreadable key is kept, never deleted.
+    const kept = dobiusDirListing().filter((name) => name.includes('.signed-out-'))
+    expect(kept).toHaveLength(1)
+    expect(readFileSync(join(tempHome, '.dobius', kept[0] as string)).equals(unavailableBytes)).toBe(true)
+
     const fresh = reloaded.ensureParticipantIdentity()
     expect(fresh.pubkey).toMatch(/^[a-f0-9]{64}$/)
     expect(fresh.pubkey).not.toBe(original.pubkey)
+  })
+
+  it('refuses sign-out when the identity file cannot be kept aside, and deletes nothing', async () => {
+    const store = await loadStoreModule()
+    const original = store.ensureParticipantIdentity()
+    const bytesBefore = readFileSync(identityPath())
+    const listingBefore = dobiusDirListing()
+
+    fsFaults.renameError = Object.assign(new Error('permission denied'), { code: 'EPERM' })
+    expect(() => store.clearParticipantIdentity()).toThrow(/Sign-out refused.*EPERM/)
+    expect(readFileSync(identityPath()).equals(bytesBefore)).toBe(true)
+    expect(dobiusDirListing()).toEqual(listingBefore)
+    expect(store.ensureParticipantIdentity()).toEqual(original)
+  })
+
+  it('sign-out on a machine with no identity file is a no-op', async () => {
+    const store = await loadStoreModule()
+    expect(() => store.clearParticipantIdentity()).not.toThrow()
   })
 
   it('an explicit import over an unavailable identity keeps the old file aside first', async () => {

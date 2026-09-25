@@ -13,7 +13,7 @@
 import { schnorr } from '@noble/curves/secp256k1'
 import { sha256 } from '@noble/hashes/sha256'
 import { safeStorage } from 'electron'
-import { existsSync, readFileSync, renameSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { writeSecureFile } from '../../shared/secure-file'
@@ -362,8 +362,22 @@ export function signParticipantEvent(event: UnsignedCommunicationsEvent): Signed
   }
 }
 
-/** Test/reset hook only — clears the in-memory cache and the on-disk file. */
+/**
+ * Explicit reset (sign-out). The identity file is moved to
+ * `<file>.signed-out-<ms>`, never deleted, because it may only be
+ * temporarily unreadable; if it cannot be moved, the reset is refused.
+ */
 export function clearParticipantIdentity(): void {
+  const identityPath = getIdentityPath()
+  try {
+    renameSync(identityPath, `${identityPath}.signed-out-${Date.now()}`)
+  } catch (error) {
+    if (errorText(error) !== 'ENOENT') {
+      throw new Error(
+        `Sign-out refused: the Communications identity file could not be kept aside (${errorText(error)}); nothing was deleted`
+      )
+    }
+  }
   cachedIdentity = null
-  rmSync(getIdentityPath(), { force: true })
+  lastLoggedUnavailableDetail = null
 }

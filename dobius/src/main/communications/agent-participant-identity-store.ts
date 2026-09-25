@@ -8,7 +8,7 @@
 import { schnorr } from '@noble/curves/secp256k1'
 import { sha256 } from '@noble/hashes/sha256'
 import { safeStorage } from 'electron'
-import { readFileSync, rmSync } from 'node:fs'
+import { readFileSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { writeSecureFile } from '../../shared/secure-file'
@@ -194,8 +194,21 @@ export function signAsAgent(
   }
 }
 
-/** Test/reset hook only — clears the in-memory cache and the on-disk file. */
+/**
+ * Explicit reset. The registry file is moved to `<file>.signed-out-<ms>`,
+ * never deleted; if it cannot be moved, the reset is refused.
+ */
 export function clearAgentIdentityRegistry(): void {
+  const path = getRegistryPath()
+  try {
+    renameSync(path, `${path}.signed-out-${Date.now()}`)
+  } catch (error) {
+    if (errorText(error) !== 'ENOENT') {
+      throw new Error(
+        `Reset refused: the agent identity registry could not be kept aside (${errorText(error)}); nothing was deleted`
+      )
+    }
+  }
   cachedRegistry = null
-  rmSync(getRegistryPath(), { force: true })
+  lastLoggedUnavailableDetail = null
 }
