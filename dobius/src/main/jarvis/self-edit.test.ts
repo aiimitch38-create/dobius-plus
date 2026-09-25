@@ -11,7 +11,13 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { type SelfEditProposal, SelfEditStore, resolveEditablePath, selfEditRoots } from './self-edit'
+import {
+  type SelfEditProposal,
+  SelfEditStore,
+  WINDOWS_WRITE_UNSUPPORTED,
+  resolveEditablePath,
+  selfEditRoots
+} from './self-edit'
 import { isSensitiveFileName } from './self-edit-path-policy'
 import {
   INSTALL_PROVENANCE_FILE,
@@ -466,5 +472,43 @@ describe('concurrency and undo (BUILD-019, #38 #39)', () => {
     expect(readFileSync(join(backups, `${proposal.id}-42.bak`), 'utf-8')).toBe('older backup\n')
     expect(readFileSync(join(root, 'src', 'voice.ts'), 'utf-8')).toBe('const a = 1\n')
     expect(readdirSync(backups)).toEqual([`${proposal.id}-42.bak`])
+  })
+})
+
+describe('Windows write refusal (BUILD-019, review finding)', () => {
+  it('refuses apply and undo on win32 with the spoken reason, writing nothing', () => {
+    const root = repo()
+    const file = join(root, 'src', 'voice.ts')
+    const windows = new SelfEditStore([root], Date.now, null, 'win32')
+    const proposed = windows.propose('src/voice.ts', 'const a = 2\n', 'bump')
+    if (!proposed.ok) {
+      throw new Error(proposed.error)
+    }
+    expect(windows.apply(proposed.proposal.id, join(root, 'backups'))).toEqual({
+      ok: false,
+      error: WINDOWS_WRITE_UNSUPPORTED
+    })
+    expect(readFileSync(file, 'utf-8')).toBe('const a = 1\n')
+    expect(existsSync(join(root, 'backups'))).toBe(false)
+  })
+
+  it('refuses undo on win32 with the spoken reason', () => {
+    const root = repo()
+    const windows = new SelfEditStore([root], Date.now, null, 'win32')
+    expect(windows.undo('edit_1')).toEqual({ ok: false, error: WINDOWS_WRITE_UNSUPPORTED })
+    expect(readFileSync(join(root, 'src', 'voice.ts'), 'utf-8')).toBe('const a = 1\n')
+  })
+
+  it('keeps writing on macOS and Linux', () => {
+    for (const platform of ['darwin', 'linux'] as const) {
+      const root = repo()
+      const store = new SelfEditStore([root], Date.now, null, platform)
+      const proposed = store.propose('src/voice.ts', 'const a = 2\n', 'bump')
+      if (!proposed.ok) {
+        throw new Error(proposed.error)
+      }
+      expect(store.apply(proposed.proposal.id, join(root, 'backups')).ok, platform).toBe(true)
+      expect(store.undo(proposed.proposal.id).ok, platform).toBe(true)
+    }
   })
 })

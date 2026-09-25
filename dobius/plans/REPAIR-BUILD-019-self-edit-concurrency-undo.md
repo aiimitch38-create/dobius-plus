@@ -88,3 +88,19 @@ second undo was refused by the conflict check instead; test tightened to assert 
 - Undo records live in memory: after an app restart, undo is refused, and the `.bak` in
   `userData/self-edit-backups` is the manual fallback (same as before).
 - A conflicted proposal stays pending (visible) rather than being auto-discarded.
+
+## Review follow-up (commit 2): Windows write refusal (Codex, medium)
+- Finding: every self-edit write relies on `O_NOFOLLOW` (`writeFileSyncNoFollow`); on Windows the
+  flag is absent (`?? 0`), so after the path re-check a local process could swap the target for a
+  symlink/junction and the write would follow it out of the allowed roots.
+- Fix: `SelfEditStore` takes an injectable `platform` (default `process.platform`, 4th
+  constructor arg). On `win32`, `apply()` and `undo()` return `WINDOWS_WRITE_UNSUPPORTED` (a
+  plain sentence the voice tools speak as `Not applied: …` / `Not undone: …`) before touching the
+  disk. Propose still works so the change can be reviewed. macOS/Linux unchanged.
+- Tests: win32 apply refused with the reason, file and backup dir untouched; win32 undo refused;
+  darwin and linux still apply and undo.
+- Mutation checks: W1 drop the apply check (1 fail), W2 drop the undo check (1 fail), W3 default
+  platform `win32` (9 fail). Final 40/40 green.
+
+## Decisions for Carson (added)
+- Self-edit apply/undo is off on Windows until a no-reparse-point open exists (fail closed).

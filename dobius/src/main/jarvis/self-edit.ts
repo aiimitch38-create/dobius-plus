@@ -47,6 +47,9 @@ export type ApplyResult =
 
 const MAX_CONTENT_BYTES = 512 * 1024
 
+export const WINDOWS_WRITE_UNSUPPORTED =
+  'Adam cannot write his own code on Windows yet: Windows has no safe way to refuse a link swapped in at the last moment. Nothing was written.'
+
 /**
  * Directories Adam may rewrite: the app that runs him and the service that
  * thinks for him. Everything else on the machine is out of reach regardless of
@@ -164,7 +167,8 @@ export class SelfEditStore {
     private readonly roots: string[],
     private readonly now: () => number = Date.now,
     /** Set when no repo root is configured: every proposal is refused with it. */
-    private readonly unavailableReason: string | null = null
+    private readonly unavailableReason: string | null = null,
+    private readonly platform: NodeJS.Platform = process.platform
   ) {}
 
   propose(requestedPath: string, newContent: string, description: string): ProposeResult {
@@ -216,6 +220,12 @@ export class SelfEditStore {
    * can be undone in one step — voice approval is easy to give by accident.
    */
   apply(id: string, backupDir: string): ApplyResult {
+    // Why refuse on Windows: every write here relies on O_NOFOLLOW, which
+    // Windows lacks, so a symlink or junction swapped in after the path check
+    // would be followed and the write would land outside the allowed roots.
+    if (this.platform === 'win32') {
+      return { ok: false, error: WINDOWS_WRITE_UNSUPPORTED }
+    }
     const proposal = this.proposals.get(id)
     if (!proposal) {
       return { ok: false, error: 'That change is no longer pending.' }
@@ -269,6 +279,9 @@ export class SelfEditStore {
    * so undo never erases work done since.
    */
   undo(id: string): ApplyResult {
+    if (this.platform === 'win32') {
+      return { ok: false, error: WINDOWS_WRITE_UNSUPPORTED }
+    }
     const edit = this.applied.get(id)
     if (!edit) {
       return { ok: false, error: 'There is no applied change with that id to undo.' }
