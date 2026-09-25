@@ -66,7 +66,7 @@ Slack, GitHub comments, or any other channel to reach a human during the run.
   dobius orchestration send --to term_COORD \\
     --type escalation --subject "Blocked: <reason>" \\
     --body "<details>" \\
-    --task-id task_SNAP
+    --task-id task_SNAP --dispatch-id ctx_SNAP
 
   # Check for messages from the coordinator:
   dobius orchestration check

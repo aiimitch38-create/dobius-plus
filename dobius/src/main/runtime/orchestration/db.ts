@@ -41,12 +41,52 @@ function generateId(prefix: string): string {
 // the terminal that created a task so task-record worktree creation can infer
 // the parent workspace even when no dispatch context exists. v4 → v5 adds
 // explicit task_title/display_name fields for orchestration worker UI labels.
-const SCHEMA_VERSION = 5
+// v5 → v6 records which process (pid + per-process session id) owns each
+// coordinator run and when its loop last beat, so one process never retires
+// another live process's run, and a reused pid cannot keep a dead run alive.
+const SCHEMA_VERSION = 6
+
+export type CoordinatorRunOwner = { pid: number; sessionId: string }
+
+// Why: a foreign run is live only while its loop keeps beating. The window is
+// generous (10 polls, never under 60s) so a slow tick is not mistaken for a
+// crash; poll intervals are capped at 60s, so it never exceeds 10 minutes.
+const OWNER_HEARTBEAT_MIN_WINDOW_S = 60
+const OWNER_HEARTBEAT_POLLS = 10
+
+// Why: the session id tells a live owner apart from an earlier process that
+// happened to have the same (since reused) pid.
+const PROCESS_OWNER: CoordinatorRunOwner = {
+  pid: process.pid,
+  sessionId: randomBytes(8).toString('hex')
+}
+
+// Why: signal 0 probes existence without delivering anything. ESRCH is the
+// only proof of death; EPERM (someone else's live process) and any other
+// error count as alive so a run is never retired on a guess.
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== 'ESRCH'
+  }
+}
 
 export class OrchestrationDb {
   private db: Database.Database
+  private readonly owner: CoordinatorRunOwner
 
-  constructor(dbPath: string | ':memory:') {
+  // Why: dev instances (and DOBIUS_BYPASS_SINGLE_INSTANCE_LOCK) share one
+  // orchestration.db, so on open only runs whose owner is gone are retired.
+  static openForProcess(dbPath: string, owner?: CoordinatorRunOwner): OrchestrationDb {
+    const db = new OrchestrationDb(dbPath, owner)
+    db.failOrphanedCoordinatorRuns()
+    return db
+  }
+
+  constructor(dbPath: string | ':memory:', owner: CoordinatorRunOwner = PROCESS_OWNER) {
+    this.owner = owner
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('synchronous = NORMAL')
@@ -143,7 +183,10 @@ export class OrchestrationDb {
         coordinator_handle  TEXT NOT NULL,
         poll_interval_ms    INTEGER NOT NULL DEFAULT 2000,
         created_at          TEXT NOT NULL DEFAULT (datetime('now')),
-        completed_at        TEXT
+        completed_at        TEXT,
+        owner_pid           INTEGER,
+        owner_session       TEXT,
+        owner_heartbeat_at  TEXT
       );
     `)
     this.createUndeliveredInboxIndexIfPossible()
@@ -244,6 +287,19 @@ export class OrchestrationDb {
         }
         if (!this.hasColumn('tasks', 'display_name')) {
           this.db.exec(`ALTER TABLE tasks ADD COLUMN display_name TEXT`)
+        }
+      }
+      // v5 → v6: nullable owner columns; rows written before v6 keep NULL
+      // owners (treated as legacy by failOrphanedCoordinatorRuns).
+      if (current < 6) {
+        if (!this.hasColumn('coordinator_runs', 'owner_pid')) {
+          this.db.exec(`ALTER TABLE coordinator_runs ADD COLUMN owner_pid INTEGER`)
+        }
+        if (!this.hasColumn('coordinator_runs', 'owner_session')) {
+          this.db.exec(`ALTER TABLE coordinator_runs ADD COLUMN owner_session TEXT`)
+        }
+        if (!this.hasColumn('coordinator_runs', 'owner_heartbeat_at')) {
+          this.db.exec(`ALTER TABLE coordinator_runs ADD COLUMN owner_heartbeat_at TEXT`)
         }
       }
       this.createUndeliveredInboxIndexIfPossible()
@@ -686,44 +742,57 @@ export class OrchestrationDb {
   // failed / circuit_broken row with an old-or-null last_heartbeat_at would
   // warn every tick (warning storm). Without `dispatched_at < :threshold`,
   // a freshly-dispatched worker would trip the warning during its first
-  // heartbeat interval (false positive). Callers supply the threshold as an
-  // ISO timestamp so the SQLite string-compare ordering works correctly
-  // (ISO-8601 compares lexicographically in time order).
+  // heartbeat interval (false positive).
+  // Why julianday(): dispatched_at and heartbeat times are stored as SQLite
+  // 'YYYY-MM-DD HH:MM:SS' while callers pass an ISO 'YYYY-MM-DDTHH:MM:SS.sssZ'
+  // threshold (and older rows may hold either). A plain string compare puts
+  // ' ' before 'T', so every same-day row looked older than the threshold.
+  // julianday() parses both shapes as UTC, so no stored row has to be rewritten.
   getStaleDispatches(thresholdIso: string): DispatchContextRow[] {
     return this.db
       .prepare(
         `SELECT * FROM dispatch_contexts
          WHERE status = 'dispatched'
            AND dispatched_at IS NOT NULL
-           AND dispatched_at < ?
-           AND (last_heartbeat_at IS NULL OR last_heartbeat_at < ?)`
+           AND julianday(dispatched_at) < julianday(?1)
+           AND (last_heartbeat_at IS NULL OR julianday(last_heartbeat_at) < julianday(?1))`
       )
-      .all(thresholdIso, thresholdIso) as DispatchContextRow[]
+      .all(thresholdIso) as DispatchContextRow[]
   }
 
+  // Why: returns undefined (and changes nothing) unless the context is still
+  // active. A duplicate or late failure for an attempt that already completed,
+  // failed or circuit-broke must not bump failure_count again or flip the
+  // task, which by then may belong to a newer attempt.
   failDispatch(ctxId: string, error: string): DispatchContextRow | undefined {
     const ctx = this.db.prepare('SELECT * FROM dispatch_contexts WHERE id = ?').get(ctxId) as
       | DispatchContextRow
       | undefined
-    if (!ctx) {
+    if (!ctx || (ctx.status !== 'pending' && ctx.status !== 'dispatched')) {
       return undefined
     }
 
     const newFailureCount = ctx.failure_count + 1
     const newStatus: DispatchStatus = newFailureCount >= 3 ? 'circuit_broken' : 'failed'
 
-    this.db
+    const changed = this.db
       .prepare(
-        'UPDATE dispatch_contexts SET status = ?, failure_count = ?, last_failure = ? WHERE id = ?'
+        "UPDATE dispatch_contexts SET status = ?, failure_count = ?, last_failure = ? WHERE id = ? AND status IN ('pending', 'dispatched')"
       )
       .run(newStatus, newFailureCount, error, ctxId)
+    if (changed.changes === 0) {
+      return undefined
+    }
 
     // Why: set the task back to 'ready' (not 'pending') so the coordinator can
     // re-dispatch it on the next tick. The task's deps are already satisfied —
     // setting it to 'pending' would strand it since promoteReadyTasks only runs
-    // when a dep completes.
+    // when a dep completes. Only a task still 'dispatched' is moved, so a task
+    // a human already completed, failed or blocked keeps that status.
     const taskStatus: TaskStatus = newStatus === 'circuit_broken' ? 'failed' : 'ready'
-    this.db.prepare('UPDATE tasks SET status = ? WHERE id = ?').run(taskStatus, ctx.task_id)
+    this.db
+      .prepare("UPDATE tasks SET status = ? WHERE id = ? AND status = 'dispatched'")
+      .run(taskStatus, ctx.task_id)
 
     return this.db.prepare('SELECT * FROM dispatch_contexts WHERE id = ?').get(ctxId) as
       | DispatchContextRow
@@ -819,9 +888,16 @@ export class OrchestrationDb {
     const id = generateId('run')
     this.db
       .prepare(
-        "INSERT INTO coordinator_runs (id, spec, status, coordinator_handle, poll_interval_ms) VALUES (?, ?, 'running', ?, ?)"
+        "INSERT INTO coordinator_runs (id, spec, status, coordinator_handle, poll_interval_ms, owner_pid, owner_session, owner_heartbeat_at) VALUES (?, ?, 'running', ?, ?, ?, ?, datetime('now'))"
       )
-      .run(id, run.spec, run.coordinatorHandle, run.pollIntervalMs ?? 2000)
+      .run(
+        id,
+        run.spec,
+        run.coordinatorHandle,
+        run.pollIntervalMs ?? 2000,
+        this.owner.pid,
+        this.owner.sessionId
+      )
     return this.db.prepare('SELECT * FROM coordinator_runs WHERE id = ?').get(id) as CoordinatorRun
   }
 
@@ -840,6 +916,100 @@ export class OrchestrationDb {
       )
       .run(status, completedAt, id)
     return this.getCoordinatorRun(id)
+  }
+
+  // Why: returns false once the row is no longer 'running' (stopped, or
+  // retired by another process), telling the loop it no longer owns the run.
+  touchCoordinatorRun(id: string): boolean {
+    const result = this.db
+      .prepare(
+        "UPDATE coordinator_runs SET owner_heartbeat_at = datetime('now') WHERE id = ? AND status = 'running'"
+      )
+      .run(id)
+    return result.changes > 0
+  }
+
+  // Why: julianday() parses both SQLite 'YYYY-MM-DD HH:MM:SS' and ISO strings
+  // as UTC (same handling as getStaleDispatches). NULL is never fresh.
+  private hasFreshOwnerHeartbeat(id: string): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT 1 AS fresh FROM coordinator_runs WHERE id = ?
+           AND owner_heartbeat_at IS NOT NULL
+           AND julianday(owner_heartbeat_at) > julianday('now') - (
+             MAX(?, ? * poll_interval_ms / 1000.0) / 86400.0
+           )`
+      )
+      .get(id, OWNER_HEARTBEAT_MIN_WINDOW_S, OWNER_HEARTBEAT_POLLS) as { fresh: number } | undefined
+    return row !== undefined
+  }
+
+  ownsCoordinatorRun(run: CoordinatorRun): boolean {
+    return run.owner_pid === this.owner.pid && run.owner_session === this.owner.sessionId
+  }
+
+  // Why: a 'running' row outlives a crashed owner and would block every later
+  // run. Retired ('failed', tasks and history kept) are rows with no owner
+  // (pre-v6 legacy rows, which predate this build), rows of a dead pid or of a
+  // reused pid with another session, rows whose heartbeat went stale (a pid
+  // can be reused by an unrelated process after a crash, so a live pid alone
+  // proves nothing), and rows of this process other than ownedRunId. A live,
+  // beating other process's run is left alone so it keeps running.
+  failOrphanedCoordinatorRuns(ownedRunId?: string | null): string[] {
+    const rows = this.db
+      .prepare(
+        "SELECT * FROM coordinator_runs WHERE status = 'running' ORDER BY created_at DESC, rowid DESC"
+      )
+      .all() as CoordinatorRun[]
+    const orphans = rows
+      .filter((row) => {
+        if (this.ownsCoordinatorRun(row)) {
+          return row.id !== ownedRunId
+        }
+        const pid = row.owner_pid
+        if (pid === null || !Number.isInteger(pid) || pid <= 0 || pid === this.owner.pid) {
+          return true
+        }
+        return !isPidAlive(pid) || !this.hasFreshOwnerHeartbeat(row.id)
+      })
+      .map((row) => row.id)
+    for (const id of orphans) {
+      this.updateCoordinatorRun(id, 'failed')
+    }
+    return orphans
+  }
+
+  // Why: retire, check and insert in one write transaction, so two processes
+  // sharing the DB cannot both pass the "no active run" check.
+  startCoordinatorRun(
+    run: { spec: string; coordinatorHandle: string; pollIntervalMs?: number },
+    ownedRunId: string | null
+  ): CoordinatorRun {
+    this.db.exec('BEGIN IMMEDIATE')
+    let existing: CoordinatorRun | undefined
+    let created: CoordinatorRun | undefined
+    try {
+      this.failOrphanedCoordinatorRuns(ownedRunId)
+      existing = this.getActiveCoordinatorRun()
+      if (!existing) {
+        created = this.createCoordinatorRun(run)
+      }
+      this.db.exec('COMMIT')
+    } catch (err) {
+      this.db.exec('ROLLBACK')
+      throw err
+    }
+    if (!created) {
+      throw new Error(`Coordinator already running: ${existing?.id}${this.describeOwner(existing)}`)
+    }
+    return created
+  }
+
+  describeOwner(run: CoordinatorRun | undefined): string {
+    if (!run || this.ownsCoordinatorRun(run)) {
+      return ''
+    }
+    return ` (owned by another live process, pid ${run.owner_pid})`
   }
 
   getActiveCoordinatorRun(): CoordinatorRun | undefined {

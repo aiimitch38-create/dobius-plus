@@ -80,4 +80,7 @@ export type CoordinatorRun = {
   poll_interval_ms: number
   created_at: string
   completed_at: string | null
+  owner_pid: number | null
+  owner_session: string | null
+  owner_heartbeat_at: string | null
 }

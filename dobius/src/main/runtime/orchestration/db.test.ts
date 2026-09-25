@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Why: DB tests cover messages, tasks, dispatch contexts, decision gates, coordinator runs, and lifecycle in one suite to share the createDb() helper and afterEach cleanup. */
+import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -532,6 +533,197 @@ describe('OrchestrationDb', () => {
       d.updateCoordinatorRun(run.id, 'completed')
       expect(d.getActiveCoordinatorRun()).toBeUndefined()
     })
+
+    it('failOrphanedCoordinatorRuns retires unowned running rows and keeps their tasks', () => {
+      const d = createDb()
+      const task = d.createTask({ spec: 'keep me' })
+      const orphan = d.createCoordinatorRun({ spec: 'old', coordinatorHandle: 'coord' })
+      const owned = d.createCoordinatorRun({ spec: 'live', coordinatorHandle: 'coord' })
+
+      expect(d.failOrphanedCoordinatorRuns(owned.id)).toEqual([orphan.id])
+      expect(d.getCoordinatorRun(orphan.id)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(owned.id)?.status).toBe('running')
+
+      expect(d.failOrphanedCoordinatorRuns()).toEqual([owned.id])
+      expect(d.getActiveCoordinatorRun()).toBeUndefined()
+      expect(d.getTask(task.id)?.status).toBe('ready')
+    })
+  })
+
+  describe('openForProcess', () => {
+    let dir: string | undefined
+    afterEach(() => {
+      if (dir) {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    it('retires a running row left by a previous process and keeps its tasks', () => {
+      dir = mkdtempSync(join(tmpdir(), 'orch-open-for-process-'))
+      const dbPath = join(dir, 'orchestration.db')
+      const previous = new OrchestrationDb(dbPath)
+      const task = previous.createTask({ spec: 'kept' })
+      const orphan = previous.createCoordinatorRun({ spec: 'crashed', coordinatorHandle: 'coord' })
+      previous.close()
+
+      const d = OrchestrationDb.openForProcess(dbPath)
+      db = d
+      expect(d.getCoordinatorRun(orphan.id)?.status).toBe('failed')
+      expect(d.getActiveCoordinatorRun()).toBeUndefined()
+      expect(d.getTask(task.id)?.spec).toBe('kept')
+    })
+
+    it('retires dead, reused-pid and legacy owners; a live other process keeps its run', () => {
+      dir = mkdtempSync(join(tmpdir(), 'orch-open-for-process-'))
+      const dbPath = join(dir, 'orchestration.db')
+      // Why: a child that has already exited gives a pid that is really dead.
+      const deadPid = spawnSync(process.execPath, ['-e', '']).pid
+      expect(deadPid).toBeGreaterThan(0)
+      const self = { pid: process.pid, sessionId: 'this-session' }
+      const runAs = (owner: { pid: number; sessionId: string }, spec: string): string => {
+        const other = new OrchestrationDb(dbPath, owner)
+        const run = other.createCoordinatorRun({ spec, coordinatorHandle: 'coord' })
+        other.close()
+        return run.id
+      }
+      const live = runAs({ pid: process.ppid, sessionId: 'parent' }, 'live elsewhere')
+      const dead = runAs({ pid: deadPid, sessionId: 'dead' }, 'dead owner')
+      const reused = runAs({ pid: process.pid, sessionId: 'earlier-process' }, 'reused pid')
+      const legacy = runAs({ pid: deadPid, sessionId: 'legacy' }, 'pre-v6')
+      const raw = new Database(dbPath)
+      raw
+        .prepare('UPDATE coordinator_runs SET owner_pid = NULL, owner_session = NULL WHERE id = ?')
+        .run(legacy)
+      raw.close()
+
+      const d = OrchestrationDb.openForProcess(dbPath, self)
+      db = d
+      expect(d.getCoordinatorRun(live)?.status).toBe('running')
+      expect(d.getCoordinatorRun(dead)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(reused)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(legacy)?.status).toBe('failed')
+
+      expect(d.failOrphanedCoordinatorRuns()).toEqual([])
+      expect(() =>
+        d.startCoordinatorRun({ spec: 'second', coordinatorHandle: 'coord' }, null)
+      ).toThrow(`Coordinator already running: ${live} (owned by another live process, pid ${process.ppid})`)
+      expect(d.getCoordinatorRun(live)?.status).toBe('running')
+      expect(d.getActiveCoordinatorRun()?.id).toBe(live)
+    })
+
+    it('a live foreign pid counts only while its heartbeat is inside max(60s, 10 polls)', () => {
+      dir = mkdtempSync(join(tmpdir(), 'orch-open-for-process-'))
+      const dbPath = join(dir, 'orchestration.db')
+      const runAs = (spec: string, pollIntervalMs: number, heartbeat: string): string => {
+        const other = new OrchestrationDb(dbPath, { pid: process.ppid, sessionId: spec })
+        const run = other.createCoordinatorRun({ spec, coordinatorHandle: 'coord', pollIntervalMs })
+        other.close()
+        const raw = new Database(dbPath)
+        raw
+          .prepare('UPDATE coordinator_runs SET owner_heartbeat_at = ? WHERE id = ?')
+          .run(heartbeat, run.id)
+        raw.close()
+        return run.id
+      }
+      const sqliteAgo = (s: number): string =>
+        new Date(Date.now() - s * 1000).toISOString().replace('T', ' ').slice(0, 19)
+      const isoAgo = (s: number): string => new Date(Date.now() - s * 1000).toISOString()
+      // Why: both stored shapes (SQLite default and JS ISO) must compare as instants.
+      const staleSqlite = runAs('stale-sqlite', 2000, sqliteAgo(90))
+      const staleIso = runAs('stale-iso', 2000, isoAgo(90))
+      const staleSlowPoll = runAs('stale-slow-poll', 30_000, sqliteAgo(400))
+      const freshSlowPoll = runAs('fresh-slow-poll', 30_000, sqliteAgo(200))
+      const freshIso = runAs('fresh-iso', 2000, isoAgo(20))
+
+      const d = OrchestrationDb.openForProcess(dbPath, { pid: process.pid, sessionId: 'self' })
+      db = d
+      expect(d.getCoordinatorRun(staleSqlite)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(staleIso)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(staleSlowPoll)?.status).toBe('failed')
+      expect(d.getCoordinatorRun(freshSlowPoll)?.status).toBe('running')
+      expect(d.getCoordinatorRun(freshIso)?.status).toBe('running')
+    })
+
+    it('touchCoordinatorRun beats only while the row is running', () => {
+      const d = createDb()
+      const run = d.createCoordinatorRun({ spec: 'beat', coordinatorHandle: 'coord' })
+      expect(run.owner_heartbeat_at).not.toBeNull()
+      expect(d.touchCoordinatorRun(run.id)).toBe(true)
+      d.updateCoordinatorRun(run.id, 'failed')
+      expect(d.touchCoordinatorRun(run.id)).toBe(false)
+    })
+
+    it('upgrades a v5 DB additively; its ownerless running row is retired as legacy', () => {
+      dir = mkdtempSync(join(tmpdir(), 'orch-open-for-process-'))
+      const dbPath = join(dir, 'orchestration.db')
+      const raw = new Database(dbPath)
+      raw.exec(`
+        CREATE TABLE coordinator_runs (
+          id                  TEXT PRIMARY KEY,
+          spec                TEXT NOT NULL,
+          status              TEXT NOT NULL DEFAULT 'idle'
+            CHECK(status IN ('idle', 'running', 'completed', 'failed')),
+          coordinator_handle  TEXT NOT NULL,
+          poll_interval_ms    INTEGER NOT NULL DEFAULT 2000,
+          created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+          completed_at        TEXT
+        );
+        INSERT INTO coordinator_runs (id, spec, status, coordinator_handle)
+          VALUES ('run_v5', 'old', 'running', 'coord'), ('run_done', 'older', 'completed', 'coord');
+      `)
+      raw.pragma('user_version = 5')
+      raw.close()
+
+      const d = OrchestrationDb.openForProcess(dbPath)
+      db = d
+      expect(d.getCoordinatorRun('run_v5')).toMatchObject({
+        status: 'failed',
+        owner_pid: null,
+        owner_session: null
+      })
+      expect(d.getCoordinatorRun('run_done')?.status).toBe('completed')
+      const started = d.startCoordinatorRun({ spec: 'new', coordinatorHandle: 'coord' }, null)
+      expect(started.owner_pid).toBe(process.pid)
+      expect(d.ownsCoordinatorRun(started)).toBe(true)
+    })
+  })
+
+  describe('failDispatch attempt binding', () => {
+    it('does not count a second failure for an attempt that already failed', () => {
+      const d = createDb()
+      const task = d.createTask({ spec: 'work' })
+      const ctx = d.createDispatchContext(task.id, 'term_a')
+
+      expect(d.failDispatch(ctx.id, 'first')?.failure_count).toBe(1)
+      expect(d.failDispatch(ctx.id, 'duplicate')).toBeUndefined()
+      expect(d.getDispatchContextById(ctx.id)?.failure_count).toBe(1)
+      expect(d.getDispatchContextById(ctx.id)?.last_failure).toBe('first')
+    })
+
+    it('a late failure for an old attempt leaves the newer attempt and task untouched', () => {
+      const d = createDb()
+      const task = d.createTask({ spec: 'work' })
+      const first = d.createDispatchContext(task.id, 'term_a')
+      d.completeDispatch(first.id)
+      d.updateTaskStatus(task.id, 'ready')
+      const second = d.createDispatchContext(task.id, 'term_b')
+
+      expect(d.failDispatch(first.id, 'late')).toBeUndefined()
+      expect(d.getDispatchContextById(second.id)?.status).toBe('dispatched')
+      expect(d.getDispatchContextById(second.id)?.failure_count).toBe(0)
+      expect(d.getTask(task.id)?.status).toBe('dispatched')
+    })
+
+    it('does not reopen a task a human already completed', () => {
+      const d = createDb()
+      const task = d.createTask({ spec: 'work' })
+      const ctx = d.createDispatchContext(task.id, 'term_a')
+      const sqlite = (d as unknown as { db: Database.Database }).db
+      sqlite.prepare("UPDATE tasks SET status = 'completed' WHERE id = ?").run(task.id)
+
+      expect(d.failDispatch(ctx.id, 'exit')?.status).toBe('failed')
+      expect(d.getTask(task.id)?.status).toBe('completed')
+    })
   })
 
   describe('lifecycle', () => {
@@ -648,6 +840,47 @@ describe('OrchestrationDb', () => {
 
       const stale = d.getStaleDispatches(iso(10 * 60 * 1000))
       expect(stale.map((s) => s.id)).toEqual([ctxB.id])
+    })
+
+    it('getStaleDispatches compares SQLite and ISO timestamps as instants across midnight', () => {
+      const d = createDb()
+      // Rows use the SQLite 'YYYY-MM-DD HH:MM:SS' shape that datetime('now')
+      // and message created_at write; the threshold is ISO (00:02Z - 10 min).
+      const rows = {
+        freshAcrossMidnight: { dispatchedAt: '2026-09-23 23:55:00', heartbeatAt: null },
+        staleNoHeartbeat: { dispatchedAt: '2026-09-23 23:40:00', heartbeatAt: null },
+        recentHeartbeat: { dispatchedAt: '2026-09-23 23:40:00', heartbeatAt: '2026-09-23 23:58:00' },
+        staleHeartbeat: { dispatchedAt: '2026-09-23 23:00:00', heartbeatAt: '2026-09-23 23:45:00' },
+        afterMidnight: { dispatchedAt: '2026-09-24 00:01:00', heartbeatAt: null }
+      }
+      const sqlite = (d as unknown as { db: Database.Database }).db
+      const ids: Record<string, string> = {}
+      for (const [name, row] of Object.entries(rows)) {
+        const task = d.createTask({ spec: name })
+        const ctx = d.createDispatchContext(task.id, `term_${name}`)
+        sqlite
+          .prepare(
+            'UPDATE dispatch_contexts SET dispatched_at = ?, last_heartbeat_at = ? WHERE id = ?'
+          )
+          .run(row.dispatchedAt, row.heartbeatAt, ctx.id)
+        ids[name] = ctx.id
+      }
+
+      const stale = d.getStaleDispatches('2026-09-23T23:52:00.000Z').map((s) => s.id)
+      expect(stale.sort()).toEqual([ids.staleNoHeartbeat, ids.staleHeartbeat].sort())
+    })
+
+    it('getStaleDispatches keeps a fresh same-day dispatch in its grace window', () => {
+      const d = createDb()
+      const task = d.createTask({ spec: 'fresh' })
+      const ctx = d.createDispatchContext(task.id, 'term_fresh')
+      const sqlite = (d as unknown as { db: Database.Database }).db
+      sqlite
+        .prepare('UPDATE dispatch_contexts SET dispatched_at = ? WHERE id = ?')
+        .run('2026-09-24 11:55:00', ctx.id)
+
+      expect(d.getStaleDispatches('2026-09-24T11:50:00.000Z')).toEqual([])
+      expect(d.getStaleDispatches('2026-09-24T12:05:00.000Z').map((s) => s.id)).toEqual([ctx.id])
     })
 
     it('getThreadMessagesFor returns only same-thread replies to a handle', () => {
