@@ -1,6 +1,8 @@
 import { RotateCcw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { CustomAgent } from '../../../../shared/agents'
+import { NEW_SESSION_SCOPE_MESSAGE } from './agent-session-reset-copy'
 
 function formatSessionSubtitle(agent: CustomAgent): string {
   if (!agent.lastSessionId) {
@@ -44,16 +46,23 @@ export function AgentMemoryView({
               Editable memory for this crew member. It is kept on disk if the agent is deleted.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={resetting}
-            onClick={onResetSession}
-          >
-            <RotateCcw className="size-4" />
-            New session
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={resetting}
+                onClick={onResetSession}
+              >
+                <RotateCcw className="size-4" />
+                New session
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={4} className="max-w-xs">
+              {NEW_SESSION_SCOPE_MESSAGE}
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="text-xs text-muted-foreground">{formatSessionSubtitle(agent)}</div>
         <textarea

@@ -113,20 +113,27 @@ function sanitizeRun(entry: unknown): AgentRun | null {
   return run
 }
 
+// A just-finished run stays readable long enough for the renderer's run poll
+// to pick up its final status and reply.
+const RECENTLY_ENDED_GRACE_MS = 30_000
+
 // Why: MAX_RUNS bounds settled history only. A running run is live state —
 // evicting it made its completion/cancellation updates (and its outbox) miss.
+// Settled runs go oldest-FINISHED first, so a long run that just ended is kept.
 function retainRuns(runs: AgentRun[]): AgentRun[] {
-  let excess = runs.length - MAX_RUNS
+  const excess = runs.length - MAX_RUNS
   if (excess <= 0) {
     return runs
   }
-  return runs.filter((run) => {
-    if (excess > 0 && run.status !== 'running') {
-      excess -= 1
-      return false
-    }
-    return true
-  })
+  const graceStart = Date.now() - RECENTLY_ENDED_GRACE_MS
+  const settledAt = (run: AgentRun): number => run.endedAt ?? run.startedAt
+  const evicted = new Set(
+    runs
+      .filter((run) => run.status !== 'running' && settledAt(run) < graceStart)
+      .toSorted((a, b) => settledAt(a) - settledAt(b))
+      .slice(0, excess)
+  )
+  return evicted.size === 0 ? runs : runs.filter((run) => !evicted.has(run))
 }
 
 const file = new SafeJsonFile<AgentRun[]>({

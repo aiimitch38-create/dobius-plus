@@ -12,7 +12,9 @@ type RunSessionClaim = {
   keyEpoch: number
 }
 
-const owners = new Map<string, string>()
+// Live claims per key, owner or not: a fresh run still writes to the key's
+// transcript lineage, so the key stays busy until every claim is released.
+const liveClaims = new Map<string, number>()
 const claims = new Map<string, RunSessionClaim>()
 const agentEpochs = new Map<string, number>()
 const keyEpochs = new Map<string, number>()
@@ -28,10 +30,9 @@ function leaseKey(agentId: string, sessionKey: string): string {
  */
 export function claimRunSession(runId: string, agentId: string, sessionKey: string): boolean {
   const key = leaseKey(agentId, sessionKey)
-  const owner = !owners.has(key)
-  if (owner) {
-    owners.set(key, runId)
-  }
+  const live = liveClaims.get(key) ?? 0
+  const owner = live === 0
+  liveClaims.set(key, live + 1)
   claims.set(runId, {
     agentId,
     sessionKey,
@@ -42,7 +43,7 @@ export function claimRunSession(runId: string, agentId: string, sessionKey: stri
   return owner
 }
 
-/** Idempotent; only the owning run frees the key. */
+/** Idempotent; the key is free once every claim on it is released. */
 export function releaseRunSession(runId: string): void {
   const claim = claims.get(runId)
   if (!claim) {
@@ -50,19 +51,22 @@ export function releaseRunSession(runId: string): void {
   }
   claims.delete(runId)
   const key = leaseKey(claim.agentId, claim.sessionKey)
-  if (claim.owner && owners.get(key) === runId) {
-    owners.delete(key)
+  const live = (liveClaims.get(key) ?? 1) - 1
+  if (live <= 0) {
+    liveClaims.delete(key)
+  } else {
+    liveClaims.set(key, live)
   }
 }
 
 /**
  * The session key a run may record its session under, or null when the run is
- * unknown or its session was reset after the run started (a reset must not be
- * undone by a run that was already in flight).
+ * unknown, does not own the key (a fresh run beside a live owner must not
+ * become the key's session), or its session was reset after the run started.
  */
 export function currentRunSessionKey(runId: string): string | null {
   const claim = claims.get(runId)
-  if (!claim) {
+  if (!claim || !claim.owner) {
     return null
   }
   const key = leaseKey(claim.agentId, claim.sessionKey)

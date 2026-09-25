@@ -94,3 +94,23 @@ the lease and outbox are memory-only.
 ## Lessons
 - Stored run history is display state; any exclusivity must be reserved synchronously in memory.
 - A "busy" check that reads state written after an `await` is a check-then-act race.
+
+## Review fixes (second commit)
+- **F1:** the lease now counts live claims per key. The key stays busy while ANY run on it is
+  live, owner or not. `currentRunSessionKey` returns null for non-owners, so a fresh run started
+  beside a live owner never saves its session under the key. Before this, when A (the owner)
+  released the key, B's fresh session became the key's session while B was still running, and a
+  new run C could resume it. Test: A/B/C/D ordering in `agent-runner-session-lease.test.ts`.
+  Mutations checked: reverting the lease to the first commit fails the test; letting a non-owner
+  record fails it; letting the owner free the key alone fails it.
+- **F2:** `retainRuns` now evicts settled runs by oldest `endedAt` (falling back to `startedAt`).
+  It never evicts a run that finished in the last 30s (`RECENTLY_ENDED_GRACE_MS`), so the
+  renderer's run poll still sees the final status. Tests: two ordering/grace tests in
+  `agent-runs-store.test.ts`. Mutations checked: the first-commit store fails both; removing the
+  grace window fails the grace test. Side effect: the file can briefly hold more than 50 runs
+  while several runs have just finished.
+- **F3:** the "New session" toast and a new button tooltip both say "All conversations for this
+  agent, including channels, will start fresh on the next run" (one constant in
+  `agent-session-reset-copy.ts`). The Agents page is not translated (hard-coded English, no
+  locale keys), so there are no i18n catalog changes. Test: `AgentMemoryView.new-session.test.tsx`
+  (tooltip on focus, toast after reset). Mutations checked: reverting either file fails its test.

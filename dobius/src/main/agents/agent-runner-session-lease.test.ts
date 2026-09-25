@@ -224,6 +224,46 @@ describe('session key ownership (#56)', () => {
   })
 })
 
+describe('fresh runs beside a live owner (#56 review F1)', () => {
+  it('keeps the key busy and unrecorded until every run on it has ended', async () => {
+    const prepareClaudeLaunch = vi.fn(async () => ({}) as never)
+    const start = (prompt: string) =>
+      startAgentRun({
+        agentId: 'abc',
+        prompt,
+        prepareClaudeLaunch,
+        options: { sessionKey: 'k' }
+      })
+    await start('A')
+    await start('B')
+    expect([resumeOf(0), resumeOf(1)]).toEqual(['s-k', undefined])
+    streams[1].push({ type: 'system', subtype: 'init', session_id: 'S_B' })
+    await flush()
+    expect(mocks.updateAgentSession).not.toHaveBeenCalledWith(
+      'abc',
+      expect.objectContaining({ lastSessionId: 'S_B' })
+    )
+
+    streams[0].end()
+    await flush()
+    await start('C')
+    // B is still writing its transcript, so C must not resume anything on k.
+    expect(resumeOf(2)).toBeUndefined()
+
+    streams[1].end()
+    streams[2].end()
+    await flush()
+    await start('D')
+    expect(resumeOf(3)).toBe('s-k')
+    streams[3].end()
+    await flush()
+    expect(mocks.updateAgentSession).not.toHaveBeenCalledWith(
+      'abc',
+      expect.objectContaining({ lastSessionId: 'S_B' })
+    )
+  })
+})
+
 describe('session recording after a reset (#57)', () => {
   it('does not record a session for a run that was in flight when the key was reset', async () => {
     const prepareClaudeLaunch = vi.fn(async () => ({}) as never)

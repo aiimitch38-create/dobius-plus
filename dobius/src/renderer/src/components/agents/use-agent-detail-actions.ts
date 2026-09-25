@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import type { CustomAgent } from '../../../../shared/agents'
+import { NEW_SESSION_SCOPE_MESSAGE } from './agent-session-reset-copy'
 
 // Memory save, session reset, and tagline save for the selected agent.
 export function useAgentDetailActions(args: {
@@ -42,7 +43,7 @@ export function useAgentDetailActions(args: {
     setResettingSession(true)
     try {
       setAgents(await window.api.agents.resetSession(selectedAgentId))
-      toast.success('New session will start on next run')
+      toast.success(NEW_SESSION_SCOPE_MESSAGE)
     } catch (error) {
       console.error('Failed to reset session:', error)
       toast.error(error instanceof Error ? error.message : 'Could not reset session')

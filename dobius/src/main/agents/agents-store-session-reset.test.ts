@@ -81,8 +81,9 @@ describe('resetAgentSession (#57)', () => {
     lease.claimRunSession('run-before', id, 'chan-1')
     lease.claimRunSession('run-other-key', id, 'chan-2')
     store.resetAgentSession(id, 'chan-1')
-    lease.claimRunSession('run-after', id, 'chan-1')
     expect(lease.currentRunSessionKey('run-before')).toBeNull()
+    lease.releaseRunSession('run-before')
+    lease.claimRunSession('run-after', id, 'chan-1')
     expect(lease.currentRunSessionKey('run-other-key')).toBe('chan-2')
     expect(lease.currentRunSessionKey('run-after')).toBe('chan-1')
 

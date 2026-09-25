@@ -151,3 +151,41 @@ describe('agent-runs-store outbox byte budget (#77)', () => {
     expect(store.getAgentRunOutbox('r5')).toHaveLength(7)
   })
 })
+
+describe('agent-runs-store eviction order (#42 review F2)', () => {
+  const minute = 60_000
+
+  it('evicts the oldest-finished run, not the oldest-started one', async () => {
+    const store = await import('./agent-runs-store')
+    const now = Date.now()
+    store.addStoredAgentRun({ ...run('long', 'running', now - 60 * minute) })
+    for (let i = 0; i < 49; i += 1) {
+      store.addStoredAgentRun({
+        ...run(`short-${i}`, 'success', now - 50 * minute + i),
+        endedAt: now - 40 * minute + i
+      })
+    }
+    store.updateStoredAgentRun('long', { status: 'success', endedAt: now - 5 * minute })
+    store.addStoredAgentRun(run('new', 'running', now))
+    const ids = store.listStoredAgentRuns().map((entry) => entry.id)
+    expect(ids).toHaveLength(50)
+    expect(ids).toContain('long')
+    expect(ids).not.toContain('short-0')
+    expect(ids).toContain('short-1')
+  })
+
+  it('never evicts a run that finished within the last 30 seconds', async () => {
+    const store = await import('./agent-runs-store')
+    const now = Date.now()
+    for (let i = 0; i < 50; i += 1) {
+      store.addStoredAgentRun({
+        ...run(`r${i}`, 'success', now - 10 * minute + i),
+        endedAt: now - 1_000
+      })
+    }
+    store.addStoredAgentRun(run('new', 'running', now))
+    const ids = store.listStoredAgentRuns().map((entry) => entry.id)
+    expect(ids).toHaveLength(51)
+    expect(ids).toContain('r0')
+  })
+})
