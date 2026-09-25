@@ -573,7 +573,7 @@ describe('dispatch_build ADAM handshake (BUILD-031, X12)', () => {
     mocks.checkBuildDispatchAdmission.mockResolvedValueOnce({
       allowed: false,
       reason: 'adam-refused',
-      message: 'ADAM refused this build (project_not_managed): project pcif is read_only'
+      message: 'ADAM refused this build (project_not_managed): project omniroute is read_only'
     })
     const run = buildRun('run-adam-refused')
     const refused = await createDobiusToolHandlers(run, store).dispatchBuild({
@@ -592,6 +592,57 @@ describe('dispatch_build ADAM handshake (BUILD-031, X12)', () => {
     })
     expect(retry.isError).toBeUndefined()
     expect(dispatch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('dispatch_build repo selection (BUILD-031 review F1)', () => {
+  const twins = [
+    { id: 'repo-stale', name: 'dobius-plus', path: '/Projects/dobius-plus' },
+    { id: 'repo-real', name: 'dobius-plus', path: '/Projects/Dobius/dobius-plus' }
+  ]
+
+  it('refuses an ambiguous repo name and lists each match by id and path', async () => {
+    const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
+    const dispatch = vi.fn(async () => ({ worktreeId: 'wt-1', ok: true }))
+    setRepoLister(() => twins)
+    setBuildDispatcher(dispatch)
+    const result = await createDobiusToolHandlers(buildRun('run-twins'), store).dispatchBuild({
+      repo: 'Dobius-Plus',
+      brief: 'Build'
+    })
+    expect(result.isError).toBe(true)
+    const text = result.content[0].text
+    expect(text).toContain('matches more than one repo')
+    expect(text).toContain('repo-stale (/Projects/dobius-plus)')
+    expect(text).toContain('repo-real (/Projects/Dobius/dobius-plus)')
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(mocks.checkBuildDispatchAdmission).not.toHaveBeenCalled()
+  })
+
+  it('dispatches by id when names collide', async () => {
+    const { setBuildDispatcher, setRepoLister } = await import('../agent-dispatch-registry')
+    const dispatch = vi.fn(async () => ({ worktreeId: 'wt-1', ok: true }))
+    setRepoLister(() => twins)
+    setBuildDispatcher(dispatch)
+    const result = await createDobiusToolHandlers(buildRun('run-by-id'), store).dispatchBuild({
+      repo: 'repo-real',
+      brief: 'Build'
+    })
+    expect(result.isError).toBeUndefined()
+    expect(mocks.checkBuildDispatchAdmission).toHaveBeenCalledWith('/Projects/Dobius/dobius-plus')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ repoId: 'repo-real' }))
+  })
+
+  it('lists name and id when the repo is not found', async () => {
+    const { setRepoLister } = await import('../agent-dispatch-registry')
+    setRepoLister(() => twins)
+    const result = await createDobiusToolHandlers(buildRun('run-missing'), store).dispatchBuild({
+      repo: 'nope',
+      brief: 'Build'
+    })
+    expect(result.content[0].text).toContain(
+      'Available repos: dobius-plus (repo-stale), dobius-plus (repo-real).'
+    )
   })
 })
 

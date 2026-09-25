@@ -121,7 +121,16 @@ async function checkAdamHandshake(
       signal: AbortSignal.timeout(timeoutMs)
     })
     status = response.status
-    body = asRecord(await response.json().catch(() => undefined))
+    // A malformed body is treated as "no pack" (blocks), but a timeout mid-body
+    // must still report as a timeout.
+    body = asRecord(
+      await response.json().catch((error: unknown) => {
+        if (asRecord(error)?.name === 'TimeoutError') {
+          throw error
+        }
+        return undefined
+      })
+    )
   } catch (error) {
     if (asRecord(error)?.name === 'TimeoutError') {
       return adamUnavailable(`ADAM offline: no answer within ${timeoutMs} ms`)

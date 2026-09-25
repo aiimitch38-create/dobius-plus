@@ -194,6 +194,18 @@ describe('dispatch_build ADAM handshake (BUILD-031, X12)', () => {
     })
   })
 
+  it('reports a timeout during the body read as a timeout (review F3)', async () => {
+    reply = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.write('{"ok":true,')
+    }
+    expect(await checkBuildDispatchAdmission(REPO_PATH, { timeoutMs: 300 })).toMatchObject({
+      allowed: false,
+      reason: 'adam-unavailable',
+      message: expect.stringContaining('no answer within 300 ms')
+    })
+  })
+
   it('blocks a Settings endpoint off this machine without sending anything', async () => {
     delete process.env.ADAM_SERVICE_URL
     setAdamEndpointSettingReader(() => 'https://adam.example.com')

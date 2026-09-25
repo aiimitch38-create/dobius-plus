@@ -105,11 +105,21 @@ export function createDispatchBuildHandler(context: DobiusToolContext) {
       return errorResult('build dispatch not available: repo list unavailable.')
     }
     const repos = listRepos()
-    const repo =
-      repos.find((entry) => entry.id === repoQuery) ??
-      repos.find((entry) => entry.name.toLowerCase() === repoQuery.toLowerCase())
+    const byId = repos.find((entry) => entry.id === repoQuery)
+    const byName = byId
+      ? []
+      : repos.filter((entry) => entry.name.toLowerCase() === repoQuery.toLowerCase())
+    // Why: two repos can share a name (a stale copy and the real checkout); taking
+    // the first match would build in the wrong one, so the agent must pick by id.
+    if (byName.length > 1) {
+      const matches = byName.map((entry) => `${entry.id} (${entry.path})`).join(', ')
+      return errorResult(
+        `Repo name "${repoQuery}" matches more than one repo; retry with one of these ids: ${matches}.`
+      )
+    }
+    const repo = byId ?? byName[0]
     if (!repo) {
-      const available = repos.map((entry) => entry.name).join(', ') || 'none'
+      const available = repos.map((entry) => `${entry.name} (${entry.id})`).join(', ') || 'none'
       return errorResult(`Repo not found. Available repos: ${available}.`)
     }
     const dispatch = getBuildDispatcher()

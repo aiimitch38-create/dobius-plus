@@ -11,7 +11,10 @@ Depends on BUILD-001 (execution gate), BUILD-007 (dispatch_build handler), BUILD
   (BUG-MATRIX X12) "does not satisfy pre-execution gating".
 - `dobius/src/main/agents/agent-tools/dispatch-build-handler.ts:99-102` (pre-fix) called only the pause
   gate, then created a worktree and launched a paid terminal agent. A triage run could therefore dispatch a
-  build into a project ADAM's registry marks `read_only` (PCIF, Pocket Cologne, BetterHealthNow, ADAM).
+  build into a project ADAM's registry does not allow (per the review of the deployed registry:
+  `read_only` omniroute and personal-finances, disabled dobius-hub, or any unregistered path). PCIF,
+  Pocket Cologne, BetterHealthNow and ADAM are managed/verified there; ADAM's own
+  `plans/CONTEXT-HANDSHAKE.md` still describes them as read_only, which is out of date on the ADAM side.
 - The repo lister (`agent-dispatch-registry.ts` `RepoLister`) returned only `{id, name}`, so the handler
   had no path to hand ADAM.
 
@@ -97,6 +100,21 @@ worktree created outside the repo folder is still judged by its repo's registrat
 - `src/main/ipc/register-core-handlers.test.ts` fails on `ipcMain.removeHandler` in
   `registerVertexTaskHandlers`; it is in the pre-existing baseline (`basefail.txt`), unrelated.
 - oxlint (default + react-doctor) clean on all changed files. Full suite: deferred to the coordinator.
+
+## Review follow-up (second commit)
+
+- F1: `dispatch-build-handler.ts` took the first repo whose name matched. Carson's list has two repos named
+  `dobius-plus` (the stale non-git `~/Projects (Code)/dobius-plus` and the real
+  `~/Projects (Code)/Dobius/dobius-plus`), and ADAM refuses the stale one (`unknown_project`), so builds
+  requested by name never ran. An exact id still wins. A name that matches more than one repo is now refused,
+  and the message lists each match as `id (path)` so the agent can retry by id. "Repo not found" now lists
+  `name (id)`. Tests: ambiguous name refused before ADAM/dispatch, dispatch by id with twins, not-found list.
+- F3: `response.json().catch(() => undefined)` swallowed a TimeoutError during the body read, so the block
+  said "answered without a context pack". A TimeoutError is now rethrown, so the message says it timed out.
+  Test: the server sends headers and half a body, then stalls.
+- F2: corrected the registry description above and the tool-server test fixture (it now uses omniroute).
+- Mutation checks: took the first name match instead of refusing → the ambiguity test failed; restored the
+  swallow-all catch → the F3 test failed.
 
 ## Rollback
 
