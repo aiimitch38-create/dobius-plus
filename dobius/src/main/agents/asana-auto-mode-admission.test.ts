@@ -7,7 +7,9 @@ const mocks = vi.hoisted(() => ({
   claimTask: vi.fn(),
   recordFailure: vi.fn(),
   releaseClaim: vi.fn(),
-  startAgentRun: vi.fn()
+  startAgentRun: vi.fn(),
+  appendBriefingItem: vi.fn(),
+  triageEngine: 'claude' as 'claude' | 'codex'
 }))
 
 vi.mock('../asana/asana-config', () => ({
@@ -15,10 +17,12 @@ vi.mock('../asana/asana-config', () => ({
 }))
 vi.mock('../asana/asana-queue-service', () => ({ refreshAsanaTasks: vi.fn() }))
 vi.mock('../asana/asana-token-store', () => ({ hasAsanaToken: () => true }))
-vi.mock('./agent-briefing-store', () => ({ appendBriefingItem: vi.fn() }))
+vi.mock('./agent-briefing-store', () => ({ appendBriefingItem: mocks.appendBriefingItem }))
 vi.mock('./agent-notification-store', () => ({ appendAgentNotification: vi.fn() }))
 vi.mock('./agents-config-store', () => ({ getAgentsPaused: () => false }))
-vi.mock('./agents-store', () => ({ getAgent: () => ({ id: 'triage' }) }))
+vi.mock('./agents-store', () => ({
+  getAgent: () => ({ id: 'triage', name: 'Edith', engine: mocks.triageEngine })
+}))
 vi.mock('./agent-runner', () => ({ startAgentRun: mocks.startAgentRun }))
 vi.mock('./asana-dispatch-ledger', () => ({
   claimTask: mocks.claimTask,
@@ -54,6 +58,8 @@ beforeEach(() => {
   mocks.recordFailure.mockReset()
   mocks.releaseClaim.mockReset()
   mocks.startAgentRun.mockReset()
+  mocks.appendBriefingItem.mockReset()
+  mocks.triageEngine = 'claude'
   vi.spyOn(console, 'info').mockImplementation(() => {})
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
@@ -82,18 +88,33 @@ describe('Asana auto mode admission', () => {
     expect(mocks.releaseClaim).not.toHaveBeenCalled()
   })
 
-  it('frees each triage slot once when a Codex triage agent is refused before spawn', async () => {
+  it('releases the claim, never counting a failure, when a Codex triage agent is refused', async () => {
     mocks.startAgentRun.mockRejectedValue(
       new CodexRunUnsupportedError("Codex agents cannot run the 'asana' profile.")
     )
     for (const gid of ['1', '2', '3']) {
       await asanaAutoModeInternals.dispatchTriage({ ...task, gid }, 'build', 'triage', prepare)
     }
-    expect(mocks.recordFailure.mock.calls).toEqual([['1'], ['2'], ['3']])
+    expect(mocks.releaseClaim.mock.calls).toEqual([['1'], ['2'], ['3']])
+    expect(mocks.recordFailure).not.toHaveBeenCalled()
     // Both in-flight slots (cap 2) were released, so a new task still dispatches.
     mocks.startAgentRun.mockReset()
     mocks.startAgentRun.mockResolvedValue('run-1')
     asanaAutoModeInternals.maybeDispatchTask(task, 'build', prepare)
     expect(mocks.startAgentRun).toHaveBeenCalledTimes(1)
+  })
+
+  it('never claims a task for a Codex triage agent and briefs once, not every tick', () => {
+    mocks.triageEngine = 'codex'
+    for (let tick = 0; tick < 3; tick += 1) {
+      asanaAutoModeInternals.maybeDispatchTask({ ...task, gid: `${tick}` }, 'build', prepare)
+    }
+    expect(mocks.claimTask).not.toHaveBeenCalled()
+    expect(mocks.startAgentRun).not.toHaveBeenCalled()
+    expect(mocks.recordFailure).not.toHaveBeenCalled()
+    expect(mocks.appendBriefingItem).toHaveBeenCalledTimes(1)
+    expect(String(mocks.appendBriefingItem.mock.calls[0]?.[0]?.summary)).toContain(
+      "Codex agents can't triage"
+    )
   })
 })

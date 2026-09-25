@@ -146,6 +146,26 @@ describe('startCodexAgentProcess run policy', () => {
     expect(vi.mocked(spawn).mock.calls[0]?.[0]).toBe('/opt/tools/bin/codex')
   })
 
+  it('turns off Codex multi-agent so sub-agents cannot escape the step cap', () => {
+    startFake()
+    const commandArgs = vi.mocked(spawn).mock.calls[0]?.[1] as string[]
+    const flag = commandArgs.indexOf('--disable')
+    expect(flag).toBeGreaterThan(-1)
+    expect(commandArgs[flag + 1]).toBe('multi_agent')
+  })
+
+  it('counts multi-agent collab_tool_call items as tool steps', () => {
+    const { child, onFinish } = startFake({ maxSteps: 1 })
+    const collab = (id: string) =>
+      `${JSON.stringify({ type: 'item.started', item: { id, type: 'collab_tool_call' } })}\n`
+    child.stdout.write(collab('x') + collab('y'))
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM')
+    child.emit('close', null)
+    expect(onFinish.mock.calls).toEqual([
+      ['error', 'Codex run stopped: it exceeded its limit of 1 tool steps.']
+    ])
+  })
+
   it('stops the run once it exceeds its tool-step cap and settles one error', () => {
     const { child, onFinish } = startFake({ maxSteps: 2 })
     child.stdout.write(commandLine('a') + commandLine('a', 'completed') + commandLine('b'))

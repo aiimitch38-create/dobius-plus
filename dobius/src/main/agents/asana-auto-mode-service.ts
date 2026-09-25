@@ -8,6 +8,7 @@ import { appendBriefingItem } from './agent-briefing-store'
 import { appendAgentNotification } from './agent-notification-store'
 import { getAgentsPaused } from './agents-config-store'
 import { getAgent } from './agents-store'
+import { isCodexRunUnsupportedError } from './codex-run-policy'
 import { checkExecutionAdmission, isExecutionBlockedError } from './execution-gate'
 import { startAgentRun } from './agent-runner'
 import {
@@ -33,6 +34,8 @@ let interval: NodeJS.Timeout | null = null
 let ticking = false
 let lastPollAt = 0
 const inFlightTriageGids = new Set<string>()
+// Triage agent ids already told they cannot triage on Codex (one brief, not one per tick).
+const codexTriageBriefed = new Set<string>()
 
 function taskLabel(task: AsanaTask): string {
   return task.name.trim() || task.gid
@@ -45,6 +48,18 @@ function appendNoAgentBrief(task: AsanaTask, lane: AsanaLane): void {
     summary: `New Asana task in ${lane} lane: ${taskLabel(task)} (no triage agent set)`
   })
   recordBriefed(task.gid)
+}
+
+function appendCodexTriageBrief(triageAgentId: string, name: string): void {
+  if (codexTriageBriefed.has(triageAgentId)) {
+    return
+  }
+  codexTriageBriefed.add(triageAgentId)
+  appendBriefingItem({
+    agentId: ASANA_BRIEFING_AGENT_ID,
+    urgency: 'now',
+    summary: `Asana Auto Mode is on hold: ${name} is a Codex agent, and Codex agents can't triage. Pick a Claude agent as the triage agent.`
+  })
 }
 
 function appendDeadLetterBrief(gid: string): void {
@@ -155,7 +170,9 @@ async function dispatchTriage(
     })
   } catch (error) {
     inFlightTriageGids.delete(task.gid)
-    if (isExecutionBlockedError(error)) {
+    // Why: neither a pause nor an unsupported engine is the task's fault, so
+    // counting it as an attempt would dead-letter the whole queue.
+    if (isExecutionBlockedError(error) || isCodexRunUnsupportedError(error)) {
       releaseClaim(task.gid)
       console.info(`[agents] Asana triage not started: ${error.message}`)
       return
@@ -188,12 +205,19 @@ function maybeDispatchTask(
   if (!checkExecutionAdmission('agent-run').allowed) {
     return
   }
+  const triageAgentId = getAsanaConfig().autoMode.triageAgentId
+  const triageAgent = triageAgentId ? getAgent(triageAgentId) : null
+  if (triageAgentId && triageAgent?.engine === 'codex') {
+    appendCodexTriageBrief(triageAgentId, triageAgent.name)
+    return
+  }
+  // A later switch back to a Codex agent should brief again.
+  codexTriageBriefed.clear()
   const record = claimTask(task.gid, lane)
   if (!record) {
     return
   }
-  const triageAgentId = getAsanaConfig().autoMode.triageAgentId
-  if (!triageAgentId || !getAgent(triageAgentId)) {
+  if (!triageAgentId || !triageAgent) {
     appendNoAgentBrief(task, lane)
     return
   }

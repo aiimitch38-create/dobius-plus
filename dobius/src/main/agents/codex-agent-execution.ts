@@ -79,6 +79,9 @@ export function startCodexAgentProcess(args: {
     'exec',
     '--json',
     '--skip-git-repo-check',
+    // Why: spawned sub-agents would run outside the step cap this run enforces.
+    '--disable',
+    'multi_agent',
     '--sandbox',
     args.agent.bypassPermissions ? 'danger-full-access' : 'workspace-write'
   ]

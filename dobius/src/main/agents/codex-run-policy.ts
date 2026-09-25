@@ -45,6 +45,10 @@ export function codexRunRejection(options: CodexRunRequest | undefined): string 
   return null
 }
 
+export function isCodexRunUnsupportedError(error: unknown): error is CodexRunUnsupportedError {
+  return error instanceof CodexRunUnsupportedError
+}
+
 export function assertCodexRunSupported(options: CodexRunRequest | undefined): void {
   const rejection = codexRunRejection(options)
   if (rejection) {
@@ -56,7 +60,9 @@ const CODEX_TOOL_ITEM_TYPES = new Set([
   'command_execution',
   'file_change',
   'mcp_tool_call',
-  'web_search'
+  'web_search',
+  // Multi-agent (spawned sub-agent) calls, codex 0.156+.
+  'collab_tool_call'
 ])
 
 /** The id of a tool step (command, file edit, MCP call, web search) a JSONL event reports, else null. */

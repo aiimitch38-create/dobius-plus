@@ -94,3 +94,28 @@ Revert the commit.
 - A mutation check that removes a safety guard can make the test itself do the dangerous thing
   (here: spawn a paid CLI). Real-process tests must be sandboxed independently of the code under
   test (PATH pinned to a nonexistent dir).
+
+## Review round 1 (second commit)
+- F1 (medium): with a Codex agent set as the Asana triage agent, every task counted a
+  refused run as a failed attempt, so the whole queue dead-lettered within 2 ticks.
+  - `maybeDispatchTask` now checks the triage agent's engine BEFORE `claimTask`. For Codex it
+    claims nothing and posts one `now` brief: "Codex agents can't triage. Pick a Claude agent."
+    The brief is deduped per triage agent id. The set clears once a non-Codex agent dispatches.
+  - The `dispatchTriage` catch treats `CodexRunUnsupportedError` like `ExecutionBlockedError`:
+    it calls `releaseClaim` and logs, and never calls `recordFailure`.
+  - Optional AsanaPane annotation skipped (renderer + i18n scope).
+- F2 (low): iMessage to a Codex agent replied "busy". There is now a dedicated reply:
+  "<name> runs on Codex and can't answer iMessage."
+- F3 (low): `collab_tool_call` (multi-agent items) now counts as a tool step, and runs pass
+  `--disable multi_agent`. Support was confirmed with `codex.js exec --help` (0.156.1 has
+  `--disable <FEATURE>`). The `multi_agent` feature key appears in the strings of both the
+  0.156.1 and the homebrew 0.147.0 binaries, which were read as files, not run.
+  Unknown flags make codex exit with "Unknown feature flag", so a mismatch fails loudly.
+- Tests: asana-auto-mode-admission (refusal releases the claim with no failure recorded; Codex
+  triage never claims and briefs once over 3 ticks); agent-channel-service (Codex reply);
+  codex-agent-execution (`--disable multi_agent` in the spawn args; collab items hit the cap).
+- Mutation checks (each failed 1 test, then restored): engine check removed · catch branch
+  removed · brief dedupe removed · iMessage branch removed · collab type renamed ·
+  multi_agent flag renamed.
+- Incident: while checking feature names, `codex features list` was run once against the
+  homebrew CLI. It is a local listing with no exec and no network run. No other codex spawn.
