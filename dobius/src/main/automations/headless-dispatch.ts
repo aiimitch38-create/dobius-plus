@@ -24,6 +24,8 @@ export type HeadlessAutomationDispatcher = (request: {
   automation: Automation
   run: AutomationRun
   target: Extract<AutomationRunTargetResult, { ok: true }>
+  /** True when the run honors Pause crew up to the agent spawn (scheduled and RPC/CLI runs). */
+  honorExecutionGate: boolean
 }) => Promise<HeadlessAutomationDispatchLaunch>
 
 export function createHeadlessAutomationOutputSnapshotBuffer(): {
