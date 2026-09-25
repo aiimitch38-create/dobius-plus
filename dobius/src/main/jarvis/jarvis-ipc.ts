@@ -270,8 +270,10 @@ function restorePersistedMode(store: Store, service: JarvisService): void {
   }
   // Why the stored flag is left on (#122-F9): writing false here silently
   // turned the user's switch off whenever another app held ⌘T at launch.
-  // toggle() already broadcast the error state; jarvis:status reports the
-  // refused grab, which Settings shows, and toggling off and on retries.
+  // The error state toggle() broadcasts here is sent before the renderer
+  // listens, so it is not what surfaces this: the renderer asks jarvis:status
+  // on mount and toasts (use-jarvis-turn), Settings shows it too, and toggling
+  // off and on retries.
   if (!service.toggle(true)) {
     console.warn('[jarvis] Cmd+T is held by another app; Jarvis stays on without the shortcut')
   }
