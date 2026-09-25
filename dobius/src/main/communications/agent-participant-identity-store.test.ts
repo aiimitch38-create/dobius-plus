@@ -1,15 +1,39 @@
 import { schnorr } from '@noble/curves/secp256k1'
-import { existsSync, mkdtempSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
+import type * as Fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const safeStorageMock = vi.hoisted(() => ({
-  decryptString: vi.fn((value: Buffer) => value.toString('utf8')),
-  encryptString: vi.fn((value: string) => Buffer.from(value)),
-  isEncryptionAvailable: vi.fn(() => true)
-}))
+// Fake ciphertext that, like real safeStorage output, is not parseable JSON
+// and cannot be decrypted without the prefix.
+const { safeStorageMock, fakeDecrypt } = vi.hoisted(() => {
+  const decrypt = (value: Buffer): string => {
+    const text = value.toString('utf8')
+    if (!text.startsWith('ENC:')) {throw new Error('Error while decrypting the ciphertext provided')}
+    return text.slice('ENC:'.length)
+  }
+  return {
+    fakeDecrypt: decrypt,
+    safeStorageMock: {
+      decryptString: vi.fn(decrypt),
+      encryptString: vi.fn((value: string) => Buffer.from(`ENC:${value}`)),
+      isEncryptionAvailable: vi.fn(() => true)
+    }
+  }
+})
+
+// Pass-through node:fs with one-shot fault injection for the store under test.
+const fsFaults = vi.hoisted(() => ({ renameError: null as NodeJS.ErrnoException | null }))
 
 let tempHome = ''
 
@@ -20,15 +44,39 @@ async function loadStoreModule() {
     const actual = await vi.importActual<typeof Os>('os')
     return { ...actual, homedir: () => tempHome }
   })
+  vi.doMock('node:fs', async () => {
+    const actual = await vi.importActual<typeof Fs>('node:fs')
+    return {
+      ...actual,
+      renameSync: (from: Fs.PathLike, to: Fs.PathLike) => {
+        const fault = fsFaults.renameError
+        if (fault) {
+          fsFaults.renameError = null
+          throw fault
+        }
+        actual.renameSync(from, to)
+      }
+    }
+  })
   return import('./agent-participant-identity-store')
+}
+
+function registryPath(): string {
+  return join(tempHome, '.dobius', 'communications-agent-identities.enc')
+}
+
+function dobiusDirListing(): string[] {
+  return readdirSync(join(tempHome, '.dobius')).sort()
 }
 
 beforeEach(() => {
   tempHome = mkdtempSync(join(tmpdir(), 'dobius-agent-identity-'))
-  safeStorageMock.decryptString.mockClear()
+  safeStorageMock.decryptString.mockReset()
+  safeStorageMock.decryptString.mockImplementation(fakeDecrypt)
   safeStorageMock.encryptString.mockClear()
   safeStorageMock.isEncryptionAvailable.mockClear()
   safeStorageMock.isEncryptionAvailable.mockReturnValue(true)
+  fsFaults.renameError = null
 })
 
 describe('agent participant identity store', () => {
@@ -96,27 +144,89 @@ describe('agent participant identity store', () => {
     expect(existsSync(join(tempHome, '.dobius', 'communications-agent-identities.enc'))).toBe(false)
   })
 
-  it('recovers with a fresh registry when the existing file cannot be decrypted', async () => {
-    // Why this matters: this file is Keychain-encrypted, tied to the app's
-    // exact code signature. An ad-hoc-signed rebuild changes that signature,
-    // so a real registry can go permanently undecryptable — reproduced here
-    // as decryptString throwing, same as a real Keychain access failure.
+  it('fails closed on a transient decrypt failure and keeps every agent identity', async () => {
     const store = await loadStoreModule()
     const original = store.ensureAgentIdentity('agent-1')
+    const bytesBefore = readFileSync(registryPath())
+    const listingBefore = dobiusDirListing()
 
     const reloaded = await loadStoreModule()
     safeStorageMock.decryptString.mockImplementationOnce(() => {
       throw new Error('The user name or passphrase you entered is not correct.')
     })
+    expect(() => reloaded.ensureAgentIdentity('agent-1')).toThrow(
+      reloaded.AgentIdentityRegistryUnavailableError
+    )
+    expect(safeStorageMock.encryptString).toHaveBeenCalledTimes(1)
+    expect(readFileSync(registryPath()).equals(bytesBefore)).toBe(true)
+    expect(dobiusDirListing()).toEqual(listingBefore)
 
-    const recovered = reloaded.ensureAgentIdentity('agent-1')
-    expect(recovered.pubkey).toMatch(/^[a-f0-9]{64}$/)
-    // A fresh identity, not a crash — continuity with the old one is lost,
-    // but every agent gets working dispatch again instead of staying broken.
-    expect(recovered.pubkey).not.toBe(original.pubkey)
-    // The undecryptable file is preserved under a new name, not silently lost.
-    const dobiusDir = join(tempHome, '.dobius')
-    const { readdirSync } = await import('node:fs')
-    expect(readdirSync(dobiusDir).some((name) => name.includes('.undecryptable-'))).toBe(true)
+    // Keychain access is back: the same agent identity, no restart needed.
+    expect(reloaded.ensureAgentIdentity('agent-1')).toEqual(original)
+  })
+
+  it('does not create a new agent identity while the registry is unavailable', async () => {
+    const store = await loadStoreModule()
+    store.ensureAgentIdentity('agent-1')
+    const bytesBefore = readFileSync(registryPath())
+
+    const reloaded = await loadStoreModule()
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
+    expect(() => reloaded.ensureAgentIdentity('agent-2')).toThrow(/unavailable \(encryption unavailable\)/)
+    expect(() => reloaded.signAsAgent('agent-1', { kind: 9, content: 'x', tags: [] })).toThrow(
+      reloaded.AgentIdentityRegistryUnavailableError
+    )
+    expect(readFileSync(registryPath()).equals(bytesBefore)).toBe(true)
+  })
+
+  it.each([
+    ['a read error', () => chmodSync(registryPath(), 0o000), /unavailable \(EACCES\)/],
+    ['a corrupt file', () => writeFileSync(registryPath(), 'ENC:{not json'), /unexpected registry shape/],
+    [
+      'an entry with the wrong shape',
+      () => writeFileSync(registryPath(), 'ENC:{"agent-1":{"pubkeyHex":"ab"}}'),
+      /unexpected registry shape/
+    ]
+  ])('never replaces the registry after %s', async (_label, breakFile, message) => {
+    const store = await loadStoreModule()
+    store.ensureAgentIdentity('agent-1')
+    breakFile()
+    const brokenMode = statSync(registryPath()).mode & 0o777
+    chmodSync(registryPath(), 0o600)
+    const bytesBefore = readFileSync(registryPath())
+    chmodSync(registryPath(), brokenMode)
+    const listingBefore = dobiusDirListing()
+
+    const reloaded = await loadStoreModule()
+    expect(() => reloaded.ensureAgentIdentity('agent-1')).toThrow(message)
+    expect(() => reloaded.ensureAgentIdentity('agent-2')).toThrow(message)
+    chmodSync(registryPath(), 0o600)
+    expect(readFileSync(registryPath()).equals(bytesBefore)).toBe(true)
+    expect(dobiusDirListing()).toEqual(listingBefore)
+  })
+
+  it('reads a legacy plaintext registry after encryption becomes available', async () => {
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
+    const store = await loadStoreModule()
+    const original = store.ensureAgentIdentity('agent-1')
+
+    const reloaded = await loadStoreModule()
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(true)
+    expect(reloaded.ensureAgentIdentity('agent-1')).toEqual(original)
+  })
+
+  it('keeps the previous registry when a write is interrupted', async () => {
+    const store = await loadStoreModule()
+    const original = store.ensureAgentIdentity('agent-1')
+    const bytesBefore = readFileSync(registryPath())
+    const listingBefore = dobiusDirListing()
+
+    fsFaults.renameError = Object.assign(new Error('simulated crash before rename'), { code: 'EIO' })
+    expect(() => store.ensureAgentIdentity('agent-2')).toThrow(/simulated crash/)
+
+    expect(readFileSync(registryPath()).equals(bytesBefore)).toBe(true)
+    expect(dobiusDirListing()).toEqual(listingBefore)
+    const reloaded = await loadStoreModule()
+    expect(reloaded.ensureAgentIdentity('agent-1')).toEqual(original)
   })
 })
