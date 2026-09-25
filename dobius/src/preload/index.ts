@@ -6,7 +6,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import { preloadE2EConfig } from './e2e-config'
 import { glApi } from './gitlab'
 import type { AppIdentity } from '../shared/app-identity'
-import type { AsanaConfig, AsanaTasksSnapshot } from '../shared/asana'
+import type { AsanaConfig, AsanaRequeueResult, AsanaTasksSnapshot } from '../shared/asana'
 import type {
   AgentRun,
   AgentRunEvent,
@@ -1102,6 +1102,9 @@ const api = {
       ipcRenderer.invoke('asana:clearLocalDone', gid),
     completeTask: (gid: string): Promise<AsanaTasksSnapshot> =>
       ipcRenderer.invoke('asana:completeTask', gid),
+    listBlockedTasks: (): Promise<string[]> => ipcRenderer.invoke('asana:listBlockedTasks'),
+    requeueTask: (gid: string): Promise<AsanaRequeueResult> =>
+      ipcRenderer.invoke('asana:requeueTask', gid),
     onTasksUpdated: (callback: (snapshot: AsanaTasksSnapshot) => void): (() => void) => {
       const listener = (_event: unknown, snapshot: AsanaTasksSnapshot): void => callback(snapshot)
       ipcRenderer.on('asana:tasksUpdated', listener)

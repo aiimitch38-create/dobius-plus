@@ -16,7 +16,7 @@ import type {
 } from '../shared/imessage-bridge'
 import type { ReadClipboardTextOptions } from '../shared/clipboard-text'
 import type { AppIdentity } from '../shared/app-identity'
-import type { AsanaConfig, AsanaTasksSnapshot } from '../shared/asana'
+import type { AsanaConfig, AsanaRequeueResult, AsanaTasksSnapshot } from '../shared/asana'
 import type {
   AgentRun,
   AgentRunEvent,
@@ -1352,6 +1352,8 @@ export type PreloadApi = {
     markLocalDone: (gid: string) => Promise<AsanaTasksSnapshot>
     clearLocalDone: (gid: string) => Promise<AsanaTasksSnapshot>
     completeTask: (gid: string) => Promise<AsanaTasksSnapshot>
+    listBlockedTasks: () => Promise<string[]>
+    requeueTask: (gid: string) => Promise<AsanaRequeueResult>
     onTasksUpdated: (callback: (snapshot: AsanaTasksSnapshot) => void) => () => void
   }
   agents: {

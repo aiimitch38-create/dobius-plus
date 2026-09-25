@@ -1,7 +1,11 @@
 import { getAsanaConfig } from '../../asana/asana-config'
 import { appendBriefingItem } from '../agent-briefing-store'
 import { getBuildDispatcher, getRepoLister } from '../agent-dispatch-registry'
-import { mayDispatchBuild, recordBuildDispatched } from '../asana-dispatch-ledger'
+import {
+  clearBuildDispatched,
+  mayDispatchBuild,
+  recordBuildDispatched
+} from '../asana-dispatch-ledger'
 import { checkExecutionAdmission } from '../execution-gate'
 import type { DobiusToolContext } from './dobius-tool-handlers'
 import { errorResult, textResult, trimText, type TextToolResult } from './dobius-tool-result'
@@ -126,6 +130,13 @@ export function createDispatchBuildHandler(context: DobiusToolContext) {
         'build dispatch refused: another build dispatch is in progress, retry shortly.'
       )
     }
+    // Why: mark the build before it can start, so an app crash mid-dispatch
+    // leaves the task blocked (outcome unknown) instead of re-dispatchable.
+    if (!recordBuildDispatched(gid)) {
+      return errorResult(
+        'build dispatch refused: could not record it in the Asana dispatch ledger.'
+      )
+    }
     // Reserved synchronously right before the only await; released exactly once below.
     inFlightBuildDispatches += 1
     // The async wrapper turns a synchronous dispatcher throw into a rejection.
@@ -136,6 +147,7 @@ export function createDispatchBuildHandler(context: DobiusToolContext) {
       result = await waitForDispatch(pending)
     } catch (error) {
       inFlightBuildDispatches -= 1
+      clearBuildDispatched(gid)
       // Why: keep the tool contract (return isError, never reject) local, in case
       // a future dispatcher registration throws instead of catching internally.
       return errorResult(
@@ -144,18 +156,17 @@ export function createDispatchBuildHandler(context: DobiusToolContext) {
     }
     inFlightBuildDispatches -= 1
     if (result === TIMED_OUT) {
-      // Outcome unknown: the worktree may still appear, so fail closed and record
-      // the task as dispatched; a human checks and re-queues it if nothing came up.
-      recordBuildDispatched(gid)
+      // Outcome unknown: the worktree may still appear, so the task stays
+      // recorded as dispatched; a human checks and re-queues it if nothing came up.
       logLateOutcome(gid, pending)
       return errorResult(
         `build dispatch timed out after ${BUILD_DISPATCH_TIMEOUT_MS / 60_000} minutes; its outcome is unknown, so no retry is allowed. A human must check ${repo.name}.`
       )
     }
     if (!result.ok) {
+      clearBuildDispatched(gid)
       return errorResult(result.error || 'build dispatch failed.')
     }
-    recordBuildDispatched(gid)
     appendBriefingItem({
       agentId: context.agentId,
       urgency: 'now',

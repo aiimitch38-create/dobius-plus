@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import type { AsanaLane } from '../../shared/asana'
 import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
@@ -6,6 +7,9 @@ import { getUserDataRoot } from '../storage/user-data-root'
 const FILE_NAME = 'asana-dispatch-ledger.json'
 const MAX_ATTEMPTS = 2
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+// Why: claims carry the id of the process that made them, so a claim left
+// 'claimed' by a crashed or quit process is told apart from a live one.
+const PROCESS_CLAIM_OWNER = randomUUID()
 
 export type AsanaDispatchRecord = {
   gid: string
@@ -16,6 +20,8 @@ export type AsanaDispatchRecord = {
   status: 'claimed' | 'briefed' | 'failed' | 'dead'
   /** Set once a build worktree was dispatched (or its outcome is unknown) for this task. */
   buildDispatchedAt?: number
+  /** Process that holds a 'claimed' record; any other owner means the claim was interrupted. */
+  claimOwner?: string
 }
 
 function filePath(): string {
@@ -44,7 +50,7 @@ function sanitizeRecord(raw: unknown): AsanaDispatchRecord | null {
     record.status === 'dead'
       ? record.status
       : null
-  const { firstSeenAt, lastAttemptAt, attempts, buildDispatchedAt } = record
+  const { firstSeenAt, lastAttemptAt, attempts, buildDispatchedAt, claimOwner } = record
   if (
     !gid ||
     !lane ||
@@ -53,7 +59,8 @@ function sanitizeRecord(raw: unknown): AsanaDispatchRecord | null {
     !isFiniteNumber(lastAttemptAt) ||
     !isFiniteNumber(attempts) ||
     attempts < 0 ||
-    (buildDispatchedAt !== undefined && !isFiniteNumber(buildDispatchedAt))
+    (buildDispatchedAt !== undefined && !isFiniteNumber(buildDispatchedAt)) ||
+    (claimOwner !== undefined && typeof claimOwner !== 'string')
   ) {
     return null
   }
@@ -64,7 +71,8 @@ function sanitizeRecord(raw: unknown): AsanaDispatchRecord | null {
     lastAttemptAt,
     attempts: Math.floor(attempts),
     status,
-    ...(buildDispatchedAt === undefined ? {} : { buildDispatchedAt })
+    ...(buildDispatchedAt === undefined ? {} : { buildDispatchedAt }),
+    ...(claimOwner === undefined ? {} : { claimOwner })
   }
 }
 
@@ -115,6 +123,7 @@ export function claimTask(gid: string, lane: AsanaLane): AsanaDispatchRecord | n
     existing.status = 'claimed'
     existing.lane = lane
     existing.lastAttemptAt = now
+    existing.claimOwner = PROCESS_CLAIM_OWNER
     persist(records)
     return cloneRecord(existing)
   }
@@ -124,7 +133,8 @@ export function claimTask(gid: string, lane: AsanaLane): AsanaDispatchRecord | n
     firstSeenAt: now,
     lastAttemptAt: now,
     attempts: 0,
-    status: 'claimed'
+    status: 'claimed',
+    claimOwner: PROCESS_CLAIM_OWNER
   }
   persist([...records, record])
   return cloneRecord(record)
@@ -173,6 +183,34 @@ export function releaseClaim(gid: string): AsanaDispatchRecord | null {
   return cloneRecord(record)
 }
 
+/**
+ * A 'claimed' record owned by another process was interrupted (crash or quit
+ * mid-triage): its run died with that process, so nothing is still working on
+ * it. Each counts as one failed attempt, so a retry is bounded and a task that
+ * keeps killing the app dead-letters instead of looping. A recorded build
+ * still blocks any second dispatch. Returns the reconciled records.
+ */
+export function reconcileInterruptedClaims(): AsanaDispatchRecord[] {
+  const records = load()
+  if (file.getStatus().status === 'unreadable') {
+    return []
+  }
+  const interrupted = records.filter(
+    (record) => record.status === 'claimed' && record.claimOwner !== PROCESS_CLAIM_OWNER
+  )
+  if (interrupted.length === 0) {
+    return []
+  }
+  const now = Date.now()
+  for (const record of interrupted) {
+    record.attempts += 1
+    record.lastAttemptAt = now
+    record.status = record.attempts >= MAX_ATTEMPTS ? 'dead' : 'failed'
+  }
+  persist(records)
+  return interrupted.map(cloneRecord)
+}
+
 /** Fails closed: an unreadable ledger may already record this task's build. */
 export function mayDispatchBuild(gid: string): boolean {
   const record = findRecord(gid)
@@ -205,6 +243,52 @@ export function recordBuildDispatched(gid: string, lane: AsanaLane = 'build'): b
   ])
 }
 
+/** Undoes a pre-dispatch mark after the dispatcher definitely failed to start a build. */
+export function clearBuildDispatched(gid: string): boolean {
+  const records = load()
+  const record = records.find((entry) => entry.gid === gid)
+  if (!record || record.buildDispatchedAt === undefined) {
+    return true
+  }
+  delete record.buildDispatchedAt
+  return file.set(records)
+}
+
+/** Tasks Auto Mode will never pick up again on its own: dead-lettered or already built. */
+export function listBlockedTaskGids(): string[] {
+  const records = load()
+  if (file.getStatus().status === 'unreadable') {
+    return []
+  }
+  return records
+    .filter((record) => record.status === 'dead' || record.buildDispatchedAt !== undefined)
+    .map((record) => record.gid)
+}
+
+export type RequeueResult = { ok: true } | { ok: false; error: string }
+
+/**
+ * Human-only reset (Tasks panel): forgets the task so the next Auto Mode poll
+ * triages it again, which may dispatch a new build.
+ */
+export function requeueTask(gid: string): RequeueResult {
+  const records = load()
+  if (file.getStatus().status === 'unreadable') {
+    return { ok: false, error: 'The Asana dispatch ledger is unreadable; fix or remove it first.' }
+  }
+  const record = records.find((entry) => entry.gid === gid)
+  if (!record) {
+    return { ok: true }
+  }
+  if (record.status === 'claimed') {
+    return { ok: false, error: 'This task is being triaged right now; try again when it finishes.' }
+  }
+  if (!file.set(records.filter((entry) => entry !== record))) {
+    return { ok: false, error: 'Could not save the Asana dispatch ledger.' }
+  }
+  return { ok: true }
+}
+
 export function isDead(gid: string): boolean {
   return findRecord(gid)?.status === 'dead'
 }
@@ -213,8 +297,19 @@ export function listDispatchRecords(): AsanaDispatchRecord[] {
   return load().map(cloneRecord)
 }
 
+// Why: retention only forgets transient outcomes. Dead letters and dispatched
+// builds stay until a human re-queues them, and a live claim is never dropped
+// mid-run (that would let the next poll claim the task a second time).
+function isRetainedForever(record: AsanaDispatchRecord): boolean {
+  return (
+    record.status === 'dead' ||
+    record.status === 'claimed' ||
+    record.buildDispatchedAt !== undefined
+  )
+}
+
 export function pruneOld(now = Date.now()): AsanaDispatchRecord[] {
   const cutoff = now - RETENTION_MS
-  persist(load().filter((record) => record.firstSeenAt >= cutoff))
+  persist(load().filter((record) => isRetainedForever(record) || record.firstSeenAt >= cutoff))
   return listDispatchRecords()
 }
