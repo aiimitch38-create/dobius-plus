@@ -12209,7 +12209,12 @@
           "a21f6c33ad": "Automation source refreshed.",
           "53f06f0ad5": "Retry source",
           "pendingAutomationMissing": "自動化は利用できなくなりました。",
-          "pendingAutomationRunMissing": "実行履歴は利用できなくなりました。"
+          "pendingAutomationRunMissing": "実行履歴は利用できなくなりました。",
+          "pauseFailed": "Failed to pause automation.",
+          "resumeFailed": "Failed to resume automation.",
+          "deleteFailed": "Failed to delete automation.",
+          "runNowFailed": "Failed to run automation.",
+          "runNowNotStarted": "Automation run did not start."
         },
         "CreateFromPicker": {
           "f061f49e3f": "repo ブランチを検索...",
