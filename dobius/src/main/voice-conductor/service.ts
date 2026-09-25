@@ -21,10 +21,24 @@ import {
 import { createLeadTabStore } from './lead-tab-store'
 import { createConductorAgentSpawner } from './agent-spawn'
 import { createPersistentWorkRegistry } from './persistent-work-registry'
+import type { WorkRegistry } from './types'
 
 const conductor = createVoiceConductor()
 let started = false
 let leadTabStore: ReturnType<typeof createLeadTabStore> | null = null
+
+// Why once per process: a spawned worker outlives a conductor off/on toggle. A
+// second registry would reload the file, mark that live worker "interrupted"
+// (freeing the cap for a second paid run), and the old one would later save
+// stale items over the file.
+let workRegistry: WorkRegistry | null = null
+
+function getWorkRegistry(): WorkRegistry {
+  workRegistry ??= createPersistentWorkRegistry(
+    path.join(app.getPath('userData'), 'voice-conductor-work.json')
+  )
+  return workRegistry
+}
 
 function getLeadTabStore(): ReturnType<typeof createLeadTabStore> {
   leadTabStore ??= createLeadTabStore(path.join(app.getPath('userData'), 'voice-conductor-tabs.json'))
@@ -37,14 +51,16 @@ function getLeadTabStore(): ReturnType<typeof createLeadTabStore> {
  */
 function buildTerminalDispatch(
   runtime: DobiusCliDispatcher,
-  imessage: ReturnType<typeof createIMessageBridge>
+  imessage: ReturnType<typeof createIMessageBridge>,
+  workRegistry: WorkRegistry
 ): ConductorTerminalDispatch {
   const tabs = getLeadTabStore()
   const agentSpawner = createConductorAgentSpawner({
     listAgents,
     getPrepareClaudeLaunch: getDefaultPrepareClaudeLaunch,
     startAgentRun,
-    notify: (message) => imessage.send(message)
+    notify: (message) => imessage.send(message),
+    workRegistry
   })
   return {
     resolveActiveTab: () => runtime.resolveActiveTerminal(),
@@ -116,15 +132,13 @@ export function syncVoiceConductorFromSettings(
     if (unavailable) {
       console.warn(`[voice-conductor] iMessage approvals will be denied: ${unavailable}`)
     }
-    const workRegistry = createPersistentWorkRegistry(
-      path.join(app.getPath('userData'), 'voice-conductor-work.json')
-    )
+    const workRegistry = getWorkRegistry()
     const deps: ConductorCliDeps = {
       conductor,
       workRegistry,
       imessage,
       asana: createSettingsLaneAsanaQueue(),
-      terminals: buildTerminalDispatch(runtime, imessage)
+      terminals: buildTerminalDispatch(runtime, imessage, workRegistry)
     }
     started = true // reserve up front so a concurrent sync can't double-start
     startConductorCliServer(deps)

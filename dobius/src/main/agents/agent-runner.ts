@@ -28,6 +28,11 @@ import {
 import { assertExecutionAdmitted, type ExecutionOrigin } from './execution-gate'
 import { claimRunSession, currentRunSessionKey, releaseRunSession } from './agent-session-lease'
 import { appendAgentRunNotification } from './agent-notification-store'
+import {
+  appendRunNotificationSafely,
+  guardRunEndCallbacks,
+  type GuardedRunEndCallbacks
+} from './agent-run-end-callbacks'
 import { appendRunProgress } from './agent-run-progress-log'
 import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
 import {
@@ -121,6 +126,9 @@ type AgentRunOptions = {
   // Why: onResult only fires when the SDK emits a result message — abnormal EOF
   // and thrown-stream errors need their own hook so channel replies never go silent.
   onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
+  // Fires once, after the run's session lease and slot are released: a caller
+  // that starts the next turn from onResult would find the session still busy.
+  onSettled?: () => void
   // Omitted = autonomous, so a new caller cannot bypass Pause crew by forgetting it.
   origin?: ExecutionOrigin
 }
@@ -168,9 +176,9 @@ async function consumeRun(
   options: Options,
   prompt: string,
   resolvedCwd: string,
-  onResult: ((message: SDKResultMessage) => void) | undefined,
-  onRunEnded: ((status: 'error' | 'cancelled', summary: string) => void) | undefined
+  callbacks: GuardedRunEndCallbacks
 ): Promise<void> {
+  const { onResult, onRunEnded } = callbacks
   let sawResult = false
   let sawSystemInit = false
   let activeQuery = sdkQuery
@@ -188,7 +196,7 @@ async function consumeRun(
       recordStreamPermissionDenials({ runId, agentId: agent.id }, message)
       if (message.type === 'result') {
         sawResult = true
-        onResult?.(message)
+        onResult(message)
         recordRunSession(agent.id, runId, message.session_id, resolvedCwd)
         // Why: a result already in flight when stopAgentRun fires must not flip a
         // cancelled run back to success/error.
@@ -206,7 +214,7 @@ async function consumeRun(
           })
           const finishedRun = getStoredAgentRun(runId)
           if (finishedRun) {
-            appendAgentRunNotification(agent, finishedRun)
+            appendRunNotificationSafely(agent, finishedRun)
           }
         }
       }
@@ -222,9 +230,13 @@ async function consumeRun(
       })
       const finishedRun = getStoredAgentRun(runId)
       if (finishedRun) {
-        appendAgentRunNotification(agent, finishedRun)
+        appendRunNotificationSafely(agent, finishedRun)
       }
-      onRunEnded?.('error', 'Run ended unexpectedly without a result')
+      onRunEnded('error', 'Run ended unexpectedly without a result')
+    } else if (!sawResult && run?.status === 'cancelled') {
+      // Why: a stop can end the stream cleanly instead of throwing; callers
+      // holding a slot until the run ends must still hear about it.
+      onRunEnded('cancelled', 'stopped by user')
     }
   } catch (error) {
     if (options.resume && !sawSystemInit && !resumeRetriedFresh) {
@@ -249,8 +261,7 @@ async function consumeRun(
         retryOptions,
         prompt,
         resolvedCwd,
-        onResult,
-        onRunEnded
+        callbacks
       )
       return
     }
@@ -264,12 +275,12 @@ async function consumeRun(
       })
       const finishedRun = getStoredAgentRun(runId)
       if (finishedRun) {
-        appendAgentRunNotification(agent, finishedRun)
+        appendRunNotificationSafely(agent, finishedRun)
       }
       broadcastRunEvent({ ...eventBase(runId, agent.id), kind: 'error', text: message })
-      onRunEnded?.('error', message)
+      onRunEnded('error', message)
     } else {
-      onRunEnded?.('cancelled', 'stopped by user')
+      onRunEnded('cancelled', 'stopped by user')
     }
   } finally {
     // The retry invocation owns finalization when we delegated to it.
@@ -285,6 +296,7 @@ async function consumeRun(
       releaseAgentRun(agent.id)
       reservedRuns -= 1
       broadcastRunsChanged()
+      callbacks.onSettled()
     }
   }
 }
@@ -355,7 +367,7 @@ export async function startAgentRun(args: {
         codexHome,
         model: args.options?.model,
         maxSteps: args.options?.maxTurns ?? DEFAULT_CODEX_MAX_STEPS,
-        onRunEnded: args.options?.onRunEnded
+        callbacks: guardRunEndCallbacks(args.options)
       })
       return runId
     }
@@ -473,8 +485,7 @@ export async function startAgentRun(args: {
       options,
       prompt,
       resolvedCwd,
-      args.options?.onResult,
-      args.options?.onRunEnded
+      guardRunEndCallbacks(args.options)
     )
     return runId
   } catch (error) {
@@ -499,7 +510,7 @@ function startCodexRun(args: {
   codexHome: string | null
   model?: string
   maxSteps: number
-  onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
+  callbacks: GuardedRunEndCallbacks
 }): void {
   const child = startCodexAgentProcess({
     agent: args.agent,
@@ -525,7 +536,7 @@ function finishCodexRun(
   args: {
     runId: string
     agent: CustomAgent
-    onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
+    callbacks: GuardedRunEndCallbacks
   },
   status: 'success' | 'error' | 'cancelled',
   summary: string
@@ -537,16 +548,17 @@ function finishCodexRun(
   updateRun(args.runId, { endedAt: Date.now(), status, summary })
   const run = getStoredAgentRun(args.runId)
   if (run) {
-    appendAgentRunNotification(args.agent, run)
+    appendRunNotificationSafely(args.agent, run)
   }
   if (status !== 'success') {
-    args.onRunEnded?.(status, summary)
+    args.callbacks.onRunEnded(status, summary)
   }
   appendRunProgress(args.agent.id, status, summary)
   releaseRunSession(args.runId)
   releaseAgentRun(args.agent.id)
   reservedRuns -= 1
   broadcastRunsChanged()
+  args.callbacks.onSettled()
 }
 
 export async function stopAgentRun(runId: string): Promise<void> {
