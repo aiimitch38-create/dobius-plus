@@ -7,6 +7,11 @@ import type * as ExecutionGateModule from '../agents/execution-gate'
 import { AutomationService } from './service'
 
 const testState = { dir: '', allowed: true }
+const runAutomationPrecheckMock = vi.hoisted(() => vi.fn())
+
+vi.mock('./precheck-runner', () => ({
+  runAutomationPrecheck: runAutomationPrecheckMock
+}))
 
 vi.mock('electron', () => ({
   app: {
@@ -50,13 +55,16 @@ const makeRepo = (overrides: Partial<Repo> = {}): Repo => ({
   ...overrides
 })
 
-async function setupDueAutomation() {
+async function setupDueAutomation(
+  opts: { precheck?: { command: string; timeoutSeconds: number } } = {}
+) {
   vi.setSystemTime(new Date('2026-05-13T08:59:00'))
   const store = await createStore()
   store.addRepo(makeRepo())
   const automation = store.createAutomation({
     name: 'Morning check',
     prompt: 'Check the repo',
+    ...(opts.precheck ? { precheck: opts.precheck } : {}),
     agentId: 'claude',
     projectId: 'r1',
     workspaceMode: 'existing',
@@ -76,6 +84,7 @@ describe('AutomationService crew admission', () => {
   beforeEach(() => {
     testState.dir = mkdtempSync(join(tmpdir(), 'dobius-automations-admission-test-'))
     testState.allowed = true
+    runAutomationPrecheckMock.mockReset()
     vi.useFakeTimers()
   })
 
@@ -118,14 +127,74 @@ describe('AutomationService crew admission', () => {
       expect(store.listAutomationRuns(automation.id)[0]?.status).toBe('skipped_unavailable')
     )
 
-    const run = await service.runNow(automation.id)
+    const run = await service.runNow(automation.id, true)
 
     expect(run).toMatchObject({ trigger: 'manual', status: 'dispatching' })
     expect(send).toHaveBeenCalledTimes(1)
     expect(send).toHaveBeenCalledWith(
       'automations:dispatchRequested',
-      expect.objectContaining({ run: expect.objectContaining({ id: run.id }) })
+      expect.objectContaining({
+        run: expect.objectContaining({ id: run.id }),
+        honorExecutionGate: false
+      })
     )
+  })
+
+  // CX12 F4: RPC/CLI runNow can come from any local process, so only the
+  // desktop UI IPC counts as a human trigger.
+  it('skips an RPC/CLI run now while the crew is paused', async () => {
+    testState.allowed = false
+    const { store, automation, send, service } = await setupDueAutomation()
+    service.setRendererReady()
+    await vi.waitFor(() =>
+      expect(store.listAutomationRuns(automation.id)[0]?.status).toBe('skipped_unavailable')
+    )
+
+    const run = await service.runNow(automation.id)
+
+    expect(run).toMatchObject({
+      trigger: 'manual',
+      status: 'skipped_unavailable',
+      error: expect.stringContaining('Crew is paused')
+    })
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('skips a headless scheduled run when Pause crew is turned on during its precheck', async () => {
+    const { store, automation } = await setupDueAutomation({
+      precheck: { command: 'true', timeoutSeconds: 30 }
+    })
+    runAutomationPrecheckMock.mockImplementation(async () => {
+      testState.allowed = false
+      return {
+        command: 'true',
+        exitCode: 0,
+        timedOut: false,
+        durationMs: 1,
+        stdout: '',
+        stderr: '',
+        stdoutTruncated: false,
+        stderrTruncated: false,
+        error: null,
+        startedAt: Date.now(),
+        completedAt: Date.now()
+      }
+    })
+    const headlessDispatcher = vi.fn()
+    const service = new AutomationService(store, { tickMs: 60_000, headlessDispatcher })
+
+    service.start()
+    await vi.waitFor(() =>
+      expect(store.listAutomationRuns(automation.id)[0]?.status).toBe('skipped_unavailable')
+    )
+    service.stop()
+
+    expect(runAutomationPrecheckMock).toHaveBeenCalledTimes(1)
+    expect(headlessDispatcher).not.toHaveBeenCalled()
+    expect(store.listAutomationRuns(automation.id)[0]).toMatchObject({
+      trigger: 'scheduled',
+      error: expect.stringContaining('Crew is paused')
+    })
   })
 
   it('dispatches scheduled runs unchanged when the crew is not paused', async () => {
@@ -139,5 +208,9 @@ describe('AutomationService crew admission', () => {
     service.stop()
 
     expect(store.listAutomationRuns(automation.id)[0]?.status).toBe('dispatching')
+    expect(send).toHaveBeenCalledWith(
+      'automations:dispatchRequested',
+      expect.objectContaining({ honorExecutionGate: true })
+    )
   })
 })

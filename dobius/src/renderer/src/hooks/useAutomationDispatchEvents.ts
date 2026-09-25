@@ -45,10 +45,25 @@ function buildAutomationWorkspaceName(runTitle: string, scheduledFor: number): s
   return `auto-${slug || 'run'}-${stamp}`
 }
 
+// Fails closed: an unreadable control file or a failed read blocks the launch.
+async function readExecutionBlockedReason(): Promise<string | null> {
+  try {
+    const state = await window.api.agents.getExecutionState()
+    if (state.status === 'unreadable') {
+      return 'Crew control file could not be read. Autonomous runs are blocked until it is fixed.'
+    }
+    return state.paused
+      ? 'Crew is paused. Resume it on the Agents page to allow autonomous runs.'
+      : null
+  } catch (error) {
+    return `Crew control state could not be read: ${error instanceof Error ? error.message : String(error)}`
+  }
+}
+
 export function useAutomationDispatchEvents(): void {
   useEffect(() => {
     const unsubscribe = window.api.automations.onDispatchRequested(
-      async ({ automation, run, dispatchToken }) => {
+      async ({ automation, run, dispatchToken, honorExecutionGate }) => {
         const markDispatchResult = async (result: AutomationDispatchResult): Promise<void> => {
           await window.api.automations.markDispatchResult(result)
           window.dispatchEvent(new Event(AUTOMATIONS_CHANGED_EVENT))
@@ -69,6 +84,25 @@ export function useAutomationDispatchEvents(): void {
         let dispatchWorkspaceDisplayName =
           automationWorktree?.displayName ?? run.workspaceDisplayName ?? null
         let precheckResult: AutomationPrecheckResult | null = null
+        // Why: Pause crew can be turned on during the SSH/precheck awaits after
+        // main admitted the run, so re-check right before each launch step.
+        const skipIfExecutionBlocked = async (): Promise<boolean> => {
+          if (!honorExecutionGate && run.trigger !== 'scheduled') {
+            return false
+          }
+          const blockedReason = await readExecutionBlockedReason()
+          if (!blockedReason) {
+            return false
+          }
+          await markDispatchResult({
+            runId: run.id,
+            status: 'skipped_unavailable',
+            workspaceId: dispatchWorkspaceId,
+            workspaceDisplayName: dispatchWorkspaceDisplayName,
+            error: blockedReason
+          })
+          return true
+        }
 
         if (!repo) {
           await markDispatchResult({
@@ -155,6 +189,9 @@ export function useAutomationDispatchEvents(): void {
             return
           }
 
+          if (await skipIfExecutionBlocked()) {
+            return
+          }
           if (run.trigger === 'scheduled' && automation.precheck) {
             precheckResult = await window.api.automations.runPrecheck({
               automationId: automation.id,
@@ -173,6 +210,9 @@ export function useAutomationDispatchEvents(): void {
             }
           }
 
+          if (await skipIfExecutionBlocked()) {
+            return
+          }
           const automationWorkspaceCreateRequestId = createBrowserUuid()
           const createResult =
             automation.workspaceMode === 'new_per_run'
@@ -235,6 +275,10 @@ export function useAutomationDispatchEvents(): void {
           }
           dispatchWorkspaceId = worktree.id
           dispatchWorkspaceDisplayName = worktree.displayName
+          // Why: workspace creation is awaited; Pause crew may have turned on during it.
+          if (await skipIfExecutionBlocked()) {
+            return
+          }
           if (createResult?.setup || createResult?.defaultTabs) {
             void launchWorktreeBackgroundTerminals({
               worktreeId: worktree.id,
@@ -340,12 +384,16 @@ export function useAutomationDispatchEvents(): void {
           }
           const dispatchStartedAt = Date.now()
           if (automation.reuseSession) {
+            const priorRuns = await window.api.automations.listRuns({ automationId: automation.id })
+            if (await skipIfExecutionBlocked()) {
+              return
+            }
             const reusableSession = findReusableAutomationSession({
               automationId: automation.id,
               agentId: automation.agentId,
               worktreeId: worktree.id,
               currentRunId: run.id,
-              runs: await window.api.automations.listRuns({ automationId: automation.id }),
+              runs: priorRuns,
               state: useAppStore.getState()
             })
             if (reusableSession) {
@@ -423,6 +471,9 @@ export function useAutomationDispatchEvents(): void {
                 }
               }
             }
+          }
+          if (await skipIfExecutionBlocked()) {
+            return
           }
           const result = await launchAgentBackgroundSession({
             agent: automation.agentId,

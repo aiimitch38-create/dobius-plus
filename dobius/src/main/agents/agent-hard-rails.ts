@@ -5,22 +5,42 @@ import {
   comparablePath,
   realpathPreservingMissingTail
 } from '../communications/providers/protected-path-guard'
+import {
+  GIT_CONFIG_WRITE_REASON,
+  isForcePush,
+  isUnverifiablePush,
+  SHELL_SEGMENT_SEPARATOR,
+  UNVERIFIABLE_PUSH_REASON,
+  writesPushRewritingGitConfig
+} from './agent-hard-rails-git'
+import {
+  buildsUnresolvableShellPath,
+  UNRESOLVABLE_SHELL_PATH_REASON
+} from './agent-hard-rails-shell'
+import { rawStringMentionsCredential, stringsToInspect } from './agent-hard-rails-inputs'
+import { prepareBashCommand } from './agent-hard-rails-bash-data'
+import { shellCInnerCommands } from './agent-hard-rails-shell-text'
 
 type HardRailRunContext = {
   agentId: string
+  // The tool call's working directory (from the SDK hook input) when known.
+  cwd?: string
 }
 
 type HardRailDenial = {
   reason: string
 }
 
-// Why: the shell expands `$HOME`, `${HOME}`, `~` and `~user` before the command
-// runs, so a rail that only matches the literal `~/` text is bypassed by any of
-// the other spellings. Expand them all (anywhere in the string) before matching.
+// Why: the shell expands `$HOME`, `${HOME}`, `~`, `~user` and `$USER` before the
+// command runs, so a rail that only matches the literal `~/` text is bypassed by
+// any of the other spellings. Expand them all (anywhere in the string) before matching.
 function expandHomeReferences(value: string): string {
   const home = os.homedir()
   return value
     .replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])/g, () => home)
+    .replace(/\$\{(?:USER|LOGNAME)\}|\$(?:USER|LOGNAME)(?![A-Za-z0-9_])/g, () =>
+      path.basename(home)
+    )
     .replace(
       /(^|[\s"'=:(`])~([A-Za-z0-9._-]*)(?=[/\\\s"'`;&|)]|$)/g,
       (_match, lead: string, user: string) =>
@@ -79,25 +99,6 @@ function protectedForms(literal: string): string[] {
   return [...new Set([literal, `${real.replace(/\/$/, '')}${trailing}`])].map(comparablePath)
 }
 
-function collectStrings(value: unknown, strings: string[] = []): string[] {
-  if (typeof value === 'string') {
-    strings.push(value)
-    return strings
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      collectStrings(item, strings)
-    }
-    return strings
-  }
-  if (typeof value === 'object' && value !== null) {
-    for (const item of Object.values(value)) {
-      collectStrings(item, strings)
-    }
-  }
-  return strings
-}
-
 function commandTriggersHardRail(toolName: string, input: unknown): HardRailDenial | null {
   if (toolName !== 'Bash' || typeof input !== 'object' || input === null) {
     return null
@@ -109,67 +110,16 @@ function commandTriggersHardRail(toolName: string, input: unknown): HardRailDeni
   if (isForcePush(command)) {
     return { reason: 'Hard rail: force-pushing is not allowed from agent runs.' }
   }
+  if (isUnverifiablePush(command)) {
+    return { reason: UNVERIFIABLE_PUSH_REASON }
+  }
+  if (writesPushRewritingGitConfig(command)) {
+    return { reason: GIT_CONFIG_WRITE_REASON }
+  }
   if (/\brm\s+(?:-[^\s]*r[^\s]*f|-+[^\s]*f[^\s]*r)\s+(?:--\s+)?\/(?:\*|\s|$)/.test(command)) {
     return { reason: 'Hard rail: recursive root deletes are not allowed from agent runs.' }
   }
   return null
-}
-
-const SHELL_SEGMENT_SEPARATOR = /&&|\|\||[;|&\n()`]/
-
-// Why: flags belong to the command in their own shell segment only, so
-// `git push && rm -rf dist` must not read rm's `-rf` as a push flag. Global
-// options can sit between git and push (`git -C <path> push --force`).
-function isForcePush(command: string): boolean {
-  for (const segment of command.split(SHELL_SEGMENT_SEPARATOR)) {
-    const tokens = segment
-      .trim()
-      .split(/\s+/)
-      .map((token) => token.replace(/^["']|["']$/g, ''))
-    const gitIndex = tokens.findIndex((token) => token === 'git' || token.endsWith('/git'))
-    const pushIndex = gitIndex === -1 ? -1 : tokens.indexOf('push', gitIndex + 1)
-    if (pushIndex !== -1 && tokens.slice(pushIndex + 1).some(isForcePushArgument)) {
-      return true
-    }
-  }
-  return false
-}
-
-// `+branch` is refspec-syntax force-push — same rail as --force / -f.
-function isForcePushArgument(token: string): boolean {
-  return token.startsWith('--force') || /^-[A-Za-z]*f[A-Za-z]*$/.test(token) || /^\+\S/.test(token)
-}
-
-// Why: prefix-agnostic on purpose — `/Users/$USER/.claude/...` or a variable
-// holding the home dir cannot be expanded here, but the credential file names
-// themselves are distinctive enough to deny wherever they appear.
-function rawStringMentionsCredential(value: string): boolean {
-  return (
-    /(^|[\s"'=:/\\])\.env(?:\.[^\s"'`;&|]*)?(?=$|[\s"'`;&|])/i.test(value) ||
-    /(^|[\s"'=:/\\])\.credentials\.json(?=$|[\s"'`;&|)])/i.test(value) ||
-    /\.claude[/\\]credentials[^\s"'`;&|]*/i.test(value) ||
-    /\.dobius[/\\][^\s"'`;&|]*[/\\]token[^\s"'`;&|]*/i.test(value) ||
-    /Library[/\\]Keychains(?:[/\\]|\s|$)/i.test(value)
-  )
-}
-
-const FILE_EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
-
-// Why: for file-editing tools only the TARGET PATH matters — scanning the content
-// payload false-denies writing ".env" into a .gitignore or a README that mentions it.
-function stringsToInspect(toolName: string, input: unknown): { field: string; raw: string }[] {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    return collectStrings(input).map((raw) => ({ field: '', raw }))
-  }
-  const record = input as Record<string, unknown>
-  if (FILE_EDIT_TOOLS.includes(toolName)) {
-    return ['file_path', 'path', 'notebook_path']
-      .map((field) => ({ field, raw: record[field] }))
-      .filter((entry): entry is { field: string; raw: string } => typeof entry.raw === 'string')
-  }
-  return Object.entries(record).flatMap(([field, value]) =>
-    collectStrings(value).map((raw) => ({ field, raw }))
-  )
 }
 
 function targetsCredentials(inspected: InspectedString[]): HardRailDenial | null {
@@ -315,17 +265,64 @@ function targetsOtherAgentIdentity(
   return null
 }
 
+const MAX_SHELL_C_DEPTH = 4
+
 export function evaluateAgentHardRails(
   context: HardRailRunContext,
   toolName: string,
-  input: unknown
+  input: unknown,
+  depth = 0
 ): HardRailDenial | null {
+  const rawCommand = toolName === 'Bash' ? (input as { command?: unknown }).command : undefined
+  if (typeof rawCommand === 'string') {
+    // Why (CX12 r3): message and file-content data is hidden from the rails
+    // only under coarse fail-closed conditions; `$(..)` inside a stripped
+    // message still runs, so it is evaluated as its own command.
+    const prepared = prepareBashCommand(rawCommand)
+    for (const inner of prepared.inner) {
+      const innerDenial =
+        depth >= MAX_SHELL_C_DEPTH
+          ? { reason: UNRESOLVABLE_SHELL_PATH_REASON }
+          : evaluateAgentHardRails(context, 'Bash', { command: inner }, depth + 1)
+      if (innerDenial) {
+        return innerDenial
+      }
+    }
+    input = { ...(input as object), command: prepared.effective }
+  }
   const commandDenial = commandTriggersHardRail(toolName, input)
   if (commandDenial) {
     return commandDenial
   }
+  // Why (CX12 F1): `bash -c '<string>'` runs a whole second command the outer
+  // scan sees only as quoted text, so every rail runs on it too.
+  const command = toolName === 'Bash' ? (input as { command?: unknown }).command : undefined
+  const shellC =
+    typeof command === 'string' ? shellCInnerCommands(command) : { inner: [], unparsable: false }
+  if (shellC.unparsable) {
+    return { reason: UNRESOLVABLE_SHELL_PATH_REASON }
+  }
+  for (const inner of shellC.inner) {
+    const innerDenial =
+      depth >= MAX_SHELL_C_DEPTH
+        ? { reason: UNRESOLVABLE_SHELL_PATH_REASON }
+        : evaluateAgentHardRails(context, 'Bash', { command: inner }, depth + 1)
+    if (innerDenial) {
+      return innerDenial
+    }
+  }
   const inspected = inspectStrings(toolName, input)
-  return targetsCredentials(inspected) ?? targetsOtherAgentIdentity(context, toolName, inspected)
+  const pathDenial =
+    targetsCredentials(inspected) ?? targetsOtherAgentIdentity(context, toolName, inspected)
+  const home = normalizePathLike(os.homedir())
+  const buildsUnresolvablePath =
+    toolName === 'Bash' &&
+    inspected.some(
+      ({ field, raw }) =>
+        field === 'command' &&
+        buildsUnresolvableShellPath(expandHomeReferences(raw), { home, cwd: context.cwd })
+    )
+  return pathDenial ?? (buildsUnresolvablePath ? { reason: UNRESOLVABLE_SHELL_PATH_REASON } : null)
 }
 
 export function buildAgentHardRailHooks(context: HardRailRunContext): {
@@ -339,7 +336,11 @@ export function buildAgentHardRailHooks(context: HardRailRunContext): {
             if (input.hook_event_name !== 'PreToolUse') {
               return { continue: true }
             }
-            const denial = evaluateAgentHardRails(context, input.tool_name, input.tool_input)
+            const denial = evaluateAgentHardRails(
+              { ...context, cwd: input.cwd },
+              input.tool_name,
+              input.tool_input
+            )
             if (!denial) {
               return { continue: true }
             }

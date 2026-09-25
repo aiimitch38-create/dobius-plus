@@ -139,6 +139,150 @@ describe('migrated stores never overwrite an unreadable file', () => {
   })
 })
 
+// CX12 F1/F2: JSON-valid files whose list holds one malformed entry next to a
+// valid one. The malformed entry must make the file unreadable, never be
+// dropped and then saved over.
+const malformedEntryFiles: Record<string, unknown> = {
+  'agents.json': [{ id: 'a1', name: 'Agent' }, { id: 7 }],
+  'agents-runs.json': [
+    { id: 'r1', agentId: 'a', prompt: 'p', startedAt: 5, status: 'success' },
+    { id: 123 }
+  ],
+  'agents-notifications.json': {
+    entries: [
+      { id: 'n1', ts: 1, agentId: 'a', kind: 'run-finished', ok: true, text: 't' },
+      { id: 'n2', ts: 'x' }
+    ],
+    lastReadTs: 0
+  },
+  'agents-briefing.json': [
+    { id: 'b1', agentId: 'a', ts: 1, urgency: 'digest', summary: 's' },
+    { id: 'b2', agentId: 'a' }
+  ],
+  'agent-drafts.json': [
+    { id: 'd1', agentId: 'a', target: { kind: 'asana', gid: '1' }, body: 'b', createdAt: 1 },
+    { id: 'd2', agentId: 'a', target: null, createdAt: 1 }
+  ],
+  'asana-dispatch-ledger.json': [
+    {
+      gid: '9',
+      lane: 'build',
+      firstSeenAt: 1,
+      lastAttemptAt: 1,
+      attempts: 0,
+      status: 'briefed',
+      buildDispatchedAt: 1
+    },
+    {
+      gid: '123',
+      lane: 'build',
+      firstSeenAt: 1,
+      lastAttemptAt: 1,
+      attempts: 0,
+      status: 'briefed',
+      buildDispatchedAt: 'yesterday'
+    }
+  ],
+  'asana-config.json': {
+    allowedProjects: [
+      { name: 'P', gid: '1' },
+      { name: '', gid: '2' }
+    ],
+    autoMode: { enabled: true }
+  },
+  'teams.json': [
+    { id: 't1', name: 'Team' },
+    { id: 't2', name: '   ' }
+  ]
+}
+
+describe('migrated stores never drop a malformed entry and save over it (CX12)', () => {
+  it.each(storeCases)('$store ($fileName)', async ({ fileName, run }) => {
+    const target = path.join(electronMock.userDataDir, fileName)
+    const text = JSON.stringify(malformedEntryFiles[fileName])
+    writeFileSync(target, text, 'utf-8')
+    const before = statSync(target)
+
+    await run()
+
+    expect(readFileSync(target, 'utf-8')).toBe(text)
+    expect(statSync(target).mtimeMs).toBe(before.mtimeMs)
+    const names = readdirSync(electronMock.userDataDir)
+    expect(names.filter((name) => name.endsWith('.tmp'))).toEqual([])
+    expect(names.filter((name) => name.startsWith(`${fileName}.unreadable-`))).toHaveLength(1)
+  })
+
+  it('agent-runs-store: restart reconciliation never rewrites [{"id":123}]', async () => {
+    const target = path.join(electronMock.userDataDir, 'agents-runs.json')
+    writeFileSync(target, '[{"id":123}]', 'utf-8')
+    const store = await import('../agents/agent-runs-store')
+
+    expect(store.listStoredAgentRuns()).toEqual([])
+    expect(readFileSync(target, 'utf-8')).toBe('[{"id":123}]')
+  })
+
+  it('agent-runs-store: keeps permission denials and drops only a malformed denial', async () => {
+    const target = path.join(electronMock.userDataDir, 'agents-runs.json')
+    const run = {
+      id: 'r1',
+      agentId: 'a',
+      prompt: 'p',
+      startedAt: 5,
+      status: 'error',
+      permissionDenials: [{ toolName: 'Bash', reason: 'denied', at: 6 }, { toolName: 7 }]
+    }
+    writeFileSync(target, JSON.stringify([run]), 'utf-8')
+    const store = await import('../agents/agent-runs-store')
+
+    expect(store.listStoredAgentRuns()[0]?.permissionDenials).toEqual([
+      { toolName: 'Bash', reason: 'denied', at: 6 }
+    ])
+    const names = readdirSync(electronMock.userDataDir)
+    expect(names.filter((name) => name.includes('.unreadable-'))).toEqual([])
+  })
+
+  it('asana-dispatch-ledger: a record with an invalid buildDispatchedAt fails closed', async () => {
+    const target = path.join(electronMock.userDataDir, 'asana-dispatch-ledger.json')
+    writeFileSync(target, JSON.stringify(malformedEntryFiles['asana-dispatch-ledger.json']))
+    const ledger = await import('../agents/asana-dispatch-ledger')
+
+    expect(ledger.mayDispatchBuild('123')).toBe(false)
+    expect(ledger.claimTask('123', 'build')).toBeNull()
+    expect(ledger.recordBuildDispatched('123')).toBe(false)
+  })
+
+  it('still loads every well-formed legacy entry', async () => {
+    for (const [fileName, content] of Object.entries(malformedEntryFiles)) {
+      const valid = Array.isArray(content)
+        ? content.slice(0, 1)
+        : fileName === 'asana-config.json'
+          ? { allowedProjects: [{ name: 'P', gid: '1' }] }
+          : { entries: (content as { entries: unknown[] }).entries.slice(0, 1), lastReadTs: 0 }
+      writeFileSync(path.join(electronMock.userDataDir, fileName), JSON.stringify(valid))
+    }
+    const agents = await import('../agents/agents-store')
+    const runs = await import('../agents/agent-runs-store')
+    const notifications = await import('../agents/agent-notification-store')
+    const briefing = await import('../agents/agent-briefing-store')
+    const drafts = await import('../agents/agent-draft-store')
+    const ledger = await import('../agents/asana-dispatch-ledger')
+    const asana = await import('../asana/asana-config')
+    const teams = await import('../communications/team-store')
+
+    expect(agents.listAgents().map((agent) => agent.id)).toEqual(['a1'])
+    expect(runs.listStoredAgentRuns().map((run) => run.id)).toEqual(['r1'])
+    expect(notifications.listAgentNotifications().entries.map((entry) => entry.id)).toEqual(['n1'])
+    expect(briefing.listRecentBriefingItems()).toEqual([])
+    expect(drafts.listDrafts().map((draft) => draft.id)).toEqual(['d1'])
+    expect(ledger.listDispatchRecords().map((record) => record.gid)).toEqual(['9'])
+    expect(ledger.mayDispatchBuild('123')).toBe(true)
+    expect(asana.getAsanaConfig().allowedProjects).toEqual([{ name: 'P', gid: '1' }])
+    expect(teams.listTeams().map((team) => team.id)).toEqual(['t1'])
+    const names = readdirSync(electronMock.userDataDir)
+    expect(names.filter((name) => name.includes('.unreadable-'))).toEqual([])
+  })
+})
+
 describe('agent-runs-store restart reconciliation', () => {
   it('still converts interrupted runs after a successful parse', async () => {
     const target = path.join(electronMock.userDataDir, 'agents-runs.json')

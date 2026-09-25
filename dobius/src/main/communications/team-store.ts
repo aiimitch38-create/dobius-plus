@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { SafeJsonFile } from '../storage/safe-json-file'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'teams.json'
@@ -81,42 +81,37 @@ function normalizeAccountIds(ids: string[] | undefined): string[] {
   return [...new Set(normalized)]
 }
 
-function sanitize(raw: unknown): Team[] {
-  if (!Array.isArray(raw)) {
-    return []
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitizeTeam(entry: unknown): Team | null {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return null
   }
-  return raw.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) {
-      return []
-    }
-    const record = entry as Partial<Record<keyof Team, unknown>>
-    const id = typeof record.id === 'string' ? record.id : ''
-    const name = typeof record.name === 'string' ? record.name.trim() : ''
-    if (!id || !name) {
-      return []
-    }
-    return [
-      {
-        id,
-        name,
-        description: typeof record.description === 'string' ? record.description : null,
-        instructions: typeof record.instructions === 'string' ? record.instructions : null,
-        personaIds: normalizePersonaIds(
-          Array.isArray(record.personaIds) ? (record.personaIds as string[]) : undefined
-        ),
-        accountIds: normalizeAccountIds(
-          Array.isArray(record.accountIds) ? (record.accountIds as string[]) : undefined
-        ),
-        createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
-        updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now()
-      }
-    ]
-  })
+  const record = entry as Partial<Record<keyof Team, unknown>>
+  const id = typeof record.id === 'string' ? record.id : ''
+  const name = typeof record.name === 'string' ? record.name.trim() : ''
+  if (!id || !name) {
+    return null
+  }
+  return {
+    id,
+    name,
+    description: typeof record.description === 'string' ? record.description : null,
+    instructions: typeof record.instructions === 'string' ? record.instructions : null,
+    personaIds: normalizePersonaIds(
+      Array.isArray(record.personaIds) ? (record.personaIds as string[]) : undefined
+    ),
+    accountIds: normalizeAccountIds(
+      Array.isArray(record.accountIds) ? (record.accountIds as string[]) : undefined
+    ),
+    createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
+    updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now()
+  }
 }
 
 const file = new SafeJsonFile<Team[]>({
   filePath,
-  parse: (raw) => (Array.isArray(raw) ? sanitize(raw) : undefined),
+  parse: (raw) => (Array.isArray(raw) ? parseEveryEntry(raw, sanitizeTeam) : undefined),
   fallback: () => [],
   label: '[teams] teams.json'
 })

@@ -65,7 +65,7 @@ export function registerAutomationHandlers(store: Store, service: AutomationServ
   })
   ipcMain.handle(
     'automations:runNow',
-    (_event, args: { id: string }): Promise<AutomationRun> => service.runNow(args.id)
+    (_event, args: { id: string }): Promise<AutomationRun> => service.runNow(args.id, true)
   )
   ipcMain.handle(
     'automations:runPrecheck',

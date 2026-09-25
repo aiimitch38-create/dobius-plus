@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { evaluateAgentHardRails } from './agent-hard-rails'
+import { buildAgentHardRailHooks, evaluateAgentHardRails } from './agent-hard-rails'
 
 // Pass-through spy so the tests can count filesystem resolutions (F3 cost bound).
 vi.mock('node:fs', async (importOriginal) => {
@@ -342,5 +342,313 @@ describe('agent hard rails: symlinked protected paths (BUILD-005)', () => {
     const link = join(base, 'work', 'alias.txt')
     symlinkSync(target, link)
     expect(evaluateAgentHardRails(ctx, 'Bash', { command: `cat ${link}` })).toBeNull()
+  })
+})
+
+describe('agent hard rails: paths built from shell expansions (CX12 F6)', () => {
+  const originalHome = process.env.HOME
+  const fakeHome = '/Users/rails-test-user'
+  const repoCwd = `${fakeHome}/Projects/app`
+
+  beforeEach(() => {
+    process.env.HOME = fakeHome
+  })
+
+  afterEach(() => {
+    process.env.HOME = originalHome
+  })
+
+  const bashIn = (command: string, cwd: string | undefined = repoCwd) =>
+    evaluateAgentHardRails({ ...ctx, cwd }, 'Bash', { command })
+
+  it.each([
+    ['d="$HOME/.do"; d="${d}bius/agents"; cat "$d/other/MEMORY.md"'],
+    ['cat "$(printf \'\\x2e\\x64obius/agents/other/MEMORY.md\')"'],
+    ['cat `echo L2Rv | base64 -d`'],
+    ['read d < p; cat "./$d"'],
+    ['d=/Us; e=.dob; cat ${d}ers/rails-test-user/${e}ius/agents/other/MEMORY.md'],
+    ["cat $'\\x2edobius/agents/other/MEMORY.md'"],
+    ['eval echo hi'],
+    ['cd ${PATH%%:*}/../..'],
+    ['for f in .dob; do cat ../../${f}ius/agents/other/MEMORY.md; done'],
+    ['for f in .dobius; do cat ~/$f/agents/other/MEMORY.md; done']
+  ])('denies a path assembled at run time: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it.each([
+    ['npm run build'],
+    ['git status'],
+    ['for f in *.ts; do wc -l "$f"; done'],
+    ['for f in src/*.ts; do cp "$f" "dist/${f%.ts}.js"; done'],
+    ['echo $PATH'],
+    ['export PATH="$HOME/.local/bin:$PATH" && pnpm test'],
+    ["awk '{print $1}' results.txt"],
+    ["grep -E 'foo$' src/a.ts"],
+    ['echo $(( 1 + 2 )) && echo $?'],
+    ['cat .dobius/notes.md']
+  ])('allows ordinary agent work in a repo: %s', (command) => {
+    expect(bashIn(command)).toBeNull()
+  })
+
+  it('denies loop variables when the working directory can reach ~/.dobius', () => {
+    const loop = 'for f in *.md; do cat "$f"; done'
+    expect(bashIn(loop, fakeHome)?.reason).toMatch(/shell variable/)
+    expect(bashIn(loop, `${fakeHome}/.dobius/agents/agent-a`)?.reason).toMatch(/shell variable/)
+    expect(evaluateAgentHardRails(ctx, 'Bash', { command: loop })?.reason).toMatch(/shell variable/)
+    expect(bashIn(loop)).toBeNull()
+  })
+
+  it('passes the SDK hook cwd to the rails', async () => {
+    const hook = buildAgentHardRailHooks(ctx).PreToolUse[0].hooks[0]
+    const call = (cwd: string) =>
+      hook(
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 's',
+          transcript_path: '/t',
+          cwd,
+          tool_name: 'Bash',
+          tool_input: { command: 'for f in *.ts; do wc -l "$f"; done' },
+          tool_use_id: 'u'
+        } as never,
+        undefined,
+        { signal: new AbortController().signal }
+      )
+    expect(await call(repoCwd)).toEqual({ continue: true })
+    expect(await call(fakeHome)).toMatchObject({
+      hookSpecificOutput: { permissionDecision: 'deny' }
+    })
+  })
+})
+
+describe('agent hard rails: force-push hidden in shell variables (CX12 F7)', () => {
+  const bash = (command: string) => evaluateAgentHardRails(ctx, 'Bash', { command })
+
+  it.each([
+    ['F=--force; git push "$F" origin main'],
+    ['git push $F origin main'],
+    ['git push $(echo --force) origin main'],
+    ['git push `echo -f` origin main'],
+    [
+      'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=+main:main git push'
+    ],
+    ['export GIT_CONFIG_PARAMETERS=x && git push origin main'],
+    ['git -c remote.origin.push=+main:main push origin'],
+    ['git push --\\force origin main']
+  ])('denies an unverifiable push: %s', (command) => {
+    expect(bash(command)?.reason).toMatch(/git push|force-push/)
+  })
+
+  it('still allows literal non-force pushes', () => {
+    expect(bash('git push origin main')).toBeNull()
+    expect(bash('git push -u origin feature/x')).toBeNull()
+    expect(bash('npm test && git push origin main')).toBeNull()
+  })
+})
+
+describe('agent hard rails: CX12 review follow-ups', () => {
+  const originalHome = process.env.HOME
+  const fakeHome = '/Users/rails-test-user'
+  const repoCwd = `${fakeHome}/Projects/app`
+
+  beforeEach(() => {
+    process.env.HOME = fakeHome
+  })
+
+  afterEach(() => {
+    process.env.HOME = originalHome
+  })
+
+  const bashIn = (command: string) =>
+    evaluateAgentHardRails({ ...ctx, cwd: repoCwd }, 'Bash', { command })
+
+  const commitHeredoc = [
+    "git commit -m \"$(cat <<'EOF'",
+    "fix(x): it's done, costs $5 and `backticks` too",
+    '',
+    'git push --force is never used here',
+    'EOF',
+    ')"'
+  ].join('\n')
+
+  it.each([
+    [commitHeredoc],
+    [`${commitHeredoc} && git push origin HEAD`],
+    [commitHeredoc.replace(/'EOF'/, '"EOF"')],
+    ['gh pr create --title t --body "$(cat <<\'EOF\'\n## Summary\n- $x\nEOF\n)"'],
+    ['NODE_ENV=test npm test && git push origin HEAD'],
+    ['for i in {1..3}; do echo "$i"; done'],
+    ["awk '{print}' a.txt"],
+    ['curl -d "{\\"a\\":1,\\"b\\":2}" http://localhost:3000'],
+    ['npm run build \\\n  --silent']
+  ])('F5: allows normal agent work: %s', (command) => {
+    expect(bashIn(command)).toBeNull()
+  })
+
+  it.each([
+    ['F=--force; git push "$F" origin main'],
+    ['git push origin main "--fo"rce'],
+    ["git push origin ''+main"],
+    ['\\git push --force origin main'],
+    ['git pu""sh --force origin main'],
+    ['g""it push -f origin main'],
+    ['echo --force | xargs git push origin main'],
+    ["git config remote.origin.push '+HEAD:refs/heads/main'"],
+    ["git config --global alias.p 'push -f'"],
+    ["git -c alias.p='push -f' p origin main"],
+    ['git() { command git push -f "$@"; }; git push origin main'],
+    ["cat <<'EOF' | bash\ngit push -f\nEOF"]
+  ])('F3: denies a hidden or rewritten force-push: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it.each([
+    ["bash -c 'd=$HOME/.do; cat ${d}bius/agents/other/MEMORY.md'"],
+    ["sh -c 'cat ~/.$0/agents/other/MEMORY.md' dobius"],
+    ["env bash -c 'cat ~/.dobius/agents/other/MEMORY.md'"],
+    ['xargs -0 zsh -c "git push --force"'],
+    ['bash -c "sh -c \'cat \\$0/x\' ~/.dobius/agents/other"']
+  ])('F1: checks the inner command of sh -c: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it('F1: allows an ordinary sh -c', () => {
+    expect(bashIn("bash -c 'npm run build && git status'")).toBeNull()
+  })
+
+  it.each([
+    ['cat ~/.{dobius,x}/agents/other/MEMORY.md'],
+    ['cat ~/.do{b,}ius/agents/other/MEMORY.md'],
+    ['cat ~/.dob{i..i}us/agents/other/MEMORY.md'],
+    ['cat ~/.dob\\\nius/agents/other/MEMORY.md'],
+    ['echo agents/other/MEMORY.md | xargs -I@ cat ~/.dobius/@'],
+    ['cd /; cd Users; cd rails-test-user; cd .dobius; for f in agents; do cat $f/other/x; done']
+  ])('F2: denies stopgap path assembly: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+})
+
+describe('agent hard rails: CX12 r2 review', () => {
+  const originalHome = process.env.HOME
+  const fakeHome = '/Users/rails-test-user'
+  const repoCwd = `${fakeHome}/Projects/app`
+
+  beforeEach(() => {
+    process.env.HOME = fakeHome
+  })
+
+  afterEach(() => {
+    process.env.HOME = originalHome
+  })
+
+  const bashIn = (command: string) =>
+    evaluateAgentHardRails({ ...ctx, cwd: repoCwd }, 'Bash', { command })
+  const push = 'git push --force origin main'
+  const built = 'x=bius; cat ~/.do${x}/agents/other/M'
+
+  it.each(
+    [push, built].flatMap((body) => [
+      [`sh -c "$(cat <<'EOF'\n${body}\nEOF\n)"`],
+      [`$(cat <<'EOF'\n${body}\nEOF\n)`],
+      [`sh <(cat <<'EOF'\n${body}\nEOF\n)`],
+      [`cat <<'EOF' > >(sh)\n${body}\nEOF`],
+      [`cat <<'EOF' > p.sh\n${body}\nEOF\nsh p.sh`],
+      [`eval "$(cat <<'EOF'\n${body}\nEOF\n)"`]
+    ])
+  )('F1: scans heredoc bodies that run as code: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it.each([
+    [`bash --norc -c '${built}'`],
+    [`bash -o pipefail -c '${built}'`],
+    [`bash -c -- '${built}'`],
+    [`bash -O extglob -c '${push}'`],
+    [`bash +o posix --login -c '${push}'`],
+    ["bash -c 'unterminated"]
+  ])('F2: parses sh options before -c: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it.each([
+    ['git add -A && git commit -m "$(cat <<\'EOF\'\nchore: add .env.example and docs\nEOF\n)"'],
+    [
+      'git commit -m "$(cat <<\'EOF\'\nfix(agents): deny reads of ~/.dobius/agents/<other>\nEOF\n)"'
+    ],
+    ['git commit -m "docs: explain why git push -f is blocked"'],
+    ["bash -lc 'npm run typecheck'"],
+    ['bash -o pipefail -c "npm test | tee out.log"'],
+    ['NODE_ENV=test npm test && git push origin HEAD'],
+    ["awk '{print $1}' file.txt"]
+  ])('F3: allows commit text and ordinary commands: %s', (command) => {
+    expect(bashIn(command)).toBeNull()
+  })
+})
+
+describe('agent hard rails: CX12 r3 review (fail-closed data rules)', () => {
+  const originalHome = process.env.HOME
+  const fakeHome = '/Users/rails-test-user'
+  const repoCwd = `${fakeHome}/Projects/app`
+  const other = `${fakeHome}/.dobius/agents/other/M`
+
+  beforeEach(() => {
+    process.env.HOME = fakeHome
+  })
+
+  afterEach(() => {
+    process.env.HOME = originalHome
+  })
+
+  const bashIn = (command: string) =>
+    evaluateAgentHardRails({ ...ctx, cwd: repoCwd }, 'Bash', { command })
+
+  it.each([
+    ["cat <<'EOF' > x.ts\nconst a = `${b}/c`\nEOF"],
+    ["cat <<'EOF' > notes.md\nPrice: $5\nEOF"],
+    ['cat <<\'EOF\' > run.sh\n#!/bin/sh\ncd "$1" && ls\nEOF'],
+    ["cat <<'EOF'\nusage: $0 <dir>\nEOF"],
+    ["cat > notes.md <<'EOF'\ncost is $5 and $(date) literal\nEOF"],
+    ["cat > notes.md <<'EOF'\nwe block git push -f here\nEOF"],
+    ["cat <<'EOF' > notes.md\n| a | b |\nEOF"],
+    ["git commit -F- <<'EOF'\ndocs: explain why git push -f is blocked\nEOF"],
+    ["gh pr create --title t --body-file - <<'EOF'\n## Summary\nhandles $HOME\nEOF"],
+    ['gh pr create --title "$(git log -1 --format=%s)"'],
+    ['git commit -m "$(cat <<\'EOF\'\nfix\nEOF\n)" && bash scripts/check.sh'],
+    ['git commit -m "$(cat <<\'EOF\'\nfix: shell rails for sh -c and eval\nEOF\n)"'],
+    ['git commit -m "docs: explain why git push -f is blocked"'],
+    ['git stash push -m "wip"'],
+    ['git -C dobius push origin HEAD'],
+    ["python3 - <<'EOF'\nprint(1)\nEOF"]
+  ])('F3/F6: allows data heredocs and messages: %s', (command) => {
+    expect(bashIn(command)).toBeNull()
+  })
+
+  it.each([
+    [`python3 -c "$(cat <<'EOF'\nprint(open('${other}').read())\nEOF\n)"`],
+    [`echo "$(cat <<'EOF'\nprint(open('${other}').read())\nEOF\n)" | python3`],
+    [`python3 - <<'EOF'\nprint(open('${other}').read())\nEOF`],
+    ["perl -e \"$(cat <<'EOF'\nsystem('git push -f')\nEOF\n)\""],
+    ['echo "$(cat <<\'EOF\'\ngit push -f\nEOF\n)" | sh'],
+    ['printf %s "$(cat <<\'EOF\'\ngit push -f\nEOF\n)" > p.sh && sh p.sh'],
+    ["cat <<'EOF' > p.sh\ngit push --force origin main\nEOF\nchmod +x p.sh && ./p.sh"],
+    ['git commit -m "$(cat <<\'EOF\'\nx\nEOF\n)" | sh'],
+    ['x="$(cat <<\'EOF\'\ngit push -f\nEOF\n)"; $x'],
+    ['gh pr create --title "$(cat ~/.dobius/agents/other/M)"']
+  ])('F2/F4: interpreter or re-used heredocs are scanned: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it.each([
+    ['git --config-env core.x=Y push -f origin main'],
+    ['git --attr-source HEAD push -f origin main'],
+    ['git --super-prefix x/ push -f origin main'],
+    ['git --no-pager push --mirror origin'],
+    ['git push origin :main'],
+    ['git push --delete origin main'],
+    ['git --config-env=alias.p=X p'],
+    ["X='push -f' git --config-env alias.p=X p"]
+  ])('F1/F5: git push detection fails closed: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
   })
 })

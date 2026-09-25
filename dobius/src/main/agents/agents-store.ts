@@ -16,7 +16,7 @@ import {
   normalizeNotify,
   normalizeSkills
 } from './agent-record-normalization'
-import { SafeJsonFile } from '../storage/safe-json-file'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agents.json'
@@ -65,57 +65,51 @@ function sanitizeSessionsByKey(
   return Object.keys(sessions).length > 0 ? sessions : undefined
 }
 
-function sanitize(raw: unknown): CustomAgent[] {
-  if (!Array.isArray(raw)) {
-    return []
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitizeAgent(entry: unknown): CustomAgent | null {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return null
   }
-  return raw.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) {
-      return []
-    }
-    const record = entry as Partial<Record<keyof CustomAgent, unknown>>
-    const id = typeof record.id === 'string' ? record.id : ''
-    const name = typeof record.name === 'string' ? record.name.trim() : ''
-    if (!id || !name) {
-      return []
-    }
-    const engine = normalizeEngine(record.engine)
-    return [
-      {
-        id,
-        name,
-        description: typeof record.description === 'string' ? record.description : '',
-        icon: normalizeIcon(record.icon),
-        color: normalizeColor(record.color),
-        systemPrompt: typeof record.systemPrompt === 'string' ? record.systemPrompt : '',
-        engine,
-        accountId: typeof record.accountId === 'string' && record.accountId ? record.accountId : null,
-        model: normalizeModel(record.model, engine),
-        allowedTools: Array.isArray(record.allowedTools)
-          ? record.allowedTools.filter((tool): tool is string => typeof tool === 'string' && !!tool)
-          : [...DEFAULT_ALLOWED_TOOLS],
-        skills: normalizeSkills(record.skills),
-        cwd: typeof record.cwd === 'string' ? record.cwd : '',
-        bypassPermissions: record.bypassPermissions === true,
-        heartbeat: normalizeHeartbeat(record.heartbeat),
-        notify: normalizeNotify(record.notify),
-        channels: normalizeChannels(record.channels),
-        lastHeartbeatAt:
-          typeof record.lastHeartbeatAt === 'number' ? record.lastHeartbeatAt : undefined,
-        lastSessionId: typeof record.lastSessionId === 'string' ? record.lastSessionId : undefined,
-        lastSessionCwd:
-          typeof record.lastSessionCwd === 'string' ? record.lastSessionCwd : undefined,
-        sessionsByKey: sanitizeSessionsByKey(record.sessionsByKey),
-        createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
-        updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now()
-      }
-    ]
-  })
+  const record = entry as Partial<Record<keyof CustomAgent, unknown>>
+  const id = typeof record.id === 'string' ? record.id : ''
+  const name = typeof record.name === 'string' ? record.name.trim() : ''
+  if (!id || !name) {
+    return null
+  }
+  const engine = normalizeEngine(record.engine)
+  return {
+    id,
+    name,
+    description: typeof record.description === 'string' ? record.description : '',
+    icon: normalizeIcon(record.icon),
+    color: normalizeColor(record.color),
+    systemPrompt: typeof record.systemPrompt === 'string' ? record.systemPrompt : '',
+    engine,
+    accountId: typeof record.accountId === 'string' && record.accountId ? record.accountId : null,
+    model: normalizeModel(record.model, engine),
+    allowedTools: Array.isArray(record.allowedTools)
+      ? record.allowedTools.filter((tool): tool is string => typeof tool === 'string' && !!tool)
+      : [...DEFAULT_ALLOWED_TOOLS],
+    skills: normalizeSkills(record.skills),
+    cwd: typeof record.cwd === 'string' ? record.cwd : '',
+    bypassPermissions: record.bypassPermissions === true,
+    heartbeat: normalizeHeartbeat(record.heartbeat),
+    notify: normalizeNotify(record.notify),
+    channels: normalizeChannels(record.channels),
+    lastHeartbeatAt:
+      typeof record.lastHeartbeatAt === 'number' ? record.lastHeartbeatAt : undefined,
+    lastSessionId: typeof record.lastSessionId === 'string' ? record.lastSessionId : undefined,
+    lastSessionCwd: typeof record.lastSessionCwd === 'string' ? record.lastSessionCwd : undefined,
+    sessionsByKey: sanitizeSessionsByKey(record.sessionsByKey),
+    createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
+    updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now()
+  }
 }
 
 const file = new SafeJsonFile<CustomAgent[]>({
   filePath,
-  parse: (raw) => (Array.isArray(raw) ? sanitize(raw) : undefined),
+  parse: (raw) => (Array.isArray(raw) ? parseEveryEntry(raw, sanitizeAgent) : undefined),
   fallback: () => [],
   label: '[agents] agents.json'
 })

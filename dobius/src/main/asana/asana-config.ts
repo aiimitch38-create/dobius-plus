@@ -2,7 +2,7 @@ import path from 'node:path'
 import type { AsanaConfig, AsanaProjectRef } from '../../shared/asana'
 import { DEFAULT_ASANA_CONFIG } from '../../shared/asana'
 import { isTuiAgent } from '../../shared/tui-agent-config'
-import { SafeJsonFile } from '../storage/safe-json-file'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 
 // Why: Asana automation keeps its own JSON file instead of the typed settings
@@ -21,19 +21,37 @@ function sanitizeString(value: unknown, fallback: string): string {
   return trimmed.length > 0 ? trimmed : fallback
 }
 
+function sanitizeProjectRef(entry: unknown): AsanaProjectRef | null {
+  if (typeof entry !== 'object' || entry === null) {
+    return null
+  }
+  const record = entry as Partial<Record<keyof AsanaProjectRef, unknown>>
+  const name = typeof record.name === 'string' ? record.name.trim() : ''
+  const gid = typeof record.gid === 'string' ? record.gid.trim() : ''
+  return name && gid ? { name, gid } : null
+}
+
 function sanitizeAllowedProjects(value: unknown): AsanaProjectRef[] {
   if (!Array.isArray(value)) {
     return [...DEFAULT_ASANA_CONFIG.allowedProjects]
   }
   return value.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) {
-      return []
-    }
-    const record = entry as Partial<Record<keyof AsanaProjectRef, unknown>>
-    const name = typeof record.name === 'string' ? record.name.trim() : ''
-    const gid = typeof record.gid === 'string' ? record.gid.trim() : ''
-    return name && gid ? [{ name, gid }] : []
+    const project = sanitizeProjectRef(entry)
+    return project ? [project] : []
   })
+}
+
+// Why: the saved file's project list is never filtered on load; one malformed
+// entry makes the file unreadable instead of being dropped and saved over (CX12 F2).
+function parseStoredConfig(raw: unknown): AsanaConfig | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return undefined
+  }
+  const { allowedProjects } = raw as Partial<Record<keyof AsanaConfig, unknown>>
+  if (Array.isArray(allowedProjects) && !parseEveryEntry(allowedProjects, sanitizeProjectRef)) {
+    return undefined
+  }
+  return sanitizeConfig(raw)
 }
 
 function sanitizeAutoMode(value: unknown): AsanaConfig['autoMode'] {
@@ -81,10 +99,7 @@ export function sanitizeConfig(raw: unknown): AsanaConfig {
 // Why: an unreadable file yields defaults (auto mode off) and is never overwritten.
 const file = new SafeJsonFile<AsanaConfig>({
   filePath: configFilePath,
-  parse: (raw) =>
-    typeof raw === 'object' && raw !== null && !Array.isArray(raw)
-      ? sanitizeConfig(raw)
-      : undefined,
+  parse: parseStoredConfig,
   fallback: () => sanitizeConfig(DEFAULT_ASANA_CONFIG),
   label: '[asana] asana-config.json'
 })
