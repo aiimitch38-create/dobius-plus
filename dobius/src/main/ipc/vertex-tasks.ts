@@ -8,9 +8,10 @@
  * false rather than throwing, so a malformed renderer call degrades to "that
  * did not happen" instead of an unhandled rejection in the main process. */
 
-import { ipcMain } from 'electron'
+import { ipcMain, webContents } from 'electron'
 
 import { reloadVertexTasksFromDisk, vertexTaskStore } from '../vertex/vertex-task-store'
+import { withClaimingWindow, withLostClaimCheck } from '../vertex/vertex-dispatch-recovery'
 import {
   isVertexTaskStatus,
   type VertexTask,
@@ -48,13 +49,41 @@ export function registerVertexTaskHandlers(): void {
   ipcMain.handle(
     'vertexTasks:update',
     async (
-      _event,
+      event,
       args: { taskId: string; patch: VertexTaskPatch },
     ): Promise<VertexTask | null> => {
       if (!args || !isNonEmptyString(args.taskId) || !args.patch) {
         return null
       }
-      return vertexTaskStore.update(args.taskId, args.patch)
+      return withClaimingWindow(event.sender.id, () =>
+        vertexTaskStore.update(args.taskId, args.patch),
+      )
+    },
+  )
+
+  // Why: a window's board dispatcher calls this on every poll. Claims it made
+  // before a reload, or whose settle write failed, have no promise left to
+  // settle them; they are ended as interrupted, never relaunched.
+  ipcMain.removeHandler('vertexTasks:releaseInterruptedClaims')
+  ipcMain.handle(
+    'vertexTasks:releaseInterruptedClaims',
+    async (event, args: { activeTaskIds: string[] }): Promise<void> => {
+      if (
+        !args ||
+        !Array.isArray(args.activeTaskIds) ||
+        !args.activeTaskIds.every(isNonEmptyString)
+      ) {
+        return
+      }
+      const check = {
+        webContentsId: event.sender.id,
+        activeTaskIds: new Set(args.activeTaskIds),
+        isWebContentsLive: (id: number) => {
+          const contents = webContents.fromId(id)
+          return Boolean(contents && !contents.isDestroyed() && !contents.isCrashed())
+        },
+      }
+      withLostClaimCheck(check, () => vertexTaskStore.list())
     },
   )
 

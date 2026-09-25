@@ -6,6 +6,12 @@ import { join } from 'node:path'
 // The store imports electron only for app.getPath, which the storage-dir
 // override replaces in tests.
 vi.mock('electron', () => ({ app: { getPath: () => tmpdir() } }))
+// Why mocked: the lost-claim path reads main's run registry; tests set it.
+const agentRuns = vi.hoisted(() => ({ runs: [] as AgentRun[] }))
+vi.mock('../agents/agent-runs-store', () => ({
+  getStoredAgentRun: (id: string) => agentRuns.runs.find((run) => run.id === id) ?? null,
+  listStoredAgentRuns: () => agentRuns.runs
+}))
 vi.mock('../agents/agents-store', () => ({
   listAgents: () => [
     {
@@ -36,7 +42,9 @@ import {
   setVertexTaskStorageDir,
   vertexTaskStore
 } from './vertex-task-store'
+import type { AgentRun } from '../../shared/agents'
 import type { VertexTaskStatus } from '../../shared/vertex-task-types'
+import { withClaimingWindow, withLostClaimCheck } from './vertex-dispatch-recovery'
 
 let dir: string
 
@@ -46,6 +54,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  agentRuns.runs = []
   vi.restoreAllMocks()
   setVertexTaskStorageDir(null)
   rmSync(dir, { recursive: true, force: true })
@@ -454,5 +463,289 @@ describe('re-parenting', () => {
     vertexTaskStore.update(a.id, { title: 'renamed' })
 
     expect(childIdsOf(p1.id)).toEqual([a.id])
+  })
+})
+
+describe('interrupted dispatch claims (#94)', () => {
+  const DEAD_PID = 999_991
+  const LIVE_OTHER_PID = 999_992
+  const agent = { kind: 'agent' as const, id: 'agent-watson-uuid', name: 'Watson', initials: 'WA' }
+
+  // Why a stub: a real crashed pid can be reused by the OS mid-test.
+  function stubPids(): void {
+    const realKill = process.kill.bind(process)
+    vi.spyOn(process, 'kill').mockImplementation(((pid: number, signal?: string | number) => {
+      if (pid === DEAD_PID) {
+        throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' })
+      }
+      if (pid === LIVE_OTHER_PID) {
+        return true
+      }
+      return realKill(pid, signal)
+    }) as typeof process.kill)
+  }
+
+  function writeClaim(
+    dispatch: Record<string, unknown>,
+    status: VertexTaskStatus = 'in-progress'
+  ): void {
+    const row = {
+      id: 'card',
+      title: 'crashed card',
+      status,
+      order: 1000,
+      assignee: agent,
+      dispatch: {
+        status: 'running',
+        agentId: agent.id,
+        agentName: agent.name,
+        attempts: 1,
+        updatedAt: Date.now(),
+        ...dispatch
+      }
+    }
+    writeFileSync(join(dir, 'vertex-tasks.json'), JSON.stringify([row]), 'utf8')
+    setVertexTaskStorageDir(dir)
+  }
+
+  const onDisk = (): { status: string; dispatch: Record<string, unknown> } =>
+    (
+      JSON.parse(readFileSync(join(dir, 'vertex-tasks.json'), 'utf8')) as {
+        status: string
+        dispatch: Record<string, unknown>
+      }[]
+    )[0]
+
+  beforeEach(stubPids)
+
+  it('marks a claim of a dead process failed, on disk, so the operator can retry', () => {
+    writeClaim({ ownerPid: DEAD_PID, ownerSessionId: 'crashed' })
+
+    const [task] = vertexTaskStore.list()
+
+    expect(task.status).toBe('in-progress')
+    expect(task.dispatch).toMatchObject({ status: 'failed', attempts: 1 })
+    expect(task.dispatch?.error).toContain('Move to To Do to retry')
+    expect(task.dispatch?.ownerPid).toBeUndefined()
+    expect(onDisk().dispatch.status).toBe('failed')
+    // The operator's retry: move to To Do. The dispatcher picks up failed + todo.
+    expect(vertexTaskStore.move('card', 'todo', 0)?.dispatch?.status).toBe('failed')
+  })
+
+  it('releases a live-pid claim older than the age cap (pid reused after a crash)', () => {
+    writeClaim({
+      ownerPid: LIVE_OTHER_PID,
+      ownerSessionId: 'other',
+      updatedAt: Date.now() - 6 * 60 * 60 * 1000 - 1
+    })
+
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('failed')
+  })
+
+  it('leaves a live other instance claim running (shared userData in dev)', () => {
+    writeClaim({ ownerPid: LIVE_OTHER_PID, ownerSessionId: 'other' })
+
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('running')
+    expect(onDisk().dispatch.status).toBe('running')
+  })
+
+  it('treats an earlier process with this same pid as gone', () => {
+    writeClaim({ ownerPid: process.pid, ownerSessionId: 'before-the-crash' })
+
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('failed')
+  })
+
+  it('treats a claim written before owner stamping as orphaned', () => {
+    writeClaim({})
+
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('failed')
+  })
+
+  it('dead-letters a claim that had used its last attempt', () => {
+    writeClaim({ ownerPid: DEAD_PID, attempts: 2 })
+
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('dead')
+  })
+
+  it('takes a crashed claim out of To Do so nothing relaunches it by itself', () => {
+    writeClaim({ ownerPid: DEAD_PID }, 'todo')
+
+    const [task] = reloadVertexTasksFromDisk()
+
+    expect(task.status).toBe('in-progress')
+    expect(task.dispatch?.status).toBe('failed')
+  })
+
+  it('still shows the board when the recovery write fails', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    writeClaim({ ownerPid: DEAD_PID })
+    chmodSync(dir, 0o500)
+    try {
+      expect(vertexTaskStore.list()[0].dispatch?.status).toBe('running')
+      expect(warn).toHaveBeenCalled()
+    } finally {
+      chmodSync(dir, 0o700)
+    }
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('failed')
+  })
+
+  it('stamps this process on a claim and keeps it running across reads', () => {
+    const created = vertexTaskStore.create({ title: 'live', status: 'todo', assignee: agent })
+    const claimed = vertexTaskStore.update(created.id, {
+      status: 'in-progress',
+      dispatch: {
+        status: 'running',
+        agentId: agent.id,
+        agentName: agent.name,
+        attempts: 1,
+        updatedAt: 1,
+        // A renderer cannot claim on another process's behalf.
+        ownerPid: DEAD_PID,
+        ownerSessionId: 'forged'
+      }
+    })
+
+    expect(claimed?.dispatch?.ownerPid).toBe(process.pid)
+    expect(claimed?.dispatch?.ownerSessionId).not.toBe('forged')
+    setVertexTaskStorageDir(dir)
+    expect(vertexTaskStore.list()[0].dispatch?.status).toBe('running')
+  })
+
+  it('drops the owner once the run settles', () => {
+    writeClaim({ ownerPid: LIVE_OTHER_PID, ownerSessionId: 'other' })
+
+    const settled = vertexTaskStore.update('card', {
+      dispatch: {
+        status: 'succeeded',
+        agentId: agent.id,
+        agentName: agent.name,
+        attempts: 1,
+        updatedAt: 2,
+        ownerPid: LIVE_OTHER_PID
+      }
+    })
+
+    expect(settled?.dispatch?.ownerPid).toBeUndefined()
+  })
+})
+
+describe('claims a window has lost (#94, same process)', () => {
+  const agent = { kind: 'agent' as const, id: 'agent-watson-uuid', name: 'Watson', initials: 'WA' }
+  const WINDOW = 7
+  const CLAIMED_AT = Date.now()
+  const run = (patch: Partial<AgentRun>): AgentRun => ({
+    id: 'run-1',
+    agentId: agent.id,
+    prompt: 'board task',
+    startedAt: CLAIMED_AT + 5,
+    status: 'running',
+    ...patch
+  })
+  const OTHER_WINDOW = 8
+
+  function claim(windowId = WINDOW, runId?: string): string {
+    const created = vertexTaskStore.create({ title: 'card', status: 'todo', assignee: agent })
+    withClaimingWindow(windowId, () =>
+      vertexTaskStore.update(created.id, {
+        status: 'in-progress',
+        dispatch: {
+          status: 'running',
+          agentId: agent.id,
+          agentName: agent.name,
+          attempts: 1,
+          updatedAt: CLAIMED_AT,
+          ...(runId ? { runId } : {})
+        }
+      })
+    )
+    return created.id
+  }
+
+  const release = (active: string[] = [], liveWindows = [WINDOW]): void =>
+    void withLostClaimCheck(
+      {
+        webContentsId: WINDOW,
+        activeTaskIds: new Set(active),
+        isWebContentsLive: (id) => liveWindows.includes(id)
+      },
+      () => vertexTaskStore.list()
+    )
+
+  const dispatchOf = (id: string) => vertexTaskStore.list().find((t) => t.id === id)?.dispatch
+
+  it('records the claiming window', () => {
+    const id = claim()
+    expect(dispatchOf(id)).toMatchObject({ ownerWebContentsId: WINDOW })
+  })
+
+  it('does not leak the window to a later in-process claim, or the check to a later read', () => {
+    release([])
+    const windowClaim = claim()
+    const created = vertexTaskStore.create({ title: 'tool', status: 'todo', assignee: agent })
+    const inProcess = vertexTaskStore.update(created.id, {
+      dispatch: { status: 'running', agentId: agent.id, agentName: agent.name, attempts: 1, updatedAt: 1 }
+    })
+    expect(inProcess?.dispatch?.ownerWebContentsId).toBeUndefined()
+    // A plain read (no window asking) never ends this process's own claims.
+    expect(dispatchOf(windowClaim)?.status).toBe('running')
+  })
+
+  it('ends a claim its dispatcher no longer awaits (reload, failed settle) as interrupted', () => {
+    const id = claim()
+    release([])
+    expect(dispatchOf(id)).toMatchObject({ status: 'failed' })
+    expect(dispatchOf(id)?.error).toContain('reloaded or lost track')
+  })
+
+  it('keeps a claim the current dispatcher still awaits', () => {
+    const id = claim()
+    release([id])
+    expect(dispatchOf(id)?.status).toBe('running')
+  })
+
+  it('leaves another open window alone, but not a closed one', () => {
+    const id = claim(OTHER_WINDOW)
+    release([], [WINDOW, OTHER_WINDOW])
+    expect(dispatchOf(id)?.status).toBe('running')
+    release([], [WINDOW])
+    expect(dispatchOf(id)?.status).toBe('failed')
+  })
+
+  it('keeps a lost claim running while its run is still going in main', () => {
+    agentRuns.runs = [run({})]
+    const id = claim(WINDOW, 'run-1')
+    release([])
+    expect(dispatchOf(id)?.status).toBe('running')
+  })
+
+  it('records the real outcome once that run has finished', () => {
+    agentRuns.runs = [run({})]
+    const id = claim(WINDOW, 'run-1')
+    release([])
+    agentRuns.runs = [run({ status: 'success', summary: 'shipped it', costUsd: 0.42, endedAt: 9 })]
+    release([])
+    const task = vertexTaskStore.list().find((t) => t.id === id)
+    expect(task?.status).toBe('review')
+    expect(task?.dispatch).toMatchObject({ status: 'succeeded', report: 'shipped it', costUsd: 0.42 })
+    expect(task?.dispatch?.error).toBeUndefined()
+  })
+
+  it('records a failed run as failed with its own reason, not as interrupted', () => {
+    agentRuns.runs = [run({ status: 'error', summary: 'budget exceeded', endedAt: 9 })]
+    const id = claim(WINDOW, 'run-1')
+    release([])
+    expect(dispatchOf(id)?.status).toBe('failed')
+    expect(dispatchOf(id)?.error).toContain('budget exceeded')
+  })
+
+  it('without a run id, keeps the claim while a run of its agent started since the claim goes on', () => {
+    agentRuns.runs = [run({ id: 'unstamped' })]
+    const id = claim()
+    release([])
+    expect(dispatchOf(id)?.status).toBe('running')
+    agentRuns.runs = [run({ id: 'older', startedAt: CLAIMED_AT - 1 })]
+    release([])
+    expect(dispatchOf(id)?.error).toContain('reloaded or lost track')
   })
 })

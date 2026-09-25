@@ -115,3 +115,46 @@ describe('StatsCollector temp-file hygiene (#49)', () => {
     expect(tmpLeftovers().sort()).toEqual([liveOld, young, 'unrelated.json.1.abc.tmp'].sort())
   })
 })
+
+describe('StatsCollector never overwrites an unreadable stats file (BUILD-009C)', () => {
+  it.each([
+    ['truncated JSON', '{"schemaVersion":1,"events":[{"type":"agent_start","at":1}],"aggre'],
+    ['wrong top-level shape', '[1,2,3]'],
+    ['events is not a list', '{"schemaVersion":1,"events":{},"aggregates":{}}']
+  ])('%s: counts in memory and leaves the file byte-identical', async (_label, bytes) => {
+    writeFileSync(statsPath(), bytes, 'utf-8')
+    const { StatsCollector } = await loadCollector()
+    const collector = new StatsCollector()
+
+    collector.onAgentStart('pty-1', 1_000)
+    collector.onAgentStop('pty-1', 2_000)
+    collector.flush()
+
+    expect(collector.getSummary().totalAgentsSpawned).toBe(1)
+    expect(readFileSync(statsPath(), 'utf-8')).toBe(bytes)
+    const names = readdirSync(state.userData)
+    expect(names.filter((name) => name.includes('.unreadable-'))).toHaveLength(1)
+    expect(tmpLeftovers()).toEqual([])
+  })
+
+  it('still merges an older file with defaults and saves it', async () => {
+    writeFileSync(
+      statsPath(),
+      JSON.stringify({ schemaVersion: 1, aggregates: { totalAgentsSpawned: 5 } }),
+      'utf-8'
+    )
+    const { StatsCollector } = await loadCollector()
+    const collector = new StatsCollector()
+
+    collector.onAgentStart('pty-1', 1_000)
+    collector.flush()
+
+    const saved = JSON.parse(readFileSync(statsPath(), 'utf-8'))
+    expect(saved.aggregates.totalAgentsSpawned).toBe(6)
+    expect(saved.aggregates.countedPRs).toEqual([])
+    expect(saved.events.map((event: { type: string }) => event.type)).toEqual([
+      'agent_start',
+      'agent_stop'
+    ])
+  })
+})

@@ -33,20 +33,35 @@ function getOpenAiKeyPath(): string {
   return join(getDobiusDir(), OPENAI_SPEECH_TOKEN_FILE)
 }
 
-function readLegacyJsonStoredOpenAiKey(): StoredOpenAiKey | null {
-  const keyPath = getOpenAiKeyPath()
-  if (!existsSync(keyPath)) {
+// Why: legacy files are JSON objects; safeStorage ciphertext never starts
+// with '{' (macOS/Linux blobs start with "v1", Windows DPAPI with 0x01).
+function looksLikeLegacyJson(raw: Buffer): boolean {
+  return raw.toString('utf8').trimStart().startsWith('{')
+}
+
+/**
+ * null when the file is not a legacy JSON key (the current binary format).
+ * Throws when it IS legacy JSON but malformed: that file must not be handed
+ * to decryptString or used as a plaintext key, and it is never deleted.
+ */
+function readLegacyJsonStoredOpenAiKey(raw: Buffer): StoredOpenAiKey | null {
+  if (!looksLikeLegacyJson(raw)) {
     return null
   }
+  let parsed: unknown
   try {
-    const parsed = JSON.parse(readFileSync(keyPath, 'utf8')) as Partial<StoredOpenAiKey>
-    if (typeof parsed.encryptedKeyBase64 !== 'string' || parsed.encryptedKeyBase64 === '') {
-      return null
-    }
-    return { encryptedKeyBase64: parsed.encryptedKeyBase64 }
+    parsed = JSON.parse(raw.toString('utf8'))
   } catch {
-    return null
+    parsed = null
   }
+  const encryptedKeyBase64 =
+    parsed && typeof parsed === 'object' && 'encryptedKeyBase64' in parsed
+      ? parsed.encryptedKeyBase64
+      : undefined
+  if (typeof encryptedKeyBase64 !== 'string' || encryptedKeyBase64 === '') {
+    throw new Error('OpenAI API key file is malformed; save the key again in Settings')
+  }
+  return { encryptedKeyBase64 }
 }
 
 export function hasOpenAiSpeechApiKey(): boolean {
@@ -103,9 +118,9 @@ export function readOpenAiSpeechApiKey(): string {
   if (!existsSync(keyPath)) {
     throw new Error('OpenAI API key is not configured')
   }
+  const raw = readFileSync(keyPath)
+  const legacyJson = readLegacyJsonStoredOpenAiKey(raw)
   try {
-    const raw = readFileSync(keyPath)
-    const legacyJson = readLegacyJsonStoredOpenAiKey()
     if (legacyJson) {
       cachedOpenAiSpeechApiKey = safeStorage.decryptString(
         Buffer.from(legacyJson.encryptedKeyBase64, 'base64')

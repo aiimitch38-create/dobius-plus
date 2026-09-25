@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { app } from 'electron'
 import type { Destination, DestinationSaveInput, DestinationType } from '../../shared/destinations'
+import { hardenExistingSecureFile } from '../../shared/secure-file'
 import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 
 const FILE_NAME = 'destinations.json'
@@ -67,10 +68,26 @@ const file = new SafeJsonFile<Destination[]>({
   filePath,
   parse: (raw) => (Array.isArray(raw) ? parseEveryEntry(raw, sanitizeDestination) : undefined),
   fallback: () => [],
-  label: `[destinations] ${FILE_NAME}`
+  label: `[destinations] ${FILE_NAME}`,
+  // Why (BUILD-009C): the file holds Telegram bot tokens and SMTP passwords.
+  mode: 0o600
 })
 
+// Why (BUILD-009C): builds before this one left the file at the umask
+// default (0644). Metadata-cached, so repeat calls cost a stat.
+function hardenExistingFile(target: string): void {
+  try {
+    hardenExistingSecureFile(target)
+  } catch (error) {
+    console.warn(
+      '[destinations] failed to restrict store permissions:',
+      error instanceof Error ? error.message : String(error)
+    )
+  }
+}
+
 function load(): Destination[] {
+  hardenExistingFile(filePath())
   return file.get()
 }
 

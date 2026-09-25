@@ -8852,7 +8852,8 @@
           "testButton": "Test",
           "statusLine": "Status: {{state}} · last message row: {{rowid}} · sent in last minute: {{outbound}}",
           "statusRunning": "running",
-          "statusStopped": "stopped"
+          "statusStopped": "stopped",
+          "configUnreadable": "imessage-bridge.json can't be read ({{detail}}), so changes are not saved; repair or remove it"
         },
         "imessage": {
           "bridge": {
@@ -12209,7 +12210,12 @@
           "a21f6c33ad": "自动化来源已刷新。",
           "53f06f0ad5": "重试来源",
           "pendingAutomationMissing": "自动化已不可用。",
-          "pendingAutomationRunMissing": "运行历史已不可用。"
+          "pendingAutomationRunMissing": "运行历史已不可用。",
+          "pauseFailed": "Failed to pause automation.",
+          "resumeFailed": "Failed to resume automation.",
+          "deleteFailed": "Failed to delete automation.",
+          "runNowFailed": "Failed to run automation.",
+          "runNowNotStarted": "Automation run did not start."
         },
         "CreateFromPicker": {
           "f061f49e3f": "搜索仓库分支...",

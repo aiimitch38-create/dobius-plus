@@ -2181,6 +2181,8 @@ export type PreloadApi = {
     reload: () => Promise<VertexTask[]>
     create: (input: VertexTaskInput) => Promise<VertexTask | null>
     update: (taskId: string, patch: VertexTaskPatch) => Promise<VertexTask | null>
+    /** Ends this window's claims its dispatcher no longer awaits (reload, failed settle). */
+    releaseInterruptedClaims: (args: { activeTaskIds: string[] }) => Promise<void>
     move: (taskId: string, to: VertexTaskStatus, toIndex: number) => Promise<VertexTask | null>
     remove: (taskId: string) => Promise<boolean>
   }

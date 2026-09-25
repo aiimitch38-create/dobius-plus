@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { reviveInterruptedChannelRuns } from "./dobiusCommunications.ts";
+import { BOARD_TASK_PROMPT_LEAD, reviveInterruptedChannelRuns } from "./dobiusCommunications.ts";
 
-function interruptedRun(id, sessionKey) {
+function interruptedRun(id, sessionKey, prompt = "ask") {
   return {
     id,
     agentId: "atlas",
-    prompt: "ask",
+    prompt,
     source: "channel",
     sessionKey,
     status: "error",
@@ -16,7 +16,8 @@ function interruptedRun(id, sessionKey) {
   };
 }
 
-test("revives interrupted channel runs but never iMessage runs (N2)", async () => {
+// One test: revival runs once per module load.
+test("revives interrupted channel runs but never iMessage (N2) or Kanban board runs (#94)", async () => {
   const started = [];
   const storage = new Map();
   const originalError = console.error;
@@ -32,7 +33,12 @@ test("revives interrupted channel runs but never iMessage runs (N2)", async () =
           return {
             ok: true,
             result: {
-              runs: [interruptedRun("r-imessage", "imessage"), interruptedRun("r-chan", "chan-1")],
+              runs: [
+                interruptedRun("r-imessage", "imessage"),
+                interruptedRun("r-chan", "chan-1"),
+                // The Kanban card is marked failed for the operator instead.
+                interruptedRun("r-board", "chan-2", `${BOARD_TASK_PROMPT_LEAD} (id: t1).`),
+              ],
             },
           };
         }

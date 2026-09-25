@@ -8852,7 +8852,8 @@
           "testButton": "Test",
           "statusLine": "Status: {{state}} · last message row: {{rowid}} · sent in last minute: {{outbound}}",
           "statusRunning": "running",
-          "statusStopped": "stopped"
+          "statusStopped": "stopped",
+          "configUnreadable": "imessage-bridge.json can't be read ({{detail}}), so changes are not saved; repair or remove it"
         },
         "imessage": {
           "bridge": {
@@ -12176,6 +12177,11 @@
           "4d7878402c": "External automation queued.",
           "4c22bc9913": "External automation deleted.",
           "3a4c476aa0": "Failed to rerun automation.",
+          "pauseFailed": "Failed to pause automation.",
+          "resumeFailed": "Failed to resume automation.",
+          "deleteFailed": "Failed to delete automation.",
+          "runNowFailed": "Failed to run automation.",
+          "runNowNotStarted": "Automation run did not start.",
           "a1bdb57008": "Automation run queued.",
           "8a3226f172": "Open Settings",
           "d2a01b0b6f": "You can change this in Settings.",
