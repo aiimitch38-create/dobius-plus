@@ -83,14 +83,16 @@ const cursorFile = new SafeJsonFile<DeliveryCursor>({
 function setHealth(state: AdamEventDeliveryState, detail: string | null): void {
   health.state = state
   health.detail = detail
+  // Why: each retry pass passes through 'delivering'; only a real delivery
+  // re-arms the warning, so an outage logs once instead of every backoff.
+  if (state === 'idle' || state === 'delivering') {
+    return
+  }
   const key = `${state}:${detail ?? ''}`
   if (key === loggedState) {
     return
   }
   loggedState = key
-  if (state === 'idle' || state === 'delivering') {
-    return
-  }
   // Why: a paused queue must be visible (#79); the message names the state only.
   console.warn(
     `[agents] ADAM event delivery paused (${state}${detail ? `: ${detail}` : ''}); events stay queued in the journal`
@@ -308,6 +310,7 @@ async function deliverLine(text: string, offset: number, token: string): Promise
     return (await quarantine(text, offset, 'rejected by ADAM')) ? 'poison' : 'retry'
   }
   health.deliveredCount += 1
+  loggedState = null
   return 'delivered'
 }
 

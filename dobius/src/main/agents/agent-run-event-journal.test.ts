@@ -201,6 +201,61 @@ describe('agent run event journal delivery', () => {
     expect(fetchCalls).toHaveLength(1)
   })
 
+  it('warns once for an outage that spans several retry passes (review F1)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    writeFileSync(journalFile(), `${record('a')}\n`)
+    let down = true
+    respond = async () => {
+      if (down) {
+        throw new TypeError('fetch failed')
+      }
+      return new Response('{}', { status: 200 })
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const journal = await loadJournal()
+    journal.startAgentRunEventDelivery()
+    await journal.whenAgentRunJournalIdle()
+    await vi.advanceTimersByTimeAsync(1_000)
+    await journal.whenAgentRunJournalIdle()
+    await vi.advanceTimersByTimeAsync(2_000)
+    await journal.whenAgentRunJournalIdle()
+    expect(fetchCalls).toHaveLength(3)
+    const paused = () => warn.mock.calls.filter((call) => String(call[0]).includes('paused (offline'))
+    expect(paused()).toHaveLength(1)
+
+    // A real delivery re-arms the warning for the next outage.
+    down = false
+    await vi.advanceTimersByTimeAsync(4_000)
+    await journal.whenAgentRunJournalIdle()
+    down = true
+    journal.appendAgentRunJournalEvent(event(1))
+    await journal.whenAgentRunJournalIdle()
+    expect(paused()).toHaveLength(2)
+  })
+
+  it('terminates a torn last line before appending so the next event is delivered (review F2)', async () => {
+    writeFileSync(journalFile(), `${record('a')}\n{"eventId":"torn`)
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const journal = await loadJournal()
+    journal.startAgentRunEventDelivery()
+    await journal.whenAgentRunJournalIdle()
+    journal.appendAgentRunJournalEvent(event(1))
+    journal.appendAgentRunJournalEvent(event(2))
+    await journal.whenAgentRunJournalIdle()
+
+    expect(fetchCalls).toHaveLength(3)
+    expect(fetchCalls[0].eventId).toBe('a')
+    const quarantined = readFileSync(
+      path.join(electronMock.userDataDir, 'agent-events.quarantine.ndjson'),
+      'utf8'
+    )
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { line: string })
+    expect(quarantined.map((entry) => entry.line)).toEqual(['{"eventId":"torn'])
+    expect(journal.getAdamEventDeliveryHealth()).toMatchObject({ deliveredCount: 3, quarantinedCount: 1 })
+  })
+
   it('does not deliver before startup starts delivery', async () => {
     const journal = await loadJournal()
     journal.appendAgentRunJournalEvent(event(1))

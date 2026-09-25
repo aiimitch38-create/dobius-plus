@@ -1,4 +1,4 @@
-import { appendFile, mkdir } from 'node:fs/promises'
+import { appendFile, mkdir, open } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import type { AgentRunEvent } from '../../shared/agents'
@@ -32,6 +32,32 @@ type JournalRecord = {
 
 const MAX_FIELD_LENGTH = 4_000
 let appendTail: Promise<void> = Promise.resolve()
+let tailChecked = false
+
+// Why: a crash can leave a torn last line with no newline; appending straight
+// onto it would glue the next valid event to the fragment and quarantine both.
+async function terminateTornTail(journalPath: string): Promise<string> {
+  let handle
+  try {
+    handle = await open(journalPath, 'r')
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return ''
+    }
+    throw error
+  }
+  try {
+    const { size } = await handle.stat()
+    if (size === 0) {
+      return ''
+    }
+    const last = Buffer.alloc(1)
+    await handle.read(last, 0, 1, size - 1)
+    return last[0] === 0x0a ? '' : '\n'
+  } finally {
+    await handle.close()
+  }
+}
 
 function truncate(value: string | undefined): string | undefined {
   if (!value) {
@@ -67,7 +93,9 @@ export function appendAgentRunJournalEvent(event: AgentRunEvent): void {
     .then(async () => {
       const journalPath = agentRunJournalPath()
       await mkdir(path.dirname(journalPath), { recursive: true })
-      await appendFile(journalPath, line, 'utf8')
+      const prefix = tailChecked ? '' : await terminateTornTail(journalPath)
+      await appendFile(journalPath, prefix + line, 'utf8')
+      tailChecked = true
       requestAgentRunEventDelivery()
     })
     .catch((error) => {

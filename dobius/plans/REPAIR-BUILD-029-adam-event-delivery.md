@@ -37,8 +37,15 @@ All in `src/main/agents/agent-run-event-journal.ts` (pre-fix line numbers) plus 
     nextRetryAt}`; each change into a paused state is logged once:
     `[agents] ADAM event delivery paused (<state>: <errno/HTTP code>)`. Never the token, never
     payload text.
-  - Cursor saved every 50 lines and at every stop; a crash re-sends at most one batch and ADAM
-    de-duplicates by `eventId` (IRIS #13: `duplicate: !prepared.created`) → "once logically".
+  - Cursor saved every 50 delivered lines, when a pass catches up, and when a pass stops for a
+    retry. There is no quit hook, so after a quit or crash mid-batch up to 49 events are re-sent;
+    ADAM de-duplicates them by event key (`INSERT OR IGNORE` on `event_key`; IRIS #13:
+    `duplicate: !prepared.created`) → "once logically".
+  - Torn tail (review F2): before the first append of a session, if the journal is non-empty and
+    does not end in `\n`, a `\n` is written first (same append chain), so the fragment becomes its
+    own line (quarantined) and the next valid event is delivered.
+  - Warning dedupe (review F1): `idle`/`delivering` no longer reset the logged state; only a
+    successful delivery re-arms it, so an outage logs one warning, not one per backoff pass.
   - Journal shorter than the cursor (replaced outside the app) → deliver from byte 0, with a warning.
   - Paths all use `getUserDataRoot()` (BUILD-014), identical before/after ready (N4).
 - New `adam-event-ingest.ts`: the unchanged token resolution (same env names and default path —
@@ -50,7 +57,7 @@ All in `src/main/agents/agent-run-event-journal.ts` (pre-fix line numbers) plus 
   called (same dynamic-import pattern) right after `logStartupMilestone('store-loaded')`. It starts
   a background drain from the saved cursor. Before it runs, appends are journaled but not sent.
 
-## Tests — `src/main/agents/agent-run-event-journal.test.ts` (7)
+## Tests — `src/main/agents/agent-run-event-journal.test.ts` (9)
 1. ADAM hangs forever → two more appends still reach disk; only one POST in flight (#78).
 2. Journal with valid, `{not json`, record rejected with 422, `{no eventId}`, valid → both valid
    delivered in order, 3 quarantine entries (raw line kept), cursor = file size, no payload text in
@@ -67,6 +74,8 @@ All in `src/main/agents/agent-run-event-journal.ts` (pre-fix line numbers) plus 
 7. Source-order check on `index.ts`: `startAgentRunEventDelivery()` after `store = new Store()`,
    `replayRecentAgentRunJournalEvents` gone (N5; same pattern as
    `startup/desktop-startup-ordering.test.ts`).
+8. Review F1: three failed passes while offline → one warning; after a delivery, a new outage warns again.
+9. Review F2: journal ending in a torn fragment → next appends delivered, only the fragment quarantined.
 
 ### Mutation checks (each broke the named tests, then restored)
 - M0 original journal file → 6 of 7 fail (the static index test passes with the fixed index.ts).
@@ -78,11 +87,14 @@ All in `src/main/agents/agent-run-event-journal.ts` (pre-fix line numbers) plus 
 - M6 journal path back to `DOBIUS_DATA_DIR ?? root` → test 6 fails.
 - M7 index.ts reverted → test 7 fails.
 - M8 drain allowed before start → test 5 fails.
+- M9 `delivering` resets the logged state (review F1) → F1 test fails (warning repeats).
+- M10 delivery does not re-arm the warning → F1 test fails.
+- M11 no torn-tail newline (review F2) → F2 test fails.
 
 ## Verification
 - `pnpm run typecheck` exit 0.
 - `vitest src/main/agents src/main/storage src/main/startup/desktop-startup-ordering.test.ts` →
-  21 files / 242 tests green. `communications/providers/agent-provider.test.ts` (imports
+  21 files / 244 tests green. `communications/providers/agent-provider.test.ts` (imports
   agent-run-events) fails 1 test with "No `app` export on the electron mock" from
   `agent-runs-store.ts` — listed in the baseline failures (`basefail.txt`), not caused by this build.
 - oxlint (default + react-doctor) on all changed files: clean.
