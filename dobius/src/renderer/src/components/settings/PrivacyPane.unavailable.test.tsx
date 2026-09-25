@@ -75,6 +75,8 @@ describe('PrivacyPane — transport unavailable (#122 F11)', () => {
     expect(toggle.getAttribute('aria-checked')).toBe('false')
     expect(toggle.disabled).toBe(true)
     expect(container.textContent).toContain('Not available in this build')
+    expect(container.textContent).toContain('This build of Dobius+ does not send usage data.')
+    expect(container.textContent).not.toContain('Dobius+ sends anonymous counts')
 
     await act(async () => {
       toggle.click()
@@ -91,5 +93,6 @@ describe('PrivacyPane — transport unavailable (#122 F11)', () => {
     expect(toggle.getAttribute('aria-checked')).toBe('true')
     expect(toggle.disabled).toBe(false)
     expect(container.textContent).not.toContain('Not available in this build')
+    expect(container.textContent).toContain('Dobius+ sends anonymous counts')
   })
 })

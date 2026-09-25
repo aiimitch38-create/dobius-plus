@@ -16,8 +16,9 @@
 // frame-lag flash where the notice briefly re-renders while settings
 // round-trip through IPC.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore } from '../store'
+import { getConsentState } from '../lib/telemetry'
 import { FirstLaunchBanner } from './FirstLaunchBanner'
 
 export function TelemetryFirstLaunchSurface(): React.JSX.Element | null {
@@ -29,21 +30,35 @@ export function TelemetryFirstLaunchSurface(): React.JSX.Element | null {
   // state. See PrivacyPane.tsx for the identical pattern.
   const fetchSettings = useAppStore((s) => s.fetchSettings)
   const [dismissedThisSession, setDismissedThisSession] = useState(false)
+  // null = not checked yet. Why: a build that cannot send must not announce
+  // that it collects usage data (#122 F11), so the notice waits for main's
+  // answer and stays hidden when the transport is unavailable.
+  const [transportAvailable, setTransportAvailable] = useState<boolean | null>(null)
 
-  if (!settings || dismissedThisSession) {
-    return null
-  }
-
-  const telemetry = settings.telemetry
-  if (!telemetry) {
-    // Defensive: migration guarantees the block exists. If it somehow
-    // doesn't, show nothing rather than guessing a cohort wrong.
-    return null
-  }
-
+  const telemetry = settings?.telemetry
   const isExistingUserAwaitingBanner =
-    telemetry.existedBeforeTelemetryRelease === true && telemetry.optedIn === null
-  if (!isExistingUserAwaitingBanner) {
+    telemetry?.existedBeforeTelemetryRelease === true && telemetry.optedIn === null
+
+  useEffect(() => {
+    if (!isExistingUserAwaitingBanner) {
+      return
+    }
+    let stale = false
+    void getConsentState().then((state) => {
+      if (!stale) {
+        setTransportAvailable(
+          !(state.effective === 'disabled' && state.reason === 'transport_unavailable')
+        )
+      }
+    })
+    return () => {
+      stale = true
+    }
+  }, [isExistingUserAwaitingBanner])
+
+  // Defensive: a missing settings/telemetry block shows nothing rather than
+  // guessing a cohort wrong (migration guarantees the block exists).
+  if (dismissedThisSession || !isExistingUserAwaitingBanner || transportAvailable !== true) {
     return null
   }
 

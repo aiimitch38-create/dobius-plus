@@ -111,10 +111,15 @@ export function PrivacyPane({ settings }: PrivacyPaneProps): React.JSX.Element {
             </Label>
           </div>
           <p className="text-xs text-muted-foreground">
-            {translate(
-              'auto.components.settings.PrivacyPane.8bfdd23a88',
-              'Help us figure out what to build next. Dobius+ sends anonymous counts of which features you use and where things break.'
-            )}{' '}
+            {blocked?.kind === 'unavailable'
+              ? translate(
+                  'auto.components.settings.PrivacyPane.transportUnavailableDescription',
+                  'This build of Dobius+ does not send usage data.'
+                )
+              : translate(
+                  'auto.components.settings.PrivacyPane.8bfdd23a88',
+                  'Help us figure out what to build next. Dobius+ sends anonymous counts of which features you use and where things break.'
+                )}{' '}
             <button
               type="button"
               className="underline underline-offset-2 hover:text-foreground"

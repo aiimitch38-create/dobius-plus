@@ -92,3 +92,20 @@
 
 ## Rollback
 Revert the commit. No stored data is migrated or rewritten.
+
+## Follow-up (coordinator, second commit)
+- FirstLaunchBanner: `TelemetryFirstLaunchSurface` asks `getConsentState()` once the user is in the
+  notice cohort and renders the notice only when the build can send (hidden while unknown and on
+  `transport_unavailable`). `optedIn` stays `null`; nothing is persisted. Test:
+  `src/renderer/src/components/TelemetryFirstLaunchSurface.test.tsx` (hidden when unavailable,
+  shown when it can send, no IPC outside the cohort).
+- Privacy description is conditional: when unavailable it reads "This build of Dobius+ does not
+  send usage data." in place of "Dobius+ sends anonymous counts…". Test: extended
+  `PrivacyPane.unavailable.test.tsx`.
+- Locales: `transportUnavailable` + `transportUnavailableDescription` added to en, es, ja, ko, zh
+  (English text in all of them). `verify-localization-catalog.mjs` still exits 1, but only for
+  `AsanaPane.autoModeBlocked{Paused,Unreadable}`, because this branch predates BUILD-003B (7b4f829b
+  on integration). A per-locale parity diff shows no other missing keys.
+- Mutation checks: M8 banner ignores transport (1 fail); M9 description unconditional (1 fail).
+- Targeted run with i18n tests: 1 failure, `i18n/no-top-level-translate.test.ts` (flags
+  `DestinationsSection.tsx`, untouched; listed in basefail.txt), so it is a baseline failure.
