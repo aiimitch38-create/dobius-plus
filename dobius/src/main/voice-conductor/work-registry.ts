@@ -4,10 +4,14 @@
 // CLIs: the conductor tracks a dispatched job here, later queries its status or
 // marks it done. Pure and deterministic — no Electron, IO, persistence, or
 // notification side effects. The v1 reference (electron/work-registry.js) also
-// persisted to config, watched tabs, fired iMessage final-reports, and enforced
-// concurrency caps; all of that belongs to the CLI / dispatch layers, not here.
+// persisted to config, watched tabs and fired iMessage final-reports; those
+// belong to the CLI / dispatch layers. The concurrency cap lives here so every
+// caller (dobius-track, dobius-spawn) reserves through one synchronous check.
 
-import type { WorkItem, WorkRegistry } from './types'
+import type { WorkItem, WorkRegistry, WorkTrackResult } from './types'
+
+// The conductor prompt promises strictly serial work: one running item at a time.
+export const MAX_RUNNING_WORK = 1
 
 export function createWorkRegistry(options?: {
   initialItems?: readonly WorkItem[]
@@ -19,20 +23,44 @@ export function createWorkRegistry(options?: {
   )
   const now = options?.now ?? Date.now
 
-  function publish(): void {
-    options?.onChange?.(Array.from(items.values(), (item) => ({ ...item })))
+  function publish(from: Map<string, WorkItem>): void {
+    options?.onChange?.(Array.from(from.values(), (item) => ({ ...item })))
   }
 
-  function track(item: Pick<WorkItem, 'workId' | 'tabId' | 'requestId' | 'description'>): void {
-    items.set(item.workId, {
+  function capacityError(exceptWorkId?: string): string | null {
+    const running = Array.from(items.values()).filter(
+      (item) => item.status === 'running' && item.workId !== exceptWorkId
+    ).length
+    return running >= MAX_RUNNING_WORK
+      ? `concurrency cap: ${running}/${MAX_RUNNING_WORK} agents already running`
+      : null
+  }
+
+  function track(
+    item: Pick<WorkItem, 'workId' | 'tabId' | 'requestId' | 'description' | 'kind'>
+  ): WorkTrackResult {
+    const existing = items.get(item.workId)
+    if (existing?.status === 'running' && existing.kind === 'spawn' && item.kind !== 'spawn') {
+      return { ok: false, error: `work item "${item.workId}" belongs to a spawned agent run`, retryable: true }
+    }
+    // Re-tracking the running item itself updates it rather than adding a second one.
+    const refusal = capacityError(item.workId)
+    if (refusal) {
+      return { ok: false, error: refusal, retryable: true }
+    }
+    const tracked: WorkItem = {
       workId: item.workId,
       tabId: item.tabId,
       requestId: item.requestId,
       description: item.description,
       startedAt: now(),
       status: 'running',
-    })
-    publish()
+      ...(item.kind ? { kind: item.kind } : {})
+    }
+    // Persist first: a reservation that could not be saved is not made.
+    publish(new Map(items).set(item.workId, tracked))
+    items.set(item.workId, tracked)
+    return { ok: true }
   }
 
   function status(target?: string): WorkItem[] {
@@ -54,15 +82,17 @@ export function createWorkRegistry(options?: {
   ): WorkItem | null {
     const entry = items.get(workId)
     if (!entry) {return null}
-    entry.summary = summary
-    entry.status = status
-    publish()
-    return { ...entry }
+    const updated: WorkItem = { ...entry, summary, status }
+    // Release in memory even if the save then fails: the work did end, and a
+    // stale 'running' row on disk is released at the next load for spawns.
+    items.set(workId, updated)
+    publish(items)
+    return { ...updated }
   }
 
   function list(): WorkItem[] {
     return Array.from(items.values(), (item) => ({ ...item }))
   }
 
-  return { track, status, markDone, list }
+  return { track, capacityError: () => capacityError(), status, markDone, list }
 }

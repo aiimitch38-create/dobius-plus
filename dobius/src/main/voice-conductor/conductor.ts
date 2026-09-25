@@ -6,33 +6,20 @@
 // SAME Claude session so context carries across turns — the v2 analog of
 // writing to the v1 conductor PTY's stdin.
 
-import { existsSync, mkdirSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { createAgent, listAgents } from '../agents/agents-store'
+import type { SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
 import { startAgentRun, stopAgentRun } from '../agents/agent-runner'
 import { getDefaultPrepareClaudeLaunch } from '../agents/default-claude-launch'
 import type { VoiceConductor, VoiceConductorStatus } from './types'
-import { CONDUCTOR_SYSTEM_PROMPT } from './conductor-system-prompt'
+import {
+  CONDUCTOR_ALLOWED_TOOLS,
+  ensureConductorAgentId,
+  ensureConductorDir
+} from './conductor-agent'
 
-// The store assigns each agent a random UUID, so the conductor agent is
-// identified by this stable name (looked up via listAgents), not a fixed id.
-const CONDUCTOR_AGENT_NAME = 'Voice Conductor'
-const CONDUCTOR_DIR_NAME = 'dobius-voice-conductor'
-const CONDUCTOR_CWD = `~/${CONDUCTOR_DIR_NAME}`
-// Opus-class reasoning is required to disambiguate fuzzy transcripts
-// ("be to be portal" => "B2B Portal").
-const CONDUCTOR_MODEL = 'opus'
-const CONDUCTOR_ALLOWED_TOOLS = [
-  'Bash',
-  'Read',
-  'Edit',
-  'Write',
-  'Glob',
-  'Grep',
-  'WebFetch',
-  'WebSearch'
-]
+// Why explicit: a voice turn is recorded as a 'channel' run, whose implicit
+// default budget is $1. The conductor's own limit is set here, shown in its
+// status, and explained to Carson when a turn hits it.
+export const CONDUCTOR_MAX_BUDGET_USD = 2
 
 export type ReplyEntry = { message: string; ts: number }
 
@@ -73,39 +60,23 @@ export function createReplyStore(now: () => number = () => Date.now()): {
   }
 }
 
-function conductorDir(): string {
-  return join(homedir(), CONDUCTOR_DIR_NAME)
-}
-
-function ensureConductorDir(): void {
-  // createAgent's assertValidCwd rejects a non-existent cwd, so the dir must
-  // exist before the agent is created.
-  const dir = conductorDir()
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true })
+/** What Carson hears when a turn ended without a reply of its own. Null = stay quiet. */
+export function conductorTurnFailureReply(
+  outcome: { subtype: SDKResultMessage['subtype'] } | { ended: 'error' | 'cancelled' }
+): string | null {
+  if ('ended' in outcome) {
+    return outcome.ended === 'cancelled' ? null : 'Voice Conductor could not finish this request.'
   }
-}
-
-function ensureAgentId(): string {
-  const existing = listAgents().find((agent) => agent.name === CONDUCTOR_AGENT_NAME)
-  if (existing) {
-    return existing.id
+  switch (outcome.subtype) {
+    case 'success':
+      return null
+    case 'error_max_budget_usd':
+      return `Voice Conductor stopped: this request reached its $${CONDUCTOR_MAX_BUDGET_USD} spending limit before finishing.`
+    case 'error_max_turns':
+      return 'Voice Conductor stopped: this request reached its step limit before finishing.'
+    default:
+      return 'Voice Conductor could not finish this request.'
   }
-  ensureConductorDir()
-  const agents = createAgent({
-    name: CONDUCTOR_AGENT_NAME,
-    description: 'Background voice-transcript router (SDK agent-runner, no window or tab).',
-    model: CONDUCTOR_MODEL,
-    cwd: CONDUCTOR_CWD,
-    bypassPermissions: true,
-    systemPrompt: CONDUCTOR_SYSTEM_PROMPT,
-    allowedTools: CONDUCTOR_ALLOWED_TOOLS
-  })
-  const created = agents.find((agent) => agent.name === CONDUCTOR_AGENT_NAME)
-  if (!created) {
-    throw new Error('Failed to create the Voice Conductor agent')
-  }
-  return created.id
 }
 
 export function createVoiceConductor(): VoiceConductor {
@@ -117,56 +88,117 @@ export function createVoiceConductor(): VoiceConductor {
   let sessionId: string | null = null
   let lastError: string | null = null
   let agentId: string | null = null
-  // Serializes transcript turns so they resume the session one at a time.
+  // Bumped by stop(): queued turns and late callbacks from an older generation
+  // must not start runs or touch the current state.
+  let generation = 0
+  // Every run this conductor started and has not seen end.
+  const ownedRuns = new Set<string>()
+  let pendingTurns = 0
+  // Serializes turns: the next one starts only after the previous run ENDS,
+  // because two runs resuming the same session would cross or drop each other.
   let transcriptChain: Promise<void> = Promise.resolve()
 
-  async function kick(prompt: string, opts: { resume: boolean }): Promise<void> {
+  function replyIfSilent(requestId: string, since: number, message: string | null): void {
+    if (message && !replyStore.get(requestId, since - 1)) {
+      replyStore.set(requestId, message)
+    }
+  }
+
+  // Resolves once the run is accepted; `settled` resolves when the runner has
+  // finished with that run, including releasing its session lease, so the next
+  // turn can resume the same session. (Wrapped in an object because awaiting a promise of a promise flattens it.)
+  async function startTurn(
+    requestId: string,
+    transcript: string,
+    turnGeneration: number
+  ): Promise<{ settled: Promise<void> }> {
     const prepare = getDefaultPrepareClaudeLaunch()
     if (!prepare) {
       throw new Error(
         'Voice Conductor requires the Dobius+ app to be running (no Claude launch preparer registered)'
       )
     }
-    if (!agentId) {
-      agentId = ensureAgentId()
+    agentId ??= ensureConductorAgentId()
+    const turnStartedAt = Date.now()
+    let runId: string | null = null
+    let ended = false
+    let settle: () => void = () => {}
+    const settled = new Promise<void>((resolve) => {
+      settle = resolve
+    })
+    const end = (error: string | null, reply: string | null): void => {
+      if (ended) {
+        return
+      }
+      ended = true
+      if (runId) {
+        ownedRuns.delete(runId)
+      }
+      if (turnGeneration === generation) {
+        if (runId === null || currentRunId === runId) {
+          currentRunId = null
+          running = false
+        }
+        lastError = error
+        replyIfSilent(requestId, turnStartedAt, reply)
+      }
     }
     running = true
     try {
-      const runId = await startAgentRun({
+      runId = await startAgentRun({
         agentId,
-        prompt,
+        prompt: `[${requestId}] ${transcript}`,
         prepareClaudeLaunch: prepare,
         options: {
           source: 'channel',
           // Its own tool set only: no channel baseline unioned in, no dobius MCP tools.
           profile: 'voice-conductor',
           allowedTools: CONDUCTOR_ALLOWED_TOOLS,
+          maxBudgetUsd: CONDUCTOR_MAX_BUDGET_USD,
           // agent-runner resolves the real session id from the agent's stored
           // lastSessionId; this flag only means "don't force a fresh session".
-          resume: opts.resume,
+          resume: true,
           onResult: (message) => {
-            sessionId = message.session_id
-            running = false
-            currentRunId = null
-            lastError = message.subtype === 'success' ? null : message.errors.join('\n')
+            if (turnGeneration === generation) {
+              sessionId = message.session_id
+            }
+            const reply = conductorTurnFailureReply({ subtype: message.subtype })
+            end(
+              message.subtype === 'success' ? null : (reply ?? message.errors.join('\n')),
+              reply
+            )
           },
           onRunEnded: (status, summary) => {
-            running = false
-            currentRunId = null
-            if (status === 'error') {
-              lastError = summary
-            }
+            end(status === 'error' ? summary : null, conductorTurnFailureReply({ ended: status }))
+          },
+          onSettled: () => {
+            end(null, null)
+            settle()
           }
         }
       })
-      currentRunId = runId
-      lastError = null
     } catch (error) {
-      running = false
-      currentRunId = null
-      lastError = error instanceof Error ? error.message : String(error)
+      if (turnGeneration === generation) {
+        running = false
+        lastError = error instanceof Error ? error.message : String(error)
+      }
       throw error
     }
+    if (ended) {
+      return { settled }
+    }
+    if (turnGeneration !== generation) {
+      // stop() ran while this run was being accepted: it is ours, so stop it too.
+      // Still return `settled` so the next turn waits for this run's lease.
+      await stopAgentRun(runId).catch((error: unknown) => {
+        console.error('[voice-conductor] could not stop a run accepted during stop:', error instanceof Error ? error.message : String(error))
+      })
+      return { settled }
+    }
+    ownedRuns.add(runId)
+    currentRunId = runId
+    lastError = null
+    return { settled }
   }
 
   return {
@@ -184,17 +216,24 @@ export function createVoiceConductor(): VoiceConductor {
         )
       }
       ensureConductorDir()
-      agentId = ensureAgentId()
+      agentId = ensureConductorAgentId()
       enabled = true
     },
 
     async stop() {
       enabled = false
-      const runId = currentRunId
+      generation += 1
       currentRunId = null
       running = false
-      if (runId) {
-        await stopAgentRun(runId)
+      const runs = Array.from(ownedRuns)
+      ownedRuns.clear()
+      const results = await Promise.allSettled(
+        // Each run's own onSettled releases the turn chain once the runner is done with it.
+        runs.map((runId) => stopAgentRun(runId))
+      )
+      const failed = results.find((result) => result.status === 'rejected')
+      if (failed) {
+        throw failed.reason
       }
     },
 
@@ -203,21 +242,70 @@ export function createVoiceConductor(): VoiceConductor {
     },
 
     getStatus(): VoiceConductorStatus {
-      return { enabled, running, runId: currentRunId, sessionId, lastError }
+      return {
+        enabled,
+        running,
+        runId: currentRunId,
+        sessionId,
+        lastError,
+        maxBudgetUsd: CONDUCTOR_MAX_BUDGET_USD,
+        queuedTurns: Math.max(0, pendingTurns - (running ? 1 : 0))
+      }
     },
 
-    async postTranscript({ transcript, requestId }) {
+    postTranscript({ transcript, requestId }) {
       if (!enabled) {
-        throw new Error('Voice Conductor is disabled')
+        return Promise.reject(new Error('Voice Conductor is disabled'))
       }
       // The v2 analog of writing to the v1 conductor PTY's stdin: a fresh run
       // that resumes the same session, tagged so the reply routes back.
-      // Serialize turns — two transcripts resuming the SAME session concurrently
-      // would cross or drop each other, so chain them one at a time.
-      transcriptChain = transcriptChain
-        .catch(() => {})
-        .then(() => kick(`[${requestId}] ${transcript}`, { resume: true }))
-      return transcriptChain
+      const turnGeneration = generation
+      const queuedBehindTurn = pendingTurns > 0
+      pendingTurns += 1
+      let accept: () => void = () => {}
+      let refuse: (error: unknown) => void = () => {}
+      const accepted = new Promise<void>((resolve, reject) => {
+        accept = resolve
+        refuse = reject
+      })
+      transcriptChain = transcriptChain.then(async () => {
+        const queuedAt = Date.now()
+        try {
+          if (!enabled || turnGeneration !== generation) {
+            replyIfSilent(requestId, queuedAt, 'Voice Conductor was turned off before this request started.')
+            refuse(new Error('Voice Conductor was stopped before this request started'))
+            return
+          }
+          let turn: { settled: Promise<void> }
+          try {
+            turn = await startTurn(requestId, transcript, turnGeneration)
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            replyIfSilent(requestId, queuedAt, `Voice Conductor could not start this request: ${message}`)
+            refuse(error)
+            return
+          }
+          accept()
+          await turn.settled
+        } finally {
+          pendingTurns -= 1
+        }
+      }).catch((error: unknown) => {
+        // Keep the chain alive so one broken turn can't wedge every later one.
+        console.error('[voice-conductor] turn failed:', error instanceof Error ? error.message : String(error))
+      })
+      if (!queuedBehindTurn) {
+        return accepted
+      }
+      // Why: a turn can wait minutes behind a running one; the caller gets an
+      // immediate ack and a failure to start reaches Carson as the reply.
+      accepted.catch((error: unknown) => {
+        console.warn(
+          '[voice-conductor] queued request not started:',
+          error instanceof Error ? error.message : String(error)
+        )
+      })
+      return Promise.resolve()
     },
 
     setReply(requestId, message) {
