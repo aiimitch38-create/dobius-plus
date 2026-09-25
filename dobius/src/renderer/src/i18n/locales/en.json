@@ -5817,7 +5817,8 @@
           "fe904ac984": "Share anonymous usage data",
           "77410e0566": "Privacy policy",
           "8bfdd23a88": "Help us figure out what to build next. Dobius+ sends anonymous counts of which features you use and where things break.",
-          "afec8b03be": "ci"
+          "afec8b03be": "ci",
+          "transportUnavailable": "Not available in this build: Dobius+ sends no usage data, so this switch has no effect."
         },
         "QuickCommandsPane": {
           "8764c6e9e4": "Remove {{value0}}",

@@ -7,11 +7,14 @@
 // of truth means the IPC getter in `src/main/ipc/telemetry.ts` returns
 // this exact shape and the Privacy pane renders helper text by pattern-
 // matching the `reason` without re-deriving the rules.
-
+//
+// `transport_unavailable` is never produced by `resolveConsent`: the IPC
+// getter returns it when this build cannot transmit at all (transport
+// compiled off or not an official build), whatever the stored preference.
 export type TelemetryConsentState =
   | { effective: 'enabled' }
   | {
       effective: 'disabled'
-      reason: 'do_not_track' | 'dobius_disabled' | 'ci' | 'user_opt_out'
+      reason: 'do_not_track' | 'dobius_disabled' | 'ci' | 'user_opt_out' | 'transport_unavailable'
     }
   | { effective: 'pending_banner' }

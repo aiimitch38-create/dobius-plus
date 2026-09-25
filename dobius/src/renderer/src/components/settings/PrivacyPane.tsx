@@ -10,7 +10,9 @@ import { PrivacyDiagnosticsSection } from './PrivacyDiagnosticsSection'
 import { translate } from '@/i18n/i18n'
 
 export type EnvBlockedReason = 'do_not_track' | 'dobius_disabled' | 'ci'
-export type BlockedReason = { kind: 'env'; reason: EnvBlockedReason }
+// `unavailable`: this build cannot transmit at all (#122 F11), so the switch
+// must not read as sharing, whatever the stored preference says.
+export type BlockedReason = { kind: 'env'; reason: EnvBlockedReason } | { kind: 'unavailable' }
 
 type PrivacyPaneProps = {
   settings: GlobalSettings
@@ -41,10 +43,22 @@ export function envVarNameForReason(reason: EnvBlockedReason): string {
 }
 
 export function computeBlockedReason(consent: TelemetryConsentState | null): BlockedReason | null {
+  if (consent?.effective === 'disabled' && consent.reason === 'transport_unavailable') {
+    return { kind: 'unavailable' }
+  }
   if (isEnvBlocked(consent)) {
     return { kind: 'env', reason: consent.reason }
   }
   return null
+}
+
+// Why: show the effective state. When this build cannot send, the switch reads
+// off; the stored preference is left untouched (#122 F11).
+export function isSharingSwitchOn(
+  blocked: BlockedReason | null,
+  settings: GlobalSettings
+): boolean {
+  return blocked?.kind !== 'unavailable' && settings.telemetry?.optedIn === true
 }
 
 export function PrivacyPane({ settings }: PrivacyPaneProps): React.JSX.Element {
@@ -66,7 +80,7 @@ export function PrivacyPane({ settings }: PrivacyPaneProps): React.JSX.Element {
   }, [settings.telemetry?.optedIn])
 
   const blocked = computeBlockedReason(consent)
-  const toggleChecked = settings.telemetry?.optedIn === true
+  const toggleChecked = isSharingSwitchOn(blocked, settings)
 
   const handleToggle = async (): Promise<void> => {
     if (blocked || inFlight) {
@@ -140,6 +154,18 @@ export function PrivacyPane({ settings }: PrivacyPaneProps): React.JSX.Element {
 }
 
 function BlockedHelper({ blocked, id }: { blocked: BlockedReason; id: string }): React.JSX.Element {
+  if (blocked.kind === 'unavailable') {
+    return (
+      <div id={id} className="pb-2 text-xs text-muted-foreground">
+        <p>
+          {translate(
+            'auto.components.settings.PrivacyPane.transportUnavailable',
+            'Not available in this build: Dobius+ sends no usage data, so this switch has no effect.'
+          )}
+        </p>
+      </div>
+    )
+  }
   return (
     <div id={id} className="pb-2 text-xs text-muted-foreground">
       {blocked.reason === 'ci' ? (

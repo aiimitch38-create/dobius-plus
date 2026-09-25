@@ -27,7 +27,13 @@ vi.mock('../../lib/telemetry', () => ({
   setOptIn: setOptInMock
 }))
 
-import { PrivacyPane, computeBlockedReason, envVarNameForReason, isEnvBlocked } from './PrivacyPane'
+import {
+  PrivacyPane,
+  computeBlockedReason,
+  envVarNameForReason,
+  isEnvBlocked,
+  isSharingSwitchOn
+} from './PrivacyPane'
 
 function buildSettings(
   telemetry: Partial<NonNullable<GlobalSettings['telemetry']>> = {}
@@ -219,5 +225,24 @@ describe('PrivacyPane — markup respects blocked state', () => {
       })
     )
     expect(markup).not.toMatch(/role="switch"[^>]*disabled/)
+  })
+})
+
+describe('PrivacyPane — transport unavailable (#122 F11)', () => {
+  it('reports the build as unable to send, ahead of any env reason', () => {
+    expect(
+      computeBlockedReason({ effective: 'disabled', reason: 'transport_unavailable' })
+    ).toEqual({
+      kind: 'unavailable'
+    })
+    expect(isEnvBlocked({ effective: 'disabled', reason: 'transport_unavailable' })).toBe(false)
+  })
+
+  it('reads the switch as off when the build cannot send, even if opted in', () => {
+    expect(isSharingSwitchOn({ kind: 'unavailable' }, buildSettings({ optedIn: true }))).toBe(false)
+    expect(isSharingSwitchOn(null, buildSettings({ optedIn: true }))).toBe(true)
+    expect(isSharingSwitchOn({ kind: 'env', reason: 'ci' }, buildSettings({ optedIn: true }))).toBe(
+      true
+    )
   })
 })

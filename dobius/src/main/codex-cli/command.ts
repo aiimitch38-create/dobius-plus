@@ -210,14 +210,74 @@ export function resolveCodexCommand(options: ResolveCommandOptions = {}): string
   return resolveCliCommand('codex', options)
 }
 
+type ClaudeSettingsOverrideReader = () => string | null | undefined
+
+let readClaudeSettingsOverride: ClaudeSettingsOverrideReader | null = null
+const warnedClaudeOverrideMessages = new Set<string>()
+
+// Why: Settings > Agents > Claude "Command" is the user's explicit choice.
+// Main-process Claude spawns (SDK runs, usage probe, account login) have no
+// store handle, so startup registers a live reader here; without it the
+// DOBIUS_CLAUDE_CLI_PATH env var silently beat the setting (X9).
+export function setClaudeSettingsOverrideReader(reader: ClaudeSettingsOverrideReader | null): void {
+  readClaudeSettingsOverride = reader
+  warnedClaudeOverrideMessages.clear()
+}
+
+function warnClaudeOverrideOnce(message: string): void {
+  if (warnedClaudeOverrideMessages.has(message)) {
+    return
+  }
+  warnedClaudeOverrideMessages.add(message)
+  console.warn(`[claude-cli] ${message}`)
+}
+
+// Returns the executable named by the Settings override, or null when the
+// value is empty or carries launch arguments. The terminal launcher treats
+// the setting as shell text, but a headless spawn needs one executable.
+function toClaudeExecutableOverride(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim()
+  if (!trimmed) {
+    return null
+  }
+  const quoted = /^(["'])(.*)\1$/.exec(trimmed)
+  if (quoted) {
+    return quoted[2].trim() || null
+  }
+  return /\s/.test(trimmed) ? null : trimmed
+}
+
 export function resolveClaudeCommand(options: ResolveCommandOptions = {}): string {
   // Why: on some machines the PATH/version-manager scan below finds nothing at
   // all (GUI-launched Electron PATH is minimal and claude wasn't installed via
   // a scanned method) — the SDK then fails to spawn the literal fallback
   // string "claude". An explicit override always wins over the scan.
-  const override = options.overridePath ?? process.env.DOBIUS_CLAUDE_CLI_PATH
-  if (override) {
-    return override
+  // Precedence: caller override > Settings override > env var > scan.
+  if (options.overridePath) {
+    return options.overridePath
+  }
+  const settingsRaw = readClaudeSettingsOverride?.()
+  const settingsOverride = toClaudeExecutableOverride(settingsRaw)
+  const envOverride = process.env.DOBIUS_CLAUDE_CLI_PATH
+  if (settingsOverride) {
+    if (envOverride && envOverride !== settingsOverride) {
+      warnClaudeOverrideOnce(
+        `Settings command override "${settingsOverride}" is used; DOBIUS_CLAUDE_CLI_PATH is ignored.`
+      )
+    }
+    // A bare name ("claude-beta") still needs the PATH/version-manager scan.
+    return /[\\/]/.test(settingsOverride)
+      ? settingsOverride
+      : resolveCliCommand(settingsOverride, options)
+  }
+  if (settingsRaw?.trim()) {
+    warnClaudeOverrideOnce(
+      'Settings command override for Claude includes arguments, so headless Claude runs ' +
+        'cannot use it and fall back to DOBIUS_CLAUDE_CLI_PATH or the PATH scan.'
+    )
+  }
+  if (envOverride) {
+    return envOverride
   }
   return resolveCliCommand('claude', options)
 }
