@@ -19,10 +19,10 @@ Three install entry points with different guarantees:
 - `scripts/install-dobius-gated.sh` — order is now: resolve paths → **lock first** (mkdir, waits up
   to `DOBIUS_INSTALL_LOCK_WAIT`=300 s so concurrent installers serialize; pid written for
   diagnosis; stale locks are reported, never auto-broken) → ownership check → downgrade guard →
-  quit app (graceful, then `pkill -x "Dobius\+"` + `pkill -f "Dobius\+ Helper.*--type="`, never the
-  daemon) → fresh stage copy (`rm -rf` stage, `cp -R`) → provenance stamp (unchanged format) →
+  fresh stage copy (`rm -rf` stage, `cp -R`) → provenance stamp (unchanged format) →
   **validate the stage** (Info.plist CFBundleExecutable + CFBundleIdentifier, executable present,
-  `app.asar` present, binary arch runs on host, provenance JSON parses) → **atomic swap**
+  `app.asar` present, binary arch runs on host, provenance JSON parses) → quit app (graceful, then
+  `pkill -a -x "Dobius\+"` + `pkill -f "Dobius\+ Helper.*--type="`, never the daemon) → **atomic swap**
   (`renamex_np(RENAME_SWAP)` via python3 ctypes; plain rename on first install) → old bundle moved
   to ONE rollback copy `~/Library/Application Support/dobius-plus-install-backups/Dobius+.previous`
   (no `.app` suffix so LaunchServices never registers it; previous rollback deleted first so the
@@ -44,7 +44,7 @@ Three install entry points with different guarantees:
   gated-install commands to stderr and `exit 1`. No `rm`, copy, kill or build left in them (#100,
   #103, #112 — the only script that writes the app is the gated one, which the hook allows by name).
 - Kept from NOTES.md: provenance stamp, branch take-over guard, lock, staged swap, install history,
-  daemon-safe pkill patterns with escaped `+`. "rm -rf the old bundle before copying" is preserved
+  daemon-safe pkill patterns with escaped `+` (now with `-a` for the main app, see review round 1). "rm -rf the old bundle before copying" is preserved
   in substance: the stage is always a fresh tree and the old bundle is replaced whole by the swap
   (test asserts no file from the old bundle survives).
 
@@ -69,6 +69,32 @@ check runs, and a fixture bundle ID.
    an un-retired script is never run.
 
 Mutation checks: see "Verification".
+
+## Review round 1 (coordinator findings F1-F3)
+- F1: macOS `pgrep`/`pkill` exclude their own ancestors unless `-a`. An install run from a
+  Dobius+ terminal descends from the main app (main `Dobius+` pid → detached daemon
+  `Dobius+ Helper … daemon-entry.js` → login → zsh → claude → zsh), so the wait loop never saw the
+  app and `pkill -x` skipped it. Now `pgrep -a -f …` and `pkill -a -x "Dobius\+"`. The helper kill
+  stays `pkill -f "Dobius\+ Helper.*--type="`: the daemon is forked at
+  `src/main/daemon/daemon-init.ts:295` with args `daemon-entry.js --socket <p> --token <p>` (no
+  `--type=`), and its process name is `Dobius+ Helper`, never an exact `Dobius+`. Confirmed live
+  (`ps`): daemon pid 979 has its own process group (pgid 979) and is `detached: true` +
+  `child.unref()` (`daemon-init.ts:302,372`), so killing the main app reparents it to launchd and
+  neither it nor the installer's shell (its descendant) is signalled.
+- F2: `MANAGE_APP` is now decided on the resolved DEST, compared case-insensitively with the
+  resolved real destination, so `/Applications//Dobius+.app` and `/applications/Dobius+.app/`
+  manage the app (checked with the same expression in a standalone bash snippet; not unit-testable
+  without the real path).
+- F3: quit/kill moved to after the stage copy + validation, just before the swap. A failed build
+  (exit 6/7) never closes the app. If the swap fails after quitting, the unchanged app is relaunched
+  (`open -a`) before exit 8.
+- Test-only env: `DOBIUS_INSTALL_TEST_MANAGE_APP=1` forces the app steps for a fixture DEST, and
+  `DOBIUS_INSTALL_LSREGISTER` points at a shim. Tests put recorder shims for
+  osascript/pgrep/pkill/open first on PATH and assert: order validate → quit → pgrep -a → pkill -a -x
+  → helper pkill → swap → lsregister → open (new app); no quit on validation failure; relaunch of the
+  old app on swap failure.
+- Mutations (app-management tests fail, then restored): N1 `pkill` without -a; N2 `pgrep` without
+  -a; N3 quit moved back before the stage copy; N4 no relaunch after swap failure.
 
 ## Rollback
 Revert the commit: the old gated script and the two old entry points come back from git. The
@@ -96,7 +122,7 @@ by hand if unwanted). To go back one install: `scripts/install-dobius-gated.sh
 - Node `spawn` with piped-but-unread stdout never emits `close`; ignore stdout or use `exit`.
 
 ## Verification
-- Targeted: `config/scripts/install-dobius-gated.test.mjs` 11/11 green (~50 s on the loaded machine).
+- Targeted: `config/scripts/install-dobius-gated.test.mjs` 14/14 green after review round 1 (11/11 before) (~50 s on the loaded machine).
 - Mutation checks (each made the file fail, then restored; logs in `stabilize-run/043/mut-*.log`):
   M1 lock moved after the checks → lock-first test fails (exit 3). M1b no lock → lock-first +
   concurrency tests fail. M2 swap failure ignored → rename test fails. M3 no stage cleanup on exit →

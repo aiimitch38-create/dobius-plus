@@ -10,8 +10,8 @@
 # build-and-install.sh and scripts/install-dobius-v2.sh are retired pointers
 # to this file (BUILD-043): there is exactly one install path.
 #
-# Order (BUILD-043): lock → ownership/version checks → quit app → stage copy →
-# validate stage → atomic swap → move the old bundle to ONE rollback copy
+# Order (BUILD-043): lock → ownership/version checks → stage copy → validate
+# stage → quit app → atomic swap → move the old bundle to ONE rollback copy
 # outside /Applications and outside dobius/dist → remove the dist build copy.
 # Any failure before the swap leaves the installed app untouched.
 #
@@ -24,6 +24,10 @@
 #   DOBIUS_INSTALL_LOCK_WAIT    seconds to wait for another install (default 300)
 #   DOBIUS_INSTALL_BACKUP_DIR   default ~/Library/Application Support/dobius-plus-install-backups
 #   DOBIUS_INSTALL_HISTORY_LOG  default ~/.dobius-install-history.log
+#   DOBIUS_INSTALL_TEST_MANAGE_APP=1  run the quit/kill/relaunch steps against a
+#                                     fixture DEST (tests put recorder shims for
+#                                     osascript/pgrep/pkill/open first on PATH)
+#   DOBIUS_INSTALL_LSREGISTER   lsregister binary (tests pass a recorder shim)
 set -euo pipefail
 
 APP_SRC="${1:?usage: install-dobius-gated.sh <built .app path> [--take-over]}"
@@ -38,14 +42,17 @@ BACKUP_DIR="${DOBIUS_INSTALL_BACKUP_DIR:-$HOME/Library/Application Support/dobiu
 # second bundle with the same ID is the duplicate-Dock-icon bug (#105).
 ROLLBACK="$BACKUP_DIR/Dobius+.previous"
 HISTORY_LOG="${DOBIUS_INSTALL_HISTORY_LOG:-$HOME/.dobius-install-history.log}"
-MANAGE_APP=0
-[ "$DEST" = "$REAL_DEST" ] && MANAGE_APP=1
-
 [ -d "$APP_SRC" ] || { echo "ERROR: no app bundle at $APP_SRC" >&2; exit 1; }
 [ -d "$(dirname "$DEST")" ] || { echo "ERROR: install folder $(dirname "$DEST") does not exist" >&2; exit 1; }
 APP_SRC="$(cd "$APP_SRC" && pwd -P)"
 DEST="$(cd "$(dirname "$DEST")" && pwd -P)/$(basename "$DEST")"
 STAGE="${DEST%.app}.new.app"
+# Decided on the RESOLVED path (APFS is case-insensitive), so a spelling like
+# /Applications//Dobius+.app still quits, relaunches and re-registers the app.
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+MANAGE_APP=0
+[ "$(lower "$DEST")" = "$(lower "$(cd "$(dirname "$REAL_DEST")" 2>/dev/null && pwd -P)/$(basename "$REAL_DEST")")" ] && MANAGE_APP=1
+[ "${DOBIUS_INSTALL_TEST_MANAGE_APP:-}" = "1" ] && MANAGE_APP=1
 case "$APP_SRC" in
   "$DEST"|"$DEST"/*|"$STAGE"|"$STAGE"/*)
     echo "ERROR: $APP_SRC is the installed app or its stage — pass a build" >&2
@@ -130,20 +137,6 @@ PYVER
   fi
 fi
 
-if [ "$MANAGE_APP" = "1" ]; then
-  osascript -e 'quit app "Dobius+"' 2>/dev/null || true
-  for _ in $(seq 1 10); do
-    pgrep -f "Dobius\\+.app/Contents/MacOS/Dobius\\+$" > /dev/null || break
-    sleep 1
-  done
-  # Kill only the main app (exact name) and Chromium helpers (--type= arg).
-  # NEVER pattern-match the bundle path: the detached terminal daemon runs
-  # "Dobius+ Helper … daemon-entry.js" from inside it, and killing it destroys
-  # every live terminal session. The + must be escaped (regex quantifier).
-  pkill -x "Dobius\+" 2>/dev/null || true
-  pkill -f "Dobius\+ Helper.*--type=" 2>/dev/null || true
-fi
-
 # Stage: full copy beside the target (same volume, so the swap is a rename).
 # The stage is always a fresh tree, so no file from an old bundle survives.
 export DOBIUS_INSTALL_GATE=1
@@ -184,6 +177,27 @@ esac
 python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$STAGE/$PROV_REL" 2>/dev/null \
   || stage_invalid "$PROV_REL was not written"
 
+# Quit only now that the build is staged and valid (a bad build never closes
+# the app). -a: pgrep/pkill skip their own ancestors by default, and an install
+# run from a Dobius+ terminal descends from the main app (main → detached
+# daemon → login → shell), so without -a the app is never seen or killed.
+if [ "$MANAGE_APP" = "1" ]; then
+  osascript -e 'quit app "Dobius+"' 2>/dev/null || true
+  for _ in $(seq 1 10); do
+    pgrep -a -f "Dobius\\+.app/Contents/MacOS/Dobius\\+$" > /dev/null || break
+    sleep 1
+  done
+  # Kill only the main app (exact name "Dobius+") and Chromium helpers (--type=
+  # arg). NEVER pattern-match the bundle path: the terminal daemon runs as
+  # "Dobius+ Helper … daemon-entry.js --socket … --token …" (no --type=), and
+  # killing it destroys every live terminal session — including the one running
+  # this script. The daemon is forked detached (own session/process group), so
+  # killing the main app does not take it or its shells down. The + must be
+  # escaped (regex quantifier).
+  pkill -a -x "Dobius\+" 2>/dev/null || true
+  pkill -f "Dobius\+ Helper.*--type=" 2>/dev/null || true
+fi
+
 # Swap (#104): with an app already installed, exchange the two bundles in ONE
 # atomic rename (renamex_np RENAME_SWAP) — there is never an instant with no
 # app at $DEST. Afterwards $STAGE holds the previous bundle.
@@ -200,6 +214,8 @@ if swap(os.fsencode(sys.argv[1]), os.fsencode(sys.argv[2]), RENAME_SWAP) != 0:
 PYSWAP
   then
     echo "ERROR: swapping $STAGE into $DEST failed — installed app left untouched." >&2
+    # The app was already quit for the swap: bring the unchanged app back.
+    if [ "$MANAGE_APP" = "1" ]; then open -a "$DEST" || true; fi
     exit 8
   fi
   # One rollback copy, outside /Applications and outside dobius/dist. The
@@ -231,7 +247,7 @@ if [ "$MANAGE_APP" = "1" ]; then
   # can bind the Dock tile to the wrong one — the app "acts broken"/relaunches
   # the old build right after an update, which reads as a crash even though
   # nothing crashed. See ~/.claude/skills/learned-dobius-duplicate-app-icon.
-  LSR=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+  LSR="${DOBIUS_INSTALL_LSREGISTER:-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister}"
   BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$DEST/Contents/Info.plist" 2>/dev/null || echo "")
   if [ -x "$LSR" ]; then
     "$LSR" -f "$DEST" >/dev/null 2>&1 || true
