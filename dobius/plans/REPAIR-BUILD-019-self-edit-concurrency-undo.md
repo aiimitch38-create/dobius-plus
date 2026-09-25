@@ -104,3 +104,21 @@ second undo was refused by the conflict check instead; test tightened to assert 
 
 ## Decisions for Carson (added)
 - Self-edit apply/undo is off on Windows until a no-reparse-point open exists (fail closed).
+
+## Review follow-up (commit 3): F1 F2 (coordinator, low)
+- F1: the backup (`wx`) and the target write are now separate steps. If the target write fails,
+  (helper `releaseBackupAfterFailedWrite` lives in self-edit-snapshot.ts to keep self-edit.ts under max-lines)
+  `releaseBackupAfterFailedWrite` removes the just-written backup only while the target still
+  holds the original bytes (digest check), so a retry does not hit EEXIST. If the write failed
+  after `O_TRUNC` had already emptied the file, the backup is kept and its path is named in the
+  error (it is then the only copy). `appliedBackupPath` is set only after a successful write.
+- F2: `propose()` catches `readSnapshot` errors (ELOOP on a dangling symlink leaf, EACCES) and
+  returns `{ok:false, error: '"<path>" could not be read: …'}`, so the voice tool speaks
+  "Could not propose that change: …" instead of receiving a rejected IPC promise.
+- Tests: read-only target, then apply fails without EEXIST, leaves no backup and no
+  `appliedBackupPath`; after chmod the retry succeeds and its backup holds the original. Dangling
+  symlink leaf, then propose refused with "could not be read".
+- Mutation checks (each 1 fail, restored; final 42/42): F1a keep backup on a failed write;
+  F1b set `appliedBackupPath` before the write; F2 rethrow the snapshot error. Not covered by a
+  test: the "write failed after truncation, keep backup" branch (can't cause a mid-write failure
+  after a successful open in a unit test without mocking fs).

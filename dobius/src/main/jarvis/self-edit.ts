@@ -11,7 +11,12 @@ import {
 } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { protectedReason } from './self-edit-path-policy'
-import { bytesDigest, readSnapshot, snapshotDigest } from './self-edit-snapshot'
+import {
+  bytesDigest,
+  readSnapshot,
+  releaseBackupAfterFailedWrite,
+  snapshotDigest
+} from './self-edit-snapshot'
 
 export type SelfEditProposal = {
   id: string
@@ -187,7 +192,17 @@ export class SelfEditStore {
     }
     // Why keep a digest of the exact bytes: apply must notice any change made
     // to the file while the user was reviewing, not just a different length.
-    const original = readSnapshot(resolved.absolutePath)
+    let original: ReturnType<typeof readSnapshot>
+    try {
+      original = readSnapshot(resolved.absolutePath)
+    } catch (error) {
+      // Why catch: a dangling symlink (ELOOP) or unreadable file must reach the
+      // voice tool as a spoken refusal, not a rejected IPC promise.
+      return {
+        ok: false,
+        error: `"${requestedPath}" could not be read: ${error instanceof Error ? error.message : String(error)}`
+      }
+    }
     const oldContent = original.exists ? original.bytes.toString('utf-8') : ''
     if (oldContent === newContent) {
       return { ok: false, error: 'That change is identical to the current file.' }
@@ -256,12 +271,20 @@ export class SelfEditStore {
         // Why the verified bytes and 'wx': the backup must be exactly what was
         // checked above, and must never overwrite an earlier backup.
         writeFileSync(backupPath, current.bytes, { flag: 'wx' })
-        proposal.appliedBackupPath = backupPath
       }
-      writeFileSyncNoFollow(proposal.absolutePath, newBytes)
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
+    try {
+      writeFileSyncNoFollow(proposal.absolutePath, newBytes)
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      return {
+        ok: false,
+        error: releaseBackupAfterFailedWrite(proposal.absolutePath, proposal.originalDigest, backupPath, reason)
+      }
+    }
+    proposal.appliedBackupPath = backupPath ?? undefined
     this.proposals.delete(id)
     this.applied.set(id, {
       absolutePath: proposal.absolutePath,

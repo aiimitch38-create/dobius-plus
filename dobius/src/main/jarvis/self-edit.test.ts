@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -510,5 +511,40 @@ describe('Windows write refusal (BUILD-019, review finding)', () => {
       expect(store.apply(proposed.proposal.id, join(root, 'backups')).ok, platform).toBe(true)
       expect(store.undo(proposed.proposal.id).ok, platform).toBe(true)
     }
+  })
+})
+
+describe('failed writes and unreadable targets (BUILD-019 review F1 F2)', () => {
+  it('a failed target write drops its backup so a retry succeeds', () => {
+    const root = repo()
+    const file = join(root, 'src', 'voice.ts')
+    const backups = join(root, 'backups')
+    const store = new SelfEditStore([root])
+    const proposed = store.propose('src/voice.ts', 'const a = 2\n', 'bump')
+    if (!proposed.ok) {
+      throw new Error(proposed.error)
+    }
+    chmodSync(file, 0o444)
+    try {
+      const failed = store.apply(proposed.proposal.id, backups)
+      expect(failed.ok).toBe(false)
+      expect(failed.ok ? '' : failed.error).not.toMatch(/EEXIST/)
+      expect(readdirSync(backups)).toEqual([])
+      expect(proposed.proposal.appliedBackupPath).toBeUndefined()
+    } finally {
+      chmodSync(file, 0o644)
+    }
+    expect(store.apply(proposed.proposal.id, backups).ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('const a = 2\n')
+    expect(readFileSync(proposed.proposal.appliedBackupPath as string, 'utf-8')).toBe('const a = 1\n')
+  })
+
+  it('refuses a dangling symlink leaf with a message instead of throwing', () => {
+    const root = repo()
+    symlinkSync(join(root, 'src', 'missing-target.ts'), join(root, 'src', 'dangling.ts'))
+    const store = new SelfEditStore([root])
+    const proposed = store.propose('src/dangling.ts', 'x\n', 'dangling')
+    expect(proposed.ok).toBe(false)
+    expect(proposed.ok ? '' : proposed.error).toMatch(/could not be read/)
   })
 })

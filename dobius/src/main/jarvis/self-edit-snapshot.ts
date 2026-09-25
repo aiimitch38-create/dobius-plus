@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { closeSync, constants, openSync, readFileSync } from 'node:fs'
+import { closeSync, constants, openSync, readFileSync, unlinkSync } from 'node:fs'
 
 /** The exact bytes of a file at one moment, or proof that it did not exist. */
 export type FileSnapshot = { exists: false } | { exists: true; bytes: Buffer }
@@ -35,4 +35,33 @@ export function readSnapshot(path: string): FileSnapshot {
   } finally {
     closeSync(fd)
   }
+}
+
+/**
+ * After a failed target write, removes the backup apply() just made and returns
+ * the error to report.
+ *
+ * Why: the 'wx' backup would make every retry fail with EEXIST. It is removed
+ * only while the target still holds the original bytes; a write that failed
+ * after truncating leaves the backup as the only copy, so it is kept.
+ */
+export function releaseBackupAfterFailedWrite(
+  targetPath: string,
+  originalDigest: string | null,
+  backupPath: string | null,
+  reason: string
+): string {
+  if (!backupPath) {
+    return reason
+  }
+  try {
+    if (snapshotDigest(readSnapshot(targetPath)) === originalDigest) {
+      unlinkSync(backupPath)
+      return reason
+    }
+  } catch (cleanupError) {
+    const detail = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+    return `${reason} (backup kept at ${backupPath}: ${detail})`
+  }
+  return `${reason} The original is kept at ${backupPath}.`
 }
