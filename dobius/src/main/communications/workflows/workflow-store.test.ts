@@ -126,7 +126,9 @@ describe('workflow-store', () => {
     const mod2 = await import('./workflow-store')
     expect(mod2.getWorkflow(created.id)).toBeNull()
     expect(mod2.listWorkflowsByChannel('anything')).toEqual([])
-    mod2.createWorkflow({ ownerPubkey: 'owner', channelId: null, yamlDefinition: 'name: New' })
+    expect(() =>
+      mod2.createWorkflow({ ownerPubkey: 'owner', channelId: null, yamlDefinition: 'name: New' })
+    ).toThrow("workflows.json can't be read, so changes are not saved; repair or remove it")
     expect(readFileSync(filePath, 'utf-8')).toBe(text)
   })
 })

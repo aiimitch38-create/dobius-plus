@@ -524,6 +524,11 @@ describe('Jira site file is never overwritten while unreadable (BUILD-009B)', ()
     const names = readdirSync(dobiusDir)
     expect(names.filter((name) => name.endsWith('.tmp'))).toEqual([])
     expect(names.filter((name) => name.startsWith('jira-sites.json.unreadable-'))).toHaveLength(1)
+    // Warn-and-continue path: one error naming the file, not one per refused save.
+    const refusals = vi
+      .mocked(console.error)
+      .mock.calls.filter((call) => String(call[0]).includes('jira-sites.json not saved'))
+    expect(refusals).toHaveLength(1)
   })
 
   it('still saves a readable site list owner-only (0600)', async () => {

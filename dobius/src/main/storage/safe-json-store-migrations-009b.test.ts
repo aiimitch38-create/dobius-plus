@@ -20,6 +20,11 @@ vi.mock('../asana/asana-client', () => ({ fetchLane: vi.fn(), markTaskComplete: 
 
 const BAD_BYTES = '[{"id": "truncated", "na'
 
+// User-edit stores throw this so the renderer shows the refusal (review F1).
+function refused(fileName: string): string {
+  return `${fileName} can't be read, so changes are not saved; repair or remove it`
+}
+
 type StoreCase = {
   store: string
   fileName: string
@@ -90,10 +95,11 @@ const storeCases: StoreCase[] = [
     run: async () => {
       const store = await import('../communications/canvas/channel-template-store')
       expect(store.listChannelTemplates()).toEqual([])
-      const [created] = store.createChannelTemplate({ name: 'T' })
-      store.updateChannelTemplate(created.id, { name: 'U' })
-      store.duplicateChannelTemplate(created.id)
-      store.removeChannelTemplate(created.id)
+      expect(() => store.createChannelTemplate({ name: 'T' })).toThrow(
+        refused('channel-templates.json')
+      )
+      expect(store.listChannelTemplates()).toEqual([])
+      expect(() => store.removeChannelTemplate('t')).toThrow(refused('channel-templates.json'))
     }
   },
   {
@@ -102,10 +108,14 @@ const storeCases: StoreCase[] = [
     run: async () => {
       const store = await import('../communications/canvas/save-subscription-store')
       expect(store.listSaveSubscriptions('pk', 'ws://relay')).toEqual([])
-      store.createSaveSubscription('pk', 'ws://relay', 'owner_p', 'pk', [1])
-      store.mergeSaveSubscriptionKinds('pk', 'ws://relay', 2)
-      store.removeSaveSubscriptionKind('pk', 'ws://relay', 2)
-      store.deleteSaveSubscription('pk', 'ws://relay', 'owner_p', 'pk')
+      const message = refused('save-subscriptions.json')
+      expect(() => store.createSaveSubscription('pk', 'ws://relay', 'owner_p', 'pk', [1])).toThrow(
+        message
+      )
+      expect(() => store.mergeSaveSubscriptionKinds('pk', 'ws://relay', 2)).toThrow(message)
+      expect(() => store.removeSaveSubscriptionKind('pk', 'ws://relay', 2)).toThrow(message)
+      expect(store.deleteSaveSubscription('pk', 'ws://relay', 'owner_p', 'pk')).toBe(false)
+      expect(store.listSaveSubscriptions('pk', 'ws://relay')).toEqual([])
     }
   },
   {
@@ -134,13 +144,10 @@ const storeCases: StoreCase[] = [
     run: async () => {
       const store = await import('../communications/workflows/workflow-store')
       expect(store.listAllWorkflows()).toEqual([])
-      const created = store.createWorkflow({
-        ownerPubkey: 'owner',
-        channelId: null,
-        yamlDefinition: 'name: W'
-      })
-      store.updateWorkflow(created.id, { yamlDefinition: 'name: W2' })
-      store.removeWorkflow(created.id)
+      expect(() =>
+        store.createWorkflow({ ownerPubkey: 'owner', channelId: null, yamlDefinition: 'name: W' })
+      ).toThrow(refused('workflows.json'))
+      expect(store.listAllWorkflows()).toEqual([])
     }
   },
   {
@@ -149,8 +156,11 @@ const storeCases: StoreCase[] = [
     run: async () => {
       const store = await import('../destinations/destinations-store')
       expect(store.listDestinations()).toEqual([])
-      const saved = store.saveDestination({ name: 'n', type: 'system', config: {} })
-      store.deleteDestination(saved.id)
+      expect(() => store.saveDestination({ name: 'n', type: 'system', config: {} })).toThrow(
+        refused('destinations.json')
+      )
+      expect(store.listDestinations()).toEqual([])
+      expect(store.deleteDestination('d')).toBe(false)
     }
   },
   {
@@ -159,8 +169,9 @@ const storeCases: StoreCase[] = [
     run: async () => {
       const store = await import('../prompts/prompts-store')
       expect(store.listPrompts()).toEqual([])
-      const [saved] = store.savePrompt({ title: 't', text: 'x' })
-      store.deletePrompt(saved.id)
+      expect(() => store.savePrompt({ title: 't', text: 'x' })).toThrow(refused('prompts.json'))
+      expect(store.listPrompts()).toEqual([])
+      expect(() => store.deletePrompt('p')).toThrow(refused('prompts.json'))
     }
   },
   {
@@ -279,6 +290,54 @@ describe('BUILD-009B stores never drop a malformed entry and save over it', () =
     await run()
 
     expectUntouched(fileName, text, before.mtimeMs)
+  })
+})
+
+describe('global-agent-config-store rejects invalid inner fields (review F2)', () => {
+  const fileName = 'communications-global-agent-config.json'
+
+  it.each([
+    ['non-string env var', { config: { env_vars: { A: 'ok', B: 5 } } }],
+    ['env_vars not an object', { config: { env_vars: ['A'] } }],
+    ['config not an object', { config: 'x', agentManagedProfiles: true }]
+  ])('%s makes the file unreadable', async (_name, content) => {
+    const text = JSON.stringify(content)
+    writeFileSync(path.join(electronMock.userDataDir, fileName), text, 'utf-8')
+    const before = statSync(path.join(electronMock.userDataDir, fileName))
+
+    await storeCases.find((entry) => entry.fileName === fileName)?.run()
+
+    expectUntouched(fileName, text, before.mtimeMs)
+  })
+
+  it('keeps "" (inherit) valid and strips it', async () => {
+    writeFileSync(
+      path.join(electronMock.userDataDir, fileName),
+      JSON.stringify({ config: { env_vars: { A: '', B: 'b' } } })
+    )
+    const store = await import('../communications/agents/global-agent-config-store')
+
+    expect(store.getGlobalAgentConfig().env_vars).toEqual({ B: 'b' })
+    expect(readdirSync(electronMock.userDataDir).filter((n) => n.includes('.unreadable-'))).toEqual([])
+  })
+})
+
+describe('warn-and-continue stores log one error naming the file (review F1)', () => {
+  it.each([
+    ['workflow-runs.json', 'workflow-run-store'],
+    ['asana-local-done.json', 'asana-queue-service (local done)']
+  ])('%s', async (fileName, storeName) => {
+    writeFileSync(path.join(electronMock.userDataDir, fileName), BAD_BYTES, 'utf-8')
+    const storeCase = storeCases.find((entry) => entry.store === storeName)
+
+    await storeCase?.run()
+    await storeCase?.run()
+
+    const refusals = vi
+      .mocked(console.error)
+      .mock.calls.map((call) => String(call[0]))
+      .filter((line) => line.includes(`${fileName} not saved`))
+    expect(refusals).toHaveLength(1)
   })
 })
 

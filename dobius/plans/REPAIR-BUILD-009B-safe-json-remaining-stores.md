@@ -122,3 +122,39 @@ new code keep the same JSON shape (plus a trailing newline), so old code reads t
 - `ASANA_GID_RE` needs 6+ digits; a test gid of `'123'` is silently ignored by `markLocalDone`.
 - Stores that threw on write failures and stores that warned must keep their own contract;
   jira/linear are the exception because `clearToken` sits inside auth-error catch blocks.
+
+## Review round 1 (F1, F2)
+Merged `stabilize/integration` (6c753d3c, BUILD-028) first; clean merge.
+
+- F1 [medium] User-edit stores ignored `false` from `set()`, so IPC/RPC returned the new list
+  and the edit vanished on restart. New `SafeJsonFile.save(value)`: calls `set()`; on refusal it
+  drops the refused change from memory (`invalidate()`, since callers mutate the cached value in
+  place) and throws `<file> can't be read, so changes are not saved; repair or remove it`
+  (or `<file> could not be saved` for a plain write failure). Used by prompts, destinations,
+  workflows, channel templates and save-subscriptions.
+  - Renderer callers: `PromptsPanel` save/delete had no catch (unhandled rejection, nothing
+    shown) → now `toast.error` and the editor stays open. `DestinationsSection` delete had no
+    catch → `toast.error`; its save already toasted. Workflows / channel templates /
+    save-subscriptions are RPC methods: `runtime/rpc/dispatcher.ts:183` maps a thrown error to
+    an RPC error reply (the path "not found" errors already use).
+  - Warn-and-continue kept for Jira/Linear, asana-local-done and workflow-runs. SafeJsonFile
+    already logs exactly one `console.error` naming the file per unreadable state
+    (`<label> not saved: ...`); tests now assert exactly one across repeated refused saves.
+- F2 [low] `global-agent-config-store`: a stored `config` that is not an object, `env_vars`
+  that is not an object, or any non-string env value now makes the file unreadable. `""` stays
+  valid (inherit) and is still stripped. Input sanitizing for `setGlobalAgentConfig` unchanged.
+
+Tests: safe-json-file.test.ts (`save()` ×3), safe-json-store-migrations-009b.test.ts (5 user-edit
+stores expect the thrown message and an empty re-list; one-error logging for workflow-runs and
+asana-local-done; F2 ×3 + "" inherit), jira/linear one-error assertions, new
+`PromptsPanel.test.tsx` and `DestinationsSection.test.tsx`, workflow-store test expects the throw.
+
+Mutations (each failed, then restored): F1a `save()` returns instead of throwing → 12 fail;
+F1b refused change kept in memory → 12 fail; F1c prompts back to `set()` → 2 fail; F1d
+PromptsPanel catch removed → 1 fail; F1e Destinations delete catch removed → 1 fail; F1f log
+every refusal → 5 fail; F2 inner-field check removed → 3 fail.
+
+Verification: typecheck exit 0; targeted 58 files / 501 tests: 499 passed + workflow-store test
+fixed after the run (re-run green) + `storage/user-data-root.test.ts` timed out at 30 s under
+load average ~35 (untouched file; passes alone: 2 files / 40 tests green). oxlint + react-doctor
+clean on all changed files.

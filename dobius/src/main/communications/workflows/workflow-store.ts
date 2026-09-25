@@ -115,9 +115,10 @@ function load(): Workflow[] {
   return file.get()
 }
 
-// Warn-and-continue like before; SafeJsonFile logs a refused or failed save.
+// Why: throws so the renderer's error path shows a refused save instead of
+// an edit that silently disappears on restart.
 function persist(workflows: Workflow[]): void {
-  file.set(workflows)
+  file.save(workflows)
 }
 
 export function listAllWorkflows(): Workflow[] {

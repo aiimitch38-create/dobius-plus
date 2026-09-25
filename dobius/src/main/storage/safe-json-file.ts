@@ -295,6 +295,26 @@ export class SafeJsonFile<T> {
     }
   }
 
+  /**
+   * set() for user-edit paths (IPC/RPC): throws when nothing was saved, so
+   * the UI shows the failure instead of an edit that is lost on restart.
+   * The refused change is also dropped from memory (callers mutate the
+   * cached value in place), so a re-list never shows it as saved.
+   */
+  save(value: T): void {
+    if (this.set(value)) {
+      return
+    }
+    const unreadable = this.status === 'unreadable'
+    this.invalidate()
+    const name = path.basename(this.options.filePath())
+    throw new Error(
+      unreadable
+        ? `${name} can't be read, so changes are not saved; repair or remove it`
+        : `${name} could not be saved`
+    )
+  }
+
   private markUnreadable(detail: string): void {
     this.status = 'unreadable'
     this.detail = detail

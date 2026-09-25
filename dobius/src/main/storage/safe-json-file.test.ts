@@ -248,3 +248,41 @@ describe('parseEveryValue (BUILD-009B)', () => {
     expect(parseEveryValue('x', parseNumber)).toBeUndefined()
   })
 })
+
+describe('SafeJsonFile save() for user-edit paths (BUILD-009B review F1)', () => {
+  it('throws a readable error, keeps the file, and drops the refused change', () => {
+    writeFileSync(target, '["kept", ', 'utf-8')
+    const file = makeFile()
+    const list = file.get()
+    list.push('edit')
+
+    expect(() => file.save(list)).toThrow(
+      "list.json can't be read, so changes are not saved; repair or remove it"
+    )
+    expect(readFileSync(target, 'utf-8')).toBe('["kept", ')
+    expect(file.get()).toEqual([])
+    expect(quarantineCopies()).toHaveLength(1)
+  })
+
+  it('throws "could not be saved" when a readable file cannot be written', () => {
+    if (isRoot) {
+      return
+    }
+    writeFileSync(target, '["original"]', 'utf-8')
+    const file = makeFile()
+    const list = file.get()
+    list.push('edit')
+    chmodSync(dir, 0o555)
+
+    expect(() => file.save(list)).toThrow('list.json could not be saved')
+    chmodSync(dir, 0o755)
+    expect(file.get()).toEqual(['original'])
+  })
+
+  it('saves normally when the file is readable', () => {
+    const file = makeFile()
+    file.get()
+    file.save(['a'])
+    expect(JSON.parse(readFileSync(target, 'utf-8'))).toEqual(['a'])
+  })
+})

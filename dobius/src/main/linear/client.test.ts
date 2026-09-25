@@ -471,6 +471,11 @@ describe('Linear workspace file is never overwritten while unreadable (BUILD-009
     expect(names.filter((name) => name.startsWith('linear-workspaces.json.unreadable-'))).toHaveLength(
       1
     )
+    // Warn-and-continue path: one error naming the file, not one per refused save.
+    const refusals = vi
+      .mocked(console.error)
+      .mock.calls.filter((call) => String(call[0]).includes('linear-workspaces.json not saved'))
+    expect(refusals).toHaveLength(1)
   })
 
   it('still saves a readable workspace list owner-only (0600)', async () => {

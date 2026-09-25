@@ -40,9 +40,10 @@ function load(): SaveSubscription[] {
   return file.get()
 }
 
-// Warn-and-continue like before; SafeJsonFile logs a refused or failed save.
+// Why: throws so the renderer's error path shows a refused save instead of
+// an edit that silently disappears on restart.
 function persist(subscriptions: SaveSubscription[]): void {
-  file.set(subscriptions)
+  file.save(subscriptions)
 }
 
 export function listSaveSubscriptions(identityPubkey: string, relayUrl: string): SaveSubscription[] {

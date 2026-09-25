@@ -58,16 +58,36 @@ function sanitizeConfig(raw: unknown): GlobalAgentConfig {
   }
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+// Why: a stored config that is not an object, or an env var that is not a
+// string, makes the file unreadable instead of being dropped and saved over.
+// "" stays valid: it means "inherit" and sanitizeConfig strips it.
+function isStoredConfigValid(config: unknown): boolean {
+  if (config === undefined) {
+    return true
+  }
+  if (!isPlainObject(config)) {
+    return false
+  }
+  const envVars = config.env_vars
+  if (envVars === undefined) {
+    return true
+  }
+  return isPlainObject(envVars) && Object.values(envVars).every((value) => typeof value === 'string')
+}
+
 // Why: a file that is not an object is unreadable (never replaced by defaults
 // and then saved over).
 function sanitize(raw: unknown): StoredFile | undefined {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+  if (!isPlainObject(raw) || !isStoredConfigValid(raw.config)) {
     return undefined
   }
-  const record = raw as { config?: unknown; agentManagedProfiles?: unknown }
   return {
-    config: sanitizeConfig(record.config),
-    agentManagedProfiles: record.agentManagedProfiles === true
+    config: sanitizeConfig(raw.config),
+    agentManagedProfiles: raw.agentManagedProfiles === true
   }
 }
 

@@ -74,9 +74,10 @@ function load(): Destination[] {
   return file.get()
 }
 
-// Warn-and-continue like before; SafeJsonFile logs a refused or failed save.
+// Why: throws so the renderer's error path shows a refused save instead of
+// an edit that silently disappears on restart.
 function persist(destinations: Destination[]): void {
-  file.set(destinations)
+  file.save(destinations)
 }
 
 export function listDestinations(): Destination[] {

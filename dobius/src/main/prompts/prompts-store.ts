@@ -39,9 +39,10 @@ function load(): DobiusPrompt[] {
   return file.get()
 }
 
-// Warn-and-continue like before; SafeJsonFile logs a refused or failed save.
+// Why: throws so the renderer's error path shows a refused save instead of
+// an edit that silently disappears on restart.
 function persist(prompts: DobiusPrompt[]): void {
-  file.set(prompts)
+  file.save(prompts)
 }
 
 export function listPrompts(): DobiusPrompt[] {
