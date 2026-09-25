@@ -89,6 +89,10 @@ export type VertexTaskFile = {
   url?: string
 }
 
+/** Attempts a task gets before the dispatcher dead-letters it. Shared so the
+ *  store's crash recovery ends a spent task the same way a failed run does. */
+export const VERTEX_DISPATCH_MAX_ATTEMPTS = 2
+
 /** What the dispatcher has done with this task.
  *
  * Lives ON the task rather than in a side ledger so the board can show it:
@@ -100,6 +104,14 @@ export type VertexTaskDispatch = {
   agentName: string
   runId?: string
   attempts: number
+  /** Main process that holds a 'running' claim. Stamped by the store, never
+   *  by the renderer, so a claim whose process died can be told apart from
+   *  one another live instance (dev builds share userData) is still running. */
+  ownerPid?: number
+  ownerSessionId?: string
+  /** Window whose dispatcher holds the claim, stamped by main from the IPC
+   *  sender, so that window can report which of its claims it still awaits. */
+  ownerWebContentsId?: number
   updatedAt: number
   /** Failure summary, surfaced in the UI. Never a stack trace. */
   error?: string

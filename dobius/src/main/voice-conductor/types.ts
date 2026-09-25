@@ -58,10 +58,15 @@ export type WorkRegistry = {
 
 /** Phase 5 — iMessage bridge (macOS only, AppleScript). */
 export type IMessageBridge = {
-  /** False on non-macOS or when Messages automation is unavailable. */
+  /** False on non-macOS or when the handle is missing/invalid in Settings. */
   isAvailable(): boolean
+  /** Why the bridge can't be used (shown to the caller), or null when usable. */
+  unavailableReason(): string | null
   send(text: string): Promise<void>
-  /** Send a question and block for the user's reply, bounded by timeoutMs (default 5 min). */
+  /**
+   * Send a question with a one-time reply code and block for the reply that
+   * starts with that code, bounded by timeoutMs (default 5 min). '' on timeout.
+   */
   ask(question: string, timeoutMs?: number): Promise<string>
 }
 

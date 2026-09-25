@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import type { ImessageBridgeConfig, ImessageBridgeStatus } from '../../../../shared/imessage-bridge'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -34,6 +35,13 @@ export function ImessageBridgeSetting(): React.JSX.Element {
       setBusy(true)
       try {
         await window.api.imessageBridge.updateConfig(updates)
+      } catch (error) {
+        // Why: a refused save (unreadable imessage-bridge.json) must be visible,
+        // not an edit that silently disappears on restart.
+        toast.error(error instanceof Error ? error.message : String(error))
+      }
+      try {
+        // Reverts the fields to what main actually holds after a refusal.
         await refresh()
       } finally {
         setBusy(false)
@@ -223,6 +231,16 @@ export function ImessageBridgeSetting(): React.JSX.Element {
           </Button>
         }
       />
+
+      {status?.unreadableDetail ? (
+        <p className="pt-1 text-xs text-destructive">
+          {translate(
+            'auto.components.settings.ImessageBridgeSetting.configUnreadable',
+            "imessage-bridge.json can't be read ({{detail}}), so changes are not saved; repair or remove it",
+            { detail: status.unreadableDetail }
+          )}
+        </p>
+      ) : null}
 
       {status ? (
         <p className="pt-1 text-xs text-muted-foreground">

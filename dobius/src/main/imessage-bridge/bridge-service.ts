@@ -6,9 +6,14 @@ import type {
   ImessageBridgeStatus,
   ImessageBridgeChatDbProbe
 } from '../../shared/imessage-bridge'
-import { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-config'
+import {
+  getImessageBridgeConfig,
+  getImessageBridgeConfigUnreadableDetail,
+  updateImessageBridgeConfig
+} from './bridge-config'
 import { extractChatDbMessageText } from './chat-db-message-text'
 import { countOutboundLastMinute, sendImessage } from './imessage-send'
+import { isDobiusAuthoredRow } from './outbound-ring'
 import { handleChannelMessage } from '../agents/agent-channel-service'
 import { checkExecutionAdmission } from '../agents/execution-gate'
 import type { PrepareClaudeLaunch } from '../agents/agent-runner'
@@ -20,7 +25,11 @@ import {
 } from './terminal-send-guard'
 import { selfHandleSpellings } from './self-handle-spellings'
 
-export { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-config'
+export {
+  getImessageBridgeConfig,
+  updateImessageBridgeConfig,
+  updateImessageBridgeSettings
+} from './bridge-config'
 export type { ImessageBridgeTerminalDispatcher } from './terminal-send-guard'
 
 const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db')
@@ -103,20 +112,22 @@ export function startImessageBridge(
     )
     return
   }
-  // Why: on first enable, jump the high-water mark to the newest row so the
-  // entire message history is never replayed as commands.
-  if (config.lastSeenRowid <= 0) {
-    try {
-      const row = db.prepare('SELECT COALESCE(MAX(ROWID), 0) AS maxRowid FROM message').get() as {
-        maxRowid: number
-      }
-      updateImessageBridgeConfig({ lastSeenRowid: row.maxRowid })
-    } catch (error) {
-      console.warn(
-        '[imessage-bridge] could not initialize lastSeenRowid:',
-        error instanceof Error ? error.message : String(error)
-      )
+  // Why: on every start/enable (not only the first), jump the watermark to the
+  // newest row, so nothing sent while the bridge was off (history, or a
+  // conductor/agent text from before a restart, when the outbound ring was
+  // empty) runs as a command. If that fails, don't poll at all.
+  try {
+    const row = db.prepare('SELECT COALESCE(MAX(ROWID), 0) AS maxRowid FROM message').get() as {
+      maxRowid: number
     }
+    updateImessageBridgeConfig({ lastSeenRowid: row.maxRowid })
+  } catch (error) {
+    console.warn(
+      '[imessage-bridge] could not initialize lastSeenRowid; not starting:',
+      error instanceof Error ? error.message : String(error)
+    )
+    stopImessageBridge()
+    return
   }
   pollTimer = setInterval(() => void pollNewMessages(), POLL_INTERVAL_MS)
   console.log(`[imessage-bridge] watching ${CHAT_DB_PATH} for handle ${config.selfHandle}`)
@@ -173,7 +184,8 @@ export function getImessageBridgeStatus(): ImessageBridgeStatus {
       process.platform === 'darwin'
         ? probeChatDb()
         : { ok: false, error: 'iMessage bridge is only available on macOS' },
-    outboundLastMin: countOutboundLastMinute()
+    outboundLastMin: countOutboundLastMinute(),
+    unreadableDetail: getImessageBridgeConfigUnreadableDetail()
   }
 }
 
@@ -242,7 +254,9 @@ async function handleIncomingMessage(
   triggerPrefix: string
 ): Promise<void> {
   const text = extractChatDbMessageText(row)?.trim()
-  if (!text) {
+  // Why: a conductor question or an agent's reply sits in this same self-chat;
+  // only Carson's own texts may reach an agent or a terminal.
+  if (!text || isDobiusAuthoredRow(text)) {
     return
   }
   if (await tryHandleChannelMessage(text, selfHandle)) {

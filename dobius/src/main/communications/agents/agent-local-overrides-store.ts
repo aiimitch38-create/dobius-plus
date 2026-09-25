@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
+import { parseEveryValue, SafeJsonFile } from '../../storage/safe-json-file'
 
 const FILE_NAME = 'communications-agent-overrides.json'
 
@@ -21,15 +21,15 @@ export type AgentLocalOverrides = {
 
 type OverridesFile = Record<string, AgentLocalOverrides>
 
-let cached: OverridesFile | null = null
-
 function filePath(): string {
   return path.join(app.getPath('userData'), FILE_NAME)
 }
 
-function sanitizeEntry(raw: unknown): AgentLocalOverrides {
-  if (typeof raw !== 'object' || raw === null) {
-    return {}
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitizeEntry(raw: unknown): AgentLocalOverrides | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return null
   }
   const record = raw as Partial<Record<keyof AgentLocalOverrides, unknown>>
   const result: AgentLocalOverrides = {}
@@ -45,46 +45,22 @@ function sanitizeEntry(raw: unknown): AgentLocalOverrides {
   return result
 }
 
-function sanitize(raw: unknown): OverridesFile {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return {}
-  }
-  const out: OverridesFile = {}
-  for (const [agentId, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof agentId === 'string' && agentId) {
-      out[agentId] = sanitizeEntry(value)
-    }
-  }
-  return out
-}
+const file = new SafeJsonFile<OverridesFile>({
+  filePath,
+  parse: (raw) => parseEveryValue(raw, sanitizeEntry),
+  fallback: () => ({}),
+  label: `[communications/agents] ${FILE_NAME}`
+})
 
 function load(): OverridesFile {
-  if (cached) {
-    return cached
-  }
-  const target = filePath()
-  if (!existsSync(target)) {
-    cached = {}
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(target, 'utf-8')))
-  } catch (error) {
-    console.warn(
-      '[communications/agents] failed to load agent overrides:',
-      error instanceof Error ? error.message : String(error)
-    )
-    cached = {}
-  }
-  return cached
+  return file.get()
 }
 
+// Throws like the old writer did, so the RPC caller sees that nothing was saved.
 function persist(data: OverridesFile): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  mkdirSync(path.dirname(target), { recursive: true })
-  writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf-8')
-  renameSync(tmp, target)
+  if (!file.set(data)) {
+    throw new Error('Agent overrides could not be saved')
+  }
 }
 
 export function getAgentLocalOverrides(agentId: string): AgentLocalOverrides {
@@ -99,7 +75,6 @@ export function setAgentLocalOverride<K extends keyof AgentLocalOverrides>(
   const data = load()
   const existing = data[agentId] ?? {}
   data[agentId] = { ...existing, [key]: value }
-  cached = data
   persist(data)
   return { ...data[agentId] }
 }

@@ -1,14 +1,13 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { app } from 'electron'
 import type { Destination, DestinationSaveInput, DestinationType } from '../../shared/destinations'
+import { hardenExistingSecureFile } from '../../shared/secure-file'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 
 const FILE_NAME = 'destinations.json'
 
 const DESTINATION_TYPES: DestinationType[] = ['telegram', 'imessage', 'system', 'asana', 'email']
-
-let cached: Destination[] | null = null
 
 function filePath(): string {
   return path.join(app.getPath('userData'), FILE_NAME)
@@ -63,39 +62,39 @@ function sanitizeDestination(raw: unknown): Destination | null {
   } as Destination
 }
 
-function load(): Destination[] {
-  if (cached) {
-    return cached
-  }
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(filePath(), 'utf-8'))
-    const list = Array.isArray(parsed) ? parsed : []
-    cached = list.map(sanitizeDestination).filter((entry): entry is Destination => entry !== null)
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[destinations] failed to load store:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = []
-  }
-  return cached
-}
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+const file = new SafeJsonFile<Destination[]>({
+  filePath,
+  parse: (raw) => (Array.isArray(raw) ? parseEveryEntry(raw, sanitizeDestination) : undefined),
+  fallback: () => [],
+  label: `[destinations] ${FILE_NAME}`,
+  // Why (BUILD-009C): the file holds Telegram bot tokens and SMTP passwords.
+  mode: 0o600
+})
 
-function persist(destinations: Destination[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
+// Why (BUILD-009C): builds before this one left the file at the umask
+// default (0644). Metadata-cached, so repeat calls cost a stat.
+function hardenExistingFile(target: string): void {
   try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(destinations, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
+    hardenExistingSecureFile(target)
   } catch (error) {
     console.warn(
-      '[destinations] failed to persist store:',
+      '[destinations] failed to restrict store permissions:',
       error instanceof Error ? error.message : String(error)
     )
   }
+}
+
+function load(): Destination[] {
+  hardenExistingFile(filePath())
+  return file.get()
+}
+
+// Why: throws so the renderer's error path shows a refused save instead of
+// an edit that silently disappears on restart.
+function persist(destinations: Destination[]): void {
+  file.save(destinations)
 }
 
 export function listDestinations(): Destination[] {
@@ -124,7 +123,6 @@ export function saveDestination(input: DestinationSaveInput): Destination {
   const next = existing
     ? destinations.map((entry) => (entry.id === sanitized.id ? sanitized : entry))
     : [...destinations, sanitized]
-  cached = next
   persist(next)
   return sanitized
 }
@@ -135,7 +133,6 @@ export function deleteDestination(id: string): boolean {
   if (next.length === destinations.length) {
     return false
   }
-  cached = next
   persist(next)
   return true
 }

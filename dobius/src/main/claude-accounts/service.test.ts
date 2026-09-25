@@ -1214,6 +1214,130 @@ describe('ClaudeAccountService credential capture', () => {
     }
   })
 
+  it('still removes the new managed auth and keeps the add error when rollback throws (BUILD-009C F3)', async () => {
+    vi.resetModules()
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: PassThrough
+      stderr: PassThrough
+      kill: ReturnType<typeof vi.fn>
+    }
+    child.stdout = new PassThrough()
+    child.stderr = new PassThrough()
+    child.kill = vi.fn()
+    const spawnMock = vi.fn(() => child)
+    vi.doMock('node:child_process', () => ({ spawn: spawnMock }))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    try {
+      const { ClaudeAccountService } = await import('./service')
+      const safeRemove = vi
+        .spyOn(
+          ClaudeAccountService.prototype as unknown as {
+            safeRemoveManagedAuth: () => Promise<void>
+          },
+          'safeRemoveManagedAuth'
+        )
+        .mockResolvedValue(undefined)
+      let settings = {
+        claudeManagedAccounts: [],
+        activeClaudeManagedAccountId: null,
+        activeClaudeManagedAccountIdsByRuntime: { host: null, wsl: {} }
+      }
+      const store = {
+        getSettings: vi.fn(() => settings),
+        updateSettings: vi.fn((updates: Partial<typeof settings>) => {
+          settings = { ...settings, ...updates }
+          return settings
+        })
+      }
+      const runtimeAuth = {
+        clearLastWrittenCredentialsJson: vi.fn(),
+        forceMaterializeCurrentSelectionForRollback: vi.fn(async () => {
+          throw new Error('snapshot unreadable (EACCES)')
+        })
+      }
+      const rateLimits = {
+        evictInactiveClaudeCache: vi.fn(),
+        refreshForClaudeAccountChange: vi.fn()
+      }
+      const service = new ClaudeAccountService(
+        store as never,
+        rateLimits as never,
+        runtimeAuth as never
+      )
+
+      const addPromise = service.addAccount()
+      await vi.waitFor(() => {
+        expect(spawnMock).toHaveBeenCalledTimes(1)
+      })
+      service.cancelPendingLogin()
+
+      await expect(addPromise).rejects.toThrow('Claude sign-in was cancelled.')
+      expect(runtimeAuth.forceMaterializeCurrentSelectionForRollback).toHaveBeenCalled()
+      expect(safeRemove).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledWith(
+        '[claude-accounts] Failed to restore runtime auth during rollback:',
+        'snapshot unreadable (EACCES)'
+      )
+    } finally {
+      warn.mockRestore()
+      vi.doUnmock('node:child_process')
+    }
+  })
+
+  it('keeps the switch error when the selection rollback throws (BUILD-009C F3)', async () => {
+    setPlatform('linux')
+    let settings = {
+      claudeManagedAccounts: [
+        {
+          id: 'account-2',
+          email: 'second@example.com',
+          managedAuthPath: '/tmp/dobius-claude-service-test/claude-accounts/account-2/auth',
+          managedAuthRuntime: 'host',
+          wslDistro: null,
+          wslLinuxAuthPath: null,
+          authMethod: 'subscription-oauth',
+          organizationUuid: null,
+          organizationName: null,
+          createdAt: 2,
+          updatedAt: 2,
+          lastAuthenticatedAt: 2
+        }
+      ],
+      activeClaudeManagedAccountId: null as string | null,
+      activeClaudeManagedAccountIdsByRuntime: { host: null as string | null, wsl: {} }
+    }
+    const store = {
+      getSettings: vi.fn(() => settings),
+      updateSettings: vi.fn((updates: Partial<typeof settings>) => {
+        settings = { ...settings, ...updates }
+        return settings
+      })
+    }
+    const runtimeAuth = {
+      syncForCurrentSelection: vi.fn(async () => {
+        throw new Error('runtime sync failed')
+      }),
+      forceMaterializeCurrentSelectionForRollback: vi.fn(async () => {
+        throw new Error('snapshot unreadable (EACCES)')
+      })
+    }
+    const rateLimits = { refreshForClaudeAccountChange: vi.fn() }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { ClaudeAccountService } = await import('./service')
+    const service = new ClaudeAccountService(
+      store as never,
+      rateLimits as never,
+      runtimeAuth as never
+    )
+
+    await expect(service.selectAccount('account-2')).rejects.toThrow('runtime sync failed')
+
+    expect(settings.activeClaudeManagedAccountId).toBeNull()
+    expect(runtimeAuth.forceMaterializeCurrentSelectionForRollback).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('honors cancel before Claude login command starts', async () => {
     setPlatform('linux')
     vi.resetModules()

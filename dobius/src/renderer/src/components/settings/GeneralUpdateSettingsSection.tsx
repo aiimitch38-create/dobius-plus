@@ -28,7 +28,8 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
   } else if (
     updateStatus.state === 'checking' ||
     updateStatus.state === 'idle' ||
-    updateStatus.state === 'not-available'
+    updateStatus.state === 'not-available' ||
+    updateStatus.state === 'disabled'
   ) {
     // Why: a new check cycle has started or completed cleanly. Clear the
     // cached version so a subsequent check failure cannot be mis-classified
@@ -187,6 +188,11 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
             translate(
               'auto.components.settings.GeneralUpdateSettingsSection.f40d88390d',
               'You’re on the latest version.'
+            )}
+          {updateStatus.state === 'disabled' &&
+            translate(
+              'auto.components.settings.GeneralUpdateSettingsSection.9b7a940bd3',
+              'Updates are managed by the install script.'
             )}
           {updateStatus.state === 'downloading' &&
             translate(

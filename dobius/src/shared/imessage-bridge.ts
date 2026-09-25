@@ -27,6 +27,8 @@ export type ImessageBridgeStatus = {
   chatDbReadable: ImessageBridgeChatDbProbe
   /** Outbound iMessages sent within the rate-limit window (last 60s). */
   outboundLastMin: number
+  /** Set when imessage-bridge.json could not be read; Settings edits are refused. */
+  unreadableDetail: string | null
 }
 
 export type ImessageBridgeSendResult = { ok: true } | { ok: false; error: string }

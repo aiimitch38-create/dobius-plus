@@ -61,7 +61,11 @@ describe('Voice Conductor agent spawning', () => {
     expect(startAgentRun).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: 'agent-1', cwd: projectPath, prompt: 'fix it' })
     )
-    expect(startAgentRun.mock.calls[0][0].options).toMatchObject({ source: 'channel', resume: false })
+    expect(startAgentRun.mock.calls[0][0].options).toMatchObject({
+      source: 'channel',
+      resume: false,
+      spawnedBy: 'voice-conductor'
+    })
     expect(notify).toHaveBeenCalledWith('Bug Hunter finished: Fixed the issue')
   })
 

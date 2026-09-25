@@ -63,16 +63,43 @@ async function canonicalizeRemoteWorkspacePath(
   }
 }
 
+function remoteErrorCode(error: unknown): string | undefined {
+  return error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined
+}
+
+// Why: the relay forwards the remote errno as the JSON-RPC error code
+// (fs.stat -> 'ENOENT'). Only a missing file may be treated as empty; any
+// other failure (EACCES, dropped connection, size cap) must not lead to a
+// write that replaces the user's remote config.
+function isRemoteFileMissing(error: unknown): boolean {
+  return (
+    remoteErrorCode(error) === 'ENOENT' ||
+    (error instanceof Error && error.message.startsWith('ENOENT'))
+  )
+}
+
+// Returns '' only when the file does not exist; throws on every other read
+// problem so the caller never overwrites a file it could not read.
 async function readRemoteTextFile(
   fsProvider: IFilesystemProvider,
   filePath: string
 ): Promise<string> {
+  let result: Awaited<ReturnType<IFilesystemProvider['readFile']>>
   try {
-    const result = await fsProvider.readFile(filePath)
-    return result.isBinary ? '' : result.content
-  } catch {
-    return ''
+    result = await fsProvider.readFile(filePath)
+  } catch (error) {
+    if (isRemoteFileMissing(error)) {
+      return ''
+    }
+    const detail = remoteErrorCode(error) ?? (error instanceof Error ? error.message : 'unknown')
+    console.warn(`[agent-trust] not updating ${filePath}: remote read failed (${detail})`)
+    throw new Error(`Could not read remote ${filePath} (${detail}); left it unchanged`)
   }
+  if (result.isBinary) {
+    console.warn(`[agent-trust] not updating ${filePath}: remote file is not text`)
+    throw new Error(`Remote ${filePath} is not a text file; left it unchanged`)
+  }
+  return result.content
 }
 
 async function markRemoteCodexProjectTrusted(
@@ -131,9 +158,11 @@ async function markRemoteCopilotFolderTrusted(
   if (raw.trim()) {
     try {
       const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        config = parsed as Record<string, unknown>
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        // Why: replacing a non-object config with {} would drop its contents.
+        return
       }
+      config = parsed as Record<string, unknown>
     } catch {
       return
     }

@@ -11,6 +11,7 @@ import {
   credentialFileHasContent,
   readStoredCredentialToken
 } from '../integration-credential-file'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import type {
   LinearConnectionStatus,
   LinearViewer,
@@ -69,8 +70,6 @@ let cachedTokens = new Map<string, string>()
 const credentialErrors = new Map<string, string>()
 let cachedLegacyViewer: LinearViewer | null = null
 let legacyViewerLoadedFromDisk = false
-let cachedWorkspaceFile: LinearWorkspaceFile | null = null
-let workspaceFileLoadedFromDisk = false
 
 function getDobiusDir(): string {
   return join(homedir(), '.dobius')
@@ -186,49 +185,54 @@ function emptyWorkspaceFile(): LinearWorkspaceFile {
   }
 }
 
-function readWorkspaceFileFromDisk(): LinearWorkspaceFile {
-  const path = getWorkspaceFilePath()
-  if (!existsSync(path)) {
-    return emptyWorkspaceFile()
+// Why: a malformed workspace makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2). Workspaces without a stored token
+// are still filtered out, as before.
+function parseWorkspaceFile(raw: unknown): LinearWorkspaceFile | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return undefined
   }
-  try {
-    const raw = readFileSync(path, { encoding: 'utf-8' })
-    const parsed = JSON.parse(raw) as Partial<LinearWorkspaceFile>
-    const workspaces = Array.isArray(parsed.workspaces)
-      ? parsed.workspaces
-          .map((workspace) => normalizeWorkspace(workspace))
-          .filter((workspace): workspace is LinearWorkspace => workspace !== null)
-          .filter((workspace) => hasStoredToken(workspace.id))
-      : []
-    const activeWorkspaceId =
-      typeof parsed.activeWorkspaceId === 'string' &&
-      workspaces.some((workspace) => workspace.id === parsed.activeWorkspaceId)
-        ? parsed.activeWorkspaceId
-        : (workspaces[0]?.id ?? null)
-    const selectedWorkspaceId =
-      parsed.selectedWorkspaceId === 'all' ||
-      (typeof parsed.selectedWorkspaceId === 'string' &&
-        workspaces.some((workspace) => workspace.id === parsed.selectedWorkspaceId))
-        ? parsed.selectedWorkspaceId
-        : activeWorkspaceId
+  const parsed = raw as Partial<LinearWorkspaceFile>
+  const storedWorkspaces =
+    parsed.workspaces === undefined
+      ? []
+      : Array.isArray(parsed.workspaces)
+        ? parseEveryEntry(parsed.workspaces, normalizeWorkspace)
+        : undefined
+  if (!storedWorkspaces) {
+    return undefined
+  }
+  const workspaces = storedWorkspaces.filter((workspace) => hasStoredToken(workspace.id))
+  const activeWorkspaceId =
+    typeof parsed.activeWorkspaceId === 'string' &&
+    workspaces.some((workspace) => workspace.id === parsed.activeWorkspaceId)
+      ? parsed.activeWorkspaceId
+      : (workspaces[0]?.id ?? null)
+  const selectedWorkspaceId =
+    parsed.selectedWorkspaceId === 'all' ||
+    (typeof parsed.selectedWorkspaceId === 'string' &&
+      workspaces.some((workspace) => workspace.id === parsed.selectedWorkspaceId))
+      ? parsed.selectedWorkspaceId
+      : activeWorkspaceId
 
-    return {
-      version: 1,
-      activeWorkspaceId,
-      selectedWorkspaceId,
-      workspaces
-    }
-  } catch {
-    return emptyWorkspaceFile()
+  return {
+    version: 1,
+    activeWorkspaceId,
+    selectedWorkspaceId,
+    workspaces
   }
 }
 
+const workspaceFile = new SafeJsonFile<LinearWorkspaceFile>({
+  filePath: getWorkspaceFilePath,
+  parse: parseWorkspaceFile,
+  fallback: emptyWorkspaceFile,
+  label: '[linear] linear-workspaces.json',
+  mode: 0o600
+})
+
 function getWorkspaceFile(): LinearWorkspaceFile {
-  if (!workspaceFileLoadedFromDisk || !cachedWorkspaceFile) {
-    cachedWorkspaceFile = readWorkspaceFileFromDisk()
-    workspaceFileLoadedFromDisk = true
-  }
-  return cachedWorkspaceFile
+  return workspaceFile.get()
 }
 
 function writeWorkspaceFile(file: LinearWorkspaceFile): void {
@@ -252,16 +256,14 @@ function writeWorkspaceFile(file: LinearWorkspaceFile): void {
         ? file.selectedWorkspaceId
         : activeWorkspaceId
 
-  cachedWorkspaceFile = {
+  // Why no throw on a refused save: clearToken runs inside many auth-error
+  // catch paths, and a throw there would replace the real error. SafeJsonFile
+  // logs the refusal and keeps the change for this session.
+  workspaceFile.set({
     version: 1,
     activeWorkspaceId,
     selectedWorkspaceId,
     workspaces: persistedWorkspaces
-  }
-  workspaceFileLoadedFromDisk = true
-  writeFileSync(getWorkspaceFilePath(), JSON.stringify(cachedWorkspaceFile, null, 2), {
-    encoding: 'utf-8',
-    mode: 0o600
   })
 }
 
@@ -418,8 +420,6 @@ export function clearToken(workspaceId?: string): void {
     credentialErrors.clear()
     cachedLegacyViewer = null
     legacyViewerLoadedFromDisk = false
-    cachedWorkspaceFile = emptyWorkspaceFile()
-    workspaceFileLoadedFromDisk = true
     clearLegacyViewerOnDisk()
     writeWorkspaceFile(emptyWorkspaceFile())
     return

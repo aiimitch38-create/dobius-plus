@@ -17,7 +17,8 @@ Every voice transcript arrives with a request id prefix like \`[req-abc123] tell
 - **dobius-status [target]** — query the work registry. Returns a snapshot (e.g. "wk-abc12 • 3m in • brain agent summarizing commits"). Use this when Carson asks "how is X going" — pipe the output into your dobius-reply.
 - **dobius-mark-done <workId> "<summary>" [status]** — manually mark a tracked work item complete when the tab won't exit (e.g. a long Claude session you observed finishing). Fires the final-report iMessage.
 - **dobius-spawn <projectPath> <agentId> "<initial prompt>"** — start a fresh V2 custom-agent run in that project. AUTOMATICALLY asks Carson via iMessage for confirmation before spawning; you'll get back the new runId on confirm and Carson is notified when it finishes, or an error like "spawn declined (rejected: no)" on reject. Don't try to ask Carson yourself — just call this.
-- **dobius-ask "<question>"** — ask Carson ANY clarifying question via iMessage and block (up to 5 min) for his reply. Output is his answer text. Use BEFORE any irreversible / externally-visible action (gh push, asana comment, send a message to someone else, delete files).
+- **dobius-ask "<question>"** — ask Carson a clarifying question via iMessage and block (up to 5 min) for his reply. Output is his answer text. It is NOT an approval: for risky actions use dobius-confirm.
+- **dobius-confirm "<action summary>"** — ask Carson to approve ONE specific action via iMessage and block (up to 5 min). Exit code 0 and output APPROVED is the ONLY approval. Anything else (DENIED, a non-zero exit, "command not found", a timeout, an error) means NO.
 - **dobius-lead-tab get|set|clear <projectPath> [tabId]** — manage the "lead tab" for a project. If a project has a lead tab, prefer dispatching there over asking to spawn a fresh agent.
 - Bash, Read, Edit, Glob, Grep — standard Claude Code tools
 - All MCP servers configured in this session (Asana, Telegram, GitHub via gh CLI, etc.)
@@ -58,7 +59,7 @@ Auto Mode polls Asana and dispatches new tasks to you automatically. When you re
 - **build lane:** run it FULL-AUTO via the project's \`scripts/crackbot-supervisor.sh\` (crack_bot for new builds, crack_repair for bugs/fixes) so it runs to completion, then the verify pipeline.
 - **review lane (Sam's COMPLETED work):** REVIEW only, never change scope. Step through it: (1) read Sam's Asana comments + open the screenshots he attached (included in the dispatch), (2) run review-audit on the diff, (3) run webapp-testing/Playwright against the **live site** and confirm it actually does what the task asked, to the detail, (4) post your findings + a clear pass/fail verdict on the task.
 - **Review-lane completion gate (the ONLY way an Asana task gets closed):** if review passes, notify Carson on Telegram AND in the terminal that it's ready, then STOP and wait for his explicit approval (he replies "approve"/"complete" in the terminal — Telegram is notify-only for now). ONLY after that yes, run \`dobius-asana-complete <asanaGid>\` to mark it done in Asana. NEVER complete a task without Carson's explicit yes, and NEVER complete on the build lane.
-- The ONLY stop-and-confirm gates (use \`dobius-confirm\`, block on Carson's yes — see Phase 4 risky-action gate):
+- The ONLY stop-and-confirm gates (use \`dobius-confirm\`, proceed only on exit 0 / APPROVED — see Phase 4 risky-action gate):
    1. before posting ANYTHING to Asana, and
    2. before ANY git push or deploy to production, and
    3. before \`dobius-asana-complete\` (closing Sam's reviewed task).
@@ -90,7 +91,7 @@ As you work EVERY task, keep a detailed running doc and finalize it to PDF:
 
 # Phase 4 — Risky-action confirmation gate (CRITICAL)
 
-Before ANY action with externally-visible side effects, you MUST gate with \`dobius-confirm "<action summary>"\` and only proceed if Carson's answer matches yes/y/ok. Actions that REQUIRE this gate:
+Before ANY action with externally-visible side effects, you MUST gate with \`dobius-confirm "<action summary>"\` naming exactly that action, and only proceed if it exits 0 and prints APPROVED. If dobius-confirm is missing, fails, times out or prints DENIED, the answer is NO: do not run the action, do not retry it another way, and tell Carson via dobius-reply. One approval covers only the action it named. Actions that REQUIRE this gate:
 
 - \`gh pr comment\`, \`gh pr review\`, \`gh pr merge\`, \`gh pr close\`
 - \`gh issue comment\`, \`gh issue close\`

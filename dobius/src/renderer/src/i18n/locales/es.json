@@ -1775,7 +1775,8 @@
         "a726967bd3": "Descartar",
         "d5253b54af": "error",
         "7ffc08506e": "check",
-        "522df222b9": "spinner"
+        "522df222b9": "spinner",
+        "f528af4816": "Las actualizaciones las gestiona el script de instalación."
       },
       "WorktreeJumpPalette": {
         "ac037cfac2": "Mover",
@@ -5312,7 +5313,8 @@
           "31fd7150cf": "Buscando actualizaciones...",
           "3394d1f663": "de cheques",
           "d69a09b672": "Las actualizaciones se verifican automáticamente al iniciarse.",
-          "7173352632": "idle"
+          "7173352632": "idle",
+          "9b7a940bd3": "Las actualizaciones las gestiona el script de instalación."
         },
         "GeneralWorkspaceSettingsSection": {
           "3d538a98f7": "Elige las apps disponibles en el menú Abrir en de un espacio de trabajo.",
@@ -8850,7 +8852,8 @@
           "testButton": "Test",
           "statusLine": "Status: {{state}} · last message row: {{rowid}} · sent in last minute: {{outbound}}",
           "statusRunning": "running",
-          "statusStopped": "stopped"
+          "statusStopped": "stopped",
+          "configUnreadable": "imessage-bridge.json can't be read ({{detail}}), so changes are not saved; repair or remove it"
         },
         "imessage": {
           "bridge": {
@@ -12207,7 +12210,12 @@
           "a21f6c33ad": "Origen de automatización actualizado.",
           "53f06f0ad5": "Reintentar origen",
           "pendingAutomationMissing": "La automatización ya no está disponible.",
-          "pendingAutomationRunMissing": "El historial de ejecuciones ya no está disponible."
+          "pendingAutomationRunMissing": "El historial de ejecuciones ya no está disponible.",
+          "pauseFailed": "Failed to pause automation.",
+          "resumeFailed": "Failed to resume automation.",
+          "deleteFailed": "Failed to delete automation.",
+          "runNowFailed": "Failed to run automation.",
+          "runNowNotStarted": "Automation run did not start."
         },
         "CreateFromPicker": {
           "f061f49e3f": "Buscar ramas del repositorio...",
@@ -12569,7 +12577,9 @@
           "notConnected": "Connect Asana in Settings → Automation to see your build and review lanes.",
           "title": "Tasks",
           "sync": "Sync",
-          "empty": "Nothing here."
+          "empty": "Nothing here.",
+          "requeue": "Re-queue",
+          "confirmRequeue": "Re-queue this task for Asana Auto Mode? It will be triaged again and may start a new build."
         },
         "PromptsPanel": {
           "title": "Prompts",
