@@ -2,6 +2,7 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import { app } from 'electron';
+import { v1WritesBlocked } from './v2-writer-guard.js';
 
 const CONFIG_DIR = path.join(app.getPath('userData'));
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
@@ -120,6 +121,9 @@ function atomicWrite(filePath, data) {
     // async write is stale by definition — skip it so it can't land after
     // the sync flush and clobber fresher state.
     if (flushed) return;
+    if (v1WritesBlocked()) {
+      return;
+    }
     try {
       await fsp.writeFile(tmp, data);
       if (flushed) { try { await fsp.unlink(tmp); } catch { /* ignore */ } return; }
@@ -139,6 +143,9 @@ function atomicWrite(filePath, data) {
  * write's rename.
  */
 function atomicWriteSync(filePath, data) {
+  if (v1WritesBlocked()) {
+    throw new Error('Dobius+ V2 owns this data folder; legacy V1 writes are disabled');
+  }
   const tmp = `${filePath}.${Date.now()}-${Math.floor(Math.random() * 1e6)}.tmp`;
   try {
     fs.writeFileSync(tmp, data);
@@ -167,6 +174,9 @@ export async function saveTerminalScrollback(projectPath, tabId, state) {
   if (!projectPath || typeof projectPath !== 'string') return;
   if (!tabId || typeof tabId !== 'string') return;
   if (UNSAFE_KEYS.has(projectPath) || UNSAFE_KEYS.has(tabId)) return;
+  if (v1WritesBlocked()) {
+    return;
+  }
   const filePath = getScrollbackPath(projectPath, tabId);
   // Unique tmp suffix per call: concurrent saves for the same (project, tab)
   // can occur when a manual checkpoint fires alongside the 30s autosave.
@@ -203,6 +213,10 @@ export async function loadTerminalScrollback(projectPath, tabId) {
  */
 function migrateScrollbackOutOfConfig(cfg) {
   if (!cfg || typeof cfg !== 'object' || !cfg.projects) return false;
+  // Why: the migration writes per-tab files, then drops the inline copy.
+  if (v1WritesBlocked()) {
+    return false;
+  }
   let migrated = 0;
   let configChanged = false;
   for (const [projectPath, proj] of Object.entries(cfg.projects)) {

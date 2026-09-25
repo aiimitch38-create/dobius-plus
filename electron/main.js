@@ -1,4 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, dialog, Notification, shell, webContents } from 'electron';
+// Why first: it must redirect userData before any module below resolves it.
+import { V1_SHARED_DATA_DIR, V2_WRITER_MARKER_FILE, v1RefusedAtStartup } from './v2-writer-guard.js';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -1746,6 +1748,17 @@ function setupCrashLogging() {
 }
 
 app.whenReady().then(() => {
+  if (v1RefusedAtStartup) {
+    // Why: Dobius+ V2 owns this data folder (bug #52). Exit before any handler,
+    // window or writer starts; app.exit skips the before-quit config flush.
+    dialog.showErrorBox(
+      'Legacy Dobius+ cannot start',
+      `The current Dobius+ app owns ${V1_SHARED_DATA_DIR}. This legacy version would overwrite its data, so it will close. ` +
+        `To run the legacy app anyway, quit Dobius+ and remove ${V2_WRITER_MARKER_FILE} from that folder.`
+    );
+    app.exit(0);
+    return;
+  }
   setupCrashLogging();
   // Make sure node-pty can actually launch shells before any tab is created.
   ensureSpawnHelperExecutable();

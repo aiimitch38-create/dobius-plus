@@ -89,6 +89,7 @@ import { maybeRedirectAppImageCliLaunch } from './startup/appimage-cli-redirect'
 import { maybeRedirectPackagedCliEntryLaunch } from './startup/packaged-cli-entry-redirect'
 import { startFirstWindowStartupServices } from './startup/first-window-startup-services'
 import { migrateLegacyDobiusConfig } from './migrate-legacy-dobius-config'
+import { claimV2WriterMarker } from './storage/v2-writer-marker'
 import { getDevInstanceIdentity } from './startup/dev-instance-identity'
 import { hydrateShellPath, mergePathSegments } from './startup/hydrate-shell-path'
 import {
@@ -585,6 +586,9 @@ if (hasSingleInstanceLock) {
   // dobius-dev in dev mode) but before app.setName('Dobius') inside whenReady
   // (which would change the resolved path on case-sensitive filesystems).
   initDataPath()
+  // Why: before anything else writes here, so a legacy V1 launch refuses this
+  // dir (bug #52). Inside the lock branch: a transient second process never writes.
+  claimV2WriterMarker(app.getVersion())
   // Why: same timing constraint as initDataPath — capture the userData path
   // before app.setName changes it. See persistence.ts:20-28.
   initStatsPath()
