@@ -520,6 +520,27 @@ describe('dispatch_build authorization and capacity', () => {
     expect(dispatch).toHaveBeenCalledTimes(3)
   })
 
+  it('records the build before the dispatcher runs, so a crash mid-dispatch cannot re-dispatch (BUILD-024)', async () => {
+    const ledger = await import('../asana-dispatch-ledger')
+    const run = buildRun('run-premark')
+    const gid = run.asanaTaskGid as string
+    let seenDuringDispatch: boolean | null = null
+    const dispatch = vi
+      .fn<(req: unknown) => Promise<{ worktreeId: string; ok: boolean; error?: string }>>()
+      .mockImplementationOnce(async () => {
+        seenDuringDispatch = ledger.mayDispatchBuild(gid)
+        return { worktreeId: '', ok: false, error: 'branch exists' }
+      })
+    await wireRepos(dispatch)
+    await createDobiusToolHandlers(run, store).dispatchBuild({ repo: 'repo-1', brief: 'Build' })
+    // While the worktree was being created the task was already marked.
+    expect(seenDuringDispatch).toBe(false)
+    // A definite failure clears the mark again, so the task may retry.
+    expect(ledger.mayDispatchBuild(gid)).toBe(true)
+    // The mark created this task's record, so the undo removes it (no stray 'briefed' block).
+    expect(ledger.listDispatchRecords().some((record) => record.gid === gid)).toBe(false)
+  })
+
   it('does not consume capacity when admission blocks', async () => {
     const dispatch = vi.fn(async () => ({ worktreeId: 'wt-1', ok: true }))
     await wireRepos(dispatch)

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, ExternalLink, Check } from 'lucide-react'
+import { toast } from 'sonner'
 import type { AsanaLane, AsanaTask, AsanaTasksSnapshot } from '../../../../shared/asana'
 import { EMPTY_ASANA_SNAPSHOT } from '../../../../shared/asana'
 import { translate } from '@/i18n/i18n'
@@ -22,13 +23,17 @@ const LANES: { lane: AsanaLane; labelKey: string; labelDefault: string }[] = [
 function TaskRow({
   task,
   done,
+  blocked,
   onToggleDone,
-  onComplete
+  onComplete,
+  onRequeue
 }: {
   task: AsanaTask
   done: boolean
+  blocked: boolean
   onToggleDone: (task: AsanaTask, done: boolean) => void
   onComplete: (task: AsanaTask) => void
+  onRequeue: (task: AsanaTask) => void
 }): React.JSX.Element {
   return (
     <div className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60">
@@ -76,6 +81,15 @@ function TaskRow({
               )}
             </button>
           )}
+          {blocked && (
+            <button
+              type="button"
+              onClick={() => onRequeue(task)}
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              {translate('auto.components.right-sidebar.TasksPanel.requeue', 'Re-queue')}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -86,6 +100,7 @@ export default function TasksPanel(): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<AsanaTasksSnapshot>(EMPTY_ASANA_SNAPSHOT)
   const [hasToken, setHasToken] = useState<boolean | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [blockedGids, setBlockedGids] = useState<string[]>([])
 
   useEffect(() => {
     let disposed = false
@@ -104,6 +119,10 @@ export default function TasksPanel(): React.JSX.Element {
         return
       }
       setSnapshot(await window.api.asana.listTasks())
+      const blocked = await window.api.asana.listBlockedTasks()
+      if (!disposed) {
+        setBlockedGids(blocked)
+      }
       setSyncing(true)
       try {
         setSnapshot(await window.api.asana.refresh())
@@ -120,11 +139,13 @@ export default function TasksPanel(): React.JSX.Element {
   }, [])
 
   const localDone = useMemo(() => new Set(snapshot.localDone), [snapshot.localDone])
+  const blocked = useMemo(() => new Set(blockedGids), [blockedGids])
 
   const onSync = useCallback(async () => {
     setSyncing(true)
     try {
       setSnapshot(await window.api.asana.refresh())
+      setBlockedGids(await window.api.asana.listBlockedTasks())
     } finally {
       setSyncing(false)
     }
@@ -147,6 +168,24 @@ export default function TasksPanel(): React.JSX.Element {
       return
     }
     void window.api.asana.completeTask(task.gid).then(setSnapshot)
+  }, [])
+
+  const onRequeue = useCallback((task: AsanaTask) => {
+    // Auto Mode skips this task for good (dead-lettered or already built);
+    // re-queueing can start a new paid build, so it is always an explicit confirm.
+    const prompt = translate(
+      'auto.components.right-sidebar.TasksPanel.confirmRequeue',
+      'Re-queue this task for Asana Auto Mode? It will be triaged again and may start a new build.'
+    )
+    if (!window.confirm(`${prompt}\n\n${task.name}`)) {
+      return
+    }
+    void window.api.asana.requeueTask(task.gid).then((result) => {
+      setBlockedGids(result.blockedGids)
+      if (!result.ok && result.error) {
+        toast.error(result.error)
+      }
+    })
   }, [])
 
   if (hasToken === false) {
@@ -198,8 +237,10 @@ export default function TasksPanel(): React.JSX.Element {
                     key={task.gid}
                     task={task}
                     done={localDone.has(task.gid) || task.completed}
+                    blocked={blocked.has(task.gid)}
                     onToggleDone={onToggleDone}
                     onComplete={onComplete}
+                    onRequeue={onRequeue}
                   />
                 ))
               )}
