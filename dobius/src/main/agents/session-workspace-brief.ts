@@ -1,4 +1,11 @@
-import { appendFileSync, lstatSync, mkdirSync, readFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync
+} from 'node:fs'
 import path from 'node:path'
 import { writeFileAtomic } from '../storage/safe-json-file'
 import {
@@ -10,7 +17,8 @@ import {
 import {
   collectSessionWorkspaceFacts,
   resolveWorkspaceRoot,
-  runWorkspaceGit
+  runWorkspaceGit,
+  type WorkspaceRootInfo
 } from './session-workspace-facts'
 
 // Generates CLAUDE.local.md (Claude Code's per-checkout, uncommitted memory
@@ -21,6 +29,8 @@ export type WorkspaceBriefSkipReason =
   | 'not-a-git-worktree'
   | 'user-authored'
   | 'not-ignorable'
+  | 'nested-worktrees'
+  | 'recently-refreshed'
   | 'error'
 
 export type WorkspaceBriefResult =
@@ -55,7 +65,18 @@ const defaultDeps: SessionWorkspaceBriefDeps = {
   now: () => new Date()
 }
 
+// Why: agent runs in one worktree can start back to back; a brief this fresh
+// is still accurate enough, so scheduled refreshes skip the git work.
+export const WORKSPACE_BRIEF_REFRESH_TTL_MS = 60_000
+
+const EXCLUDE_RULE = `/${WORKSPACE_BRIEF_FILENAME}`
+
+// All keyed by worktree root, so different cwds inside one worktree share them.
 const inFlight = new Map<string, Promise<WorkspaceBriefResult>>()
+const lastWrittenAt = new Map<string, number>()
+// Why: a root whose ignore rules defeat ours (a `!CLAUDE.local.md` re-include,
+// or a tracked file) would otherwise get the exclude rule appended on every run.
+const notIgnorableRoots = new Set<string>()
 const loggedUserAuthored = new Set<string>()
 
 type ExistingBrief = 'absent' | 'generated' | 'user-authored'
@@ -81,7 +102,8 @@ function readExistingBrief(filePath: string): ExistingBrief {
 
 // Why: the file must never be committed. Repos that do not already ignore it
 // get a local-only rule in .git/info/exclude (shared by all worktrees, never
-// pushed). If git cannot confirm the file is ignored, nothing is written.
+// pushed), added at most once. If git cannot confirm the file is ignored,
+// nothing is written.
 async function ensureBriefIgnored(worktreeRoot: string): Promise<boolean> {
   const check = await runWorkspaceGit(worktreeRoot, [
     'check-ignore',
@@ -105,10 +127,14 @@ async function ensureBriefIgnored(worktreeRoot: string): Promise<boolean> {
     return false
   }
   const target = excludePath.stdout.trim()
+  const existing = existsSync(target) ? readFileSync(target, 'utf-8') : ''
+  if (existing.split(/\r?\n/).some((line) => line.trim() === EXCLUDE_RULE)) {
+    return false
+  }
   mkdirSync(path.dirname(target), { recursive: true })
   appendFileSync(
     target,
-    `\n# Dobius+ generated session workspace brief (local only)\n/${WORKSPACE_BRIEF_FILENAME}\n`
+    `\n# Dobius+ generated session workspace brief (local only)\n${EXCLUDE_RULE}\n`
   )
   const recheck = await runWorkspaceGit(worktreeRoot, [
     'check-ignore',
@@ -119,15 +145,39 @@ async function ensureBriefIgnored(worktreeRoot: string): Promise<boolean> {
   return recheck.ok
 }
 
+function canonicalPath(target: string): string {
+  try {
+    return realpathSync(target)
+  } catch {
+    // A worktree registered in git whose folder is gone still counts by its recorded path.
+    return path.resolve(target)
+  }
+}
+
+// Why: Claude Code loads every CLAUDE.local.md from the cwd up to the root, so a
+// brief at a main checkout would leak into sessions of worktrees nested below it
+// (Dobius keeps them under .claude/worktrees/) with the wrong branch and path.
+async function hasNestedLinkedWorktrees(root: WorkspaceRootInfo): Promise<boolean> {
+  const list = await runWorkspaceGit(root.worktreeRoot, ['worktree', 'list', '--porcelain'])
+  if (!list.ok) {
+    return true
+  }
+  const base = canonicalPath(root.worktreeRoot)
+  return list.stdout
+    .split('\n')
+    .filter((line) => line.startsWith('worktree '))
+    .map((line) => canonicalPath(line.slice('worktree '.length)))
+    .some((worktreePath) => worktreePath !== base && worktreePath.startsWith(base + path.sep))
+}
+
 async function refreshBrief(
-  cwd: string,
+  root: WorkspaceRootInfo,
   deps: SessionWorkspaceBriefDeps
 ): Promise<WorkspaceBriefResult> {
-  const root = await resolveWorkspaceRoot(cwd)
-  if (!root) {
-    return { status: 'skipped', reason: 'not-a-git-worktree' }
-  }
   const filePath = path.join(root.worktreeRoot, WORKSPACE_BRIEF_FILENAME)
+  if (notIgnorableRoots.has(root.worktreeRoot)) {
+    return { status: 'skipped', reason: 'not-ignorable', filePath }
+  }
   if (readExistingBrief(filePath) === 'user-authored') {
     if (!loggedUserAuthored.has(filePath)) {
       loggedUserAuthored.add(filePath)
@@ -135,7 +185,11 @@ async function refreshBrief(
     }
     return { status: 'skipped', reason: 'user-authored', filePath }
   }
+  if (root.commonDir === root.gitDir && (await hasNestedLinkedWorktrees(root))) {
+    return { status: 'skipped', reason: 'nested-worktrees', filePath }
+  }
   if (!(await ensureBriefIgnored(root.worktreeRoot))) {
+    notIgnorableRoots.add(root.worktreeRoot)
     console.warn(`[workspace-brief] skipped ${filePath}: git could not confirm it is ignored`)
     return { status: 'skipped', reason: 'not-ignorable', filePath }
   }
@@ -148,31 +202,63 @@ async function refreshBrief(
   if (readExistingBrief(filePath) === 'user-authored') {
     return { status: 'skipped', reason: 'user-authored', filePath }
   }
-  writeFileAtomic(filePath, renderSessionWorkspaceBrief(facts, deps.now(), contextPack))
+  const now = deps.now()
+  writeFileAtomic(filePath, renderSessionWorkspaceBrief(facts, now, contextPack))
+  lastWrittenAt.set(root.worktreeRoot, now.getTime())
   return { status: 'written', filePath }
 }
 
-// Never throws and never blocks longer than a few bounded git calls: a missing
-// brief must not stop a terminal or agent run from starting.
-export async function refreshSessionWorkspaceBrief(
+async function refreshForCwd(
+  cwd: string,
+  deps: SessionWorkspaceBriefDeps,
+  honorTtl: boolean
+): Promise<WorkspaceBriefResult> {
+  try {
+    const root = await resolveWorkspaceRoot(path.resolve(cwd))
+    if (!root) {
+      return { status: 'skipped', reason: 'not-a-git-worktree' }
+    }
+    const key = root.worktreeRoot
+    const writtenAt = lastWrittenAt.get(key)
+    if (
+      honorTtl &&
+      writtenAt !== undefined &&
+      deps.now().getTime() - writtenAt < WORKSPACE_BRIEF_REFRESH_TTL_MS
+    ) {
+      return { status: 'skipped', reason: 'recently-refreshed' }
+    }
+    const pending = inFlight.get(key)
+    if (pending) {
+      return await pending
+    }
+    const run = refreshBrief(root, deps).finally(() => {
+      inFlight.delete(key)
+    })
+    inFlight.set(key, run)
+    return await run
+  } catch (error) {
+    console.warn(
+      `[workspace-brief] could not refresh the brief for ${cwd}: ${error instanceof Error ? error.message : String(error)}`
+    )
+    return { status: 'skipped', reason: 'error' }
+  }
+}
+
+// Awaited on worktree creation so the first session there already has the
+// brief. Never throws; only a few bounded git calls.
+export function refreshSessionWorkspaceBrief(
   cwd: string,
   deps: SessionWorkspaceBriefDeps = defaultDeps
 ): Promise<WorkspaceBriefResult> {
-  const key = path.resolve(cwd)
-  const pending = inFlight.get(key)
-  if (pending) {
-    return pending
-  }
-  const run = refreshBrief(key, deps)
-    .catch((error: unknown): WorkspaceBriefResult => {
-      console.warn(
-        `[workspace-brief] could not refresh the brief for ${key}: ${error instanceof Error ? error.message : String(error)}`
-      )
-      return { status: 'skipped', reason: 'error' }
-    })
-    .finally(() => {
-      inFlight.delete(key)
-    })
-  inFlight.set(key, run)
-  return run
+  return refreshForCwd(cwd, deps, false)
+}
+
+// Fire-and-forget for agent runs: SDK runs do not load CLAUDE.local.md
+// themselves, so they must not wait on git; this only keeps the file current
+// for later terminal sessions. Returns the promise for tests; never rejects.
+export function scheduleSessionWorkspaceBriefRefresh(
+  cwd: string,
+  deps: SessionWorkspaceBriefDeps = defaultDeps
+): Promise<WorkspaceBriefResult> {
+  return refreshForCwd(cwd, deps, true)
 }

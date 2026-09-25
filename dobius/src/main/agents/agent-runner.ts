@@ -35,7 +35,7 @@ import {
 } from './agent-run-end-callbacks'
 import { appendRunProgress } from './agent-run-progress-log'
 import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
-import { refreshSessionWorkspaceBrief } from './session-workspace-brief'
+import { scheduleSessionWorkspaceBriefRefresh } from './session-workspace-brief'
 import {
   buildDobiusRunMcpServer,
   buildProfileAllowedTools,
@@ -375,11 +375,11 @@ export async function startAgentRun(args: {
     const preparation = await args.prepareClaudeLaunch(
       agent.accountId ? { accountId: agent.accountId } : undefined
     )
-    const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
-    await refreshSessionWorkspaceBrief(resolvedCwd)
-    // Why: the crew can be paused while auth preparation or the brief is awaited.
+    // Why: the crew can be paused while auth preparation is awaited.
     assertExecutionAdmitted(origin)
     const abortController = new AbortController()
+    const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
+    void scheduleSessionWorkspaceBriefRefresh(resolvedCwd)
     const branch = currentGitBranch(resolvedCwd)
     const systemPrompt = buildSystemPrompt(agent)
     const keyedSession = getAgentSessionForKey(agent, sessionKey)

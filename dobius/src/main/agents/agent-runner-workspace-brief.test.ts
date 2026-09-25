@@ -9,7 +9,9 @@ const mocks = vi.hoisted(() => ({
   refreshBrief: vi.fn()
 }))
 
-vi.mock('./session-workspace-brief', () => ({ refreshSessionWorkspaceBrief: mocks.refreshBrief }))
+vi.mock('./session-workspace-brief', () => ({
+  scheduleSessionWorkspaceBriefRefresh: mocks.refreshBrief
+}))
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: mocks.query }))
 vi.mock('./agents-config-store', () => ({
@@ -95,35 +97,26 @@ beforeEach(() => {
 })
 
 describe('startAgentRun workspace brief (BUILD-050)', () => {
-  it('refreshes the brief for the resolved cwd before the SDK run starts', async () => {
-    let briefDoneBeforeQuery = false
-    let briefDone = false
-    mocks.refreshBrief.mockImplementation(async () => {
-      await Promise.resolve()
-      briefDone = true
-      return { status: 'written', filePath: '/work/tree/CLAUDE.local.md' }
-    })
-    mocks.query.mockImplementation(() => {
-      briefDoneBeforeQuery = briefDone
-      return pendingQuery()
-    })
+  it('schedules the brief for the resolved cwd without waiting on it', async () => {
+    // A refresh that never settles must not hold the run back (SDK runs do not read the file).
+    mocks.refreshBrief.mockImplementation(() => new Promise(() => {}))
 
     await startAgentRun({ agentId: 'a', prompt: 'go', cwd: '/work/tree', prepareClaudeLaunch })
 
     expect(mocks.refreshBrief).toHaveBeenCalledWith('/work/tree')
-    expect(briefDoneBeforeQuery).toBe(true)
+    expect(mocks.query).toHaveBeenCalledTimes(1)
   })
 
-  it('re-checks Pause crew after the brief is awaited', async () => {
-    mocks.refreshBrief.mockImplementation(async () => {
+  it('does not touch the worktree for a run refused by Pause crew', async () => {
+    prepareClaudeLaunch.mockImplementationOnce(async () => {
       mocks.paused = true
-      return { status: 'skipped', reason: 'not-a-git-worktree' }
+      return {} as never
     })
 
     await expect(
       startAgentRun({ agentId: 'a', prompt: 'go', prepareClaudeLaunch })
     ).rejects.toMatchObject({ name: 'ExecutionBlockedError' })
+    expect(mocks.refreshBrief).not.toHaveBeenCalled()
     expect(mocks.query).not.toHaveBeenCalled()
-    expect(mocks.addStoredAgentRun).not.toHaveBeenCalled()
   })
 })
