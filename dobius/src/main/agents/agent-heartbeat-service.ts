@@ -65,7 +65,9 @@ function isDue(agent: CustomAgent, now: Date): boolean {
     return now.getTime() - last >= TEN_MINUTES_MS
   }
   if (agent.heartbeat.frequency === 'hourly') {
-    return now.getMinutes() === 0 && last < startOfHour(now)
+    // Why: due once per clock hour whenever a tick lands in it; requiring the
+    // tick at exactly :00 skipped whole hours after a delayed tick or a wake.
+    return last < startOfHour(now)
   }
   if (agent.heartbeat.frequency === 'weekdays') {
     const day = now.getDay()
@@ -233,3 +235,6 @@ export function startAgentHeartbeats(prepareClaudeLaunch: PrepareClaudeLaunch): 
   interval.unref?.()
   void tick(prepareClaudeLaunch)
 }
+
+// Test seam only.
+export const agentHeartbeatInternals = { isDue }

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { join } from 'node:path'
@@ -16,6 +16,7 @@ const { closeAllConnectionsMock, netFetchMock, resolveProxyMock, setProxyMock } 
 
 type SafeStorageMockOptions = {
   encryptionAvailable?: boolean
+  encryptString?: (value: string) => Buffer
   decryptString?: (value: Buffer) => string
 }
 
@@ -95,7 +96,7 @@ async function loadClientModule(options: SafeStorageMockOptions = {}) {
     net: { fetch: netFetchMock },
     safeStorage: {
       isEncryptionAvailable: () => options.encryptionAvailable ?? false,
-      encryptString: (value: string) => Buffer.from(value),
+      encryptString: options.encryptString ?? ((value: string) => Buffer.from(value)),
       decryptString: options.decryptString ?? ((value: Buffer) => value.toString('utf-8'))
     },
     session: {
@@ -429,4 +430,55 @@ describe('Jira client credential storage', () => {
     expect(headers.get('User-Agent')).toBe('Dobius')
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  it('writes no plaintext token when safeStorage is unavailable, and stays connected this session (#25)', async () => {
+    netFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ accountId: 'account-alpha', displayName: 'Ada', emailAddress: 'ada@example.com' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    const jira = await loadClientModule({ encryptionAvailable: false })
+
+    await expect(
+      jira.connect({ siteUrl: 'example.atlassian.net', email: 'ada@example.com', apiToken: 'token-alpha' })
+    ).resolves.toMatchObject({ ok: true })
+
+    expect(jira.getStatus()).toMatchObject({ connected: true })
+    for (const file of listFiles(join(tempHome, '.dobius'))) {
+      expect(readFileSync(file, 'utf-8').includes('token-alpha')).toBe(false)
+    }
+  })
+
+  it('writes no plaintext token when encryptString throws (#25)', async () => {
+    netFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ accountId: 'account-alpha', displayName: 'Ada', emailAddress: 'ada@example.com' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    const jira = await loadClientModule({
+      encryptionAvailable: true,
+      encryptString: () => {
+        throw new Error('keychain locked')
+      }
+    })
+
+    await expect(
+      jira.connect({ siteUrl: 'example.atlassian.net', email: 'ada@example.com', apiToken: 'token-alpha' })
+    ).resolves.toMatchObject({ ok: true })
+
+    for (const file of listFiles(join(tempHome, '.dobius'))) {
+      expect(readFileSync(file, 'utf-8').includes('token-alpha')).toBe(false)
+    }
+  })
 })
+
+function listFiles(dir: string): string[] {
+  if (!existsSync(dir)) {
+    return []
+  }
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+}

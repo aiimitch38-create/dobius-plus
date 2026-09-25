@@ -16,7 +16,7 @@ import type {
 } from '../shared/imessage-bridge'
 import type { ReadClipboardTextOptions } from '../shared/clipboard-text'
 import type { AppIdentity } from '../shared/app-identity'
-import type { AsanaConfig, AsanaTasksSnapshot } from '../shared/asana'
+import type { AsanaConfig, AsanaRequeueResult, AsanaTasksSnapshot } from '../shared/asana'
 import type {
   AgentRun,
   AgentRunEvent,
@@ -374,6 +374,7 @@ import type {
   RateLimitState
 } from '../shared/rate-limit-types'
 import type {
+  ElevenLabsKeyStatus,
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
@@ -1352,6 +1353,8 @@ export type PreloadApi = {
     markLocalDone: (gid: string) => Promise<AsanaTasksSnapshot>
     clearLocalDone: (gid: string) => Promise<AsanaTasksSnapshot>
     completeTask: (gid: string) => Promise<AsanaTasksSnapshot>
+    listBlockedTasks: () => Promise<string[]>
+    requeueTask: (gid: string) => Promise<AsanaRequeueResult>
     onTasksUpdated: (callback: (snapshot: AsanaTasksSnapshot) => void) => () => void
   }
   agents: {
@@ -3243,6 +3246,11 @@ export type PreloadApi = {
     status: () => Promise<{ shortcutActive: boolean; phase: string }>
     /** Mints a signed websocket URL for the configured ElevenLabs agent. */
     agentSignedUrl: () => Promise<{ ok: true; url: string } | { ok: false; error: string }>
+    /** Whether an ElevenLabs key is saved; the key itself never reaches the renderer. */
+    getElevenLabsKeyStatus: () => Promise<ElevenLabsKeyStatus>
+    /** Saves the key to the encrypted store (session-only when encryption is unavailable). */
+    saveElevenLabsKey: (apiKey: string) => Promise<ElevenLabsKeyStatus>
+    clearElevenLabsKey: () => Promise<ElevenLabsKeyStatus>
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
     askAdamText: (utterance: string) => Promise<JarvisAskResult>
     onState: (callback: (event: JarvisStateEvent) => void) => () => void

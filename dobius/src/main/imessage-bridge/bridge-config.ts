@@ -1,6 +1,7 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
+import { hardenExistingSecureFile, writeSecureFile } from '../../shared/secure-file'
 import type { ImessageBridgeConfig } from '../../shared/imessage-bridge'
 import {
   IMESSAGE_BRIDGE_DEFAULT_TRIGGER_PREFIX,
@@ -56,9 +57,27 @@ function sanitizeConfig(raw: unknown): ImessageBridgeConfig {
   }
 }
 
-function loadConfigFromDisk(): ImessageBridgeConfig {
+function hardenExistingConfigFile(target: string): void {
+  if (!existsSync(target)) {
+    return
+  }
+  // Why (#15): files written by older builds were left at the umask default
+  // (0644), exposing the phone/email handle to other local users.
   try {
-    return sanitizeConfig(JSON.parse(readFileSync(configFilePath(), 'utf-8')))
+    hardenExistingSecureFile(target)
+  } catch (error) {
+    console.warn(
+      '[imessage-bridge] failed to restrict config permissions:',
+      error instanceof Error ? error.message : String(error)
+    )
+  }
+}
+
+function loadConfigFromDisk(): ImessageBridgeConfig {
+  const target = configFilePath()
+  hardenExistingConfigFile(target)
+  try {
+    return sanitizeConfig(JSON.parse(readFileSync(target, 'utf-8')))
   } catch {
     // Missing or corrupt file both fall back to defaults; the next update
     // rewrites a valid file.
@@ -67,14 +86,11 @@ function loadConfigFromDisk(): ImessageBridgeConfig {
 }
 
 function persistConfig(config: ImessageBridgeConfig): void {
-  const target = configFilePath()
-  // Why: tmp-write + rename keeps the file readable if the app dies mid-write,
-  // mirroring the Store's atomic persistence pattern.
-  const tmp = `${target}.${process.pid}.tmp`
+  // Why: writeSecureFile is tmp-write + rename (readable if the app dies
+  // mid-write) and creates the file owner-only (0600 / user ACL, #15), whatever
+  // the process umask.
   try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
+    writeSecureFile(configFilePath(), `${JSON.stringify(config, null, 2)}\n`)
   } catch (error) {
     console.warn(
       '[imessage-bridge] failed to persist config:',

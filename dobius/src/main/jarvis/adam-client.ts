@@ -1,52 +1,12 @@
-import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { DEFAULT_ADAM_ENDPOINT } from '../../shared/constants'
 import type { JarvisAskResult } from '../../shared/speech-types'
+import { resolveAdamTarget, resolveAdamToken } from '../adam-connection'
 
 export const ADAM_CONVERSE_TIMEOUT_MS = 10_000
 export const ADAM_UNREACHABLE_TEXT = 'ADAM is unreachable'
-
-/** The ADAM project checkout — also the root `selfEditRoots` allows Adam to rewrite. */
-export function adamProjectDirectory(): string {
-  return join(homedir(), 'dobius', 'projects', 'ADAM')
-}
-
-/**
- * Token path lives outside the settings surface by design: it is machine-local
- * provisioning for the ADAM sidecar, not something the renderer should edit.
- * DOBIUS_ADAM_TOKEN_PATH exists so tests and non-default machines can redirect it.
- */
-export function adamServiceTokenPath(): string {
-  return (
-    process.env.DOBIUS_ADAM_TOKEN_PATH ||
-    join(adamProjectDirectory(), 'service', 'data', 'service-token')
-  )
-}
-
-type TokenReader = (path: string) => string
-const defaultTokenReader: TokenReader = (path) => readFileSync(path, 'utf-8')
-
-let cachedToken: string | null = null
-
-/** Reads once per process; later calls reuse the cache so ask() stays cheap. */
-export function loadAdamServiceToken(reader: TokenReader = defaultTokenReader): string {
-  if (cachedToken !== null) {
-    return cachedToken
-  }
-  try {
-    cachedToken = reader(adamServiceTokenPath()).trim()
-  } catch {
-    // Unreadable/missing token still yields an empty Bearer value; the request
-    // then fails like any other unreachable case instead of throwing here.
-    cachedToken = ''
-  }
-  return cachedToken
-}
-
-export function resetAdamServiceTokenCacheForTests(): void {
-  cachedToken = null
-}
+export const ADAM_NOT_INSTALLED_TEXT = 'ADAM is not installed on this Mac'
+export const ADAM_BLOCKED_ENDPOINT_TEXT =
+  'ADAM endpoint blocked: Settings must point at this Mac or your tailnet'
 
 export function parseAdamConverseResponse(payload: unknown): JarvisAskResult {
   if (!payload || typeof payload !== 'object') {
@@ -114,4 +74,35 @@ export async function converseWithAdam(args: ConverseAdamArgs): Promise<JarvisAs
   } catch {
     return { kind: 'error', text: ADAM_UNREACHABLE_TEXT }
   }
+}
+
+export type AskAdamArgs = {
+  /** Settings voice.adamEndpoint from the caller's store. */
+  settingsEndpoint: string | undefined
+  utterance: string
+  fetchFn?: typeof fetch
+}
+
+/**
+ * Resolves the connection through the shared registry on every ask, so
+ * Settings and token changes apply without a restart (#81). A missing ADAM
+ * folder is a named state, not a request that can only fail (#118).
+ */
+export async function askAdam(args: AskAdamArgs): Promise<JarvisAskResult> {
+  const target = resolveAdamTarget(args.settingsEndpoint)
+  if (!target.ok) {
+    return { kind: 'error', text: ADAM_BLOCKED_ENDPOINT_TEXT }
+  }
+  const tokenResult = await resolveAdamToken()
+  if (tokenResult.token === undefined && tokenResult.state === 'not-installed') {
+    return { kind: 'error', text: ADAM_NOT_INSTALLED_TEXT }
+  }
+  return converseWithAdam({
+    endpoint: target.endpoint,
+    // Why an empty token still asks: converse has always gone out without a
+    // Bearer header when the token file is missing, and ADAM answers 401 itself.
+    token: tokenResult.token ?? '',
+    utterance: args.utterance,
+    fetchFn: args.fetchFn
+  })
 }

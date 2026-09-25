@@ -16,6 +16,7 @@ import {
   normalizeNotify,
   normalizeSkills
 } from './agent-record-normalization'
+import { invalidateAgentSessions, sessionsAfterReset } from './agent-session-lease'
 import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import { getUserDataRoot } from '../storage/user-data-root'
 
@@ -300,13 +301,23 @@ export function getAgentSessionForKey(
   return null
 }
 
-export function resetAgentSession(id: string): CustomAgent[] {
+/**
+ * Starts fresh: no key given = every session of the agent (default and each
+ * channel key); a key = only that one. Runs already in flight are told not to
+ * record their session back over the reset.
+ */
+export function resetAgentSession(id: string, sessionKey?: string): CustomAgent[] {
   const agents = load()
   const agent = agents.find((entry) => entry.id === id)
   if (!agent) {
     throw new Error('Agent not found')
   }
-  agent.lastSessionId = undefined
+  agent.sessionsByKey = sessionsAfterReset(agent.sessionsByKey, sessionKey)
+  if (sessionKey === undefined || sessionKey === 'default') {
+    agent.lastSessionId = undefined
+    agent.lastSessionCwd = undefined
+  }
+  invalidateAgentSessions(id, sessionKey)
   agent.updatedAt = Date.now()
   file.set(agents)
   return listAgents()

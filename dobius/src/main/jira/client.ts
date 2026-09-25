@@ -212,13 +212,26 @@ function writeSiteFile(file: JiraSiteFile): void {
   })
 }
 
+// Why (#25): fail closed. When the token cannot be encrypted nothing is
+// written (any existing file stays untouched); the caller's in-memory cache
+// keeps the site connected for this session only.
 function writeEncryptedToken(path: string, apiToken: string): void {
+  let encrypted: Buffer | null = null
   if (safeStorage.isEncryptionAvailable()) {
-    writeFileSync(path, safeStorage.encryptString(apiToken), { mode: 0o600 })
+    try {
+      encrypted = safeStorage.encryptString(apiToken)
+    } catch (error) {
+      console.error(
+        '[jira] safeStorage encryption failed:',
+        error instanceof Error ? error.message : String(error)
+      )
+    }
+  }
+  if (encrypted === null) {
+    console.warn('[jira] safeStorage encryption unavailable — token kept for this session only')
     return
   }
-  console.warn('[jira] safeStorage encryption unavailable — storing token in plaintext')
-  writeFileSync(path, apiToken, { encoding: 'utf-8', mode: 0o600 })
+  writeFileSync(path, encrypted, { mode: 0o600 })
 }
 
 function readToken(siteId: string): string | null {

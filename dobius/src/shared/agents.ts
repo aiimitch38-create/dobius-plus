@@ -137,6 +137,13 @@ export type AgentRunOutboxItem = {
   createdAt: number
 }
 
+/**
+ * Session key for iMessage `@Agent` runs. Their own key, never 'default': a
+ * phone-driven run must not overwrite (or be resumed from) the session a
+ * manual run continues, and it is not a Communications channel id.
+ */
+export const IMESSAGE_SESSION_KEY = 'imessage'
+
 export type AgentRun = {
   id: string
   agentId: string
