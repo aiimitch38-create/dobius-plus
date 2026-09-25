@@ -13,6 +13,7 @@ import {
 } from '../integration-credential-file'
 import { ensureElectronProxyFromEnvironment } from '../network/proxy-settings'
 import { withSpan } from '../observability/tracer'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
 import type {
   JiraConnectArgs,
   JiraConnectionStatus,
@@ -74,8 +75,6 @@ export class JiraApiError extends Error {
   }
 }
 
-let cachedSiteFile: JiraSiteFile | null = null
-let siteFileLoaded = false
 const cachedTokens = new Map<string, string>()
 // Why: decrypt failures are recorded per site so getStatus can explain
 // failing reads without re-touching the keychain on every status poll.
@@ -147,42 +146,47 @@ function normalizeSite(input: unknown): JiraSite | null {
   }
 }
 
-function readSiteFileFromDisk(): JiraSiteFile {
-  const path = getSiteFilePath()
-  if (!existsSync(path)) {
-    return emptySiteFile()
+// Why: a malformed site makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2). Sites without a stored token are
+// still filtered out, as before.
+function parseSiteFile(raw: unknown): JiraSiteFile | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return undefined
   }
-  try {
-    const parsed = JSON.parse(readFileSync(path, { encoding: 'utf-8' })) as Partial<JiraSiteFile>
-    const sites = Array.isArray(parsed.sites)
-      ? parsed.sites
-          .map((site) => normalizeSite(site))
-          .filter((site): site is JiraSite => site !== null)
-          .filter((site) => hasStoredToken(site.id))
-      : []
-    const activeSiteId =
-      typeof parsed.activeSiteId === 'string' &&
-      sites.some((site) => site.id === parsed.activeSiteId)
-        ? parsed.activeSiteId
-        : (sites[0]?.id ?? null)
-    const selectedSiteId =
-      parsed.selectedSiteId === 'all' ||
-      (typeof parsed.selectedSiteId === 'string' &&
-        sites.some((site) => site.id === parsed.selectedSiteId))
-        ? parsed.selectedSiteId
-        : activeSiteId
-    return { version: 1, activeSiteId, selectedSiteId, sites }
-  } catch {
-    return emptySiteFile()
+  const parsed = raw as Partial<JiraSiteFile>
+  const storedSites =
+    parsed.sites === undefined
+      ? []
+      : Array.isArray(parsed.sites)
+        ? parseEveryEntry(parsed.sites, normalizeSite)
+        : undefined
+  if (!storedSites) {
+    return undefined
   }
+  const sites = storedSites.filter((site) => hasStoredToken(site.id))
+  const activeSiteId =
+    typeof parsed.activeSiteId === 'string' && sites.some((site) => site.id === parsed.activeSiteId)
+      ? parsed.activeSiteId
+      : (sites[0]?.id ?? null)
+  const selectedSiteId =
+    parsed.selectedSiteId === 'all' ||
+    (typeof parsed.selectedSiteId === 'string' &&
+      sites.some((site) => site.id === parsed.selectedSiteId))
+      ? parsed.selectedSiteId
+      : activeSiteId
+  return { version: 1, activeSiteId, selectedSiteId, sites }
 }
 
+const siteFile = new SafeJsonFile<JiraSiteFile>({
+  filePath: getSiteFilePath,
+  parse: parseSiteFile,
+  fallback: emptySiteFile,
+  label: '[jira] jira-sites.json',
+  mode: 0o600
+})
+
 function getSiteFile(): JiraSiteFile {
-  if (!siteFileLoaded || !cachedSiteFile) {
-    cachedSiteFile = readSiteFileFromDisk()
-    siteFileLoaded = true
-  }
-  return cachedSiteFile
+  return siteFile.get()
 }
 
 function writeSiteFile(file: JiraSiteFile): void {
@@ -199,17 +203,10 @@ function writeSiteFile(file: JiraSiteFile): void {
         ? file.selectedSiteId
         : activeSiteId
 
-  cachedSiteFile = {
-    version: 1,
-    activeSiteId,
-    selectedSiteId,
-    sites
-  }
-  siteFileLoaded = true
-  writeFileSync(getSiteFilePath(), JSON.stringify(cachedSiteFile, null, 2), {
-    encoding: 'utf-8',
-    mode: 0o600
-  })
+  // Why no throw on a refused save: clearToken runs inside many auth-error
+  // catch paths, and a throw there would replace the real error. SafeJsonFile
+  // logs the refusal and keeps the change for this session.
+  siteFile.set({ version: 1, activeSiteId, selectedSiteId, sites })
 }
 
 // Why (#25): fail closed. When the token cannot be encrypted nothing is

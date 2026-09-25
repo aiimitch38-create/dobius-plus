@@ -1775,7 +1775,8 @@
         "a726967bd3": "Dismiss",
         "d5253b54af": "error",
         "7ffc08506e": "check",
-        "522df222b9": "spinner"
+        "522df222b9": "spinner",
+        "f528af4816": "Updates are managed by the install script."
       },
       "WorktreeJumpPalette": {
         "ac037cfac2": "Move",
@@ -5312,7 +5313,8 @@
           "31fd7150cf": "Checking for updates...",
           "3394d1f663": "checking",
           "d69a09b672": "Updates are checked automatically on launch.",
-          "7173352632": "idle"
+          "7173352632": "idle",
+          "9b7a940bd3": "Updates are managed by the install script."
         },
         "GeneralWorkspaceSettingsSection": {
           "3d538a98f7": "Choose apps available from a workspace's Open in menu.",
@@ -12174,6 +12176,11 @@
           "4d7878402c": "External automation queued.",
           "4c22bc9913": "External automation deleted.",
           "3a4c476aa0": "Failed to rerun automation.",
+          "pauseFailed": "Failed to pause automation.",
+          "resumeFailed": "Failed to resume automation.",
+          "deleteFailed": "Failed to delete automation.",
+          "runNowFailed": "Failed to run automation.",
+          "runNowNotStarted": "Automation run did not start.",
           "a1bdb57008": "Automation run queued.",
           "8a3226f172": "Open Settings",
           "d2a01b0b6f": "You can change this in Settings.",
@@ -12569,7 +12576,9 @@
           "notConnected": "Connect Asana in Settings → Automation to see your build and review lanes.",
           "title": "Tasks",
           "sync": "Sync",
-          "empty": "Nothing here."
+          "empty": "Nothing here.",
+          "requeue": "Re-queue",
+          "confirmRequeue": "Re-queue this task for Asana Auto Mode? It will be triaged again and may start a new build."
         },
         "PromptsPanel": {
           "title": "Prompts",

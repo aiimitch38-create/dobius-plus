@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
+import { parseEveryValue, SafeJsonFile } from '../../storage/safe-json-file'
 
 const FILE_NAME = 'communications-custom-harnesses.json'
 
@@ -23,12 +23,12 @@ export type CustomHarnessDefinition = {
 
 type HarnessFile = Record<string, CustomHarnessDefinition>
 
-let cached: HarnessFile | null = null
-
 function filePath(): string {
   return path.join(app.getPath('userData'), FILE_NAME)
 }
 
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
 function sanitizeDefinition(raw: unknown): CustomHarnessDefinition | null {
   if (typeof raw !== 'object' || raw === null) {
     return null
@@ -59,47 +59,22 @@ function sanitizeDefinition(raw: unknown): CustomHarnessDefinition | null {
   }
 }
 
-function sanitize(raw: unknown): HarnessFile {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return {}
-  }
-  const out: HarnessFile = {}
-  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
-    const definition = sanitizeDefinition(value)
-    if (definition) {
-      out[id] = definition
-    }
-  }
-  return out
-}
+const file = new SafeJsonFile<HarnessFile>({
+  filePath,
+  parse: (raw) => parseEveryValue(raw, sanitizeDefinition),
+  fallback: () => ({}),
+  label: `[communications/agents] ${FILE_NAME}`
+})
 
 function load(): HarnessFile {
-  if (cached) {
-    return cached
-  }
-  const target = filePath()
-  if (!existsSync(target)) {
-    cached = {}
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(target, 'utf-8')))
-  } catch (error) {
-    console.warn(
-      '[communications/agents] failed to load custom harnesses:',
-      error instanceof Error ? error.message : String(error)
-    )
-    cached = {}
-  }
-  return cached
+  return file.get()
 }
 
+// Throws like the old writer did, so the RPC caller sees that nothing was saved.
 function persist(data: HarnessFile): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  mkdirSync(path.dirname(target), { recursive: true })
-  writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf-8')
-  renameSync(tmp, target)
+  if (!file.set(data)) {
+    throw new Error('Custom harnesses could not be saved')
+  }
 }
 
 export function listCustomHarnesses(): CustomHarnessDefinition[] {
@@ -118,7 +93,6 @@ export function saveCustomHarness(
     delete data[originalId]
   }
   data[definition.id] = definition
-  cached = data
   persist(data)
   return definition
 }
@@ -129,6 +103,5 @@ export function deleteCustomHarness(id: string): void {
     return
   }
   delete data[id]
-  cached = data
   persist(data)
 }

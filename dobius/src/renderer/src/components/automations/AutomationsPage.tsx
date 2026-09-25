@@ -147,6 +147,11 @@ import { ExternalAutomationManagers } from './ExternalAutomationManagers'
 import type { FetchExternalAutomationRuns } from './ExternalAutomationRunTable'
 import { useContextualTour } from '@/components/contextual-tours/use-contextual-tour'
 import { translate } from '@/i18n/i18n'
+import { useAutomationListTarget } from './use-automation-list-target'
+import {
+  getAutomationRunNowFailureDetail,
+  useAutomationMutations
+} from './use-automation-mutations'
 
 const AGENTS = getAgentCatalog().map((agent) => agent.id)
 const DEFAULT_TIME = '09:00'
@@ -380,6 +385,7 @@ export default function AutomationsPage(): React.JSX.Element {
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   const runtimeStatusByEnvironmentId = useAppStore((s) => s.runtimeStatusByEnvironmentId)
   const settings = useAppStore((s) => s.settings)
+  const automationListTarget = useAutomationListTarget()
   const preflightStatus = useAppStore((s) => s.preflightStatus)
   const preflightStatusChecked = useAppStore((s) => s.preflightStatusChecked)
   const preflightStatusContextKey = useAppStore((s) => s.preflightStatusContextKey)
@@ -1009,7 +1015,7 @@ export default function AutomationsPage(): React.JSX.Element {
     const pendingNavigation = useAppStore.getState().pendingAutomationRunNavigation
     const automationHostTarget = pendingNavigation
       ? getAutomationTargetFromHostId(pendingNavigation.hostId)
-      : getAutomationListTarget(settings)
+      : automationListTarget
     try {
       const [nextAutomations, nextRuns, nextExternalManagers] = await Promise.all([
         listAutomationsForTarget(automationHostTarget),
@@ -1045,7 +1051,8 @@ export default function AutomationsPage(): React.JSX.Element {
     } finally {
       setIsLoading(false)
     }
-  }, [selectAutomationId, settings])
+  }, [automationListTarget, selectAutomationId])
+  const { pendingAutomationIds, runAutomationMutation } = useAutomationMutations(refresh)
 
   useEffect(() => {
     if (!pendingAutomationRunNavigation || isLoading) {
@@ -1086,7 +1093,7 @@ export default function AutomationsPage(): React.JSX.Element {
         ? getAutomationTargetFromHostId(pendingAutomationRunNavigation.hostId)
         : selected
           ? getAutomationOwnerTarget(selected, automationHostTarget)
-          : getAutomationListTarget(settings)
+          : automationListTarget
     void listAutomationRunsForTarget(target, automationId).then((nextRuns) => {
       if (!cancelled) {
         setSelectedAutomationRuns({ automationId, runs: nextRuns })
@@ -1095,7 +1102,14 @@ export default function AutomationsPage(): React.JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [automationHostTarget, pendingAutomationRunNavigation, selected, selected?.id, runs, settings])
+  }, [
+    automationHostTarget,
+    automationListTarget,
+    pendingAutomationRunNavigation,
+    selected,
+    selected?.id,
+    runs
+  ])
 
   useEffect(() => {
     const onAutomationsChanged = (): void => {
@@ -1747,22 +1761,43 @@ export default function AutomationsPage(): React.JSX.Element {
     }
   }
 
-  const toggleAutomation = async (automation: Automation): Promise<void> => {
-    await updateAutomationForTarget(
-      automation,
-      { enabled: !automation.enabled },
-      automationHostTarget
+  const toggleAutomation = (automation: Automation): Promise<void> =>
+    runAutomationMutation(
+      automation.id,
+      async () => {
+        await updateAutomationForTarget(
+          automation,
+          { enabled: !automation.enabled },
+          automationHostTarget
+        )
+        await refresh()
+      },
+      automation.enabled
+        ? translate(
+            'auto.components.automations.AutomationsPage.pauseFailed',
+            'Failed to pause automation.'
+          )
+        : translate(
+            'auto.components.automations.AutomationsPage.resumeFailed',
+            'Failed to resume automation.'
+          )
     )
-    await refresh()
-  }
 
-  const deleteAutomation = async (automation: Automation): Promise<void> => {
-    await deleteAutomationForTarget(automation, automationHostTarget)
-    if (useAppStore.getState().selectedAutomationId === automation.id) {
-      selectAutomationId(null)
-    }
-    await refresh()
-  }
+  const deleteAutomation = (automation: Automation): Promise<void> =>
+    runAutomationMutation(
+      automation.id,
+      async () => {
+        await deleteAutomationForTarget(automation, automationHostTarget)
+        if (useAppStore.getState().selectedAutomationId === automation.id) {
+          selectAutomationId(null)
+        }
+        await refresh()
+      },
+      translate(
+        'auto.components.automations.AutomationsPage.deleteFailed',
+        'Failed to delete automation.'
+      )
+    )
 
   const persistDeleteAutomationPreference = (): void => {
     void updateSettings({ skipDeleteAutomationConfirm: true })
@@ -1818,6 +1853,9 @@ export default function AutomationsPage(): React.JSX.Element {
   }
 
   const runNow = async (automation: Automation): Promise<void> => {
+    if (pendingAutomationIds.has(automation.id)) {
+      return
+    }
     const repo = repoMap.get(getAutomationRunRepoId(automation)) ?? null
     const workspace = automation.workspaceId
       ? (worktreeMap.get(automation.workspaceId) ?? null)
@@ -1836,10 +1874,34 @@ export default function AutomationsPage(): React.JSX.Element {
       toast.error(availability.message)
       return
     }
-    await runAutomationNowForTarget(automation, automationHostTarget)
-    useAppStore.getState().recordFeatureInteraction('automation-run')
-    await hydratePersistedUIState()
-    await refresh()
+    await runAutomationMutation(
+      automation.id,
+      async () => {
+        const run = await runAutomationNowForTarget(automation, automationHostTarget)
+        useAppStore.getState().recordFeatureInteraction('automation-run')
+        showRunNowOutcome(run)
+        await hydratePersistedUIState()
+        await refresh()
+      },
+      translate(
+        'auto.components.automations.AutomationsPage.runNowFailed',
+        'Failed to run automation.'
+      )
+    )
+  }
+
+  const showRunNowOutcome = (run: AutomationRun): void => {
+    const failureDetail = getAutomationRunNowFailureDetail(run)
+    if (failureDetail) {
+      toast.error(
+        translate(
+          'auto.components.automations.AutomationsPage.runNowNotStarted',
+          'Automation run did not start.'
+        ),
+        { description: failureDetail }
+      )
+      return
+    }
     toast.message(
       translate('auto.components.automations.AutomationsPage.a1bdb57008', 'Automation run queued.')
     )
@@ -1854,15 +1916,10 @@ export default function AutomationsPage(): React.JSX.Element {
     rerunRunIdsInFlightRef.current.add(runId)
     setRerunRunIdsInFlight(new Set(rerunRunIdsInFlightRef.current))
     try {
-      await runAutomationNowForTarget(automation, automationHostTarget)
+      const nextRun = await runAutomationNowForTarget(automation, automationHostTarget)
       await hydratePersistedUIState()
       await refresh()
-      toast.message(
-        translate(
-          'auto.components.automations.AutomationsPage.a1bdb57008',
-          'Automation run queued.'
-        )
-      )
+      showRunNowOutcome(nextRun)
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -2439,6 +2496,7 @@ export default function AutomationsPage(): React.JSX.Element {
                 automationHostTarget,
                 sourceHostAvailability: automationSourceHostAvailabilityById.get(automation.id)
               })
+              const isMutationPending = pendingAutomationIds.has(automation.id)
               const workspaceLabel =
                 automation.workspaceMode === 'new_per_run'
                   ? `Create from ${automation.baseBranch ?? automationRepo?.worktreeBaseRef ?? 'project default'}`
@@ -2519,7 +2577,7 @@ export default function AutomationsPage(): React.JSX.Element {
                   </ContextMenuTrigger>
                   <ContextMenuContent className="w-48">
                     <ContextMenuItem
-                      disabled={!automationRunAvailability.canRunNow}
+                      disabled={!automationRunAvailability.canRunNow || isMutationPending}
                       onSelect={(event) => {
                         if (!automationRunAvailability.canRunNow) {
                           event.preventDefault()
@@ -2542,7 +2600,10 @@ export default function AutomationsPage(): React.JSX.Element {
                       <Pencil className="size-3.5" />
                       {translate('auto.components.automations.AutomationsPage.f4612e3f78', 'Edit')}
                     </ContextMenuItem>
-                    <ContextMenuItem onSelect={() => void toggleAutomation(automation)}>
+                    <ContextMenuItem
+                      disabled={isMutationPending}
+                      onSelect={() => void toggleAutomation(automation)}
+                    >
                       {automation.enabled ? (
                         <Pause className="size-3.5" />
                       ) : (
@@ -2561,6 +2622,7 @@ export default function AutomationsPage(): React.JSX.Element {
                     <ContextMenuSeparator />
                     <ContextMenuItem
                       variant="destructive"
+                      disabled={isMutationPending}
                       onSelect={() => requestDeleteAutomation(automation)}
                     >
                       <Trash2 className="size-3.5" />
@@ -2924,6 +2986,7 @@ export default function AutomationsPage(): React.JSX.Element {
                   }
                   hostLabelById={hostLabelById}
                   runNowAvailability={selectedRunNowAvailability}
+                  actionsPending={selected ? pendingAutomationIds.has(selected.id) : false}
                   now={relativeNow}
                   onRunNow={(automation) => void runNow(automation)}
                   onEdit={(automation) => void openEditDialog(automation)}

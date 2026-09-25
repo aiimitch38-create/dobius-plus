@@ -1,7 +1,7 @@
 // Pure request routing for the Voice Conductor CLI server (socket-free,
 // unit-testable). Split out of cli-server.ts to keep both modules under the
 // max-lines limit; cli-server.ts owns the socket plumbing and re-exports this.
-import type { WorkItem } from './types'
+import type { IMessageBridge, WorkItem } from './types'
 import type { ConductorCliDeps, ConductorCliResult } from './cli-server'
 
 // --- pure request routing (socket-free, unit-testable) ------------------
@@ -43,6 +43,37 @@ function toRegistryStatus(raw: string): 'done' | 'error' {
     return 'error'
   }
   return 'done'
+}
+
+// The whole answer (after the reply code) must be an approval word. Anything
+// else, including "yes but wait", a timeout or a send failure, is a denial.
+const APPROVAL_RE = /^(y|yes|ok|okay|approve|approved|confirm)[.!]?$/i
+const MAX_ACTION_LENGTH = 500
+const MAX_ASK_TIMEOUT_MS = 5 * 60 * 1000
+const SPAWN_PROMPT_PREVIEW_CHARS = 300
+
+export type ApprovalDecision = { approved: boolean; reason: string }
+
+/**
+ * Ask Carson to approve one action over iMessage. Fails closed: no channel,
+ * no reply or any non-approval answer denies.
+ */
+export async function requestImessageApproval(
+  imessage: IMessageBridge,
+  action: string
+): Promise<ApprovalDecision> {
+  const unavailable = imessage.unavailableReason()
+  if (unavailable) {
+    return { approved: false, reason: `no confirmation channel: ${unavailable}` }
+  }
+  const answer = await imessage.ask(`Dobius+ approval needed: ${action}\nApprove? (yes / no)`)
+  if (!answer) {
+    return { approved: false, reason: 'no reply' }
+  }
+  if (!APPROVAL_RE.test(answer.trim())) {
+    return { approved: false, reason: 'rejected' }
+  }
+  return { approved: true, reason: 'approved' }
 }
 
 /**
@@ -143,22 +174,32 @@ export async function handleConductorCliRequest(
           return { status: 400, body: { ok: false, error: 'null byte in argument' } }
         }
         // v1 gated the spawn behind an iMessage confirm to Carson. Preserve that
-        // and FAIL CLOSED: with no confirmation channel there is no approval, so
-        // refuse rather than spawn an agent unconfirmed.
-        if (!d.imessage.isAvailable()) {
-          return {
-            status: 200,
-            body: { ok: false, error: 'spawn declined (no confirmation channel available)' }
-          }
-        }
-        const answer = await d.imessage.ask(
-          `Spawn agent "${agentId}" in ${projectPath}? Reply YES to confirm.`
+        // and FAIL CLOSED: no channel, no reply or no explicit yes = no spawn.
+        const promptPreview =
+          initialPrompt.length > SPAWN_PROMPT_PREVIEW_CHARS
+            ? `${initialPrompt.slice(0, SPAWN_PROMPT_PREVIEW_CHARS)}…`
+            : initialPrompt
+        const decision = await requestImessageApproval(
+          d.imessage,
+          `spawn agent "${agentId}" in ${projectPath} with prompt: "${promptPreview}"`
         )
-        if (!/^\s*(y|yes|ok|okay|sure|confirm)\b/i.test(answer)) {
-          return { status: 200, body: { ok: false, error: `spawn declined (${answer || 'no reply'})` } }
+        if (!decision.approved) {
+          return { status: 200, body: { ok: false, error: `spawn declined (${decision.reason})` } }
         }
         const spawned = await d.terminals.spawnAgent(projectPath, agentId, initialPrompt)
         return { status: 200, body: { ok: true, ...spawned } }
+      }
+
+      case '/confirm': {
+        const action = asString(body.action).trim()
+        if (!action || hasNullByte(action) || action.length > MAX_ACTION_LENGTH) {
+          return {
+            status: 400,
+            body: { ok: false, approved: false, error: `action required (1-${MAX_ACTION_LENGTH} chars)` }
+          }
+        }
+        const decision = await requestImessageApproval(d.imessage, action)
+        return { status: 200, body: { ok: true, ...decision } }
       }
 
       case '/ask': {
@@ -166,7 +207,14 @@ export async function handleConductorCliRequest(
         if (!question.trim()) {
           return { status: 400, body: { ok: false, error: 'question required' } }
         }
-        const timeoutMs = typeof body.timeoutMs === 'number' ? body.timeoutMs : undefined
+        const unavailable = d.imessage.unavailableReason()
+        if (unavailable) {
+          return { status: 200, body: { ok: false, error: unavailable } }
+        }
+        const timeoutMs =
+          typeof body.timeoutMs === 'number' && Number.isFinite(body.timeoutMs)
+            ? Math.min(MAX_ASK_TIMEOUT_MS, Math.max(1, Math.floor(body.timeoutMs)))
+            : undefined
         const answer = await d.imessage.ask(question, timeoutMs)
         return { status: 200, body: { ok: true, answer, timedOut: answer === '' } }
       }

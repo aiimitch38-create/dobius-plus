@@ -17,6 +17,7 @@ const execFileMock = vi.hoisted(() =>
 vi.mock('node:child_process', () => ({ execFile: execFileMock }))
 
 import { isValidImessageHandle, sendImessage } from './imessage-send'
+import { outboundSince, wasSentByDobius } from './outbound-ring'
 
 function lastArgs(): string[] {
   return execFileMock.mock.calls.at(-1)?.[1] ?? []
@@ -67,3 +68,13 @@ describe('#16 AppleScript send cannot be altered by the handle or text', () => {
     expect(lastArgs()[4]).toBe('line1\nline2end')
   })
 })
+
+describe('BUILD-033 F1: every Dobius send is recorded in the outbound ring', () => {
+  it('records the text as sent (control chars stripped) with its send time', async () => {
+    const before = Date.now()
+    await sendImessage('me@x.com', 'agent reply: 4821 yes\u0007')
+    expect(wasSentByDobius('agent reply: 4821 yes')).toBe(true)
+    expect(outboundSince(before).map((record) => record.text)).toContain('agent reply: 4821 yes')
+  })
+})
+

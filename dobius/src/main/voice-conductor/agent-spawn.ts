@@ -13,6 +13,7 @@ export type ConductorAgentSpawnerDeps = {
     prepareClaudeLaunch: PrepareClaudeLaunch
     options: {
       source: 'channel'
+      spawnedBy: 'voice-conductor'
       resume: false
       onResult(message: { subtype: string; result?: string; errors?: string[] }): void
       onRunEnded(status: 'error' | 'cancelled', summary: string): void
@@ -75,6 +76,9 @@ export function createConductorAgentSpawner(deps: ConductorAgentSpawnerDeps): {
         prepareClaudeLaunch,
         options: {
           source: 'channel',
+          // Why: the worker inherits the conductor's messaging rails, so one
+          // approved spawn can't install a self-approving helper.
+          spawnedBy: 'voice-conductor',
           // Why: dobius-spawn promises a fresh worker; resuming the agent's prior
           // conversation could carry unrelated project context into this task.
           resume: false,
