@@ -1632,9 +1632,6 @@ function shouldSuppressCodexAutoApprovalSyntheticTitleFromHook(args: {
 
 app.whenReady().then(async () => {
   logStartupMilestone('app-ready')
-  void import('./agents/agent-run-event-journal')
-    .then(({ replayRecentAgentRunJournalEvents }) => replayRecentAgentRunJournalEvents())
-    .catch((error) => console.warn('[agents] event journal replay failed:', error))
   electronApp.setAppUserModelId(devInstanceIdentity.appUserModelId)
   app.setName(devInstanceIdentity.name)
   reportUserDataRootDivergence()
@@ -1642,6 +1639,11 @@ app.whenReady().then(async () => {
   store = new Store()
   await migrateLegacyDobiusConfig(store)
   logStartupMilestone('store-loaded')
+  // Why: after the store, and a background drain that resumes from the saved
+  // cursor instead of re-posting the last 1,000 events on every launch (N5).
+  void import('./agents/agent-run-event-journal')
+    .then(({ startAgentRunEventDelivery }) => startAgentRunEventDelivery())
+    .catch((error) => console.warn('[agents] event delivery failed to start:', error))
   selfHealRuntimeEnvironmentFocus({ store, userDataPath: getCanonicalUserDataPath() })
   applyAppIcon(store.getSettings().appIcon)
   if (shouldSuppressDevEducation({ isDev: is.dev })) {
