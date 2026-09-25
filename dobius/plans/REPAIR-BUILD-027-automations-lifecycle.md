@@ -32,7 +32,8 @@ Builds on BUILD-002 (scheduler gate), CX12 F4 (launch re-checks, gated RPC runNo
   `assertExecutionAdmitted` once; `Coordinator.dispatchTask` sends through
   `runtime.sendTerminal` (`dobius-runtime.ts` `sendTerminal`, no execution gate). Pausing the crew
   during a run did not stop further dispatches. CONFIRMED, fixed.
-- **Extra scope (Codex w3 lead 2): headless re-check placement.** Verified in
+- **Extra scope (Codex w3 lead 2): headless re-check placement.** (Superseded by review F2 below:
+  the spawn-time window is now closed inside the runtime.) Verified in
   `service.ts requestHeadlessDispatch`: the CX12 re-check runs after the precheck await (the last
   await in the service) and synchronously before the dispatcher call; nothing awaits in between.
   Inside the dispatcher (`index.ts` serve-mode closure) the first await *is* the launch call
@@ -130,6 +131,64 @@ Builds on BUILD-002 (scheduler gate), CX12 F4 (launch re-checks, gated RPC runNo
   shared-type or persistence change is needed and the UI already shows it as a failed run.
 - Pending runs from a previous process are left alone: nothing launches before `dispatching` is
   persisted (both paths), so a `pending` scheduled run is safe for the scheduler to pick up again.
+
+## Review round 1 (F1 document, F2 fix)
+- **F2 [low] headless spawn-time gap.** The CX12 re-check ran before the serve-mode dispatcher, but
+  the dispatcher's launch call itself awaits (`resolveRepoSelector`, `git worktree add`, meta
+  writes, remote trust) before the agent spawns, so Pause crew could turn on in between.
+  - `HeadlessAutomationDispatcher` request gains `honorExecutionGate`; `service.ts` passes it.
+  - `index.ts` serve closure passes `executionOrigin: 'agent-run'` to `createManagedWorktree` /
+    `launchAgentTerminal` only when `honorExecutionGate` is set (desktop manual runs unchanged).
+  - `dobius-runtime.ts`: `executionOrigin?: ExecutionOrigin` on `createManagedWorktree` args (and
+    the remote-create args it spreads into) and `launchAgentTerminal` opts. New private
+    `assertAgentSpawnAdmitted(origin, createdWorkspacePath?)` runs right before each agent-starting
+    `createTerminal`: the folder-workspace, local git and SSH create paths, and
+    `launchAgentTerminal`. Blocked -> `ExecutionBlockedError` whose message ends with
+    "Workspace <path> was created, but no agent was started in it." The three startup `catch`
+    blocks rethrow `ExecutionBlockedError` instead of folding it into `warning`, so it reaches
+    `requestHeadlessDispatch`, whose existing catch records `skipped_unavailable` with that
+    message (the path stays on the run; the workspace is kept, never deleted).
+  - No caller without `executionOrigin` changes behaviour.
+  - `service.ts` hit the line cap again: the headless completion chain moved to
+    `run-lifecycle.ts settleHeadlessCompletion` (same then/catch/catch, precheckResult only on the
+    success write as before).
+- **F1 [low, documented] startup cleanup and multiple instances.** `markInterruptedAutomationRuns`
+  closes every `dispatching` run, including one owned by another live process sharing the same
+  userData. Not fixed: two instances on one profile already overwrite each other's whole state
+  file, so per-run owner tracking would not make that setup safe.
+
+### Tests (round 1)
+- `runtime/dobius-runtime.test.ts` (execution gate mocked, allowed by default): Pause crew turned
+  on inside `addWorktree` during a gated `createManagedWorktree` -> rejects with
+  `ExecutionBlockedError` naming the workspace path, no PTY spawned; gated `launchAgentTerminal`
+  while paused -> rejects, no spawn.
+- `automations/service-lifecycle.test.ts`: dispatcher gets `honorExecutionGate: true` for a
+  scheduled run and `false` for a desktop manual run; a spawn-time `ExecutionBlockedError` is
+  recorded as `skipped_unavailable` with the workspace path.
+
+### Mutation checks (round 1; script stabilize-run/027/mut/run2.py, originals restored)
+- M12 spawn gate always passes -> runtime test fails.
+- M13 git-path catch swallows the block into `warning` -> runtime test fails.
+- M14 `launchAgentTerminal` check removed -> runtime test fails.
+- M15 service passes `honorExecutionGate: false` -> service test fails.
+- Not unit-covered: the `index.ts` closure wiring (serve-only, no harness) and the folder/SSH
+  create sites (same helper and rethrow as the tested git path).
+
+### Verification (round 1)
+- `pnpm run typecheck` exit 0; oxlint (both configs) clean on all changed files.
+- Targeted: automations/*, orchestration/*, dobius-runtime.test.ts, orchestration-gates
+  admission/lifecycle, rpc orchestration + automations, ipc automations: 860 passed, 2 skipped.
+
+## Known limits
+- Multiple Dobius+ instances on one userData are unsupported: startup cleanup closes the other
+  instance's `dispatching` runs (and the shared state file is already last-writer-wins).
+- A spawn-time Pause crew refusal leaves the freshly created workspace on disk; its path is in the
+  run's error. It is not deleted automatically (never delete user data).
+
+## Decisions for Carson
+- An interrupted run (quit/crash mid-dispatch) is shown as failed with "check the workspace before
+  running it again" and is never retried automatically.
+- Multiple instances on one userData are unsupported (see Known limits); no owner tracking added.
 
 ## Rollback
 Revert the commit. No schema or file-format change; runs already closed as interrupted stay

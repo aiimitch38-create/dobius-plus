@@ -308,6 +308,45 @@ describe('AutomationService run lifecycle', () => {
     )
   })
 
+  // BUILD-027 F2: the dispatcher gets honorExecutionGate, and a Pause crew
+  // refusal at the agent spawn is recorded as skipped with the workspace path.
+  it('records a spawn-time Pause crew refusal from the headless dispatcher as skipped', async () => {
+    const { ExecutionBlockedError } = await vi.importActual<typeof ExecutionGateModule>(
+      '../agents/execution-gate'
+    )
+    const store = await createStore()
+    store.addRepo(makeRepo())
+    const automation = createDueAutomation(store, 'Morning check')
+    vi.setSystemTime(new Date('2026-05-13T09:01:00'))
+    const headlessDispatcher = vi.fn(async () => {
+      throw new ExecutionBlockedError(
+        'agent-run',
+        'paused',
+        'Crew is paused. Workspace /tmp/ws/auto-run was created, but no agent was started in it.'
+      )
+    })
+    const service = new AutomationService(store, { tickMs: 60_000, headlessDispatcher })
+
+    service.start()
+    await vi.waitFor(() =>
+      expect(store.listAutomationRuns(automation.id)[0]?.status).toBe('skipped_unavailable')
+    )
+    service.stop()
+
+    expect(headlessDispatcher).toHaveBeenCalledWith(
+      expect.objectContaining({ honorExecutionGate: true })
+    )
+    expect(store.listAutomationRuns(automation.id)[0]?.error).toContain(
+      'Workspace /tmp/ws/auto-run was created'
+    )
+
+    const manual = await service.runNow(automation.id, true)
+    expect(headlessDispatcher).toHaveBeenLastCalledWith(
+      expect.objectContaining({ honorExecutionGate: false })
+    )
+    expect(manual.status).toBe('skipped_unavailable')
+  })
+
   // #71: completion arriving after its run is gone must not become an unhandled rejection.
   it('a headless completion for a deleted automation is logged, not an unhandled rejection', async () => {
     const store = await createStore()

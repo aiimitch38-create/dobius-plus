@@ -22,7 +22,8 @@ import {
   finalizeAutomationRunResult,
   markInterruptedAutomationRuns,
   recordAutomationEvaluationFailure,
-  reportAutomationBackgroundFailure
+  reportAutomationBackgroundFailure,
+  settleHeadlessCompletion
 } from './run-lifecycle'
 import {
   checkExecutionAdmission,
@@ -280,7 +281,12 @@ export class AutomationService {
       // Why: persist the launch intent first; a crash mid-launch then leaves
       // 'dispatching', which startup closes as interrupted instead of re-running.
       const dispatching = this.store.updateAutomationRun({ runId: run.id, status: 'dispatching' })
-      const launch = await this.headlessDispatcher!({ automation, run: dispatching, target })
+      const launch = await this.headlessDispatcher!({
+        automation,
+        run: dispatching,
+        target,
+        honorExecutionGate
+      })
       const launchRunTarget = {
         workspaceId: launch.workspaceId,
         workspaceDisplayName: launch.workspaceDisplayName ?? null,
@@ -295,28 +301,12 @@ export class AutomationService {
         error: null
       })
       if (launch.completion) {
-        void launch.completion
-          .then((completion) =>
-            this.markDispatchResult({
-              runId: run.id,
-              status: completion.status,
-              ...launchRunTarget,
-              precheckResult,
-              outputSnapshot: completion.outputSnapshot ?? null,
-              error: completion.error ?? null
-            })
-          )
-          .catch((error) =>
-            this.markDispatchResult({
-              runId: run.id,
-              status: 'dispatch_failed',
-              ...launchRunTarget,
-              error: error instanceof Error ? error.message : String(error)
-            })
-          )
-          .catch((error) =>
-            reportAutomationBackgroundFailure(`could not record the result of run ${run.id}`, error)
-          )
+        settleHeadlessCompletion(
+          (result) => this.markDispatchResult(result),
+          { runId: run.id, ...launchRunTarget },
+          precheckResult,
+          launch.completion
+        )
       }
       return updated
     } catch (error) {

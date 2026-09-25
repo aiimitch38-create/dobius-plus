@@ -1826,7 +1826,10 @@ app.whenReady().then(async () => {
     // server process should execute schedules owned by `remote_host_service`.
     allowRemoteHostScheduling: isServeMode,
     headlessDispatcher: isServeMode
-      ? async ({ automation, run, target }) => {
+      ? async ({ automation, run, target, honorExecutionGate }) => {
+          // Why: the spawn happens after awaited worktree work; the runtime
+          // re-checks Pause crew right before it for gated runs.
+          const executionOrigin = honorExecutionGate ? ('agent-run' as const) : undefined
           const terminalSnapshotLimit = 2_000
           let terminalHandle: string
           let terminalSessionId: string | null = null
@@ -1841,7 +1844,8 @@ app.whenReady().then(async () => {
                 automation,
                 run,
                 repo: target.repo
-              })
+              }),
+              executionOrigin
             })
             terminalHandle = created.startupTerminal?.handle ?? ''
             terminalSessionId = created.startupTerminal?.tabId ?? null
@@ -1864,7 +1868,8 @@ app.whenReady().then(async () => {
               {
                 agent: automation.agentId,
                 prompt: automation.prompt,
-                title: run.title
+                title: run.title,
+                executionOrigin
               }
             )
             terminalHandle = terminal.handle

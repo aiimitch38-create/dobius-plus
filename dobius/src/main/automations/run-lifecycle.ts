@@ -6,6 +6,7 @@ import type {
 } from '../../shared/automations-types'
 import type { ClaudeUsageStore } from '../claude-usage/store'
 import type { CodexUsageStore } from '../codex-usage/store'
+import type { HeadlessAutomationDispatchLaunch } from './headless-dispatch'
 import { clearAutomationDispatchTokens } from './dispatch-tokens'
 import { isFinalRunStatus } from './run-final-status'
 import { deliverAutomationRunNotification } from './run-notification-delivery'
@@ -61,6 +62,40 @@ export async function finalizeAutomationRunResult(
     usage,
     error: run.error
   })
+}
+
+// Why: the headless completion runs detached from the launch call, so this
+// chain owns every rejection, including a failed result write (e.g. the
+// automation was deleted mid-run), instead of leaving it unhandled.
+export function settleHeadlessCompletion(
+  markResult: (result: AutomationDispatchResult) => Promise<AutomationRun>,
+  runTarget: Omit<AutomationDispatchResult, 'status' | 'precheckResult'>,
+  precheckResult: AutomationDispatchResult['precheckResult'],
+  completion: NonNullable<HeadlessAutomationDispatchLaunch['completion']>
+): void {
+  void completion
+    .then((outcome) =>
+      markResult({
+        ...runTarget,
+        status: outcome.status,
+        precheckResult,
+        outputSnapshot: outcome.outputSnapshot ?? null,
+        error: outcome.error ?? null
+      })
+    )
+    .catch((error) =>
+      markResult({
+        ...runTarget,
+        status: 'dispatch_failed',
+        error: describeError(error)
+      })
+    )
+    .catch((error) =>
+      reportAutomationBackgroundFailure(
+        `could not record the result of run ${runTarget.runId}`,
+        error
+      )
+    )
 }
 
 // Why: a 'dispatching' run is owned by a renderer or headless launch and a
