@@ -6,7 +6,11 @@ import type {
   ImessageBridgeStatus,
   ImessageBridgeChatDbProbe
 } from '../../shared/imessage-bridge'
-import { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-config'
+import {
+  getImessageBridgeConfig,
+  getImessageBridgeConfigUnreadableDetail,
+  updateImessageBridgeConfig
+} from './bridge-config'
 import { extractChatDbMessageText } from './chat-db-message-text'
 import { countOutboundLastMinute, sendImessage } from './imessage-send'
 import { isDobiusAuthoredRow } from './outbound-ring'
@@ -21,7 +25,11 @@ import {
 } from './terminal-send-guard'
 import { selfHandleSpellings } from './self-handle-spellings'
 
-export { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-config'
+export {
+  getImessageBridgeConfig,
+  updateImessageBridgeConfig,
+  updateImessageBridgeSettings
+} from './bridge-config'
 export type { ImessageBridgeTerminalDispatcher } from './terminal-send-guard'
 
 const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db')
@@ -176,7 +184,8 @@ export function getImessageBridgeStatus(): ImessageBridgeStatus {
       process.platform === 'darwin'
         ? probeChatDb()
         : { ok: false, error: 'iMessage bridge is only available on macOS' },
-    outboundLastMin: countOutboundLastMinute()
+    outboundLastMin: countOutboundLastMinute(),
+    unreadableDetail: getImessageBridgeConfigUnreadableDetail()
   }
 }
 

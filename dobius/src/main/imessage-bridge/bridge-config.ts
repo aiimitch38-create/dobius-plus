@@ -1,7 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 import { hardenExistingSecureFile, writeSecureFile } from '../../shared/secure-file'
+import { keepUnreadableCopy, readSafeJsonFile } from '../storage/safe-json-file'
 import type { ImessageBridgeConfig } from '../../shared/imessage-bridge'
 import {
   IMESSAGE_BRIDGE_DEFAULT_TRIGGER_PREFIX,
@@ -19,7 +20,11 @@ const DEFAULT_CONFIG: ImessageBridgeConfig = {
   lastSeenRowid: 0
 }
 
+const LABEL = `[imessage-bridge] ${CONFIG_FILE_NAME}`
+
 let cached: ImessageBridgeConfig | null = null
+// Set while the file on disk could not be read; saves are refused until restart.
+let unreadableDetail: string | null = null
 
 function configFilePath(): string {
   return path.join(app.getPath('userData'), CONFIG_FILE_NAME)
@@ -73,19 +78,33 @@ function hardenExistingConfigFile(target: string): void {
   }
 }
 
+function parseConfig(raw: unknown): ImessageBridgeConfig | undefined {
+  return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+    ? sanitizeConfig(raw)
+    : undefined
+}
+
 function loadConfigFromDisk(): ImessageBridgeConfig {
   const target = configFilePath()
   hardenExistingConfigFile(target)
-  try {
-    return sanitizeConfig(JSON.parse(readFileSync(target, 'utf-8')))
-  } catch {
-    // Missing or corrupt file both fall back to defaults; the next update
-    // rewrites a valid file.
-    return { ...DEFAULT_CONFIG }
+  // Missing file -> defaults (bridge off). Unreadable or corrupt file -> the
+  // same safe defaults for this session, but never saved over the original.
+  const result = readSafeJsonFile(target, parseConfig, () => ({ ...DEFAULT_CONFIG }))
+  if (result.status === 'unreadable') {
+    unreadableDetail = result.detail ?? 'unreadable'
+    console.error(
+      `${LABEL} unreadable (${target}: ${unreadableDetail}); settings changes are kept for this session only until it is fixed`
+    )
+    keepUnreadableCopy(target, LABEL, null)
   }
+  return result.value
 }
 
 function persistConfig(config: ImessageBridgeConfig): void {
+  if (unreadableDetail !== null) {
+    // Refused: the unreadable original must not be replaced (logged at load).
+    return
+  }
   // Why: writeSecureFile is tmp-write + rename (readable if the app dies
   // mid-write) and creates the file owner-only (0600 / user ACL, #15), whatever
   // the process umask.
@@ -99,11 +118,36 @@ function persistConfig(config: ImessageBridgeConfig): void {
   }
 }
 
+// Why load once, even while unreadable: re-reading a repaired file mid-session
+// would roll lastSeenRowid back to the on-disk value and re-type commands that
+// were already delivered. A repaired file is picked up on the next launch.
 export function getImessageBridgeConfig(): ImessageBridgeConfig {
   if (!cached) {
     cached = loadConfigFromDisk()
   }
   return { ...cached }
+}
+
+export const IMESSAGE_BRIDGE_CONFIG_UNREADABLE_MESSAGE = `${CONFIG_FILE_NAME} can't be read, so changes are not saved; repair or remove it`
+
+/** Why the config file could not be read this session, or null when it is fine. */
+export function getImessageBridgeConfigUnreadableDetail(): string | null {
+  getImessageBridgeConfig()
+  return unreadableDetail
+}
+
+/**
+ * Settings (renderer) edits. Throws while the file is unreadable so the user
+ * sees the refusal instead of a change that silently vanishes on restart.
+ * Bridge-internal lastSeenRowid updates keep using updateImessageBridgeConfig.
+ */
+export function updateImessageBridgeSettings(
+  updates: Partial<Omit<ImessageBridgeConfig, 'lastSeenRowid'>>
+): ImessageBridgeConfig {
+  if (getImessageBridgeConfigUnreadableDetail() !== null) {
+    throw new Error(IMESSAGE_BRIDGE_CONFIG_UNREADABLE_MESSAGE)
+  }
+  return updateImessageBridgeConfig(updates)
 }
 
 export function updateImessageBridgeConfig(
