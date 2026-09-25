@@ -128,6 +128,28 @@ export function getImessageBridgeConfig(): ImessageBridgeConfig {
   return { ...cached }
 }
 
+export const IMESSAGE_BRIDGE_CONFIG_UNREADABLE_MESSAGE = `${CONFIG_FILE_NAME} can't be read, so changes are not saved; repair or remove it`
+
+/** Why the config file could not be read this session, or null when it is fine. */
+export function getImessageBridgeConfigUnreadableDetail(): string | null {
+  getImessageBridgeConfig()
+  return unreadableDetail
+}
+
+/**
+ * Settings (renderer) edits. Throws while the file is unreadable so the user
+ * sees the refusal instead of a change that silently vanishes on restart.
+ * Bridge-internal lastSeenRowid updates keep using updateImessageBridgeConfig.
+ */
+export function updateImessageBridgeSettings(
+  updates: Partial<Omit<ImessageBridgeConfig, 'lastSeenRowid'>>
+): ImessageBridgeConfig {
+  if (getImessageBridgeConfigUnreadableDetail() !== null) {
+    throw new Error(IMESSAGE_BRIDGE_CONFIG_UNREADABLE_MESSAGE)
+  }
+  return updateImessageBridgeConfig(updates)
+}
+
 export function updateImessageBridgeConfig(
   updates: Partial<ImessageBridgeConfig>
 ): ImessageBridgeConfig {

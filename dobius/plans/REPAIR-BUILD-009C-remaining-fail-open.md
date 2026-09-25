@@ -115,3 +115,23 @@ Revert the commit. Set-aside `*.unreadable-<ms>` files remain on disk; old code 
   removed → the existing-0644 test fails.
 - Typecheck exit 0. Targeted (this build's set + src/main/storage + DestinationsSection.test.tsx):
   38 files / 444 tests passed.
+
+## Review round 1 (F1-F3)
+- F1: `updateImessageBridgeSettings()` (renderer edits via `imessageBridge:updateConfig`) throws
+  "imessage-bridge.json can't be read, so changes are not saved; repair or remove it" while the
+  file is unreadable. Bridge-internal `lastSeenRowid` updates still use `updateImessageBridgeConfig`
+  (session-only, no throw). The bridge status gains `unreadableDetail`. `ImessageBridgeSetting`
+  now catches the rejected save, shows it with `toast.error`, re-fetches the real config, and shows
+  a destructive notice while `unreadableDetail` is set (new en.json key `configUnreadable`).
+  `bridge-service-start.test.ts` mock gains the new export.
+- F2: the Keychain-write-failure rollback in `doSyncForCurrentSelection` wraps
+  `restoreSystemDefaultSnapshot` in try/catch, logs the rollback error, and rethrows the Keychain error.
+- F3: `ClaudeAccountService.rollbackRuntimeAuthBestEffort()` replaces the 4
+  `forceMaterializeCurrentSelectionForRollback` calls. It never throws, so add's
+  `safeRemoveManagedAuth` always runs and the original error is rethrown.
+- Tests (each seen failing without the fix): bridge-config refusal test (throw replaced by warn → 1
+  fail); ImessageBridgeSetting.test.tsx (pre-fix component → 1 fail); runtime-auth F2 test (inner
+  try/catch removed → 1 fail); service.test.ts F3 add + select tests (pre-fix service.ts → 2 fail).
+- Targeted: 44 files / 466 tests, 1 failure = no-top-level-translate.test.ts (baseline in
+  basefail.txt; flags DestinationsSection.tsx, not this build's files). src/main/ipc run: only
+  baseline files failed (mobile, notifications, pty, register-core-handlers, repos-remote).

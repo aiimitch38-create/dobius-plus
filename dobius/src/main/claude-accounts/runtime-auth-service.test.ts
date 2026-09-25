@@ -30,6 +30,7 @@ const testState = {
   throwScopedKeychainRead: false,
   throwLegacyKeychainRead: false,
   throwRuntimeKeychainWrite: false,
+  onRuntimeKeychainWriteFailure: null as (() => void) | null,
   throwLegacyRuntimeKeychainWrite: false,
   throwScopedKeychainWrite: false,
   runtimeWriteConfigDir: null as string | null,
@@ -126,6 +127,7 @@ vi.mock('./keychain', () => ({
         throw new Error(`Unexpected Claude config dir: ${configDir}`)
       }
       if (testState.throwRuntimeKeychainWrite) {
+        testState.onRuntimeKeychainWriteFailure?.()
         throw new Error('runtime keychain write failed')
       }
       testState.runtimeWriteConfigDir = configDir
@@ -276,6 +278,7 @@ describe('ClaudeRuntimeAuthService', () => {
     testState.throwScopedKeychainRead = false
     testState.throwLegacyKeychainRead = false
     testState.throwRuntimeKeychainWrite = false
+    testState.onRuntimeKeychainWriteFailure = null
     testState.throwLegacyRuntimeKeychainWrite = false
     testState.throwScopedKeychainWrite = false
     testState.runtimeWriteConfigDir = null
@@ -2094,6 +2097,54 @@ describe('ClaudeRuntimeAuthService', () => {
     expect(testState.scopedKeychainCredentials).toBe(systemCredentials)
     expect(testState.legacyKeychainCredentials).toBe(systemCredentials)
   })
+
+  it.runIf(hostPlatform !== 'win32' && process.getuid?.() !== 0)(
+    'keeps the Keychain error when the rollback snapshot is unreadable (BUILD-009C F2)',
+    async () => {
+      const runtimeCredentialsPath = join(testState.fakeHomeDir, '.claude', '.credentials.json')
+      const snapshotPath = join(
+        testState.userDataDir,
+        'claude-runtime-auth',
+        'system-default-auth.json'
+      )
+      const systemCredentials = createClaudeCredentialsJson('system@example.com', 'system')
+      const managedCredentials = createClaudeCredentialsJson('user@example.com', 'managed')
+      writeFileSync(runtimeCredentialsPath, systemCredentials, 'utf-8')
+      testState.scopedKeychainCredentials = systemCredentials
+      testState.legacyKeychainCredentials = systemCredentials
+      const managedAuthPath = createManagedClaudeAuth(
+        testState.userDataDir,
+        'account-1',
+        managedCredentials
+      )
+      const settings = createSettings({
+        claudeManagedAccounts: [createClaudeAccount('account-1', managedAuthPath)]
+      })
+      const store = createStore(settings)
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      // The snapshot captured on entry becomes unreadable before the rollback reads it.
+      testState.onRuntimeKeychainWriteFailure = () => chmodSync(snapshotPath, 0o000)
+
+      const { ClaudeRuntimeAuthService } = await import('./runtime-auth-service')
+      const service = new ClaudeRuntimeAuthService(store as never)
+      // Let the constructor's own sync finish before switching accounts.
+      await service.syncForCurrentSelection()
+      settings.activeClaudeManagedAccountId = 'account-1'
+      testState.throwRuntimeKeychainWrite = true
+      try {
+        await expect(service.syncForCurrentSelection()).rejects.toThrow(
+          'runtime keychain write failed'
+        )
+        expect(warn).toHaveBeenCalledWith(
+          '[claude-runtime-auth] Rollback after Keychain write failure did not complete:',
+          expect.stringContaining('EACCES')
+        )
+      } finally {
+        chmodSync(snapshotPath, 0o600)
+        warn.mockRestore()
+      }
+    }
+  )
 
   it('restores scoped keychain after legacy runtime keychain write fails', async () => {
     const runtimeCredentialsPath = join(testState.fakeHomeDir, '.claude', '.credentials.json')

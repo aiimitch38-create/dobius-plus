@@ -97,8 +97,27 @@ describe('iMessage bridge config never overwrites an unreadable file (BUILD-009C
     error.mockRestore()
   })
 
+  it('refuses Settings edits loudly but keeps advancing the watermark (review F1)', async () => {
+    const bytes = '{"enabled": true, "selfHandle": "fake@example.invalid"'
+    writeFileSync(configFile(), bytes, 'utf-8')
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const bridgeConfig = await loadModule()
+
+    expect(() => bridgeConfig.updateImessageBridgeSettings({ enabled: true })).toThrow(
+      "imessage-bridge.json can't be read, so changes are not saved; repair or remove it"
+    )
+    expect(bridgeConfig.getImessageBridgeConfig().enabled).toBe(false)
+    expect(bridgeConfig.getImessageBridgeConfigUnreadableDetail()).toBe('invalid JSON')
+    expect(() => bridgeConfig.updateImessageBridgeConfig({ lastSeenRowid: 9 })).not.toThrow()
+    expect(readFileSync(configFile(), 'utf-8')).toBe(bytes)
+    error.mockRestore()
+  })
+
   it('still creates the file when it is missing', async () => {
     const bridgeConfig = await loadModule()
+
+    bridgeConfig.updateImessageBridgeSettings({ triggerPrefix: 'x:' })
+    expect(bridgeConfig.getImessageBridgeConfigUnreadableDetail()).toBeNull()
 
     bridgeConfig.updateImessageBridgeConfig({ lastSeenRowid: 7 })
 

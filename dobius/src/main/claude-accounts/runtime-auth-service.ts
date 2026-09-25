@@ -441,10 +441,19 @@ export class ClaudeRuntimeAuthService {
       try {
         await writeActiveClaudeKeychainCredentialsForRuntime(credentialsJson, paths.configDir)
       } catch (error) {
-        await this.restoreSystemDefaultSnapshot(
-          credentialsJson,
-          this.readManagedOauthAccount(activeAccount)
-        )
+        try {
+          await this.restoreSystemDefaultSnapshot(
+            credentialsJson,
+            this.readManagedOauthAccount(activeAccount)
+          )
+        } catch (restoreError) {
+          // Why: the Keychain failure is the real cause; a snapshot problem
+          // during the rollback must not replace it.
+          console.warn(
+            '[claude-runtime-auth] Rollback after Keychain write failure did not complete:',
+            restoreError instanceof Error ? restoreError.message : String(restoreError)
+          )
+        }
         throw error
       }
     }
