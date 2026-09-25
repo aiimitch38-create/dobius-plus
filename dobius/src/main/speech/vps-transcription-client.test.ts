@@ -5,6 +5,7 @@ import {
   VpsTranscriptionSession,
   checkVpsSttHealth,
   describeVpsTranscriptionFailure,
+  resolveVpsSttEndpoint,
 } from './vps-transcription-client'
 
 afterEach(() => {
@@ -84,6 +85,26 @@ describe('VpsTranscriptionSession', () => {
 
   it('defaults to the Tailscale endpoint', () => {
     expect(DEFAULT_VPS_STT_ENDPOINT).toBe('http://100.98.24.1:8823')
+  })
+})
+
+describe('resolveVpsSttEndpoint (#123)', () => {
+  it('uses the configured endpoint over the default', () => {
+    expect(resolveVpsSttEndpoint(' https://stt.example.com:9000 ')).toBe(
+      'https://stt.example.com:9000',
+    )
+  })
+
+  it('falls back to the default only when nothing is configured', () => {
+    expect(resolveVpsSttEndpoint(undefined)).toBe(DEFAULT_VPS_STT_ENDPOINT)
+    expect(resolveVpsSttEndpoint('   ')).toBe(DEFAULT_VPS_STT_ENDPOINT)
+  })
+
+  it('rejects a malformed endpoint instead of silently using the default host', () => {
+    expect(() => resolveVpsSttEndpoint('stt.example.com:9000')).toThrow('Speech server address')
+    expect(() => resolveVpsSttEndpoint('not a url')).toThrow('not a valid URL')
+    expect(() => resolveVpsSttEndpoint('file:///etc/passwd')).toThrow('http:// or https://')
+    expect(() => resolveVpsSttEndpoint('http://user:pw@host:1')).toThrow('http:// or https://')
   })
 })
 

@@ -9,6 +9,7 @@ export const OPENAI_TRANSCRIPTION_MODEL_BY_ID: Record<string, string> = {
 const OPENAI_TRANSCRIPTION_URL = 'https://api.openai.com/v1/audio/transcriptions'
 const CLOUD_TRANSCRIPTION_SAMPLE_RATE = 16000
 const MAX_CLOUD_AUDIO_SECONDS = 10 * 60
+export const OPENAI_TRANSCRIPTION_TIMEOUT_MS = 120_000
 
 type OpenAiTranscriptionResponse = {
   text?: unknown
@@ -38,6 +39,12 @@ function parseOpenAiTranscriptionResponse(data: OpenAiTranscriptionResponse): st
     throw new Error(sanitizeOpenAiTranscriptionErrorMessage(data.error.message))
   }
   throw new Error('OpenAI transcription response did not include text')
+}
+
+function openAiTranscriptionTimeoutError(): Error {
+  return new Error(
+    `OpenAI transcription timed out after ${OPENAI_TRANSCRIPTION_TIMEOUT_MS / 1000} seconds`
+  )
 }
 
 export class OpenAiTranscriptionSession {
@@ -78,15 +85,33 @@ export class OpenAiTranscriptionSession {
     // a named WAV blob avoids filesystem temp files and works in packaged apps.
     form.append('file', new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), 'dictation.wav')
 
-    const response = await fetch(OPENAI_TRANSCRIPTION_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.readApiKey()}`
-      },
-      body: form
-    })
-
-    const data = (await response.json().catch(() => ({}))) as OpenAiTranscriptionResponse
+    // Why: without a bound, a stalled upload or response leaves dictation stuck
+    // in "Processing…" forever. The timer also covers reading the body.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), OPENAI_TRANSCRIPTION_TIMEOUT_MS)
+    let response: Response
+    let data: OpenAiTranscriptionResponse
+    try {
+      response = await fetch(OPENAI_TRANSCRIPTION_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.readApiKey()}`
+        },
+        body: form,
+        signal: controller.signal
+      })
+      data = (await response.json().catch(() => ({}))) as OpenAiTranscriptionResponse
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw openAiTranscriptionTimeoutError()
+      }
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
+    if (controller.signal.aborted) {
+      throw openAiTranscriptionTimeoutError()
+    }
     if (!response.ok) {
       const message =
         typeof data.error?.message === 'string'

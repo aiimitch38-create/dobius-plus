@@ -125,7 +125,9 @@ vi.mock('worker_threads', () => ({
 
 vi.mock('./model-catalog', () => ({
   getCatalogModel: (id: string) =>
-    id === 'openai-model'
+    id === 'vps-model'
+      ? { id, type: 'vps', provider: 'vps', streaming: false, sampleRate: 16000 }
+      : id === 'openai-model'
       ? {
           id,
           type: 'openai',
@@ -152,6 +154,13 @@ vi.mock('./openai-transcription-client', () => ({
 }))
 
 import { IDLE_WORKER_TEARDOWN_MS, START_DICTATION_TIMEOUT_MS, SttService } from './stt-service'
+
+function readyModelManager(): never {
+  return {
+    getModelState: vi.fn().mockResolvedValue({ id: 'model-a', status: 'ready' }),
+    getModelDir: vi.fn().mockReturnValue('/tmp/model-a')
+  } as never
+}
 
 describe('SttService', () => {
   beforeEach(() => {
@@ -484,5 +493,101 @@ describe('SttService', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('sends VPS dictation to the endpoint configured in Settings (#123)', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ text: 'hello' })
+    }))
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch)
+    try {
+      let configured: string | undefined = 'http://custom-host:9000'
+      const sink = vi.fn()
+      const service = new SttService(readyModelManager(), () => configured)
+
+      await service.startDictation('vps-model', sink, undefined, 'desktop')
+      service.feedAudio(new Float32Array(1600).fill(0.1), 16000, 'desktop')
+      await service.stopDictation('desktop')
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('http://custom-host:9000/transcribe')
+      expect(sink).toHaveBeenCalledWith({ type: 'final', text: 'hello' })
+
+      // Settings changes between dictations take effect on the next start.
+      configured = 'https://other-host'
+      await service.startDictation('vps-model', vi.fn(), undefined, 'desktop')
+      service.feedAudio(new Float32Array(1600).fill(0.1), 16000, 'desktop')
+      await service.stopDictation('desktop')
+      expect(fetchMock.mock.calls[1]?.[0]).toBe('https://other-host/transcribe')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('refuses to start VPS dictation with a malformed configured endpoint (#123)', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const service = new SttService(readyModelManager(), () => 'speech-box:8823')
+
+      await expect(
+        service.startDictation('vps-model', vi.fn(), undefined, 'desktop')
+      ).rejects.toThrow('Speech server address "speech-box:8823"')
+      expect(service.isActive()).toBe(false)
+      expect(fetchMock).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  // #86 (verify-only): a Worker 'error' event is fatal (the thread is already
+  // gone); a posted {type:'error'} message is recoverable and keeps the worker.
+  it('forgets a fatally errored worker and spawns a fresh one next time (#86)', async () => {
+    const sink = vi.fn()
+    const service = new SttService(readyModelManager())
+
+    await service.startDictation('model-a', sink, undefined, 'desktop')
+    const crashed = getLastWorker()
+    crashed!.emit('error', new Error('native crash'))
+    crashed!.emit('exit', 1)
+
+    expect(service.isActive()).toBe(false)
+    expect(service.getActiveModelId()).toBeNull()
+    expect(sink).toHaveBeenCalledWith({ type: 'error', error: 'Error: native crash' })
+
+    await service.startDictation('model-a', vi.fn(), undefined, 'desktop')
+    expect(getCreatedWorkerCount()).toBe(2)
+    expect(getLastWorker()).not.toBe(crashed)
+    expect(service.isActive()).toBe(true)
+  })
+
+  it('forgets a worker that exits on its own while active (#86)', async () => {
+    const service = new SttService(readyModelManager())
+
+    await service.startDictation('model-a', vi.fn(), undefined, 'desktop')
+    const worker = getLastWorker()
+    worker!.emit('exit', 1)
+
+    expect(service.isActive()).toBe(false)
+    expect(worker!.listenerCount('message')).toBe(0)
+    expect(worker!.listenerCount('exit')).toBe(0)
+  })
+
+  it('keeps the worker after a posted recoverable error message (#86)', async () => {
+    const sink = vi.fn()
+    const service = new SttService(readyModelManager())
+
+    await service.startDictation('model-a', sink, undefined, 'desktop')
+    const worker = getLastWorker()
+    worker!.emit('message', { type: 'error', error: 'decode failed' })
+
+    expect(sink).toHaveBeenCalledWith({ type: 'error', error: 'decode failed' })
+    expect(service.isActive()).toBe(true)
+    expect(worker!.terminated).toBe(false)
+
+    await service.stopDictation('desktop')
+    await service.startDictation('model-a', vi.fn(), undefined, 'desktop')
+    expect(getCreatedWorkerCount()).toBe(1)
   })
 })

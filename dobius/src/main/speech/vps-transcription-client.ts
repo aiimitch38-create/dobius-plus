@@ -21,6 +21,32 @@ const REQUEST_TIMEOUT_MS = 120_000
 
 export const DEFAULT_VPS_STT_ENDPOINT = 'http://100.98.24.1:8823'
 
+/**
+ * Settings' `vpsSttEndpoint` wins; only a missing or blank value falls back to
+ * the default. A malformed value throws instead of silently using the default
+ * host, so a typo can never send audio somewhere the user did not choose.
+ */
+export function resolveVpsSttEndpoint(configured: string | undefined): string {
+  const trimmed = configured?.trim()
+  if (!trimmed) {
+    return DEFAULT_VPS_STT_ENDPOINT
+  }
+  let url: URL
+  try {
+    url = new URL(trimmed)
+  } catch {
+    throw new Error(
+      `Speech server address "${trimmed}" in Settings is not a valid URL. Use a form like http://host:8823.`
+    )
+  }
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) {
+    throw new Error(
+      `Speech server address "${trimmed}" in Settings must be a plain http:// or https:// URL.`
+    )
+  }
+  return trimmed
+}
+
 type VpsTranscriptionResponse = {
   text?: string
   error?: string

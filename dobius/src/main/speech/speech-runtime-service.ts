@@ -22,7 +22,10 @@ export function getSpeechModelManager(store: SpeechSettingsStore): ModelManager 
 
 export function getSpeechSttService(store: SpeechSettingsStore): SttService {
   if (!sttService) {
-    sttService = new SttService(getSpeechModelManager(store))
+    sttService = new SttService(
+      getSpeechModelManager(store),
+      () => store.getSettings().voice?.vpsSttEndpoint
+    )
   }
   return sttService
 }
