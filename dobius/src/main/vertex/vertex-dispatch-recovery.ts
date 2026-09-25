@@ -12,6 +12,8 @@ import {
   type VertexTaskDispatch,
   type VertexTaskPatch,
 } from '../../shared/vertex-task-types'
+import type { AgentRun } from '../../shared/agents'
+import { getStoredAgentRun, listStoredAgentRuns } from '../agents/agent-runs-store'
 import { isPidAlive } from '../lib/is-pid-alive'
 
 const INTERRUPTED = 'Interrupted: Dobius stopped before this run finished.'
@@ -50,6 +52,27 @@ function isOrphanedClaim(dispatch: VertexTaskDispatch): boolean {
     return true
   }
   return !isPidAlive(pid) || !(Date.now() - dispatch.updatedAt < CLAIM_MAX_AGE_MS)
+}
+
+/* The board run executes in main (agent.run), so it outlives a reloaded or
+ * closed window. For a lost claim: while its run is still going, keep the
+ * card running (ending it would invite a second paid run); once the run has
+ * settled, end the card with the run's real outcome. The run is found by the
+ * id stamped at launch; a claim lost before that stamp landed is kept while
+ * any run of its agent started since the claim is still going. Only this
+ * process's runs are trusted: the runs store is per process. */
+function lostClaimEnd(dispatch: VertexTaskDispatch): string | AgentRun | null {
+  const run = dispatch.runId ? getStoredAgentRun(dispatch.runId) : null
+  if (run) {
+    return run.status === 'running' ? null : run
+  }
+  const busy = listStoredAgentRuns().some(
+    (candidate) =>
+      candidate.status === 'running' &&
+      candidate.agentId === dispatch.agentId &&
+      candidate.startedAt >= dispatch.updatedAt,
+  )
+  return busy ? null : LOST
 }
 
 /* Claims of THIS process whose renderer promise is gone: the window's
@@ -136,26 +159,46 @@ export function stampClaimOwner(patch: VertexTaskPatch): void {
 function releaseClaims(
   tasks: VertexTask[],
   orderGap: number,
-  reasonFor: (task: VertexTask, dispatch: VertexTaskDispatch) => string | null,
+  endFor: (task: VertexTask, dispatch: VertexTaskDispatch) => string | AgentRun | null,
 ): boolean {
   const now = Date.now()
+  const moveTo = (task: VertexTask, status: VertexTask['status']): void => {
+    const column = tasks.filter((t) => t.status === status).map((t) => t.order)
+    task.order = Math.max(0, ...column) + orderGap
+    task.status = status
+  }
   let changed = false
   for (const task of tasks) {
-    const reason = task.dispatch ? reasonFor(task, task.dispatch) : null
-    if (!task.dispatch || !reason) {
+    const end = task.dispatch ? endFor(task, task.dispatch) : null
+    if (!task.dispatch || !end) {
       continue
     }
-    const spent = task.dispatch.attempts >= VERTEX_DISPATCH_MAX_ATTEMPTS
-    task.dispatch = {
-      ...withoutOwner(task.dispatch),
-      status: spent ? 'dead' : 'failed',
-      error: spent ? `${reason} No attempts left.` : `${reason} Move to To Do to retry.`,
-      updatedAt: now,
-    }
-    if (task.status === 'todo') {
-      const column = tasks.filter((t) => t.status === 'in-progress').map((t) => t.order)
-      task.order = Math.max(0, ...column) + orderGap
-      task.status = 'in-progress'
+    const owned = withoutOwner(task.dispatch)
+    if (typeof end !== 'string' && end.status === 'success') {
+      // Same record the dispatcher writes on success. Review, never Done.
+      task.dispatch = {
+        ...owned,
+        status: 'succeeded',
+        report: (end.summary ?? '').slice(0, 4000),
+        costUsd: end.costUsd ?? null,
+        updatedAt: now,
+      }
+      moveTo(task, 'review')
+    } else {
+      const reason =
+        typeof end === 'string'
+          ? end
+          : `The run ended (${end.status}): ${end.summary ?? ''}`.slice(0, 240).trim()
+      const spent = task.dispatch.attempts >= VERTEX_DISPATCH_MAX_ATTEMPTS
+      task.dispatch = {
+        ...owned,
+        status: spent ? 'dead' : 'failed',
+        error: spent ? `${reason} No attempts left.` : `${reason} Move to To Do to retry.`,
+        updatedAt: now,
+      }
+      if (task.status === 'todo') {
+        moveTo(task, 'in-progress')
+      }
     }
     task.updatedAt = now
     changed = true
@@ -176,7 +219,7 @@ export function readReleasingOrphanedClaims(
     if (isOrphanedClaim(dispatch)) {
       return INTERRUPTED
     }
-    return check && isLostDispatcherClaim(task, dispatch, check) ? LOST : null
+    return check && isLostDispatcherClaim(task, dispatch, check) ? lostClaimEnd(dispatch) : null
   })
   if (!released) {
     return tasks

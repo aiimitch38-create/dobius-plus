@@ -272,6 +272,22 @@ describe('claim failures (N9)', () => {
     })
   })
 
+  it('records the run id on the claim before waiting on the run', async () => {
+    const api = stubApi(async () => ready)
+    runBoardTask.mockImplementation(async (args: { onRunStarted?: (id: string) => Promise<void> }) => {
+      await args.onRunStarted?.('run-9')
+      expect(api.vertexTasks.update).toHaveBeenLastCalledWith(
+        't1',
+        expect.objectContaining({
+          dispatch: expect.objectContaining({ status: 'running', runId: 'run-9' })
+        })
+      )
+      return { reply: 'done', costUsd: null }
+    })
+    await boardDispatchInternals.dispatchTask(ready, 'board')
+    expect(api.vertexTasks.update).toHaveBeenCalledTimes(3)
+  })
+
   it('settles a claimed run into Review', async () => {
     const api = stubApi(async () => ready)
     runBoardTask.mockResolvedValue({ reply: 'done', costUsd: 0.2 })

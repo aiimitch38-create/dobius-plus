@@ -102,8 +102,9 @@ recovery-write failure rethrown (M12). Every one failed at least one test.
   afterwards and overwrites it. Running several instances on one profile is unsupported; this is
   accepted rather than guessed around (an owner-less claim cannot be told apart from a crashed one).
 - Age cap `CLAIM_MAX_AGE_MS` = 6 hours (review F2), for claims of another live pid only.
-- After a window reload the old run may still be going in main. The card shows "Interrupted" and a
-  manual retry starts a second run beside it (review F1). Recorded; not auto-cancelled.
+- After a window reload the run goes on in main; the card now stays "working" until that run ends and
+  then shows its real outcome (review round 2). A failed/cancelled run is recorded as failed with the
+  run's own reason, although the live dispatcher (pre-existing) records any finished run as succeeded.
 
 ## Review fixes (third commit)
 - **F1 (medium)** a claim of THIS process stayed "running" while main lived if the renderer reloaded
@@ -146,6 +147,39 @@ recovery-write failure rethrown (M12). Every one failed at least one test.
   (never release / always release); other windows released regardless; lost-claim release removed;
   window not stamped; window or check not cleared after its call (leak); poll skips the release call; IPC ignores the sender; IPC skips validation;
   crashed window counted live.
+
+## Review fixes, round 2 (fourth commit, after merging stabilize/integration)
+- **F1 (medium)** the board run executes in main (`agent.run`) and outlives a reloaded or closed
+  window, so ending its claim as "Interrupted" invited a second paid run and the result never reached
+  the card.
+  - Run id stamped at launch: `runDobiusBoardTaskInChannel` takes `onRunStarted(runId)` and awaits it
+    right after `agent.run` returns, before waiting on the run. `board-dispatch.ts` uses it to write
+    `{...claim, runId}` (awaited, so it can never land after the settle write; a failed stamp only
+    logs). Main's `stampClaimOwner` keeps `runId` and restamps the owner.
+  - `lostClaimEnd` in `vertex-dispatch-recovery.ts`, used only on the lost-claim path (this process +
+    session, window gone or task not awaited): with a run id, look it up in `agent-runs-store`. While
+    it is `running`, keep the card running. Once it has settled, end the card with the real outcome:
+    `success` → `succeeded`, report = run summary (4000 chars), cost, card to Review (the record the
+    dispatcher itself writes); `error`/`cancelled` → `failed`/`dead` with "The run ended (<status>):
+    <summary>". Without a run id (window lost between launch and stamp, or a claim from before this
+    commit): keep the card while any `running` run of `dispatch.agentId` started at or after the claim
+    time (`dispatch.updatedAt`, unchanged by the stamp) exists; afterwards end it as "Interrupted",
+    because the time match cannot prove which run it was.
+  - Chosen option: the next poll writes the outcome (no main-side watcher). Cost: a closed-window run
+    is written when some window's dispatcher polls next (15 s). With auto mode off it waits for auto
+    mode or the next restart; after a restart the runs store has marked it `error` / "app restarted
+    during run", and the crash path ends the card.
+  - Not applied to the other-process or same-pid-other-session orphan paths: `agent-runs-store` is a
+    per-process cache that turns every `running` row into `error` on load, so another process's runs
+    cannot be trusted from here, and a previous session's runs are all dead.
+  - Tests: `vertex-task-store.test.ts` (runs store mocked): live run keeps the card; settled success
+    gives Review + report + cost; failed run gives failed with its reason; without a run id a newer
+    running run of the agent keeps it, an older one does not. `board-dispatch.test.ts`: the run id is
+    written to the claim before the run is awaited. New `runDobiusBoardTaskInChannel.test.mjs`:
+    `onRunStarted` runs after `agent.run` and before the first `agent.runs` poll.
+  - Mutations (each failed at least one test, then restored): lost path ignores runs; a running run is
+    released; a settled run treated as interrupted; success not recorded; no agent+time fallback;
+    fallback ignores the claim time; no run-id stamp; `onRunStarted` never called.
 
 ## Rollback
 Revert the commits. Data: new optional fields `ownerPid`/`ownerSessionId`/`ownerWebContentsId` on running dispatches;

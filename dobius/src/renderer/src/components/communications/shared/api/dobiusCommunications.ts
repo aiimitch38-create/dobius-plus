@@ -1821,6 +1821,8 @@ export async function runDobiusBoardTaskInChannel(args: {
   prompt: string;
   maxBudgetUsd: number;
   maxTurns: number;
+  /** Awaited before waiting on the run, so the board can record the run id. */
+  onRunStarted?: (runId: string) => Promise<void>;
 }): Promise<{ reply: string; costUsd: number | null }> {
   const agentsResponse = await invokeDobiusRuntime("agent.list");
   const agent = recordsAt(agentsResponse, "agents")
@@ -1851,6 +1853,7 @@ export async function runDobiusBoardTaskInChannel(args: {
       : undefined,
     "agent run id",
   );
+  await args.onRunStarted?.(runId);
   // parentEventId null = post at channel top level. The board task has no
   // originating message to thread under.
   const live: DobiusAgentRunLiveTarget = {

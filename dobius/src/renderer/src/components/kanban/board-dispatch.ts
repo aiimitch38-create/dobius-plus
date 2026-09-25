@@ -148,7 +148,15 @@ async function dispatchTask(task: VertexTask, channelId: string): Promise<void> 
         channelId,
         prompt: buildPrompt(task),
         maxBudgetUsd: MAX_BUDGET_USD,
-        maxTurns: MAX_TURNS
+        maxTurns: MAX_TURNS,
+        // Why: the run lives in main and outlives this window. With its id on
+        // the claim, main can keep the card running while the run goes on and
+        // record its real outcome if this window is gone when it ends.
+        onRunStarted: (runId) =>
+          window.api.vertexTasks.update(task.id, { dispatch: { ...base, runId } }).then(
+            () => undefined,
+            (error) => console.warn('[dobius board] could not record run id:', error)
+          )
       })
       await window.api.vertexTasks.update(task.id, {
         dispatch: {

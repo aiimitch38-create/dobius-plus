@@ -6,6 +6,12 @@ import { join } from 'node:path'
 // The store imports electron only for app.getPath, which the storage-dir
 // override replaces in tests.
 vi.mock('electron', () => ({ app: { getPath: () => tmpdir() } }))
+// Why mocked: the lost-claim path reads main's run registry; tests set it.
+const agentRuns = vi.hoisted(() => ({ runs: [] as AgentRun[] }))
+vi.mock('../agents/agent-runs-store', () => ({
+  getStoredAgentRun: (id: string) => agentRuns.runs.find((run) => run.id === id) ?? null,
+  listStoredAgentRuns: () => agentRuns.runs
+}))
 vi.mock('../agents/agents-store', () => ({
   listAgents: () => [
     {
@@ -36,6 +42,7 @@ import {
   setVertexTaskStorageDir,
   vertexTaskStore
 } from './vertex-task-store'
+import type { AgentRun } from '../../shared/agents'
 import type { VertexTaskStatus } from '../../shared/vertex-task-types'
 import { withClaimingWindow, withLostClaimCheck } from './vertex-dispatch-recovery'
 
@@ -47,6 +54,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  agentRuns.runs = []
   vi.restoreAllMocks()
   setVertexTaskStorageDir(null)
   rmSync(dir, { recursive: true, force: true })
@@ -625,9 +633,18 @@ describe('interrupted dispatch claims (#94)', () => {
 describe('claims a window has lost (#94, same process)', () => {
   const agent = { kind: 'agent' as const, id: 'agent-watson-uuid', name: 'Watson', initials: 'WA' }
   const WINDOW = 7
+  const CLAIMED_AT = Date.now()
+  const run = (patch: Partial<AgentRun>): AgentRun => ({
+    id: 'run-1',
+    agentId: agent.id,
+    prompt: 'board task',
+    startedAt: CLAIMED_AT + 5,
+    status: 'running',
+    ...patch
+  })
   const OTHER_WINDOW = 8
 
-  function claim(windowId = WINDOW): string {
+  function claim(windowId = WINDOW, runId?: string): string {
     const created = vertexTaskStore.create({ title: 'card', status: 'todo', assignee: agent })
     withClaimingWindow(windowId, () =>
       vertexTaskStore.update(created.id, {
@@ -637,7 +654,8 @@ describe('claims a window has lost (#94, same process)', () => {
           agentId: agent.id,
           agentName: agent.name,
           attempts: 1,
-          updatedAt: Date.now()
+          updatedAt: CLAIMED_AT,
+          ...(runId ? { runId } : {})
         }
       })
     )
@@ -692,5 +710,42 @@ describe('claims a window has lost (#94, same process)', () => {
     expect(dispatchOf(id)?.status).toBe('running')
     release([], [WINDOW])
     expect(dispatchOf(id)?.status).toBe('failed')
+  })
+
+  it('keeps a lost claim running while its run is still going in main', () => {
+    agentRuns.runs = [run({})]
+    const id = claim(WINDOW, 'run-1')
+    release([])
+    expect(dispatchOf(id)?.status).toBe('running')
+  })
+
+  it('records the real outcome once that run has finished', () => {
+    agentRuns.runs = [run({})]
+    const id = claim(WINDOW, 'run-1')
+    release([])
+    agentRuns.runs = [run({ status: 'success', summary: 'shipped it', costUsd: 0.42, endedAt: 9 })]
+    release([])
+    const task = vertexTaskStore.list().find((t) => t.id === id)
+    expect(task?.status).toBe('review')
+    expect(task?.dispatch).toMatchObject({ status: 'succeeded', report: 'shipped it', costUsd: 0.42 })
+    expect(task?.dispatch?.error).toBeUndefined()
+  })
+
+  it('records a failed run as failed with its own reason, not as interrupted', () => {
+    agentRuns.runs = [run({ status: 'error', summary: 'budget exceeded', endedAt: 9 })]
+    const id = claim(WINDOW, 'run-1')
+    release([])
+    expect(dispatchOf(id)?.status).toBe('failed')
+    expect(dispatchOf(id)?.error).toContain('budget exceeded')
+  })
+
+  it('without a run id, keeps the claim while a run of its agent started since the claim goes on', () => {
+    agentRuns.runs = [run({ id: 'unstamped' })]
+    const id = claim()
+    release([])
+    expect(dispatchOf(id)?.status).toBe('running')
+    agentRuns.runs = [run({ id: 'older', startedAt: CLAIMED_AT - 1 })]
+    release([])
+    expect(dispatchOf(id)?.error).toContain('reloaded or lost track')
   })
 })
