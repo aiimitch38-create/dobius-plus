@@ -1327,7 +1327,8 @@ function VideoReviewDialog({
       : isPostingReviewItem
         ? "Posting..."
         : null;
-  const visibleDuration = Math.max(duration, 0);
+  // Why: a malformed imeta duration parses to NaN; Math.max would pass NaN through to the scrubber.
+  const visibleDuration = Number.isFinite(duration) ? Math.max(duration, 0) : 0;
   const displayComments = React.useMemo(() => {
     const confirmedBodies = new Set(
       comments.map((comment) => comment.comment.body),
