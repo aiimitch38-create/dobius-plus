@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CrashReportStore } from './crash-report-store'
 import type { CrashReportCreateInput } from '../../shared/crash-reporting'
 
@@ -38,6 +38,7 @@ function input(reason = 'crashed'): CrashReportCreateInput {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })))
 })
 
@@ -77,6 +78,38 @@ describe('CrashReportStore', () => {
     await fs.writeFile(filePath, '{ nope', 'utf8')
 
     await expect(store.listRecent()).resolves.toEqual([])
+  })
+
+  it('never records over an unreadable file and recovers once it is repaired (BUILD-009B)', async () => {
+    const { store, filePath } = await createStore()
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    for (const bad of ['{ nope', '{"reports": 5}', '[]']) {
+      await fs.writeFile(filePath, bad, 'utf8')
+      const before = await fs.stat(filePath)
+
+      await expect(store.getLatestPending()).resolves.toBeNull()
+      await expect(store.record(input())).rejects.toThrow(/unreadable/)
+      await expect(store.dismiss('missing')).rejects.toThrow(/unreadable/)
+
+      await expect(fs.readFile(filePath, 'utf8')).resolves.toBe(bad)
+      expect((await fs.stat(filePath)).mtimeMs).toBe(before.mtimeMs)
+    }
+    const names = await fs.readdir(path.dirname(filePath))
+    expect(names.filter((name) => name.endsWith('.tmp'))).toEqual([])
+    expect(names.filter((name) => name.startsWith('crash-reports.json.unreadable-'))).toHaveLength(3)
+
+    await fs.writeFile(filePath, JSON.stringify({ reports: [] }), 'utf8')
+    await expect(store.record(input())).resolves.toMatchObject({ status: 'pending' })
+    await vi.waitFor(async () =>
+      expect(JSON.parse(await fs.readFile(filePath, 'utf8')).reports).toHaveLength(1)
+    )
+  })
+
+  it('a missing file still records normally', async () => {
+    const { store, filePath } = await createStore()
+    await store.record(input())
+    expect(JSON.parse(await fs.readFile(filePath, 'utf8')).reports).toHaveLength(1)
   })
 
   it('allows a pending report to reach one terminal status only', async () => {

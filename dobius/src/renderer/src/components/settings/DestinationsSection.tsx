@@ -140,8 +140,12 @@ export function DestinationsSection(): React.JSX.Element {
   }
 
   const handleDelete = async (id: string): Promise<void> => {
-    await window.api.destinations.delete(id)
-    setDestinations(await window.api.destinations.list())
+    try {
+      await window.api.destinations.delete(id)
+      setDestinations(await window.api.destinations.list())
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
   }
 
   const handleTest = async (id: string): Promise<void> => {
