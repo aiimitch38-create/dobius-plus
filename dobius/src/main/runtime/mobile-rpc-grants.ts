@@ -7,6 +7,8 @@
 // startup; edit them with the app closed.
 import { normalizeBrowserNavigationUrl } from '../../shared/browser-url'
 import { DOBIUS_BROWSER_BLANK_URL } from '../../shared/constants'
+import { MOBILE_RPC_METHOD_CLASSES } from './mobile-rpc-method-classes'
+import { isProtectedMobileWritePath } from './mobile-write-path-guard'
 
 export const MOBILE_RPC_GRANTS = [
   // Typing into, starting or closing shells / agents.
@@ -22,6 +24,8 @@ export const MOBILE_RPC_GRANTS = [
   'files.write',
   // Merging, auto-merging, closing or reopening PRs / MRs.
   'remote.merge',
+  // Outward tracker writes: issues, PRs/MRs, comments, reviewers, projects.
+  'remote.write',
   // Driving or watching the in-app browser, which carries desktop logins.
   'browser.control'
 ] as const
@@ -31,49 +35,6 @@ export type MobileRpcGrant = (typeof MOBILE_RPC_GRANTS)[number]
 export type MobileRpcRequirement = { rejected: string } | { grants: MobileRpcGrant[] }
 
 const GRANT_SET: ReadonlySet<string> = new Set(MOBILE_RPC_GRANTS)
-
-const METHOD_GRANTS: Readonly<Record<string, MobileRpcGrant>> = {
-  'terminal.send': 'terminal.send',
-  'terminal.close': 'terminal.send',
-  // Why: both tear down live PTYs (running agents), same as terminal.close.
-  'session.tabs.close': 'terminal.send',
-  'worktree.sleep': 'terminal.send',
-  'git.push': 'git.push',
-  // Why: fork sync pushes the updated default branch to origin.
-  'git.forkSync': 'git.push',
-  'git.discard': 'git.discard',
-  'worktree.create': 'worktree.create',
-  'worktree.rm': 'worktree.rm',
-  'worktree.forceDeleteBranch': 'worktree.rm',
-  'settings.update': 'settings.update',
-  // Why: both store a phone-chosen Linear credential / workspace on the host.
-  'linear.connect': 'settings.update',
-  'linear.selectWorkspace': 'settings.update',
-  'files.writeTerminalArtifact': 'files.write',
-  'files.createFile': 'files.write',
-  'markdown.saveTab': 'files.write',
-  'github.mergePR': 'remote.merge',
-  'github.setPRAutoMerge': 'remote.merge',
-  'github.updatePRState': 'remote.merge',
-  'gitlab.mergeMR': 'remote.merge',
-  'gitlab.updateMRState': 'remote.merge',
-  'browser.back': 'browser.control',
-  'browser.dialogAccept': 'browser.control',
-  'browser.dialogDismiss': 'browser.control',
-  'browser.forward': 'browser.control',
-  'browser.goto': 'browser.control',
-  'browser.keyboardInsertText': 'browser.control',
-  'browser.keypress': 'browser.control',
-  'browser.mouseDown': 'browser.control',
-  'browser.mouseClick': 'browser.control',
-  'browser.mouseMove': 'browser.control',
-  'browser.mouseUp': 'browser.control',
-  'browser.mouseWheel': 'browser.control',
-  'browser.reload': 'browser.control',
-  'browser.screencast': 'browser.control',
-  'browser.tabCreate': 'browser.control',
-  'browser.viewport': 'browser.control'
-}
 
 // Why: these fields make the host spawn a caller-chosen command or agent, the
 // same power as terminal.send, so they need that grant on top of the method's.
@@ -107,38 +68,15 @@ const REPO_UPDATE_REJECTED_FIELDS = [
   'hookSettings',
   'sourceControlAi',
   'worktreeBasePath',
-  'symlinkPaths'
+  'symlinkPaths',
+  // Why: these redirect which remote fork sync and issue sources talk to.
+  'forkSyncMode',
+  'upstream'
 ]
 
 // Why: worktree push target / parent redirect where the owner's later pushes
 // and PRs go; a phone must not be able to repoint them.
 const WORKTREE_SET_REJECTED_FIELDS = ['pushTarget', 'parentWorktree']
-
-// Why: files that agents or the host execute or obey on a later run. A phone
-// may never write them, even with files.write.
-const PROTECTED_DIR_SEGMENTS = new Set(['.git', '.claude', '.codex', '.cursor', '.gemini', '.dobius'])
-const PROTECTED_FILE_NAMES = new Set([
-  'claude.md',
-  'claude.local.md',
-  'agents.md',
-  'gemini.md',
-  '.cursorrules',
-  'dobius.yaml',
-  '.envrc'
-])
-
-export function isProtectedMobileWritePath(filePath: string): boolean {
-  const segments = filePath
-    .replaceAll('\\', '/')
-    .split('/')
-    .map((segment) => segment.trim().toLowerCase())
-    .filter((segment) => segment.length > 0)
-  const fileName = segments.at(-1) ?? ''
-  return (
-    PROTECTED_FILE_NAMES.has(fileName) ||
-    segments.some((segment) => PROTECTED_DIR_SEGMENTS.has(segment))
-  )
-}
 
 // Why: the in-app browser also opens file: URLs and bare paths (local
 // previews), which would let a phone read any local file over the screencast.
@@ -173,14 +111,14 @@ function mobileRejection(method: string, record: Record<string, unknown>): strin
       return `mobile clients cannot change ${fields.join(', ')}`
     }
   }
-  const writePath =
-    method === 'files.createFile'
-      ? record.relativePath
-      : method === 'files.writeTerminalArtifact'
-        ? record.absolutePath
-        : undefined
-  if (typeof writePath === 'string' && isProtectedMobileWritePath(writePath)) {
-    return 'mobile clients cannot write agent-instruction, hook or .git files'
+  // Why: early refusal on the relative path; the host-side guard
+  // (mobile-write-path-guard.ts) re-checks against the real filesystem.
+  if (
+    method === 'files.createFile' &&
+    typeof record.relativePath === 'string' &&
+    isProtectedMobileWritePath(record.relativePath)
+  ) {
+    return 'mobile clients cannot write agent-instruction, hook, script or .git files'
   }
   return null
 }
@@ -216,10 +154,16 @@ export function mobileRpcRequirement(method: string, params: unknown): MobileRpc
     }
   }
 
+  const methodClass = Object.hasOwn(MOBILE_RPC_METHOD_CLASSES, method)
+    ? MOBILE_RPC_METHOD_CLASSES[method]
+    : undefined
+  if (!methodClass) {
+    // Why: default-deny; see mobile-rpc-method-classes.ts.
+    return { rejected: 'method is not classified for mobile clients' }
+  }
   const grants = new Set<MobileRpcGrant>()
-  const methodGrant = METHOD_GRANTS[method]
-  if (methodGrant) {
-    grants.add(methodGrant)
+  if (methodClass !== 'read' && methodClass !== 'benign-mutation') {
+    grants.add(methodClass)
   }
   if (
     TERMINAL_CREATE_METHODS.has(method) &&

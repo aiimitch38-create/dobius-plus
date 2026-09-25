@@ -1012,6 +1012,8 @@ describe('DobiusRuntimeRpcServer', () => {
       'git.push',
       'settings.update',
       'remote.merge',
+      'remote.write',
+      'git.discard',
       'browser.control'
     ]
     const replies: Record<string, unknown>[] = []

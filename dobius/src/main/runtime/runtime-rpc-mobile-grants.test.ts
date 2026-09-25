@@ -4,10 +4,11 @@ import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi, type MockInstance } from 'vitest'
 import type { WebSocket } from 'ws'
-import { DobiusRuntimeRpcServer } from './runtime-rpc'
+import { DobiusRuntimeRpcServer, MOBILE_RPC_METHOD_ALLOWLIST } from './runtime-rpc'
 import { DeviceRegistry } from './device-registry'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
-import { mobileRpcRequirement } from './mobile-rpc-grants'
+import { MOBILE_RPC_GRANTS, mobileRpcRequirement } from './mobile-rpc-grants'
+import { MOBILE_RPC_METHOD_CLASSES } from './mobile-rpc-method-classes'
 import type { DobiusRuntimeService } from './dobius-runtime'
 import {
   encodeTerminalStreamFrame,
@@ -309,6 +310,7 @@ describe('mobile RPC grants: review bypasses', () => {
         'settings.update',
         'files.write',
         'remote.merge',
+        'remote.write',
         'browser.control'
       ]
       await expect(
@@ -366,17 +368,7 @@ describe('mobile RPC grants: review bypasses', () => {
 })
 
 describe('mobile RPC grants: round-2 review', () => {
-  const allGrants = [
-    'terminal.send',
-    'git.push',
-    'git.discard',
-    'worktree.create',
-    'worktree.rm',
-    'settings.update',
-    'files.write',
-    'remote.merge',
-    'browser.control'
-  ] as const
+  const allGrants = MOBILE_RPC_GRANTS
 
   const sendWithAllGrants = async (
     method: string,
@@ -425,8 +417,8 @@ describe('mobile RPC grants: round-2 review', () => {
     ['files.createFile', { worktree: 'id:wt', relativePath: '.codex/config.toml' }],
     ['files.createFile', { worktree: 'id:wt', relativePath: '.git/hooks/pre-commit' }],
     ['files.createFile', { worktree: 'id:wt', relativePath: 'dobius.yaml' }],
-    ['files.writeTerminalArtifact', { absolutePath: '/repo/.git/config', grantId: 'g' }],
-    ['files.writeTerminalArtifact', { absolutePath: 'C:\\repo\\CLAUDE.md', grantId: 'g' }]
+    ['files.createFile', { worktree: 'id:wt', relativePath: 'AGENT\u017F.md' }],
+    ['files.createFile', { worktree: 'id:wt', relativePath: 'pkg\\package.json' }]
   ])('F2: %s refuses agent-instruction, hook and .git paths even with files.write (%o)', async (method, params) => {
     const { reply, dispatched } = await sendWithAllGrants(method, params)
     expect(reply).toMatchObject(forbidden)
@@ -467,5 +459,77 @@ describe('mobile RPC grants: round-2 review', () => {
     await expect(send(phone.token, 'browser.screencast.unsubscribe', {})).resolves.toMatchObject({
       ok: true
     })
+  })
+})
+
+describe('mobile RPC grants: round-3 review (default deny)', () => {
+  it('classifies every mobile-allowlisted method, and nothing else', () => {
+    const allowlisted = [...MOBILE_RPC_METHOD_ALLOWLIST]
+    const unclassified = allowlisted.filter(
+      (method) => !Object.hasOwn(MOBILE_RPC_METHOD_CLASSES, method)
+    )
+    const stale = Object.keys(MOBILE_RPC_METHOD_CLASSES).filter(
+      (method) => !MOBILE_RPC_METHOD_ALLOWLIST.has(method)
+    )
+    expect(unclassified).toEqual([])
+    expect(stale).toEqual([])
+  })
+
+  it('denies a method that has no classification', () => {
+    expect(mobileRpcRequirement('github.someNewWrite', {})).toMatchObject({
+      rejected: expect.stringContaining('not classified')
+    })
+    expect(mobileRpcRequirement('toString', {})).toMatchObject({
+      rejected: expect.stringContaining('not classified')
+    })
+  })
+
+  it.each([
+    ['F1', 'github.project.updatePullRequestBySlug', 'remote.merge'],
+    ['F3', 'hostedReview.create', 'remote.write'],
+    ['F3', 'github.createIssue', 'remote.write'],
+    ['F3', 'github.addIssueComment', 'remote.write'],
+    ['F3', 'github.addPRReviewComment', 'remote.write'],
+    ['F3', 'github.addPRReviewCommentReply', 'remote.write'],
+    ['F3', 'github.requestPRReviewers', 'remote.write'],
+    ['F3', 'github.rerunPRChecks', 'remote.write'],
+    ['F3', 'github.updatePR', 'remote.write'],
+    ['F3', 'github.updateIssue', 'remote.write'],
+    ['F3', 'github.project.addIssueCommentBySlug', 'remote.write'],
+    ['F3', 'github.project.updateIssueCommentBySlug', 'remote.write'],
+    ['F3', 'github.project.deleteIssueCommentBySlug', 'remote.write'],
+    ['F3', 'github.project.updateIssueBySlug', 'remote.write'],
+    ['F3', 'github.project.updateIssueTypeBySlug', 'remote.write'],
+    ['F3', 'github.project.updateItemField', 'remote.write'],
+    ['F3', 'github.project.clearItemField', 'remote.write'],
+    ['F3', 'gitlab.createIssue', 'remote.write'],
+    ['F3', 'gitlab.addMRComment', 'remote.write'],
+    ['F3', 'gitlab.updateMR', 'remote.write'],
+    ['F3', 'linear.createIssue', 'remote.write'],
+    ['F3', 'linear.createProject', 'remote.write'],
+    ['F3', 'linear.addIssueComment', 'remote.write'],
+    ['F3', 'linear.updateIssue', 'remote.write'],
+    ['F5', 'git.abortMerge', 'git.discard'],
+    ['F5', 'git.abortRebase', 'git.discard']
+  ] as const)('%s: %s needs the %s grant', async (_id, method, grant) => {
+    const { registry, dispatchStreaming, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    await expect(send(phone.token, method, {})).resolves.toMatchObject(forbidden)
+    expect(dispatchStreaming).not.toHaveBeenCalled()
+    registry.getDevice(phone.deviceId)!.grants = [grant]
+    await expect(send(phone.token, method, {})).resolves.toMatchObject({ ok: true })
+  })
+
+  it.each([
+    ['forkSyncMode', 'safe-auto'],
+    ['upstream', { owner: 'evil', repo: 'fork' }]
+  ])('F4: repo.update rejects a mobile %s change even with every grant', async (field, value) => {
+    const { registry, dispatchStreaming, send } = setup()
+    const phone = registry.addDevice('phone', 'mobile')
+    registry.getDevice(phone.deviceId)!.grants = [...MOBILE_RPC_GRANTS]
+    await expect(
+      send(phone.token, 'repo.update', { repo: 'id:r', updates: { [field]: value } })
+    ).resolves.toMatchObject(forbidden)
+    expect(dispatchStreaming).not.toHaveBeenCalled()
   })
 })

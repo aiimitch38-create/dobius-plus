@@ -124,7 +124,7 @@ function webClientPathForEndpoint(pathname: string): string {
   return `${pathname.replace(/\/$/, '')}/web-index.html`
 }
 
-const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
+export const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'voice.intent',
   'voice.reply',
   'accounts.list',

@@ -5107,6 +5107,15 @@ export class DobiusRuntimeService {
     return { worktree, repo, connectionId, localGitOptions }
   }
 
+  // Why: mobile write guards (mobile-write-path-guard.ts) check targets
+  // relative to the real worktree root, and skip disk checks over SSH.
+  async resolveMobileWriteRoot(
+    worktreeSelector: string
+  ): Promise<{ root: string; connectionId?: string }> {
+    const target = await this.resolveRuntimeFileTarget(worktreeSelector)
+    return { root: target.worktree.path, connectionId: target.connectionId }
+  }
+
   private async resolveRuntimeFileTarget(worktreeSelector: string): Promise<{
     worktree: ResolvedWorktree
     connectionId?: string

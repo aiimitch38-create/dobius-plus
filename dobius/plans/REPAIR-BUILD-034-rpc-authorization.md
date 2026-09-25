@@ -46,20 +46,25 @@ Grant categories (`MOBILE_RPC_GRANTS` in `mobile-rpc-grants.ts`), all **denied**
 | `worktree.create` | worktree.create (any) |
 | `worktree.rm` | worktree.rm, worktree.forceDeleteBranch |
 | `git.push` | git.push, git.forkSync (pushes to origin) |
-| `git.discard` | git.discard |
+| `git.discard` | git.discard, git.abortMerge, git.abortRebase |
 | `settings.update` | settings.update, linear.connect, linear.selectWorkspace |
-| `files.write` | files.writeTerminalArtifact, files.createFile, markdown.saveTab (agent-instruction / hook / `.git` paths refused even with the grant) |
-| `remote.merge` | github.mergePR, github.setPRAutoMerge, github.updatePRState, gitlab.mergeMR, gitlab.updateMRState |
+| `files.write` | files.writeTerminalArtifact, files.createFile, markdown.saveTab (host-side path guard refuses protected files and Dobius data even with the grant) |
+| `remote.merge` | github.mergePR, github.setPRAutoMerge, github.updatePRState, github.project.updatePullRequestBySlug, gitlab.mergeMR, gitlab.updateMRState |
+| `remote.write` | every outward tracker write: hostedReview.create; github createIssue, addIssueComment, addPRReviewComment(Reply), request/removePRReviewers, rerunPRChecks, resolveReviewThread, setPRFileViewed, updateIssue, updatePR, updatePRTitle, all github.project.* writes; gitlab createIssue, addIssueComment, addMRComment, resolveMRDiscussion, updateIssue, updateMR; linear createIssue, createProject, addIssueComment, updateIssue |
 | `browser.control` | every mobile browser.* method except browser.screencast.unsubscribe (navigate, click, type, keys, dialogs, reload, viewport, tabCreate, screencast) |
 
 Rejected for mobile outright (no grant unlocks it): AI generation overrides
 (`commitMessageAi`, `sourceControlAi`, `sourceControlAiResolvedParams`, `agentCmdOverrides` on
 git.generateCommitMessage / generatePullRequestFields / discoverCommitMessageModels) and
-repo.update of `hookSettings`, `sourceControlAi`, `worktreeBasePath`, `symlinkPaths`;
+repo.update of `hookSettings`, `sourceControlAi`, `worktreeBasePath`, `symlinkPaths`, `forkSyncMode`,
+`upstream`; any method not classified in `mobile-rpc-method-classes.ts` (default deny);
 worktree.set of `pushTarget` / `parentWorktree`; browser.goto / browser.tabCreate with any URL that is
 not http(s) (file:, bare paths, javascript:, leading `-`); files.createFile / writeTerminalArtifact /
-markdown.saveTab to CLAUDE.md, CLAUDE.local.md, AGENTS.md, GEMINI.md, .cursorrules, dobius.yaml,
-.envrc, or anything under .git/, .claude/, .codex/, .cursor/, .gemini/, .dobius/.
+markdown.saveTab to CLAUDE.md, CLAUDE.local.md, AGENTS.md, AGENTS.override.md, GEMINI.md,
+.cursorrules, dobius.yaml, .envrc, .mcp.json, package.json, .vscode/tasks.json,
+.vscode/settings.json, .github/copilot-instructions.md, anything under .git/, .claude/, .codex/,
+.cursor/, .gemini/, .dobius/, .husky/ (names APFS-folded, checked relative to the worktree), into
+the userData root or ~/.dobius, through a symlink, or (createFile/saveTab) outside the worktree.
 Removed from the mobile allowlist: `agentTeams.prepareLaunch`, `agentTeams.tmuxCompat` (no mobile
 caller; tmux `send-keys` types into shells).
 
@@ -67,7 +72,8 @@ To grant: add e.g. `"grants": ["terminal.send", "worktree.create"]` to that devi
 `<userData>/dobius-devices.json` **with the app closed** (grants are read at startup; a running
 app's next save would overwrite a live edit). No UI yet. Consequences with defaults: from the
 phone, no terminal typing/closing, no worktree create/sleep/remove, no discard, push, fork sync,
-merge, settings or Linear change, no file writes, and no in-app browser control or screencast. The phone listener itself is off by default (BUILD-003).
+merge, settings or Linear change, no tracker writes (issues, PR/MR comments, reviewers, PR
+creation), no file writes, and no in-app browser control or screencast. The phone listener itself is off by default (BUILD-003).
 
 ## Deviations from EXECUTION-ORDER.md
 - `rpc/dispatcher.ts` not changed: `dispatch()` is transport-agnostic and trusts its caller by
@@ -158,71 +164,73 @@ Mutation checks round 3 (failing tests): screencast grant 1, http(s) scheme chec
 at RPC 2, saveTab grant 1, createFile grant 1, protected paths at RPC 8, saveTab handler path
 check 5, worktree.set fields 2, linear.connect 1, forkSync 1, bridge leading `-` 1.
 
-## Mobile allowlist sweep (231 methods after removing agentTeams.*)
-R = read-only / subscription / cancel, G = gated (grant or reject), U = ungated mutating (reason).
+## Review round 4 (final: 3 MEDIUM, 2 LOW, unverified risks)
+Merged `stabilize/integration` first (clean, ca522cdd).
+- Design: default deny. `mobile-rpc-method-classes.ts` classifies every allowlisted method as
+  `read`, `benign-mutation` or a grant; `mobileRpcRequirement` rejects any method with no
+  classification, and a test fails if an allowlisted method is unclassified or a class entry is
+  stale. `MOBILE_RPC_METHOD_ALLOWLIST` is now exported for that test.
+- F1 github.project.updatePullRequestBySlug → remote.merge. F3 new `remote.write` grant (list in
+  the Decisions table). F4 repo.update rejects forkSyncMode / upstream. F5 abortMerge /
+  abortRebase → git.discard.
+- F2 + unverified risks: new host-side guard `mobile-write-path-guard.ts`, run by the
+  files.createFile, files.writeTerminalArtifact and markdown.saveTab handlers when
+  `clientKind === 'mobile'`. It folds names like APFS (NFKC, ſ→s, Kelvin K→k, lowercase),
+  realpaths the deepest existing ancestor, refuses a symlinked target, refuses when the name
+  resolves to a differently spelled on-disk entry, refuses when a symlinked ancestor redirects
+  the write, refuses anything in the userData root (`getUserDataRoot()`) or ~/.dobius (including
+  via symlink), and checks the protected list on the path RELATIVE to the real worktree root, so
+  worktrees under `<repo>/.claude/worktrees/` save normally. Outside the worktree:
+  createFile/saveTab refuse; writeTerminalArtifact checks the full path (so ~/.claude/** is
+  refused; fail-closed for files in other worktrees under .claude/worktrees). SSH worktrees get
+  the folded lexical checks only (host cannot inspect the remote filesystem).
+- `DobiusRuntimeService.resolveMobileWriteRoot(worktree)` exposes the worktree root and
+  connectionId for the guard.
+- The transport keeps an early folded check on files.createFile's relative path only; the
+  absolute-path transport check was removed (it caused the .claude/worktrees false positive).
 
-| Method(s) | Class | Note |
-|---|---|---|
-| terminal.send, terminal.close | G | terminal.send |
-| terminal.create | G/U | G with command/env/launchConfig; else U: opens an idle shell, input still gated |
-| terminal.multiplex, terminal.subscribe | R | stream; binary Input gated by terminal.send |
-| terminal.read, list, agentStatus, isRunningAgent, getAutoRestoreFit, wait, unsubscribe | R | |
-| terminal.clearBuffer, focus, rename, setAutoRestoreFit, setDisplayMode, updateViewport | U | display state only |
-| session.tabs.close | G | terminal.send |
-| session.tabs.createTerminal | G/U | G with command/env/launchConfig; else U: agent-only launch picks a configured agent, no caller command |
-| session.tabs.activate, move | U | tab layout only |
-| session.tabs.list/listAll/subscribe/subscribeAll/unsubscribe/unsubscribeAll | R | |
-| worktree.create | G | worktree.create (+ terminal.send for spawn fields) |
-| worktree.rm, worktree.forceDeleteBranch | G | worktree.rm |
-| worktree.sleep | G | terminal.send |
-| worktree.set | G/U | pushTarget/parentWorktree rejected; rest U: names, links, pin, sparse dirs |
-| worktree.activate | U | selection only |
-| worktree.prefetchCreateBase | U | git fetch of a base ref, no local change to work |
-| worktree.ps, show, resolveMrBase, resolvePrBase | R | |
-| git.push | G | git.push |
-| git.discard | G | git.discard |
-| git.generateCommitMessage, generatePullRequestFields, discoverCommitMessageModels | G | override fields rejected; stored settings only |
-| git.commit | U | local and reversible; runs only repo-owned hooks |
-| git.stage, unstage, bulkStage, bulkUnstage | U | index only, reversible |
-| git.forkSync | G | git.push (pushes the synced default branch to origin) |
-| git.checkout, fetch, pull, fastForward, rebaseFromBase, abortMerge, abortRebase | U | local git operations that make no push; git refuses to clobber dirty work (fetch/pull do contact the remote) |
-| git.cancelGenerate* | R | cancel |
-| git.status, diff, history, localBranches, upstreamStatus, branchCompare, branchDiff, commitCompare, commitDiff | R | |
-| github.mergePR, setPRAutoMerge, updatePRState; gitlab.mergeMR, updateMRState | G | remote.merge |
-| github.createIssue, addIssueComment, addPRReviewComment(Reply), requestPRReviewers, removePRReviewers, rerunPRChecks, resolveReviewThread, setPRFileViewed, updateIssue, updatePR, updatePRTitle, project.* updates/comments/clearItemField | U | tracker text/metadata; visible, attributable, reversible; no code runs locally |
-| gitlab.createIssue, addIssueComment, addMRComment, resolveMRDiscussion, updateIssue, updateMR | U | same as GitHub tracker edits |
-| github/gitlab list/read methods (countWorkItems, listLabels, listWorkItems, prChecks, prCheckDetails, prFileContents, prForBranch, repoSlug, workItem, workItemDetails, project list/view/resolve, todos) | R | |
-| hostedReview.create | U | opens a PR/MR from an existing remote branch (no push; checked `createHostedReview`) |
-| hostedReview.forBranch, getCreationEligibility | R | |
-| linear.addIssueComment, createIssue, createProject, updateIssue | U | tracker edits, same reason as GitHub |
-| linear.connect, selectWorkspace | G | settings.update (stores a phone-supplied key / workspace) |
-| linear read methods | R | |
-| repo.update | G/U | hookSettings/sourceControlAi/worktreeBasePath/symlinkPaths rejected; rest U: display and discovery prefs |
-| repo.saveSparsePreset | U | preset metadata |
-| repo.list, baseRefDefault, gitAvailable, hooks, searchRefs, sparsePresets | R | |
-| files.writeTerminalArtifact | G | files.write |
-| files.createFile | G | files.write; protected paths rejected |
-| files.open, files.openDiff | U | opens a tab on desktop |
-| files.read*, list, browseServerDir, resolveTerminalPath | R | resolveTerminalPath issues a read/write grant id; the write is gated |
-| markdown.saveTab | G | files.write; the handler reads the tab's path and refuses protected paths for mobile clients |
-| markdown.readTab | R | |
-| settings.update | G | settings.update |
-| settings.get, ui.get, status.get, stats.summary, diagnostics.memory, host.*, preflight.detectAgents/detectRemoteAgents | R | |
-| ui.set, ui.recordFeatureInteraction | U | UI state only |
-| preflight.check | U | re-runs fixed local tool detection; no caller input |
-| accounts.selectClaude, selectCodex | U | switches between accounts already signed in on the Mac |
-| accounts.list/subscribe/unsubscribe, notifications.*, runtime.clientEvents.*, nativeChat.* | R | |
-| browser.* (goto, click, keys, tabCreate, dialogs, reload, viewport, screencast) | G | browser.control; goto/tabCreate also http(s)-only for mobile |
-| browser.screencast.unsubscribe | R | cleanup, must always work |
-| clipboard.* image upload / saveImageAsTempFile | U | writes an image to a temp file |
-| speech.dictation.*, speech.models.list | R/U | dictation session state |
-| speech.models.download, speech.models.delete | U | catalog model by id (inferred from handler, not traced further) |
-| ssh.connect | U | connects an already-registered SSH target only |
-| ssh.getState | R | |
-| voice.intent, voice.reply | U | voice conductor; by design (C2/C3), not changed here |
+Mutation checks round 4 (failing tests): default deny off 1, classification entry removed 2,
+updatePullRequestBySlug→benign 1, hostedReview.create→benign 1, forkSyncMode reject 1,
+abortMerge→benign 1, APFS fold → plain lowercase 5, package.json 2, .husky 1, .vscode/tasks.json 1,
+file-symlink refusal 1, symlinked-ancestor refusal 2, data-root check off 2, data-root check
+lexical-only (symlink) 1, protected check on absolute instead of relative path 2 (the
+.claude/worktrees false positive), ~/.dobius root 1, writeTerminalArtifact handler wiring 2.
+
+## Mobile allowlist sweep (231 methods)
+The table of record is `src/main/runtime/mobile-rpc-method-classes.ts` (one line per method,
+enforced by test). Summary:
+
+| Class | Methods |
+|---|---|
+| grant `terminal.send` | terminal.send, terminal.close, session.tabs.close, worktree.sleep (+ startup fields on terminal.create, session.tabs.createTerminal, worktree.create; binary Input frames) |
+| grant `worktree.create` / `worktree.rm` | worktree.create / worktree.rm, worktree.forceDeleteBranch |
+| grant `git.push` / `git.discard` | git.push, git.forkSync / git.discard, git.abortMerge, git.abortRebase |
+| grant `settings.update` | settings.update, linear.connect, linear.selectWorkspace |
+| grant `files.write` | files.createFile, files.writeTerminalArtifact, markdown.saveTab |
+| grant `remote.merge` / `remote.write` | see Decisions table |
+| grant `browser.control` | all browser.* except screencast.unsubscribe |
+| read | status/settings/ui get, host.*, stats, diagnostics, every list/read/diff/history/status, subscriptions and unsubscribes, terminal read/list/wait/multiplex/subscribe, files read/list/resolveTerminalPath, tracker reads, preflight detect, repo reads, nativeChat, notifications, clientEvents, voice.reply |
+
+benign-mutation (ungated), one-line reasons:
+- git.stage / unstage / bulkStage / bulkUnstage: index only, reversible.
+- git.commit: local commit, reversible; runs only repo-owned hooks (a phone can no longer write .husky/.git).
+- git.checkout / fetch / pull / fastForward / rebaseFromBase: make no push; git refuses to clobber dirty work (fetch/pull do contact the remote).
+- git.generateCommitMessage / generatePullRequestFields / discoverCommitMessageModels: use stored AI settings only (overrides rejected); a paid model run, but no new command.
+- git.cancelGenerate*: cancel.
+- terminal.create / session.tabs.createTerminal without startup fields: idle shell or configured agent; input stays gated.
+- terminal.clearBuffer / focus / rename / setAutoRestoreFit / setDisplayMode / updateViewport, session.tabs.activate / move, worktree.activate: display state only.
+- worktree.set (without pushTarget/parentWorktree), repo.update (without rejected fields), repo.saveSparsePreset, worktree.prefetchCreateBase: metadata / fetch only.
+- files.open / openDiff: opens a desktop tab.
+- clipboard.*: writes an uploaded image to a temp file.
+- accounts.selectClaude / selectCodex: switches between accounts already signed in on the Mac.
+- ssh.connect: connects an already-registered target only.
+- speech.dictation.*, speech.models.download / delete: dictation state; catalog models by id (inferred from the handler, not traced further).
+- preflight.check: re-runs fixed local tool detection.
+- ui.set, ui.recordFeatureInteraction: UI state.
+- voice.intent: voice conductor, unchanged by design (C2/C3).
 
 ## Residual risk (not in scope)
-See the sweep table: the remaining ungated mutating methods are listed with reasons. The biggest
+See the sweep: every remaining ungated mutating method is listed with a reason. The biggest
 remaining surface is `voice.intent` (by design, C2/C3). With `browser.control` granted, a phone sees
 whatever the desktop browser pane shows, including a desktop-opened `file:` preview it navigates back
 to (browser.back/forward/reload stay within that tab's history); that is part of what the grant means.
