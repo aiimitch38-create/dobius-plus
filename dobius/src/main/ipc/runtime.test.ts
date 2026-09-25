@@ -17,6 +17,21 @@ vi.mock('electron', () => ({
 }))
 
 import { registerRuntimeHandlers } from './runtime'
+import { registerRendererWindow } from '../window/renderer-window-registry'
+
+function makeAppWindowSender(): { isDestroyed: () => boolean } {
+  const sender = { isDestroyed: () => false }
+  registerRendererWindow({
+    once: vi.fn(),
+    isDestroyed: () => false,
+    webContents: sender
+  } as never)
+  return sender
+}
+
+function topFrameEvent(sender: unknown): unknown {
+  return { sender, senderFrame: { parent: null } }
+}
 
 describe('registerRuntimeHandlers', () => {
   beforeEach(() => {
@@ -68,7 +83,7 @@ describe('registerRuntimeHandlers', () => {
     expect(callRegistration).toBeTruthy()
 
     const handler = callRegistration![1]
-    const result = await handler({ sender: {} }, { method: 'status.get' })
+    const result = await handler(topFrameEvent(makeAppWindowSender()), { method: 'status.get' })
 
     expect(result).toMatchObject({
       ok: true,
@@ -91,12 +106,84 @@ describe('registerRuntimeHandlers', () => {
     expect(callRegistration).toBeTruthy()
 
     const handler = callRegistration![1]
-    const result = await handler({ sender: {} }, { method: 'projectGroup.list' })
+    const result = await handler(topFrameEvent(makeAppWindowSender()), {
+      method: 'projectGroup.list'
+    })
 
     expect(result).toMatchObject({
       ok: true,
       result: { groups: [{ id: 'group-1', name: 'Platform' }] },
       _meta: { runtimeId: 'runtime-1' }
+    })
+  })
+
+  describe('runtime:call sender trust (#21)', () => {
+    const makeRuntime = () => ({
+      syncWindowGraph: vi.fn(),
+      getStatus: vi.fn().mockReturnValue({ graphStatus: 'ready' }),
+      getRuntimeId: vi.fn().mockReturnValue('runtime-1'),
+      listProjectGroups: vi.fn().mockReturnValue([])
+    })
+
+    const callHandler = (): ((event: unknown, args: unknown) => Promise<unknown>) => {
+      const registration = handleMock.mock.calls.find(([channel]) => channel === 'runtime:call')
+      return registration![1]
+    }
+
+    const forbidden = {
+      ok: false,
+      error: expect.objectContaining({ code: 'forbidden' }),
+      _meta: { runtimeId: 'runtime-1' }
+    }
+
+    it('denies a webContents that is not a registered app window', async () => {
+      const runtime = makeRuntime()
+      registerRuntimeHandlers(runtime as never)
+
+      const result = await callHandler()(topFrameEvent({ isDestroyed: () => false }), {
+        method: 'projectGroup.list'
+      })
+
+      expect(result).toMatchObject(forbidden)
+      expect(runtime.listProjectGroups).not.toHaveBeenCalled()
+    })
+
+    it('denies a subframe inside a registered app window', async () => {
+      const runtime = makeRuntime()
+      registerRuntimeHandlers(runtime as never)
+
+      const result = await callHandler()(
+        { sender: makeAppWindowSender(), senderFrame: { parent: { url: 'app://top' } } },
+        { method: 'projectGroup.list' }
+      )
+
+      expect(result).toMatchObject(forbidden)
+      expect(runtime.listProjectGroups).not.toHaveBeenCalled()
+    })
+
+    it('denies when the sending frame is gone', async () => {
+      const runtime = makeRuntime()
+      registerRuntimeHandlers(runtime as never)
+
+      const result = await callHandler()(
+        { sender: makeAppWindowSender(), senderFrame: null },
+        { method: 'projectGroup.list' }
+      )
+
+      expect(result).toMatchObject(forbidden)
+      expect(runtime.listProjectGroups).not.toHaveBeenCalled()
+    })
+
+    it('denies a destroyed webContents', async () => {
+      const runtime = makeRuntime()
+      registerRuntimeHandlers(runtime as never)
+      const sender = makeAppWindowSender()
+      sender.isDestroyed = () => true
+
+      const result = await callHandler()(topFrameEvent(sender), { method: 'projectGroup.list' })
+
+      expect(result).toMatchObject(forbidden)
+      expect(runtime.listProjectGroups).not.toHaveBeenCalled()
     })
   })
 })

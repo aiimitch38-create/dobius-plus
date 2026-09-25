@@ -28,8 +28,10 @@ import { E2EEChannel } from './rpc/e2ee-channel'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../shared/pairing'
 import {
   decodeTerminalStreamFrame,
+  TerminalStreamOpcode,
   type TerminalStreamFrame
 } from '../../shared/terminal-stream-protocol'
+import { deviceHasMobileRpcGrant, requiredMobileRpcGrant } from './mobile-rpc-grants'
 
 const DEFAULT_WS_PORT = 6768
 
@@ -988,6 +990,20 @@ export class DobiusRuntimeRpcServer {
       )
       return
     }
+    const requiredGrant =
+      device.scope === 'mobile' ? requiredMobileRpcGrant(request.method, request.params) : null
+    if (requiredGrant && !deviceHasMobileRpcGrant(device, requiredGrant)) {
+      reply(
+        JSON.stringify(
+          this.buildError(
+            request.id,
+            'forbidden',
+            `Method '${request.method}' needs the '${requiredGrant}' grant for this mobile device`
+          )
+        )
+      )
+      return
+    }
 
     // Why: associate the deviceToken with this WebSocket so ws.on('close')
     // can notify the runtime which mobile client disconnected.
@@ -1032,13 +1048,35 @@ export class DobiusRuntimeRpcServer {
         signal: abortRegistration?.signal,
         sendBinary,
         registerBinaryStreamHandler: (streamId, handler) =>
-          this.registerBinaryStreamHandler(connectionId, streamId, handler)
+          this.registerBinaryStreamHandler(
+            connectionId,
+            streamId,
+            device.scope === 'mobile' ? this.guardMobileTerminalInput(token, handler) : handler
+          )
       })
     } finally {
       abortRegistration?.dispose()
       if (longPoll) {
         this.activeLongPolls = Math.max(0, this.activeLongPolls - 1)
       }
+    }
+  }
+
+  // Why: binary Input frames on terminal.subscribe / terminal.multiplex type
+  // into the PTY exactly like terminal.send, so they need the same grant.
+  // Re-read the device per frame so a revoked token or grant stops input.
+  private guardMobileTerminalInput(
+    token: string,
+    handler: (frame: TerminalStreamFrame) => void
+  ): (frame: TerminalStreamFrame) => void {
+    return (frame) => {
+      if (frame.opcode === TerminalStreamOpcode.Input) {
+        const device = this.deviceRegistry?.validateToken(token)
+        if (!device || !deviceHasMobileRpcGrant(device, 'terminal.send')) {
+          return
+        }
+      }
+      handler(frame)
     }
   }
 
