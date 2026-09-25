@@ -232,19 +232,37 @@ function warnClaudeOverrideOnce(message: string): void {
   console.warn(`[claude-cli] ${message}`)
 }
 
+// Shell syntax a headless spawn cannot evaluate: expansions, globs, command
+// separators, `~user`. A bare leading `~/` is expanded separately below.
+// Backslash is allowed on purpose: Windows paths use it as the separator.
+const CLAUDE_OVERRIDE_SHELL_SYNTAX = /[$`*?;|&<>(){}[\]"']|^~(?!\/)|\s/
+
 // Returns the executable named by the Settings override, or null when the
-// value is empty or carries launch arguments. The terminal launcher treats
-// the setting as shell text, but a headless spawn needs one executable.
-function toClaudeExecutableOverride(raw: string | null | undefined): string | null {
+// value is empty or needs a shell (arguments, variables, globs, operators).
+// The terminal launcher treats the setting as shell text, but a headless
+// spawn runs one literal executable, so only a plain path/name is honored.
+function toClaudeExecutableOverride(
+  raw: string | null | undefined,
+  homePath: string
+): string | null {
   const trimmed = raw?.trim()
   if (!trimmed) {
     return null
   }
-  const quoted = /^(["'])(.*)\1$/.exec(trimmed)
+  // Why: only a single quoted token is unwrapped; `"/a" "--x"` is two words.
+  const quoted = /^"([^"]*)"$|^'([^']*)'$/.exec(trimmed)
   if (quoted) {
-    return quoted[2].trim() || null
+    const inner = (quoted[1] ?? quoted[2]).trim()
+    // A double-quoted `$VAR` or backtick would still expand in a shell.
+    if (!inner || (quoted[1] !== undefined && /[$`]/.test(inner))) {
+      return null
+    }
+    return inner
   }
-  return /\s/.test(trimmed) ? null : trimmed
+  if (CLAUDE_OVERRIDE_SHELL_SYNTAX.test(trimmed)) {
+    return null
+  }
+  return trimmed.startsWith('~/') ? join(homePath, trimmed.slice(2)) : trimmed
 }
 
 export function resolveClaudeCommand(options: ResolveCommandOptions = {}): string {
@@ -257,7 +275,7 @@ export function resolveClaudeCommand(options: ResolveCommandOptions = {}): strin
     return options.overridePath
   }
   const settingsRaw = readClaudeSettingsOverride?.()
-  const settingsOverride = toClaudeExecutableOverride(settingsRaw)
+  const settingsOverride = toClaudeExecutableOverride(settingsRaw, options.homePath ?? homedir())
   const envOverride = process.env.DOBIUS_CLAUDE_CLI_PATH
   if (settingsOverride) {
     if (envOverride && envOverride !== settingsOverride) {
@@ -272,8 +290,8 @@ export function resolveClaudeCommand(options: ResolveCommandOptions = {}): strin
   }
   if (settingsRaw?.trim()) {
     warnClaudeOverrideOnce(
-      'Settings command override for Claude includes arguments, so headless Claude runs ' +
-        'cannot use it and fall back to DOBIUS_CLAUDE_CLI_PATH or the PATH scan.'
+      'Settings command override for Claude includes arguments or shell syntax, so headless ' +
+        'Claude runs cannot use it and fall back to DOBIUS_CLAUDE_CLI_PATH or the PATH scan.'
     )
   }
   if (envOverride) {

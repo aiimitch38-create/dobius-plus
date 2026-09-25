@@ -90,6 +90,53 @@ describe('resolveClaudeCommand — Settings override vs DOBIUS_CLAUDE_CLI_PATH',
     expect(String(warnSpy.mock.calls[0]?.[0])).toContain('includes arguments')
   })
 
+  it('expands a leading ~/ under the home directory', () => {
+    const home = emptyHome()
+    setClaudeSettingsOverrideReader(() => '~/.claude/local/claude')
+
+    expect(resolveClaudeCommand({ platform: 'darwin', pathEnv: '', homePath: home })).toBe(
+      join(home, '.claude', 'local', 'claude')
+    )
+  })
+
+  it.each([
+    ['$HOME/bin/claude'],
+    ['`which claude`'],
+    ['~other/bin/claude'],
+    ['/opt/claude*'],
+    ['/opt/claude;rm'],
+    ['/opt/claude|tee'],
+    ['/opt/claude&'],
+    ['"$HOME/bin/claude"']
+  ])('falls back (visibly) on shell syntax: %s', (override) => {
+    vi.stubEnv('DOBIUS_CLAUDE_CLI_PATH', '/env/claude')
+    setClaudeSettingsOverrideReader(() => override)
+
+    expect(resolveClaudeCommand({ platform: 'darwin', pathEnv: '', homePath: emptyHome() })).toBe(
+      '/env/claude'
+    )
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(String(warnSpy.mock.calls[0]?.[0])).toContain('shell syntax')
+  })
+
+  it('does not merge two quoted words into one bogus path', () => {
+    vi.stubEnv('DOBIUS_CLAUDE_CLI_PATH', '/env/claude')
+    setClaudeSettingsOverrideReader(() => '"/opt/claude" "--verbose"')
+
+    expect(resolveClaudeCommand({ platform: 'darwin', pathEnv: '', homePath: emptyHome() })).toBe(
+      '/env/claude'
+    )
+    expect(String(warnSpy.mock.calls[0]?.[0])).toContain('includes arguments')
+  })
+
+  it('keeps Windows backslash paths as-is', () => {
+    setClaudeSettingsOverrideReader(() => 'C:\\Users\\me\\claude.exe')
+
+    expect(resolveClaudeCommand({ platform: 'win32', pathEnv: '', homePath: emptyHome() })).toBe(
+      'C:\\Users\\me\\claude.exe'
+    )
+  })
+
   it('keeps an explicit caller overridePath above everything', () => {
     vi.stubEnv('DOBIUS_CLAUDE_CLI_PATH', '/env/claude')
     setClaudeSettingsOverrideReader(() => '/settings/claude')

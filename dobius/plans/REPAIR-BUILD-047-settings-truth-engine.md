@@ -109,3 +109,17 @@ Revert the commit. No stored data is migrated or rewritten.
 - Mutation checks: M8 banner ignores transport (1 fail); M9 description unconditional (1 fail).
 - Targeted run with i18n tests: 1 failure, `i18n/no-top-level-translate.test.ts` (flags
   `DestinationsSection.tsx`, untouched; listed in basefail.txt), so it is a baseline failure.
+
+## Review fixes (third commit, after merging stabilize/integration incl. BUILD-003B)
+- F1: a headless spawn gets a literal path, but the Settings "Command" is shell text. A leading
+  `~/` is now expanded with `homedir()` (or `options.homePath`). Anything else that needs a shell
+  (`$`, backtick, `~user`, glob `*?`, `; | & < > ( ) { } [ ]`, whitespace, stray quotes) falls
+  back to env/PATH scan with a one-time warning. A double-quoted token containing `$` or a
+  backtick also falls back. Backslash is allowed on purpose (Windows paths).
+- F2: the quote unwrap only accepts one quoted token (`/^"([^"]*)"$|^'([^']*)'$/`), so
+  `"/opt/claude" "--verbose"` now falls back instead of becoming a bogus path.
+- Tests (command-claude-override.test.ts): `~/` expansion; 8 shell-syntax cases fall back with a
+  warning; two quoted words fall back; Windows backslash path kept.
+- Mutation checks: M10 no `~/` expansion (1 fail); M11 whitespace-only check (6 fail);
+  M12 greedy unwrap (1 fail).
+- After the merge, `verify-localization-catalog.mjs` exits 0.
