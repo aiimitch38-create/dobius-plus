@@ -6,7 +6,7 @@ import {
   markBuildDispatched,
   mayDispatchBuild
 } from '../asana-dispatch-ledger'
-import { checkExecutionAdmission } from '../execution-gate'
+import { checkBuildDispatchAdmission, checkExecutionAdmission } from '../execution-gate'
 import type { DobiusToolContext } from './dobius-tool-handlers'
 import { errorResult, textResult, trimText, type TextToolResult } from './dobius-tool-result'
 
@@ -105,16 +105,32 @@ export function createDispatchBuildHandler(context: DobiusToolContext) {
       return errorResult('build dispatch not available: repo list unavailable.')
     }
     const repos = listRepos()
-    const repo =
-      repos.find((entry) => entry.id === repoQuery) ??
-      repos.find((entry) => entry.name.toLowerCase() === repoQuery.toLowerCase())
+    const byId = repos.find((entry) => entry.id === repoQuery)
+    const byName = byId
+      ? []
+      : repos.filter((entry) => entry.name.toLowerCase() === repoQuery.toLowerCase())
+    // Why: two repos can share a name (a stale copy and the real checkout); taking
+    // the first match would build in the wrong one, so the agent must pick by id.
+    if (byName.length > 1) {
+      const matches = byName.map((entry) => `${entry.id} (${entry.path})`).join(', ')
+      return errorResult(
+        `Repo name "${repoQuery}" matches more than one repo; retry with one of these ids: ${matches}.`
+      )
+    }
+    const repo = byId ?? byName[0]
     if (!repo) {
-      const available = repos.map((entry) => entry.name).join(', ') || 'none'
+      const available = repos.map((entry) => `${entry.name} (${entry.id})`).join(', ') || 'none'
       return errorResult(`Repo not found. Available repos: ${available}.`)
     }
     const dispatch = getBuildDispatcher()
     if (!dispatch) {
       return errorResult('build dispatch unavailable.')
+    }
+    // Why here: ADAM checks the repo path before the worktree or any paid agent
+    // exists, and before the ledger mark or capacity slot, so a refusal costs nothing.
+    const adamAdmission = await checkBuildDispatchAdmission(repo.path)
+    if (!adamAdmission.allowed) {
+      return errorResult(`build dispatch blocked: ${adamAdmission.message}`)
     }
     const name = args.branchName
       ? sanitizeSlug(args.branchName, slugFromBrief(brief))
