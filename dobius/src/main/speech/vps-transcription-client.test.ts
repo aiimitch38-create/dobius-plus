@@ -108,6 +108,73 @@ describe('resolveVpsSttEndpoint (#123)', () => {
   })
 })
 
+describe('VpsTranscriptionSession timeouts (#84 VPS path)', () => {
+  it('times out when the response body never finishes', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, init: RequestInit) => ({
+          ok: true,
+          status: 200,
+          json: () =>
+            new Promise((_resolve, reject) => {
+              init.signal?.addEventListener('abort', () => {
+                reject(new DOMException('This operation was aborted', 'AbortError'))
+              })
+            }),
+        })) as unknown as typeof fetch,
+      )
+      const session = new VpsTranscriptionSession('http://server:8823')
+      session.feedAudio(tone(1), SR)
+
+      const outcome = session.finish().then(
+        () => 'resolved',
+        (error: Error) => error.message,
+      )
+      await vi.advanceTimersByTimeAsync(120_000)
+      expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe(
+        'Speech server at http://server:8823 timed out. It may still be loading the model.',
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('endpoint credential redaction', () => {
+  it('never echoes a password from a rejected endpoint', () => {
+    for (const endpoint of [
+      'http://carson:s3cretPw@host:1',
+      'ftp://carson:s3cretPw@host:1',
+      'carson:s3cretPw@host:1',
+      'http://carson:s3cretPw@bad host',
+    ]) {
+      let message = ''
+      try {
+        resolveVpsSttEndpoint(endpoint)
+      } catch (error) {
+        message = (error as Error).message
+      }
+      expect(message).toContain('Speech server address')
+      expect(message).not.toContain('s3cretPw')
+      expect(message).not.toContain('carson')
+    }
+  })
+
+  it('never echoes a password through transport failure messages', () => {
+    const endpoint = 'http://carson:s3cretPw@host:1'
+    for (const raw of [
+      'fetch failed',
+      'The operation was aborted',
+      `Request cannot be constructed from a URL that includes credentials: ${endpoint}/transcribe`,
+    ]) {
+      const message = describeVpsTranscriptionFailure(new Error(raw), endpoint)
+      expect(message).not.toContain('s3cretPw')
+    }
+  })
+})
+
 describe('checkVpsSttHealth', () => {
   it('reports false instead of throwing when the server is unreachable', async () => {
     vi.stubGlobal(

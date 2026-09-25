@@ -92,6 +92,20 @@ Mutation checks (each seen failing, then restored and green):
   for it yet). A set-but-malformed value fails loudly instead.
 - At 10 minutes cloud dictation stops and inserts what it has (no automatic continuation).
 
+## Review follow-up (second commit)
+
+- **F1** The VPS client cleared its abort timer right after `fetch`, so `await response.json()` had no bound: a server
+  that sent headers then stalled still left "Processing…" forever (#84 on the VPS path). The body read is now inside
+  the timed `try`, and an abort swallowed by `json().catch` is re-checked via `signal.aborted` → the same
+  "Speech server at … timed out" message. Test: hanging body times out at 120 s. Mutations: body read moved back
+  outside the timer → fails; post-read `aborted` check removed → fails.
+- **F2** `resolveVpsSttEndpoint` echoed the raw value, so `user:pass@` reached a toast and stderr. New
+  `redactEndpointCredentials` replaces any `userinfo@` with `[redacted]@` in both resolver errors, and
+  `describeVpsTranscriptionFailure` redacts the endpoint and the raw transport message (undici's "URL that includes
+  credentials" error echoes the URL). `Speech server returned <status>: <error>` carries only the server body.
+  Tests: 4 credential forms never leak the user or password; transport messages never leak the password.
+  Mutations: no redaction in the resolver → fails; none in describe → fails.
+
 ## Rollback
 
 Revert the commit. No data or settings format changes.

@@ -26,22 +26,30 @@ export const DEFAULT_VPS_STT_ENDPOINT = 'http://100.98.24.1:8823'
  * the default. A malformed value throws instead of silently using the default
  * host, so a typo can never send audio somewhere the user did not choose.
  */
+/** Hide `user:pass@` in any endpoint-bearing text before it reaches a toast or log. */
+function redactEndpointCredentials(text: string): string {
+  return text.replace(/([a-z][a-z0-9+.-]*:\/\/)?[^\s/?#"@]*@/gi, (_match, scheme?: string) => {
+    return `${scheme ?? ''}[redacted]@`
+  })
+}
+
 export function resolveVpsSttEndpoint(configured: string | undefined): string {
   const trimmed = configured?.trim()
   if (!trimmed) {
     return DEFAULT_VPS_STT_ENDPOINT
   }
+  const shown = redactEndpointCredentials(trimmed)
   let url: URL
   try {
     url = new URL(trimmed)
   } catch {
     throw new Error(
-      `Speech server address "${trimmed}" in Settings is not a valid URL. Use a form like http://host:8823.`
+      `Speech server address "${shown}" in Settings is not a valid URL. Use a form like http://host:8823.`
     )
   }
   if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) {
     throw new Error(
-      `Speech server address "${trimmed}" in Settings must be a plain http:// or https:// URL.`
+      `Speech server address "${shown}" in Settings must be a plain http:// or https:// URL.`
     )
   }
   return trimmed
@@ -61,12 +69,13 @@ type VpsTranscriptionResponse = {
  * is not running", not a server fault.
  */
 export function describeVpsTranscriptionFailure(error: unknown, endpoint: string): string {
-  const raw = error instanceof Error ? error.message : String(error)
+  const raw = redactEndpointCredentials(error instanceof Error ? error.message : String(error))
+  const shown = redactEndpointCredentials(endpoint)
   if (/abort|timeout/i.test(raw)) {
-    return `Speech server at ${endpoint} timed out. It may still be loading the model.`
+    return `Speech server at ${shown} timed out. It may still be loading the model.`
   }
   if (/ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ENOTFOUND|fetch failed/i.test(raw)) {
-    return `Cannot reach the speech server at ${endpoint}. Check that Tailscale is running and the dobius-stt service is up.`
+    return `Cannot reach the speech server at ${shown}. Check that Tailscale is running and the dobius-stt service is up.`
   }
   return `Speech server error: ${raw}`
 }
@@ -102,7 +111,10 @@ export class VpsTranscriptionSession {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
+    // Why the body read is inside the timer: a server that sends headers and
+    // then stalls would otherwise leave dictation in "Processing…" forever.
     let response: Response
+    let data: VpsTranscriptionResponse
     try {
       response = await fetch(url, {
         method: 'POST',
@@ -110,13 +122,15 @@ export class VpsTranscriptionSession {
         body: new Uint8Array(wav),
         signal: controller.signal,
       })
+      data = (await response.json().catch(() => ({}))) as VpsTranscriptionResponse
     } catch (error) {
       throw new Error(describeVpsTranscriptionFailure(error, this.endpoint))
     } finally {
       clearTimeout(timer)
     }
-
-    const data = (await response.json().catch(() => ({}))) as VpsTranscriptionResponse
+    if (controller.signal.aborted) {
+      throw new Error(describeVpsTranscriptionFailure(new Error('timeout'), this.endpoint))
+    }
     if (!response.ok) {
       throw new Error(
         `Speech server returned ${response.status}${data.error ? `: ${data.error}` : ''}`,
