@@ -8,9 +8,10 @@
 import { schnorr } from '@noble/curves/secp256k1'
 import { sha256 } from '@noble/hashes/sha256'
 import { safeStorage } from 'electron'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { writeSecureFile } from '../../shared/secure-file'
 import type {
   SignedCommunicationsEvent,
   UnsignedCommunicationsEvent
@@ -22,6 +23,24 @@ type AgentIdentityEntry = { privateKeyHex: string; pubkeyHex: string }
 type AgentIdentityRegistry = Record<string, AgentIdentityEntry>
 
 let cachedRegistry: AgentIdentityRegistry | null = null
+let lastLoggedUnavailableDetail: string | null = null
+
+/**
+ * The shared agent identity file exists but could not be read, decrypted or
+ * parsed. The file is left exactly as it is; no agent gets a new identity.
+ */
+export class AgentIdentityRegistryUnavailableError extends Error {
+  constructor(
+    readonly filePath: string,
+    readonly detail: string
+  ) {
+    super(
+      `Communications agent identities are unavailable (${detail}); the file at ${filePath} ` +
+        'was kept unchanged and no new agent identities were created.'
+    )
+    this.name = 'AgentIdentityRegistryUnavailableError'
+  }
+}
 
 function getRegistryPath(): string {
   return join(homedir(), '.dobius', REGISTRY_FILE)
@@ -35,60 +54,93 @@ function hexToBytes(hex: string): Uint8Array {
   return new Uint8Array(Buffer.from(hex, 'hex'))
 }
 
+function errorText(error: unknown): string {
+  if (error && typeof error === 'object' && 'code' in error) {return String(error.code)}
+  return error instanceof Error ? error.message : String(error)
+}
+
+function parseRegistry(text: string): AgentIdentityRegistry | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {return undefined}
+  for (const entry of Object.values(parsed)) {
+    if (
+      !entry ||
+      typeof entry !== 'object' ||
+      typeof (entry as Partial<AgentIdentityEntry>).privateKeyHex !== 'string' ||
+      typeof (entry as Partial<AgentIdentityEntry>).pubkeyHex !== 'string'
+    ) {
+      return undefined
+    }
+  }
+  return parsed as AgentIdentityRegistry
+}
+
+// Returns the registry, or a short reason (never file contents) it could not be decoded.
+function decodeRegistry(raw: Buffer): AgentIdentityRegistry | string {
+  let decryptProblem = 'encryption unavailable'
+  if (safeStorage.isEncryptionAvailable()) {
+    try {
+      return parseRegistry(safeStorage.decryptString(raw)) ?? 'unexpected registry shape'
+    } catch (error) {
+      decryptProblem = `decrypt failed: ${errorText(error)}`
+    }
+  }
+  // Why: a file written while encryption was unavailable is plaintext JSON.
+  return parseRegistry(raw.toString('utf8')) ?? decryptProblem
+}
+
+function unavailable(path: string, detail: string): AgentIdentityRegistryUnavailableError {
+  if (lastLoggedUnavailableDetail !== detail) {
+    lastLoggedUnavailableDetail = detail
+    console.error(
+      `[agent-participant-identity-store] agent identity registry unavailable (${path}: ${detail}); ` +
+        'keeping the file and refusing to generate replacement identities'
+    )
+  }
+  return new AgentIdentityRegistryUnavailableError(path, detail)
+}
+
+/**
+ * Empty only when no registry file exists. Any other failure throws
+ * AgentIdentityRegistryUnavailableError and is re-tried on the next call, so
+ * a transient Keychain or read failure recovers every existing agent identity.
+ */
 function readRegistry(): AgentIdentityRegistry {
   if (cachedRegistry) {return cachedRegistry}
 
   const path = getRegistryPath()
-  if (!existsSync(path)) {
-    cachedRegistry = {}
-    return cachedRegistry
+  let raw: Buffer
+  try {
+    raw = readFileSync(path)
+  } catch (error) {
+    if (errorText(error) === 'ENOENT') {
+      cachedRegistry = {}
+      return cachedRegistry
+    }
+    throw unavailable(path, errorText(error))
   }
 
-  try {
-    const raw = readFileSync(path)
-    const decrypted = safeStorage.isEncryptionAvailable()
-      ? safeStorage.decryptString(raw)
-      : raw.toString('utf8')
-    cachedRegistry = JSON.parse(decrypted) as AgentIdentityRegistry
-    return cachedRegistry
-  } catch (error) {
-    // Why: this file is Keychain-encrypted, and macOS ties that encryption to
-    // the app's exact code signature. Every ad-hoc-signed rebuild changes that
-    // signature, so an existing registry can go permanently undecryptable —
-    // not a rare edge case for this app, an expected one during active
-    // development. Without this catch, EVERY agent's identity lookup fails at
-    // once (they share this one file), which silently drops every agent as a
-    // dispatch target with no visible error — channel messages just never get
-    // a reply. Recover by starting fresh (new identities regenerate on next
-    // use) rather than leaving Communications agents permanently broken;
-    // rename instead of delete so nothing is silently destroyed.
-    console.warn(
-      '[agent-participant-identity-store] could not decrypt the agent identity registry ' +
-        `(${error instanceof Error ? error.message : String(error)}) — likely a stale Keychain ` +
-        'grant from a prior app signature. Starting a fresh registry; existing agents will get ' +
-        'new Communications identities.'
-    )
-    try {
-      renameSync(path, `${path}.undecryptable-${Date.now()}`)
-    } catch {
-      // Best-effort backup; proceed with a fresh registry either way.
-    }
-    cachedRegistry = {}
-    return cachedRegistry
+  const decoded = decodeRegistry(raw)
+  if (typeof decoded === 'string') {
+    throw unavailable(path, decoded)
   }
+  lastLoggedUnavailableDetail = null
+  cachedRegistry = decoded
+  return cachedRegistry
 }
 
 function writeRegistry(registry: AgentIdentityRegistry): void {
-  const dir = join(homedir(), '.dobius')
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true })
-  }
-
   const serialized = JSON.stringify(registry)
   const contents = safeStorage.isEncryptionAvailable()
     ? safeStorage.encryptString(serialized)
     : Buffer.from(serialized, 'utf8')
-  writeFileSync(getRegistryPath(), contents, { mode: 0o600 })
+  // Atomic temp + rename, 0600: an interrupted write leaves every agent's identity intact.
+  writeSecureFile(getRegistryPath(), contents)
   cachedRegistry = registry
 }
 
@@ -142,8 +194,21 @@ export function signAsAgent(
   }
 }
 
-/** Test/reset hook only — clears the in-memory cache and the on-disk file. */
+/**
+ * Explicit reset. The registry file is moved to `<file>.signed-out-<ms>`,
+ * never deleted; if it cannot be moved, the reset is refused.
+ */
 export function clearAgentIdentityRegistry(): void {
+  const path = getRegistryPath()
+  try {
+    renameSync(path, `${path}.signed-out-${Date.now()}`)
+  } catch (error) {
+    if (errorText(error) !== 'ENOENT') {
+      throw new Error(
+        `Reset refused: the agent identity registry could not be kept aside (${errorText(error)}); nothing was deleted`
+      )
+    }
+  }
   cachedRegistry = null
-  rmSync(getRegistryPath(), { force: true })
+  lastLoggedUnavailableDetail = null
 }
