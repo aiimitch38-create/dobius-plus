@@ -113,10 +113,28 @@ function sanitizeRun(entry: unknown): AgentRun | null {
   return run
 }
 
+// Why: MAX_RUNS bounds settled history only. A running run is live state —
+// evicting it made its completion/cancellation updates (and its outbox) miss.
+function retainRuns(runs: AgentRun[]): AgentRun[] {
+  let excess = runs.length - MAX_RUNS
+  if (excess <= 0) {
+    return runs
+  }
+  return runs.filter((run) => {
+    if (excess > 0 && run.status !== 'running') {
+      excess -= 1
+      return false
+    }
+    return true
+  })
+}
+
 const file = new SafeJsonFile<AgentRun[]>({
   filePath: runsPath,
-  parse: (raw) =>
-    Array.isArray(raw) ? parseEveryEntry(raw, sanitizeRun)?.slice(-MAX_RUNS) : undefined,
+  parse: (raw) => {
+    const runs = Array.isArray(raw) ? parseEveryEntry(raw, sanitizeRun) : undefined
+    return runs ? retainRuns(runs) : undefined
+  },
   fallback: () => [],
   label: '[agents] agents-runs.json'
 })
@@ -134,7 +152,7 @@ function loadRuns(): AgentRun[] {
 }
 
 function persistRuns(runs: AgentRun[]): void {
-  file.set(runs.slice(-MAX_RUNS))
+  file.set(retainRuns(runs))
 }
 
 export function addStoredAgentRun(run: AgentRun): AgentRun[] {
@@ -160,23 +178,58 @@ export function updateStoredAgentRun(runId: string, updates: Partial<AgentRun>):
 // rewrote the whole pretty-printed file synchronously on every append, and
 // the 750ms runs poll re-serialized every blob across IPC. Load-time
 // sanitizeRuns dropped them on restart anyway, so persistence bought nothing.
+// Byte budgets (#77): the client polls about once a second, so the oldest
+// items are long delivered when a run passes 8 MiB (~8 max-size screenshots).
 const MAX_OUTBOX_RUNS = 32
+export const MAX_OUTBOX_BYTES_PER_RUN = 8 * 1024 * 1024
+export const MAX_OUTBOX_BYTES_TOTAL = 32 * 1024 * 1024
 const liveRunOutbox = new Map<string, AgentRunOutboxItem[]>()
 
+function outboxItemBytes(item: AgentRunOutboxItem): number {
+  return Buffer.byteLength(item.content, 'utf8') + (item.imageDataUrl?.length ?? 0)
+}
+
+function outboxBytes(items: AgentRunOutboxItem[]): number {
+  return items.reduce((total, item) => total + outboxItemBytes(item), 0)
+}
+
+function totalOutboxBytes(): number {
+  let total = 0
+  for (const items of liveRunOutbox.values()) {
+    total += outboxBytes(items)
+  }
+  return total
+}
+
+/** False when the run is not tracked or the item alone exceeds the per-run budget. */
 export function appendAgentRunOutbox(runId: string, item: AgentRunOutboxItem): boolean {
   const run = loadRuns().find((entry) => entry.id === runId)
-  if (!run) {
+  if (!run || outboxItemBytes(item) > MAX_OUTBOX_BYTES_PER_RUN) {
     return false
   }
   const items = liveRunOutbox.get(runId) ?? []
   items.push(item)
+  // Re-inserted so the run just written to is the newest and evicted last.
+  liveRunOutbox.delete(runId)
   liveRunOutbox.set(runId, items)
-  while (liveRunOutbox.size > MAX_OUTBOX_RUNS) {
+  let dropped = 0
+  while (outboxBytes(items) > MAX_OUTBOX_BYTES_PER_RUN) {
+    items.shift()
+    dropped += 1
+  }
+  while (
+    liveRunOutbox.size > MAX_OUTBOX_RUNS ||
+    (liveRunOutbox.size > 1 && totalOutboxBytes() > MAX_OUTBOX_BYTES_TOTAL)
+  ) {
     const oldest = liveRunOutbox.keys().next().value
-    if (oldest === undefined) {
+    if (oldest === undefined || oldest === runId) {
       break
     }
+    dropped += liveRunOutbox.get(oldest)?.length ?? 0
     liveRunOutbox.delete(oldest)
+  }
+  if (dropped > 0) {
+    console.warn(`[agents] run outbox over its byte budget; dropped ${dropped} oldest item(s)`)
   }
   return true
 }

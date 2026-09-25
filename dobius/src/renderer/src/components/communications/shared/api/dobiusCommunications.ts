@@ -695,6 +695,8 @@ export async function reviveInterruptedChannelRuns(): Promise<void> {
         run.source === "channel" &&
         typeof run.sessionKey === "string" &&
         run.sessionKey !== "default" &&
+        // Not a channel id: iMessage runs (IMESSAGE_SESSION_KEY in shared/agents.ts).
+        run.sessionKey !== "imessage" &&
         run.status === "error" &&
         run.summary === "app restarted during run" &&
         typeof run.startedAt === "number" &&

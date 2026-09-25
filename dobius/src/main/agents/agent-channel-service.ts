@@ -1,5 +1,5 @@
 import type { SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { CustomAgent } from '../../shared/agents'
+import { IMESSAGE_SESSION_KEY, type CustomAgent } from '../../shared/agents'
 import type { PrepareClaudeLaunch } from './agent-runner'
 
 const CHANNEL_TOOLS = ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch']
@@ -142,6 +142,7 @@ export async function handleChannelMessage(
       options: {
         source: 'channel',
         profile: 'imessage',
+        sessionKey: IMESSAGE_SESSION_KEY,
         resume: false,
         permissionMode: 'dontAsk',
         allowedTools: readonlyTools(match.agent),
