@@ -1,8 +1,9 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { app } from 'electron'
 import type { Destination, DestinationSaveInput, DestinationType } from '../../shared/destinations'
+import { hardenExistingSecureFile, writeSecureFile } from '../../shared/secure-file'
 
 const FILE_NAME = 'destinations.json'
 
@@ -63,10 +64,24 @@ function sanitizeDestination(raw: unknown): Destination | null {
   } as Destination
 }
 
+// Why (BUILD-009C): the file holds Telegram bot tokens and SMTP passwords;
+// builds before this one left it at the umask default (0644).
+function hardenExistingFile(target: string): void {
+  try {
+    hardenExistingSecureFile(target)
+  } catch (error) {
+    console.warn(
+      '[destinations] failed to restrict store permissions:',
+      error instanceof Error ? error.message : String(error)
+    )
+  }
+}
+
 function load(): Destination[] {
   if (cached) {
     return cached
   }
+  hardenExistingFile(filePath())
   try {
     const parsed: unknown = JSON.parse(readFileSync(filePath(), 'utf-8'))
     const list = Array.isArray(parsed) ? parsed : []
@@ -84,12 +99,10 @@ function load(): Destination[] {
 }
 
 function persist(destinations: Destination[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
+  // Why: writeSecureFile is unique tmp + rename, and creates the file
+  // owner-only (0600 / user ACL) whatever the process umask.
   try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(destinations, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
+    writeSecureFile(filePath(), `${JSON.stringify(destinations, null, 2)}\n`)
   } catch (error) {
     console.warn(
       '[destinations] failed to persist store:',

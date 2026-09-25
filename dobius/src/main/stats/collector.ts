@@ -1,7 +1,12 @@
 import { app } from 'electron'
-import { readFileSync, mkdirSync, existsSync } from 'node:fs'
+import { mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { sweepStaleTempFiles, writeFileAtomic } from '../storage/safe-json-file'
+import {
+  keepUnreadableCopy,
+  readSafeJsonFile,
+  sweepStaleTempFiles,
+  writeFileAtomic
+} from '../storage/safe-json-file'
 import type { StatsSummary } from '../../shared/types'
 import type { StatsEvent, StatsAggregates, StatsFile } from './types'
 
@@ -54,11 +59,41 @@ function getDefaultStatsFile(): StatsFile {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+// Returns undefined (-> unreadable) when the top-level shape is wrong.
+function parseStatsFile(raw: unknown): StatsFile | undefined {
+  if (!isRecord(raw)) {
+    return undefined
+  }
+  const events = raw.events ?? []
+  const aggregates = raw.aggregates ?? {}
+  if (!Array.isArray(events) || !isRecord(aggregates)) {
+    return undefined
+  }
+  const mergedAggregates = { ...getDefaultAggregates(), ...aggregates } as StatsAggregates
+  if (!Array.isArray(mergedAggregates.countedPRs)) {
+    return undefined
+  }
+  // Merge with defaults for forward compatibility
+  return {
+    ...getDefaultStatsFile(),
+    ...(raw as Partial<StatsFile>),
+    events: events as StatsEvent[],
+    aggregates: mergedAggregates
+  }
+}
+
 export class StatsCollector {
   private events: StatsEvent[]
   private aggregates: StatsAggregates
   private liveAgents = new Map<string, number>() // ptyId → startTimestamp
   private writeTimer: ReturnType<typeof setTimeout> | null = null
+  // Set when the stats file exists but could not be read; saves are refused
+  // for this session so the original is never replaced by a fresh log.
+  private unreadableDetail: string | null = null
   // Why: star-nag lives in its own service but needs to observe the running
   // agent-spawned counter. A lightweight listener avoids cyclic imports and
   // keeps StatsCollector unaware of how the counter is consumed.
@@ -160,29 +195,18 @@ export class StatsCollector {
   // ── Persistence ───────────────────────────────────────────────────
 
   private load(): StatsFile {
-    try {
-      const statsFile = getStatsFile()
-      if (existsSync(statsFile)) {
-        const raw = readFileSync(statsFile, 'utf-8')
-        const parsed = JSON.parse(raw) as StatsFile
-        // Merge with defaults for forward compatibility
-        return {
-          ...getDefaultStatsFile(),
-          ...parsed,
-          aggregates: {
-            ...getDefaultAggregates(),
-            ...parsed.aggregates
-          }
-        }
-      }
-    } catch (err) {
-      // Why "start fresh" instead of crashing: lifetime aggregates are lost
-      // on corruption, which is unfortunate but not critical — this is a
-      // "fun stats" feature, not billing data. The corrupt file is left on
-      // disk so it can be inspected for debugging.
-      console.error('[stats] Failed to load stats, starting fresh:', err)
+    const statsFile = getStatsFile()
+    const result = readSafeJsonFile(statsFile, parseStatsFile, getDefaultStatsFile)
+    if (result.status === 'unreadable') {
+      // Why not "start fresh" and save: the next save would replace months of
+      // lifetime totals with this session's counts. Count in memory instead.
+      this.unreadableDetail = result.detail ?? 'unreadable'
+      console.error(
+        `[stats] ${statsFile} unreadable (${this.unreadableDetail}); counting this session in memory only`
+      )
+      keepUnreadableCopy(statsFile, '[stats] dobius-stats.json', null)
     }
-    return getDefaultStatsFile()
+    return result.value
   }
 
   private updateAggregates(event: StatsEvent): void {
@@ -247,6 +271,9 @@ export class StatsCollector {
   }
 
   private writeToDiskSync(): void {
+    if (this.unreadableDetail !== null) {
+      return
+    }
     const statsFile = getStatsFile()
     const dir = dirname(statsFile)
     if (!existsSync(dir)) {

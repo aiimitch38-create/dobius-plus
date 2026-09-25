@@ -144,6 +144,104 @@ describe('markRemoteAgentWorkspaceTrusted', () => {
     })
   })
 
+  describe('remote config read failures (BUILD-009C)', () => {
+    function errnoError(code: string): Error {
+      return Object.assign(new Error(`${code}: remote read failed`), { code })
+    }
+
+    it.each([
+      ['codex', 'EACCES'],
+      ['codex', 'EIO'],
+      ['codex', 'CONNECTION_LOST'],
+      ['copilot', 'EACCES'],
+      ['copilot', 'EIO'],
+      ['copilot', 'CONNECTION_LOST']
+    ] as const)(
+      '%s: a %s read error writes nothing and surfaces the error',
+      async (preset, code) => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const fsProvider = makeFsProvider({
+          readFile: vi.fn(async () => {
+            throw errnoError(code)
+          })
+        })
+        mocks.getSshFilesystemProvider.mockReturnValue(fsProvider)
+
+        await expect(
+          markRemoteAgentWorkspaceTrusted({
+            preset,
+            connectionId: 'ssh-1',
+            workspacePath: '/repo/worktree'
+          })
+        ).rejects.toThrow(code)
+
+        expect(fsProvider.createDir).not.toHaveBeenCalled()
+        expect(fsProvider.writeFile).not.toHaveBeenCalled()
+        warn.mockRestore()
+      }
+    )
+
+    it.each(['codex', 'copilot'] as const)(
+      '%s: a binary remote config is left unchanged',
+      async (preset) => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const fsProvider = makeFsProvider({
+          readFile: vi.fn(async () => ({ content: 'AAAA', isBinary: true }))
+        })
+        mocks.getSshFilesystemProvider.mockReturnValue(fsProvider)
+
+        await expect(
+          markRemoteAgentWorkspaceTrusted({
+            preset,
+            connectionId: 'ssh-1',
+            workspacePath: '/repo/worktree'
+          })
+        ).rejects.toThrow(/not a text file/)
+
+        expect(fsProvider.writeFile).not.toHaveBeenCalled()
+        warn.mockRestore()
+      }
+    )
+
+    it.each([
+      ['codex', '/home/u/.codex/config.toml'],
+      ['copilot', '/home/u/.copilot/config.json']
+    ] as const)('%s: a missing remote config (ENOENT) is created', async (preset, configPath) => {
+      const fsProvider = makeFsProvider({
+        readFile: vi.fn(async () => {
+          throw errnoError('ENOENT')
+        })
+      })
+      mocks.getSshFilesystemProvider.mockReturnValue(fsProvider)
+
+      await markRemoteAgentWorkspaceTrusted({
+        preset,
+        connectionId: 'ssh-1',
+        workspacePath: '/repo/worktree'
+      })
+
+      expect(fsProvider.writeFile).toHaveBeenCalledWith(
+        configPath,
+        expect.stringContaining('/real/repo/worktree')
+      )
+    })
+
+    it('copilot: a config that is valid JSON but not an object is left unchanged', async () => {
+      const fsProvider = makeFsProvider({
+        readFile: vi.fn(async () => ({ content: '["/old"]', isBinary: false }))
+      })
+      mocks.getSshFilesystemProvider.mockReturnValue(fsProvider)
+
+      await markRemoteAgentWorkspaceTrusted({
+        preset: 'copilot',
+        connectionId: 'ssh-1',
+        workspacePath: '/repo/worktree'
+      })
+
+      expect(fsProvider.writeFile).not.toHaveBeenCalled()
+    })
+  })
+
   it('does nothing when the SSH home cannot be resolved safely', async () => {
     const fsProvider = makeFsProvider()
     mocks.getActiveMultiplexer.mockReturnValue({
