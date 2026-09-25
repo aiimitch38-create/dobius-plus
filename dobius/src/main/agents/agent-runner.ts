@@ -19,6 +19,11 @@ import {
   setDecisionBypassRunHandler
 } from './agent-decision-queue'
 import { buildAgentHardRailHooks } from './agent-hard-rails'
+import {
+  createHeadlessCanUseTool,
+  recordStreamPermissionDenials,
+  withPermissionDenialNote
+} from './agent-headless-permissions'
 import { assertExecutionAdmitted, type ExecutionOrigin } from './execution-gate'
 import { appendAgentRunNotification } from './agent-notification-store'
 import { appendRunProgress } from './agent-run-progress-log'
@@ -170,6 +175,7 @@ async function consumeRun(
       for (const event of reduceMessage(message, runId, agent.id)) {
         broadcastRunEvent(event)
       }
+      recordStreamPermissionDenials({ runId, agentId: agent.id }, message)
       if (message.type === 'result') {
         sawResult = true
         onResult?.(message)
@@ -185,7 +191,10 @@ async function consumeRun(
           updateRun(runId, {
             endedAt: Date.now(),
             status: message.subtype === 'success' ? 'success' : 'error',
-            summary: message.subtype === 'success' ? message.result : message.errors.join('\n'),
+            summary: withPermissionDenialNote(
+              runId,
+              message.subtype === 'success' ? message.result : message.errors.join('\n')
+            ),
             numTurns: message.num_turns,
             costUsd: message.total_cost_usd
           })
@@ -203,7 +212,7 @@ async function consumeRun(
       updateRun(runId, {
         endedAt: Date.now(),
         status: 'error',
-        summary: 'Run ended unexpectedly without a result'
+        summary: withPermissionDenialNote(runId, 'Run ended unexpectedly without a result')
       })
       const finishedRun = getStoredAgentRun(runId)
       if (finishedRun) {
@@ -242,7 +251,11 @@ async function consumeRun(
     const message = error instanceof Error ? error.message : String(error)
     const run = getStoredAgentRun(runId)
     if (run?.status !== 'cancelled') {
-      updateRun(runId, { endedAt: Date.now(), status: 'error', summary: message })
+      updateRun(runId, {
+        endedAt: Date.now(),
+        status: 'error',
+        summary: withPermissionDenialNote(runId, message)
+      })
       const finishedRun = getStoredAgentRun(runId)
       if (finishedRun) {
         appendAgentRunNotification(agent, finishedRun)
@@ -409,13 +422,24 @@ export async function startAgentRun(args: {
     // loaded does not allow its tools unless the agent's allowlist names them.
     options.strictMcpConfig = false
     options.hooks = buildAgentHardRailHooks({ agentId: agent.id })
-    if (permissionMode === 'default' && (args.options?.source ?? 'manual') === 'manual') {
+    const source = args.options?.source ?? 'manual'
+    // Only a person who pressed Run on the Agents page watches the decision
+    // queue. Every other run (heartbeat, Asana, iMessage, workflows, RPC/CLI,
+    // even with source 'manual') is headless: its prompts are denied at once
+    // and recorded on the run, never left waiting or silently refused.
+    const attended = source === 'manual' && origin === 'agents-page'
+    if (attended && permissionMode === 'default') {
       options.canUseTool = createAgentCanUseTool({
         runId,
         agentId: agent.id,
         cwd: resolvedCwd,
-        branch
+        branch,
+        // The CLI only accepts a switch into bypass for sessions launched with
+        // --allow-dangerously-skip-permissions.
+        bypassRunSupported: options.allowDangerouslySkipPermissions === true
       })
+    } else if (!attended) {
+      options.canUseTool = createHeadlessCanUseTool({ runId, agentId: agent.id, source })
     }
     const run: AgentRun = {
       id: runId,

@@ -54,6 +54,7 @@ export function AgentDecisionTicketDialog({
 }): React.JSX.Element {
   const decision = decisions.find((item) => item.id === openDecisionId) ?? null
   const agent = agents.find((item) => item.id === decision?.agentId) ?? null
+  const bypassUnavailableReason = decision?.bypassRunUnavailableReason
   const [alwaysAllow, setAlwaysAllow] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editedCommand, setEditedCommand] = useState('')
@@ -168,18 +169,23 @@ export function AgentDecisionTicketDialog({
         <DialogFooter className="items-center sm:justify-between">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-[color-mix(in_srgb,var(--annotation-highlight)_45%,var(--border))] text-[color:var(--annotation-highlight)]"
-                onClick={() => void resolve('bypassRun')}
-              >
-                <AlertTriangle className="size-4" />
-                Bypass run
-              </Button>
+              {/* Why: a disabled button gets no pointer events, so the wrapper carries the tooltip. */}
+              <span tabIndex={bypassUnavailableReason ? 0 : undefined}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={Boolean(bypassUnavailableReason)}
+                  className="border-[color-mix(in_srgb,var(--annotation-highlight)_45%,var(--border))] text-[color:var(--annotation-highlight)]"
+                  onClick={() => void resolve('bypassRun')}
+                >
+                  <AlertTriangle className="size-4" />
+                  Bypass run
+                </Button>
+              </span>
             </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={4}>
-              Approve everything for the rest of this run — hard rails still apply
+            <TooltipContent side="top" sideOffset={4} className="max-w-xs">
+              {bypassUnavailableReason ??
+                'Approve everything for the rest of this run — hard rails still apply'}
             </TooltipContent>
           </Tooltip>
           <div className="flex flex-wrap justify-end gap-2">
