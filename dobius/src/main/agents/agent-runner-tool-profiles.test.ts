@@ -64,6 +64,7 @@ vi.mock('./codex-agent-execution', () => ({ startCodexAgentProcess: vi.fn() }))
 vi.mock('../codex-cli/command', () => ({ resolveClaudeCommand: () => 'claude' }))
 
 import { startAgentRun } from './agent-runner'
+import { buildAgentHardRailHooks } from './agent-hard-rails'
 
 type CapturedOptions = {
   allowedTools: string[]
@@ -201,5 +202,11 @@ describe('startAgentRun tool profiles (SDK query arguments)', () => {
     expect(options.tools).toEqual(conductorTools)
     expect(options.mcpServers).toEqual({})
     expect(mocks.buildDobiusToolServer).not.toHaveBeenCalled()
+    // BUILD-033: the hard rails get the profile so conductor-only rails apply.
+    expect(vi.mocked(buildAgentHardRailHooks)).toHaveBeenLastCalledWith({
+      agentId: 'a',
+      profile: 'voice-conductor',
+      spawnedBy: undefined
+    })
   })
 })

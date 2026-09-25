@@ -20,8 +20,10 @@ import {
 import { rawStringMentionsCredential, stringsToInspect } from './agent-hard-rails-inputs'
 import { prepareBashCommand } from './agent-hard-rails-bash-data'
 import { shellCInnerCommands } from './agent-hard-rails-shell-text'
+import { conductorProfileDenial, type ConductorRailContext } from './agent-hard-rails-conductor'
 
-type HardRailRunContext = {
+// The run profile (ConductorRailContext) scopes the Voice Conductor rails.
+type HardRailRunContext = ConductorRailContext & {
   agentId: string
   // The tool call's working directory (from the SDK hook input) when known.
   cwd?: string
@@ -290,7 +292,7 @@ export function evaluateAgentHardRails(
     }
     input = { ...(input as object), command: prepared.effective }
   }
-  const commandDenial = commandTriggersHardRail(toolName, input)
+  const commandDenial = conductorProfileDenial(context, toolName, input) ?? commandTriggersHardRail(toolName, input)
   if (commandDenial) {
     return commandDenial
   }

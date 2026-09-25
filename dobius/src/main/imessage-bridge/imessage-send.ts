@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { recordOutbound } from './outbound-ring'
 
 const execFileAsync = promisify(execFile)
 
@@ -46,7 +47,7 @@ export function isValidImessageHandle(handle: string): boolean {
   return PHONE_HANDLE.test(handle) || EMAIL_HANDLE.test(handle)
 }
 
-function stripControlChars(text: string): string {
+export function stripControlChars(text: string): string {
   // Why: keep the old literal's rule (drop control chars except newline); a
   // NUL would also make execFile reject the argument.
   // eslint-disable-next-line no-control-regex -- control chars are exactly what is being removed
@@ -74,11 +75,13 @@ export async function sendImessage(handle: string, text: string): Promise<void> 
     throw new Error(`outbound rate limit (${OUTBOUND_RATE_LIMIT_PER_MIN}/min) exceeded`)
   }
   outboundTimestamps.push(now)
+  const body = stripControlChars(text)
+  recordOutbound(body, now)
 
   const { stderr } = await execFileAsync(
     '/usr/bin/osascript',
     // '--' ends osascript's option parsing, so no argument is ever read as a flag.
-    ['-e', SEND_SCRIPT, '--', handle, stripControlChars(text)],
+    ['-e', SEND_SCRIPT, '--', handle, body],
     { timeout: OSASCRIPT_TIMEOUT_MS }
   )
   if (stderr) {

@@ -28,6 +28,7 @@ import {
 } from '../../shared/vertex-task-types'
 import { listAgents } from '../agents/agents-store'
 import { SafeJsonFile } from '../storage/safe-json-file'
+import { readReleasingOrphanedClaims, stampClaimOwner } from './vertex-dispatch-recovery'
 
 const FILE_NAME = 'vertex-tasks.json'
 const ORDER_GAP = 1000
@@ -135,7 +136,7 @@ function normalizePersistedTask(task: VertexTask): VertexTask {
 
 export function reloadVertexTasksFromDisk(): VertexTask[] {
   file.invalidate()
-  return readAll()
+  return readReleasingOrphanedClaims(readAll, persist, ORDER_GAP)
 }
 
 /** Drop rows that would crash a renderer rather than trusting the file. */
@@ -208,7 +209,9 @@ function normalizeInput(input: VertexTaskInput): VertexTask {
 export const vertexTaskStore: VertexTaskSource = {
   list(): VertexTask[] {
     // Sorted so every caller sees the same order without re-sorting.
-    return [...readAll()].sort((a, b) => a.order - b.order)
+    return [...readReleasingOrphanedClaims(readAll, persist, ORDER_GAP)].sort(
+      (a, b) => a.order - b.order,
+    )
   },
 
   create(input: VertexTaskInput): VertexTask {
@@ -258,6 +261,7 @@ export const vertexTaskStore: VertexTaskSource = {
     if (patch.parentTaskId === task.id) {
       delete patch.parentTaskId
     }
+    stampClaimOwner(patch)
     const oldParentId = task.parentTaskId
     Object.assign(task, patch, { updatedAt: Date.now() })
     if ('parentTaskId' in patch) {

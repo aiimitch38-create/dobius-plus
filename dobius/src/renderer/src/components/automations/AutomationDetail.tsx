@@ -25,6 +25,8 @@ type AutomationDetailProps = {
   projectDefaultBaseRef: string | null
   hostLabelById?: ReadonlyMap<string, string>
   runNowAvailability: AutomationTargetAvailability | null
+  /** Run Now / Pause / Delete is in flight for this automation. */
+  actionsPending?: boolean
   now: number
   onRunNow: (automation: Automation) => void
   onEdit: (automation: Automation) => void
@@ -66,12 +68,14 @@ function ToolbarIconButton({
   label,
   children,
   onClick,
-  className
+  className,
+  disabled
 }: {
   label: string
   children: React.ReactNode
   onClick: () => void
   className?: string
+  disabled?: boolean
 }): React.JSX.Element {
   return (
     <Tooltip>
@@ -83,6 +87,7 @@ function ToolbarIconButton({
           aria-label={label}
           onClick={onClick}
           className={className}
+          disabled={disabled}
         >
           {children}
         </Button>
@@ -102,6 +107,7 @@ export function AutomationDetail({
   projectDefaultBaseRef,
   hostLabelById,
   runNowAvailability,
+  actionsPending = false,
   now,
   onRunNow,
   onEdit,
@@ -158,7 +164,7 @@ export function AutomationDetail({
                   variant="secondary"
                   size="sm"
                   onClick={() => onRunNow(automation)}
-                  disabled={runNowDisabled}
+                  disabled={runNowDisabled || actionsPending}
                 >
                   <Play className="size-4" />
                   {translate('auto.components.automations.AutomationDetail.2fb1605beb', 'Run Now')}
@@ -193,6 +199,7 @@ export function AutomationDetail({
                   )
             }
             onClick={() => onToggle(automation)}
+            disabled={actionsPending}
           >
             {automation.enabled ? <Pause className="size-4" /> : <Play className="size-4" />}
           </ToolbarIconButton>
@@ -202,6 +209,7 @@ export function AutomationDetail({
               'Delete automation'
             )}
             onClick={() => onDelete(automation)}
+            disabled={actionsPending}
             className="text-destructive hover:text-destructive"
           >
             <Trash2 className="size-4" />

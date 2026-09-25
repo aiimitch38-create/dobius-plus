@@ -8,6 +8,11 @@ const MARKER = `# dobius-cli v${CLI_VERSION}`
 const PORT = 8421
 const RETIRED_MESSAGE =
   'This Dobius+ command was retired in the new engine. See dobius --help / the Tasks panel.'
+// Why: the conductor prompt gates risky actions on these; a retired copy must
+// read as an explicit NO, never as "tool missing, carry on".
+const RETIRED_APPROVAL_MESSAGE =
+  'DENIED: no approval channel (the Voice Conductor is not running). Do not proceed.'
+const APPROVAL_CLIS: ReadonlySet<string> = new Set(['dobius-confirm', 'dobius-ask'])
 const LEGACY_MARKERS = ['voice-bridge-token', '127.0.0.1:8421'] as const
 export const STALE_LEGACY_CLIS = [
   'dobius-tabs',
@@ -68,12 +73,21 @@ function writeIfChanged(file: string, contents: string): void {
   chmodSync(file, 0o755)
 }
 
-function retiredStub(): string {
+function retiredStub(name: string): string {
+  const message = APPROVAL_CLIS.has(name) ? RETIRED_APPROVAL_MESSAGE : RETIRED_MESSAGE
   return `#!/bin/bash
 ${MARKER}
-echo "${RETIRED_MESSAGE}" >&2
+echo "${message}" >&2
 exit 1
 `
+}
+
+// A stub this installer wrote earlier (any version) — safe to rewrite.
+function isOwnRetiredStub(contents: string): boolean {
+  return (
+    contents.includes('# dobius-cli v') &&
+    (contents.includes(RETIRED_MESSAGE) || contents.includes(RETIRED_APPROVAL_MESSAGE))
+  )
 }
 
 function replaceStaleLegacyClis(dir: string): void {
@@ -84,10 +98,13 @@ function replaceStaleLegacyClis(dir: string): void {
     const file = path.join(dir, name)
     try {
       const contents = readFileSync(file, 'utf8')
-      if (!LEGACY_MARKERS.some((marker) => contents.includes(marker))) {
+      if (
+        !LEGACY_MARKERS.some((marker) => contents.includes(marker)) &&
+        !isOwnRetiredStub(contents)
+      ) {
         continue
       }
-      writeIfChanged(file, retiredStub())
+      writeIfChanged(file, retiredStub(name))
     } catch (err) {
       // Missing or unreadable stale scripts are harmless.
       void err
