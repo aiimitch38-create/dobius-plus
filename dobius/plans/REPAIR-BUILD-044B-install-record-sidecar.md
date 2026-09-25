@@ -73,6 +73,26 @@ Script: `stabilize-run/044B/mutate.py`; every mutation made its suite FAIL, and 
 | M9 TS never reads the outside record | 3 outside-record tests |
 | M10 TS drops the legacy fallback | legacy fallback test |
 
+## Review round 1 (F1 high, F2 low)
+
+- **F1:** a TERM while the swap `python3` ran was handled as soon as it returned, before `PHASE="swapped"`, so cleanup
+  took `$STAGE` (by then the PREVIOUS bundle) for a partial stage and deleted it, and the record was never promoted.
+  Fix: from just before the quit through the rollback move, `trap 'SIGNALLED=1' INT TERM` defers INT/TERM; afterwards
+  the `exit 130` trap is restored and a deferred signal exits 130 (cleanup relaunches the app). Defence in depth: the
+  stage's inode is taken before the quit (`STAGE_INODE`); cleanup treats `prepare` as swapped when `$DEST` has that
+  inode, and a swap `python3` that reports failure after the rename (`swapped_in`) no longer exits 8.
+  Deviation from the review's suggestion: inode instead of bundleIdentity, because two builds can share an identity
+  (unsigned, no build counter, or a same-build reinstall) while the inode names exactly the staged directory; and a
+  deferring trap instead of `trap ''` so the signal is not lost.
+- **F2:** `promote_record` rotates `CURRENT_REC` → `ROLLBACK_REC` at most once per run (`RECORD_ROTATED`), so a retry from
+  cleanup no longer deletes the rollback record; a failed copy removes its tmp file.
+- Tests (install-dobius-gated-record.test.mjs): TERM during the swap; TERM right after the rotation; a failed first
+  promotion retried by cleanup; a swap reported as failed after it swapped. Merged `stabilize/integration` first.
+- Mutation checks (`stabilize-run/044B/mutate2.py`), all FAIL: pre-fix script (all 4 new tests); no deferral (rotation
+  test; the swap test is still saved by the cleanup inode check); no deferral and no inode check (both TERM tests);
+  rotation unguarded (retry test); swap result not re-checked (swap-reported-failure test); deferred signal never
+  honoured (both TERM tests).
+
 ## Deviations
 
 - Not in EXECUTION-ORDER.md (follow-up build).

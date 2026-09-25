@@ -114,24 +114,47 @@ PENDING_REC="$LOCK/INSTALL-PROVENANCE.json"
 PHASE="prepare"
 APP_QUIT=0
 APP_RELAUNCHED=0
+# Set when INT/TERM arrives during the critical section (quit → swap → record →
+# rollback move), which is deferred and acted on once that section is done.
+SIGNALLED=0
+# The stage's inode: after the swap (or first-install move) $DEST has it, which
+# tells an interrupted run whether the new bundle is already installed.
+STAGE_INODE=""
+swapped_in() {
+  [ -n "$STAGE_INODE" ] && [ -e "$DEST" ] && [ "$(stat -f %i "$DEST" 2>/dev/null)" = "$STAGE_INODE" ]
+}
 # Called once the new bundle is at $DEST: the swapped-out bundle's record goes
 # beside the rollback copy (it moves there next), and the pending record
-# becomes the installed app's, via a same-dir tmp + rename.
+# becomes the installed app's, via a same-dir tmp + rename. Safe to call again
+# after a partial run: the rotation happens at most once (RECORD_ROTATED).
+RECORD_ROTATED=0
 promote_record() {
   [ -f "$PENDING_REC" ] || return 0
   mkdir -p "$BACKUP_DIR" || return 1
-  if [ -f "$CURRENT_REC" ]; then
-    mv -f "$CURRENT_REC" "$ROLLBACK_REC" || return 1
-  else
-    rm -f "$ROLLBACK_REC" || return 1
+  if [ "$RECORD_ROTATED" = "0" ]; then
+    if [ -f "$CURRENT_REC" ]; then
+      mv -f "$CURRENT_REC" "$ROLLBACK_REC" || return 1
+    else
+      rm -f "$ROLLBACK_REC" || return 1
+    fi
+    RECORD_ROTATED=1
   fi
-  cat "$PENDING_REC" > "$CURRENT_REC.tmp.$$" && mv -f "$CURRENT_REC.tmp.$$" "$CURRENT_REC" \
-    && rm -f "$PENDING_REC"
+  if cat "$PENDING_REC" > "$CURRENT_REC.tmp.$$" && mv -f "$CURRENT_REC.tmp.$$" "$CURRENT_REC"; then
+    rm -f "$PENDING_REC"
+  else
+    rm -f "$CURRENT_REC.tmp.$$"
+    return 1
+  fi
 }
 cleanup() {
   # A second Ctrl-C/TERM must not cut this short.
   trap '' INT TERM
   if [ "$LOCK_HELD" = "1" ]; then
+    # Exited between the swap and PHASE being set: $STAGE holds the PREVIOUS
+    # bundle and must be kept as the rollback, never deleted as a partial stage.
+    if [ "$PHASE" = "prepare" ] && swapped_in; then
+      if [ -e "$STAGE" ]; then PHASE="swapped"; else PHASE="done"; fi
+    fi
     # Interrupted after the new bundle reached $DEST: its record must follow.
     if [ "$PHASE" != "prepare" ] && ! promote_record; then
       echo "WARNING: could not write the install record $CURRENT_REC." >&2
@@ -350,6 +373,11 @@ fi
 # the app). -a: pgrep/pkill skip their own ancestors by default, and an install
 # run from a Dobius+ terminal descends from the main app (main → detached
 # daemon → login → shell), so without -a the app is never seen or killed.
+# From here to the rollback move, INT/TERM only set SIGNALLED: an exit inside
+# the swap window would treat the swapped-out bundle as a partial stage and
+# delete it, and leave the new bundle without its record.
+STAGE_INODE=$(stat -f %i "$STAGE")
+trap 'SIGNALLED=1' INT TERM
 if [ "$MANAGE_APP" = "1" ]; then
   osascript -e 'quit app "Dobius+"' 2>/dev/null || true
   for _ in $(seq 1 10); do
@@ -370,9 +398,10 @@ fi
 
 # Swap (#104): with an app already installed, exchange the two bundles in ONE
 # atomic rename (renamex_np RENAME_SWAP) — there is never an instant with no
-# app at $DEST. Afterwards $STAGE holds the previous bundle.
+# app at $DEST. Afterwards $STAGE holds the previous bundle. Why swapped_in: a
+# python3 killed right after the rename reports failure although it swapped.
 if [ -e "$DEST" ]; then
-  if ! python3 - "$STAGE" "$DEST" <<'PYSWAP'
+  if ! python3 - "$STAGE" "$DEST" <<'PYSWAP' && ! swapped_in
 import ctypes, ctypes.util, os, sys
 libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
 swap = libc.renamex_np
@@ -407,6 +436,10 @@ else
   promote_record || echo "WARNING: could not write the install record $CURRENT_REC." >&2
   ROLLBACK_NOTE="rollback: none (first install)"
 fi
+# The critical section is over: honour a signal that arrived during it (the
+# cleanup trap relaunches the app).
+trap 'exit 130' INT TERM
+[ "$SIGNALLED" = "0" ] || exit 130
 
 # The build output carries the same bundle ID as the installed app; left in
 # dobius/dist it can register with LaunchServices → two Dock icons (#105). It

@@ -28,6 +28,59 @@ import {
 
 afterEach(cleanupRoots)
 
+// App management on a fixture DEST with recorder shims (quit/kill are no-ops,
+// `open` is traced), plus any extra command shims a test needs.
+function withShims(root, extra = {}) {
+  const dir = path.join(root, 'shims')
+  const trace = path.join(root, 'open-trace.log')
+  mkdirSync(dir)
+  const shims = {
+    osascript: 'exit 0',
+    pgrep: 'exit 1',
+    pkill: 'exit 0',
+    lsregister: 'exit 0',
+    open: `echo "$*" >> "${trace}"`,
+    ...extra
+  }
+  for (const [name, body] of Object.entries(shims)) {
+    writeFileSync(path.join(dir, name), `#!/bin/bash\n${body}\n`, { mode: 0o755 })
+  }
+  return {
+    env: {
+      PATH: `${dir}:${process.env.PATH}`,
+      DOBIUS_INSTALL_TEST_MANAGE_APP: '1',
+      DOBIUS_INSTALL_LSREGISTER: path.join(dir, 'lsregister')
+    },
+    opened: () => (existsSync(trace) ? readFileSync(trace, 'utf8').trim().split('\n') : [])
+  }
+}
+
+// The shims' own dir is first on PATH; drop it to reach the real command.
+const REAL_PATH = 'PATH="${PATH#*:}"'
+// The swap is the only `python3 -` call with exactly two arguments.
+const IS_SWAP = '[ "$1" = "-" ] && [ "$#" = 3 ]'
+
+// v1 installed through the installer (so it has a record), v2 ready to install.
+function installedV1(root) {
+  const v1 = makeBundle(path.join(root, 'h1', 'Dobius+.app'), { bundleVersion: '41', asar: 'v1' })
+  expect(runGated(root, [v1]).status).toBe(0)
+  return makeBundle(path.join(root, 'h2', 'Dobius+.app'), { bundleVersion: '42', asar: 'v2' })
+}
+
+function expectV2InstalledWithV1Rollback(root) {
+  expect(asarOf(dest(root))).toBe('v2')
+  expect(provenanceOf(dest(root))).toMatchObject({ buildNumber: 42 })
+  expect(asarOf(rollbackOf(root))).toBe('v1')
+  expect(recordFor(rollbackOf(root), rollbackRecordOf(root))).toMatchObject({ buildNumber: 41 })
+  expect(readdirSync(path.join(root, 'Applications'))).toEqual(['Dobius+.app'])
+  expect(readdirSync(backupsOf(root))).toEqual([
+    'Dobius+.previous',
+    'Dobius+.previous.INSTALL-PROVENANCE.json',
+    'INSTALL-PROVENANCE.json'
+  ])
+  expect(existsSync(path.join(root, 'install.lock'))).toBe(false)
+}
+
 describe.runIf(process.platform === 'darwin')(
   'install-dobius-gated.sh install record outside the bundle (BUILD-044B)',
   { timeout: 120_000 },
@@ -143,6 +196,65 @@ describe.runIf(process.platform === 'darwin')(
       expect(readFileSync(currentRecordOf(root), 'utf8')).toBe(record)
       expect(readdirSync(backupsOf(root))).toEqual(['INSTALL-PROVENANCE.json'])
       expect(existsSync(path.join(root, 'install.lock'))).toBe(false)
+    })
+
+    it('TERM during the swap keeps the previous bundle as the rollback and promotes the record (review F1)', () => {
+      const root = makeRoot()
+      const v2 = installedV1(root)
+      const shims = withShims(root, {
+        python3: `if ${IS_SWAP}; then kill -TERM "$PPID"; fi\n${REAL_PATH} exec python3 "$@"`
+      })
+
+      const result = runGated(root, [v2], shims.env)
+
+      expect(result.status, result.stderr).toBe(130)
+      expectV2InstalledWithV1Rollback(root)
+      expect(shims.opened()).toHaveLength(1)
+    })
+
+    it('TERM right after the record rotation keeps the rollback record (review F2)', () => {
+      const root = makeRoot()
+      const v2 = installedV1(root)
+      const mark = path.join(root, 'signalled')
+      const shims = withShims(root, {
+        mv: `/bin/mv "$@"; rc=$?\nif [ "$2" = "${currentRecordOf(root)}" ] && [ ! -e "${mark}" ]; then touch "${mark}"; kill -TERM "$PPID"; fi\nexit $rc`
+      })
+
+      const result = runGated(root, [v2], shims.env)
+
+      expect(existsSync(mark)).toBe(true)
+      expect(result.status, result.stderr).toBe(130)
+      expectV2InstalledWithV1Rollback(root)
+    })
+
+    it('retrying a partly done record promotion keeps the rollback record and leaves no tmp (review F2)', () => {
+      const root = makeRoot()
+      const v2 = installedV1(root)
+      const mark = path.join(root, 'failed-once')
+      // The first copy of the pending record fails; the cleanup trap retries it.
+      const shims = withShims(root, {
+        cat: `if [ "$1" = "${path.join(root, 'install.lock', 'INSTALL-PROVENANCE.json')}" ] && [ ! -e "${mark}" ]; then touch "${mark}"; exit 1; fi\nexec /bin/cat "$@"`
+      })
+
+      const result = runGated(root, [v2], shims.env)
+
+      expect(existsSync(mark)).toBe(true)
+      expect(result.status, result.stderr).toBe(0)
+      expect(result.stderr).toContain('could not write the install record')
+      expectV2InstalledWithV1Rollback(root)
+    })
+
+    it('completes the install when the swap reports failure after it already swapped', () => {
+      const root = makeRoot()
+      const v2 = installedV1(root)
+      const shims = withShims(root, {
+        python3: `if ${IS_SWAP}; then ${REAL_PATH} python3 "$@"; exit 1; fi\n${REAL_PATH} exec python3 "$@"`
+      })
+
+      const result = runGated(root, [v2], shims.env)
+
+      expect(result.status, result.stderr).toBe(0)
+      expectV2InstalledWithV1Rollback(root)
     })
 
     it('reads the owner from the record that names the installed bundle, else the legacy one inside it', () => {
