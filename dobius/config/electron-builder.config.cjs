@@ -204,6 +204,11 @@ module.exports = {
       ? undefined
       : (process.env.CSC_NAME ?? findInstalledMacSigningIdentity() ?? undefined),
     icon: 'resources/build/icon.icns',
+    // Why: CFBundleVersion carries the local build number handed out by
+    // config/scripts/electron-builder-with-build-number.mjs (BUILD-044); the
+    // installer records it in INSTALL-PROVENANCE.json. Unset, it stays the
+    // plain version (electron-builder's default).
+    bundleVersion: macBundleVersion(),
     entitlements: 'resources/build/entitlements.mac.plist',
     entitlementsInherit: 'resources/build/entitlements.mac.plist',
     extendInfo: {
@@ -369,6 +374,17 @@ module.exports = {
     repo: 'dobius-plus',
     releaseType: 'release'
   }
+}
+
+function macBundleVersion() {
+  const buildNumber = process.env.DOBIUS_BUILD_NUMBER
+  if (buildNumber === undefined || buildNumber === '') {
+    return null
+  }
+  if (!/^[1-9][0-9]*$/.test(buildNumber)) {
+    throw new Error(`DOBIUS_BUILD_NUMBER must be a positive integer, got "${buildNumber}"`)
+  }
+  return buildNumber
 }
 
 function chmodUnixCliLaunchers(resourcesDir, electronPlatformName) {

@@ -112,28 +112,38 @@ fi
 # Why (2026-09-07): a stale 1.0.66 lane build landed over the 2.0.0-rc.1 app and
 # read as "months of work wiped". Branch ownership alone did not catch it — the
 # version going backwards is the signal that a stale lane is installing.
-if [ "$TAKE_OVER" != "--take-over" ]; then
-  # Why the -f guards: on a missing plist PlistBuddy prints "File Doesn't Exist,
-  # Will Create: <path>" to stdout, and the digits in that path were compared
-  # as a version (a first install into a path with digits was refused).
-  SRC_VER=""; DST_VER=""
-  [ -f "$APP_SRC/Contents/Info.plist" ] && SRC_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_SRC/Contents/Info.plist" 2>/dev/null || echo "")
-  [ -f "$DEST/Contents/Info.plist" ] && DST_VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$DEST/Contents/Info.plist" 2>/dev/null || echo "")
-  if [ -n "$SRC_VER" ] && [ -n "$DST_VER" ]; then
-    if ! python3 - "$SRC_VER" "$DST_VER" <<'PYVER'
-import re, sys
-def key(v):
-    return [int(n) for n in re.findall(r"\d+", v.split("-")[0])[:3]] or [0]
-src, dst = key(sys.argv[1]), key(sys.argv[2])
-sys.exit(0 if src >= dst else 1)
-PYVER
-    then
-      echo "REFUSED: that build is version $SRC_VER but $DEST is $DST_VER." >&2
-      echo "Installing it would DOWNGRADE the app (this is the 'my work disappeared' bug)." >&2
-      echo "You are installing from: $SRC_REPO ($SRC_BRANCH)" >&2
-      echo "Re-run with --take-over only if you really mean to go backwards." >&2
-      exit 5
-    fi
+# BUILD-044: full SemVer precedence (#102: 2.0.0-rc.1 is OLDER than 2.0.0, and
+# rc.1 older than rc.2). A version that is missing or not SemVer is never a
+# pass (N8): the build is always refused, the installed app's only unless
+# --take-over says the operator accepts not knowing.
+# Why the -f guards: on a missing plist PlistBuddy prints "File Doesn't Exist,
+# Will Create: <path>" to stdout, and the digits in that path were compared
+# as a version (a first install into a path with digits was refused).
+SEMVER="$(cd "$(dirname "$0")" && pwd -P)/semver-compare.py"
+plist_value() {
+  [ -f "$1/Contents/Info.plist" ] || return 0
+  /usr/libexec/PlistBuddy -c "Print :$2" "$1/Contents/Info.plist" 2>/dev/null || true
+}
+SRC_VER=$(plist_value "$APP_SRC" CFBundleShortVersionString)
+if ! python3 "$SEMVER" valid "$SRC_VER"; then
+  echo "REFUSED: $APP_SRC has no valid version (CFBundleShortVersionString='$SRC_VER')." >&2
+  echo "Without one the downgrade guard cannot judge it; rebuild it." >&2
+  exit 5
+fi
+if [ -e "$DEST" ] && [ "$TAKE_OVER" != "--take-over" ]; then
+  DST_VER=$(plist_value "$DEST" CFBundleShortVersionString)
+  if ! python3 "$SEMVER" valid "$DST_VER"; then
+    echo "REFUSED: $DEST has no valid version (CFBundleShortVersionString='$DST_VER')," >&2
+    echo "so this install cannot be proven not to be a downgrade." >&2
+    echo "Re-run with --take-over to replace it anyway." >&2
+    exit 5
+  fi
+  if ! python3 "$SEMVER" ge "$SRC_VER" "$DST_VER"; then
+    echo "REFUSED: that build is version $SRC_VER but $DEST is $DST_VER." >&2
+    echo "Installing it would DOWNGRADE the app (this is the 'my work disappeared' bug)." >&2
+    echo "You are installing from: $SRC_REPO ($SRC_BRANCH)" >&2
+    echo "Re-run with --take-over only if you really mean to go backwards." >&2
+    exit 5
   fi
 fi
 
@@ -145,13 +155,67 @@ if ! cp -R "$APP_SRC" "$STAGE"; then
   echo "ERROR: copying $APP_SRC to $STAGE failed — installed app left untouched." >&2
   exit 6
 fi
-python3 - "$STAGE/$PROV_REL" "$SRC_BRANCH" "$SRC_COMMIT" "$SRC_REPO" <<'EOF'
-import json, sys, datetime, os
-path, branch, commit, repo = sys.argv[1:5]
+# Provenance (#109, #110, X2): the commit alone does not say what was built.
+# Also record whether the source tree had uncommitted changes plus a digest of
+# them, the annotated release tag at HEAD (if any), the bundle's own version and
+# build number, and a hash of the shipped app.asar, so each can be checked on
+# its own. A value that cannot be determined is null, never a guess.
+# CFBundleVersion carries the build counter (dobius/config/scripts/
+# electron-builder-with-build-number.mjs). A bundle packaged without it has the
+# plain version there, which is not a build number.
+BUILD_NUM=$(plist_value "$STAGE" CFBundleVersion)
+case "$BUILD_NUM" in ''|0*|*[!0-9]*) BUILD_NUM="" ;; esac
+python3 - "$STAGE/$PROV_REL" "$SRC_BRANCH" "$SRC_COMMIT" "$SRC_REPO" "$SRC_VER" "$BUILD_NUM" "$STAGE/Contents/Resources/app.asar" <<'EOF'
+import json, sys, datetime, hashlib, os, subprocess
+path, branch, commit, repo, version, build_number, asar = sys.argv[1:8]
+
+def git(*args):
+    return subprocess.run(["git", "--no-optional-locks", "-C", repo, *args], capture_output=True, check=True).stdout
+
+def sha256_file(file_path):
+    digest = hashlib.sha256()
+    with open(file_path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+dirty = diff_digest = tag = None
+if repo != "unknown":
+    try:
+        dirty = bool(git("status", "--porcelain", "--untracked-files=all").strip())
+        if dirty:
+            # Tracked changes (staged + unstaged) as one binary diff, then every
+            # untracked, non-ignored path with a hash of its content.
+            digest = hashlib.sha256(git("diff", "HEAD", "--binary", "--no-ext-diff", "--no-textconv", "--no-color"))
+            untracked = git("ls-files", "--others", "--exclude-standard", "-z").split(b"\0")
+            for rel in sorted(p for p in untracked if p):
+                full = os.path.join(repo, os.fsdecode(rel))
+                if os.path.islink(full):
+                    content = b"link:" + os.fsencode(os.readlink(full))
+                elif os.path.isfile(full):
+                    content = sha256_file(full).encode()
+                else:
+                    content = b"other"
+                digest.update(b"\0untracked\0" + rel + b"\0" + content)
+            diff_digest = "sha256:" + digest.hexdigest()
+    except (OSError, subprocess.CalledProcessError):
+        dirty = diff_digest = None
+    try:
+        # Annotated tags only: the release-tag contract (#110) is `git tag -a v<version>`.
+        tag = git("describe", "--exact-match", "HEAD").decode().strip() or None
+    except (OSError, subprocess.CalledProcessError):
+        tag = None
+
 json.dump({
     "branch": branch,
     "commit": commit,
     "repo": repo,
+    "dirty": dirty,
+    "diffDigest": diff_digest,
+    "tag": tag,
+    "version": version,
+    "buildNumber": int(build_number) if build_number else None,
+    "artifactSha256": sha256_file(asar) if os.path.isfile(asar) else None,
     "installedAt": datetime.datetime.now().isoformat(timespec="seconds"),
     "installedBy": os.environ.get("USER", "unknown"),
 }, open(path, "w"), indent=2)
@@ -264,7 +328,7 @@ if [ "$MANAGE_APP" = "1" ]; then
   open -a "$DEST"
 fi
 
-echo "INSTALLED: $SRC_BRANCH@$SRC_COMMIT -> $DEST ($ROLLBACK_NOTE)"
+echo "INSTALLED: $SRC_BRANCH@$SRC_COMMIT version $SRC_VER build ${BUILD_NUM:-none} -> $DEST ($ROLLBACK_NOTE)"
 [ "$ROLLBACK_NOTE" = "rollback: $ROLLBACK" ] && \
   echo "To go back: $0 \"$ROLLBACK\" --take-over"
-echo "$(date '+%F %T') install $SRC_BRANCH@$SRC_COMMIT from $SRC_REPO ($ROLLBACK_NOTE)" >> "$HISTORY_LOG"
+echo "$(date '+%F %T') install $SRC_BRANCH@$SRC_COMMIT version $SRC_VER build ${BUILD_NUM:-none} from $SRC_REPO ($ROLLBACK_NOTE)" >> "$HISTORY_LOG"

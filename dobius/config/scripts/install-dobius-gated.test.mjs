@@ -2,6 +2,7 @@
 // Every run sets DOBIUS_INSTALL_DEST (never /Applications) and a temp HOME, so
 // the script never quits, kills, relaunches or registers the real app.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   chmodSync,
   copyFileSync,
@@ -22,6 +23,7 @@ const repoRoot = path.resolve(import.meta.dirname, '../../..')
 const gatedScript = path.join(repoRoot, 'scripts', 'install-dobius-gated.sh')
 const v2Script = path.join(repoRoot, 'scripts', 'install-dobius-v2.sh')
 const buildAndInstall = path.join(repoRoot, 'build-and-install.sh')
+const semverScript = path.join(repoRoot, 'scripts', 'semver-compare.py')
 
 const roots = []
 
@@ -33,9 +35,18 @@ function makeRoot() {
   return root
 }
 
-function makeBundle(bundlePath, { version = '2.0.0', asar = 'v1', withAsar = true } = {}) {
+function makeBundle(
+  bundlePath,
+  { version = '2.0.0', bundleVersion = null, asar = 'v1', withAsar = true } = {}
+) {
   mkdirSync(path.join(bundlePath, 'Contents', 'MacOS'), { recursive: true })
   mkdirSync(path.join(bundlePath, 'Contents', 'Resources'), { recursive: true })
+  const versionKey =
+    version === null
+      ? ''
+      : `<key>CFBundleShortVersionString</key><string>${version}</string>\n`
+  const bundleVersionKey =
+    bundleVersion === null ? '' : `<key>CFBundleVersion</key><string>${bundleVersion}</string>\n`
   writeFileSync(
     path.join(bundlePath, 'Contents', 'Info.plist'),
     `<?xml version="1.0" encoding="UTF-8"?>
@@ -43,8 +54,7 @@ function makeBundle(bundlePath, { version = '2.0.0', asar = 'v1', withAsar = tru
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>FixtureApp</string>
 <key>CFBundleIdentifier</key><string>com.example.dobius-installer-fixture</string>
-<key>CFBundleShortVersionString</key><string>${version}</string>
-</dict></plist>
+${versionKey}${bundleVersionKey}</dict></plist>
 `
   )
   // A real Mach-O (universal) binary so the arch validation runs for real.
@@ -410,6 +420,215 @@ describe.runIf(process.platform === 'darwin')(
         destAsarAtCall: 'v1'
       })
       expect(asarOf(dest(root))).toBe('v1')
+    })
+  }
+)
+
+// BUILD-044 (#102): SemVer precedence, straight from the helper the installer calls.
+const semver = (...args) => spawnSync('python3', [semverScript, ...args], { encoding: 'utf8' }).status
+
+describe('semver-compare.py (#102, N8)', () => {
+  // [newer, older]: each pair is checked both ways.
+  const ordered = [
+    ['2.0.0-rc.2', '2.0.0-rc.1'],
+    ['2.0.0', '2.0.0-rc.2'],
+    ['2.0.0', '2.0.0-rc.1'],
+    ['2.0.1', '2.0.0'],
+    ['2.0.1-rc.1', '2.0.0'],
+    ['2.0.0-rc.10', '2.0.0-rc.2'],
+    ['2.0.0-rc.1', '1.0.66'],
+    ['10.0.0', '9.9.9'],
+    ['1.0.0-alpha.beta', '1.0.0-alpha.1'],
+    ['1.0.0-alpha.1', '1.0.0-alpha'],
+    ['1.0.0-beta', '1.0.0-alpha.beta']
+  ]
+
+  it.each(ordered)('%s >= %s, and not the other way round', (newer, older) => {
+    expect(semver('ge', newer, older)).toBe(0)
+    expect(semver('ge', older, newer)).toBe(1)
+  })
+
+  it('treats equal versions as not older, and ignores build metadata both ways', () => {
+    expect(semver('ge', '2.0.0', '2.0.0')).toBe(0)
+    expect(semver('ge', '2.0.0+5', '2.0.0+9')).toBe(0)
+    expect(semver('ge', '2.0.0+9', '2.0.0+5')).toBe(0)
+    expect(semver('ge', '2.0.0-rc.1+900', '2.0.0+1')).toBe(1)
+  })
+
+  it.each([
+    '',
+    '2.0',
+    '2.0.0.1',
+    'v2.0.0',
+    '02.0.0',
+    '2.0.0-',
+    '2.0.0-rc.01',
+    "File Doesn't Exist, Will Create: /tmp/1/2/3/Info.plist"
+  ])('refuses %j as a version', (bad) => {
+    expect(semver('valid', bad)).toBe(2)
+    expect(semver('ge', bad, '2.0.0')).toBe(2)
+    expect(semver('ge', '2.0.0', bad)).toBe(2)
+  })
+})
+
+function git(cwd, ...args) {
+  return execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    env: {
+      PATH: process.env.PATH,
+      HOME: cwd,
+      GIT_AUTHOR_NAME: 'fixture',
+      GIT_AUTHOR_EMAIL: 'fixture@example.com',
+      GIT_COMMITTER_NAME: 'fixture',
+      GIT_COMMITTER_EMAIL: 'fixture@example.com'
+    }
+  }).trim()
+}
+
+// A real git repo whose build output sits in an ignored dist/, like dobius/.
+function makeRepo(root) {
+  const repo = path.join(root, 'repo')
+  mkdirSync(repo)
+  git(repo, 'init', '-q', '-b', 'main')
+  writeFileSync(path.join(repo, '.gitignore'), 'dist/\n')
+  writeFileSync(path.join(repo, 'src.txt'), 'committed\n')
+  git(repo, 'add', '.')
+  git(repo, 'commit', '-q', '-m', 'fixture')
+  return repo
+}
+
+const provenanceOf = (bundle) =>
+  JSON.parse(
+    readFileSync(path.join(bundle, 'Contents', 'Resources', 'INSTALL-PROVENANCE.json'), 'utf8')
+  )
+const distBundle = (root, options) =>
+  makeBundle(path.join(root, 'repo', 'dist', 'mac-arm64', 'Dobius+.app'), options)
+
+describe.runIf(process.platform === 'darwin')(
+  'install-dobius-gated.sh version guard and provenance (BUILD-044)',
+  { timeout: 90_000 },
+  () => {
+    it('refuses a release candidate over the stable app it precedes (#102)', () => {
+      const root = makeRoot()
+      makeBundle(dest(root), { version: '2.0.0', asar: 'v1' })
+      const built = makeBundle(path.join(root, 'handoff', 'Dobius+.app'), {
+        version: '2.0.0-rc.1',
+        asar: 'v2'
+      })
+
+      const result = runGated(root, [built])
+
+      expect(result.status, result.stderr).toBe(5)
+      expect(result.stderr).toContain('DOWNGRADE')
+      expect(asarOf(dest(root))).toBe('v1')
+      expect(existsSync(path.join(root, 'install.lock'))).toBe(false)
+    })
+
+    it('installs the stable release over its release candidate (#102)', () => {
+      const root = makeRoot()
+      makeBundle(dest(root), { version: '2.0.0-rc.2', asar: 'v1' })
+      const built = makeBundle(path.join(root, 'handoff', 'Dobius+.app'), {
+        version: '2.0.0',
+        asar: 'v2'
+      })
+
+      const result = runGated(root, [built])
+
+      expect(result.status, result.stderr).toBe(0)
+      expect(asarOf(dest(root))).toBe('v2')
+    })
+
+    it('refuses a build with no version, even with --take-over (N8)', () => {
+      const root = makeRoot()
+      makeBundle(dest(root), { asar: 'v1' })
+      const built = makeBundle(path.join(root, 'handoff', 'Dobius+.app'), {
+        version: null,
+        asar: 'v2'
+      })
+
+      for (const args of [[built], [built, '--take-over']]) {
+        const result = runGated(root, args)
+        expect(result.status, result.stderr).toBe(5)
+        expect(result.stderr).toContain('no valid version')
+        expect(asarOf(dest(root))).toBe('v1')
+      }
+    })
+
+    it('refuses to replace an installed app with no version unless --take-over (N8)', () => {
+      const root = makeRoot()
+      makeBundle(dest(root), { version: null, asar: 'v1' })
+      const built = makeBundle(path.join(root, 'handoff', 'Dobius+.app'), { asar: 'v2' })
+
+      const refused = runGated(root, [built])
+      expect(refused.status, refused.stderr).toBe(5)
+      expect(refused.stderr).toContain('cannot be proven not to be a downgrade')
+      expect(asarOf(dest(root))).toBe('v1')
+
+      const takenOver = runGated(root, [built, '--take-over'])
+      expect(takenOver.status, takenOver.stderr).toBe(0)
+      expect(asarOf(dest(root))).toBe('v2')
+    })
+
+    it('records a clean tree, the release tag, version, build number and artifact hash (#109, #110)', () => {
+      const root = makeRoot()
+      const repo = makeRepo(root)
+      git(repo, 'tag', '-a', 'v2.0.0', '-m', 'release 2.0.0')
+      const built = distBundle(root, { version: '2.0.0', bundleVersion: '41', asar: 'v2' })
+
+      const result = runGated(root, [built])
+
+      expect(result.status, result.stderr).toBe(0)
+      expect(provenanceOf(dest(root))).toMatchObject({
+        branch: 'main',
+        commit: git(repo, 'rev-parse', '--short', 'HEAD'),
+        dirty: false,
+        diffDigest: null,
+        tag: 'v2.0.0',
+        version: '2.0.0',
+        buildNumber: 41,
+        artifactSha256: createHash('sha256').update('v2').digest('hex')
+      })
+      expect(readFileSync(path.join(root, 'history.log'), 'utf8')).toContain(
+        'version 2.0.0 build 41'
+      )
+    })
+
+    it('records a dirty tree with a digest of the uncommitted changes (X2, #109)', () => {
+      const root = makeRoot()
+      const repo = makeRepo(root)
+      writeFileSync(path.join(repo, 'src.txt'), 'edited but not committed\n')
+      const first = distBundle(root, { bundleVersion: '42', asar: 'v2' })
+      expect(runGated(root, [first]).status).toBe(0)
+      const dirtyEdit = provenanceOf(dest(root))
+
+      expect(dirtyEdit).toMatchObject({ dirty: true, tag: null, buildNumber: 42 })
+      expect(dirtyEdit.diffDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
+
+      // A different uncommitted change (an untracked file) gives a different digest.
+      writeFileSync(path.join(repo, 'new-untracked.txt'), 'x\n')
+      const second = distBundle(root, { bundleVersion: '43', asar: 'v3' })
+      expect(runGated(root, [second]).status).toBe(0)
+      const withUntracked = provenanceOf(dest(root))
+      expect(withUntracked).toMatchObject({ dirty: true, buildNumber: 43 })
+      expect(withUntracked.diffDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
+      expect(withUntracked.diffDigest).not.toBe(dirtyEdit.diffDigest)
+    })
+
+    it('records no build number for a bundle packaged without the counter', () => {
+      const root = makeRoot()
+      const built = makeBundle(path.join(root, 'handoff', 'Dobius+.app'), {
+        bundleVersion: '2.0.0',
+        asar: 'v2'
+      })
+
+      expect(runGated(root, [built]).status).toBe(0)
+      expect(provenanceOf(dest(root))).toMatchObject({
+        buildNumber: null,
+        dirty: null,
+        diffDigest: null,
+        tag: null
+      })
     })
   }
 )
