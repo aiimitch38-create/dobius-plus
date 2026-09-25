@@ -143,6 +143,12 @@ function registerHandlers(store: Store, service: JarvisService): void {
     return result
   })
 
+  // Why no window: undo is asked for by voice after the review window closed.
+  ipcMain.removeHandler('jarvis:undoSelfEdit')
+  ipcMain.handle('jarvis:undoSelfEdit', (_event, id: string) =>
+    selfEdits.undo(String(id ?? ''))
+  )
+
   ipcMain.removeHandler('jarvis:discardSelfEdit')
   ipcMain.handle('jarvis:discardSelfEdit', (_event, id: string) => {
     const discarded = selfEdits.discard(String(id ?? ''))

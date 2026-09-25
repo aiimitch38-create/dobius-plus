@@ -1,16 +1,22 @@
 import {
   closeSync,
   constants,
-  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
   readFileSync,
   realpathSync,
+  unlinkSync,
   writeFileSync
 } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { protectedReason } from './self-edit-path-policy'
+import {
+  bytesDigest,
+  readSnapshot,
+  releaseBackupAfterFailedWrite,
+  snapshotDigest
+} from './self-edit-snapshot'
 
 export type SelfEditProposal = {
   id: string
@@ -20,17 +26,34 @@ export type SelfEditProposal = {
   oldContent: string
   newContent: string
   createdAt: number
+  /** sha256 of the file's bytes when proposed; null when it did not exist. */
+  originalDigest: string | null
   /** Set once written; keeps the backup path for a one-step undo. */
   appliedBackupPath?: string
+}
+
+/** What undo needs once a proposal has been written. */
+type AppliedEdit = {
+  absolutePath: string
+  displayPath: string
+  /** Null when the edit created the file: undo removes it again. */
+  backupPath: string | null
+  originalDigest: string | null
+  appliedDigest: string
 }
 
 export type ProposeResult =
   | { ok: true; proposal: SelfEditProposal }
   | { ok: false; error: string }
 
-export type ApplyResult = { ok: true; displayPath: string } | { ok: false; error: string }
+export type ApplyResult =
+  | { ok: true; displayPath: string }
+  | { ok: false; error: string; conflict?: true }
 
 const MAX_CONTENT_BYTES = 512 * 1024
+
+export const WINDOWS_WRITE_UNSUPPORTED =
+  'Adam cannot write his own code on Windows yet: Windows has no safe way to refuse a link swapped in at the last moment. Nothing was written.'
 
 /**
  * Directories Adam may rewrite: the app that runs him and the service that
@@ -127,7 +150,7 @@ export function resolveEditablePath(
  * between that check and this write. O_NOFOLLOW makes the kernel refuse rather
  * than letting the write escape the allowed roots.
  */
-function writeFileSyncNoFollow(path: string, content: string): void {
+function writeFileSyncNoFollow(path: string, content: string | Buffer): void {
   const { O_WRONLY, O_TRUNC, O_CREAT, O_NOFOLLOW } = constants
   // O_NOFOLLOW is POSIX-only; on Windows the flag is absent and 0 is a no-op.
   const flags = O_WRONLY | O_TRUNC | O_CREAT | (O_NOFOLLOW ?? 0)
@@ -142,13 +165,15 @@ function writeFileSyncNoFollow(path: string, content: string): void {
 /** In-memory store: proposals are deliberately not durable across a restart. */
 export class SelfEditStore {
   private readonly proposals = new Map<string, SelfEditProposal>()
+  private readonly applied = new Map<string, AppliedEdit>()
   private sequence = 0
 
   constructor(
     private readonly roots: string[],
     private readonly now: () => number = Date.now,
     /** Set when no repo root is configured: every proposal is refused with it. */
-    private readonly unavailableReason: string | null = null
+    private readonly unavailableReason: string | null = null,
+    private readonly platform: NodeJS.Platform = process.platform
   ) {}
 
   propose(requestedPath: string, newContent: string, description: string): ProposeResult {
@@ -165,9 +190,20 @@ export class SelfEditStore {
     if (!resolved.ok) {
       return resolved
     }
-    const oldContent = existsSync(resolved.absolutePath)
-      ? readFileSync(resolved.absolutePath, 'utf-8')
-      : ''
+    // Why keep a digest of the exact bytes: apply must notice any change made
+    // to the file while the user was reviewing, not just a different length.
+    let original: ReturnType<typeof readSnapshot>
+    try {
+      original = readSnapshot(resolved.absolutePath)
+    } catch (error) {
+      // Why catch: a dangling symlink (ELOOP) or unreadable file must reach the
+      // voice tool as a spoken refusal, not a rejected IPC promise.
+      return {
+        ok: false,
+        error: `"${requestedPath}" could not be read: ${error instanceof Error ? error.message : String(error)}`
+      }
+    }
+    const oldContent = original.exists ? original.bytes.toString('utf-8') : ''
     if (oldContent === newContent) {
       return { ok: false, error: 'That change is identical to the current file.' }
     }
@@ -179,7 +215,8 @@ export class SelfEditStore {
       description: description.trim() || 'No description given.',
       oldContent,
       newContent,
-      createdAt: this.now()
+      createdAt: this.now(),
+      originalDigest: snapshotDigest(original)
     }
     this.proposals.set(proposal.id, proposal)
     return { ok: true, proposal }
@@ -198,36 +235,126 @@ export class SelfEditStore {
    * can be undone in one step — voice approval is easy to give by accident.
    */
   apply(id: string, backupDir: string): ApplyResult {
+    // Why refuse on Windows: every write here relies on O_NOFOLLOW, which
+    // Windows lacks, so a symlink or junction swapped in after the path check
+    // would be followed and the write would land outside the allowed roots.
+    if (this.platform === 'win32') {
+      return { ok: false, error: WINDOWS_WRITE_UNSUPPORTED }
+    }
     const proposal = this.proposals.get(id)
     if (!proposal) {
       return { ok: false, error: 'That change is no longer pending.' }
     }
     // Why re-resolve: review can take minutes, and a parent folder swapped for a
     // symlink meanwhile would redirect the write; O_NOFOLLOW only guards the leaf.
-    const recheck = resolveEditablePath(proposal.absolutePath, this.roots)
-    if (!recheck.ok || recheck.absolutePath !== proposal.absolutePath) {
-      return {
-        ok: false,
-        error: recheck.ok ? `"${proposal.displayPath}" moved since it was proposed.` : recheck.error
-      }
+    const moved = this.recheckPath(proposal.absolutePath, proposal.displayPath, 'proposed')
+    if (moved) {
+      return moved
     }
+    const newBytes = Buffer.from(proposal.newContent, 'utf-8')
+    let backupPath: string | null = null
     try {
-      mkdirSync(backupDir, { recursive: true })
-      if (existsSync(proposal.absolutePath)) {
-        const backupPath = join(backupDir, `${proposal.id}-${proposal.createdAt}.bak`)
-        copyFileSync(proposal.absolutePath, backupPath)
-        proposal.appliedBackupPath = backupPath
+      const current = readSnapshot(proposal.absolutePath)
+      // Why refuse instead of merging: the reviewed diff was computed against
+      // the old bytes, so writing now would silently erase the newer edit.
+      // The proposal stays pending so the conflict is visible in the window.
+      if (snapshotDigest(current) !== proposal.originalDigest) {
+        return {
+          ok: false,
+          conflict: true,
+          error: `"${proposal.displayPath}" changed since Adam proposed this edit. Nothing was written; ask Adam to propose it again.`
+        }
       }
-      writeFileSyncNoFollow(proposal.absolutePath, proposal.newContent)
+      mkdirSync(backupDir, { recursive: true })
+      if (current.exists) {
+        backupPath = join(backupDir, `${proposal.id}-${proposal.createdAt}.bak`)
+        // Why the verified bytes and 'wx': the backup must be exactly what was
+        // checked above, and must never overwrite an earlier backup.
+        writeFileSync(backupPath, current.bytes, { flag: 'wx' })
+      }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
+    try {
+      writeFileSyncNoFollow(proposal.absolutePath, newBytes)
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      return {
+        ok: false,
+        error: releaseBackupAfterFailedWrite(proposal.absolutePath, proposal.originalDigest, backupPath, reason)
+      }
+    }
+    proposal.appliedBackupPath = backupPath ?? undefined
     this.proposals.delete(id)
+    this.applied.set(id, {
+      absolutePath: proposal.absolutePath,
+      displayPath: proposal.displayPath,
+      backupPath,
+      originalDigest: proposal.originalDigest,
+      appliedDigest: bytesDigest(newBytes)
+    })
     return { ok: true, displayPath: proposal.displayPath }
+  }
+
+  /**
+   * Restores the exact bytes from before an applied edit (or removes a file the
+   * edit created). Refuses with a conflict if the file changed after the edit,
+   * so undo never erases work done since.
+   */
+  undo(id: string): ApplyResult {
+    if (this.platform === 'win32') {
+      return { ok: false, error: WINDOWS_WRITE_UNSUPPORTED }
+    }
+    const edit = this.applied.get(id)
+    if (!edit) {
+      return { ok: false, error: 'There is no applied change with that id to undo.' }
+    }
+    const moved = this.recheckPath(edit.absolutePath, edit.displayPath, 'applied')
+    if (moved) {
+      return moved
+    }
+    try {
+      if (snapshotDigest(readSnapshot(edit.absolutePath)) !== edit.appliedDigest) {
+        return {
+          ok: false,
+          conflict: true,
+          error: `"${edit.displayPath}" changed after the edit was applied. Nothing was undone${edit.backupPath ? `; the original is kept at ${edit.backupPath}` : ''}.`
+        }
+      }
+      if (edit.backupPath) {
+        const original = readFileSync(edit.backupPath)
+        if (bytesDigest(original) !== edit.originalDigest) {
+          return { ok: false, error: `The backup at ${edit.backupPath} was modified. Nothing was undone.` }
+        }
+        writeFileSyncNoFollow(edit.absolutePath, original)
+      } else {
+        // Safe: the file holds exactly the bytes this edit created (checked above).
+        unlinkSync(edit.absolutePath)
+      }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+    this.applied.delete(id)
+    return { ok: true, displayPath: edit.displayPath }
   }
 
   discard(id: string): boolean {
     return this.proposals.delete(id)
+  }
+
+  private recheckPath(
+    absolutePath: string,
+    displayPath: string,
+    since: 'proposed' | 'applied'
+  ): { ok: false; error: string } | null {
+    const recheck = resolveEditablePath(absolutePath, this.roots)
+    if (recheck.ok && recheck.absolutePath === absolutePath) {
+      return null
+    }
+    return {
+      ok: false,
+      error: recheck.ok ? `"${displayPath}" moved since it was ${since}.` : recheck.error
+    }
   }
 
   private toDisplayPath(absolutePath: string): string {

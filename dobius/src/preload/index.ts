@@ -4464,8 +4464,12 @@ const api = {
       ipcRenderer.invoke('jarvis:proposeSelfEdit', path, content, description),
     applySelfEdit: (
       id: string
-    ): Promise<{ ok: true; displayPath: string } | { ok: false; error: string }> =>
+    ): Promise<{ ok: true; displayPath: string } | { ok: false; error: string; conflict?: true }> =>
       ipcRenderer.invoke('jarvis:applySelfEdit', id),
+    undoSelfEdit: (
+      id: string
+    ): Promise<{ ok: true; displayPath: string } | { ok: false; error: string; conflict?: true }> =>
+      ipcRenderer.invoke('jarvis:undoSelfEdit', id),
     discardSelfEdit: (id: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('jarvis:discardSelfEdit', id),
     onSelfEditProposal: (callback: (proposal: unknown) => void): (() => void) => {
