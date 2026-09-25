@@ -20,6 +20,16 @@ export type OrbHudState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'erro
 const WAKE_WORD_WINDOW_MS = 12_000
 const ERROR_STATE_CLEAR_MS = 4_000
 export const JARVIS_NO_MODEL_TEXT = 'No speech model selected. Download one in Settings > Voice.'
+export const JARVIS_SHORTCUT_UNAVAILABLE_TEXT =
+  "Jarvis shortcut (Cmd+T) couldn't be registered. Another app may be using it. See Settings > Voice."
+
+const OPEN_VOICE_SETTINGS_ACTION = {
+  label: 'Open Settings',
+  onClick: (): void => {
+    useAppStore.getState().openSettingsTarget({ pane: 'voice', repoId: null })
+    useAppStore.getState().openSettingsPage()
+  }
+}
 
 type TurnSubPhase = 'idle' | 'starting' | 'listening'
 
@@ -201,15 +211,7 @@ export function useJarvisTurn(): JarvisTurn {
       // fix is picking a speech model; mirrors DictationController's prompt.
       setErrorText(JARVIS_NO_MODEL_TEXT)
       setPhase('error')
-      toast(JARVIS_NO_MODEL_TEXT, {
-        action: {
-          label: 'Open Settings',
-          onClick: () => {
-            useAppStore.getState().openSettingsTarget({ pane: 'voice', repoId: null })
-            useAppStore.getState().openSettingsPage()
-          }
-        }
-      })
+      toast(JARVIS_NO_MODEL_TEXT, { action: OPEN_VOICE_SETTINGS_ACTION })
       return
     }
     turnPhaseRef.current = 'starting'
@@ -276,6 +278,27 @@ export function useJarvisTurn(): JarvisTurn {
       }),
     [setPhase]
   )
+
+  // Why ask once on mount (#122-F9): main tries the ⌘T grab at launch, before
+  // this listener exists, so its error broadcast is never seen here. Without
+  // this, a refused grab showed only in Settings.
+  // Why no cleanup cancel: StrictMode re-runs the effect and the ref would
+  // then skip the only check.
+  const shortcutCheckedRef = useRef(false)
+  useEffect(() => {
+    if (!flags.jarvisEnabled || shortcutCheckedRef.current) {
+      return
+    }
+    shortcutCheckedRef.current = true
+    void window.api.jarvis
+      .status()
+      .then((status) => {
+        if (!status.shortcutActive) {
+          toast(JARVIS_SHORTCUT_UNAVAILABLE_TEXT, { action: OPEN_VOICE_SETTINGS_ACTION })
+        }
+      })
+      .catch(() => undefined)
+  }, [flags.jarvisEnabled])
 
   // Global ⌘T push-to-talk: press starts or cancels a turn.
   // Why the agentId check: with a live agent configured, the agent hook owns

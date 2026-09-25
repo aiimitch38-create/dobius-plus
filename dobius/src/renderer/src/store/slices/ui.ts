@@ -2501,7 +2501,8 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
     } else if (
       status.state === 'idle' ||
       status.state === 'checking' ||
-      status.state === 'not-available'
+      status.state === 'not-available' ||
+      status.state === 'disabled'
     ) {
       // Why: reset on cycle-boundary states so stale rich content from a
       // previous update cycle cannot resurface.

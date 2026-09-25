@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { appMock, browserWindowMock, nativeUpdaterMock, autoUpdaterMock, isMock, killAllPtyMock } =
   vi.hoisted(() => {
@@ -87,6 +87,12 @@ vi.mock('@electron-toolkit/utils', () => ({
   is: isMock
 }))
 
+// Why: these tests exercise the opted-in updater path; the shared update
+// policy needs the opt-in flag and the disconnect switch off (BUILD-046).
+vi.mock('./dobius-disconnect', () => ({
+  DOBIUS_SERVICES_DISCONNECTED: false
+}))
+
 vi.mock('./ipc/pty', () => ({
   killAllPty: killAllPtyMock
 }))
@@ -111,6 +117,10 @@ function makeBenignCheckFailure(message: string): void {
 }
 
 describe('updater check failure handling', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   beforeEach(() => {
     vi.resetModules()
     autoUpdaterMock.reset()
@@ -124,6 +134,7 @@ describe('updater check failure handling', () => {
     isMock.dev = false
     killAllPtyMock.mockReset()
     vi.unstubAllGlobals()
+    vi.stubEnv('DOBIUS_ENABLE_DOBIUS_UPDATES', '1')
     vi.useRealTimers()
   })
 

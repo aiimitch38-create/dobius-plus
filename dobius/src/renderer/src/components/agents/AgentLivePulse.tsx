@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-react'
 import { AgentAvatar } from './AgentAvatar'
 import { AgentTerminalAvatar } from './AgentTerminalAvatar'
+import { formatRunAge } from './agent-run-age'
 import type { AgentRun, CustomAgent, PendingAgentDecision } from '../../../../shared/agents'
 import type { TerminalAgentRosterRow } from './use-terminal-agent-rows'
 import { cn } from '@/lib/utils'
@@ -49,7 +50,8 @@ function crewRowText(
   if (run.status === 'running') {
     return run.summary || 'Running'
   }
-  return run.summary || run.status
+  // Why: a finished run's summary can be days old; say so instead of passing it off as live.
+  return `Last run ${formatRunAge(run.endedAt ?? run.startedAt)} · ${run.summary || run.status}`
 }
 
 function terminalPulseState(state: TerminalAgentRosterRow['state']): LivePulseState {

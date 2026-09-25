@@ -7,9 +7,9 @@
  * per-record files.
  */
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
+import { parseEveryEntry, SafeJsonFile } from '../../storage/safe-json-file'
 import {
   assertValidTemplateName,
   cloneChannelTemplate,
@@ -25,36 +25,27 @@ import {
 
 const FILE_NAME = 'channel-templates.json'
 
-let cached: ChannelTemplate[] | null = null
-
 function filePath(): string {
   return path.join(app.getPath('userData'), FILE_NAME)
 }
 
+// Why: a malformed row makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+const file = new SafeJsonFile<ChannelTemplate[]>({
+  filePath,
+  parse: (raw) => (Array.isArray(raw) ? parseEveryEntry(raw, sanitizeChannelTemplateRow) : undefined),
+  fallback: () => [],
+  label: `[channel-templates] ${FILE_NAME}`
+})
+
 function load(): ChannelTemplate[] {
-  if (cached) {return cached}
-  try {
-    const raw = JSON.parse(readFileSync(filePath(), 'utf-8'))
-    cached = Array.isArray(raw) ? raw.map(sanitizeChannelTemplateRow).filter((row): row is ChannelTemplate => row !== null) : []
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn('[channel-templates] failed to load channel templates:', error instanceof Error ? error.message : String(error))
-    }
-    cached = []
-  }
-  return cached
+  return file.get()
 }
 
+// Why: throws so the renderer's error path shows a refused save instead of
+// an edit that silently disappears on restart.
 function persist(templates: ChannelTemplate[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(templates, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn('[channel-templates] failed to persist channel templates:', error instanceof Error ? error.message : String(error))
-  }
+  file.save(templates)
 }
 
 export function listChannelTemplates(): ChannelTemplate[] {
@@ -82,7 +73,6 @@ export function createChannelTemplate(input: ChannelTemplateInput): ChannelTempl
     createdAt: now,
     updatedAt: now
   })
-  cached = templates
   persist(templates)
   return listChannelTemplates()
 }
@@ -113,14 +103,12 @@ export function updateChannelTemplate(id: string, updates: ChannelTemplateUpdate
     template.agents = normalizeTemplateAgents(updates.agents)
   }
   template.updatedAt = Date.now()
-  cached = templates
   persist(templates)
   return listChannelTemplates()
 }
 
 export function removeChannelTemplate(id: string): ChannelTemplate[] {
-  cached = load().filter((template) => template.id !== id)
-  persist(cached)
+  persist(load().filter((template) => template.id !== id))
   return listChannelTemplates()
 }
 
@@ -141,7 +129,6 @@ export function duplicateChannelTemplate(id: string): ChannelTemplate[] {
     createdAt: now,
     updatedAt: now
   })
-  cached = templates
   persist(templates)
   return listChannelTemplates()
 }
