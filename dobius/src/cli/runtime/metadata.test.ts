@@ -17,8 +17,11 @@ describe('getDefaultUserDataPath', () => {
         '/Users/example/Library/Application Support/dobius-plus'
       )
     } finally {
-      if (originalDobius === undefined) delete process.env.DOBIUS_USER_DATA_PATH
-      else process.env.DOBIUS_USER_DATA_PATH = originalDobius
+      if (originalDobius === undefined) {
+        delete process.env.DOBIUS_USER_DATA_PATH
+      } else {
+        process.env.DOBIUS_USER_DATA_PATH = originalDobius
+      }
     }
   })
 
@@ -30,10 +33,16 @@ describe('getDefaultUserDataPath', () => {
     try {
       expect(getDefaultUserDataPath('linux', homeDir)).toBe('/Users/example/.config/dobius-plus')
     } finally {
-      if (originalXdg === undefined) delete process.env.XDG_CONFIG_HOME
-      else process.env.XDG_CONFIG_HOME = originalXdg
-      if (originalDobius === undefined) delete process.env.DOBIUS_USER_DATA_PATH
-      else process.env.DOBIUS_USER_DATA_PATH = originalDobius
+      if (originalXdg === undefined) {
+        delete process.env.XDG_CONFIG_HOME
+      } else {
+        process.env.XDG_CONFIG_HOME = originalXdg
+      }
+      if (originalDobius === undefined) {
+        delete process.env.DOBIUS_USER_DATA_PATH
+      } else {
+        process.env.DOBIUS_USER_DATA_PATH = originalDobius
+      }
     }
   })
 
@@ -47,10 +56,16 @@ describe('getDefaultUserDataPath', () => {
         'C:\\Users\\example\\AppData\\Roaming/dobius-plus'
       )
     } finally {
-      if (originalAppData === undefined) delete process.env.APPDATA
-      else process.env.APPDATA = originalAppData
-      if (originalDobius === undefined) delete process.env.DOBIUS_USER_DATA_PATH
-      else process.env.DOBIUS_USER_DATA_PATH = originalDobius
+      if (originalAppData === undefined) {
+        delete process.env.APPDATA
+      } else {
+        process.env.APPDATA = originalAppData
+      }
+      if (originalDobius === undefined) {
+        delete process.env.DOBIUS_USER_DATA_PATH
+      } else {
+        process.env.DOBIUS_USER_DATA_PATH = originalDobius
+      }
     }
   })
 })
