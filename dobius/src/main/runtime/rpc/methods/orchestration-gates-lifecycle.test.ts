@@ -106,6 +106,50 @@ describe('orchestration coordinator run ownership', () => {
     db.close()
   })
 
+  it('owns a rejected coordinator loop: row failed, reason in the inbox, no unhandled rejection', async () => {
+    const db = new OrchestrationDb(':memory:')
+    runtime.setOrchestrationDb(db)
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      // No tasks: the background loop rejects with "No tasks found".
+      const started = (await call('orchestration.run', { spec: 'nothing to do' }, ctx)) as {
+        runId: string
+      }
+      await vi.waitFor(() => expect(logged).toHaveBeenCalled())
+      await new Promise((r) => {
+        setTimeout(r, 20)
+      })
+
+      expect(unhandled).not.toHaveBeenCalled()
+      expect(db.getCoordinatorRun(started.runId)?.status).toBe('failed')
+      const [note] = db.getUnreadMessages('coordinator')
+      expect(note).toMatchObject({
+        from_handle: 'orchestration',
+        subject: `Coordinator run ${started.runId} failed`,
+        type: 'status',
+        priority: 'high'
+      })
+      expect(note?.body).toContain('No tasks found')
+      // Ownership was released, so the next run is not refused as still running.
+      const retryTask = db.createTask({ spec: 'gated' })
+      db.createGate({ taskId: retryTask.id, question: 'proceed?' })
+      const next = (await call(
+        'orchestration.run',
+        { spec: 'retry', pollIntervalMs: 10 },
+        ctx
+      )) as {
+        status: string
+      }
+      expect(next.status).toBe('running')
+      call('orchestration.runStop', {}, ctx)
+    } finally {
+      process.off('unhandledRejection', unhandled)
+      logged.mockRestore()
+    }
+  })
+
   it('refuses a new run until a stopped coordinator loop has exited', async () => {
     const db = new OrchestrationDb(':memory:')
     runtime.setOrchestrationDb(db)
