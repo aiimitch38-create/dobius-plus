@@ -22746,7 +22746,14 @@ describe('DobiusRuntimeService', () => {
     }
     const fsProvider = {
       realpath: vi.fn().mockResolvedValue('/remote/mobile-codex-draft'),
-      readFile: vi.fn().mockRejectedValue(new Error('missing config')),
+      // Real missing-file shape: relay stat() throws ENOENT, relay dispatcher
+      // forwards err.code, ssh-channel-multiplexer sets it on the rejected Error.
+      readFile: vi.fn().mockRejectedValue(
+        Object.assign(
+          new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
+          { code: 'ENOENT' }
+        )
+      ),
       createDir: vi.fn().mockResolvedValue(undefined),
       writeFile: vi.fn().mockResolvedValue(undefined)
     }
@@ -22859,7 +22866,14 @@ describe('DobiusRuntimeService', () => {
     }
     const fsProvider = {
       realpath: vi.fn().mockResolvedValue('/remote/mobile-codex-command'),
-      readFile: vi.fn().mockRejectedValue(new Error('missing config')),
+      // Real missing-file shape: relay stat() throws ENOENT, relay dispatcher
+      // forwards err.code, ssh-channel-multiplexer sets it on the rejected Error.
+      readFile: vi.fn().mockRejectedValue(
+        Object.assign(
+          new Error("ENOENT: no such file or directory, stat '/home/dev/.codex/config.toml'"),
+          { code: 'ENOENT' }
+        )
+      ),
       createDir: vi.fn().mockResolvedValue(undefined),
       writeFile: vi.fn().mockResolvedValue(undefined)
     }
