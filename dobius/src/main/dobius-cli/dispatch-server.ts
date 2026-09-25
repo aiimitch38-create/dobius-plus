@@ -15,6 +15,10 @@ const HOST = '127.0.0.1'
 const EXPECTED_HOST_HEADER = `${HOST}:${PORT}`
 const MAX_BODY_BYTES = 64 * 1024
 const TOKEN_FILE_NAME = 'dobius-cli-token'
+// Matches the runtime's MAX_TERMINAL_READ_LIMIT; larger values are refused here
+// instead of being silently clamped.
+const MAX_TAB_READ_LIMIT = 2_000
+const DEFAULT_TAB_READ_LIMIT = 200
 
 // The slice of DobiusRuntimeService the server needs; structural so it stays testable.
 export type DobiusCliDispatcher = {
@@ -135,9 +139,9 @@ async function handleTabSend(body: Record<string, unknown>): Promise<unknown> {
   if (!dispatcher) {
     return { ok: false, error: 'runtime unavailable' }
   }
-  const handle = await dispatcher.resolveActiveTerminal()
+  const handle = await withTimeout(dispatcher.resolveActiveTerminal(), 5_000)
   // dobius's sendTerminal appends submission itself when enter:true.
-  await dispatcher.sendTerminal(handle, { text: message, enter: true })
+  await withTimeout(dispatcher.sendTerminal(handle, { text: message, enter: true }))
   return { ok: true, sent: message.length }
 }
 
@@ -156,7 +160,9 @@ async function withTimeout<T>(work: Promise<T>, ms = 10_000): Promise<T> {
 }
 
 async function knownHandle(id: string): Promise<boolean> {
-  if (!dispatcher) return false
+  if (!dispatcher) {
+    return false
+  }
   const listed = await withTimeout(dispatcher.listTerminals(), 5_000)
   return listed.terminals.some((t) => t.handle === id)
 }
@@ -203,7 +209,15 @@ async function handleTabRead(body: Record<string, unknown>): Promise<unknown> {
   if (!(await knownHandle(id))) {
     return { ok: false, error: `unknown tab: ${id}` }
   }
-  const limit = typeof body.limit === 'number' ? body.limit : 200
+  const limit = body.limit === undefined ? DEFAULT_TAB_READ_LIMIT : body.limit
+  if (
+    typeof limit !== 'number' ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_TAB_READ_LIMIT
+  ) {
+    return { ok: false, error: `limit must be an integer from 1 to ${MAX_TAB_READ_LIMIT}` }
+  }
   const result = await withTimeout(dispatcher.readTerminal(id, { limit }))
   return { ok: true, id, result }
 }
