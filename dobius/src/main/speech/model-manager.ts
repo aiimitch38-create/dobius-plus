@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- Why: model download, checksum, extraction, and cleanup share one state machine so progress/error transitions stay coupled. */
-import { app, net } from 'electron'
+import { net } from 'electron'
 import { join, resolve, relative } from 'node:path'
 import { existsSync, mkdirSync, createWriteStream, createReadStream, rmSync } from 'node:fs'
 import { readdir, rm } from 'node:fs/promises'
@@ -19,6 +19,7 @@ import {
   migrateSpeechModelCacheIfNeeded,
   type SpeechModelCacheDir
 } from './model-cache-path'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 type DownloadHandle = {
   abort: () => void
@@ -43,7 +44,7 @@ export class ModelManager {
   private progressCallbacks = new Set<ProgressCallback>()
 
   constructor(customModelsDir?: string) {
-    const requestedModelsDir = customModelsDir || join(app.getPath('userData'), 'speech-models')
+    const requestedModelsDir = customModelsDir || join(getUserDataRoot(), 'speech-models')
     const prepared = this.prepareModelsDir(requestedModelsDir)
     this.modelsDir = prepared.modelsDir
     this.migrationSourceDir = prepared.migrationSourceDir

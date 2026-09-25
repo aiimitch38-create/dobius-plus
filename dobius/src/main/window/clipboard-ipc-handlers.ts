@@ -1,5 +1,4 @@
 import {
-  app,
   clipboard,
   ipcMain,
   nativeImage,
@@ -34,6 +33,7 @@ import {
   writeRemoteFileToClipboard
 } from './clipboard-remote-file-copy'
 import { saveClipboardImageBufferInRuntime } from './clipboard-runtime-image-upload'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 let trustedClipboardRendererWebContentsId: number | null = null
 
@@ -49,7 +49,7 @@ async function saveClipboardImageBufferForTarget(
   assertClipboardImageByteLengthWithinLimit(buffer.byteLength)
   const runtimeEnvironmentId = args?.runtimeEnvironmentId?.trim()
   if (runtimeEnvironmentId && !args?.connectionId) {
-    return saveClipboardImageBufferInRuntime(app.getPath('userData'), runtimeEnvironmentId, buffer)
+    return saveClipboardImageBufferInRuntime(getUserDataRoot(), runtimeEnvironmentId, buffer)
   }
   return saveClipboardImageBufferAsTempFile(buffer, args)
 }

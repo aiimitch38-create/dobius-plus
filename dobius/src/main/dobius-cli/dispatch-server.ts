@@ -2,9 +2,9 @@ import http from 'node:http'
 import crypto from 'node:crypto'
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app } from 'electron'
 import { getAsanaSnapshot, markLocalDone } from '../asana/asana-queue-service'
 import { installDobiusClis } from './install-clis'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Localhost dispatch server for the dobius-* CLIs. Hardening copied verbatim from
 // the old dobius-plus voice-bridge.js: loopback-only, POST-only, exact Host header
@@ -44,7 +44,7 @@ let bridgeToken: string | null = null
 let dispatcher: DobiusCliDispatcher | null = null
 
 export function dobiusCliTokenPath(): string {
-  return path.join(app.getPath('userData'), TOKEN_FILE_NAME)
+  return path.join(getUserDataRoot(), TOKEN_FILE_NAME)
 }
 
 function loadOrCreateToken(): void {

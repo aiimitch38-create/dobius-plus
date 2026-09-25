@@ -10,6 +10,7 @@ import {
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { app } from 'electron'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 /**
  * Relocates node-pty's Windows native runtime (conpty.node, conpty.dll,
@@ -128,7 +129,7 @@ export function installRelocatedNodePtyNativeRuntime(): void {
   }
   const destDir = ensureRelocatedNodePtyNativeRuntime({
     sourceDir,
-    destRoot: join(app.getPath('userData'), 'node-pty-runtime'),
+    destRoot: join(getUserDataRoot(), 'node-pty-runtime'),
     version: app.getVersion()
   })
   if (destDir) {

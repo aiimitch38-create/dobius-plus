@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import { createWriteStream, existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { get } from 'node:https'
@@ -7,6 +6,7 @@ import type { IncomingMessage } from 'node:http'
 import { EmulatorError } from '../emulator-errors'
 import { emulatorProbe, emulatorProbeError } from '../emulator-probe'
 import { SCRCPY_SERVER_VERSION } from './scrcpy-server-deploy'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 // The scrcpy server jar is fetched by the client on first use (not bundled in
 // the repo) into the per-user cache, pinned to the version our client protocol
@@ -15,7 +15,7 @@ const DOWNLOAD_URL = `https://github.com/Genymobile/scrcpy/releases/download/v${
 const MIN_VALID_BYTES = 10_000
 
 export function scrcpyServerJarPath(): string {
-  return join(app.getPath('userData'), 'scrcpy', `scrcpy-server-v${SCRCPY_SERVER_VERSION}.jar`)
+  return join(getUserDataRoot(), 'scrcpy', `scrcpy-server-v${SCRCPY_SERVER_VERSION}.jar`)
 }
 
 export function isScrcpyServerJarReady(): boolean {

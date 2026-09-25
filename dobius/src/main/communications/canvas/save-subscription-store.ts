@@ -7,7 +7,6 @@
  * (identityPubkey, relayUrl, scopeType, scopeValue), not a generated id.
  */
 import path from 'node:path'
-import { app } from 'electron'
 import { parseEveryEntry, SafeJsonFile } from '../../storage/safe-json-file'
 import {
   assertValidIdentityPubkey,
@@ -20,11 +19,12 @@ import {
   subscriptionKey,
   type SaveSubscription
 } from './save-subscription-record'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 const FILE_NAME = 'save-subscriptions.json'
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 // Why: a malformed row makes the whole file unreadable instead of being

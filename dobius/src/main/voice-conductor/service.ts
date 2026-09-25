@@ -3,7 +3,6 @@
 // setting. Wired from src/main/index.ts at boot and on every settings change.
 
 import path from 'node:path'
-import { app } from 'electron'
 import type { GlobalSettings } from '../../shared/types'
 import type { DobiusCliDispatcher } from '../dobius-cli/dispatch-server'
 import { listAgents } from '../agents/agents-store'
@@ -22,6 +21,7 @@ import { createLeadTabStore } from './lead-tab-store'
 import { createConductorAgentSpawner } from './agent-spawn'
 import { createPersistentWorkRegistry } from './persistent-work-registry'
 import type { WorkRegistry } from './types'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const conductor = createVoiceConductor()
 let started = false
@@ -35,13 +35,13 @@ let workRegistry: WorkRegistry | null = null
 
 function getWorkRegistry(): WorkRegistry {
   workRegistry ??= createPersistentWorkRegistry(
-    path.join(app.getPath('userData'), 'voice-conductor-work.json')
+    path.join(getUserDataRoot(), 'voice-conductor-work.json')
   )
   return workRegistry
 }
 
 function getLeadTabStore(): ReturnType<typeof createLeadTabStore> {
-  leadTabStore ??= createLeadTabStore(path.join(app.getPath('userData'), 'voice-conductor-tabs.json'))
+  leadTabStore ??= createLeadTabStore(path.join(getUserDataRoot(), 'voice-conductor-tabs.json'))
   return leadTabStore
 }
 

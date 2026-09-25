@@ -1,11 +1,12 @@
 import path from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import type { AsanaTask, AsanaTasksSnapshot } from '../../shared/asana'
 import { ASANA_GID_RE, EMPTY_ASANA_SNAPSHOT } from '../../shared/asana'
 import { SafeJsonFile } from '../storage/safe-json-file'
 import { getAsanaConfig } from './asana-config'
 import { hasAsanaToken } from './asana-token-store'
 import { fetchLane, markTaskComplete } from './asana-client'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Locally-ticked task gids live in their own JSON so ticking a task "done" in
 // the panel never touches Asana (house rule: never auto-close Asana tasks).
@@ -18,7 +19,7 @@ let lastError: string | null = null
 let refreshing = false
 
 function localDonePath(): string {
-  return path.join(app.getPath('userData'), LOCAL_DONE_FILE)
+  return path.join(getUserDataRoot(), LOCAL_DONE_FILE)
 }
 
 // Why: a non-string entry makes the whole file unreadable instead of being

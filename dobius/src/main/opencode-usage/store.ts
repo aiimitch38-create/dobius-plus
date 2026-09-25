@@ -1,5 +1,4 @@
 /* eslint-disable max-lines -- Why: this store owns OpenCode analytics persistence, scan policy, and renderer query semantics. Keeping range/scope queries next to scan persistence prevents UI totals from drifting from the SQLite projection. */
-import { app } from 'electron'
 import { dirname, join } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import type {
@@ -17,6 +16,7 @@ import type { Store } from '../persistence'
 import { loadKnownUsageWorktreesByRepo, type UsageWorktreeRef } from '../usage-worktree-metadata'
 import type { OpenCodeUsageDailyAggregate, OpenCodeUsagePersistedState } from './types'
 import { createWorktreeRefs, scanOpenCodeUsageDatabases } from './scanner'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const SCHEMA_VERSION = 1
 const STALE_MS = 5 * 60_000
@@ -58,12 +58,12 @@ export function normalizePersistedState(
 }
 
 export function initOpenCodeUsagePath(): void {
-  _openCodeUsageFile = join(app.getPath('userData'), 'dobius-opencode-usage.json')
+  _openCodeUsageFile = join(getUserDataRoot(), 'dobius-opencode-usage.json')
 }
 
 function getOpenCodeUsageFile(): string {
   if (!_openCodeUsageFile) {
-    _openCodeUsageFile = join(app.getPath('userData'), 'dobius-opencode-usage.json')
+    _openCodeUsageFile = join(getUserDataRoot(), 'dobius-opencode-usage.json')
   }
   return _openCodeUsageFile
 }

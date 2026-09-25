@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getVersionManagerBinPaths } from '../codex-cli/command'
 import { getMainE2EConfig } from '../e2e-config'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const DEV_PARENT_SHUTDOWN_GRACE_MS = 3000
 const HTTP1_COMPATIBILITY_ENV_VAR = 'DOBIUS_DISABLE_HTTP2'
@@ -52,7 +53,7 @@ export function shouldDisableHttp2ForElectronNetworking(
   if (envValue !== null) {
     return envValue
   }
-  return readPersistedHttp1CompatibilityMode(options.userDataPath ?? app.getPath('userData'))
+  return readPersistedHttp1CompatibilityMode(options.userDataPath ?? getUserDataRoot())
 }
 
 export function configureElectronNetworkCompatibility(
@@ -225,7 +226,7 @@ export function configureDobiusUserDataPathEnv(): void {
   // Why: app relaunches can inherit an DOBIUS_USER_DATA_PATH from an older CLI or
   // updater process. Main must canonicalize it before CLI-shared modules build
   // runtime-home paths, or migrations can bridge two Dobius app-data directories.
-  process.env.DOBIUS_USER_DATA_PATH = app.getPath('userData')
+  process.env.DOBIUS_USER_DATA_PATH = getUserDataRoot()
 }
 
 export function shouldInstallManagedHooks(isDev: boolean): boolean {

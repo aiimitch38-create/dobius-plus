@@ -13,7 +13,6 @@
 
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { app } from 'electron'
 
 import {
   isVertexTaskPriority,
@@ -29,6 +28,7 @@ import {
 import { listAgents } from '../agents/agents-store'
 import { SafeJsonFile } from '../storage/safe-json-file'
 import { readReleasingOrphanedClaims, stampClaimOwner } from './vertex-dispatch-recovery'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'vertex-tasks.json'
 const ORDER_GAP = 1000
@@ -43,7 +43,7 @@ export function setVertexTaskStorageDir(dir: string | null): void {
 }
 
 function storageDir(): string {
-  return storageDirOverride ?? app.getPath('userData')
+  return storageDirOverride ?? getUserDataRoot()
 }
 
 function filePath(): string {

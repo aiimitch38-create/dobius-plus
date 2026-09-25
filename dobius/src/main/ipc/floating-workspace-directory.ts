@@ -5,6 +5,7 @@ import { app } from 'electron'
 import type { GlobalSettings, FloatingTerminalCwdRequest } from '../../shared/types'
 import type { Store } from '../persistence'
 import { authorizeExternalPath } from './filesystem-auth'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FLOATING_WORKSPACE_DIRNAME = 'floating-workspace'
 
@@ -68,7 +69,7 @@ function isTrustedFloatingWorkspaceDirectory(
 }
 
 export async function ensureDefaultFloatingWorkspacePath(): Promise<string> {
-  const cwd = path.join(app.getPath('userData'), FLOATING_WORKSPACE_DIRNAME)
+  const cwd = path.join(getUserDataRoot(), FLOATING_WORKSPACE_DIRNAME)
   await mkdir(cwd, { recursive: true })
   // Why: the default floating workspace lives outside repo roots by design;
   // authorize only this app-owned directory instead of widening access to ~.

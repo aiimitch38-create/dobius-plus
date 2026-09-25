@@ -1,4 +1,4 @@
-import { app, dialog } from 'electron'
+import { dialog } from 'electron'
 import { readFile, stat } from 'node:fs/promises'
 import {
   ensureMediaServerStarted,
@@ -11,6 +11,7 @@ import {
   assertPathOutsideProtectedRoots,
   protectedProviderRoots
 } from '../../providers/protected-path-guard'
+import { getUserDataRoot } from '../../../storage/user-data-root'
 
 const MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
@@ -54,7 +55,7 @@ export async function uploadMedia(filePath: string, _isTemp: boolean): Promise<B
   // holds dobius-data.json / config.json — the app's own settings — which
   // protectedProviderRoots can't see without importing Electron.
   assertPathOutsideProtectedRoots(
-    [...protectedProviderRoots(), app.getPath('userData')],
+    [...protectedProviderRoots(), getUserDataRoot()],
     filePath,
     process.cwd()
   )

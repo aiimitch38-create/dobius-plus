@@ -36,6 +36,7 @@ import type {
   JarvisServiceDeps,
   JarvisShortcutPort
 } from './jarvis-service'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 function createGlobalShortcutPort(): JarvisShortcutPort {
   return {
@@ -161,7 +162,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
   // reads "on" while the shortcut belongs to another app.
   ipcMain.removeHandler('jarvis:agentContext')
   ipcMain.handle('jarvis:agentContext', () =>
-    buildAgentContext(join(app.getPath('userData'), 'terminal-history'))
+    buildAgentContext(join(getUserDataRoot(), 'terminal-history'))
   )
 
   const repoRoot = resolveSelfEditRepoRoot({
@@ -173,7 +174,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
   const selfEdits = repoRoot.ok
     ? new SelfEditStore(selfEditRoots(app.getPath('home'), repoRoot.root))
     : new SelfEditStore([], Date.now, repoRoot.error)
-  const selfEditBackups = join(app.getPath('userData'), 'self-edit-backups')
+  const selfEditBackups = join(getUserDataRoot(), 'self-edit-backups')
 
   ipcMain.removeHandler('jarvis:proposeSelfEdit')
   ipcMain.handle(
@@ -224,7 +225,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
 
   ipcMain.removeHandler('jarvis:agentOpening')
   ipcMain.handle('jarvis:agentOpening', () =>
-    buildOpeningLine(join(app.getPath('userData'), 'terminal-history'))
+    buildOpeningLine(join(getUserDataRoot(), 'terminal-history'))
   )
 
   ipcMain.removeHandler('jarvis:runDobius')

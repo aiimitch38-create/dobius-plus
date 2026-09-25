@@ -709,6 +709,7 @@ import {
   type ExecutionOrigin
 } from '../agents/execution-gate'
 import { refreshSessionWorkspaceBrief } from '../agents/session-workspace-brief'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 function sanitizeNestedRepoRuntimeImportError(context: string, error: unknown): string {
   console.warn(`[project-groups] ${context}`, error)
@@ -2678,8 +2679,7 @@ export class DobiusRuntimeService {
   // to inject an in-memory DB without touching the filesystem.
   getOrchestrationDb(): OrchestrationDb {
     if (!this._orchestrationDb) {
-      const { app } = require('electron')
-      const dbPath = join(app.getPath('userData'), 'orchestration.db')
+      const dbPath = join(getUserDataRoot(), 'orchestration.db')
       this._orchestrationDb = OrchestrationDb.openForProcess(dbPath)
     }
     return this._orchestrationDb

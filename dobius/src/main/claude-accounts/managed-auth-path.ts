@@ -1,12 +1,12 @@
 import { existsSync, lstatSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
-import { app } from 'electron'
 import { writeFileAtomically } from '../codex-accounts/fs-utils'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const MANAGED_AUTH_MARKER = '.dobius-managed-claude-auth'
 
 export function getClaudeManagedAccountsRoot(): string {
-  return join(app.getPath('userData'), 'claude-accounts')
+  return join(getUserDataRoot(), 'claude-accounts')
 }
 
 export function resolveOwnedClaudeManagedAuthPath(

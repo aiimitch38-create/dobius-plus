@@ -1,16 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { app } from 'electron'
 import type { Destination, DestinationSaveInput, DestinationType } from '../../shared/destinations'
 import { hardenExistingSecureFile } from '../../shared/secure-file'
 import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'destinations.json'
 
 const DESTINATION_TYPES: DestinationType[] = ['telegram', 'imessage', 'system', 'asana', 'email']
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function asString(value: unknown): string {

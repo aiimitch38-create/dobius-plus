@@ -1,6 +1,5 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { app } from 'electron'
 import { hardenExistingSecureFile, writeSecureFile } from '../../shared/secure-file'
 import { keepUnreadableCopy, readSafeJsonFile } from '../storage/safe-json-file'
 import type { ImessageBridgeConfig } from '../../shared/imessage-bridge'
@@ -8,6 +7,7 @@ import {
   IMESSAGE_BRIDGE_DEFAULT_TRIGGER_PREFIX,
   IMESSAGE_BRIDGE_TRIGGER_PREFIX_MAX_LENGTH
 } from '../../shared/imessage-bridge'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Why: the bridge keeps its own JSON file instead of the typed settings store
 // so this macOS-only surface never touches the GlobalSettings schema.
@@ -27,7 +27,7 @@ let cached: ImessageBridgeConfig | null = null
 let unreadableDetail: string | null = null
 
 function configFilePath(): string {
-  return path.join(app.getPath('userData'), CONFIG_FILE_NAME)
+  return path.join(getUserDataRoot(), CONFIG_FILE_NAME)
 }
 
 function sanitizeTriggerPrefix(value: unknown): string {

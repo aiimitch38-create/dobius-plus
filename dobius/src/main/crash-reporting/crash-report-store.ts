@@ -2,7 +2,6 @@ import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { app } from 'electron'
 import {
   formatCrashReportText,
   sanitizeCrashReportBreadcrumbs,
@@ -12,6 +11,7 @@ import {
   type CrashReportStatus
 } from '../../shared/crash-reporting'
 import { keepUnreadableCopy, readSafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const MAX_REPORTS = 5
 const RELATED_CRASH_WINDOW_MS = 5_000
@@ -45,7 +45,7 @@ export class CrashReportStore {
 
   constructor(private readonly filePath: string) {}
 
-  static fromUserData(userDataPath = app.getPath('userData')): CrashReportStore {
+  static fromUserData(userDataPath = getUserDataRoot()): CrashReportStore {
     return new CrashReportStore(path.join(userDataPath, 'crash-reports.json'))
   }
 

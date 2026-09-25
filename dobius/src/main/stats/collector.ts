@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import { mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import {
@@ -9,6 +8,7 @@ import {
 } from '../storage/safe-json-file'
 import type { StatsSummary } from '../../shared/types'
 import type { StatsEvent, StatsAggregates, StatsFile } from './types'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const STATS_SCHEMA_VERSION = 1
 const MAX_EVENTS = 10_000
@@ -30,13 +30,13 @@ const STATS_TEMP_RE = /^dobius-stats\.json\.(\d+)\.[\da-f.]+\.tmp$/
 let _statsFile: string | null = null
 
 export function initStatsPath(): void {
-  _statsFile = join(app.getPath('userData'), 'dobius-stats.json')
+  _statsFile = join(getUserDataRoot(), 'dobius-stats.json')
 }
 
 function getStatsFile(): string {
   if (!_statsFile) {
     // Safety fallback — should not be hit in normal startup.
-    _statsFile = join(app.getPath('userData'), 'dobius-stats.json')
+    _statsFile = join(getUserDataRoot(), 'dobius-stats.json')
   }
   return _statsFile
 }
