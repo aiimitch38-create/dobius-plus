@@ -123,3 +123,15 @@ Revert the commit. There is no data migration and nothing is persisted. `disable
 ## Lessons
 
 - A master switch implemented as a per-entry-point `if` drifts. Any path added later, such as wake, timer or nudge, silently bypasses it. Keep one policy function and gate every public entry point with it. Make the tests flip the policy live after an enabled setup, so each gate is proven on its own.
+
+## Review follow-up (F1, low)
+
+- **Bug:** a second manual "Check for Updates" in the same session showed nothing when updates were off. Two things swallowed it:
+  - `statusesEqual` deduped the identical `disabled` status.
+  - UpdateCard's `autoDismissed` only resets when the state changes.
+- **Fix:** the disabled branch of `checkForUpdatesFromMenu` now sends a transient `{state:'checking', userInitiated:true}` before `disabled`, so every click is a state change on both sides.
+- **Test:** `updater-policy.test.ts` › `every manual check with updates off re-surfaces feedback, not only the first`. Two clicks must produce `checking, disabled, checking, disabled`.
+  - Seen FAIL before the fix: the second click sent nothing.
+  - Seen PASS after the fix.
+  - The menu truth-table rows now expect the leading `checking`.
+- **Branch:** merged `stabilize/integration` (ce7a98eb) first. The merge was clean.

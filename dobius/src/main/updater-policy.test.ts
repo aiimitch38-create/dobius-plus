@@ -262,6 +262,7 @@ describe('updater entry points follow the update policy (#106, #107)', () => {
     expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(combo.allowed ? 1 : 0)
     if (!combo.allowed) {
       expect(sentStatuses(send)).toEqual([
+        { state: 'checking', userInitiated: true },
         {
           state: 'disabled',
           reason: combo.disconnected ? 'disconnected' : 'not-enabled',
@@ -318,6 +319,28 @@ describe('updater entry points follow the update policy (#106, #107)', () => {
       })
     }
   )
+
+  it('every manual check with updates off re-surfaces feedback, not only the first', async () => {
+    applyCombo({ flag: '1', disconnected: true })
+    const { send, window } = makeWindow()
+    const { setupAutoUpdater, checkForUpdatesFromMenu } = await import('./updater')
+    setupAutoUpdater(window)
+    send.mockClear()
+
+    checkForUpdatesFromMenu()
+    checkForUpdatesFromMenu()
+
+    const disabled = { state: 'disabled', reason: 'disconnected', userInitiated: true }
+    // Why: the transient 'checking' changes state on both sides, so main's
+    // status dedupe and the card's auto-dismiss flag both reset per click.
+    expect(sentStatuses(send)).toEqual([
+      { state: 'checking', userInitiated: true },
+      disabled,
+      { state: 'checking', userInitiated: true },
+      disabled
+    ])
+    expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled()
+  })
 
   it('dev builds report disabled instead of up to date on a manual check', async () => {
     applyCombo({ flag: '1', disconnected: false })

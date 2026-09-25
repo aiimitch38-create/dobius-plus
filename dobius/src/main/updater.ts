@@ -1057,7 +1057,10 @@ export function checkForUpdatesFromMenu(options?: UpdateCheckOptions): void {
   const policy = getUpdatePolicy()
   if (!policy.enabled) {
     // Why: 'not-available' renders "You're on the latest version", which is a
-    // claim nobody checked. Report that updates are off instead.
+    // claim nobody checked. Report that updates are off instead. The transient
+    // 'checking' makes repeat clicks a state change, so the status dedupe and
+    // the card's auto-dismiss don't swallow the second click's feedback.
+    sendStatus({ state: 'checking', userInitiated: true })
     sendStatus(getDisabledStatus(policy, true))
     return
   }
