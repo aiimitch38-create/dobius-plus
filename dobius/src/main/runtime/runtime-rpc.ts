@@ -6,7 +6,10 @@
 // live in `rpc/unix-socket-transport.ts` and `rpc/ws-transport.ts`.
 import { randomBytes } from 'node:crypto'
 import { readdirSync, rmSync } from 'node:fs'
+import { connect } from 'node:net'
 import { join } from 'node:path'
+import { constantTimeEqual } from '../lib/constant-time-equal'
+import { isPidAlive } from '../lib/is-pid-alive'
 import type { RuntimeMetadata, RuntimeTransportMetadata } from '../../shared/runtime-bootstrap'
 import type { DobiusRuntimeService } from './dobius-runtime'
 import { writeRuntimeMetadata } from './runtime-metadata'
@@ -420,7 +423,6 @@ export class DobiusRuntimeRpcServer {
   private readonly longPollCap: number
   private deviceRegistry: DeviceRegistry | null = null
   private e2eeKeypair: E2EEKeypair | null = null
-  private tlsFingerprint: string | null = null
   private wsTransport: WebSocketTransport | null = null
   private activeTransports: RpcTransport[] = []
   private transports: RuntimeTransportMetadata[] = []
@@ -469,10 +471,6 @@ export class DobiusRuntimeRpcServer {
 
   getDeviceRegistry(): DeviceRegistry | null {
     return this.deviceRegistry
-  }
-
-  getTlsFingerprint(): string | null {
-    return this.tlsFingerprint
   }
 
   getE2EEPublicKey(): string | null {
@@ -672,7 +670,7 @@ export class DobiusRuntimeRpcServer {
     // not leave filesystem entries in userData, so the sweep is a no-op
     // there.
     if (this.platform !== 'win32') {
-      sweepOrphanedRuntimeSockets(this.userDataPath, this.pid)
+      await sweepOrphanedRuntimeSockets(this.userDataPath, this.pid)
     }
 
     const transportMeta = createRuntimeTransportMetadata(
@@ -936,7 +934,7 @@ export class DobiusRuntimeRpcServer {
     if (typeof request.authToken !== 'string' || request.authToken.length === 0) {
       return { error: this.buildError(request.id, 'unauthorized', 'Missing auth token') }
     }
-    if (request.authToken !== this.authToken) {
+    if (!constantTimeEqual(request.authToken, this.authToken)) {
       return { error: this.buildError(request.id, 'unauthorized', 'Invalid auth token') }
     }
 
@@ -974,7 +972,11 @@ export class DobiusRuntimeRpcServer {
       typeof (request as Record<string, unknown>).deviceToken === 'string'
         ? ((request as Record<string, unknown>).deviceToken as string)
         : null
-    if (authenticatedDeviceToken && requestToken && requestToken !== authenticatedDeviceToken) {
+    if (
+      authenticatedDeviceToken &&
+      requestToken &&
+      !constantTimeEqual(requestToken, authenticatedDeviceToken)
+    ) {
       reply(JSON.stringify(this.buildError(request.id, 'unauthorized', 'Device token mismatch')))
       return
     }
@@ -1109,7 +1111,44 @@ export class DobiusRuntimeRpcServer {
  */
 export const RUNTIME_SOCKET_NAME_REGEX = /^o-(\d+)-[A-Za-z0-9_-]+\.sock$/
 
-export function sweepOrphanedRuntimeSockets(userDataPath: string, ownPid: number): void {
+// Why: a live pid is not proof the socket is live — after a crash the OS can
+// hand the dead runtime's pid to an unrelated process, and the old socket then
+// survived every sweep. A unix socket with no listener refuses connections, so
+// ECONNREFUSED (or the file vanishing, or it not being a socket at all) marks it
+// orphaned. Anything else, including a slow accept, counts as live so a running
+// runtime is never swept.
+const SOCKET_PROBE_TIMEOUT_MS = 500
+const ORPHANED_SOCKET_ERROR_CODES = new Set(['ECONNREFUSED', 'ENOENT', 'ENOTSOCK'])
+
+function isSocketListenerGone(socketPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = connect(socketPath)
+    const finish = (gone: boolean): void => {
+      clearTimeout(timer)
+      probe.destroy()
+      resolve(gone)
+    }
+    const timer = setTimeout(() => finish(false), SOCKET_PROBE_TIMEOUT_MS)
+    probe.once('connect', () => finish(false))
+    probe.once('error', (error: NodeJS.ErrnoException) => {
+      finish(ORPHANED_SOCKET_ERROR_CODES.has(error.code ?? ''))
+    })
+  })
+}
+
+function removeOrphanedSocket(socketPath: string): void {
+  try {
+    rmSync(socketPath, { force: true })
+  } catch (error) {
+    // Why: best-effort sweep — a later start() or a reboot cleans it up.
+    console.warn(`[runtime] could not remove orphaned socket ${socketPath}:`, error)
+  }
+}
+
+export async function sweepOrphanedRuntimeSockets(
+  userDataPath: string,
+  ownPid: number
+): Promise<void> {
   let entries: string[]
   try {
     entries = readdirSync(userDataPath)
@@ -1118,6 +1157,7 @@ export function sweepOrphanedRuntimeSockets(userDataPath: string, ownPid: number
     // below will create it. Nothing to sweep in that case.
     return
   }
+  const probes: Promise<void>[] = []
   for (const entry of entries) {
     const match = RUNTIME_SOCKET_NAME_REGEX.exec(entry)
     if (!match) {
@@ -1133,26 +1173,20 @@ export function sweepOrphanedRuntimeSockets(userDataPath: string, ownPid: number
     if (pid === ownPid) {
       continue
     }
-    try {
-      // Why: signal 0 is the POSIX liveness probe — it delivers no signal
-      // but returns success iff the pid resolves AND the caller has
-      // permission to signal it. ESRCH = no such process; EPERM = pid
-      // exists but owned by another user, which is extremely unusual on a
-      // desktop app's userData dir but we conservatively leave those
-      // sockets alone.
-      process.kill(pid, 0)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
-        try {
-          rmSync(join(userDataPath, entry), { force: true })
-        } catch {
-          // Why: best-effort sweep — a permission error on unlink is fine
-          // to ignore; the socket will be cleaned by a later start() or
-          // by the OS on reboot.
-        }
-      }
+    const socketPath = join(userDataPath, entry)
+    if (!isPidAlive(pid)) {
+      removeOrphanedSocket(socketPath)
+      continue
     }
+    probes.push(
+      isSocketListenerGone(socketPath).then((gone) => {
+        if (gone) {
+          removeOrphanedSocket(socketPath)
+        }
+      })
+    )
   }
+  await Promise.all(probes)
 }
 
 export function createRuntimeTransportMetadata(

@@ -1,7 +1,10 @@
 // Why: the E2EE channel sits between the WebSocket transport and the RPC handler.
 // It owns the handshake state machine and transparent encrypt/decrypt so the RPC
 // handler only sees plaintext JSON, identical to the Unix socket path.
+import { randomBytes } from 'node:crypto'
 import type { WebSocket } from 'ws'
+import { E2EE_CLIENT_UPDATE_REQUIRED, E2EE_HANDSHAKE_VERSION } from '../../../shared/e2ee-handshake'
+import { constantTimeEqual } from '../../lib/constant-time-equal'
 import { deriveSharedKey, encrypt, decrypt, encryptBytes, decryptBytes } from './e2ee-crypto'
 
 type ChannelState = 'awaiting_hello' | 'awaiting_auth' | 'ready'
@@ -9,6 +12,9 @@ type ChannelState = 'awaiting_hello' | 'awaiting_auth' | 'ready'
 const HANDSHAKE_TIMEOUT_MS = 10_000
 const MAX_CONSECUTIVE_DECRYPT_FAILURES = 5
 const MAX_BINARY_BUFFERED_AMOUNT = 8 * 1024 * 1024
+const HANDSHAKE_CHALLENGE_BYTES = 32
+// Why: distinct from 4001 so logs tell an outdated client from a bad token.
+const CLOSE_CLIENT_UPDATE_REQUIRED = 4010
 
 type E2EEHello = {
   type: 'e2ee_hello'
@@ -18,6 +24,7 @@ type E2EEHello = {
 type E2EEAuth = {
   type: 'e2ee_auth'
   deviceToken: string
+  challenge?: unknown
 }
 
 export type E2EEChannelOptions = {
@@ -30,6 +37,8 @@ export type E2EEChannelOptions = {
 export class E2EEChannel {
   private state: ChannelState = 'awaiting_hello'
   private sharedKey: Uint8Array | null = null
+  // Why: fresh per connection; the auth frame must echo it (handshake v2).
+  private challenge: string | null = null
   private consecutiveFailures = 0
   private handshakeTimer: ReturnType<typeof setTimeout> | null = null
   private readonly ws: WebSocket
@@ -173,12 +182,21 @@ export class E2EEChannel {
     }
 
     this.sharedKey = deriveSharedKey(this.serverSecretKey, clientPublicKey)
+    this.challenge = randomBytes(HANDSHAKE_CHALLENGE_BYTES).toString('base64')
     this.state = 'awaiting_auth'
 
     // Why: send e2ee_ready as plaintext — the client needs it to know the
     // key exchange succeeded before it can send encrypted authentication.
+    // The challenge may be public: a replayer still cannot encrypt it
+    // without the client's ephemeral secret key.
     if (this.ws.readyState === this.ws.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'e2ee_ready' }))
+      this.ws.send(
+        JSON.stringify({
+          type: 'e2ee_ready',
+          version: E2EE_HANDSHAKE_VERSION,
+          challenge: this.challenge
+        })
+      )
     }
   }
 
@@ -197,6 +215,24 @@ export class E2EEChannel {
       this.onError(4001, 'Invalid e2ee_auth')
       return
     }
+    if (auth.challenge === undefined) {
+      // Why: a pre-v2 client cannot prove freshness, so accepting it would
+      // reopen the replay hole. Reject with a reason it can show and log.
+      this.sendEncryptedControl({
+        type: 'e2ee_error',
+        error: {
+          code: E2EE_CLIENT_UPDATE_REQUIRED,
+          message: 'This Dobius app is too old for this desktop. Update the app, then reconnect.'
+        }
+      })
+      this.onError(CLOSE_CLIENT_UPDATE_REQUIRED, 'Client update required')
+      return
+    }
+    if (!this.challenge || !constantTimeEqual(auth.challenge, this.challenge)) {
+      this.sendEncryptedControl({ type: 'e2ee_error', error: { code: 'bad_auth' } })
+      this.onError(4001, 'Stale e2ee_auth')
+      return
+    }
     if (!this.validateToken(auth.deviceToken)) {
       this.sendEncryptedControl({ type: 'e2ee_error', error: { code: 'unauthorized' } })
       this.onError(4001, 'Unauthorized')
@@ -204,6 +240,7 @@ export class E2EEChannel {
     }
 
     this.deviceToken = auth.deviceToken
+    this.challenge = null
     this.state = 'ready'
 
     if (this.handshakeTimer) {
@@ -227,6 +264,7 @@ export class E2EEChannel {
       this.handshakeTimer = null
     }
     this.sharedKey = null
+    this.challenge = null
     this.messageHandler = null
     this.binaryMessageHandler = null
   }

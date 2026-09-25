@@ -6,11 +6,26 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { hardenExistingSecureFile, writeSecureJsonFile } from '../../shared/secure-file'
 import type { DeviceScope } from '../../shared/runtime-types'
+import { constantTimeEqual } from '../lib/constant-time-equal'
 import { readSafeJsonFile } from '../storage/safe-json-file'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 import { isMobileRpcGrant, type MobileRpcGrant } from './mobile-rpc-grants'
 
 export type { DeviceScope }
+
+// Why: a phone pairing QR carries a full device token. Until a phone first
+// connects, the only copy is on screen (or in a screenshot), so an unscanned
+// mobile offer stops authenticating after this long. Runtime links are listed
+// and revocable in Settings, so they keep no TTL here.
+export const MOBILE_PAIRING_OFFER_TTL_MS = 15 * 60 * 1000
+
+function isExpiredPairingOffer(device: DeviceEntry, now: number): boolean {
+  return (
+    device.scope === 'mobile' &&
+    device.lastSeenAt === 0 &&
+    now - device.pairedAt > MOBILE_PAIRING_OFFER_TTL_MS
+  )
+}
 
 export type DeviceEntry = {
   deviceId: string
@@ -109,9 +124,14 @@ export class DeviceRegistry {
   // mints a new one and drops any stale pending entries.
   getOrCreatePendingDevice(name: string, scope: DeviceScope = 'mobile'): DeviceEntry {
     this.assertWritable()
+    const now = Date.now()
     const existing = this.devices.find((d) => d.lastSeenAt === 0 && d.scope === scope)
-    if (existing) {
+    if (existing && !isExpiredPairingOffer(existing, now)) {
       return existing
+    }
+    if (existing) {
+      // Why: never hand out an expired offer; drop it and mint a fresh one.
+      return this.rotatePendingDevice(name, scope)
     }
     return this.addDevice(name, scope)
   }
@@ -151,7 +171,11 @@ export class DeviceRegistry {
 
   validateToken(token: string): DeviceEntry | null {
     this.reloadIfUnreadable()
-    return this.devices.find((d) => d.token === token) ?? null
+    const device = this.devices.find((d) => constantTimeEqual(token, d.token)) ?? null
+    if (device && isExpiredPairingOffer(device, Date.now())) {
+      return null
+    }
+    return device
   }
 
   updateLastSeen(deviceId: string): void {

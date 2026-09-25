@@ -194,6 +194,32 @@ describe('mobile rpc-client connection timeout', () => {
     client.close()
   })
 
+  it('echoes the handshake v2 challenge in its encrypted auth (#17)', () => {
+    const client = connect('ws://desktop.invalid', 'token', 'server-key')
+    const socket = mockSockets[0]!
+
+    socket.open()
+    socket.receive(JSON.stringify({ type: 'e2ee_ready', version: 2, challenge: 'fresh-challenge' }))
+
+    expect(socket.sent.at(-1)).toBe(
+      `encrypted:${JSON.stringify({ type: 'e2ee_auth', deviceToken: 'token', challenge: 'fresh-challenge' })}`
+    )
+    client.close()
+  })
+
+  it('still authenticates to an older desktop that sends no challenge', () => {
+    const client = connect('ws://desktop.invalid', 'token', 'server-key')
+    const socket = mockSockets[0]!
+
+    socket.open()
+    socket.receive(JSON.stringify({ type: 'e2ee_ready' }))
+
+    expect(socket.sent.at(-1)).toBe(
+      `encrypted:${JSON.stringify({ type: 'e2ee_auth', deviceToken: 'token' })}`
+    )
+    client.close()
+  })
+
   it('sends session tabs unsubscribe when a session tab stream is disposed', () => {
     const client = connect('ws://desktop.invalid', 'token', 'server-key')
     const socket = mockSockets[0]!

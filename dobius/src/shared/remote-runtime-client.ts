@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto'
 import WebSocket from 'ws'
 import type { PairingOffer } from './pairing'
+import { buildE2EEAuthPayload } from './e2ee-handshake'
 import {
   decrypt,
   decryptBytes,
@@ -254,9 +255,7 @@ export async function sendRemoteRuntimeRequest<TResult>(
         return
       }
       state = 'awaiting_authenticated'
-      ws?.send(
-        encrypt(JSON.stringify({ type: 'e2ee_auth', deviceToken: pairing.deviceToken }), sharedKey)
-      )
+      ws?.send(encrypt(JSON.stringify(buildE2EEAuthPayload(pairing.deviceToken, ready)), sharedKey))
     }
 
     function handleAuthenticatedFrame(plaintext: string): void {
@@ -547,9 +546,7 @@ export async function subscribeRemoteRuntimeRequest<TResult>(
         return
       }
       state = 'awaiting_authenticated'
-      ws?.send(
-        encrypt(JSON.stringify({ type: 'e2ee_auth', deviceToken: pairing.deviceToken }), sharedKey)
-      )
+      ws?.send(encrypt(JSON.stringify(buildE2EEAuthPayload(pairing.deviceToken, ready)), sharedKey))
     }
 
     function handleAuthenticatedFrame(plaintext: string): void {

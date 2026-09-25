@@ -43,8 +43,12 @@ function doHandshake(ctx: ReturnType<typeof setup>) {
   })
   ctx.channel.handleRawMessage(hello)
   const sharedKey = deriveSharedKey(ctx.clientKeys.secretKey, ctx.serverKeys.publicKey)
+  const ready = JSON.parse(ctx.ws.sent.at(-1)!) as { challenge: string }
   ctx.channel.handleRawMessage(
-    encrypt(JSON.stringify({ type: 'e2ee_auth', deviceToken: 'valid-token' }), sharedKey)
+    encrypt(
+      JSON.stringify({ type: 'e2ee_auth', deviceToken: 'valid-token', challenge: ready.challenge }),
+      sharedKey
+    )
   )
   return sharedKey
 }
@@ -68,7 +72,7 @@ describe('E2EEChannel', () => {
       expect(ctx.channel.deviceToken).toBe('valid-token')
 
       const readyMsg = JSON.parse(ctx.ws.sent[0]!)
-      expect(readyMsg).toEqual({ type: 'e2ee_ready' })
+      expect(readyMsg).toEqual({ type: 'e2ee_ready', version: 2, challenge: expect.any(String) })
       const authMsg = decrypt(
         ctx.ws.sent[1]!,
         deriveSharedKey(ctx.clientKeys.secretKey, ctx.serverKeys.publicKey)
@@ -86,7 +90,7 @@ describe('E2EEChannel', () => {
       )
 
       expect(ctx.onReady).not.toHaveBeenCalled()
-      expect(JSON.parse(ctx.ws.sent[0]!)).toEqual({ type: 'e2ee_ready' })
+      expect(JSON.parse(ctx.ws.sent[0]!)).toMatchObject({ type: 'e2ee_ready' })
     })
 
     it('rejects invalid encrypted token', () => {
@@ -98,8 +102,16 @@ describe('E2EEChannel', () => {
         })
       )
       const sharedKey = deriveSharedKey(ctx.clientKeys.secretKey, ctx.serverKeys.publicKey)
+      const ready = JSON.parse(ctx.ws.sent[0]!) as { challenge: string }
       ctx.channel.handleRawMessage(
-        encrypt(JSON.stringify({ type: 'e2ee_auth', deviceToken: 'bad-token' }), sharedKey)
+        encrypt(
+          JSON.stringify({
+            type: 'e2ee_auth',
+            deviceToken: 'bad-token',
+            challenge: ready.challenge
+          }),
+          sharedKey
+        )
       )
 
       expect(ctx.onError).toHaveBeenCalledWith(4001, 'Unauthorized')

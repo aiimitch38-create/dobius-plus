@@ -55,16 +55,28 @@ describe('E2EE integration (simulated mobile ↔ desktop)', () => {
     vi.useRealTimers()
   })
 
-  function completeHandshake(targetChannel = channel, keys = mobileEphemeralKeys): Uint8Array {
+  function completeHandshake(
+    targetChannel = channel,
+    keys = mobileEphemeralKeys,
+    sent = wsSent
+  ): Uint8Array {
     targetChannel.handleRawMessage(
       JSON.stringify({
         type: 'e2ee_hello',
         publicKeyB64: publicKeyToBase64(keys.publicKey)
       })
     )
+    const ready = JSON.parse(sent.at(-1)!) as { challenge: string }
     const sharedKey = deriveSharedKey(keys.secretKey, serverKeys.publicKey)
     targetChannel.handleRawMessage(
-      encrypt(JSON.stringify({ type: 'e2ee_auth', deviceToken: 'device-abc' }), sharedKey)
+      encrypt(
+        JSON.stringify({
+          type: 'e2ee_auth',
+          deviceToken: 'device-abc',
+          challenge: ready.challenge
+        }),
+        sharedKey
+      )
     )
     return sharedKey
   }
@@ -75,7 +87,7 @@ describe('E2EE integration (simulated mobile ↔ desktop)', () => {
     // Desktop should respond with plaintext ready, then encrypted auth ack.
     expect(onReady).toHaveBeenCalled()
     expect(wsSent).toHaveLength(2)
-    expect(JSON.parse(wsSent[0]!)).toEqual({ type: 'e2ee_ready' })
+    expect(JSON.parse(wsSent[0]!)).toMatchObject({ type: 'e2ee_ready', version: 2 })
     expect(JSON.parse(decrypt(wsSent[1]!, mobileShared)!)).toEqual({
       type: 'e2ee_authenticated'
     })

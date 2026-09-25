@@ -2,11 +2,10 @@
    admission, heartbeat, pre-auth timeout, and client-id cleanup together; those
    invariants are easier to audit in one transport boundary. */
 // Why: the WebSocket transport enables mobile clients to connect to the Dobius
-// runtime over the local network. When TLS cert/key are provided it uses wss://
-// to prevent passive sniffing; otherwise it falls back to plain ws://. Per-device
-// tokens (validated by the message handler in DobiusRuntimeRpcServer) provide auth
-// regardless of transport encryption.
-import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
+// runtime over the local network. It is plain ws:// on purpose: confidentiality
+// and server authentication come from the E2EE channel (e2ee-channel.ts), whose
+// server key the phone pins from the pairing QR. React Native cannot pin a
+// self-signed TLS cert, so there is no wss:// mode.
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { RpcTransport } from './transport'
@@ -42,8 +41,6 @@ const HEARTBEAT_INTERVAL_MS = 15_000
 export type WebSocketTransportOptions = {
   host: string
   port: number
-  tlsCert?: string
-  tlsKey?: string
   // Why: test-only override. Production uses HEARTBEAT_INTERVAL_MS.
   heartbeatIntervalMs?: number
   // Why: test-only override. Production uses PRE_AUTH_TIMEOUT_MS.
@@ -56,12 +53,10 @@ export type WebSocketTransportOptions = {
 export class WebSocketTransport implements RpcTransport {
   private readonly host: string
   private readonly port: number
-  private readonly tlsCert: string | undefined
-  private readonly tlsKey: string | undefined
   private readonly heartbeatIntervalMs: number
   private readonly preAuthTimeoutMs: number
   private readonly staticRoot: string | undefined
-  private httpServer: HttpsServer | HttpServer | null = null
+  private httpServer: HttpServer | null = null
   private wss: WebSocketServer | null = null
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   // Why: tracks whether each socket has pong'd since the last heartbeat
@@ -76,20 +71,20 @@ export class WebSocketTransport implements RpcTransport {
   // so ws.on('close') can notify the runtime which mobile client disconnected.
   private wsClientIds = new Map<WebSocket, string>()
   private preAuthTimers = new WeakMap<WebSocket, ReturnType<typeof setTimeout>>()
+  // Why: sockets that have not authenticated yet, oldest first (Set keeps
+  // insertion order). When the slot cap is hit the oldest of these is evicted
+  // so unauthenticated LAN clients can never lock a paired phone out.
+  private unauthenticatedSockets = new Set<WebSocket>()
 
   constructor({
     host,
     port,
-    tlsCert,
-    tlsKey,
     heartbeatIntervalMs,
     preAuthTimeoutMs,
     staticRoot
   }: WebSocketTransportOptions) {
     this.host = host
     this.port = port
-    this.tlsCert = tlsCert
-    this.tlsKey = tlsKey
     this.heartbeatIntervalMs = heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS
     this.preAuthTimeoutMs = preAuthTimeoutMs ?? PRE_AUTH_TIMEOUT_MS
     this.staticRoot = staticRoot
@@ -113,6 +108,7 @@ export class WebSocketTransport implements RpcTransport {
 
   setClientId(ws: WebSocket, clientId: string): void {
     this.wsClientIds.set(ws, clientId)
+    this.unauthenticatedSockets.delete(ws)
     this.clearPreAuthTimer(ws)
   }
 
@@ -162,13 +158,11 @@ export class WebSocketTransport implements RpcTransport {
     }
   }
 
-  private createHttpServer(): HttpServer | HttpsServer {
+  private createHttpServer(): HttpServer {
     const requestListener = this.staticRoot
       ? createStaticWebClientHandler(this.staticRoot)
       : undefined
-    return this.tlsCert && this.tlsKey
-      ? createHttpsServer({ cert: this.tlsCert, key: this.tlsKey }, requestListener)
-      : createHttpServer(requestListener)
+    return createHttpServer(requestListener)
   }
 
   // Why: the WebSocketServer is attached only after listen succeeds. If we
@@ -191,7 +185,9 @@ export class WebSocketTransport implements RpcTransport {
     })
 
     wss.on('connection', (ws) => {
-      if (wss.clients.size > MAX_WS_CONNECTIONS) {
+      if (wss.clients.size > MAX_WS_CONNECTIONS && !this.evictOldestUnauthenticated()) {
+        // Why: every slot holds an authenticated client; those are never
+        // displaced by a newcomer that has not proven anything yet.
         ws.close(1013, 'Maximum connections reached')
         return
       }
@@ -201,6 +197,18 @@ export class WebSocketTransport implements RpcTransport {
     this.httpServer = httpServer
     this.wss = wss
     this.startHeartbeat()
+  }
+
+  private evictOldestUnauthenticated(): boolean {
+    const oldest = this.unauthenticatedSockets.values().next()
+    if (oldest.done) {
+      return false
+    }
+    this.unauthenticatedSockets.delete(oldest.value)
+    // Why: terminate frees the slot at once; a close handshake with a silent
+    // pre-auth client could hold it until the TCP timeout.
+    oldest.value.terminate()
+    return true
   }
 
   // Why: ping every live socket on a fixed cadence and terminate any that
@@ -323,6 +331,7 @@ export class WebSocketTransport implements RpcTransport {
       ws.off('close', finalizeConnection)
       ws.off('error', onError)
       this.clearPreAuthTimer(ws)
+      this.unauthenticatedSockets.delete(ws)
       const clientId = this.wsClientIds.get(ws) ?? null
       this.wsClientIds.delete(ws)
       const hasOtherConnections =
@@ -342,6 +351,7 @@ export class WebSocketTransport implements RpcTransport {
       preAuthTimer.unref()
     }
     this.preAuthTimers.set(ws, preAuthTimer)
+    this.unauthenticatedSockets.add(ws)
 
     // Why: seed alive=true so the first heartbeat tick after connect doesn't
     // treat a fresh socket as dead. Subsequent pongs (or any inbound traffic)

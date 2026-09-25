@@ -5,6 +5,7 @@ import type { RuntimeRpcResponse, RuntimeRpcSuccess } from '../../../shared/runt
 import { isKeepaliveFrame } from '../../../shared/runtime-rpc-envelope'
 import type { WebPairingOffer } from './web-pairing'
 import { withRemoteRuntimeTailscaleHint } from '../../../shared/remote-runtime-tailscale-hint'
+import { buildE2EEAuthPayload } from '../../../shared/e2ee-handshake'
 import {
   decrypt,
   decryptBytes,
@@ -429,7 +430,7 @@ export class WebRuntimeClient {
       try {
         const control = JSON.parse(raw) as { type?: unknown }
         if (control.type === 'e2ee_ready') {
-          this.sendEncrypted({ type: 'e2ee_auth', deviceToken: this.pairing.deviceToken })
+          this.sendEncrypted(buildE2EEAuthPayload(this.pairing.deviceToken, control))
           return
         }
       } catch {

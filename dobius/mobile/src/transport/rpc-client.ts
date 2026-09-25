@@ -438,7 +438,15 @@ export function connect(
           const msg = JSON.parse(raw)
           if (msg.type === 'e2ee_ready') {
             emitLog('success', 'Received e2ee_ready', 'Sending device token')
-            sendEncrypted({ type: 'e2ee_auth', deviceToken })
+            // Why: handshake v2 — echo the server's per-connection challenge so
+            // a captured auth frame cannot be replayed. Mirrors
+            // src/shared/e2ee-handshake.ts (Metro can't import it); older
+            // desktops send no challenge and ignore the field.
+            sendEncrypted(
+              typeof msg.challenge === 'string' && msg.challenge.length > 0
+                ? { type: 'e2ee_auth', deviceToken, challenge: msg.challenge }
+                : { type: 'e2ee_auth', deviceToken }
+            )
             return
           }
         } catch {

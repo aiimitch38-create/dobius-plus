@@ -165,10 +165,18 @@ async function authenticateMobileWsSession(pairingUrl: string): Promise<Authenti
       publicKeyB64: Buffer.from(mobileKeys.publicKey).toString('base64')
     })
   )
-  expect(JSON.parse(await nextWsMessage(ws))).toEqual({ type: 'e2ee_ready' })
+  const ready = JSON.parse(await nextWsMessage(ws)) as { type: string; challenge: string }
+  expect(ready).toMatchObject({ type: 'e2ee_ready', version: 2 })
 
   ws.send(
-    encrypt(JSON.stringify({ type: 'e2ee_auth', deviceToken: parsed!.deviceToken }), sharedKey)
+    encrypt(
+      JSON.stringify({
+        type: 'e2ee_auth',
+        deviceToken: parsed!.deviceToken,
+        challenge: ready.challenge
+      }),
+      sharedKey
+    )
   )
   expect(JSON.parse(decrypt(await nextWsMessage(ws), sharedKey)!)).toEqual({
     type: 'e2ee_authenticated'
@@ -552,7 +560,7 @@ describe('DobiusRuntimeRpcServer', () => {
           publicKeyB64: Buffer.from(mobileKeys.publicKey).toString('base64')
         })
       )
-      expect(JSON.parse(await nextWsMessage(ws))).toEqual({ type: 'e2ee_ready' })
+      expect(JSON.parse(await nextWsMessage(ws))).toMatchObject({ type: 'e2ee_ready' })
       expect(server['e2eeChannels'].size).toBe(1)
       expect(server['wsConnectionIds'].size).toBe(1)
 
