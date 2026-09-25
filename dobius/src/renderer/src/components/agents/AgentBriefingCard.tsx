@@ -12,6 +12,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import type { BriefingItem, CustomAgent } from '../../../../shared/agents'
+import { isAgentFileConflictError } from '../../../../shared/agent-file-conflict'
 import { AgentAvatar } from './AgentAvatar'
 
 const timeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -23,6 +24,15 @@ type TuneState = {
   agent: CustomAgent
   current: string
   draft: string
+}
+
+// Why: agents can write their own brief.md; `current` (the copy the dialog loaded)
+// lets main refuse the save instead of overwriting a newer on-disk version (#40).
+export function saveBriefDirective(
+  tune: TuneState,
+  write: (agentId: string, name: 'brief', content: string, expected?: string) => Promise<void>
+): Promise<void> {
+  return write(tune.agent.id, 'brief', tune.draft, tune.current)
 }
 
 export function AgentBriefingCard({
@@ -70,11 +80,19 @@ export function AgentBriefingCard({
     }
     setSaving(true)
     try {
-      await window.api.agents.writeFile(tune.agent.id, 'brief', tune.draft)
+      await saveBriefDirective(tune, window.api.agents.writeFile)
       setTune(null)
       toast.success('Briefing tuned')
     } catch (error) {
       console.error('Failed to save briefing directive:', error)
+      if (isAgentFileConflictError(error)) {
+        const agent = tune.agent
+        toast.error(
+          'The briefing directive changed on disk while you were editing. It was not overwritten.',
+          { action: { label: 'Load latest', onClick: () => void openTune(agent) } }
+        )
+        return
+      }
       toast.error(error instanceof Error ? error.message : 'Could not save briefing directive')
     } finally {
       setSaving(false)

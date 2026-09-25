@@ -104,7 +104,14 @@ export function useAgentIdentityFiles(selectedAgentId: string | null): {
       names: options.names,
       write: window.api.agents.writeFile
     })
-    if (baseline && baseline.agentId === agentId && !options.isNew) {
+    // Why: a reload or agent switch may have replaced the baseline during the await;
+    // advancing the older object would overwrite the newer one.
+    if (
+      baseline &&
+      baselineRef.current === baseline &&
+      baseline.agentId === agentId &&
+      !options.isNew
+    ) {
       const next = { ...baseline.files }
       for (const name of written) {
         next[name] = files[name]

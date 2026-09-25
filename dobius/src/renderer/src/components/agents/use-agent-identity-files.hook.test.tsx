@@ -82,3 +82,33 @@ describe('useAgentIdentityFiles save (#40)', () => {
     expect(writeFile).toHaveBeenCalledWith('a1', 'memory', 'M\n', loaded.memory)
   })
 })
+
+describe('useAgentIdentityFiles baseline after an agent switch mid-save', () => {
+  it('keeps the newer agent baseline when an older save finishes late', async () => {
+    const filesB: AgentReadableFiles = { ...DEFAULT_AGENT_FILES, memory: '- B fact.\n' }
+    readFiles.mockImplementation(async (id: string) => (id === 'b1' ? filesB : loaded))
+    let finishWrite: () => void = () => {}
+    writeFile.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishWrite = resolve
+        })
+    )
+    await act(async () => root.render(<Probe agentId="a1" />))
+    await act(async () => current().setAgentFiles({ ...current().agentFiles, soul: 'A soul.\n' }))
+    let pending: Promise<void> = Promise.resolve()
+    act(() => {
+      pending = current().saveAgentFiles('a1')
+    })
+    await act(async () => root.render(<Probe agentId="b1" />))
+    await act(async () => {
+      finishWrite()
+      await pending
+    })
+
+    writeFile.mockClear()
+    await act(async () => current().setAgentFiles({ ...current().agentFiles, soul: 'B soul.\n' }))
+    await act(async () => current().saveAgentFiles('b1'))
+    expect(writeFile).toHaveBeenCalledWith('b1', 'soul', 'B soul.\n', filesB.soul)
+  })
+})

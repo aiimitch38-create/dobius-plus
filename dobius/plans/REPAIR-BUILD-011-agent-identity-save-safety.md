@@ -58,8 +58,6 @@
 - Check is content-based, not mtime: identity files are small, and mtime has coarse granularity.
   A write racing between the check and the rename in main is still possible (no cross-process
   lock with the agent CLI); the window is one synchronous read + rename.
-- `AgentBriefingCard` "tune brief" still writes `brief.md` without `expected` (unchanged; the
-  brief is not agent-written).
 
 ## Rollback
 Revert the commit. No data format change; the optional IPC argument is ignored by old code.
@@ -76,3 +74,14 @@ Revert the commit. No data format change; the optional IPC argument is ignored b
 - react-doctor flags `setState` in an effect keyed on a prop when the effect body is a single
   set call (no-derived-state-effect / no-adjust-state-on-prop-change); folding the reset into
   the async loader or a guarded branch keeps the intent and passes.
+
+## Review follow-up (second commit)
+- F1: `saveAgentFiles` advances the baseline only if `baselineRef.current` is still the object
+  captured before the await (an agent switch or reload mid-save no longer gets overwritten by
+  the older baseline). Test: hook test "keeps the newer agent baseline when an older save
+  finishes late". Mutation M8 (drop identity check) → fails.
+- F2: `AgentBriefingCard` tune save passes the loaded `current` as `expected` via
+  `saveBriefDirective`; conflicts show the same "Load latest" toast (re-opens tune from disk).
+  Test: `AgentBriefingCard.test.ts`. Mutation M9 (omit expected) → fails.
+- Targeted: agent-identity-files.test.ts + src/renderer/src/components/agents → 9 files / 37 tests
+  green. Typecheck exit 0. oxlint + react-doctor clean on changed files.
