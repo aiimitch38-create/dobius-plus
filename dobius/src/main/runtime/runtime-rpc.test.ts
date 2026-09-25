@@ -1006,6 +1006,17 @@ describe('DobiusRuntimeRpcServer', () => {
     const server = new DobiusRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
     server['deviceRegistry'] = new DeviceRegistry(userDataPath)
     const mobile = server['deviceRegistry']!.addDevice('phone', 'mobile')
+    // Why: high-risk mobile methods need an explicit per-device grant
+    // (BUILD-034); this test covers their routing once granted.
+    server['deviceRegistry']!.getDevice(mobile.deviceId)!.grants = [
+      'git.push',
+      'settings.update',
+      'remote.merge',
+      'remote.write',
+      'git.discard',
+      'git.sync',
+      'browser.control'
+    ]
     const replies: Record<string, unknown>[] = []
 
     await server['handleWebSocketMessage'](
@@ -2679,6 +2690,8 @@ describe('DobiusRuntimeRpcServer', () => {
       throw new Error('WebSocket pairing unavailable')
     }
     expect(parsePairingCode(phoneOffer.pairingUrl)?.scope).toBe('mobile')
+    // Why: terminal.send from a phone needs an explicit grant (BUILD-034).
+    server.getDeviceRegistry()!.getDevice(phoneOffer.deviceId)!.grants = ['terminal.send']
     const phone = await authenticateMobileWsSession(phoneOffer.pairingUrl)
     const phoneResponses = createEncryptedWsResponseReader(phone)
     const metadata = readRuntimeMetadata(userDataPath)
