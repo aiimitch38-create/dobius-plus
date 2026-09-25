@@ -2056,6 +2056,8 @@ const api = {
       ipcRenderer.invoke('vertexTasks:create', input),
     update: (taskId: string, patch: VertexTaskPatch): Promise<VertexTask | null> =>
       ipcRenderer.invoke('vertexTasks:update', { taskId, patch }),
+    releaseInterruptedClaims: (args: { activeTaskIds: string[] }): Promise<void> =>
+      ipcRenderer.invoke('vertexTasks:releaseInterruptedClaims', args),
     move: (taskId: string, to: VertexTaskStatus, toIndex: number): Promise<VertexTask | null> =>
       ipcRenderer.invoke('vertexTasks:move', { taskId, to, toIndex }),
     remove: (taskId: string): Promise<boolean> =>
