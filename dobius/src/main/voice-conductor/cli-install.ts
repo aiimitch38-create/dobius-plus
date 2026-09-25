@@ -9,7 +9,7 @@ import { app } from 'electron'
 // userData path for the token file location.
 //
 // Bump when any script body changes so writeIfChanged rewrites installed copies.
-const CLI_VERSION = 1
+const CLI_VERSION = 2
 const MARKER = `# dobius-conductor-cli v${CLI_VERSION}`
 
 // The conductor CLI server binds its OWN port + token file, distinct from the
@@ -110,12 +110,30 @@ curl -sS --max-time 320 -X POST "http://${HOST}:${PORT}/spawn" ${base} --data-bi
 `,
 
     // dobius-ask "<question>" -> POST /ask, blocks up to 5 min, prints .answer
-    'dobius-ask': `${header('dobius-ask', 'Ask Sam a question via iMessage and wait up to 5 min. Usage: dobius-ask "<question>"', tokenFile)}
+    'dobius-ask': `${header('dobius-ask', 'Ask the iMessage handle set in Settings (iMessage bridge) a question and wait up to 5 min. Usage: dobius-ask "<question>"', tokenFile)}
 if [ $# -lt 1 ]; then echo "usage: dobius-ask <question>" >&2; exit 1; fi
 QUESTION="$*"
 BODY=$(python3 -c 'import json,sys; print(json.dumps({"question": sys.argv[1]}))' "$QUESTION")
 curl -sS --max-time 320 -X POST "http://${HOST}:${PORT}/ask" ${base} --data-binary "$BODY" \\
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("answer") or ("(timeout)" if d.get("timedOut") else ""))'
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("answer") or ("(timeout)" if d.get("timedOut") else "(error: %s)" % d.get("error", "unknown")))'
+`,
+
+    // dobius-confirm "<action>" -> POST /confirm. Exit 0 ONLY on an explicit
+    // approval; a denial, timeout, server/curl failure or bad JSON exits non-zero.
+    'dobius-confirm': `${header('dobius-confirm', 'Ask for approval of one action via iMessage; exit 0 only if approved. Usage: dobius-confirm "<action summary>"', tokenFile)}
+set -o pipefail
+if [ $# -lt 1 ]; then echo "DENIED: usage: dobius-confirm <action summary>" >&2; exit 1; fi
+ACTION="$*"
+BODY=$(python3 -c 'import json,sys; print(json.dumps({"action": sys.argv[1]}))' "$ACTION")
+RESPONSE=$(curl -sS --max-time 320 -X POST "http://${HOST}:${PORT}/confirm" ${base} --data-binary "$BODY") || { echo "DENIED: approval server unreachable" >&2; exit 1; }
+printf '%s' "$RESPONSE" | python3 -c 'import json,sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("DENIED: unreadable approval response"); sys.exit(1)
+if d.get("approved") is True:
+    print("APPROVED"); sys.exit(0)
+print("DENIED: %s" % (d.get("reason") or d.get("error") or "not approved")); sys.exit(1)'
 `,
 
     // dobius-lead-tab get|set|clear <projectPath> [tabId]

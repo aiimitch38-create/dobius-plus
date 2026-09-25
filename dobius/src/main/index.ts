@@ -1936,12 +1936,11 @@ app.whenReady().then(async () => {
   // Reuses the runtime's active-terminal resolution + send path.
   startDobiusCli(runtimeService)
   // Voice Conductor: background Opus session that routes voice/dispatched work.
-  // Starts/stops in step with the voice.conductorEnabled setting. The iMessage
-  // handle (for dobius-ask confirmations) comes from env until it has a setting.
-  const voiceConductorImessageHandle = process.env.DOBIUS_IMESSAGE_HANDLE ?? ''
-  syncVoiceConductorFromSettings(store.getSettings(), runtimeService, voiceConductorImessageHandle)
+  // Starts/stops in step with the voice.conductorEnabled setting. Its iMessage
+  // handle comes from the iMessage bridge setting (voice-conductor/conductor-settings.ts).
+  syncVoiceConductorFromSettings(store.getSettings(), runtimeService)
   store.onSettingsChanged((_updates, nextSettings) => {
-    syncVoiceConductorFromSettings(nextSettings, runtimeService, voiceConductorImessageHandle)
+    syncVoiceConductorFromSettings(nextSettings, runtimeService)
   })
   // Prompt snippets → inject into the active terminal (needs the runtime).
   registerPromptsHandlers(runtimeService)
