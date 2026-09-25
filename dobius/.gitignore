@@ -19,7 +19,7 @@ src/**/*.d.ts
 !src/renderer/src/components/communications/tailwind.config.js
 
 # Dependencies
-node_modules/
+node_modules
 
 # Build output
 dist/

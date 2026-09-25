@@ -8,5 +8,5 @@
 # builds the LEGACY v1 app (electron/main.js, appId com.statusdigital.dobius-plus).
 echo "build-and-install.sh is retired. Build, then install with the gated installer:" >&2
 echo "  pnpm --dir dobius run build:unpack" >&2
-echo "  scripts/install-dobius-gated.sh dobius/dist/mac-arm64/Dobius+.app [--take-over]" >&2
+echo "  scripts/install-dobius-gated.sh dobius/dist/mac-arm64/Dobius+.app [--take-over] [--allow-downgrade]" >&2
 exit 1

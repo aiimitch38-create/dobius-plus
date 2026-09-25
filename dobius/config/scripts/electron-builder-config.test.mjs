@@ -134,6 +134,36 @@ describe('electron-builder config', () => {
     }
   })
 
+  it('seals the build-time source record into the mac bundle Resources (BUILD-044 F1)', async () => {
+    const configPath = require.resolve('../electron-builder.config.cjs')
+    const original = process.env.DOBIUS_BUILD_PROVENANCE_FILE
+    const root = await mkdtemp(join(tmpdir(), 'dobius-build-record-'))
+    const recordFile = join(root, 'BUILD-PROVENANCE.json')
+    await writeFile(recordFile, '{}')
+    const load = (value) => {
+      delete require.cache[configPath]
+      if (value === undefined) {
+        delete process.env.DOBIUS_BUILD_PROVENANCE_FILE
+      } else {
+        process.env.DOBIUS_BUILD_PROVENANCE_FILE = value
+      }
+      return require('../electron-builder.config.cjs')
+    }
+    try {
+      expect(load(recordFile).mac.extraResources).toContainEqual({
+        from: recordFile,
+        to: 'BUILD-PROVENANCE.json'
+      })
+      expect(
+        load(undefined).mac.extraResources.some((r) => r.to === 'BUILD-PROVENANCE.json')
+      ).toBe(false)
+      expect(() => load(join(root, 'missing.json'))).toThrow('missing file')
+    } finally {
+      load(original)
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('uses Dobius native rebuild hook instead of electron-builder default rebuild', () => {
     expect(electronBuilderConfig.beforeBuild).toBe(electronBuilderNativeRebuild)
     expect(electronBuilderConfig.npmRebuild).toBe(true)

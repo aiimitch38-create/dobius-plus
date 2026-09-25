@@ -161,3 +161,64 @@ hand. Provenance written by this build only has extra keys, and old readers igno
   main checkout, where node_modules is a real ignored directory, are not affected.
 - electron-builder requires the config in tests, so any side effect there, such as
   allocating a counter, would run on every test. Keep allocation in the wrapper.
+
+## Review round 1 (coordinator findings F1-F4)
+- F1 (source state was taken at install time):
+  - `scripts/source-state.py` (new) is now the one implementation of
+    branch/commit/dirty/diffDigest/tag. The digest code moved there from the installer
+    heredoc.
+  - `electron-builder-with-build-number.mjs` runs it on `dobius/` at build time. It writes
+    `{repo, branch, commit, dirty, diffDigest, tag, buildNumber, builtAt}` to a temp file
+    and passes that file as `DOBIUS_BUILD_PROVENANCE_FILE`. It deletes the file after
+    electron-builder exits.
+  - `electron-builder.config.cjs` adds the file to `mac.extraResources` as
+    `BUILD-PROVENANCE.json`. It is sealed into Contents/Resources before signing. If the env
+    var points at a missing file, the config throws.
+  - The installer reads `<app>/Contents/Resources/BUILD-PROVENANCE.json` before the
+    ownership check (`source-state.py --from-build-record` validates it).
+    - If the record is valid, branch/commit/repo/dirty/diffDigest/tag come from it, with
+      `"sourceStateFrom": "build"`.
+    - If there is no record, or the record is malformed (with a warning), the installer uses
+      the tree as it is now, with `"sourceStateFrom": "install"`.
+    - The ownership check therefore compares the branch the app was BUILT from.
+  - `buildNumber` still comes from CFBundleVersion, which is the sealed Info.plist.
+- F2: `--take-over` covers branch ownership only. The version guard is bypassed only by
+  the new `--allow-downgrade`. An unknown option exits 1. The usage text in the installer
+  and the two retired pointers is updated. The rollback hint prints
+  `--take-over --allow-downgrade`. An invalid installed version now says
+  "Re-run with --allow-downgrade".
+- F3: `node_modules/` → `node_modules` in `.gitignore` and `dobius/.gitignore`, so the
+  worktree symlink no longer marks every worktree build dirty. 0 tracked paths match.
+- F4: before anything else, the installer checks that `python3` is on PATH and that
+  `semver-compare.py` and `source-state.py` exist. If not, it refuses with exit 9 and names
+  the missing piece. It never says "no valid version" in that case.
+- Test split: `install-dobius-gated.test.mjs` would pass the 600-line `.mjs` max-lines
+  limit, so the fixture builders moved to `install-dobius-gated-fixtures.mjs`. The
+  BUILD-044 tests moved to `install-dobius-gated-version.test.mjs`. The BUILD-043 test
+  bodies are unchanged.
+- New tests:
+  - F2: `--take-over` alone plus an older version gives exit 5. `--allow-downgrade`
+    installs it. `--allow-downgrade` alone does not take over another branch (exit 3).
+    An unknown flag gives exit 1.
+  - F1: a sealed record wins over a clean install-time checkout (branch, repo, commit,
+    dirty, digest, `sourceStateFrom:'build'`). A malformed record falls back to
+    `'install'` with a warning. The wrapper passes the record to electron-builder and
+    removes it afterwards. `collectSourceState` reads a clean and a dirty fixture repo.
+    Config: the record maps to `BUILD-PROVENANCE.json`, is absent when unset, and a
+    missing file throws.
+  - F3: `git check-ignore --no-index -v` on a non-directory `node_modules` under each
+    `.gitignore`.
+  - F4: an installer copy without its helpers gives exit 9 with a "missing" message. A
+    PATH without python3 gives exit 9 with "python3 is not on PATH".
+- Mutations (round 2, log `stabilize-run/044/mut-round2.log`):
+  - The installer ignores the record.
+  - The guard is also skipped by `--take-over`.
+  - The helper/python check is removed.
+  - The gitignores are reverted.
+  - The wrapper stops passing the record.
+  - The config drops the resource.
+
+  Together these failed 9 tests (every new F1-F4 test); all files were then restored.
+- Superseded above: the "Deviations" note that source state is install-time only, the
+  "Lessons" note about worktree builds reading dirty, and every `--take-over` mention in
+  the version-guard sections. For the version guard, read `--allow-downgrade`.

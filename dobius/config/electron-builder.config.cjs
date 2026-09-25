@@ -259,7 +259,8 @@ module.exports = {
         from: 'native/computer-use-macos/.build/release/Dobius+ Computer Use.app',
         to: 'Dobius+ Computer Use.app'
       },
-      featureWallResources
+      featureWallResources,
+      ...buildProvenanceResources()
     ],
     target: [
       {
@@ -385,6 +386,20 @@ function macBundleVersion() {
     throw new Error(`DOBIUS_BUILD_NUMBER must be a positive integer, got "${buildNumber}"`)
   }
   return buildNumber
+}
+
+// Why: the wrapper records the source tree's state at build time; shipping it
+// inside the sealed bundle lets the gated installer record what was BUILT, not
+// what the checkout looks like at install time (BUILD-044).
+function buildProvenanceResources() {
+  const recordFile = process.env.DOBIUS_BUILD_PROVENANCE_FILE
+  if (recordFile === undefined || recordFile === '') {
+    return []
+  }
+  if (!existsSync(recordFile)) {
+    throw new Error(`DOBIUS_BUILD_PROVENANCE_FILE points at a missing file: ${recordFile}`)
+  }
+  return [{ from: recordFile, to: 'BUILD-PROVENANCE.json' }]
 }
 
 function chmodUnixCliLaunchers(resourcesDir, electronPlatformName) {
