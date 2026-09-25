@@ -58,11 +58,17 @@ export const kanbanMockSource: TaskSource = {
   async move(taskId: string, to: TaskStatus, toIndex: number) {
     useKanbanStore.setState((state) => {
       const moving = state.tasks.find((task) => task.id === taskId)
-      if (!moving) return state
-      if (to === 'done' && !moving.resultNote?.trim()) return state
+      if (!moving) {
+        return state
+      }
+      if (to === 'done' && !moving.resultNote?.trim()) {
+        return state
+      }
       const without = state.tasks.filter((task) => task.id !== taskId)
       const targetIndexes = without.reduce<number[]>((indexes, task, index) => {
-        if (task.status === to) indexes.push(index)
+        if (task.status === to) {
+          indexes.push(index)
+        }
         return indexes
       }, [])
       const insertionIndex =
@@ -120,7 +126,9 @@ export const kanbanMockSource: TaskSource = {
   },
 
   async remove(taskId) {
-    if (!find(taskId)) return false
+    if (!find(taskId)) {
+      return false
+    }
     useKanbanStore.setState((state) => ({
       tasks: state.tasks.filter((task) => task.id !== taskId),
       revision: state.revision + 1
