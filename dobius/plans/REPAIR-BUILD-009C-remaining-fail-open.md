@@ -106,3 +106,12 @@ Revert the commit. Set-aside `*.unreadable-<ms>` files remain on disk; old code 
 ## Lessons
 - `hardenExistingSecureFile` chmods an owner's 0000 file to 0600, so an EACCES fixture for a
   store that hardens on load self-heals; use corrupt bytes for those stores' tests.
+
+## Merge of stabilize/integration (03e03f7f, BUILD-009B merged)
+- destinations-store.ts conflict resolved as the coordinator asked: 009B's SafeJsonFile version
+  (including `save()`, which throws on a refused save) + `mode: 0o600` + `hardenExistingFile(filePath())`
+  at the top of `load()`. The `writeSecureFile` persist from this build is gone.
+- Mutation re-check after the merge: `mode` removed → the 0600 write test fails; harden call
+  removed → the existing-0644 test fails.
+- Typecheck exit 0. Targeted (this build's set + src/main/storage + DestinationsSection.test.tsx):
+  38 files / 444 tests passed.
