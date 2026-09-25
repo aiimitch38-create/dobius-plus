@@ -222,3 +222,55 @@ hand. Provenance written by this build only has extra keys, and old readers igno
 - Superseded above: the "Deviations" note that source state is install-time only, the
   "Lessons" note about worktree builds reading dirty, and every `--take-over` mention in
   the version-guard sections. For the version guard, read `--allow-downgrade`.
+
+## Review round 2 (coordinator findings F1-F3, low)
+- F1 (the record described the tree at packaging time, not at compile time):
+  - `build:unpack` and `build:mac` now start with
+    `node config/scripts/electron-builder-with-build-number.mjs --snapshot-source`. It
+    records `source-state.py` output before the compile, into a file keyed by checkout in
+    os.tmpdir (outside the tree, so it never dirties it). `DOBIUS_BUILD_SOURCE_SNAPSHOT`
+    overrides the path for tests.
+  - The packaging step reads the snapshot, deletes it (one use), and re-collects the
+    state. If repo, branch, commit, dirty or diffDigest changed, it throws, and nothing
+    is packaged.
+  - The sealed record is the pre-compile snapshot plus `capturedAt`, `buildNumber` and
+    `builtAt`.
+  - A missing snapshot fails loudly with "No pre-compile source snapshot".
+- F2 (the record was not tied to the bundle): the installer reads CFBundleVersion from the
+  source bundle before the source-state step. `source-state.py --from-build-record
+  <file> <CFBundleVersion>` rejects a record whose `buildNumber` is present and not equal
+  to it. The installer then warns and falls back to `sourceStateFrom: "install"`.
+  `BUILD_NUM` is now read once, from `$APP_SRC`; the stage is a copy of it.
+- F3 (pre-existing 043 bug): a TERM/INT between the swap and the rollback move made
+  cleanup `rm -rf "$STAGE"`, which at that moment held the PREVIOUS bundle. The app also
+  stayed quit.
+  - `PHASE` is now `prepare`, then `swapped`, then `done`. In `swapped`, cleanup moves
+    `$STAGE` to `$ROLLBACK`. If that fails, it leaves the bundle with a warning; it never
+    deletes it.
+  - Cleanup ignores further INT/TERM.
+  - If the app was quit (`APP_QUIT`) and not relaunched (`APP_RELAUNCHED`), cleanup runs
+    `open -a "$DEST"`. This covers any early exit after the quit.
+- Hook: `~/.claude/hooks/dobius-install-gate.sh` is outside the repo, and its message still
+  says `[--take-over]`. It was NOT edited. The only in-repo mentions are the plan and docs.
+- Tests:
+  - Wrapper: without a snapshot the wrapper exits non-zero and electron-builder is never
+    called. With a snapshot it seals the pre-compile record, and the snapshot is used
+    once. On a fixture repo, a HEAD that moved after the snapshot, or a changed
+    uncommitted edit, throws.
+  - Installer: a record with `buildNumber` 45 on a bundle with CFBundleVersion 44 falls
+    back to `install`.
+  - Installer, signal test (test mode, recorder shims): a `mkdir` shim sends TERM to the
+    installer at the first `mkdir -p` after the swap, which is the rollback move. The
+    expected results:
+    - exit 130
+    - DEST = v2
+    - rollback = v1
+    - no stage left
+    - lock released
+    - `open -a DEST` called once
+- Mutations (log `stabilize-run/044/mut-round3.log`):
+  - The swapped-phase branch in cleanup and the cleanup relaunch are disabled.
+  - The buildNumber comparison is disabled.
+  - The field comparison is emptied.
+
+  Together these failed exactly the 3 new tests; all files were then restored.

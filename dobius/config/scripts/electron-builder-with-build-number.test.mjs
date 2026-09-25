@@ -3,7 +3,14 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { allocateBuildNumber, collectSourceState } from './electron-builder-with-build-number.mjs'
+import {
+  allocateBuildNumber,
+  collectSourceState,
+  takeSourceSnapshot,
+  writeBuildRecord
+} from './electron-builder-with-build-number.mjs'
+
+const wrapper = path.join(import.meta.dirname, 'electron-builder-with-build-number.mjs')
 
 const roots = []
 function counterIn() {
@@ -69,32 +76,52 @@ describe('build number allocation (BUILD-044)', () => {
       { mode: 0o755 }
     )
 
-    const result = spawnSync(
-      process.execPath,
-      [path.join(import.meta.dirname, 'electron-builder-with-build-number.mjs'), '--dir'],
-      {
+    const snapshotFile = path.join(path.dirname(counterFile), 'snapshot.json')
+    const run = (args) =>
+      spawnSync(process.execPath, [wrapper, ...args], {
         encoding: 'utf8',
         env: {
           PATH: `${shimDir}:${process.env.PATH}`,
-          DOBIUS_BUILD_NUMBER_FILE: counterFile
+          DOBIUS_BUILD_NUMBER_FILE: counterFile,
+          DOBIUS_BUILD_SOURCE_SNAPSHOT: snapshotFile
         }
-      }
-    )
+      })
 
-    expect(result.stdout).toContain('number=10 args=--dir')
+    // Without the pre-compile snapshot nothing is packaged.
+    const unsnapped = run(['--dir'])
+    expect(unsnapped.status).not.toBe(0)
+    expect(unsnapped.stderr).toContain('No pre-compile source snapshot')
+    expect(unsnapped.stdout).not.toContain('number=')
+
+    expect(run(['--snapshot-source']).status).toBe(0)
+    expect(existsSync(snapshotFile)).toBe(true)
+    const result = run(['--dir'])
+
+    expect(result.stdout).toContain('number=11 args=--dir')
     // The build-time source record electron-builder seals into the bundle (F1).
     const json = result.stdout.slice(result.stdout.indexOf('{'), result.stdout.lastIndexOf('}') + 1)
     const record = JSON.parse(json)
-    expect(record).toMatchObject({ buildNumber: 10 })
+    expect(record).toMatchObject({ buildNumber: 11 })
     expect(Object.keys(record)).toEqual(
-      expect.arrayContaining(['repo', 'branch', 'commit', 'dirty', 'diffDigest', 'tag', 'builtAt'])
+      expect.arrayContaining([
+        'repo',
+        'branch',
+        'commit',
+        'dirty',
+        'diffDigest',
+        'tag',
+        'capturedAt',
+        'builtAt'
+      ])
     )
+    // A snapshot is used once.
+    expect(existsSync(snapshotFile)).toBe(false)
     // The temp record is removed once electron-builder is done.
     const recordPath = result.stdout.match(/record=(.*)/)[1]
     expect(existsSync(recordPath)).toBe(false)
     // electron-builder's own exit code is passed through.
     expect(result.status).toBe(3)
-    expect(readFileSync(counterFile, 'utf8')).toBe('10\n')
+    expect(readFileSync(counterFile, 'utf8')).toBe('11\n')
   })
 
   it('collects branch, commit, dirty and digest of a checkout at build time (F1)', () => {
@@ -132,5 +159,49 @@ describe('build number allocation (BUILD-044)', () => {
     const dirty = collectSourceState(repo)
     expect(dirty.dirty).toBe(true)
     expect(dirty.diffDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
+  })
+
+  it('refuses to package when HEAD or the dirty digest moved during the compile (F1)', () => {
+    const root = path.dirname(counterIn())
+    const repo = path.join(root, 'repo')
+    mkdirSync(repo)
+    const git = (...args) =>
+      execFileSync('git', args, {
+        cwd: repo,
+        encoding: 'utf8',
+        env: {
+          PATH: process.env.PATH,
+          HOME: root,
+          GIT_AUTHOR_NAME: 'f',
+          GIT_AUTHOR_EMAIL: 'f@example.com',
+          GIT_COMMITTER_NAME: 'f',
+          GIT_COMMITTER_EMAIL: 'f@example.com'
+        }
+      }).trim()
+    git('init', '-q', '-b', 'lane')
+    writeFileSync(path.join(repo, 'a.txt'), 'one\n')
+    git('add', '.')
+    git('commit', '-q', '-m', 'x')
+    const snapshotFile = path.join(root, 'snapshot.json')
+    const recordFile = path.join(root, 'record.json')
+    const build = () =>
+      writeBuildRecord(recordFile, { sourceDir: repo, snapshotFile, buildNumber: 5 })
+
+    // Unchanged tree: the record is the PRE-compile snapshot plus the number.
+    const snapshot = takeSourceSnapshot({ sourceDir: repo, file: snapshotFile })
+    expect(build()).toMatchObject({ ...snapshot, buildNumber: 5 })
+
+    // HEAD moved.
+    takeSourceSnapshot({ sourceDir: repo, file: snapshotFile })
+    writeFileSync(path.join(repo, 'a.txt'), 'two\n')
+    git('commit', '-q', '-am', 'y')
+    expect(build).toThrow(/changed while the build compiled \(commit: /)
+    expect(existsSync(snapshotFile)).toBe(false)
+
+    // Same HEAD, different uncommitted changes.
+    writeFileSync(path.join(repo, 'a.txt'), 'three\n')
+    takeSourceSnapshot({ sourceDir: repo, file: snapshotFile })
+    writeFileSync(path.join(repo, 'a.txt'), 'four\n')
+    expect(build).toThrow(/diffDigest: sha256:/)
   })
 })

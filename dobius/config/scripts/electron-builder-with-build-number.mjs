@@ -6,12 +6,19 @@
 // seals into Contents/Resources/BUILD-PROVENANCE.json, so the installer never
 // has to describe a tree that may have changed since the build.
 //
+// Two steps, because the compile before packaging takes minutes:
+//   --snapshot-source  (first in build:unpack/build:mac) records the tree
+//                      BEFORE the compile;
+//   <electron-builder args>  refuses to package if HEAD, branch or the dirty
+//                      digest changed since, then seals the snapshot.
+//
 // Why a counter and not a version bump: package.json's SemVer version is what
 // the installer's downgrade guard compares, so it must only move when a person
 // means it to. Rewriting it on every build would dirty the tree and would let a
 // stale branch built later outrank newer code. The build number is SemVer build
 // metadata: it orders builds on this machine and never affects precedence.
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
@@ -21,7 +28,18 @@ export const BUILD_NUMBER_ENV = 'DOBIUS_BUILD_NUMBER'
 export const BUILD_PROVENANCE_ENV = 'DOBIUS_BUILD_PROVENANCE_FILE'
 
 const repoRoot = path.resolve(import.meta.dirname, '../../..')
+const dobiusDir = path.resolve(import.meta.dirname, '../..')
 const sourceStateScript = path.join(repoRoot, 'scripts', 'source-state.py')
+
+// Outside the checkout, so writing it never makes the tree dirty; keyed by the
+// checkout so parallel worktrees do not share one.
+export function defaultSnapshotFile(dir = dobiusDir) {
+  if (process.env.DOBIUS_BUILD_SOURCE_SNAPSHOT) {
+    return process.env.DOBIUS_BUILD_SOURCE_SNAPSHOT
+  }
+  const key = createHash('sha256').update(dir).digest('hex').slice(0, 16)
+  return path.join(tmpdir(), `dobius-build-source-${key}.json`)
+}
 
 export function defaultCounterFile() {
   return process.env.DOBIUS_BUILD_NUMBER_FILE || path.join(homedir(), '.dobius-build-number')
@@ -102,27 +120,64 @@ export function collectSourceState(dir) {
   return JSON.parse(result.stdout)
 }
 
-export function writeBuildRecord(file, { sourceDir, buildNumber }) {
-  const record = {
-    ...collectSourceState(sourceDir),
-    buildNumber,
-    builtAt: new Date().toISOString()
+export function takeSourceSnapshot({ sourceDir = dobiusDir, file = defaultSnapshotFile() } = {}) {
+  const snapshot = { ...collectSourceState(sourceDir), capturedAt: new Date().toISOString() }
+  writeFileSync(file, `${JSON.stringify(snapshot, null, 2)}\n`)
+  return snapshot
+}
+
+const COMPARED_FIELDS = ['repo', 'branch', 'commit', 'dirty', 'diffDigest']
+
+// Throws when the tree changed between the pre-compile snapshot and packaging:
+// the bundle would then contain code the record does not describe.
+export function assertSourceUnchanged(snapshot, current) {
+  const changed = COMPARED_FIELDS.filter((field) => snapshot[field] !== current[field])
+  if (changed.length > 0) {
+    const detail = changed
+      .map((field) => `${field}: ${snapshot[field]} -> ${current[field]}`)
+      .join('; ')
+    throw new Error(
+      `The source tree changed while the build compiled (${detail}). Nothing was packaged; rebuild from a tree nobody is editing.`
+    )
   }
+}
+
+export function writeBuildRecord(
+  file,
+  { sourceDir = dobiusDir, snapshotFile = defaultSnapshotFile(), buildNumber }
+) {
+  let snapshot
+  try {
+    snapshot = JSON.parse(readFileSync(snapshotFile, 'utf8'))
+  } catch (error) {
+    throw new Error(
+      `No pre-compile source snapshot at ${snapshotFile} (${error.message}). Build through pnpm run build:unpack or build:mac.`
+    )
+  } finally {
+    // One snapshot per build: never let a later build reuse it.
+    rmSync(snapshotFile, { force: true })
+  }
+  assertSourceUnchanged(snapshot, collectSourceState(sourceDir))
+  const record = { ...snapshot, buildNumber, builtAt: new Date().toISOString() }
   writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`)
   return record
 }
 
 function main(args) {
+  if (args.length === 1 && args[0] === '--snapshot-source') {
+    const snapshot = takeSourceSnapshot()
+    console.log(
+      `Dobius+ source snapshot: ${snapshot.branch}@${snapshot.commit}${snapshot.dirty ? ' (dirty)' : ''}`
+    )
+    return
+  }
   const buildNumber = allocateBuildNumber()
   console.log(`Dobius+ build number: ${buildNumber}`)
   const recordDir = mkdtempSync(path.join(tmpdir(), 'dobius-build-provenance-'))
   const recordFile = path.join(recordDir, 'BUILD-PROVENANCE.json')
   let result
   try {
-    writeBuildRecord(recordFile, {
-      sourceDir: path.resolve(import.meta.dirname, '../..'),
-      buildNumber
-    })
+    writeBuildRecord(recordFile, { buildNumber })
     result = spawnSync('electron-builder', args, {
       stdio: 'inherit',
       // Why: on Windows the local bin is electron-builder.cmd, which needs a shell.

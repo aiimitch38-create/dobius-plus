@@ -8,6 +8,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   symlinkSync,
   writeFileSync
 } from 'node:fs'
@@ -304,6 +305,73 @@ describe.runIf(process.platform === 'darwin')(
         dirty: false,
         sourceStateFrom: 'install'
       })
+    })
+
+    it('ignores a build record whose buildNumber is not the bundle CFBundleVersion (round 3 F2)', () => {
+      const root = makeRoot()
+      makeRepo(root)
+      const built = distBundle(root, { bundleVersion: '44', asar: 'v2' })
+      writeFileSync(
+        path.join(built, 'Contents', 'Resources', 'BUILD-PROVENANCE.json'),
+        JSON.stringify({
+          repo: '/build/checkout',
+          branch: 'main',
+          commit: 'abc1234',
+          dirty: false,
+          diffDigest: null,
+          tag: null,
+          buildNumber: 45
+        })
+      )
+
+      const result = runGated(root, [built])
+
+      expect(result.status, result.stderr).toBe(0)
+      expect(result.stderr).toContain('not a valid build record for this bundle')
+      expect(provenanceOf(dest(root))).toMatchObject({
+        repo: realpathSync(path.join(root, 'repo')),
+        sourceStateFrom: 'install',
+        buildNumber: 44
+      })
+    })
+
+    it('keeps the previous bundle as the rollback and relaunches when TERM lands right after the swap (round 3 F3)', () => {
+      const root = makeRoot()
+      makeBundle(dest(root), { asar: 'v1' })
+      const built = makeBundle(path.join(root, 'handoff', 'Dobius+.app'), { asar: 'v2' })
+      const shims = path.join(root, 'shims')
+      const trace = path.join(root, 'open-trace.log')
+      const mark = path.join(root, 'signalled')
+      mkdirSync(shims)
+      const shim = (name, body) =>
+        writeFileSync(path.join(shims, name), `#!/bin/bash\n${body}\n`, { mode: 0o755 })
+      shim('osascript', 'exit 0')
+      shim('pgrep', 'exit 1')
+      shim('pkill', 'exit 0')
+      shim('lsregister', 'exit 0')
+      shim('open', `echo "$*" >> "${trace}"`)
+      // The first `mkdir -p` after the swap is the rollback move: signal the
+      // installer there, exactly between the swap and the move.
+      shim(
+        'mkdir',
+        `if [ "$1" = "-p" ] && [ ! -e "${mark}" ]; then touch "${mark}"; kill -TERM "$PPID"; fi\nexec /bin/mkdir "$@"`
+      )
+
+      const result = runGated(root, [built], {
+        PATH: `${shims}:${process.env.PATH}`,
+        DOBIUS_INSTALL_TEST_MANAGE_APP: '1',
+        DOBIUS_INSTALL_LSREGISTER: path.join(shims, 'lsregister')
+      })
+
+      expect(existsSync(mark)).toBe(true)
+      expect(result.status, result.stderr).toBe(130)
+      expect(asarOf(dest(root))).toBe('v2')
+      expect(asarOf(path.join(root, 'backups', 'Dobius+.previous'))).toBe('v1')
+      expect(readdirSync(path.join(root, 'Applications'))).toEqual(['Dobius+.app'])
+      expect(existsSync(path.join(root, 'install.lock'))).toBe(false)
+      expect(readFileSync(trace, 'utf8').trim()).toBe(
+        `-a ${path.join(realpathSync(root), 'Applications', 'Dobius+.app')}`
+      )
     })
 
     it('refuses with a clear reason when an installer helper is missing (F4)', () => {

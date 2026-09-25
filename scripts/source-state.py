@@ -2,11 +2,12 @@
 """Source-tree state of a Dobius+ checkout, as one JSON object (BUILD-044).
 
 Usage: source-state.py <any path inside the checkout>
-       source-state.py --from-build-record <BUILD-PROVENANCE.json>
+       source-state.py --from-build-record <BUILD-PROVENANCE.json> [<CFBundleVersion>]
 
 Prints {repo, branch, commit, dirty, diffDigest, tag}. With --from-build-record
 it validates a record written at build time and prints its source state (exit 3
-when the record is unreadable or malformed). Used at build time by
+when the record is unreadable or malformed, or when its buildNumber does not
+match the bundle's CFBundleVersion). Used at build time by
 dobius/config/scripts/electron-builder-with-build-number.mjs (the record ships
 inside the bundle) and, only for a bundle without that record, by the gated
 installer. One implementation, so a build-time and an install-time digest of
@@ -94,7 +95,7 @@ def source_state(start):
     return state
 
 
-def from_build_record(record_path):
+def from_build_record(record_path, bundle_build_number=""):
     with open(record_path, encoding="utf-8") as handle:
         record = json.load(handle)
     if not isinstance(record, dict):
@@ -111,6 +112,15 @@ def from_build_record(record_path):
         raise ValueError("diffDigest")
     if tag is not None and not isinstance(tag, str):
         raise ValueError("tag")
+    build_number = record.get("buildNumber")
+    if build_number is not None:
+        if not isinstance(build_number, int) or isinstance(build_number, bool):
+            raise ValueError("buildNumber")
+        if str(build_number) != bundle_build_number:
+            raise ValueError(
+                "buildNumber %s does not match the bundle's CFBundleVersion %r"
+                % (build_number, bundle_build_number)
+            )
     return {key: record[key] for key in ("repo", "branch", "commit")} | {
         "dirty": dirty,
         "diffDigest": digest,
@@ -119,9 +129,9 @@ def from_build_record(record_path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "--from-build-record":
+    if len(sys.argv) in (3, 4) and sys.argv[1] == "--from-build-record":
         try:
-            state = from_build_record(sys.argv[2])
+            state = from_build_record(sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else "")
         except (OSError, ValueError) as error:
             sys.stderr.write("invalid build record: %s\n" % error)
             sys.exit(3)

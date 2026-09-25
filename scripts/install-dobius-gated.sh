@@ -94,13 +94,34 @@ esac
 # left by any install that finished while we waited, not a snapshot taken
 # before it. mkdir is atomic; the lock holds our pid for diagnosis.
 LOCK_HELD=0
+# PHASE says what $STAGE holds if we exit early: "prepare" = the new bundle
+# (partial or unvalidated), "swapped" = the PREVIOUS bundle, just swapped out
+# and not yet moved to the rollback dir, "done" = rollback handling finished.
+PHASE="prepare"
+APP_QUIT=0
+APP_RELAUNCHED=0
 cleanup() {
-  # Whatever sits at $STAGE at exit is ours to remove: a partial/unvalidated
-  # new bundle, or the old bundle whose move to the rollback dir failed.
-  # Either way it must not linger as a second same-bundle-ID app.
+  # A second Ctrl-C/TERM must not cut this short.
+  trap '' INT TERM
   if [ "$LOCK_HELD" = "1" ]; then
-    if [ -e "$STAGE" ]; then rm -rf "$STAGE"; fi
+    if [ "$PHASE" = "swapped" ] && [ -e "$STAGE" ]; then
+      # Interrupted between the swap and the rollback move: $STAGE is the only
+      # copy of the previous bundle. Keep it as the rollback, never delete it.
+      if mkdir -p "$BACKUP_DIR" && rm -rf "$ROLLBACK" && mv "$STAGE" "$ROLLBACK"; then
+        echo "Interrupted after the swap; the previous bundle is kept at $ROLLBACK." >&2
+      else
+        echo "WARNING: interrupted after the swap; the previous bundle is left at $STAGE (move it out of /Applications)." >&2
+      fi
+    elif [ -e "$STAGE" ]; then
+      # A partial/unvalidated new bundle, or the old bundle whose move to the
+      # rollback dir failed: it must not linger as a second same-bundle-ID app.
+      rm -rf "$STAGE"
+    fi
     rm -rf "$LOCK"
+  fi
+  # The app was quit for the swap: never leave it closed on an early exit.
+  if [ "$MANAGE_APP" = "1" ] && [ "$APP_QUIT" = "1" ] && [ "$APP_RELAUNCHED" = "0" ] && [ -e "$DEST" ]; then
+    open -a "$DEST" || true
   fi
 }
 trap cleanup EXIT
@@ -127,15 +148,29 @@ echo "$$" > "$LOCK/pid"
 # record the build wrapper sealed into the bundle at BUILD time; the tree may
 # have changed since. Only a bundle without a valid record falls back to the
 # tree as it is now, and the provenance says which one was used.
+# Why the -f guards: on a missing plist PlistBuddy prints "File Doesn't Exist,
+# Will Create: <path>" to stdout, and the digits in that path were compared
+# as a version (a first install into a path with digits was refused).
+plist_value() {
+  [ -f "$1/Contents/Info.plist" ] || return 0
+  /usr/libexec/PlistBuddy -c "Print :$2" "$1/Contents/Info.plist" 2>/dev/null || true
+}
+# CFBundleVersion carries the build counter (dobius/config/scripts/
+# electron-builder-with-build-number.mjs). A bundle packaged without it has the
+# plain version there, which is not a build number.
+BUILD_NUM=$(plist_value "$APP_SRC" CFBundleVersion)
+case "$BUILD_NUM" in ''|0*|*[!0-9]*) BUILD_NUM="" ;; esac
 BUILD_RECORD="$APP_SRC/Contents/Resources/BUILD-PROVENANCE.json"
 SRC_STATE=""
 SOURCE_FROM="install"
 if [ -f "$BUILD_RECORD" ]; then
-  if SRC_STATE=$(python3 "$SOURCE_STATE" --from-build-record "$BUILD_RECORD"); then
+  # The record must belong to THIS bundle: its buildNumber, when present, has
+  # to match CFBundleVersion, or it was copied in from another build.
+  if SRC_STATE=$(python3 "$SOURCE_STATE" --from-build-record "$BUILD_RECORD" "$BUILD_NUM"); then
     SOURCE_FROM="build"
   else
     SRC_STATE=""
-    echo "WARNING: $BUILD_RECORD is not a valid build record; recording the source tree as it is now." >&2
+    echo "WARNING: $BUILD_RECORD is not a valid build record for this bundle; recording the source tree as it is now." >&2
   fi
 fi
 [ -n "$SRC_STATE" ] || SRC_STATE=$(python3 "$SOURCE_STATE" "$(dirname "$APP_SRC")")
@@ -166,13 +201,6 @@ fi
 # pass (N8): the build is always refused, the installed app's only unless
 # --allow-downgrade says the operator accepts not knowing. --take-over (branch
 # ownership) never bypasses this guard.
-# Why the -f guards: on a missing plist PlistBuddy prints "File Doesn't Exist,
-# Will Create: <path>" to stdout, and the digits in that path were compared
-# as a version (a first install into a path with digits was refused).
-plist_value() {
-  [ -f "$1/Contents/Info.plist" ] || return 0
-  /usr/libexec/PlistBuddy -c "Print :$2" "$1/Contents/Info.plist" 2>/dev/null || true
-}
 SRC_VER=$(plist_value "$APP_SRC" CFBundleShortVersionString)
 if ! python3 "$SEMVER" valid "$SRC_VER"; then
   echo "REFUSED: $APP_SRC has no valid version (CFBundleShortVersionString='$SRC_VER')." >&2
@@ -210,11 +238,6 @@ fi
 # from (the build record, or the tree at install time), the bundle's own version
 # and build number, and a hash of the shipped app.asar, so each can be checked
 # on its own. A value that cannot be determined is null, never a guess.
-# CFBundleVersion carries the build counter (dobius/config/scripts/
-# electron-builder-with-build-number.mjs). A bundle packaged without it has the
-# plain version there, which is not a build number.
-BUILD_NUM=$(plist_value "$STAGE" CFBundleVersion)
-case "$BUILD_NUM" in ''|0*|*[!0-9]*) BUILD_NUM="" ;; esac
 python3 - "$STAGE/$PROV_REL" "$SRC_STATE" "$SOURCE_FROM" "$SRC_VER" "$BUILD_NUM" "$STAGE/Contents/Resources/app.asar" <<'EOF'
 import json, sys, datetime, hashlib, os
 path, state_json, source_from, version, build_number, asar = sys.argv[1:7]
@@ -282,6 +305,7 @@ if [ "$MANAGE_APP" = "1" ]; then
   # escaped (regex quantifier).
   pkill -a -x "Dobius\+" 2>/dev/null || true
   pkill -f "Dobius\+ Helper.*--type=" 2>/dev/null || true
+  APP_QUIT=1
 fi
 
 # Swap (#104): with an app already installed, exchange the two bundles in ONE
@@ -302,8 +326,10 @@ PYSWAP
     echo "ERROR: swapping $STAGE into $DEST failed — installed app left untouched." >&2
     # The app was already quit for the swap: bring the unchanged app back.
     if [ "$MANAGE_APP" = "1" ]; then open -a "$DEST" || true; fi
+    APP_RELAUNCHED=1
     exit 8
   fi
+  PHASE="swapped"
   # One rollback copy, outside /Applications and outside dobius/dist. The
   # previous one is dropped first so the disk never holds two.
   ROLLBACK_NOTE="rollback: none (moving the previous bundle failed)"
@@ -312,6 +338,7 @@ PYSWAP
   else
     echo "WARNING: could not keep a rollback copy in $BACKUP_DIR; the previous bundle is removed." >&2
   fi
+  PHASE="done"
 else
   mv "$STAGE" "$DEST"
   ROLLBACK_NOTE="rollback: none (first install)"
@@ -348,6 +375,7 @@ if [ "$MANAGE_APP" = "1" ]; then
     fi
   fi
   open -a "$DEST"
+  APP_RELAUNCHED=1
 fi
 
 echo "INSTALLED: $SRC_BRANCH@$SRC_COMMIT version $SRC_VER build ${BUILD_NUM:-none} -> $DEST ($ROLLBACK_NOTE)"
