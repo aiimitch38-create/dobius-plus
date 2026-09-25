@@ -27,14 +27,17 @@ export const forcedUnreadStore = {
   read(pubkey: string): ForcedUnreadMap {
     try {
       const raw = window.localStorage.getItem(storageKey(pubkey));
-      if (!raw) return {};
+      if (!raw) {
+        return {};
+      }
       const parsed: unknown = JSON.parse(raw);
       if (
         typeof parsed !== "object" ||
         parsed === null ||
         Array.isArray(parsed)
-      )
+      ) {
         return {};
+      }
       const result: ForcedUnreadMap = {};
       for (const [k, v] of Object.entries(parsed)) {
         if (typeof k === "string" && (v === null || typeof v === "number")) {

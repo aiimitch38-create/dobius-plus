@@ -30,14 +30,18 @@ export function useTimelineRetention(
     refreshTimerRef.current = null;
     const currentKeys = keysRef.current;
     const list = listRef.current;
-    if (!list || currentKeys.length === 0) return;
+    if (!list || currentKeys.length === 0) {
+      return;
+    }
     setRetainedKeys((previous) =>
       nextRetainedTimelineKeys(currentKeys, previous, list),
     );
   }, [listRef]);
 
   React.useLayoutEffect(() => {
-    if (isPrepend) evictionNotBeforeRef.current = performance.now() + 3_000;
+    if (isPrepend) {
+      evictionNotBeforeRef.current = performance.now() + 3_000;
+    }
   }, [isPrepend]);
 
   React.useEffect(

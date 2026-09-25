@@ -9,7 +9,9 @@ import { asRecord, asString, titleCase } from "./agentSessionUtils";
 export function extractPromptText(payload: Record<string, unknown>): string {
   const params = asRecord(payload.params);
   const prompt = params.prompt;
-  if (!Array.isArray(prompt)) return "";
+  if (!Array.isArray(prompt)) {
+    return "";
+  }
   return prompt.map(extractBlockText).filter(Boolean).join("\n");
 }
 
@@ -173,7 +175,9 @@ export function parseSystemPromptSections(
     teamBody: string | null;
   } {
     const at = raw.lastIndexOf(TEAM_DELIMITER);
-    if (at === -1) return { systemBody: raw.trim(), teamBody: null };
+    if (at === -1) {
+      return { systemBody: raw.trim(), teamBody: null };
+    }
     return {
       systemBody: raw.slice(0, at).trim(),
       teamBody: raw.slice(at + TEAM_DELIMITER.length).trim() || null,
@@ -185,31 +189,44 @@ export function parseSystemPromptSections(
     if (baseAndSystem.startsWith("[System]\n")) {
       const raw = baseAndSystem.slice("[System]\n".length);
       const { systemBody, teamBody } = splitSystemBody(raw);
-      if (systemBody) sections.push({ title: "System", body: systemBody });
-      if (teamBody)
+      if (systemBody) {
+        sections.push({ title: "System", body: systemBody });
+      }
+      if (teamBody) {
         sections.push({ title: "Team Instructions", body: teamBody });
+      }
     } else {
       const marker = "\n[System]\n";
       const at = baseAndSystem.indexOf(marker);
       const head = at === -1 ? baseAndSystem : baseAndSystem.slice(0, at);
       const baseBody = head.replace(/^\[Base]\n/, "").trim();
-      if (baseBody) sections.push({ title: "Base", body: baseBody });
+      if (baseBody) {
+        sections.push({ title: "Base", body: baseBody });
+      }
 
       if (at !== -1) {
         const raw = baseAndSystem.slice(at + marker.length);
         const { systemBody, teamBody } = splitSystemBody(raw);
-        if (systemBody) sections.push({ title: "System", body: systemBody });
-        if (teamBody)
+        if (systemBody) {
+          sections.push({ title: "System", body: systemBody });
+        }
+        if (teamBody) {
           sections.push({ title: "Team Instructions", body: teamBody });
+        }
       }
     }
   }
 
   // ── 5. Append team (modern), core, and canvas sections in producer order ──
-  if (modernTeamBody)
+  if (modernTeamBody) {
     sections.push({ title: "Team Instructions", body: modernTeamBody });
-  if (coreBody) sections.push({ title: "Core Memory", body: coreBody });
-  if (canvasBody) sections.push({ title: "Channel Canvas", body: canvasBody });
+  }
+  if (coreBody) {
+    sections.push({ title: "Core Memory", body: coreBody });
+  }
+  if (canvasBody) {
+    sections.push({ title: "Channel Canvas", body: canvasBody });
+  }
 
   return sections;
 }
@@ -296,14 +313,22 @@ function extractEventId(body: string): string | null {
 }
 
 export function extractContentText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map(extractBlockText).join("\n");
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(extractBlockText).join("\n");
+  }
   return extractBlockText(value);
 }
 
 export function extractBlockText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map(extractBlockText).join("\n");
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(extractBlockText).join("\n");
+  }
   const record = asRecord(value);
   const nestedContent = record.content;
   const rawOutput = record.rawOutput;
@@ -345,7 +370,9 @@ export function extractPlanText(update: Record<string, unknown>): string {
 
 function formatPlanEntry(entry: Record<string, unknown>): string {
   const content = asString(entry.content);
-  if (!content) return "";
+  if (!content) {
+    return "";
+  }
   const checkbox = entry.status === "completed" ? "[x]" : "[ ]";
   const suffix = entry.status === "in_progress" ? " (in progress)" : "";
   return `- ${checkbox} ${content}${suffix}`;
@@ -426,7 +453,9 @@ function collectToolNameCandidates(update: Record<string, unknown>): string[] {
 
 export function extractToolResult(update: Record<string, unknown>): string {
   const contentText = extractContentText(update.content);
-  if (contentText) return contentText;
+  if (contentText) {
+    return contentText;
+  }
   return extractBlockText(update.rawOutput);
 }
 

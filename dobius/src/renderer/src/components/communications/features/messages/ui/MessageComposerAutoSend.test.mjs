@@ -34,8 +34,12 @@ import { buildAutoSendClearPatch } from "../../channels/ui/channelSearchKeys.ts"
 // the auto-submit effect arms on mount.
 
 function shouldAutoSubmit(autoSubmitDraftKey, effectiveDraftKey) {
-  if (autoSubmitDraftKey === null) return false;
-  if (autoSubmitDraftKey !== effectiveDraftKey) return false;
+  if (autoSubmitDraftKey === null) {
+    return false;
+  }
+  if (autoSubmitDraftKey !== effectiveDraftKey) {
+    return false;
+  }
   return true;
 }
 

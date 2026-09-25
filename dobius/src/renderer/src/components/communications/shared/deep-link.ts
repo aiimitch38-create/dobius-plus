@@ -7,13 +7,13 @@ export type AddCommunityDeepLinkPayload = {
   name?: string;
 };
 
-export interface DeepLinkDeps {
+export type DeepLinkDeps = {
   startCommunityOnboarding: (input: StartCommunityOnboardingInput) => boolean;
   openAddCommunity: (
     payload: AddCommunityDeepLinkPayload & { requestId: string },
   ) => boolean;
   onAddCommunityAvailable: (listener: () => void) => () => void;
-}
+};
 
 /**
  * Payload emitted by the Rust deep-link handler for `buzz://message?…`.
@@ -88,9 +88,15 @@ async function drainPendingCommunityDeepLinks(deps: DeepLinkDeps) {
     const pending = await invoke<PendingCommunityDeepLink | null>(
       "take_pending_community_deep_link",
     );
-    if (!pending) return;
-    if (!(await acceptPendingCommunityDeepLink(pending, deps))) return;
-    if (pending.kind === "add-community") return;
+    if (!pending) {
+      return;
+    }
+    if (!(await acceptPendingCommunityDeepLink(pending, deps))) {
+      return;
+    }
+    if (pending.kind === "add-community") {
+      return;
+    }
   }
 }
 
@@ -117,7 +123,9 @@ export async function listenForDeepLinks(
   let drainRequested = false;
   const drain = () => {
     drainRequested = true;
-    if (drainRunning) return;
+    if (drainRunning) {
+      return;
+    }
     drainRunning = true;
     void (async () => {
       try {
@@ -129,7 +137,9 @@ export async function listenForDeepLinks(
         console.warn("Failed to drain pending community deep links", error);
       } finally {
         drainRunning = false;
-        if (drainRequested) drain();
+        if (drainRequested) {
+          drain();
+        }
       }
     })();
   };
@@ -148,7 +158,9 @@ export async function listenForDeepLinks(
   drain();
   return () => {
     stopAvailabilityListener();
-    for (const unlisten of unlistens) unlisten();
+    for (const unlisten of unlistens) {
+      unlisten();
+    }
   };
 }
 

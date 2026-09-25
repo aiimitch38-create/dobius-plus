@@ -22,9 +22,13 @@ export function channelSnapshotKey(relayUrl: string): string {
 }
 
 function parseChannelSnapshot(json: unknown): Channel[] | null {
-  if (typeof json !== "object" || json === null) return null;
+  if (typeof json !== "object" || json === null) {
+    return null;
+  }
   const obj = json as Record<string, unknown>;
-  if (obj.version !== 1 || !Array.isArray(obj.channels)) return null;
+  if (obj.version !== 1 || !Array.isArray(obj.channels)) {
+    return null;
+  }
   return obj.channels as Channel[];
 }
 
@@ -34,7 +38,9 @@ function parseChannelSnapshot(json: unknown): Channel[] | null {
 export function readChannelSnapshot(relayUrl: string): Channel[] | null {
   try {
     const raw = window.localStorage.getItem(channelSnapshotKey(relayUrl));
-    if (!raw) return null;
+    if (!raw) {
+      return null;
+    }
     return parseChannelSnapshot(JSON.parse(raw));
   } catch {
     return null;
@@ -56,8 +62,9 @@ export function writeChannelSnapshot(
     if (previous) {
       try {
         const parsed = parseChannelSnapshot(JSON.parse(previous));
-        if (parsed && JSON.stringify(parsed) === JSON.stringify(channels))
+        if (parsed && JSON.stringify(parsed) === JSON.stringify(channels)) {
           return;
+        }
       } catch {
         // Malformed snapshots are replaced below.
       }

@@ -88,7 +88,9 @@ function SectionNameDialog({
     event.preventDefault();
     const trimmed = name.trim();
     const trimmedIcon = icon.trim();
-    if (isConfirmDisabled(trimmed, trimmedIcon)) return;
+    if (isConfirmDisabled(trimmed, trimmedIcon)) {
+      return;
+    }
     onConfirm({
       name: trimmed,
       ...(trimmedIcon ? { icon: trimmedIcon } : {}),
@@ -325,7 +327,9 @@ export function useLeaveChannelDialog() {
     <LeaveChannelAlertDialog
       open={target !== null}
       onOpenChange={(open) => {
-        if (!open) setTarget(null);
+        if (!open) {
+          setTarget(null);
+        }
       }}
       channelName={target?.name ?? ""}
       onConfirm={() => {
@@ -354,7 +358,9 @@ export function useDeleteChannelDialog(onDeleted: (channel: Channel) => void) {
         deleteChannel.mutate(undefined, {
           onSuccess: () => {
             setTarget(null);
-            if (deletedChannel) onDeleted(deletedChannel);
+            if (deletedChannel) {
+              onDeleted(deletedChannel);
+            }
           },
         });
       }}

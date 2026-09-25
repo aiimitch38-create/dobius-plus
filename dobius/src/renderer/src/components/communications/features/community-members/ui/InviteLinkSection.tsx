@@ -64,13 +64,17 @@ export function InviteLinkSection({
         : "Copy link";
 
   React.useEffect(() => {
-    if (copyStatus !== "copied") return;
+    if (copyStatus !== "copied") {
+      return;
+    }
     const resetTimer = window.setTimeout(() => setCopyStatus("idle"), 2000);
     return () => window.clearTimeout(resetTimer);
   }, [copyStatus]);
 
   async function handleCopy() {
-    if (copyStatus === "copying") return;
+    if (copyStatus === "copying") {
+      return;
+    }
     setCopyStatus("copying");
     try {
       const invite = await mintInvite({ ttlSecs, maxUses });

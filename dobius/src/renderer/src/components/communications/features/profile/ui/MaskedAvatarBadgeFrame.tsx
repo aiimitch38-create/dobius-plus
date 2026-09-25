@@ -295,16 +295,28 @@ function getArcSweep(
 
   if (direction === 1) {
     let sweep = endAngle - startAngle;
-    while (sweep < 0) sweep += fullTurn;
-    if (largeArc && sweep < Math.PI) sweep += fullTurn;
-    if (!largeArc && sweep > Math.PI) sweep -= fullTurn;
+    while (sweep < 0) {
+      sweep += fullTurn;
+    }
+    if (largeArc && sweep < Math.PI) {
+      sweep += fullTurn;
+    }
+    if (!largeArc && sweep > Math.PI) {
+      sweep -= fullTurn;
+    }
     return sweep;
   }
 
   let sweep = startAngle - endAngle;
-  while (sweep < 0) sweep += fullTurn;
-  if (largeArc && sweep < Math.PI) sweep += fullTurn;
-  if (!largeArc && sweep > Math.PI) sweep -= fullTurn;
+  while (sweep < 0) {
+    sweep += fullTurn;
+  }
+  if (largeArc && sweep < Math.PI) {
+    sweep += fullTurn;
+  }
+  if (!largeArc && sweep > Math.PI) {
+    sweep -= fullTurn;
+  }
   return -sweep;
 }
 

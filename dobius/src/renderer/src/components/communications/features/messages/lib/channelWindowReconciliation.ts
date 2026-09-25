@@ -12,8 +12,12 @@ const CHANNEL_TIMELINE_KINDS = new Set<number>(CHANNEL_TIMELINE_CONTENT_KINDS);
 
 function retainRefetchReconciliationEvents(events: RelayEvent[]) {
   return events.filter((event) => {
-    if (!CHANNEL_TIMELINE_KINDS.has(event.kind)) return false;
-    if (event.pending) return true;
+    if (!CHANNEL_TIMELINE_KINDS.has(event.kind)) {
+      return false;
+    }
+    if (event.pending) {
+      return true;
+    }
     const thread = getThreadReference(event.tags);
     return thread.parentId !== null && !isBroadcastReply(event.tags);
   });

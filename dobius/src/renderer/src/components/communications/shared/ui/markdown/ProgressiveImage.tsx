@@ -9,7 +9,9 @@ function isSameImageSource(
   left: string | undefined,
   right: string | undefined,
 ) {
-  if (!left || !right) return false;
+  if (!left || !right) {
+    return false;
+  }
   try {
     return (
       new URL(left, window.location.href).href ===
@@ -69,7 +71,9 @@ export function ProgressiveImage({
   const setFullImageRef = React.useCallback(
     (image: HTMLImageElement | null) => {
       fullImageRef.current = image;
-      if (image?.complete) void handleFullLoad(image);
+      if (image?.complete) {
+        void handleFullLoad(image);
+      }
     },
     [fullImageRef, handleFullLoad],
   );
@@ -77,7 +81,9 @@ export function ProgressiveImage({
   const setThumbnailRef = React.useCallback(
     (image: HTMLImageElement | null) => {
       thumbnailRef.current = image;
-      if (image && !fullImageRef.current) fullImageRef.current = image;
+      if (image && !fullImageRef.current) {
+        fullImageRef.current = image;
+      }
     },
     [fullImageRef, thumbnailRef],
   );

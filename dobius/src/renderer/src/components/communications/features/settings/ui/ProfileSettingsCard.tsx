@@ -330,18 +330,28 @@ export function ProfileSettingsCard({
   }, []);
   const saveScrollPosition = React.useCallback(() => {
     const el = sectionRef.current;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
     const scroller = el.closest<HTMLElement>("[class*='overflow-y']");
-    if (scroller) savedScrollTopRef.current = scroller.scrollTop;
+    if (scroller) {
+      savedScrollTopRef.current = scroller.scrollTop;
+    }
   }, []);
   const restoreScrollPosition = React.useCallback(() => {
     const saved = savedScrollTopRef.current;
-    if (saved == null) return;
+    if (saved == null) {
+      return;
+    }
     savedScrollTopRef.current = null;
     const el = sectionRef.current;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
     const scroller = el.closest<HTMLElement>("[class*='overflow-y']");
-    if (scroller) scroller.scrollTop = saved;
+    if (scroller) {
+      scroller.scrollTop = saved;
+    }
   }, []);
   const closeAvatarEditor = React.useCallback(() => {
     clearAvatarEditorFinishTimeout();

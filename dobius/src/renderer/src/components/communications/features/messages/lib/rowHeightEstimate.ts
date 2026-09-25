@@ -36,7 +36,9 @@ const CONTINUATION_MIN_ESTIMATE = 28;
 
 function mediaHeightFromDim(dim: string | undefined): number {
   const dimensions = dimensionsFromDim(dim);
-  if (!dimensions) return MEDIA_MAX_HEIGHT; // unknown shape: reserve full box
+  if (!dimensions) {
+    return MEDIA_MAX_HEIGHT;
+  } // unknown shape: reserve full box
   const scale = Math.min(
     1,
     MEDIA_MAX_WIDTH / dimensions.width,
@@ -93,7 +95,9 @@ function mediaUrlsInBody(body: string): string[] {
   }
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
-    if (MEDIA_URL_RE.test(trimmed)) urls.push(trimmed);
+    if (MEDIA_URL_RE.test(trimmed)) {
+      urls.push(trimmed);
+    }
   }
   return urls;
 }
@@ -126,13 +130,17 @@ export function estimateRowHeight(
   if (message.tags && message.tags.length > 0) {
     const imeta = parseImetaTags(message.tags);
     for (const entry of imeta.values()) {
-      if (!entry.url) continue;
+      if (!entry.url) {
+        continue;
+      }
       imetaUrls.add(entry.url);
       height += mediaReserveHeight(entry.dim);
     }
   }
   for (const url of mediaUrlsInBody(body)) {
-    if (imetaUrls.has(url)) continue; // already counted via its imeta dim
+    if (imetaUrls.has(url)) {
+      continue;
+    } // already counted via its imeta dim
     // dim-less inline media reserves the fixed markdown image box plus its mt-1.
     height += mediaReserveHeight(undefined);
   }
@@ -144,9 +152,13 @@ export function estimateRowHeight(
       (line) =>
         /^\s*https?:\/\/\S+\s*$/.test(line) && !MEDIA_URL_RE.test(line.trim()),
     );
-  if (hasPreviewUrlLine) height += PREVIEW_CARD;
+  if (hasPreviewUrlLine) {
+    height += PREVIEW_CARD;
+  }
 
-  if (message.reactions && message.reactions.length > 0) height += REACTION_ROW;
+  if (message.reactions && message.reactions.length > 0) {
+    height += REACTION_ROW;
+  }
 
   return Math.max(
     isContinuation ? CONTINUATION_MIN_ESTIMATE : MIN_ESTIMATE,

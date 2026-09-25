@@ -63,7 +63,7 @@ export function EffortSelectField({
   /** Semantic default for this provider/model combination, or null for manual-budget. */
   effortDefault: string | null;
   /** Valid effort values for this provider/model. */
-  effortValid: ReadonlyArray<string>;
+  effortValid: readonly string[];
   /** Optional class override for the field wrapper. */
   fieldClassName?: string;
   /** `htmlFor` attribute for the label element. */
@@ -110,7 +110,9 @@ export function EffortSelectField({
     { label: emptyOptionLabel ?? inheritLabel, value: "" },
     ...BUZZ_AGENT_THINKING_EFFORT_VALUES.flatMap((v) => {
       const isValid = (effortValid as readonly string[]).includes(v);
-      if (!showUnavailableOptions && !isValid) return [];
+      if (!showUnavailableOptions && !isValid) {
+        return [];
+      }
       const isDefault = v === effortDefault;
       return [
         {
@@ -187,7 +189,7 @@ export function useEffortAutoClear({
   onClear,
 }: {
   currentEffort: string;
-  effortValid: ReadonlyArray<string>;
+  effortValid: readonly string[];
   onClear: () => void;
 }): void {
   // biome-ignore lint/correctness/useExhaustiveDependencies: onClear excluded intentionally — see comment above

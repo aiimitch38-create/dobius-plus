@@ -102,15 +102,23 @@ function labelForStatus(
 ) {
   const label = descriptor.label;
   if (descriptor.groupKey === "file-edit:str_replace") {
-    if (failed) return "Edit failed";
-    if (running) return "Editing file";
+    if (failed) {
+      return "Edit failed";
+    }
+    if (running) {
+      return "Editing file";
+    }
     return "Edited file";
   }
   if (failed) {
     return label.endsWith("failed") ? label : `${label} failed`;
   }
-  if (running) return label;
-  if (status === "completed") return label;
+  if (running) {
+    return label;
+  }
+  if (status === "completed") {
+    return label;
+  }
   return label;
 }
 

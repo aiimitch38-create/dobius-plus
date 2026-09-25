@@ -56,7 +56,9 @@ function installDOMShim() {
       this._listeners = {};
     }
     addEventListener(type, fn) {
-      if (!this._listeners[type]) this._listeners[type] = [];
+      if (!this._listeners[type]) {
+        this._listeners[type] = [];
+      }
       this._listeners[type].push(fn);
     }
     removeEventListener(type, fn) {
@@ -65,7 +67,9 @@ function installDOMShim() {
       }
     }
     dispatchEvent(e) {
-      for (const fn of this._listeners[e.type] ?? []) fn(e);
+      for (const fn of this._listeners[e.type] ?? []) {
+        fn(e);
+      }
       return true;
     }
   }
@@ -87,7 +91,7 @@ function installDOMShim() {
       return this.children[0] ?? null;
     }
     get lastChild() {
-      return this.children[this.children.length - 1] ?? null;
+      return this.children.at(-1) ?? null;
     }
     get nextSibling() {
       return null;
@@ -107,16 +111,22 @@ function installDOMShim() {
       return child;
     }
     insertBefore(newNode, refNode) {
-      if (!refNode) return this.appendChild(newNode);
+      if (!refNode) {
+        return this.appendChild(newNode);
+      }
       const i = this.children.indexOf(refNode);
-      if (i < 0) return this.appendChild(newNode);
+      if (i < 0) {
+        return this.appendChild(newNode);
+      }
       this.children.splice(i, 0, newNode);
       this.childNodes.splice(i, 0, newNode);
       newNode.parentNode = this;
       return newNode;
     }
     contains(node) {
-      if (!node) return false;
+      if (!node) {
+        return false;
+      }
       return this === node || this.children.some((c) => c?.contains?.(node));
     }
   }
@@ -142,7 +152,9 @@ function installDOMShim() {
       return n;
     }
     get body() {
-      if (!this._body) this._body = this.createElement("body");
+      if (!this._body) {
+        this._body = this.createElement("body");
+      }
       return this._body;
     }
     get activeElement() {
@@ -196,7 +208,9 @@ const ipcHandlers = new Map();
 globalThis.__TAURI_INTERNALS__ = {
   invoke: (cmd, args) => {
     const handler = ipcHandlers.get(cmd);
-    if (handler) return handler(args);
+    if (handler) {
+      return handler(args);
+    }
     return Promise.reject(new Error(`unmocked Tauri command: ${cmd}`));
   },
   transformCallback: (_cb) => {
@@ -519,8 +533,9 @@ describe("useLoadArchivedObserverEvents — mounted hook lifecycle regressions",
           await bFirstReadDeferred;
           return makeBPage(100).map((r) => JSON.stringify(r)); // full page
         }
-        if (bCallCount <= 4)
+        if (bCallCount <= 4) {
           return makeBPage(bCallCount * 100).map((r) => JSON.stringify(r));
+        }
         return [JSON.stringify(makeArchivedRow(9999, "chan-b"))]; // short = exhaust
       }
       return [];
@@ -838,10 +853,11 @@ describe("useLoadArchivedObserverEvents — mounted hook lifecycle regressions",
           await freshAFirstReadDeferred;
           return makePage("chan-a", 200).map((r) => JSON.stringify(r)); // full
         }
-        if (freshACallCount <= 4)
+        if (freshACallCount <= 4) {
           return makePage("chan-a", freshACallCount * 200).map((r) =>
             JSON.stringify(r),
           );
+        }
         return [JSON.stringify(makeArchivedRow(9999, "chan-a"))]; // exhaust
       }
       if (args.channelId === "chan-b") {

@@ -235,7 +235,9 @@ export function useChannelMessagesQuery(channel: Channel | null) {
     enabled: channel !== null && channel.channelType !== "forum",
     queryKey,
     queryFn: async () => {
-      if (!channel) throw new Error("No channel selected.");
+      if (!channel) {
+        throw new Error("No channel selected.");
+      }
       const previousMessages =
         queryClient.getQueryData<RelayEvent[]>(queryKey) ?? [];
       const events = await getChannelWindowEvents(channel.id);
@@ -257,23 +259,31 @@ export function useChannelSubscription(channel: Channel | null) {
   const channelId = channel?.id ?? null;
   const channelType = channel?.channelType ?? null;
   const refreshNewestWindow = useEffectEvent(async () => {
-    if (!channelId) return;
+    if (!channelId) {
+      return;
+    }
     await refreshChannelWindowMessages(queryClient, channelId);
   });
 
   const appendMessage = useEffectEvent((event: RelayEvent) => {
-    if (!channelId) return;
+    if (!channelId) {
+      return;
+    }
     if (event.kind === KIND_CHANNEL_THREAD_SUMMARY) {
       // Relay-pushed live badge recount — window-store overlay only, never a
       // timeline row (mirrors the page path, where 39005 is metadata).
       const parsed = parseLiveThreadSummary(event);
-      if (!parsed) return;
+      if (!parsed) {
+        return;
+      }
       const windowKey = channelWindowKey(channelId);
       const current =
         queryClient.getQueryData<ChannelWindowStore>(windowKey) ??
         emptyChannelWindowStore();
       const next = mergeLiveThreadSummary(current, parsed.rootId, parsed.live);
-      if (next !== current) queryClient.setQueryData(windowKey, next);
+      if (next !== current) {
+        queryClient.setQueryData(windowKey, next);
+      }
       return;
     }
     const isTimelineRow = CHANNEL_TIMELINE_KINDS.has(event.kind);
@@ -288,9 +298,13 @@ export function useChannelSubscription(channel: Channel | null) {
           (current = []) => mergeMessages(current, event),
         );
       }
-      if (!isBroadcastReply(event.tags)) return;
+      if (!isBroadcastReply(event.tags)) {
+        return;
+      }
     }
-    if (!isTimelineRow && !CHANNEL_AUX_KINDS.has(event.kind)) return;
+    if (!isTimelineRow && !CHANNEL_AUX_KINDS.has(event.kind)) {
+      return;
+    }
     if (!isTimelineRow) {
       queryClient.setQueriesData<RelayEvent[]>(
         { queryKey: ["thread-replies", channelId] },
@@ -334,7 +348,9 @@ export function useChannelSubscription(channel: Channel | null) {
   // subscriptions are replayed first on reconnect, reducing latency on
   // degraded networks.
   useEffect(() => {
-    if (!channelId || channelType === "forum") return;
+    if (!channelId || channelType === "forum") {
+      return;
+    }
     setVisibleChannel(channelId);
     return () => {
       setVisibleChannel(null);
@@ -672,7 +688,9 @@ export function useDeleteMessageMutation(channel: Channel | null) {
       await deleteMessage(channel.id, eventId);
     },
     onSuccess: (_data, { eventId }) => {
-      if (!channel) return;
+      if (!channel) {
+        return;
+      }
       queryClient.setQueryData<RelayEvent[]>(
         channelMessagesKey(channel.id),
         (current = []) => current.filter((message) => message.id !== eventId),
@@ -731,7 +749,9 @@ export function useEditMessageMutation(channel: Channel | null) {
       // update — runs in onSuccess, not onMutate. Worth bearing the cost
       // only because the edit event round-trip can lag perceptibly.)
       const applyEdit = (message: RelayEvent): RelayEvent => {
-        if (message.id !== eventId) return message;
+        if (message.id !== eventId) {
+          return message;
+        }
         const nextTags = mediaTags
           ? applyEditTagOverlay(message.tags, mediaTags)
           : message.tags;

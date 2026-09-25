@@ -71,11 +71,15 @@ const relayOriginListeners = new Set<() => void>();
 const mediaProxyPortListeners = new Set<() => void>();
 
 function notifyRelayOriginListeners(): void {
-  for (const listener of relayOriginListeners) listener();
+  for (const listener of relayOriginListeners) {
+    listener();
+  }
 }
 
 function notifyMediaProxyPortListeners(): void {
-  for (const listener of mediaProxyPortListeners) listener();
+  for (const listener of mediaProxyPortListeners) {
+    listener();
+  }
 }
 
 /**
@@ -88,9 +92,13 @@ function notifyMediaProxyPortListeners(): void {
  * `useSyncExternalStore` doesn't churn.
  */
 function setRelayOrigin(origin: string | null, generation: number): void {
-  if (generation !== cacheGeneration) return;
+  if (generation !== cacheGeneration) {
+    return;
+  }
   const canonical = origin === null ? null : canonicalOrigin(origin);
-  if (cachedRelayOrigin === canonical) return;
+  if (cachedRelayOrigin === canonical) {
+    return;
+  }
   cachedRelayOrigin = canonical;
   notifyRelayOriginListeners();
 }
@@ -154,7 +162,9 @@ export function withDeadline<T>(
   // race) would otherwise surface as an unhandled rejection, so attach a
   // no-op catch that keeps it observed regardless of which side wins.
   promise.catch(() => {});
-  if (remaining <= 0) return Promise.resolve(null);
+  if (remaining <= 0) {
+    return Promise.resolve(null);
+  }
   return new Promise<T | null>((resolve, reject) => {
     // Clear the timer once the promise settles so a settled race doesn't leave
     // a dangling timeout for the rest of the poll budget.
@@ -198,7 +208,9 @@ async function fetchProxyPort(): Promise<number | null> {
           invokeTauri<string>("get_relay_http_url"),
           deadline,
         );
-        if (url !== null) publishRelayOrigin(canonicalOrigin(url));
+        if (url !== null) {
+          publishRelayOrigin(canonicalOrigin(url));
+        }
       } catch {
         // invoke failed (e.g. Tauri IPC not ready yet) — keep retrying
       }
@@ -228,7 +240,9 @@ async function fetchProxyPort(): Promise<number | null> {
     // once the port is cached). Each invoke is bounded by the remaining
     // deadline (`withDeadline`) so a never-settling IPC call can't hang the
     // loop; every late origin result is generation-guarded.
-    if (cachedPort && cachedRelayOrigin) return cachedPort;
+    if (cachedPort && cachedRelayOrigin) {
+      return cachedPort;
+    }
 
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
@@ -302,7 +316,9 @@ export function mediaProxyUrl(port: number, mediaPath: string): string {
  */
 export function rewriteRelayUrl(url: string): string {
   const m = RELAY_MEDIA_RE.exec(url);
-  if (!m) return url;
+  if (!m) {
+    return url;
+  }
 
   // Only proxy URLs that belong to our relay. External Blossom URLs
   // (different origin) pass through unchanged — they work fine via WKWebView.

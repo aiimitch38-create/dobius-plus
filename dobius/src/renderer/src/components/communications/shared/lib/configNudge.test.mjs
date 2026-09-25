@@ -239,9 +239,13 @@ import { normalizePubkey } from "./pubkey.ts";
  * Returns the payload if it passes auth, null otherwise.
  */
 function authGuardedExtract(content, configNudgeAuthorPubkey) {
-  if (!configNudgeAuthorPubkey) return null;
+  if (!configNudgeAuthorPubkey) {
+    return null;
+  }
   const payload = extractConfigNudge(content);
-  if (payload === null) return null;
+  if (payload === null) {
+    return null;
+  }
   if (
     normalizePubkey(payload.agent_pubkey) !==
     normalizePubkey(configNudgeAuthorPubkey)

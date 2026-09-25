@@ -5,7 +5,9 @@
  * opening it in a browser, or embedding it in an iframe.
  */
 export function isSafeUrl(url: string | undefined): url is string {
-  if (!url) return false;
+  if (!url) {
+    return false;
+  }
   try {
     const parsed = new URL(url);
     return parsed.protocol === "http:" || parsed.protocol === "https:";

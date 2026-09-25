@@ -435,7 +435,9 @@ const MessageTimelineBase = React.forwardRef<
     () => ({
       scrollToBottomOnNextUpdate: prepareForOwnMessage,
       settleAtBottom: () => {
-        if (!timelineVirtualizerApi) return false;
+        if (!timelineVirtualizerApi) {
+          return false;
+        }
         scrollToBottom("auto");
         return true;
       },
@@ -477,7 +479,9 @@ const MessageTimelineBase = React.forwardRef<
     unreadCount > 0 &&
     firstUnreadMessageId !== null &&
     !showTimelineSkeleton;
-  if (showUnreadPill) hasShownPillRef.current = true;
+  if (showUnreadPill) {
+    hasShownPillRef.current = true;
+  }
   const handleJumpToOldestUnread = React.useCallback(() => {
     setIsUnreadPillDismissed(true);
     if (firstUnreadMessageId) {
@@ -492,7 +496,9 @@ const MessageTimelineBase = React.forwardRef<
   const prevSearchActiveRef = React.useRef<string | null>(null);
   const pendingSearchTargetRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (showTimelineSkeleton) return;
+    if (showTimelineSkeleton) {
+      return;
+    }
     if (!searchActiveMessageId) {
       pendingSearchTargetRef.current = null;
     }
@@ -513,7 +519,9 @@ const MessageTimelineBase = React.forwardRef<
   // biome-ignore lint/correctness/useExhaustiveDependencies: deferredMessages and virtualizerRenderVersion are intentional retry triggers — a search hit may be spliced into messages asynchronously, and in virtualized mode a phase-1 index jump only realizes the row; retry when the rendered range changes so the DOM-visible path can center and highlight it.
   React.useEffect(() => {
     const target = pendingSearchTargetRef.current;
-    if (!target || showTimelineSkeleton) return;
+    if (!target || showTimelineSkeleton) {
+      return;
+    }
     if (
       useTimelineVirtualizer &&
       !activeScrollContainerRef.current?.querySelector(

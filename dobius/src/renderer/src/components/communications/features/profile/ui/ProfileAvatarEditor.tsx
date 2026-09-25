@@ -234,7 +234,6 @@ export function ProfileAvatarEditor({
         .then((applied) => {
           if (applied) {
             setIsAnimatedDoneQueued(true);
-            return;
           }
         })
         .catch(() => {})
@@ -247,7 +246,9 @@ export function ProfileAvatarEditor({
   }, [mode, onDone]);
 
   React.useEffect(() => {
-    if (!isAnimatedDoneQueued) return;
+    if (!isAnimatedDoneQueued) {
+      return;
+    }
     setIsAnimatedDoneQueued(false);
     onDone?.();
   }, [isAnimatedDoneQueued, onDone]);
@@ -255,7 +256,9 @@ export function ProfileAvatarEditor({
   useEmojiMartStyles(emojiPickerContainerRef, mode === "emoji");
 
   React.useEffect(() => {
-    if (mode !== "emoji") return;
+    if (mode !== "emoji") {
+      return;
+    }
 
     let animationFrame = 0;
     let observer: MutationObserver | null = null;
@@ -295,7 +298,9 @@ export function ProfileAvatarEditor({
 
   React.useLayoutEffect(() => {
     const node = modeContentRef.current;
-    if (!node) return;
+    if (!node) {
+      return;
+    }
 
     const updateModeContentHeight = () => {
       setModeContentHeight(node.getBoundingClientRect().height);
@@ -327,7 +332,9 @@ export function ProfileAvatarEditor({
   }, [avatarUrl]);
 
   React.useEffect(() => {
-    if (!shouldShowColorControls) setIsCustomColorPickerOpen(false);
+    if (!shouldShowColorControls) {
+      setIsCustomColorPickerOpen(false);
+    }
   }, [shouldShowColorControls]);
 
   React.useLayoutEffect(() => {

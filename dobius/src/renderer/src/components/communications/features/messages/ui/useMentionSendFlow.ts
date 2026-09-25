@@ -396,10 +396,14 @@ export function useMentionSendFlow({
       if (postSendContent) {
         richText.setContentAndFocusEnd(postSendContent);
         mentions.cancelMentionAutocomplete();
-      } else richText.clearContent();
+      } else {
+        richText.clearContent();
+      }
       setPendingImeta([]);
       setSpoileredAttachmentUrls?.(new Set());
-      if (!postSendContent) mentions.clearMentions();
+      if (!postSendContent) {
+        mentions.clearMentions();
+      }
       channelLinks.clearChannels();
       emojiAutocomplete.clearEmojis();
       setIsEmojiPickerOpen(false);
@@ -788,7 +792,9 @@ export function useMentionSendFlow({
   );
 
   const pendingNonMemberNames = React.useMemo(() => {
-    if (!pendingNonMemberSend) return [];
+    if (!pendingNonMemberSend) {
+      return [];
+    }
 
     return pendingNonMemberSend.nonMemberPubkeys.map(
       (pubkey) =>
@@ -797,7 +803,9 @@ export function useMentionSendFlow({
   }, [mentions.getMentionDisplayName, pendingNonMemberSend]);
 
   const handleSendWithoutInviting = React.useCallback(() => {
-    if (!pendingNonMemberSend) return;
+    if (!pendingNonMemberSend) {
+      return;
+    }
 
     const nonMemberPubkeys = new Set(
       pendingNonMemberSend.nonMemberPubkeys.map((pubkey) =>
@@ -815,7 +823,9 @@ export function useMentionSendFlow({
   }, [completeSend, pendingNonMemberSend]);
 
   const handleInviteNonMembers = React.useCallback(() => {
-    if (!pendingNonMemberSend) return;
+    if (!pendingNonMemberSend) {
+      return;
+    }
 
     const invitedPubkeys = new Set(
       pendingNonMemberSend.nonMemberPubkeys.map(normalizePubkey),

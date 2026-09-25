@@ -28,7 +28,9 @@ export function HomeScreen({
   const { threadActivityFeedItems } = useAppShell();
 
   const augmentedFeed = React.useMemo((): HomeFeedResponse | undefined => {
-    if (!homeFeedQuery.data) return undefined;
+    if (!homeFeedQuery.data) {
+      return undefined;
+    }
     if (threadActivityFeedItems.length === 0) {
       return homeFeedQuery.data;
     }

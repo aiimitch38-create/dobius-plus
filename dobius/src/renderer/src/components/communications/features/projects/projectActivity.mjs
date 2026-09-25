@@ -28,7 +28,9 @@ function activityDayKey(createdAtSeconds) {
 
 function ensureSummary(summaryByRepoAddress, repoAddress) {
   const existing = summaryByRepoAddress.get(repoAddress);
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
 
   const summary = {
     repoAddress,

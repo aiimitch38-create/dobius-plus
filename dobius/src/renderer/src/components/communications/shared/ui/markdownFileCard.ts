@@ -45,13 +45,17 @@ export type ResolvedSnapshotCard = {
 function snapshotDisplayName(filename: string, childText: string): string {
   const label = childText.trim();
   const labelIsSnapshotFilename = /\.agent\.(?:json|png)$/i.test(label);
-  if (label && !labelIsSnapshotFilename) return label;
+  if (label && !labelIsSnapshotFilename) {
+    return label;
+  }
 
   const filenameStem = filename
     .replace(/\.agent\.(?:json|png)$/i, "")
     .replace(/[-_]+/g, " ")
     .trim();
-  if (!filenameStem) return "Agent";
+  if (!filenameStem) {
+    return "Agent";
+  }
 
   return filenameStem
     .split(/\s+/)
@@ -78,12 +82,16 @@ export function resolveSnapshotCard(
   href: string | undefined,
   childText: string,
 ): ResolvedSnapshotCard | null {
-  if (!href || !entry) return null;
+  if (!href || !entry) {
+    return null;
+  }
 
   const filename =
     entry.filename || childText.trim() || (href.split("/").pop() ?? "");
 
-  if (!filename) return null;
+  if (!filename) {
+    return null;
+  }
 
   const lower = filename.toLowerCase();
   const isJson = lower.endsWith(".agent.json");
@@ -91,16 +99,22 @@ export function resolveSnapshotCard(
   const isTeamJson = lower.endsWith(".team.json");
   const isTeamPng = lower.endsWith(".team.png");
 
-  if (!isJson && !isPng && !isTeamJson && !isTeamPng) return null;
+  if (!isJson && !isPng && !isTeamJson && !isTeamPng) {
+    return null;
+  }
 
   const isAnyPng = isPng || isTeamPng;
 
   // For PNG: MIME must be image/png when present; other MIMEs are inconsistent.
-  if (isAnyPng && entry.m && entry.m !== "image/png") return null;
+  if (isAnyPng && entry.m && entry.m !== "image/png") {
+    return null;
+  }
 
   // SHA-256 is required for the bounded verified fetch.
   const sha256 = entry.x?.trim();
-  if (sha256?.length !== 64) return null;
+  if (sha256?.length !== 64) {
+    return null;
+  }
 
   const snapshotKind: "agent" | "team" = isJson || isPng ? "agent" : "team";
 

@@ -32,7 +32,9 @@ export function applyOptimisticReaction(
   const existing = reactions.find((reaction) => reaction.emoji === emoji);
 
   if (remove) {
-    if (!existing?.reactedByCurrentUser) return reactions;
+    if (!existing?.reactedByCurrentUser) {
+      return reactions;
+    }
 
     const nextCount = Math.max(0, existing.count - 1);
     if (nextCount === 0) {
@@ -52,7 +54,9 @@ export function applyOptimisticReaction(
   }
 
   if (existing) {
-    if (existing.reactedByCurrentUser) return reactions;
+    if (existing.reactedByCurrentUser) {
+      return reactions;
+    }
 
     return reactions.map((reaction) =>
       reaction.emoji === emoji

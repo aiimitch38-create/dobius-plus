@@ -73,7 +73,9 @@ export function SoundPicker({
       return;
     }
     const audio = playNotificationSound(value);
-    if (!audio) return;
+    if (!audio) {
+      return;
+    }
     audioRef.current = audio;
     setIsPlaying(true);
     const stop = () => setIsPlaying(false);

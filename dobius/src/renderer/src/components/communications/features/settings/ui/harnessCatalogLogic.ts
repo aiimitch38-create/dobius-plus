@@ -27,8 +27,12 @@ const ROW_SORT_PRIORITY: Record<string, number> = {
  * catalog with a real setup action — NOT an inert row control.
  */
 export function isYourHarnessEntry(entry: AcpRuntimeCatalogEntry): boolean {
-  if (entry.source === "custom") return true;
-  if (entry.availability === "available") return true;
+  if (entry.source === "custom") {
+    return true;
+  }
+  if (entry.availability === "available") {
+    return true;
+  }
   return entry.canAutoInstall && !entry.nodeRequired;
 }
 
@@ -60,7 +64,9 @@ function compareCatalogEntries(
 ): number {
   const aReady = a.availability === "available" ? 1 : 0;
   const bReady = b.availability === "available" ? 1 : 0;
-  if (aReady !== bReady) return aReady - bReady;
+  if (aReady !== bReady) {
+    return aReady - bReady;
+  }
   return a.label.localeCompare(b.label);
 }
 
@@ -88,7 +94,9 @@ export function filterCatalogEntries(
   query: string,
 ): AcpRuntimeCatalogEntry[] {
   const q = query.trim().toLowerCase();
-  if (!q) return [...entries];
+  if (!q) {
+    return [...entries];
+  }
   return entries.filter(
     (e) =>
       e.label.toLowerCase().includes(q) ||
@@ -103,10 +111,14 @@ function compareInitialRows(
 ): number {
   const aPriority = ROW_SORT_PRIORITY[a.id] ?? Number.MAX_SAFE_INTEGER;
   const bPriority = ROW_SORT_PRIORITY[b.id] ?? Number.MAX_SAFE_INTEGER;
-  if (aPriority !== bPriority) return aPriority - bPriority;
+  if (aPriority !== bPriority) {
+    return aPriority - bPriority;
+  }
   const aOn = a.availability === "available" ? 0 : 1;
   const bOn = b.availability === "available" ? 0 : 1;
-  if (aOn !== bOn) return aOn - bOn;
+  if (aOn !== bOn) {
+    return aOn - bOn;
+  }
   return a.label.localeCompare(b.label);
 }
 
@@ -137,7 +149,9 @@ export function stableRowOrder(
 
 /** Human status label for a catalog entry; null when nothing needs saying. */
 export function entryStatusLabel(entry: AcpRuntimeCatalogEntry): string | null {
-  if (entry.authStatus.status === "config_invalid") return "Config error";
+  if (entry.authStatus.status === "config_invalid") {
+    return "Config error";
+  }
   switch (entry.availability) {
     case "adapter_missing":
       return "Adapter needed";
@@ -212,7 +226,9 @@ export function installLinkLabel(entry: AcpRuntimeCatalogEntry): string {
 export function catalogPrimaryAction(
   entry: AcpRuntimeCatalogEntry,
 ): CatalogPrimaryAction {
-  if (entry.availability === "available") return { kind: "none" };
+  if (entry.availability === "available") {
+    return { kind: "none" };
+  }
   if (entry.canAutoInstall && !entry.nodeRequired) {
     return {
       kind: "install",

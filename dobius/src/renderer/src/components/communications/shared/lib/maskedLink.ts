@@ -12,22 +12,32 @@
  */
 export function isMaskedLink(label: string, href: string): boolean {
   const trimmedLabel = label.trim();
-  if (!trimmedLabel) return false;
+  if (!trimmedLabel) {
+    return false;
+  }
 
   const hrefUrl = parseExternal(href);
-  if (!hrefUrl) return false;
+  if (!hrefUrl) {
+    return false;
+  }
 
   const labelUrl = parseExternal(trimmedLabel, { assumeScheme: true });
-  if (!labelUrl) return true; // label isn't URL-shaped at all
+  if (!labelUrl) {
+    return true;
+  } // label isn't URL-shaped at all
 
   // A label with userinfo (`safe.com@evil.com`) visually leads with the
   // wrong host — always treat it as masked.
-  if (labelUrl.username || labelUrl.password) return true;
+  if (labelUrl.username || labelUrl.password) {
+    return true;
+  }
 
   // If the label spells out a scheme, it must match the destination's —
   // otherwise [https://x](http://x) silently downgrades.
   const labelHasScheme = /^https?:\/\//i.test(trimmedLabel);
-  if (labelHasScheme && labelUrl.protocol !== hrefUrl.protocol) return true;
+  if (labelHasScheme && labelUrl.protocol !== hrefUrl.protocol) {
+    return true;
+  }
 
   // Host comparison is case-insensitive (the URL parser lowercases it);
   // path/query/hash stay case-sensitive — many backends distinguish them.
@@ -44,12 +54,14 @@ function parseExternal(
   { assumeScheme = false }: { assumeScheme?: boolean } = {},
 ): URL | null {
   let candidate = value;
-  if (/^\/\//.test(candidate)) {
+  if (candidate.startsWith("//")) {
     candidate = `https:${candidate}`;
   } else if (assumeScheme && !/^https?:\/\//i.test(candidate)) {
     candidate = `https://${candidate}`;
   }
-  if (!/^https?:\/\//i.test(candidate)) return null;
+  if (!/^https?:\/\//i.test(candidate)) {
+    return null;
+  }
   try {
     return new URL(candidate);
   } catch {

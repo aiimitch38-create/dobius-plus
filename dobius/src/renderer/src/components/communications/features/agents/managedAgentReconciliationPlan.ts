@@ -25,7 +25,9 @@ const RETRY_BACKOFF_MS = [5_000, 30_000, 120_000] as const;
  * stop retrying until the community set changes again.
  */
 export function reconcileRetryDelayMs(failureCount: number): number | null {
-  if (failureCount < 1) return null;
+  if (failureCount < 1) {
+    return null;
+  }
   return RETRY_BACKOFF_MS[failureCount - 1] ?? null;
 }
 
@@ -42,7 +44,9 @@ export function canonicalCommunityRelays(
   const byCanonical = new Map<string, string>();
   for (const community of communities) {
     const canonical = canonicalize(community.relayUrl);
-    if (canonical === null || byCanonical.has(canonical)) continue;
+    if (canonical === null || byCanonical.has(canonical)) {
+      continue;
+    }
     byCanonical.set(canonical, community.relayUrl);
   }
   return byCanonical;
@@ -59,7 +63,9 @@ export function pendingReconcileRelays(
 ): string[] {
   const pending: string[] = [];
   for (const canonical of canonicalToRequested.keys()) {
-    if (reconciled.has(canonical) || inFlight.has(canonical)) continue;
+    if (reconciled.has(canonical) || inFlight.has(canonical)) {
+      continue;
+    }
     pending.push(canonical);
   }
   return pending;
@@ -81,15 +87,22 @@ export function classifyReconcileResult(
   }
   const failedRelays = new Set<string>();
   for (const row of rows) {
-    if (row.lifecycle !== "failed") continue;
+    if (row.lifecycle !== "failed") {
+      continue;
+    }
     const canonical = canonicalize(row.requestedRelayUrl ?? row.relayUrl);
-    if (canonical !== null) failedRelays.add(canonical);
+    if (canonical !== null) {
+      failedRelays.add(canonical);
+    }
   }
   const succeeded: string[] = [];
   const failed: string[] = [];
   for (const relay of attempted) {
-    if (failedRelays.has(relay)) failed.push(relay);
-    else succeeded.push(relay);
+    if (failedRelays.has(relay)) {
+      failed.push(relay);
+    } else {
+      succeeded.push(relay);
+    }
   }
   return { succeeded, failed };
 }

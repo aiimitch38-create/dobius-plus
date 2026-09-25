@@ -47,27 +47,37 @@ const WELCOME_KICKOFF_CTA =
   "What can we help you build? Bring us something you're working on, or give us a quick challenge to see how we work together.";
 
 function formatAgentNames(agents: readonly ManagedAgent[]) {
-  if (agents.length === 0) return "";
-  if (agents.length === 1) return agents[0]?.name ?? "";
+  if (agents.length === 0) {
+    return "";
+  }
+  if (agents.length === 1) {
+    return agents[0]?.name ?? "";
+  }
   return `${agents
     .slice(0, -1)
     .map((agent) => agent.name)
-    .join(", ")} and ${agents[agents.length - 1]?.name ?? ""}`;
+    .join(", ")} and ${agents.at(-1)?.name ?? ""}`;
 }
 
 function formatMentionNames(agents: readonly ManagedAgent[]) {
-  if (agents.length === 0) return "";
-  if (agents.length === 1) return `@${agents[0]?.name ?? ""}`;
+  if (agents.length === 0) {
+    return "";
+  }
+  if (agents.length === 1) {
+    return `@${agents[0]?.name ?? ""}`;
+  }
   return `${agents
     .slice(0, -1)
     .map((agent) => `@${agent.name}`)
-    .join(", ")} and @${agents[agents.length - 1]?.name ?? ""}`;
+    .join(", ")} and @${agents.at(-1)?.name ?? ""}`;
 }
 export function createWelcomeKickoffCoordinator() {
   const controllers = new Map<string, AbortController>();
   return {
     begin(channelId: string) {
-      if (controllers.has(channelId)) return null;
+      if (controllers.has(channelId)) {
+        return null;
+      }
       const controller = new AbortController();
       controllers.set(channelId, controller);
       return controller;
@@ -135,7 +145,9 @@ export function resolveWelcomeAgentSet(
   const ordered = WELCOME_TEAM_STARTERS.map((starter) =>
     pickWelcomeTeamStarterAgentForRelay([...agents], starter),
   );
-  if (ordered.some((agent) => !agent)) return null;
+  if (ordered.some((agent) => !agent)) {
+    return null;
+  }
   return {
     lead: ordered[0] as ManagedAgent,
     teammates: [ordered[1] as ManagedAgent, ordered[2] as ManagedAgent],
@@ -228,7 +240,9 @@ export async function waitForWelcomeTeammatesOnline(
     } catch (error) {
       console.warn("Welcome teammate presence check failed; retrying.", error);
     }
-    if (Date.now() >= deadline) break;
+    if (Date.now() >= deadline) {
+      break;
+    }
     await new Promise((resolve) => globalThis.setTimeout(resolve, pollMs));
   }
   return options.isCancelled() ? [] : latestOnline;
@@ -239,7 +253,9 @@ export async function waitForWelcomeKickoffBeat(options: {
   waitMs: number;
 }) {
   const waitMs = options.waitMs;
-  if (options.signal?.aborted) return false;
+  if (options.signal?.aborted) {
+    return false;
+  }
 
   return new Promise<boolean>((resolve) => {
     const timer = globalThis.setTimeout(() => {
@@ -404,7 +420,9 @@ export function mergeKickoffEvents(
   channelEvents: readonly RelayEvent[],
   openerReplies: readonly RelayEvent[],
 ): readonly RelayEvent[] {
-  if (openerReplies.length === 0) return channelEvents;
+  if (openerReplies.length === 0) {
+    return channelEvents;
+  }
   const seen = new Set(channelEvents.map((event) => event.id));
   return [
     ...channelEvents,
@@ -474,7 +492,9 @@ async function sendWelcomeKickoffCloser({
   content: string;
   opener: RelayEvent;
 }) {
-  if (await markerExists(channelId, closerMarker)) return;
+  if (await markerExists(channelId, closerMarker)) {
+    return;
+  }
 
   await sendManagedAgentChannelMessage({
     agentPubkey: agentSet.lead.pubkey,
@@ -533,8 +553,12 @@ export function useWelcomeKickoff(
     [channelEvents, openerThreadQuery.data],
   );
   React.useEffect(() => {
-    if (!channelId || kickoffResolved) return;
-    if (markerEvent(kickoffEvents, closerMarker) == null) return;
+    if (!channelId || kickoffResolved) {
+      return;
+    }
+    if (markerEvent(kickoffEvents, closerMarker) == null) {
+      return;
+    }
     setResolvedChannelId(channelId);
   }, [channelId, kickoffEvents, kickoffResolved]);
   const channelEventsRef = React.useRef(kickoffEvents);
@@ -562,7 +586,9 @@ export function useWelcomeKickoff(
     }
 
     const kickoffController = kickoffCoordinator.begin(channelId);
-    if (!kickoffController) return;
+    if (!kickoffController) {
+      return;
+    }
     const isCancelled = () =>
       kickoffController.signal.aborted ||
       focusedWelcomeChannelRef.current !== channelId;
@@ -632,12 +658,16 @@ export function useWelcomeKickoff(
         await queryClient.invalidateQueries({
           queryKey: managedAgentsQueryKey,
         });
-        if (openerAlreadySent) return;
+        if (openerAlreadySent) {
+          return;
+        }
 
         const leadStartIndex = agentsToStart.findIndex(
           (agent) => agent.pubkey === resolvedAgentSet.lead.pubkey,
         );
-        if (startResults[leadStartIndex]?.status === "rejected") return;
+        if (startResults[leadStartIndex]?.status === "rejected") {
+          return;
+        }
         const teammatesToAwait = resolvedAgentSet.teammates.filter(
           (teammate) =>
             startResults[
@@ -650,7 +680,9 @@ export function useWelcomeKickoff(
           teammatesToAwait,
           { isCancelled },
         );
-        if (isCancelled()) return;
+        if (isCancelled()) {
+          return;
+        }
         const introTeammates = selectWelcomeKickoffIntroTeammates(
           resolvedAgentSet.teammates,
           onlineTeammates,
@@ -660,7 +692,9 @@ export function useWelcomeKickoff(
             "Some Welcome teammates did not become ready; continuing with a degraded kickoff.",
           );
         }
-        if (isCancelled()) return;
+        if (isCancelled()) {
+          return;
+        }
 
         // Best-effort: a missing profile should degrade to an ungreeted,
         // untagged opener, never block the kickoff.
@@ -678,7 +712,9 @@ export function useWelcomeKickoff(
             owner,
           ),
         );
-        if (!isCancelled()) onKickoffOpenerPosted?.(openerResult.eventId);
+        if (!isCancelled()) {
+          onKickoffOpenerPosted?.(openerResult.eventId);
+        }
       } catch (error) {
         console.warn("Failed to start the Welcome team kickoff.", error);
       } finally {
@@ -699,12 +735,16 @@ export function useWelcomeKickoff(
   React.useEffect(() => {
     void isActiveWelcome;
     return () => {
-      if (!channelId) return;
+      if (!channelId) {
+        return;
+      }
       kickoffCoordinator.cancel(channelId);
       closerAbortControllers.get(channelId)?.abort();
       closerAbortControllers.delete(channelId);
       const timeout = closerTimeouts.get(channelId);
-      if (timeout) globalThis.clearTimeout(timeout);
+      if (timeout) {
+        globalThis.clearTimeout(timeout);
+      }
       closerTimeouts.delete(channelId);
       closerInFlight.delete(channelId);
     };
@@ -722,8 +762,9 @@ export function useWelcomeKickoff(
       // and would classify every teammate as silent and re-run the closer on
       // each revisit. The latch is the durable "already resolved" signal.
       kickoffResolved
-    )
+    ) {
       return;
+    }
     const opener = markerEvent(kickoffEvents, openerMarker);
     if (!opener || markerEvent(kickoffEvents, closerMarker)) {
       return;
@@ -741,7 +782,9 @@ export function useWelcomeKickoff(
         const waitMs = Math.max(0, TEAMMATE_INTRO_BACKSTOP_MS - elapsedMs);
         const timeout = globalThis.setTimeout(() => {
           closerTimeouts.delete(channelId);
-          if (focusedWelcomeChannelRef.current !== channelId) return;
+          if (focusedWelcomeChannelRef.current !== channelId) {
+            return;
+          }
           const controller = new AbortController();
           closerAbortControllers.set(channelId, controller);
           closerInFlight.add(channelId);
@@ -753,11 +796,14 @@ export function useWelcomeKickoff(
               })) ||
               controller.signal.aborted ||
               focusedWelcomeChannelRef.current !== channelId
-            )
+            ) {
               return;
+            }
 
             const latestEvents = channelEventsRef.current;
-            if (markerEvent(latestEvents, closerMarker)) return;
+            if (markerEvent(latestEvents, closerMarker)) {
+              return;
+            }
             const latestOpener =
               markerEvent(latestEvents, openerMarker) ?? opener;
             const latestAgentSet = await resolveLatestWelcomeAgentSet({
@@ -796,7 +842,9 @@ export function useWelcomeKickoff(
     }
 
     const timeout = closerTimeouts.get(channelId);
-    if (timeout) globalThis.clearTimeout(timeout);
+    if (timeout) {
+      globalThis.clearTimeout(timeout);
+    }
     closerTimeouts.delete(channelId);
 
     const controller = new AbortController();
@@ -810,8 +858,9 @@ export function useWelcomeKickoff(
         })) ||
         controller.signal.aborted ||
         focusedWelcomeChannelRef.current !== channelId
-      )
+      ) {
         return;
+      }
 
       const latestEvents = channelEventsRef.current;
       const latestOpener = markerEvent(latestEvents, openerMarker) ?? opener;

@@ -110,7 +110,9 @@ function buildActivityItems({
         !latest || candidate.timestamp > latest.timestamp ? candidate : latest,
       snapshot.commits[0],
     );
-    if (!commit) continue;
+    if (!commit) {
+      continue;
+    }
     items.push({
       id: `commit:${project.id}:${commit.hash}`,
       kind: "commit",

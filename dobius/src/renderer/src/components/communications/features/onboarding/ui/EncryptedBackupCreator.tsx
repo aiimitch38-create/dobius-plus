@@ -100,7 +100,9 @@ function PendingDownloadTicker() {
   // The clone is visually identical to the first message: once its slide-in
   // finishes, jump back to the real first row without animating.
   React.useEffect(() => {
-    if (position !== PENDING_TICKER_MESSAGES.length) return;
+    if (position !== PENDING_TICKER_MESSAGES.length) {
+      return;
+    }
     const timer = window.setTimeout(() => {
       setSnap(true);
       setPosition(0);
@@ -110,7 +112,9 @@ function PendingDownloadTicker() {
 
   // Re-enable the transition one frame after the snap has painted.
   React.useEffect(() => {
-    if (!snap) return;
+    if (!snap) {
+      return;
+    }
     const raf = window.requestAnimationFrame(() => setSnap(false));
     return () => window.cancelAnimationFrame(raf);
   }, [snap]);
@@ -309,9 +313,13 @@ function PassphraseGeneratorPopover({
         words: wordCount,
         separator: sep,
       });
-      if (mountedRef.current) onGeneratedRef.current(passphrase);
+      if (mountedRef.current) {
+        onGeneratedRef.current(passphrase);
+      }
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        return;
+      }
       setError(
         err instanceof Error ? err.message : "Failed to generate a password.",
       );
@@ -320,7 +328,9 @@ function PassphraseGeneratorPopover({
 
   // Fill the password field on every open and whenever a control changes.
   React.useEffect(() => {
-    if (open) void generate(words, separator);
+    if (open) {
+      void generate(words, separator);
+    }
   }, [open, words, separator, generate]);
 
   return (
@@ -345,8 +355,11 @@ function PassphraseGeneratorPopover({
               onRequestGenerate();
               return;
             }
-            if (!open) setOpen(true);
-            else void generate(words, separator);
+            if (!open) {
+              setOpen(true);
+            } else {
+              void generate(words, separator);
+            }
           }}
           ref={anchorRef}
           size="icon"
@@ -474,7 +487,9 @@ export function EncryptedBackupCreator({
   // A queued download locks the form — mask the password too so it isn't
   // left readable on screen while the user waits for the save dialog.
   React.useEffect(() => {
-    if (state.downloadPending) setIsRevealed(false);
+    if (state.downloadPending) {
+      setIsRevealed(false);
+    }
   }, [state.downloadPending]);
 
   // Correlate KDF completion by an opaque request id. The password exists only
@@ -483,11 +498,15 @@ export function EncryptedBackupCreator({
   const pendingPassphrase = pendingEncryptPassphrase(state);
   const skipDebounce = state.downloadPending;
   React.useEffect(() => {
-    if (!pendingPassphrase) return;
+    if (!pendingPassphrase) {
+      return;
+    }
     let cancelled = false;
     const requestId = state.nextRequestId;
     const start = () => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       dispatch({ type: "encrypt-started", requestId });
       void createNcryptsecBackup(pendingPassphrase)
         .then((ncryptsec) =>
@@ -521,7 +540,9 @@ export function EncryptedBackupCreator({
   // password form so "Download backup" can be clicked again.
   React.useEffect(() => {
     const ncryptsec = state.ncryptsec;
-    if (!ncryptsec || savedForRef.current === ncryptsec) return;
+    if (!ncryptsec || savedForRef.current === ncryptsec) {
+      return;
+    }
     savedForRef.current = ncryptsec;
     onCreated?.();
     setIsSaving(true);
@@ -542,13 +563,16 @@ export function EncryptedBackupCreator({
       })
       .catch((err: unknown) => {
         rollBack();
-        if (mountedRef.current)
+        if (mountedRef.current) {
           setSaveError(
             err instanceof Error ? err.message : "Failed to save your key.",
           );
+        }
       })
       .finally(() => {
-        if (mountedRef.current) setIsSaving(false);
+        if (mountedRef.current) {
+          setIsSaving(false);
+        }
       });
   }, [
     dispatch,
@@ -560,7 +584,9 @@ export function EncryptedBackupCreator({
   ]);
 
   const handleSaveCopy = React.useCallback(async () => {
-    if (!state.ncryptsec || isSaving) return;
+    if (!state.ncryptsec || isSaving) {
+      return;
+    }
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -570,12 +596,15 @@ export function EncryptedBackupCreator({
         onSaved?.(path);
       }
     } catch (err) {
-      if (mountedRef.current)
+      if (mountedRef.current) {
         setSaveError(
           err instanceof Error ? err.message : "Failed to save your key.",
         );
+      }
     } finally {
-      if (mountedRef.current) setIsSaving(false);
+      if (mountedRef.current) {
+        setIsSaving(false);
+      }
     }
   }, [isSaving, onSaved, setSavedPath, state.ncryptsec]);
 
@@ -662,10 +691,13 @@ export function EncryptedBackupCreator({
               dispatch({ type: "set-passphrase", value: event.target.value })
             }
             onKeyDown={(event) => {
-              if (event.key !== "Enter" || event.nativeEvent.isComposing)
+              if (event.key !== "Enter" || event.nativeEvent.isComposing) {
                 return;
+              }
               event.preventDefault();
-              if (downloadDisabled(state) || isSaving) return;
+              if (downloadDisabled(state) || isSaving) {
+                return;
+              }
               if (state.savedPassword && state.ncryptsec) {
                 void handleSaveCopy();
                 return;
@@ -764,7 +796,7 @@ export function EncryptedBackupCreator({
             Backup saved to {savedPath}
           </p>
           <p className="text-xs leading-5 text-muted-foreground">
-            Your password isn't kept — download another copy anytime, or start
+            Your password isn&apos;t kept — download another copy anytime, or start
             over to choose a new password.
           </p>
         </div>
@@ -823,8 +855,9 @@ export function EncryptedBackupCreator({
         );
         // `undefined` = inline (settings); `null` = slot not mounted yet
         // (skip a frame rather than flashing the button inline).
-        if (createButtonPortal === undefined)
+        if (createButtonPortal === undefined) {
           return <div className="flex justify-center">{createButton}</div>;
+        }
         return createButtonPortal
           ? createPortal(createButton, createButtonPortal)
           : null;

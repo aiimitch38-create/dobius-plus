@@ -56,7 +56,9 @@ function hasOnlyKeys(
 export function parseAgentManagementRequest(
   value: unknown,
 ): AgentManagementRequest | null {
-  if (typeof value !== "object" || value === null) return null;
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
   const payload = value as Record<string, unknown>;
   if (
     payload.type !== AGENT_MANAGEMENT_REQUEST ||
@@ -121,7 +123,9 @@ export function parseAgentManagementRequest(
     ...(isText(request.model) ? { model: request.model } : {}),
     ...(request.respondTo ? { respondTo: request.respondTo } : {}),
   };
-  if (Object.keys(changes).length === 0) return null;
+  if (Object.keys(changes).length === 0) {
+    return null;
+  }
   return {
     type: AGENT_MANAGEMENT_REQUEST,
     action: "update",

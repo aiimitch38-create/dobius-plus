@@ -18,13 +18,17 @@ function makeFakeRelayClient() {
       subs.set(key, { filter, callback, unsubbed: false });
       return Promise.resolve(async () => {
         const entry = subs.get(key);
-        if (entry) entry.unsubbed = true;
+        if (entry) {
+          entry.unsubbed = true;
+        }
       });
     },
     push(filter, event) {
       const key = JSON.stringify(filter);
       const entry = subs.get(key);
-      if (!entry) throw new Error(`no subscription for filter ${key}`);
+      if (!entry) {
+        throw new Error(`no subscription for filter ${key}`);
+      }
       entry.callback(event);
     },
     activeCount() {
@@ -66,7 +70,9 @@ function makeFakeArchive() {
           },
         ];
       }
-      for (const l of listeners) l();
+      for (const l of listeners) {
+        l();
+      }
     },
     async deleteSaveSubscription(scopeType, scopeValue) {
       const before = subs.length;
@@ -74,7 +80,9 @@ function makeFakeArchive() {
         (s) => !(s.scopeType === scopeType && s.scopeValue === scopeValue),
       );
       if (subs.length < before) {
-        for (const l of listeners) l();
+        for (const l of listeners) {
+          l();
+        }
         return true;
       }
       return false;
@@ -303,7 +311,9 @@ function makeNotifier() {
       return () => listeners.delete(l);
     },
     notify() {
-      for (const l of listeners) l();
+      for (const l of listeners) {
+        l();
+      }
     },
   };
 }
@@ -556,7 +566,9 @@ test("manager_retries_subscription_after_subscribeLive_failure", async () => {
       relay.subs.set(key, { filter, callback, unsubbed: false });
       return Promise.resolve(async () => {
         const entry = relay.subs.get(key);
-        if (entry) entry.unsubbed = true;
+        if (entry) {
+          entry.unsubbed = true;
+        }
       });
     },
     activeCount() {
@@ -605,7 +617,9 @@ test("manager_no_duplicate_sub_when_two_reloads_overlap", async () => {
       const disposeHandle = async () => {
         disposedCount.value++;
         const entry = relay.subs.get(key);
-        if (entry) entry.unsubbed = true;
+        if (entry) {
+          entry.unsubbed = true;
+        }
       };
       if (callCount === 1) {
         // Slow first call — resolver exposed so the test can unblock it later.

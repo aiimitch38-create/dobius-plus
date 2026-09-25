@@ -33,7 +33,9 @@ export class CommunicationsErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     const { error } = this.state
-    if (!error) return this.props.children
+    if (!error) {
+      return this.props.children
+    }
 
     return (
       <div

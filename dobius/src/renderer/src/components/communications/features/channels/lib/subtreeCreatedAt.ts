@@ -8,12 +8,12 @@
  */
 
 /** Minimal timeline shape the adjacency/createdAt builders read. */
-interface ReplyGraphMessage {
+type ReplyGraphMessage = {
   id: string;
   parentId?: string | null;
   rootId?: string | null;
   createdAt: number;
-}
+};
 
 /** Maps each parent message id to its direct-reply ids in timeline order. */
 export function buildDirectReplyIdsByParentId(
@@ -21,7 +21,9 @@ export function buildDirectReplyIdsByParentId(
 ): Map<string, string[]> {
   const map = new Map<string, string[]>();
   for (const message of messages) {
-    if (!message.parentId) continue;
+    if (!message.parentId) {
+      continue;
+    }
     const currentReplies = map.get(message.parentId) ?? [];
     currentReplies.push(message.id);
     map.set(message.parentId, currentReplies);
@@ -44,7 +46,9 @@ export function buildRepliesByRootId<T extends ReplyGraphMessage>(
   const map = new Map<string, T[]>();
   for (const message of messages) {
     const rootId = message.rootId;
-    if (!rootId || rootId === message.id) continue;
+    if (!rootId || rootId === message.id) {
+      continue;
+    }
     const currentReplies = map.get(rootId) ?? [];
     currentReplies.push(message);
     map.set(rootId, currentReplies);
@@ -72,7 +76,9 @@ export function collectReplyDescendantIds(
   const pendingIds = [...(directReplyIdsByParentId.get(messageId) ?? [])];
   while (pendingIds.length > 0) {
     const currentId = pendingIds.pop();
-    if (!currentId) continue;
+    if (!currentId) {
+      continue;
+    }
     descendantIds.push(currentId);
     pendingIds.push(...(directReplyIdsByParentId.get(currentId) ?? []));
   }

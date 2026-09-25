@@ -162,7 +162,9 @@ test("production chain: new turn in same session produces value-different id seq
 // This is tested by importing the hook directly and calling it via React.
 
 function installDOMShimForStabilityTest() {
-  if (globalThis.document) return; // already installed by a prior test
+  if (globalThis.document) {
+    return;
+  } // already installed by a prior test
 
   class EventTargetShim {
     constructor() {
@@ -178,7 +180,9 @@ function installDOMShimForStabilityTest() {
       );
     }
     dispatchEvent(event) {
-      for (const l of this.listeners.get(event.type) ?? []) l(event);
+      for (const l of this.listeners.get(event.type) ?? []) {
+        l(event);
+      }
       return true;
     }
   }
@@ -232,9 +236,13 @@ function installDOMShimForStabilityTest() {
       return child;
     }
     insertBefore(child, ref) {
-      if (!ref) return this.appendChild(child);
+      if (!ref) {
+        return this.appendChild(child);
+      }
       const idx = this.children.indexOf(ref);
-      if (idx < 0) return this.appendChild(child);
+      if (idx < 0) {
+        return this.appendChild(child);
+      }
       this.children.splice(idx, 0, child);
       this.childNodes.splice(idx, 0, child);
       child.parentNode = this;

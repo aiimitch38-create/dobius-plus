@@ -11,12 +11,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 import { getProviderEffortConfig } from "./buzzAgentConfig.ts";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const fixture = JSON.parse(
   readFileSync(path.join(__dirname, "effortTable.fixture.json"), "utf8"),
 );

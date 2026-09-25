@@ -412,7 +412,9 @@ export function useLiveChannelUpdates(
 
     const runSync = async () => {
       const ok = await syncSubs();
-      if (isCancelled) return;
+      if (isCancelled) {
+        return;
+      }
       if (ok) {
         retryAttempt = 0;
         return;
@@ -463,7 +465,9 @@ export function useLiveChannelUpdates(
         const stale = Array.from(activeSubs.values());
         activeSubs.clear();
         await Promise.allSettled(stale.map((dispose) => dispose()));
-        if (isCancelled) return true;
+        if (isCancelled) {
+          return true;
+        }
       }
       mentionSubsPubkeyRef.current = normalizedCurrentPubkey;
 
@@ -511,7 +515,9 @@ export function useLiveChannelUpdates(
 
     const runSync = async () => {
       const ok = await syncSubs();
-      if (isCancelled) return;
+      if (isCancelled) {
+        return;
+      }
       if (ok) {
         retryAttempt = 0;
         return;

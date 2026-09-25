@@ -76,7 +76,9 @@ export function MessageModerationMenuItems({
     removeMutation.isPending;
 
   const restriction = React.useMemo(() => {
-    if (targetPubkey == null) return null;
+    if (targetPubkey == null) {
+      return null;
+    }
     const key = normalizePubkey(targetPubkey);
     return (
       restrictionsQuery.data?.find((r) => normalizePubkey(r.pubkey) === key) ??
@@ -101,7 +103,9 @@ export function MessageModerationMenuItems({
     [],
   );
 
-  if (!enabled || targetPubkey == null) return null;
+  if (!enabled || targetPubkey == null) {
+    return null;
+  }
 
   return (
     <>

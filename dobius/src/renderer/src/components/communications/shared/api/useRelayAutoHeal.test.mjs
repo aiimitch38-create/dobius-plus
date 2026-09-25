@@ -28,7 +28,9 @@ function makeScheduler({ minIntervalMs = 100, now: initialNow = 0 } = {}) {
     }),
     mock.fn((id) => {
       const idx = timers.findIndex((t) => t.id === id);
-      if (idx !== -1) timers.splice(idx, 1);
+      if (idx !== -1) {
+        timers.splice(idx, 1);
+      }
     }),
     () => nowMs,
   );

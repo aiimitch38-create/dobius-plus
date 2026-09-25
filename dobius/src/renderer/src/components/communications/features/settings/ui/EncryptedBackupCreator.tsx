@@ -121,9 +121,13 @@ function PassphraseGeneratorPopover({
         words: wordCount,
         separator: sep,
       });
-      if (mountedRef.current) onGeneratedRef.current(passphrase);
+      if (mountedRef.current) {
+        onGeneratedRef.current(passphrase);
+      }
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        return;
+      }
       setError(
         err instanceof Error ? err.message : "Failed to generate a password.",
       );
@@ -132,7 +136,9 @@ function PassphraseGeneratorPopover({
 
   // Fill the password field on every open and whenever a control changes.
   React.useEffect(() => {
-    if (open) void generate(words, separator);
+    if (open) {
+      void generate(words, separator);
+    }
   }, [open, words, separator, generate]);
 
   return (
@@ -153,8 +159,11 @@ function PassphraseGeneratorPopover({
               onRequestGenerate();
               return;
             }
-            if (!open) setOpen(true);
-            else void generate(words, separator);
+            if (!open) {
+              setOpen(true);
+            } else {
+              void generate(words, separator);
+            }
           }}
           ref={anchorRef}
           size="icon"
@@ -264,11 +273,15 @@ export function EncryptedBackupCreator({
   // A queued download hides the form; mask the password before it can return
   // in any error state.
   React.useEffect(() => {
-    if (state.downloadPending) setIsRevealed(false);
+    if (state.downloadPending) {
+      setIsRevealed(false);
+    }
   }, [state.downloadPending]);
 
   React.useEffect(() => {
-    if (state.ncryptsec) onOpenChange(false);
+    if (state.ncryptsec) {
+      onOpenChange(false);
+    }
   }, [onOpenChange, state.ncryptsec]);
 
   return (

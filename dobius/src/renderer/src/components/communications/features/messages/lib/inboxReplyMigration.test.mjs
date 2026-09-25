@@ -116,7 +116,9 @@ function makeDeps({ event, renameResult = "migrated" } = {}) {
   const renameLog = [];
   return {
     getEventById: async (id) => {
-      if (!event || id !== event.id) throw new Error("not found");
+      if (!event || id !== event.id) {
+        throw new Error("not found");
+      }
       return event;
     },
     getChannelIdFromTags, // real production function

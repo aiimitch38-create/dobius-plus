@@ -40,7 +40,9 @@ export function useChannelSortPreference(
   setSortModeFor: (group: ChannelSortGroupKey, mode: ChannelSortMode) => void;
 } {
   const [store, setStore] = React.useState<ChannelSortStore>(() => {
-    if (!pubkey) return DEFAULT_STORE;
+    if (!pubkey) {
+      return DEFAULT_STORE;
+    }
     return readChannelSortStore(pubkey, relayUrl);
   });
 
@@ -66,10 +68,14 @@ export function useChannelSortPreference(
   }, [pubkey, relayUrl]);
 
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
     const key = storageKey(pubkey, relayUrl);
     const handler = (e: StorageEvent) => {
-      if (e.key !== key) return;
+      if (e.key !== key) {
+        return;
+      }
       setStore(readChannelSortStore(pubkey, relayUrl));
     };
     window.addEventListener("storage", handler);
@@ -83,17 +89,24 @@ export function useChannelSortPreference(
       remote: RemoteSortPrefs,
     ): ((prev: ChannelSortStore) => ChannelSortStore) => {
       return (prev) => {
-        if (!pubkey) return prev;
-        if (remote.createdAt < lastAppliedRemoteTs.current) return prev;
+        if (!pubkey) {
+          return prev;
+        }
+        if (remote.createdAt < lastAppliedRemoteTs.current) {
+          return prev;
+        }
         if (
           remote.createdAt === lastAppliedRemoteTs.current &&
           remote.eventId <= lastAppliedEventId.current
-        )
+        ) {
           return prev;
+        }
         lastAppliedRemoteTs.current = remote.createdAt;
         lastAppliedEventId.current = remote.eventId;
         managerRef.current?.cancelPendingPublish();
-        if (!writeChannelSortStore(pubkey, remote.store, relayUrl)) return prev;
+        if (!writeChannelSortStore(pubkey, remote.store, relayUrl)) {
+          return prev;
+        }
         return remote.store;
       };
     },
@@ -101,10 +114,14 @@ export function useChannelSortPreference(
   );
 
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
     let cancelled = false;
     void managerRef.current?.fetchRemoteSortPrefs().then((remote) => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       if (remote) {
         setStore(applyRemote(remote));
       } else {
@@ -120,12 +137,16 @@ export function useChannelSortPreference(
   }, [pubkey, relayUrl, applyRemote]);
 
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
     let unsub: (() => Promise<void>) | null = null;
     let cancelled = false;
     void managerRef.current
       ?.subscribeToSortPrefs((remote) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setStore(applyRemote(remote));
       })
       .then((dispose) => {
@@ -137,16 +158,22 @@ export function useChannelSortPreference(
       });
     return () => {
       cancelled = true;
-      if (unsub) void unsub();
+      if (unsub) {
+        void unsub();
+      }
     };
   }, [pubkey, applyRemote]);
 
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
     let cancelled = false;
     const unsub = relayClient.subscribeToReconnects(() => {
       void managerRef.current?.fetchRemoteSortPrefs().then((remote) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         if (remote) {
           setStore(applyRemote(remote));
         }
@@ -169,7 +196,9 @@ export function useChannelSortPreference(
 
   const setSortModeFor = React.useCallback(
     (group: ChannelSortGroupKey, mode: ChannelSortMode) => {
-      if (!pubkey) return;
+      if (!pubkey) {
+        return;
+      }
       setStore((prev) => {
         const withUpdate: ChannelSortStore = {
           ...prev,
@@ -180,7 +209,9 @@ export function useChannelSortPreference(
         const next = liveSectionIds
           ? stripOrphanedSectionModes(withUpdate, liveSectionIds)
           : withUpdate;
-        if (!writeChannelSortStore(pubkey, next, relayUrl)) return prev;
+        if (!writeChannelSortStore(pubkey, next, relayUrl)) {
+          return prev;
+        }
         managerRef.current?.publishSortPrefs(next);
         return next;
       });

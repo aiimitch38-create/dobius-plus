@@ -119,12 +119,24 @@ export function slotForFeedKind(
   kind: number,
   category: FeedItemCategory,
 ): SoundSlot {
-  if (category === "mention") return "mention";
-  if (kind === KIND_JOB_ACCEPTED) return "job_accepted";
-  if (kind === KIND_JOB_PROGRESS) return "job_progress";
-  if (kind === KIND_JOB_RESULT) return "job_result";
-  if (kind === KIND_JOB_ERROR) return "job_error";
-  if (kind === KIND_APPROVAL_REQUEST) return "needs_action";
+  if (category === "mention") {
+    return "mention";
+  }
+  if (kind === KIND_JOB_ACCEPTED) {
+    return "job_accepted";
+  }
+  if (kind === KIND_JOB_PROGRESS) {
+    return "job_progress";
+  }
+  if (kind === KIND_JOB_RESULT) {
+    return "job_result";
+  }
+  if (kind === KIND_JOB_ERROR) {
+    return "job_error";
+  }
+  if (kind === KIND_APPROVAL_REQUEST) {
+    return "needs_action";
+  }
   return "needs_action";
 }
 

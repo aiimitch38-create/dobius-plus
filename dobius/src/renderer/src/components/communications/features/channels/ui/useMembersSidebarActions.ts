@@ -105,7 +105,7 @@ export function useMembersSidebarActions({
   }) {
     clearActionFeedback();
     setActiveActionKey(actionKey);
-    const failures: Array<{ error: string; name: string }> = [];
+    const failures: { error: string; name: string }[] = [];
     let successCount = 0;
 
     try {
@@ -330,10 +330,10 @@ function getLifecycleSuccessMessage(agent: ManagedAgent) {
 }
 
 function formatFailureSummary(
-  failures: Array<{
+  failures: {
     error: string;
     name: string;
-  }>,
+  }[],
 ) {
   if (failures.length === 0) {
     return null;

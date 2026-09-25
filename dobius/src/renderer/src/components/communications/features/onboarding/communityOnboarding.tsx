@@ -99,7 +99,9 @@ function canonicalRelayUrl(rawRelayUrl: string) {
 function isTransaction(
   value: unknown,
 ): value is CommunityOnboardingTransaction {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object") {
+    return false;
+  }
   const transaction = value as Partial<CommunityOnboardingTransaction>;
   return (
     typeof transaction.id === "string" &&
@@ -123,7 +125,9 @@ export function loadCommunityOnboardingTransaction(
 ): CommunityOnboardingTransaction | null {
   try {
     const raw = storage.getItem(STORAGE_KEY);
-    if (!raw) return null;
+    if (!raw) {
+      return null;
+    }
     const parsed: unknown = JSON.parse(raw);
     return isTransaction(parsed) ? parsed : null;
   } catch {
@@ -212,7 +216,9 @@ export function updateCurrentCommunityOnboardingTransaction(
   storage: Storage = localStorage,
   now = new Date(),
 ): CommunityOnboardingTransaction | null {
-  if (!current || (expectedId && current.id !== expectedId)) return current;
+  if (!current || (expectedId && current.id !== expectedId)) {
+    return current;
+  }
   return updateCommunityOnboardingTransaction(current, patch, storage, now);
 }
 
@@ -310,7 +316,9 @@ export async function resolveProfileCheckAction(
   } catch {
     return { action: "show-profile" };
   } finally {
-    if (timerId !== undefined) clearTimeout(timerId);
+    if (timerId !== undefined) {
+      clearTimeout(timerId);
+    }
   }
 }
 
@@ -375,9 +383,10 @@ export function CommunityOnboardingProvider({
 
 export function useCommunityOnboarding() {
   const context = React.useContext(CommunityOnboardingContext);
-  if (!context)
+  if (!context) {
     throw new Error(
       "useCommunityOnboarding must be used within CommunityOnboardingProvider",
     );
+  }
   return context;
 }

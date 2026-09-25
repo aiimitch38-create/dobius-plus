@@ -31,7 +31,9 @@ function makeDeps({
     hookConfigured: mock.fn(hookConfiguredResult),
     runHook: mock.fn(runHookResult),
     subscribeToConnectionState: mock.fn((listener) => {
-      if (connectionStateListener) connectionStateListener.set(listener);
+      if (connectionStateListener) {
+        connectionStateListener.set(listener);
+      }
       return () => {};
     }),
     onSuccess: mock.fn(),
@@ -43,7 +45,9 @@ function makeDeps({
     }),
     clearTimeout: mock.fn((id) => {
       const idx = timers.findIndex((t) => t.id === id);
-      if (idx !== -1) timers.splice(idx, 1);
+      if (idx !== -1) {
+        timers.splice(idx, 1);
+      }
     }),
     // Test helper to fire timers.
     _fireTimer: (id) => timers.find((t) => t.id === id)?.fn(),
@@ -120,7 +124,9 @@ test("escalation fires only when fast path fails and hook is configured", async 
   const deps = makeDeps({
     preconnectResult: async () => {
       // First call (fast path) fails.
-      if (++callIdx === 1) throw new Error("relay unreachable");
+      if (++callIdx === 1) {
+        throw new Error("relay unreachable");
+      }
     },
     hookConfiguredResult: async () => true,
   });
@@ -411,11 +417,7 @@ test("subscribers receive state transitions and can unsubscribe", async () => {
 
   // Should have seen: initial idle, pending=true, pending=false (success).
   assert.ok(states.length >= 2, "at least 2 state transitions observed");
-  assert.equal(
-    states[states.length - 1].isPending,
-    false,
-    "last state is not pending",
-  );
+  assert.equal(states.at(-1).isPending, false, "last state is not pending");
 
   // After unsubscribe, no further updates.
   const countBefore = states.length;

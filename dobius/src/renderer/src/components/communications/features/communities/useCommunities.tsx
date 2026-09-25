@@ -45,7 +45,9 @@ export function resolveCommunityUpdateResult(
   >,
 ): UpdateCommunityResult {
   const current = communities.find((w) => w.id === id);
-  if (!current) return { kind: "not-found" };
+  if (!current) {
+    return { kind: "not-found" };
+  }
 
   if (
     updates.relayUrl !== undefined &&
@@ -62,7 +64,9 @@ export function resolveCommunityUpdateResult(
     (updates.pubkey !== undefined && updates.pubkey !== current.pubkey) ||
     (updates.reposDir !== undefined && updates.reposDir !== current.reposDir);
 
-  if (!hasChange) return { kind: "unchanged" };
+  if (!hasChange) {
+    return { kind: "unchanged" };
+  }
 
   const isActive = id === activeId;
   const backendFieldsChanged =
@@ -242,7 +246,9 @@ function useCommunitiesInternal(): UseCommunitiesReturn {
 
   const switchCommunity = useCallback(
     (id: string) => {
-      if (id === activeId) return;
+      if (id === activeId) {
+        return;
+      }
       saveActiveCommunityId(id);
       setActiveId(id);
     },

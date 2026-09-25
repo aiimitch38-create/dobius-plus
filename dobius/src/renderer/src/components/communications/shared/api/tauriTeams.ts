@@ -87,15 +87,23 @@ function connectedAccountsForEngine(
   engineLabel: string,
   engineState: unknown,
 ): ConnectedDobiusAccount[] {
-  if (!engineState || typeof engineState !== "object") return [];
+  if (!engineState || typeof engineState !== "object") {
+    return [];
+  }
   const accounts = (engineState as Record<string, unknown>).accounts;
-  if (!Array.isArray(accounts)) return [];
+  if (!Array.isArray(accounts)) {
+    return [];
+  }
 
   const result: ConnectedDobiusAccount[] = [];
   for (const candidate of accounts) {
-    if (!candidate || typeof candidate !== "object") continue;
+    if (!candidate || typeof candidate !== "object") {
+      continue;
+    }
     const account = candidate as Record<string, unknown>;
-    if (typeof account.id !== "string") continue;
+    if (typeof account.id !== "string") {
+      continue;
+    }
     const email = typeof account.email === "string" ? account.email : null;
     result.push({ id: account.id, label: labelForEngineAccount(engineLabel, email) });
   }
@@ -120,7 +128,9 @@ export async function listConnectedAccounts(): Promise<
     return [];
   }
   const snapshot = await invokeDobiusRuntime("accounts.list");
-  if (!snapshot || typeof snapshot !== "object") return [];
+  if (!snapshot || typeof snapshot !== "object") {
+    return [];
+  }
   const record = snapshot as Record<string, unknown>;
   return [
     ...connectedAccountsForEngine("Claude", record.claude),

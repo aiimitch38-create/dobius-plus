@@ -39,7 +39,9 @@ export function RemindMeLaterDialog({
   const customTimestamp = parseCustomDateTime(customDate, customTime);
 
   const submit = (notBefore: number) => {
-    if (!target || create.isPending) return;
+    if (!target || create.isPending) {
+      return;
+    }
     create.mutate(
       { target, notBefore, note: note || undefined },
       {
@@ -133,7 +135,9 @@ export function RemindMeLaterDialog({
             className="relative"
             disabled={create.isPending || customTimestamp === null}
             onClick={() => {
-              if (customTimestamp === null) return;
+              if (customTimestamp === null) {
+                return;
+              }
               submit(customTimestamp);
             }}
             variant="default"

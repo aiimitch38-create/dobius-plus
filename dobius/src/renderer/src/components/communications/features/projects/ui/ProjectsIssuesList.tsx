@@ -42,9 +42,15 @@ type ProjectsIssuesListProps = {
 };
 
 function nextStepLabel(status: ProjectIssue["status"]) {
-  if (status === "Done" || status === "Closed") return "View issue";
-  if (status === "In Review") return "Review issue";
-  if (status === "Triage") return "Triage issue";
+  if (status === "Done" || status === "Closed") {
+    return "View issue";
+  }
+  if (status === "In Review") {
+    return "Review issue";
+  }
+  if (status === "Triage") {
+    return "Triage issue";
+  }
   return "Open issue";
 }
 
@@ -68,7 +74,9 @@ function IssueHeader({
       </div>
       <p className={`truncate ${PROJECT_LIST_ROW_SUBTEXT_CLASS}`}>
         {project.name}
-        {includeDate ? ` · created ${relativeTime(issue.createdAt)}` : null} ·
+        {includeDate
+          ? ` · created ${relativeTime(issue.createdAt)}`
+          : null} ·
         by{" "}
         <UserProfilePopover pubkey={issue.author} triggerElement="span">
           <button

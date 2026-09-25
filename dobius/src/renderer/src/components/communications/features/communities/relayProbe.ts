@@ -5,7 +5,9 @@
 /** Normalize a user-entered relay URL to ws(s):// form. Returns null if invalid. */
 export function normalizeRelayUrl(input: string): string | null {
   const trimmed = input.trim().replace(/\/+$/, "");
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return null;
+  }
 
   // Already ws(s)://
   if (trimmed.startsWith("wss://") || trimmed.startsWith("ws://")) {
@@ -68,9 +70,13 @@ export function probeRelayReachable(
 
   const promise = new Promise<boolean>((resolve) => {
     function settle(result: boolean) {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
-      if (timeoutId !== null) clearTimeout(timeoutId);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
       try {
         socket?.close();
       } catch {
@@ -94,9 +100,13 @@ export function probeRelayReachable(
   return {
     promise,
     cancel() {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
-      if (timeoutId !== null) clearTimeout(timeoutId);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
       try {
         socket?.close();
       } catch {

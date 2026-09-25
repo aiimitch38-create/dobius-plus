@@ -34,7 +34,9 @@ export function CommunityChangeOverlay({
 
   const handleSubmit = React.useCallback(
     (name: string, relayUrl: string) => {
-      if (!activeCommunity) return;
+      if (!activeCommunity) {
+        return;
+      }
       setError(null);
       const result = updateCommunity(activeCommunity.id, { name, relayUrl });
       switch (result.kind) {
@@ -61,7 +63,9 @@ export function CommunityChangeOverlay({
     [activeCommunity, onClose, onUpdated, updateCommunity],
   );
 
-  if (!activeCommunity) return null;
+  if (!activeCommunity) {
+    return null;
+  }
 
   return (
     <div

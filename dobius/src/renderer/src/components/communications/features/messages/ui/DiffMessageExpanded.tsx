@@ -32,7 +32,9 @@ export default function DiffMessageExpanded({
   return (
     <Dialog
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) {
+          onClose();
+        }
       }}
       open
     >

@@ -20,9 +20,13 @@ export function storageKey(pubkey: string): string {
 }
 
 export function parseStarPayload(json: unknown): ChannelStarStore | null {
-  if (typeof json !== "object" || json === null) return null;
+  if (typeof json !== "object" || json === null) {
+    return null;
+  }
   const obj = json as Record<string, unknown>;
-  if (obj.version !== 1) return null;
+  if (obj.version !== 1) {
+    return null;
+  }
   const channels: Record<string, ChannelStarEntry> =
     typeof obj.channels === "object" &&
     obj.channels !== null &&

@@ -10,7 +10,9 @@ import type { TimelineMessage } from "../types";
 export function timelineImageUrls(message: TimelineMessage): string[] {
   const urls = new Set<string>();
   const add = (url: string | null | undefined) => {
-    if (url) urls.add(rewriteRelayUrl(url));
+    if (url) {
+      urls.add(rewriteRelayUrl(url));
+    }
   };
 
   add(message.avatarUrl);
@@ -24,11 +26,15 @@ export function timelineImageUrls(message: TimelineMessage): string[] {
       }
     }
     for (const tag of message.tags) {
-      if (tag[0] === "emoji") add(tag[2]);
+      if (tag[0] === "emoji") {
+        add(tag[2]);
+      }
     }
   }
 
-  for (const reaction of message.reactions ?? []) add(reaction.emojiUrl);
+  for (const reaction of message.reactions ?? []) {
+    add(reaction.emojiUrl);
+  }
   return [...urls];
 }
 
@@ -44,7 +50,9 @@ export function preloadTimelineImages(
 ): void {
   for (const message of messages) {
     for (const url of timelineImageUrls(message)) {
-      if (state.requestedUrls.has(url)) continue;
+      if (state.requestedUrls.has(url)) {
+        continue;
+      }
       state.requestedUrls.add(url);
       const image = new Image();
       state.activeImages.add(image);

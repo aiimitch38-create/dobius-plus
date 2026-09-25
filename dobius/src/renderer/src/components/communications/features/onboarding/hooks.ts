@@ -47,7 +47,9 @@ function seedWelcomeExperience(
 ) {
   const key = `${communityScope ?? ""}:${channelId}`;
   const current = welcomeSeedPromises.get(key);
-  if (current) return current;
+  if (current) {
+    return current;
+  }
 
   const promise = (async () => {
     try {
@@ -493,7 +495,9 @@ export function useAppOnboardingState(isSharedIdentity: boolean) {
   // because the flow remounts when pubkey changes after recovery.
   const [bootedLost, setBootedLost] = React.useState(false);
   React.useEffect(() => {
-    if (identityLost) setBootedLost(true);
+    if (identityLost) {
+      setBootedLost(true);
+    }
   }, [identityLost]);
 
   // Sticky boot fact: once identity was locked at boot, this remains true for
@@ -501,7 +505,9 @@ export function useAppOnboardingState(isSharedIdentity: boolean) {
   // relaunchRequired derivation uses this to force the relaunch screen.
   const [bootedLocked, setBootedLocked] = React.useState(false);
   React.useEffect(() => {
-    if (identityLocked) setBootedLocked(true);
+    if (identityLocked) {
+      setBootedLocked(true);
+    }
   }, [identityLocked]);
 
   const profileQuery = useProfileQuery(
@@ -544,7 +550,9 @@ export function useAppOnboardingState(isSharedIdentity: boolean) {
             true,
           );
           return currentPromise.then((result) => {
-            if (!result.ok) return result;
+            if (!result.ok) {
+              return result;
+            }
             return initializeStarterChannels(queryClient, {
               focus: true,
               pubkey: currentPubkey,

@@ -14,7 +14,9 @@ export function resolveSentMessageBody(
   inlineContent: string | null,
   fetchedContent: string | undefined | null,
 ): string | null {
-  if (inlineContent) return inlineContent;
+  if (inlineContent) {
+    return inlineContent;
+  }
   return fetchedContent ?? null;
 }
 

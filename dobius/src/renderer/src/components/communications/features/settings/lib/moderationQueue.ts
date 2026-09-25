@@ -126,8 +126,12 @@ function actionMatchesTarget(
   targetKind: ReportTargetKind,
   target: string,
 ): boolean {
-  if (targetKind === "event") return action.targetEventId === target;
-  if (targetKind === "pubkey") return action.targetPubkey === target;
+  if (targetKind === "event") {
+    return action.targetEventId === target;
+  }
+  if (targetKind === "pubkey") {
+    return action.targetPubkey === target;
+  }
   return false;
 }
 
@@ -176,7 +180,9 @@ export function buildModerationQueue(
   }
 
   return [...groups.values()].sort((a, b) => {
-    if (b.maxSeverity !== a.maxSeverity) return b.maxSeverity - a.maxSeverity;
+    if (b.maxSeverity !== a.maxSeverity) {
+      return b.maxSeverity - a.maxSeverity;
+    }
     return b.latestCreatedAt.localeCompare(a.latestCreatedAt);
   });
 }
@@ -215,8 +221,12 @@ export function reportTypeLabel(reportType: ReportType): string {
 export type SeverityTier = "critical" | "high" | "normal";
 
 export function severityTier(reportType: ReportType): SeverityTier {
-  if (reportType === "illegal") return "critical";
-  if (reportType === "malware" || reportType === "impersonation") return "high";
+  if (reportType === "illegal") {
+    return "critical";
+  }
+  if (reportType === "malware" || reportType === "impersonation") {
+    return "high";
+  }
   return "normal";
 }
 
@@ -255,10 +265,16 @@ export function resolvableActions(
   hasChannel: boolean,
 ): ResolutionAction[] {
   const actions: ResolutionAction[] = [];
-  if (targetKind === "event" && hasChannel) actions.push("delete");
+  if (targetKind === "event" && hasChannel) {
+    actions.push("delete");
+  }
   // ban needs only the author; event reports look it up from the signer.
-  if (targetKind === "event" || targetKind === "pubkey") actions.push("ban");
-  if (targetKind === "event" && hasChannel) actions.push("kick");
+  if (targetKind === "event" || targetKind === "pubkey") {
+    actions.push("ban");
+  }
+  if (targetKind === "event" && hasChannel) {
+    actions.push("kick");
+  }
   actions.push("escalate", "dismiss");
   return actions;
 }

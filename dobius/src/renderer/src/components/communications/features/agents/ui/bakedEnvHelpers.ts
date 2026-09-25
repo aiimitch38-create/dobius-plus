@@ -45,7 +45,9 @@ export function resolveInheritedDefault(
   bakedKey: string,
 ): InheritedDefault {
   const global = globalValue?.trim() ?? "";
-  if (global) return { source: "global", value: global };
+  if (global) {
+    return { source: "global", value: global };
+  }
 
   const baked = bakedEnv?.find(
     (entry) => entry.key === bakedKey && !entry.masked,
@@ -83,12 +85,18 @@ export function getGlobalModelFallback(
   const universal = bakedEnv?.find(
     (entry) => entry.key === "BUZZ_AGENT_MODEL" && !entry.masked,
   )?.value;
-  if (universal?.trim()) return universal.trim();
+  if (universal?.trim()) {
+    return universal.trim();
+  }
 
   const providerKey = providerModelEnvKey(provider);
-  if (!providerKey) return provider === "relay-mesh" ? "auto" : null;
+  if (!providerKey) {
+    return provider === "relay-mesh" ? "auto" : null;
+  }
   const globalProviderModel = globalEnv[providerKey]?.trim();
-  if (globalProviderModel) return globalProviderModel;
+  if (globalProviderModel) {
+    return globalProviderModel;
+  }
   const providerModel = bakedEnv?.find(
     (entry) => entry.key === providerKey && !entry.masked,
   )?.value;
@@ -116,7 +124,9 @@ export function getAdvancedInheritedSummary(
   effort: InheritedDefault,
   globalEnvCount: number,
 ): string {
-  if (!effort.value && globalEnvCount === 0) return "";
+  if (!effort.value && globalEnvCount === 0) {
+    return "";
+  }
 
   const globalEnvLabel =
     globalEnvCount > 0
@@ -160,7 +170,9 @@ export function getInheritedAgentDefaults(
         bakedEnv,
         "BUZZ_AGENT_MODEL",
       );
-      if (structured.value) return structured;
+      if (structured.value) {
+        return structured;
+      }
       const provider = resolveInheritedDefault(
         globalConfig.provider,
         bakedEnv,

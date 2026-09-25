@@ -477,7 +477,9 @@ export function formatTimelineMessages(
       tags: applyEditTagOverlay(event.tags, edit?.tags),
       reactions: (() => {
         const reactions = reactionsByEventId.get(event.id);
-        if (!reactions) return undefined;
+        if (!reactions) {
+          return undefined;
+        }
         // Sort pills by earliest reaction time ascending (Slack-style: first-reacted
         // emoji leftmost). Tiebreak on emoji string for determinism.
         return [...reactions.values()]
@@ -580,9 +582,7 @@ export function collectMessageAuthorPubkeys(
   return [...pubkeys];
 }
 
-export function collectMessageMentionPubkeys(
-  events: Array<{ tags?: string[][] }>,
-) {
+export function collectMessageMentionPubkeys(events: { tags?: string[][] }[]) {
   const pubkeys = new Set<string>();
 
   for (const event of events) {

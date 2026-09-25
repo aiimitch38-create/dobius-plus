@@ -68,7 +68,9 @@ export function CreatePullRequestDialog({
   const createMutation = useCreateProjectPullRequestMutation(project);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     const nextProject =
       projects.find((candidate) => candidate.id === initialProjectId) ??
       projects[0];
@@ -76,7 +78,9 @@ export function CreatePullRequestDialog({
   }, [initialProjectId, open, projects]);
 
   React.useEffect(() => {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     setTargetBranch(project.defaultBranch);
     setSourceBranch("");
   }, [project]);
@@ -150,7 +154,9 @@ export function CreatePullRequestDialog({
       itemName="pull-request"
       onCreate={handleCreate}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && createMutation.isPending) return;
+        if (!nextOpen && createMutation.isPending) {
+          return;
+        }
         onOpenChange(nextOpen);
       }}
       open={open}

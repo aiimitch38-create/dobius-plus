@@ -48,9 +48,15 @@ export function computeThreadReplyUnreadCounts(params: {
   const unreadReplyIds = new Set(
     timelineMessages
       .filter((message) => {
-        if (!subtree.has(message.id)) return false;
-        if (currentPubkey && message.pubkey === currentPubkey) return false;
-        if (isForcedUnread(message.id)) return true;
+        if (!subtree.has(message.id)) {
+          return false;
+        }
+        if (currentPubkey && message.pubkey === currentPubkey) {
+          return false;
+        }
+        if (isForcedUnread(message.id)) {
+          return true;
+        }
         const readAt = getReadAt(message.id);
         return readAt === null || message.createdAt > readAt;
       })
@@ -64,9 +70,13 @@ export function computeThreadReplyUnreadCounts(params: {
 
   const counts = new Map<string, number>();
   for (const replyId of visibleReplyIds) {
-    if (expandedReplyIds.has(replyId)) continue;
+    if (expandedReplyIds.has(replyId)) {
+      continue;
+    }
     const unread = stats.get(replyId)?.unreadDescendantCount ?? 0;
-    if (unread > 0) counts.set(replyId, unread);
+    if (unread > 0) {
+      counts.set(replyId, unread);
+    }
   }
   return counts;
 }

@@ -34,7 +34,9 @@ test("media-proxy port store: resolved port publishes and reset notifies subscri
   globalThis.window = {
     __TAURI_INTERNALS__: {
       invoke(command) {
-        if (command === "get_media_proxy_port") return Promise.resolve(54321);
+        if (command === "get_media_proxy_port") {
+          return Promise.resolve(54321);
+        }
         if (command === "get_relay_http_url") {
           return Promise.resolve("https://relay.example");
         }
@@ -280,7 +282,9 @@ test("resetMediaCaches: ignores relay origin lookups from the previous generatio
   globalThis.window = {
     __TAURI_INTERNALS__: {
       invoke(command) {
-        if (command === "get_media_proxy_port") return Promise.resolve(54321);
+        if (command === "get_media_proxy_port") {
+          return Promise.resolve(54321);
+        }
         if (command === "get_relay_http_url") {
           relayOriginCalls += 1;
           return relayOriginCalls === 1
@@ -323,7 +327,9 @@ test("rewriteRelayUrl: matches relay origin case-insensitively (uppercase saved 
   globalThis.window = {
     __TAURI_INTERNALS__: {
       invoke(command) {
-        if (command === "get_media_proxy_port") return Promise.resolve(54321);
+        if (command === "get_media_proxy_port") {
+          return Promise.resolve(54321);
+        }
         if (command === "get_relay_http_url") {
           // Saved community URLs keep the user's casing; the relay always
           // emits lowercased media URLs (normalize_host in buzz-core).
@@ -354,7 +360,9 @@ test("rewriteRelayUrl: still passes external Blossom URLs through unchanged", as
   globalThis.window = {
     __TAURI_INTERNALS__: {
       invoke(command) {
-        if (command === "get_media_proxy_port") return Promise.resolve(54321);
+        if (command === "get_media_proxy_port") {
+          return Promise.resolve(54321);
+        }
         if (command === "get_relay_http_url") {
           return Promise.resolve("https://relay.example");
         }

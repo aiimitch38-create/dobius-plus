@@ -88,10 +88,16 @@ export function HarnessCatalogDialog({
   // Keep a valid selection: default to the first visible entry; hold on to
   // the custom-form selection regardless of the filter.
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     setSelectedId((current) => {
-      if (current === CUSTOM_ENTRY_ID) return current;
-      if (current && filtered.some((e) => e.id === current)) return current;
+      if (current === CUSTOM_ENTRY_ID) {
+        return current;
+      }
+      if (current && filtered.some((e) => e.id === current)) {
+        return current;
+      }
       return filtered[0]?.id ?? null;
     });
   }, [open, filtered]);
@@ -563,7 +569,7 @@ function CatalogDetail({ entry }: { entry: AcpRuntimeCatalogEntry }) {
 }
 
 function TechnicalDetails({ entry }: { entry: AcpRuntimeCatalogEntry }) {
-  const rows: Array<{ label: string; value: string }> = [
+  const rows: { label: string; value: string }[] = [
     { label: "ID", value: entry.id },
     ...(entry.command ? [{ label: "Command", value: entry.command }] : []),
     ...(entry.defaultArgs.length > 0

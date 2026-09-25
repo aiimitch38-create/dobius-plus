@@ -43,11 +43,13 @@ type HiddenRange = {
 };
 
 function maskRanges(content: string, ranges: HiddenRange[]): string {
-  if (ranges.length === 0) return content;
+  if (ranges.length === 0) {
+    return content;
+  }
 
   const merged: HiddenRange[] = [];
   for (const range of [...ranges].sort((a, b) => a.start - b.start)) {
-    const last = merged[merged.length - 1];
+    const last = merged.at(-1);
     if (last && range.start <= last.end) {
       last.end = Math.max(last.end, range.end);
     } else {
@@ -108,7 +110,9 @@ function collectMarkdownImageLinkRanges(content: string): HiddenRange[] {
   const ranges: HiddenRange[] = [];
 
   for (const match of content.matchAll(MARKDOWN_SUPPORTED_LINK_RE)) {
-    if (!match[0]?.startsWith("!")) continue;
+    if (!match[0]?.startsWith("!")) {
+      continue;
+    }
     ranges.push({
       start: match.index ?? 0,
       end: (match.index ?? 0) + match[0].length,
@@ -207,7 +211,9 @@ function stripHiddenLinkPreviewContent(content: string): string {
 function countChar(value: string, char: string): number {
   let count = 0;
   for (const current of value) {
-    if (current === char) count += 1;
+    if (current === char) {
+      count += 1;
+    }
   }
   return count;
 }
@@ -215,7 +221,7 @@ function countChar(value: string, char: string): number {
 function trimUrlCandidate(candidate: string): string {
   let value = candidate.replace(/[.,!?;:]+$/g, "");
 
-  const pairs: Array<[close: string, open: string]> = [
+  const pairs: [close: string, open: string][] = [
     [")", "("],
     ["]", "["],
     ["}", "{"],
@@ -273,7 +279,9 @@ function parseGithubLink(parsed: URL): SupportedLinkPreview | null {
 
   const segments = parsed.pathname.split("/").filter(Boolean).map(safeDecode);
   const [owner, repo, resource, number] = segments;
-  if (!owner || !repo) return null;
+  if (!owner || !repo) {
+    return null;
+  }
 
   const repoLabel = `${owner}/${repo}`;
   if (resource === undefined) {
@@ -378,7 +386,9 @@ function parseGoogleDocsLink(parsed: URL): SupportedLinkPreview | null {
 
   const segments = parsed.pathname.split("/").filter(Boolean);
   const [resource, dSegment, id] = segments;
-  if (dSegment !== "d" || !id) return null;
+  if (dSegment !== "d" || !id) {
+    return null;
+  }
 
   if (resource === "document") {
     return createPreview(
@@ -482,7 +492,9 @@ export function extractSupportedLinkPreviews(
   let order = 0;
 
   for (const match of searchable.matchAll(MARKDOWN_SUPPORTED_LINK_RE)) {
-    if (match[0]?.startsWith("!")) continue;
+    if (match[0]?.startsWith("!")) {
+      continue;
+    }
     candidates.push({
       href: match[2],
       index: match.index ?? 0,
@@ -495,7 +507,9 @@ export function extractSupportedLinkPreviews(
   for (const match of searchable.matchAll(SUPPORTED_URL_RE)) {
     const prefix = match[1] ?? "";
     const href = match[2];
-    if (!href) continue;
+    if (!href) {
+      continue;
+    }
     candidates.push({
       href,
       index: (match.index ?? 0) + prefix.length,
@@ -508,7 +522,9 @@ export function extractSupportedLinkPreviews(
 
   for (const candidate of candidates) {
     const preview = parseSupportedLinkPreview(candidate.href);
-    if (!preview || seen.has(preview.href)) continue;
+    if (!preview || seen.has(preview.href)) {
+      continue;
+    }
 
     seen.add(preview.href);
     previews.push(
@@ -519,7 +535,9 @@ export function extractSupportedLinkPreviews(
           : null,
       ),
     );
-    if (previews.length >= MAX_PREVIEWS) break;
+    if (previews.length >= MAX_PREVIEWS) {
+      break;
+    }
   }
 
   return previews;

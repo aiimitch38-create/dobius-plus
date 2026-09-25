@@ -25,7 +25,9 @@ export function resolveAgentReadiness(
 ): AgentReadinessResult {
   if (scope === "any") {
     for (const runtime of runtimes) {
-      if (runtime.id === "buzz-agent") continue;
+      if (runtime.id === "buzz-agent") {
+        continue;
+      }
       if (
         runtime.availability === "available" &&
         (runtime.authStatus.status === "logged_in" ||

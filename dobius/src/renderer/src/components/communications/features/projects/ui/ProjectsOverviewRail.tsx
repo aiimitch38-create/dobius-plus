@@ -42,7 +42,9 @@ function overviewActivityByDay(
   const merged: Record<string, number> = {};
   for (const project of projects) {
     const byDay = summaries?.[project.repoAddress]?.activityByDay;
-    if (!byDay) continue;
+    if (!byDay) {
+      continue;
+    }
     for (const [day, count] of Object.entries(byDay)) {
       merged[day] = (merged[day] ?? 0) + count;
     }

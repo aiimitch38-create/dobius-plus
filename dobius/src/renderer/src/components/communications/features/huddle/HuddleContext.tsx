@@ -41,7 +41,7 @@ function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-interface HuddleContextValue {
+type HuddleContextValue = {
   /** Current local audio track (for mute toggle in HuddleBar) */
   localAudioTrack: MediaStreamTrack | null;
   /** Whether a huddle is being started (for button disabled state) */
@@ -94,7 +94,7 @@ interface HuddleContextValue {
   /** Leave the current huddle — stops worklet, stops mic, calls Rust leave_huddle.
    *  Returns true if backend cleanup succeeded, false if it failed (caller may retry). */
   leaveHuddle: () => Promise<boolean>;
-}
+};
 
 const HuddleContext = React.createContext<HuddleContextValue | null>(null);
 
@@ -197,10 +197,15 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
     listen<string[]>("huddle-active-speakers", (event) => {
-      if (!cancelled) setActiveSpeakers(event.payload);
+      if (!cancelled) {
+        setActiveSpeakers(event.payload);
+      }
     }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
     });
     return () => {
       cancelled = true;
@@ -218,7 +223,9 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
     listen<boolean>("ptt-state", (event) => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       setPttActive(event.payload);
       if (micConnected) {
         try {
@@ -242,8 +249,11 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
     });
     return () => {
       cancelled = true;
@@ -359,7 +369,9 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      if (tokenRef.current !== myToken) throw new Error("superseded");
+      if (tokenRef.current !== myToken) {
+        throw new Error("superseded");
+      }
 
       // Get mic — Rust backend owns the audio WS connection.
       // Request 48 kHz to match the Opus encoder and worklet buffer size (960 samples = 20ms).
@@ -424,7 +436,9 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
       memberPubkeys: string[],
       channelName?: string,
     ) => {
-      if (busyRef.current) return;
+      if (busyRef.current) {
+        return;
+      }
       busyRef.current = true;
 
       tokenRef.current += 1;
@@ -471,7 +485,9 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
 
   const joinHuddle = React.useCallback(
     async (parentChannelId: string, ephemeralChannelId: string) => {
-      if (busyRef.current) return;
+      if (busyRef.current) {
+        return;
+      }
       busyRef.current = true;
       tokenRef.current += 1;
       const myToken = tokenRef.current;
@@ -519,7 +535,9 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
 
   // Pipeline hot-start — check if voice models finished downloading mid-huddle
   React.useEffect(() => {
-    if (!ephemeralChannelId) return;
+    if (!ephemeralChannelId) {
+      return;
+    }
     const id = window.setInterval(() => {
       invoke("check_pipeline_hotstart").catch(() => {
         /* best-effort */
@@ -551,7 +569,9 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
     let smoothedLevel = 0;
     function tick(now: number) {
       raf = requestAnimationFrame(tick);
-      if (now - lastUpdate < MIC_ANALYSER_UPDATE_INTERVAL_MS) return;
+      if (now - lastUpdate < MIC_ANALYSER_UPDATE_INTERVAL_MS) {
+        return;
+      }
       lastUpdate = now;
       analyser.getFloatTimeDomainData(buf);
 
@@ -619,7 +639,9 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
     listen("huddle-audio-disconnected", () => {
-      if (cancelled || audioReconnectInFlightRef.current) return;
+      if (cancelled || audioReconnectInFlightRef.current) {
+        return;
+      }
       audioReconnectInFlightRef.current = true;
       const reconnectToken = tokenRef.current;
 
@@ -630,11 +652,15 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
         // draining pod itself from exhausting before kube-proxy converges.
         const delaysMs = [0, 100, 250, 500, 1_000, 2_000, 2_000];
         for (const delayMs of delaysMs) {
-          if (cancelled || tokenRef.current !== reconnectToken) return;
+          if (cancelled || tokenRef.current !== reconnectToken) {
+            return;
+          }
           if (delayMs > 0) {
             await new Promise((resolve) => window.setTimeout(resolve, delayMs));
           }
-          if (cancelled || tokenRef.current !== reconnectToken) return;
+          if (cancelled || tokenRef.current !== reconnectToken) {
+            return;
+          }
           try {
             await invoke("reconnect_huddle_audio");
             // Success installs a live replacement pipeline. If it later fails,
@@ -655,8 +681,11 @@ export function HuddleProvider({ children }: { children: React.ReactNode }) {
         audioReconnectInFlightRef.current = false;
       });
     }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
     });
     return () => {
       cancelled = true;

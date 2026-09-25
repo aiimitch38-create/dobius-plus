@@ -21,7 +21,9 @@ function collectNodeTypes(tree) {
   const types = [];
   (function walk(node) {
     types.push(node.type);
-    for (const child of node.children ?? []) walk(child);
+    for (const child of node.children ?? []) {
+      walk(child);
+    }
   })(tree);
   return types;
 }
@@ -119,7 +121,7 @@ test("snapshot keeps only the newest slice of a long timeline", () => {
   writeMessageSnapshot(RELAY, "chan-1", events);
   const persisted = readMessageSnapshot(RELAY, "chan-1");
   assert.equal(persisted.length, 80);
-  assert.equal(persisted[persisted.length - 1].id, "event-199");
+  assert.equal(persisted.at(-1).id, "event-199");
   assert.equal(persisted[0].id, "event-120");
 });
 
@@ -163,8 +165,12 @@ test("inline base64 screenshots are stripped before persisting", () => {
   assert.ok(!types.includes("link"), `expected no link node, got: ${types.join(", ")}`);
   const textValues = [];
   (function walk(node) {
-    if (node.type === "text") textValues.push(node.value);
-    for (const child of node.children ?? []) walk(child);
+    if (node.type === "text") {
+      textValues.push(node.value);
+    }
+    for (const child of node.children ?? []) {
+      walk(child);
+    }
   })(tree);
   // Exact-equality (not just "includes") — a garbled
   // `![screenshot]([image omitted from cache])` also parses to a text node

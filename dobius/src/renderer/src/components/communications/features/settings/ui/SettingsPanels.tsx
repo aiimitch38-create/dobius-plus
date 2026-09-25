@@ -289,7 +289,9 @@ function useThemeCategories() {
 
     for (const name of SYNTAX_THEMES) {
       // Skip dark members of pairs — they'll be shown alongside their light counterpart
-      if (darkPairMembers.has(name)) continue;
+      if (darkPairMembers.has(name)) {
+        continue;
+      }
 
       if (LIGHT_THEMES.has(name)) {
         const pair = getThemePair(name);
@@ -577,7 +579,9 @@ function ThemeSettingsCard() {
             {selectedMode === "system" &&
               pairedLight.map((lightName) => {
                 const darkName = getThemePair(lightName);
-                if (!darkName) return null;
+                if (!darkName) {
+                  return null;
+                }
                 return (
                   <PairedThemeTile
                     darkVars={getVars(darkName)}

@@ -33,7 +33,9 @@ const DIFF_ADD_RE = /\s*\/\/\s*\[!code\s*\+\+\]\s*$/;
 const DIFF_REMOVE_RE = /\s*\/\/\s*\[!code\s*--\]\s*$/;
 
 function ensureHighlighter(): Promise<void> {
-  if (shikiHighlighter) return Promise.resolve();
+  if (shikiHighlighter) {
+    return Promise.resolve();
+  }
   if (!shikiInitPromise) {
     shikiInitPromise = getSingletonHighlighter({
       themes: [],
@@ -46,17 +48,25 @@ function ensureHighlighter(): Promise<void> {
 }
 
 export function extractLanguage(className?: string): string {
-  if (typeof className !== "string") return "";
+  if (typeof className !== "string") {
+    return "";
+  }
   const match = className.match(/language-(\S+)/);
   return match ? match[1] : "";
 }
 
 function stripDiffMarker(tokens: ThemedToken[], marker: RegExp): ThemedToken[] {
-  const last = tokens[tokens.length - 1];
-  if (!last) return tokens;
+  const last = tokens.at(-1);
+  if (!last) {
+    return tokens;
+  }
   const stripped = last.content.replace(marker, "");
-  if (stripped === last.content) return tokens;
-  if (stripped === "") return tokens.slice(0, -1);
+  if (stripped === last.content) {
+    return tokens;
+  }
+  if (stripped === "") {
+    return tokens.slice(0, -1);
+  }
   return [...tokens.slice(0, -1), { ...last, content: stripped }];
 }
 
@@ -150,10 +160,14 @@ export function SyntaxHighlightedCode({
     async function loadAssets() {
       try {
         await ensureHighlighter();
-        if (!shikiHighlighter || cancelled) return;
+        if (!shikiHighlighter || cancelled) {
+          return;
+        }
         let loaded = false;
         if (!loadedLangs.has(language)) {
-          if (loadedLangs.size >= MAX_LOADED_LANGUAGES) return;
+          if (loadedLangs.size >= MAX_LOADED_LANGUAGES) {
+            return;
+          }
           try {
             await shikiHighlighter.loadLanguage(language as BundledLanguage);
             loadedLangs.add(language);
@@ -171,7 +185,9 @@ export function SyntaxHighlightedCode({
             return;
           }
         }
-        if (loaded && !cancelled) setLoadedKey((k) => k + 1);
+        if (loaded && !cancelled) {
+          setLoadedKey((k) => k + 1);
+        }
       } catch {
         /* ignore */
       }
@@ -190,12 +206,17 @@ export function SyntaxHighlightedCode({
       !shikiHighlighter ||
       !loadedLangs.has(language) ||
       !loadedThemes.has(shikiTheme)
-    )
+    ) {
       return null;
-    if ((code.match(/\n/g) || []).length > MAX_HIGHLIGHT_LINES) return null;
+    }
+    if ((code.match(/\n/g) || []).length > MAX_HIGHLIGHT_LINES) {
+      return null;
+    }
     const cacheKey = `${language}:${shikiTheme}:${code}`;
     const cached = tokenCache.get(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
     try {
       const result = shikiHighlighter.codeToTokens(code, {
         lang: language as BundledLanguage,
@@ -203,7 +224,9 @@ export function SyntaxHighlightedCode({
       });
       if (tokenCache.size >= MAX_CACHE_ENTRIES) {
         const firstKey = tokenCache.keys().next().value;
-        if (firstKey !== undefined) tokenCache.delete(firstKey);
+        if (firstKey !== undefined) {
+          tokenCache.delete(firstKey);
+        }
       }
       tokenCache.set(cacheKey, result.tokens);
       return result.tokens;

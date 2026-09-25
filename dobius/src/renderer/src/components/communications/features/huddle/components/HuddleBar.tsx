@@ -84,14 +84,18 @@ function parseEphemeralChannelId(content: string): string | null {
 
 function customEmojiShortcode(emoji: string): string | null {
   const trimmed = emoji.trim();
-  if (!trimmed.startsWith(":") || !trimmed.endsWith(":")) return null;
+  if (!trimmed.startsWith(":") || !trimmed.endsWith(":")) {
+    return null;
+  }
   const shortcode = trimmed.slice(1, -1).trim().toLowerCase();
   return shortcode.length > 0 ? shortcode : null;
 }
 
 function clampReactionName(name: string): string {
   const trimmed = name.trim();
-  if (trimmed.length <= HUDDLE_REACTION_NAME_MAX) return trimmed;
+  if (trimmed.length <= HUDDLE_REACTION_NAME_MAX) {
+    return trimmed;
+  }
   return `${trimmed.slice(0, HUDDLE_REACTION_NAME_MAX - 1).trimEnd()}…`;
 }
 
@@ -100,10 +104,14 @@ function fallbackNameForPubkey(pubkey?: string | null): string {
 }
 
 function parseHuddleReactionEvent(event: RelayEvent) {
-  if (event.kind !== KIND_HUDDLE_REACTION) return null;
+  if (event.kind !== KIND_HUDDLE_REACTION) {
+    return null;
+  }
 
   const emoji = (firstTagValue(event, "reaction") ?? event.content).trim();
-  if (!emoji) return null;
+  if (!emoji) {
+    return null;
+  }
 
   const shortcode = customEmojiShortcode(emoji);
   const emojiUrl =
@@ -242,10 +250,15 @@ export function HuddleBar({
 
     // Primary: listen for Rust-emitted state change events
     listen<HuddleState>("huddle-state-changed", (event) => {
-      if (!cancelled) applyIncomingState(event.payload);
+      if (!cancelled) {
+        applyIncomingState(event.payload);
+      }
     }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
     });
 
     // Fallback in case events are missed; keep it slow so normal huddle use is
@@ -264,19 +277,25 @@ export function HuddleBar({
 
   const huddlePhase = state?.phase;
   React.useEffect(() => {
-    if (huddlePhase !== "active" && huddlePhase !== "connected") return;
+    if (huddlePhase !== "active" && huddlePhase !== "connected") {
+      return;
+    }
 
     let cancelled = false;
 
     const fmt = (s: unknown): string => {
-      if (typeof s === "string") return s === "ready" ? "ready" : "pending";
+      if (typeof s === "string") {
+        return s === "ready" ? "ready" : "pending";
+      }
       if (typeof s === "object" && s !== null) {
         if ("downloading" in s) {
           const d = (s as { downloading: { progress_percent: number } })
             .downloading;
           return `${d.progress_percent}%`;
         }
-        if ("error" in s) return "error";
+        if ("error" in s) {
+          return "error";
+        }
       }
       return "pending";
     };
@@ -287,7 +306,9 @@ export function HuddleBar({
           stt: unknown;
           tts: unknown;
         }>("get_model_status");
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
         setModelStatus({
           stt: fmt(status.stt),
@@ -374,13 +395,21 @@ export function HuddleBar({
           since: Math.floor(Date.now() / 1_000),
         },
         (event) => {
-          if (disposed) return;
-          if (seenEventIds.has(event.id)) return;
+          if (disposed) {
+            return;
+          }
+          if (seenEventIds.has(event.id)) {
+            return;
+          }
           seenEventIds.add(event.id);
-          if (event.pubkey === currentPubkey) return;
+          if (event.pubkey === currentPubkey) {
+            return;
+          }
 
           const reaction = parseHuddleReactionEvent(event);
-          if (!reaction) return;
+          if (!reaction) {
+            return;
+          }
           burstHuddleReaction(reaction);
         },
       )
@@ -413,9 +442,12 @@ export function HuddleBar({
 
     void relayClient
       .subscribeToHuddleEvents(parentChannelId, (event) => {
-        if (disposed || event.kind !== KIND_HUDDLE_STARTED) return;
-        if (parseEphemeralChannelId(event.content) !== reactionChannelId)
+        if (disposed || event.kind !== KIND_HUDDLE_STARTED) {
           return;
+        }
+        if (parseEphemeralChannelId(event.content) !== reactionChannelId) {
+          return;
+        }
         setHuddleThreadEventId(event.id);
       })
       .then((dispose) => {
@@ -438,7 +470,9 @@ export function HuddleBar({
   const handleHuddleReactionSelect = React.useCallback(
     (emoji: string) => {
       const trimmedEmoji = emoji.trim();
-      if (!reactionChannelId || !trimmedEmoji) return;
+      if (!reactionChannelId || !trimmedEmoji) {
+        return;
+      }
 
       const emojiUrl = reactionEmojiUrl(trimmedEmoji, customEmoji);
       const displayEmojiUrl = emojiUrl ? rewriteRelayUrl(emojiUrl) : null;
@@ -491,7 +525,9 @@ export function HuddleBar({
   const aecMissing = true;
 
   async function handleLeave() {
-    if (isLeaving) return;
+    if (isLeaving) {
+      return;
+    }
     const leavingChannelId = barState?.ephemeral_channel_id ?? null;
     stateGenerationRef.current += 1;
     locallyLeavingChannelRef.current = leavingChannelId;
@@ -530,7 +566,9 @@ export function HuddleBar({
   }
 
   function handleOpenThread() {
-    if (!parentChannelId || !huddleThreadEventId) return;
+    if (!parentChannelId || !huddleThreadEventId) {
+      return;
+    }
     onOpenThread?.(parentChannelId, huddleThreadEventId);
   }
 
@@ -686,11 +724,15 @@ export function HuddleBar({
             activeSpeakers={activeSpeakers}
             agentPubkeys={barState.agent_pubkeys}
             onRemoveAgent={async (pubkey) => {
-              if (!barState.ephemeral_channel_id) return;
+              if (!barState.ephemeral_channel_id) {
+                return;
+              }
               const confirmed = window.confirm(
                 "Remove this agent from the huddle?",
               );
-              if (!confirmed) return;
+              if (!confirmed) {
+                return;
+              }
               try {
                 await invoke("remove_channel_member", {
                   channelId: barState.ephemeral_channel_id,
@@ -699,7 +741,9 @@ export function HuddleBar({
                 // Optimistically remove from local state — the backend's
                 // 15s membership poll will eventually converge.
                 setState((prev) => {
-                  if (!prev) return prev;
+                  if (!prev) {
+                    return prev;
+                  }
                   return {
                     ...prev,
                     participants: prev.participants.filter((p) => p !== pubkey),

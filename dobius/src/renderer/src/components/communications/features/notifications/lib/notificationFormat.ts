@@ -10,9 +10,11 @@ const NOTIFICATION_BODY_MAX_LENGTH = 140;
  */
 export function resolveNotificationChannelLabel(
   channelId: string | null | undefined,
-  channels: ReadonlyArray<{ id: string; name?: string | null }>,
+  channels: readonly { id: string; name?: string | null }[],
 ): string | null {
-  if (!channelId) return null;
+  if (!channelId) {
+    return null;
+  }
   const channel = channels.find((c) => c.id === channelId);
   const name = channel?.name?.trim();
   return name ? `#${name}` : null;
@@ -28,8 +30,12 @@ export function truncateNotificationBody(
   fallback: string,
 ): string {
   const trimmed = content.trim();
-  if (trimmed.length === 0) return fallback;
-  if (trimmed.length <= NOTIFICATION_BODY_MAX_LENGTH) return trimmed;
+  if (trimmed.length === 0) {
+    return fallback;
+  }
+  if (trimmed.length <= NOTIFICATION_BODY_MAX_LENGTH) {
+    return trimmed;
+  }
   return `${trimmed.slice(0, NOTIFICATION_BODY_MAX_LENGTH - 3).trimEnd()}...`;
 }
 

@@ -22,7 +22,9 @@ async function fetchProjectCommitDiff(
       cloneUrl: project.cloneUrls[0] ?? null,
       targetCommit: commitHash,
     });
-    if (local) return local;
+    if (local) {
+      return local;
+    }
   }
 
   const cloneUrl = project.cloneUrls[0];

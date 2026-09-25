@@ -11,7 +11,7 @@ import type { InstallRuntimeResult } from "@comms/shared/api/types";
  */
 export function getInstallErrorMessage(result: InstallRuntimeResult): string {
   const { steps, logPath } = result;
-  const lastStep = steps[steps.length - 1];
+  const lastStep = steps.at(-1);
   if (!lastStep) {
     return withLog("Install failed with no output.", logPath);
   }

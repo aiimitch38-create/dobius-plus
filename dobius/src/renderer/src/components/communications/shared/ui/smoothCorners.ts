@@ -29,10 +29,7 @@ type SmoothCornersOptions = {
   smoothing?: number;
 };
 
-const ADJACENTS_BY_CORNER: Record<
-  Corner,
-  Array<{ corner: Corner; side: Side }>
-> = {
+const ADJACENTS_BY_CORNER: Record<Corner, { corner: Corner; side: Side }[]> = {
   topLeft: [
     { corner: "topRight", side: "top" },
     { corner: "bottomLeft", side: "left" },
@@ -79,7 +76,9 @@ function rounded(strings: TemplateStringsArray, ...values: number[]): string {
 
 function parseRadiusLength(value: string | undefined, axisLength: number) {
   const trimmed = value?.trim();
-  if (!trimmed) return 0;
+  if (!trimmed) {
+    return 0;
+  }
 
   if (trimmed.endsWith("%")) {
     const percent = Number.parseFloat(trimmed);
@@ -186,7 +185,7 @@ function distributeAndNormalize(
     bottomLeft: -1,
   };
 
-  (Object.entries(radiusMap) as Array<[Corner, number]>)
+  (Object.entries(radiusMap) as [Corner, number][])
     .sort(([, first], [, second]) => second - first)
     .forEach(([corner, radius]) => {
       const budget = Math.min(
@@ -378,18 +377,16 @@ export function generateSmoothCornerPath(
 
   return (
     `M ${round(topLeft.p)} 0` +
-    ` L ${round(width - topRight.p)} 0` +
-    seg(topRight.pathSegment("topRight")) +
-    ` L ${round(width)} ${round(bottomRight.p)}` +
-    ` L ${round(width)} ${round(height - bottomRight.p)}` +
-    seg(bottomRight.pathSegment("bottomRight")) +
-    ` L ${round(width - bottomLeft.p)} ${round(height)}` +
-    ` L ${round(bottomLeft.p)} ${round(height)}` +
-    seg(bottomLeft.pathSegment("bottomLeft")) +
-    ` L 0 ${round(height - topLeft.p)}` +
-    ` L 0 ${round(topLeft.p)}` +
-    seg(topLeft.pathSegment("topLeft")) +
-    " Z"
+    ` L ${round(width - topRight.p)} 0${seg(
+      topRight.pathSegment("topRight"),
+    )} L ${round(width)} ${round(bottomRight.p)}` +
+    ` L ${round(width)} ${round(height - bottomRight.p)}${seg(
+      bottomRight.pathSegment("bottomRight"),
+    )} L ${round(width - bottomLeft.p)} ${round(height)}` +
+    ` L ${round(bottomLeft.p)} ${round(height)}${seg(
+      bottomLeft.pathSegment("bottomLeft"),
+    )} L 0 ${round(height - topLeft.p)}` +
+    ` L 0 ${round(topLeft.p)}${seg(topLeft.pathSegment("topLeft"))} Z`
   );
 }
 
@@ -410,11 +407,17 @@ export function useSmoothCorners<T extends HTMLElement>(
   const smoothing = options.smoothing ?? SMOOTH_CORNER_SMOOTHING;
 
   React.useLayoutEffect(() => {
-    if (!enabled || typeof window === "undefined") return;
+    if (!enabled || typeof window === "undefined") {
+      return;
+    }
 
     const element = ref.current;
-    if (!element) return;
-    if (!supportsClipPathPath()) return;
+    if (!element) {
+      return;
+    }
+    if (!supportsClipPathPath()) {
+      return;
+    }
 
     const savedClipPath = element.style.clipPath;
     const savedWebkitClipPath =
@@ -424,7 +427,9 @@ export function useSmoothCorners<T extends HTMLElement>(
 
     const sync = () => {
       const { width, height } = getLayoutSize(element);
-      if (width <= 0 || height <= 0) return;
+      if (width <= 0 || height <= 0) {
+        return;
+      }
 
       const clipPath = generateSmoothCornerClipPath(
         width,
@@ -433,7 +438,9 @@ export function useSmoothCorners<T extends HTMLElement>(
         smoothing,
       );
 
-      if (clipPath === lastClipPath) return;
+      if (clipPath === lastClipPath) {
+        return;
+      }
 
       element.style.clipPath = clipPath;
       element.style.setProperty("-webkit-clip-path", clipPath);
@@ -443,7 +450,9 @@ export function useSmoothCorners<T extends HTMLElement>(
     };
 
     const scheduleSync = () => {
-      if (animationFrame) return;
+      if (animationFrame) {
+        return;
+      }
       animationFrame = window.requestAnimationFrame(() => {
         animationFrame = 0;
         sync();

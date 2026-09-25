@@ -14,11 +14,15 @@ export function parseImetaTags(
 ): Map<string, ParsedImetaEntry> {
   const map = new Map<string, ParsedImetaEntry>();
   for (const tag of tags) {
-    if (tag[0] !== "imeta") continue;
+    if (tag[0] !== "imeta") {
+      continue;
+    }
     const entry: Partial<ParsedImetaEntry> = {};
     for (const part of tag.slice(1)) {
       const spaceIdx = part.indexOf(" ");
-      if (spaceIdx === -1) continue;
+      if (spaceIdx === -1) {
+        continue;
+      }
       const key = part.slice(0, spaceIdx);
       const val = part.slice(spaceIdx + 1);
       switch (key) {
@@ -57,7 +61,9 @@ export function parseImetaTags(
           break;
       }
     }
-    if (entry.url) map.set(entry.url, entry as ParsedImetaEntry);
+    if (entry.url) {
+      map.set(entry.url, entry as ParsedImetaEntry);
+    }
   }
   return map;
 }

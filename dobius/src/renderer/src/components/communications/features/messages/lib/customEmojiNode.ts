@@ -24,12 +24,12 @@ import { escapeRegExp } from "@comms/shared/lib/mentionPattern";
 
 export const CUSTOM_EMOJI_NODE_NAME = "customEmoji";
 
-export interface CustomEmojiNodeOptions {
+export type CustomEmojiNodeOptions = {
   /** Resolve a (lowercased) shortcode to its image URL. */
   resolveUrl: (shortcode: string) => string | undefined;
   /** All known shortcodes, used to build the input-rule pattern. */
   shortcodes: () => string[];
-}
+};
 
 /**
  * Build a case-insensitive regex matching a completed `:shortcode:` for any
@@ -43,7 +43,9 @@ export function buildKnownShortcodeAlternation(
   const sorted = [...new Set(shortcodes)]
     .filter((s) => s.trim().length > 0)
     .sort((a, b) => b.length - a.length);
-  if (sorted.length === 0) return null;
+  if (sorted.length === 0) {
+    return null;
+  }
   return sorted.map((s) => escapeRegExp(s)).join("|");
 }
 
@@ -70,12 +72,16 @@ export function registerCustomEmojiMarkdownIt(
   // `parse.setup` runs on every parse against the *same* markdown-it instance,
   // so only register the rule + renderer once — `ruler.before` throws on a
   // duplicate rule name.
-  if (md.renderer.rules[TOKEN_TYPE]) return;
+  if (md.renderer.rules[TOKEN_TYPE]) {
+    return;
+  }
 
   // biome-ignore lint/suspicious/noExplicitAny: markdown-it state/silent
   const rule = (state: any, silent: boolean): boolean => {
     // Fast bail: a shortcode must start with `:`.
-    if (state.src.charCodeAt(state.pos) !== 0x3a /* : */) return false;
+    if (state.src.charCodeAt(state.pos) !== 0x3a /* : */) {
+      return false;
+    }
 
     // Word-boundary guard: don't fire when the `:` is glued to a preceding
     // word char. This keeps prose and URLs intact — `not:buzz:` and
@@ -89,11 +95,15 @@ export function registerCustomEmojiMarkdownIt(
         (prev >= 0x41 && prev <= 0x5a) /* A-Z */ ||
         (prev >= 0x61 && prev <= 0x7a) /* a-z */ ||
         prev === 0x5f; /* _ */
-      if (isWordChar) return false;
+      if (isWordChar) {
+        return false;
+      }
     }
 
     const alternation = buildKnownShortcodeAlternation(options.shortcodes());
-    if (!alternation) return false;
+    if (!alternation) {
+      return false;
+    }
 
     // Match a known `:shortcode:` anchored at the current position. `y` (sticky)
     // anchors at lastIndex without `^`, so we don't accidentally match later in
@@ -101,7 +111,9 @@ export function registerCustomEmojiMarkdownIt(
     const re = new RegExp(`:(?:${alternation}):`, "iy");
     re.lastIndex = state.pos;
     const match = re.exec(state.src);
-    if (!match) return false;
+    if (!match) {
+      return false;
+    }
 
     if (!silent) {
       const matched = match[0];
@@ -157,7 +169,9 @@ export const CustomEmojiNode = Node.create<CustomEmojiNodeOptions>({
         parseHTML: (el) => {
           const e = el as HTMLElement;
           const fromData = e.getAttribute("data-shortcode");
-          if (fromData) return fromData;
+          if (fromData) {
+            return fromData;
+          }
           // Timeline-rendered emoji (markdown.tsx) carry no data-shortcode;
           // recover it from the `:shortcode:` alt so copy-from-timeline →
           // paste-into-composer still produces a proper node.
@@ -248,11 +262,15 @@ export const CustomEmojiNode = Node.create<CustomEmojiNodeOptions>({
           const alternation = buildKnownShortcodeAlternation(
             options.shortcodes(),
           );
-          if (!alternation) return null;
+          if (!alternation) {
+            return null;
+          }
           // Match a completed `:shortcode:` ending at the input position.
           const re = new RegExp(`(:(?:${alternation}):)$`, "i");
           const match = re.exec(text);
-          if (!match) return null;
+          if (!match) {
+            return null;
+          }
           return {
             index: match.index,
             text: match[0],

@@ -47,10 +47,18 @@ function dayKeyOf(date: Date) {
 }
 
 function levelFor(count: number) {
-  if (count <= 0) return 0;
-  if (count <= 2) return 1;
-  if (count <= 5) return 2;
-  if (count <= 9) return 3;
+  if (count <= 0) {
+    return 0;
+  }
+  if (count <= 2) {
+    return 1;
+  }
+  if (count <= 5) {
+    return 2;
+  }
+  if (count <= 9) {
+    return 3;
+  }
   return 4;
 }
 
@@ -79,7 +87,9 @@ function monthLabels(weeks: Date[][]) {
   return weeks.map((week, index) => {
     const isNewMonth =
       index === 0 || week[0].getMonth() !== weeks[index - 1][0].getMonth();
-    if (!isNewMonth || index - lastLabeledIndex < MIN_LABEL_GAP) return "";
+    if (!isNewMonth || index - lastLabeledIndex < MIN_LABEL_GAP) {
+      return "";
+    }
     lastLabeledIndex = index;
     return week[0].toLocaleDateString(undefined, { month: "short" });
   });

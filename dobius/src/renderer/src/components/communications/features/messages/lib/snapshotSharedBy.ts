@@ -9,7 +9,9 @@ export function resolveSnapshotSharedBy(
   message: Pick<TimelineMessage, "signerPubkey">,
   profiles?: UserProfileLookup,
 ): string | undefined {
-  if (!message.signerPubkey) return undefined;
+  if (!message.signerPubkey) {
+    return undefined;
+  }
 
   return resolveUserLabel({
     profiles,

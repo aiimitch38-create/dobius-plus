@@ -30,7 +30,9 @@ function subscribe(listener: Listener): () => void {
 export function emitChange(): void {
   cachedRaw = null;
   cachedParsed = null;
-  for (const listener of listeners) listener();
+  for (const listener of listeners) {
+    listener();
+  }
 }
 
 // useSyncExternalStore requires getSnapshot to return a referentially stable
@@ -144,10 +146,14 @@ export function usePreviewFeatureWarning(featureId: string): void {
   useEffect(() => {
     // No-op for stable features (not in manifest) and preview features
     // that ARE enabled. Manifest membership = preview by definition.
-    if (!feature || enabled) return;
+    if (!feature || enabled) {
+      return;
+    }
     let cancelled = false;
     void import("sonner").then(({ toast }) => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       toast.warning(
         `${feature.name} is a preview feature. Enable it in Settings → Experiments to surface it in your sidebar.`,
       );

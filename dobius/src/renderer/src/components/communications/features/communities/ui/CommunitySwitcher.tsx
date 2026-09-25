@@ -119,7 +119,9 @@ export function CommunitySwitcher({
   }
 
   function scheduleProfileMenu(nextOpen: boolean) {
-    if (variant !== "profile-menu") return;
+    if (variant !== "profile-menu") {
+      return;
+    }
     clearProfileMenuHoverTimer();
     profileMenuHoverTimer.current = window.setTimeout(
       () => setDropdownOpen(nextOpen),
@@ -393,7 +395,9 @@ export function CommunitySwitcher({
       <EditCommunityDialog
         canRemove={communities.length > 1}
         onOpenChange={(open) => {
-          if (!open) setEditingCommunity(null);
+          if (!open) {
+            setEditingCommunity(null);
+          }
         }}
         onRemove={onRemoveCommunity}
         onSave={onUpdateCommunity}

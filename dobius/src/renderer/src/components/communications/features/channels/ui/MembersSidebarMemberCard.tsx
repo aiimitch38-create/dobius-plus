@@ -496,8 +496,12 @@ function MemberActionsMenu({
 }
 
 function getPairActionIcon(action: ManagedAgentPairAction) {
-  if (action === "stop") return <Square className="h-4 w-4" />;
-  if (action === "restart") return <RotateCcw className="h-4 w-4" />;
+  if (action === "stop") {
+    return <Square className="h-4 w-4" />;
+  }
+  if (action === "restart") {
+    return <RotateCcw className="h-4 w-4" />;
+  }
   return <Play className="h-4 w-4" />;
 }
 

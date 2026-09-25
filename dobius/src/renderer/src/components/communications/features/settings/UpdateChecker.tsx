@@ -47,7 +47,7 @@ export function UpdateChecker() {
             <div className="min-w-0">
               <p className="text-sm font-medium">Update status</p>
               <p className="text-sm font-normal text-muted-foreground">
-                You're on the latest version.
+                You&apos;re on the latest version.
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={checkForUpdate}>
@@ -61,7 +61,7 @@ export function UpdateChecker() {
             <div className="min-w-0">
               <p className="text-sm font-medium">Update status</p>
               <p className="text-sm font-normal text-muted-foreground">
-                Automatic updates aren't available on this build. Download the
+                Automatic updates aren&apos;t available on this build. Download the
                 latest release manually.
               </p>
             </div>
@@ -78,7 +78,7 @@ export function UpdateChecker() {
                 Update available — v{status.version}
               </p>
               <p className="text-sm font-normal text-muted-foreground">
-                In-app updates aren't supported on this Linux package. Download
+                In-app updates aren&apos;t supported on this Linux package. Download
                 the new version from GitHub.{" "}
                 <span className="text-muted-foreground">
                   Switch to the AppImage build for automatic updates.

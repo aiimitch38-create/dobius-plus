@@ -103,16 +103,23 @@ export function HostedCommunityOnboarding({
     let active = true;
     void getBuilderlabAuth()
       .then(async (nextAuth) => {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
         setAuth(nextAuth);
-        if (nextAuth) await loadAccount();
+        if (nextAuth) {
+          await loadAccount();
+        }
       })
       .catch((cause) => {
-        if (active)
+        if (active) {
           setError(cause instanceof Error ? cause.message : String(cause));
+        }
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       });
     return () => {
       active = false;
@@ -137,16 +144,22 @@ export function HostedCommunityOnboarding({
     setError(null);
     void startBuilderlabLogin()
       .then(async (nextAuth) => {
-        if (loginAttempt.current !== attempt) return;
+        if (loginAttempt.current !== attempt) {
+          return;
+        }
         setAuth(nextAuth);
         await loadAccount();
       })
       .catch((cause) => {
-        if (loginAttempt.current !== attempt) return;
+        if (loginAttempt.current !== attempt) {
+          return;
+        }
         setError(cause instanceof Error ? cause.message : String(cause));
       })
       .finally(() => {
-        if (loginAttempt.current === attempt) setAction(null);
+        if (loginAttempt.current === attempt) {
+          setAction(null);
+        }
       });
   };
 
@@ -253,16 +266,21 @@ export function HostedCommunityOnboarding({
     const handle = window.setTimeout(() => {
       void checkHostedCommunityName(normalizedName)
         .then((response) => {
-          if (!cancelled)
+          if (!cancelled) {
             setAvailability(
               response.error ? null : (response.available ?? false),
             );
+          }
         })
         .catch(() => {
-          if (!cancelled) setAvailability(null);
+          if (!cancelled) {
+            setAvailability(null);
+          }
         })
         .finally(() => {
-          if (!cancelled) setCheckingName(false);
+          if (!cancelled) {
+            setCheckingName(false);
+          }
         });
     }, 500);
     return () => {
@@ -295,7 +313,9 @@ export function HostedCommunityOnboarding({
 
   const create = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!validName || !identity || identityMismatch || atCommunityLimit) return;
+    if (!validName || !identity || identityMismatch || atCommunityLimit) {
+      return;
+    }
     void run("Creating community…", async () => {
       const available = await checkHostedCommunityName(normalizedName);
       if (available.error || !available.available) {
@@ -333,7 +353,9 @@ export function HostedCommunityOnboarding({
   // Guarded so it fires exactly once per mount.
   const readyNotifiedRef = React.useRef(false);
   React.useEffect(() => {
-    if (loading || !ready || readyNotifiedRef.current) return;
+    if (loading || !ready || readyNotifiedRef.current) {
+      return;
+    }
     readyNotifiedRef.current = true;
     onReady?.();
   }, [loading, onReady, ready]);
@@ -458,12 +480,16 @@ export function HostedCommunityOnboarding({
     <Dialog
       open={modalOpen}
       onOpenChange={(open) => {
-        if (open) return;
+        if (open) {
+          return;
+        }
         if (action === "Signing in…") {
           cancelSignInAndGoBack();
           return;
         }
-        if (!busy) goBack();
+        if (!busy) {
+          goBack();
+        }
       }}
     >
       <DialogContent

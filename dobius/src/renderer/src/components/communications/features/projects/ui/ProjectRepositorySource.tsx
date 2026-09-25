@@ -44,7 +44,7 @@ export function RepositoryBranchDropdown({
   branch: string;
   branchOptions: string[];
   selectedTag?: string | null;
-  tagOptions?: Array<{ name: string; commit: string }>;
+  tagOptions?: { name: string; commit: string }[];
   /** Smaller trigger for inline headers. */
   compact?: boolean;
   createBranchDisabled?: boolean;
@@ -167,7 +167,7 @@ export type RepoSourceHeaderControls = {
   branch: string;
   branchOptions: string[];
   selectedTag?: string | null;
-  tagOptions?: Array<{ name: string; commit: string }>;
+  tagOptions?: { name: string; commit: string }[];
   onBranchChange: (branch: string) => void;
   onTagChange?: (tag: string) => void;
   onCreateBranch?: () => void;
@@ -324,7 +324,9 @@ export function RepoSyncActionButton({
     );
   }
 
-  if (!controls.onFetch) return null;
+  if (!controls.onFetch) {
+    return null;
+  }
   return (
     <Button
       className={PROJECT_PANEL_ACTION_BUTTON_CLASS}

@@ -33,7 +33,9 @@ export function HuddleParticipantsControl({
     [agentPubkeys],
   );
 
-  if (participants.length === 0) return null;
+  if (participants.length === 0) {
+    return null;
+  }
 
   const participantLabel =
     participants.length === 1

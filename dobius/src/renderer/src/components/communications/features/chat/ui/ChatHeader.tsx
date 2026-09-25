@@ -102,7 +102,9 @@ export function ChatHeader({
 
   async function handleCopyTitle() {
     const value = title.trim();
-    if (!value) return;
+    if (!value) {
+      return;
+    }
 
     try {
       await writeTextToClipboard(value);

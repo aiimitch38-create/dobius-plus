@@ -50,13 +50,17 @@ export type ImetaMedia = BlobDescriptor & {
  * (or split `ImetaMedia` from it) and pass them through here.
  */
 export function imetaMediaFromTags(
-  tags: ReadonlyArray<ReadonlyArray<string>> | undefined,
+  tags: readonly (readonly string[])[] | undefined,
 ): ImetaMedia[] {
-  if (!tags || tags.length === 0) return [];
+  if (!tags || tags.length === 0) {
+    return [];
+  }
   const entries = parseImetaTags(tags as string[][]);
   const out: ImetaMedia[] = [];
   for (const entry of entries.values()) {
-    if (!entry.url) continue;
+    if (!entry.url) {
+      continue;
+    }
     out.push({
       url: entry.url,
       type: entry.m ?? "image/jpeg",
@@ -86,9 +90,7 @@ export function imetaMediaFromTags(
  * rejects literal `"x "` / `"size 0"` empties. NIP-92 itself treats every
  * field except `url` as optional, so dropping them is spec-clean.
  */
-export function buildImetaTags(
-  imetaMedia: ReadonlyArray<ImetaMedia>,
-): string[][] {
+export function buildImetaTags(imetaMedia: readonly ImetaMedia[]): string[][] {
   return imetaMedia.map((d) => [
     "imeta",
     `url ${d.url}`,
@@ -130,9 +132,11 @@ function unescapeMarkdownLinkLabel(label: string): string {
  */
 export function restoreImetaMediaDisplayLabels(
   body: string,
-  imetaMedia: ReadonlyArray<ImetaMedia>,
+  imetaMedia: readonly ImetaMedia[],
 ): ImetaMedia[] {
-  if (imetaMedia.length === 0) return [];
+  if (imetaMedia.length === 0) {
+    return [];
+  }
 
   const urls = new Set(imetaMedia.map((media) => media.url));
   const labelsByUrl = new Map<string, string>();
@@ -141,10 +145,14 @@ export function restoreImetaMediaDisplayLabels(
     const line = lines[index];
     const match = line.match(LABELED_FILE_LINE_RE);
     const url = match?.[2];
-    if (!url || !urls.has(url) || labelsByUrl.has(url)) continue;
+    if (!url || !urls.has(url) || labelsByUrl.has(url)) {
+      continue;
+    }
 
     const label = unescapeMarkdownLinkLabel(match[1]).trim();
-    if (label) labelsByUrl.set(url, label);
+    if (label) {
+      labelsByUrl.set(url, label);
+    }
   }
 
   return imetaMedia.map((media) => {
@@ -173,7 +181,9 @@ function findTrailingBlockSpoilerMediaStart(
     }
 
     const match = line.match(MEDIA_LINE_RE);
-    if (!match || !urls.has(match[1])) return null;
+    if (!match || !urls.has(match[1])) {
+      return null;
+    }
 
     hasMatchingMedia = true;
     index -= 1;
@@ -191,9 +201,11 @@ function findTrailingBlockSpoilerMediaStart(
  */
 export function stripImetaMediaLines(
   body: string,
-  imetaMedia: ReadonlyArray<ImetaMedia>,
+  imetaMedia: readonly ImetaMedia[],
 ): string {
-  if (imetaMedia.length === 0) return body;
+  if (imetaMedia.length === 0) {
+    return body;
+  }
   const urls = new Set(imetaMedia.map((m) => m.url));
   const lines = body.split("\n");
 
@@ -224,9 +236,11 @@ export function stripImetaMediaLines(
 
 export function findSpoileredImetaMediaUrls(
   body: string,
-  imetaMedia: ReadonlyArray<ImetaMedia>,
+  imetaMedia: readonly ImetaMedia[],
 ): Set<string> {
-  if (imetaMedia.length === 0) return new Set();
+  if (imetaMedia.length === 0) {
+    return new Set();
+  }
 
   const urls = new Set(imetaMedia.map((m) => m.url));
   const spoileredUrls = new Set<string>();
@@ -239,7 +253,9 @@ export function findSpoileredImetaMediaUrls(
       continue;
     }
 
-    if (!BLOCK_SPOILER_DELIMITER_RE.test(line)) continue;
+    if (!BLOCK_SPOILER_DELIMITER_RE.test(line)) {
+      continue;
+    }
 
     const blockSpoileredUrls = new Set<string>();
     let closingDelimiterIndex = -1;
@@ -261,7 +277,9 @@ export function findSpoileredImetaMediaUrls(
     }
 
     if (closingDelimiterIndex !== -1) {
-      for (const url of blockSpoileredUrls) spoileredUrls.add(url);
+      for (const url of blockSpoileredUrls) {
+        spoileredUrls.add(url);
+      }
       index = closingDelimiterIndex;
     }
   }
@@ -319,7 +337,7 @@ export function formatImetaMediaLine(
  */
 export function buildOutgoingMessage(
   body: string,
-  pendingImeta: ReadonlyArray<ImetaMedia>,
+  pendingImeta: readonly ImetaMedia[],
   spoileredMediaUrls: ReadonlySet<string> = new Set(),
 ): { content: string; mediaTags: string[][] | undefined } {
   let content = body;
@@ -343,7 +361,9 @@ export function mergeOutgoingTags(
   mediaTags: string[][] | undefined,
   emojiTags: string[][],
 ): string[][] | undefined {
-  if (!mediaTags && emojiTags.length === 0) return undefined;
+  if (!mediaTags && emojiTags.length === 0) {
+    return undefined;
+  }
   return [...(mediaTags ?? []), ...emojiTags];
 }
 

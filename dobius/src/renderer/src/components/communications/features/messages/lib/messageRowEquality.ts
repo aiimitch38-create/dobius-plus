@@ -23,14 +23,22 @@ export function tagsEqual(
   a: TimelineMessage["tags"],
   b: TimelineMessage["tags"],
 ): boolean {
-  if (a === b) return true;
-  if (!a || !b || a.length !== b.length) return false;
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b || a.length !== b.length) {
+    return false;
+  }
   for (let i = 0; i < a.length; i += 1) {
     const tagA = a[i];
     const tagB = b[i];
-    if (tagA.length !== tagB.length) return false;
+    if (tagA.length !== tagB.length) {
+      return false;
+    }
     for (let j = 0; j < tagA.length; j += 1) {
-      if (tagA[j] !== tagB[j]) return false;
+      if (tagA[j] !== tagB[j]) {
+        return false;
+      }
     }
   }
   return true;
@@ -40,8 +48,12 @@ export function reactionsEqual(
   a: TimelineReaction[] | undefined,
   b: TimelineReaction[] | undefined,
 ): boolean {
-  if (a === b) return true;
-  if (!a || !b || a.length !== b.length) return false;
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b || a.length !== b.length) {
+    return false;
+  }
   for (let i = 0; i < a.length; i += 1) {
     const left = a[i];
     const right = b[i];
@@ -73,10 +85,16 @@ export function numberArrayEqual(
   a: readonly number[] | undefined,
   b: readonly number[] | undefined,
 ): boolean {
-  if (a === b) return true;
-  if (!a || !b || a.length !== b.length) return false;
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b || a.length !== b.length) {
+    return false;
+  }
   for (let i = 0; i < a.length; i += 1) {
-    if (a[i] !== b[i]) return false;
+    if (a[i] !== b[i]) {
+      return false;
+    }
   }
   return true;
 }
@@ -87,24 +105,28 @@ export function numberArrayEqual(
  * would create an import cycle with MessageRow. */
 export function depthGuideActionsEqual(
   a:
-    | ReadonlyArray<{
+    | readonly {
         active?: boolean;
         depth: number;
         label: string;
         message: TimelineMessage;
-      }>
+      }[]
     | undefined,
   b:
-    | ReadonlyArray<{
+    | readonly {
         active?: boolean;
         depth: number;
         label: string;
         message: TimelineMessage;
-      }>
+      }[]
     | undefined,
 ): boolean {
-  if (a === b) return true;
-  if (!a || !b || a.length !== b.length) return false;
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b || a.length !== b.length) {
+    return false;
+  }
   for (let i = 0; i < a.length; i += 1) {
     if (
       a[i].active !== b[i].active ||

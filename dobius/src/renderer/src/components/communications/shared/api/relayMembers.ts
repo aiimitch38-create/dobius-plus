@@ -58,11 +58,17 @@ export function relayMembersFromEvent(event: RelayEvent): RelayMember[] {
 
   for (const tag of event.tags) {
     const [name, rawPubkey, maybeRoleOrRelay, maybePTagRole] = tag;
-    if (name !== "member" && name !== "p") continue;
-    if (!rawPubkey) continue;
+    if (name !== "member" && name !== "p") {
+      continue;
+    }
+    if (!rawPubkey) {
+      continue;
+    }
 
     const pubkey = normalizePubkey(rawPubkey);
-    if (!/^[0-9a-f]{64}$/.test(pubkey) || seen.has(pubkey)) continue;
+    if (!/^[0-9a-f]{64}$/.test(pubkey) || seen.has(pubkey)) {
+      continue;
+    }
     seen.add(pubkey);
 
     const rawRole = name === "member" ? maybeRoleOrRelay : maybePTagRole;

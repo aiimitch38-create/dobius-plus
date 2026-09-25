@@ -28,7 +28,9 @@ export function useQuickBotDrop(channelId: string | null) {
 
   const addBot = React.useCallback(
     async (persona: AgentPersona, instanceName: string) => {
-      if (state.pending || !channelId) return;
+      if (state.pending || !channelId) {
+        return;
+      }
 
       setState({ pending: true, error: null });
 

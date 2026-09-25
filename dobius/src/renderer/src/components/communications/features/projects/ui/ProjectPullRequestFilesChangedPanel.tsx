@@ -171,7 +171,9 @@ function sortedFileTreeChildren(node: FileTreeNode) {
 
 function extensionForPath(path: string) {
   const name = fileName(path).toLowerCase();
-  if (!name.includes(".")) return "";
+  if (!name.includes(".")) {
+    return "";
+  }
   return name.split(".").pop() ?? "";
 }
 
@@ -330,7 +332,9 @@ function ChangedFolderTreeIcon() {
 
 function parseHunkHeader(line: string) {
   const match = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   return { oldLine: Number(match[1]), newLine: Number(match[2]) };
 }
 
@@ -383,16 +387,25 @@ function diffRows(file: ProjectRepoDiffFile): DiffRow[] {
 }
 
 function diffLineClassName(type: DiffRow["type"]) {
-  if (type === "add") return "border-green-500/10 border-l-2 bg-green-500/10";
-  if (type === "delete")
+  if (type === "add") {
+    return "border-green-500/10 border-l-2 bg-green-500/10";
+  }
+  if (type === "delete") {
     return "border-destructive/10 border-l-2 bg-destructive/10";
-  if (type === "hunk") return "bg-sky-500/10 text-sky-500";
+  }
+  if (type === "hunk") {
+    return "bg-sky-500/10 text-sky-500";
+  }
   return "border-transparent border-l-2";
 }
 
 function linePrefix(type: DiffRow["type"]) {
-  if (type === "add") return "+";
-  if (type === "delete") return "-";
+  if (type === "add") {
+    return "+";
+  }
+  if (type === "delete") {
+    return "-";
+  }
   return " ";
 }
 
@@ -400,7 +413,9 @@ function commentAnchorForRow(
   file: ProjectRepoDiffFile,
   row: DiffRow,
 ): ProjectPullRequestCommentAnchor | null {
-  if (row.type === "hunk") return null;
+  if (row.type === "hunk") {
+    return null;
+  }
   const side = row.type === "delete" ? "old" : "new";
   const line = side === "old" ? row.oldLine : row.newLine;
   return line ? { line, path: file.path, side } : null;
@@ -437,7 +452,9 @@ function errorMessage(error: unknown) {
       : typeof error === "string"
         ? error
         : null;
-  if (!message) return null;
+  if (!message) {
+    return null;
+  }
   // Backend errors can carry raw git stderr with temp-dir paths; strip
   // absolute paths so the UI doesn't leak local filesystem details.
   return message.replace(/(^|[\s'"`])(?:[A-Za-z]:)?[\\/][^\s'"`]+/g, "$1…");
@@ -467,7 +484,9 @@ function DiffPreview({
     let isListeningForInteraction = false;
     const clearHighlight = () => setHighlightedAnchor(null);
     const clearHighlightOnKeyDown = (event: KeyboardEvent) => {
-      if (["Alt", "Control", "Meta", "Shift"].includes(event.key)) return;
+      if (["Alt", "Control", "Meta", "Shift"].includes(event.key)) {
+        return;
+      }
       clearHighlight();
     };
     const frame = window.requestAnimationFrame(() => {
@@ -690,7 +709,9 @@ export function ProjectPullRequestFilesChangedPanel({
       mediaTags?: string[][],
       decision?: "request-changes",
     ) => {
-      if (!pullRequest) throw new Error("No pull request selected.");
+      if (!pullRequest) {
+        throw new Error("No pull request selected.");
+      }
       try {
         await postComment({
           anchor,
@@ -779,7 +800,9 @@ export function ProjectDiffFilesPanel({
   const files = diff?.files ?? [];
   const filteredFiles = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return files;
+    if (!normalizedQuery) {
+      return files;
+    }
     return files.filter((file) =>
       file.path.toLowerCase().includes(normalizedQuery),
     );
@@ -795,7 +818,9 @@ export function ProjectDiffFilesPanel({
     null;
 
   React.useEffect(() => {
-    if (!focusedAnchor) return;
+    if (!focusedAnchor) {
+      return;
+    }
     setQuery("");
     setSelectedPath(focusedAnchor.path);
   }, [focusedAnchor]);

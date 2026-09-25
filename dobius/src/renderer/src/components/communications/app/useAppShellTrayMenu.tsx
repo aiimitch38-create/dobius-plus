@@ -13,7 +13,9 @@ export function AppShellTrayMenu({
   goChannel: (channelId: string) => Promise<unknown>;
   openCreateChannel: () => void;
 }) {
-  if (!isMacPlatform()) return null;
+  if (!isMacPlatform()) {
+    return null;
+  }
   return (
     <MacAppShellTrayMenu
       channels={channels}

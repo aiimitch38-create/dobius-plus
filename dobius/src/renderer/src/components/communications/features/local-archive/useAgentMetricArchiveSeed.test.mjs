@@ -21,7 +21,9 @@ function makeDeps({
     calls,
     agentMetricArchiveDefaultEnabled: async () => defaultOn,
     mergeSaveSubscriptionKinds: async (kind) => {
-      if (mergeShouldFail) throw new Error("merge failed");
+      if (mergeShouldFail) {
+        throw new Error("merge failed");
+      }
       calls.mergeSaveSubscriptionKinds.push({ kind });
     },
     hasExplicitChoice: (_pubkey) => hasExplicitChoice,
@@ -36,8 +38,12 @@ function makeDeps({
 const KIND_AGENT_TURN_METRIC = 44200;
 
 async function runSeed(pubkey, deps) {
-  if (!pubkey) return;
-  if (deps.hasExplicitChoice(pubkey)) return;
+  if (!pubkey) {
+    return;
+  }
+  if (deps.hasExplicitChoice(pubkey)) {
+    return;
+  }
 
   let defaultOn;
   try {
@@ -46,7 +52,9 @@ async function runSeed(pubkey, deps) {
     return;
   }
 
-  if (!defaultOn) return;
+  if (!defaultOn) {
+    return;
+  }
 
   try {
     await deps.mergeSaveSubscriptionKinds(KIND_AGENT_TURN_METRIC);
@@ -187,15 +195,21 @@ test("test_concurrent_seeds_both_kinds_survive", async () => {
 
   // Replace the kind constant in the observer runSeed equivalent with 24200.
   async function runObserverSeed(pubkey, deps) {
-    if (!pubkey) return;
-    if (deps.hasExplicitChoice(pubkey)) return;
+    if (!pubkey) {
+      return;
+    }
+    if (deps.hasExplicitChoice(pubkey)) {
+      return;
+    }
     let defaultOn;
     try {
       defaultOn = await deps.agentMetricArchiveDefaultEnabled();
     } catch {
       return;
     }
-    if (!defaultOn) return;
+    if (!defaultOn) {
+      return;
+    }
     try {
       await deps.mergeSaveSubscriptionKinds(24200);
     } catch {

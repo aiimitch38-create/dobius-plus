@@ -85,7 +85,9 @@ export function ChannelTemplatesSettingsCard() {
   }
 
   function handleDelete() {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     deleteMutation.mutate(deleteTarget.id, {
       onSuccess: () => {
         toast.success(`Deleted "${deleteTarget.name}"`);
@@ -153,7 +155,9 @@ export function ChannelTemplatesSettingsCard() {
       {editingTemplate ? (
         <TemplateFormDialog
           onOpenChange={(open) => {
-            if (!open) setEditingTemplate(null);
+            if (!open) {
+              setEditingTemplate(null);
+            }
           }}
           open
           template={editingTemplate}
@@ -162,7 +166,9 @@ export function ChannelTemplatesSettingsCard() {
 
       <AlertDialog
         onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
+          if (!open) {
+            setDeleteTarget(null);
+          }
         }}
         open={deleteTarget !== null}
       >
@@ -310,7 +316,9 @@ function TemplateFormDialog({
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     if (template) {
       setName(template.name);
       setDescription(template.description ?? "");
@@ -319,12 +327,16 @@ function TemplateFormDialog({
       setSelectedTeamIds(template.agents.teams.map((t) => t.teamId));
       const pRuntimes: Record<string, string> = {};
       for (const p of template.agents.personas) {
-        if (p.runtime) pRuntimes[p.personaId] = p.runtime;
+        if (p.runtime) {
+          pRuntimes[p.personaId] = p.runtime;
+        }
       }
       setPersonaRuntimes(pRuntimes);
       const tRuntimes: Record<string, string> = {};
       for (const t of template.agents.teams) {
-        if (t.runtime) tRuntimes[t.teamId] = t.runtime;
+        if (t.runtime) {
+          tRuntimes[t.teamId] = t.runtime;
+        }
       }
       setTeamRuntimes(tRuntimes);
     } else {
@@ -341,7 +353,9 @@ function TemplateFormDialog({
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const trimmedName = name.trim();
-    if (!trimmedName) return;
+    if (!trimmedName) {
+      return;
+    }
 
     const agents = {
       personas: selectedPersonaIds.map((personaId) => ({
@@ -664,7 +678,9 @@ function RuntimeAssignments({
 }) {
   const hasSelections =
     selectedPersonaIds.length > 0 || selectedTeamIds.length > 0;
-  if (!hasSelections) return null;
+  if (!hasSelections) {
+    return null;
+  }
 
   const selectedPersonas = personas.filter((p) =>
     selectedPersonaIds.includes(p.id),

@@ -20,7 +20,9 @@ export function pageOlderMessagesUntilRowFloor(
   shouldContinue: () => boolean,
 ): Promise<PageOlderResult> {
   const running = inFlightPasses.get(channelId);
-  if (running) return running;
+  if (running) {
+    return running;
+  }
   const pass = runPage(queryClient, channelId, shouldContinue).finally(() => {
     inFlightPasses.delete(channelId);
   });
@@ -36,7 +38,7 @@ async function runPage(
   const store = queryClient.getQueryData<ChannelWindowStore>(
     channelWindowKey(channelId),
   );
-  const tail = store?.pages[store.pages.length - 1];
+  const tail = store?.pages.at(-1);
   if (!store || !tail?.hasMore || !tail.nextCursor || !shouldContinue()) {
     return { hasOlderMessages: false };
   }
@@ -47,12 +49,16 @@ async function runPage(
     requestCursor,
     CHANNEL_WINDOW_PAGE_SIZE,
   );
-  if (!shouldContinue()) return { hasOlderMessages: true };
+  if (!shouldContinue()) {
+    return { hasOlderMessages: true };
+  }
   const page = parseChannelWindowResponse(events, channelId, requestCursor);
   const retained = queryClient.getQueryData<ChannelWindowStore>(
     channelWindowKey(channelId),
   );
-  if (!retained) return { hasOlderMessages: true };
+  if (!retained) {
+    return { hasOlderMessages: true };
+  }
   const next = appendOlderChannelWindow(retained, page);
   queryClient.setQueryData(channelWindowKey(channelId), next);
   projectChannelWindowMessages(queryClient, channelId);

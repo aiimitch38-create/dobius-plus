@@ -318,16 +318,24 @@ export function AgentInstanceEditDialog({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — llmProviderFieldVisible is the availability signal that re-triggers the focus attempt; agent.pubkey handles agent-switch
   React.useEffect(() => {
-    if (!open || !initialFocus) return;
-    if (initialFocus.type !== "normalized_field") return;
-    if (normalizedFieldFocusFiredRef.current) return;
+    if (!open || !initialFocus) {
+      return;
+    }
+    if (initialFocus.type !== "normalized_field") {
+      return;
+    }
+    if (normalizedFieldFocusFiredRef.current) {
+      return;
+    }
 
     const targetId =
       initialFocus.field === "provider"
         ? "edit-agent-llm-provider"
         : "edit-agent-model";
     const el = document.getElementById(targetId);
-    if (!(el instanceof HTMLElement)) return;
+    if (!(el instanceof HTMLElement)) {
+      return;
+    }
 
     normalizedFieldFocusFiredRef.current = true;
 

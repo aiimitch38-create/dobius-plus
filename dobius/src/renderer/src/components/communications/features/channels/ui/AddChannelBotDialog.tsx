@@ -40,7 +40,7 @@ function formatAgentCountLabel(count: number) {
 }
 
 function formatBatchFailureSummary(
-  failures: ReadonlyArray<{ name: string; error: string }>,
+  failures: readonly { name: string; error: string }[],
 ) {
   if (failures.length === 1) {
     const [failure] = failures;
@@ -110,7 +110,9 @@ export function AddChannelBotDialog({
   }
 
   function handleOpenChange(next: boolean) {
-    if (!next) reset();
+    if (!next) {
+      reset();
+    }
     onOpenChange(next);
   }
 
@@ -135,7 +137,9 @@ export function AddChannelBotDialog({
   }
 
   async function handleSubmit() {
-    if (providers.length === 0 || selectedPersonas.length === 0) return;
+    if (providers.length === 0 || selectedPersonas.length === 0) {
+      return;
+    }
 
     const inputs = selectedPersonas.map((persona) => {
       const resolved = resolvePersonaRuntime(
@@ -163,7 +167,9 @@ export function AddChannelBotDialog({
     try {
       const result = await createBotsMutation.mutateAsync(inputs);
       if (result.failures.length === 0) {
-        if (result.successes[0]) onAdded?.(result.successes[0]);
+        if (result.successes[0]) {
+          onAdded?.(result.successes[0]);
+        }
         handleOpenChange(false);
         return;
       }

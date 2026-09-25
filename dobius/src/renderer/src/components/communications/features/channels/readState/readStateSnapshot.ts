@@ -20,22 +20,32 @@ export async function parseReadStateEvent(
   pubkey: string,
   decrypt: ReadStateDecrypt = nip44DecryptFromSelf,
 ): Promise<ParsedReadStateEvent | null> {
-  if (event.pubkey !== pubkey) return null;
+  if (event.pubkey !== pubkey) {
+    return null;
+  }
 
   const dTags = event.tags.filter((tag) => tag[0] === "d");
-  if (dTags.length !== 1) return null;
+  if (dTags.length !== 1) {
+    return null;
+  }
   const dTag = dTags[0]?.[1];
-  if (!isValidReadStateDTag(dTag)) return null;
+  if (!isValidReadStateDTag(dTag)) {
+    return null;
+  }
 
   const tTags = event.tags.filter(
     (tag) => tag[0] === "t" && tag[1] === "read-state",
   );
-  if (tTags.length !== 1) return null;
+  if (tTags.length !== 1) {
+    return null;
+  }
 
   try {
     const plaintext = await decrypt(event.content);
     const parsed = JSON.parse(plaintext);
-    if (!isValidBlob(parsed)) return null;
+    if (!isValidBlob(parsed)) {
+      return null;
+    }
     return {
       dTag,
       blob: {
@@ -63,7 +73,9 @@ export async function mergeReadStateEvents(
 
   for (const event of events) {
     const parsed = await parseReadStateEvent(event, pubkey, decrypt);
-    if (!parsed) continue;
+    if (!parsed) {
+      continue;
+    }
 
     for (const [contextId, timestamp] of Object.entries(parsed.blob.contexts)) {
       const current = contexts.get(contextId) ?? 0;

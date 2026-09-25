@@ -109,62 +109,102 @@ function toHeaderRows(
 function headersToRecord(
   headers: HeaderFormState[] | undefined,
 ): Record<string, string> | undefined {
-  if (!headers) return undefined;
+  if (!headers) {
+    return undefined;
+  }
 
   const entries = headers
     .map(({ key, value }) => [key.trim(), value] as const)
     .filter(([key]) => key.length > 0);
 
-  if (entries.length === 0) return undefined;
+  if (entries.length === 0) {
+    return undefined;
+  }
   return Object.fromEntries(entries);
 }
 
 function parseTimeoutSecs(timeoutSecs: string | undefined): number | undefined {
-  if (!timeoutSecs) return undefined;
+  if (!timeoutSecs) {
+    return undefined;
+  }
   const trimmed = timeoutSecs.trim();
-  if (!/^\d+$/.test(trimmed)) return undefined;
+  if (!/^\d+$/.test(trimmed)) {
+    return undefined;
+  }
   const parsed = Number(trimmed);
   return parsed > 0 ? parsed : undefined;
 }
 
 function actionFieldsForStep(step: StepFormState): Record<string, unknown> {
   const fields: Record<string, unknown> = {};
-  if (step.name?.trim()) fields.name = step.name.trim();
-  if (step.condition?.trim()) fields.if = step.condition.trim();
+  if (step.name?.trim()) {
+    fields.name = step.name.trim();
+  }
+  if (step.condition?.trim()) {
+    fields.if = step.condition.trim();
+  }
   const timeoutSecs = parseTimeoutSecs(step.timeoutSecs);
-  if (timeoutSecs !== undefined) fields.timeout_secs = timeoutSecs;
+  if (timeoutSecs !== undefined) {
+    fields.timeout_secs = timeoutSecs;
+  }
 
   switch (step.action) {
     case "delay":
-      if (step.duration) fields.duration = step.duration;
+      if (step.duration) {
+        fields.duration = step.duration;
+      }
       break;
     case "send_message":
-      if (step.text) fields.text = step.text;
-      if (step.channel) fields.channel = step.channel;
+      if (step.text) {
+        fields.text = step.text;
+      }
+      if (step.channel) {
+        fields.channel = step.channel;
+      }
       break;
     case "send_dm":
-      if (step.to) fields.to = step.to;
-      if (step.text) fields.text = step.text;
+      if (step.to) {
+        fields.to = step.to;
+      }
+      if (step.text) {
+        fields.text = step.text;
+      }
       break;
     case "call_webhook":
-      if (step.url) fields.url = step.url;
+      if (step.url) {
+        fields.url = step.url;
+      }
       fields.method = step.method || "POST";
       {
         const headers = headersToRecord(step.headers);
-        if (headers) fields.headers = headers;
+        if (headers) {
+          fields.headers = headers;
+        }
       }
-      if (step.body) fields.body = step.body;
+      if (step.body) {
+        fields.body = step.body;
+      }
       break;
     case "request_approval":
-      if (step.from) fields.from = step.from;
-      if (step.message) fields.message = step.message;
-      if (step.timeout) fields.timeout = step.timeout;
+      if (step.from) {
+        fields.from = step.from;
+      }
+      if (step.message) {
+        fields.message = step.message;
+      }
+      if (step.timeout) {
+        fields.timeout = step.timeout;
+      }
       break;
     case "add_reaction":
-      if (step.emoji) fields.emoji = step.emoji;
+      if (step.emoji) {
+        fields.emoji = step.emoji;
+      }
       break;
     case "set_channel_topic":
-      if (step.topic) fields.topic = step.topic;
+      if (step.topic) {
+        fields.topic = step.topic;
+      }
       break;
   }
   return fields;
@@ -183,8 +223,12 @@ export function formStateToYaml(state: WorkflowFormState): string {
     trigger.emoji = state.trigger.emoji;
   }
   if (state.trigger.on === "schedule") {
-    if (state.trigger.cron) trigger.cron = state.trigger.cron;
-    if (state.trigger.interval) trigger.interval = state.trigger.interval;
+    if (state.trigger.cron) {
+      trigger.cron = state.trigger.cron;
+    }
+    if (state.trigger.interval) {
+      trigger.interval = state.trigger.interval;
+    }
   }
 
   const steps = state.steps.map((step) => ({
@@ -216,10 +260,14 @@ export function nextStepId(existingSteps: StepFormState[]): string {
   let maxN = 0;
   for (const id of existingIds) {
     const match = STEP_ID_PATTERN.exec(id);
-    if (match) maxN = Math.max(maxN, Number(match[1]));
+    if (match) {
+      maxN = Math.max(maxN, Number(match[1]));
+    }
   }
   let n = maxN + 1;
-  while (existingIds.has(`step_${n}`)) n++;
+  while (existingIds.has(`step_${n}`)) {
+    n++;
+  }
   return `step_${n}`;
 }
 

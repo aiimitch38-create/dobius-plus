@@ -15,7 +15,9 @@ import { acquireEscapeSurface } from "@comms/shared/hooks/escapeSurfaces";
  */
 export function useEscapeKey(onEscape: () => void, enabled: boolean = true) {
   React.useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      return;
+    }
     const releaseSurface = acquireEscapeSurface();
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && !event.defaultPrevented) {

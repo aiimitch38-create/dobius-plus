@@ -113,14 +113,18 @@ export function InviteRedeemForm({
         : parsedInvite
           ? bareCodeRelayUrl.trim()
           : "";
-    if (!relayWsUrl || !isJoinPolicyDiscoveryCandidate(relayWsUrl)) return;
+    if (!relayWsUrl || !isJoinPolicyDiscoveryCandidate(relayWsUrl)) {
+      return;
+    }
 
     const code = parsedInvite?.code;
     let cancelled = false;
     const timeoutId = window.setTimeout(() => {
       void getJoinPolicy(relayWsUrl, code ? "webview" : "native")
         .then((policy) => {
-          if (cancelled || !policy) return;
+          if (cancelled || !policy) {
+            return;
+          }
           setJoinPolicy(policy);
           setPolicyTarget({ relayWsUrl, code });
           setAgeConfirmed(false);
@@ -195,12 +199,16 @@ export function InviteRedeemForm({
         }
         return;
       }
-      if (!parsedInvite) return;
+      if (!parsedInvite) {
+        return;
+      }
 
       const relayWsUrl = hasInviteRelay(parsedInvite)
         ? parsedInvite.relayWsUrl
         : bareCodeRelayUrl.trim();
-      if (!relayWsUrl) return;
+      if (!relayWsUrl) {
+        return;
+      }
 
       setPolicyError(null);
       setIsLoadingPolicy(true);

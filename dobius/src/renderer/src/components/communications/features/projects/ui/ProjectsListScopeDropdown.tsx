@@ -16,7 +16,7 @@ export function ProjectsListScopeDropdown<T extends string>({
 }: {
   label: string;
   onChange: (value: T) => void;
-  options: Array<{ label: string; value: T }>;
+  options: { label: string; value: T }[];
   value: T;
 }) {
   const selectedLabel =

@@ -92,7 +92,9 @@ export function MeshComputeSettingsCard() {
     (async () => {
       try {
         const list = await meshInstalledModels();
-        if (!cancelled) setInstalledModels(list);
+        if (!cancelled) {
+          setInstalledModels(list);
+        }
       } catch {
         // Non-fatal — picklist just stays empty; user can still type a ref.
       }
@@ -115,10 +117,14 @@ export function MeshComputeSettingsCard() {
     (async () => {
       try {
         const value = await meshModelCatalog();
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setCatalog(value);
         setModelInput((current) => {
-          if (current.trim() !== "" || !value.recommended) return current;
+          if (current.trim() !== "" || !value.recommended) {
+            return current;
+          }
           writeDraft(MODEL_DRAFT_STORAGE_KEY, value.recommended);
           return value.recommended;
         });
@@ -214,7 +220,7 @@ export function MeshComputeSettingsCard() {
 
       {error ? (
         <p className="mb-3 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          Couldn't check shared compute: {error}
+          Couldn&apos;t check shared compute: {error}
         </p>
       ) : null}
       {actionError ? (
@@ -395,7 +401,7 @@ export function MeshComputeSettingsCard() {
       </SettingsOptionGroup>
 
       <p className="mt-3 rounded-lg bg-muted/30 px-3 py-2 text-sm font-normal text-muted-foreground">
-        Only members of this relay can use this machine's shared compute.
+        Only members of this relay can use this machine&apos;s shared compute.
       </p>
     </section>
   );
@@ -574,7 +580,7 @@ function StatusLine({
   if (isConsuming) {
     return (
       <p className="text-sm text-muted-foreground">
-        This machine is currently using another member's shared compute. Turn on
+        This machine is currently using another member&apos;s shared compute. Turn on
         sharing to switch to the selected local model; Dobius may briefly restart.
       </p>
     );
@@ -601,7 +607,7 @@ function StatusLine({
     if (health.status === "failed") {
       return (
         <p className="text-sm text-destructive">
-          Couldn't load: {health.reason}
+          Couldn&apos;t load: {health.reason}
         </p>
       );
     }

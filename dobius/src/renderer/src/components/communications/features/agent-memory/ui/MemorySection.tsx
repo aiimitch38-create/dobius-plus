@@ -47,7 +47,9 @@ export function MemorySection({
   viewerIsOwner: boolean;
 }): React.ReactElement | null {
   // Hide entirely for non-owners.
-  if (!viewerIsOwner) return null;
+  if (!viewerIsOwner) {
+    return null;
+  }
 
   return <MemorySectionForOwner agentPubkey={agentPubkey} />;
 }
@@ -69,7 +71,9 @@ export function MemoryRefreshButton({
     enabled: viewerIsOwner,
   });
 
-  if (!viewerIsOwner || !query.data) return null;
+  if (!viewerIsOwner || !query.data) {
+    return null;
+  }
 
   return (
     <Button
@@ -171,7 +175,7 @@ function MemoryErrorState({
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
         <div className="space-y-1">
           <div className="font-medium text-destructive">
-            Couldn't load memory
+            Couldn&apos;t load memory
           </div>
           <div className="text-muted-foreground">{message}</div>
         </div>
@@ -230,7 +234,7 @@ function MemoryGraphView({
         data-testid="agent-memory-empty"
       >
         <Brain className="mx-auto h-4 w-4 text-muted-foreground" />
-        <p className="mt-3 text-sm font-medium">Build this agent's memory</p>
+        <p className="mt-3 text-sm font-medium">Build this agent&apos;s memory</p>
         <p className="mt-1 text-sm text-muted-foreground">
           Try telling this agent to remember something for next time.
         </p>
@@ -317,7 +321,9 @@ function MemoryShowMoreButton({
     </button>
   );
 
-  if (!truncated) return button;
+  if (!truncated) {
+    return button;
+  }
 
   return (
     <Tooltip>
@@ -387,7 +393,9 @@ function MemoryBodyText({ body }: { body: string }) {
 }
 
 function MemoryDanglingRefsHint({ slugs }: { slugs: string[] }) {
-  if (slugs.length === 0) return null;
+  if (slugs.length === 0) {
+    return null;
+  }
 
   return (
     <div
@@ -419,7 +427,9 @@ function MemoryDanglingRefsHint({ slugs }: { slugs: string[] }) {
 
 function MemorySlugTitle({ slug }: { slug: string }) {
   const segments = slug.split("/").filter((segment) => segment.length > 0);
-  if (segments.length === 0) return null;
+  if (segments.length === 0) {
+    return null;
+  }
 
   if (segments.length === 1) {
     return (
@@ -487,7 +497,9 @@ function MemoryEntryAccordion({
     const measure = () => {
       const titleEl = titleRef.current;
       const bodyEl = bodyRef.current;
-      if (!titleEl || !bodyEl) return;
+      if (!titleEl || !bodyEl) {
+        return;
+      }
 
       setShowCaret(
         elementExceedsLines(titleEl, 2) || elementExceedsLines(bodyEl, 2),
@@ -496,7 +508,9 @@ function MemoryEntryAccordion({
 
     measure();
     const root = articleRef.current;
-    if (!root) return undefined;
+    if (!root) {
+      return undefined;
+    }
 
     const observer = new ResizeObserver(measure);
     observer.observe(root);

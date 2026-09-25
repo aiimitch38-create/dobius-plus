@@ -117,7 +117,9 @@ export async function fetchChunkedHistory(
   buildFilter: (eventIds: string[]) => RelaySubscriptionFilter,
   fetchHistory: (filter: RelaySubscriptionFilter) => Promise<RelayEvent[]>,
 ): Promise<RelayEvent[]> {
-  if (eventIds.length === 0) return [];
+  if (eventIds.length === 0) {
+    return [];
+  }
 
   const chunks: string[][] = [];
   for (let i = 0; i < eventIds.length; i += AUX_BACKFILL_CHUNK_SIZE) {

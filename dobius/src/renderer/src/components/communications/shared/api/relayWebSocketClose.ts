@@ -51,7 +51,9 @@ export function openWebSocket(
     // Before open, the close handler above already rejects the connect
     // promise, so this only needs to forward errors on a live connection.
     socket.onerror = () => {
-      if (!opened) return;
+      if (!opened) {
+        return;
+      }
       onMessage({ type: "Error" });
     };
   });

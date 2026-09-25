@@ -75,7 +75,9 @@ function MessageItem({
 function getTranscriptMessageLink(
   item: Extract<TranscriptItem, { type: "message" }>,
 ) {
-  if (!item.channelId || !item.messageId) return null;
+  if (!item.channelId || !item.messageId) {
+    return null;
+  }
   return {
     channelId: item.channelId,
     messageId: item.messageId,

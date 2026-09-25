@@ -40,7 +40,9 @@ export function useHomeDrafts({
       setSelectedKey(null);
       return;
     }
-    if (!autoSelect) return;
+    if (!autoSelect) {
+      return;
+    }
     if (viewportWidthPx === 0) {
       return;
     }

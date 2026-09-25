@@ -42,11 +42,11 @@ type VideoReviewReaction = {
   emojiUrl?: string;
   count: number;
   reactedByCurrentUser?: boolean;
-  users: Array<{
+  users: {
     pubkey: string;
     displayName: string;
     avatarUrl: string | null;
-  }>;
+  }[];
 };
 
 export type VideoReviewComment = {
@@ -229,12 +229,18 @@ function sortTimecodedComments(
   right: TimecodedComment,
 ): number {
   if (left.seconds !== null && right.seconds !== null) {
-    if (left.seconds !== right.seconds) return left.seconds - right.seconds;
+    if (left.seconds !== right.seconds) {
+      return left.seconds - right.seconds;
+    }
     return left.comment.createdAt - right.comment.createdAt;
   }
 
-  if (left.seconds !== null) return -1;
-  if (right.seconds !== null) return 1;
+  if (left.seconds !== null) {
+    return -1;
+  }
+  if (right.seconds !== null) {
+    return 1;
+  }
   return left.comment.createdAt - right.comment.createdAt;
 }
 
@@ -259,7 +265,9 @@ function useSmoothPlaybackTime(
   onTime: (seconds: number) => void,
 ) {
   React.useEffect(() => {
-    if (!isActive) return;
+    if (!isActive) {
+      return;
+    }
 
     let frameId = 0;
     const tick = () => {
@@ -291,7 +299,9 @@ function useThrottledVideoSeek(
   const requestSeek = React.useCallback(
     (seconds: number) => {
       const video = videoRef.current;
-      if (!video) return;
+      if (!video) {
+        return;
+      }
       // `video.seeking` is the ground truth: if the element is not actually
       // mid-seek, a stale in-flight flag (a seek interrupted by an error, or
       // a skipped `seeked` event) must not wedge the scrubber.
@@ -308,10 +318,14 @@ function useThrottledVideoSeek(
   const handleSeeked = React.useCallback(() => {
     isSeekingRef.current = false;
     const queued = queuedSeekRef.current;
-    if (queued === null) return;
+    if (queued === null) {
+      return;
+    }
     queuedSeekRef.current = null;
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      return;
+    }
     isSeekingRef.current = true;
     video.currentTime = queued;
   }, [videoRef]);
@@ -335,7 +349,9 @@ function VideoGlow({
   React.useEffect(() => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext("2d");
-    if (!canvas || !context) return;
+    if (!canvas || !context) {
+      return;
+    }
 
     const frameInterval = 1000 / 15;
     let frameId = 0;
@@ -411,7 +427,9 @@ function VideoScrubber({
   const ratioFromClientX = React.useCallback(
     (target: HTMLElement, clientX: number) => {
       const rect = target.getBoundingClientRect();
-      if (rect.width <= 0) return null;
+      if (rect.width <= 0) {
+        return null;
+      }
       return Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
     },
     [],
@@ -419,9 +437,13 @@ function VideoScrubber({
 
   const seekFromClientX = React.useCallback(
     (target: HTMLElement, clientX: number) => {
-      if (duration <= 0) return;
+      if (duration <= 0) {
+        return;
+      }
       const ratio = ratioFromClientX(target, clientX);
-      if (ratio === null) return;
+      if (ratio === null) {
+        return;
+      }
       onSeek(Math.round(ratio * duration * 1000) / 1000);
     },
     [duration, onSeek, ratioFromClientX],
@@ -429,7 +451,9 @@ function VideoScrubber({
 
   const handlePointerDown = React.useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (duration <= 0) return;
+      if (duration <= 0) {
+        return;
+      }
       if (
         event.target instanceof Element &&
         event.target.closest("[data-video-review-marker]")
@@ -452,7 +476,9 @@ function VideoScrubber({
       if (showHoverPreview && event.pointerType === "mouse") {
         setHoverRatio(ratioFromClientX(event.currentTarget, event.clientX));
       }
-      if (!draggingRef.current) return;
+      if (!draggingRef.current) {
+        return;
+      }
       seekFromClientX(event.currentTarget, event.clientX);
     },
     [ratioFromClientX, seekFromClientX, showHoverPreview],
@@ -460,7 +486,9 @@ function VideoScrubber({
 
   const handlePointerEnd = React.useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!draggingRef.current) return;
+      if (!draggingRef.current) {
+        return;
+      }
       draggingRef.current = false;
       seekFromClientX(event.currentTarget, event.clientX);
     },
@@ -473,7 +501,9 @@ function VideoScrubber({
 
   const handleKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (duration <= 0) return;
+      if (duration <= 0) {
+        return;
+      }
 
       const smallStep = event.shiftKey ? 10 : 1;
       const largeStep = Math.max(5, duration / 10);
@@ -504,7 +534,9 @@ function VideoScrubber({
           break;
       }
 
-      if (nextSeconds === null) return;
+      if (nextSeconds === null) {
+        return;
+      }
       event.preventDefault();
       onSeek(Math.min(Math.max(nextSeconds, 0), duration));
     },
@@ -823,7 +855,9 @@ export function VideoPlayer({
 
   const applyPlaybackSpeed = React.useCallback(
     (video: HTMLVideoElement | null) => {
-      if (!video) return;
+      if (!video) {
+        return;
+      }
       video.playbackRate = playbackSpeed;
     },
     [playbackSpeed],
@@ -880,7 +914,9 @@ export function VideoPlayer({
     (event?: React.SyntheticEvent) => {
       event?.stopPropagation();
       const video = videoRef.current;
-      if (!video) return;
+      if (!video) {
+        return;
+      }
 
       if (video.paused || video.ended) {
         setStarted(true);
@@ -917,13 +953,17 @@ export function VideoPlayer({
 
   const handleToggleMute = React.useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      return;
+    }
     video.muted = !video.muted;
   }, []);
 
   const handleVolumeChange = React.useCallback((value: number) => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      return;
+    }
     video.volume = Math.min(Math.max(value, 0), 1);
     video.muted = value <= 0;
   }, []);
@@ -1287,7 +1327,7 @@ function VideoReviewDialog({
       : isPostingReviewItem
         ? "Posting..."
         : null;
-  const visibleDuration = duration > 0 ? duration : 0;
+  const visibleDuration = Math.max(duration, 0);
   const displayComments = React.useMemo(() => {
     const confirmedBodies = new Set(
       comments.map((comment) => comment.comment.body),
@@ -1318,7 +1358,9 @@ function VideoReviewDialog({
     );
     const repliesByTopId = new Map<string, TimecodedComment[]>();
     for (const item of displayComments) {
-      if (!item.comment.parentId || !byId.has(item.comment.parentId)) continue;
+      if (!item.comment.parentId || !byId.has(item.comment.parentId)) {
+        continue;
+      }
       // Walk up to the top-level ancestor (deep reply chains flatten).
       let ancestor = item;
       const visited = new Set<string>([item.comment.id]);
@@ -1381,9 +1423,13 @@ function VideoReviewDialog({
   }, [open]);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     const element = videoAreaRef.current;
-    if (!element) return;
+    if (!element) {
+      return;
+    }
 
     const update = () => {
       const rect = element.getBoundingClientRect();
@@ -1425,10 +1471,16 @@ function VideoReviewDialog({
   );
 
   React.useEffect(() => {
-    if (!open) return;
-    if (pendingSeekSeconds === null) return;
+    if (!open) {
+      return;
+    }
+    if (pendingSeekSeconds === null) {
+      return;
+    }
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      return;
+    }
     video.currentTime = pendingSeekSeconds;
     syncCurrentTime(pendingSeekSeconds);
     onPendingSeekConsumed();
@@ -1444,7 +1496,9 @@ function VideoReviewDialog({
 
   const togglePlay = React.useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      return;
+    }
 
     if (video.paused || video.ended) {
       void video.play().catch(() => undefined);
@@ -1467,14 +1521,18 @@ function VideoReviewDialog({
 
   const handleToggleMute = React.useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      return;
+    }
     video.muted = !video.muted;
   }, [videoRef]);
 
   const handleVolumeChange = React.useCallback(
     (value: number) => {
       const video = videoRef.current;
-      if (!video) return;
+      if (!video) {
+        return;
+      }
       video.volume = Math.min(Math.max(value, 0), 1);
       video.muted = value <= 0;
     },
@@ -1482,9 +1540,13 @@ function VideoReviewDialog({
   );
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      return;
+    }
     video.playbackRate = playbackSpeed;
   }, [open, playbackSpeed, videoRef]);
 
@@ -1502,7 +1564,9 @@ function VideoReviewDialog({
       },
     ) => {
       const trimmed = content.trim();
-      if (!trimmed || !reviewContext?.onSendComment || !canPost) return;
+      if (!trimmed || !reviewContext?.onSendComment || !canPost) {
+        return;
+      }
 
       const replyTo = options?.replyTo ?? null;
       const authoredSeconds =
@@ -1616,10 +1680,14 @@ function VideoReviewDialog({
   }, [onOpenChange]);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape") {
+        return;
+      }
       if (isEmojiPickerOpen) {
         setIsEmojiPickerOpen(false);
       } else {
@@ -1631,7 +1699,9 @@ function VideoReviewDialog({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isEmojiPickerOpen, onOpenChange, open]);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   return createPortal(
     <div

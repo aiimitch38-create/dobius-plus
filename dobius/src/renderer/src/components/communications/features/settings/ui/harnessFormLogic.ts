@@ -33,12 +33,14 @@ export function idFromLabel(label: string): string {
  * rows the user hasn't filled in yet.
  */
 export function buildEnvRecord(
-  pairs: ReadonlyArray<{ key: string; value: string }>,
+  pairs: readonly { key: string; value: string }[],
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const { key, value } of pairs) {
     const k = key.trim();
-    if (k) out[k] = value;
+    if (k) {
+      out[k] = value;
+    }
   }
   return out;
 }
@@ -53,8 +55,10 @@ export function buildEnvRecord(
  */
 export function envPairsFromRecord(
   record: Record<string, string> | undefined,
-): Array<{ key: string; value: string }> {
-  if (!record) return [];
+): { key: string; value: string }[] {
+  if (!record) {
+    return [];
+  }
   return Object.entries(record).map(([key, value]) => ({ key, value }));
 }
 
@@ -64,25 +68,25 @@ export function envPairsFromRecord(
  * when they contain non-whitespace content so quoted/complex args are
  * never silently dropped.
  */
-export function filterArgs(args: ReadonlyArray<string>): string[] {
+export function filterArgs(args: readonly string[]): string[] {
   return args.filter((a) => a.trim() !== "");
 }
 
 /** Form state for the custom-harness create/edit form. */
-export interface CustomFormValues {
+export type CustomFormValues = {
   id: string;
   label: string;
   command: string;
   /** Each element is one argument; no space-splitting round-trip. */
   args: string[];
   /** KEY=VALUE pairs for env injection at spawn time. */
-  env: Array<{ key: string; value: string }>;
+  env: { key: string; value: string }[];
   installInstructionsUrl: string;
   installHint: string;
-}
+};
 
 /** The subset of a catalog entry that seeds the edit form. */
-export interface EditableCatalogEntry {
+export type EditableCatalogEntry = {
   id: string;
   label: string;
   command: string | null;
@@ -90,10 +94,10 @@ export interface EditableCatalogEntry {
   definitionEnv?: Record<string, string>;
   installInstructionsUrl: string;
   installHint: string;
-}
+};
 
 /** Definition payload sent to `save_custom_harness`. */
-export interface HarnessDefinitionPayload {
+export type HarnessDefinitionPayload = {
   id: string;
   label: string;
   command: string;
@@ -101,7 +105,7 @@ export interface HarnessDefinitionPayload {
   env: Record<string, string>;
   installInstructionsUrl: string;
   installHint: string;
-}
+};
 
 /**
  * Seed form values from an existing catalog entry (edit flow).
@@ -151,8 +155,10 @@ export function definitionFromFormValues(
  *
  * Returns the error message, or `null` when all args are comma-free.
  */
-export function commaArgError(args: ReadonlyArray<string>): string | null {
+export function commaArgError(args: readonly string[]): string | null {
   const offender = args.find((a) => a.includes(","));
-  if (offender === undefined) return null;
+  if (offender === undefined) {
+    return null;
+  }
   return `Argument "${offender}" contains a comma — arguments are passed via a comma-delimited transport and would be split at spawn time. Use separate argument entries instead.`;
 }

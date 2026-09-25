@@ -30,7 +30,9 @@ function escapeHtml(value: string): string {
 function isSafeSnapshotUrl(value: string): boolean {
   // The raw value is later emitted inside Markdown's `(url)` syntax. Keep
   // delimiters and whitespace out even when URL parsing would normalize them.
-  if (/[\s()]/u.test(value)) return false;
+  if (/[\s()]/u.test(value)) {
+    return false;
+  }
 
   try {
     const url = new URL(value);
@@ -88,7 +90,9 @@ export function parseSnapshotClipboardHtml(html: string): ImetaMedia | null {
     new RegExp(`\\b${CLIPBOARD_ATTRIBUTE}=(?:"([^"]+)"|'([^']+)')`, "i"),
   );
   const encodedPayload = match?.[1] ?? match?.[2];
-  if (!encodedPayload) return null;
+  if (!encodedPayload) {
+    return null;
+  }
 
   let payload: unknown;
   try {
@@ -97,7 +101,9 @@ export function parseSnapshotClipboardHtml(html: string): ImetaMedia | null {
     return null;
   }
 
-  if (!payload || typeof payload !== "object") return null;
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
   const candidate = payload as Partial<SnapshotClipboardPayload>;
   const displayName =
     typeof candidate.displayName === "string"
@@ -159,7 +165,9 @@ export function handleSnapshotPaste(
 ): boolean {
   const html = event.clipboardData?.getData("text/html") ?? "";
   const pastedSnapshot = parseSnapshotClipboardHtml(html);
-  if (!pastedSnapshot) return false;
+  if (!pastedSnapshot) {
+    return false;
+  }
 
   event.preventDefault();
   setPendingImeta((current) =>

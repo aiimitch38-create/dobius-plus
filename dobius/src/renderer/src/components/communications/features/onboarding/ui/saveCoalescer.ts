@@ -24,17 +24,20 @@ export function createSaveCoalescer<T>(
   let running = false;
   let cancelled = false;
   let finalError: unknown;
-  let flushWaiters: Array<{
+  let flushWaiters: {
     resolve: () => void;
     reject: (error: unknown) => void;
-  }> = [];
+  }[] = [];
 
   function settleFlushWaiters() {
     const waiters = flushWaiters;
     flushWaiters = [];
     for (const waiter of waiters) {
-      if (finalError === undefined) waiter.resolve();
-      else waiter.reject(finalError);
+      if (finalError === undefined) {
+        waiter.resolve();
+      } else {
+        waiter.reject(finalError);
+      }
     }
   }
 
@@ -66,7 +69,9 @@ export function createSaveCoalescer<T>(
     enqueue(value: T) {
       pending = value;
       hasPending = true;
-      if (running) return;
+      if (running) {
+        return;
+      }
       running = true;
       finalError = undefined;
       onSaving(true);

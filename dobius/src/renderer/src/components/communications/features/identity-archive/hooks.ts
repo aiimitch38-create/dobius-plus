@@ -29,7 +29,9 @@ export function useArchivedIdentitiesQuery(enabled = true) {
 /** `undefined` while the snapshot loads so callers can defer the flair. */
 export function useIsIdentityArchived(pubkey: string): boolean | undefined {
   const query = useArchivedIdentitiesQuery();
-  if (!query.data) return undefined;
+  if (!query.data) {
+    return undefined;
+  }
   const lower = pubkey.toLowerCase();
   return query.data.archived.includes(lower);
 }
@@ -149,7 +151,9 @@ export function useIdentityArchive(
     hasTargetPubkey && (isSelf || isRelayAdminOrOwner || isOaOwnerOfViewee);
 
   const archive = React.useCallback(() => {
-    if (!hasTargetPubkey) return;
+    if (!hasTargetPubkey) {
+      return;
+    }
     archiveMutation.mutate(
       { targetPubkey },
       {
@@ -163,7 +167,9 @@ export function useIdentityArchive(
   }, [archiveMutation, hasTargetPubkey, targetPubkey]);
 
   const unarchive = React.useCallback(() => {
-    if (!hasTargetPubkey) return;
+    if (!hasTargetPubkey) {
+      return;
+    }
     unarchiveMutation.mutate(
       { targetPubkey },
       {

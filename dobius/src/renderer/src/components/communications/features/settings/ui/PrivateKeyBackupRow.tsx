@@ -91,16 +91,21 @@ export function PrivateKeyBackupRow() {
       setLoadError(null);
       try {
         const value = await getNsec();
-        if (!fetchCancelledRef.current) setNsec(value);
+        if (!fetchCancelledRef.current) {
+          setNsec(value);
+        }
       } catch (err) {
-        if (!fetchCancelledRef.current)
+        if (!fetchCancelledRef.current) {
           setLoadError(
             err instanceof Error
               ? err.message
               : "Failed to retrieve private key.",
           );
+        }
       } finally {
-        if (!fetchCancelledRef.current) setIsLoading(false);
+        if (!fetchCancelledRef.current) {
+          setIsLoading(false);
+        }
       }
       return;
     }
@@ -111,13 +116,17 @@ export function PrivateKeyBackupRow() {
   }
 
   function handleCreateBackup() {
-    if (backupAvailable) startNewBackup();
+    if (backupAvailable) {
+      startNewBackup();
+    }
     setCreateOpen(true);
   }
 
   function handleTestOpenChange(open: boolean) {
     setTestOpen(open);
-    if (!open) setTestProgress(initialBackupTestProgress);
+    if (!open) {
+      setTestProgress(initialBackupTestProgress);
+    }
   }
 
   return (

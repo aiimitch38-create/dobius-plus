@@ -97,13 +97,13 @@ export const MessageRow = React.memo(
     videoReviewContext,
   }: {
     channelId?: string | null;
-    collapseDepthGuideActions?: ReadonlyArray<ThreadDepthGuideAction>;
+    collapseDepthGuideActions?: readonly ThreadDepthGuideAction[];
     connectDescendants?: boolean;
-    depthGuideDepths?: ReadonlyArray<number>;
+    depthGuideDepths?: readonly number[];
     highlighted?: boolean;
     highlightDescendantRail?: boolean;
     highlightReplyConnector?: boolean;
-    highlightThreadLineDepths?: ReadonlyArray<number>;
+    highlightThreadLineDepths?: readonly number[];
     hoverBackground?: boolean;
     huddleMemberPubkeys?: readonly string[];
     huddleMemberPubkeysPending?: boolean;

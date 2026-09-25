@@ -80,7 +80,9 @@ export function ProfileAvatar({
           )}
           data-testid={testId ? `${testId}-image` : undefined}
           onLoadingStatusChange={(status) => {
-            if (status === "error") setFailedSrc(liveSrc);
+            if (status === "error") {
+              setFailedSrc(liveSrc);
+            }
             if (status === "loaded" && src === liveSrc) {
               setFailedSrc(null);
             }

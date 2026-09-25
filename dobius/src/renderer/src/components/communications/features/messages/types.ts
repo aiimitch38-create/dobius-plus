@@ -4,11 +4,11 @@ export type TimelineReaction = {
   emojiUrl?: string;
   count: number;
   reactedByCurrentUser?: boolean;
-  users: Array<{
+  users: {
     pubkey: string;
     displayName: string;
     avatarUrl: string | null;
-  }>;
+  }[];
 };
 
 export type TimelineMessage = {

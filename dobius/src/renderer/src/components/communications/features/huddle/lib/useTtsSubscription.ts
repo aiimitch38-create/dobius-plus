@@ -16,7 +16,9 @@ export function useTtsSubscription(
   selfPubkeyRef: React.RefObject<string | null>,
 ) {
   React.useEffect(() => {
-    if (!ephemeralChannelId) return;
+    if (!ephemeralChannelId) {
+      return;
+    }
 
     let disposed = false;
     let cleanup: (() => void) | null = null;
@@ -37,7 +39,9 @@ export function useTtsSubscription(
       try {
         const pubkeys = await invoke<string[]>("get_huddle_agent_pubkeys");
         agentPubkeys.clear();
-        for (const pk of pubkeys) agentPubkeys.add(pk);
+        for (const pk of pubkeys) {
+          agentPubkeys.add(pk);
+        }
         agentsLoaded = true;
       } catch (e) {
         // Fail-closed on ALL failures, including refresh after prior success.
@@ -65,27 +69,45 @@ export function useTtsSubscription(
 
     relayClient
       .subscribeToChannelLive(ephemeralChannelId, (event) => {
-        if (disposed) return;
+        if (disposed) {
+          return;
+        }
         // Defense-in-depth: subscription already filters to kind:9 only.
-        if (event.kind !== 9) return;
+        if (event.kind !== 9) {
+          return;
+        }
 
         // Dedup by event ID (covers reconnect replay).
-        if (seenEventIds.has(event.id)) return;
+        if (seenEventIds.has(event.id)) {
+          return;
+        }
         seenEventIds.add(event.id);
         seenOrder.push(event.id);
         if (seenOrder.length > MAX_SEEN_EVENTS) {
           const oldest = seenOrder.shift();
-          if (oldest !== undefined) seenEventIds.delete(oldest);
+          if (oldest !== undefined) {
+            seenEventIds.delete(oldest);
+          }
         }
 
         // Fail-closed: don't speak until agent list is loaded.
-        if (!agentsLoaded) return;
+        if (!agentsLoaded) {
+          return;
+        }
         // Only speak agent messages — skip human STT transcripts.
-        if (!agentPubkeys.has(event.pubkey)) return;
-        if (event.pubkey === selfPubkeyRef.current) return;
-        if (event.content.trim().length <= 1) return;
+        if (!agentPubkeys.has(event.pubkey)) {
+          return;
+        }
+        if (event.pubkey === selfPubkeyRef.current) {
+          return;
+        }
+        if (event.content.trim().length <= 1) {
+          return;
+        }
         // Legacy: skip [System]-prefixed messages from before kind:48106.
-        if (event.content.startsWith("[System]")) return;
+        if (event.content.startsWith("[System]")) {
+          return;
+        }
         invoke("speak_agent_message", { text: event.content }).catch((err) => {
           console.warn(
             "[huddle] TTS speak failed (backpressure or pipeline unavailable):",

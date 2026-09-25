@@ -102,7 +102,9 @@ export function PullRequestReviewersRow({
 
   const handleRequest = React.useCallback(
     async (pubkey: string, reviewerLabel: string) => {
-      if (requestReviewMutation.isPending || requestInFlightRef.current) return;
+      if (requestReviewMutation.isPending || requestInFlightRef.current) {
+        return;
+      }
       requestInFlightRef.current = true;
       try {
         await requestReviewMutation.mutateAsync({
@@ -126,7 +128,9 @@ export function PullRequestReviewersRow({
   );
 
   React.useEffect(() => {
-    if (!pickerOpen) setReviewerQuery("");
+    if (!pickerOpen) {
+      setReviewerQuery("");
+    }
   }, [pickerOpen]);
 
   if (pullRequest.reviewers.length === 0 && !canRequest) {

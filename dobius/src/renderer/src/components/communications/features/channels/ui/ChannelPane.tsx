@@ -264,7 +264,9 @@ export const ChannelPane = React.memo(function ChannelPane({
 
   const findLastOwnEditable = React.useCallback(
     (candidates: TimelineMessage[]): TimelineMessage | null => {
-      if (!onEdit || !currentPubkey) return null;
+      if (!onEdit || !currentPubkey) {
+        return null;
+      }
       let best: TimelineMessage | null = null;
       for (const message of candidates) {
         if (
@@ -285,18 +287,28 @@ export const ChannelPane = React.memo(function ChannelPane({
 
   const handleEditLastOwnMainMessage = React.useCallback((): boolean => {
     const target = findLastOwnEditable(messages);
-    if (!target || !onEdit) return false;
+    if (!target || !onEdit) {
+      return false;
+    }
     onEdit(target);
     return true;
   }, [findLastOwnEditable, messages, onEdit]);
 
   const handleEditLastOwnThreadMessage = React.useCallback((): boolean => {
-    if (!onEdit) return false;
+    if (!onEdit) {
+      return false;
+    }
     const scope: TimelineMessage[] = [];
-    if (threadHeadMessage) scope.push(threadHeadMessage);
-    for (const entry of threadMessages) scope.push(entry.message);
+    if (threadHeadMessage) {
+      scope.push(threadHeadMessage);
+    }
+    for (const entry of threadMessages) {
+      scope.push(entry.message);
+    }
     const target = findLastOwnEditable(scope);
-    if (!target) return false;
+    if (!target) {
+      return false;
+    }
     onEdit(target);
     return true;
   }, [findLastOwnEditable, onEdit, threadHeadMessage, threadMessages]);
@@ -410,7 +422,9 @@ export const ChannelPane = React.memo(function ChannelPane({
   const hasComposerBotActivity = composerWorkingBotPubkeys.length > 0;
   const hasComposerBottomActivity = hasComposerBotActivity || hasTypingActivity;
   const threadComposerBotTypingPubkeys = React.useMemo(() => {
-    if (!openThreadHeadId) return [];
+    if (!openThreadHeadId) {
+      return [];
+    }
     return botTypingEntries
       .filter((entry) => entry.threadHeadId === openThreadHeadId)
       .map((entry) => entry.pubkey)

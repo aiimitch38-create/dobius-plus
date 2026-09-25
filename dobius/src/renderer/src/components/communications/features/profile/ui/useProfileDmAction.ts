@@ -23,14 +23,18 @@ export function useProfileDmAction({
   }, []);
 
   const handleMessage = React.useCallback(async () => {
-    if (!effectivePubkey || !onOpenDm || isOpeningDm) return;
+    if (!effectivePubkey || !onOpenDm || isOpeningDm) {
+      return;
+    }
 
     setIsOpeningDm(true);
 
     try {
       await onOpenDm([effectivePubkey]);
     } catch (error) {
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current) {
+        return;
+      }
       toast.error(
         error instanceof Error
           ? error.message
@@ -40,7 +44,9 @@ export function useProfileDmAction({
       return;
     }
 
-    if (!isMountedRef.current) return;
+    if (!isMountedRef.current) {
+      return;
+    }
     setIsOpeningDm(false);
     onClose();
   }, [effectivePubkey, isOpeningDm, onClose, onOpenDm]);

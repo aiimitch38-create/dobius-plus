@@ -29,7 +29,9 @@ function bech32Polymod(values: readonly number[]): number {
     const high = checksum >>> 25;
     checksum = ((checksum & 0x1ffffff) << 5) ^ value;
     for (let index = 0; index < BECH32_GENERATORS.length; index += 1) {
-      if ((high >>> index) & 1) checksum ^= BECH32_GENERATORS[index];
+      if ((high >>> index) & 1) {
+        checksum ^= BECH32_GENERATORS[index];
+      }
     }
   }
   return checksum >>> 0;
@@ -70,8 +72,12 @@ export function classifyKeyImportInput(input: string): KeyImportKind {
   // Case-insensitive on the HRP to match the Rust classifier: an uppercase
   // valid backup routes to the encrypted path (and decodes there); mixed
   // case routes there too and fails in Rust with the accurate error.
-  if (trimmed.slice(0, 10).toLowerCase() === "ncryptsec1") return "ncryptsec";
-  if (trimmed.startsWith("nsec1")) return "nsec";
+  if (trimmed.slice(0, 10).toLowerCase() === "ncryptsec1") {
+    return "ncryptsec";
+  }
+  if (trimmed.startsWith("nsec1")) {
+    return "nsec";
+  }
   return "unknown";
 }
 
@@ -82,7 +88,9 @@ export function classifyKeyImportInput(input: string): KeyImportKind {
  */
 export function isPlausibleNcryptsec(input: string): boolean {
   const trimmed = input.trim();
-  if (trimmed.length !== NCRYPTSEC_ENCODED_LENGTH) return false;
+  if (trimmed.length !== NCRYPTSEC_ENCODED_LENGTH) {
+    return false;
+  }
   if (trimmed !== trimmed.toLowerCase() && trimmed !== trimmed.toUpperCase()) {
     return false;
   }
@@ -100,7 +108,9 @@ export function isPlausibleNcryptsec(input: string): boolean {
   const words = Array.from(encoded, (character) =>
     BECH32_CHARSET.indexOf(character),
   );
-  if (words.some((word) => word < 0) || words.length <= 6) return false;
+  if (words.some((word) => word < 0) || words.length <= 6) {
+    return false;
+  }
   if (bech32Polymod([...expandBech32Hrp(NCRYPTSEC_HRP), ...words]) !== 1) {
     return false;
   }

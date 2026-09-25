@@ -51,7 +51,9 @@ export function CreateProjectWorkItemDialog({
   const itemLabel = itemName === "issue" ? "issue" : "pull request";
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     setWorkItemTitle("");
     setBody("");
     setErrorMessage(null);
@@ -64,9 +66,13 @@ export function CreateProjectWorkItemDialog({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isCreating || submitDisabled || submitInFlightRef.current) return;
+    if (isCreating || submitDisabled || submitInFlightRef.current) {
+      return;
+    }
     const trimmedTitle = workItemTitle.trim();
-    if (!trimmedTitle) return;
+    if (!trimmedTitle) {
+      return;
+    }
     submitInFlightRef.current = true;
     setErrorMessage(null);
     try {
@@ -86,7 +92,9 @@ export function CreateProjectWorkItemDialog({
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && isCreating) return;
+        if (!nextOpen && isCreating) {
+          return;
+        }
         onOpenChange(nextOpen);
       }}
       open={open}

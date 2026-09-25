@@ -13,10 +13,10 @@ const LOCAL_DEV_RELAY_URLS = new Set([
 type LegacyCommunityStorageSnapshot = {
   workspaces: string | null;
   activeWorkspaceId: string | null;
-  onboardingCompletions: Array<{
+  onboardingCompletions: {
     pubkey: string;
     value: string;
-  }>;
+  }[];
 };
 
 type StoredCommunity = {

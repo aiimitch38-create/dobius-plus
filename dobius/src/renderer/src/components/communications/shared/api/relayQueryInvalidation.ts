@@ -55,17 +55,29 @@ const LOCAL_PROJECT_QUERY_PARTS = new Set<string>([
 function isRelayDependentProjectQueryKey(queryKey: readonly unknown[]) {
   if (queryKey[0] === "projects") {
     const scope = queryKey[1];
-    if (scope === undefined) return true;
-    if (typeof scope !== "string") return false;
-    if (LOCAL_PROJECT_QUERY_PARTS.has(scope)) return false;
+    if (scope === undefined) {
+      return true;
+    }
+    if (typeof scope !== "string") {
+      return false;
+    }
+    if (LOCAL_PROJECT_QUERY_PARTS.has(scope)) {
+      return false;
+    }
     return RELAY_PROJECT_QUERY_PARTS.has(scope);
   }
 
   if (queryKey[0] === "project") {
     const scope = queryKey[2];
-    if (scope === undefined) return true;
-    if (typeof scope !== "string") return false;
-    if (LOCAL_PROJECT_QUERY_PARTS.has(scope)) return false;
+    if (scope === undefined) {
+      return true;
+    }
+    if (typeof scope !== "string") {
+      return false;
+    }
+    if (LOCAL_PROJECT_QUERY_PARTS.has(scope)) {
+      return false;
+    }
     return RELAY_PROJECT_QUERY_PARTS.has(scope);
   }
 
@@ -74,8 +86,12 @@ function isRelayDependentProjectQueryKey(queryKey: readonly unknown[]) {
 
 export function isRelayDependentQueryKey(queryKey: readonly unknown[]) {
   const root = queryKey[0];
-  if (typeof root !== "string") return false;
-  if (RELAY_QUERY_ROOTS.has(root)) return true;
+  if (typeof root !== "string") {
+    return false;
+  }
+  if (RELAY_QUERY_ROOTS.has(root)) {
+    return true;
+  }
   return isRelayDependentProjectQueryKey(queryKey);
 }
 

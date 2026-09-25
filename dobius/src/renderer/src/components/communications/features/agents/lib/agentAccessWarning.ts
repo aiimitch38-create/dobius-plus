@@ -15,7 +15,9 @@ export type AgentRunLocation = "local" | "remote";
 export function runLocationForBackend(
   backend: ManagedAgentBackend | null | undefined,
 ): AgentRunLocation | null {
-  if (!backend) return null;
+  if (!backend) {
+    return null;
+  }
   return backend.type === "local" ? "local" : "remote";
 }
 
@@ -27,7 +29,9 @@ export function runLocationForBackend(
 export function runLocationForRunOn(
   runOn: string | null | undefined,
 ): AgentRunLocation | null {
-  if (!runOn) return null;
+  if (!runOn) {
+    return null;
+  }
   return runOn === "local" ? "local" : "remote";
 }
 
@@ -50,7 +54,9 @@ export function agentAccessWarningText(
   mode: RespondToMode,
   runLocation?: AgentRunLocation | null,
 ): string | null {
-  if (mode !== "anyone" && mode !== "allowlist") return null;
+  if (mode !== "anyone" && mode !== "allowlist") {
+    return null;
+  }
   const audience = mode === "anyone" ? "Anyone" : "Selected people";
   // The two locations differ in more than the noun: a local agent reaches the
   // owner's own files, while a remote host's files aren't theirs to describe —

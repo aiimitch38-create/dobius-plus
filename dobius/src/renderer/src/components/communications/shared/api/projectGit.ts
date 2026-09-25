@@ -225,7 +225,9 @@ export async function getProjectLocalRepoDiff(input: {
       targetCommit: input.targetCommit ?? null,
     },
   );
-  if (!diff) return null;
+  if (!diff) {
+    return null;
+  }
   return {
     additions: diff.additions,
     deletions: diff.deletions,
@@ -257,7 +259,9 @@ export async function getProjectLocalRepoSnapshot(input: {
       baseBranch: input.baseBranch ?? null,
     },
   );
-  if (!localSnapshot) return null;
+  if (!localSnapshot) {
+    return null;
+  }
   return {
     path: localSnapshot.path,
     snapshot: fromRawProjectRepoSnapshot(localSnapshot.snapshot),
@@ -502,7 +506,9 @@ export class ProjectPullRequestMergeError extends Error {
 
 function mergeErrorPayload(error: unknown): unknown {
   const payload = error instanceof TauriInvokeError ? error.payload : error;
-  if (typeof payload !== "string") return payload;
+  if (typeof payload !== "string") {
+    return payload;
+  }
   try {
     return JSON.parse(payload);
   } catch {
@@ -515,7 +521,9 @@ export function parseProjectPullRequestMergeError(
   error: unknown,
 ): ProjectPullRequestMergeError | null {
   const payload = mergeErrorPayload(error);
-  if (!payload || typeof payload !== "object") return null;
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
   const candidate = payload as {
     code?: unknown;
     message?: unknown;
@@ -529,7 +537,9 @@ export function parseProjectPullRequestMergeError(
   }
   let recovery: ProjectPullRequestMergeRecovery | null = null;
   if (candidate.recovery !== null && candidate.recovery !== undefined) {
-    if (typeof candidate.recovery !== "object") return null;
+    if (typeof candidate.recovery !== "object") {
+      return null;
+    }
     const value = candidate.recovery as {
       action?: unknown;
       sourceBranch?: unknown;

@@ -19,7 +19,9 @@ const PASTED_LINK_AT_END_RE =
 
 function isPasteEndingWithLink(text: string): boolean {
   const trimmedEnd = text.trimEnd();
-  if (!trimmedEnd || trimmedEnd.length !== text.length) return false;
+  if (!trimmedEnd || trimmedEnd.length !== text.length) {
+    return false;
+  }
   return PASTED_LINK_AT_END_RE.test(trimmedEnd);
 }
 
@@ -75,11 +77,17 @@ export function createLinkInteractionExtension({
               // links at the DOM event layer and route them to composer-local
               // controls.
               click(view, event) {
-                if (!(event instanceof MouseEvent)) return false;
+                if (!(event instanceof MouseEvent)) {
+                  return false;
+                }
                 const target = event.target;
-                if (!(target instanceof Element)) return false;
+                if (!(target instanceof Element)) {
+                  return false;
+                }
                 const anchor = target.closest("a[href]");
-                if (!anchor || !view.dom.contains(anchor)) return false;
+                if (!anchor || !view.dom.contains(anchor)) {
+                  return false;
+                }
 
                 const position = view.posAtCoords({
                   left: event.clientX,
@@ -123,7 +131,9 @@ function notifyLinkSelection(
   options?: { suppressLinkedSelection?: boolean },
 ) {
   const handler = getSelectionChangeHandler();
-  if (!handler) return;
+  if (!handler) {
+    return;
+  }
   if (!state.selection.empty) {
     handler(null);
     return;
@@ -144,10 +154,14 @@ function handleLinkClick({
   view: EditorView;
 }): boolean {
   const handler = getEditLinkHandler();
-  if (!handler) return false;
+  if (!handler) {
+    return false;
+  }
 
   const info = resolveLinkAt(view.state, pos);
-  if (!info) return false;
+  if (!info) {
+    return false;
+  }
 
   event.preventDefault();
   event.stopPropagation();

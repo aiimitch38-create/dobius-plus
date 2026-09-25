@@ -20,11 +20,15 @@ function makeDeps({
   return {
     calls,
     observerArchiveDefaultEnabled: async () => {
-      if (flagShouldFail) throw new Error("flag check failed");
+      if (flagShouldFail) {
+        throw new Error("flag check failed");
+      }
       return policyOn;
     },
     mergeSaveSubscriptionKinds: async (kind) => {
-      if (mergeShouldFail) throw new Error("merge failed");
+      if (mergeShouldFail) {
+        throw new Error("merge failed");
+      }
       calls.merge.push({ kind });
     },
   };

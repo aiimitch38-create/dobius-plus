@@ -134,7 +134,9 @@ export function useCommunityInit(
               shouldAutoConnectDefaultRelay(defaultRelayUrl))
           ) {
             const identity = await getIdentity();
-            if (cancelled) return;
+            if (cancelled) {
+              return;
+            }
             const community = initFirstCommunity(
               defaultRelayUrl,
               identity.pubkey,
@@ -261,10 +263,14 @@ export function useCommunityInit(
 
         try {
           const identity = await getIdentity();
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           initDraftStore(identity.pubkey, activeCommunity.relayUrl);
         } catch (err) {
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           console.error(
             "[useCommunityInit] getIdentity failed, draft store uninitialized:",
             err,

@@ -69,7 +69,9 @@ export function CommunicationsPage(): React.JSX.Element {
     let cancelled = false
     identityPrimed
       .then(() => {
-        if (!cancelled) setIdentityState('ready')
+        if (!cancelled) {
+          setIdentityState('ready')
+        }
         // Channels stay live across restarts: re-kick agent conversations the
         // shutdown interrupted, so the channel picks up where it left off
         // instead of sitting dead until the user speaks again.

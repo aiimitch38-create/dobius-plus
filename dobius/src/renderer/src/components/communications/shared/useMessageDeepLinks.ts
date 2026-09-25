@@ -23,7 +23,9 @@ export function useMessageDeepLinks() {
   React.useEffect(() => {
     let cancelled = false;
     const unlistenPromise = listenForMessageDeepLinks((payload) => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       void goChannel(payload.channelId, {
         messageId: payload.messageId,
         threadRootId: payload.threadRootId,

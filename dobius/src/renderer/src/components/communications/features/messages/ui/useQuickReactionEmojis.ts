@@ -18,7 +18,9 @@ type QuickReactionEntry = {
 };
 
 function canUseLocalStorage() {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") {
+    return false;
+  }
 
   try {
     return Boolean(window.localStorage);
@@ -28,7 +30,9 @@ function canUseLocalStorage() {
 }
 
 function getActiveCommunityScope() {
-  if (!canUseLocalStorage()) return null;
+  if (!canUseLocalStorage()) {
+    return null;
+  }
 
   try {
     return loadActiveCommunityId() ?? loadCommunities()[0]?.id ?? null;
@@ -52,7 +56,9 @@ function quickReactionSessionKey(
 }
 
 function normalizeEntry(entry: unknown): QuickReactionEntry | null {
-  if (!entry || typeof entry !== "object") return null;
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
 
   const candidate = entry as Partial<QuickReactionEntry>;
   if (
@@ -72,18 +78,24 @@ function normalizeEntry(entry: unknown): QuickReactionEntry | null {
 function sortEntries(entries: QuickReactionEntry[]) {
   return [...entries].sort((left, right) => {
     const countDelta = right.count - left.count;
-    if (countDelta !== 0) return countDelta;
+    if (countDelta !== 0) {
+      return countDelta;
+    }
     return right.lastUsedAt - left.lastUsedAt;
   });
 }
 
 function readQuickReactionEntries(storageKey: string) {
-  if (!canUseLocalStorage()) return [];
+  if (!canUseLocalStorage()) {
+    return [];
+  }
 
   try {
     const raw = window.localStorage.getItem(storageKey);
     const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
     return sortEntries(
       parsed
         .map((entry) => normalizeEntry(entry))
@@ -98,7 +110,9 @@ function writeQuickReactionEntries(
   entries: QuickReactionEntry[],
   storageKey: string,
 ) {
-  if (!canUseLocalStorage()) return;
+  if (!canUseLocalStorage()) {
+    return;
+  }
 
   try {
     window.localStorage.setItem(
@@ -110,7 +124,7 @@ function writeQuickReactionEntries(
   }
 }
 
-function customEmojiSignature(customEmoji: ReadonlyArray<CustomEmoji>) {
+function customEmojiSignature(customEmoji: readonly CustomEmoji[]) {
   return customEmoji
     .map((emoji) => emoji.shortcode.toLowerCase())
     .sort()
@@ -129,12 +143,14 @@ function canRenderQuickReactionEmoji(
   emoji: string,
   customEmojiShortcodes: ReadonlySet<string>,
 ) {
-  if (!isCustomEmojiShortcode(emoji)) return true;
+  if (!isCustomEmojiShortcode(emoji)) {
+    return true;
+  }
   return customEmojiShortcodes.has(emoji.slice(1, -1).toLowerCase());
 }
 
 function resolveQuickReactionEmojisWithShortcodes(
-  entries: ReadonlyArray<Pick<QuickReactionEntry, "emoji">>,
+  entries: readonly Pick<QuickReactionEntry, "emoji">[],
   limit: number,
   customEmojiShortcodes: ReadonlySet<string>,
 ) {
@@ -142,29 +158,37 @@ function resolveQuickReactionEmojisWithShortcodes(
   const next: string[] = [];
 
   for (const entry of entries) {
-    if (seen.has(entry.emoji)) continue;
+    if (seen.has(entry.emoji)) {
+      continue;
+    }
     if (!canRenderQuickReactionEmoji(entry.emoji, customEmojiShortcodes)) {
       continue;
     }
     seen.add(entry.emoji);
     next.push(entry.emoji);
-    if (next.length >= limit) return next;
+    if (next.length >= limit) {
+      return next;
+    }
   }
 
   for (const emoji of DEFAULT_QUICK_REACTIONS) {
-    if (seen.has(emoji)) continue;
+    if (seen.has(emoji)) {
+      continue;
+    }
     seen.add(emoji);
     next.push(emoji);
-    if (next.length >= limit) return next;
+    if (next.length >= limit) {
+      return next;
+    }
   }
 
   return next;
 }
 
 export function resolveQuickReactionEmojis(
-  entries: ReadonlyArray<Pick<QuickReactionEntry, "emoji">>,
+  entries: readonly Pick<QuickReactionEntry, "emoji">[],
   limit: number,
-  customEmoji: ReadonlyArray<CustomEmoji> = [],
+  customEmoji: readonly CustomEmoji[] = [],
 ) {
   return resolveQuickReactionEmojisWithShortcodes(
     entries,
@@ -196,7 +220,9 @@ function getSessionQuickReactionEmojis(
     customEmojiSignature,
   );
   const cached = sessionQuickReactionEmojis.get(sessionKey);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   const emojis = getQuickReactionEmojis(
     limit,
@@ -209,7 +235,9 @@ function getSessionQuickReactionEmojis(
 
 export function recordQuickReactionEmoji(emoji: string) {
   const trimmed = emoji.trim();
-  if (!trimmed) return;
+  if (!trimmed) {
+    return;
+  }
 
   const communityScope = getActiveCommunityScope();
   const storageKey = quickReactionStorageKey(communityScope);
@@ -233,7 +261,7 @@ export function recordQuickReactionEmoji(emoji: string) {
 
 export function useQuickReactionEmojis(
   limit = 4,
-  customEmoji: ReadonlyArray<CustomEmoji> = [],
+  customEmoji: readonly CustomEmoji[] = [],
 ) {
   const communityScope = getActiveCommunityScope();
   const customEmojiCacheKey = customEmojiSignature(customEmoji);
@@ -242,7 +270,9 @@ export function useQuickReactionEmojis(
   );
 
   React.useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined") {
+      return;
+    }
 
     const storageKey = quickReactionStorageKey(communityScope);
     const sessionKey = quickReactionSessionKey(

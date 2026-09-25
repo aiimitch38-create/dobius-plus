@@ -174,7 +174,9 @@ function editAffectsMentionBoundary(tr: Transaction): boolean {
 
     let found = false;
     map.forEach((oldFrom, oldTo, newFrom, newTo) => {
-      if (found) return;
+      if (found) {
+        return;
+      }
 
       // Check new doc text in the affected range
       const clampedNewTo = Math.min(newTo, tr.doc.content.size);
@@ -208,7 +210,9 @@ function editAffectsMentionBoundary(tr: Transaction): boolean {
       }
     });
 
-    if (found) return true;
+    if (found) {
+      return true;
+    }
   }
 
   return false;
@@ -226,7 +230,9 @@ function editIntersectsDecoration(
   let hit = false;
   tr.mapping.maps.forEach((map) => {
     map.forEach((oldFrom, oldTo) => {
-      if (hit) return;
+      if (hit) {
+        return;
+      }
       if (decorations.find(oldFrom, oldTo).length > 0) {
         hit = true;
       }
@@ -245,8 +251,9 @@ function buildDecorations(
     names.length === 0 &&
     agentNames.length === 0 &&
     channelNames.length === 0
-  )
+  ) {
     return DecorationSet.empty;
+  }
 
   const decorations: Decoration[] = [];
   const agentNameSet = new Set(
@@ -260,7 +267,9 @@ function buildDecorations(
   const channelPatterns = buildHighlightPatterns([], channelNames);
 
   doc.descendants((node, pos) => {
-    if (!node.isText || !node.text) return;
+    if (!node.isText || !node.text) {
+      return;
+    }
 
     addMatchesForPatterns(
       decorations,

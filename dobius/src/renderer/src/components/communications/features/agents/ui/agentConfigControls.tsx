@@ -65,15 +65,21 @@ export function resolveModelFieldStatusMessage({
   loading: boolean;
   status: PersonaModelDiscoveryStatus | null;
 }): string | null {
-  if (loading) return "Loading models...";
-  if (status !== null) return status.message;
+  if (loading) {
+    return "Loading models...";
+  }
+  if (status !== null) {
+    return status.message;
+  }
   return discoveredModelOptions !== null
     ? "Saved changes take effect on the next start."
     : null;
 }
 
 function optionTestId(testId: string | undefined, value: string) {
-  if (!testId) return undefined;
+  if (!testId) {
+    return undefined;
+  }
   return `${testId}-option-${value || "empty"}`;
 }
 
@@ -154,7 +160,9 @@ export function AgentDropdownSelect({
   const showSearch = searchable && options.length > 1;
   const filteredOptions = React.useMemo(() => {
     const trimmed = query.trim().toLowerCase();
-    if (!showSearch || trimmed === "") return options;
+    if (!showSearch || trimmed === "") {
+      return options;
+    }
     return options.filter((option) =>
       (typeof option.label === "string" ? option.label : option.value)
         .toLowerCase()
@@ -164,7 +172,9 @@ export function AgentDropdownSelect({
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
-    if (!next) setQuery("");
+    if (!next) {
+      setQuery("");
+    }
   }
 
   return (
@@ -263,7 +273,9 @@ export function AgentDropdownSelect({
                 disabled={option.disabled}
                 key={option.value}
                 onClick={() => {
-                  if (option.disabled) return;
+                  if (option.disabled) {
+                    return;
+                  }
                   onValueChange(option.value);
                   setOpen(false);
                 }}

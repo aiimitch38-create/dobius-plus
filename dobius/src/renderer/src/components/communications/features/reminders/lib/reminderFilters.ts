@@ -69,11 +69,17 @@ export function groupReminders(
 
   for (const r of reminders) {
     if (r.content.status === "done") {
-      if (includeDone) done.push(r);
+      if (includeDone) {
+        done.push(r);
+      }
       continue;
     }
-    if (r.content.status !== "pending") continue;
-    if (r.notBefore === undefined) continue;
+    if (r.content.status !== "pending") {
+      continue;
+    }
+    if (r.notBefore === undefined) {
+      continue;
+    }
     if (r.notBefore <= now) {
       overdue.push(r);
     } else if (r.notBefore <= endOfTodaySecs) {
@@ -86,10 +92,17 @@ export function groupReminders(
   done.sort((a, b) => b.createdAt - a.createdAt);
 
   const groups: ReminderGroup[] = [];
-  if (overdue.length > 0) groups.push({ label: "Overdue", reminders: overdue });
-  if (today.length > 0) groups.push({ label: "Today", reminders: today });
-  if (upcoming.length > 0)
+  if (overdue.length > 0) {
+    groups.push({ label: "Overdue", reminders: overdue });
+  }
+  if (today.length > 0) {
+    groups.push({ label: "Today", reminders: today });
+  }
+  if (upcoming.length > 0) {
     groups.push({ label: "Upcoming", reminders: upcoming });
-  if (done.length > 0) groups.push({ label: "Completed", reminders: done });
+  }
+  if (done.length > 0) {
+    groups.push({ label: "Completed", reminders: done });
+  }
   return groups;
 }

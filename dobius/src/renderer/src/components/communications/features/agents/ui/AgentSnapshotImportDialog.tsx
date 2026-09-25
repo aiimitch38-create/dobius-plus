@@ -191,7 +191,7 @@ function PreviewBody({
               {preview.memoryEntryCount === 1 ? "y" : "ies"}
             </strong>
             . Memory is stored as plaintext in the file and will be restored
-            under the new agent's identity.
+            under the new agent&apos;s identity.
           </p>
         </div>
       ) : (

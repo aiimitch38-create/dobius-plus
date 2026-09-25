@@ -53,9 +53,13 @@ function readFollowedRootIds(pubkey: string): Set<string> {
     const raw = window.localStorage.getItem(
       `${FOLLOWS_STORAGE_KEY_PREFIX}:${pubkey}`,
     );
-    if (!raw) return new Set();
+    if (!raw) {
+      return new Set();
+    }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
+    if (!Array.isArray(parsed)) {
+      return new Set();
+    }
     const ids = new Set<string>();
     for (const entry of parsed) {
       if (
@@ -226,7 +230,9 @@ export async function fetchCommunityUnread(args: {
   let mentionCount = 0;
 
   for (const channel of channels) {
-    if (mutedIds.has(channel.id)) continue;
+    if (mutedIds.has(channel.id)) {
+      continue;
+    }
 
     // Compute readAt first so the forced-unread gate can compare against it.
     const readAt = readState.get(channel.id) ?? null;
@@ -313,7 +319,9 @@ export function resolveObservedChannels(
   const latestMetadata = new Map<string, RelayEvent>();
   for (const event of metadataEvents) {
     const channelId = tagValue(event, "d");
-    if (!channelId) continue;
+    if (!channelId) {
+      continue;
+    }
     const existing = latestMetadata.get(channelId);
     if (!existing || event.created_at > existing.created_at) {
       latestMetadata.set(channelId, event);
@@ -361,7 +369,9 @@ function isUnreadExternalEvent(
   channelReadAt: number | null,
   normalizedPubkey: string,
 ): boolean {
-  if (event.pubkey.toLowerCase() === normalizedPubkey) return false;
+  if (event.pubkey.toLowerCase() === normalizedPubkey) {
+    return false;
+  }
 
   const rootId = isBroadcastReply(event.tags)
     ? null

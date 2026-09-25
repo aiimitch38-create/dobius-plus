@@ -9,7 +9,9 @@ export type AgentCommunityAvailability =
 export function agentCommunityAvailability(
   runtime: ManagedAgentRuntimeStatus,
 ): AgentCommunityAvailability {
-  if (!runtime.localSetup) return "Needs setup on this device";
+  if (!runtime.localSetup) {
+    return "Needs setup on this device";
+  }
 
   switch (runtime.lifecycle) {
     case "starting":
@@ -27,11 +29,15 @@ export function agentCommunityAvailability(
 export function agentCommunityStatusDetail(
   runtime: ManagedAgentRuntimeStatus,
 ): string | null {
-  if (!runtime.localSetup)
+  if (!runtime.localSetup) {
     return "Set up this agent on this device to start it.";
-  if (runtime.lifecycle === "stopped") return "Stopped by you";
-  if (runtime.lifecycle === "failed")
+  }
+  if (runtime.lifecycle === "stopped") {
+    return "Stopped by you";
+  }
+  if (runtime.lifecycle === "failed") {
     return runtime.error ?? "Could not connect";
+  }
   return null;
 }
 
@@ -48,8 +54,12 @@ export type ManagedAgentPairAction = "start" | "stop" | "restart";
 export function managedAgentPairAction(
   runtime: ManagedAgentRuntimeStatus | undefined,
 ): ManagedAgentPairAction {
-  if (!runtime || runtime.lifecycle === "stopped") return "start";
-  if (runtime.lifecycle === "failed") return "restart";
+  if (!runtime || runtime.lifecycle === "stopped") {
+    return "start";
+  }
+  if (runtime.lifecycle === "failed") {
+    return "restart";
+  }
   return "stop";
 }
 
@@ -77,7 +87,9 @@ export function canonicalRelayUrl(raw: string): string | null {
   } catch {
     return null;
   }
-  if (url.protocol !== "ws:" && url.protocol !== "wss:") return null;
+  if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+    return null;
+  }
   let host = url.hostname.toLowerCase();
   if (host === "localhost" || host === "[::1]" || host.startsWith("127.")) {
     host = "127.0.0.1";

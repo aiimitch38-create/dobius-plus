@@ -305,7 +305,9 @@ function ImageZoomOverlay({
   }, []);
 
   const close = React.useCallback(() => {
-    if (closeTimerRef.current != null) return;
+    if (closeTimerRef.current != null) {
+      return;
+    }
 
     if (galleryTransitionTimerRef.current != null) {
       window.clearTimeout(galleryTransitionTimerRef.current);
@@ -1029,7 +1031,9 @@ function ImageBlock({ alt, dim, resolvedSrc, src, thumbSrc }: ImageBlockProps) {
   const updateSpoilerMediaSize = React.useCallback(
     (image: HTMLImageElement) => {
       const { naturalHeight, naturalWidth } = image;
-      if (naturalHeight <= 0 || naturalWidth <= 0) return;
+      if (naturalHeight <= 0 || naturalWidth <= 0) {
+        return;
+      }
 
       const maxWidth = 384;
       const maxHeight = 256;
@@ -1078,7 +1082,9 @@ function ImageBlock({ alt, dim, resolvedSrc, src, thumbSrc }: ImageBlockProps) {
 
   React.useLayoutEffect(() => {
     const trigger = triggerRef.current;
-    if (!trigger) return;
+    if (!trigger) {
+      return;
+    }
 
     const updateHiddenState = () => {
       setIsHiddenInSpoiler(isInsideHiddenSpoiler(trigger));
@@ -1087,7 +1093,9 @@ function ImageBlock({ alt, dim, resolvedSrc, src, thumbSrc }: ImageBlockProps) {
     updateHiddenState();
 
     const spoiler = trigger.closest(".buzz-spoiler[data-spoiler]");
-    if (!spoiler) return;
+    if (!spoiler) {
+      return;
+    }
 
     const observer = new MutationObserver(updateHiddenState);
     observer.observe(spoiler, {
@@ -1103,7 +1111,9 @@ function ImageBlock({ alt, dim, resolvedSrc, src, thumbSrc }: ImageBlockProps) {
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (isInsideHiddenSpoiler(e.currentTarget)) return;
+    if (isInsideHiddenSpoiler(e.currentTarget)) {
+      return;
+    }
     e.stopPropagation();
     e.nativeEvent.stopImmediatePropagation();
     setMenu({ x: e.clientX, y: e.clientY });
@@ -1159,7 +1169,9 @@ function ImageBlock({ alt, dim, resolvedSrc, src, thumbSrc }: ImageBlockProps) {
 
   const handleCopyImage = React.useCallback((copySrc: string | undefined) => {
     setMenu(null);
-    if (!copySrc) return;
+    if (!copySrc) {
+      return;
+    }
     invokeTauri("copy_image_to_clipboard", { url: copySrc })
       .then(() => {
         toast.success("Copied to clipboard");
@@ -1173,7 +1185,9 @@ function ImageBlock({ alt, dim, resolvedSrc, src, thumbSrc }: ImageBlockProps) {
   const handleDownload = React.useCallback(
     (downloadSrc: string | undefined) => {
       setMenu(null);
-      if (!downloadSrc) return;
+      if (!downloadSrc) {
+        return;
+      }
       invokeTauri("download_image", { url: downloadSrc }).catch(
         (err: unknown) => {
           const msg = err instanceof Error ? err.message : "Download failed";
@@ -1307,7 +1321,9 @@ function ExternalLinkAnchor({
       )}
       href={href}
       onContextMenuCapture={(event) => {
-        if (!href) return;
+        if (!href) {
+          return;
+        }
         event.preventDefault();
         setMenu({ x: event.clientX, y: event.clientY });
       }}
@@ -1633,7 +1649,9 @@ function createMarkdownComponents(
       return <p>{children}</p>;
     },
     pre: ({ children }) => {
-      if (!interactive) return <span>{children}</span>;
+      if (!interactive) {
+        return <span>{children}</span>;
+      }
       let language = "";
       React.Children.forEach(children, (child) => {
         if (

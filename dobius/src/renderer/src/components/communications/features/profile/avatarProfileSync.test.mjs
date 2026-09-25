@@ -140,7 +140,9 @@ test("retries a transient save and keeps the sync pending until success", async 
     initialState: "ready",
     saveProfile: async (input) => {
       attempt += 1;
-      if (attempt === 1) throw new Error("relay unreachable: network error");
+      if (attempt === 1) {
+        throw new Error("relay unreachable: network error");
+      }
       return { avatarUrl: input.avatarUrl, pubkey: input.expectedPubkey };
     },
     scheduleRetry: (callback, delayMs) => {

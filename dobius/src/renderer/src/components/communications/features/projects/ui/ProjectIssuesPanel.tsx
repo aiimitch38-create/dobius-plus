@@ -27,8 +27,12 @@ import { ProfileIdentityButton } from "./ProjectProfileIdentity";
 import { ProjectRichContent } from "./ProjectRichContent";
 
 export function issueStatusClassName(status: ProjectIssue["status"]) {
-  if (status === "Done") return "text-purple-400";
-  if (status === "Closed") return "text-destructive";
+  if (status === "Done") {
+    return "text-purple-400";
+  }
+  if (status === "Closed") {
+    return "text-destructive";
+  }
   return "text-green-500";
 }
 

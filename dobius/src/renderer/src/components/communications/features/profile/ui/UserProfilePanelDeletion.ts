@@ -61,7 +61,9 @@ export function useProfileAgentDeletion({
           channelIds.add(channel.id);
         }
       }
-      if (channelIds.size === 0) return;
+      if (channelIds.size === 0) {
+        return;
+      }
       await Promise.allSettled(
         [...channelIds].map((channelId) =>
           removeChannelMember(channelId, agentPubkey),
@@ -128,7 +130,9 @@ export async function deleteProfileManagedAgent(
     agent,
     ...deleteContext,
   });
-  if (result.cancelled) return result;
+  if (result.cancelled) {
+    return result;
+  }
 
   await removeAgentFromAllChannels(agent.pubkey);
   return result;
@@ -153,7 +157,9 @@ export async function deleteProfileManagedAgentsForPersona(
 
   for (const agent of agentsByPubkey.values()) {
     const result = await deleteProfileManagedAgent(agent, deleteContext);
-    if (result.cancelled) return result;
+    if (result.cancelled) {
+      return result;
+    }
   }
 
   return {};

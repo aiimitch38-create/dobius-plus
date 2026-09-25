@@ -33,7 +33,9 @@ export function PersonaModelCombobox({
   const selectedOption = options.find((option) => option.value === value);
 
   const filteredOptions = React.useMemo(() => {
-    if (query.trim() === "") return options;
+    if (query.trim() === "") {
+      return options;
+    }
     const lower = query.toLowerCase();
     return options.filter((option) =>
       option.label.toLowerCase().includes(lower),
@@ -60,7 +62,9 @@ export function PersonaModelCombobox({
     const len = filteredOptions.length;
     for (let step = 1; step <= len; step++) {
       const candidate = (from + direction * step + len * step) % len;
-      if (!filteredOptions[candidate]?.disabled) return candidate;
+      if (!filteredOptions[candidate]?.disabled) {
+        return candidate;
+      }
     }
     return from;
   }
@@ -84,7 +88,9 @@ export function PersonaModelCombobox({
       case "Enter": {
         event.preventDefault();
         const target = filteredOptions[highlightedIndex];
-        if (target && !target.disabled) selectOption(target.value);
+        if (target && !target.disabled) {
+          selectOption(target.value);
+        }
         break;
       }
       case "Escape": {
@@ -192,7 +198,9 @@ export function PersonaModelCombobox({
                   key={option.value}
                   onClick={() => selectOption(option.value)}
                   onMouseEnter={() => {
-                    if (!option.disabled) setHighlightedIndex(index);
+                    if (!option.disabled) {
+                      setHighlightedIndex(index);
+                    }
                   }}
                   type="button"
                 >

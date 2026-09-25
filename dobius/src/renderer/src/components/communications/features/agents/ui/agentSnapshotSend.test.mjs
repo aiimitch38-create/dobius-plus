@@ -293,7 +293,9 @@ test("runSendPipeline_checkpoint2_blocks_upload_after_encode", async () => {
     channelId: "ch-1",
     checkEligibilityFn: () => {
       // checkpoint 1: passes; checkpoint 2: fails (called after encode)
-      if (!encodeComplete) return null;
+      if (!encodeComplete) {
+        return null;
+      }
       return "channel became forum during encode";
     },
     encodeFn: async () => {

@@ -126,9 +126,13 @@ export function resolveObservedUnreadRootId(tags: string[][]): string | null {
 }
 
 function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
-  if (a.size !== b.size) return false;
+  if (a.size !== b.size) {
+    return false;
+  }
   for (const item of a) {
-    if (!b.has(item)) return false;
+    if (!b.has(item)) {
+      return false;
+    }
   }
   return true;
 }
@@ -326,7 +330,9 @@ export function useUnreadChannels(
         readAt,
         observedLatest,
       );
-      if (markAt === null) return;
+      if (markAt === null) {
+        return;
+      }
       markContextRead(channelId, markAt);
       // Clear observed-latest refs when the read marker covers them so the
       // unread memo sees `latest === undefined` until a genuinely new event
@@ -366,15 +372,25 @@ export function useUnreadChannels(
   // set actually grew so callers can decide whether to bump the gate snapshot.
   const recordMentionedRoot = React.useCallback(
     (event: RelayEvent): boolean => {
-      if (normalizedPubkey === null) return false;
-      if (event.pubkey.toLowerCase() === normalizedPubkey) return false;
-      if (!hasMentionForEvent(event, normalizedPubkey)) return false;
+      if (normalizedPubkey === null) {
+        return false;
+      }
+      if (event.pubkey.toLowerCase() === normalizedPubkey) {
+        return false;
+      }
+      if (!hasMentionForEvent(event, normalizedPubkey)) {
+        return false;
+      }
       const { rootId } = getThreadReference(event.tags);
-      if (rootId === null) return false;
+      if (rootId === null) {
+        return false;
+      }
       const target = mentionedRootIdsRef.current;
       const sizeBefore = target.size;
       target.add(rootId);
-      if (target.size === sizeBefore) return false;
+      if (target.size === sizeBefore) {
+        return false;
+      }
       mentionedStore.write(normalizedPubkey, target);
       return true;
     },
@@ -486,8 +502,9 @@ export function useUnreadChannels(
       if (
         !currentActivityScope ||
         threadActivityScopeRef.current !== currentActivityScope
-      )
+      ) {
         return;
+      }
 
       const channelName =
         channels.find((ch) => ch.id === channelId)?.name ?? "";
@@ -502,7 +519,9 @@ export function useUnreadChannels(
         tags: [...event.tags],
       };
       const added = addThreadActivityItems(threadActivityRef.current, [item]);
-      if (!added.didAdd) return;
+      if (!added.didAdd) {
+        return;
+      }
       const didRecordMentionedRoot = recordMentionedRoot(event);
       threadActivityRef.current = added.items;
       if (normalizedPubkey !== null && normalizedRelayUrl) {
@@ -576,15 +595,23 @@ export function useUnreadChannels(
   // app restart now that we don't persist any client-side "latest" state.
   // biome-ignore lint/correctness/useExhaustiveDependencies: options.followedRootIds intentionally omitted — it's a Set reference that changes identity every render; the catch-up is a one-shot per-channel operation controlled by caughtUpChannelsRef, not reactive to follow changes
   React.useEffect(() => {
-    if (!isReadStateReady) return;
-    if (!relayClient) return;
-    if (channelIdsKey.length === 0) return;
+    if (!isReadStateReady) {
+      return;
+    }
+    if (!relayClient) {
+      return;
+    }
+    if (channelIdsKey.length === 0) {
+      return;
+    }
 
     const targetIds = channelIdsKey.split(",");
     const toFetch = targetIds.filter(
       (id) => !caughtUpChannelsRef.current.has(id),
     );
-    if (toFetch.length === 0) return;
+    if (toFetch.length === 0) {
+      return;
+    }
 
     // Claim optimistically so re-renders mid-flight don't kick off duplicate
     // REQs. If the effect is cancelled (cleanup) we release the claims so
@@ -672,7 +699,9 @@ export function useUnreadChannels(
             ) {
               continue;
             }
-            if (readAt !== null && event.created_at <= readAt) continue;
+            if (readAt !== null && event.created_at <= readAt) {
+              continue;
+            }
             const eventChannelId =
               event.tags.find((t) => t[0] === "h")?.[1] ?? null;
             if (
@@ -736,15 +765,18 @@ export function useUnreadChannels(
         }
       }),
     ).then((results) => {
-      if (isCancelled) return;
+      if (isCancelled) {
+        return;
+      }
       // Guard: don't merge catch-up results into a ref whose scope has drifted
       // (relay/pubkey changed while this async fetch was in flight). Also reject
       // an empty scope for the same reason as the live writer above.
       if (
         !currentActivityScope ||
         threadActivityScopeRef.current !== currentActivityScope
-      )
+      ) {
         return;
+      }
       let didAdvance = false;
       const allThreadReplies: ThreadActivityItem[] = [];
       for (const result of results) {
@@ -788,7 +820,9 @@ export function useUnreadChannels(
           didAdvance = true;
         }
       }
-      if (didAdvance) bumpLatestVersion();
+      if (didAdvance) {
+        bumpLatestVersion();
+      }
       if (
         participatedRootIdsRef.current.size !== participatedSizeBefore ||
         authoredRootIdsRef.current.size !== authoredSizeBefore ||
@@ -842,7 +876,9 @@ export function useUnreadChannels(
       let unreadChannelNotificationCount = 0;
 
       for (const channel of channels) {
-        if (channel.id === activeChannelId) continue;
+        if (channel.id === activeChannelId) {
+          continue;
+        }
 
         if (Object.hasOwn(forcedUnreadRef.current, channel.id)) {
           // Forced-unread is dot tier only — not high-priority.
@@ -852,7 +888,9 @@ export function useUnreadChannels(
           continue;
         }
 
-        if (latestByChannelRef.current.get(channel.id) === undefined) continue;
+        if (latestByChannelRef.current.get(channel.id) === undefined) {
+          continue;
+        }
 
         const observedEvents = observedUnreadEventsByChannelRef.current.get(
           channel.id,
@@ -870,7 +908,9 @@ export function useUnreadChannels(
           observedEvents,
           readAtForObservedEvent,
         );
-        if (unreadCount === 0) continue;
+        if (unreadCount === 0) {
+          continue;
+        }
 
         unread.add(channel.id);
         const badgeCount = countUnreadBadgeObservedEvents(

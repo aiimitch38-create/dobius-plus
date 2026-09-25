@@ -50,17 +50,23 @@ export function pickBotName(
 
   const pick = (pool: readonly string[]) => {
     const available = pool.filter((n) => !usedLower.has(n.toLowerCase()));
-    if (available.length === 0) return null;
+    if (available.length === 0) {
+      return null;
+    }
     return available[Math.floor(Math.random() * available.length)];
   };
 
   if (namePool.length > 0) {
     const name = pick(namePool);
-    if (name) return name;
+    if (name) {
+      return name;
+    }
   }
 
   const fallback = pick(UNIVERSAL_POOL);
-  if (fallback) return fallback;
+  if (fallback) {
+    return fallback;
+  }
 
   const allNames = namePool.length > 0 ? namePool : UNIVERSAL_POOL;
   const base = allNames[Math.floor(Math.random() * allNames.length)];

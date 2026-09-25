@@ -21,7 +21,9 @@ export function sortDmChannelsByLabel(
 }
 
 function dmRecencyMs(channel: Channel): number | null {
-  if (!channel.lastMessageAt) return null;
+  if (!channel.lastMessageAt) {
+    return null;
+  }
   const ms = Date.parse(channel.lastMessageAt);
   return Number.isFinite(ms) ? ms : null;
 }
@@ -45,8 +47,12 @@ export function sortDmChannelsForSidebar(
     if (leftMs !== null && rightMs !== null && leftMs !== rightMs) {
       return rightMs - leftMs;
     }
-    if (leftMs !== null && rightMs === null) return -1;
-    if (leftMs === null && rightMs !== null) return 1;
+    if (leftMs !== null && rightMs === null) {
+      return -1;
+    }
+    if (leftMs === null && rightMs !== null) {
+      return 1;
+    }
     return compareDmChannelsByLabel(left, right, channelLabels);
   });
 }

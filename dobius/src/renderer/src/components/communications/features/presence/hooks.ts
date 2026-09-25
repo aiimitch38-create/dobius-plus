@@ -111,9 +111,13 @@ export function usePresenceSubscription() {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     function handlePresenceEvent(event: { pubkey: string; content: string }) {
-      if (isCancelled) return;
+      if (isCancelled) {
+        return;
+      }
       const parsed = parseLivePresenceEvent(event);
-      if (!parsed) return;
+      if (!parsed) {
+        return;
+      }
       const { pubkey, status } = parsed;
       queryClient.setQueriesData<PresenceLookup>(
         {
@@ -126,7 +130,9 @@ export function usePresenceSubscription() {
     }
 
     function subscribeWithRetry(attempt = 0) {
-      if (isCancelled) return;
+      if (isCancelled) {
+        return;
+      }
       void relayClient
         .subscribeToPresenceUpdates(handlePresenceEvent)
         .then((unsubFn) => {
@@ -149,15 +155,20 @@ export function usePresenceSubscription() {
     subscribeWithRetry();
 
     const unsubReconnect = relayClient.subscribeToReconnects(() => {
-      if (!isCancelled)
+      if (!isCancelled) {
         void queryClient.invalidateQueries({ queryKey: ["presence"] });
+      }
     });
 
     return () => {
       isCancelled = true;
       unsubReconnect();
-      if (retryTimer) clearTimeout(retryTimer);
-      if (unsub) void unsub();
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+      if (unsub) {
+        void unsub();
+      }
     };
   }, [queryClient]);
 }
@@ -175,7 +186,9 @@ export function useSetPresenceMutation(pubkey?: string) {
       };
     },
     onSuccess: ({ status }) => {
-      if (normalizedPubkey.length === 0) return;
+      if (normalizedPubkey.length === 0) {
+        return;
+      }
       queryClient.setQueriesData<PresenceLookup>(
         {
           queryKey: ["presence"],

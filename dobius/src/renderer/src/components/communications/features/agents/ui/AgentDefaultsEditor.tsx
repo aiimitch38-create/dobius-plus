@@ -221,8 +221,12 @@ export function AgentDefaultsEditor({
       // all open dialogs (and any that open afterward) see the new config
       // synchronously — no second IPC round-trip needed.
       queryClient.setQueryData(globalAgentConfigQueryKey, result.config);
-      if (savedCurrentDraft) onSaveSuccess?.(result);
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      if (savedCurrentDraft) {
+        onSaveSuccess?.(result);
+      }
+      if (savedTimerRef.current) {
+        clearTimeout(savedTimerRef.current);
+      }
       // Partial restart failures require an explicit acknowledgment in the
       // overlay, so keep their result visible instead of fading it away.
       if (result.failed_restart_count === 0) {
@@ -270,7 +274,7 @@ export function AgentDefaultsEditor({
       ) : configSurfaceError ? (
         <div className="flex items-center gap-2 py-4 text-sm text-destructive">
           <AlertCircle className="size-4" />
-          Couldn't load agent defaults. Restart the app to try again.
+          Couldn&apos;t load agent defaults. Restart the app to try again.
         </div>
       ) : (
         <>

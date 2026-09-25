@@ -83,7 +83,9 @@ function deriveCounts(
   for (const entry of visibilityById.values()) {
     const top = getRelativeTop(entry.element, root);
 
-    if (entry.isIntersecting) continue;
+    if (entry.isIntersecting) {
+      continue;
+    }
 
     if (top < 0) {
       unreadAboveCount += 1;
@@ -148,7 +150,9 @@ export function useUnreadOverflow(args: {
 
       for (const element of getUnreadElements(root, unreadChannelIds)) {
         const channelId = getChannelId(element);
-        if (!channelId) continue;
+        if (!channelId) {
+          continue;
+        }
 
         visibilityById.set(channelId, {
           element,
@@ -172,7 +176,9 @@ export function useUnreadOverflow(args: {
 
   const scrollToNextAbove = React.useCallback(() => {
     const root = scrollRef.current;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     findNextUnreadElement({
       direction: "above",
@@ -183,7 +189,9 @@ export function useUnreadOverflow(args: {
 
   const scrollToNextBelow = React.useCallback(() => {
     const root = scrollRef.current;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     findNextUnreadElement({
       direction: "below",

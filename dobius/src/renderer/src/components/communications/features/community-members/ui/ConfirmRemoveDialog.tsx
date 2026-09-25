@@ -65,7 +65,9 @@ export function ConfirmRemoveDialog({
             data-testid="confirm-remove-member"
             disabled={removeMutation.isPending || !member}
             onClick={() => {
-              if (!member) return;
+              if (!member) {
+                return;
+              }
               removeMutation.mutate(member.pubkey, {
                 onSuccess: () => {
                   toast.success("Member removed");

@@ -51,7 +51,9 @@ export class RelayAutoHealScheduler {
    * deferred) when the transition is degraded→connected.
    */
   onTransition(prev: ConnectionState, next: ConnectionState): void {
-    if (!(isRelayConnectionDegraded(prev) && next === "connected")) return;
+    if (!(isRelayConnectionDegraded(prev) && next === "connected")) {
+      return;
+    }
 
     // A new recovery supersedes any pending deferred heal.
     if (this.deferredId !== null) {

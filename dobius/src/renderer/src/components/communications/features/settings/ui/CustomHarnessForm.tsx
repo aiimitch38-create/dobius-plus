@@ -42,10 +42,14 @@ function CommandAvailabilityBadge({ command }: { command: string }) {
     enabled: trimmed.length > 0,
   });
 
-  if (!trimmed || prereqs.isLoading) return null;
+  if (!trimmed || prereqs.isLoading) {
+    return null;
+  }
 
   const available = prereqs.data?.acp.available;
-  if (available === undefined) return null;
+  if (available === undefined) {
+    return null;
+  }
 
   return (
     <span
@@ -144,8 +148,8 @@ function EnvEditor({
   env,
   onChange,
 }: {
-  env: Array<{ key: string; value: string }>;
-  onChange: (next: Array<{ key: string; value: string }>) => void;
+  env: { key: string; value: string }[];
+  onChange: (next: { key: string; value: string }[]) => void;
 }) {
   function set(index: number, field: "key" | "value", value: string) {
     onChange(env.map((e, i) => (i === index ? { ...e, [field]: value } : e)));

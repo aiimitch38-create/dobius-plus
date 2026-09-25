@@ -76,7 +76,9 @@ export function readStoredRepositoryScope(): ProjectsRepositoryScope {
     const value = globalThis.localStorage?.getItem(
       PROJECTS_REPOSITORY_SCOPE_STORAGE_KEY,
     );
-    if (value === "mine" || value === "local") return value;
+    if (value === "mine" || value === "local") {
+      return value;
+    }
     const legacyFilter = globalThis.localStorage?.getItem(
       PROJECTS_FILTER_STORAGE_KEY,
     );
@@ -270,7 +272,9 @@ export function normalizeRepositoryUrl(url: string) {
 
 export function getClonePathLabel(project: Project) {
   const cloneUrl = project.cloneUrls[0];
-  if (!cloneUrl) return "Clone path pending";
+  if (!cloneUrl) {
+    return "Clone path pending";
+  }
 
   try {
     const parsed = new URL(cloneUrl);
@@ -282,7 +286,9 @@ export function getClonePathLabel(project: Project) {
 
 function repositoryIdentityKey(project: Project) {
   const cloneUrl = project.cloneUrls[0];
-  if (cloneUrl) return normalizeRepositoryUrl(cloneUrl);
+  if (cloneUrl) {
+    return normalizeRepositoryUrl(cloneUrl);
+  }
   return (project.name || project.dtag).trim().toLowerCase();
 }
 
@@ -290,7 +296,9 @@ export function uniqueRepositories(projects: Project[]) {
   const seen = new Set<string>();
   return projects.filter((project) => {
     const key = repositoryIdentityKey(project);
-    if (seen.has(key)) return false;
+    if (seen.has(key)) {
+      return false;
+    }
     seen.add(key);
     return true;
   });
@@ -321,7 +329,9 @@ export function isProjectMine(
   project: Project,
   currentPubkey: string | undefined,
 ) {
-  if (!currentPubkey) return false;
+  if (!currentPubkey) {
+    return false;
+  }
   const normalizedCurrentPubkey = normalizePubkey(currentPubkey);
   return (
     normalizePubkey(project.owner) === normalizedCurrentPubkey ||

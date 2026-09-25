@@ -13,7 +13,9 @@ export function rememberVideoAspectRatio(
   src: string | undefined,
   ratio: number,
 ): void {
-  if (!src || !Number.isFinite(ratio) || ratio <= 0) return;
+  if (!src || !Number.isFinite(ratio) || ratio <= 0) {
+    return;
+  }
   learnedVideoAspectRatios.set(src, ratio);
 }
 
@@ -36,7 +38,9 @@ export function useNaturalVideoAspectRatio(
   );
   const learn = React.useCallback(
     (width: number, height: number) => {
-      if (width <= 0 || height <= 0) return;
+      if (width <= 0 || height <= 0) {
+        return;
+      }
       const next = width / height;
       rememberVideoAspectRatio(src, next);
       setRatio(next);

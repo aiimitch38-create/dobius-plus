@@ -24,10 +24,14 @@ export function deriveRelayCloneUrl(
   owner: string,
   dtag: string,
 ): string | null {
-  if (!relayOrigin || !owner || !dtag) return null;
+  if (!relayOrigin || !owner || !dtag) {
+    return null;
+  }
   // The Rust validator requires a 64-char hex owner pubkey; anything else is
   // not a relay-hosted repo we can address, so decline rather than guess.
-  if (!/^[0-9a-fA-F]{64}$/.test(owner)) return null;
+  if (!/^[0-9a-fA-F]{64}$/.test(owner)) {
+    return null;
+  }
   const origin = relayOrigin.replace(/\/+$/, "");
   return `${origin}/git/${owner.toLowerCase()}/${dtag}`;
 }
@@ -46,7 +50,9 @@ export function effectiveCloneUrls(
   owner: string,
   dtag: string,
 ): string[] {
-  if (cloneUrls.length > 0) return cloneUrls;
+  if (cloneUrls.length > 0) {
+    return cloneUrls;
+  }
   const derived = deriveRelayCloneUrl(relayOrigin, owner, dtag);
   return derived ? [derived] : [];
 }

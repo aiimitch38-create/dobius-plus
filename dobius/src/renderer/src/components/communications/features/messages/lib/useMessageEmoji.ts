@@ -12,7 +12,7 @@ import type { CustomEmoji } from "@comms/shared/lib/remarkCustomEmoji";
  */
 export function useMessageEmoji(
   body: string,
-  tags: ReadonlyArray<ReadonlyArray<string>> | undefined,
+  tags: readonly (readonly string[])[] | undefined,
 ): { customEmoji: CustomEmoji[] | undefined; emojiOnly: boolean } {
   const customEmoji = React.useMemo(
     () => (tags ? customEmojiFromTags(tags) : undefined),

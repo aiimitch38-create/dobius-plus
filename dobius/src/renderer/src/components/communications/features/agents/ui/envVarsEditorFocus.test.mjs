@@ -54,12 +54,20 @@ function makeMockInput() {
 // ---------------------------------------------------------------------------
 
 function dispatchFocusIfReady(focusKey, requiredKeys, refMap, firedRef) {
-  if (!focusKey) return false;
-  if (firedRef.current) return false;
-  if (!requiredKeys.includes(focusKey)) return false;
+  if (!focusKey) {
+    return false;
+  }
+  if (firedRef.current) {
+    return false;
+  }
+  if (!requiredKeys.includes(focusKey)) {
+    return false;
+  }
 
   const inputEl = refMap.get(focusKey);
-  if (!inputEl) return false;
+  if (!inputEl) {
+    return false;
+  }
 
   firedRef.current = true;
   inputEl.scrollIntoView({ block: "nearest" });

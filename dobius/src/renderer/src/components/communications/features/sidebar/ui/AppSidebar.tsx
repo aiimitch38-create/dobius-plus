@@ -252,10 +252,14 @@ export function AppSidebar({
 
   React.useEffect(() => {
     const scrollElement = scrollRef.current;
-    if (!scrollElement) return;
+    if (!scrollElement) {
+      return;
+    }
 
     const handleWheel = (event: WheelEvent) => {
-      if (event.deltaY === 0) return;
+      if (event.deltaY === 0) {
+        return;
+      }
 
       const maxScrollTop =
         scrollElement.scrollHeight - scrollElement.clientHeight;
@@ -380,7 +384,9 @@ export function AppSidebar({
     useLeaveChannelDialog();
   const { requestDeleteChannel, dialog: deleteChannelDialog } =
     useDeleteChannelDialog((channel) => {
-      if (channel.id === selectedChannelId) onSelectHome();
+      if (channel.id === selectedChannelId) {
+        onSelectHome();
+      }
     });
 
   const streamChannels = React.useMemo(
@@ -394,7 +400,9 @@ export function AppSidebar({
     const sectionIds = new Set(channelSections.map((s) => s.id));
 
     for (const channel of streamChannels) {
-      if (starredChannelIds?.has(channel.id)) continue;
+      if (starredChannelIds?.has(channel.id)) {
+        continue;
+      }
       const sectionId = channelAssignments[channel.id];
       if (sectionId && sectionIds.has(sectionId)) {
         if (!bySection[sectionId]) {
@@ -426,7 +434,9 @@ export function AppSidebar({
   ]);
 
   const starredChannels = React.useMemo(() => {
-    if (!starredChannelIds || starredChannelIds.size === 0) return [];
+    if (!starredChannelIds || starredChannelIds.size === 0) {
+      return [];
+    }
     return sortChannelsForSidebar(
       streamChannels.filter((channel) => starredChannelIds.has(channel.id)),
       sortModeFor("starred"),
@@ -950,7 +960,9 @@ export function AppSidebar({
       <RenameSectionDialog
         open={renameSectionTarget !== null}
         onOpenChange={(open) => {
-          if (!open) setRenameSectionTarget(null);
+          if (!open) {
+            setRenameSectionTarget(null);
+          }
         }}
         sectionName={renameSectionTarget?.name ?? ""}
         sectionIcon={renameSectionTarget?.icon}
@@ -965,7 +977,9 @@ export function AppSidebar({
       <DeleteSectionAlertDialog
         open={deleteSectionTarget !== null}
         onOpenChange={(open) => {
-          if (!open) setDeleteSectionTarget(null);
+          if (!open) {
+            setDeleteSectionTarget(null);
+          }
         }}
         sectionName={deleteSectionTarget?.name ?? ""}
         channelCount={

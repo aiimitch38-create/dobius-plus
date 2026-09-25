@@ -18,13 +18,17 @@ export async function resolveSnapshotAvatarPng(
   dependencies: SnapshotAvatarPngDependencies = {},
 ): Promise<string | undefined> {
   const url = avatarUrl?.trim();
-  if (!url) return undefined;
+  if (!url) {
+    return undefined;
+  }
 
   if (isSvgDataUrl(url)) {
     return rasterizeSvg(url, dependencies);
   }
 
-  if (!isHttpsUrl(url)) return undefined;
+  if (!isHttpsUrl(url)) {
+    return undefined;
+  }
 
   try {
     // Rust validates same-relay `/media/` URLs before fetching; other origins
@@ -63,7 +67,9 @@ async function rasterizeSvg(
     canvas.width = 512;
     canvas.height = 512;
     const context = canvas.getContext("2d");
-    if (!context) return undefined;
+    if (!context) {
+      return undefined;
+    }
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL("image/png");
   } catch {

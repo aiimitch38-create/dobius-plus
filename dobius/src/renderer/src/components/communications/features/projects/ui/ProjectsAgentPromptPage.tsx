@@ -80,7 +80,9 @@ const REPO_CONTEXT_MARKER = "Workspace repositories:";
  * (repo announcements are addressable by these coordinates). Only sent
  * with the first message of a conversation. */
 function repoContextBlock(projects: readonly Project[]) {
-  if (projects.length === 0) return "";
+  if (projects.length === 0) {
+    return "";
+  }
   const listed = projects
     .slice(0, MAX_CONTEXT_REPOS)
     .map((project) => `- ${project.name} (${project.repoAddress})`);
@@ -94,7 +96,9 @@ function repoContextBlock(projects: readonly Project[]) {
  * prompt back in the inline conversation. */
 function stripRepoContext(content: string) {
   const markerIndex = content.indexOf(`---\n${REPO_CONTEXT_MARKER}`);
-  if (markerIndex === -1) return content;
+  if (markerIndex === -1) {
+    return content;
+  }
   return content.slice(0, markerIndex).replace(/\n+$/, "");
 }
 
@@ -152,7 +156,9 @@ function useAgentCandidates() {
     }));
     for (const agent of relayAgents) {
       const pubkey = normalizePubkey(agent.pubkey);
-      if (managedByPubkey.has(pubkey) || !mentionable.has(pubkey)) continue;
+      if (managedByPubkey.has(pubkey) || !mentionable.has(pubkey)) {
+        continue;
+      }
       candidates.push({
         pubkey,
         name: agent.name,
@@ -162,8 +168,12 @@ function useAgentCandidates() {
     }
 
     return candidates.sort((left, right) => {
-      if (left.isActive !== right.isActive) return left.isActive ? -1 : 1;
-      if (left.isManaged !== right.isManaged) return left.isManaged ? -1 : 1;
+      if (left.isActive !== right.isActive) {
+        return left.isActive ? -1 : 1;
+      }
+      if (left.isManaged !== right.isManaged) {
+        return left.isManaged ? -1 : 1;
+      }
       return left.name.localeCompare(right.name);
     });
   }, [
@@ -201,9 +211,11 @@ function ConversationThread({
     [messagesQuery.data, visibleAfter],
   );
 
-  const lastMessageId = messages[messages.length - 1]?.id ?? null;
+  const lastMessageId = messages.at(-1)?.id ?? null;
   React.useEffect(() => {
-    if (!lastMessageId && !agentWorking.working) return;
+    if (!lastMessageId && !agentWorking.working) {
+      return;
+    }
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [lastMessageId, agentWorking.working]);
 
@@ -314,7 +326,9 @@ export function ProjectsAgentPromptPage({
   );
 
   React.useEffect(() => {
-    if (conversation || !restorableConversation) return;
+    if (conversation || !restorableConversation) {
+      return;
+    }
     setConversation(restorableConversation);
     setSelectedPubkey(restorableConversation.agent.pubkey);
   }, [conversation, restorableConversation]);
@@ -341,7 +355,9 @@ export function ProjectsAgentPromptPage({
   onLinkShortcutRef.current = linkEditor.openFromShortcut;
 
   React.useEffect(() => {
-    if (!richText.editor) return;
+    if (!richText.editor) {
+      return;
+    }
     const frame = window.requestAnimationFrame(richText.focusPreserve);
     return () => window.cancelAnimationFrame(frame);
   }, [richText.editor, richText.focusPreserve]);
@@ -354,7 +370,9 @@ export function ProjectsAgentPromptPage({
 
   const handleSubmit = React.useCallback(async () => {
     const trimmed = richText.getMarkdown().trim();
-    if (!trimmed || !selectedAgent || isSending) return;
+    if (!trimmed || !selectedAgent || isSending) {
+      return;
+    }
 
     setIsSending(true);
     // Cutoff captured before sending: the opening prompt lands at or after

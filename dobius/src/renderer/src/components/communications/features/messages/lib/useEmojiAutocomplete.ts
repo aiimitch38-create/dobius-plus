@@ -37,11 +37,15 @@ function detectEmojiQuery(
 ): { query: string; startIndex: number } | null {
   const beforeCursor = value.slice(0, cursorPosition);
   const match = beforeCursor.match(/(?:^|[\s])(:([^\s:]{2,})?)$/);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
 
   const full = match[1]; // includes the `:`
   const query = match[2]; // just the text after `:`
-  if (!query || query.length < MIN_QUERY_LENGTH) return null;
+  if (!query || query.length < MIN_QUERY_LENGTH) {
+    return null;
+  }
 
   const startIndex = beforeCursor.length - full.length;
   return { query, startIndex };
@@ -99,13 +103,17 @@ export function useEmojiAutocomplete(customEmoji: CustomEmoji[] = []) {
     })
       .then(
         (
-          results: Array<{
-            id: string;
-            name: string;
-            skins: Array<{ native: string }>;
-          }> | null,
+          results:
+            | {
+                id: string;
+                name: string;
+                skins: { native: string }[];
+              }[]
+            | null,
         ) => {
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           const standard: EmojiSuggestion[] = (results ?? [])
             .map((emoji) => ({
               id: emoji.id,
@@ -139,7 +147,9 @@ export function useEmojiAutocomplete(customEmoji: CustomEmoji[] = []) {
         },
       )
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         // emoji-mart failed; still surface custom matches.
         setSuggestions(customMatches);
         setEmojiSelectedIndex(0);

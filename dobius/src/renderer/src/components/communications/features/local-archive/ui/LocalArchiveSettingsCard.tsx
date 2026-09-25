@@ -57,8 +57,12 @@ function scopeLabel(
 }
 
 function kindSummary(kinds: number[]): string {
-  if (kinds.length === 0) return "no kinds";
-  if (kinds.length <= 4) return kinds.join(", ");
+  if (kinds.length === 0) {
+    return "no kinds";
+  }
+  if (kinds.length <= 4) {
+    return kinds.join(", ");
+  }
   return `${kinds.slice(0, 3).join(", ")} +${kinds.length - 3} more`;
 }
 
@@ -90,7 +94,7 @@ function ObserverArchiveSection({
               className="text-sm font-medium"
               htmlFor="local-archive-observer-toggle"
             >
-              Archive my agents' observer frames
+              Archive my agents&apos; observer frames
             </label>
             <p className="text-sm font-normal text-muted-foreground">
               {policy === true
@@ -136,7 +140,7 @@ function AgentMetricArchiveSection({
               className="text-sm font-medium"
               htmlFor="local-archive-agent-metric-toggle"
             >
-              Archive my agents' turn metrics
+              Archive my agents&apos; turn metrics
             </label>
             <p className="text-sm font-normal text-muted-foreground">
               Saves kind {KIND_AGENT_TURN_METRIC} turn-metric events addressed
@@ -269,7 +273,7 @@ function CustomKindsInput({ value, onChange }: CustomKindsInputProps) {
 // ── Add-subscription form (Steps 1 + 2) ──────────────────────────────────────
 
 type AddFormProps = {
-  channels: Array<{ id: string; name: string }>;
+  channels: { id: string; name: string }[];
   onSaved: () => void;
   onCancel: () => void;
 };
@@ -292,7 +296,9 @@ function AddSubscriptionForm({ channels, onSaved, onCancel }: AddFormProps) {
   const canAdd = request !== null;
 
   const handleAdd = React.useCallback(async () => {
-    if (request === null) return;
+    if (request === null) {
+      return;
+    }
 
     setIsAdding(true);
     try {
@@ -464,8 +470,12 @@ export function LocalArchiveSettingsCard() {
 
   const handleObserverToggle = React.useCallback(
     async (checked: boolean) => {
-      if (!pubkey) return;
-      if (!checked && observerPolicy !== false) return;
+      if (!pubkey) {
+        return;
+      }
+      if (!checked && observerPolicy !== false) {
+        return;
+      }
       setObserverToggling(true);
       try {
         if (checked) {
@@ -494,7 +504,9 @@ export function LocalArchiveSettingsCard() {
 
   const handleMetricToggle = React.useCallback(
     async (checked: boolean) => {
-      if (!pubkey) return;
+      if (!pubkey) {
+        return;
+      }
       setMetricToggling(true);
       try {
         if (checked) {

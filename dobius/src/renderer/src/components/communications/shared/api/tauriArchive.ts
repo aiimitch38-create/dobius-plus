@@ -1,3 +1,5 @@
+import type { RelayEvent } from "@comms/shared/api/types";
+
 import { invokeTauri } from "./tauri";
 
 // ── Wire-shape types (raw Tauri responses) ───────────────────────────────────
@@ -204,10 +206,10 @@ export async function deleteSaveSubscription(
  *   fields — so `candidates` is passed as-is, with snake_case field names.
  */
 export async function archiveEvents(
-  candidates: Array<{
+  candidates: {
     rawEventJson: string;
     matchedScope: { scopeType: ScopeType; scopeValue: string };
-  }>,
+  }[],
 ): Promise<ArchiveBatchResult> {
   return invokeTauri<ArchiveBatchResult>("archive_events", {
     candidates: candidates.map((c) => ({
@@ -235,7 +237,7 @@ export async function readArchivedObserverEventsForChannel(
     before?: { createdAt: number; id: string } | null;
     limit?: number;
   },
-): Promise<import("@comms/shared/api/types").RelayEvent[]> {
+): Promise<RelayEvent[]> {
   const rawRows = await invokeTauri<string[]>(
     "read_archived_observer_events_for_channel",
     {
@@ -248,7 +250,7 @@ export async function readArchivedObserverEventsForChannel(
   return rawRows
     .map((raw) => {
       try {
-        return JSON.parse(raw) as import("@comms/shared/api/types").RelayEvent;
+        return JSON.parse(raw) as RelayEvent;
       } catch {
         console.warn(
           "[tauriArchive] failed to parse archived observer raw_json:",
@@ -257,7 +259,7 @@ export async function readArchivedObserverEventsForChannel(
         return null;
       }
     })
-    .filter((e): e is import("@comms/shared/api/types").RelayEvent => e !== null);
+    .filter((e): e is RelayEvent => e !== null);
 }
 
 /**
@@ -271,13 +273,15 @@ export async function readArchivedObserverEventsForChannel(
  * Idempotent — already-indexed frames are silently skipped.
  */
 export async function indexObserverChannelId(
-  entries: Array<{
+  entries: {
     eventId: string;
     channelId: string | null;
     createdAt: number;
-  }>,
+  }[],
 ): Promise<void> {
-  if (entries.length === 0) return;
+  if (entries.length === 0) {
+    return;
+  }
   await invokeTauri("index_observer_channel_id", {
     entries: entries.map((e) => ({
       event_id: e.eventId,
@@ -294,10 +298,10 @@ export async function indexObserverChannelId(
  * event id and created_at for each row so the caller can decrypt and index.
  */
 export async function readUnindexedObserverRows(): Promise<
-  Array<{ id: string; rawJson: string; createdAt: number }>
+  { id: string; rawJson: string; createdAt: number }[]
 > {
   const rows = await invokeTauri<
-    Array<{ id: string; raw_json: string; created_at: number }>
+    { id: string; raw_json: string; created_at: number }[]
   >("read_unindexed_observer_rows");
   return rows.map((r) => ({
     id: r.id,
@@ -327,7 +331,7 @@ export async function readArchivedEvents(
     before?: { createdAt: number; id: string } | null;
     limit?: number;
   },
-): Promise<import("@comms/shared/api/types").RelayEvent[]> {
+): Promise<RelayEvent[]> {
   const rawRows = await invokeTauri<string[]>("read_archived_events", {
     scopeType,
     scopeValue,
@@ -339,11 +343,11 @@ export async function readArchivedEvents(
   return rawRows
     .map((raw) => {
       try {
-        return JSON.parse(raw) as import("@comms/shared/api/types").RelayEvent;
+        return JSON.parse(raw) as RelayEvent;
       } catch {
         console.warn("[tauriArchive] failed to parse archived raw_json:", raw);
         return null;
       }
     })
-    .filter((e): e is import("@comms/shared/api/types").RelayEvent => e !== null);
+    .filter((e): e is RelayEvent => e !== null);
 }
