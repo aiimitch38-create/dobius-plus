@@ -206,3 +206,25 @@ tests), global assignment check restored (NODE_ENV test), no dequote (6 tests),
 no xargs push rule, no config-write rule (2), no sh -c recursion (2), F2
 stopgaps off (4), xargs -I rule off, split-cd off, backslash-newline off,
 renderer post-create re-check off.
+
+## Review r2 (third commit)
+- r2 F1 [high]: `stripLiteralHeredocs` now strips ONLY one whole double-quoted
+  argument `"$(cat <<'X' ... X\n)"`, and never when its segment contains
+  sh/bash/zsh/dash/ksh/fish/eval/source/`.`. The standalone `cat <<'X'` strip is
+  gone, so `> p.sh`, `> >(sh)`, `<(..)`, a bare `$(..)` command word and pipes
+  keep their bodies scanned.
+- r2 F2: `sh -c` parsing is a small tokenizer: `--long`, `-o/-O/+o/+O <word>`,
+  `+x` and letter clusters before the -c cluster; optional `--` after it; the
+  operand is one shell word (quotes joined). An unreadable operand (e.g. an
+  unterminated quote) denies with UNRESOLVABLE_SHELL_PATH_REASON.
+- r2 F3: `inspectStrings` uses the stripped text for the Bash `command` field,
+  so credential/identity rails no longer see commit-message text.
+- Also fixed: git push/config detection uses git's subcommand (first non-option
+  word after git), so `git commit -m "... git push -f ..."` is allowed.
+- Reviewer probe: 54/55 rows as expected. The one remaining row,
+  `for f in a.ts b.ts; do npx oxlint $f; done` with cwd = home, is denied by
+  design (a home cwd can reach ~/.dobius; recorded under Decisions for Carson).
+- Tests: `agent-hard-rails.test.ts` "CX12 r2 review" block. Run against the
+  previous commit's rail code: 17 of 25 fail (all 10 F1 shapes except the eval
+  pair, 4 F2 cases, 3 F3 allows); the rest were already green and stay as
+  regression guards.

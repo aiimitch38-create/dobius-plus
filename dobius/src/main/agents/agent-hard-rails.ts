@@ -75,7 +75,10 @@ type InspectedString = {
 // once per tool call and shared by every rail.
 function inspectStrings(toolName: string, input: unknown): InspectedString[] {
   let resolveBudget = MAX_RESOLVED_PATH_TOKENS
-  return stringsToInspect(toolName, input).map(({ field, raw }) => {
+  return stringsToInspect(toolName, input).map(({ field, raw: original }) => {
+    // Why (r2 F3): a literal commit/PR heredoc body is message text, not paths.
+    const raw =
+      toolName === 'Bash' && field === 'command' ? stripLiteralHeredocs(original) : original
     const unquoted = toolName === 'Bash' ? raw.replace(/["'\\]/g, '') : raw
     const expanded = expandHomeReferences(unquoted)
     const candidates = new Set([comparablePath(normalizePathLike(raw))])
@@ -280,7 +283,12 @@ export function evaluateAgentHardRails(
   // Why (CX12 F1): `bash -c '<string>'` runs a whole second command the outer
   // scan sees only as quoted text, so every rail runs on it too.
   const command = toolName === 'Bash' ? (input as { command?: unknown }).command : undefined
-  for (const inner of typeof command === 'string' ? shellCInnerCommands(command) : []) {
+  const shellC =
+    typeof command === 'string' ? shellCInnerCommands(command) : { inner: [], unparsable: false }
+  if (shellC.unparsable) {
+    return { reason: UNRESOLVABLE_SHELL_PATH_REASON }
+  }
+  for (const inner of shellC.inner) {
     const innerDenial =
       depth >= MAX_SHELL_C_DEPTH
         ? { reason: UNRESOLVABLE_SHELL_PATH_REASON }
@@ -298,10 +306,7 @@ export function evaluateAgentHardRails(
     inspected.some(
       ({ field, raw }) =>
         field === 'command' &&
-        buildsUnresolvableShellPath(expandHomeReferences(stripLiteralHeredocs(raw)), {
-          home,
-          cwd: context.cwd
-        })
+        buildsUnresolvableShellPath(expandHomeReferences(raw), { home, cwd: context.cwd })
     )
   return pathDenial ?? (buildsUnresolvablePath ? { reason: UNRESOLVABLE_SHELL_PATH_REASON } : null)
 }

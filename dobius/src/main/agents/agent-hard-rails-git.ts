@@ -36,8 +36,25 @@ function gitSegments(command: string): GitSegment[] {
   })
 }
 
-function pushIndexOf({ tokens, gitIndex }: GitSegment): number {
-  return tokens.indexOf('push', gitIndex + 1)
+const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace'])
+
+// Index of git's subcommand (first non-option word after git), so `push` or
+// `config` inside a commit message is not read as the subcommand.
+function subcommandIndex({ tokens, gitIndex }: GitSegment): number {
+  for (let index = gitIndex + 1; index < tokens.length; index += 1) {
+    const token = tokens[index]
+    if (GIT_OPTIONS_WITH_VALUE.has(token)) {
+      index += 1
+    } else if (!token.startsWith('-')) {
+      return index
+    }
+  }
+  return -1
+}
+
+function pushIndexOf(segment: GitSegment): number {
+  const index = subcommandIndex(segment)
+  return index !== -1 && segment.tokens[index] === 'push' ? index : -1
 }
 
 // `+branch` is refspec-syntax force-push — same rail as --force / -f.
@@ -99,9 +116,12 @@ export function isUnverifiablePush(command: string): boolean {
 
 /** `git config alias.x ...`, `git config remote.origin.push +...`, `git -c alias.x=...`. */
 export function writesPushRewritingGitConfig(command: string): boolean {
-  return gitSegments(command).some(({ tokens, gitIndex }) => {
+  return gitSegments(command).some((segment) => {
+    const { tokens, gitIndex } = segment
     const rest = tokens.slice(gitIndex + 1)
-    const configIndex = rest.indexOf('config')
+    const subcommand = subcommandIndex(segment)
+    const configIndex =
+      subcommand !== -1 && tokens[subcommand] === 'config' ? subcommand - gitIndex - 1 : -1
     const configKeys = configIndex === -1 ? [] : rest.slice(configIndex + 1)
     const overrideKeys = rest.flatMap((token, index) =>
       rest[index - 1] === '-c' ? [token] : token.startsWith('-c') ? [token.slice(2)] : []

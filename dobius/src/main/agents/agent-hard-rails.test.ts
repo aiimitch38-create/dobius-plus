@@ -528,3 +528,60 @@ describe('agent hard rails: CX12 review follow-ups', () => {
     expect(bashIn(command)?.reason).toMatch(/Hard rail/)
   })
 })
+
+describe('agent hard rails: CX12 r2 review', () => {
+  const originalHome = process.env.HOME
+  const fakeHome = '/Users/rails-test-user'
+  const repoCwd = `${fakeHome}/Projects/app`
+
+  beforeEach(() => {
+    process.env.HOME = fakeHome
+  })
+
+  afterEach(() => {
+    process.env.HOME = originalHome
+  })
+
+  const bashIn = (command: string) =>
+    evaluateAgentHardRails({ ...ctx, cwd: repoCwd }, 'Bash', { command })
+  const push = 'git push --force origin main'
+  const built = 'x=bius; cat ~/.do${x}/agents/other/M'
+
+  it.each(
+    [push, built].flatMap((body) => [
+      [`sh -c "$(cat <<'EOF'\n${body}\nEOF\n)"`],
+      [`$(cat <<'EOF'\n${body}\nEOF\n)`],
+      [`sh <(cat <<'EOF'\n${body}\nEOF\n)`],
+      [`cat <<'EOF' > >(sh)\n${body}\nEOF`],
+      [`cat <<'EOF' > p.sh\n${body}\nEOF\nsh p.sh`],
+      [`eval "$(cat <<'EOF'\n${body}\nEOF\n)"`]
+    ])
+  )('F1: scans heredoc bodies that run as code: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it.each([
+    [`bash --norc -c '${built}'`],
+    [`bash -o pipefail -c '${built}'`],
+    [`bash -c -- '${built}'`],
+    [`bash -O extglob -c '${push}'`],
+    [`bash +o posix --login -c '${push}'`],
+    ["bash -c 'unterminated"]
+  ])('F2: parses sh options before -c: %s', (command) => {
+    expect(bashIn(command)?.reason).toMatch(/Hard rail/)
+  })
+
+  it.each([
+    ['git add -A && git commit -m "$(cat <<\'EOF\'\nchore: add .env.example and docs\nEOF\n)"'],
+    [
+      'git commit -m "$(cat <<\'EOF\'\nfix(agents): deny reads of ~/.dobius/agents/<other>\nEOF\n)"'
+    ],
+    ['git commit -m "docs: explain why git push -f is blocked"'],
+    ["bash -lc 'npm run typecheck'"],
+    ['bash -o pipefail -c "npm test | tee out.log"'],
+    ['NODE_ENV=test npm test && git push origin HEAD'],
+    ["awk '{print $1}' file.txt"]
+  ])('F3: allows commit text and ordinary commands: %s', (command) => {
+    expect(bashIn(command)).toBeNull()
+  })
+})
