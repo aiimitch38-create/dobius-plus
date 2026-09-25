@@ -708,6 +708,7 @@ import {
   isExecutionBlockedError,
   type ExecutionOrigin
 } from '../agents/execution-gate'
+import { refreshSessionWorkspaceBrief } from '../agents/session-workspace-brief'
 
 function sanitizeNestedRepoRuntimeImportError(context: string, error: unknown): string {
   console.warn(`[project-groups] ${context}`, error)
@@ -13592,6 +13593,7 @@ export class DobiusRuntimeService {
       console.warn(`[hooks] ${warning}`)
     }
 
+    await refreshSessionWorkspaceBrief(worktreePath)
     this.invalidateResolvedWorktreeCache()
     // Why: the filesystem-auth layer maintains a separate cache of registered
     // worktree roots used by git IPC handlers (branchCompare, diff, status, etc.)

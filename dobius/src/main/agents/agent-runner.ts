@@ -35,6 +35,7 @@ import {
 } from './agent-run-end-callbacks'
 import { appendRunProgress } from './agent-run-progress-log'
 import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
+import { scheduleSessionWorkspaceBriefRefresh } from './session-workspace-brief'
 import {
   buildDobiusRunMcpServer,
   buildProfileAllowedTools,
@@ -378,6 +379,7 @@ export async function startAgentRun(args: {
     assertExecutionAdmitted(origin)
     const abortController = new AbortController()
     const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
+    void scheduleSessionWorkspaceBriefRefresh(resolvedCwd)
     const branch = currentGitBranch(resolvedCwd)
     const systemPrompt = buildSystemPrompt(agent)
     const keyedSession = getAgentSessionForKey(agent, sessionKey)
