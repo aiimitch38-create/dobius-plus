@@ -38,6 +38,12 @@ export function useVoiceAgent(): VoiceAgent {
   // Why a ref guard: ⌘T can fire again while startSession is still awaiting,
   // and two sessions would each hold the microphone.
   const startingRef = useRef(false)
+  // Why a generation: stop() can land while start() is still awaiting the
+  // signed URL or the SDK connect. Each start owns one generation; stop bumps
+  // it, so a start that resumes afterwards knows it was canceled and must
+  // close whatever session it managed to open instead of keeping a paid call
+  // live behind an idle orb.
+  const generationRef = useRef(0)
 
   const clearIdleTimer = useCallback((): void => {
     if (idleTimerRef.current !== null) {
@@ -47,6 +53,8 @@ export function useVoiceAgent(): VoiceAgent {
   }, [])
 
   const stop = useCallback(async (): Promise<void> => {
+    generationRef.current += 1
+    startingRef.current = false
     clearIdleTimer()
     const conversation = conversationRef.current
     conversationRef.current = null
@@ -61,9 +69,15 @@ export function useVoiceAgent(): VoiceAgent {
       return
     }
     startingRef.current = true
+    const generation = generationRef.current + 1
+    generationRef.current = generation
+    const isCurrent = (): boolean => generationRef.current === generation
     setErrorText(null)
     setState('connecting')
     const touchIdle = (): void => {
+      if (!isCurrent()) {
+        return
+      }
       clearIdleTimer()
       idleTimerRef.current = window.setTimeout(() => {
         idleTimerRef.current = null
@@ -73,6 +87,9 @@ export function useVoiceAgent(): VoiceAgent {
     touchIdle()
     try {
       const signed = await window.api.jarvis.agentSignedUrl()
+      if (!isCurrent()) {
+        return
+      }
       if (!signed.ok) {
         throw new Error(signed.error)
       }
@@ -81,7 +98,10 @@ export function useVoiceAgent(): VoiceAgent {
       // user's most recent terminal, which keeps every call from opening the
       // same canned way.
       const opening = await window.api.jarvis.agentOpening().catch(() => '')
-      conversationRef.current = await Conversation.startSession({
+      if (!isCurrent()) {
+        return
+      }
+      const conversation = await Conversation.startSession({
         signedUrl: signed.url,
         ...(opening ? { dynamicVariables: { opening } } : {}),
         clientTools: {
@@ -122,11 +142,17 @@ export function useVoiceAgent(): VoiceAgent {
           }
         },
         onModeChange: ({ mode }) => {
+          if (!isCurrent()) {
+            return
+          }
           setState(mode === 'speaking' ? 'speaking' : 'listening')
           touchIdle()
         },
         onMessage: () => touchIdle(),
         onStatusChange: ({ status }) => {
+          if (!isCurrent()) {
+            return
+          }
           if (status === 'connected') {
             setState((current) => (current === 'connecting' ? 'listening' : current))
             // Why push instead of waiting to be asked: the agent should open the
@@ -152,16 +178,30 @@ export function useVoiceAgent(): VoiceAgent {
           }
         },
         onError: (message) => {
+          if (!isCurrent()) {
+            return
+          }
           setErrorText(message)
           setState('error')
         }
       })
+      if (!isCurrent()) {
+        // Canceled while connecting: this session has no owner, hang it up.
+        await conversation.endSession().catch(() => undefined)
+        return
+      }
+      conversationRef.current = conversation
     } catch (error) {
+      if (!isCurrent()) {
+        return
+      }
       conversationRef.current = null
       setErrorText(error instanceof Error ? error.message : String(error))
       setState('error')
     } finally {
-      startingRef.current = false
+      if (isCurrent()) {
+        startingRef.current = false
+      }
     }
   }, [clearIdleTimer, stop])
 

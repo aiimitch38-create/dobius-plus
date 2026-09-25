@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from 'react'
+import { useRef, useCallback, useEffect, useMemo } from 'react'
 import {
   audioLevelFromSamples,
   decayAudioLevel
@@ -283,13 +283,19 @@ export function useAudioCapture() {
   // guard, and open a live mic for a component that's already gone.
   useEffect(() => stop, [stop])
 
-  return {
-    start,
-    stop,
-    flushBufferedAudio,
-    discardBufferedAudio,
-    getCapturedChunkCount,
-    getAudioLevel,
-    isCapturingRef
-  }
+  // Why memoized: consumers (use-jarvis-turn) list this object in effect and
+  // callback deps; a fresh literal each render re-ran their cleanups and
+  // stopped a live capture on every re-render.
+  return useMemo(
+    () => ({
+      start,
+      stop,
+      flushBufferedAudio,
+      discardBufferedAudio,
+      getCapturedChunkCount,
+      getAudioLevel,
+      isCapturingRef
+    }),
+    [start, stop, flushBufferedAudio, discardBufferedAudio, getCapturedChunkCount, getAudioLevel]
+  )
 }
