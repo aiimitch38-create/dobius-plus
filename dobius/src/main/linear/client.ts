@@ -317,15 +317,26 @@ function clearLegacyViewerOnDisk(): void {
   }
 }
 
+// Why (#25): fail closed. When the token cannot be encrypted nothing is
+// written (any existing file stays untouched); the caller's in-memory cache
+// keeps the workspace connected for this session only.
 function writeEncryptedToken(path: string, apiKey: string): void {
+  let encrypted: Buffer | null = null
   if (safeStorage.isEncryptionAvailable()) {
-    const encrypted = safeStorage.encryptString(apiKey)
-    writeFileSync(path, encrypted, { mode: 0o600 })
+    try {
+      encrypted = safeStorage.encryptString(apiKey)
+    } catch (error) {
+      console.error(
+        '[linear] safeStorage encryption failed:',
+        error instanceof Error ? error.message : String(error)
+      )
+    }
+  }
+  if (encrypted === null) {
+    console.warn('[linear] safeStorage encryption unavailable — token kept for this session only')
     return
   }
-
-  console.warn('[linear] safeStorage encryption unavailable — storing token in plaintext')
-  writeFileSync(path, apiKey, { encoding: 'utf-8', mode: 0o600 })
+  writeFileSync(path, encrypted, { mode: 0o600 })
 }
 
 function saveWorkspaceToken(workspaceId: string, apiKey: string): void {

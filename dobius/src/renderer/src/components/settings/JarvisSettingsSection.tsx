@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import type { VoiceSettings } from '../../../../shared/speech-types'
+import type { ElevenLabsKeyStatus, VoiceSettings } from '../../../../shared/speech-types'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -24,7 +24,14 @@ export function JarvisSettingsSection({
 }: JarvisSettingsSectionProps): React.JSX.Element {
   // Why drafts: an API key typed character by character must not be persisted
   // (and re-read by the speech path) on every keystroke — Save commits it.
-  const [keyDraft, setKeyDraft] = useState(voiceSettings.elevenlabsApiKey ?? '')
+  // Why write-only (#24): the saved key lives in the encrypted store and is
+  // never sent back here; the draft holds only a new key being entered.
+  const [keyDraft, setKeyDraft] = useState('')
+  const [keyStatus, setKeyStatus] = useState<ElevenLabsKeyStatus>({
+    configured: false,
+    sessionOnly: false,
+    unreadable: false
+  })
   const [voiceDraft, setVoiceDraft] = useState(voiceSettings.elevenlabsVoiceId ?? '')
   const [agentDraft, setAgentDraft] = useState(voiceSettings.elevenlabsAgentId ?? '')
   const [testing, setTesting] = useState(false)
@@ -48,34 +55,67 @@ export function JarvisSettingsSection({
   }, [voiceSettings.jarvisEnabled])
 
   useEffect(() => {
-    setKeyDraft(voiceSettings.elevenlabsApiKey ?? '')
+    let cancelled = false
+    void window.api.jarvis
+      .getElevenLabsKeyStatus()
+      .then((status) => {
+        if (!cancelled) {
+          setKeyStatus(status)
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     setVoiceDraft(voiceSettings.elevenlabsVoiceId ?? '')
     setAgentDraft(voiceSettings.elevenlabsAgentId ?? '')
-  }, [
-    voiceSettings.elevenlabsApiKey,
-    voiceSettings.elevenlabsVoiceId,
-    voiceSettings.elevenlabsAgentId
-  ])
+  }, [voiceSettings.elevenlabsVoiceId, voiceSettings.elevenlabsAgentId])
 
   const dirty =
-    keyDraft !== (voiceSettings.elevenlabsApiKey ?? '') ||
+    keyDraft.trim() !== '' ||
     voiceDraft !== (voiceSettings.elevenlabsVoiceId ?? '') ||
     agentDraft !== (voiceSettings.elevenlabsAgentId ?? '')
 
-  const saveElevenLabs = (): void => {
+  const saveElevenLabs = async (): Promise<void> => {
+    const newKey = keyDraft.trim()
+    let status = keyStatus
+    if (newKey) {
+      try {
+        status = await window.api.jarvis.saveElevenLabsKey(newKey)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error))
+        return
+      }
+      setKeyStatus(status)
+      setKeyDraft('')
+    }
     onUpdateVoiceSettings({
-      elevenlabsApiKey: keyDraft.trim(),
       elevenlabsVoiceId: voiceDraft.trim(),
       elevenlabsAgentId: agentDraft.trim()
     })
-    toast.success(
-      keyDraft.trim() ? 'ElevenLabs voice saved' : 'ElevenLabs cleared — using the built-in voice'
-    )
+    if (status.sessionOnly) {
+      toast.warning('ElevenLabs key works until you quit: the system keychain is unavailable')
+    } else {
+      toast.success('ElevenLabs voice saved')
+    }
+  }
+
+  const clearElevenLabsKey = async (): Promise<void> => {
+    try {
+      setKeyStatus(await window.api.jarvis.clearElevenLabsKey())
+      setKeyDraft('')
+      toast.success('ElevenLabs cleared — using the built-in voice')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
   }
 
   const testElevenLabs = async (): Promise<void> => {
     if (dirty) {
-      saveElevenLabs()
+      await saveElevenLabs()
     }
     setTesting(true)
     try {
@@ -158,7 +198,13 @@ export function JarvisSettingsSection({
           type="password"
           autoComplete="off"
           spellCheck={false}
-          placeholder="ElevenLabs API key"
+          placeholder={
+            keyStatus.unreadable
+              ? "Saved key can't be read on this build. Re-enter it."
+              : keyStatus.configured
+                ? 'Key saved — paste a new key to replace it'
+                : 'ElevenLabs API key'
+          }
           value={keyDraft}
           onChange={(event) => setKeyDraft(event.target.value)}
         />
@@ -183,9 +229,14 @@ export function JarvisSettingsSection({
           one question at a time. Needs a key with the Conversational AI permission.
         </p>
         <div className="flex items-center gap-2 pt-0.5">
-          <Button size="sm" onClick={saveElevenLabs} disabled={!dirty}>
+          <Button size="sm" onClick={() => void saveElevenLabs()} disabled={!dirty}>
             {dirty ? 'Save' : 'Saved'}
           </Button>
+          {keyStatus.configured ? (
+            <Button size="sm" variant="outline" onClick={() => void clearElevenLabsKey()}>
+              Remove key
+            </Button>
+          ) : null}
           <Button
             size="sm"
             variant="outline"

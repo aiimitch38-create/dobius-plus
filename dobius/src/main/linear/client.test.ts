@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { join } from 'node:path'
@@ -18,6 +18,7 @@ let linearClientMock: ReturnType<typeof vi.fn>
 
 type SafeStorageMockOptions = {
   encryptionAvailable?: boolean
+  encryptString?: (value: string) => Buffer
   decryptString?: (value: Buffer) => string
 }
 
@@ -93,7 +94,7 @@ async function loadClientModule(options: SafeStorageMockOptions = {}) {
   vi.doMock('electron', () => ({
     safeStorage: {
       isEncryptionAvailable: () => options.encryptionAvailable ?? false,
-      encryptString: (value: string) => Buffer.from(value),
+      encryptString: options.encryptString ?? ((value: string) => Buffer.from(value)),
       decryptString: options.decryptString ?? ((value: Buffer) => value.toString('utf-8'))
     }
   }))
@@ -385,4 +386,40 @@ describe('Linear client workspace storage', () => {
 
     expect(() => linear.getClients('bad')).toThrow('Could not decrypt')
   })
+
+  it('writes no plaintext token when safeStorage is unavailable, and stays connected this session (#25)', async () => {
+    const linear = await loadClientModule({ encryptionAvailable: false })
+
+    await expect(linear.connect('token-alpha')).resolves.toMatchObject({ ok: true })
+
+    expect(linear.getStatus()).toMatchObject({ connected: true })
+    expect(linear.loadToken({ workspaceId: 'org-alpha' })).toBe('token-alpha')
+    for (const file of listFiles(join(tempHome, '.dobius'))) {
+      expect(readFileSync(file, 'utf-8').includes('token-alpha')).toBe(false)
+    }
+  })
+
+  it('writes no plaintext token when encryptString throws (#25)', async () => {
+    const linear = await loadClientModule({
+      encryptionAvailable: true,
+      encryptString: () => {
+        throw new Error('keychain locked')
+      }
+    })
+
+    await expect(linear.connect('token-alpha')).resolves.toMatchObject({ ok: true })
+
+    for (const file of listFiles(join(tempHome, '.dobius'))) {
+      expect(readFileSync(file, 'utf-8').includes('token-alpha')).toBe(false)
+    }
+  })
 })
+
+function listFiles(dir: string): string[] {
+  if (!existsSync(dir)) {
+    return []
+  }
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+}
