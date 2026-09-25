@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import type { DobiusRuntimeService } from '../runtime/dobius-runtime'
 import type {
   RuntimeBrowserDriverState,
@@ -9,6 +9,23 @@ import type {
 } from '../../shared/runtime-types'
 import type { RuntimeRpcResponse } from '../../shared/runtime-rpc-envelope'
 import { RpcDispatcher } from '../runtime/rpc/dispatcher'
+import { errorResponse } from '../runtime/rpc/errors'
+import { isRegisteredRendererWebContents } from '../window/renderer-window-registry'
+
+// Why: runtime:call reaches every RPC method (terminal.send, git.push, ...)
+// with desktop authority and no token. Only the top frame of a first-party app
+// window may use it; webview guests and subframes are rejected.
+function isTrustedRuntimeCallSender(event: IpcMainInvokeEvent): boolean {
+  const sender = event.sender
+  if (typeof sender?.isDestroyed !== 'function' || sender.isDestroyed()) {
+    return false
+  }
+  if (!isRegisteredRendererWebContents(sender)) {
+    return false
+  }
+  const frame = event.senderFrame
+  return frame != null && frame.parent === null
+}
 
 export function registerRuntimeHandlers(runtime: DobiusRuntimeService): void {
   ipcMain.removeHandler('runtime:syncWindowGraph')
@@ -33,9 +50,17 @@ export function registerRuntimeHandlers(runtime: DobiusRuntimeService): void {
   ipcMain.handle(
     'runtime:call',
     async (
-      _event,
+      event,
       args: { method: string; params?: unknown }
     ): Promise<RuntimeRpcResponse<unknown>> => {
+      if (!isTrustedRuntimeCallSender(event)) {
+        return errorResponse(
+          'desktop-ipc',
+          { runtimeId: runtime.getRuntimeId() },
+          'forbidden',
+          'runtime:call is only available to Dobius app windows'
+        ) as RuntimeRpcResponse<unknown>
+      }
       return (await new RpcDispatcher({ runtime }).dispatch({
         id: 'desktop-ipc',
         authToken: 'desktop-ipc',

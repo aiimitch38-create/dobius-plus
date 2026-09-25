@@ -8,6 +8,7 @@ import { hardenExistingSecureFile, writeSecureJsonFile } from '../../shared/secu
 import type { DeviceScope } from '../../shared/runtime-types'
 import { readSafeJsonFile } from '../storage/safe-json-file'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
+import { isMobileRpcGrant, type MobileRpcGrant } from './mobile-rpc-grants'
 
 export type { DeviceScope }
 
@@ -18,6 +19,10 @@ export type DeviceEntry = {
   scope: DeviceScope
   pairedAt: number
   lastSeenAt: number
+  // Why: explicit per-device opt-in for the high-risk mobile methods (see
+  // mobile-rpc-grants.ts). Missing means none granted. Read at startup only;
+  // edit dobius-devices.json with the app closed or a later save overwrites it.
+  grants?: MobileRpcGrant[]
 }
 
 // Why: an unreadable registry still holds every paired device on disk. Any
@@ -56,12 +61,15 @@ function parseDevices(raw: unknown): DeviceEntry[] | undefined {
     ) {
       return undefined
     }
-    const device = item as DeviceEntry
+    const { grants: rawGrants, ...device } = item as DeviceEntry & { grants?: unknown }
+    // Why: unknown or malformed grant values never authorize anything.
+    const grants = Array.isArray(rawGrants) ? rawGrants.filter(isMobileRpcGrant) : []
     entries.push({
       ...device,
       // Why: older registries only existed for phone pairing. Treat missing
       // scope as mobile so legacy device tokens do not gain new CLI powers.
-      scope: device.scope === 'runtime' ? 'runtime' : 'mobile'
+      scope: device.scope === 'runtime' ? 'runtime' : 'mobile',
+      ...(grants.length > 0 ? { grants } : {})
     })
   }
   return entries
