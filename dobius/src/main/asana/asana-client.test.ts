@@ -202,38 +202,62 @@ describe('asana client fetchLane', () => {
     expect(taskPaths(paths)).toHaveLength(3)
   })
 
-  it('filters by allowedProjects across pages; empty list keeps every task', async () => {
-    const replyFor = (path: string): PageReply =>
+  it('carries each task\'s project gids across pages and never filters by project', async () => {
+    routeAsana((path) =>
       path.includes('offset=next')
         ? {
             body: {
-              data: [
-                task('800003', { projects: [{ gid: '555555' }, { gid: '123123' }] }),
-                task('800004', { projects: [{ gid: '999000' }] })
-              ]
+              data: [task('800003', { projects: [{ gid: '555555' }, { gid: '123123' }] })]
             }
           }
         : {
             body: {
-              data: [
-                task('800001', { projects: [{ gid: '123123' }] }),
-                task('800002', { projects: [] })
-              ],
+              data: [task('800001', { projects: [{ gid: '123123' }] }), task('800002')],
               next_page: { offset: 'next' }
             }
           }
-    routeAsana(replyFor)
+    )
     const { fetchLane } = await import('./asana-client')
-    const filtered = await fetchLane('build', ASSIGNEE, ['123123'])
-    expect(filtered.map((t) => t.gid)).toEqual(['800001', '800003'])
-    const unfiltered = await fetchLane('build', ASSIGNEE, [])
-    expect(unfiltered.map((t) => t.gid)).toEqual(['800001', '800002', '800003', '800004'])
+    const tasks = await fetchLane('build', ASSIGNEE)
+    expect(tasks.map((t) => [t.gid, t.projectGids])).toEqual([
+      ['800001', ['123123']],
+      ['800002', []],
+      ['800003', ['555555', '123123']]
+    ])
   })
 
-  it('requests project memberships so the filter has data', async () => {
+  it('retries a rate-limited workspace lookup', async () => {
+    let limited = false
+    mocks.httpsRequest.mockImplementation((options: { path: string }, callback) => {
+      const request = new FakeRequest()
+      request.end = vi.fn(() => {
+        const isMe = options.path.startsWith('/api/1.0/users/me')
+        const rateLimit = isMe && !limited
+        limited ||= rateLimit
+        const response = Object.assign(new FakeResponse(), {
+          statusCode: rateLimit ? 429 : 200,
+          headers: rateLimit ? { 'retry-after': '0' } : {}
+        })
+        callback(response)
+        const body = rateLimit
+          ? {}
+          : isMe
+            ? { data: { workspaces: [{ gid: '111111' }] } }
+            : { data: [task('810001')] }
+        response.emit('data', Buffer.from(JSON.stringify(body)))
+        response.emit('end')
+      })
+      return request
+    })
+    const { fetchLane } = await import('./asana-client')
+    const tasks = await fetchLane('build', ASSIGNEE)
+    expect(tasks.map((t) => t.gid)).toEqual(['810001'])
+  })
+
+  it('requests project memberships so Auto Mode can apply its allowlist', async () => {
     const paths = routeAsana(() => ({ body: { data: [] } }))
     const { fetchLane } = await import('./asana-client')
-    await fetchLane('build', ASSIGNEE, ['123123'])
+    await fetchLane('build', ASSIGNEE)
     const fields = new URLSearchParams(taskPaths(paths)[0].split('?')[1]).get('opt_fields')
     expect(fields?.split(',')).toContain('projects.gid')
   })

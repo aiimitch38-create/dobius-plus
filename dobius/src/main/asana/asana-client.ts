@@ -178,7 +178,7 @@ async function fetchAllTaskPages(basePath: string): Promise<NonNullable<TasksRes
 }
 
 async function fetchWorkspaces(): Promise<string[]> {
-  const me = await asanaGet<MeResponse>('/api/1.0/users/me?opt_fields=gid,workspaces')
+  const me = await asanaGetWithRetry<MeResponse>('/api/1.0/users/me?opt_fields=gid,workspaces')
   return (me.data?.workspaces ?? []).map((w) => w.gid).filter(Boolean)
 }
 
@@ -189,18 +189,13 @@ async function fetchWorkspaces(): Promise<string[]> {
  * (Sam's recently-finished work). Asana's completed_since returns incomplete
  * tasks plus tasks completed after that instant, so the review lane asks for
  * "48h ago" and then keeps only the completed ones.
- * allowedProjectGids: empty = every project (and tasks in no project);
- * non-empty = only tasks that belong to at least one listed project.
+ * No project filter here: each task carries its projectGids and only Auto Mode
+ * applies the allowedProjects allowlist.
  */
-export async function fetchLane(
-  lane: AsanaLane,
-  assigneeGid: string,
-  allowedProjectGids: readonly string[] = []
-): Promise<AsanaTask[]> {
+export async function fetchLane(lane: AsanaLane, assigneeGid: string): Promise<AsanaTask[]> {
   if (!ASANA_GID_RE.test(assigneeGid)) {
     return []
   }
-  const allowed = new Set(allowedProjectGids)
   const workspaces = await fetchWorkspaces()
   const seen = new Set<string>()
   const out: AsanaTask[] = []
@@ -218,9 +213,6 @@ export async function fetchLane(
       if (lane === 'review' && !t.completed) {
         continue
       }
-      if (allowed.size > 0 && !(t.projects ?? []).some((p) => p.gid && allowed.has(p.gid))) {
-        continue
-      }
       seen.add(t.gid)
       out.push({
         gid: t.gid,
@@ -230,7 +222,8 @@ export async function fetchLane(
         dueOn: t.due_on ?? null,
         completed: Boolean(t.completed),
         lane,
-        assignee: t.assignee?.name ?? null
+        assignee: t.assignee?.name ?? null,
+        projectGids: (t.projects ?? []).flatMap((p) => (p.gid ? [p.gid] : []))
       })
     }
   }

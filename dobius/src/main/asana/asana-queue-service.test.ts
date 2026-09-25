@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AsanaConfig } from '../../shared/asana'
+import type { AsanaConfig, AsanaTask } from '../../shared/asana'
 import { DEFAULT_ASANA_CONFIG } from '../../shared/asana'
 
 const mocks = vi.hoisted(() => ({
@@ -15,45 +15,41 @@ vi.mock('./asana-token-store', () => ({ hasAsanaToken: () => true }))
 vi.mock('./asana-config', () => ({ getAsanaConfig: mocks.getAsanaConfig }))
 vi.mock('./asana-client', () => ({ fetchLane: mocks.fetchLane, markTaskComplete: vi.fn() }))
 
-function config(allowedProjects: AsanaConfig['allowedProjects']): AsanaConfig {
+function laneTask(gid: string, lane: AsanaTask['lane'], projectGids: string[]): AsanaTask {
   return {
-    ...DEFAULT_ASANA_CONFIG,
-    allowedProjects,
-    autoMode: { ...DEFAULT_ASANA_CONFIG.autoMode }
+    gid,
+    name: gid,
+    notes: '',
+    url: '',
+    dueOn: null,
+    completed: lane === 'review',
+    lane,
+    assignee: null,
+    projectGids
   }
 }
 
 beforeEach(() => {
   vi.resetModules()
   mocks.fetchLane.mockReset()
-  mocks.fetchLane.mockResolvedValue([])
+  mocks.fetchLane.mockImplementation(async (lane: AsanaTask['lane']) => [
+    laneTask(lane === 'build' ? '900001' : '900002', lane, ['999000']),
+    laneTask(lane === 'build' ? '900003' : '900004', lane, [])
+  ])
 })
 
-describe('asana queue service allowedProjects', () => {
-  it('passes the stored project gids to both lanes', async () => {
-    mocks.getAsanaConfig.mockReturnValue(
-      config([
-        { name: 'Site', gid: '123123' },
-        { name: 'App', gid: '456456' }
-      ])
-    )
+describe('asana queue service snapshot', () => {
+  it('is never filtered by allowedProjects (Auto Mode applies the allowlist)', async () => {
+    const config: AsanaConfig = {
+      ...DEFAULT_ASANA_CONFIG,
+      allowedProjects: [{ name: 'Site', gid: '123123' }],
+      autoMode: { ...DEFAULT_ASANA_CONFIG.autoMode }
+    }
+    mocks.getAsanaConfig.mockReturnValue(config)
     const { refreshAsanaTasks } = await import('./asana-queue-service')
-    await refreshAsanaTasks()
-    expect(mocks.fetchLane).toHaveBeenCalledWith('build', DEFAULT_ASANA_CONFIG.myGid, [
-      '123123',
-      '456456'
-    ])
-    expect(mocks.fetchLane).toHaveBeenCalledWith('review', DEFAULT_ASANA_CONFIG.reviewGid, [
-      '123123',
-      '456456'
-    ])
-  })
-
-  it('an empty list means no project filter', async () => {
-    mocks.getAsanaConfig.mockReturnValue(config([]))
-    const { refreshAsanaTasks } = await import('./asana-queue-service')
-    await refreshAsanaTasks()
-    expect(mocks.fetchLane).toHaveBeenCalledWith('build', DEFAULT_ASANA_CONFIG.myGid, [])
-    expect(mocks.fetchLane).toHaveBeenCalledWith('review', DEFAULT_ASANA_CONFIG.reviewGid, [])
+    const snapshot = await refreshAsanaTasks()
+    expect(snapshot.build.map((t) => t.gid)).toEqual(['900001', '900003'])
+    expect(snapshot.review.map((t) => t.gid)).toEqual(['900002', '900004'])
+    expect(snapshot.build[0].projectGids).toEqual(['999000'])
   })
 })

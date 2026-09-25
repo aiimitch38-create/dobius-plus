@@ -31,9 +31,10 @@ function sanitizeProjectRef(entry: unknown): AsanaProjectRef | null {
   return name && gid ? { name, gid } : null
 }
 
-// Why: an empty list means "no project filter" — intake keeps tasks from every
-// project, including tasks in no project (fetchLane). A non-empty list keeps only
-// tasks that belong to at least one listed project.
+// Why: allowedProjects is the Auto Mode allowlist only (legacy meaning); the
+// Tasks panel and CLI snapshot are never filtered. Empty list = Auto Mode may
+// process tasks from every project, including tasks in no project. Non-empty =
+// only tasks in at least one listed project (see isAllowedForAutoMode).
 function sanitizeAllowedProjects(value: unknown): AsanaProjectRef[] {
   if (!Array.isArray(value)) {
     return [...DEFAULT_ASANA_CONFIG.allowedProjects]
