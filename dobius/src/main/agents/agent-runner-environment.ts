@@ -23,10 +23,14 @@ export function buildRunEnv(preparation: ClaudeRuntimeAuthPreparation): Options[
 }
 
 export function resolveAgentRunCwd(cwd: string): string {
-  return ensureRunCwd(resolveRunCwdPath(cwd))
+  return ensureRunCwd(resolveAgentRunCwdPath(cwd))
 }
 
-function resolveRunCwdPath(cwd: string): string {
+/**
+ * The run's absolute cwd with no filesystem side effects: what ADAM is asked to
+ * admit. resolveAgentRunCwd creates and checks the folder only once admitted.
+ */
+export function resolveAgentRunCwdPath(cwd: string): string {
   if (!cwd) {
     return os.homedir()
   }

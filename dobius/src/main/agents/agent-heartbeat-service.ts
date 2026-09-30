@@ -175,8 +175,9 @@ async function maybeStartHeartbeat(
 ): Promise<void> {
   // Why: mark the window consumed only after the run actually reserves a slot —
   // writing first made agents beyond the concurrency cap silently skip their
-  // whole scheduled window. The pre-await reservation in startAgentRun keeps
-  // the next tick from double-firing via hasLiveAgentRun.
+  // whole scheduled window. startAgentRun reserves right after ADAM admits the
+  // run (bounded at 5 s, far under TICK_MS), so the next tick sees it via
+  // hasLiveAgentRun and does not double-fire.
   await startAgentRun({
     agentId: agent.id,
     prompt: HEARTBEAT_PROMPT,
