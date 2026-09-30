@@ -433,6 +433,10 @@ export class DobiusRuntimeRpcServer {
   // subscriptions, so the server can reap a closing socket's subscriptions
   // without affecting other live sockets that share the same deviceToken.
   private wsConnectionIds = new Map<WebSocket, string>()
+  // Why: a pairing grace window can issue several successive tokens for one
+  // device. Revocation must close every socket by stable device id, not only
+  // sockets using the registry's newest token.
+  private wsDeviceIds = new Map<WebSocket, string>()
   private readonly binaryStreamHandlers = new Map<
     string,
     Map<number, (frame: TerminalStreamFrame) => void>
@@ -486,7 +490,7 @@ export class DobiusRuntimeRpcServer {
     if (device?.scope !== 'mobile' || !this.deviceRegistry?.removeDevice(deviceId)) {
       return false
     }
-    this.wsTransport?.terminateClientConnections(device.token)
+    this.terminateDeviceConnections(deviceId)
     return true
   }
 
@@ -495,8 +499,18 @@ export class DobiusRuntimeRpcServer {
     if (device?.scope !== 'runtime' || !this.deviceRegistry?.removeDevice(deviceId)) {
       return false
     }
-    this.wsTransport?.terminateClientConnections(device.token)
+    this.terminateDeviceConnections(deviceId)
     return true
+  }
+
+  private terminateDeviceConnections(deviceId: string): number {
+    const sockets = [...this.wsDeviceIds.entries()]
+      .filter(([, candidateDeviceId]) => candidateDeviceId === deviceId)
+      .map(([ws]) => ws)
+    for (const ws of sockets) {
+      ws.terminate()
+    }
+    return sockets.length
   }
 
   // Why: lets the UI tell "listener off at launch" apart from "on at launch
@@ -506,6 +520,9 @@ export class DobiusRuntimeRpcServer {
   }
 
   getWebSocketEndpoint(): string | null {
+    if (!this.wsTransport) {
+      return null
+    }
     const ws = this.transports.find((t) => t.kind === 'websocket')
     return ws?.endpoint ?? null
   }
@@ -762,6 +779,7 @@ export class DobiusRuntimeRpcServer {
                   // generated as QR codes but never scanned stay hidden.
                   const device = this.deviceRegistry?.validateToken(ch.deviceToken)
                   if (device) {
+                    this.wsDeviceIds.set(ws, device.deviceId)
                     this.deviceRegistry?.updateLastSeen(device.deviceId)
                   }
                 }
@@ -808,6 +826,7 @@ export class DobiusRuntimeRpcServer {
             this.binaryStreamHandlers.delete(connectionId)
             this.wsConnectionIds.delete(ws)
           }
+          this.wsDeviceIds.delete(ws)
           const channel = this.e2eeChannels.get(ws)
           if (channel) {
             channel.destroy()

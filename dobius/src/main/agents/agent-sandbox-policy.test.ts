@@ -17,7 +17,10 @@ function context(overrides: Partial<AgentSandboxContext> = {}): AgentSandboxCont
     otherAgentEntries: ['nova', '_crew'],
     dobiusEntries: ['agent-hooks', 'asana-token.enc', 'agents-config.json'],
     tempDirs: ['/tmp', '/private/var/folders'],
-    executableDirs: [`${HOME}/.local/bin`, `${HOME}/.hermes/node/lib/node_modules/@anthropic-ai/claude-code`],
+    executableDirs: [
+      `${HOME}/.local/bin`,
+      `${HOME}/.hermes/node/lib/node_modules/@anthropic-ai/claude-code`
+    ],
     ...overrides
   }
 }
@@ -80,7 +83,7 @@ describe('buildAgentRunSandboxPolicy', () => {
     }
   })
 
-  it('denies Messages, Dobius token files and the userData secret folders', () => {
+  it('denies Messages, Dobius tokens, runtime credentials and userData secret folders', () => {
     const { sandbox, disallowedTools } = buildAgentRunSandboxPolicy(context())
     const denyRead = sandbox.filesystem?.denyRead ?? []
     expect(denyRead).toEqual(
@@ -89,6 +92,11 @@ describe('buildAgentRunSandboxPolicy', () => {
         `${HOME}/.dobius/*.enc`,
         `${HOME}/.dobius/**/*.enc`,
         `${HOME}/.dobius/*token*`,
+        `${USER_DATA}/dobius-runtime.json*`,
+        `${USER_DATA}/dobius-devices.json*`,
+        `${USER_DATA}/dobius-e2ee-keypair.json*`,
+        `${USER_DATA}/dobius-cli-token*`,
+        `${USER_DATA}/voice-conductor-cli-token*`,
         `${USER_DATA}/claude-accounts`,
         `${USER_DATA}/codex-accounts`,
         `${USER_DATA}/daemon`,
@@ -97,10 +105,17 @@ describe('buildAgentRunSandboxPolicy', () => {
     )
     expect(disallowedTools).toContain(rule('Read', `${HOME}/Library/Messages/**`))
     expect(disallowedTools).toContain(rule('Read', `${USER_DATA}/claude-accounts/**`))
-    // The runtime file the dobius CLI needs stays readable.
-    expect(denyRead.some((entry) => isWithin(`${USER_DATA}/dobius-runtime.json`, entry))).toBe(
-      false
-    )
+    expect(disallowedTools).toContain(rule('Read', `${USER_DATA}/dobius-runtime.json*`))
+  })
+
+  it('lets only the conductor read its scoped broker token', () => {
+    const conductor = buildAgentRunSandboxPolicy(context({ runProfile: 'voice-conductor' }))
+    const regular = buildAgentRunSandboxPolicy(context())
+    const token = `${USER_DATA}/voice-conductor-cli-token*`
+    expect(conductor.sandbox.filesystem?.denyRead).not.toContain(token)
+    expect(conductor.disallowedTools).not.toContain(rule('Read', token))
+    expect(regular.sandbox.filesystem?.denyRead).toContain(token)
+    expect(regular.disallowedTools).toContain(rule('Read', token))
   })
 
   it('lets Bash write only the cwd, the repo git dirs, the own agent folder, temp and caches', () => {

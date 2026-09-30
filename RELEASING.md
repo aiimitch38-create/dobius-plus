@@ -84,7 +84,7 @@ check. Any other option is refused.
 | 7 | The staged copy is not a runnable, complete build (lists the missing artifacts) | untouched, never quit |
 | 8 | The atomic swap failed | untouched, relaunched |
 | 9 | `python3` or an installer helper is missing, or the installed app's record cannot be looked up, so the guards cannot run | untouched |
-| 130 | Interrupted (Ctrl-C or TERM); a partial stage is removed. A signal that lands between the quit and the rollback move waits until the swap, the install record and the rollback copy are done | relaunched if it was quit |
+| 130 | Interrupted by TERM; a partial stage is removed. TERM during the protected install section is reported only after the swap, cleanup, relaunch and history entry finish. Ctrl-C is ignored in that section so its process-group signal cannot kill a swap child | relaunched if it was quit |
 
 ### Rollback
 

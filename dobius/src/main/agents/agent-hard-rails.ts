@@ -5,14 +5,8 @@ import {
   comparablePath,
   realpathPreservingMissingTail
 } from '../communications/providers/protected-path-guard'
-import {
-  GIT_CONFIG_WRITE_REASON,
-  isForcePush,
-  isUnverifiablePush,
-  SHELL_SEGMENT_SEPARATOR,
-  UNVERIFIABLE_PUSH_REASON,
-  writesPushRewritingGitConfig
-} from './agent-hard-rails-git'
+import { SHELL_SEGMENT_SEPARATOR } from './agent-hard-rails-git'
+import { commandHardRailDenial } from './agent-hard-rails-command'
 import {
   buildsUnresolvableShellPath,
   UNRESOLVABLE_SHELL_PATH_REASON
@@ -101,30 +95,10 @@ function protectedForms(literal: string): string[] {
   return [...new Set([literal, `${real.replace(/\/$/, '')}${trailing}`])].map(comparablePath)
 }
 
-function commandTriggersHardRail(toolName: string, input: unknown): HardRailDenial | null {
-  if (toolName !== 'Bash' || typeof input !== 'object' || input === null) {
-    return null
-  }
-  const command = (input as { command?: unknown }).command
-  if (typeof command !== 'string') {
-    return null
-  }
-  if (isForcePush(command)) {
-    return { reason: 'Hard rail: force-pushing is not allowed from agent runs.' }
-  }
-  if (isUnverifiablePush(command)) {
-    return { reason: UNVERIFIABLE_PUSH_REASON }
-  }
-  if (writesPushRewritingGitConfig(command)) {
-    return { reason: GIT_CONFIG_WRITE_REASON }
-  }
-  if (/\brm\s+(?:-[^\s]*r[^\s]*f|-+[^\s]*f[^\s]*r)\s+(?:--\s+)?\/(?:\*|\s|$)/.test(command)) {
-    return { reason: 'Hard rail: recursive root deletes are not allowed from agent runs.' }
-  }
-  return null
-}
-
-function targetsCredentials(inspected: InspectedString[]): HardRailDenial | null {
+function targetsCredentials(
+  inspected: InspectedString[],
+  allowVoiceConductorToken: boolean
+): HardRailDenial | null {
   const home = normalizePathLike(os.homedir())
   const credentialPrefixes = [
     `${home}/.claude/.credentials.json`,
@@ -133,7 +107,11 @@ function targetsCredentials(inspected: InspectedString[]): HardRailDenial | null
   ].flatMap(protectedForms)
   const dobiusPrefixes = protectedForms(`${home}/.dobius/`)
   for (const { raw, expanded, candidates } of inspected) {
-    if (rawStringMentionsCredential(raw) || rawStringMentionsCredential(expanded)) {
+    const credentialOptions = { allowVoiceConductorToken }
+    if (
+      rawStringMentionsCredential(raw, credentialOptions) ||
+      rawStringMentionsCredential(expanded, credentialOptions)
+    ) {
       return { reason: 'Hard rail: credential material is not available to agents.' }
     }
     const basename = path.basename(normalizePathLike(raw))
@@ -192,7 +170,9 @@ function climbsOutOfAgentFolder(command: string): boolean {
   let insideAgentsFolder = false
   for (const segment of command.split(SHELL_SEGMENT_SEPARATOR)) {
     const tokens = tokensOf(segment)
-    if (tokens.some((token) => DOT_DOT_SEGMENT.test(token) && AGENTS_FOLDER_REFERENCE.test(token))) {
+    if (
+      tokens.some((token) => DOT_DOT_SEGMENT.test(token) && AGENTS_FOLDER_REFERENCE.test(token))
+    ) {
       return true
     }
     if (insideAgentsFolder && tokens.some((token) => DOT_DOT_SEGMENT.test(token))) {
@@ -260,7 +240,10 @@ function targetsOtherAgentIdentity(
     if (climbsOutOfAgentFolder(expanded)) {
       return IDENTITY_DENIAL
     }
-    if (searchRootInAgentsFolder && tokensOf(expanded).some((token) => DOT_DOT_SEGMENT.test(token))) {
+    if (
+      searchRootInAgentsFolder &&
+      tokensOf(expanded).some((token) => DOT_DOT_SEGMENT.test(token))
+    ) {
       return IDENTITY_DENIAL
     }
   }
@@ -292,7 +275,8 @@ export function evaluateAgentHardRails(
     }
     input = { ...(input as object), command: prepared.effective }
   }
-  const commandDenial = conductorProfileDenial(context, toolName, input) ?? commandTriggersHardRail(toolName, input)
+  const commandDenial =
+    conductorProfileDenial(context, toolName, input) ?? commandHardRailDenial(toolName, input)
   if (commandDenial) {
     return commandDenial
   }
@@ -315,7 +299,8 @@ export function evaluateAgentHardRails(
   }
   const inspected = inspectStrings(toolName, input)
   const pathDenial =
-    targetsCredentials(inspected) ?? targetsOtherAgentIdentity(context, toolName, inspected)
+    targetsCredentials(inspected, context.profile === 'voice-conductor') ??
+    targetsOtherAgentIdentity(context, toolName, inspected)
   const home = normalizePathLike(os.homedir())
   const buildsUnresolvablePath =
     toolName === 'Bash' &&

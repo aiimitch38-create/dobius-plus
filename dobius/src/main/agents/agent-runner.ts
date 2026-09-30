@@ -19,6 +19,7 @@ import {
   setDecisionBypassRunHandler
 } from './agent-decision-queue'
 import { buildAgentHardRailHooks } from './agent-hard-rails'
+import { AgentRunCapacityError } from './agent-run-capacity'
 import { resolveAgentRunSandboxPolicy } from './agent-sandbox-context'
 import {
   createHeadlessCanUseTool,
@@ -45,10 +46,7 @@ import {
   type AgentRunProfileId
 } from './agent-runner-dobius-tools'
 import { buildSystemPrompt } from './agent-run-prompt'
-import {
-  getDefaultPrepareCodexLaunch,
-  type PrepareCodexLaunch
-} from './default-codex-launch'
+import { getDefaultPrepareCodexLaunch, type PrepareCodexLaunch } from './default-codex-launch'
 import { startCodexAgentProcess } from './codex-agent-execution'
 import { assertCodexRunSupported, DEFAULT_CODEX_MAX_STEPS } from './codex-run-policy'
 import {
@@ -256,15 +254,7 @@ async function consumeRun(
         detail: 'Resume failed; starting a fresh session'
       })
       delegatedRetry = true
-      await consumeRun(
-        runId,
-        agent,
-        retryQuery,
-        retryOptions,
-        prompt,
-        resolvedCwd,
-        callbacks
-      )
+      await consumeRun(runId, agent, retryQuery, retryOptions, prompt, resolvedCwd, callbacks)
       return
     }
     const message = error instanceof Error ? error.message : String(error)
@@ -314,7 +304,7 @@ export async function startAgentRun(args: {
   const origin = args.options?.origin ?? 'agent-run'
   assertExecutionAdmitted(origin)
   if (reservedRuns >= MAX_CONCURRENT_RUNS) {
-    throw new Error('Too many concurrent agent runs')
+    throw new AgentRunCapacityError()
   }
   const agent = getAgent(args.agentId)
   if (!agent) {
@@ -419,8 +409,7 @@ export async function startAgentRun(args: {
       maxTurns: args.options?.maxTurns ?? 100,
       // Channel chat is cheap now (~$0.20/run on Sonnet with length limits);
       // $1 is ~5x a typical run — real work never dies mid-task, runaways stop.
-      maxBudgetUsd:
-        args.options?.maxBudgetUsd ?? (isChannelRun ? 1 : DEFAULT_MAX_BUDGET_USD),
+      maxBudgetUsd: args.options?.maxBudgetUsd ?? (isChannelRun ? 1 : DEFAULT_MAX_BUDGET_USD),
       outputFormat: args.options?.outputFormat,
       // Load the project's CLAUDE.md / memory at the agent's cwd — without this
       // an agent runs blind to the very files that define how work happens in
@@ -445,16 +434,24 @@ export async function startAgentRun(args: {
     // Access is still gated per-agent by allowedTools — an MCP server being
     // loaded does not allow its tools unless the agent's allowlist names them.
     options.strictMcpConfig = false
-    options.hooks = buildAgentHardRailHooks({ agentId: agent.id, profile: profile.id, spawnedBy: args.options?.spawnedBy })
+    options.hooks = buildAgentHardRailHooks({
+      agentId: agent.id,
+      profile: profile.id,
+      spawnedBy: args.options?.spawnedBy
+    })
     // Kernel-enforced file and credential limits for Bash, plus matching deny
     // rules for the file tools; the rails above stay as defense in depth.
     // Sets options.sandbox and options.disallowedTools.
-    Object.assign(options, resolveAgentRunSandboxPolicy({
-      agentId: agent.id,
-      cwd: resolvedCwd,
-      claudeConfigDir: preparation.configDir,
-      claudeExecutable: options.pathToClaudeCodeExecutable
-    }))
+    Object.assign(
+      options,
+      resolveAgentRunSandboxPolicy({
+        agentId: agent.id,
+        runProfile: profile.id,
+        cwd: resolvedCwd,
+        claudeConfigDir: preparation.configDir,
+        claudeExecutable: options.pathToClaudeCodeExecutable
+      })
+    )
     const source = args.options?.source ?? 'manual'
     // Only a person who pressed Run on the Agents page watches the decision
     // queue. Every other run (heartbeat, Asana, iMessage, workflows, RPC/CLI,

@@ -7,6 +7,7 @@ import type { GlobalSettings } from '../../shared/types'
 import type { DobiusCliDispatcher } from '../dobius-cli/dispatch-server'
 import { listAgents } from '../agents/agents-store'
 import { startAgentRun } from '../agents/agent-runner'
+import { assertExecutionAdmitted } from '../agents/execution-gate'
 import { getDefaultPrepareClaudeLaunch } from '../agents/default-claude-launch'
 import { createVoiceConductor } from './conductor'
 import { createIMessageBridge } from './imessage-bridge'
@@ -65,7 +66,15 @@ function buildTerminalDispatch(
   return {
     resolveActiveTab: () => runtime.resolveActiveTerminal(),
     sendToTab: async (tabId, text) => {
-      await runtime.sendTerminal(tabId, { text, enter: true })
+      await runtime.sendTerminal(
+        tabId,
+        { text, enter: true },
+        {
+          // Why: sendTerminal yields while sizing input; re-check immediately
+          // before the PTY write so Pause crew closes that race.
+          beforeWrite: () => assertExecutionAdmitted('agent-run')
+        }
+      )
       return { sent: text.length }
     },
     listTabs: async () => {

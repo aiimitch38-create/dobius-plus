@@ -132,7 +132,8 @@ export function registerCoreHandlers(
         startupAgent: buildAgent,
         startupPrompt: brief,
         activate: false,
-        createdWithAgent: buildAgent
+        createdWithAgent: buildAgent,
+        executionOrigin: 'dispatch-build'
       })
       return { worktreeId: result.worktree.id, ok: true }
     } catch (error) {

@@ -114,8 +114,8 @@ PENDING_REC="$LOCK/INSTALL-PROVENANCE.json"
 PHASE="prepare"
 APP_QUIT=0
 APP_RELAUNCHED=0
-# Set when INT/TERM arrives during the critical section (quit → swap → record →
-# rollback move), which is deferred and acted on once that section is done.
+# Set when TERM arrives during the critical section (quit → swap → record →
+# rollback move), which is deferred until cleanup, relaunch and history finish.
 SIGNALLED=0
 # The stage's inode: after the swap (or first-install move) $DEST has it, which
 # tells an interrupted run whether the new bundle is already installed.
@@ -373,11 +373,13 @@ fi
 # the app). -a: pgrep/pkill skip their own ancestors by default, and an install
 # run from a Dobius+ terminal descends from the main app (main → detached
 # daemon → login → shell), so without -a the app is never seen or killed.
-# From here to the rollback move, INT/TERM only set SIGNALLED: an exit inside
-# the swap window would treat the swapped-out bundle as a partial stage and
-# delete it, and leave the new bundle without its record.
+# From here through post-install cleanup, Ctrl-C is ignored by this shell and
+# every child it starts. A terminal sends INT to the whole process group, so a
+# handler in only this shell would still let it kill the swap child. TERM is
+# remembered and honored only after cleanup, relaunch and history finish.
 STAGE_INODE=$(stat -f %i "$STAGE")
-trap 'SIGNALLED=1' INT TERM
+trap '' INT
+trap 'SIGNALLED=1' TERM
 if [ "$MANAGE_APP" = "1" ]; then
   osascript -e 'quit app "Dobius+"' 2>/dev/null || true
   for _ in $(seq 1 10); do
@@ -436,10 +438,6 @@ else
   promote_record || echo "WARNING: could not write the install record $CURRENT_REC." >&2
   ROLLBACK_NOTE="rollback: none (first install)"
 fi
-# The critical section is over: honour a signal that arrived during it (the
-# cleanup trap relaunches the app).
-trap 'exit 130' INT TERM
-[ "$SIGNALLED" = "0" ] || exit 130
 
 # The build output carries the same bundle ID as the installed app; left in
 # dobius/dist it can register with LaunchServices → two Dock icons (#105). It
@@ -479,3 +477,9 @@ echo "INSTALLED: $SRC_BRANCH@$SRC_COMMIT version $SRC_VER build ${BUILD_NUM:-non
 [ "$ROLLBACK_NOTE" = "rollback: $ROLLBACK" ] && \
   echo "To go back: $0 \"$ROLLBACK\" --take-over --allow-downgrade"
 echo "$(date '+%F %T') install $SRC_BRANCH@$SRC_COMMIT version $SRC_VER build ${BUILD_NUM:-none} from $SRC_REPO ($ROLLBACK_NOTE)" >> "$HISTORY_LOG"
+
+# Restore normal signal behavior only after the install is fully recorded and
+# the app is relaunched. A deferred TERM reports interruption now; Ctrl-C in
+# the protected section was ignored so the completed install returns success.
+trap 'exit 130' INT TERM
+[ "$SIGNALLED" = "0" ] || exit 130

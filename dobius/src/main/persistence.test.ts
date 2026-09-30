@@ -131,6 +131,7 @@ vi.mock('electron', () => ({
 // a quit-time flush at an exact filesystem step; with no hook set they are inert.
 const fsHooks = vi.hoisted(() => ({
   beforeRenameSync: null as null | ((src: string, dst: string) => void),
+  beforeCopyFileSync: null as null | ((src: string, dst: string) => void),
   beforeAsyncOp: null as null | ((op: string) => void)
 }))
 
@@ -141,6 +142,10 @@ vi.mock('node:fs', async (importOriginal) => {
     renameSync: (src: FsModule.PathLike, dst: FsModule.PathLike) => {
       fsHooks.beforeRenameSync?.(String(src), String(dst))
       actual.renameSync(src, dst)
+    },
+    copyFileSync: (src: FsModule.PathLike, dst: FsModule.PathLike) => {
+      fsHooks.beforeCopyFileSync?.(String(src), String(dst))
+      actual.copyFileSync(src, dst)
     }
   }
 })
@@ -367,6 +372,9 @@ describe('Store', () => {
   })
 
   afterEach(() => {
+    fsHooks.beforeRenameSync = null
+    fsHooks.beforeCopyFileSync = null
+    fsHooks.beforeAsyncOp = null
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
@@ -8831,6 +8839,29 @@ describe('Store', () => {
         name.startsWith('dobius-data.json.failed-')
       )
       expect(preserved).toHaveLength(1)
+    })
+
+    it('never replaces or saves over an unloadable primary when preservation fails', async () => {
+      writeFileSync(dataFile(), '{{{newer-corrupt-bytes', 'utf-8')
+      writeBackup(0, validBackupState('usable-backup'))
+      fsHooks.beforeCopyFileSync = (_src, dst) => {
+        if (dst.includes('.failed-')) {
+          throw Object.assign(new Error('injected preserve failure'), { code: 'EIO' })
+        }
+      }
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+      const store = await createStore()
+      expect(store.getRepos().map((repo) => repo.id)).toEqual(['usable-backup'])
+      expect(readFileSync(dataFile(), 'utf-8')).toBe('{{{newer-corrupt-bytes')
+
+      store.addRepo(makeRepo({ id: 'session-only', path: '/session-only' }))
+      store.flush()
+      expect(readFileSync(dataFile(), 'utf-8')).toBe('{{{newer-corrupt-bytes')
+      expect(error).toHaveBeenCalledWith(
+        '[persistence] Failed to flush state:',
+        expect.objectContaining({ message: expect.stringContaining('read-only') })
+      )
     })
 
     it('never rotates defaults into the backup ring when every candidate fails (#31)', async () => {

@@ -30,6 +30,22 @@ describe('agent hard rails', () => {
     expect(evaluateAgentHardRails(ctx, 'Bash', { command: 'git commit -m "fix"' })).toBeNull()
   })
 
+  it('denies the unrestricted Dobius CLI without blocking scoped conductor tools or repo work', () => {
+    expect(
+      evaluateAgentHardRails(ctx, 'Bash', { command: 'dobius agents remove --id another-agent' })
+        ?.reason
+    ).toMatch(/unrestricted Dobius CLI/)
+    expect(
+      evaluateAgentHardRails(ctx, 'Bash', {
+        command: 'echo ready && /usr/local/bin/dobius terminal send --text go'
+      })?.reason
+    ).toMatch(/unrestricted Dobius CLI/)
+    expect(evaluateAgentHardRails(ctx, 'Bash', { command: 'dobius-send tab go' })).toBeNull()
+    expect(
+      evaluateAgentHardRails(ctx, 'Bash', { command: 'cd /repo/dobius && pnpm test' })
+    ).toBeNull()
+  })
+
   it('denies credential targets but not content that merely mentions .env', () => {
     expect(evaluateAgentHardRails(ctx, 'Read', { file_path: '/repo/.env' })).not.toBeNull()
     expect(
@@ -44,6 +60,27 @@ describe('agent hard rails', () => {
     expect(
       evaluateAgentHardRails(ctx, 'Write', { file_path: '/repo/.env', content: 'X=1' })
     ).not.toBeNull()
+  })
+
+  it('denies runtime and remote-auth files, except the conductor scoped token for its profile', () => {
+    for (const file of [
+      'dobius-runtime.json',
+      'dobius-devices.json',
+      'dobius-e2ee-keypair.json',
+      'dobius-cli-token',
+      'voice-conductor-cli-token'
+    ]) {
+      expect(
+        evaluateAgentHardRails(ctx, 'Bash', {
+          command: `cat "$HOME/Library/Application Support/dobius-plus/${file}"`
+        })
+      ).not.toBeNull()
+    }
+    expect(
+      evaluateAgentHardRails({ agentId: 'conductor', profile: 'voice-conductor' }, 'Bash', {
+        command: 'cat "$HOME/Library/Application Support/dobius-plus/voice-conductor-cli-token"'
+      })
+    ).toBeNull()
   })
 
   it('isolates agent identities across Write and Bash', () => {
@@ -174,8 +211,9 @@ describe('agent hard rails: agents folder reached by case, cd or quoting (BUILD-
       })?.reason
     ).toMatch(/another agent/)
     expect(
-      evaluateAgentHardRails(ctx, 'Bash', { command: 'echo pwn >> ~/.dobius/AGENTS/other/MEMORY.md' })
-        ?.reason
+      evaluateAgentHardRails(ctx, 'Bash', {
+        command: 'echo pwn >> ~/.dobius/AGENTS/other/MEMORY.md'
+      })?.reason
     ).toMatch(/another agent/)
     expect(
       evaluateAgentHardRails(ctx, 'Write', {
@@ -237,9 +275,7 @@ describe('agent hard rails: agents folder reached by case, cd or quoting (BUILD-
     expect(bash('cd /repo && cat ../x.md; cat ~/.dobius/agents/agent-a/m.md')).toBeNull()
     expect(bash('cd ~/.dobius/agents/agent-a && cd /repo && cat ../x.md')).toBeNull()
     expect(bash('cd ~/.dobius/agents/agent-a && cat ../sam/x')?.reason).toMatch(/another agent/)
-    expect(bash('cd ~/.dobius/agents/agent-a; cd .. && cat sam/x')?.reason).toMatch(
-      /another agent/
-    )
+    expect(bash('cd ~/.dobius/agents/agent-a; cd .. && cat sam/x')?.reason).toMatch(/another agent/)
     expect(bash('cat .dobius/agents/agent-a/../sam/x')?.reason).toMatch(/another agent/)
     expect(bash('cat ~/.dobius/agents/agent-a/../sam/x')?.reason).toMatch(/another agent/)
   })
@@ -331,9 +367,9 @@ describe('agent hard rails: symlinked protected paths (BUILD-005)', () => {
       evaluateAgentHardRails(ctx, 'Write', { file_path: join(link, 'soul.md'), content: 'x' })
         ?.reason
     ).toMatch(/another agent/)
-    expect(
-      evaluateAgentHardRails(ctx, 'Bash', { command: `cat ${link}/soul.md` })?.reason
-    ).toMatch(/another agent/)
+    expect(evaluateAgentHardRails(ctx, 'Bash', { command: `cat ${link}/soul.md` })?.reason).toMatch(
+      /another agent/
+    )
   })
 
   it('allows an ordinary symlink that stays outside protected folders', () => {

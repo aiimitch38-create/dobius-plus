@@ -46,6 +46,7 @@ vi.mock('./execution-gate', async (importOriginal) => {
 
 import { CodexRunUnsupportedError } from './codex-run-policy'
 import { ExecutionBlockedError } from './execution-gate'
+import { AgentRunCapacityError } from './agent-run-capacity'
 import { asanaAutoModeInternals } from './asana-auto-mode-service'
 
 const task = { gid: '42', name: 'Fix it', notes: '', completed: false } as AsanaTask
@@ -81,8 +82,15 @@ describe('Asana auto mode admission', () => {
     expect(mocks.recordFailure).not.toHaveBeenCalled()
   })
 
+  it('releases the claim when the global run capacity is full', async () => {
+    mocks.startAgentRun.mockRejectedValue(new AgentRunCapacityError())
+    await asanaAutoModeInternals.dispatchTriage(task, 'build', 'triage', prepare)
+    expect(mocks.releaseClaim).toHaveBeenCalledWith('42')
+    expect(mocks.recordFailure).not.toHaveBeenCalled()
+  })
+
   it('still records a failure for any other start error', async () => {
-    mocks.startAgentRun.mockRejectedValue(new Error('Too many concurrent agent runs'))
+    mocks.startAgentRun.mockRejectedValue(new Error('launch failed'))
     await asanaAutoModeInternals.dispatchTriage(task, 'build', 'triage', prepare)
     expect(mocks.recordFailure).toHaveBeenCalledWith('42')
     expect(mocks.releaseClaim).not.toHaveBeenCalled()

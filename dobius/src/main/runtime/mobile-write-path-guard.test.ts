@@ -146,7 +146,7 @@ describe('mobile write path guard (BUILD-034)', () => {
     expect(mobileWriteDataRoots()).toEqual(['/fake/user-data', join(homedir(), '.dobius')])
   })
 
-  it('applies the folded lexical checks to SSH worktrees', async () => {
+  it('refuses SSH writes until the remote filesystem can be verified', async () => {
     const remote = (targetPath: string, allowOutsideWorktree = false): Promise<void> =>
       assertMobileWriteAllowed({
         worktreeRoot: '/srv/repo/.claude/worktrees/wt',
@@ -154,10 +154,12 @@ describe('mobile write path guard (BUILD-034)', () => {
         connectionId: 'ssh-1',
         allowOutsideWorktree
       })
-    await expect(remote('/srv/repo/.claude/worktrees/wt/docs/a.md')).resolves.toBeUndefined()
+    await expect(remote('/srv/repo/.claude/worktrees/wt/docs/a.md')).rejects.toThrow(
+      /SSH writes require remote path verification/
+    )
     await expect(remote('/srv/repo/.claude/worktrees/wt/AGENTſ.md')).rejects.toThrow(
       /mobile write refused/
     )
-    await expect(remote('/srv/elsewhere/a.md')).rejects.toThrow(/outside the worktree/)
+    await expect(remote('/srv/elsewhere/a.md')).rejects.toThrow(/mobile write refused/)
   })
 })

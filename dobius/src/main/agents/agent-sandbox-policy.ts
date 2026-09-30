@@ -15,6 +15,8 @@ import type { Options, SandboxSettings } from '@anthropic-ai/claude-agent-sdk'
 
 export type AgentSandboxContext = {
   agentId: string
+  /** Run profile; only the conductor may read its own scoped broker token. */
+  runProfile?: string
   homeDir: string
   userDataDir: string
   /** Claude config dir of the run's account; its settings and hooks are protected too. */
@@ -51,6 +53,14 @@ const USER_DATA_SECRET_DIRS = [
   'Cookies',
   'Network',
   'cookie-import-staging'
+]
+
+const USER_DATA_SECRET_FILES = [
+  'dobius-runtime.json*',
+  'dobius-devices.json*',
+  'dobius-e2ee-keypair.json*',
+  'dobius-cli-token*',
+  'voice-conductor-cli-token*'
 ]
 
 // Package-manager and tool caches under home that installs and builds write.
@@ -138,8 +148,9 @@ export function buildAgentRunSandboxPolicy(context: AgentSandboxContext): AgentR
   const otherAgentDirs = context.otherAgentEntries
     .filter((entry) => entry !== context.agentId)
     .map((entry) => path.join(agents, entry))
-  const configDirs = [...new Set([path.join(home, '.claude'), context.claudeConfigDir ?? ''])]
-    .filter((dir) => path.isAbsolute(dir))
+  const configDirs = [
+    ...new Set([path.join(home, '.claude'), context.claudeConfigDir ?? ''])
+  ].filter((dir) => path.isAbsolute(dir))
   const credentialFiles = configDirs.map((dir) => path.join(dir, '.credentials*'))
   const secretFileGlobs = [
     path.join(dobiusDir, '*.enc'),
@@ -147,6 +158,9 @@ export function buildAgentRunSandboxPolicy(context: AgentSandboxContext): AgentR
     path.join(dobiusDir, '*token*'),
     path.join(dobiusDir, '*token*', '**')
   ]
+  const userDataSecretFiles = USER_DATA_SECRET_FILES.filter(
+    (name) => context.runProfile !== 'voice-conductor' || name !== 'voice-conductor-cli-token*'
+  ).map((name) => path.join(context.userDataDir, name))
   const secretDirs = [
     path.join(home, 'Library', 'Messages'),
     ...USER_DATA_SECRET_DIRS.map((dir) => path.join(context.userDataDir, dir))
@@ -194,6 +208,7 @@ export function buildAgentRunSandboxPolicy(context: AgentSandboxContext): AgentR
         path.join(dobiusDir, 'agents-*'),
         ...credentialFiles,
         ...secretFileGlobs,
+        ...userDataSecretFiles,
         ...secretDirs
       ],
       allowRead: [ownAgentDir],
@@ -214,7 +229,9 @@ export function buildAgentRunSandboxPolicy(context: AgentSandboxContext): AgentR
   const disallowedTools = [
     ...otherAgentDirs.map((dir) => absoluteRule('Read', path.join(dir, '**'))),
     absoluteRule('Read', path.join(dobiusDir, 'agents-*', '**')),
-    ...[...credentialFiles, ...secretFileGlobs].map((target) => absoluteRule('Read', target)),
+    ...[...credentialFiles, ...secretFileGlobs, ...userDataSecretFiles].map((target) =>
+      absoluteRule('Read', target)
+    ),
     ...secretDirs.map((dir) => absoluteRule('Read', path.join(dir, '**'))),
     ...[...new Set(protectedWrites)].flatMap(editRules),
     // The run's project (and nested projects) settings files.

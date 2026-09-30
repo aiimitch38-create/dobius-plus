@@ -2675,6 +2675,9 @@ export class Store {
   private gitUsernameCache = new Map<string, string>()
   private loadNeedsSave = false
   private backupRotationSuspended = false
+  // Why: replacing an unloadable primary is safe only after its exact bytes
+  // were preserved. If preservation fails, this process stays read-only.
+  private persistenceWritesBlocked = false
   private settingsChangeListeners = new Set<
     (
       updates: Partial<GlobalSettings>,
@@ -2852,14 +2855,19 @@ export class Store {
   // Why (#31, N6): a backup is chosen only after its complete state loads
   // (parse + migrate + normalize), candidates are only ever read, and the
   // primary is replaced by tmp+rename so a failed restore leaves it untouched.
-  private restoreFromBackup(dataFile: string): PersistedState | null {
+  private restoreFromBackup(
+    dataFile: string,
+    options: { promote: boolean } = { promote: true }
+  ): PersistedState | null {
     for (let i = 0; i < BACKUP_COUNT; i++) {
       const path = backupPath(dataFile, i)
       const candidate = this.readStateFile(path)
       if (candidate === null) {
         continue
       }
-      this.promoteBackupToPrimary(path, dataFile)
+      if (options.promote) {
+        this.promoteBackupToPrimary(path, dataFile)
+      }
       console.warn(`[persistence] Recovered state from backup slot ${i}: ${path}`)
       return candidate
     }
@@ -2891,9 +2899,9 @@ export class Store {
 
   // Why (#31): the next save replaces an unloadable primary, so keep a copy of
   // it first; a migration bug may have rejected data a fixed build can read.
-  private preserveFailedPrimary(dataFile: string): void {
+  private preserveFailedPrimary(dataFile: string): boolean {
     if (!existsSync(dataFile)) {
-      return
+      return true
     }
     const preservedFile = `${dataFile}.failed-${Date.now()}`
     try {
@@ -2911,12 +2919,14 @@ export class Store {
         )
       })
       if (alreadyKept) {
-        return
+        return true
       }
       copyFileSync(dataFile, preservedFile)
       console.warn(`[persistence] Preserved unloadable state file at ${preservedFile}`)
+      return true
     } catch (err) {
       console.error('[persistence] Failed to preserve unloadable state file:', err)
+      return false
     }
   }
 
@@ -2951,8 +2961,14 @@ export class Store {
         }
       }
       if (fileExistedOnLoad || hasBackup) {
-        this.preserveFailedPrimary(dataFile)
-        result = this.restoreFromBackup(dataFile)
+        const primaryPreserved = this.preserveFailedPrimary(dataFile)
+        if (!primaryPreserved) {
+          // Why: a backup can keep this session usable, but neither promotion
+          // nor a later save may destroy primary bytes we failed to preserve.
+          this.persistenceWritesBlocked = true
+          this.backupRotationSuspended = true
+        }
+        result = this.restoreFromBackup(dataFile, { promote: primaryPreserved })
         recoveredFromBackup = result !== null
         if (result === null) {
           console.error('[persistence] No usable state file or backup found, using defaults')
@@ -3805,6 +3821,11 @@ export class Store {
   // Why: async writes avoid blocking the main Electron thread on every
   // debounced save during active use.
   private async writeToDiskAsync(): Promise<void> {
+    if (this.persistenceWritesBlocked) {
+      throw new Error(
+        'Persistence is read-only because the unloadable primary could not be preserved'
+      )
+    }
     const gen = this.writeGeneration
     const stateHash = this.computeStateHash()
     // Why: a mutation burst that nets out to already-persisted state (or a
@@ -3858,6 +3879,11 @@ export class Store {
   // Why: synchronous variant kept only for flush() at shutdown, where the
   // process may exit before an async write completes.
   private writeToDiskSync(opts: { force?: boolean } = {}): void {
+    if (this.persistenceWritesBlocked) {
+      throw new Error(
+        'Persistence is read-only because the unloadable primary could not be preserved'
+      )
+    }
     const stateHash = this.computeStateHash()
     // Why: skipping is safe under flushOrThrow's durability contract — a
     // matching hash means this exact state is already the file's content.

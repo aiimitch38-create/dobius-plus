@@ -26,7 +26,11 @@ export type DobiusCliDispatcher = {
   listTerminals: () => Promise<{
     terminals: { handle: string; title: string | null; worktreePath?: string }[]
   }>
-  sendTerminal: (handle: string, action: { text?: string; enter?: boolean }) => Promise<unknown>
+  sendTerminal: (
+    handle: string,
+    action: { text?: string; enter?: boolean },
+    options?: { beforeWrite?: (ptyId: string) => void | Promise<void> }
+  ) => Promise<unknown>
   // Optional richer control (ADAM orchestration, 2026-07-29): present on the real
   // runtime, optional here so existing tests/mocks keep compiling.
   // Method syntax (not arrow properties): keeps parameter checks bivariant so the
@@ -230,11 +234,13 @@ async function handleTabOpen(body: Record<string, unknown>): Promise<unknown> {
   if (!dispatcher?.createTerminal) {
     return { ok: false, error: 'open unavailable in this runtime' }
   }
-  const result = await withTimeout(dispatcher.createTerminal(`path:${project}`, {
-    presentation: 'focused',
-    rendererBacked: true,
-    focus: true
-  }))
+  const result = await withTimeout(
+    dispatcher.createTerminal(`path:${project}`, {
+      presentation: 'focused',
+      rendererBacked: true,
+      focus: true
+    })
+  )
   return { ok: true, project, result }
 }
 

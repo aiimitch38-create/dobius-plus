@@ -111,8 +111,8 @@ function loadFresh(): AsanaDispatchRecord[] {
   return file.get()
 }
 
-function persist(records: AsanaDispatchRecord[]): void {
-  file.set(records)
+function persist(records: AsanaDispatchRecord[]): boolean {
+  return file.set(records)
 }
 
 function findRecord(gid: string): AsanaDispatchRecord | undefined {
@@ -152,8 +152,7 @@ export function claimTask(gid: string, lane: AsanaLane): AsanaDispatchRecord | n
     existing.lane = lane
     existing.lastAttemptAt = now
     Object.assign(existing, claimStamp(now))
-    persist(records)
-    return cloneRecord(existing)
+    return persist(records) ? cloneRecord(existing) : null
   }
   const record: AsanaDispatchRecord = {
     gid,
@@ -164,8 +163,7 @@ export function claimTask(gid: string, lane: AsanaLane): AsanaDispatchRecord | n
     status: 'claimed',
     ...claimStamp(now)
   }
-  persist([...records, record])
-  return cloneRecord(record)
+  return persist([...records, record]) ? cloneRecord(record) : null
 }
 
 export function recordBriefed(gid: string): AsanaDispatchRecord | null {

@@ -228,14 +228,16 @@ export function runGated(root, args, extraEnv) {
   return spawnSync('/bin/bash', [gatedScript, ...args], { env, encoding: 'utf8' })
 }
 
-export function runGatedAsync(root, args, extraEnv) {
+export function runGatedAsync(root, args, extraEnv, options = {}) {
   const env = envFor(root, extraEnv)
   expect(env.DOBIUS_INSTALL_DEST.startsWith(root)).toBe(true)
   return new Promise((resolve) => {
     const child = spawn('/bin/bash', [gatedScript, ...args], {
       env,
-      stdio: ['ignore', 'ignore', 'pipe']
+      stdio: ['ignore', 'ignore', 'pipe'],
+      detached: options.detached ?? false
     })
+    options.onSpawn?.(child)
     let stderr = ''
     child.stderr.on('data', (chunk) => {
       stderr += chunk

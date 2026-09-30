@@ -16,9 +16,10 @@ function git(cwd: string, ...args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'ignore' })
 }
 
-function resolve(overrides: { cwd?: string; claudeExecutable?: string } = {}) {
+function resolve(overrides: { cwd?: string; claudeExecutable?: string; runProfile?: string } = {}) {
   return resolveAgentRunSandboxPolicy({
     agentId: 'atlas',
+    runProfile: overrides.runProfile,
     cwd: overrides.cwd ?? path.join(home, 'work'),
     claudeExecutable: overrides.claudeExecutable
   })
@@ -75,7 +76,18 @@ describe('resolveAgentRunSandboxPolicy', () => {
     const repo = path.join(home, 'repo')
     mkdirSync(repo)
     git(repo, 'init', '-q', '-b', 'main')
-    git(repo, '-c', 'user.email=a@b', '-c', 'user.name=a', 'commit', '-q', '--allow-empty', '-m', 'i')
+    git(
+      repo,
+      '-c',
+      'user.email=a@b',
+      '-c',
+      'user.name=a',
+      'commit',
+      '-q',
+      '--allow-empty',
+      '-m',
+      'i'
+    )
     const worktree = path.join(home, 'repo-wt')
     git(repo, 'worktree', 'add', '-q', worktree, '-b', 'feature')
     const allowWrite = resolve({ cwd: worktree }).sandbox?.filesystem?.allowWrite ?? []
@@ -121,6 +133,14 @@ describe('resolveAgentRunSandboxPolicy', () => {
 
   it('the Settings switch on (the default) keeps the kernel sandbox', () => {
     expect(resolve().sandbox).toMatchObject({ enabled: true, allowUnsandboxedCommands: false })
+  })
+
+  it('passes the run profile through to the scoped-token policy', () => {
+    const token = path.join(mocks.userDataRoot, 'voice-conductor-cli-token*')
+    expect(resolve().sandbox?.filesystem?.denyRead).toContain(token)
+    expect(resolve({ runProfile: 'voice-conductor' }).sandbox?.filesystem?.denyRead).not.toContain(
+      token
+    )
   })
 
   it('the Settings switch off drops only the kernel sandbox, keeps every deny rule, and warns', () => {

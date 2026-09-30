@@ -10,7 +10,9 @@ import { getAgentsPaused } from './agents-config-store'
 import { getAgent } from './agents-store'
 import { isCodexRunUnsupportedError } from './codex-run-policy'
 import { checkExecutionAdmission, isExecutionBlockedError } from './execution-gate'
+import { isAgentRunCapacityError } from './agent-run-capacity'
 import { startAgentRun } from './agent-runner'
+import * as autoMode from './asana-auto-mode-constants'
 import {
   claimTask,
   hasBeenClaimed,
@@ -24,9 +26,6 @@ import {
 import { triageOutputFormat, validateTriageVerdict } from './asana-triage-verdict'
 import { wrapUntrustedTaskText } from './asana-untrusted-text'
 
-const TICK_MS = 60_000
-const DEFAULT_INTERVAL_MINUTES = 10
-const MAX_IN_FLIGHT_TRIAGE = 2
 const ASANA_BRIEFING_AGENT_ID = 'asana-auto-mode'
 
 type PrepareClaudeLaunch = () => Promise<ClaudeRuntimeAuthPreparation>
@@ -179,7 +178,11 @@ async function dispatchTriage(
     inFlightTriageGids.delete(task.gid)
     // Why: neither a pause nor an unsupported engine is the task's fault, so
     // counting it as an attempt would dead-letter the whole queue.
-    if (isExecutionBlockedError(error) || isCodexRunUnsupportedError(error)) {
+    if (
+      isExecutionBlockedError(error) ||
+      isCodexRunUnsupportedError(error) ||
+      isAgentRunCapacityError(error)
+    ) {
       releaseClaim(task.gid)
       console.info(`[agents] Asana triage not started: ${error.message}`)
       return
@@ -218,7 +221,7 @@ function maybeDispatchTask(
   if (hasBeenClaimed(task.gid) || isDead(task.gid)) {
     return
   }
-  if (inFlightTriageGids.size >= MAX_IN_FLIGHT_TRIAGE) {
+  if (inFlightTriageGids.size >= autoMode.MAX_IN_FLIGHT_TRIAGE) {
     return
   }
   // Why: the pause can flip while tick awaits the Asana refresh; never claim while blocked.
@@ -283,8 +286,8 @@ async function tick(prepareClaudeLaunch: PrepareClaudeLaunch): Promise<void> {
   if (!config.autoMode.enabled) {
     return
   }
-  const intervalMinutes = config.autoMode.intervalMinutes || DEFAULT_INTERVAL_MINUTES
-  if (Date.now() - lastPollAt < intervalMinutes * TICK_MS) {
+  const intervalMinutes = config.autoMode.intervalMinutes || autoMode.DEFAULT_INTERVAL_MINUTES
+  if (Date.now() - lastPollAt < intervalMinutes * autoMode.TICK_MS) {
     return
   }
   ticking = true
@@ -309,7 +312,7 @@ export function startAsanaAutoMode(prepareClaudeLaunch: PrepareClaudeLaunch): vo
   if (interval) {
     return
   }
-  interval = setInterval(() => void tick(prepareClaudeLaunch), TICK_MS)
+  interval = setInterval(() => void tick(prepareClaudeLaunch), autoMode.TICK_MS)
   interval.unref?.()
   void tick(prepareClaudeLaunch)
 }

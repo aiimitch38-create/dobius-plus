@@ -609,15 +609,22 @@ describe('DobiusRuntimeRpcServer', () => {
       if (!offer.available) {
         throw new Error('WebSocket pairing unavailable')
       }
+      // Why: the QR grace window may rotate more than once. Both sockets
+      // belong to the same device even though each holds a superseded token.
       const firstSession = await authenticateMobileWsSession(offer.pairingUrl)
-      const first = firstSession.ws
-      const second = await authenticateMobileWs(offer.pairingUrl, firstSession.deviceToken)
+      const secondSession = await authenticateMobileWsSession(offer.pairingUrl)
+      expect(firstSession.deviceToken).not.toBe(secondSession.deviceToken)
 
       expect(server.revokeMobileDevice(offer.deviceId)).toBe(true)
-      await Promise.all([waitForWsClose(first), waitForWsClose(second)])
-      await waitFor(() => server['e2eeChannels'].size === 0 && server['wsConnectionIds'].size === 0)
+      await Promise.all([waitForWsClose(firstSession.ws), waitForWsClose(secondSession.ws)])
+      await waitFor(
+        () =>
+          server['e2eeChannels'].size === 0 &&
+          server['wsConnectionIds'].size === 0 &&
+          server['wsDeviceIds'].size === 0
+      )
 
-      expect(disconnectSpy).toHaveBeenCalledTimes(1)
+      expect(disconnectSpy).toHaveBeenCalledTimes(2)
     } finally {
       disconnectSpy.mockRestore()
       await server.stop()

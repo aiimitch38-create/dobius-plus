@@ -100,6 +100,7 @@ function executableDirs(
 
 export function resolveAgentRunSandboxPolicy(args: {
   agentId: string
+  runProfile?: string
   cwd: string
   claudeConfigDir?: string | null
   claudeExecutable?: string
@@ -110,6 +111,7 @@ export function resolveAgentRunSandboxPolicy(args: {
   const tempDirs = scratchDirs()
   const policy = buildAgentRunSandboxPolicy({
     agentId: args.agentId,
+    runProfile: args.runProfile,
     homeDir,
     userDataDir: getUserDataRoot(),
     claudeConfigDir: args.claudeConfigDir,

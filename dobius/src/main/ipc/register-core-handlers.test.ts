@@ -142,6 +142,8 @@ vi.mock('./project-files', () => ({
   registerProjectFilesHandlers: registerProjectFilesHandlersMock
 }))
 
+vi.mock('./vertex-tasks', () => ({ registerVertexTaskHandlers: vi.fn() }))
+
 vi.mock('./destinations', () => ({
   registerDestinationHandlers: registerDestinationHandlersMock
 }))
@@ -285,6 +287,15 @@ vi.mock('./runtime', () => ({
 
 vi.mock('../communications/communications-gateway', () => ({
   registerCommunicationsGateway: registerCommunicationsGatewayMock
+}))
+
+vi.mock('../communications/relay/relay-lifecycle', () => ({
+  registerRelayStatusHandler: vi.fn(),
+  startCommunicationsRelay: vi.fn()
+}))
+
+vi.mock('../communications/participant-identity-buzz-migration', () => ({
+  runCommunicationsBuzzIdentityMigration: vi.fn()
 }))
 
 vi.mock('./communications-identity', () => ({
@@ -448,9 +459,14 @@ describe('registerCoreHandlers', () => {
     setRepoListerMock.mockReset()
   })
 
-  it('passes the store through to handler registrars that need it', () => {
+  it('passes the store through to handler registrars that need it', async () => {
     const store = { marker: 'store' }
-    const runtime = { marker: 'runtime', getAgentBrowserBridge: () => null }
+    const createManagedWorktree = vi.fn(async () => ({ worktree: { id: 'wt-1' } }))
+    const runtime = {
+      marker: 'runtime',
+      getAgentBrowserBridge: () => null,
+      createManagedWorktree
+    }
     const stats = { marker: 'stats' }
     const claudeUsage = { marker: 'claudeUsage' }
     const codexUsage = { marker: 'codexUsage' }
@@ -541,6 +557,19 @@ describe('registerCoreHandlers', () => {
     expect(registerSpeechHandlersMock).toHaveBeenCalledWith(store)
     expect(setRepoListerMock).toHaveBeenCalledWith(expect.any(Function))
     expect(setBuildDispatcherMock).toHaveBeenCalledWith(expect.any(Function))
+    const dispatchBuild = setBuildDispatcherMock.mock.calls[0]?.[0]
+    await expect(
+      dispatchBuild({
+        repoId: 'repo-1',
+        name: 'build-one',
+        baseBranch: 'main',
+        brief: 'fix it',
+        buildAgent: 'agent-1'
+      })
+    ).resolves.toEqual({ worktreeId: 'wt-1', ok: true })
+    expect(createManagedWorktree).toHaveBeenCalledWith(
+      expect.objectContaining({ executionOrigin: 'dispatch-build' })
+    )
   })
 
   it('only registers IPC handlers once but always updates web contents id', () => {

@@ -24,12 +24,20 @@ function collectStrings(value: unknown, strings: string[] = []): string[] {
 // Why: prefix-agnostic on purpose — `/Users/$USER/.claude/...` or a variable
 // holding the home dir cannot be expanded here, but the credential file names
 // themselves are distinctive enough to deny wherever they appear.
-export function rawStringMentionsCredential(value: string): boolean {
+export function rawStringMentionsCredential(
+  value: string,
+  options: { allowVoiceConductorToken?: boolean } = {}
+): boolean {
   return (
     /(^|[\s"'=:/\\])\.env(?:\.[^\s"'`;&|]*)?(?=$|[\s"'`;&|])/i.test(value) ||
     /(^|[\s"'=:/\\])\.credentials\.json(?=$|[\s"'`;&|)])/i.test(value) ||
     /\.claude[/\\]credentials[^\s"'`;&|]*/i.test(value) ||
     /\.dobius[/\\][^\s"'`;&|]*[/\\]token[^\s"'`;&|]*/i.test(value) ||
+    /(?:^|[/\\\s"'=])(?:dobius-runtime\.json|dobius-devices\.json|dobius-e2ee-keypair\.json|dobius-cli-token)(?:[^/\\\s"'`;&|]*)/i.test(
+      value
+    ) ||
+    (!options.allowVoiceConductorToken &&
+      /(?:^|[/\\\s"'=])voice-conductor-cli-token(?:[^/\\\s"'`;&|]*)/i.test(value)) ||
     /Library[/\\]Keychains(?:[/\\]|\s|$)/i.test(value) ||
     readsKeychainSecret(value)
   )

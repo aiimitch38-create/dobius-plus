@@ -5,7 +5,7 @@
 // entry names and APFS case/compatibility folding.
 import { lstat, readdir, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, isAbsolute, join, posix, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { getUserDataRoot } from '../storage/user-data-root'
 
 // Why: every dot-file and dot-directory is refused (.git, .claude, .codex,
@@ -134,8 +134,7 @@ export function mobileWriteDataRoots(): string[] {
 export type MobileWriteCheck = {
   worktreeRoot: string
   targetPath: string
-  // SSH worktrees: the host cannot inspect the remote filesystem, so only the
-  // folded lexical checks apply.
+  // SSH worktrees cannot be safely checked from the host filesystem.
   connectionId?: string
   // Terminal-artifact writes may target files outside the worktree.
   allowOutsideWorktree: boolean
@@ -144,8 +143,7 @@ export type MobileWriteCheck = {
 
 export async function assertMobileWriteAllowed(check: MobileWriteCheck): Promise<void> {
   if (check.connectionId) {
-    assertRemoteMobileWrite(check)
-    return
+    throw new MobileWriteRefusedError('SSH writes require remote path verification')
   }
   const requested = resolve(check.targetPath)
   const root = resolve(check.worktreeRoot)
@@ -180,20 +178,6 @@ export async function assertMobileWriteAllowed(check: MobileWriteCheck): Promise
     throw new MobileWriteRefusedError('target is outside the worktree')
   }
   if (isProtectedMobileWritePath(realTarget) || isProtectedMobileWritePath(requested)) {
-    throw new MobileWriteRefusedError('agent-instruction, hook, script or .git file')
-  }
-}
-
-function assertRemoteMobileWrite(check: MobileWriteCheck): void {
-  const rel = posix.relative(
-    posix.resolve(check.worktreeRoot),
-    posix.resolve(check.worktreeRoot, check.targetPath)
-  )
-  const inside = rel === '' || (!rel.startsWith('..') && !posix.isAbsolute(rel))
-  if (!inside && !check.allowOutsideWorktree) {
-    throw new MobileWriteRefusedError('target is outside the worktree')
-  }
-  if (isProtectedMobileWritePath(inside ? rel : check.targetPath)) {
     throw new MobileWriteRefusedError('agent-instruction, hook, script or .git file')
   }
 }

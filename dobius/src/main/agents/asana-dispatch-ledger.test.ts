@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -36,6 +36,14 @@ describe('asana dispatch ledger', () => {
     expect(second).toBeNull()
     expect(ledger.hasBeenClaimed('123456')).toBe(true)
     expect(ledger.listDispatchRecords()).toHaveLength(1)
+  })
+
+  it('does not claim a task when the claim cannot be persisted', async () => {
+    mkdirSync(path.join(electronMock.userDataDir, 'asana-dispatch-ledger.json'))
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const ledger = await loadLedger()
+
+    expect(ledger.claimTask('123459', 'build')).toBeNull()
   })
 
   it('dead-letters after two failures', async () => {

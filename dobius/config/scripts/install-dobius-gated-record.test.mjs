@@ -23,7 +23,8 @@ import {
   recordFor,
   rollbackOf,
   rollbackRecordOf,
-  runGated
+  runGated,
+  runGatedAsync
 } from './install-dobius-gated-fixtures.mjs'
 
 afterEach(cleanupRoots)
@@ -110,9 +111,7 @@ describe.runIf(process.platform === 'darwin')(
       const root = makeRoot()
       const repo = makeRepo(root)
       const commit = git(repo, 'rev-parse', '--short', 'HEAD')
-      expect(runGated(root, [distBundle(root, { bundleVersion: '42', asar: 'v2' })]).status).toBe(
-        0
-      )
+      expect(runGated(root, [distBundle(root, { bundleVersion: '42', asar: 'v2' })]).status).toBe(0)
       expect(provenanceOf(dest(root))).toMatchObject({
         branch: 'main',
         commit,
@@ -210,7 +209,44 @@ describe.runIf(process.platform === 'darwin')(
       expect(result.status, result.stderr).toBe(130)
       expectV2InstalledWithV1Rollback(root)
       expect(shims.opened()).toHaveLength(1)
+      expect(readFileSync(path.join(root, 'history.log'), 'utf8').trim().split('\n')).toHaveLength(
+        2
+      )
     })
+
+    it('ignores process-group SIGINT until swap, cleanup and history are complete', async () => {
+      const root = makeRoot()
+      installedV1(root)
+      const built = distBundle(root, { bundleVersion: '42', asar: 'v2' })
+      const mark = path.join(root, 'inside-critical-section')
+      const release = path.join(root, 'release-critical-section')
+      const shims = withShims(root, {
+        pgrep: `touch "${mark}"\nwhile [ ! -e "${release}" ]; do /bin/sleep 0.02; done\nexit 1`
+      })
+      let childPid = 0
+      const resultPromise = runGatedAsync(root, [built], shims.env, {
+        detached: true,
+        onSpawn: (child) => {
+          childPid = child.pid
+        }
+      })
+      for (let attempt = 0; attempt < 1_500 && !existsSync(mark); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      expect(existsSync(mark)).toBe(true)
+      expect(childPid).toBeGreaterThan(0)
+      process.kill(-childPid, 'SIGINT')
+      writeFileSync(release, '')
+
+      const result = await resultPromise
+      expect(result.status, result.stderr).toBe(0)
+      expectV2InstalledWithV1Rollback(root)
+      expect(existsSync(built)).toBe(false)
+      expect(readFileSync(path.join(root, 'history.log'), 'utf8').trim().split('\n')).toHaveLength(
+        2
+      )
+      expect(shims.opened()).toHaveLength(1)
+    }, 30_000)
 
     it('TERM right after the record rotation keeps the rollback record (review F2)', () => {
       const root = makeRoot()
