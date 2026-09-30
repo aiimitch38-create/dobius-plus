@@ -92,7 +92,10 @@ function sanitizeRun(entry: unknown): AgentRun | null {
         ...(typeof context.adamTaskId === 'string' ? { adamTaskId: context.adamTaskId } : {}),
         ...(typeof context.projectId === 'string' ? { projectId: context.projectId } : {}),
         ...(typeof context.worktreeId === 'string' ? { worktreeId: context.worktreeId } : {}),
-        ...(typeof context.requestedBy === 'string' ? { requestedBy: context.requestedBy } : {})
+        ...(typeof context.requestedBy === 'string' ? { requestedBy: context.requestedBy } : {}),
+        ...(typeof context.contextDigest === 'string'
+          ? { contextDigest: context.contextDigest }
+          : {})
       }
     }
   }
