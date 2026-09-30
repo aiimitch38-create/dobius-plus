@@ -117,6 +117,8 @@ export type AgentRunContext = {
   projectId?: string
   worktreeId?: string
   requestedBy?: string
+  /** Digest of the ADAM context pack the run was admitted under (autonomous runs only). */
+  contextDigest?: string
 }
 
 /**

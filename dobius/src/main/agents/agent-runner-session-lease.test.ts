@@ -74,7 +74,8 @@ vi.mock('./agent-run-progress-log', () => ({ appendRunProgress: vi.fn() }))
 vi.mock('./agent-runner-environment', () => ({
   buildRunEnv: vi.fn(() => ({})),
   currentGitBranch: vi.fn(() => 'main'),
-  resolveAgentRunCwd: (cwd: string) => cwd
+  resolveAgentRunCwd: (cwd: string) => cwd,
+  resolveAgentRunCwdPath: (cwd: string) => cwd
 }))
 vi.mock('./agent-runner-dobius-tools', () => ({
   buildDobiusRunMcpServer: vi.fn(() => ({})),
@@ -86,6 +87,19 @@ vi.mock('./agent-run-prompt', () => ({ buildSystemPrompt: () => '' }))
 vi.mock('./default-codex-launch', () => ({ getDefaultPrepareCodexLaunch: () => () => null }))
 vi.mock('./codex-agent-execution', () => ({ startCodexAgentProcess: vi.fn() }))
 vi.mock('../codex-cli/command', () => ({ resolveClaudeCommand: () => 'claude' }))
+
+// Run admission (the ADAM handshake) is covered by agent-runner-adam-admission.test.ts;
+// here it keeps only the pause checks, so no test reaches a real or fake ADAM.
+vi.mock('./execution-gate', async (importOriginal) => {
+  const actual = await importOriginal<{ assertExecutionAdmitted: (origin: string) => void }>()
+  return {
+    ...actual,
+    assertRunAdmitted: vi.fn(async (origin: string) => {
+      actual.assertExecutionAdmitted(origin)
+      return undefined
+    })
+  }
+})
 
 import { startAgentRun } from './agent-runner'
 import { invalidateAgentSessions } from './agent-session-lease'
@@ -176,7 +190,9 @@ describe('session key ownership (#56)', () => {
       prepareClaudeLaunch,
       options: { sessionKey: 'chan-1' }
     })
-    // Both are parked inside prepareClaudeLaunch before either stored a run.
+    // Both are parked inside prepareClaudeLaunch before either stored a run
+    // (run admission is awaited first, so let both starts reach it).
+    await flush()
     expect(prepareClaudeLaunch).toHaveBeenCalledTimes(2)
     open()
     await Promise.all([first, second])

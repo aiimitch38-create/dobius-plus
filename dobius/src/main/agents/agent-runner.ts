@@ -27,7 +27,12 @@ import {
   recordStreamPermissionDenials,
   withPermissionDenialNote
 } from './agent-headless-permissions'
-import { assertExecutionAdmitted, type ExecutionOrigin } from './execution-gate'
+import {
+  assertExecutionAdmitted,
+  assertRunAdmitted,
+  type AdamContextPack,
+  type ExecutionOrigin
+} from './execution-gate'
 import { claimRunSession, currentRunSessionKey, releaseRunSession } from './agent-session-lease'
 import { appendAgentRunNotification } from './agent-notification-store'
 import {
@@ -36,7 +41,12 @@ import {
   type GuardedRunEndCallbacks
 } from './agent-run-end-callbacks'
 import { appendRunProgress } from './agent-run-progress-log'
-import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
+import {
+  buildRunEnv,
+  currentGitBranch,
+  resolveAgentRunCwd,
+  resolveAgentRunCwdPath
+} from './agent-runner-environment'
 import { scheduleSessionWorkspaceBriefRefresh } from './session-workspace-brief'
 import {
   buildDobiusRunMcpServer,
@@ -157,6 +167,26 @@ function addRun(run: AgentRun): void {
 function updateRun(runId: string, updates: Partial<AgentRun>): void {
   if (updateStoredAgentRun(runId, updates)) {
     broadcastRunsChanged()
+  }
+}
+
+// ADAM's answer names the project the run acts in, and the digest pins the
+// context pack it was admitted under; both ride on every agent.run.* event.
+function withAdmittedContext(
+  context: AgentRunContext | undefined,
+  runId: string,
+  pack: AdamContextPack | undefined
+): AgentRunContext {
+  const base = context ?? { correlationId: runId }
+  if (!pack) {
+    return base
+  }
+  // Only ADAM's digest may ride on an admitted run: a caller-supplied one is dropped.
+  const { contextDigest: _callerDigest, ...rest } = base
+  return {
+    ...rest,
+    projectId: pack.projectId,
+    ...(pack.digest ? { contextDigest: pack.digest } : {})
   }
 }
 
@@ -303,9 +333,6 @@ export async function startAgentRun(args: {
 }): Promise<string> {
   const origin = args.options?.origin ?? 'agent-run'
   assertExecutionAdmitted(origin)
-  if (reservedRuns >= MAX_CONCURRENT_RUNS) {
-    throw new AgentRunCapacityError()
-  }
   const agent = getAgent(args.agentId)
   if (!agent) {
     throw new Error('Agent not found')
@@ -313,6 +340,16 @@ export async function startAgentRun(args: {
   const prompt = args.prompt.trim()
   if (!prompt) {
     throw new Error('Prompt is required')
+  }
+  // The path only (no mkdir): ADAM is the first side effect of an autonomous run.
+  const cwdPath = resolveAgentRunCwdPath(args.cwd ?? agent.cwd)
+  // Why here: ADAM must admit the run into this folder before any slot is
+  // reserved or anything spawns, so a refusal costs nothing — and the
+  // synchronous capacity check must stay adjacent to the reservation below
+  // (an await between them would reopen the check-then-act race).
+  let admitted = await assertRunAdmitted(origin, cwdPath)
+  if (reservedRuns >= MAX_CONCURRENT_RUNS) {
+    throw new AgentRunCapacityError()
   }
   if (agent.engine === 'codex') {
     // Before any reservation or spawn: Codex cannot enforce restricted profiles.
@@ -325,7 +362,8 @@ export async function startAgentRun(args: {
   // A live run on the SAME (agent, sessionKey) means that conversation thread
   // is mid-turn: the new run must not resume its session (two writers on one
   // transcript) and starts fresh. Different sessionKeys (other channels) run
-  // in parallel, each resuming its own thread. Claimed before any await.
+  // in parallel, each resuming its own thread. Claimed synchronously with the
+  // reservation above (no await between them).
   const sessionKeyBusy = !claimRunSession(runId, agent.id, sessionKey)
   let runAdded = false
   try {
@@ -337,13 +375,13 @@ export async function startAgentRun(args: {
       const codexHome = prepareCodexLaunch(
         agent.accountId ? { accountId: agent.accountId } : undefined
       )
-      const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
+      const resolvedCwd = resolveAgentRunCwd(cwdPath)
       const run: AgentRun = {
         id: runId,
         agentId: agent.id,
         prompt,
         source: args.options?.source ?? 'manual',
-        context: args.options?.context ?? { correlationId: runId },
+        context: withAdmittedContext(args.options?.context, runId, admitted),
         sessionKey,
         startedAt: Date.now(),
         status: 'running'
@@ -366,10 +404,11 @@ export async function startAgentRun(args: {
     const preparation = await args.prepareClaudeLaunch(
       agent.accountId ? { accountId: agent.accountId } : undefined
     )
-    // Why: the crew can be paused while auth preparation is awaited.
-    assertExecutionAdmitted(origin)
+    // Why: the crew can be paused, or ADAM's answer can change, while auth
+    // preparation is awaited. Same order as dispatch_build: pause → ADAM → pause.
+    admitted = await assertRunAdmitted(origin, cwdPath)
     const abortController = new AbortController()
-    const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
+    const resolvedCwd = resolveAgentRunCwd(cwdPath)
     void scheduleSessionWorkspaceBriefRefresh(resolvedCwd)
     const branch = currentGitBranch(resolvedCwd)
     const systemPrompt = buildSystemPrompt(agent)
@@ -476,7 +515,7 @@ export async function startAgentRun(args: {
       agentId: agent.id,
       prompt,
       source: args.options?.source ?? 'manual',
-      context: args.options?.context ?? { correlationId: runId },
+      context: withAdmittedContext(args.options?.context, runId, admitted),
       sessionKey,
       startedAt: Date.now(),
       status: 'running'

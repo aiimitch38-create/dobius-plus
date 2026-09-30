@@ -152,6 +152,23 @@ describe('agent-runs-store outbox byte budget (#77)', () => {
   })
 })
 
+describe('agent-runs-store run context (B2 run-adoption gate)', () => {
+  it('keeps the ADAM context digest across a restart', async () => {
+    const store = await import('./agent-runs-store')
+    store.addStoredAgentRun({
+      ...run('r1', 'running', 1),
+      context: { correlationId: 'c1', projectId: 'dobius-plus', contextDigest: 'pack-digest-1' }
+    })
+    vi.resetModules()
+    const reloaded = await import('./agent-runs-store')
+    expect(reloaded.getStoredAgentRun('r1')?.context).toEqual({
+      correlationId: 'c1',
+      projectId: 'dobius-plus',
+      contextDigest: 'pack-digest-1'
+    })
+  })
+})
+
 describe('agent-runs-store eviction order (#42 review F2)', () => {
   const minute = 60_000
 

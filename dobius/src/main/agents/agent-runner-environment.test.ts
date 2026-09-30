@@ -1,8 +1,16 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resolveAgentRunCwd } from './agent-runner-environment'
+import { resolveAgentRunCwd, resolveAgentRunCwdPath } from './agent-runner-environment'
 
 describe('resolveAgentRunCwd (BUILD-005 #23)', () => {
   let base = ''
@@ -55,5 +63,15 @@ describe('resolveAgentRunCwd (BUILD-005 #23)', () => {
     const file = path.join(base, 'not-a-dir')
     writeFileSync(file, 'x')
     expect(() => resolveAgentRunCwd(file)).toThrow(/cannot be used/)
+  })
+
+  // B2 run-adoption gate: ADAM is asked about the path before the folder exists.
+  it('resolves the path for ADAM admission without creating the folder', () => {
+    const cwd = path.join(base, 'not-yet', 'workspace')
+    expect(resolveAgentRunCwdPath(cwd)).toBe(cwd)
+    expect(resolveAgentRunCwdPath('~/x')).toBe(path.join(os.homedir(), 'x'))
+    expect(existsSync(path.join(base, 'not-yet'))).toBe(false)
+    expect(resolveAgentRunCwd(cwd)).toBe(cwd)
+    expect(statSync(cwd).isDirectory()).toBe(true)
   })
 })

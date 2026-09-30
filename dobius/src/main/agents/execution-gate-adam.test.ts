@@ -98,7 +98,10 @@ afterEach(async () => {
 
 describe('dispatch_build ADAM handshake (BUILD-031, X12)', () => {
   it('admits when ADAM returns a context pack, sending the repo path with bearer auth', async () => {
-    expect(await checkBuildDispatchAdmission(REPO_PATH)).toEqual({ allowed: true })
+    expect(await checkBuildDispatchAdmission(REPO_PATH)).toEqual({
+      allowed: true,
+      contextPack: { projectId: 'dobius-plus', digest: 'abc' }
+    })
     expect(seen).toEqual([
       {
         method: 'POST',
