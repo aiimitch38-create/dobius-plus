@@ -58,6 +58,8 @@ import {
   getCommitDiff
 } from '../git/status'
 import { getHistory } from '../git/history'
+import { emitDobiusActionEvent, newActionContext } from '../agents/dobius-action-events'
+import { USER_ACTOR } from '../../shared/dobius-action-events'
 import {
   cancelGenerateCommitMessageLocal,
   cancelGeneratePullRequestFieldsLocal,
@@ -1312,7 +1314,16 @@ export function registerFilesystemHandlers(
         args.worktreePath,
         worktreePath
       )
-      return commitChanges(worktreePath, args.message, gitOptions)
+      const result = await commitChanges(worktreePath, args.message, gitOptions)
+      if (result.success) {
+        emitDobiusActionEvent({
+          type: 'git.commit.landed',
+          actor: USER_ACTOR,
+          context: newActionContext(),
+          payload: { worktreePath, message: args.message }
+        })
+      }
+      return result
     }
   )
 

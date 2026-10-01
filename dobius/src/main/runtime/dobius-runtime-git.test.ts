@@ -19,14 +19,25 @@ const mocks = vi.hoisted(() => ({
   generatePullRequestFieldsFromContext: vi.fn(),
   resolveCommitMessageSettings: vi.fn(),
   resolveHostedReviewBodyForGeneration: vi.fn(),
-  getSshGitProvider: vi.fn()
+  getSshGitProvider: vi.fn(),
+  commitChanges: vi.fn(),
+  emitDobiusActionEvent: vi.fn()
 }))
 
 vi.mock('../git/status', async () => ({
   ...(await vi.importActual<typeof GitStatusModule>('../git/status')),
   abortMerge: mocks.abortMerge,
   abortRebase: mocks.abortRebase,
+  commitChanges: mocks.commitChanges,
   getStagedCommitContext: mocks.getStagedCommitContext
+}))
+
+vi.mock('../agents/dobius-action-events', () => ({
+  emitDobiusActionEvent: mocks.emitDobiusActionEvent,
+  newActionContext: (fields: Record<string, unknown> = {}) => ({
+    correlationId: 'fresh',
+    ...fields
+  })
 }))
 
 vi.mock('../git/checkout', () => ({
@@ -96,6 +107,60 @@ describe('RuntimeGitCommands', () => {
     mocks.getSshGitProvider.mockReset()
     mocks.checkoutBranch.mockReset()
     mocks.listLocalBranches.mockReset()
+    mocks.commitChanges.mockReset()
+    mocks.emitDobiusActionEvent.mockReset()
+  })
+
+  it('records a landed runtime commit as one git.commit.landed event (B3)', async () => {
+    const worktreePath = mkdtempSync(join(tmpdir(), 'dobius-runtime-git-'))
+    tempDirs.push(worktreePath)
+    const commands = makeCommands(worktreePath)
+    mocks.commitChanges.mockResolvedValue({ success: true })
+
+    await expect(commands.commitRuntimeGit('id:wt-1', 'feat: via rpc')).resolves.toEqual({
+      success: true
+    })
+
+    expect(mocks.emitDobiusActionEvent).toHaveBeenCalledTimes(1)
+    expect(mocks.emitDobiusActionEvent).toHaveBeenCalledWith({
+      type: 'git.commit.landed',
+      actor: 'runtime',
+      context: { correlationId: 'fresh', worktreeId: 'wt-1' },
+      payload: { worktreePath, repoId: 'repo-1', message: 'feat: via rpc' }
+    })
+  })
+
+  it('records nothing for a remote commit through the SSH git provider (B3 slice 1: local only)', async () => {
+    const provider = { commit: vi.fn().mockResolvedValue({ success: true }) }
+    mocks.getSshGitProvider.mockReturnValue(provider)
+    const commands = new RuntimeGitCommands({
+      resolveRuntimeGitTarget: async () => ({
+        worktree: makeWorktree('/remote/repo'),
+        connectionId: 'conn-1'
+      }),
+      getRuntimeSettings: () => ({}) as GlobalSettings
+    })
+
+    await expect(commands.commitRuntimeGit('id:wt-1', 'feat: remote')).resolves.toEqual({
+      success: true
+    })
+
+    expect(provider.commit).toHaveBeenCalledWith('/remote/repo', 'feat: remote')
+    expect(mocks.commitChanges).not.toHaveBeenCalled()
+    expect(mocks.emitDobiusActionEvent).not.toHaveBeenCalled()
+  })
+
+  it('records nothing when the runtime commit fails (B3)', async () => {
+    const worktreePath = mkdtempSync(join(tmpdir(), 'dobius-runtime-git-'))
+    tempDirs.push(worktreePath)
+    const commands = makeCommands(worktreePath)
+    mocks.commitChanges.mockResolvedValue({ success: false, error: 'hook failed' })
+
+    await expect(commands.commitRuntimeGit('id:wt-1', 'feat: via rpc')).resolves.toEqual({
+      success: false,
+      error: 'hook failed'
+    })
+    expect(mocks.emitDobiusActionEvent).not.toHaveBeenCalled()
   })
 
   afterEach(() => {

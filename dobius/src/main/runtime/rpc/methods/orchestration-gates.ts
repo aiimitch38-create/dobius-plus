@@ -4,6 +4,8 @@ import { OptionalFiniteNumber, OptionalString, requiredString } from '../schemas
 import type { GateStatus, OrchestrationDb } from '../../orchestration/db'
 import { Coordinator, clampPollIntervalMs } from '../../orchestration/coordinator'
 import { assertExecutionAdmitted } from '../../../agents/execution-gate'
+import { emitDobiusActionEvent } from '../../../agents/dobius-action-events'
+import { RUNTIME_ACTOR } from '../../../../shared/dobius-action-events'
 
 // Why: the coordinator instance is stored at module scope so orchestration.runStop
 // can signal it to halt. Only one coordinator can run at a time (enforced by
@@ -206,6 +208,17 @@ export const ORCHESTRATION_GATE_METHODS: RpcMethod[] = [
       if (!gate) {
         throw new Error(`Gate not found: ${params.id}`)
       }
+      emitDobiusActionEvent({
+        type: 'task.gate.resolved',
+        actor: RUNTIME_ACTOR,
+        context: { correlationId: gate.task_id },
+        payload: {
+          gateId: gate.id,
+          taskId: gate.task_id,
+          question: gate.question,
+          resolution: params.resolution
+        }
+      })
       return { gate }
     }
   }),

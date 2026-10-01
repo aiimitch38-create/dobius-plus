@@ -1,19 +1,19 @@
 import { appendFile, mkdir, open } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import type { AgentRunEvent } from '../../shared/agents'
+import type { AgentRunContext, AgentRunEvent } from '../../shared/agents'
+import type { DobiusActionEvent } from '../../shared/dobius-action-events'
 import {
   agentRunJournalPath,
   requestAgentRunEventDelivery,
   whenAgentRunEventDeliveryIdle
 } from './agent-run-event-delivery'
 
-export {
-  getAdamEventDeliveryHealth,
-  startAgentRunEventDelivery
-} from './agent-run-event-delivery'
+export { getAdamEventDeliveryHealth, startAgentRunEventDelivery } from './agent-run-event-delivery'
 export type { AdamEventDeliveryHealth, AdamEventDeliveryState } from './agent-run-event-delivery'
 
+// The envelope ADAM's /v1/events/ingest validates (DobiusEventSchema): runId
+// and agentId are required there, so every record carries both.
 type JournalRecord = {
   eventId: string
   eventType: string
@@ -21,12 +21,8 @@ type JournalRecord = {
   sourceTool: 'dobius'
   runId: string
   agentId: string
-  context?: AgentRunEvent['context']
-  payload: {
-    text?: string
-    toolName?: string
-    detail?: string
-  }
+  context?: AgentRunContext
+  payload: Record<string, unknown>
   schemaVersion: 1
 }
 
@@ -84,8 +80,38 @@ function buildRecord(event: AgentRunEvent): JournalRecord {
   }
 }
 
+function buildActionRecord(event: DobiusActionEvent): JournalRecord {
+  const payload: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(event.payload)) {
+    payload[key] = typeof value === 'string' ? truncate(value) : value
+  }
+  return {
+    eventId: randomUUID(),
+    eventType: event.type,
+    occurredAt: new Date(event.ts).toISOString(),
+    sourceTool: 'dobius',
+    // Why: ADAM requires runId/agentId. An action outside a run is keyed by its
+    // correlation id and attributed to whoever performed it.
+    runId: event.runId ?? event.context.correlationId,
+    agentId: event.actor,
+    context: event.context,
+    payload,
+    schemaVersion: 1
+  }
+}
+
 export function appendAgentRunJournalEvent(event: AgentRunEvent): void {
-  const record = buildRecord(event)
+  appendRecord(buildRecord(event))
+}
+
+/** Appends a significant Dobius action to the same journal the run events use. */
+export function appendDobiusActionJournalEvent(event: DobiusActionEvent): void {
+  appendRecord(buildActionRecord(event))
+}
+
+// Why: one append chain for every event type keeps a single writer to the
+// journal, and so a single drainer to ADAM (B3).
+function appendRecord(record: JournalRecord): void {
   const line = `${JSON.stringify(record)}\n`
   // Why: the append chain never waits on the network; delivery is a separate
   // drainer that reads what is already on disk (#78).
