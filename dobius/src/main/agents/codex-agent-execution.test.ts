@@ -85,7 +85,9 @@ describe('unwrapCodexErrorMessage', () => {
 describe('codexMessageFromLine (unchanged behavior, guarding against regressions in this file)', () => {
   it('still extracts the agent_message text', () => {
     expect(
-      codexMessageFromLine('{"type":"item.completed","item":{"type":"agent_message","text":"hello"}}')
+      codexMessageFromLine(
+        '{"type":"item.completed","item":{"type":"agent_message","text":"hello"}}'
+      )
     ).toBe('hello')
   })
 
@@ -137,6 +139,43 @@ afterEach(() => {
   mocks.fakeChild = null
   mocks.command = 'codex'
   vi.mocked(spawn).mockClear()
+})
+
+describe('startCodexAgentProcess admitted-context delivery (B5)', () => {
+  it('merges the delivered env over the spawn env and puts the banner ahead of the user request', () => {
+    const child = new FakeCodexChild()
+    mocks.fakeChild = child
+    startCodexAgentProcess({
+      agent,
+      prompt: 'go',
+      cwd: '/repo',
+      codexHome: '/codex-home',
+      env: { DOBIUS_PROJECT_ID: 'dobius-plus', DOBIUS_CONTEXT_DIGEST: 'pack-digest-1' },
+      contextBanner: 'Dobius context: project=dobius-plus digest=pack-digest-1',
+      maxSteps: 100,
+      onAssistantText: vi.fn(),
+      onFinish: vi.fn(),
+      isCancelled: () => false
+    })
+    const spawnEnv = vi.mocked(spawn).mock.calls[0]?.[2]?.env as Record<string, string | undefined>
+    expect(spawnEnv).toMatchObject({
+      CODEX_HOME: '/codex-home',
+      DOBIUS_PROJECT_ID: 'dobius-plus',
+      DOBIUS_CONTEXT_DIGEST: 'pack-digest-1'
+    })
+    // The inherited process env is still there underneath.
+    expect(spawnEnv.PATH).toBe(process.env.PATH)
+    expect(String(child.stdin.read())).toBe(
+      'Dobius context: project=dobius-plus digest=pack-digest-1\n\nUser request:\ngo'
+    )
+  })
+
+  it('sends the bare prompt and no extra env when nothing was delivered', () => {
+    const { child } = startFake()
+    const spawnEnv = vi.mocked(spawn).mock.calls[0]?.[2]?.env as Record<string, string | undefined>
+    expect(spawnEnv.DOBIUS_PROJECT_ID).toBeUndefined()
+    expect(String(child.stdin.read())).toBe('go')
+  })
 })
 
 describe('startCodexAgentProcess run policy', () => {

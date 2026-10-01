@@ -56,6 +56,11 @@ import {
   type AgentRunProfileId
 } from './agent-runner-dobius-tools'
 import { buildSystemPrompt } from './agent-run-prompt'
+import {
+  deliverAdmittedContext,
+  withContextBanner,
+  type AdmittedContextDelivery
+} from './agent-run-context-delivery'
 import { getDefaultPrepareCodexLaunch, type PrepareCodexLaunch } from './default-codex-launch'
 import { startCodexAgentProcess } from './codex-agent-execution'
 import { assertCodexRunSupported, DEFAULT_CODEX_MAX_STEPS } from './codex-run-policy'
@@ -376,12 +381,16 @@ export async function startAgentRun(args: {
         agent.accountId ? { accountId: agent.accountId } : undefined
       )
       const resolvedCwd = resolveAgentRunCwd(cwdPath)
+      const context = withAdmittedContext(args.options?.context, runId, admitted)
+      const delivery = admitted
+        ? deliverAdmittedContext({ cwd: resolvedCwd, pack: admitted, context, origin })
+        : undefined
       const run: AgentRun = {
         id: runId,
         agentId: agent.id,
         prompt,
         source: args.options?.source ?? 'manual',
-        context: withAdmittedContext(args.options?.context, runId, admitted),
+        context,
         sessionKey,
         startedAt: Date.now(),
         status: 'running'
@@ -395,6 +404,7 @@ export async function startAgentRun(args: {
         prompt,
         resolvedCwd,
         codexHome,
+        delivery,
         model: args.options?.model,
         maxSteps: args.options?.maxTurns ?? DEFAULT_CODEX_MAX_STEPS,
         callbacks: guardRunEndCallbacks(args.options)
@@ -411,6 +421,11 @@ export async function startAgentRun(args: {
     const resolvedCwd = resolveAgentRunCwd(cwdPath)
     void scheduleSessionWorkspaceBriefRefresh(resolvedCwd)
     const branch = currentGitBranch(resolvedCwd)
+    const context = withAdmittedContext(args.options?.context, runId, admitted)
+    // Admitted runs only: a manual Agents-page run has no pack to deliver.
+    const delivery = admitted
+      ? deliverAdmittedContext({ cwd: resolvedCwd, pack: admitted, context, origin })
+      : undefined
     const systemPrompt = buildSystemPrompt(agent)
     const keyedSession = getAgentSessionForKey(agent, sessionKey)
     const resume =
@@ -434,7 +449,7 @@ export async function startAgentRun(args: {
     const allowedTools = buildProfileAllowedTools(profile, configuredTools)
     const isChannelRun = (args.options?.source ?? 'manual') === 'channel'
     const options: Options = {
-      systemPrompt: systemPrompt || undefined,
+      systemPrompt: withContextBanner(systemPrompt, delivery?.banner),
       model: args.options?.model ?? agent.model,
       cwd: resolvedCwd,
       allowedTools,
@@ -444,7 +459,7 @@ export async function startAgentRun(args: {
       allowDangerouslySkipPermissions: permissionMode === 'bypassPermissions' ? true : undefined,
       resume,
       abortController,
-      env: buildRunEnv(preparation),
+      env: { ...buildRunEnv(preparation), ...delivery?.env },
       maxTurns: args.options?.maxTurns ?? 100,
       // Channel chat is cheap now (~$0.20/run on Sonnet with length limits);
       // $1 is ~5x a typical run — real work never dies mid-task, runaways stop.
@@ -515,7 +530,7 @@ export async function startAgentRun(args: {
       agentId: agent.id,
       prompt,
       source: args.options?.source ?? 'manual',
-      context: withAdmittedContext(args.options?.context, runId, admitted),
+      context,
       sessionKey,
       startedAt: Date.now(),
       status: 'running'
@@ -556,6 +571,7 @@ function startCodexRun(args: {
   prompt: string
   resolvedCwd: string
   codexHome: string | null
+  delivery?: AdmittedContextDelivery
   model?: string
   maxSteps: number
   callbacks: GuardedRunEndCallbacks
@@ -565,6 +581,8 @@ function startCodexRun(args: {
     prompt: args.prompt,
     cwd: args.resolvedCwd,
     codexHome: args.codexHome,
+    env: args.delivery?.env,
+    contextBanner: args.delivery?.banner,
     model: args.model,
     maxSteps: args.maxSteps,
     isCancelled: () => getStoredAgentRun(args.runId)?.status === 'cancelled',

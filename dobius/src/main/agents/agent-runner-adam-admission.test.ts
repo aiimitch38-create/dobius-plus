@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -84,6 +84,7 @@ vi.mock('../codex-cli/command', () => ({ resolveClaudeCommand: () => 'claude' })
 
 import { setAdamEndpointSettingReader } from '../adam-connection'
 import { hasLiveAgentRun, startAgentRun } from './agent-runner'
+import { buildRunEnv } from './agent-runner-environment'
 
 const ENV_KEYS = [
   'ADAM_SERVICE_URL',
@@ -124,7 +125,12 @@ function admit(): Reply {
 }
 
 function refuse(code: string): Reply {
-  return json(403, { ok: false, error: 'context handshake failed', code, reason: `because ${code}` })
+  return json(403, {
+    ok: false,
+    error: 'context handshake failed',
+    code,
+    reason: `because ${code}`
+  })
 }
 
 const handshake = {
@@ -399,5 +405,87 @@ describe('startAgentRun ADAM admission (B2 run-adoption gate)', () => {
     ).rejects.toMatchObject({ name: 'ExecutionBlockedError', reason: 'adam-refused' })
     expect(seen).toEqual([handshake])
     expect(mocks.query).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('startAgentRun context delivery (B5)', () => {
+  const contextFile = (cwd: string): string => join(cwd, '.dobius', 'context', 'current.json')
+
+  function checkoutDir(name: string): string {
+    const cwd = join(tempRoot, name)
+    mkdirSync(join(cwd, '.git'), { recursive: true })
+    return cwd
+  }
+
+  function lastQueryOptions(): { env?: Record<string, string>; systemPrompt?: unknown } {
+    return mocks.query.mock.calls.at(-1)?.[0]?.options ?? {}
+  }
+
+  beforeEach(() => {
+    // The run env the preparer built must survive the merge (never clobbered).
+    vi.mocked(buildRunEnv).mockReturnValue({ CLAUDE_CONFIG_DIR: '/cfg' })
+  })
+
+  it("hands ADAM's context to an admitted Claude run: env vars, current.json and a prompt banner", async () => {
+    const cwd = checkoutDir('claude-repo')
+    await startAgentRun({
+      agentId: 'claude-delivery',
+      prompt: 'go',
+      cwd,
+      prepareClaudeLaunch,
+      options: { context: { correlationId: 'corr-1', worktreeId: 'wt-3' } }
+    })
+    expect(seen.at(-1)?.body).toEqual({ worktreePath: cwd, intent: 'launch' })
+    expect(lastQueryOptions().env).toEqual({
+      CLAUDE_CONFIG_DIR: '/cfg',
+      DOBIUS_PROJECT_ID: 'dobius-plus',
+      DOBIUS_CONTEXT_DIGEST: 'pack-digest-1',
+      DOBIUS_WORKTREE_ID: 'wt-3'
+    })
+    // buildSystemPrompt is faked to '' here, so the banner rides the preset.
+    expect(lastQueryOptions().systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: 'Dobius context: project=dobius-plus digest=pack-digest-1'
+    })
+    expect(JSON.parse(readFileSync(contextFile(cwd), 'utf-8'))).toMatchObject({
+      projectId: 'dobius-plus',
+      contextDigest: 'pack-digest-1',
+      worktree: 'wt-3',
+      origin: 'agent-run'
+    })
+    expect(readFileSync(join(cwd, '.gitignore'), 'utf-8')).toBe('.dobius/\n')
+  })
+
+  it("hands ADAM's context to an admitted Codex run through its spawn env and prompt", async () => {
+    mocks.engine = 'codex'
+    const cwd = checkoutDir('codex-repo')
+    await startAgentRun({ agentId: 'codex-delivery', prompt: 'go', cwd, prepareClaudeLaunch })
+    expect(mocks.startCodexAgentProcess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd,
+        env: { DOBIUS_PROJECT_ID: 'dobius-plus', DOBIUS_CONTEXT_DIGEST: 'pack-digest-1' },
+        contextBanner: 'Dobius context: project=dobius-plus digest=pack-digest-1'
+      })
+    )
+    expect(JSON.parse(readFileSync(contextFile(cwd), 'utf-8'))).toMatchObject({
+      projectId: 'dobius-plus',
+      origin: 'agent-run'
+    })
+  })
+
+  it('delivers nothing to a manual Agents-page run (no admitted pack)', async () => {
+    const cwd = checkoutDir('manual-repo')
+    await startAgentRun({
+      agentId: 'manual',
+      prompt: 'go',
+      cwd,
+      prepareClaudeLaunch,
+      options: { origin: 'agents-page', context: { correlationId: 'c', projectId: 'caller-said' } }
+    })
+    expect(lastQueryOptions().env).toEqual({ CLAUDE_CONFIG_DIR: '/cfg' })
+    expect(lastQueryOptions().systemPrompt).toBeUndefined()
+    expect(existsSync(contextFile(cwd))).toBe(false)
+    expect(existsSync(join(cwd, '.gitignore'))).toBe(false)
   })
 })
