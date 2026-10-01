@@ -43,8 +43,10 @@ const {
   getSshFilesystemProviderMock,
   getSshGitProviderMock,
   tryDeleteWslUncPathMock,
-  recordCrashBreadcrumbMock
+  recordCrashBreadcrumbMock,
+  emitDobiusActionEventMock
 } = vi.hoisted(() => ({
+  emitDobiusActionEventMock: vi.fn(),
   handleMock: vi.fn(),
   showSaveDialogMock: vi.fn(),
   fromWebContentsMock: vi.fn(),
@@ -141,6 +143,11 @@ vi.mock('../git/status', () => ({
 
 vi.mock('../git/check-ignored-paths', () => ({
   checkIgnoredPaths: checkIgnoredPathsMock
+}))
+
+vi.mock('../agents/dobius-action-events', () => ({
+  emitDobiusActionEvent: emitDobiusActionEventMock,
+  newActionContext: () => ({ correlationId: 'fresh' })
 }))
 
 vi.mock('../git/worktree', () => ({
@@ -278,7 +285,8 @@ describe('registerFilesystemHandlers', () => {
       cancelGeneratePullRequestFieldsLocalMock,
       getSshFilesystemProviderMock,
       getSshGitProviderMock,
-      tryDeleteWslUncPathMock
+      tryDeleteWslUncPathMock,
+      emitDobiusActionEventMock
     ]) {
       mock.mockReset()
     }
@@ -1446,6 +1454,14 @@ describe('registerFilesystemHandlers', () => {
     ).resolves.toEqual({ success: true })
 
     expect(commitChangesMock).toHaveBeenCalledWith(WORKTREE_FEATURE_PATH, 'feat: ship commit', {})
+    // B3: a landed commit is one normalized event in ADAM's ledger.
+    expect(emitDobiusActionEventMock).toHaveBeenCalledTimes(1)
+    expect(emitDobiusActionEventMock).toHaveBeenCalledWith({
+      type: 'git.commit.landed',
+      actor: 'user',
+      context: { correlationId: 'fresh' },
+      payload: { worktreePath: WORKTREE_FEATURE_PATH, message: 'feat: ship commit' }
+    })
   })
 
   it('returns local commit hook failure payload from git:commit', async () => {
@@ -1459,6 +1475,7 @@ describe('registerFilesystemHandlers', () => {
         message: 'feat: ship commit'
       })
     ).resolves.toEqual({ success: false, error: 'hook failed' })
+    expect(emitDobiusActionEventMock).not.toHaveBeenCalled()
   })
 
   it('generates a local commit message from main-process staged context', async () => {
@@ -2033,6 +2050,8 @@ describe('registerFilesystemHandlers', () => {
 
     expect(sshCommitMock).toHaveBeenCalledWith('/remote/repo', 'feat: remote commit')
     expect(commitChangesMock).not.toHaveBeenCalled()
+    // B3 slice 1 hooks the local path only; the SSH path records nothing yet.
+    expect(emitDobiusActionEventMock).not.toHaveBeenCalled()
   })
 
   it('routes ssh git:remoteCommitUrl through the SSH provider', async () => {

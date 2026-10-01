@@ -8,6 +8,8 @@ import { formatMessageBanner } from '../../orchestration/formatter'
 import { isGroupAddress, resolveGroupAddress } from '../../orchestration/groups'
 import { reconcileLifecycleMessage } from '../../orchestration/lifecycle-reconciliation'
 import { ORCHESTRATION_GATE_METHODS } from './orchestration-gates'
+import { emitDobiusActionEvent } from '../../../agents/dobius-action-events'
+import { RUNTIME_ACTOR } from '../../../../shared/dobius-action-events'
 
 const MESSAGE_TYPES: MessageType[] = [
   'status',
@@ -419,6 +421,18 @@ export const ORCHESTRATION_METHODS: RpcMethod[] = [
       if (!task) {
         throw new Error(`Task not found: ${params.id}`)
       }
+      emitDobiusActionEvent({
+        type: 'task.status.changed',
+        actor: RUNTIME_ACTOR,
+        // Why: the task id is the correlation id so every event of one task lines up in the ledger.
+        context: { correlationId: task.id },
+        payload: {
+          taskId: task.id,
+          status: task.status,
+          title: task.task_title,
+          ...(params.result !== undefined ? { result: params.result } : {})
+        }
+      })
       return { task }
     }
   }),

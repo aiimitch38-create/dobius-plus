@@ -3,6 +3,9 @@ import { BrowserWindow } from 'electron'
 import type { CanUseTool, PermissionResult, PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentDecisionResolution, PendingAgentDecision } from '../../shared/agents'
 import { appendAgentNotification } from './agent-notification-store'
+import { getStoredAgentRun } from './agent-runs-store'
+import { emitDobiusActionEvent, newActionContext } from './dobius-action-events'
+import { DOBIUS_ACTOR, USER_ACTOR } from '../../shared/dobius-action-events'
 
 type PendingResolver = {
   decision: PendingAgentDecision
@@ -52,7 +55,7 @@ function listPendingDecisionValues(): PendingAgentDecision[] {
     .sort((a, b) => a.createdAt - b.createdAt)
 }
 
-function resolveWith(id: string, result: PermissionResult): boolean {
+function resolveWith(id: string, result: PermissionResult, actor: string): boolean {
   const entry = decisions.get(id)
   if (!entry) {
     return false
@@ -69,6 +72,21 @@ function resolveWith(id: string, result: PermissionResult): boolean {
         ? `Approved ${entry.decision.toolName}`
         : `Resolved ${entry.decision.toolName}: ${result.message}`,
     decisionId: entry.decision.id
+  })
+  const { decision } = entry
+  emitDobiusActionEvent({
+    type: 'agent.decision.resolved',
+    actor,
+    runId: decision.runId,
+    // Why: the run's own context keeps the decision on the run's correlation id in the ledger.
+    context: getStoredAgentRun(decision.runId)?.context ?? newActionContext(),
+    payload: {
+      decisionId: decision.id,
+      agentId: decision.agentId,
+      toolName: decision.toolName,
+      behavior: result.behavior,
+      ...(result.behavior === 'deny' ? { message: result.message } : {})
+    }
   })
   return true
 }
@@ -109,11 +127,15 @@ export function createAgentCanUseTool(context: DecisionQueueContext): CanUseTool
       options.signal.addEventListener(
         'abort',
         () => {
-          resolveWith(id, {
-            behavior: 'deny',
-            message: 'Run stopped before the permission request was answered',
-            interrupt: true
-          })
+          resolveWith(
+            id,
+            {
+              behavior: 'deny',
+              message: 'Run stopped before the permission request was answered',
+              interrupt: true
+            },
+            DOBIUS_ACTOR
+          )
         },
         { once: true }
       )
@@ -141,35 +163,47 @@ export async function resolveAgentDecision(
   }
   const { decision, suggestions } = entry
   if (resolution.action === 'approve') {
-    resolveWith(decision.id, { behavior: 'allow', updatedInput: { ...decision.input } })
+    resolveWith(decision.id, { behavior: 'allow', updatedInput: { ...decision.input } }, USER_ACTOR)
     return { ok: true }
   }
   if (resolution.action === 'approveEdited') {
-    resolveWith(decision.id, {
-      behavior: 'allow',
-      updatedInput: editedInput(decision, resolution.payload?.input)
-    })
+    resolveWith(
+      decision.id,
+      {
+        behavior: 'allow',
+        updatedInput: editedInput(decision, resolution.payload?.input)
+      },
+      USER_ACTOR
+    )
     return { ok: true }
   }
   if (resolution.action === 'alwaysAllow') {
-    resolveWith(decision.id, {
-      behavior: 'allow',
-      updatedInput: { ...decision.input },
-      updatedPermissions: suggestions?.length ? suggestions : undefined
-    })
+    resolveWith(
+      decision.id,
+      {
+        behavior: 'allow',
+        updatedInput: { ...decision.input },
+        updatedPermissions: suggestions?.length ? suggestions : undefined
+      },
+      USER_ACTOR
+    )
     return suggestions?.length
       ? { ok: true }
       : { ok: true, note: 'The SDK did not provide an always-allow permission suggestion.' }
   }
   if (resolution.action === 'deny') {
-    resolveWith(decision.id, { behavior: 'deny', message: 'Denied by user' })
+    resolveWith(decision.id, { behavior: 'deny', message: 'Denied by user' }, USER_ACTOR)
     return { ok: true }
   }
   if (resolution.action === 'respond') {
-    resolveWith(decision.id, {
-      behavior: 'deny',
-      message: resolution.payload?.text?.trim() || 'Denied by user'
-    })
+    resolveWith(
+      decision.id,
+      {
+        behavior: 'deny',
+        message: resolution.payload?.text?.trim() || 'Denied by user'
+      },
+      USER_ACTOR
+    )
     return { ok: true }
   }
   if (resolution.action === 'bypassRun') {
@@ -181,7 +215,7 @@ export async function resolveAgentDecision(
       throw new Error('Bypass is not available for this run')
     }
     await bypassRunHandler(decision.runId)
-    resolveWith(decision.id, { behavior: 'allow', updatedInput: { ...decision.input } })
+    resolveWith(decision.id, { behavior: 'allow', updatedInput: { ...decision.input } }, USER_ACTOR)
     return { ok: true }
   }
   throw new Error('Unknown decision action')
@@ -192,6 +226,6 @@ export function denyPendingDecisionsForRun(runId: string, message: string): void
     .filter((decision) => decision.runId === runId)
     .map((decision) => decision.id)
   for (const id of decisionIds) {
-    resolveWith(id, { behavior: 'deny', message, interrupt: true })
+    resolveWith(id, { behavior: 'deny', message, interrupt: true }, DOBIUS_ACTOR)
   }
 }

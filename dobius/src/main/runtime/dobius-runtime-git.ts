@@ -46,6 +46,8 @@ import {
   stageFile,
   unstageFile
 } from '../git/status'
+import { emitDobiusActionEvent, newActionContext } from '../agents/dobius-action-events'
+import { RUNTIME_ACTOR } from '../../shared/dobius-action-events'
 import { checkoutBranch, listLocalBranches } from '../git/checkout'
 import type { RuntimeGitCheckoutResult, RuntimeGitLocalBranches } from '../../shared/runtime-types'
 import { getHistory as getGitHistory } from '../git/history'
@@ -570,7 +572,20 @@ export class RuntimeGitCommands {
       }
       return provider.commit(target.worktree.path, message)
     }
-    return commitChanges(target.worktree.path, message, localGitOptionsForTarget(target))
+    const result = await commitChanges(
+      target.worktree.path,
+      message,
+      localGitOptionsForTarget(target)
+    )
+    if (result.success) {
+      emitDobiusActionEvent({
+        type: 'git.commit.landed',
+        actor: RUNTIME_ACTOR,
+        context: newActionContext({ worktreeId: target.worktree.id }),
+        payload: { worktreePath: target.worktree.path, repoId: target.worktree.repoId, message }
+      })
+    }
+    return result
   }
 
   async generateRuntimeCommitMessage(
