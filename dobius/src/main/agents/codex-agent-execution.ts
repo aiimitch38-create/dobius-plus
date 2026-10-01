@@ -5,8 +5,12 @@ import { getSpawnArgsForWindows } from '../win32-utils'
 import { buildSystemPrompt } from './agent-run-prompt'
 import { codexToolStepFromLine } from './codex-run-policy'
 
-function codexPrompt(agent: CustomAgent, prompt: string): string {
-  const systemPrompt = buildSystemPrompt(agent).trim()
+function codexPrompt(agent: CustomAgent, prompt: string, contextBanner?: string): string {
+  // Codex has no system-prompt option: the agent's prompt and the context
+  // banner (B5) share the one prefix ahead of the user request.
+  const systemPrompt = [buildSystemPrompt(agent).trim(), contextBanner ?? '']
+    .filter(Boolean)
+    .join('\n\n')
   return systemPrompt ? `${systemPrompt}\n\nUser request:\n${prompt}` : prompt
 }
 
@@ -67,6 +71,10 @@ export function startCodexAgentProcess(args: {
   prompt: string
   cwd: string
   codexHome: string | null
+  /** Extra env for the spawned process (ADAM's admitted context); merged over process.env. */
+  env?: Record<string, string>
+  /** One line of admitted-run context, placed with the agent's own prompt. */
+  contextBanner?: string
   /** Per-run model override; absent = the agent's configured model. */
   model?: string
   /** Tool steps allowed before the run is stopped (Codex has no turn option of its own). */
@@ -92,7 +100,8 @@ export function startCodexAgentProcess(args: {
   commandArgs.push('-')
   const environment = {
     ...process.env,
-    ...(args.codexHome ? { CODEX_HOME: args.codexHome } : {})
+    ...(args.codexHome ? { CODEX_HOME: args.codexHome } : {}),
+    ...args.env
   }
   // Why: a GUI-launched app has a minimal PATH, so a bare `codex` spawn fails
   // with ENOENT even when Codex is installed under a version manager.
@@ -192,6 +201,6 @@ export function startCodexAgentProcess(args: {
         : stderr.trim() || lastError || stdinError || `Codex exited with code ${code}`
     )
   })
-  child.stdin?.end(codexPrompt(args.agent, args.prompt))
+  child.stdin?.end(codexPrompt(args.agent, args.prompt, args.contextBanner))
   return child
 }
