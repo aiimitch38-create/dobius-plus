@@ -73,3 +73,14 @@ test('does not duplicate a server whose termination is delayed by disk IO', asyn
   await supervisor.tick()
   assert.equal(state.starts, 2)
 })
+
+test('waits for an inherited/manual startup before launching a replacement', async () => {
+  const { state, supervisor } = fixture()
+  state.mounted = true
+  supervisor.starting = () => true
+  await supervisor.tick()
+  assert.equal(state.starts, 0)
+  supervisor.starting = () => false
+  await supervisor.tick()
+  assert.equal(state.starts, 1)
+})

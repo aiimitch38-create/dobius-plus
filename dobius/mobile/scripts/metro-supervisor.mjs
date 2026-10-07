@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { existsSync, openSync, closeSync } from 'node:fs'
-import { spawn } from 'node:child_process'
+import { spawn, execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
 // This file is installed on the internal drive so launchd can wait for Storage.
 export class MetroSupervisor {
-  constructor({ available, healthy, start, stop, alive, now = Date.now }) {
-    Object.assign(this, { available, healthy, start, stop, alive, now })
+  constructor({ available, healthy, start, stop, alive, starting = () => false, now = Date.now }) {
+    Object.assign(this, { available, healthy, start, stop, alive, starting, now })
     this.child = null
     this.retiring = null
     this.startedAt = 0
@@ -42,6 +42,10 @@ export class MetroSupervisor {
       }
       return
     }
+    // Also respect startup inherited from a previous supervisor or a manual run.
+    if (this.starting()) {
+      return
+    }
     this.child = this.start()
     this.startedAt = this.now()
     this.failures = 0
@@ -64,6 +68,8 @@ async function main() {
   const endpoint = 'http://127.0.0.1:8081/status'
   const supervisor = new MetroSupervisor({
     available: () => existsSync(`${mobileDir}/node_modules/.bin/expo`),
+    starting: () => execFileSync('/bin/ps', ['-axo', 'command'], { encoding: 'utf8' })
+      .split('\n').some((line) => /^\S*node\s+.*expo\/bin\/cli\s+start\b/.test(line.trim()) && /--port\s+8081\b/.test(line)),
     alive: (child) => {
       if (!child.pid) {
         return false
