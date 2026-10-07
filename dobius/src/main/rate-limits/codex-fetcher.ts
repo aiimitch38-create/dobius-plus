@@ -409,7 +409,7 @@ async function fetchViaRpc(options?: FetchCodexRateLimitsOptions): Promise<Provi
     let resolved = false
     let rpcId = 0
 
-    const codexArgs = ['-s', 'read-only', '-a', 'untrusted', 'app-server']
+    const codexArgs = ['-s', 'read-only', '-a', 'never', 'app-server']
     const wslCodex = options?.codexHomePath
       ? buildWslCodexCommand(options.codexHomePath, codexArgs)
       : null

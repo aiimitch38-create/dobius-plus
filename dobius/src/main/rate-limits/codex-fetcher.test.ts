@@ -542,7 +542,7 @@ describe('fetchCodexRateLimits', () => {
       expect(bashCommand).toContain(
         "export CODEX_HOME='/home/alice/.local/share/dobius/account/home'"
       )
-      expect(bashCommand).toContain("exec codex '-s' 'read-only' '-a' 'untrusted' 'app-server'")
+      expect(bashCommand).toContain("exec codex '-s' 'read-only' '-a' 'never' 'app-server'")
       expect(spawnOptions).toEqual(
         expect.objectContaining({
           cwd: expect.stringContaining('rate-limit-pty-cwd'),
