@@ -7,6 +7,11 @@
 
 <!-- New lessons are appended below this line -->
 
+## 2026-10-07 — A yielded git add still owns the index lock
+- Tried: invoke git commit after git add returned a running process session, twice during slow external-drive IO.
+- Failed because: the preceding git add had not finished and still owned index.lock. A tool return containing a session ID is not a completed command, even when no output is visible.
+- Works instead: wait for git add's actual exit 0 before starting the dependent commit. Do not delete index.lock while that process is running. The commits succeeded after waiting for the owner to finish.
+
 ## 2026-10-07 — Standalone Electron capture benchmark did not reach measurement
 - Tried: launch cached Electron 42.3.3 with the display benchmark; repeat with NODE_OPTIONS, NODE_PATH and ELECTRON_RUN_AS_NODE removed.
 - Failed because: neither reached benchmark output during observation. A process sample showed Electron bootstrap/embedded preload execution, not a measured capture loop. This does not establish a screen permission or performance result.
