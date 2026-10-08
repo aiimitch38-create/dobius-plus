@@ -5,6 +5,7 @@ import { colors } from '../theme/mobile-theme'
 import { TERMINAL_TEXT_SCALES } from '../storage/preferences'
 import { TERMINAL_PATH_TAP_JS } from './terminal-path-tap-injected'
 import { XTERM_ENGINE_CSS, XTERM_ENGINE_JS } from './terminal-webview-engine.generated'
+import { TERMINAL_KEYBOARD_METRICS_JS } from './terminal-webview-keyboard-metrics-injected'
 import { TERMINAL_REFLOW_JS } from './terminal-webview-reflow-injected'
 import { TERMINAL_TAP_DISPATCH_JS } from './terminal-webview-tap-dispatch-injected'
 import { URL_TAP_WEBVIEW_JS } from './terminal-webview-url-tap'
@@ -281,6 +282,7 @@ window.onerror = function(msg) {
         if (cols < MIN_FIT_COLS) return;
         var rows = Math.max(8, Math.floor(window.innerHeight / cellH));
         term.resize(cols, rows);
+        emitKeyboardAvoidanceMetrics();
       }
       applyFitScale('text-scale');
     });
@@ -707,6 +709,7 @@ window.onerror = function(msg) {
       sgrMouseMode: false,
       sgrMousePixelsMode: false
     };
+    resetKeyboardAvoidanceMetrics();
     var replayData = normalizeInitialData(initialData);
     // Why: normalizeInitialData can discard pre-alt-screen bytes. Keep the
     // mirrored modes aligned with exactly what this mobile xterm replays.
@@ -813,6 +816,7 @@ window.onerror = function(msg) {
     if (!term) return;
     initRows = rows || initRows;
     term.resize(cols || term.cols, rows || term.rows);
+    emitKeyboardAvoidanceMetrics();
     applyFitScale('resize-msg');
     notify({ type: 'ready', cols: cols, rows: rows });
   }
@@ -1109,17 +1113,7 @@ window.onerror = function(msg) {
     sgrMousePixelsMode: false
   };
 
-  function emitKeyboardAvoidanceMetrics() {
-    if (!term) return;
-    var alt = false;
-    try { alt = term.buffer && term.buffer.active && term.buffer.active.type === 'alternate'; } catch (e) {}
-    notify({
-      type: 'keyboard-avoidance-metrics',
-      cursorY: term.buffer && term.buffer.active ? term.buffer.active.cursorY : 0,
-      rows: term.rows || 0,
-      altScreen: alt
-    });
-  }
+  ${TERMINAL_KEYBOARD_METRICS_JS}
 
   function attachTermObservers() {
     if (!term) return;
