@@ -7,6 +7,16 @@
 
 <!-- New lessons are appended below this line -->
 
+## 2026-10-07 — Standalone Electron capture benchmark did not reach measurement
+- Tried: launch cached Electron 42.3.3 with the display benchmark; repeat with NODE_OPTIONS, NODE_PATH and ELECTRON_RUN_AS_NODE removed.
+- Failed because: neither reached benchmark output during observation. A process sample showed Electron bootstrap/embedded preload execution, not a measured capture loop. This does not establish a screen permission or performance result.
+- Works instead: stop repeating identical launches, retain aggregate-only benchmark code, and diagnose runtime startup separately. Native display-only prototype preflight reliably returned permission not granted (exit 2); request the user's macOS permission setup before a real measurement. Phase 1 remains gated until actual benchmark evidence exists.
+
+## 2026-10-07 — Metro startup after Storage reconnect can block on filesystem access
+- Tried: start Metro under a login LaunchAgent with Node 26, then the declared Node 24 toolchain after Storage remounted.
+- Failed because: neither startup had reached HTTP listening during observation; a process sample of the Node 24 Expo process showed its main thread waiting in `__open` while reading package metadata. Processes were in macOS `U` (uninterruptible filesystem wait). TCC logs confirmed removable-volume consent for Node; permission denial was not established as the remaining cause.
+- Works instead: keep the advertised Tailscale URL `http://100.94.52.53:8081`, retain the recovery launcher internally, allow cold startup time, and wait for owned process groups to terminate before replacing them. Pause competing dependency/extraction IO while diagnosing. Do not claim the HTTP server is healthy from launchd's running state; require `/status` to answer. Do not repeatedly spawn duplicates or repair/eject the user's drive without evidence.
+
 ### [Deployment] — 2026-04-30
 - **MISTAKE**: Released v1.0.3 with the auto-updater wired up, but Brett's app silently failed to update. The bug: `latest-mac.yml` referenced `dobius-plus-1.0.3-arm64-mac.zip` while the actual uploaded file was `Dobius+-1.0.3-arm64-mac.zip`. The download URL 404'd, so `electron-updater` aborted silently with no user-visible error.
 - **FIX**: `electron-builder` defaults the `artifactName` to use `${productName}` ("Dobius+") for filenames, but writes `latest-mac.yml` URLs using `${name}` ("dobius-plus") from `package.json`. They never match unless you pin `artifactName` explicitly. Added to `electron-builder.yml`:
@@ -347,3 +357,8 @@ that is one plain command and passes every time.
 - **Still true and worth keeping**: a dropped stash IS recoverable while unreachable — `git fsck --unreachable`, then `git update-ref refs/recovered/<slug> <sha>` to pin it before `gc` prunes. A `git stash -u` writes **three** commits (`WIP on …`, `index on …`, `untracked files on …`); new files live only in the third, so recover them with `git checkout <untracked-sha> -- <paths>`. Good technique; I just applied it to a problem that did not exist.
 - **Also verified**: committing with explicit pathspecs (`git add -- a b c` && `git commit -- a b c`) genuinely does keep other agents' dirty files out of your commit. That part held under concurrent editing.
 - **CONTEXT**: Related to the 2026-08-25 NOTES rule about never `git checkout <my-branch>` in a shared tree — same root cause (shared repo state), same silent blast radius. And if you do restore someone's work into a shared tree, do not commit it on their behalf: check whether they already committed it somewhere first.
+
+## 2026-10-07 — Metro supervisor killed Metro mid-bundle (phone bundle "empty reply", curl exit 52)
+- Tried: launchd supervisor (`mobile/scripts/metro-supervisor.mjs`) restarting Metro after 3 failed 3 s `/status` checks.
+- Failed because: Metro stops answering `/status` while it bundles (~2–3 min cold), so the timeouts looked like a crash; every cold bundle was killed and the phone never loaded.
+- Works instead: treat a `TimeoutError` as healthy/busy; only a refused/failed connection counts as dead (fixed in metro-supervisor.mjs, tests 5/5). Separately: a Metro process in ps state `U` with no kernel disk errors after an external-drive reconnect is blocked on I/O — check for a macOS "removable volume" access prompt before blaming the drive (unconfirmed as of writing).
