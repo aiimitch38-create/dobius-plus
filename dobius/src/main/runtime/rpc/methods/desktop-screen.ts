@@ -26,6 +26,7 @@ function owner(ctx: RpcContext): ScreenOwner {
   return {
     deviceId: ctx.clientId,
     connectionId: ctx.connectionId,
+    requestId: ctx.requestId,
     signal: ctx.signal,
     sendBinary: ctx.sendBinary
   }
@@ -44,7 +45,7 @@ export const DESKTOP_SCREEN_METHODS: RpcAnyMethod[] = [
   }),
   defineMethod({
     name: 'screen.stream.unsubscribe',
-    params: ScreenReferenceSchema,
+    params: z.union([ScreenReferenceSchema, z.object({ requestId: z.string().min(1).max(128) }).strict()]),
     handler: (params, ctx) => endpoint(ctx).unsubscribe(params, owner(ctx))
   }),
   defineMethod({

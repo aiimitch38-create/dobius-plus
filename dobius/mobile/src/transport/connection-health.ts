@@ -27,6 +27,15 @@ export type ConnectionVerdict =
   | { kind: 'auth-failed'; label: string }
   | { kind: 'update-required'; label: string }
 
+export function isErrorVerdict(v: ConnectionVerdict): boolean {
+  return (
+    v.kind === 'warning' ||
+    v.kind === 'unreachable' ||
+    v.kind === 'auth-failed' ||
+    v.kind === 'update-required'
+  )
+}
+
 // Why: the rpc-client's lastConnectedAt is a one-shot timestamp; we have
 // to recompute "are we currently stale" against now() each render.
 // Centralized so home + host-detail show identical verdicts.

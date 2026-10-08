@@ -31,6 +31,16 @@ import {
 import { describeSocketEvent } from './socket-event-debug'
 import { isRpcResponse } from './rpc-response-shape'
 import { websocketPayloadToUint8 } from './websocket-payload-bytes'
+import { DesktopScreenStreamRouting } from './desktop-screen-stream-routing'
+import type { RpcClient, SendRequestOptions } from './rpc-client-contract'
+export type { RpcClient } from './rpc-client-contract'
+import {
+  isBrowserScreencastReadyResult,
+  isTerminalSubscribedResult,
+  type StreamRequest,
+  type StreamingListener,
+  type SubscribeOptions
+} from './rpc-stream-subscription'
 
 type PendingRequest = {
   resolve: (response: RpcResponse) => void
@@ -41,61 +51,6 @@ type ConnectWaiter = {
   resolve: () => void
   reject: (error: Error) => void
   timeout: ReturnType<typeof setTimeout> | null
-}
-
-type SendRequestOptions = {
-  timeoutMs?: number
-}
-
-type SubscribeOptions = {
-  onBinaryFrame?: (frame: BrowserScreencastFrame) => void
-}
-
-type StreamingListener = (result: unknown) => void
-
-type StreamRequest = {
-  method: string
-  params: unknown
-  listener: StreamingListener
-  onBinaryFrame?: (frame: BrowserScreencastFrame) => void
-  subscriptionId?: string
-  cancelled?: boolean
-  sent?: boolean
-}
-
-export type RpcClient = {
-  sendRequest: (
-    method: string,
-    params?: unknown,
-    options?: SendRequestOptions
-  ) => Promise<RpcResponse>
-  subscribe: (
-    method: string,
-    params: unknown,
-    onData: StreamingListener,
-    options?: SubscribeOptions
-  ) => () => void
-  updateTerminalSubscriptionViewport: (
-    terminal: string,
-    viewport: { cols: number; rows: number }
-  ) => void
-  getState: () => ConnectionState
-  // Why: a pairing QR token is single-use; the desktop swaps in a new one on
-  // first login. Pairing screens persist this, not the scanned token.
-  getDeviceToken: () => string
-  // Why: UI escalates "Reconnecting…" to "Can't connect" once attempts cross
-  // a threshold. 0 means never failed; counter is reset on successful open.
-  getReconnectAttempt: () => number
-  // Why: timestamp (ms epoch) of the last time we reached 'connected'.
-  // null = never connected since the client was created. Used by the UI
-  // to distinguish "host moved/never reachable" from "transient blip".
-  getLastConnectedAt: () => number | null
-  onStateChange: (listener: (state: ConnectionState) => void) => () => void
-  // Why: app-resume hook. Android/iOS can kill the TCP path or park the
-  // reconnect loop while the app is backgrounded; callers invoke this on
-  // AppState 'active' so the session recovers without an app restart.
-  notifyForeground: () => void
-  close: () => void
 }
 
 // Why: tiered backoff. The first four entries (500ms→4s) keep
@@ -213,6 +168,23 @@ export function connect(
 
   const pending = new Map<string, PendingRequest>()
   const streamListeners = new Map<string, StreamRequest>()
+  const desktopScreens = new DesktopScreenStreamRouting(
+    (session) =>
+      sendEncrypted({
+        id: nextId(),
+        deviceToken,
+        method: 'screen.stream.unsubscribe',
+        params: { subscriptionId: session.subscriptionId, generation: session.generation }
+      }),
+    (id) => removeStreamListener(id),
+    (requestId) =>
+      sendEncrypted({
+        id: nextId(),
+        deviceToken,
+        method: 'screen.stream.unsubscribe',
+        params: { requestId }
+      })
+  )
   const terminalStreamListeners = new Map<number, StreamingListener>()
   const terminalStreamIdsByRequest = new Map<string, Set<number>>()
   const terminalSnapshots = new Map<number, TerminalSnapshotState>()
@@ -619,10 +591,17 @@ export function connect(
       const isStreaming = response.ok && (response as RpcSuccess).streaming === true
 
       if (isStreaming) {
+        if (response.ok && desktopScreens.ready(response.id, response.result)) {
+          return
+        }
         const stream = streamListeners.get(response.id)
         if (stream && response.ok) {
           const result = (response as RpcSuccess).result
-          if (isBrowserScreencastReadyResult(result)) {
+          if (stream.method === 'screen.stream') {
+            desktopScreens.event(response.id, result)
+            return
+          }
+          if (stream.method === 'browser.screencast' && isBrowserScreencastReadyResult(result)) {
             stream.subscriptionId = result.subscriptionId
             if (stream.cancelled) {
               sendBrowserScreencastUnsubscribe(result.subscriptionId)
@@ -958,6 +937,7 @@ export function connect(
   }
 
   function removeStreamListener(id: string): void {
+    desktopScreens.remove(id)
     const stream = streamListeners.get(id)
     streamListeners.delete(id)
     if (activeBrowserScreencastRequestId === id) {
@@ -980,6 +960,8 @@ export function connect(
   }
 
   function markStreamsForReplay(): void {
+    // Viewing never replays across reconnect, even while other subscriptions resume.
+    desktopScreens.disconnected()
     for (const [id, stream] of streamListeners) {
       stream.sent = false
       resetTerminalStreamRoutingForRequest(id)
@@ -1034,6 +1016,10 @@ export function connect(
   }
 
   function handleBinaryFrame(bytes: Uint8Array): void {
+    if (desktopScreens.binary(bytes)) {
+      recordValidatedInboundTraffic()
+      return
+    }
     const browserFrame = decodeBrowserScreencastFrame(bytes)
     if (browserFrame) {
       recordValidatedInboundTraffic()
@@ -1156,6 +1142,16 @@ export function connect(
         onBinaryFrame: options?.onBinaryFrame
       }
       streamListeners.set(id, stream)
+      if (method === 'screen.stream') {
+        for (const [previousId, previous] of streamListeners) {
+          if (previousId !== id && previous.method === 'screen.stream') {
+            previous.cancelled = true
+            previous.listener = () => {}
+            desktopScreens.cancel(previousId, previous.sent === true)
+          }
+        }
+        desktopScreens.register(id, onData, options?.onDesktopFrame)
+      }
       if (method === 'browser.screencast') {
         if (activeBrowserScreencastRequestId && activeBrowserScreencastRequestId !== id) {
           disposeBrowserScreencastStream(activeBrowserScreencastRequestId)
@@ -1186,6 +1182,12 @@ export function connect(
 
       return () => {
         const stream = streamListeners.get(id)
+        if (stream?.method === 'screen.stream') {
+          stream.cancelled = true
+          stream.listener = () => {}
+          desktopScreens.cancel(id, stream.sent === true)
+          return
+        }
         if (stream?.method === 'browser.screencast') {
           disposeBrowserScreencastStream(id)
           return
@@ -1283,6 +1285,7 @@ export function connect(
     },
 
     close() {
+      desktopScreens.disconnected()
       intentionallyClosed = true
       if (reconnectTimer) {
         clearTimeout(reconnectTimer)
@@ -1303,26 +1306,4 @@ export function connect(
       rejectAllPending('Client closed')
     }
   }
-}
-
-function isTerminalSubscribedResult(
-  value: unknown
-): value is { type: 'subscribed'; streamId: number } {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    (value as { type?: unknown }).type === 'subscribed' &&
-    typeof (value as { streamId?: unknown }).streamId === 'number'
-  )
-}
-
-function isBrowserScreencastReadyResult(
-  value: unknown
-): value is { type: 'ready'; subscriptionId: string } {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    (value as { type?: unknown }).type === 'ready' &&
-    typeof (value as { subscriptionId?: unknown }).subscriptionId === 'string'
-  )
 }

@@ -3,9 +3,11 @@ import type { DesktopScreenSession } from '../../../shared/desktop-screen-protoc
 
 export type ScreenStreamParams = { fps: number; width: number }
 export type ScreenReference = Pick<DesktopScreenSession, 'subscriptionId' | 'generation'>
+export type ScreenCancelReference = ScreenReference | { requestId: string }
 export type ScreenOwner = {
   deviceId: string
   connectionId: string
+  requestId?: string
   signal?: AbortSignal
   sendBinary?: RpcContext['sendBinary']
 }
@@ -29,7 +31,7 @@ export type DesktopScreenEndpoint = {
     owner: ScreenOwner,
     emit: (event: ScreenEvent) => void
   ): Promise<void>
-  unsubscribe(ref: ScreenReference, owner: ScreenOwner): { unsubscribed: true }
+  unsubscribe(ref: ScreenCancelReference, owner: ScreenOwner): { unsubscribed: true }
   renew(ref: ScreenReference, owner: ScreenOwner): { renewed: true }
   stop(reason: string): void
   revokeDevice(deviceId: string): void

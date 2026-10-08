@@ -377,3 +377,8 @@ that is one plain command and passes every time.
 - Tried: asserting incomplete screen endpoint/runtime fixtures directly as their production types, and changing dispatcher sendBinary's void callback to a boolean-or-void return.
 - Failed because: two typechecks exposed insufficient fixture overlap and existing terminal-test callbacks that return Array.push's number under a void callback contract.
 - Works instead: satisfy the complete screen endpoint type; explicitly mark the deliberately minimal runtime test double through unknown. Preserve the existing dispatcher callback contract: JavaScript already forwards the real sender and its return value unchanged to RpcContext, whose capture-facing type supports congestion results. Do not repeat unchanged failing checks.
+
+## 2026-10-07 — Mobile feature hooks hit per-file max-lines ceilings
+- Tried: adding desktop subscription hooks and labeled navigation inside the existing large RPC client and host/home screens; the first extraction still exceeded two file budgets after formatting.
+- Failed because: these files have tight per-file ceilings, and formatter-expanded imports/JSX count toward them.
+- Works instead: extract the public RPC contract, subscription types/result guards, desktop navigation controls and host screen props into focused modules. Reuse connection verdict classification from its domain module. Never raise or disable max-lines to fit a feature.

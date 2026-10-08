@@ -215,4 +215,19 @@ describe('desktop screen consented session safety', () => {
     expect(f.stop).toHaveBeenCalledOnce()
     expect(f.sendBinary).not.toHaveBeenCalled()
   })
+  it('cancels pending approval by original request ID only for its device and connection', async () => {
+    const f = fixture()
+    f.owner.requestId = 'original-request'
+    f.approve.mockImplementation(() => new Promise<boolean>(() => {}))
+    const task = f.stream()
+    const rejection = expect(task).rejects.toMatchObject({ code: 'screen_not_authorized' })
+    await f.ready()
+    for (const owner of [{ ...f.owner, deviceId: 'other' }, { ...f.owner, connectionId: 'other' }]) {
+      expect(() => f.service.unsubscribe({ requestId: 'original-request' }, owner)).toThrow('Start viewing again')
+    }
+    f.service.unsubscribe({ requestId: 'original-request' }, f.owner)
+    await rejection
+    expect(f.start).not.toHaveBeenCalled()
+    expect(f.events).toEqual([])
+  })
 })

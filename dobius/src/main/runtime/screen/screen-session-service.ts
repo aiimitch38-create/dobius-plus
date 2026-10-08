@@ -10,6 +10,7 @@ import type {
   ScreenEvent,
   ScreenOwner,
   ScreenReference,
+  ScreenCancelReference,
   ScreenStreamParams
 } from './screen-contracts'
 
@@ -277,8 +278,14 @@ export class ScreenSessionService implements DesktopScreenEndpoint {
     }
     return session
   }
-  unsubscribe(ref: ScreenReference, owner: ScreenOwner): { unsubscribed: true } {
-    this.owned(ref, owner)
+  unsubscribe(ref: ScreenCancelReference, owner: ScreenOwner): { unsubscribed: true } {
+    if ('requestId' in ref) {
+      const session = this.active
+      if (!session || session.owner.requestId !== ref.requestId || session.owner.deviceId !== owner.deviceId ||
+          session.owner.connectionId !== owner.connectionId) throw new DesktopScreenError('screen_not_authorized')
+    } else {
+      this.owned(ref, owner)
+    }
     this.stop('stopped')
     return { unsubscribed: true }
   }

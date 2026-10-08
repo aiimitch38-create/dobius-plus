@@ -178,6 +178,10 @@ privacy or receiver feature requires a native module.
 
 Screen binary routing and screen-specific unsubscribe in `rpc-client.ts`.
 Cancel-before-ready keeps bounded tombstone; late ready unsubscribes immediately.
+Owner-checked unsubscribe also accepts the original stream request ID, so blur or
+background can cancel pending approval before the subscription UUID arrives.
+The server matches the stored request, device and connection; tombstones remain
+a fallback for an in-flight ready response. This adds no new grant or RPC method.
 Dead-connection tombstones clear on close. Never automatically replay desktop
 subscriptions; reconnect blanks pixels and requires explicit start/new approval.
 Stop stays Stopped until explicit start.

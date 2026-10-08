@@ -29,6 +29,7 @@ import {
   PanelLeftClose
 } from 'lucide-react-native'
 import type { RpcClient } from '../../../src/transport/rpc-client'
+import { DesktopHostButton } from '../../../src/desktop/DesktopNavigationButtons'
 import { loadHosts, updateLastConnected, removeHost } from '../../../src/transport/host-store'
 import {
   useHostClient,
@@ -37,10 +38,7 @@ import {
   useReconnectAttempt,
   useLastConnectedAt
 } from '../../../src/transport/client-context'
-import {
-  classifyConnection,
-  type ConnectionVerdict
-} from '../../../src/transport/connection-health'
+import { classifyConnection, isErrorVerdict } from '../../../src/transport/connection-health'
 import type { RpcSuccess } from '../../../src/transport/types'
 import { StatusDot } from '../../../src/components/StatusDot'
 import { NewWorktreeModalController } from '../../../src/components/NewWorktreeModalController'
@@ -92,33 +90,11 @@ import {
   WORKSPACE_SORT_OPTIONS as SORT_OPTIONS
 } from '../../../src/worktree/workspace-list-picker-options'
 import type { DesktopStatus, RepoSummary } from '../../../src/worktree/host-worktree-rpc-types'
+import type { HostScreenProps } from '../../../src/worktree/host-screen-props'
 import type { WorkspaceStatusDefinition } from '../../../../src/shared/types'
 import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../../../src/worktree/mobile-workspace-statuses'
 
-function isErrorVerdict(v: ConnectionVerdict): boolean {
-  return (
-    v.kind === 'warning' ||
-    v.kind === 'unreachable' ||
-    v.kind === 'auth-failed' ||
-    v.kind === 'update-required'
-  )
-}
-
 const REPO_METADATA_REFRESH_MS = 60_000
-
-type HostScreenProps = {
-  // Why: when true, this worktree list is rendered as the persistent tablet
-  // sidebar by the host layout rather than as its own routed screen. That
-  // swaps the back button for a hide-sidebar control, drives data fetching
-  // from a plain mount effect (the sidebar is never the "focused" route), and
-  // opens sessions into the detail pane instead of pushing a new full screen.
-  embedded?: boolean
-  // Route params aren't in scope when rendered from the layout, so the caller
-  // passes hostId/action explicitly; falls back to the local route params.
-  hostId?: string
-  action?: string
-  onHideSidebar?: () => void
-}
 
 export function HostScreen({
   embedded = false,
@@ -927,6 +903,11 @@ export function HostScreen({
         {embedded ? (
           <View style={styles.embeddedToolbar}>
             <View style={styles.embeddedToolbarRow}>
+              <DesktopHostButton
+                compact
+                disabled={connState !== 'connected'}
+                onPress={() => navigateFromHostList(`/h/${hostId}/desktop`)}
+              />
               <Pressable
                 style={[
                   styles.filterChip,
@@ -1087,6 +1068,10 @@ export function HostScreen({
             </Pressable>
 
             <View style={styles.toolbarSpacer} />
+            <DesktopHostButton
+              disabled={connState !== 'connected'}
+              onPress={() => navigateFromHostList(`/h/${hostId}/desktop`)}
+            />
 
             <Pressable
               style={styles.searchToggle}
