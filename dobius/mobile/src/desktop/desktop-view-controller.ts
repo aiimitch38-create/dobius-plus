@@ -118,7 +118,7 @@ export class DesktopViewController {
       this.callbacks.message('Approve your named phone on the Mac. Viewing starts after approval.')
       this.unsubscribe = this.client.subscribe(
         'screen.stream',
-        { fps: 3, width: 1280 },
+        { fps: 10, width: 1280 },
         (event) => {
           if (!valid()) {
             return

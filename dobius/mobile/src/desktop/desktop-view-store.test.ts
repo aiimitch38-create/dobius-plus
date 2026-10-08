@@ -104,6 +104,31 @@ describe('shared floating desktop mirror', () => {
     expect(f.subscribe).toHaveBeenCalledOnce()
   })
 
+  it('stops and clears an active mirror when Back leaves the desktop route', async () => {
+    const f = fixture()
+    await f.store.start()
+    f.event(f.ready)
+    f.frame(f.pixels)
+    expect(f.store.getSnapshot().image).not.toBeNull()
+    const clearNativeImage = vi.fn()
+    f.store.onClear(clearNativeImage)
+
+    // The route's useFocusEffect cleanup runs on Back navigation and unmount.
+    f.store.leavePage('host-a')
+
+    expect(f.unsubscribe).toHaveBeenCalledOnce()
+    expect(clearNativeImage).toHaveBeenCalledOnce()
+    expect(f.store.getSnapshot().image).toBeNull()
+    expect(f.store.getSnapshot().badge).toBe('Paused')
+    const renewalsAtExit = f.sendRequest.mock.calls.filter(
+      ([method]) => method === 'screen.lease.renew'
+    ).length
+    vi.advanceTimersByTime(30000)
+    expect(
+      f.sendRequest.mock.calls.filter(([method]) => method === 'screen.lease.renew')
+    ).toHaveLength(renewalsAtExit)
+  })
+
   it('keeps one subscription while ownership moves between page and widget', async () => {
     const f = fixture()
     await f.store.start()

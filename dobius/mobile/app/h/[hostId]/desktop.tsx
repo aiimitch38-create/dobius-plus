@@ -1,18 +1,30 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import {
+  Image,
+  Pressable,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions
+} from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
 import { ChevronLeft, Monitor } from 'lucide-react-native'
 import { useHostClient } from '../../../src/transport/client-context'
 import { desktopViewStore, useDesktopViewSnapshot } from '../../../src/desktop/desktop-view-store'
+import { getDesktopScreenLayout } from '../../../src/desktop/desktop-screen-layout'
 import { colors, radii, spacing, typography } from '../../../src/theme/mobile-theme'
 
 export default function DesktopScreen(): React.JSX.Element {
   const { hostId } = useLocalSearchParams<{ hostId: string }>()
   const router = useRouter()
   const { client, state } = useHostClient(hostId)
+  const { width, height } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
+  const layout = getDesktopScreenLayout(width, height)
   const nativeImage = useRef<Image>(null)
   const { image, badge, message } = useDesktopViewSnapshot()
   const scale = useSharedValue(1)
@@ -73,19 +85,22 @@ export default function DesktopScreen(): React.JSX.Element {
     transform: [{ translateX: x.value }, { translateY: y.value }, { scale: scale.value }]
   }))
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          onPress={() => router.back()}
-        >
-          <ChevronLeft color={colors.textPrimary} size={24} />
-        </Pressable>
-        <Monitor color={colors.textSecondary} size={18} />
-        <Text style={styles.title}>Desktop</Text>
-        <Text style={styles.badge}>{badge}</Text>
-      </View>
+    <SafeAreaView edges={layout.fullScreen ? [] : undefined} style={styles.screen}>
+      <StatusBar hidden={layout.fullScreen} />
+      {layout.showHeader && (
+        <View style={styles.header}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            onPress={() => router.back()}
+          >
+            <ChevronLeft color={colors.textPrimary} size={24} />
+          </Pressable>
+          <Monitor color={colors.textSecondary} size={18} />
+          <Text style={styles.title}>Desktop</Text>
+          <Text style={styles.badge}>{badge}</Text>
+        </View>
+      )}
       <View style={styles.viewport}>
         {image ? (
           <GestureDetector gesture={Gesture.Simultaneous(pinch, pan)}>
@@ -108,40 +123,62 @@ export default function DesktopScreen(): React.JSX.Element {
           </Text>
         )}
       </View>
-      {message ? (
-        <Text style={styles.message}>{message}</Text>
-      ) : (
-        <Text style={styles.message}>
-          Pinch to zoom · Drag to pan · Stop on the Mac ends viewing
+      {(layout.showControls || (message && !image)) && (
+        <Text style={[styles.message, layout.fullScreen && styles.fullscreenMessage]}>
+          {message ?? 'Pinch to zoom · Drag to pan · Stop on the Mac ends viewing'}
         </Text>
       )}
-      <View style={styles.actions}>
+      {layout.showControls && (
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={state !== 'connected'}
+            style={[styles.button, state !== 'connected' && styles.disabled]}
+            onPress={() => void desktopViewStore.start()}
+          >
+            <Text style={styles.buttonText}>View my screen</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={styles.button}
+            onPress={() => desktopViewStore.stop()}
+          >
+            <Text style={styles.buttonText}>Stop viewing</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={styles.button}
+            onPress={() => {
+              desktopViewStore.showWidget()
+              router.back()
+            }}
+          >
+            <Text style={styles.buttonText}>Float</Text>
+          </Pressable>
+        </View>
+      )}
+      {layout.fullScreen && (
         <Pressable
           accessibilityRole="button"
-          disabled={state !== 'connected'}
-          style={[styles.button, state !== 'connected' && styles.disabled]}
-          onPress={() => void desktopViewStore.start()}
+          accessibilityLabel="Back from full-screen mirror"
+          onPress={() => router.back()}
+          style={[styles.fullscreenBack, { top: insets.top + spacing.md }]}
         >
-          <Text style={styles.buttonText}>View my screen</Text>
+          <ChevronLeft color={colors.textPrimary} size={24} />
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.button}
-          onPress={() => desktopViewStore.stop()}
-        >
-          <Text style={styles.buttonText}>Stop viewing</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.button}
-          onPress={() => {
-            desktopViewStore.showWidget()
-            router.back()
-          }}
-        >
-          <Text style={styles.buttonText}>Float</Text>
-        </Pressable>
-      </View>
+      )}
+      {layout.fullScreen && !image && (
+        <View style={[styles.fullscreenActions, { bottom: insets.bottom + spacing.lg }]}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={state !== 'connected'}
+            style={[styles.button, state !== 'connected' && styles.disabled]}
+            onPress={() => void desktopViewStore.start()}
+          >
+            <Text style={styles.buttonText}>View my screen</Text>
+          </Pressable>
+        </View>
+      )}
     </SafeAreaView>
   )
 }
@@ -157,6 +194,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
+  fullscreenMessage: { position: 'absolute', bottom: spacing.xl, alignSelf: 'center' },
+  fullscreenBack: {
+    position: 'absolute',
+    left: spacing.md,
+    zIndex: 1,
+    padding: spacing.sm,
+    borderRadius: radii.button,
+    backgroundColor: colors.bgRaised
+  },
+  fullscreenActions: { position: 'absolute', alignSelf: 'center' },
   image: { width: '100%', height: '100%' },
   hint: {
     color: colors.textSecondary,

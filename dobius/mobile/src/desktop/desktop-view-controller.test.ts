@@ -105,6 +105,12 @@ describe('foreground phone desktop viewing', () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_IMAGE_SENTINEL')
     f.controller.stop()
   })
+  it('requests the supported 10 FPS capture rate for smoother phone viewing', async () => {
+    const f = fixture()
+    await f.controller.start()
+    expect(f.subscribe.mock.calls[0][1]).toEqual({ fps: 10, width: 1280 })
+    f.controller.stop()
+  })
   it('preserves typed screen permission instructions and keeps Stop latched until a new start', async () => {
     const f = fixture()
     await f.controller.start()

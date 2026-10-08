@@ -45,7 +45,8 @@ function fixture() {
     sendBinary
   }
   const events: ScreenEvent[] = []
-  const stream = () => service.stream({ fps: 3, width: 1280 }, owner, (event) => events.push(event))
+  const stream = (fps = 3) =>
+    service.stream({ fps, width: 1280 }, owner, (event) => events.push(event))
   const ready = async () => {
     for (let i = 0; i < 12; i++) {
       await Promise.resolve()
@@ -146,6 +147,26 @@ describe('desktop screen consented session safety', () => {
     await task
     expect(f.stop).toHaveBeenCalledOnce()
     expect(f.hide).toHaveBeenCalledOnce()
+  })
+  it('gates a 10 FPS stream to the requested rate while allowing the native capture cadence', async () => {
+    const f = fixture()
+    const task = f.stream(10)
+    await f.ready()
+    expect(f.backend.create).toHaveBeenCalledWith({ fps: 10, width: 1280 })
+
+    f.produce()
+    f.produce()
+    expect(f.sendBinary).toHaveBeenCalledOnce()
+
+    vi.advanceTimersByTime(94)
+    f.produce()
+    expect(f.sendBinary).toHaveBeenCalledOnce()
+
+    vi.advanceTimersByTime(1)
+    f.produce()
+    expect(f.sendBinary).toHaveBeenCalledTimes(2)
+    f.service.stop('stopped')
+    await task
   })
   it('reserves one viewer before consent and fences delayed approval on Stop', async () => {
     const f = fixture()
