@@ -7,6 +7,8 @@ import {
   isClaudeManagementTitle,
   isShellProcess
 } from '../../shared/agent-detection'
+import type { DesktopScreenEndpoint } from './screen/screen-contracts'
+import { DESKTOP_SCREEN_CAPABILITY } from '../../shared/desktop-screen-protocol'
 import { extractOscTitleScanTail } from '../../shared/osc-title-scan-tail'
 import { extractLastOsc7Uri, extractOscScanTail } from '../daemon/osc7-uri-extraction'
 import { parseFileUriPathParts } from '../daemon/osc7-file-uri'
@@ -1998,6 +2000,7 @@ async function hasLocalWorktreeBaseRef(
 }
 
 export class DobiusRuntimeService {
+  desktopScreen?: DesktopScreenEndpoint
   private readonly runtimeId = randomUUID()
   private readonly startedAt = Date.now()
   private readonly store: RuntimeStore | null
@@ -2717,6 +2720,7 @@ export class DobiusRuntimeService {
     if (hasOffscreen) {
       capabilities.push(BROWSER_HEADLESS_RUNTIME_CAPABILITY)
     }
+    if (this.desktopScreen?.supported) capabilities.push(DESKTOP_SCREEN_CAPABILITY)
     return {
       runtimeId: this.runtimeId,
       rendererGraphEpoch: this.rendererGraphEpoch,

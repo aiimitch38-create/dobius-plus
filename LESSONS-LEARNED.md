@@ -372,3 +372,8 @@ that is one plain command and passes every time.
 - Tried: terminal-spawned native/Electron preflights after granting their executable identities; independent Electron launches through LaunchServices and launchd; final 60-second Perl alarm preflight.
 - Failed because: TCC attributed terminal capture to the old Dobius+ host despite the native executable grant. Electron's final launch reached bootstrap but not app readiness before exit 142; no permission/throughput result is available from that run.
 - Works instead: independent native launchd capture produced aggregate measurements; remove submitted jobs promptly because they can restart. Stop repeating Electron launch identity experiments. For the remaining Electron benchmark, ask Carson to enable the intended Dobius+ capture-owner permission and perform any required restart himself. Keep Phase 1 gated on honest benchmark evidence.
+
+## 2026-10-07 — Narrow dispatcher fixtures and binary sender return types
+- Tried: asserting incomplete screen endpoint/runtime fixtures directly as their production types, and changing dispatcher sendBinary's void callback to a boolean-or-void return.
+- Failed because: two typechecks exposed insufficient fixture overlap and existing terminal-test callbacks that return Array.push's number under a void callback contract.
+- Works instead: satisfy the complete screen endpoint type; explicitly mark the deliberately minimal runtime test double through unknown. Preserve the existing dispatcher callback contract: JavaScript already forwards the real sender and its return value unchanged to RpcContext, whose capture-facing type supports congestion results. Do not repeat unchanged failing checks.

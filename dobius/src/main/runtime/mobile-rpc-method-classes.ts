@@ -11,6 +11,11 @@ const READ = 'read'
 const BENIGN = 'benign-mutation'
 
 export const MOBILE_RPC_METHOD_CLASSES: Readonly<Record<string, MobileRpcMethodClass>> = {
+  'screen.capabilities': 'screen.view',
+  'screen.stream': 'screen.view',
+  'screen.lease.renew': 'screen.view',
+  // Owners must be able to clean up after their grant is revoked.
+  'screen.stream.unsubscribe': READ,
   // Voice conductor (Jarvis) is unchanged by design (C2/C3).
   'voice.intent': BENIGN,
   'voice.reply': READ,

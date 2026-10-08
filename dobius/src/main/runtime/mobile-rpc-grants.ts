@@ -30,7 +30,9 @@ export const MOBILE_RPC_GRANTS = [
   // Outward tracker writes: issues, PRs/MRs, comments, reviewers, projects.
   'remote.write',
   // Driving or watching the in-app browser, which carries desktop logins.
-  'browser.control'
+  'browser.control',
+  // Exposes everything on the main display, including messages and passwords; off by default.
+  'screen.view'
 ] as const
 
 export type MobileRpcGrant = (typeof MOBILE_RPC_GRANTS)[number]
