@@ -13,6 +13,7 @@ export type StreamRequest = {
   subscriptionId?: string
   cancelled?: boolean
   sent?: boolean
+  everSent?: boolean
 }
 export function isTerminalSubscribedResult(
   value: unknown

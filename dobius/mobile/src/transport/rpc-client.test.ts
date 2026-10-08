@@ -504,22 +504,26 @@ describe('mobile rpc-client connection timeout', () => {
   it('replays terminal subscribe with the latest viewport after reconnect', () => {
     const client = connect('ws://desktop.invalid', 'token', 'server-key')
     const firstSocket = mockSockets[0]!
-
-    firstSocket.open()
-    firstSocket.receive(JSON.stringify({ type: 'e2ee_ready' }))
-    firstSocket.receive('encrypted:{"type":"e2ee_authenticated"}')
-
     client.subscribe(
       'terminal.subscribe',
       {
         terminal: 'term-1',
         client: { id: 'phone-1', type: 'mobile' },
-        viewport: { cols: 45, rows: 20 }
+        viewport: { cols: 45, rows: 20 },
+        acquire: true
       },
       () => {}
     )
+
+    // A deliberate selection queued while disconnected may acquire once on
+    // its first authenticated send.
+    firstSocket.open()
+    firstSocket.receive(JSON.stringify({ type: 'e2ee_ready' }))
+    firstSocket.receive('encrypted:{"type":"e2ee_authenticated"}')
+
     expect(sentRequest(firstSocket, 'terminal.subscribe').params).toMatchObject({
-      viewport: { cols: 45, rows: 20 }
+      viewport: { cols: 45, rows: 20 },
+      acquire: true
     })
 
     client.updateTerminalSubscriptionViewport('term-1', { cols: 60, rows: 24 })
@@ -533,6 +537,7 @@ describe('mobile rpc-client connection timeout', () => {
     expect(sentRequest(secondSocket, 'terminal.subscribe').params).toMatchObject({
       viewport: { cols: 60, rows: 24 }
     })
+    expect(sentRequest(secondSocket, 'terminal.subscribe').params).not.toHaveProperty('acquire')
 
     client.close()
   })

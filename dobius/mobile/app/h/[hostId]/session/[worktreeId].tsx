@@ -1017,6 +1017,7 @@ export default function SessionScreen() {
     readonly liveInputEnabled: boolean
   } | null>(null)
   const terminalUnsubsRef = useRef<Map<string, () => void>>(new Map())
+  const pendingTerminalAcquireRef = useRef<Set<string>>(new Set())
   const subscribingHandlesRef = useRef<Set<string>>(new Set())
   const initializedHandlesRef = useRef<Set<string>>(new Set())
   // Why: WebViews load xterm.js from CDN asynchronously. Hidden WebViews
@@ -1342,7 +1343,7 @@ export default function SessionScreen() {
   )
 
   const subscribeToTerminal = useCallback(
-    (handle: string) => {
+    (handle: string, options?: { acquire?: boolean }) => {
       if (!client) {
         return
       }
@@ -1359,6 +1360,10 @@ export default function SessionScreen() {
         return
       }
 
+      const shouldAcquire =
+        options?.acquire === true || pendingTerminalAcquireRef.current.has(handle)
+      pendingTerminalAcquireRef.current.delete(handle)
+
       subscribingHandlesRef.current.add(handle)
       const seq = (subscribeSeqRef.current.get(handle) ?? 0) + 1
       subscribeSeqRef.current.set(handle, seq)
@@ -1373,6 +1378,7 @@ export default function SessionScreen() {
           terminal: handle,
           client: { id: deviceTokenRef.current!, type: 'mobile' as const },
           viewport: viewportRef.current ?? undefined,
+          ...(shouldAcquire ? { acquire: true } : {}),
           capabilities: { terminalBinaryStream: 1 }
         },
         (result) => {
@@ -1595,8 +1601,9 @@ export default function SessionScreen() {
         await client.sendRequest('terminal.setDisplayMode', {
           terminal: handle,
           mode: next,
-          // Why: presence-lock take-floor signal — requesting 'auto' is the
-          // explicit "I want to drive at phone dims" gesture.
+          // Why: only this user-triggered toggle may transfer terminal
+          // control. Reconnect and viewport refits stay passive.
+          ...(next === 'auto' ? { acquire: true } : {}),
           ...(deviceTokenRef.current
             ? { client: { id: deviceTokenRef.current, type: 'mobile' as const } }
             : {}),
@@ -2854,12 +2861,17 @@ export default function SessionScreen() {
         unsubscribeTerminal(prev)
         initializedHandlesRef.current.delete(prev)
       }
+      pendingTerminalAcquireRef.current.clear()
+      pendingTerminalAcquireRef.current.add(handle)
       // Force a fresh subscribe even if eagerly subscribed without viewport
       if (terminalUnsubsRef.current.has(handle)) {
         unsubscribeTerminal(handle)
         initializedHandlesRef.current.delete(handle)
       }
-      subscribeToTerminal(handle)
+      // Why: a user-selected terminal is an explicit floor handoff. Other
+      // subscribeToTerminal call sites are lifecycle/viewport recovery and
+      // intentionally remain passive.
+      subscribeToTerminal(handle, { acquire: true })
       if (client) {
         void client.sendRequest('terminal.focus', { terminal: handle }).catch(() => {})
         if (matchingTab) {
@@ -2885,6 +2897,7 @@ export default function SessionScreen() {
 
   const switchSessionTab = useCallback(
     (tab: MobileSessionTab) => {
+      pendingTerminalAcquireRef.current.clear()
       if (tab.type === 'terminal') {
         if (typeof tab.terminal === 'string') {
           switchTab(tab.terminal)

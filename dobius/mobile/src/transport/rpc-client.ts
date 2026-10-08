@@ -26,6 +26,7 @@ import {
 } from './browser-screencast-protocol'
 import {
   buildTerminalUnsubscribeParams,
+  buildTerminalSubscriptionReplayParams,
   updateTerminalSubscriptionViewport as updateCachedTerminalSubscriptionViewport
 } from './rpc-client-terminal-subscription'
 import { describeSocketEvent } from './socket-event-debug'
@@ -506,9 +507,18 @@ export function connect(
               }
               resetTerminalStreamRoutingForRequest(id)
               if (
-                sendEncrypted({ id, deviceToken, method: stream.method, params: stream.params })
+                sendEncrypted({
+                  id,
+                  deviceToken,
+                  method: stream.method,
+                  params:
+                    stream.method === 'terminal.subscribe' && stream.everSent
+                      ? buildTerminalSubscriptionReplayParams(stream.params)
+                      : stream.params
+                })
               ) {
                 stream.sent = true
+                stream.everSent = true
               } else {
                 emitStreamError(stream, 'Connection interrupted')
                 removeStreamListener(id)
@@ -1169,6 +1179,7 @@ export function connect(
       if (state === 'connected') {
         if (sendEncrypted({ id, deviceToken, method, params })) {
           stream.sent = true
+          stream.everSent = true
         } else {
           emitStreamError(stream, 'Connection interrupted')
           removeStreamListener(id)
