@@ -43,6 +43,9 @@ export function MobilePairedDevicesSection({
             >
               <div>
                 <div className="text-sm font-medium">{device.name}</div>
+                <div className="select-text break-all text-xs text-muted-foreground">
+                  Device ID: {device.deviceId}
+                </div>
                 <div className="text-muted-foreground text-xs">
                   {translate('auto.components.settings.MobilePane.254a6d09e4', 'Paired')}
                   {new Date(device.pairedAt).toLocaleDateString()}
