@@ -1,4 +1,4 @@
-# Desktop capture benchmark — native measured, Electron pending
+# Desktop capture benchmark — native selected
 
 2026-10-07, this Mac. Required run: main display, 1280 px wide, 3 fps,
 JPEG quality approximately 60, 60 seconds. No frames were logged or persisted.
@@ -8,10 +8,20 @@ JPEG quality approximately 60, 60 seconds. No frames were logged or persisted.
 | A: Electron 42.3.3 thumbnail polling | Earlier repaired-app preflight returned `getMediaAccessStatus('screen') = denied`, exit 2. Final 60-second bounded preflight logged bootstrap but did not reach `app.whenReady()` before exit 142. | Unavailable; no valid first frame or 60-second run. |
 | B: native display-only ScreenCaptureKit prototype | Independent launchd launch passed its own permission gate and completed the configured 60-second capture. | 136 callbacks / 65.385 s total = 2.080 fps; first frame 10007.7 ms; main-loop maximum lag 7056.7 ms; CPU 3.628%; peak RSS 104.719 MiB; 387024.6 bytes/s. |
 
-Backend choice is **blocked**, not inferred. No performance threshold has been
-verified and Phase 1 feature implementation has not started. The plan requires
-successful measurements before selecting the backend. Native fails the <3-second
-first-frame target in this run; low CPU alone does not establish suitability.
+Backend choice is **B: native ScreenCaptureKit**, under Carson/Claude's explicit
+fallback decision on 2026-10-07: one final Electron attempt with a 60-second bound,
+then choose native if it is denied or times out. That final attempt, with Dobius+
+Screen Recording confirmed enabled, exited 142 without output or measurements.
+No further identity experiments will run. Electron performance remains unmeasured;
+this selection is a documented fallback, not a claim native meets the targets.
+Native fails the <3-second first-frame and <50 ms main-loop-lag targets in this run.
+
+Phase 1 optimization work: one persistent SCStream per approved viewing session,
+JPEG encoding on a serial background queue, complete-frame filtering, bounded
+newest-frame delivery, and no per-frame helper process launches or blocking waits
+on the desktop main thread. Re-measure first-frame time and lag before claiming
+acceptance. Only capture during consented, leased viewing; do not keep an idle
+screen-capturing stream alive as a startup optimization.
 
 Native measurement: 1280 × 832, JPEG quality 0.6, requested 3 fps. The measurement
 window includes stream startup/shutdown, so it is 65.385 seconds rather than exactly
@@ -55,10 +65,12 @@ reach the script, and the experiment was stopped. A final raw preflight has a
 60-second Perl alarm and exited 142 after bootstrap without a permission result.
 Child rendezvous errors appeared after the parent alarm terminated it; those are
 not evidence that capture itself failed. Do not spend further time experimenting with launch identities:
-the remaining prerequisite is Screen Recording for Dobius+ itself, the intended
-Electron capture owner and the responsible application for these terminal tools.
-If macOS needs that app restarted, Carson must perform the restart. No installed
-desktop app was changed or restarted by the agent. Do not silently request permission.
+Carson confirmed Dobius+ Screen Recording is already enabled without a restart.
+The explicitly requested final 60-second benchmark attempt still exited 142
+without output. That clears the decision gate by the user's fallback instruction.
+No installed desktop app was changed or restarted by the agent. Do not silently
+request permission. Shipping native capture must preflight its own helper identity;
+neither this prototype grant nor Dobius+'s checkbox proves the packaged helper grant.
 
 Separate physical phone acceptance remains unverified and requires the later
 approved desktop installation, new pairing, screen grant and local setup.

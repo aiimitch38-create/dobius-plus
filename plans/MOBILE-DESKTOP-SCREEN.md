@@ -50,15 +50,18 @@ Preflight the actual capture executable's own Screen Recording identity. Record
 the same metrics and identify which process's event loop was measured. Standalone
 prototype permission does not prove packaged helper permission.
 
-Selection is **pending measurements**. Default to A if lag <50 ms and CPU <25%
-at 3 fps; otherwise evaluate B. Denied permission or incomplete runs are blockers,
-not performance evidence. Never trigger a permission prompt from an automated
+Selection is **B: native ScreenCaptureKit**, following the user's explicit fallback
+instruction: a final Electron attempt with a 60-second alarm exited 142 without
+numbers even though Carson confirmed Dobius+ permission enabled. Electron
+performance is unmeasured, not disproven. Never trigger a permission prompt from an automated
 remote/benchmark request. Record results in `plans/DESKTOP-SCREEN-BENCHMARK.md`.
 Native independent run completed: 2.080 callback fps, first frame 10007.7 ms,
 CPU 3.628%, RSS 104.719 MiB, 387024.6 bytes/s, native main-loop maximum lag
-7056.7 ms. It misses the first-frame target; Electron has no valid 60-second
-measurement yet. Use the intended Dobius+ permission identity for the remaining
-Electron run after Carson enables it; further launch identity experiments are stopped.
+7056.7 ms. It misses first-frame and lag targets. Phase 1 uses a persistent SCStream
+per approved session, complete-frame filtering and background JPEG encoding;
+no per-frame launches or main-thread waits. Re-measure before claiming acceptance.
+Further launch identity experiments are stopped. Preflight the shipping native
+capture helper itself; the prototype and Dobius+ permission grants do not prove it.
 Phone-rendered metrics can only follow the approved desktop installation and
 are reported separately. Phase 0 commit:
 `docs(screen): plan v2 resolving review findings + capture benchmark`.
@@ -134,7 +137,8 @@ counters to prove capture stops. Never log/cache/hash/persist image contents.
 ### Step 3 — local permission setup, consent, indicator and Stop
 
 Settings → Mobile adds **Enable screen sharing**, explaining main-display scope
-and correct capture owner. For Electron this means Dobius+ itself, not Computer Use.
+and correct capture owner: the native helper's display-only mode. This mode requires
+Screen Recording only and must not require or request Accessibility permission.
 Local setup may invoke the permission-requesting API; phone calls cannot.
 Explain restart-required permission state honestly and leave desktop restart to Carson.
 
