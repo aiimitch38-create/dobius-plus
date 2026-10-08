@@ -13,6 +13,7 @@ import {
   useTerminalWebViewEngineErrorState
 } from './terminal-webview-engine-error-state'
 import { TERMINAL_WEBVIEW_FRAME_STYLES } from './terminal-webview-frame-styles'
+import { createTerminalWebViewMeasureTracker } from './terminal-webview-measure-tracker'
 import { useTerminalWebReadyWatchdog } from './terminal-webview-ready-watchdog'
 import { XTERM_WEBVIEW_SOURCE } from './terminal-webview-html'
 import type { TerminalWebViewCommand } from './terminal-webview-messages'
@@ -60,11 +61,9 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
   const webViewRef = useRef<WebView>(null)
   const isWebReadyRef = useRef(false)
   const pendingMessages = useMemo(() => createTerminalWebViewPendingMessages(), [])
+  const measureTracker = useMemo(() => createTerminalWebViewMeasureTracker(), [])
   const messageIdRef = useRef(0)
   const terminalThemeKey = useMemo(() => JSON.stringify(terminalTheme ?? null), [terminalTheme])
-  const measureResolveRef = useRef<
-    ((result: { cols: number; rows: number } | null) => void) | null
-  >(null)
   // Why: each init() call posts 'init' to the WebView and arms a fresh
   // ready promise. WebView's init() rAF chain ends with a 'ready' notify
   // that resolves it. measureFitDimensions awaits this so it doesn't
@@ -78,10 +77,17 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
     reportEngineError
   )
 
-  const sendToWebView = useCallback((msg: TerminalWebViewCommand) => {
+  const nextMessageId = useCallback(() => {
     messageIdRef.current += 1
-    webViewRef.current?.postMessage(JSON.stringify({ ...msg, id: messageIdRef.current }))
+    return messageIdRef.current
   }, [])
+
+  const sendToWebView = useCallback(
+    (msg: TerminalWebViewCommand, id = nextMessageId()) => {
+      webViewRef.current?.postMessage(JSON.stringify({ ...msg, id }))
+    },
+    [nextMessageId]
+  )
 
   const flushPendingMessages = useCallback(() => {
     pendingMessages.flush(sendToWebView)
@@ -123,13 +129,12 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
         readyPromiseRef.current = null
         resolve?.()
       } else if (msg.type === 'measure-result') {
-        const resolve = measureResolveRef.current
-        measureResolveRef.current = null
-        if (resolve) {
-          const cols = typeof msg.cols === 'number' ? msg.cols : null
-          const rows = typeof msg.rows === 'number' ? msg.rows : null
-          resolve(cols && rows && cols >= 20 && rows >= 8 ? { cols, rows } : null)
-        }
+        const cols = typeof msg.cols === 'number' ? msg.cols : null
+        const rows = typeof msg.rows === 'number' ? msg.rows : null
+        measureTracker.resolve(
+          msg.id,
+          cols && rows && cols >= 20 && rows >= 8 ? { cols, rows } : null
+        )
       } else if (msg.type === 'log') {
         // Surface fit-scale diagnostics in the RN/Metro console.
         const tag = typeof msg.tag === 'string' ? msg.tag : '[fit]'
@@ -211,6 +216,7 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
       flushPendingMessages,
       clearEngineError,
       clearWebReadyWatchdog,
+      measureTracker,
       reportEngineError,
       onWebReady,
       onSelectionMode,
@@ -249,6 +255,8 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
   useEffect(() => {
     postMessage({ type: 'set-font-scale', fontScale: textScale })
   }, [postMessage, textScale])
+
+  useEffect(() => () => measureTracker.clear(), [measureTracker])
 
   useImperativeHandle(
     ref,
@@ -306,28 +314,23 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
           return Promise.resolve(null)
         }
         return new Promise((resolve) => {
-          measureResolveRef.current?.(null)
+          const id = nextMessageId()
           let timeout: ReturnType<typeof setTimeout> | null = null
           const finish = (result: { cols: number; rows: number } | null) => {
             if (timeout) {
               clearTimeout(timeout)
               timeout = null
             }
-            if (measureResolveRef.current === finish) {
-              measureResolveRef.current = null
-            }
             resolve(result)
           }
-          measureResolveRef.current = finish
-          sendToWebView({ type: 'measure', containerHeight })
+          measureTracker.replace(id, finish)
           // Why: if the WebView doesn't respond within 2s (e.g., xterm
           // failed to load), resolve null so the caller can disable
           // Fit to Phone rather than hanging indefinitely.
           timeout = setTimeout(() => {
-            if (measureResolveRef.current === finish) {
-              finish(null)
-            }
+            measureTracker.cancel(id)
           }, 2000)
+          sendToWebView({ type: 'measure', containerHeight }, id)
         })
       },
       resetZoom() {
@@ -363,7 +366,7 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
         })
       }
     }),
-    [postMessage, sendToWebView, terminalTheme, textScale]
+    [measureTracker, nextMessageId, postMessage, sendToWebView, terminalTheme, textScale]
   )
 
   return (
