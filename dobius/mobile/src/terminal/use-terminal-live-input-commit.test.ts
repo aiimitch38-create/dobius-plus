@@ -9,6 +9,7 @@ import { useTerminalLiveInputCommit } from './use-terminal-live-input-commit'
 type TerminalLiveInputCommitHarness = {
   readonly captures: readonly string[]
   readonly handlers: ReturnType<typeof useTerminalLiveInputCommit<string>>
+  readonly getHandlers: () => ReturnType<typeof useTerminalLiveInputCommit<string>>
   readonly sent: readonly string[]
   readonly sentRequests: readonly { handle: string; bytes: string }[]
   readonly setActiveHandle: (next: string) => void
@@ -104,6 +105,12 @@ function createTerminalLiveInputCommitHarness({
   return {
     captures,
     handlers,
+    getHandlers: () => {
+      if (!handlers) {
+        throw new Error('terminal live input hook did not render')
+      }
+      return handlers
+    },
     sent,
     sentRequests,
     setActiveHandle: (next: string): void => {
@@ -257,6 +264,9 @@ describe('terminal live input commit hook', () => {
     })
     handlers.handleLiveInputChange('a')
     await vi.waitFor(() => expect(sent).toEqual(['a']))
+    await expect(handlers.flushPendingLiveInputBeforeExternalSend('terminal-a')).resolves.toBe(
+      false
+    )
 
     // When
     handlers.handleLiveInputChange('')
@@ -297,15 +307,14 @@ describe('terminal live input commit hook', () => {
     const oldSend = new Promise<boolean>((resolve) => {
       resolveOldSend = resolve
     })
-    const { handlers, sentRequests, setActiveHandle } = createTerminalLiveInputCommitHarness({
-      sendPromises: [oldSend]
-    })
+    const { handlers, getHandlers, sentRequests, setActiveHandle } =
+      createTerminalLiveInputCommitHarness({ sendPromises: [oldSend] })
     handlers.handleLiveInputChange('a')
     await vi.waitFor(() => expect(sentRequests).toEqual([{ handle: 'terminal-a', bytes: 'a' }]))
 
     // When: the user selects terminal B before A's result arrives.
     setActiveHandle('terminal-b')
-    handlers.handleLiveInputChange('b')
+    getHandlers().handleLiveInputChange('b')
     resolveOldSend?.(false)
 
     // Then: B's independent input is sent despite A's ambiguous failure.
@@ -323,7 +332,7 @@ describe('terminal live input commit hook', () => {
     const oldSend = new Promise<boolean>((resolve) => {
       resolveOldSend = resolve
     })
-    const { handlers, sentRequests, setActiveHandle, setActiveSessionTabType } =
+    const { handlers, getHandlers, sentRequests, setActiveHandle, setActiveSessionTabType } =
       createTerminalLiveInputCommitHarness({ sendPromises: [oldSend] })
     handlers.handleLiveInputChange('a')
     await vi.waitFor(() => expect(sentRequests).toEqual([{ handle: 'terminal-a', bytes: 'a' }]))
@@ -332,7 +341,7 @@ describe('terminal live input commit hook', () => {
     setActiveSessionTabType('markdown')
     setActiveHandle('terminal-b')
     setActiveSessionTabType('terminal')
-    handlers.handleLiveInputChange('b')
+    getHandlers().handleLiveInputChange('b')
     resolveOldSend?.(false)
 
     // Then: the stale A failure cannot suppress B's independent input.
