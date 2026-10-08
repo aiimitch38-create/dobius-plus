@@ -274,3 +274,11 @@ background. This needs an iOS photo-library-add permission and native configurat
 change, therefore one phone rebuild/reinstall. It is excluded from Phase 1's
 memory-only viewer and no-phone-reinstall promise. Navigation remains a clearly
 labeled **Desktop / View my screen** entry on both the host screen and Quick Actions.
+
+## Step 8 Mac indicator fallback — 2026-10-08
+
+The sandboxed local indicator is a compact draggable top-right window. It keeps
+the phone name, red recording dot and Stop button, and must become visible before
+sharing starts. Live thumbnail omitted: the current native launch identity reports
+no capture permission, so real capture exclusion cannot be proved unattended. See
+`plans/DESKTOP-SCREEN-MAC-WIDGET.md`; no second capture or permission change added.

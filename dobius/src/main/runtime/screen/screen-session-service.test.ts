@@ -84,6 +84,54 @@ function fixture() {
 }
 
 describe('desktop screen consented session safety', () => {
+  it.each(['stopped', 'revoked', 'sleep', 'shutdown'])(
+    'closes the indicator and single capture on %s',
+    async (reason) => {
+      const f = fixture()
+      const task = f.stream()
+      await f.ready()
+      f.produce()
+      vi.advanceTimersByTime(334)
+      f.produce()
+      expect(f.service.counters.captureStarts).toBe(1)
+      expect(f.show).toHaveBeenCalledOnce()
+      f.service.stop(reason)
+      await task
+      expect(f.hide).toHaveBeenCalledOnce()
+      expect(f.stop).toHaveBeenCalledOnce()
+      expect(() => f.service.renew(f.ref(), f.owner)).toThrow()
+    }
+  )
+  it('widget Stop invalidates ownership and cannot restart capture', async () => {
+    const f = fixture()
+    let widgetStop!: () => void
+    f.service.setConsentUi({
+      approve: f.approve,
+      indicatorVisible: () => true,
+      show: (_name, stop) => {
+        widgetStop = stop
+        return f.hide
+      }
+    })
+    const task = f.stream()
+    await f.ready()
+    widgetStop()
+    await task
+    f.produce()
+    expect(f.sendBinary).not.toHaveBeenCalled()
+    expect(f.service.counters.captureStarts).toBe(1)
+    expect(() => f.service.renew(f.ref(), f.owner)).toThrow()
+  })
+  it('indicator load failure prevents ready and capture', async () => {
+    const f = fixture()
+    f.show.mockImplementation(() => {
+      throw new Error('local window load failed')
+    })
+    await expect(f.stream()).rejects.toThrow()
+    expect(f.start).not.toHaveBeenCalled()
+    expect(f.events).toEqual([])
+  })
+
   it('shows the named-phone indicator and sends ready before a binary frame; excludes frames from JSON', async () => {
     const f = fixture()
     const task = f.stream()

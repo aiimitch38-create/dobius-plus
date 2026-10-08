@@ -18,12 +18,14 @@ export async function showScreenViewingBanner(
     throw new DesktopScreenError('screen_not_authorized')
   }
   const area = screen.getPrimaryDisplay().workArea
-  const width = Math.min(560, area.width - 32)
+  const width = Math.min(240, area.width - 32)
   const win = new BrowserWindow({
     width,
-    height: 72,
-    x: Math.round(area.x + (area.width - width) / 2),
-    y: area.y + 12,
+    height: 44,
+    frame: false,
+    roundedCorners: true,
+    x: area.x + area.width - width - 16,
+    y: area.y + 16,
     show: false,
     alwaysOnTop: true,
     resizable: false,
@@ -59,15 +61,16 @@ export async function showScreenViewingBanner(
   }
   signal.addEventListener('abort', hide, { once: true })
   const nonce = randomBytes(16).toString('base64')
+  // Thumbnail intentionally omitted until real capture exclusion is proved.
   // A sandboxed local status surface uses the documented light/dark tokens, without any preload or RPC bridge.
   const html = `<!doctype html><html><head><meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'">
   <style>:root{--background:#fff;--foreground:#0a0a0a;--primary:#171717;--primary-foreground:#fafafa;--border:#e5e5e5;--radius:.625rem}
   @media(prefers-color-scheme:dark){:root{--background:#0a0a0a;--foreground:#fafafa;--primary:#e5e5e5;--primary-foreground:#171717;--border:rgb(255 255 255 / .07)}}
-  body{margin:0;padding:12px 16px;font:12px/1.5 system-ui;background:var(--background);color:var(--foreground);display:flex;align-items:center;gap:12px}
+  body{margin:0;box-sizing:border-box;height:44px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);-webkit-app-region:drag;font:12px/1.5 system-ui;background:var(--background);color:var(--foreground);display:flex;align-items:center;gap:6px}
   p{margin:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  button{font:inherit;background:var(--primary);color:var(--primary-foreground);border:1px solid var(--border);border-radius:var(--radius);padding:6px 16px;cursor:pointer}</style></head>
-  <body><p title="${escaped(name)}">📱 ${escaped(name)} is viewing your screen</p><button id="stop" type="button">Stop</button>
+  button{-webkit-app-region:no-drag;font:inherit;background:var(--primary);color:var(--primary-foreground);border:1px solid var(--border);border-radius:var(--radius);padding:4px 8px;cursor:pointer}</style></head>
+  <body><span aria-hidden="true">🔴</span><p title="📱 ${escaped(name)} is viewing your screen">📱 ${escaped(name)} is viewing</p><button id="stop" type="button">Stop</button>
   <script nonce="${nonce}">document.getElementById('stop').addEventListener('click',()=>{location.href='dobius-screen-stop://local'})</script></body></html>`
   try {
     await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
