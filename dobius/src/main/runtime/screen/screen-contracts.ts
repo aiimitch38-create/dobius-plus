@@ -32,4 +32,5 @@ export type DesktopScreenEndpoint = {
   unsubscribe(ref: ScreenReference, owner: ScreenOwner): { unsubscribed: true }
   renew(ref: ScreenReference, owner: ScreenOwner): { renewed: true }
   stop(reason: string): void
+  revokeDevice(deviceId: string): void
 }

@@ -130,8 +130,9 @@ Server bounds: fps default 3, min 1, max 10; width 320–1280, height ≤1280, p
 ≤1,638,400, preserve aspect ratio, no upscaling; JPEG q60, bytes ≤1 MiB. Schemas
 reject malformed/nonfinite params. One capture in flight, no timer pileup, keep
 only newest pending frame. Reject empty/oversized frames. On `sendBinary=false`,
-pause capture to avoid filling the channel's 8 MiB queue; bounded retries terminate
-after five seconds of sustained congestion. Track non-sensitive invocation/session
+Phase 1 conservatively terminates capture immediately instead of retrying into the
+channel's 8 MiB queue. This is stricter than the original five-second congestion
+grace and requires an explicit new start and Mac approval. Track non-sensitive invocation/session
 counters to prove capture stops. Never log/cache/hash/persist image contents.
 
 ### Step 3 — local permission setup, consent, indicator and Stop
@@ -250,3 +251,12 @@ arbitrate with agent input. Ordered input IDs and execution-time expiry reject
 duplicate/delayed actions. Never queue/replay input across reconnect. Stop invalidates
 lease and queued actions before next native action. Ciphertext replay protection is
 separate from application input order. Multi-monitor/mixed-DPI selection is Phase 3.
+
+## Follow-up — after Phase 1
+
+Optional **Save screenshot** on the phone Desktop screen: save only the currently
+displayed frame to Photos on an explicit tap. Never save automatically or in the
+background. This needs an iOS photo-library-add permission and native configuration
+change, therefore one phone rebuild/reinstall. It is excluded from Phase 1's
+memory-only viewer and no-phone-reinstall promise. Navigation remains a clearly
+labeled **Desktop / View my screen** entry on both the host screen and Quick Actions.

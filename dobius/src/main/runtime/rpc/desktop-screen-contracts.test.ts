@@ -45,7 +45,8 @@ describe('desktop screen contracts', () => {
           stream: async () => {},
           unsubscribe: () => ({ unsubscribed: true }),
           renew: () => ({ renewed: true }),
-          stop: () => {}
+          stop: () => {},
+          revokeDevice: () => {}
         } satisfies DesktopScreenEndpoint
       } as unknown as DobiusRuntimeService
       const dispatcher = new RpcDispatcher({ runtime, methods: DESKTOP_SCREEN_METHODS })

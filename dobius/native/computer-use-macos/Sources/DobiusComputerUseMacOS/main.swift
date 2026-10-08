@@ -3778,7 +3778,13 @@ private func writeAll(_ data: Data, to fd: Int32) -> Bool {
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
-if arguments.first == "--agent" {
+if arguments.first == "--screen-status" {
+    desktopScreenStatus()
+} else if arguments.first == "--screen-enable" {
+    enableDesktopScreenCapture()
+} else if arguments.first == "--screen-stream" {
+    runDesktopScreenCapture(arguments: arguments)
+} else if arguments.first == "--agent" {
     guard arguments.count >= 2 else {
         fputs("usage: dobius-computer-use-macos --agent <socket-path> --token-file <token-path>\n", stderr)
         exit(2)

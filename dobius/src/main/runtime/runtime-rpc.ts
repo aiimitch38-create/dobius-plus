@@ -491,6 +491,7 @@ export class DobiusRuntimeRpcServer {
       return false
     }
     this.wsTransport?.terminateClientConnections(device.token)
+    this.runtime.desktopScreen?.revokeDevice(deviceId)
     return true
   }
 
