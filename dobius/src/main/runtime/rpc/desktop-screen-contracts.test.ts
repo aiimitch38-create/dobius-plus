@@ -6,6 +6,7 @@ import { mobileRpcRequirement, deviceHasMobileRpcGrant } from '../mobile-rpc-gra
 import { DesktopScreenError } from '../../../shared/desktop-screen-errors'
 import type { DobiusRuntimeService } from '../dobius-runtime'
 import type { DesktopScreenEndpoint } from '../screen/screen-contracts'
+import { ScreenSessionService } from '../screen/screen-session-service'
 
 describe('desktop screen contracts', () => {
   it('registers every screen method and gates viewing while allowing owner cleanup after revoke', () => {
@@ -54,10 +55,48 @@ describe('desktop screen contracts', () => {
       await dispatcher.dispatchStreaming(
         { id: 'request', authToken: 'token', method: 'screen.capabilities', params: {} },
         (reply) => replies.push(reply),
-        { clientId: 'phone', connectionId: 'socket', clientKind: 'mobile' }
+        { clientId: 'token', clientDeviceId: 'phone', connectionId: 'socket', clientKind: 'mobile' }
       )
       expect(JSON.parse(replies[0])).toMatchObject({ ok: false, error: { code } })
     }
+  })
+  it('looks up screen grants by stable device ID, not the bearer token', async () => {
+    const screen = new ScreenSessionService(
+      {
+        supported: true,
+        status: async () => ({
+          supported: true,
+          permission: 'granted',
+          display: { id: 1, width: 1440, height: 900 },
+          maxFps: 10,
+          maxWidth: 1280
+        }),
+        create: () => {
+          throw new Error('capture is not used by capabilities')
+        }
+      },
+      (id) =>
+        id === 'stable-device-id'
+          ? { name: 'Stored phone', scope: 'mobile', grants: ['screen.view'] }
+          : null
+    )
+    const runtime = {
+      getRuntimeId: () => 'host',
+      desktopScreen: screen
+    } as unknown as DobiusRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: DESKTOP_SCREEN_METHODS })
+    const replies: string[] = []
+    await dispatcher.dispatchStreaming(
+      { id: 'request', authToken: 'paired-token', method: 'screen.capabilities', params: {} },
+      (reply) => replies.push(reply),
+      {
+        clientId: 'paired-token',
+        clientDeviceId: 'stable-device-id',
+        connectionId: 'socket',
+        clientKind: 'mobile'
+      }
+    )
+    expect(JSON.parse(replies[0])).toMatchObject({ ok: true, result: { supported: true } })
   })
   it('fails safely on a headless host instead of importing a capture implementation', async () => {
     const runtime = { getRuntimeId: () => 'headless' } as DobiusRuntimeService

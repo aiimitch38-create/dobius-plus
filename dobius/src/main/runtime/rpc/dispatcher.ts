@@ -101,6 +101,7 @@ export class RpcDispatcher {
       connectionId?: string
       signal?: AbortSignal
       clientId?: string
+      clientDeviceId?: string
       clientKind?: 'mobile' | 'runtime'
       sendBinary?: (bytes: Uint8Array<ArrayBufferLike>) => void
       registerBinaryStreamHandler?: (
@@ -134,6 +135,7 @@ export class RpcDispatcher {
           requestId: request.id,
           connectionId: options?.connectionId,
           clientId: options?.clientId,
+          clientDeviceId: options?.clientDeviceId,
           clientKind: options?.clientKind,
           sendBinary: options?.sendBinary,
           registerBinaryStreamHandler: options?.registerBinaryStreamHandler
@@ -168,6 +170,7 @@ export class RpcDispatcher {
           requestId: request.id,
           connectionId: options?.connectionId,
           clientId: options?.clientId,
+          clientDeviceId: options?.clientDeviceId,
           clientKind: options?.clientKind,
           sendBinary: options?.sendBinary,
           registerBinaryStreamHandler: options?.registerBinaryStreamHandler

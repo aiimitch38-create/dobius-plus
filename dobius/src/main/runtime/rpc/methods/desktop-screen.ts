@@ -20,11 +20,11 @@ function endpoint(ctx: RpcContext): DesktopScreenEndpoint {
   return ctx.runtime.desktopScreen
 }
 function owner(ctx: RpcContext): ScreenOwner {
-  if (!ctx.clientId || !ctx.connectionId || ctx.clientKind !== 'mobile') {
+  if (!ctx.clientId || !ctx.clientDeviceId || !ctx.connectionId || ctx.clientKind !== 'mobile') {
     throw new DesktopScreenError('screen_not_authorized')
   }
   return {
-    deviceId: ctx.clientId,
+    deviceId: ctx.clientDeviceId,
     connectionId: ctx.connectionId,
     requestId: ctx.requestId,
     signal: ctx.signal,
