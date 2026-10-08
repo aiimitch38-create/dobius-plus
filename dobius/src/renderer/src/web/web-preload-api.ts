@@ -688,6 +688,8 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     },
     mobile: {
       listNetworkInterfaces: () => Promise.resolve({ interfaces: [] }),
+      enableScreenSharing: () =>
+        Promise.reject(new Error('Screen sharing setup is only available in the macOS app.')),
       getPairingQR: () => Promise.resolve({ available: false }),
       getRuntimePairingUrl: () => Promise.resolve({ available: false }),
       listDevices: () => Promise.resolve({ devices: [] }),

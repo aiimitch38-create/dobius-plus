@@ -2993,3 +2993,22 @@ describe('web GitLab preload API', () => {
     ])
   })
 })
+
+describe('web desktop screen sharing setup', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.doUnmock('./web-runtime-client')
+  })
+
+  it('rejects screen setup because only the macOS app can request Screen Recording', async () => {
+    const { api } = await installApi('Linux')
+
+    await expect(api.mobile.enableScreenSharing()).rejects.toThrow(
+      'Screen sharing setup is only available in the macOS app.'
+    )
+  })
+})
