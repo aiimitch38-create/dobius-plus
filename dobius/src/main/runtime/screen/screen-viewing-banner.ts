@@ -75,6 +75,10 @@ export async function showScreenViewingBanner(
       throw new DesktopScreenError('screen_not_authorized')
     }
     win.showInactive()
+    // Loading HTML does not prove the local privacy indicator became visible.
+    if (!win.isVisible()) {
+      throw new DesktopScreenError('screen_not_authorized')
+    }
     return hide
   } catch (error) {
     hide()
