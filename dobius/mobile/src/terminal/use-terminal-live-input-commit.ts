@@ -82,7 +82,12 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
       (activeSessionTabType != null && activeSessionTabType !== 'terminal') ||
       !liveInputTerminalHandles.has(activeHandle)
     ) {
-      clearPendingLiveInputCommit()
+      clearPendingLiveInputCommit({
+        detachPendingSends:
+          pendingHandle !== activeHandle ||
+          (activeSessionTabType != null && activeSessionTabType !== 'terminal') ||
+          (activeHandle !== null && !liveInputTerminalHandles.has(activeHandle))
+      })
     }
   }, [activeHandle, activeSessionTabType, clearPendingLiveInputCommit, liveInputTerminalHandles])
 
@@ -90,7 +95,7 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
     async (handle: string): Promise<boolean> => {
       const pendingHandle = pendingLiveInputHandleRef.current
       if (pendingHandle && pendingHandle !== handle) {
-        clearPendingLiveInputCommit()
+        clearPendingLiveInputCommit({ detachPendingSends: true })
         return waitForPendingLiveInputFlush()
       }
       // Why: external bytes (dictation/paste) land after the field's echo on the
@@ -106,7 +111,7 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
   const handleLiveInputChange = useCallback(
     (text: string) => {
       if (!activeHandle || !liveInputTerminalHandles.has(activeHandle)) {
-        clearPendingLiveInputCommit()
+        clearPendingLiveInputCommit({ detachPendingSends: true })
         return
       }
       const normalizedText = normalizeTerminalTextInput(text)

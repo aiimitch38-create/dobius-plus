@@ -1067,6 +1067,7 @@ export default function SessionScreen() {
   // gap reset (treat as a fresh subscription, e.g. server restart).
   const layoutSeqRef = useRef<Map<string, number>>(new Map())
   const sendingRef = useRef(false)
+  const terminalInputFailureToastAtRef = useRef(0)
   // Why: tracks the pixel height of the terminal frame so measureFitDimensions
   // can use the exact container height instead of relying on window.innerHeight,
   // which can overstate the visible area due to layout timing.
@@ -3210,9 +3211,20 @@ export default function SessionScreen() {
         handle !== activeHandleRef.current ||
         activeSessionTabTypeRef.current !== 'terminal'
       ) {
+        if (
+          handle === activeHandleRef.current &&
+          activeSessionTabTypeRef.current === 'terminal' &&
+          connStateRef.current !== 'connected'
+        ) {
+          const now = Date.now()
+          if (now - terminalInputFailureToastAtRef.current >= 2500) {
+            terminalInputFailureToastAtRef.current = now
+            showToast('Input was not confirmed. Check the terminal before retrying.', 3000)
+          }
+        }
         return false
       }
-      return rpc
+      const accepted = await rpc
         .sendRequest('terminal.send', {
           terminal: handle,
           text,
@@ -3222,6 +3234,16 @@ export default function SessionScreen() {
             : {})
         })
         .then(isTerminalSendRpcAccepted, () => false)
+      if (!accepted) {
+        const now = Date.now()
+        if (now - terminalInputFailureToastAtRef.current >= 2500) {
+          terminalInputFailureToastAtRef.current = now
+          showToast('Input was not confirmed. Check the terminal before retrying.', 3000)
+        }
+      } else {
+        terminalInputFailureToastAtRef.current = 0
+      }
+      return accepted
     },
     [showToast]
   )

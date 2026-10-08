@@ -15,6 +15,10 @@ import {
 import { TERMINAL_WEBVIEW_FRAME_STYLES } from './terminal-webview-frame-styles'
 import { createTerminalWebViewMeasureTracker } from './terminal-webview-measure-tracker'
 import { useTerminalWebReadyWatchdog } from './terminal-webview-ready-watchdog'
+import {
+  createTerminalWebViewLifecycleRecord,
+  type TerminalWebViewLifecycleEvent
+} from './terminal-webview-lifecycle-diagnostics'
 import { XTERM_WEBVIEW_SOURCE } from './terminal-webview-html'
 import type { TerminalWebViewCommand } from './terminal-webview-messages'
 import { createTerminalWebViewPendingMessages } from './terminal-webview-pending-messages'
@@ -33,6 +37,9 @@ type Props = {
   // Why: baseline zoom multiplier ("text size") applied on top of the fit-to-width
   // scale; raw xterm fontSize can't drive apparent size because the fit cancels it.
   textScale?: number
+  diagnosticTerminalKey?: string
+  diagnosticActive?: boolean
+  diagnosticEnabled?: boolean
   onWebReady?: () => void
   onEngineError?: (message: string) => void
 } & TerminalSelectionEvents
@@ -42,6 +49,9 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
     style,
     terminalTheme,
     textScale = 1,
+    diagnosticTerminalKey = 'unknown',
+    diagnosticActive = false,
+    diagnosticEnabled = false,
     onWebReady,
     onEngineError,
     onSelectionMode,
@@ -60,6 +70,8 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
 ) {
   const webViewRef = useRef<WebView>(null)
   const isWebReadyRef = useRef(false)
+  const webViewGenerationRef = useRef(0)
+  const lastLifecycleEventAtRef = useRef(Date.now())
   const pendingMessages = useMemo(() => createTerminalWebViewPendingMessages(), [])
   const measureTracker = useMemo(() => createTerminalWebViewMeasureTracker(), [])
   const messageIdRef = useRef(0)
@@ -75,6 +87,28 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
   const { armWebReadyWatchdog, clearWebReadyWatchdog } = useTerminalWebReadyWatchdog(
     isWebReadyRef,
     reportEngineError
+  )
+
+  const reportLifecycleEvent = useCallback(
+    (event: TerminalWebViewLifecycleEvent) => {
+      if (!diagnosticEnabled) {
+        return
+      }
+      const atMs = Date.now()
+      const sincePreviousEventMs = atMs - lastLifecycleEventAtRef.current
+      lastLifecycleEventAtRef.current = atMs
+      const record = createTerminalWebViewLifecycleRecord({
+        terminalKey: diagnosticTerminalKey,
+        event,
+        generation: webViewGenerationRef.current,
+        active: diagnosticActive,
+        atMs
+      })
+      // Why: correlate terminal process churn across app restores without
+      // logging terminal input, output, or the raw terminal handle.
+      console.log('[terminal-webview-lifecycle]', { ...record, sincePreviousEventMs })
+    },
+    [diagnosticActive, diagnosticEnabled, diagnosticTerminalKey]
   )
 
   const nextMessageId = useCallback(() => {
@@ -114,6 +148,7 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
       }
 
       if (msg.type === 'web-ready') {
+        reportLifecycleEvent('web-ready')
         isWebReadyRef.current = true
         clearWebReadyWatchdog()
         clearEngineError()
@@ -229,26 +264,66 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
       onTerminalTap,
       onFileTap,
       onOpenUrl,
-      onTextScaleChange
+      onTextScaleChange,
+      reportLifecycleEvent
     ]
   )
 
   const handleLoadStart = useCallback(() => {
+    webViewGenerationRef.current += 1
+    reportLifecycleEvent('load-start')
     isWebReadyRef.current = false
     armWebReadyWatchdog()
     // Why: messages queued for a previous WebView generation are stale after a reload;
     // dropping them avoids replaying terminal chunks before the next init snapshot.
     pendingMessages.clear()
-  }, [armWebReadyWatchdog, pendingMessages])
+  }, [armWebReadyWatchdog, pendingMessages, reportLifecycleEvent])
 
   const handleReload = useCallback(() => {
+    reportLifecycleEvent('reload-requested')
     clearEngineError()
     webViewRef.current?.reload()
-  }, [clearEngineError])
+  }, [clearEngineError, reportLifecycleEvent])
+
+  const handleLoadError = useCallback(
+    (event: Parameters<typeof reportNativeEngineError>[1]) => {
+      reportLifecycleEvent('load-error')
+      reportNativeEngineError('Terminal WebView load failed', event)
+    },
+    [reportLifecycleEvent, reportNativeEngineError]
+  )
+
+  const handleHttpError = useCallback(
+    (event: Parameters<typeof reportNativeEngineError>[1]) => {
+      reportLifecycleEvent('http-error')
+      reportNativeEngineError('Terminal WebView HTTP error', event)
+    },
+    [reportLifecycleEvent, reportNativeEngineError]
+  )
+
+  const handleRenderProcessGone = useCallback(
+    (event: Parameters<typeof reportNativeEngineError>[1]) => {
+      reportLifecycleEvent('render-process-gone')
+      reportNativeEngineError('Terminal WebView render process ended', event)
+    },
+    [reportLifecycleEvent, reportNativeEngineError]
+  )
+
+  const handleContentProcessDidTerminate = useCallback(
+    (event: Parameters<typeof reportNativeEngineError>[1]) => {
+      reportLifecycleEvent('content-process-ended')
+      reportNativeEngineError('Terminal WebView content process ended', event)
+    },
+    [reportLifecycleEvent, reportNativeEngineError]
+  )
 
   useEffect(() => {
     postMessage({ type: 'set-theme', terminalTheme })
   }, [postMessage, terminalThemeKey, terminalTheme])
+
+  useEffect(() => {
+    reportLifecycleEvent('active-state')
+  }, [reportLifecycleEvent])
 
   // Why: live-apply text-size changes to an already-mounted terminal (the pane
   // stays alive while the user visits Settings), so no terminal reload is needed.
@@ -387,14 +462,10 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
         textZoom={100}
         onLoadStart={handleLoadStart}
         onMessage={handleMessage}
-        onError={(event) => reportNativeEngineError('Terminal WebView load failed', event)}
-        onHttpError={(event) => reportNativeEngineError('Terminal WebView HTTP error', event)}
-        onRenderProcessGone={(event) =>
-          reportNativeEngineError('Terminal WebView render process ended', event)
-        }
-        onContentProcessDidTerminate={(event) =>
-          reportNativeEngineError('Terminal WebView content process ended', event)
-        }
+        onError={handleLoadError}
+        onHttpError={handleHttpError}
+        onRenderProcessGone={handleRenderProcessGone}
+        onContentProcessDidTerminate={handleContentProcessDidTerminate}
       />
       {engineError ? (
         <TerminalWebViewEngineErrorOverlay message={engineError} onReload={handleReload} />
