@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ScreenSessionService, type ScreenCaptureFrame } from './screen-session-service'
-import type { ScreenCapabilities, ScreenEvent, ScreenOwner, ScreenReference } from './screen-contracts'
+import type {
+  ScreenCapabilities,
+  ScreenEvent,
+  ScreenOwner,
+  ScreenReference
+} from './screen-contracts'
 
 afterEach(() => vi.useRealTimers())
 function fixture() {
@@ -13,13 +18,15 @@ function fixture() {
   })
   const backend = {
     supported: true,
-    status: vi.fn(async (): Promise<ScreenCapabilities> => ({
-      supported: true,
-      permission: 'granted' as const,
-      display: { id: 7, width: 1920, height: 1200 },
-      maxFps: 10,
-      maxWidth: 1280
-    })),
+    status: vi.fn(
+      async (): Promise<ScreenCapabilities> => ({
+        supported: true,
+        permission: 'granted' as const,
+        display: { id: 7, width: 1920, height: 1200 },
+        maxFps: 10,
+        maxWidth: 1280
+      })
+    ),
     create: vi.fn(() => ({ start, stop }))
   }
   const service = new ScreenSessionService(backend, () =>
@@ -196,22 +203,33 @@ describe('desktop screen consented session safety', () => {
   it('waits for the visible indicator and fences Stop while it is loading', async () => {
     const f = fixture()
     let show!: (hide: () => void) => void
-    f.service.setConsentUi({ approve: f.approve, indicatorVisible: () => true,
-      show: () => new Promise<() => void>((resolve) => { show = resolve }) })
+    f.service.setConsentUi({
+      approve: f.approve,
+      indicatorVisible: () => true,
+      show: () =>
+        new Promise<() => void>((resolve) => {
+          show = resolve
+        })
+    })
     const task = f.stream()
     const rejection = expect(task).rejects.toMatchObject({ code: 'screen_not_authorized' })
     await f.ready()
     expect(f.events).toEqual([])
     expect(f.start).not.toHaveBeenCalled()
-    f.service.stop('stopped'); show(() => {}); await rejection
+    f.service.stop('stopped')
+    show(() => {})
+    await rejection
     expect(f.start).not.toHaveBeenCalled()
   })
   it('stops before a frame can be sent when the app and its indicator become hidden', async () => {
     const f = fixture()
     let visible = true
     f.service.setConsentUi({ approve: f.approve, show: f.show, indicatorVisible: () => visible })
-    const task = f.stream(); await f.ready()
-    visible = false; f.produce(); await task
+    const task = f.stream()
+    await f.ready()
+    visible = false
+    f.produce()
+    await task
     expect(f.stop).toHaveBeenCalledOnce()
     expect(f.sendBinary).not.toHaveBeenCalled()
   })
@@ -222,8 +240,13 @@ describe('desktop screen consented session safety', () => {
     const task = f.stream()
     const rejection = expect(task).rejects.toMatchObject({ code: 'screen_not_authorized' })
     await f.ready()
-    for (const owner of [{ ...f.owner, deviceId: 'other' }, { ...f.owner, connectionId: 'other' }]) {
-      expect(() => f.service.unsubscribe({ requestId: 'original-request' }, owner)).toThrow('Start viewing again')
+    for (const owner of [
+      { ...f.owner, deviceId: 'other' },
+      { ...f.owner, connectionId: 'other' }
+    ]) {
+      expect(() => f.service.unsubscribe({ requestId: 'original-request' }, owner)).toThrow(
+        'Start viewing again'
+      )
     }
     f.service.unsubscribe({ requestId: 'original-request' }, f.owner)
     await rejection

@@ -382,3 +382,8 @@ that is one plain command and passes every time.
 - Tried: adding desktop subscription hooks and labeled navigation inside the existing large RPC client and host/home screens; the first extraction still exceeded two file budgets after formatting.
 - Failed because: these files have tight per-file ceilings, and formatter-expanded imports/JSX count toward them.
 - Works instead: extract the public RPC contract, subscription types/result guards, desktop navigation controls and host screen props into focused modules. Reuse connection verdict classification from its domain module. Never raise or disable max-lines to fit a feature.
+
+## 2026-10-07 — Desktop session module line budget after formatting
+- Tried: extracting capture contracts and geometry after the session module exceeded 300 lines; the formatted result still exceeded the ceiling.
+- Failed because: expanded callbacks and imports consume the line budget as well as executable statements.
+- Works instead: move session state and parameter validation into the focused capture-contract module; format before checking the budget. Do not disable or raise max-lines.

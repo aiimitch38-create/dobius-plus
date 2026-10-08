@@ -20,22 +20,76 @@ final class DesktopScreenOutput: NSObject, SCStreamOutput, @unchecked Sendable {
     private let width: Int
     private let height: Int
     private var sequence: UInt32 = 0
+    private let lock = NSLock()
+    private let encoder = DispatchQueue(label: "dobius.screen.encoder", qos: .userInitiated)
+    private let writer = DispatchQueue(label: "dobius.screen.writer", qos: .userInitiated)
+    private var latestBuffer: CVPixelBuffer?
+    private var latestJPEG: Data?
+    private var encoding = false
+    private var lastSample = ProcessInfo.processInfo.systemUptime
+    private var timer: DispatchSourceTimer?
     init(display: UInt32, width: Int, height: Int) {
         self.display = display; self.width = width; self.height = height
     }
     func stream(_ stream: SCStream, didOutputSampleBuffer sample: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen, sample.isValid,
             let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
-            let status = attachments.first?[.status] as? Int, status == SCFrameStatus.complete.rawValue,
-            let buffer = sample.imageBuffer else { return }
-        // Serial sample queue and queueDepth=2 bound encoding; no per-frame process or main-thread wait.
+            let status = attachments.first?[.status] as? Int else { return }
+        if status == SCFrameStatus.blank.rawValue || status == SCFrameStatus.suspended.rawValue ||
+            status == SCFrameStatus.stopped.rawValue {
+            exit(3) // Blank/suspended content must never reuse the previous image.
+        }
+        guard status == SCFrameStatus.complete.rawValue || status == SCFrameStatus.idle.rawValue else { return }
+        lock.lock()
+        lastSample = ProcessInfo.processInfo.systemUptime
+        if status == SCFrameStatus.complete.rawValue, let buffer = sample.imageBuffer {
+            latestBuffer = buffer // Replace pending work; retain only the newest pixel buffer.
+        }
+        let start = !encoding && latestBuffer != nil
+        if start { encoding = true }
+        lock.unlock()
+        if start { encoder.async { self.encodeNewest() } }
+    }
+    private func encodeNewest() {
+        while true {
+            lock.lock()
+            let buffer = latestBuffer
+            latestBuffer = nil
+            if buffer == nil { encoding = false }
+            lock.unlock()
+            guard let buffer else { return }
+            autoreleasepool {
+                let image = CIImage(cvPixelBuffer: buffer)
+                guard let cg = context.createCGImage(image, from: image.extent),
+                    cg.width == width, cg.height == height else { exit(3) }
+                let bitmap = NSBitmapImageRep(cgImage: cg)
+                guard let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.6]),
+                    !jpeg.isEmpty, jpeg.count <= 1024 * 1024 else { exit(3) }
+                lock.lock()
+                latestJPEG = jpeg
+                lock.unlock()
+            }
+        }
+    }
+    func startDelivery(fps: Int) {
+        lock.lock()
+        lastSample = ProcessInfo.processInfo.systemUptime
+        lock.unlock()
+        let timer = DispatchSource.makeTimerSource(queue: writer)
+        self.timer = timer
+        timer.schedule(deadline: .now(), repeating: .milliseconds(1000 / fps))
+        timer.setEventHandler { [weak self] in self?.deliverNewest() }
+        timer.resume()
+    }
+    private func deliverNewest() {
+        lock.lock()
+        let jpeg = latestJPEG
+        let stale = ProcessInfo.processInfo.systemUptime - lastSample > 5
+        lock.unlock()
+        // Idle samples confirm a still-live static display; capture silence fails closed.
+        guard !stale, CGPreflightScreenCaptureAccess() else { exit(3) }
+        guard let jpeg else { return }
         autoreleasepool {
-            let image = CIImage(cvPixelBuffer: buffer)
-            guard let cg = context.createCGImage(image, from: image.extent),
-                cg.width == width, cg.height == height else { return }
-            let bitmap = NSBitmapImageRep(cgImage: cg)
-            guard let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.6]),
-                !jpeg.isEmpty, jpeg.count <= 1024 * 1024 else { return }
             sequence &+= 1
             var packet = Data()
             func append<T: FixedWidthInteger>(_ number: T) {
@@ -81,6 +135,7 @@ final class DesktopScreenRuntime: NSObject, NSApplicationDelegate, SCStreamDeleg
                 try stream.addStreamOutput(output, type: .screen,
                     sampleHandlerQueue: DispatchQueue(label: "dobius.screen.jpeg", qos: .userInitiated))
                 try await stream.startCapture()
+                output.startDelivery(fps: fps)
             } catch { exit(3) }
         }
         // Losing the parent pipe closes capture even if its Stop IPC never arrives.

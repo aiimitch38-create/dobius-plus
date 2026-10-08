@@ -1,9 +1,19 @@
 import { randomUUID } from 'node:crypto'
 import { DesktopScreenError } from '../../../shared/desktop-screen-errors'
+import { encodeDesktopScreenFrame } from '../../../shared/desktop-screen-protocol'
 import {
-  encodeDesktopScreenFrame,
-  type DesktopScreenFrame
-} from '../../../shared/desktop-screen-protocol'
+  screenDimensions,
+  validScreenParams,
+  type ScreenCaptureBackend,
+  type ScreenConsentUi,
+  type ScreenSession as Session
+} from './screen-capture-contracts'
+export type {
+  ScreenCaptureFrame,
+  ScreenCaptureBackend,
+  ScreenConsentUi,
+  ScreenProducer
+} from './screen-capture-contracts'
 import type {
   DesktopScreenEndpoint,
   ScreenCapabilities,
@@ -14,39 +24,6 @@ import type {
   ScreenStreamParams
 } from './screen-contracts'
 
-export type ScreenCaptureFrame = Pick<
-  DesktopScreenFrame,
-  'displayId' | 'width' | 'height' | 'image'
->
-export type ScreenProducer = {
-  start(frame: (frame: ScreenCaptureFrame) => void, failed: () => void): void
-  stop(): void
-}
-export type ScreenCaptureBackend = {
-  supported: boolean
-  status(): Promise<ScreenCapabilities>
-  create(params: ScreenStreamParams): ScreenProducer
-}
-export type ScreenConsentUi = {
-  indicatorVisible(): boolean
-  approve(name: string, signal: AbortSignal): Promise<boolean>
-  show(name: string, stop: () => void, signal: AbortSignal): (() => void) | Promise<() => void>
-}
-type Session = ScreenReference & {
-  owner: ScreenOwner
-  emit: (event: ScreenEvent) => void
-  expiry: number
-  cancel: AbortController
-  done: Promise<void>
-  resolve: () => void
-  timer?: ReturnType<typeof setInterval>
-  producer?: ScreenProducer
-  hide?: () => void
-  removeAbort?: () => void
-  ready: boolean
-  sequence: number
-  lastFrameAt: number
-}
 type Device = { name: string; scope: string; grants?: readonly string[] }
 
 // This owner is independent of generic runtime subscriptions: cleanup always verifies both identities.
@@ -127,14 +104,7 @@ export class ScreenSessionService implements DesktopScreenEndpoint {
     if (this.active) {
       throw new DesktopScreenError('screen_busy')
     }
-    if (
-      !Number.isInteger(params.fps) ||
-      params.fps < 1 ||
-      params.fps > 10 ||
-      !Number.isInteger(params.width) ||
-      params.width < 320 ||
-      params.width > 1280
-    ) {
+    if (!validScreenParams(params)) {
       throw new DesktopScreenError('screen_not_authorized')
     }
     let resolve!: () => void
@@ -178,22 +148,21 @@ export class ScreenSessionService implements DesktopScreenEndpoint {
         throw new DesktopScreenError('screen_not_authorized')
       }
       this.requireLive(session)
-      const width = Math.max(
-        1,
-        Math.floor(
-          Math.min(
-            params.width,
-            status.display.width,
-            (1280 * status.display.width) / status.display.height
+      const { width, height } = screenDimensions(params.width, status.display)
+      session.hide = await this.wait(
+        Promise.resolve(
+          this.ui.show(
+            device.name,
+            () => {
+              if (this.active === session) {
+                this.stop('stopped')
+              }
+            },
+            session.cancel.signal
           )
-        )
+        ),
+        session
       )
-      const height = Math.max(1, Math.floor((width * status.display.height) / status.display.width))
-      session.hide = await this.wait(Promise.resolve(this.ui.show(device.name, () => {
-        if (this.active === session) {
-          this.stop('stopped')
-        }
-      }, session.cancel.signal)), session)
       this.requireLive(session)
       session.ready = true
       emit({
@@ -281,8 +250,14 @@ export class ScreenSessionService implements DesktopScreenEndpoint {
   unsubscribe(ref: ScreenCancelReference, owner: ScreenOwner): { unsubscribed: true } {
     if ('requestId' in ref) {
       const session = this.active
-      if (!session || session.owner.requestId !== ref.requestId || session.owner.deviceId !== owner.deviceId ||
-          session.owner.connectionId !== owner.connectionId) throw new DesktopScreenError('screen_not_authorized')
+      if (
+        !session ||
+        session.owner.requestId !== ref.requestId ||
+        session.owner.deviceId !== owner.deviceId ||
+        session.owner.connectionId !== owner.connectionId
+      ) {
+        throw new DesktopScreenError('screen_not_authorized')
+      }
     } else {
       this.owned(ref, owner)
     }
