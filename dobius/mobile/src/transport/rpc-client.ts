@@ -17,6 +17,7 @@ import {
   isE2EESequenceViolated
 } from './e2ee'
 import {
+  clearTerminalStreamsForRequest,
   handleTerminalBinaryFrame,
   type TerminalSnapshotState
 } from './rpc-client-terminal-binary-frame'
@@ -189,6 +190,16 @@ export function connect(
   const terminalStreamListeners = new Map<number, StreamingListener>()
   const terminalStreamIdsByRequest = new Map<string, Set<number>>()
   const terminalSnapshots = new Map<number, TerminalSnapshotState>()
+  const terminalSnapshotCleanup = {
+    streamIdsByRequest: terminalStreamIdsByRequest,
+    listeners: terminalStreamListeners,
+    snapshots: terminalSnapshots
+  }
+  const terminalBinaryFrameOptions = {
+    terminalSnapshots,
+    getListener: (streamId: number) => terminalStreamListeners.get(streamId),
+    recordValidatedInboundTraffic
+  }
   let activeBrowserScreencastRequestId: string | null = null
   let pendingBrowserScreencastRequestId: string | null = null
   const stateListeners = new Set<(state: ConnectionState) => void>()
@@ -956,14 +967,7 @@ export function connect(
     if (pendingBrowserScreencastRequestId === id) {
       pendingBrowserScreencastRequestId = null
     }
-    const terminalStreamIds = terminalStreamIdsByRequest.get(id)
-    if (terminalStreamIds) {
-      for (const streamId of terminalStreamIds) {
-        terminalStreamListeners.delete(streamId)
-        terminalSnapshots.delete(streamId)
-      }
-      terminalStreamIdsByRequest.delete(id)
-    }
+    clearTerminalStreamsForRequest(id, terminalSnapshotCleanup)
     if (stream?.method === 'browser.screencast') {
       stream.cancelled = true
     }
@@ -979,15 +983,7 @@ export function connect(
   }
 
   function resetTerminalStreamRoutingForRequest(id: string): void {
-    const terminalStreamIds = terminalStreamIdsByRequest.get(id)
-    if (!terminalStreamIds) {
-      return
-    }
-    for (const streamId of terminalStreamIds) {
-      terminalStreamListeners.delete(streamId)
-      terminalSnapshots.delete(streamId)
-    }
-    terminalStreamIdsByRequest.delete(id)
+    clearTerminalStreamsForRequest(id, terminalSnapshotCleanup)
   }
 
   function emitStreamError(stream: StreamRequest, message: string, error?: unknown): void {
@@ -1036,11 +1032,7 @@ export function connect(
       handleBrowserBinaryFrame(browserFrame)
       return
     }
-    handleTerminalBinaryFrame(bytes, {
-      terminalSnapshots,
-      getListener: (streamId) => terminalStreamListeners.get(streamId),
-      recordValidatedInboundTraffic
-    })
+    handleTerminalBinaryFrame(bytes, terminalBinaryFrameOptions)
   }
 
   function handleBrowserBinaryFrame(frame: BrowserScreencastFrame) {

@@ -62,6 +62,11 @@ import {
   useLastConnectedAt
 } from '../../../../src/transport/client-context'
 import { classifyConnection } from '../../../../src/transport/connection-health'
+import {
+  initializeTerminalAfterOversizedSnapshot,
+  markOversizedSnapshotAwaitingGeometry,
+  shouldRetryTerminalSnapshot
+} from '../../../../src/transport/terminal-snapshot-recovery'
 import { useResponsiveLayout } from '../../../../src/layout/responsive-layout'
 import {
   type ActivePanel,
@@ -1020,6 +1025,9 @@ export default function SessionScreen() {
   const pendingTerminalAcquireRef = useRef<Set<string>>(new Set())
   const subscribingHandlesRef = useRef<Set<string>>(new Set())
   const initializedHandlesRef = useRef<Set<string>>(new Set())
+  const snapshotRecoveryAttemptsRef = useRef<Map<string, number>>(new Map())
+  const snapshotWarningTerminalsRef = useRef<Set<string>>(new Set())
+  const oversizedSnapshotAwaitingGeometryRef = useRef<Set<string>>(new Set())
   // Why: WebViews load xterm.js from CDN asynchronously. Hidden WebViews
   // (opacity:0) may have delayed JS execution on iOS. We must not subscribe
   // until the WebView has fired web-ready, otherwise init() messages queue
@@ -1173,6 +1181,12 @@ export default function SessionScreen() {
     [clearToastHideTimer]
   )
 
+  useEffect(() => {
+    if (activeHandle && snapshotWarningTerminalsRef.current.has(activeHandle)) {
+      showToast('Terminal view could not be restored. New output will still appear.', 4000)
+    }
+  }, [activeHandle, showToast])
+
   const dictation = useMobileDictation({
     client,
     enabled: canSend,
@@ -1313,6 +1327,9 @@ export default function SessionScreen() {
     terminalUnsubsRef.current.clear()
     subscribingHandlesRef.current.clear()
     initializedHandlesRef.current.clear()
+    snapshotRecoveryAttemptsRef.current.clear()
+    snapshotWarningTerminalsRef.current.clear()
+    oversizedSnapshotAwaitingGeometryRef.current.clear()
     webReadyHandlesRef.current.clear()
     subscribeSeqRef.current.clear()
     layoutSeqRef.current.clear()
@@ -1343,7 +1360,7 @@ export default function SessionScreen() {
   )
 
   const subscribeToTerminal = useCallback(
-    (handle: string, options?: { acquire?: boolean }) => {
+    (handle: string, options?: { acquire?: boolean; snapshotRecovery?: boolean }) => {
       if (!client) {
         return
       }
@@ -1358,6 +1375,9 @@ export default function SessionScreen() {
       }
       if (!webReadyHandlesRef.current.has(handle)) {
         return
+      }
+      if (!options?.snapshotRecovery) {
+        snapshotRecoveryAttemptsRef.current.delete(handle)
       }
 
       const shouldAcquire =
@@ -1417,7 +1437,49 @@ export default function SessionScreen() {
           if (data.type === 'subscribed') {
             return
           }
+          if (data.type === 'snapshot-error') {
+            if (data.reason === 'oversized') {
+              snapshotWarningTerminalsRef.current.add(handle)
+              markOversizedSnapshotAwaitingGeometry(
+                oversizedSnapshotAwaitingGeometryRef.current,
+                handle,
+                initializedHandlesRef.current.has(handle)
+              )
+              if (activeHandleRef.current === handle) {
+                showToast(
+                  'Terminal view could not be restored. New output will still appear.',
+                  4000
+                )
+              }
+              return
+            }
+            if (
+              shouldRetryTerminalSnapshot(
+                snapshotRecoveryAttemptsRef.current,
+                handle,
+                typeof data.reason === 'string' ? data.reason : undefined
+              )
+            ) {
+              initializedHandlesRef.current.delete(handle)
+              unsubscribeTerminal(handle)
+              subscribeToTerminal(handle, { snapshotRecovery: true })
+            } else {
+              console.warn('[terminal] snapshot assembly failed after recovery', {
+                handle: handle.slice(-8),
+                reason: data.reason
+              })
+            }
+            return
+          }
           if (data.type === 'scrollback') {
+            oversizedSnapshotAwaitingGeometryRef.current.delete(handle)
+            snapshotRecoveryAttemptsRef.current.delete(handle)
+            if (
+              snapshotWarningTerminalsRef.current.delete(handle) &&
+              activeHandleRef.current === handle
+            ) {
+              showToast('Terminal view restored.')
+            }
             if (initializedHandlesRef.current.has(handle)) {
               return
             }
@@ -1553,8 +1615,29 @@ export default function SessionScreen() {
             const cols = (data.cols as number) || 80
             const rows = (data.rows as number) || 24
             const serialized = typeof data.serialized === 'string' ? data.serialized : null
-            const oscLinks = isTerminalOscLinkRanges(data.oscLinks) ? data.oscLinks : undefined
             if (serialized != null) {
+              snapshotRecoveryAttemptsRef.current.delete(handle)
+              if (
+                snapshotWarningTerminalsRef.current.delete(handle) &&
+                activeHandleRef.current === handle
+              ) {
+                showToast('Terminal view restored.')
+              }
+            }
+            const oscLinks = isTerminalOscLinkRanges(data.oscLinks) ? data.oscLinks : undefined
+            const terminalRef = getTerminalRef(handle)
+            if (
+              serialized == null &&
+              initializeTerminalAfterOversizedSnapshot(
+                oversizedSnapshotAwaitingGeometryRef.current,
+                handle,
+                terminalRef,
+                cols,
+                rows
+              )
+            ) {
+              initializedHandlesRef.current.add(handle)
+            } else if (serialized != null) {
               getTerminalRef(handle)?.init(cols, rows, serialized, true, oscLinks)
             } else {
               getTerminalRef(handle)?.resize(cols, rows)
@@ -1576,7 +1659,7 @@ export default function SessionScreen() {
       }
       subscribingHandlesRef.current.delete(handle)
     },
-    [client, getTerminalRef, scheduleDelayedAction]
+    [client, getTerminalRef, scheduleDelayedAction, showToast, unsubscribeTerminal]
   )
 
   // Why: toggles between phone and desktop mode via server RPC. The server

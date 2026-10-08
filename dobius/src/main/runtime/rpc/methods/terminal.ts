@@ -15,6 +15,7 @@ import {
   encodeTerminalStreamFrame,
   encodeTerminalStreamJson,
   encodeTerminalStreamText,
+  TERMINAL_SNAPSHOT_TOO_LARGE_MESSAGE,
   type TerminalStreamFrame
 } from '../../../../shared/terminal-stream-protocol'
 import { TERMINAL_PANE_SPLIT_SOURCES } from '../../../../shared/feature-education-telemetry'
@@ -28,7 +29,8 @@ import { measureClipboardTextByteLength } from '../../../../shared/clipboard-tex
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import {
   MOBILE_SNAPSHOT_BYTE_BUDGET,
-  MOBILE_SUBSCRIBE_SCROLLBACK_ROWS
+  MOBILE_SUBSCRIBE_SCROLLBACK_ROWS,
+  TERMINAL_SNAPSHOT_MAX_BYTES
 } from '../../scrollback-limits'
 
 const REQUESTED_SNAPSHOT_BYTE_BUDGET = 2 * 1024 * 1024
@@ -446,7 +448,14 @@ async function serializeBudgetedRequestedSnapshot(
 function sendSnapshotFrames(
   sendFrame: (opcode: TerminalStreamOpcode, payload?: Uint8Array<ArrayBufferLike>) => void,
   options: SnapshotFrameOptions
-): { bytes: number; chunks: number } {
+): { bytes: number; chunks: number; oversized: boolean } {
+  if (terminalStreamByteLengthExceeds(options.data, TERMINAL_SNAPSHOT_MAX_BYTES)) {
+    sendFrame(
+      TerminalStreamOpcode.Error,
+      encodeTerminalStreamText(TERMINAL_SNAPSHOT_TOO_LARGE_MESSAGE)
+    )
+    return { bytes: 0, chunks: 0, oversized: true }
+  }
   sendFrame(
     TerminalStreamOpcode.SnapshotStart,
     encodeTerminalStreamJson({
@@ -472,7 +481,7 @@ function sendSnapshotFrames(
     sendFrame(TerminalStreamOpcode.SnapshotChunk, chunk)
   }
   sendFrame(TerminalStreamOpcode.SnapshotEnd)
-  return { bytes, chunks }
+  return { bytes, chunks, oversized: false }
 }
 
 async function serializeBudgetedMobileSnapshot(
@@ -530,7 +539,7 @@ async function sendMobileResizeRestream(
   if (shouldSend && !shouldSend()) {
     return true
   }
-  sendSnapshotFrames(sendFrame, {
+  const stats = sendSnapshotFrames(sendFrame, {
     kind: 'resized',
     cols: serialized.cols,
     rows: serialized.rows,
@@ -544,6 +553,20 @@ async function sendMobileResizeRestream(
     truncatedByByteBudget: serialized.truncatedByByteBudget,
     data: serialized.data
   })
+  if (stats.oversized) {
+    // Why: the PTY geometry has already changed; keep the phone's local
+    // terminal dimensions coherent even when its full-buffer reflow is refused.
+    sendFrame(
+      TerminalStreamOpcode.Resized,
+      encodeTerminalStreamJson({
+        cols: serialized.cols,
+        rows: serialized.rows,
+        displayMode: event.displayMode,
+        reason: event.reason,
+        seq: event.seq ?? serialized.seq
+      })
+    )
+  }
   return true
 }
 
@@ -2004,12 +2027,28 @@ export const TERMINAL_METHODS: RpcAnyMethod[] = [
           oscLinks: serialized?.oscLinks,
           data: serialized?.data ?? ''
         })
+        if (snapshotStats.oversized) {
+          // Why: an initial snapshot can be refused before the phone has an
+          // xterm instance. Send current geometry after the explicit error so
+          // the client can initialize an empty live terminal without treating
+          // the refused snapshot as a successful empty replay.
+          sendFrame(
+            TerminalStreamOpcode.Resized,
+            encodeTerminalStreamJson({
+              cols: serialized?.cols ?? size?.cols ?? 80,
+              rows: serialized?.rows ?? size?.rows ?? 24,
+              displayMode,
+              seq: snapshotFrameSeq
+            })
+          )
+        }
         console.log('[mobile-terminal-stream] snapshot', {
           terminal: params.terminal,
           streamId,
           kind: 'scrollback',
           bytes: snapshotStats.bytes,
           chunks: snapshotStats.chunks,
+          oversized: snapshotStats.oversized,
           scrollbackRows: serialized?.scrollbackRows,
           truncatedByByteBudget: serialized?.truncatedByByteBudget === true
         })

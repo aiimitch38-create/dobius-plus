@@ -9,8 +9,13 @@ import {
   TerminalStreamOpcode,
   decodeTerminalStreamFrame,
   decodeTerminalStreamJson,
-  decodeTerminalStreamText
+  decodeTerminalStreamText,
+  TERMINAL_SNAPSHOT_TOO_LARGE_MESSAGE
 } from '../../../shared/terminal-stream-protocol'
+import {
+  MOBILE_SNAPSHOT_BYTE_BUDGET,
+  TERMINAL_SNAPSHOT_MAX_BYTES
+} from '../../../shared/terminal-scrollback-limits'
 
 function stubRuntime(overrides: Partial<DobiusRuntimeService> = {}): DobiusRuntimeService {
   return {
@@ -23,7 +28,106 @@ function makeRequest(method: string, params?: unknown): RpcRequest {
   return { id: 'req-1', authToken: 'tok', method, params }
 }
 
+async function runMobileSnapshot(data: string): Promise<Uint8Array<ArrayBufferLike>[]> {
+  const messages: string[] = []
+  const binaryFrames: Uint8Array<ArrayBufferLike>[] = []
+  const cleanups = new Map<string, () => void>()
+  const runtime = stubRuntime({
+    resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
+    readTerminal: vi.fn().mockResolvedValue({ tail: [], truncated: false }),
+    serializeTerminalBuffer: vi.fn().mockResolvedValue({ data, cols: 80, rows: 24 }),
+    getTerminalSize: vi.fn().mockReturnValue({ cols: 80, rows: 24 }),
+    getMobileDisplayMode: vi.fn().mockReturnValue('auto'),
+    getLayout: vi.fn().mockReturnValue({ seq: 1 }),
+    handleMobileSubscribe: vi.fn().mockResolvedValue(undefined),
+    handleMobileUnsubscribe: vi.fn(),
+    subscribeToTerminalData: vi.fn().mockReturnValue(vi.fn()),
+    subscribeToTerminalResize: vi.fn().mockReturnValue(vi.fn()),
+    subscribeToFitOverrideChanges: vi.fn().mockReturnValue(vi.fn()),
+    registerSubscriptionCleanup: vi.fn((id: string, cleanup: () => void) => {
+      cleanups.set(id, cleanup)
+    }),
+    cleanupSubscription: vi.fn((id: string) => {
+      const cleanup = cleanups.get(id)
+      cleanups.delete(id)
+      cleanup?.()
+    }),
+    waitForTerminal: vi.fn(() => new Promise<RuntimeTerminalWait>(() => {})),
+    sendTerminal: vi.fn().mockResolvedValue({ accepted: true }),
+    updateMobileViewport: vi.fn().mockResolvedValue({ updated: false, applied: false })
+  })
+  const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
+  const dispatchPromise = dispatcher.dispatchStreaming(
+    makeRequest('terminal.subscribe', {
+      terminal: 'terminal-1',
+      client: { id: 'phone-1', type: 'mobile' },
+      capabilities: { terminalBinaryStream: 1 }
+    }),
+    (msg) => messages.push(msg),
+    {
+      connectionId: 'conn-snapshot-admission',
+      sendBinary: (bytes) => binaryFrames.push(bytes)
+    }
+  )
+
+  await vi.waitFor(() =>
+    expect(
+      binaryFrames.some((frame) => {
+        const opcode = decodeTerminalStreamFrame(frame)?.opcode
+        return opcode === TerminalStreamOpcode.SnapshotEnd || opcode === TerminalStreamOpcode.Error
+      })
+    ).toBe(true)
+  )
+  runtime.cleanupSubscription('terminal-1:phone-1')
+  await dispatchPromise
+  return binaryFrames
+}
+
 describe('terminal subscribe buffering', () => {
+  it('sends a complete mobile zero-row fallback above the soft row target', async () => {
+    const data = 'x'.repeat(MOBILE_SNAPSHOT_BYTE_BUDGET + 1)
+    const frames = await runMobileSnapshot(data)
+    const decoded = frames.map((frame) => decodeTerminalStreamFrame(frame))
+    const snapshot = decoded
+      .filter((frame) => frame?.opcode === TerminalStreamOpcode.SnapshotChunk)
+      .map((frame) => (frame ? decodeTerminalStreamText(frame.payload) : ''))
+      .join('')
+
+    expect(snapshot).toBe(data)
+    expect(
+      decoded.filter((frame) => frame?.opcode === TerminalStreamOpcode.SnapshotChunk)
+    ).toHaveLength(Math.ceil(data.length / (48 * 1024)))
+    expect(decoded.map((frame) => frame?.opcode)).not.toContain(TerminalStreamOpcode.Error)
+  })
+
+  it('counts UTF-8 bytes and admits an exact-ceiling mobile snapshot', async () => {
+    const data = `${'x'.repeat(TERMINAL_SNAPSHOT_MAX_BYTES - 4)}💡`
+    const frames = await runMobileSnapshot(data)
+    const decoded = frames.map((frame) => decodeTerminalStreamFrame(frame))
+    const snapshot = decoded
+      .filter((frame) => frame?.opcode === TerminalStreamOpcode.SnapshotChunk)
+      .map((frame) => (frame ? decodeTerminalStreamText(frame.payload) : ''))
+      .join('')
+
+    expect(snapshot).toBe(data)
+    expect(
+      decoded.filter((frame) => frame?.opcode === TerminalStreamOpcode.SnapshotChunk)
+    ).toHaveLength(171)
+  })
+
+  it('refuses an over-ceiling snapshot without an empty success frame', async () => {
+    const data = `${'x'.repeat(TERMINAL_SNAPSHOT_MAX_BYTES - 3)}💡`
+    const frames = await runMobileSnapshot(data)
+    const decoded = frames.map((frame) => decodeTerminalStreamFrame(frame))
+
+    expect(decoded.map((frame) => frame?.opcode)).toEqual([
+      TerminalStreamOpcode.Error,
+      TerminalStreamOpcode.Resized
+    ])
+    expect(decodeTerminalStreamText(decoded[0]!.payload)).toBe(TERMINAL_SNAPSHOT_TOO_LARGE_MESSAGE)
+    expect(decodeTerminalStreamJson(decoded[1]!.payload)).toMatchObject({ cols: 80, rows: 24 })
+  })
+
   it('settles mobile subscribe waits when the stream signal aborts before PTY spawn', async () => {
     vi.useFakeTimers()
     try {
