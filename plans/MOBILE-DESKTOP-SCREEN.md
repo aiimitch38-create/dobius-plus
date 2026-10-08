@@ -186,12 +186,15 @@ Dead-connection tombstones clear on close. Never automatically replay desktop
 subscriptions; reconnect blanks pixels and requires explicit start/new approval.
 Stop stays Stopped until explicit start.
 
-Viewing requires route focus AND active AppState. Blur/background synchronously
-clear image, pending render, gesture state and renew timer, then unsubscribe.
-Clear every image reference on Stop, revoke/error and host change. Current-frame
-in-memory data URI only: no file cache, AsyncStorage, RPC JSON, telemetry or exception
-context. Physical app-switcher snapshot privacy must be observed; report any shell
-limitation requiring native protection before adding a dependency.
+Viewing requires the Desktop page OR its floating widget to be visible AND active
+AppState. Leaving both surfaces or backgrounding synchronously clears image and
+gesture state, ends lease renewal and unsubscribes. The one shared phone-side
+controller survives a page-to-widget handoff; there is never a second subscription.
+Closing the widget explicitly stops viewing. Clear every image reference on Stop,
+revoke/error, background and host change. Current-frame in-memory data URI only: no
+file cache, AsyncStorage, RPC JSON, telemetry or exception context. Physical
+app-switcher snapshot privacy must be observed; report any shell limitation requiring
+native protection before adding a dependency.
 
 Badges: Live only after image onLoad; Paused for local inactivity; Reconnecting for
 disconnected transport with blank pixels; Stopped for local session termination.
@@ -257,6 +260,13 @@ lease and queued actions before next native action. Ciphertext replay protection
 separate from application input order. Multi-monitor/mixed-DPI selection is Phase 3.
 
 ## Follow-up — after Phase 1
+
+The phone's JavaScript floating mirror widget is DESKTOP-SCREEN v2 step 7. It is
+mounted above the route stack, shares the Desktop page's single controller, and
+snaps to a screen corner. The Mac widget is step 8 and reuses the existing capture.
+
+Later: iOS system picture-in-picture over other apps needs native AVPictureInPicture,
+a video stream and a phone rebuild; it is out of scope.
 
 Optional **Save screenshot** on the phone Desktop screen: save only the currently
 displayed frame to Photos on an explicit tap. Never save automatically or in the

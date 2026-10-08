@@ -1,41 +1,28 @@
-import { Buffer } from 'buffer'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
 import { ChevronLeft, Monitor } from 'lucide-react-native'
 import { useHostClient } from '../../../src/transport/client-context'
-import {
-  DesktopViewController,
-  type DesktopBadge
-} from '../../../src/desktop/desktop-view-controller'
+import { desktopViewStore, useDesktopViewSnapshot } from '../../../src/desktop/desktop-view-store'
 import { colors, radii, spacing, typography } from '../../../src/theme/mobile-theme'
 
-type ImageState = { uri: string; width: number; height: number; sequence: number }
 export default function DesktopScreen(): React.JSX.Element {
   const { hostId } = useLocalSearchParams<{ hostId: string }>()
   const router = useRouter()
   const { client, state } = useHostClient(hostId)
-  const focused = useRef(false)
-  const active = useRef(AppState.currentState === 'active')
-  const controller = useRef<DesktopViewController | null>(null)
   const nativeImage = useRef<Image>(null)
-  const [image, setImage] = useState<ImageState | null>(null)
-  const [badge, setBadge] = useState<DesktopBadge>('Paused')
-  const [message, setMessage] = useState<string | null>(
-    'Tap View my screen to request viewing, then approve your phone on the Mac.'
-  )
+  const { image, badge, message } = useDesktopViewSnapshot()
   const scale = useSharedValue(1)
   const savedScale = useSharedValue(1)
   const x = useSharedValue(0)
   const y = useSharedValue(0)
   const savedX = useSharedValue(0)
   const savedY = useSharedValue(0)
-  const clear = useCallback(() => {
+  const clearGesture = useCallback(() => {
     nativeImage.current?.setNativeProps({ source: [] })
-    setImage(null)
     scale.value = 1
     savedScale.value = 1
     x.value = 0
@@ -45,44 +32,27 @@ export default function DesktopScreen(): React.JSX.Element {
   }, [scale, savedScale, x, y, savedX, savedY])
   useFocusEffect(
     useCallback(() => {
-      focused.current = true
       if (client) {
-        controller.current = new DesktopViewController(client, {
-          visible: () => focused.current && active.current,
-          clear,
-          badge: setBadge,
-          message: setMessage,
-          frame: (frame) =>
-            setImage({
-              uri: `data:image/jpeg;base64,${Buffer.from(frame.image).toString('base64')}`,
-              width: frame.width,
-              height: frame.height,
-              sequence: frame.sequence
-            })
-        })
+        desktopViewStore.enterPage(hostId, client)
       }
       return () => {
-        focused.current = false
-        controller.current?.stop('Paused')
-        controller.current = null
-        clear()
+        desktopViewStore.leavePage(hostId)
       }
-    }, [client, clear, hostId])
+    }, [client, hostId])
   )
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (next) => {
-      active.current = next === 'active'
-      if (!active.current) {
-        controller.current?.stop('Paused')
-      }
-    })
-    return () => subscription.remove()
-  }, [])
-  useEffect(() => {
     if (state !== 'connected') {
-      controller.current?.stop('Reconnecting')
+      desktopViewStore.setConnectionState(hostId, state)
     }
-  }, [state])
+  }, [hostId, state])
+  useLayoutEffect(
+    () =>
+      desktopViewStore.onClear(() => {
+        nativeImage.current?.setNativeProps({ source: [] })
+        clearGesture()
+      }),
+    [clearGesture]
+  )
   const pinch = Gesture.Pinch()
     .onUpdate((event) => {
       scale.value = Math.min(6, Math.max(1, savedScale.value * event.scale))
@@ -121,15 +91,13 @@ export default function DesktopScreen(): React.JSX.Element {
           <GestureDetector gesture={Gesture.Simultaneous(pinch, pan)}>
             <Animated.View style={[styles.image, transform]}>
               <Image
-                key={image.sequence}
                 ref={nativeImage}
                 source={{ uri: image.uri, cache: 'reload' }}
                 resizeMode="contain"
                 style={styles.image}
-                onLoad={() => controller.current?.imageLoaded(image.sequence)}
+                onLoad={() => desktopViewStore.imageLoaded(image)}
                 onError={() => {
-                  controller.current?.stop()
-                  setMessage('Screen image could not load. Tap View my screen to try again.')
+                  desktopViewStore.stop()
                 }}
               />
             </Animated.View>
@@ -152,16 +120,26 @@ export default function DesktopScreen(): React.JSX.Element {
           accessibilityRole="button"
           disabled={state !== 'connected'}
           style={[styles.button, state !== 'connected' && styles.disabled]}
-          onPress={() => void controller.current?.start()}
+          onPress={() => void desktopViewStore.start()}
         >
           <Text style={styles.buttonText}>View my screen</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
           style={styles.button}
-          onPress={() => controller.current?.stop()}
+          onPress={() => desktopViewStore.stop()}
         >
           <Text style={styles.buttonText}>Stop viewing</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.button}
+          onPress={() => {
+            desktopViewStore.showWidget()
+            router.back()
+          }}
+        >
+          <Text style={styles.buttonText}>Float</Text>
         </Pressable>
       </View>
     </SafeAreaView>
