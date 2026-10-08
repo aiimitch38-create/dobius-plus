@@ -1,10 +1,17 @@
 // Aggregate measurements only. Frames are never logged or written to disk.
 const { app, desktopCapturer, screen, systemPreferences } = require('electron')
 const { performance, monitorEventLoopDelay } = require('node:perf_hooks')
+app.setPath('userData', '/Volumes/Storage/dev/codex-runs/screen-benchmark-profile')
+console.log(JSON.stringify({ backend: 'a', status: 'bootstrapped', electron: process.versions.electron }))
 
 app.whenReady().then(async () => {
   app.dock?.hide()
   const permission = systemPreferences.getMediaAccessStatus('screen')
+  if (process.env.DOBIUS_SCREEN_PREFLIGHT_ONLY === '1') {
+    console.log(JSON.stringify({ backend: 'a', status: 'preflight', permission }))
+    app.exit(permission === 'granted' ? 0 : 2)
+    return
+  }
   if (permission !== 'granted') {
     console.log(JSON.stringify({ backend: 'a', status: 'blocked', permission }))
     app.exit(2)
@@ -22,6 +29,7 @@ app.whenReady().then(async () => {
   let firstFrameMs = null
   let peakRss = process.memoryUsage().rss
   let cpuPercent = 0
+  let cpuSum = 0
   while (performance.now() - started < 60000) {
     const tick = performance.now()
     const sources = await desktopCapturer.getSources({
@@ -39,6 +47,7 @@ app.whenReady().then(async () => {
     }
     peakRss = Math.max(peakRss, process.memoryUsage().rss)
     cpuPercent = app.getAppMetrics().reduce((total, metric) => total + metric.cpu.percentCPUUsage, 0)
+    cpuSum += cpuPercent
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, 1000 / 3 - (performance.now() - tick))))
   }
   const elapsedSeconds = (performance.now() - started) / 1000
@@ -50,6 +59,7 @@ app.whenReady().then(async () => {
     eventLoopLagMs: { p50: lag.percentile(50) / 1e6, p95: lag.percentile(95) / 1e6, max: lag.max / 1e6 },
     mainCpuPercent: (cpu.user + cpu.system) / (elapsedSeconds * 1e6) * 100,
     lastAllElectronProcessesCpuPercent: cpuPercent,
+    meanAllElectronProcessesCpuPercent: cpuSum / frames,
     peakRssMiB: peakRss / 1048576, bytesPerSecond: bytes / elapsedSeconds
   }))
   app.exit(0)
