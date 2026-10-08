@@ -54,6 +54,11 @@ Selection is **pending measurements**. Default to A if lag <50 ms and CPU <25%
 at 3 fps; otherwise evaluate B. Denied permission or incomplete runs are blockers,
 not performance evidence. Never trigger a permission prompt from an automated
 remote/benchmark request. Record results in `plans/DESKTOP-SCREEN-BENCHMARK.md`.
+Native independent run completed: 2.080 callback fps, first frame 10007.7 ms,
+CPU 3.628%, RSS 104.719 MiB, 387024.6 bytes/s, native main-loop maximum lag
+7056.7 ms. It misses the first-frame target; Electron has no valid 60-second
+measurement yet. Use the intended Dobius+ permission identity for the remaining
+Electron run after Carson enables it; further launch identity experiments are stopped.
 Phone-rendered metrics can only follow the approved desktop installation and
 are reported separately. Phase 0 commit:
 `docs(screen): plan v2 resolving review findings + capture benchmark`.

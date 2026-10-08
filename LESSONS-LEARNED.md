@@ -367,3 +367,8 @@ that is one plain command and passes every time.
 - Tried: launchd supervisor (`mobile/scripts/metro-supervisor.mjs`) restarting Metro after 3 failed 3 s `/status` checks.
 - Failed because: Metro stops answering `/status` while it bundles (~2–3 min cold), so the timeouts looked like a crash; every cold bundle was killed and the phone never loaded.
 - Works instead: treat a `TimeoutError` as healthy/busy; only a refused/failed connection counts as dead (fixed in metro-supervisor.mjs, tests 5/5). Separately: a Metro process in ps state `U` with no kernel disk errors after an external-drive reconnect is blocked on I/O — check for a macOS "removable volume" access prompt before blaming the drive (unconfirmed as of writing).
+
+## 2026-10-07 — Screen benchmark identity and repeated Electron startup stalls
+- Tried: terminal-spawned native/Electron preflights after granting their executable identities; independent Electron launches through LaunchServices and launchd; final 60-second Perl alarm preflight.
+- Failed because: TCC attributed terminal capture to the old Dobius+ host despite the native executable grant. Electron's final launch reached bootstrap but not app readiness before exit 142; no permission/throughput result is available from that run.
+- Works instead: independent native launchd capture produced aggregate measurements; remove submitted jobs promptly because they can restart. Stop repeating Electron launch identity experiments. For the remaining Electron benchmark, ask Carson to enable the intended Dobius+ capture-owner permission and perform any required restart himself. Keep Phase 1 gated on honest benchmark evidence.

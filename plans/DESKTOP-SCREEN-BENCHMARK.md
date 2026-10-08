@@ -1,16 +1,28 @@
-# Desktop capture benchmark — pending permission/runtime prerequisite
+# Desktop capture benchmark — native measured, Electron pending
 
 2026-10-07, this Mac. Required run: main display, 1280 px wide, 3 fps,
 JPEG quality approximately 60, 60 seconds. No frames were logged or persisted.
 
 | Backend | Actual result | Performance metrics |
 | --- | --- | --- |
-| A: Electron 42.3.3 thumbnail polling | Startup repaired with a local development signature on the isolated benchmark app. Bounded preflight reached code and returned `getMediaAccessStatus('screen') = denied`, exit 2. | Unavailable; no valid first frame or 60-second run. |
-| B: native display-only ScreenCaptureKit prototype | Compiled with Xcode Swift in Swift 5 mode. Own `CGPreflightScreenCaptureAccess()` returned false; process exited 2 with `permission=not_granted` without requesting permission or capturing. | Unavailable; permission denied is not a throughput measurement. |
+| A: Electron 42.3.3 thumbnail polling | Earlier repaired-app preflight returned `getMediaAccessStatus('screen') = denied`, exit 2. Final 60-second bounded preflight logged bootstrap but did not reach `app.whenReady()` before exit 142. | Unavailable; no valid first frame or 60-second run. |
+| B: native display-only ScreenCaptureKit prototype | Independent launchd launch passed its own permission gate and completed the configured 60-second capture. | 136 callbacks / 65.385 s total = 2.080 fps; first frame 10007.7 ms; main-loop maximum lag 7056.7 ms; CPU 3.628%; peak RSS 104.719 MiB; 387024.6 bytes/s. |
 
 Backend choice is **blocked**, not inferred. No performance threshold has been
 verified and Phase 1 feature implementation has not started. The plan requires
-successful measurements before selecting the backend.
+successful measurements before selecting the backend. Native fails the <3-second
+first-frame target in this run; low CPU alone does not establish suitability.
+
+Native measurement: 1280 × 832, JPEG quality 0.6, requested 3 fps. The measurement
+window includes stream startup/shutdown, so it is 65.385 seconds rather than exactly
+60. Its compiled prototype counts image-buffer callbacks; it does not filter idle
+frame status. Accordingly 2.080 fps is an upper bound on complete-frame throughput,
+not phone-rendered fps. The source was subsequently improved to filter complete
+frames but was deliberately not recompiled over the executable Carson had just
+authorized. This run measures that original executable. The main-loop lag is the
+native main dispatch queue's timer lag, not an Electron event-loop measurement.
+The aggregate JSON is in `~/Library/Logs/dobius-native-screen-benchmark.json`.
+Temporary launchd benchmark jobs were removed after collecting the result.
 
 Electron source: `dobius/tools/benchmarks/desktop-screen-capture.cjs`.
 Native source/executable: `/Volumes/Storage/dev/codex-runs/screen-capture-prototype.swift`
@@ -35,10 +47,18 @@ to check the correct Electron capture identity. Subsequent deep/strict signature
 verification exited 0: “valid on disk” and “satisfies its Designated Requirement.”
 No installed Dobius+ bundle was modified, restarted or installed.
 
-Both capture identities still need macOS permission before any throughput run.
-Carson should enable the repaired `screen-benchmark-electron/Electron.app` and
-the native prototype in Screen & System Audio Recording, then notify Codex.
-Do not repeatedly rerun a denied preflight or silently request permission.
+Carson enabled both prototype identities. macOS TCC logs confirm the native grant.
+Terminal-spawned processes nevertheless inherit the old Dobius+ host as their
+responsible permission identity; its stored requirement failed. The independent
+native launch solved that attribution. Independent Electron startup still did not
+reach the script, and the experiment was stopped. A final raw preflight has a
+60-second Perl alarm and exited 142 after bootstrap without a permission result.
+Child rendezvous errors appeared after the parent alarm terminated it; those are
+not evidence that capture itself failed. Do not spend further time experimenting with launch identities:
+the remaining prerequisite is Screen Recording for Dobius+ itself, the intended
+Electron capture owner and the responsible application for these terminal tools.
+If macOS needs that app restarted, Carson must perform the restart. No installed
+desktop app was changed or restarted by the agent. Do not silently request permission.
 
 Separate physical phone acceptance remains unverified and requires the later
 approved desktop installation, new pairing, screen grant and local setup.
