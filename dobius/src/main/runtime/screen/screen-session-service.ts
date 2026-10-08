@@ -27,6 +27,7 @@ export type ScreenCaptureBackend = {
   create(params: ScreenStreamParams): ScreenProducer
 }
 export type ScreenConsentUi = {
+  indicatorVisible(): boolean
   approve(name: string, signal: AbortSignal): Promise<boolean>
   show(name: string, stop: () => void, signal: AbortSignal): (() => void) | Promise<() => void>
 }
@@ -77,6 +78,10 @@ export class ScreenSessionService implements DesktopScreenEndpoint {
   }
   private live(session: Session): boolean {
     if (this.active !== session || session.cancel.signal.aborted) {
+      return false
+    }
+    if (session.ready && !this.ui?.indicatorVisible()) {
+      this.stop('stopped')
       return false
     }
     if (session.owner.signal?.aborted) {

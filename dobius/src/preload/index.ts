@@ -4281,6 +4281,7 @@ const api = {
   },
 
   mobile: {
+    enableScreenSharing: (): Promise<{ opened: true }> => ipcRenderer.invoke('screenSharing:enable'),
     listNetworkInterfaces: (): Promise<{
       interfaces: { name: string; address: string }[]
     }> => ipcRenderer.invoke('mobile:listNetworkInterfaces'),

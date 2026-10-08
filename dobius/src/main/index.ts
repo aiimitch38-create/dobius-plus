@@ -6,6 +6,7 @@ import { existsSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import os from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron'
+import { installDesktopScreenSharing } from './runtime/screen/install-screen-sharing'
 import { electronApp, is } from '@electron-toolkit/utils'
 import * as QRCode from 'qrcode'
 import {
@@ -2131,6 +2132,9 @@ app.whenReady().then(async () => {
     webClientRoot: getBundledWebClientRoot()
   })
   registerMobileHandlers(runtimeRpc)
+  if (!isServeMode) {
+    installDesktopScreenSharing(runtime, (id) => runtimeRpc?.getDeviceRegistry()?.getDevice(id) ?? null)
+  }
 
   if (!isServeMode) {
     startDesktopFirstWindowStartupServices()

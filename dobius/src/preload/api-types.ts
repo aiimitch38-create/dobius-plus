@@ -3145,6 +3145,7 @@ export type PreloadApi = {
     dropByTabPrefix: (tabId: string) => void
   }
   mobile: {
+    enableScreenSharing: () => Promise<{ opened: true }>
     listNetworkInterfaces: () => Promise<{
       interfaces: { name: string; address: string }[]
     }>
