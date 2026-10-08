@@ -285,7 +285,11 @@ export function useMobileDictation(options: UseMobileDictationOptions): UseMobil
 
   useEffect(() => {
     const sub = addExpoTwoWayAudioEventListener('onAudioInterruption', (event) => {
-      if (event.data === 'began' || event.data === 'blocked') {
+      if (
+        event.data === 'began' ||
+        event.data === 'blocked' ||
+        event.data === 'media-services-reset'
+      ) {
         void cancel()
       }
     })

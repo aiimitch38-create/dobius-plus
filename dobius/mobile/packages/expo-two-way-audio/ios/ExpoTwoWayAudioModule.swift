@@ -25,14 +25,20 @@ public class ExpoTwoWayAudioModule: Module {
 
         AsyncFunction("initialize") { () -> Bool in
             do {
-                if self.audioEngine != nil {
-                    return true
+                if let audioEngine = self.audioEngine {
+                    return audioEngine.recoverAfterMediaServicesResetForUserAction()
                 }
-                self.audioEngine = try AudioEngine()
+                let audioEngine = try AudioEngine()
+                self.audioEngine = audioEngine
                 self.setupMicrophoneCallback()
                 self.setupInputAudioLevelCallback()
                 self.setupOutputAudioLevelCallback()
                 self.setupAudioInterruptionCallback()
+                if audioEngine.requiresUserInitiatedMediaResetRecovery {
+                    self.sendEvent(ON_AUDIO_INTERRUPTION_EVENT_NAME, ["data": "media-services-reset"])
+                    self.sendEvent(ON_RECORDING_CHANGE_EVENT_NAME, ["data": false])
+                    return false
+                }
                 return true
             } catch {
                 print("Failed to initialize AudioEngine: \(error)")

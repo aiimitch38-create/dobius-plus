@@ -7,9 +7,13 @@ class AudioEngine {
     private var engineConfigChangeObserver: Any?
     private var sessionInterruptionObserver: Any?
     private var mediaServicesResetObserver: Any?
+    private var mediaServicesResetRecoveryGate = MediaServicesResetRecoveryGate()
 
     public private(set) var voiceIOFormat: AVAudioFormat
     public private(set) var isRecording = false
+    var requiresUserInitiatedMediaResetRecovery: Bool {
+        mediaServicesResetRecoveryGate.requiresUserInitiatedRecovery
+    }
     private var wasRecordingBeforeInterruption = false
 
     public var onMicDataCallback: ((Data) -> Void)?
@@ -42,12 +46,7 @@ class AudioEngine {
         voiceIOFormat = format
         print("Voice IO format: \(String(describing: voiceIOFormat))")
 
-        engineConfigChangeObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: avAudioEngine,
-            queue: .main) { [weak self] _ in
-                self?.checkEngineIsRunning()
-            }
+        observeEngineConfigurationChanges()
         sessionInterruptionObserver = NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
             object: AVAudioSession.sharedInstance(),
@@ -78,35 +77,42 @@ class AudioEngine {
         }
     }
 
-    func setupAudioSession() {
+    @discardableResult
+    func setupAudioSession() -> Bool {
         let session = AVAudioSession.sharedInstance()
+        var succeeded = true
 
         do {
             try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
         } catch {
             print("Could not set the audio category: \(error.localizedDescription)")
+            succeeded = false
         }
 
         do {
             try session.setPreferredSampleRate(voiceIOFormat.sampleRate)
         } catch {
             print("Could not set the preferred sample rate: \(error.localizedDescription)")
+            succeeded = false
         }
 
         do {
             try session.setActive(true)
         } catch {
             print("Could not set the audio session as active")
+            succeeded = false
         }
+        return succeeded
     }
 
-    func setup() {
+    @discardableResult
+    func setup() -> Bool {
         let input = avAudioEngine.inputNode
         do {
             try input.setVoiceProcessingEnabled(true)
         } catch {
             print("Could not enable voice processing \(error)")
-            return
+            return false
         }
 
         avAudioEngine.inputNode.isVoiceProcessingInputMuted = !isRecording
@@ -132,6 +138,7 @@ class AudioEngine {
         }
 
         avAudioEngine.prepare()
+        return true
     }
 
     func processMicrophoneBuffer(_ buffer: AVAudioPCMBuffer) {
@@ -175,15 +182,48 @@ class AudioEngine {
         }
     }
 
-    func start() {
+    @discardableResult
+    func start() -> Bool {
         do {
             try avAudioEngine.start()
+            return true
         } catch {
             print("Could not start audio engine: \(error)")
+            return false
         }
     }
 
+    func recoverAfterMediaServicesResetForUserAction() -> Bool {
+        guard mediaServicesResetRecoveryGate.requiresUserInitiatedRecovery else {
+            return true
+        }
+
+        avAudioEngine.stop()
+        speechPlayer.stop()
+        if let observer = engineConfigChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            engineConfigChangeObserver = nil
+        }
+
+        avAudioEngine = AVAudioEngine()
+        speechPlayer = AVAudioPlayerNode()
+        avAudioEngine.attach(speechPlayer)
+        observeEngineConfigurationChanges()
+
+        // This method is called by the explicit dictation start action. Reapply
+        // the session before constructing the graph and starting the new engine.
+        guard setupAudioSession(), setup(), start() else {
+            return false
+        }
+
+        mediaServicesResetRecoveryGate.finishUserInitiatedRecovery(succeeded: true)
+        return true
+    }
+
     func playPCMData(_ pcmData: Data) {
+        guard mediaServicesResetRecoveryGate.permitsAutomaticStart else {
+            return
+        }
         // Looks like we don't get a proper AEC for the very first chunks of audio that we play.
         // To work around this, we will discard microphone input for the first few milliseconds.
         // This will give the AEC time to adapt to the playback audio.
@@ -236,11 +276,18 @@ class AudioEngine {
     }
 
     func bypassVoiceProcessing(_ bypass: Bool) {
+        guard mediaServicesResetRecoveryGate.permitsAutomaticStart else {
+            return
+        }
         let input = avAudioEngine.inputNode
         input.isVoiceProcessingBypassed = bypass
     }
 
     func toggleRecording(_ val: Bool) -> Bool {
+        guard mediaServicesResetRecoveryGate.permitsAutomaticStart else {
+            isRecording = false
+            return false
+        }
         isRecording = val
         if !isRecording {
             avAudioEngine.inputNode.isVoiceProcessingInputMuted = true
@@ -264,12 +311,19 @@ class AudioEngine {
         } catch {
             print("Could not set the audio session to inactive: \(error)")
         }
+        guard mediaServicesResetRecoveryGate.permitsAutomaticStart else {
+            isRecording = false
+            return
+        }
         toggleRecording(false)
         speechPlayer.stop()
         updateOutputVolume()
     }
 
     func resumeRecordingAndPlayer(){
+        guard mediaServicesResetRecoveryGate.permitsAutomaticStart else {
+            return
+        }
         do {
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
@@ -286,10 +340,13 @@ class AudioEngine {
     }
 
     var isPlaying: Bool {
-        return speechPlayer.isPlaying
+        return mediaServicesResetRecoveryGate.permitsAutomaticStart && speechPlayer.isPlaying
     }
 
     func stopPlayback() {
+        guard mediaServicesResetRecoveryGate.permitsAutomaticStart else {
+            return
+        }
         speechPlayer.stop()
         // Clear any scheduled buffers
         outputBuffer = [Float](repeating: 0, count: 2048)
@@ -298,11 +355,17 @@ class AudioEngine {
     }
 
     func pausePlayback() {
+        guard mediaServicesResetRecoveryGate.permitsAutomaticStart else {
+            return
+        }
         speechPlayer.pause()
         print("Playback paused")
     }
 
     func resumePlayback() {
+        guard mediaServicesResetRecoveryGate.permitsAutomaticStart else {
+            return
+        }
         if !speechPlayer.isPlaying {
             speechPlayer.play()
             print("Playback resumed")
@@ -310,9 +373,18 @@ class AudioEngine {
     }
 
     private func checkEngineIsRunning() {
-        if !avAudioEngine.isRunning {
+        if mediaServicesResetRecoveryGate.permitsAutomaticStart && !avAudioEngine.isRunning {
             start()
         }
+    }
+
+    private func observeEngineConfigurationChanges() {
+        engineConfigChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: avAudioEngine,
+            queue: .main) { [weak self] _ in
+                self?.checkEngineIsRunning()
+            }
     }
 
     private func handleAudioSessionInterruption(_ notification: Notification) {
@@ -345,9 +417,20 @@ class AudioEngine {
     }
 
     private func handleMediaServicesWereReset() {
-        self.avAudioEngine.stop()
-        self.setup()
-        self.start()
+        mediaServicesResetRecoveryGate.mediaServicesWereReset()
+        avAudioEngine.stop()
+        speechPlayer.stop()
+        isRecording = false
+        wasRecordingBeforeInterruption = false
+        inputBuffer = [Float](repeating: 0, count: inputBuffer.count)
+        outputBuffer = [Float](repeating: 0, count: outputBuffer.count)
+        inputBufferIndex = 0
+        outputBufferIndex = 0
+        hasFirstInputBeenDiscarded = false
+        discardRecording = false
+        updateInputVolume()
+        updateOutputVolume()
+        onAudioInterruptionCallback?("media-services-reset")
     }
 
     private func updateInputVolume() {

@@ -48,4 +48,15 @@ describe('useMobileDictation source invariants', () => {
 
     expect(pendingAudioResets).toHaveLength(pendingChunkClears.length)
   })
+
+  it('cancels dictation after media services reset without treating reset as resume', () => {
+    const interruptionHandler = sliceBetween(
+      "addExpoTwoWayAudioEventListener('onAudioInterruption'",
+      'return () => sub.remove()'
+    )
+
+    expect(interruptionHandler).toContain("event.data === 'media-services-reset'")
+    expect(interruptionHandler).toContain('void cancel()')
+    expect(interruptionHandler).not.toContain('resumeRecordingAndPlayer')
+  })
 })
