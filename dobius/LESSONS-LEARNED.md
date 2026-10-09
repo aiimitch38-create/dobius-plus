@@ -23,3 +23,8 @@
 - Tried: adding `@comms` / `@features-manifest` / `@tauri-apps/*` aliases to `electron.vite.config.ts` only, then running `pnpm run build:mac`.
 - Failed because: `build:desktop` runs `build:electron-vite` **and** `build:web`, and `vite.web.config.ts` is a separate config with its own `resolve.alias`. The desktop renderer built all 2000+ modules and emitted `CommunicationsPage-*.js` successfully; then `build:web` died on `Rollup failed to resolve import "@comms/app/App"` — four minutes in, with a message that reads like the desktop build broke.
 - Works instead: the alias map lives in one place, `config/comms-alias.ts`, spread into both configs. Anything added to the renderer's module graph must resolve in BOTH. Note that a new file under `config/` must also be added to `config/tsconfig.node.json`'s `include`, or `typecheck` fails with TS6307 before any bundling starts.
+
+## 2026-10-09 — Do not persist custom Dock icons onto a signed app bundle
+- Tried: persisting a selected Dock icon with `NSWorkspace.setIcon:forFile:` against the packaged `.app`, then clearing Finder metadata with `xattr` when returning to the classic icon.
+- Failed because: changing Finder custom-icon metadata on the signed bundle root after signing adds or changes `com.apple.FinderInfo`/resource-fork metadata, causing strict code-signature verification to fail after launch. Pre-install verification passed; the post-launch bundle showed a 32-byte FinderInfo attribute.
+- Works instead: update the current process Dock icon with Electron's `app.dock.setIcon` and live windows with `BrowserWindow.setIcon`; never mutate or clean metadata on the signed app bundle at runtime. The stopped app uses its packaged icon until rebuilt with another default.
