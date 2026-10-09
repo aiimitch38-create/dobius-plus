@@ -4,6 +4,10 @@ import { createTerminalWebViewMeasureTracker } from './terminal-webview-measure-
 
 const htmlSource = readFileSync(new URL('./terminal-webview-html.ts', import.meta.url), 'utf8')
 const componentSource = readFileSync(new URL('./TerminalWebView.tsx', import.meta.url), 'utf8')
+const messageHandlerSource = readFileSync(
+  new URL('./terminal-webview-message-handler.ts', import.meta.url),
+  'utf8'
+)
 
 function extractMeasureFunction(): string {
   const start = htmlSource.indexOf('function measureFitDimensions(')
@@ -97,8 +101,8 @@ describe('terminal WebView measurement correlation', () => {
 
   it('sends the same command ID to the WebView and requires it on the RN reply path', () => {
     expect(componentSource).toContain("sendToWebView({ type: 'measure', containerHeight }, id)")
-    expect(componentSource).toContain('measureTracker.resolve(')
-    expect(componentSource).toContain('msg.id,')
+    expect(messageHandlerSource).toContain('options.measureTracker.resolve(')
+    expect(messageHandlerSource).toContain('message.id,')
     expect(componentSource).toContain('measureTracker.cancel(id)')
 
     const measureDispatch = htmlSource.slice(htmlSource.indexOf("msg.type === 'measure'"))

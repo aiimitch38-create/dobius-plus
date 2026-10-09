@@ -54,6 +54,7 @@ function createObserverHarness() {
     'updateScrollIndicator',
     `
 var initRows = 24;
+var geometryProbe = { noteOutput: function() {}, noteRender: function() {} };
 ${TERMINAL_KEYBOARD_METRICS_JS}
 ${observerSource}
 ${resizeSource}

@@ -5,10 +5,13 @@ import { colors } from '../theme/mobile-theme'
 import { TERMINAL_TEXT_SCALES } from '../storage/preferences'
 import { TERMINAL_PATH_TAP_JS } from './terminal-path-tap-injected'
 import { XTERM_ENGINE_CSS, XTERM_ENGINE_JS } from './terminal-webview-engine.generated'
+import { TERMINAL_FIT_COMMIT_JS } from './terminal-webview-fit-commit-injected'
 import { TERMINAL_KEYBOARD_METRICS_JS } from './terminal-webview-keyboard-metrics-injected'
 import { TERMINAL_REFLOW_JS } from './terminal-webview-reflow-injected'
+import { TERMINAL_SURFACE_SWAP_JS } from './terminal-webview-surface-swap-injected'
 import { TERMINAL_TAP_DISPATCH_JS } from './terminal-webview-tap-dispatch-injected'
 import { URL_TAP_WEBVIEW_JS } from './terminal-webview-url-tap'
+import { TERMINAL_WEBVIEW_GEOMETRY_PROBE_SCRIPT } from './terminal-webview-geometry-probe'
 
 const DEFAULT_TERMINAL_THEME: RuntimeMobileTerminalTheme['theme'] = {
   background: colors.terminalBg,
@@ -72,7 +75,7 @@ window.onerror = function(msg) {
     width: 100%;
     height: 100%;
   }
-  #terminal-surface {
+  #terminal-surface, .terminal-surface {
     transform-origin: top left;
     display: inline-block;
   }
@@ -292,7 +295,7 @@ window.onerror = function(msg) {
   var pendingNormalScrollDeltaY = 0;
   var normalScrollFrameId = null;
   var initRows = 24;
-  var terminalGeneration = 0;
+  var terminalGeneration = 0, pendingSurfaceSwap = null;
   var defaultTheme = ${JSON.stringify(DEFAULT_TERMINAL_THEME)};
   var terminalTheme = defaultTheme;
   var activeAltScreenSnapshot = false;
@@ -453,9 +456,10 @@ window.onerror = function(msg) {
   // scrollWidth (xterm rendered something). Cap at 60 frames (~1s @60Hz)
   // so a backgrounded WebView never spins forever.
   var FIT_RETRY_MAX_FRAMES = 60;
-  var fitRetryToken = 0;
-  function applyFitScale(reason) {
+  var fitRetryToken = 0, fitCommitCallback = null;
+  function applyFitScale(reason, onCommitted) {
     if (!term || !term.element) return;
+    if (onCommitted) fitCommitCallback = onCommitted;
     var token = ++fitRetryToken;
     var attempts = 0;
     var lastScrollWidth = -1;
@@ -525,7 +529,7 @@ window.onerror = function(msg) {
         vpWidth: vpW
       });
     }
-    repositionOverlay();
+    geometryProbe.start(finishFitCommit() ? 'init' : 'fit');
   }
 
   function isAltScreenActive(data) {
@@ -688,8 +692,7 @@ window.onerror = function(msg) {
     // since line counts and cell positions change. null = stay pinned to bottom.
     var prevB = preserveScroll && term && term.buffer && term.buffer.active ? term.buffer.active : null;
     var scrollAnchorRows = prevB ? Math.max(0, (prevB.baseY || 0) - (prevB.viewportY || 0)) : -1;
-    terminalGeneration++;
-    var gen = terminalGeneration;
+    geometryProbe.stop(); var gen = ++terminalGeneration; fitRetryToken++; fitCommitCallback = null;
     ready = false;
     resetWriteQueue();
     statusDotPendingSelector = false;
@@ -718,10 +721,8 @@ window.onerror = function(msg) {
     initialOscLinks = Array.isArray(nextOscLinks) ? nextOscLinks : [];
     initialOscLinkRowOffset = 0;
     initialOscLinkEvictionReady = false;
-    var oldTerm = term;
-    var oldSurface = surface;
-    var nextSurface = null;
-    disposeTermObservers();
+    var priorSurface = prepareInitSurface(), oldTerm = priorSurface.oldTerm;
+    var oldSurface = priorSurface.oldSurface, nextSurface = null;
     if (oldTerm) {
       nextSurface = document.createElement('div');
       nextSurface.id = 'terminal-surface';
@@ -730,9 +731,8 @@ window.onerror = function(msg) {
       nextSurface.style.left = '0';
       nextSurface.style.top = '0';
       document.getElementById('terminal-container').appendChild(nextSurface);
-      surface = nextSurface;
-      attachSurfaceEventHandlers(surface);
-      oldSurface.removeAttribute('id');
+      surface = nextSurface; attachSurfaceEventHandlers(surface);
+      prepareRetainedSurface(oldSurface);
     }
 
     applyTerminalTheme(nextTheme);
@@ -752,7 +752,7 @@ window.onerror = function(msg) {
       convertEol: false,
       allowProposedApi: true
     });
-    term.open(surface);
+    term.open(surface); if (nextSurface && oldSurface) pendingSurfaceSwap = { gen: gen, oldSurface: oldSurface, oldTerm: oldTerm };
     if (window.WebglAddon && window.WebglAddon.WebglAddon) {
       try { var webglAddon = new window.WebglAddon.WebglAddon(); term.loadAddon(webglAddon); if (webglAddon.onContextLoss) webglAddon.onContextLoss(function() { try { webglAddon && webglAddon.dispose && webglAddon.dispose(); } catch (e) {} }); } catch (e) {}
     }
@@ -772,14 +772,6 @@ window.onerror = function(msg) {
       everReady = true;
       afterWritesDrained(function() {
         if (gen !== terminalGeneration) return;
-        if (nextSurface && oldSurface) {
-          nextSurface.style.visibility = 'visible';
-          nextSurface.style.position = '';
-          nextSurface.style.left = '';
-          nextSurface.style.top = '';
-          oldSurface.remove();
-          if (oldTerm) oldTerm.dispose();
-        }
         // Why: restore the reader's place after the rewrapped buffer replays.
         // Replay lands at bottom, so only act when they were scrolled up (rows>0).
         if (scrollAnchorRows > 0 && term && term.buffer && term.buffer.active) {
@@ -788,8 +780,15 @@ window.onerror = function(msg) {
         captureInitialOscLinkTexts();
         initialOscLinkRowOffset = 0;
         initialOscLinkEvictionReady = true;
-        applyFitScale('init-replay');
-        notify({ type: 'ready', cols: cols, rows: rows });
+        if (nextSurface && oldSurface) {
+          // Why: do not expose the replacement xterm surface with its default
+          // geometry. Keep the already-fitted surface visible until the new
+          // surface's fit transform has committed, then swap them atomically.
+          applyFitScale('init-replay', function() { commitInitSurfaceSwap(gen, nextSurface, oldSurface, oldTerm, cols, rows); });
+        } else {
+          applyFitScale('init-replay');
+          notify({ type: 'ready', cols: cols, rows: rows });
+        }
       });
     });
   }
@@ -823,6 +822,9 @@ window.onerror = function(msg) {
 
   // reflow(): see terminal-webview-reflow-injected.ts (extracted for max-lines).
   ${TERMINAL_REFLOW_JS}
+  ${TERMINAL_FIT_COMMIT_JS}
+  ${TERMINAL_SURFACE_SWAP_JS}
+  ${TERMINAL_WEBVIEW_GEOMETRY_PROBE_SCRIPT}
 
   function notify(msg) {
     if (window.ReactNativeWebView) {
@@ -957,6 +959,7 @@ window.onerror = function(msg) {
     } else if (msg.type === 'write') {
       write(msg.data);
     } else if (msg.type === 'clear') {
+      geometryProbe.stop();
       terminalGeneration++;
       resetWriteQueue();
       statusDotPendingSelector = false;
@@ -978,6 +981,8 @@ window.onerror = function(msg) {
       }
     } else if (msg.type === 'measure') {
       measureFitDimensions(msg.containerHeight, msg.id);
+    } else if (msg.type === 'geometry-probe') {
+      geometryProbe.setActive(msg.active === true);
     } else if (msg.type === 'reset-zoom') {
       applyFitScale('reset-zoom-msg');
     } else if (msg.type === 'set-theme') {
@@ -1127,11 +1132,11 @@ window.onerror = function(msg) {
     try {
       if (term.onWriteParsed) {
         termObserverDisposables.push(term.onWriteParsed(function() {
-          emitModesIfChanged();
-          emitKeyboardAvoidanceMetrics();
+          geometryProbe.noteOutput(); emitModesIfChanged(); emitKeyboardAvoidanceMetrics();
         }));
       }
     } catch (e) {}
+    try { if (term.onRender) termObserverDisposables.push(term.onRender(function() { geometryProbe.noteRender(); })); } catch (e) {}
     // Initial emit once buffer settles.
     afterWritesDrained(function() {
       emitModesIfChanged();
