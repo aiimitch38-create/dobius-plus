@@ -41,6 +41,15 @@ function api(status = empty): CloudBackupApi {
 }
 
 describe('AWS backup settings', () => {
+  it('shows actionable desktop errors without Electron transport details', async () => {
+    const bridge = api(healthy)
+    vi.mocked(bridge.runNow).mockRejectedValue(
+      new Error("Error invoking remote method 'cloudBackup:runNow': Error: AWS access denied.")
+    )
+    render(<AwsCloudBackupSetting api={bridge} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Back up now' }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('AWS access denied.'))
+  })
   it('collects credentials, disables concurrent submission, clears secrets, and waits for verification', async () => {
     const bridge = api()
     render(<AwsCloudBackupSetting api={bridge} />)

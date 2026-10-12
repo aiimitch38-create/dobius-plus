@@ -68,7 +68,10 @@ export function useCloudBackup(api?: CloudBackupApi) {
         }
       } catch (failure) {
         if (mounted.current) {
-          setError(failure instanceof Error ? failure.message : 'Backup action could not finish.')
+          const message =
+            failure instanceof Error ? failure.message : 'Backup action could not finish.'
+          // Electron adds transport details that do not help someone fix their connection.
+          setError(message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ''))
         }
       } finally {
         working.current = false
