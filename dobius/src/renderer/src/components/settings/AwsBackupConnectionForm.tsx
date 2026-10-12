@@ -29,14 +29,14 @@ export function AwsBackupConnectionForm({
       name: 'bucket',
       label: translate('settings.aws.bucket', 'S3 bucket name'),
       secret: false,
-      placeholder: 'my-dobius-backups',
+      placeholder: translate('settings.aws.bucketExample', 'my-dobius-backups'),
       max: 63
     },
     {
       name: 'region',
       label: translate('settings.aws.region', 'AWS region'),
       secret: false,
-      placeholder: 'us-east-1',
+      placeholder: translate('settings.aws.regionExample', 'us-east-1'),
       max: 40
     },
     {

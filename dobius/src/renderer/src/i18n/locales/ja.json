@@ -69,7 +69,9 @@
       "saveKey": "Save recovery key",
       "recoveryNote": "Keep your recovery key in a separate password manager. You need it to restore encrypted backups after losing this computer.",
       "sources": "Folders included in this computer’s backup",
-      "exclusions": "Dependencies, caches, and generated builds are excluded. Remote projects and other personal folders are not included automatically."
+      "exclusions": "Dependencies, caches, and generated builds are excluded. Remote projects and other personal folders are not included automatically.",
+      "bucketExample": "my-dobius-backups",
+      "regionExample": "us-east-1"
     }
   },
   "menu": {

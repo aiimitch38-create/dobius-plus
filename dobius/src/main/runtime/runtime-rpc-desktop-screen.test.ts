@@ -76,7 +76,9 @@ function fixture() {
     return replies[0]
   }
   const ready = async () => {
-    for (let i = 0; i < 20; i++) await Promise.resolve()
+    for (let i = 0; i < 20; i++) {
+      await Promise.resolve()
+    }
   }
   return { phone, other, screen, socket, request, call, ready, approve, start, stop }
 }
