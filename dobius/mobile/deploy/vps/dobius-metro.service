@@ -1,0 +1,41 @@
+[Unit]
+Description=Dobius phone development launcher
+Wants=network-online.target tailscaled.service
+After=network-online.target tailscaled.service
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=dobius
+Group=dobius
+WorkingDirectory=/srv/dobius/workspaces/dobius-plus/dobius/mobile
+StateDirectory=dobius-metro
+StateDirectoryMode=0700
+CacheDirectory=dobius-metro
+CacheDirectoryMode=0700
+Environment=HOME=/var/lib/dobius-metro
+Environment=TMPDIR=/var/cache/dobius-metro
+Environment=CI=1
+Environment=EXPO_NO_TELEMETRY=1
+# Ubuntu resolves localhost to IPv6 first; the private forwarder uses IPv4 loopback.
+Environment="NODE_OPTIONS=--max-old-space-size=1792 --dns-result-order=ipv4first"
+EnvironmentFile=/etc/dobius/metro.env
+# The Tailscale TCP forwarder exposes 8081 privately; Metro listens only on loopback.
+# One worker transforms synchronously in the server and stalls health/launcher requests.
+ExecStart=/usr/bin/node node_modules/expo/bin/cli start --dev-client --localhost --port 8082 --max-workers 2
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+KillMode=control-group
+MemoryMax=2500M
+CPUQuota=150%
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/dobius/workspaces/dobius-plus/dobius/mobile
+
+[Install]
+WantedBy=multi-user.target
