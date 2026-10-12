@@ -45,9 +45,15 @@ def tick(config, force=False, notify=True):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return {"health": "already_running"}
+        if config.get("configuration_file"):
+            config = read_json(config["configuration_file"])
         previous = read_json(state_directory / "status.json")
         state = dict(previous)
         state["profile"] = config.get("profile", "unknown")
+        if config.get("enabled") is False:
+            state.update(health="paused", detail="Automatic AWS backups are paused.")
+            save_status(config, previous, state, notify=False)
+            return state
         try:
             environment = validate(config)
             sources = backup_sources(config)
@@ -60,7 +66,7 @@ def tick(config, force=False, notify=True):
             save_status(config, previous, state, notify=False)
             return state
         try:
-            state.update(health="running", detail="Creating an encrypted backup snapshot.")
+            state.update(health="running", detail="Creating an encrypted backup snapshot.", pid=os.getpid())
             save_status(config, previous, state, notify=False)
             command = ["backup", "--json", "--host", config["profile"], "--tag", "dobius-automatic", "--read-concurrency", "1"]
             for pattern in config.get("exclude_patterns", []):
@@ -74,11 +80,15 @@ def tick(config, force=False, notify=True):
             if now - state.get("last_check_epoch", 0) >= 7 * 86400:
                 full = "last_full_check_epoch" not in state or now - state["last_full_check_epoch"] >= 30 * 86400
                 args = ["check", "--read-data"] if full else ["check", "--read-data-subset=5%"]
+                state.update(detail="Verifying encrypted backup data.")
+                save_status(config, previous, state, notify=False)
                 run_restic(config, environment, args)
                 state.update(last_check_epoch=now, last_check_at=timestamp())
                 if full:
                     state["last_full_check_epoch"] = now
             if now - state.get("last_restore_epoch", 0) >= 7 * 86400:
+                state.update(detail="Restoring a verification file and checking its contents.")
+                save_status(config, previous, state, notify=False)
                 restore_canary(config, environment, snapshot)
                 state.update(last_restore_epoch=now, last_restore_at=timestamp())
             if now - state.get("last_retention_epoch", 0) >= 86400:
@@ -111,7 +121,7 @@ def main():
         return 0
     result = tick(config, force=args.action == "run", notify=not args.no_notify)
     print(json.dumps(result, indent=2))
-    return 0 if result["health"] in ["healthy", "already_running"] else 78 if result["health"] == "waiting_for_configuration" else 1
+    return 0 if result["health"] in ["healthy", "already_running"] else 78 if result["health"] in ["waiting_for_configuration", "paused"] else 1
 
 
 if __name__ == "__main__":

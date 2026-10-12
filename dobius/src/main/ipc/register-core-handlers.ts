@@ -43,6 +43,7 @@ import { registerDeveloperPermissionHandlers } from './developer-permissions'
 import { registerComputerUsePermissionHandlers } from './computer-use-permissions'
 import { setTrustedBrowserRendererWebContentsId, setAgentBrowserBridgeRef } from './browser'
 import { registerSessionHandlers } from './session'
+import { registerCloudBackupHandlers, setTrustedCloudBackupRenderer } from './cloud-backup'
 import { registerSettingsHandlers } from './settings'
 import { registerDiagnosticsHandlers } from './diagnostics'
 import { registerSkillsHandlers } from './skills'
@@ -117,6 +118,7 @@ export function registerCoreHandlers(
   setTrustedBrowserRendererWebContentsId(mainWindowWebContentsId)
   setTrustedClipboardRendererWebContentsId(mainWindowWebContentsId)
   setTrustedUIRendererWebContentsId(mainWindowWebContentsId)
+  setTrustedCloudBackupRenderer(mainWindowWebContentsId)
   setAgentBrowserBridgeRef(runtime.getAgentBrowserBridge())
   setRepoLister(() =>
     runtime.listRepos().map((repo) => ({ id: repo.id, name: repo.displayName || repo.id }))
@@ -199,6 +201,7 @@ export function registerCoreHandlers(
   registerDiagnosticsHandlers()
   registerComputerUsePermissionHandlers()
   registerSettingsHandlers(store, agentAwakeService)
+  registerCloudBackupHandlers(store)
   registerProjectFilesHandlers(store)
   registerSkillsHandlers(store)
   registerKnowledgeHandlers(store)

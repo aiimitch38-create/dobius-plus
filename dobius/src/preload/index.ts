@@ -4,6 +4,7 @@ review and type drift checks easier than scattering these bindings across module
 import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { preloadE2EConfig } from './e2e-config'
+import { cloudBackupApi } from './cloud-backup'
 import { glApi } from './gitlab'
 import type { AppIdentity } from '../shared/app-identity'
 import type { AsanaConfig, AsanaTasksSnapshot } from '../shared/asana'
@@ -545,7 +546,7 @@ const api = {
         callback(update)
       ipcRenderer.on('phone-visual:update', listener)
       return () => ipcRenderer.removeListener('phone-visual:update', listener)
-    },
+    }
   } satisfies PreloadApi['window'],
 
   platform: {
@@ -1916,6 +1917,8 @@ const api = {
       ipcRenderer.invoke('diagnostics:deleteBundle', ticketId)
   },
 
+  cloudBackup: cloudBackupApi,
+
   settings: {
     get: (): Promise<unknown> => ipcRenderer.invoke('settings:get'),
 
@@ -2046,8 +2049,7 @@ const api = {
       ipcRenderer.invoke('vertexTasks:update', { taskId, patch }),
     move: (taskId: string, to: VertexTaskStatus, toIndex: number): Promise<VertexTask | null> =>
       ipcRenderer.invoke('vertexTasks:move', { taskId, to, toIndex }),
-    remove: (taskId: string): Promise<boolean> =>
-      ipcRenderer.invoke('vertexTasks:remove', taskId)
+    remove: (taskId: string): Promise<boolean> => ipcRenderer.invoke('vertexTasks:remove', taskId)
   },
   agentTrust: {
     markTrusted: (args: {
@@ -2263,7 +2265,6 @@ const api = {
       return () => ipcRenderer.removeListener('knowledge:changed', listener)
     }
   },
-
 
   pet: {
     import: (): Promise<CustomPet | null> => ipcRenderer.invoke('pet:import'),
@@ -4446,7 +4447,8 @@ const api = {
     ask: (utterance: string): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:ask', utterance),
     speak: (text: string): Promise<JarvisSpeakOutcome> => ipcRenderer.invoke('jarvis:speak', text),
-    openOrb: (): Promise<{ ok: boolean; windowId?: number }> => ipcRenderer.invoke('jarvis:openOrb'),
+    openOrb: (): Promise<{ ok: boolean; windowId?: number }> =>
+      ipcRenderer.invoke('jarvis:openOrb'),
     pressPtt: (): Promise<void> => ipcRenderer.invoke('jarvis:pressPtt'),
     getAdamProjectDirectory: (): Promise<string> =>
       ipcRenderer.invoke('jarvis:getAdamProjectDirectory'),

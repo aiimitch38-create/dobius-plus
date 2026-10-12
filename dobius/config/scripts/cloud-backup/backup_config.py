@@ -3,6 +3,7 @@ import json
 import os
 import re
 import stat
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,14 +15,17 @@ class ConfigurationError(Exception):
 def atomic_json(path, document):
     path = Path(path)
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".new")
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(descriptor, "w") as stream:
-        json.dump(document, stream, indent=2)
-        stream.write("\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    temporary.replace(path)
+    descriptor, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".new", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump(document, stream, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def read_json(path, default=None):

@@ -485,7 +485,7 @@ function createWebPreloadApi(): Partial<PreloadApi> {
         Promise.reject(new Error('Floating phone is unavailable in the web client.')),
       setPhoneVisualBounds: () =>
         Promise.reject(new Error('Floating phone is unavailable in the web client.')),
-      onPhoneVisualUpdate: () => noopUnsubscribe,
+      onPhoneVisualUpdate: () => noopUnsubscribe
     },
     starNag: {
       onShow: () => noopUnsubscribe,
@@ -510,6 +510,29 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     },
     e2e: {
       getConfig: () => createE2EConfig({})
+    },
+    cloudBackup: {
+      getStatus: async () => ({
+        supported: false,
+        configured: false,
+        enabled: false,
+        health: 'unsupported',
+        detail: 'Configure AWS backups in desktop settings on the computer you want to protect.',
+        bucket: '',
+        region: 'us-east-1',
+        repository: '',
+        sources: []
+      }),
+      connect: async () => {
+        throw new Error('AWS credentials must be entered in desktop settings.')
+      },
+      runNow: async () => {
+        throw new Error('Open desktop backup settings.')
+      },
+      setEnabled: async () => {
+        throw new Error('Open desktop backup settings.')
+      },
+      exportRecoveryKey: async () => false
     },
     settings: {
       get: async () => getRuntimeBackedStoredSettings(),

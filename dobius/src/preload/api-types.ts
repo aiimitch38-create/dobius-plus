@@ -8,6 +8,7 @@ import type {
   HostedReviewInfo,
   HostedReviewProvider
 } from '../shared/hosted-review'
+import type { CloudBackupApi } from '../shared/cloud-backup'
 import type { NativeFileDropPayload } from '../shared/native-file-drop'
 import type {
   ImessageBridgeConfig,
@@ -1408,9 +1409,7 @@ export type PreloadApi = {
   }
   communications: {
     getIdentity: () => Promise<{ pubkey: string; username: string }>
-    signEvent: (
-      unsigned: CommunicationsUnsignedEvent
-    ) => Promise<CommunicationsSignedEvent>
+    signEvent: (unsigned: CommunicationsUnsignedEvent) => Promise<CommunicationsSignedEvent>
     getAgentIdentity: (agentId: string) => Promise<{ pubkey: string }>
     signEventAsAgent: (
       agentId: string,
@@ -2090,6 +2089,7 @@ export type PreloadApi = {
    *  intervene). Subject to the same per-session consent-mutation rate
    *  limit as `telemetrySetOptIn`. */
   telemetryAcknowledgeBanner: () => Promise<void>
+  cloudBackup: CloudBackupApi
   settings: {
     get: () => Promise<GlobalSettings>
     set: (args: Partial<GlobalSettings>) => Promise<GlobalSettings>

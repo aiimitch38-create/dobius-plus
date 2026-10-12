@@ -18,7 +18,7 @@ from backup_config import atomic_json, read_json
 
 
 VERSION = "0.19.1"
-MODULES = ["backup_config.py", "restic_process.py", "backup_runner.py", "configure_destination.py"]
+MODULES = ["backup_config.py", "restic_process.py", "backup_runner.py", "configure_destination.py", "install_schedule.py", "settings_bridge.py"]
 EXCLUDES = ["**/node_modules", "**/.pnpm-store", "**/dist", "**/out", "**/build", "**/.next", "**/.turbo", "**/Pods", "**/DerivedData", "**/.venv", "**/.cache", "**/.DS_Store", "**/GPUCache", "**/Code Cache", "**/Cache", "**/__pycache__"]
 
 

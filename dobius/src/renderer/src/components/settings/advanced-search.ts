@@ -1,3 +1,4 @@
+import { CLOUD_BACKUP_SEARCH } from '../../../../shared/cloud-backup'
 import type { SettingsSearchEntry } from './settings-search'
 import { getAdvancedNetworkSearchEntries } from './advanced-network-search'
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
@@ -6,6 +7,7 @@ import { translateSearchKeyword } from './settings-search-keywords'
 
 export const getAdvancedPaneSearchEntries = createLocalizedCatalog((): SettingsSearchEntry[] => [
   ...getAdvancedNetworkSearchEntries(),
+  CLOUD_BACKUP_SEARCH,
   {
     title: translate(
       'auto.components.settings.advanced.search.11eea3da72',

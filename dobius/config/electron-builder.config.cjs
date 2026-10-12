@@ -41,6 +41,7 @@ const bundledSkillsExtraResource = {
 const packagedRuntimeNodeModuleResources = createPackagedRuntimeNodeModuleResources()
 
 const commonExtraResources = [
+  { from: 'config/scripts/cloud-backup', to: 'cloud-backup', filter: ['*.py', '!test_*.py'] },
   relayExtraResource,
   bundledSkillsExtraResource,
   ...packagedRuntimeNodeModuleResources
@@ -165,7 +166,10 @@ module.exports = {
       chmodSync(join(resourcesDir, filename), 0o755)
     }
     if (context.electronPlatformName === 'darwin') {
-      await signMacComputerUseHelper(join(resourcesDir, 'Dobius+ Computer Use.app'), context.packager)
+      await signMacComputerUseHelper(
+        join(resourcesDir, 'Dobius+ Computer Use.app'),
+        context.packager
+      )
     }
   },
   win: {

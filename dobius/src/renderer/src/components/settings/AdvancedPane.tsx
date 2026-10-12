@@ -6,6 +6,7 @@ import { Button } from '../ui/button'
 import { Label } from '../ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import { AdvancedNetworkSettingsSection } from './AdvancedNetworkSettingsSection'
+import { AwsCloudBackupSetting } from './AwsCloudBackupSetting'
 import { ExternalBackupSetting } from './ExternalBackupSetting'
 import { SearchableSetting } from './SearchableSetting'
 import { SettingsSubsectionHeader, SettingsSwitch } from './SettingsFormControls'
@@ -43,6 +44,7 @@ export function AdvancedPane({ settings, updateSettings }: AdvancedPaneProps): R
 
   return (
     <div className="space-y-4">
+      <AwsCloudBackupSetting />
       <ExternalBackupSetting settings={settings} updateSettings={updateSettings} />
 
       <section className="space-y-3">

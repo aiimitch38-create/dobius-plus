@@ -40,6 +40,36 @@
         "resourceUsageToggleDescription": "显示资源管理器。点击可查看 CPU、内存、会话、守护进程控制和工作区磁盘扫描。",
         "portsToggleDescription": "显示实时工作区端口。单击它可获取工作区范围的端口和外部侦听器。"
       }
+    },
+    "aws": {
+      "bucket": "S3 bucket name",
+      "region": "AWS region",
+      "accessKey": "Access key ID",
+      "secretKey": "Secret access key",
+      "sessionToken": "Session token (optional)",
+      "credentialsNote": "Use an IAM backup identity limited to this bucket. Credentials are stored in private files on this computer for backups while Dobius is closed. Temporary credentials must be replaced before they expire.",
+      "connect": "Connect and enable backups",
+      "title": "AWS cloud backups",
+      "description": "Connect Amazon S3 for automatic encrypted backups and restore checks.",
+      "desktopOnly": "Open Dobius desktop settings on the computer you want to back up. SSH and VPS files need a backup configured on their host.",
+      "loading": "Loading backup status…",
+      "verified": "Backup verified",
+      "paused": "Paused",
+      "inProgress": "In progress",
+      "attention": "Needs attention",
+      "notConnected": "Not connected",
+      "lastBackup": "Last completed backup:",
+      "lastRestore": "Last restore check:",
+      "schedule": "Backups run every 30 minutes while this computer is awake and online, even with Dobius closed. S3 storage and transfer charges apply. Use an existing private bucket in its correct region.",
+      "changeConnection": "Change AWS connection or replace credentials",
+      "connectionDetails": "AWS connection details",
+      "runNow": "Back up now",
+      "pause": "Pause backups",
+      "resume": "Resume backups",
+      "saveKey": "Save recovery key",
+      "recoveryNote": "Keep your recovery key in a separate password manager. You need it to restore encrypted backups after losing this computer.",
+      "sources": "Folders included in this computer’s backup",
+      "exclusions": "Dependencies, caches, and generated builds are excluded. Remote projects and other personal folders are not included automatically."
     }
   },
   "menu": {
