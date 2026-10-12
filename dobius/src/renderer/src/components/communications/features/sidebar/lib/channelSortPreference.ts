@@ -40,7 +40,9 @@ export function sectionSortGroupKey(sectionId: string): ChannelSortGroupKey {
  * preferences don't bleed across communities/relays.
  */
 export function storageKey(pubkey: string, relayUrl?: string): string {
-  if (!relayUrl) return `${STORAGE_KEY_PREFIX}:${pubkey}`;
+  if (!relayUrl) {
+    return `${STORAGE_KEY_PREFIX}:${pubkey}`;
+  }
   const normalized = normalizeRelayUrl(relayUrl);
   // Encode the normalized relay so it can't contain the `:` delimiter.
   return `${STORAGE_KEY_PREFIX}:${pubkey}:${encodeURIComponent(normalized)}`;
@@ -62,16 +64,22 @@ export function stripOrphanedSectionModes(
   const kept = Object.entries(store.groups).filter(
     ([key]) => !key.startsWith("section:") || liveKeys.has(key),
   );
-  if (kept.length === Object.keys(store.groups).length) return store;
+  if (kept.length === Object.keys(store.groups).length) {
+    return store;
+  }
   return { ...store, groups: Object.fromEntries(kept) };
 }
 
 export function parseChannelSortPayload(
   json: unknown,
 ): ChannelSortStore | null {
-  if (typeof json !== "object" || json === null) return null;
+  if (typeof json !== "object" || json === null) {
+    return null;
+  }
   const obj = json as Record<string, unknown>;
-  if (obj.version !== 1) return null;
+  if (obj.version !== 1) {
+    return null;
+  }
   const groups: Record<string, ChannelSortMode> =
     typeof obj.groups === "object" &&
     obj.groups !== null &&
@@ -92,7 +100,9 @@ export function readChannelSortStore(
 ): ChannelSortStore {
   try {
     const raw = window.localStorage.getItem(storageKey(pubkey, relayUrl));
-    if (!raw) return DEFAULT_STORE;
+    if (!raw) {
+      return DEFAULT_STORE;
+    }
     return parseChannelSortPayload(JSON.parse(raw)) ?? DEFAULT_STORE;
   } catch {
     return DEFAULT_STORE;
@@ -123,7 +133,9 @@ export function sortModeForGroup(
 }
 
 function channelRecencyMs(channel: Channel): number | null {
-  if (!channel.lastMessageAt) return null;
+  if (!channel.lastMessageAt) {
+    return null;
+  }
   const ms = Date.parse(channel.lastMessageAt);
   return Number.isFinite(ms) ? ms : null;
 }
@@ -152,8 +164,12 @@ export function sortChannelsForSidebar(
     if (leftMs !== null && rightMs !== null && leftMs !== rightMs) {
       return rightMs - leftMs;
     }
-    if (leftMs !== null && rightMs === null) return -1;
-    if (leftMs === null && rightMs !== null) return 1;
+    if (leftMs !== null && rightMs === null) {
+      return -1;
+    }
+    if (leftMs === null && rightMs !== null) {
+      return 1;
+    }
     return compareChannelsByName(left, right);
   });
 }

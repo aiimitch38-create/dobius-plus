@@ -154,8 +154,12 @@ function projectRootItem(item: FeedItem, groupItems: readonly FeedItem[]) {
 }
 
 function projectTypeLabel(item: FeedItem) {
-  if (item.kind === 1618) return "Pull request";
-  if (item.kind === 1621) return "Issue";
+  if (item.kind === 1618) {
+    return "Pull request";
+  }
+  if (item.kind === 1621) {
+    return "Issue";
+  }
   return "Project update";
 }
 
@@ -246,7 +250,9 @@ function isThreadReplyItem(item: FeedItem) {
 function uniqueItemsById(items: readonly FeedItem[]) {
   const seen = new Set<string>();
   return items.filter((item) => {
-    if (seen.has(item.id)) return false;
+    if (seen.has(item.id)) {
+      return false;
+    }
     seen.add(item.id);
     return true;
   });

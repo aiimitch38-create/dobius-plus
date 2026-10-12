@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app } from 'electron'
+import { parseEveryValue, SafeJsonFile } from '../../storage/safe-json-file'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 const FILE_NAME = 'communications-observer-channel-index.json'
 
@@ -21,12 +21,12 @@ export type ObserverChannelIndexEntry = {
 
 type IndexFile = Record<string, ObserverChannelIndexEntry>
 
-let cached: IndexFile | null = null
-
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
 function sanitizeEntry(raw: unknown): ObserverChannelIndexEntry | null {
   if (typeof raw !== 'object' || raw === null) {
     return null
@@ -44,47 +44,22 @@ function sanitizeEntry(raw: unknown): ObserverChannelIndexEntry | null {
   }
 }
 
-function sanitize(raw: unknown): IndexFile {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return {}
-  }
-  const out: IndexFile = {}
-  for (const [eventId, value] of Object.entries(raw as Record<string, unknown>)) {
-    const entry = sanitizeEntry(value)
-    if (entry) {
-      out[eventId] = entry
-    }
-  }
-  return out
-}
+const file = new SafeJsonFile<IndexFile>({
+  filePath,
+  parse: (raw) => parseEveryValue(raw, sanitizeEntry),
+  fallback: () => ({}),
+  label: `[communications/agents] ${FILE_NAME}`
+})
 
 function load(): IndexFile {
-  if (cached) {
-    return cached
-  }
-  const target = filePath()
-  if (!existsSync(target)) {
-    cached = {}
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(target, 'utf-8')))
-  } catch (error) {
-    console.warn(
-      '[communications/agents] failed to load observer channel index:',
-      error instanceof Error ? error.message : String(error)
-    )
-    cached = {}
-  }
-  return cached
+  return file.get()
 }
 
+// Throws like the old writer did, so the RPC caller sees that nothing was saved.
 function persist(data: IndexFile): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  mkdirSync(path.dirname(target), { recursive: true })
-  writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf-8')
-  renameSync(tmp, target)
+  if (!file.set(data)) {
+    throw new Error('Observer channel index could not be saved')
+  }
 }
 
 // Idempotent by design (matches the real contract): already-indexed frames
@@ -103,7 +78,6 @@ export function indexObserverChannelIds(entries: ObserverChannelIndexEntry[]): v
     changed = true
   }
   if (changed) {
-    cached = data
     persist(data)
   }
 }

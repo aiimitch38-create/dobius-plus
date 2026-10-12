@@ -69,7 +69,9 @@ export function LandingBees() {
 
   React.useEffect(() => {
     const field = fieldRef.current;
-    if (!field) return;
+    if (!field) {
+      return;
+    }
 
     let raf = 0;
     const start = performance.now();
@@ -79,7 +81,9 @@ export function LandingBees() {
       const rect = field.getBoundingClientRect();
       const p = pointer.current;
       beeRefs.current.forEach((el, i) => {
-        if (!el) return;
+        if (!el) {
+          return;
+        }
         const bee = BEES[i];
         // Per-bee wander: two incommensurate sine waves, phase-shifted by index.
         const phase = i * 1.7;
@@ -130,7 +134,9 @@ export function LandingBees() {
     return () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseout", onLeave);
-      if (raf) cancelAnimationFrame(raf);
+      if (raf) {
+        cancelAnimationFrame(raf);
+      }
     };
   }, []);
 

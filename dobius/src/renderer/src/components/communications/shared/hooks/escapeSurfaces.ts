@@ -27,7 +27,9 @@ export function acquireEscapeSurface(): () => void {
   activeEscapeSurfaceCount += 1;
   let released = false;
   return () => {
-    if (released) return;
+    if (released) {
+      return;
+    }
     released = true;
     activeEscapeSurfaceCount -= 1;
   };

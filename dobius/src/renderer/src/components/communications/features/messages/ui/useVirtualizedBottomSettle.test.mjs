@@ -15,8 +15,9 @@ class EventTargetShim {
     );
   }
   dispatchEvent(event) {
-    for (const listener of this.listeners.get(event.type) ?? [])
+    for (const listener of this.listeners.get(event.type) ?? []) {
       listener(event);
+    }
     return true;
   }
 }
@@ -48,7 +49,9 @@ class ElementShim extends EventTargetShim {
   }
   insertBefore(child, reference) {
     const index = this.children.indexOf(reference);
-    if (index < 0) return this.appendChild(child);
+    if (index < 0) {
+      return this.appendChild(child);
+    }
     this.children.splice(index, 0, child);
     this.childNodes.splice(index, 0, child);
     return child;
@@ -110,7 +113,9 @@ import { useVirtualizedBottomSettle } from "./useVirtualizedBottomSettle.ts";
 function flushAnimationFrames() {
   const callbacks = [...animationFrames.values()];
   animationFrames.clear();
-  for (const callback of callbacks) callback(performance.now());
+  for (const callback of callbacks) {
+    callback(performance.now());
+  }
 }
 
 function Harness({ apiRef, hostRef, itemsLengthRef, listRef }) {

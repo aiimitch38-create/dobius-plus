@@ -29,7 +29,9 @@ export function CreateProjectIssueDialog({
   const createMutation = useCreateProjectIssueMutation(project);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     const nextProject =
       projects.find((candidate) => candidate.id === initialProjectId) ??
       projects[0];
@@ -37,7 +39,9 @@ export function CreateProjectIssueDialog({
   }, [initialProjectId, open, projects]);
 
   async function handleCreate(input: CreateProjectWorkItemDialogInput) {
-    if (!project) throw new Error("Choose a repository.");
+    if (!project) {
+      throw new Error("Choose a repository.");
+    }
     const issueId = await createMutation.mutateAsync(input);
     toast.success("Issue created.");
     await onCreated(project, issueId);

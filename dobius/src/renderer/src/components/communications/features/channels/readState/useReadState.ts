@@ -30,7 +30,9 @@ export function useReadState(
   // Create/destroy manager when pubkey becomes available/changes
   React.useEffect(() => {
     setInitializedPubkey(null);
-    if (!pubkey || !relayClient) return;
+    if (!pubkey || !relayClient) {
+      return;
+    }
 
     let isCancelled = false;
     const manager = new ReadStateManager(pubkey, relayClient);

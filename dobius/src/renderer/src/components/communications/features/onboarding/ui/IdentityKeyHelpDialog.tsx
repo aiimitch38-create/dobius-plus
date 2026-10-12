@@ -37,7 +37,9 @@ export function IdentityKeyHelpDialog() {
   const [isVisible, setIsVisible] = React.useState(hasSeenIdentityKeyHelp);
 
   React.useEffect(() => {
-    if (isVisible) return;
+    if (isVisible) {
+      return;
+    }
 
     const timeout = window.setTimeout(() => {
       rememberIdentityKeyHelpSeen();

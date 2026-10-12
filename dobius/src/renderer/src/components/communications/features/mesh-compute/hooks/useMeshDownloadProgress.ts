@@ -34,7 +34,9 @@ export function useMeshDownloadProgress(): {
         const stop = await listen<MeshDownloadProgress>(
           "mesh-download-progress",
           (event) => {
-            if (cancelled) return;
+            if (cancelled) {
+              return;
+            }
             setProgress(event.payload.done ? null : event.payload);
           },
         );
@@ -60,8 +62,12 @@ export function useMeshDownloadProgress(): {
 /** "2.1 GB of 5.0 GB" style formatting; tolerates unknown totals. */
 export function formatDownloadBytes(p: MeshDownloadProgress): string {
   const gb = (n: number) => `${(n / 1e9).toFixed(1)} GB`;
-  if (p.downloadedBytes == null) return "";
-  if (p.totalBytes == null || p.totalBytes === 0) return gb(p.downloadedBytes);
+  if (p.downloadedBytes == null) {
+    return "";
+  }
+  if (p.totalBytes == null || p.totalBytes === 0) {
+    return gb(p.downloadedBytes);
+  }
   return `${gb(p.downloadedBytes)} of ${gb(p.totalBytes)}`;
 }
 

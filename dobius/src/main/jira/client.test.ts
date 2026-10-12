@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { join } from 'node:path'
@@ -16,6 +24,7 @@ const { closeAllConnectionsMock, netFetchMock, resolveProxyMock, setProxyMock } 
 
 type SafeStorageMockOptions = {
   encryptionAvailable?: boolean
+  encryptString?: (value: string) => Buffer
   decryptString?: (value: Buffer) => string
 }
 
@@ -95,7 +104,7 @@ async function loadClientModule(options: SafeStorageMockOptions = {}) {
     net: { fetch: netFetchMock },
     safeStorage: {
       isEncryptionAvailable: () => options.encryptionAvailable ?? false,
-      encryptString: (value: string) => Buffer.from(value),
+      encryptString: options.encryptString ?? ((value: string) => Buffer.from(value)),
       decryptString: options.decryptString ?? ((value: Buffer) => value.toString('utf-8'))
     },
     session: {
@@ -428,5 +437,109 @@ describe('Jira client credential storage', () => {
     const headers = netFetchMock.mock.calls[0]?.[1]?.headers as Headers
     expect(headers.get('User-Agent')).toBe('Dobius')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('writes no plaintext token when safeStorage is unavailable, and stays connected this session (#25)', async () => {
+    netFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ accountId: 'account-alpha', displayName: 'Ada', emailAddress: 'ada@example.com' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    const jira = await loadClientModule({ encryptionAvailable: false })
+
+    await expect(
+      jira.connect({ siteUrl: 'example.atlassian.net', email: 'ada@example.com', apiToken: 'token-alpha' })
+    ).resolves.toMatchObject({ ok: true })
+
+    expect(jira.getStatus()).toMatchObject({ connected: true })
+    for (const file of listFiles(join(tempHome, '.dobius'))) {
+      expect(readFileSync(file, 'utf-8').includes('token-alpha')).toBe(false)
+    }
+  })
+
+  it('writes no plaintext token when encryptString throws (#25)', async () => {
+    netFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ accountId: 'account-alpha', displayName: 'Ada', emailAddress: 'ada@example.com' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    const jira = await loadClientModule({
+      encryptionAvailable: true,
+      encryptString: () => {
+        throw new Error('keychain locked')
+      }
+    })
+
+    await expect(
+      jira.connect({ siteUrl: 'example.atlassian.net', email: 'ada@example.com', apiToken: 'token-alpha' })
+    ).resolves.toMatchObject({ ok: true })
+
+    for (const file of listFiles(join(tempHome, '.dobius'))) {
+      expect(readFileSync(file, 'utf-8').includes('token-alpha')).toBe(false)
+    }
+  })
+})
+
+function listFiles(dir: string): string[] {
+  if (!existsSync(dir)) {
+    return []
+  }
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+}
+
+describe('Jira site file is never overwritten while unreadable (BUILD-009B)', () => {
+  const validSite = {
+    id: 'site-alpha',
+    siteUrl: 'https://example.atlassian.net',
+    email: 'ada@example.com',
+    displayName: 'Ada',
+    accountId: 'account-alpha'
+  }
+
+  it.each([
+    ['truncated JSON', '{"version": 1, "sites": [{"id"'],
+    ['a malformed site next to a valid one', JSON.stringify({ sites: [validSite, { id: 7 }] })],
+    ['sites that is not a list', JSON.stringify({ sites: 'nope' })]
+  ])('%s', async (_name, text) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const dobiusDir = join(tempHome, '.dobius')
+    const target = join(dobiusDir, 'jira-sites.json')
+    mkdirSync(join(dobiusDir, 'jira-tokens'), { recursive: true })
+    writeFileSync(tokenPathForSite(validSite.id), 'token-alpha')
+    writeFileSync(target, text, 'utf-8')
+    const before = statSync(target)
+    const jira = await loadClientModule()
+
+    expect(jira.getStatus().connected).toBe(false)
+    jira.selectSite('all')
+    jira.clearToken(validSite.id)
+    jira.disconnect()
+
+    expect(readFileSync(target, 'utf-8')).toBe(text)
+    expect(statSync(target).mtimeMs).toBe(before.mtimeMs)
+    const names = readdirSync(dobiusDir)
+    expect(names.filter((name) => name.endsWith('.tmp'))).toEqual([])
+    expect(names.filter((name) => name.startsWith('jira-sites.json.unreadable-'))).toHaveLength(1)
+    // Warn-and-continue path: one error naming the file, not one per refused save.
+    const refusals = vi
+      .mocked(console.error)
+      .mock.calls.filter((call) => String(call[0]).includes('jira-sites.json not saved'))
+    expect(refusals).toHaveLength(1)
+  })
+
+  it('still saves a readable site list owner-only (0600)', async () => {
+    writeJiraFiles('site-alpha', 'token-alpha')
+    const target = join(tempHome, '.dobius', 'jira-sites.json')
+    const jira = await loadClientModule()
+
+    expect(jira.selectSite('all').connected).toBe(true)
+    expect(JSON.parse(readFileSync(target, 'utf-8')).selectedSiteId).toBe('all')
+    if (process.platform !== 'win32') {
+      expect(statSync(target).mode & 0o777).toBe(0o600)
+    }
   })
 })

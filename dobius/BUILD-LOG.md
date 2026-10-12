@@ -35,3 +35,17 @@
 - Verify: typecheck node+cli+web 0 errors, oxlint clean on touched files, 47 automation/destination tests pass (8 new), electron-vite build exit 0.
 - Lessons: service.ts sat exactly at the 300-line cap — split into run-notification-delivery.ts + run-final-status.ts; localize-renderer-strings.mjs sweeps the whole repo, revert unrelated wraps before committing; `cmd | tail -1` masks exit codes in && chains.
 - Pre-existing branch failures NOT absorbed: agent-runner.ts max-lines, localization-coverage on untouched files.
+
+## 2026-09-24 — BUILD-001 fail-closed "Pause crew" execution gate (stabilize/001-global-execution-gate)
+- Fixes #1 (autonomous paths ignored pause) and #2 (unreadable pause file unpaused + got overwritten). Plan: plans/REPAIR-BUILD-001-execution-gate.md.
+- Verified: typecheck exit 0; targeted suites 98/98; full-suite failures (85 files) pre-exist on parent b5c66cf5 except one flaky hermes test (3/3 green alone). Code-reviewer subagent: no findings.
+- Lesson: run `oxfmt` only on files you edited and re-check the diff — it reformats untouched lines and globs (`*.test.ts`) pull in unrelated files.
+
+## 2026-09-25 — Stabilization program: 49 of 50 builds merged on stabilize/integration (not installed)
+- Scope: 123-bug audit (docs/stabilization/EXECUTION-ORDER.md) → 50 builds plus follow-ups 003B, 009B, 009C, 009C2, 014B, CX12 (Codex review fixes), SBX (Claude Agent SDK sandbox). Each build: own worktree/branch from integration, plan at plans/REPAIR-BUILD-*.md, targeted tests with fail-without/pass-with mutation checks, independent reviewer subagent (security builds 2-5 rounds), then --no-ff merge with typecheck + targeted tests.
+- Integration tip after BUILD-049: 0d613dd6. Diff vs program base b5c66cf5: ~1200 files.
+- Verify: typecheck 0; `pnpm run lint` 0 (shrink-only baseline, BUILD-049); verify-localization-catalog 0; full vitest suite on 049 branch: 2923 files pass, the only failure not in the pre-program baseline is run-verification.test.ts (needs port 3300 held by the live app); 2 baseline files now pass. Dry `pnpm run build:unpack` exit 0: bundle manifest pass, 2.0.0 (build 1), sealed BUILD-PROVENANCE clean, codesign --strict pass. NOT installed (Carson's instruction: install only on his explicit go).
+- Blocked: BUILD-031 (ADAM has no check-only handshake route). Deferred with reasons: N7, X10, X11.
+- Codex: waves 1-2 reviewed (8 findings → CX12/022/032/019); wave-3 review cut off by usage limit (2 leads fixed in BUILD-027); final whole-program review scheduled after the 2026-09-26 limit reset.
+- Decisions for Carson: stabilize-run/DECISIONS-FOR-CARSON.md (73 items, 11 need action).
+- Lessons: a text rail over shell commands is an arms race — enforce at the OS (SDK sandbox) and server (branch protection) instead; security builds need default-deny classification tests, not lists of bad fields; APFS case/Unicode folding (ſ→s) defeats name-based path checks; worktrees nested in the main checkout see every CLAUDE.local.md up the tree; run the localization check on every merge.

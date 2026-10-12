@@ -59,6 +59,9 @@ export type RpcContext = {
   // Why: WebSocket RPCs authenticate by mobile device token. State-owning
   // handlers use this to clean up when that paired device disconnects.
   clientId?: string
+  // Why: some authorization needs the stable registry identity, while
+  // clientId remains the bearer token for existing ownership and cleanup.
+  clientDeviceId?: string
   // Why: payload windowing/truncation tuned for the constrained mobile payload
   // (e.g. native-chat block char cap) must not clip full-screen web/desktop
   // clients. Carries the paired device's scope so handlers can gate the diet to

@@ -151,7 +151,9 @@ function isElement(value: unknown): value is Element {
 
 function elementCenter(element: Element): BurstPoint | null {
   const rect = element.getBoundingClientRect();
-  if (!rect.width && !rect.height) return null;
+  if (!rect.width && !rect.height) {
+    return null;
+  }
   return {
     x: rect.left + rect.width / 2,
     y: rect.top + rect.height / 2,
@@ -159,8 +161,12 @@ function elementCenter(element: Element): BurstPoint | null {
 }
 
 function pointFromOrigin(origin: EmojiBurstOrigin): BurstPoint | null {
-  if (!origin) return null;
-  if (isElement(origin)) return elementCenter(origin);
+  if (!origin) {
+    return null;
+  }
+  if (isElement(origin)) {
+    return elementCenter(origin);
+  }
 
   if (
     typeof origin.clientX === "number" &&
@@ -197,7 +203,9 @@ function getEmojiCanvas(emoji: string): HTMLCanvasElement {
   const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
   const cacheKey = `${emoji}:${dpr}:${EMOJI_CACHE_SCALE}`;
   const existing = emojiCanvasCache.get(cacheKey);
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
 
   const fontSize = Math.ceil(EMOJI_CACHE_PX * dpr);
   const size = Math.ceil(fontSize * EMOJI_CACHE_SCALE);
@@ -206,7 +214,9 @@ function getEmojiCanvas(emoji: string): HTMLCanvasElement {
   canvas.height = size;
 
   const context = canvas.getContext("2d");
-  if (!context) return canvas;
+  if (!context) {
+    return canvas;
+  }
 
   context.textAlign = "center";
   context.textBaseline = "middle";
@@ -221,7 +231,9 @@ function getEmojiImageCanvas(src: string): HTMLCanvasElement | null {
   const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
   const cacheKey = `${src}:${dpr}:${EMOJI_CACHE_SCALE}`;
   const existing = emojiImageCanvasCache.get(cacheKey);
-  if (existing) return existing.canvas;
+  if (existing) {
+    return existing.canvas;
+  }
 
   const record: { canvas: HTMLCanvasElement | null } = {
     canvas: null,
@@ -291,7 +303,9 @@ function fitParticleLabel(
   label: string,
   maxWidth: number,
 ) {
-  if (context.measureText(label).width <= maxWidth) return label;
+  if (context.measureText(label).width <= maxWidth) {
+    return label;
+  }
 
   const ellipsis = "…";
   let fitted = label;
@@ -312,7 +326,9 @@ function drawParticleLabel(
   drawSize: number,
 ) {
   const label = particle.label?.trim();
-  if (!label) return;
+  if (!label) {
+    return;
+  }
 
   context.setTransform(dpr, 0, 0, dpr, 0, 0);
   context.font =
@@ -386,7 +402,9 @@ function resolveCollisions(particles: Particle[]) {
       const dvx = a.xv - b.xv;
       const dvy = a.yv - b.yv;
       const velocityAlongNormal = dvx * nx + dvy * ny;
-      if (velocityAlongNormal <= 0) continue;
+      if (velocityAlongNormal <= 0) {
+        continue;
+      }
 
       const impulse = velocityAlongNormal * 0.34;
       a.xv -= impulse * nx;
@@ -420,7 +438,9 @@ function normalizeBurstPayload(
   }
 
   const emoji = reaction.emoji.trim();
-  if (!emoji) return null;
+  if (!emoji) {
+    return null;
+  }
 
   return {
     emoji,
@@ -434,7 +454,9 @@ function spawnPickerEmojiBurst(
   point: BurstPoint,
   reaction: EmojiBurstPayload,
 ) {
-  if (particles.length + PICKER_PARTICLES_PER_BURST > MAX_ACTIVE) return;
+  if (particles.length + PICKER_PARTICLES_PER_BURST > MAX_ACTIVE) {
+    return;
+  }
 
   for (let i = 0; i < PICKER_PARTICLES_PER_BURST; i += 1) {
     const horizontalDrift = (Math.random() - 0.5) * 4.4;
@@ -466,7 +488,9 @@ function spawnHuddleEmojiBurst(
   point: BurstPoint,
   reaction: EmojiBurstPayload,
 ) {
-  if (particles.length + HUDDLE_PARTICLES_PER_BURST + 1 > MAX_ACTIVE) return;
+  if (particles.length + HUDDLE_PARTICLES_PER_BURST + 1 > MAX_ACTIVE) {
+    return;
+  }
 
   const heroLife = HUDDLE_PARTICLE_LIFE_FRAMES + 42;
   particles.push({
@@ -517,7 +541,9 @@ function spawnHuddleEmojiBurst(
 function spawnEmojiFloatBurst(particles: Particle[]) {
   const availableSlots = Math.max(0, MAX_ACTIVE - particles.length);
   const count = Math.min(CELEBRATION_PARTICLE_COUNT, availableSlots);
-  if (count === 0) return;
+  if (count === 0) {
+    return;
+  }
 
   const centerX = window.innerWidth / 2;
   const launchBandWidth = window.innerWidth * 0.78;
@@ -565,11 +591,15 @@ export function EmojiBurstProvider({
   const reducedMotionRef = React.useRef(false);
 
   const startLoop = React.useCallback(() => {
-    if (animationFrameRef.current !== null) return;
+    if (animationFrameRef.current !== null) {
+      return;
+    }
 
     const canvas = canvasRef.current;
     const context = contextRef.current;
-    if (!canvas || !context) return;
+    if (!canvas || !context) {
+      return;
+    }
     const activeCanvas = canvas;
     const activeContext = context;
 
@@ -636,7 +666,9 @@ export function EmojiBurstProvider({
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
 
     contextRef.current = canvas.getContext("2d");
     resizeCanvas(canvas);
@@ -670,7 +702,9 @@ export function EmojiBurstProvider({
   const burstEmoji = React.useCallback(
     (emoji: string, origin?: EmojiBurstOrigin) => {
       const reaction = normalizeBurstPayload(emoji);
-      if (!reaction || reducedMotionRef.current) return;
+      if (!reaction || reducedMotionRef.current) {
+        return;
+      }
 
       spawnPickerEmojiBurst(
         particlesRef.current,
@@ -685,7 +719,9 @@ export function EmojiBurstProvider({
   const burstHuddleReaction = React.useCallback(
     (input: string | EmojiBurstPayload, origin?: EmojiBurstOrigin) => {
       const reaction = normalizeBurstPayload(input);
-      if (!reaction || reducedMotionRef.current) return;
+      if (!reaction || reducedMotionRef.current) {
+        return;
+      }
 
       spawnHuddleEmojiBurst(
         particlesRef.current,
@@ -698,7 +734,9 @@ export function EmojiBurstProvider({
   );
 
   const celebrateWithEmojiFloatBurst = React.useCallback(() => {
-    if (reducedMotionRef.current) return;
+    if (reducedMotionRef.current) {
+      return;
+    }
 
     spawnEmojiFloatBurst(particlesRef.current);
     startLoop();

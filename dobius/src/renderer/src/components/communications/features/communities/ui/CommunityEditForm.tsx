@@ -59,7 +59,9 @@ export function CommunityEditForm({
   }, []);
 
   React.useEffect(() => {
-    if (!joinPolicyRequired) return;
+    if (!joinPolicyRequired) {
+      return;
+    }
 
     const normalizedUrl = normalizeRelayUrl(relayUrl);
     if (!normalizedUrl || !isJoinPolicyDiscoveryCandidate(normalizedUrl)) {
@@ -70,7 +72,9 @@ export function CommunityEditForm({
     const timeoutId = window.setTimeout(() => {
       void getJoinPolicy(normalizedUrl, "native")
         .then((policy) => {
-          if (cancelled || !policy) return;
+          if (cancelled || !policy) {
+            return;
+          }
           setJoinPolicy(policy);
           setPolicyRelayUrl(normalizedUrl);
           setAgeConfirmed(false);

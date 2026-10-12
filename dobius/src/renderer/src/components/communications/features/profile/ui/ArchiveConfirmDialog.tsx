@@ -47,7 +47,7 @@ export function ArchiveConfirmDialog({
             a <ul> or another block <p>. */}
         <ul className="list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
           <li>
-            They won't appear in search, autocomplete, or when adding members
+            They won&apos;t appear in search, autocomplete, or when adding members
           </li>
           <li>
             This only affects{" "}

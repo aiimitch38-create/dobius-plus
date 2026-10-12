@@ -31,7 +31,9 @@ function normalizePubkeys(pubkeys: Iterable<string>): string[] {
 }
 
 function readEnabled(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") {
+    return false;
+  }
   try {
     return window.localStorage.getItem(ENABLED_STORAGE_KEY) === "1";
   } catch {
@@ -40,13 +42,16 @@ function readEnabled(): boolean {
 }
 
 function readAudiences(): Record<string, string[]> {
-  if (typeof window === "undefined") return {};
+  if (typeof window === "undefined") {
+    return {};
+  }
   try {
     const parsed: unknown = JSON.parse(
       window.localStorage.getItem(AUDIENCES_STORAGE_KEY) ?? "{}",
     );
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return {};
+    }
 
     const result: Record<string, string[]> = {};
     for (const [scope, value] of Object.entries(parsed)) {
@@ -68,7 +73,9 @@ function buildSnapshot(): PersistentAgentAudienceSnapshot {
 
 function emit(): void {
   snapshot = buildSnapshot();
-  for (const listener of listeners) listener();
+  for (const listener of listeners) {
+    listener();
+  }
 }
 
 function persistAudiences(): void {
@@ -88,7 +95,9 @@ function advanceRevision(scope: string): void {
 }
 
 export function setPersistentAgentAudienceEnabled(nextEnabled: boolean): void {
-  if (enabled === nextEnabled) return;
+  if (enabled === nextEnabled) {
+    return;
+  }
   enabled = nextEnabled;
   if (!nextEnabled) {
     generation += 1;
@@ -112,8 +121,12 @@ export function getPersistentAgentAudienceScope({
   threadRootId = null,
 }: PersistentAgentAudienceScopeInput): string | null {
   const owner = ownerPubkey.trim().toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(owner) || !channelId) return null;
-  if (!threadRootId) return null;
+  if (!/^[0-9a-f]{64}$/.test(owner) || !channelId) {
+    return null;
+  }
+  if (!threadRootId) {
+    return null;
+  }
   return `${owner}:${channelId}:thread:${threadRootId}`;
 }
 
@@ -129,7 +142,9 @@ export function initializePersistentAgentAudience(
   scope: string,
   pubkeys: Iterable<string>,
 ): void {
-  if (!enabled || !scope || Object.hasOwn(audiences, scope)) return;
+  if (!enabled || !scope || Object.hasOwn(audiences, scope)) {
+    return;
+  }
   setPersistentAgentAudience(scope, pubkeys);
 }
 
@@ -137,7 +152,9 @@ export function setPersistentAgentAudience(
   scope: string,
   pubkeys: Iterable<string>,
 ): void {
-  if (!scope) return;
+  if (!scope) {
+    return;
+  }
   const normalized = normalizePubkeys(pubkeys);
   const current = audiences[scope];
   if (

@@ -113,7 +113,9 @@ export function waitForRateLimit(): Promise<void> {
  * retry.
  */
 export function rateLimitRemainingMs(): number {
-  if (expiresAt === null) return 0;
+  if (expiresAt === null) {
+    return 0;
+  }
   return Math.max(0, expiresAt - Date.now());
 }
 

@@ -28,7 +28,6 @@
 // import isolation rule above. The cost of one duplicated array vs.
 // punching a hole in the architecture is trivially worth it.
 
-import { app } from 'electron'
 import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -50,6 +49,7 @@ import {
   type UploadBundleResult
 } from './diagnostic-bundle-upload'
 import { setActiveSink } from './tracer'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const CI_ENV_VARS = [
   'CI',
@@ -136,7 +136,7 @@ export function resolveObservabilityConsent(): ObservabilityConsent {
 export function getTraceFilePath(): string {
   let userData: string
   try {
-    userData = app.getPath('userData')
+    userData = getUserDataRoot()
   } catch {
     // Tests — Electron's `app` may not be initialized. Use a sensible
     // OS-conventional fallback so unit tests can construct the path

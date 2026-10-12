@@ -66,6 +66,9 @@
         ]
       }
     },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

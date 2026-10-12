@@ -29,7 +29,9 @@ function installDOMShim() {
       );
     }
     dispatchEvent(event) {
-      for (const l of this.listeners.get(event.type) ?? []) l(event);
+      for (const l of this.listeners.get(event.type) ?? []) {
+        l(event);
+      }
       return true;
     }
   }
@@ -73,9 +75,13 @@ function installDOMShim() {
       return child;
     }
     insertBefore(child, ref) {
-      if (!ref) return this.appendChild(child);
+      if (!ref) {
+        return this.appendChild(child);
+      }
       const idx = this.children.indexOf(ref);
-      if (idx < 0) return this.appendChild(child);
+      if (idx < 0) {
+        return this.appendChild(child);
+      }
       this.children.splice(idx, 0, child);
       this.childNodes.splice(idx, 0, child);
       child.parentNode = this;
@@ -186,7 +192,9 @@ function ObserverFeedHarness({
     messages,
     scrollContainerRef: refs.container,
   });
-  if (onScrollRef) onScrollRef.current = onScroll;
+  if (onScrollRef) {
+    onScrollRef.current = onScroll;
+  }
   return null;
 }
 

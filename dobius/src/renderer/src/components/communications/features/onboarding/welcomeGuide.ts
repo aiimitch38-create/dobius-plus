@@ -233,7 +233,9 @@ export function welcomeStarterRuntimeUpdate(
   existing: ManagedAgent,
   desired: CreateManagedAgentInput,
 ) {
-  if (!desired.agentCommand) return null;
+  if (!desired.agentCommand) {
+    return null;
+  }
 
   const desiredArgs = desired.agentArgs ?? [];
   const desiredModel = desired.model ?? null;
@@ -346,7 +348,9 @@ export function ensureWelcomeTeam(
 ): Promise<WelcomeTeamAgents> {
   const key = `${normalizeRelayUrl(relayUrl) ?? ""}:${channelId}`;
   const current = welcomeTeamPromises.get(key);
-  if (current) return current;
+  if (current) {
+    return current;
+  }
 
   const promise = provisionWelcomeTeam(channelId, relayUrl).finally(() =>
     welcomeTeamPromises.delete(key),

@@ -130,7 +130,9 @@ export function MachineOnboardingFlow({
     const confirmed = window.confirm(
       "This will create a new identity and abandon your previous key. This cannot be undone. Continue?",
     );
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     setIsPending(true);
     setError(null);

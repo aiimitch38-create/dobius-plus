@@ -39,7 +39,9 @@ function readLineByRoot(messages, frontiersByRoot) {
   for (const message of messages) {
     const root = message.rootId ?? message.parentId ?? message.id;
     const line = frontiersByRoot.get(root);
-    if (line !== undefined) lineByMessageId.set(message.id, line);
+    if (line !== undefined) {
+      lineByMessageId.set(message.id, line);
+    }
   }
   return (id) => lineByMessageId.get(id) ?? null;
 }

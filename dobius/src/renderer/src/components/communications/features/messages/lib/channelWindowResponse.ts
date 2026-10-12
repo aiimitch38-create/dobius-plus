@@ -54,9 +54,13 @@ const mapSummary = (payload: SummaryPayload): ChannelWindowThreadSummary => ({
 export function parseLiveThreadSummary(
   event: RelayEvent,
 ): { rootId: string; live: LiveThreadSummary } | null {
-  if (event.kind !== KIND_CHANNEL_THREAD_SUMMARY) return null;
+  if (event.kind !== KIND_CHANNEL_THREAD_SUMMARY) {
+    return null;
+  }
   const rootId = targetId(event, "e");
-  if (!rootId) return null;
+  if (!rootId) {
+    return null;
+  }
   try {
     return {
       rootId,
@@ -96,10 +100,14 @@ export function parseChannelWindowResponse(
   const rowById = new Map(rows.map((row) => [row.event.id, row]));
 
   for (const event of events) {
-    if (event.kind !== KIND_CHANNEL_THREAD_SUMMARY) continue;
+    if (event.kind !== KIND_CHANNEL_THREAD_SUMMARY) {
+      continue;
+    }
     const rootId = targetId(event, "e");
     const row = rootId ? rowById.get(rootId) : undefined;
-    if (!row) continue;
+    if (!row) {
+      continue;
+    }
     const payload = parseJson<SummaryPayload>(event, "thread summary");
     row.thread = mapSummary(payload);
   }

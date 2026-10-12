@@ -87,7 +87,9 @@ export function useCreateChannelForm({
 
   const kindLabel = channelKind === "forum" ? "forum" : "channel";
   React.useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      return;
+    }
 
     setName(initialName ?? "");
     setDescription("");
@@ -99,7 +101,9 @@ export function useCreateChannelForm({
     setTypePopoverOpen(false);
     visibilityTouchedRef.current = false;
 
-    if (!autoFocusName) return;
+    if (!autoFocusName) {
+      return;
+    }
 
     // Small delay to let the dialog animation start before focusing.
     const timerId = globalThis.setTimeout(() => {
@@ -111,7 +115,9 @@ export function useCreateChannelForm({
         return;
       }
       const input = nameInputRef.current;
-      if (!input) return;
+      if (!input) {
+        return;
+      }
       input.focus();
       // Place the caret at the end of any prefilled name.
       const end = input.value.length;
@@ -125,7 +131,9 @@ export function useCreateChannelForm({
       if (!templateId) {
         setSelectedTemplateId(null);
         setDescription("");
-        if (!visibilityTouchedRef.current) setVisibility("open");
+        if (!visibilityTouchedRef.current) {
+          setVisibility("open");
+        }
         setErrorMessage(null);
         return;
       }
@@ -133,11 +141,15 @@ export function useCreateChannelForm({
       const template = templates.find(
         (t: ChannelTemplate) => t.id === templateId,
       );
-      if (!template) return;
+      if (!template) {
+        return;
+      }
 
       setSelectedTemplateId(templateId);
       setDescription(template.description ?? "");
-      if (!visibilityTouchedRef.current) setVisibility(template.visibility);
+      if (!visibilityTouchedRef.current) {
+        setVisibility(template.visibility);
+      }
       setErrorMessage(null);
     },
     [templates],
@@ -148,7 +160,9 @@ export function useCreateChannelForm({
       event.preventDefault();
 
       const trimmedName = name.trim();
-      if (!trimmedName) return;
+      if (!trimmedName) {
+        return;
+      }
 
       setErrorMessage(null);
 

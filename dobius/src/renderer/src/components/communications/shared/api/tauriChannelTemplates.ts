@@ -13,19 +13,19 @@ type RawChannelTemplate = {
   visibility: string;
   canvas_template?: string | null;
   agents?: {
-    personas?: Array<{
+    personas?: {
       personaId: string;
       runtime?: string | null;
       model?: string | null;
       role?: string | null;
       backend?: { type: "local" } | { type: "provider"; id: string } | null;
-    }>;
-    teams?: Array<{
+    }[];
+    teams?: {
       teamId: string;
       runtime?: string | null;
       model?: string | null;
       backend?: { type: "local" } | { type: "provider"; id: string } | null;
-    }>;
+    }[];
   };
   is_builtin: boolean;
   created_at: string;

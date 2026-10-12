@@ -155,7 +155,9 @@ const RULES = [
  */
 export function classifyCommand(command) {
   const rule = RULES.find((candidate) => candidate.match.test(command))
-  if (!rule) return null
+  if (!rule) {
+    return null
+  }
   return { disposition: rule.disposition, package: rule.package, feature: rule.feature }
 }
 

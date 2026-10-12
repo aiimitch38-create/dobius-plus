@@ -51,9 +51,13 @@ function slotIdKey(pubkey: string): string {
 function loadExtraSlotIds(pubkey: string): string[] {
   try {
     const raw = localStorage.getItem(localExtraSlotIdsKey(pubkey));
-    if (!raw) return [];
+    if (!raw) {
+      return [];
+    }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
     return parsed.filter(
       (v): v is string => typeof v === "string" && v.length > 0,
     );
@@ -93,11 +97,17 @@ export function resolveEffectiveTimestamp(args: {
   const own = effectiveState.get(contextId) ?? null;
 
   const parentId = parentResolver?.(contextId) ?? null;
-  if (parentId === null) return own;
+  if (parentId === null) {
+    return own;
+  }
 
   const parent = effectiveState.get(parentId) ?? null;
-  if (parent === null) return own;
-  if (own === null) return parent;
+  if (parent === null) {
+    return own;
+  }
+  if (own === null) {
+    return parent;
+  }
   return Math.max(own, parent);
 }
 
@@ -145,15 +155,15 @@ export function applyRemoteContextTimestamp(args: {
 /**
  * Result of a `splitContextsIntoBudgetedSlots` call.
  */
-export interface SlotSplitResult {
+export type SlotSplitResult = {
   /** Contexts record for each slot (primary slot first). */
-  slots: Array<Record<string, number>>;
+  slots: Record<string, number>[];
   /**
    * Extra slot IDs allocated beyond the first. Length is `slots.length - 1`.
    * The caller is responsible for persisting these.
    */
   extraSlotIds: string[];
-}
+};
 
 /**
  * Partition `channelEntries` across slots so each slot's blob fits within
@@ -196,8 +206,8 @@ export function splitContextsIntoBudgetedSlots(args: {
   const extraSlotIds: string[] = [];
 
   // Distribute channel keys and check fit. Grow slot count until all fit.
-  const distribute = (count: number): Array<Record<string, number>> => {
-    const slotContexts: Array<Record<string, number>> = Array.from(
+  const distribute = (count: number): Record<string, number>[] => {
+    const slotContexts: Record<string, number>[] = Array.from(
       { length: count },
       () => ({}),
     );
@@ -234,12 +244,12 @@ export function splitContextsIntoBudgetedSlots(args: {
 /**
  * Result of a `trimContextsToBudget` call.
  */
-export interface TrimResult {
+export type TrimResult = {
   /** Number of entries removed from `contexts`. */
   evicted: number;
   /** True when the serialized blob fits within `maxBytes` after trimming. */
   fitsAfterTrim: boolean;
-}
+};
 
 /**
  * Trim a contexts map to fit within `maxBytes` when serialized as the JSON
@@ -286,7 +296,9 @@ export function trimContextsToBudget(
   // This is an approximation — the final encode below is the authoritative check.
   const toEvict: string[] = [];
   for (const [key, ts] of [...msgEntries, ...threadEntries]) {
-    if (currentBytes <= maxBytes) break;
+    if (currentBytes <= maxBytes) {
+      break;
+    }
     // Contribution: `,"key":timestamp` — comma + quoted key + colon + value
     currentBytes -= key.length + 3 + String(ts).length + 1;
     toEvict.push(key);
@@ -334,7 +346,9 @@ export class ReadStateManager {
   }
 
   async initialize(): Promise<void> {
-    if (this.initialized || this.destroyed) return;
+    if (this.initialized || this.destroyed) {
+      return;
+    }
     console.debug(
       `[ReadStateManager] initialize pubkey=${truncatePubkey(this.pubkey)} clientId=${this.clientId.substring(0, 8)}… slotId=${this.slotId}`,
     );
@@ -342,9 +356,13 @@ export class ReadStateManager {
     this.hydrateFromLocalStorage();
 
     await this.fetchAndMerge();
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
     await this.startLiveSubscription();
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
     const initContexts = this.currentContexts();
     if (initContexts === null) {
       // Channel keys exceed single-slot budget — schedule a multi-slot publish.
@@ -484,7 +502,9 @@ export class ReadStateManager {
 
     for (const event of events) {
       const parsed = await parseReadStateEvent(event, this.pubkey);
-      if (!parsed) continue;
+      if (!parsed) {
+        continue;
+      }
 
       this.maxFetchedCreatedAt = Math.max(
         this.maxFetchedCreatedAt,
@@ -520,7 +540,9 @@ export class ReadStateManager {
     // d-tag coordinate. If so, rotate our slotId to avoid clobbering.
     for (const event of events) {
       const parsed = await parseReadStateEvent(event, this.pubkey);
-      if (!parsed || parsed.dTag !== `read-state:${this.slotId}`) continue;
+      if (!parsed || parsed.dTag !== `read-state:${this.slotId}`) {
+        continue;
+      }
       if (parsed.blob.client_id !== this.clientId) {
         this.slotId = generateHex(16);
         setLocalStorageItemWithRecovery(slotIdKey(this.pubkey), this.slotId);
@@ -572,14 +594,20 @@ export class ReadStateManager {
   }
 
   private async handleIncomingEvent(event: RelayEvent): Promise<void> {
-    if (event.pubkey !== this.pubkey) return;
-    if (this.destroyed) return;
+    if (event.pubkey !== this.pubkey) {
+      return;
+    }
+    if (this.destroyed) {
+      return;
+    }
     console.debug(
       `[ReadStateManager] incoming event=${event.id.substring(0, 8)}… created_at=${event.created_at}`,
     );
 
     const parsed = await parseReadStateEvent(event, this.pubkey);
-    if (!parsed) return;
+    if (!parsed) {
+      return;
+    }
 
     this.maxFetchedCreatedAt = Math.max(
       this.maxFetchedCreatedAt,
@@ -656,7 +684,9 @@ export class ReadStateManager {
       this.lastPublishedContexts = {};
     }
 
-    if (this.isIdenticalToLastPublished(contexts)) return;
+    if (this.isIdenticalToLastPublished(contexts)) {
+      return;
+    }
 
     await this.publishOneSlot(this.slotId, contexts);
   }
@@ -731,7 +761,9 @@ export class ReadStateManager {
    */
   private async publishSplitSlots(): Promise<void> {
     const slots = this.splitContextsIntoSlots();
-    if (slots === null) return; // Truly degenerate — already logged.
+    if (slots === null) {
+      return;
+    } // Truly degenerate — already logged.
 
     // No-op suppression: compute the union of all slot contexts and skip if
     // nothing changed since the last publish. Without this, every debounce
@@ -740,10 +772,14 @@ export class ReadStateManager {
     for (const { contexts } of slots) {
       for (const [key, ts] of Object.entries(contexts)) {
         const existing = unionContexts[key];
-        if (existing === undefined || ts > existing) unionContexts[key] = ts;
+        if (existing === undefined || ts > existing) {
+          unionContexts[key] = ts;
+        }
       }
     }
-    if (this.isIdenticalToLastPublished(unionContexts)) return;
+    if (this.isIdenticalToLastPublished(unionContexts)) {
+      return;
+    }
 
     // Reset lastPublishedContexts before the multi-slot publish so we can
     // rebuild it as the union of all slots.
@@ -815,9 +851,13 @@ export class ReadStateManager {
   ): boolean {
     const lastKeys = Object.keys(this.lastPublishedContexts);
     const currentKeys = Object.keys(contexts);
-    if (lastKeys.length !== currentKeys.length) return false;
+    if (lastKeys.length !== currentKeys.length) {
+      return false;
+    }
     for (const key of currentKeys) {
-      if (this.lastPublishedContexts[key] !== contexts[key]) return false;
+      if (this.lastPublishedContexts[key] !== contexts[key]) {
+        return false;
+      }
     }
     return true;
   }
@@ -865,15 +905,19 @@ export class ReadStateManager {
    * msg: entries are added to the primary slot and trimmed by the
    * byte-budget guard there.
    */
-  private splitContextsIntoSlots(): Array<{
-    slotId: string;
-    contexts: Record<string, number>;
-  }> | null {
+  private splitContextsIntoSlots():
+    | {
+        slotId: string;
+        contexts: Record<string, number>;
+      }[]
+    | null {
     // Separate channel keys from thread/msg entries.
     const channelEntries: [string, number][] = [];
     const threadMsgEntries: [string, number][] = [];
     for (const [ctx, ts] of this.effectiveState) {
-      if (!this.publishableContextIds.has(ctx)) continue;
+      if (!this.publishableContextIds.has(ctx)) {
+        continue;
+      }
       if (ctx.startsWith(MSG_PREFIX) || ctx.startsWith(THREAD_PREFIX)) {
         threadMsgEntries.push([ctx, ts]);
       } else {

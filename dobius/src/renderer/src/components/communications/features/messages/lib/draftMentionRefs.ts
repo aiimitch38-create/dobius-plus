@@ -42,7 +42,9 @@ export function replaceWithDraftMentionRefs(
   mentions.clear();
   personaMentions.clear();
   const normalized = normalizeDraftMentionRefs(refs);
-  for (const ref of normalized) mentions.set(ref.displayName, ref.pubkey);
+  for (const ref of normalized) {
+    mentions.set(ref.displayName, ref.pubkey);
+  }
   const names = normalized.map((ref) => ref.displayName);
   const agentNames = normalized
     .filter((ref) => ref.isAgent)

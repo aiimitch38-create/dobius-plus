@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as RegistryModule from './browser-session-registry'
 
 const USER_DATA = '/user-data'
 const META_PATH = `${USER_DATA}/browser-session-meta.json`
@@ -6,6 +7,11 @@ const META_PATH = `${USER_DATA}/browser-session-meta.json`
 type FsState = {
   files: Map<string, string>
   present: Set<string>
+  mtimes: Map<string, number>
+  tmpWrites: string[]
+  failTmpWrite: boolean
+  failRename: boolean
+  readErrorCode: string | null
 }
 
 function fsKey(pathValue: string): string {
@@ -13,7 +19,15 @@ function fsKey(pathValue: string): string {
 }
 
 function createFsState(): FsState {
-  return { files: new Map(), present: new Set() }
+  return {
+    files: new Map(),
+    present: new Set(),
+    mtimes: new Map(),
+    tmpWrites: [],
+    failTmpWrite: false,
+    failRename: false,
+    readErrorCode: null
+  }
 }
 
 function seedMeta(fsState: FsState, meta: unknown): void {
@@ -60,6 +74,7 @@ function installModuleMocks(
   }))
 
   vi.doMock('node:fs', () => ({
+    constants: { COPYFILE_EXCL: 1 },
     copyFileSync: vi.fn((src: string, dst: string) => {
       const sourceKey = fsKey(src)
       const destinationKey = fsKey(dst)
@@ -75,13 +90,27 @@ function installModuleMocks(
     existsSync: vi.fn((p: string) => fsState.present.has(fsKey(p))),
     mkdirSync: vi.fn(),
     readFileSync: vi.fn((p: string) => {
+      if (fsState.readErrorCode && fsKey(p) === META_PATH) {
+        const code = fsState.readErrorCode
+        throw Object.assign(new Error(`${code}: injected`), { code })
+      }
       const v = fsState.files.get(fsKey(p))
       if (v === undefined) {
-        throw new Error('ENOENT')
+        throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
       }
       return v
     }),
+    readdirSync: vi.fn((dir: string) => {
+      const prefix = `${fsKey(dir)}/`
+      return [...fsState.present]
+        .filter((key) => key.startsWith(prefix) && !key.slice(prefix.length).includes('/'))
+        .map((key) => key.slice(prefix.length))
+    }),
+    statSync: vi.fn((p: string) => ({ mtimeMs: fsState.mtimes.get(fsKey(p)) ?? Date.now() })),
     renameSync: vi.fn((from: string, to: string) => {
+      if (fsState.failRename) {
+        throw Object.assign(new Error('EPERM: injected'), { code: 'EPERM' })
+      }
       const sourceKey = fsKey(from)
       const destinationKey = fsKey(to)
       const v = fsState.files.get(sourceKey)
@@ -101,6 +130,15 @@ function installModuleMocks(
     writeFileSync: vi.fn((p: string, data: string | Uint8Array) => {
       const value = typeof data === 'string' ? data : Buffer.from(data).toString('utf-8')
       const key = fsKey(p)
+      if (key.endsWith('.tmp')) {
+        fsState.tmpWrites.push(key)
+      }
+      if (fsState.failTmpWrite && key.endsWith('.tmp')) {
+        // Partial write: the temp exists with some bytes before the error.
+        fsState.files.set(key, value.slice(0, 5))
+        fsState.present.add(key)
+        throw Object.assign(new Error('ENOSPC: injected'), { code: 'ENOSPC' })
+      }
       fsState.files.set(key, value)
       fsState.present.add(key)
     })
@@ -512,5 +550,215 @@ describe('BrowserSessionRegistry persistence', () => {
     const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
     expect(written.pendingCookieImports).toEqual({})
     expect(fsState.present.has('/outside/Cookies')).toBe(false)
+  })
+})
+
+describe('BrowserSessionRegistry metadata temp files (#51)', () => {
+  const PROFILE_PARTITION = 'persist:dobius-browser-session-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+
+  function tmpKeys(fsState: FsState): string[] {
+    return [...fsState.present].filter((key) => key.endsWith('.tmp'))
+  }
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.restoreAllMocks()
+  })
+
+  it('gives every save its own temp name', async () => {
+    const fsState = createFsState()
+    seedMeta(fsState, { defaultSource: null, profiles: [] })
+    installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    browserSessionRegistry.setPendingCookieImport('persist:dobius-browser', '/staged/a')
+    browserSessionRegistry.persistUserAgent(PROFILE_PARTITION, 'UA/1')
+
+    expect(fsState.tmpWrites).toHaveLength(2)
+    expect(new Set(fsState.tmpWrites).size).toBe(2)
+    expect(fsState.tmpWrites.every((key) => key !== `${META_PATH}.tmp`)).toBe(true)
+    expect(tmpKeys(fsState)).toEqual([])
+  })
+
+  it.each([
+    ['a write that fails midway', 'failTmpWrite'],
+    ['a rename that fails', 'failRename']
+  ] as const)('%s keeps valid metadata, leaves no temp, and reports it', async (_l, key) => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const fsState = createFsState()
+    seedMeta(fsState, {
+      defaultSource: null,
+      pendingCookieImports: { 'persist:dobius-browser': '/staged/keep' },
+      profiles: []
+    })
+    const before = fsState.files.get(META_PATH)
+    installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    fsState[key] = true
+    browserSessionRegistry.persistUserAgent(PROFILE_PARTITION, 'UA/2')
+
+    expect(fsState.files.get(META_PATH)).toBe(before)
+    expect(tmpKeys(fsState)).toEqual([])
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('browser-session-meta.json'),
+      expect.anything()
+    )
+  })
+
+  it("sweeps abandoned metadata temps at startup but keeps a live writer's temp", async () => {
+    const fsState = createFsState()
+    seedMeta(fsState, { defaultSource: null, profiles: [] })
+    const old = Date.now() - 11 * 60_000
+    const legacy = `${META_PATH}.tmp`
+    const dead = `${META_PATH}.2147483646.0123456789ab.tmp`
+    const live = `${META_PATH}.${process.ppid}.0123456789ab.tmp`
+    const young = `${META_PATH}.2147483646.fedcba987654.tmp`
+    for (const tmp of [legacy, dead, live, young]) {
+      fsState.files.set(tmp, '')
+      fsState.present.add(tmp)
+      fsState.mtimes.set(tmp, tmp === young ? Date.now() - 1_000 : old)
+    }
+    installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
+
+    expect(tmpKeys(fsState).sort()).toEqual([live, young].sort())
+  })
+})
+
+describe('BrowserSessionRegistry unreadable metadata', () => {
+  const PROFILE = {
+    id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    scope: 'imported',
+    partition: 'persist:dobius-browser-session-cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    label: 'Work',
+    source: null
+  }
+
+  function quarantineCopies(fsState: FsState): string[] {
+    return [...fsState.present].filter((key) => key.startsWith(`${META_PATH}.unreadable-`))
+  }
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.restoreAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+
+  it.each([
+    ['malformed JSON', '{"profiles": [', null, true],
+    ['wrong top-level shape', '[1,2]', null, true],
+    ['EACCES on read', '{"profiles": []}', 'EACCES', false]
+  ] as const)(
+    '%s: every save is refused and the bytes stay unchanged',
+    async (_l, raw, code, copied) => {
+      const fsState = createFsState()
+      fsState.files.set(META_PATH, raw)
+      fsState.present.add(META_PATH)
+      fsState.mtimes.set(META_PATH, 1)
+      fsState.readErrorCode = code
+      // An EACCES file cannot be copied either; quarantine is best-effort there.
+      installModuleMocks(fsState, code ? new Set([META_PATH]) : new Set())
+      const { browserSessionRegistry } = await import('./browser-session-registry')
+
+      browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
+      browserSessionRegistry.applyPendingCookieImport()
+      browserSessionRegistry.setPendingCookieImport('persist:dobius-browser', '/staged/x')
+      browserSessionRegistry.persistUserAgent('persist:dobius-browser', 'UA/3')
+      browserSessionRegistry.createProfile('isolated', 'New')
+
+      expect(fsState.files.get(META_PATH)).toBe(raw)
+      expect(fsState.tmpWrites).toEqual([])
+      // Quarantine copy is kept once, not on every access.
+      expect(quarantineCopies(fsState)).toHaveLength(copied ? 1 : 0)
+      expect(console.error).toHaveBeenCalledWith(expect.stringContaining('not saved'))
+    }
+  )
+
+  it('a repaired file is read again on the next access and saves resume', async () => {
+    const fsState = createFsState()
+    fsState.files.set(META_PATH, '{"profiles": [')
+    fsState.present.add(META_PATH)
+    installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    browserSessionRegistry.persistUserAgent('persist:dobius-browser', 'UA/lost')
+    expect(fsState.files.get(META_PATH)).toBe('{"profiles": [')
+
+    seedMeta(fsState, { defaultSource: null, profiles: [PROFILE] })
+    browserSessionRegistry.persistUserAgent('persist:dobius-browser', 'UA/4')
+
+    const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
+    expect(written.profiles).toEqual([PROFILE])
+    expect(written.userAgentByPartition).toEqual({ 'persist:dobius-browser': 'UA/4' })
+  })
+
+  describe('file repaired mid-session after an unreadable start', () => {
+    const A = { ...PROFILE, id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', label: 'A' }
+    const B = { ...PROFILE, id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', label: 'B' }
+    A.partition = `persist:dobius-browser-session-${A.id}`
+    B.partition = `persist:dobius-browser-session-${B.id}`
+
+    async function startUnreadableThenRepair(): Promise<{
+      fsState: FsState
+      registry: typeof RegistryModule.browserSessionRegistry
+    }> {
+      const fsState = createFsState()
+      fsState.files.set(META_PATH, '{"profiles": [')
+      fsState.present.add(META_PATH)
+      fsState.mtimes.set(META_PATH, 1)
+      installModuleMocks(fsState)
+      const { browserSessionRegistry } = await import('./browser-session-registry')
+      browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
+      expect(browserSessionRegistry.listProfiles().map((p) => p.id)).toEqual(['default'])
+      seedMeta(fsState, {
+        defaultSource: null,
+        userAgentByPartition: { [A.partition]: 'UA/A' },
+        profiles: [A, B]
+      })
+      return { fsState, registry: browserSessionRegistry }
+    }
+
+    function writtenProfileIds(fsState: FsState): string[] {
+      const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
+      return (written.profiles as { id: string }[]).map((p) => p.id).sort()
+    }
+
+    it('creating a profile keeps the repaired profiles', async () => {
+      const { fsState, registry } = await startUnreadableThenRepair()
+      const created = registry.createProfile('isolated', 'C')
+      expect(writtenProfileIds(fsState)).toEqual([A.id, B.id, created!.id].sort())
+      expect(registry.isAllowedPartition(A.partition)).toBe(true)
+    })
+
+    it('deleting a repaired profile removes only that one', async () => {
+      const { fsState, registry } = await startUnreadableThenRepair()
+      await expect(registry.deleteProfile(B.id)).resolves.toBe(true)
+      expect(writtenProfileIds(fsState)).toEqual([A.id])
+      expect(registry.isAllowedPartition(B.partition)).toBe(false)
+    })
+
+    it('persistUserAgent keeps the repaired profiles and UAs', async () => {
+      const { fsState, registry } = await startUnreadableThenRepair()
+      registry.persistUserAgent(B.partition, 'UA/B')
+      const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
+      expect(writtenProfileIds(fsState)).toEqual([A.id, B.id])
+      expect(written.userAgentByPartition).toEqual({ [A.partition]: 'UA/A', [B.partition]: 'UA/B' })
+    })
+  })
+
+  it('a missing file is a normal first run: saves create it', async () => {
+    const fsState = createFsState()
+    installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    browserSessionRegistry.persistUserAgent('persist:dobius-browser', 'UA/5')
+
+    const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
+    expect(written.userAgent).toBe('UA/5')
+    expect(quarantineCopies(fsState)).toEqual([])
   })
 })

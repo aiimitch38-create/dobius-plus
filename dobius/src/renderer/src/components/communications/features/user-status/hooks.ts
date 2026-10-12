@@ -88,9 +88,13 @@ export function useUserStatusSubscription() {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     function handleStatusEvent(event: RelayEvent) {
-      if (isCancelled) return;
+      if (isCancelled) {
+        return;
+      }
       const dTag = event.tags.find((t) => t[0] === "d");
-      if (dTag?.[1] !== "general") return;
+      if (dTag?.[1] !== "general") {
+        return;
+      }
       const parsed = parseUserStatusEvent(event);
       const status: UserStatus | null =
         parsed.text || parsed.emoji
@@ -104,16 +108,22 @@ export function useUserStatusSubscription() {
       queryClient.setQueriesData<UserStatusLookup>(
         { queryKey: ["user-status"] },
         (old) => {
-          if (!old || !(parsed.pubkey in old)) return old;
+          if (!old || !(parsed.pubkey in old)) {
+            return old;
+          }
           const existing = old[parsed.pubkey];
-          if (existing && existing.updatedAt >= parsed.updatedAt) return old;
+          if (existing && existing.updatedAt >= parsed.updatedAt) {
+            return old;
+          }
           return { ...old, [parsed.pubkey]: status };
         },
       );
     }
 
     function subscribeWithRetry(attempt = 0) {
-      if (isCancelled) return;
+      if (isCancelled) {
+        return;
+      }
       void relayClient
         .subscribeToUserStatusUpdates(handleStatusEvent)
         .then((unsubFn) => {
@@ -136,15 +146,20 @@ export function useUserStatusSubscription() {
     subscribeWithRetry();
 
     const unsubReconnect = relayClient.subscribeToReconnects(() => {
-      if (!isCancelled)
+      if (!isCancelled) {
         void queryClient.invalidateQueries({ queryKey: ["user-status"] });
+      }
     });
 
     return () => {
       isCancelled = true;
       unsubReconnect();
-      if (retryTimer) clearTimeout(retryTimer);
-      if (unsub) void unsub();
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+      if (unsub) {
+        void unsub();
+      }
     };
   }, [queryClient]);
 }
@@ -159,7 +174,9 @@ export function useSetUserStatusMutation(pubkey?: string) {
       return { text, emoji };
     },
     onSuccess: ({ text, emoji }) => {
-      if (normalizedPubkey.length === 0) return;
+      if (normalizedPubkey.length === 0) {
+        return;
+      }
 
       const status: UserStatus | null =
         text || emoji
@@ -168,13 +185,15 @@ export function useSetUserStatusMutation(pubkey?: string) {
 
       queryClient.setQueryData<UserStatusLookup>(
         userStatusQueryKey([normalizedPubkey]),
-        (old) => ({ ...(old ?? {}), [normalizedPubkey]: status }),
+        (old) => ({ ...old, [normalizedPubkey]: status }),
       );
 
       queryClient.setQueriesData<UserStatusLookup>(
         { queryKey: ["user-status"] },
         (old) => {
-          if (!old || !(normalizedPubkey in old)) return old;
+          if (!old || !(normalizedPubkey in old)) {
+            return old;
+          }
           return { ...old, [normalizedPubkey]: status };
         },
       );

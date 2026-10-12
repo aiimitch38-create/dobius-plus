@@ -6,13 +6,17 @@ export function orderMentionPubkeysByText(
   mentionPubkeysByName: Readonly<Record<string, string>> | undefined,
   isEligible: (pubkey: string) => boolean,
 ): string[] {
-  if (!mentionPubkeysByName) return [];
+  if (!mentionPubkeysByName) {
+    return [];
+  }
 
   const earliestOffsetByPubkey = new Map<string, number>();
   for (const [name, pubkey] of Object.entries(mentionPubkeysByName)) {
     const normalized = normalizePubkey(pubkey);
     const offset = getMentionOffset(text, name);
-    if (offset === null || !isEligible(normalized)) continue;
+    if (offset === null || !isEligible(normalized)) {
+      continue;
+    }
 
     const previousOffset = earliestOffsetByPubkey.get(normalized);
     if (previousOffset === undefined || offset < previousOffset) {

@@ -198,23 +198,27 @@ export function SidebarDndContext({
   const handleDragStart = React.useCallback(
     (event: DragStartEvent) => {
       const data = event.active.data.current;
-      if (!data) return;
+      if (!data) {
+        return;
+      }
       if (data.type === "channel") {
         const ch = channels.find((c) => c.id === data.channelId);
-        if (ch)
+        if (ch) {
           setActiveDragItem({
             type: "channel",
             channelId: ch.id,
             channelName: ch.name,
           });
+        }
       } else if (data.type === "section") {
         const sec = sections.find((s) => s.id === data.sectionId);
-        if (sec)
+        if (sec) {
           setActiveDragItem({
             type: "section",
             sectionId: sec.id,
             sectionName: sec.name,
           });
+        }
       }
     },
     [channels, sections],
@@ -224,10 +228,14 @@ export function SidebarDndContext({
     (event: DragEndEvent) => {
       setActiveDragItem(null);
       const { active, over } = event;
-      if (!over) return;
+      if (!over) {
+        return;
+      }
       const activeData = active.data.current;
       const overData = over.data.current;
-      if (!activeData) return;
+      if (!activeData) {
+        return;
+      }
       if (activeData.type === "channel") {
         const channelId = activeData.channelId as string;
         if (overData?.type === "section-drop") {

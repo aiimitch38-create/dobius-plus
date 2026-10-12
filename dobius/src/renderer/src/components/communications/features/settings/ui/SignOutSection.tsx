@@ -82,16 +82,21 @@ export function SignOutSection() {
     setNsecError(null);
     try {
       const value = await getNsec();
-      if (!fetchCancelledRef.current) setNsec(value);
+      if (!fetchCancelledRef.current) {
+        setNsec(value);
+      }
     } catch (err) {
-      if (!fetchCancelledRef.current)
+      if (!fetchCancelledRef.current) {
         setNsecError(
           err instanceof Error
             ? err.message
             : "Failed to retrieve private key.",
         );
+      }
     } finally {
-      if (!fetchCancelledRef.current) setIsNsecLoading(false);
+      if (!fetchCancelledRef.current) {
+        setIsNsecLoading(false);
+      }
     }
   }
 
@@ -210,7 +215,7 @@ export function SignOutSection() {
               htmlFor="signout-confirm-phrase"
             >
               2. Type{" "}
-              <span className="font-semibold">"{SIGNOUT_CONFIRM_PHRASE}"</span>{" "}
+              <span className="font-semibold">&quot;{SIGNOUT_CONFIRM_PHRASE}&quot;</span>{" "}
               to confirm
             </label>
             <Input

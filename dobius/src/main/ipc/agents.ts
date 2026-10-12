@@ -3,6 +3,7 @@ import type {
   AgentCrewFileName,
   AgentIdentityFileName,
   AgentDecisionResolution,
+  AgentsExecutionState,
   BriefingItem,
   CustomAgentInput,
   CustomAgentUpdate
@@ -29,13 +30,19 @@ import {
   markAgentNotificationsRead
 } from '../agents/agent-notification-store'
 import { dismissBriefingItems, listRecentBriefingItems } from '../agents/agent-briefing-store'
-import { getAgentsPaused, getPingStatus, setAgentsPaused } from '../agents/agents-config-store'
+import {
+  getAgentsControlState,
+  getAgentsPaused,
+  getPingStatus,
+  setAgentsPaused
+} from '../agents/agents-config-store'
 import { startAgentHeartbeats } from '../agents/agent-heartbeat-service'
 import { startAsanaAutoMode } from '../agents/asana-auto-mode-service'
 import { listDrafts, setDraftStatus } from '../agents/agent-draft-store'
 import { approveDraftAndPost } from '../agents/agent-draft-approval'
 import { setDobiusToolKnowledgeStore } from '../agents/agent-tools/dobius-tool-server'
 import {
+  parseExpectedAgentFile,
   readAgentFiles,
   readCrewFiles,
   writeAgentFile,
@@ -113,8 +120,14 @@ export function registerAgentsHandlers(
   ipcMain.removeHandler('agents:writeFile')
   ipcMain.handle(
     'agents:writeFile',
-    (_event, agentId: string, name: AgentIdentityFileName | 'brief' | 'memory', content: string) =>
-      writeAgentFile(requireAgentId(agentId), name, content)
+    (
+      _event,
+      agentId: string,
+      name: AgentIdentityFileName | 'brief' | 'memory',
+      content: string,
+      expected?: unknown
+    ) =>
+      writeAgentFile(requireAgentId(agentId), name, content, parseExpectedAgentFile(expected))
   )
 
   ipcMain.removeHandler('agents:readCrewFiles')
@@ -130,7 +143,13 @@ export function registerAgentsHandlers(
 
   ipcMain.removeHandler('agents:run')
   ipcMain.handle('agents:run', (_event, args: { agentId: string; prompt: string }) =>
-    startAgentRun({ ...args, prepareClaudeLaunch, prepareCodexLaunch })
+    startAgentRun({
+      ...args,
+      prepareClaudeLaunch,
+      prepareCodexLaunch,
+      // The only operator origin: a human pressed Run on the Agents page.
+      options: { origin: 'agents-page' }
+    })
   )
 
   ipcMain.removeHandler('agents:stop')
@@ -177,6 +196,12 @@ export function registerAgentsHandlers(
 
   ipcMain.removeHandler('agents:getPaused')
   ipcMain.handle('agents:getPaused', () => getAgentsPaused())
+
+  ipcMain.removeHandler('agents:getExecutionState')
+  ipcMain.handle('agents:getExecutionState', (): AgentsExecutionState => {
+    const { paused, status, detail, filePath } = getAgentsControlState()
+    return { paused, status, detail, filePath }
+  })
 
   ipcMain.removeHandler('agents:setPaused')
   ipcMain.handle('agents:setPaused', (_event, paused: boolean) => setAgentsPaused(paused))

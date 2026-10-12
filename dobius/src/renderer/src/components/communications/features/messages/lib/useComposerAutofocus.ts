@@ -35,8 +35,12 @@ export function useComposerAutofocus(
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: draftKey is the trigger; disabled is read via ref
   React.useEffect(() => {
-    if (disabledRef.current) return;
-    if (typeof document === "undefined") return;
+    if (disabledRef.current) {
+      return;
+    }
+    if (typeof document === "undefined") {
+      return;
+    }
     const active = document.activeElement as HTMLElement | null;
     if (active && active !== document.body) {
       const tag = active.tagName;

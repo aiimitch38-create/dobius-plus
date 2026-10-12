@@ -1,0 +1,1020 @@
+{
+  "_readme": "Pre-existing lint debt (#115, BUILD-049). Checks fail only when a file/rule count grows. Shrink with `pnpm run lint:baseline:update`; never add entries or raise counts.",
+  "oxlint": {
+    "src/main/agents/agent-runner.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/main/communications/relay/relay-server.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/main/communications/workstation/workstation.scenarios.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/main/dobius-cli/dispatch-server.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/App.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/app/App.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/app/AppShell.tsx": {
+      "eslint(max-lines)": 1,
+      "unicorn(prefer-ternary)": 1
+    },
+    "src/renderer/src/components/communications/app/navigation/useBackForwardControls.ts": {
+      "unicorn(no-useless-spread)": 1
+    },
+    "src/renderer/src/components/communications/app/routeTree.gen.ts": {
+      "typescript(consistent-type-definitions)": 6,
+      "typescript(no-explicit-any)": 12
+    },
+    "src/renderer/src/components/communications/app/router.tsx": {
+      "typescript(consistent-type-definitions)": 1
+    },
+    "src/renderer/src/components/communications/features/agent-memory/ui/MemorySection.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/activeAgentTurnsStore.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/activeAgentTurnsStore.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/channelAgents.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/hooks.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ingestArchivedObserverEvents.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/observerRelayStore.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentConfigFields.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentConfigPanel.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentCreationPreview.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentDefinitionDialog.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentInstanceEditDialog.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentSessionTranscriptList.tsx": {
+      "eslint(max-lines)": 1,
+      "react(no-object-type-as-default-prop)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentsView.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/EditAgentAdvancedFields.tsx": {
+      "react(no-object-type-as-default-prop)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/EnvVarsEditor.tsx": {
+      "eslint(max-lines)": 1,
+      "react(no-object-type-as-default-prop)": 4
+    },
+    "src/renderer/src/components/communications/features/agents/ui/ManagedAgentRow.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/PersonaAdvancedFields.tsx": {
+      "react(no-object-type-as-default-prop)": 4
+    },
+    "src/renderer/src/components/communications/features/agents/ui/PersonaShareDialog.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/PersonaShareRecipients.tsx": {
+      "react(no-object-type-as-default-prop)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/RespondToField.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/TeamDialog.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/UnifiedAgentsSection.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/agentConfigControls.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/agentConfigOptions.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/agentSessionToolClassifier.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/agentSessionTranscript.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/agentSessionTranscript.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/agentSessionTranscriptGrouping.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/agentSessionTranscriptGrouping.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/agentSessionTranscriptHelpers.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/agentSessionTranscriptHelpers.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/createAgentLocalModeGate.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/editAgentProviderDiscovery.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/useManagedAgentActions.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/useObserverEvents.ts": {
+      "unicorn(prefer-at)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/usePersonaActions.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/usePersonaModelDiscovery.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/useTeamActions.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/useManagedAgentRuntimeReconciliation.ts": {
+      "unicorn(no-useless-spread)": 2
+    },
+    "src/renderer/src/components/communications/features/channels/hooks.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/readState/readStateManager.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/AgentSessionThreadPanel.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/ChannelBrowserDialog.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/ChannelManagementSheet.tsx": {
+      "eslint(max-lines)": 1,
+      "react(jsx-no-constructed-context-values)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/ChannelPane.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/ChannelScreen.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/MembersSidebar.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/MembersSidebarMemberCard.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/useChannelUnreadState.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/useMembersSidebarActions.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/useLiveChannelUpdates.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/useUnreadChannels.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/communities/communityUnreadObserver.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/communities/communityUnreadObserver.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/communities/ui/HostedCommunityCreateFlow.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/communities/ui/HostedCommunityOnboarding.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/communities/useCommunities.tsx": {
+      "unicorn(prefer-ternary)": 1
+    },
+    "src/renderer/src/components/communications/features/community-members/ui/AddMemberDialog.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/forum/ui/ForumComposer.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/home/lib/inbox.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/home/ui/HomeView.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/home/ui/InboxDetailPane.tsx": {
+      "eslint(max-lines)": 1,
+      "react(no-object-type-as-default-prop)": 2
+    },
+    "src/renderer/src/components/communications/features/home/ui/InboxListPane.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/huddle/HuddleContext.tsx": {
+      "eslint(max-lines)": 1,
+      "react(jsx-no-constructed-context-values)": 1
+    },
+    "src/renderer/src/components/communications/features/huddle/components/HuddleBar.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/huddle/components/MicControls.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/huddle/lib/audioWorklet.ts": {
+      "typescript(no-explicit-any)": 1
+    },
+    "src/renderer/src/components/communications/features/local-archive/archiveSyncManager.test.mjs": {
+      "eslint(max-lines)": 1,
+      "unicorn(prefer-ternary)": 1
+    },
+    "src/renderer/src/components/communications/features/local-archive/ui/LocalArchiveSettingsCard.tsx": {
+      "eslint(max-lines)": 1,
+      "unicorn(prefer-ternary)": 2
+    },
+    "src/renderer/src/components/communications/features/mesh-compute/ui/MeshComputeSettingsCard.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/hooks.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/customEmojiNode.ts": {
+      "typescript(no-explicit-any)": 6
+    },
+    "src/renderer/src/components/communications/features/messages/lib/formatTimelineMessages.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/imetaMediaMarkdown.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/mentionHighlightExtension.ts": {
+      "typescript(no-this-alias)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/remarkMessageLinks.ts": {
+      "unicorn(prefer-at)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/selectionBlockFormatting.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/spoilerMark.ts": {
+      "typescript(no-explicit-any)": 3
+    },
+    "src/renderer/src/components/communications/features/messages/lib/threadPanel.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/threadPanel.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/timelineItems.ts": {
+      "unicorn(prefer-at)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/timelineSnapshot.ts": {
+      "unicorn(prefer-at)": 2
+    },
+    "src/renderer/src/components/communications/features/messages/lib/useDrafts.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/useDrafts.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/useLinkEditor.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/useMediaUpload.test.mjs": {
+      "unicorn(no-new-array)": 3
+    },
+    "src/renderer/src/components/communications/features/messages/lib/useMediaUpload.ts": {
+      "eslint(max-lines)": 1,
+      "unicorn(no-new-array)": 2
+    },
+    "src/renderer/src/components/communications/features/messages/lib/useMentions.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/useRichTextEditor.ts": {
+      "eslint(max-lines)": 1,
+      "typescript(no-explicit-any)": 2
+    },
+    "src/renderer/src/components/communications/features/messages/ui/ComposerAttachments.tsx": {
+      "eslint(max-lines)": 1,
+      "react(no-object-type-as-default-prop)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/ComposerImageEditor.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/DraftsPanel.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageActionBar.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageComposer.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageReactions.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageRow.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageThreadPanel.tsx": {
+      "eslint(max-lines)": 1,
+      "unicorn(prefer-at)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageTimeline.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/NewMessageScreen.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/SystemMessageRow.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/TimelineMessageList.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/WaveMessageAttachment.tsx": {
+      "react(no-object-type-as-default-prop)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/useAnchoredScroll.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/useMentionSendFlow.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/notifications/hooks.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/hooks.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/BackupStep.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/BackupTestFlow.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/CommunityOnboardingFlow.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/EncryptedBackupCreator.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/InviteRedeemForm.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/NostrKeyImportForm.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/OnboardingFlow.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/SetupStep.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/welcome.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/welcomeGuide.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/welcomeKickoff.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/presence/hooks.ts": {
+      "eslint(max-lines)": 1,
+      "eslint(no-useless-return)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/hooks.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/lib/animatedAvatarCapture.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/AnimatedAvatarCapture.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/AnimatedAvatarControls.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/MaskedAvatarBadgeFrame.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/NostrBindConsentDialog.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/ProfileAvatarEditor.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/ProfileAvatarEditor.utils.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/UserProfilePanel.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/UserProfilePanelFields.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/UserProfilePanelSections.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/UserProfilePanelTabs.tsx": {
+      "eslint(max-lines)": 1,
+      "unicorn(prefer-ternary)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/UserProfilePanelUtils.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/UserProfilePopover.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/hooks.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/lib/projectsViewHelpers.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/projectPullRequests.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/pullRequestReviews.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectCards.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectDetailScreen.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectPullRequestFilesChangedPanel.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectPullRequestsPanel.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectRepositoryPanel.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectRepositorySource.tsx": {
+      "react(no-object-type-as-default-prop)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectWorkspaceTabs.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectsActivityFeed.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectsAgentPromptPage.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectsView.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/pulse/ui/NoteCard.tsx": {
+      "react(no-object-type-as-default-prop)": 2
+    },
+    "src/renderer/src/components/communications/features/pulse/ui/PulseView.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/reminders/ui/RemindersPanel.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/search/ui/TopbarSearch.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/search/useSearchResults.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/BackupTestFlow.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/ChannelTemplatesSettingsCard.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/CustomHarnessForm.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/HarnessCatalogDialog.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/HarnessRow.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/HostedCommunitiesSettingsCard.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/MobilePairingCard.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/ModerationQueueCard.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/ProfileSettingsCard.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/SettingsPanels.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/sidebar/lib/useChannelSections.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/sidebar/ui/AppSidebar.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/sidebar/ui/CommunityRail.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/sidebar/ui/CustomChannelSection.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/sidebar/ui/SidebarSection.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/workflows/ui/WorkflowRunTrace.tsx": {
+      "react(no-object-type-as-default-prop)": 1
+    },
+    "src/renderer/src/components/communications/features/workflows/ui/WorkflowStepCard.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/features/workflows/ui/workflowFormTypes.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/api/concurrency.ts": {
+      "unicorn(no-new-array)": 1
+    },
+    "src/renderer/src/components/communications/shared/api/dobiusCommunications.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/api/dobiusCommunications.ts": {
+      "eslint(max-lines)": 1,
+      "typescript(consistent-type-definitions)": 1
+    },
+    "src/renderer/src/components/communications/shared/api/moderation.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/api/projectGit.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/api/relayClientSession.ts": {
+      "eslint(max-lines)": 1,
+      "eslint(no-useless-return)": 1
+    },
+    "src/renderer/src/components/communications/shared/api/tauri.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/api/types.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/lib/createRemarkPrefixPlugin.ts": {
+      "typescript(no-explicit-any)": 5
+    },
+    "src/renderer/src/components/communications/shared/lib/linkPreview.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/lib/panelReturnTarget.ts": {
+      "unicorn(no-useless-spread)": 1
+    },
+    "src/renderer/src/components/communications/shared/lib/remarkCustomEmoji.ts": {
+      "typescript(no-explicit-any)": 4
+    },
+    "src/renderer/src/components/communications/shared/lib/remarkSpoilers.ts": {
+      "typescript(no-explicit-any)": 2
+    },
+    "src/renderer/src/components/communications/shared/lib/trailingDebounce.test.mjs": {
+      "unicorn(no-useless-spread)": 1
+    },
+    "src/renderer/src/components/communications/shared/theme/ThemePreviewFrame.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/theme/ThemeProvider.tsx": {
+      "eslint(max-lines)": 1,
+      "react(jsx-no-constructed-context-values)": 1
+    },
+    "src/renderer/src/components/communications/shared/theme/theme-loader.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/EmojiBurstProvider.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/SpoilerParticles.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/VideoPlayer.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/carousel.tsx": {
+      "react(jsx-no-constructed-context-values)": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/markdown.test.mjs": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/markdown.tsx": {
+      "eslint(max-lines)": 1,
+      "unicorn(prefer-at)": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/markdown/imageLightbox.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/markdown/nodeCache.ts": {
+      "typescript(no-explicit-any)": 2
+    },
+    "src/renderer/src/components/communications/shared/ui/sidebar.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/smoothCorners.ts": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/communications/tauri-shim/core.ts": {
+      "typescript(consistent-type-definitions)": 1
+    },
+    "src/renderer/src/components/communications/tauri-shim/event.ts": {
+      "unicorn(no-useless-spread)": 1
+    },
+    "src/renderer/src/components/communications/testing/e2eBridge.ts": {
+      "eslint(max-lines)": 1,
+      "typescript(consistent-type-definitions)": 1,
+      "unicorn(prefer-at)": 10
+    },
+    "src/renderer/src/components/kanban/KanbanBoard.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/components/kanban/KanbanDetailPanel.tsx": {
+      "eslint(max-lines)": 1
+    },
+    "src/renderer/src/lib/resume-sleeping-agent-session.test.ts": {
+      "eslint(max-lines)": 1
+    }
+  },
+  "switch-exhaustiveness": {
+    "src/main/communications/native/title-bar-double-click.ts": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/main/voice-conductor/conductor.ts": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/agents/use-terminal-agent-rows.ts": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/lib/personaSaveNotice.ts": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/runtimeAvailabilityWarning.ts": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/MembersSidebarMemberCard.tsx": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/community-members/ui/CommunityMembersCard.tsx": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/lib/parseDiff.ts": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageRow.tsx": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/SettingsPanels.tsx": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/harnessCatalogLogic.ts": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/sidebar/ui/SidebarRelayConnectionCard.tsx": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/workflows/ui/WorkflowFormBuilder.tsx": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/communications/features/workflows/ui/WorkflowStepCard.tsx": {
+      "typescript(switch-exhaustiveness-check)": 2
+    },
+    "src/renderer/src/components/communications/shared/ui/import-status-icon.tsx": {
+      "typescript(switch-exhaustiveness-check)": 1
+    },
+    "src/renderer/src/components/settings/SourceControlActionRepoOverrideNote.tsx": {
+      "typescript(switch-exhaustiveness-check)": 1
+    }
+  },
+  "styled-scrollbars": {
+    "src/renderer/src/components/DobiusTitlebarButtons.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/agents/AgentEditForm.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/agents/AgentTemplatesDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/agents/CrewFilesDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AddAgentToChannelDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AddTeamToChannelDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentDefaultsDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentSessionToolItem/SentMessageContextDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentSessionToolItem/ToolDetailBlocks.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentSessionTranscriptList.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentSnapshotImportDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/AgentsView.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/FileContentBlock.tsx": {
+      "styled-scrollbar": 2
+    },
+    "src/renderer/src/components/communications/features/agents/ui/ManagedAgentLogPanel.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/ModelPicker.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/PersonaCatalogDialog.tsx": {
+      "styled-scrollbar": 2
+    },
+    "src/renderer/src/components/communications/features/agents/ui/PersonaDropdownField.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/PersonaModelCombobox.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/PersonaShareRecipients.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/RawEventRail.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/RespondToField.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/SecretRevealDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/TeamDialog.tsx": {
+      "styled-scrollbar": 3
+    },
+    "src/renderer/src/components/communications/features/agents/ui/TeamSnapshotImportDialog.tsx": {
+      "styled-scrollbar": 3
+    },
+    "src/renderer/src/components/communications/features/agents/ui/activityRenderClasses/RawRailActivity.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/agents/ui/agentConfigControls.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/AgentSessionThreadPanel.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/ChannelBrowserDialog.tsx": {
+      "styled-scrollbar": 2
+    },
+    "src/renderer/src/components/communications/features/channels/ui/ChannelManagementSheet.tsx": {
+      "styled-scrollbar": 2
+    },
+    "src/renderer/src/components/communications/features/channels/ui/ChannelMemberInviteCard.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/channels/ui/MembersSidebar.tsx": {
+      "styled-scrollbar": 2
+    },
+    "src/renderer/src/components/communications/features/communities/ui/WelcomeSetup.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/community-members/ui/AddMemberDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/community-members/ui/CommunityInviteDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/forum/ui/ForumComposer.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/forum/ui/ForumComposerCompactLayout.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/forum/ui/ForumThreadPanel.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/forum/ui/ForumView.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/home/ui/HomeLoadingState.tsx": {
+      "styled-scrollbar": 2
+    },
+    "src/renderer/src/components/communications/features/home/ui/InboxDetailPane.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/home/ui/InboxListPane.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/home/ui/ProjectInboxDetailPane.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/huddle/components/AddAgentDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/huddle/components/ParticipantList.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/mesh-compute/ui/MeshComputeSettingsCard.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/ChannelAutocomplete.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/DiffMessage.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/DiffMessageExpanded.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/DraftDetailPane.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/DraftsPanel.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MentionAutocomplete.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageComposer.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageThreadPanel.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageThreadPanelSkeleton.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/MessageTimeline.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/NewMessageScreen.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/SystemMessageRow.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/messages/ui/TimelineMessageList.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/CommunityOnboardingFlow.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/MachineOnboardingFlow.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/OnboardingFlow.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/onboarding/ui/RuntimeErrorTooltip.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/profile/ui/NostrBindConsentDialog.tsx": {
+      "styled-scrollbar": 2
+    },
+    "src/renderer/src/components/communications/features/profile/ui/UserProfilePanel.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectDetailScreen.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectPullRequestFilesChangedPanel.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectRepositoryPanel.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectsAgentPromptPage.tsx": {
+      "styled-scrollbar": 3
+    },
+    "src/renderer/src/components/communications/features/projects/ui/ProjectsView.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/projects/ui/PullRequestReviewersRow.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/pulse/ui/PulseView.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/reminders/ui/RemindersPanel.tsx": {
+      "styled-scrollbar": 3
+    },
+    "src/renderer/src/components/communications/features/search/ui/TopbarSearch.tsx": {
+      "styled-scrollbar": 3
+    },
+    "src/renderer/src/components/communications/features/settings/ui/CustomHarnessForm.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/HarnessCatalogDialog.tsx": {
+      "styled-scrollbar": 4
+    },
+    "src/renderer/src/components/communications/features/settings/ui/MobilePairingCard.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/ModerationQueueCard.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/SettingsPanels.tsx": {
+      "styled-scrollbar": 2
+    },
+    "src/renderer/src/components/communications/features/settings/ui/SettingsView.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/settings/ui/SoundPicker.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/sidebar/ui/CommunityRail.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/workflows/ui/ChannelCombobox.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/workflows/ui/WorkflowDetailPanel.tsx": {
+      "styled-scrollbar": 2
+    },
+    "src/renderer/src/components/communications/features/workflows/ui/WorkflowDialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/features/workflows/ui/WorkflowRunTrace.tsx": {
+      "styled-scrollbar": 2
+    },
+    "src/renderer/src/components/communications/features/workflows/ui/WorkflowsView.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/VideoPlayer.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/ViewLoadingFallback.tsx": {
+      "styled-scrollbar": 4
+    },
+    "src/renderer/src/components/communications/shared/ui/VirtualizedList.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/alert-dialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/chooser-dialog-content.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/context-menu.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/dialog.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/dropdown-menu.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/markdown/CodeBlock.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/communications/shared/ui/sidebar.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/jarvis/SelfEditView.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/kanban/KanbanDetailPanel.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/operations/OperationsDashboard.tsx": {
+      "styled-scrollbar": 3
+    },
+    "src/renderer/src/components/right-sidebar/PromptsPanel.tsx": {
+      "styled-scrollbar": 1
+    },
+    "src/renderer/src/components/right-sidebar/TasksPanel.tsx": {
+      "styled-scrollbar": 1
+    }
+  }
+}

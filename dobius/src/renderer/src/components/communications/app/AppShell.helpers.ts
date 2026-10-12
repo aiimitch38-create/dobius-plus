@@ -52,15 +52,27 @@ function isTauriDragRegionEvent(event: MouseEvent | PointerEvent) {
   const directTarget = path[0];
 
   for (const item of path) {
-    if (!(item instanceof HTMLElement)) continue;
+    if (!(item instanceof HTMLElement)) {
+      continue;
+    }
 
     const attr = item.getAttribute(TAURI_DRAG_REGION_ATTR);
 
-    if (isClickableElement(item) && attr === null) return false;
-    if (attr === null) continue;
-    if (attr === "false") return false;
-    if (attr === "deep") return true;
-    if (attr === "" || attr === "true") return item === directTarget;
+    if (isClickableElement(item) && attr === null) {
+      return false;
+    }
+    if (attr === null) {
+      continue;
+    }
+    if (attr === "false") {
+      return false;
+    }
+    if (attr === "deep") {
+      return true;
+    }
+    if (attr === "" || attr === "true") {
+      return item === directTarget;
+    }
   }
 
   return false;

@@ -55,6 +55,10 @@ describe('getDefaultSettings', () => {
     expect(getDefaultSettings('/tmp').richMarkdownSpellcheckEnabled).toBe(true)
   })
 
+  it('keeps the phone/LAN runtime listener off by default', () => {
+    expect(getDefaultSettings('/tmp').mobileListenerEnabled).toBe(false)
+  })
+
   it('enables Source Control AI by default without pinning a separate agent', () => {
     expect(getDefaultSettings('/tmp').commitMessageAi).toMatchObject({
       enabled: true,

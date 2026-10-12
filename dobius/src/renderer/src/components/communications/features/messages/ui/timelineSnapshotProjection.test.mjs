@@ -51,7 +51,9 @@ function installDOMShim() {
       }
     }
     dispatchEvent(e) {
-      for (const fn of this._listeners[e.type] ?? []) fn(e);
+      for (const fn of this._listeners[e.type] ?? []) {
+        fn(e);
+      }
       return true;
     }
   }
@@ -73,7 +75,7 @@ function installDOMShim() {
       return this.children[0] ?? null;
     }
     get lastChild() {
-      return this.children[this.children.length - 1] ?? null;
+      return this.children.at(-1) ?? null;
     }
     get nextSibling() {
       return null;
@@ -93,16 +95,22 @@ function installDOMShim() {
       return child;
     }
     insertBefore(newNode, refNode) {
-      if (!refNode) return this.appendChild(newNode);
+      if (!refNode) {
+        return this.appendChild(newNode);
+      }
       const i = this.children.indexOf(refNode);
-      if (i < 0) return this.appendChild(newNode);
+      if (i < 0) {
+        return this.appendChild(newNode);
+      }
       this.children.splice(i, 0, newNode);
       this.childNodes.splice(i, 0, newNode);
       newNode.parentNode = this;
       return newNode;
     }
     contains(node) {
-      if (!node) return false;
+      if (!node) {
+        return false;
+      }
       return this === node || this.children.some((c) => c?.contains?.(node));
     }
   }
@@ -128,7 +136,9 @@ function installDOMShim() {
       return n;
     }
     get body() {
-      if (!this._body) this._body = this.createElement("body");
+      if (!this._body) {
+        this._body = this.createElement("body");
+      }
       return this._body;
     }
     get activeElement() {
@@ -173,7 +183,9 @@ import { useSettleGatedPrependMessages } from "./useSettleGatedPrependMessages.t
 const rows = (ids) => ids.map((id) => ({ id }));
 const ids = (prefix, from, to) => {
   const out = [];
-  for (let i = from; i < to; i += 1) out.push(`${prefix}${i}`);
+  for (let i = from; i < to; i += 1) {
+    out.push(`${prefix}${i}`);
+  }
   return out;
 };
 
@@ -316,7 +328,7 @@ test("pass-1 landing: exhaustion proof can never pair with the stale row array",
   await handle.settle(400);
 
   // Final state: rows and proof advanced TOGETHER.
-  const last = records[records.length - 1];
+  const last = records.at(-1);
   assert.deepEqual(
     { count: last.count, firstId: last.firstId, exhausted: last.exhausted },
     { count: 135, firstId: "m0", exhausted: true },
@@ -364,7 +376,7 @@ test("reverse reconnect: exhaustion retraction stays paired with its replacement
   // (no hold), and the retracted proof must arrive WITH the new rows — never
   // stale-true against the new oldest prefix, never premature-false against
   // the old rows.
-  const last = records[records.length - 1];
+  const last = records.at(-1);
   assert.deepEqual(
     { count: last.count, firstId: last.firstId, exhausted: last.exhausted },
     { count: 50, firstId: "new0", exhausted: false },

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app } from 'electron'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'teams.json'
 
@@ -40,10 +40,8 @@ export type TeamUpdate = Partial<Omit<TeamInput, 'name'>> & {
   name?: string
 }
 
-let cached: Team[] | null = null
-
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function cloneTeam(team: Team): Team {
@@ -83,70 +81,47 @@ function normalizeAccountIds(ids: string[] | undefined): string[] {
   return [...new Set(normalized)]
 }
 
-function sanitize(raw: unknown): Team[] {
-  if (!Array.isArray(raw)) {
-    return []
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitizeTeam(entry: unknown): Team | null {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return null
   }
-  return raw.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) {
-      return []
-    }
-    const record = entry as Partial<Record<keyof Team, unknown>>
-    const id = typeof record.id === 'string' ? record.id : ''
-    const name = typeof record.name === 'string' ? record.name.trim() : ''
-    if (!id || !name) {
-      return []
-    }
-    return [
-      {
-        id,
-        name,
-        description: typeof record.description === 'string' ? record.description : null,
-        instructions: typeof record.instructions === 'string' ? record.instructions : null,
-        personaIds: normalizePersonaIds(
-          Array.isArray(record.personaIds) ? (record.personaIds as string[]) : undefined
-        ),
-        accountIds: normalizeAccountIds(
-          Array.isArray(record.accountIds) ? (record.accountIds as string[]) : undefined
-        ),
-        createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
-        updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now()
-      }
-    ]
-  })
+  const record = entry as Partial<Record<keyof Team, unknown>>
+  const id = typeof record.id === 'string' ? record.id : ''
+  const name = typeof record.name === 'string' ? record.name.trim() : ''
+  if (!id || !name) {
+    return null
+  }
+  return {
+    id,
+    name,
+    description: typeof record.description === 'string' ? record.description : null,
+    instructions: typeof record.instructions === 'string' ? record.instructions : null,
+    personaIds: normalizePersonaIds(
+      Array.isArray(record.personaIds) ? (record.personaIds as string[]) : undefined
+    ),
+    accountIds: normalizeAccountIds(
+      Array.isArray(record.accountIds) ? (record.accountIds as string[]) : undefined
+    ),
+    createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
+    updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now()
+  }
 }
 
+const file = new SafeJsonFile<Team[]>({
+  filePath,
+  parse: (raw) => (Array.isArray(raw) ? parseEveryEntry(raw, sanitizeTeam) : undefined),
+  fallback: () => [],
+  label: '[teams] teams.json'
+})
+
 function load(): Team[] {
-  if (cached) {
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(filePath(), 'utf-8')))
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[teams] failed to load teams:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = []
-  }
-  return cached
+  return file.get()
 }
 
 function persist(teams: Team[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(teams, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[teams] failed to persist teams:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+  file.set(teams)
 }
 
 function assertValidName(name: string): void {
@@ -179,7 +154,6 @@ export function createTeam(input: TeamInput): Team[] {
     createdAt: now,
     updatedAt: now
   })
-  cached = teams
   persist(teams)
   return listTeams()
 }
@@ -207,7 +181,6 @@ export function updateTeam(id: string, updates: TeamUpdate): Team[] {
     team.accountIds = normalizeAccountIds(updates.accountIds)
   }
   team.updatedAt = Date.now()
-  cached = teams
   persist(teams)
   return listTeams()
 }
@@ -215,7 +188,6 @@ export function updateTeam(id: string, updates: TeamUpdate): Team[] {
 // Why: a team is only a named reference to Dobius custom agents by id —
 // deleting it must never touch the agents-store records it points at.
 export function removeTeam(id: string): Team[] {
-  cached = load().filter((team) => team.id !== id)
-  persist(cached)
+  persist(load().filter((team) => team.id !== id))
   return listTeams()
 }

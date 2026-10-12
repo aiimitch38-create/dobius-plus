@@ -16,8 +16,12 @@ export const emptyWhereToRunDraft: WhereToRunDraft = {
 };
 
 export function providerConfigComplete(draft: WhereToRunDraft): boolean {
-  if (draft.runOn === "local") return true;
-  if (!draft.probedProvider) return false;
+  if (draft.runOn === "local") {
+    return true;
+  }
+  if (!draft.probedProvider) {
+    return false;
+  }
   const schema = draft.probedProvider.config_schema as
     | Record<string, unknown>
     | undefined;
@@ -34,7 +38,9 @@ export function canSubmitWhereToRun(draft: WhereToRunDraft): boolean {
 export function resolveBackendIntent(
   draft: WhereToRunDraft,
 ): BackendIntent | null {
-  if (draft.runOn === "local") return null;
+  if (draft.runOn === "local") {
+    return null;
+  }
   return {
     type: "provider",
     id: draft.runOn,

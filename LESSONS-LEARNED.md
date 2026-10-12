@@ -7,6 +7,21 @@
 
 <!-- New lessons are appended below this line -->
 
+## 2026-10-07 — A yielded git add still owns the index lock
+- Tried: invoke git commit after git add returned a running process session, twice during slow external-drive IO.
+- Failed because: the preceding git add had not finished and still owned index.lock. A tool return containing a session ID is not a completed command, even when no output is visible.
+- Works instead: wait for git add's actual exit 0 before starting the dependent commit. Do not delete index.lock while that process is running. The commits succeeded after waiting for the owner to finish.
+
+## 2026-10-07 — Standalone Electron capture benchmark did not reach measurement
+- Tried: launch cached Electron 42.3.3 with the display benchmark; repeat with NODE_OPTIONS, NODE_PATH and ELECTRON_RUN_AS_NODE removed.
+- Failed because: neither reached benchmark output during observation. A process sample showed Electron bootstrap/embedded preload execution, not a measured capture loop. This does not establish a screen permission or performance result.
+- Works instead: stop repeating identical launches, retain aggregate-only benchmark code, and diagnose runtime startup separately. Native display-only prototype preflight reliably returned permission not granted (exit 2); request the user's macOS permission setup before a real measurement. Phase 1 remains gated until actual benchmark evidence exists.
+
+## 2026-10-07 — Metro startup after Storage reconnect can block on filesystem access
+- Tried: start Metro under a login LaunchAgent with Node 26, then the declared Node 24 toolchain after Storage remounted.
+- Failed because: neither startup had reached HTTP listening during observation; a process sample of the Node 24 Expo process showed its main thread waiting in `__open` while reading package metadata. Processes were in macOS `U` (uninterruptible filesystem wait). TCC logs confirmed removable-volume consent for Node; permission denial was not established as the remaining cause.
+- Works instead: keep the advertised Tailscale URL `http://100.94.52.53:8081`, retain the recovery launcher internally, allow cold startup time, and wait for owned process groups to terminate before replacing them. Pause competing dependency/extraction IO while diagnosing. Do not claim the HTTP server is healthy from launchd's running state; require `/status` to answer. Do not repeatedly spawn duplicates or repair/eject the user's drive without evidence.
+
 ### [Deployment] — 2026-04-30
 - **MISTAKE**: Released v1.0.3 with the auto-updater wired up, but Brett's app silently failed to update. The bug: `latest-mac.yml` referenced `dobius-plus-1.0.3-arm64-mac.zip` while the actual uploaded file was `Dobius+-1.0.3-arm64-mac.zip`. The download URL 404'd, so `electron-updater` aborted silently with no user-visible error.
 - **FIX**: `electron-builder` defaults the `artifactName` to use `${productName}` ("Dobius+") for filenames, but writes `latest-mac.yml` URLs using `${name}` ("dobius-plus") from `package.json`. They never match unless you pin `artifactName` explicitly. Added to `electron-builder.yml`:
@@ -347,3 +362,28 @@ that is one plain command and passes every time.
 - **Still true and worth keeping**: a dropped stash IS recoverable while unreachable — `git fsck --unreachable`, then `git update-ref refs/recovered/<slug> <sha>` to pin it before `gc` prunes. A `git stash -u` writes **three** commits (`WIP on …`, `index on …`, `untracked files on …`); new files live only in the third, so recover them with `git checkout <untracked-sha> -- <paths>`. Good technique; I just applied it to a problem that did not exist.
 - **Also verified**: committing with explicit pathspecs (`git add -- a b c` && `git commit -- a b c`) genuinely does keep other agents' dirty files out of your commit. That part held under concurrent editing.
 - **CONTEXT**: Related to the 2026-08-25 NOTES rule about never `git checkout <my-branch>` in a shared tree — same root cause (shared repo state), same silent blast radius. And if you do restore someone's work into a shared tree, do not commit it on their behalf: check whether they already committed it somewhere first.
+
+## 2026-10-07 — Metro supervisor killed Metro mid-bundle (phone bundle "empty reply", curl exit 52)
+- Tried: launchd supervisor (`mobile/scripts/metro-supervisor.mjs`) restarting Metro after 3 failed 3 s `/status` checks.
+- Failed because: Metro stops answering `/status` while it bundles (~2–3 min cold), so the timeouts looked like a crash; every cold bundle was killed and the phone never loaded.
+- Works instead: treat a `TimeoutError` as healthy/busy; only a refused/failed connection counts as dead (fixed in metro-supervisor.mjs, tests 5/5). Separately: a Metro process in ps state `U` with no kernel disk errors after an external-drive reconnect is blocked on I/O — check for a macOS "removable volume" access prompt before blaming the drive (unconfirmed as of writing).
+
+## 2026-10-07 — Screen benchmark identity and repeated Electron startup stalls
+- Tried: terminal-spawned native/Electron preflights after granting their executable identities; independent Electron launches through LaunchServices and launchd; final 60-second Perl alarm preflight.
+- Failed because: TCC attributed terminal capture to the old Dobius+ host despite the native executable grant. Electron's final launch reached bootstrap but not app readiness before exit 142; no permission/throughput result is available from that run.
+- Works instead: independent native launchd capture produced aggregate measurements; remove submitted jobs promptly because they can restart. Stop repeating Electron launch identity experiments. For the remaining Electron benchmark, ask Carson to enable the intended Dobius+ capture-owner permission and perform any required restart himself. Keep Phase 1 gated on honest benchmark evidence.
+
+## 2026-10-07 — Narrow dispatcher fixtures and binary sender return types
+- Tried: asserting incomplete screen endpoint/runtime fixtures directly as their production types, and changing dispatcher sendBinary's void callback to a boolean-or-void return.
+- Failed because: two typechecks exposed insufficient fixture overlap and existing terminal-test callbacks that return Array.push's number under a void callback contract.
+- Works instead: satisfy the complete screen endpoint type; explicitly mark the deliberately minimal runtime test double through unknown. Preserve the existing dispatcher callback contract: JavaScript already forwards the real sender and its return value unchanged to RpcContext, whose capture-facing type supports congestion results. Do not repeat unchanged failing checks.
+
+## 2026-10-07 — Mobile feature hooks hit per-file max-lines ceilings
+- Tried: adding desktop subscription hooks and labeled navigation inside the existing large RPC client and host/home screens; the first extraction still exceeded two file budgets after formatting.
+- Failed because: these files have tight per-file ceilings, and formatter-expanded imports/JSX count toward them.
+- Works instead: extract the public RPC contract, subscription types/result guards, desktop navigation controls and host screen props into focused modules. Reuse connection verdict classification from its domain module. Never raise or disable max-lines to fit a feature.
+
+## 2026-10-07 — Desktop session module line budget after formatting
+- Tried: extracting capture contracts and geometry after the session module exceeded 300 lines; the formatted result still exceeded the ceiling.
+- Failed because: expanded callbacks and imports consume the line budget as well as executable statements.
+- Works instead: move session state and parameter validation into the focused capture-contract module; format before checking the budget. Do not disable or raise max-lines.

@@ -1,8 +1,14 @@
-import { app } from 'electron'
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
+import { mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import {
+  keepUnreadableCopy,
+  readSafeJsonFile,
+  sweepStaleTempFiles,
+  writeFileAtomic
+} from '../storage/safe-json-file'
 import type { StatsSummary } from '../../shared/types'
 import type { StatsEvent, StatsAggregates, StatsFile } from './types'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const STATS_SCHEMA_VERSION = 1
 const MAX_EVENTS = 10_000
@@ -14,6 +20,9 @@ const MAX_COUNTED_PRS = 2_000
 // Why 5s instead of the main store's 300ms: stat events are infrequent
 // (a few per session) and not latency-sensitive for the UI.
 const DEBOUNCE_MS = 5_000
+// Matches both the current `<file>.<pid>.<hex>.tmp` name and the older
+// `<file>.<pid>.<ms>.<hex>.tmp` residue; group 1 is the writer's pid.
+const STATS_TEMP_RE = /^dobius-stats\.json\.(\d+)\.[\da-f.]+\.tmp$/
 
 // Why: same timing constraint as persistence.ts — the path must be captured
 // after configureDevUserDataPath() but before app.setName('Dobius'). See the
@@ -21,13 +30,13 @@ const DEBOUNCE_MS = 5_000
 let _statsFile: string | null = null
 
 export function initStatsPath(): void {
-  _statsFile = join(app.getPath('userData'), 'dobius-stats.json')
+  _statsFile = join(getUserDataRoot(), 'dobius-stats.json')
 }
 
 function getStatsFile(): string {
   if (!_statsFile) {
     // Safety fallback — should not be hit in normal startup.
-    _statsFile = join(app.getPath('userData'), 'dobius-stats.json')
+    _statsFile = join(getUserDataRoot(), 'dobius-stats.json')
   }
   return _statsFile
 }
@@ -50,11 +59,41 @@ function getDefaultStatsFile(): StatsFile {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+// Returns undefined (-> unreadable) when the top-level shape is wrong.
+function parseStatsFile(raw: unknown): StatsFile | undefined {
+  if (!isRecord(raw)) {
+    return undefined
+  }
+  const events = raw.events ?? []
+  const aggregates = raw.aggregates ?? {}
+  if (!Array.isArray(events) || !isRecord(aggregates)) {
+    return undefined
+  }
+  const mergedAggregates = { ...getDefaultAggregates(), ...aggregates } as StatsAggregates
+  if (!Array.isArray(mergedAggregates.countedPRs)) {
+    return undefined
+  }
+  // Merge with defaults for forward compatibility
+  return {
+    ...getDefaultStatsFile(),
+    ...(raw as Partial<StatsFile>),
+    events: events as StatsEvent[],
+    aggregates: mergedAggregates
+  }
+}
+
 export class StatsCollector {
   private events: StatsEvent[]
   private aggregates: StatsAggregates
   private liveAgents = new Map<string, number>() // ptyId → startTimestamp
   private writeTimer: ReturnType<typeof setTimeout> | null = null
+  // Set when the stats file exists but could not be read; saves are refused
+  // for this session so the original is never replaced by a fresh log.
+  private unreadableDetail: string | null = null
   // Why: star-nag lives in its own service but needs to observe the running
   // agent-spawned counter. A lightweight listener avoids cyclic imports and
   // keeps StatsCollector unaware of how the counter is consumed.
@@ -64,6 +103,7 @@ export class StatsCollector {
     const data = this.load()
     this.events = data.events
     this.aggregates = data.aggregates
+    sweepStaleTempFiles(dirname(getStatsFile()), STATS_TEMP_RE)
   }
 
   onAgentStarted(listener: (totalAgentsSpawned: number) => void): () => void {
@@ -155,29 +195,18 @@ export class StatsCollector {
   // ── Persistence ───────────────────────────────────────────────────
 
   private load(): StatsFile {
-    try {
-      const statsFile = getStatsFile()
-      if (existsSync(statsFile)) {
-        const raw = readFileSync(statsFile, 'utf-8')
-        const parsed = JSON.parse(raw) as StatsFile
-        // Merge with defaults for forward compatibility
-        return {
-          ...getDefaultStatsFile(),
-          ...parsed,
-          aggregates: {
-            ...getDefaultAggregates(),
-            ...parsed.aggregates
-          }
-        }
-      }
-    } catch (err) {
-      // Why "start fresh" instead of crashing: lifetime aggregates are lost
-      // on corruption, which is unfortunate but not critical — this is a
-      // "fun stats" feature, not billing data. The corrupt file is left on
-      // disk so it can be inspected for debugging.
-      console.error('[stats] Failed to load stats, starting fresh:', err)
+    const statsFile = getStatsFile()
+    const result = readSafeJsonFile(statsFile, parseStatsFile, getDefaultStatsFile)
+    if (result.status === 'unreadable') {
+      // Why not "start fresh" and save: the next save would replace months of
+      // lifetime totals with this session's counts. Count in memory instead.
+      this.unreadableDetail = result.detail ?? 'unreadable'
+      console.error(
+        `[stats] ${statsFile} unreadable (${this.unreadableDetail}); counting this session in memory only`
+      )
+      keepUnreadableCopy(statsFile, '[stats] dobius-stats.json', null)
     }
-    return getDefaultStatsFile()
+    return result.value
   }
 
   private updateAggregates(event: StatsEvent): void {
@@ -242,6 +271,9 @@ export class StatsCollector {
   }
 
   private writeToDiskSync(): void {
+    if (this.unreadableDetail !== null) {
+      return
+    }
     const statsFile = getStatsFile()
     const dir = dirname(statsFile)
     if (!existsSync(dir)) {
@@ -261,8 +293,6 @@ export class StatsCollector {
 
     // Why unique temp file: same race-safe pattern as persistence.ts:120 —
     // synchronous flushes can race the debounced writer during shutdown.
-    const tmpFile = `${statsFile}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
-    writeFileSync(tmpFile, JSON.stringify(data), 'utf-8')
-    renameSync(tmpFile, statsFile)
+    writeFileAtomic(statsFile, JSON.stringify(data))
   }
 }

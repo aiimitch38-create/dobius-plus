@@ -7,6 +7,15 @@ type MutableStreamRequest = {
   params: unknown
 }
 
+export function buildTerminalSubscriptionReplayParams(params: unknown): unknown {
+  if (!params || typeof params !== 'object' || !('acquire' in params)) {
+    return params
+  }
+  const replayParams = { ...params } as Record<string, unknown>
+  delete replayParams.acquire
+  return replayParams
+}
+
 export function updateTerminalSubscriptionViewport(
   streams: Iterable<MutableStreamRequest>,
   terminal: string,

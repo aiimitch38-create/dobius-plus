@@ -343,7 +343,7 @@ describe("load-older cursor advance logic", () => {
       { id: "e3", created_at: 800 },
       { id: "e4", created_at: 500 },
     ];
-    const oldestEvent = events[events.length - 1];
+    const oldestEvent = events.at(-1);
     const cursor = { createdAt: oldestEvent.created_at, id: oldestEvent.id };
     assert.deepEqual(
       cursor,

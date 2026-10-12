@@ -26,7 +26,9 @@ async function decryptAndParse(
   try {
     const plaintext = await nip44DecryptFromSelf(event.content);
     const store = parseChannelSortPayload(JSON.parse(plaintext));
-    if (!store) return null;
+    if (!store) {
+      return null;
+    }
     return { store, createdAt: event.created_at, eventId: event.id };
   } catch {
     return null;
@@ -62,8 +64,12 @@ export class ChannelSortSyncManager {
         "#d": [D_TAG],
         limit: 1,
       });
-      if (events.length === 0) return null;
-      if (events[0].pubkey !== this.pubkey) return null;
+      if (events.length === 0) {
+        return null;
+      }
+      if (events[0].pubkey !== this.pubkey) {
+        return null;
+      }
       const result = await decryptAndParse(events[0]);
       if (result) {
         this.lastRemoteCreatedAt = Math.max(
@@ -109,9 +115,13 @@ export class ChannelSortSyncManager {
         "#d": [D_TAG],
         limit: 1,
       });
-      if (events.length === 0 || events[0].pubkey !== this.pubkey) return store;
+      if (events.length === 0 || events[0].pubkey !== this.pubkey) {
+        return store;
+      }
       const remote = await decryptAndParse(events[0]);
-      if (!remote) return store;
+      if (!remote) {
+        return store;
+      }
       // Sort prefs use whole-blob LWW: take whichever is newer
       if (remote.createdAt > this.lastRemoteCreatedAt) {
         this.lastRemoteCreatedAt = remote.createdAt;
@@ -124,14 +134,20 @@ export class ChannelSortSyncManager {
   }
 
   private isIdenticalToLastPublished(store: ChannelSortStore): boolean {
-    if (!this.lastPublishedStore) return false;
+    if (!this.lastPublishedStore) {
+      return false;
+    }
     const lastGroups = this.lastPublishedStore.groups;
     const currentGroups = store.groups;
     const lastKeys = Object.keys(lastGroups);
     const currentKeys = Object.keys(currentGroups);
-    if (lastKeys.length !== currentKeys.length) return false;
+    if (lastKeys.length !== currentKeys.length) {
+      return false;
+    }
     for (const key of currentKeys) {
-      if (lastGroups[key] !== currentGroups[key]) return false;
+      if (lastGroups[key] !== currentGroups[key]) {
+        return false;
+      }
     }
     return true;
   }
@@ -142,7 +158,9 @@ export class ChannelSortSyncManager {
       // Guard: manager may have been destroyed while fetchOwnBlobBeforePublish
       // was awaited (community switch during in-flight fetch). If so, abort
       // before touching the relay.
-      if (this.destroyed) return;
+      if (this.destroyed) {
+        return;
+      }
       if (this.isIdenticalToLastPublished(merged)) {
         this.pendingStore = null;
         return;
@@ -168,7 +186,9 @@ export class ChannelSortSyncManager {
       // Final guard immediately before the network call — sign/encrypt are
       // synchronous-ish but cheap; the relay socket may have moved to a
       // different community by the time we reach this point.
-      if (this.destroyed) return;
+      if (this.destroyed) {
+        return;
+      }
       await relayClient.publishEvent(
         event,
         "Timed out publishing channel sort preferences.",
@@ -196,7 +216,9 @@ export class ChannelSortSyncManager {
         limit: 0,
       },
       (event: RelayEvent) => {
-        if (event.pubkey !== this.pubkey) return;
+        if (event.pubkey !== this.pubkey) {
+          return;
+        }
         void decryptAndParse(event).then((result) => {
           if (result) {
             this.lastRemoteCreatedAt = Math.max(

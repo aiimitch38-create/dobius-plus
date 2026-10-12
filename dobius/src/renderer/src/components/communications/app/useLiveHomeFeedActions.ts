@@ -37,12 +37,12 @@ export function useLiveHomeFeedActions(
     }
 
     let isCancelled = false;
-    let disposers: Array<() => Promise<void>> = [];
+    let disposers: (() => Promise<void>)[] = [];
     let retryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
     let retryAttempt = 0;
     const since = Math.floor(Date.now() / 1_000);
 
-    const disposeAll = (currentDisposers: Array<() => Promise<void>>) => {
+    const disposeAll = (currentDisposers: (() => Promise<void>)[]) => {
       void Promise.allSettled(currentDisposers.map((dispose) => dispose()));
     };
     const scheduleRetry = () => {

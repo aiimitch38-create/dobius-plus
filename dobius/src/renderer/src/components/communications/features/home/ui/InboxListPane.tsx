@@ -107,10 +107,16 @@ function InboxLabel({
 }
 
 function formatReminderStatus(notBefore: number | undefined) {
-  if (notBefore === undefined) return "Pending";
+  if (notBefore === undefined) {
+    return "Pending";
+  }
   const secondsUntil = notBefore - Math.floor(Date.now() / 1_000);
-  if (secondsUntil <= 0) return "Reminder due";
-  if (secondsUntil < 60) return "Reminder in less than a minute";
+  if (secondsUntil <= 0) {
+    return "Reminder due";
+  }
+  if (secondsUntil < 60) {
+    return "Reminder in less than a minute";
+  }
   if (secondsUntil < 3_600) {
     return `Reminder in ${Math.floor(secondsUntil / 60)}m`;
   }

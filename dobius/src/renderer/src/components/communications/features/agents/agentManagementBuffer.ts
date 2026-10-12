@@ -13,7 +13,9 @@ export function classifyAgentManagementOrigin(
   agentPubkey: string,
   channelId: string,
 ): "buffer" | "accept" | "reject" {
-  if (agents === undefined || channels === undefined) return "buffer";
+  if (agents === undefined || channels === undefined) {
+    return "buffer";
+  }
   const normalizedAgentPubkey = agentPubkey.toLowerCase();
   const isOwnedAgent = agents.some(
     (agent) => agent.pubkey.toLowerCase() === normalizedAgentPubkey,

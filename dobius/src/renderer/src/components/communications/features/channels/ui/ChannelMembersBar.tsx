@@ -224,7 +224,7 @@ export function ChannelMembersBar({
     );
 
   return (
-    <React.Fragment>
+    <>
       {controls}
 
       <AddChannelBotDialog
@@ -241,6 +241,6 @@ export function ChannelMembersBar({
         providersErrorMessage={dialogErrorMessage}
         providersLoading={providersQuery.isLoading}
       />
-    </React.Fragment>
+    </>
   );
 }

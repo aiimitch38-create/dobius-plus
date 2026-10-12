@@ -156,8 +156,12 @@ function trimTrailingEmptyContextLines(
 }
 
 function getShikiDiffKind(line: string): "add" | "remove" | null {
-  if (SHIKI_ADD_RE.test(line)) return "add";
-  if (SHIKI_REMOVE_RE.test(line)) return "remove";
+  if (SHIKI_ADD_RE.test(line)) {
+    return "add";
+  }
+  if (SHIKI_REMOVE_RE.test(line)) {
+    return "remove";
+  }
   return null;
 }
 
@@ -199,5 +203,5 @@ function getDiffStats(
 
 function basename(path: string) {
   const parts = path.replace(/\\/g, "/").split("/");
-  return parts[parts.length - 1] || path;
+  return parts.at(-1) || path;
 }

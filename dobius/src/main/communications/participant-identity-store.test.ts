@@ -1,15 +1,39 @@
 import { schnorr } from '@noble/curves/secp256k1'
-import { existsSync, mkdtempSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
+import type * as Fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const safeStorageMock = vi.hoisted(() => ({
-  decryptString: vi.fn((value: Buffer) => value.toString('utf8')),
-  encryptString: vi.fn((value: string) => Buffer.from(value)),
-  isEncryptionAvailable: vi.fn(() => true)
-}))
+// Fake ciphertext that, like real safeStorage output, is not parseable JSON
+// and cannot be decrypted without the prefix.
+const { safeStorageMock, fakeDecrypt } = vi.hoisted(() => {
+  const decrypt = (value: Buffer): string => {
+    const text = value.toString('utf8')
+    if (!text.startsWith('ENC:')) {throw new Error('Error while decrypting the ciphertext provided')}
+    return text.slice('ENC:'.length)
+  }
+  return {
+    fakeDecrypt: decrypt,
+    safeStorageMock: {
+      decryptString: vi.fn(decrypt),
+      encryptString: vi.fn((value: string) => Buffer.from(`ENC:${value}`)),
+      isEncryptionAvailable: vi.fn(() => true)
+    }
+  }
+})
+
+// Pass-through node:fs with one-shot fault injection for the store under test.
+const fsFaults = vi.hoisted(() => ({ renameError: null as NodeJS.ErrnoException | null }))
 
 let tempHome = ''
 
@@ -31,15 +55,45 @@ async function loadStoreModule(options: { brokenUserInfo?: boolean } = {}) {
         : actual.userInfo
     }
   })
+  vi.doMock('node:fs', async () => {
+    const actual = await vi.importActual<typeof Fs>('node:fs')
+    return {
+      ...actual,
+      renameSync: (from: Fs.PathLike, to: Fs.PathLike) => {
+        const fault = fsFaults.renameError
+        if (fault) {
+          fsFaults.renameError = null
+          throw fault
+        }
+        actual.renameSync(from, to)
+      }
+    }
+  })
   return import('./participant-identity-store')
+}
+
+function identityPath(): string {
+  return join(tempHome, '.dobius', 'communications-identity.enc')
+}
+
+function dobiusDirListing(): string[] {
+  return readdirSync(join(tempHome, '.dobius')).sort()
+}
+
+function decryptFailsOnce(): void {
+  safeStorageMock.decryptString.mockImplementationOnce(() => {
+    throw new Error('The user name or passphrase you entered is not correct.')
+  })
 }
 
 beforeEach(() => {
   tempHome = mkdtempSync(join(tmpdir(), 'dobius-communications-identity-'))
-  safeStorageMock.decryptString.mockClear()
+  safeStorageMock.decryptString.mockReset()
+  safeStorageMock.decryptString.mockImplementation(fakeDecrypt)
   safeStorageMock.encryptString.mockClear()
   safeStorageMock.isEncryptionAvailable.mockClear()
   safeStorageMock.isEncryptionAvailable.mockReturnValue(true)
+  fsFaults.renameError = null
 })
 
 describe('participant identity store', () => {
@@ -169,29 +223,148 @@ describe('participant identity store', () => {
     expect(identity.username).toBe('dobius')
   })
 
-  it('recovers with a fresh identity when the existing file cannot be decrypted', async () => {
-    // Why this matters: this file is Keychain-encrypted, tied to the app's
-    // exact code signature. An ad-hoc-signed rebuild changes that signature,
-    // so a real identity can go permanently undecryptable — reproduced here
-    // as decryptString throwing, same as a real Keychain access failure.
-    // Mirrors the identical recovery test already proven in
-    // agent-participant-identity-store.test.ts.
+  it('fails closed on a transient decrypt failure and keeps the same identity', async () => {
+    const store = await loadStoreModule()
+    const original = store.ensureParticipantIdentity()
+    const bytesBefore = readFileSync(identityPath())
+    const listingBefore = dobiusDirListing()
+
+    const reloaded = await loadStoreModule()
+    decryptFailsOnce()
+    expect(() => reloaded.ensureParticipantIdentity()).toThrow(reloaded.ParticipantIdentityUnavailableError)
+    expect(safeStorageMock.encryptString).toHaveBeenCalledTimes(1)
+    expect(readFileSync(identityPath()).equals(bytesBefore)).toBe(true)
+    expect(dobiusDirListing()).toEqual(listingBefore)
+
+    // Keychain access is back: the very same identity, no restart needed.
+    expect(reloaded.ensureParticipantIdentity()).toEqual(original)
+    expect(readFileSync(identityPath()).equals(bytesBefore)).toBe(true)
+  })
+
+  it('fails closed while encryption is transiently unavailable for an encrypted identity', async () => {
+    const store = await loadStoreModule()
+    const original = store.ensureParticipantIdentity()
+    const bytesBefore = readFileSync(identityPath())
+
+    const reloaded = await loadStoreModule()
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
+    expect(() => reloaded.ensureParticipantIdentity()).toThrow(/unavailable \(encryption unavailable\)/)
+    expect(() => reloaded.getParticipantPublicIdentity()).toThrow(reloaded.ParticipantIdentityUnavailableError)
+    expect(() => reloaded.signParticipantEvent({ kind: 1, content: 'x', tags: [] })).toThrow(
+      reloaded.ParticipantIdentityUnavailableError
+    )
+    expect(readFileSync(identityPath()).equals(bytesBefore)).toBe(true)
+
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(true)
+    expect(reloaded.ensureParticipantIdentity()).toEqual(original)
+  })
+
+  it.each([
+    ['a read error', () => chmodSync(identityPath(), 0o000), /unavailable \(EACCES\)/],
+    ['a corrupt file', () => writeFileSync(identityPath(), 'ENC:{not json'), /unexpected identity shape/],
+    [
+      'a file with the wrong shape',
+      () => writeFileSync(identityPath(), 'ENC:{"pubkeyHex":"ab"}'),
+      /unexpected identity shape/
+    ]
+  ])('never replaces the identity after %s', async (_label, breakFile, message) => {
+    const store = await loadStoreModule()
+    store.ensureParticipantIdentity()
+    breakFile()
+    const brokenMode = statSync(identityPath()).mode & 0o777
+    chmodSync(identityPath(), 0o600)
+    const bytesBefore = readFileSync(identityPath())
+    chmodSync(identityPath(), brokenMode)
+    const listingBefore = dobiusDirListing()
+
+    const reloaded = await loadStoreModule()
+    expect(() => reloaded.ensureParticipantIdentity()).toThrow(message)
+    expect(() => reloaded.ensureParticipantIdentity()).toThrow(message)
+    chmodSync(identityPath(), 0o600)
+    expect(readFileSync(identityPath()).equals(bytesBefore)).toBe(true)
+    expect(dobiusDirListing()).toEqual(listingBefore)
+  })
+
+  it('reads a legacy plaintext identity after encryption becomes available', async () => {
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
     const store = await loadStoreModule()
     const original = store.ensureParticipantIdentity()
 
     const reloaded = await loadStoreModule()
-    safeStorageMock.decryptString.mockImplementationOnce(() => {
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(true)
+    expect(reloaded.ensureParticipantIdentity()).toEqual(original)
+  })
+
+  it('keeps the previous identity file when a write is interrupted', async () => {
+    const store = await loadStoreModule()
+    const original = store.ensureParticipantIdentity()
+    const bytesBefore = readFileSync(identityPath())
+    const listingBefore = dobiusDirListing()
+    const replacementKey = Buffer.from(schnorr.utils.randomPrivateKey()).toString('hex')
+
+    fsFaults.renameError = Object.assign(new Error('simulated crash before rename'), { code: 'EIO' })
+    expect(() => store.importParticipantPrivateKey(replacementKey)).toThrow(/simulated crash/)
+
+    expect(readFileSync(identityPath()).equals(bytesBefore)).toBe(true)
+    expect(dobiusDirListing()).toEqual(listingBefore)
+    const reloaded = await loadStoreModule()
+    expect(reloaded.getParticipantPublicIdentity()).toEqual(original)
+  })
+
+  it('explicit sign-out reset replaces an unavailable identity with a new one', async () => {
+    const store = await loadStoreModule()
+    const original = store.ensureParticipantIdentity()
+
+    const reloaded = await loadStoreModule()
+    safeStorageMock.decryptString.mockImplementation(() => {
       throw new Error('The user name or passphrase you entered is not correct.')
     })
+    expect(() => reloaded.ensureParticipantIdentity()).toThrow(reloaded.ParticipantIdentityUnavailableError)
 
-    const recovered = reloaded.ensureParticipantIdentity()
-    expect(recovered.pubkey).toMatch(/^[a-f0-9]{64}$/)
-    // A fresh identity, not a crash — continuity with the old one is lost,
-    // but the owner can sign again instead of every publish staying broken.
-    expect(recovered.pubkey).not.toBe(original.pubkey)
-    // The undecryptable file is preserved under a new name, not silently lost.
-    const dobiusDir = join(tempHome, '.dobius')
-    const { readdirSync } = await import('node:fs')
-    expect(readdirSync(dobiusDir).some((name) => name.includes('.undecryptable-'))).toBe(true)
+    const unavailableBytes = readFileSync(identityPath())
+    reloaded.clearParticipantIdentity()
+    // The possibly only-temporarily-unreadable key is kept, never deleted.
+    const kept = dobiusDirListing().filter((name) => name.includes('.signed-out-'))
+    expect(kept).toHaveLength(1)
+    expect(readFileSync(join(tempHome, '.dobius', kept[0] as string)).equals(unavailableBytes)).toBe(true)
+
+    const fresh = reloaded.ensureParticipantIdentity()
+    expect(fresh.pubkey).toMatch(/^[a-f0-9]{64}$/)
+    expect(fresh.pubkey).not.toBe(original.pubkey)
+  })
+
+  it('refuses sign-out when the identity file cannot be kept aside, and deletes nothing', async () => {
+    const store = await loadStoreModule()
+    const original = store.ensureParticipantIdentity()
+    const bytesBefore = readFileSync(identityPath())
+    const listingBefore = dobiusDirListing()
+
+    fsFaults.renameError = Object.assign(new Error('permission denied'), { code: 'EPERM' })
+    expect(() => store.clearParticipantIdentity()).toThrow(/Sign-out refused.*EPERM/)
+    expect(readFileSync(identityPath()).equals(bytesBefore)).toBe(true)
+    expect(dobiusDirListing()).toEqual(listingBefore)
+    expect(store.ensureParticipantIdentity()).toEqual(original)
+  })
+
+  it('sign-out on a machine with no identity file is a no-op', async () => {
+    const store = await loadStoreModule()
+    expect(() => store.clearParticipantIdentity()).not.toThrow()
+  })
+
+  it('an explicit import over an unavailable identity keeps the old file aside first', async () => {
+    const store = await loadStoreModule()
+    store.ensureParticipantIdentity()
+    const oldBytes = readFileSync(identityPath())
+
+    const reloaded = await loadStoreModule()
+    decryptFailsOnce()
+    const replacementKey = Buffer.from(schnorr.utils.randomPrivateKey()).toString('hex')
+    const imported = reloaded.importParticipantPrivateKey(replacementKey, 'carson')
+
+    expect(imported.username).toBe('carson')
+    const kept = dobiusDirListing().filter((name) => name.includes('.unavailable-'))
+    expect(kept).toHaveLength(1)
+    expect(readFileSync(join(tempHome, '.dobius', kept[0] as string)).equals(oldBytes)).toBe(true)
+    expect(reloaded.getParticipantPublicIdentity()).toEqual(imported)
   })
 })

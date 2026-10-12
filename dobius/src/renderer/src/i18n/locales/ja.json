@@ -1805,7 +1805,8 @@
         "a726967bd3": "閉じる",
         "d5253b54af": "エラー",
         "7ffc08506e": "チェック",
-        "522df222b9": "スピナー"
+        "522df222b9": "スピナー",
+        "f528af4816": "アップデートはインストールスクリプトで管理されます。"
       },
       "WorktreeJumpPalette": {
         "ac037cfac2": "移動",
@@ -5327,7 +5328,8 @@
           "31fd7150cf": "アップデートをチェックしています...",
           "3394d1f663": "チェック中",
           "d69a09b672": "アップデートは起動時に自動的にチェックされます。",
-          "7173352632": "idle"
+          "7173352632": "idle",
+          "9b7a940bd3": "アップデートはインストールスクリプトで管理されます。"
         },
         "GeneralWorkspaceSettingsSection": {
           "3d538a98f7": "ワークスペースの「開く」メニューから利用可能なアプリを選択します。",
@@ -5686,7 +5688,10 @@
           "aa1263e881": "スマートフォンサイズを維持（デフォルト）",
           "6436e56546": "モバイルペアリング用のQRコード",
           "1b1b70279a": "まだデバイスがペアリングされていません。",
-          "1592afcc7a": "まだデバイスがペアリングされていません。 Dobius+ モバイル アプリで QR コードをスキャンします。"
+          "1592afcc7a": "まだデバイスがペアリングされていません。 Dobius+ モバイル アプリで QR コードをスキャンします。",
+          "listenerPendingRestart": "The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.",
+          "listenerOff": "The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.",
+          "listenerFailedToStart": "The phone listener was on at launch but failed to start (see logs). Restart Dobius+ to try again."
         },
         "MobileSettingsPane": {
           "9a3c280e49": "GitHub リリース",
@@ -5832,7 +5837,9 @@
           "fe904ac984": "匿名の使用状況データを共有する",
           "77410e0566": "プライバシーポリシー",
           "8bfdd23a88": "次に何を構築するかを考えるのに協力してください。 Dobius+ は、使用した機能と問題が発生した場所の匿名のカウントを送信します。",
-          "afec8b03be": "ci"
+          "afec8b03be": "ci",
+          "transportUnavailable": "Not available in this build: Dobius+ sends no usage data, so this switch has no effect.",
+          "transportUnavailableDescription": "This build of Dobius+ does not send usage data."
         },
         "QuickCommandsPane": {
           "8764c6e9e4": "{{value0}} を削除",
@@ -7820,7 +7827,14 @@
               "671eb4173c": "スマートフォンから terminals と agents を操作",
               "ffd52a96e4": "モバイル",
               "1de96ec8a6": "Dobius+ Mobile ボタンを表示",
-              "682293cadf": "左サイドバー上部に Dobius+ Mobile ボタンを表示します。"
+              "682293cadf": "左サイドバー上部に Dobius+ Mobile ボタンを表示します。",
+              "listenerTitle": "Phone Listener (takes effect on next launch)",
+              "listenerDescription": "Lets phones on your local network connect to Dobius+. Changes take effect the next time Dobius+ starts.",
+              "listenerKeywordListener": "listener",
+              "listenerKeywordNetwork": "local network",
+              "listenerKeywordLan": "lan",
+              "listenerKeywordPhone": "phone",
+              "listenerKeywordWebsocket": "websocket"
             }
           }
         },
@@ -8868,7 +8882,8 @@
           "testButton": "Test",
           "statusLine": "Status: {{state}} · last message row: {{rowid}} · sent in last minute: {{outbound}}",
           "statusRunning": "running",
-          "statusStopped": "stopped"
+          "statusStopped": "stopped",
+          "configUnreadable": "imessage-bridge.json can't be read ({{detail}}), so changes are not saved; repair or remove it"
         },
         "imessage": {
           "bridge": {
@@ -8903,7 +8918,9 @@
           "buildAgentLabel": "Build agent",
           "buildAgentDescription": "Terminal agent used when dispatch_build creates a build worktree.",
           "intervalLabel": "Poll interval",
-          "intervalDescription": "Minutes between Asana refreshes while Auto Mode is enabled."
+          "intervalDescription": "Minutes between Asana refreshes while Auto Mode is enabled.",
+          "autoModeBlockedPaused": "Blocked: crew paused. Resume the crew on the Agents page to run Auto Mode.",
+          "autoModeBlockedUnreadable": "Blocked: crew control file could not be read ({{filePath}}). Fix or remove it, then resume the crew."
         },
         "asana": {
           "search": {
@@ -8955,6 +8972,10 @@
           "remove": "Remove",
           "configured": "A key is stored, encrypted on this machine. It is never shown again.",
           "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "agent-sandbox-copy": {
+          "title": "エージェントのサンドボックス（推奨）",
+          "description": "Claude エージェントが実行するコマンドは、エージェントの作業フォルダー、その git リポジトリ、一時フォルダー、パッケージキャッシュにのみ書き込めます。他のエージェントのメモリや保存された認証情報は読み取れません。オフにすると、エージェントはホームフォルダー内のどこにでも書き込めるようになります。フック、設定、シェルの起動ファイルはどちらの場合も保護されます。"
         }
       },
       "right": {
@@ -12223,7 +12244,12 @@
           "a21f6c33ad": "Automation source refreshed.",
           "53f06f0ad5": "Retry source",
           "pendingAutomationMissing": "自動化は利用できなくなりました。",
-          "pendingAutomationRunMissing": "実行履歴は利用できなくなりました。"
+          "pendingAutomationRunMissing": "実行履歴は利用できなくなりました。",
+          "pauseFailed": "Failed to pause automation.",
+          "resumeFailed": "Failed to resume automation.",
+          "deleteFailed": "Failed to delete automation.",
+          "runNowFailed": "Failed to run automation.",
+          "runNowNotStarted": "Automation run did not start."
         },
         "CreateFromPicker": {
           "f061f49e3f": "repo ブランチを検索...",
@@ -12585,7 +12611,9 @@
           "notConnected": "Connect Asana in Settings → Automation to see your build and review lanes.",
           "title": "Tasks",
           "sync": "Sync",
-          "empty": "Nothing here."
+          "empty": "Nothing here.",
+          "requeue": "Re-queue",
+          "confirmRequeue": "Re-queue this task for Asana Auto Mode? It will be triaged again and may start a new build."
         },
         "PromptsPanel": {
           "title": "Prompts",

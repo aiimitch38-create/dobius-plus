@@ -11,7 +11,8 @@
   "main": "./out/main/index.js",
   "scripts": {
     "format": "oxfmt --write .",
-    "lint": "oxlint && pnpm run lint:switch-exhaustiveness && node config/scripts/check-styled-scrollbars.mjs && pnpm run check:reliability-gates && pnpm run verify:localization-catalog && pnpm run verify:localization-coverage",
+    "lint": "node config/scripts/check-lint-baseline.mjs oxlint && node config/scripts/check-lint-baseline.mjs switch-exhaustiveness && node config/scripts/check-styled-scrollbars.mjs && pnpm run check:reliability-gates && pnpm run verify:localization-catalog && pnpm run verify:localization-coverage",
+    "lint:baseline:update": "node config/scripts/check-lint-baseline.mjs oxlint --update && node config/scripts/check-lint-baseline.mjs switch-exhaustiveness --update && node config/scripts/check-styled-scrollbars.mjs --update",
     "lint:react-doctor": "oxlint --config config/oxlint-react-doctor.json",
     "lint:react-doctor:changed": "node config/scripts/lint-react-doctor-changed.mjs",
     "lint:switch-exhaustiveness": "oxlint --type-aware --config config/oxlint-switch-exhaustiveness.json src/main src/preload src/shared src/relay src/cli src/renderer/src config tests --quiet",
@@ -19,6 +20,7 @@
     "test": "node config/scripts/ensure-native-runtime.mjs --runtime=node && vitest run --config config/vitest.config.ts",
     "check:styled-scrollbars": "node config/scripts/check-styled-scrollbars.mjs",
     "check:reliability-gates": "node config/scripts/check-reliability-gates.mjs",
+    "check:node-toolchain": "node config/scripts/check-node-toolchain.mjs",
     "check:feature-wall-assets": "node config/scripts/check-feature-wall-assets.mjs",
     "verify:macos-entitlements": "node config/scripts/verify-macos-entitlements.mjs",
     "vendor:feature-wall-assets": "node config/scripts/vendor-feature-wall-assets.mjs",
@@ -64,11 +66,11 @@
     "postinstall": "node config/scripts/rebuild-native-deps.mjs",
     "rebuild:electron": "node config/scripts/rebuild-native-deps.mjs",
     "rebuild:node": "pnpm rebuild node-pty",
-    "build:unpack": "pnpm run build && pnpm run ensure:electron-runtime && electron-builder --config config/electron-builder.config.cjs --dir",
+    "build:unpack": "node config/scripts/check-node-toolchain.mjs --warn-only && node config/scripts/electron-builder-with-build-number.mjs --snapshot-source && pnpm run build && pnpm run ensure:electron-runtime && node config/scripts/electron-builder-with-build-number.mjs --config config/electron-builder.config.cjs --dir",
     "build:win": "pnpm run build:desktop && pnpm run ensure:electron-runtime && electron-builder --config config/electron-builder.config.cjs --win",
     "build:icons": "bash resources/icon-source/generate.sh",
-    "build:mac": "pnpm run build:desktop && pnpm run build:computer-macos && pnpm run ensure:electron-runtime && electron-builder --config config/electron-builder.config.cjs --mac",
-    "build:mac:release": "node config/scripts/verify-macos-release-env.mjs && DOBIUS_MAC_RELEASE=1 pnpm run build:desktop && DOBIUS_MAC_RELEASE=1 pnpm run build:computer-macos && pnpm run ensure:electron-runtime && DOBIUS_MAC_RELEASE=1 electron-builder --config config/electron-builder.config.cjs --mac",
+    "build:mac": "node config/scripts/check-node-toolchain.mjs --warn-only && node config/scripts/electron-builder-with-build-number.mjs --snapshot-source && pnpm run build:desktop && pnpm run build:computer-macos && pnpm run ensure:electron-runtime && node config/scripts/electron-builder-with-build-number.mjs --config config/electron-builder.config.cjs --mac",
+    "build:mac:release": "node config/scripts/check-node-toolchain.mjs && node config/scripts/verify-macos-release-env.mjs && DOBIUS_MAC_RELEASE=1 pnpm run build:desktop && DOBIUS_MAC_RELEASE=1 pnpm run build:computer-macos && pnpm run ensure:electron-runtime && DOBIUS_MAC_RELEASE=1 electron-builder --config config/electron-builder.config.cjs --mac",
     "build:linux": "pnpm run build:desktop && pnpm run ensure:electron-runtime && electron-builder --config config/electron-builder.config.cjs --linux AppImage deb",
     "test:e2e": "pnpm run ensure:electron-runtime && npx playwright test --config tests/playwright.config.ts --project electron-headless",
     "test:e2e:floating-mobile-emulator": "pnpm run ensure:electron-runtime && npx playwright test tests/e2e/floating-mobile-emulator-tab.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1",
@@ -244,7 +246,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,mts,cts}": [
-      "oxlint",
+      "node config/scripts/check-lint-baseline.mjs oxlint --files",
       "oxlint --config config/oxlint-react-doctor.json",
       "oxfmt --write"
     ],

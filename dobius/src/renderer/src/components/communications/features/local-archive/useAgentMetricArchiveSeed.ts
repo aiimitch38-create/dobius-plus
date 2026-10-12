@@ -30,12 +30,12 @@ import {
 /**
  * Deps interface for testing.  Production callers pass nothing.
  */
-export interface AgentMetricArchiveSeedDeps {
+export type AgentMetricArchiveSeedDeps = {
   agentMetricArchiveDefaultEnabled: () => Promise<boolean>;
   mergeSaveSubscriptionKinds: (kind: number) => Promise<void>;
   hasExplicitChoice: (pubkey: string) => boolean;
   setExplicitChoice: (pubkey: string, enabled: boolean) => void;
-}
+};
 
 const defaultDeps: AgentMetricArchiveSeedDeps = {
   agentMetricArchiveDefaultEnabled,
@@ -57,17 +57,23 @@ export function useAgentMetricArchiveSeed(
   deps: AgentMetricArchiveSeedDeps = defaultDeps,
 ): void {
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
 
     // Already made an explicit choice for this identity — never re-seed.
-    if (deps.hasExplicitChoice(pubkey)) return;
+    if (deps.hasExplicitChoice(pubkey)) {
+      return;
+    }
 
     let cancelled = false;
 
     async function maybeSeed(): Promise<void> {
       // pubkey is checked above but TypeScript doesn't narrow across the async
       // boundary — re-guard here so the call below is type-safe.
-      if (!pubkey) return;
+      if (!pubkey) {
+        return;
+      }
 
       let defaultOn: boolean;
       try {
@@ -77,7 +83,9 @@ export function useAgentMetricArchiveSeed(
         return;
       }
 
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
 
       if (!defaultOn) {
         // OSS build (flag off): don't persist a choice — leave null so seeding
@@ -99,7 +107,9 @@ export function useAgentMetricArchiveSeed(
         return;
       }
 
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
 
       // Persist the explicit choice so this never re-fires.
       deps.setExplicitChoice(pubkey, true);

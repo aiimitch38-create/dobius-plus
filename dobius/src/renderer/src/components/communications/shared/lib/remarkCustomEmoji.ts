@@ -25,7 +25,7 @@ type RemarkCustomEmojiOptions = {
 };
 
 // biome-ignore lint/suspicious/noExplicitAny: building mdast-compatible nodes
-type Node = { [key: string]: any };
+type Node = Record<string, any>;
 
 /**
  * Build a regex matching `:shortcode:` for any known shortcode, longest-first
@@ -36,7 +36,9 @@ function buildShortcodePattern(shortcodes: string[]): RegExp | null {
   const sorted = [...new Set(shortcodes)]
     .filter((s) => s.trim().length > 0)
     .sort((a, b) => b.length - a.length);
-  if (sorted.length === 0) return null;
+  if (sorted.length === 0) {
+    return null;
+  }
   const alternatives = sorted.map((s) => escapeRegExp(s)).join("|");
   // Case-insensitive: the set keys are lowercase, but message content may use
   // mixed case (manual typing, other clients). NIP-30 renders by the emoji
@@ -53,7 +55,9 @@ export default function remarkCustomEmoji(options?: RemarkCustomEmojiOptions) {
     // biome-ignore lint/suspicious/noExplicitAny: remark tree types are not available
     tree: any,
   ) => {
-    if (!pattern) return;
+    if (!pattern) {
+      return;
+    }
     walkChildren(tree, pattern, urlByShortcode);
   };
 }
@@ -107,7 +111,9 @@ function splitByPattern(
 
   while (true) {
     match = pattern.exec(text);
-    if (!match) break;
+    if (!match) {
+      break;
+    }
 
     if (match.index > lastIndex) {
       parts.push({ type: "text", value: text.slice(lastIndex, match.index) });

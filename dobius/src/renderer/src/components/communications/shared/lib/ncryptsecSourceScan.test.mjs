@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 // Structural tripwire (plan D4, defense-in-depth): NIP-49 backup material
@@ -14,10 +13,7 @@ import test from "node:test";
 // Mirror of the Rust-side scan in
 // `src-tauri/src/egress_guard_tests.rs::ncryptsec_handling_is_confined_to_allowlisted_files`.
 
-const SRC_ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../..",
-);
+const SRC_ROOT = path.resolve(import.meta.dirname, "../..");
 
 const ALLOWLIST = [
   "shared/api/tauriIdentity.ts",
@@ -58,7 +54,9 @@ test("ncryptsec handling is confined to allowlisted frontend files", () => {
   const violations = [];
   for (const file of walk(SRC_ROOT)) {
     const rel = path.relative(SRC_ROOT, file).replaceAll("\\", "/");
-    if (ALLOWLIST.includes(rel)) continue;
+    if (ALLOWLIST.includes(rel)) {
+      continue;
+    }
     const content = fs.readFileSync(file, "utf8");
     if (content.toLowerCase().includes("ncryptsec")) {
       violations.push(rel);
@@ -68,7 +66,6 @@ test("ncryptsec handling is confined to allowlisted frontend files", () => {
     violations,
     [],
     `NIP-49 material outside allowlisted files — wire it through the ` +
-      `identity layer (and its egress-guarded Rust commands) instead:\n` +
-      violations.join("\n"),
+      `identity layer (and its egress-guarded Rust commands) instead:\n${violations.join("\n")}`,
   );
 });

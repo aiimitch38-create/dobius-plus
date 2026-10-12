@@ -92,7 +92,9 @@ test("toRows_topLevelApiKey_excludedFromAdvancedRows", () => {
 function buildRecord(rows, requiredKeys, value) {
   const base = {};
   for (const key of requiredKeys) {
-    if (key in value) base[key] = value[key];
+    if (key in value) {
+      base[key] = value[key];
+    }
   }
   return { ...base, ...toRecord(rows) };
 }
@@ -432,7 +434,9 @@ test("inheritedRows_not_serialized_in_buildRecord", () => {
   // buildRecord reimplemented inline to match EnvVarsEditor's buildRecord:
   const base = {};
   for (const key of requiredKeys) {
-    if (key in value) base[key] = value[key];
+    if (key in value) {
+      base[key] = value[key];
+    }
   }
   const record = { ...base, ...toRecord(rows) };
   assert.equal(

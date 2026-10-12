@@ -50,7 +50,9 @@ export function CreateChannelDialog({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && isCreating) return;
+        if (!nextOpen && isCreating) {
+          return;
+        }
         onOpenChange(nextOpen);
       }}
     >

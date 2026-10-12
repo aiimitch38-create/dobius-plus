@@ -52,7 +52,9 @@ test("saveCoalescer_rapid_edits_coalesce_second_is_drained_after_first", async (
 
   const coalescer = createSaveCoalescer(
     async (v) => {
-      if (v.n === 0) await d.promise;
+      if (v.n === 0) {
+        await d.promise;
+      }
       persisted.push(v.n);
       return v;
     },
@@ -77,7 +79,9 @@ test("saveCoalescer_three_rapid_edits_only_first_and_last_are_persisted", async 
 
   const coalescer = createSaveCoalescer(
     async (v) => {
-      if (v.n === 0) await d.promise;
+      if (v.n === 0) {
+        await d.promise;
+      }
       persisted.push(v.n);
       return v;
     },
@@ -103,7 +107,9 @@ test("saveCoalescer_onSaved_suppressed_for_first_when_second_is_pending", async 
 
   const coalescer = createSaveCoalescer(
     async (v) => {
-      if (v.n === 0) await d.promise;
+      if (v.n === 0) {
+        await d.promise;
+      }
       return v;
     },
     () => {},
@@ -151,7 +157,9 @@ test("saveCoalescer_flush_waits_for_the_latest_pending_save", async () => {
 
   const coalescer = createSaveCoalescer(
     async (v) => {
-      if (v.n === 0) await d.promise;
+      if (v.n === 0) {
+        await d.promise;
+      }
       persisted.push(v.n);
       return v;
     },

@@ -322,7 +322,9 @@ export function UserProfilePopover({
   );
 
   const handleMessage = React.useCallback(async () => {
-    if (!showMessageAction || pendingAction !== null) return;
+    if (!showMessageAction || pendingAction !== null) {
+      return;
+    }
 
     clearHoverTimer();
     setPendingAction("message");

@@ -12,23 +12,33 @@ export function useUpwardPaginationWheel(
 
   React.useLayoutEffect(() => {
     const scroller = hostRef.current?.firstElementChild;
-    if (!(scroller instanceof HTMLDivElement)) return;
+    if (!(scroller instanceof HTMLDivElement)) {
+      return;
+    }
     let releaseTimer: number | null = null;
     const handleWheel = (event: WheelEvent) => {
       // Ctrl+wheel belongs to browser zoom. It must not retire bottom intent or
       // arm upward-pagination momentum because it does not move the reader.
-      if (event.ctrlKey) return;
+      if (event.ctrlKey) {
+        return;
+      }
       onWheel();
       if (event.deltaY >= 0) {
         clear();
-        if (releaseTimer !== null) window.clearTimeout(releaseTimer);
+        if (releaseTimer !== null) {
+          window.clearTimeout(releaseTimer);
+        }
         releaseTimer = null;
         return;
       }
       lastUpwardWheelAtRef.current = performance.now();
-      if (!suppressRef.current) return;
+      if (!suppressRef.current) {
+        return;
+      }
       event.preventDefault();
-      if (releaseTimer !== null) window.clearTimeout(releaseTimer);
+      if (releaseTimer !== null) {
+        window.clearTimeout(releaseTimer);
+      }
       releaseTimer = window.setTimeout(() => {
         clear();
         releaseTimer = null;
@@ -37,7 +47,9 @@ export function useUpwardPaginationWheel(
     scroller.addEventListener("wheel", handleWheel, { passive: false });
     return () => {
       scroller.removeEventListener("wheel", handleWheel);
-      if (releaseTimer !== null) window.clearTimeout(releaseTimer);
+      if (releaseTimer !== null) {
+        window.clearTimeout(releaseTimer);
+      }
     };
   }, [clear, hostRef, onWheel]);
 

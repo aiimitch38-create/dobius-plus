@@ -1397,6 +1397,15 @@ describe('AgentBrowserBridge', () => {
     expect(args).toContain('https://example.com')
   })
 
+  it('rejects a goto URL that agent-browser would parse as a flag (BUILD-034)', async () => {
+    succeedWith({ url: 'x', title: 'x' })
+    execFileMock.mockClear()
+
+    await expect(bridge.goto('--help')).rejects.toMatchObject({ code: 'invalid_argument' })
+    await expect(bridge.goto('  -x')).rejects.toMatchObject({ code: 'invalid_argument' })
+    expect(execFileMock).not.toHaveBeenCalled()
+  })
+
   it('rejects oversized browser clipboard writes before spawning agent-browser', async () => {
     const secret = 'browser-clipboard-secret'
     succeedWith({ ok: true })

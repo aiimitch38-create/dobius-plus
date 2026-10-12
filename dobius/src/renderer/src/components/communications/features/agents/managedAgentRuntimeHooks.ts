@@ -47,7 +47,9 @@ export function mergeManagedAgentRuntimeStatuses(
   });
 
   for (const runtime of current ?? []) {
-    if (!reconciledPairs.has(runtimePairKey(runtime))) merged.push(runtime);
+    if (!reconciledPairs.has(runtimePairKey(runtime))) {
+      merged.push(runtime);
+    }
   }
   return merged;
 }
@@ -123,9 +125,13 @@ export function clearActiveTurnsForAgentOnStop(
   relayUrl?: string | null,
 ): void {
   const activeId = loadActiveCommunityId();
-  if (!activeId) return;
+  if (!activeId) {
+    return;
+  }
   const activeCommunity = loadCommunities().find((c) => c.id === activeId);
-  if (!activeCommunity) return;
+  if (!activeCommunity) {
+    return;
+  }
 
   if (relayUrl != null) {
     // Pair-scoped: only clear when the stopped pair's relay matches the active
@@ -190,7 +196,9 @@ export function useManagedAgentRuntimeAction() {
       pubkey: string;
       relayUrl: string;
     }) => {
-      if (action === "stop") return stopManagedAgentRuntime(pubkey, relayUrl);
+      if (action === "stop") {
+        return stopManagedAgentRuntime(pubkey, relayUrl);
+      }
       if (action === "restart") {
         return restartManagedAgentPair(
           pubkey,
@@ -217,7 +225,9 @@ export function useManagedAgentRuntimeAction() {
               candidate.pubkey === runtime.pubkey &&
               candidate.relayUrl === runtime.relayUrl,
           );
-          if (index === -1) return [...current, runtime];
+          if (index === -1) {
+            return [...current, runtime];
+          }
           return current.map((candidate, candidateIndex) =>
             candidateIndex === index ? runtime : candidate,
           );

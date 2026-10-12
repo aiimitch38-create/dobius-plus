@@ -12,9 +12,12 @@ import {
   publicKeyToBase64,
   encrypt,
   decrypt,
-  decryptBytes
+  decryptBytes,
+  enableE2EESequencing,
+  isE2EESequenceViolated
 } from './e2ee'
 import {
+  clearTerminalStreamsForRequest,
   handleTerminalBinaryFrame,
   type TerminalSnapshotState
 } from './rpc-client-terminal-binary-frame'
@@ -24,11 +27,22 @@ import {
 } from './browser-screencast-protocol'
 import {
   buildTerminalUnsubscribeParams,
+  buildTerminalSubscriptionReplayParams,
   updateTerminalSubscriptionViewport as updateCachedTerminalSubscriptionViewport
 } from './rpc-client-terminal-subscription'
 import { describeSocketEvent } from './socket-event-debug'
 import { isRpcResponse } from './rpc-response-shape'
 import { websocketPayloadToUint8 } from './websocket-payload-bytes'
+import { DesktopScreenStreamRouting } from './desktop-screen-stream-routing'
+import type { RpcClient, SendRequestOptions } from './rpc-client-contract'
+export type { RpcClient } from './rpc-client-contract'
+import {
+  isBrowserScreencastReadyResult,
+  isTerminalSubscribedResult,
+  type StreamRequest,
+  type StreamingListener,
+  type SubscribeOptions
+} from './rpc-stream-subscription'
 
 type PendingRequest = {
   resolve: (response: RpcResponse) => void
@@ -39,58 +53,6 @@ type ConnectWaiter = {
   resolve: () => void
   reject: (error: Error) => void
   timeout: ReturnType<typeof setTimeout> | null
-}
-
-type SendRequestOptions = {
-  timeoutMs?: number
-}
-
-type SubscribeOptions = {
-  onBinaryFrame?: (frame: BrowserScreencastFrame) => void
-}
-
-type StreamingListener = (result: unknown) => void
-
-type StreamRequest = {
-  method: string
-  params: unknown
-  listener: StreamingListener
-  onBinaryFrame?: (frame: BrowserScreencastFrame) => void
-  subscriptionId?: string
-  cancelled?: boolean
-  sent?: boolean
-}
-
-export type RpcClient = {
-  sendRequest: (
-    method: string,
-    params?: unknown,
-    options?: SendRequestOptions
-  ) => Promise<RpcResponse>
-  subscribe: (
-    method: string,
-    params: unknown,
-    onData: StreamingListener,
-    options?: SubscribeOptions
-  ) => () => void
-  updateTerminalSubscriptionViewport: (
-    terminal: string,
-    viewport: { cols: number; rows: number }
-  ) => void
-  getState: () => ConnectionState
-  // Why: UI escalates "Reconnecting…" to "Can't connect" once attempts cross
-  // a threshold. 0 means never failed; counter is reset on successful open.
-  getReconnectAttempt: () => number
-  // Why: timestamp (ms epoch) of the last time we reached 'connected'.
-  // null = never connected since the client was created. Used by the UI
-  // to distinguish "host moved/never reachable" from "transient blip".
-  getLastConnectedAt: () => number | null
-  onStateChange: (listener: (state: ConnectionState) => void) => () => void
-  // Why: app-resume hook. Android/iOS can kill the TCP path or park the
-  // reconnect loop while the app is backgrounded; callers invoke this on
-  // AppState 'active' so the session recovers without an app restart.
-  notifyForeground: () => void
-  close: () => void
 }
 
 // Why: tiered backoff. The first four entries (500ms→4s) keep
@@ -141,11 +103,19 @@ export type ConnectOptions = {
   // detailed connection log. Useful when 'Connecting…' hangs forever
   // (e.g. broken Tailscale route) and you need to see *where* it's stuck.
   onLog?: ConnectionLogSink
+  // Why: fires when the desktop replaced the pairing token (first login with
+  // a QR). The caller must persist it; the scanned token no longer works.
+  onDeviceTokenRotated?: (deviceToken: string) => void
 }
+
+// Mirrors E2EE_HANDSHAKE_VERSION / E2EE_CLIENT_UPDATE_REQUIRED in
+// src/shared/e2ee-handshake.ts.
+const E2EE_HANDSHAKE_VERSION = 2
+const E2EE_CLIENT_UPDATE_REQUIRED = 'client_update_required'
 
 export function connect(
   endpoint: string,
-  deviceToken: string,
+  initialDeviceToken: string,
   serverPublicKeyB64: string,
   optionsOrLegacy?: ConnectOptions | ((state: ConnectionState) => void)
 ): RpcClient {
@@ -156,6 +126,7 @@ export function connect(
       : (optionsOrLegacy ?? {})
   const onStateChange = options.onStateChange
   const onLog = options.onLog
+  let deviceToken = initialDeviceToken
   let logCounter = 0
   function emitLog(level: ConnectionLogLevel, message: string, detail?: string) {
     if (!onLog) {
@@ -199,9 +170,36 @@ export function connect(
 
   const pending = new Map<string, PendingRequest>()
   const streamListeners = new Map<string, StreamRequest>()
+  const desktopScreens = new DesktopScreenStreamRouting(
+    (session) =>
+      sendEncrypted({
+        id: nextId(),
+        deviceToken,
+        method: 'screen.stream.unsubscribe',
+        params: { subscriptionId: session.subscriptionId, generation: session.generation }
+      }),
+    (id) => removeStreamListener(id),
+    (requestId) =>
+      sendEncrypted({
+        id: nextId(),
+        deviceToken,
+        method: 'screen.stream.unsubscribe',
+        params: { requestId }
+      })
+  )
   const terminalStreamListeners = new Map<number, StreamingListener>()
   const terminalStreamIdsByRequest = new Map<string, Set<number>>()
   const terminalSnapshots = new Map<number, TerminalSnapshotState>()
+  const terminalSnapshotCleanup = {
+    streamIdsByRequest: terminalStreamIdsByRequest,
+    listeners: terminalStreamListeners,
+    snapshots: terminalSnapshots
+  }
+  const terminalBinaryFrameOptions = {
+    terminalSnapshots,
+    getListener: (streamId: number) => terminalStreamListeners.get(streamId),
+    recordValidatedInboundTraffic
+  }
   let activeBrowserScreencastRequestId: string | null = null
   let pendingBrowserScreencastRequestId: string | null = null
   const stateListeners = new Set<(state: ConnectionState) => void>()
@@ -252,9 +250,13 @@ export function connect(
         }
         waiter.resolve()
       }
-    } else if (next === 'disconnected' || next === 'auth-failed') {
+    } else if (next === 'disconnected' || next === 'auth-failed' || next === 'update-required') {
       const reason =
-        next === 'auth-failed' ? 'Unauthorized — pairing may be revoked' : 'Connection closed'
+        next === 'auth-failed'
+          ? 'Unauthorized — pairing may be revoked'
+          : next === 'update-required'
+            ? 'Update the Dobius+ app'
+            : 'Connection closed'
       rejectConnectWaiters(reason)
     }
     for (const listener of stateListeners) {
@@ -341,6 +343,14 @@ export function connect(
 
     ws = new WebSocket(endpoint)
     const openingWs = ws
+    // Why: v2 frames are numbered and must be decrypted in arrival order. An
+    // ArrayBuffer is available synchronously; a Blob would be read async and
+    // could let a later text frame be decrypted first.
+    openingWs.binaryType = 'arraybuffer'
+    // Why: true once this socket's e2ee_ready offered handshake v2. A
+    // client_update_required after a v1-looking ready is contradictory (a real
+    // older desktop never sends it), so it is retried, not latched.
+    let serverOfferedV2 = false
     const ignoreStaleSocketEvent = (eventName: string): boolean => {
       if (ws === openingWs) {
         return false
@@ -438,7 +448,25 @@ export function connect(
           const msg = JSON.parse(raw)
           if (msg.type === 'e2ee_ready') {
             emitLog('success', 'Received e2ee_ready', 'Sending device token')
-            sendEncrypted({ type: 'e2ee_auth', deviceToken })
+            // Why: handshake v2 — echo the server's per-connection challenge so
+            // a captured auth frame cannot be replayed, and number every frame
+            // so one cannot be replayed inside the session. Mirrors
+            // beginE2EEAuth in src/shared/e2ee-handshake.ts (Metro can't import
+            // it); older desktops send neither and keep the v1 frame format.
+            const isV2 =
+              typeof msg.version === 'number' &&
+              msg.version >= E2EE_HANDSHAKE_VERSION &&
+              typeof msg.challenge === 'string' &&
+              msg.challenge.length > 0
+            serverOfferedV2 = isV2
+            if (isV2 && sharedKey) {
+              enableE2EESequencing(sharedKey, 'client')
+            }
+            sendEncrypted(
+              isV2
+                ? { type: 'e2ee_auth', deviceToken, challenge: msg.challenge }
+                : { type: 'e2ee_auth', deviceToken }
+            )
             return
           }
         } catch {
@@ -451,6 +479,7 @@ export function connect(
 
         const plaintext = decrypt(raw, sharedKey)
         if (plaintext === null) {
+          dropIfOutOfSequence(openingWs)
           return
         }
 
@@ -460,6 +489,11 @@ export function connect(
             if (handshakeTimer) {
               clearTimeout(handshakeTimer)
               handshakeTimer = null
+            }
+            if (typeof msg.deviceToken === 'string' && msg.deviceToken.length > 0) {
+              deviceToken = msg.deviceToken
+              emitLog('info', 'Pairing code used', 'Desktop issued this phone its own token')
+              options.onDeviceTokenRotated?.(deviceToken)
             }
             console.log('[net] e2ee_authenticated — connected', {
               streamCount: streamListeners.size
@@ -484,13 +518,33 @@ export function connect(
               }
               resetTerminalStreamRoutingForRequest(id)
               if (
-                sendEncrypted({ id, deviceToken, method: stream.method, params: stream.params })
+                sendEncrypted({
+                  id,
+                  deviceToken,
+                  method: stream.method,
+                  params:
+                    stream.method === 'terminal.subscribe' && stream.everSent
+                      ? buildTerminalSubscriptionReplayParams(stream.params)
+                      : stream.params
+                })
               ) {
                 stream.sent = true
+                stream.everSent = true
               } else {
                 emitStreamError(stream, 'Connection interrupted')
                 removeStreamListener(id)
               }
+            }
+          } else if (msg.type === 'e2ee_error' && msg.error?.code === E2EE_CLIENT_UPDATE_REQUIRED) {
+            if (handshakeTimer) {
+              clearTimeout(handshakeTimer)
+              handshakeTimer = null
+            }
+            if (serverOfferedV2) {
+              handleUpdateRequired()
+            } else {
+              emitLog('warn', 'Handshake downgraded', 'Retrying the connection')
+              openingWs.close()
             }
           } else if (msg.type === 'e2ee_error' || (!msg.ok && msg.error?.code === 'unauthorized')) {
             console.log('[net] e2ee auth FAILED', { msgType: msg.type, error: msg.error })
@@ -522,6 +576,7 @@ export function connect(
         }
         const plaintextBytes = decryptBytes(bytes, sharedKey)
         if (!plaintextBytes) {
+          dropIfOutOfSequence(openingWs)
           return
         }
         handleBinaryFrame(plaintextBytes)
@@ -530,6 +585,7 @@ export function connect(
 
       const plaintext = decrypt(raw, sharedKey)
       if (plaintext === null) {
+        dropIfOutOfSequence(openingWs)
         return
       }
 
@@ -556,10 +612,17 @@ export function connect(
       const isStreaming = response.ok && (response as RpcSuccess).streaming === true
 
       if (isStreaming) {
+        if (response.ok && desktopScreens.ready(response.id, response.result)) {
+          return
+        }
         const stream = streamListeners.get(response.id)
         if (stream && response.ok) {
           const result = (response as RpcSuccess).result
-          if (isBrowserScreencastReadyResult(result)) {
+          if (stream.method === 'screen.stream') {
+            desktopScreens.event(response.id, result)
+            return
+          }
+          if (stream.method === 'browser.screencast' && isBrowserScreencastReadyResult(result)) {
             stream.subscriptionId = result.subscriptionId
             if (stream.cancelled) {
               sendBrowserScreencastUnsubscribe(result.subscriptionId)
@@ -730,6 +793,29 @@ export function connect(
   // up to AUTH_RETRY_BUDGET times before declaring auth dead, so a one-off
   // glitch self-heals instead of forcing the user to re-pair. A genuinely
   // revoked token fails every retry and latches auth-failed within seconds.
+  // Why: an authentic frame out of sequence means frames were replayed,
+  // reordered or deleted on the path. Close this socket; the close handler
+  // reconnects with a fresh key and counters.
+  function dropIfOutOfSequence(socket: WebSocket): void {
+    if (sharedKey && isE2EESequenceViolated(sharedKey)) {
+      emitLog('warn', 'Out-of-sequence frame', 'Reconnecting')
+      socket.close()
+    }
+  }
+
+  // Why: the desktop speaks a newer handshake than this app. Retrying cannot
+  // help and it is not a pairing problem, so latch a distinct state.
+  function handleUpdateRequired(): void {
+    emitLog('error', 'Update the Dobius+ app', 'This desktop needs a newer app version')
+    activeBrowserScreencastRequestId = null
+    pendingBrowserScreencastRequestId = null
+    intentionallyClosed = true
+    ws?.close()
+    ws = null
+    setState('update-required')
+    rejectAllPending('Update the Dobius+ app')
+  }
+
   function handleAuthRejection(reason: string): void {
     activeBrowserScreencastRequestId = null
     pendingBrowserScreencastRequestId = null
@@ -872,6 +958,7 @@ export function connect(
   }
 
   function removeStreamListener(id: string): void {
+    desktopScreens.remove(id)
     const stream = streamListeners.get(id)
     streamListeners.delete(id)
     if (activeBrowserScreencastRequestId === id) {
@@ -880,20 +967,15 @@ export function connect(
     if (pendingBrowserScreencastRequestId === id) {
       pendingBrowserScreencastRequestId = null
     }
-    const terminalStreamIds = terminalStreamIdsByRequest.get(id)
-    if (terminalStreamIds) {
-      for (const streamId of terminalStreamIds) {
-        terminalStreamListeners.delete(streamId)
-        terminalSnapshots.delete(streamId)
-      }
-      terminalStreamIdsByRequest.delete(id)
-    }
+    clearTerminalStreamsForRequest(id, terminalSnapshotCleanup)
     if (stream?.method === 'browser.screencast') {
       stream.cancelled = true
     }
   }
 
   function markStreamsForReplay(): void {
+    // Viewing never replays across reconnect, even while other subscriptions resume.
+    desktopScreens.disconnected()
     for (const [id, stream] of streamListeners) {
       stream.sent = false
       resetTerminalStreamRoutingForRequest(id)
@@ -901,15 +983,7 @@ export function connect(
   }
 
   function resetTerminalStreamRoutingForRequest(id: string): void {
-    const terminalStreamIds = terminalStreamIdsByRequest.get(id)
-    if (!terminalStreamIds) {
-      return
-    }
-    for (const streamId of terminalStreamIds) {
-      terminalStreamListeners.delete(streamId)
-      terminalSnapshots.delete(streamId)
-    }
-    terminalStreamIdsByRequest.delete(id)
+    clearTerminalStreamsForRequest(id, terminalSnapshotCleanup)
   }
 
   function emitStreamError(stream: StreamRequest, message: string, error?: unknown): void {
@@ -948,17 +1022,17 @@ export function connect(
   }
 
   function handleBinaryFrame(bytes: Uint8Array): void {
+    if (desktopScreens.binary(bytes)) {
+      recordValidatedInboundTraffic()
+      return
+    }
     const browserFrame = decodeBrowserScreencastFrame(bytes)
     if (browserFrame) {
       recordValidatedInboundTraffic()
       handleBrowserBinaryFrame(browserFrame)
       return
     }
-    handleTerminalBinaryFrame(bytes, {
-      terminalSnapshots,
-      getListener: (streamId) => terminalStreamListeners.get(streamId),
-      recordValidatedInboundTraffic
-    })
+    handleTerminalBinaryFrame(bytes, terminalBinaryFrameOptions)
   }
 
   function handleBrowserBinaryFrame(frame: BrowserScreencastFrame) {
@@ -1070,6 +1144,16 @@ export function connect(
         onBinaryFrame: options?.onBinaryFrame
       }
       streamListeners.set(id, stream)
+      if (method === 'screen.stream') {
+        for (const [previousId, previous] of streamListeners) {
+          if (previousId !== id && previous.method === 'screen.stream') {
+            previous.cancelled = true
+            previous.listener = () => {}
+            desktopScreens.cancel(previousId, previous.sent === true)
+          }
+        }
+        desktopScreens.register(id, onData, options?.onDesktopFrame)
+      }
       if (method === 'browser.screencast') {
         if (activeBrowserScreencastRequestId && activeBrowserScreencastRequestId !== id) {
           disposeBrowserScreencastStream(activeBrowserScreencastRequestId)
@@ -1087,6 +1171,7 @@ export function connect(
       if (state === 'connected') {
         if (sendEncrypted({ id, deviceToken, method, params })) {
           stream.sent = true
+          stream.everSent = true
         } else {
           emitStreamError(stream, 'Connection interrupted')
           removeStreamListener(id)
@@ -1100,6 +1185,12 @@ export function connect(
 
       return () => {
         const stream = streamListeners.get(id)
+        if (stream?.method === 'screen.stream') {
+          stream.cancelled = true
+          stream.listener = () => {}
+          desktopScreens.cancel(id, stream.sent === true)
+          return
+        }
         if (stream?.method === 'browser.screencast') {
           disposeBrowserScreencastStream(id)
           return
@@ -1144,6 +1235,9 @@ export function connect(
       updateCachedTerminalSubscriptionViewport(streamListeners.values(), terminal, viewport)
     },
 
+    getDeviceToken(): string {
+      return deviceToken
+    },
     getState(): ConnectionState {
       return state
     },
@@ -1194,6 +1288,7 @@ export function connect(
     },
 
     close() {
+      desktopScreens.disconnected()
       intentionallyClosed = true
       if (reconnectTimer) {
         clearTimeout(reconnectTimer)
@@ -1214,26 +1309,4 @@ export function connect(
       rejectAllPending('Client closed')
     }
   }
-}
-
-function isTerminalSubscribedResult(
-  value: unknown
-): value is { type: 'subscribed'; streamId: number } {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    (value as { type?: unknown }).type === 'subscribed' &&
-    typeof (value as { streamId?: unknown }).streamId === 'number'
-  )
-}
-
-function isBrowserScreencastReadyResult(
-  value: unknown
-): value is { type: 'ready'; subscriptionId: string } {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    (value as { type?: unknown }).type === 'ready' &&
-    typeof (value as { subscriptionId?: unknown }).subscriptionId === 'string'
-  )
 }

@@ -1,7 +1,6 @@
 import { useRef, useCallback, forwardRef, useImperativeHandle, useEffect, useMemo } from 'react'
 import { View, type StyleProp, type ViewStyle } from 'react-native'
 import { WebView } from 'react-native-webview'
-import type { WebViewMessageEvent } from 'react-native-webview'
 import type { TerminalOscLinkRange } from './terminal-osc-link-ranges'
 import type {
   MobileTerminalTheme,
@@ -13,7 +12,10 @@ import {
   useTerminalWebViewEngineErrorState
 } from './terminal-webview-engine-error-state'
 import { TERMINAL_WEBVIEW_FRAME_STYLES } from './terminal-webview-frame-styles'
+import { createTerminalWebViewMeasureTracker } from './terminal-webview-measure-tracker'
 import { useTerminalWebReadyWatchdog } from './terminal-webview-ready-watchdog'
+import { useTerminalWebViewDiagnostics } from './use-terminal-webview-diagnostics'
+import { createTerminalWebViewMessageHandler } from './terminal-webview-message-handler'
 import { XTERM_WEBVIEW_SOURCE } from './terminal-webview-html'
 import type { TerminalWebViewCommand } from './terminal-webview-messages'
 import { createTerminalWebViewPendingMessages } from './terminal-webview-pending-messages'
@@ -32,6 +34,9 @@ type Props = {
   // Why: baseline zoom multiplier ("text size") applied on top of the fit-to-width
   // scale; raw xterm fontSize can't drive apparent size because the fit cancels it.
   textScale?: number
+  diagnosticTerminalKey?: string
+  diagnosticActive?: boolean
+  diagnosticEnabled?: boolean
   onWebReady?: () => void
   onEngineError?: (message: string) => void
 } & TerminalSelectionEvents
@@ -41,6 +46,9 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
     style,
     terminalTheme,
     textScale = 1,
+    diagnosticTerminalKey = 'unknown',
+    diagnosticActive = false,
+    diagnosticEnabled = false,
     onWebReady,
     onEngineError,
     onSelectionMode,
@@ -60,11 +68,9 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
   const webViewRef = useRef<WebView>(null)
   const isWebReadyRef = useRef(false)
   const pendingMessages = useMemo(() => createTerminalWebViewPendingMessages(), [])
+  const measureTracker = useMemo(() => createTerminalWebViewMeasureTracker(), [])
   const messageIdRef = useRef(0)
   const terminalThemeKey = useMemo(() => JSON.stringify(terminalTheme ?? null), [terminalTheme])
-  const measureResolveRef = useRef<
-    ((result: { cols: number; rows: number } | null) => void) | null
-  >(null)
   // Why: each init() call posts 'init' to the WebView and arms a fresh
   // ready promise. WebView's init() rAF chain ends with a 'ready' notify
   // that resolves it. measureFitDimensions awaits this so it doesn't
@@ -73,15 +79,32 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
   const readyResolveRef = useRef<(() => void) | null>(null)
   const { clearEngineError, engineError, reportEngineError, reportNativeEngineError } =
     useTerminalWebViewEngineErrorState(onEngineError)
+  const {
+    handleDiagnosticMessage,
+    handleLoadStart: reportLoadStart,
+    nativeErrorHandlers,
+    reportActiveState,
+    reportLifecycleEvent
+  } = useTerminalWebViewDiagnostics(
+    { terminalKey: diagnosticTerminalKey, active: diagnosticActive, enabled: diagnosticEnabled },
+    reportNativeEngineError
+  )
   const { armWebReadyWatchdog, clearWebReadyWatchdog } = useTerminalWebReadyWatchdog(
     isWebReadyRef,
     reportEngineError
   )
 
-  const sendToWebView = useCallback((msg: TerminalWebViewCommand) => {
+  const nextMessageId = useCallback(() => {
     messageIdRef.current += 1
-    webViewRef.current?.postMessage(JSON.stringify({ ...msg, id: messageIdRef.current }))
+    return messageIdRef.current
   }, [])
+
+  const sendToWebView = useCallback(
+    (msg: TerminalWebViewCommand, id = nextMessageId()) => {
+      webViewRef.current?.postMessage(JSON.stringify({ ...msg, id }))
+    },
+    [nextMessageId]
+  )
 
   const flushPendingMessages = useCallback(() => {
     pendingMessages.flush(sendToWebView)
@@ -98,157 +121,89 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
     [pendingMessages, sendToWebView]
   )
 
-  const handleMessage = useCallback(
-    (event: WebViewMessageEvent) => {
-      let msg: Record<string, unknown>
-      try {
-        msg = JSON.parse(event.nativeEvent.data) as Record<string, unknown>
-      } catch {
-        return
-      }
-
-      if (msg.type === 'web-ready') {
-        isWebReadyRef.current = true
-        clearWebReadyWatchdog()
-        clearEngineError()
-        onWebReady?.()
-        flushPendingMessages()
-      } else if (msg.type === 'ready') {
-        // Why: the WebView's init() rAF chain has run — term is open,
-        // renderService is populated, first paint has happened. Resolve
-        // any pending awaitReady() so a queued measure can now safely
-        // read cell dims.
-        const resolve = readyResolveRef.current
-        readyResolveRef.current = null
-        readyPromiseRef.current = null
-        resolve?.()
-      } else if (msg.type === 'measure-result') {
-        const resolve = measureResolveRef.current
-        measureResolveRef.current = null
-        if (resolve) {
-          const cols = typeof msg.cols === 'number' ? msg.cols : null
-          const rows = typeof msg.rows === 'number' ? msg.rows : null
-          resolve(cols && rows && cols >= 20 && rows >= 8 ? { cols, rows } : null)
-        }
-      } else if (msg.type === 'log') {
-        // Surface fit-scale diagnostics in the RN/Metro console.
-        const tag = typeof msg.tag === 'string' ? msg.tag : '[fit]'
-        // eslint-disable-next-line no-console
-        console.log(tag, msg.payload)
-      } else if (msg.type === 'error') {
-        const message = typeof msg.message === 'string' ? msg.message : 'Unknown terminal error'
-        reportEngineError(message, msg.fatal !== false)
-      } else if (msg.type === 'set-select-mode') {
-        onSelectionMode?.(!!msg.enabled)
-      } else if (msg.type === 'selection') {
-        const text = typeof msg.text === 'string' ? msg.text : ''
-        onSelectionCopy?.(text)
-      } else if (msg.type === 'selection-evicted') {
-        onSelectionEvicted?.()
-      } else if (msg.type === 'modes') {
-        const mouseTrackingMode =
-          msg.mouseTrackingMode === 'x10' ||
-          msg.mouseTrackingMode === 'vt200' ||
-          msg.mouseTrackingMode === 'drag' ||
-          msg.mouseTrackingMode === 'any'
-            ? msg.mouseTrackingMode
-            : 'none'
-        onModesChanged?.({
-          bracketedPasteMode: !!msg.bracketedPasteMode,
-          altScreen: !!msg.altScreen,
-          mouseTrackingMode,
-          sgrMouseMode: !!msg.sgrMouseMode,
-          sgrMousePixelsMode: !!msg.sgrMousePixelsMode
-        })
-      } else if (msg.type === 'terminal-input') {
-        const bytes = typeof msg.bytes === 'string' ? msg.bytes : ''
-        if (bytes.length > 0) {
-          onTerminalInput?.(bytes)
-        }
-      } else if (msg.type === 'terminal-tap') {
-        onTerminalTap?.()
-      } else if (msg.type === 'terminal-file-tap') {
-        const pathText = typeof msg.pathText === 'string' ? msg.pathText : ''
-        if (pathText.length > 0) {
-          const line = typeof msg.line === 'number' ? msg.line : null
-          const column = typeof msg.column === 'number' ? msg.column : null
-          onFileTap?.(pathText, line, column)
-        }
-      } else if (msg.type === 'open-url') {
-        const url = typeof msg.url === 'string' ? msg.url : ''
-        if (url.length > 0) {
-          onOpenUrl?.(url)
-        }
-      } else if (msg.type === 'keyboard-avoidance-metrics') {
-        const cursorY = typeof msg.cursorY === 'number' ? msg.cursorY : 0
-        const rows = typeof msg.rows === 'number' ? msg.rows : 0
-        onKeyboardAvoidanceMetrics?.({
-          cursorY,
-          rows,
-          altScreen: !!msg.altScreen
-        })
-      } else if (msg.type === 'haptic') {
-        const kind = msg.kind
-        if (
-          kind === 'selection' ||
-          kind === 'success' ||
-          kind === 'error' ||
-          kind === 'edge-bump'
-        ) {
-          onHaptic?.(kind)
-        }
-      } else if (msg.type === 'font-scale-changed') {
-        const scale = typeof msg.fontScale === 'number' ? msg.fontScale : 0
-        if (scale > 0) {
-          onTextScaleChange?.(scale)
-        }
-      } else if (msg.type === 'mobile-clip-cancel-by-pinch') {
-        // eslint-disable-next-line no-console
-        console.warn('[mobile-clip] selection cancelled by pinch')
-      }
-    },
+  const handleMessage = useMemo(
+    () =>
+      createTerminalWebViewMessageHandler({
+        isWebReadyRef,
+        readyPromiseRef,
+        readyResolveRef,
+        measureTracker,
+        clearEngineError,
+        clearWebReadyWatchdog,
+        flushPendingMessages,
+        onWebReady,
+        onSelectionMode,
+        onSelectionCopy,
+        onSelectionEvicted,
+        onModesChanged,
+        onKeyboardAvoidanceMetrics,
+        onHaptic,
+        onTerminalInput,
+        onTerminalTap,
+        onFileTap,
+        onOpenUrl,
+        onTextScaleChange,
+        postMessage,
+        reportEngineError,
+        reportLifecycleEvent,
+        reportActiveState,
+        handleDiagnosticMessage
+      }),
     [
-      flushPendingMessages,
       clearEngineError,
       clearWebReadyWatchdog,
-      reportEngineError,
-      onWebReady,
-      onSelectionMode,
+      flushPendingMessages,
+      handleDiagnosticMessage,
+      measureTracker,
+      onFileTap,
+      onHaptic,
+      onKeyboardAvoidanceMetrics,
+      onModesChanged,
+      onOpenUrl,
       onSelectionCopy,
       onSelectionEvicted,
-      onModesChanged,
-      onKeyboardAvoidanceMetrics,
-      onHaptic,
+      onSelectionMode,
       onTerminalInput,
       onTerminalTap,
-      onFileTap,
-      onOpenUrl,
-      onTextScaleChange
+      onTextScaleChange,
+      onWebReady,
+      postMessage,
+      reportActiveState,
+      reportEngineError,
+      reportLifecycleEvent
     ]
   )
 
   const handleLoadStart = useCallback(() => {
+    reportLoadStart()
     isWebReadyRef.current = false
     armWebReadyWatchdog()
     // Why: messages queued for a previous WebView generation are stale after a reload;
     // dropping them avoids replaying terminal chunks before the next init snapshot.
     pendingMessages.clear()
-  }, [armWebReadyWatchdog, pendingMessages])
+  }, [armWebReadyWatchdog, pendingMessages, reportLoadStart])
 
   const handleReload = useCallback(() => {
+    reportLifecycleEvent('reload-requested')
     clearEngineError()
     webViewRef.current?.reload()
-  }, [clearEngineError])
+  }, [clearEngineError, reportLifecycleEvent])
 
   useEffect(() => {
     postMessage({ type: 'set-theme', terminalTheme })
   }, [postMessage, terminalThemeKey, terminalTheme])
+
+  useEffect(() => {
+    reportActiveState(postMessage)
+  }, [postMessage, reportActiveState])
 
   // Why: live-apply text-size changes to an already-mounted terminal (the pane
   // stays alive while the user visits Settings), so no terminal reload is needed.
   useEffect(() => {
     postMessage({ type: 'set-font-scale', fontScale: textScale })
   }, [postMessage, textScale])
+
+  useEffect(() => () => measureTracker.clear(), [measureTracker])
 
   useImperativeHandle(
     ref,
@@ -306,28 +261,23 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
           return Promise.resolve(null)
         }
         return new Promise((resolve) => {
-          measureResolveRef.current?.(null)
+          const id = nextMessageId()
           let timeout: ReturnType<typeof setTimeout> | null = null
           const finish = (result: { cols: number; rows: number } | null) => {
             if (timeout) {
               clearTimeout(timeout)
               timeout = null
             }
-            if (measureResolveRef.current === finish) {
-              measureResolveRef.current = null
-            }
             resolve(result)
           }
-          measureResolveRef.current = finish
-          sendToWebView({ type: 'measure', containerHeight })
+          measureTracker.replace(id, finish)
           // Why: if the WebView doesn't respond within 2s (e.g., xterm
           // failed to load), resolve null so the caller can disable
           // Fit to Phone rather than hanging indefinitely.
           timeout = setTimeout(() => {
-            if (measureResolveRef.current === finish) {
-              finish(null)
-            }
+            measureTracker.cancel(id)
           }, 2000)
+          sendToWebView({ type: 'measure', containerHeight }, id)
         })
       },
       resetZoom() {
@@ -363,7 +313,7 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
         })
       }
     }),
-    [postMessage, sendToWebView, terminalTheme, textScale]
+    [measureTracker, nextMessageId, postMessage, sendToWebView, terminalTheme, textScale]
   )
 
   return (
@@ -384,14 +334,10 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
         textZoom={100}
         onLoadStart={handleLoadStart}
         onMessage={handleMessage}
-        onError={(event) => reportNativeEngineError('Terminal WebView load failed', event)}
-        onHttpError={(event) => reportNativeEngineError('Terminal WebView HTTP error', event)}
-        onRenderProcessGone={(event) =>
-          reportNativeEngineError('Terminal WebView render process ended', event)
-        }
-        onContentProcessDidTerminate={(event) =>
-          reportNativeEngineError('Terminal WebView content process ended', event)
-        }
+        onError={nativeErrorHandlers.onLoadError}
+        onHttpError={nativeErrorHandlers.onHttpError}
+        onRenderProcessGone={nativeErrorHandlers.onRenderProcessGone}
+        onContentProcessDidTerminate={nativeErrorHandlers.onContentProcessDidTerminate}
       />
       {engineError ? (
         <TerminalWebViewEngineErrorOverlay message={engineError} onReload={handleReload} />

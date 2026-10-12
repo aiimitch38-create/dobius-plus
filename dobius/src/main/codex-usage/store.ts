@@ -1,5 +1,4 @@
 /* eslint-disable max-lines -- Why: this store owns Codex analytics persistence, scan policy, and renderer query semantics. Keeping them together prevents the Codex range/scope rules from drifting away from the scanner’s event model. */
-import { app } from 'electron'
 import { dirname, join } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import type {
@@ -18,6 +17,7 @@ import type { Store } from '../persistence'
 import { loadKnownUsageWorktreesByRepo, type UsageWorktreeRef } from '../usage-worktree-metadata'
 import type { CodexUsagePersistedState } from './types'
 import { createWorktreeRefs, scanCodexUsageFiles } from './scanner'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const SCHEMA_VERSION = 3
 const STALE_MS = 5 * 60_000
@@ -135,12 +135,12 @@ export function normalizePersistedState(state: CodexUsagePersistedState): CodexU
 }
 
 export function initCodexUsagePath(): void {
-  _codexUsageFile = join(app.getPath('userData'), 'dobius-codex-usage.json')
+  _codexUsageFile = join(getUserDataRoot(), 'dobius-codex-usage.json')
 }
 
 function getCodexUsageFile(): string {
   if (!_codexUsageFile) {
-    _codexUsageFile = join(app.getPath('userData'), 'dobius-codex-usage.json')
+    _codexUsageFile = join(getUserDataRoot(), 'dobius-codex-usage.json')
   }
   return _codexUsageFile
 }

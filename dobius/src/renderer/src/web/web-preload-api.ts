@@ -711,13 +711,22 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     },
     mobile: {
       listNetworkInterfaces: () => Promise.resolve({ interfaces: [] }),
+      enableScreenSharing: () =>
+        Promise.reject(new Error('Screen sharing setup is only available in the macOS app.')),
       getPairingQR: () => Promise.resolve({ available: false }),
       getRuntimePairingUrl: () => Promise.resolve({ available: false }),
       listDevices: () => Promise.resolve({ devices: [] }),
       revokeDevice: () => Promise.resolve({ revoked: false }),
       listRuntimeAccessGrants: () => Promise.resolve({ grants: [] }),
       revokeRuntimeAccess: () => Promise.resolve({ revoked: false }),
-      isWebSocketReady: () => Promise.resolve({ ready: Boolean(activeEnvironment), endpoint: null })
+      // Why: a web client only exists because the host's listener is on, so
+      // report it as enabled; this never hides a real pairing error.
+      isWebSocketReady: () =>
+        Promise.resolve({
+          ready: Boolean(activeEnvironment),
+          endpoint: null,
+          startedWithListenerEnabled: true
+        })
     },
     telemetryTrack: () => Promise.resolve(),
     telemetrySetOptIn: () => Promise.resolve(),

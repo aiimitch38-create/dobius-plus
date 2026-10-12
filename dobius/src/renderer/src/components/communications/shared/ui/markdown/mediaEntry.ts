@@ -26,7 +26,9 @@ function urlPathExtension(src: string): string | undefined {
     pathname = src.split(/[?#]/, 1)[0];
   }
   const lastDot = pathname.lastIndexOf(".");
-  if (lastDot < 0 || lastDot === pathname.length - 1) return undefined;
+  if (lastDot < 0 || lastDot === pathname.length - 1) {
+    return undefined;
+  }
   return pathname.slice(lastDot + 1).toLowerCase();
 }
 
@@ -40,7 +42,9 @@ function urlPathExtension(src: string): string | undefined {
  * extension check.
  */
 export function isVideoMedia(src: string, imetaMime?: string): boolean {
-  if (imetaMime) return imetaMime.toLowerCase().startsWith("video/");
+  if (imetaMime) {
+    return imetaMime.toLowerCase().startsWith("video/");
+  }
   const ext = urlPathExtension(src);
   return (
     ext !== undefined && (VIDEO_EXTENSIONS as readonly string[]).includes(ext)
@@ -65,13 +69,17 @@ export function isRelayDownloadable(
   src: string,
   relayOrigin?: string,
 ): boolean {
-  if (!relayOrigin) return false;
+  if (!relayOrigin) {
+    return false;
+  }
   let parsed: URL;
   try {
     parsed = new URL(src);
   } catch {
     return false;
   }
-  if (!parsed.pathname.startsWith("/media/")) return false;
+  if (!parsed.pathname.startsWith("/media/")) {
+    return false;
+  }
   return parsed.origin === relayOrigin;
 }

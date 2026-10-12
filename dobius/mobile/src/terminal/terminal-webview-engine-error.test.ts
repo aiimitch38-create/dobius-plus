@@ -45,12 +45,19 @@ function suppressReactTestRendererDeprecationWarning(): () => void {
 // unmount so the timer can't survive into later tests and fire in teardown.
 let activeRenderer: ReactTestRenderer | null = null
 
-function createTerminalWebViewRenderer(onEngineError = vi.fn()) {
+function createTerminalWebViewRenderer(
+  onEngineError = vi.fn(),
+  diagnostics: {
+    diagnosticEnabled?: boolean
+    diagnosticTerminalKey?: string
+    diagnosticActive?: boolean
+  } = {}
+) {
   let renderer: ReactTestRenderer | null = null
   const restoreConsoleError = suppressReactTestRendererDeprecationWarning()
   try {
     act(() => {
-      renderer = create(createElement(TerminalWebView, { onEngineError }))
+      renderer = create(createElement(TerminalWebView, { onEngineError, ...diagnostics }))
     })
   } finally {
     restoreConsoleError()
@@ -174,5 +181,30 @@ describe('TerminalWebView engine errors', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('records WebView generation and active state when a content process ends', () => {
+    const lifecycleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const { renderer } = createTerminalWebViewRenderer(vi.fn(), {
+      diagnosticEnabled: true,
+      diagnosticTerminalKey: 'terminal-test-key',
+      diagnosticActive: false
+    })
+    const webView = renderer.root.findByType('WebView')
+
+    act(() => webView.props.onLoadStart())
+    act(() => webView.props.onContentProcessDidTerminate({ nativeEvent: {} }))
+
+    const records = lifecycleLog.mock.calls.map(([, record]) => record as Record<string, unknown>)
+    expect(records.map((record) => record.event)).toEqual([
+      'active-state',
+      'load-start',
+      'content-process-ended'
+    ])
+    expect(records[2]).toMatchObject({
+      terminalKey: 'terminal-test-key',
+      generation: 1,
+      active: false
+    })
   })
 })

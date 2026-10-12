@@ -74,18 +74,26 @@ function isValidThemeName(name: string): name is SyntaxThemeName {
 /** Read stored theme, migrating legacy "light"/"dark"/"system" values. */
 function readStoredTheme(fallback: SyntaxThemeName): SyntaxThemeName {
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (!stored) return fallback;
+  if (!stored) {
+    return fallback;
+  }
 
   // Migrate legacy values
-  if (stored === "light") return "catppuccin-latte";
-  if (stored === "dark" || stored === "system") return "houston";
+  if (stored === "light") {
+    return "catppuccin-latte";
+  }
+  if (stored === "dark" || stored === "system") {
+    return "houston";
+  }
 
   return isValidThemeName(stored) ? stored : fallback;
 }
 
 function getContrastColor(hex: string): string {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})/i.exec(hex);
-  if (!m) return "#ffffff";
+  if (!m) {
+    return "#ffffff";
+  }
   const r = parseInt(m[1], 16);
   const g = parseInt(m[2], 16);
   const b = parseInt(m[3], 16);
@@ -101,7 +109,9 @@ type Rgb = {
 
 function hexToRgb(hex: string): Rgb {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})/i.exec(hex);
-  if (!m) return { r: 255, g: 255, b: 255 };
+  if (!m) {
+    return { r: 255, g: 255, b: 255 };
+  }
   return {
     r: parseInt(m[1], 16),
     g: parseInt(m[2], 16),
@@ -320,10 +330,18 @@ let buzzVibrancyEnabled = false;
  * continuations superseded by a newer theme switch.
  */
 function maybeEnableBuzzTranslucent(themeName: string, requestToken: number) {
-  if (requestToken !== buzzVibrancyRequest) return;
-  if (!isBuzzTheme(themeName) || !isMacPlatform()) return;
-  if (!buzzVibrancyReady) return;
-  if (!document.documentElement.hasAttribute("data-buzz-sidebar")) return;
+  if (requestToken !== buzzVibrancyRequest) {
+    return;
+  }
+  if (!isBuzzTheme(themeName) || !isMacPlatform()) {
+    return;
+  }
+  if (!buzzVibrancyReady) {
+    return;
+  }
+  if (!document.documentElement.hasAttribute("data-buzz-sidebar")) {
+    return;
+  }
   setBuzzTranslucent(true);
 }
 
@@ -376,7 +394,9 @@ async function applyBuzzVibrancy(themeName: string) {
     });
     // A newer theme change superseded this request while the IPC was in flight;
     // that later call owns the current translucency state, so don't clobber it.
-    if (requestToken !== buzzVibrancyRequest) return;
+    if (requestToken !== buzzVibrancyRequest) {
+      return;
+    }
     buzzVibrancyEnabled = buzz;
     // Native layer is installed. Record readiness and try to enable translucency
     // — but only if `applyBuzzSidebar` has already installed the Dobius gradient
@@ -388,7 +408,9 @@ async function applyBuzzVibrancy(themeName: string) {
     }
   } catch (error) {
     console.warn("set_window_vibrancy failed", error);
-    if (requestToken !== buzzVibrancyRequest) return;
+    if (requestToken !== buzzVibrancyRequest) {
+      return;
+    }
     // Vibrancy failed — don't go transparent or we'd show through to nothing.
     buzzVibrancyEnabled = false;
     setBuzzTranslucent(false);
@@ -399,7 +421,9 @@ async function applyBuzzVibrancy(themeName: string) {
 function applyCachedVars(): string | null {
   try {
     const cached = window.localStorage.getItem(CACHE_KEY);
-    if (!cached) return null;
+    if (!cached) {
+      return null;
+    }
     const { themeName, vars, isDark } = JSON.parse(cached);
     const root = document.documentElement;
     for (const [key, value] of Object.entries(vars)) {
@@ -431,7 +455,9 @@ async function applyTheme(
 ): Promise<{ isDark: boolean } | null> {
   const requestToken = ++themeApplyRequest;
   const themeData = await loadThemeData(name);
-  if (requestToken !== themeApplyRequest) return null;
+  if (requestToken !== themeApplyRequest) {
+    return null;
+  }
 
   const info = extractThemeInfo(name, themeData);
   const { isDark, vars } = createThemeVars(info.bg, info.fg, info.comment, {
@@ -499,7 +525,9 @@ export function ThemeProvider({
   });
   const [followSystem, setFollowSystemState] = useState<boolean>(() => {
     const stored = window.localStorage.getItem(FOLLOW_SYSTEM_KEY);
-    if (stored !== null) return stored === "true";
+    if (stored !== null) {
+      return stored === "true";
+    }
     // Fresh profiles (no saved theme) default to System mode so the Dobius
     // default tracks the OS light/dark scheme. Profiles that picked a theme
     // before this toggle existed keep their fixed theme until they opt in.
@@ -511,7 +539,9 @@ export function ThemeProvider({
 
   // Resolve the effective theme based on follow-system preference
   const effectiveTheme = (() => {
-    if (!followSystem || !isValidThemeName(selectedTheme)) return selectedTheme;
+    if (!followSystem || !isValidThemeName(selectedTheme)) {
+      return selectedTheme;
+    }
     return resolveSystemTheme(selectedTheme as SyntaxThemeName, systemIsDark);
   })();
 
@@ -521,7 +551,9 @@ export function ThemeProvider({
     : false;
 
   useEffect(() => {
-    if (!isValidThemeName(effectiveTheme)) return;
+    if (!isValidThemeName(effectiveTheme)) {
+      return;
+    }
 
     // Track which theme we're loading to avoid race conditions
     const thisTheme = effectiveTheme;
@@ -529,7 +561,9 @@ export function ThemeProvider({
     setIsLoading(true);
 
     applyTheme(effectiveTheme as SyntaxThemeName).then((result) => {
-      if (!result) return;
+      if (!result) {
+        return;
+      }
       // Only update if this is still the theme we want. The accent is applied
       // inside applyTheme (synchronously with the theme vars), so there's no
       // separate re-application here — that avoided the switch-time flicker.
@@ -541,13 +575,17 @@ export function ThemeProvider({
   }, [effectiveTheme]);
 
   useEffect(() => {
-    if (!isValidThemeName(effectiveTheme)) return;
+    if (!isValidThemeName(effectiveTheme)) {
+      return;
+    }
     void applyBuzzVibrancy(effectiveTheme);
   }, [effectiveTheme]);
 
   // Listen for system color scheme changes when followSystem is enabled
   useEffect(() => {
-    if (!followSystem) return;
+    if (!followSystem) {
+      return;
+    }
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handleMediaChange = (event: MediaQueryListEvent) => {
@@ -566,7 +604,9 @@ export function ThemeProvider({
     if (isTauri()) {
       void getCurrentWindow()
         .onThemeChanged(({ payload }) => {
-          if (!disposed) setSystemIsDark(payload === "dark");
+          if (!disposed) {
+            setSystemIsDark(payload === "dark");
+          }
         })
         .then((unlisten) => {
           if (disposed) {
@@ -596,7 +636,9 @@ export function ThemeProvider({
   }, [accentColor, effectiveTheme]);
 
   const setTheme = useCallback((name: string) => {
-    if (!isValidThemeName(name)) return;
+    if (!isValidThemeName(name)) {
+      return;
+    }
     setSelectedTheme(name);
     window.localStorage.setItem(THEME_STORAGE_KEY, name);
   }, []);

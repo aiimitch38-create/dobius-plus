@@ -250,13 +250,21 @@ function waitForCaptureEnqueue(client: PostHog, event: EventName, uuid: string):
   })
 }
 
+// Why: the one answer to "can this build send anything at all?". `track()`
+// gates on it, and the Privacy pane reads it (via `telemetry:getConsentState`)
+// so the "Share anonymous usage data" switch never promises sharing that
+// this build cannot do (#122 F11).
+export function isTelemetryTransportAvailable(): boolean {
+  return testTransportEnabled || (IS_OFFICIAL_BUILD && TELEMETRY_ENABLED)
+}
+
 // In `pnpm dev` and any contributor / non-official build, `track()` is a
 // no-op: it returns immediately without transmitting, logging, or running
 // the burst-cap / consent / validator pipeline. Telemetry only flows in
 // official stable/rc builds where CI injects `DOBIUS_BUILD_IDENTITY` and
 // `DOBIUS_POSTHOG_WRITE_KEY`.
 export function track<N extends EventName>(name: N, props: EventProps<N>): void {
-  if (!testTransportEnabled && (!IS_OFFICIAL_BUILD || !TELEMETRY_ENABLED)) {
+  if (!isTelemetryTransportAvailable()) {
     return
   }
 

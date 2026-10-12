@@ -11,10 +11,14 @@ const FENCE_AFTER_BREAK = /￼(?:```|~~~)([a-z+]*)$/;
  * or undefined when no fence was detected (caller should proceed).
  */
 export function handleCodeFenceEnter(ed: Editor): boolean | undefined {
-  if (ed.isActive("codeBlock")) return undefined;
+  if (ed.isActive("codeBlock")) {
+    return undefined;
+  }
 
   const { $cursor } = ed.state.selection as TextSelection;
-  if (!$cursor) return undefined;
+  if (!$cursor) {
+    return undefined;
+  }
 
   const textBefore = $cursor.parent.textBetween(
     0,
@@ -39,7 +43,9 @@ export function handleCodeFenceEnter(ed: Editor): boolean | undefined {
   }
 
   const m = textBefore.match(FENCE_AFTER_BREAK);
-  if (!m) return undefined;
+  if (!m) {
+    return undefined;
+  }
 
   const { tr, schema } = ed.state;
   const hardBreakDocPos =
@@ -76,7 +82,9 @@ export const CodeBlockAfterHardBreak = Extension.create({
         find: /\n(?:```|~~~)([a-z+]*)[\s]$/,
         handler: ({ state, range, match }) => {
           const $from = state.doc.resolve(range.from);
-          if ($from.parent.type.name === "codeBlock") return null;
+          if ($from.parent.type.name === "codeBlock") {
+            return null;
+          }
           const afterParagraph = $from.after();
           const attrs = match[1] ? { language: match[1] } : {};
           state.tr.delete(range.from, range.to);

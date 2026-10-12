@@ -91,7 +91,9 @@ const MAX_DRAFTS = 100;
  */
 function canonicalizeRelayScope(relayUrl: string): string {
   const trimmed = relayUrl.trim().replace(/\/+$/, "");
-  if (!trimmed) return "";
+  if (!trimmed) {
+    return "";
+  }
   try {
     const u = new URL(trimmed);
     const path = u.pathname.replace(/\/+$/, "");
@@ -152,7 +154,9 @@ export function clearAllDrafts(): void {
 let _memCache: Map<string, DraftState> | null = null;
 
 function readStore(): Map<string, DraftState> {
-  if (_memCache !== null) return _memCache;
+  if (_memCache !== null) {
+    return _memCache;
+  }
 
   const map = new Map<string, DraftState>();
   if (!currentPubkey) {
@@ -205,7 +209,9 @@ function readStore(): Map<string, DraftState> {
 }
 
 function isValidDraftState(v: unknown): v is DraftState {
-  if (typeof v !== "object" || v === null) return false;
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
   const d = v as Partial<DraftState>;
   if (
     typeof d.content !== "string" ||
@@ -252,7 +258,9 @@ function isValidDraftState(v: unknown): v is DraftState {
 }
 
 function flushStore(map: Map<string, DraftState>): boolean {
-  if (!currentPubkey) return false;
+  if (!currentPubkey) {
+    return false;
+  }
   const obj: StoredDrafts = {};
   for (const [k, v] of map) {
     obj[k] = v;
@@ -264,7 +272,9 @@ function flushStore(map: Map<string, DraftState>): boolean {
  * Evict the least-recently-updated entry until the map is within `MAX_DRAFTS`.
  */
 function evictOldest(map: Map<string, DraftState>): void {
-  if (map.size <= MAX_DRAFTS) return;
+  if (map.size <= MAX_DRAFTS) {
+    return;
+  }
   // Sort ascending by updatedAt; evict oldest until within cap.
   const sorted = [...map.entries()].sort((a, b) =>
     a[1].updatedAt.localeCompare(b[1].updatedAt),
@@ -389,10 +399,14 @@ export function renameDraftEntry(
   oldKey: string,
   newKey: string,
 ): "migrated" | "collision" | "noop" {
-  if (oldKey === newKey) return "noop";
+  if (oldKey === newKey) {
+    return "noop";
+  }
   const map = readStore();
   const existing = map.get(oldKey);
-  if (existing === undefined) return "noop";
+  if (existing === undefined) {
+    return "noop";
+  }
 
   const destination = map.get(newKey);
   if (destination !== undefined) {
@@ -455,10 +469,10 @@ export function persistDraftEntry(
  * Returns all drafts sorted most-recently-updated first.
  * Used by the Drafts inbox panel (Phase 2).
  */
-export function getAllDraftEntries(): Array<{
+export function getAllDraftEntries(): {
   key: string;
   draft: DraftState;
-}> {
+}[] {
   return [...readStore().entries()]
     .sort((a, b) => b[1].updatedAt.localeCompare(a[1].updatedAt))
     .map(([key, draft]) => ({ key, draft }));
@@ -468,10 +482,10 @@ export function getAllDraftEntries(): Array<{
  * Returns only active (unsent) drafts, sorted most-recently-updated first.
  * Used by the "Drafts" subsection of the Drafts inbox panel.
  */
-export function getActiveDraftEntries(): Array<{
+export function getActiveDraftEntries(): {
   key: string;
   draft: DraftState;
-}> {
+}[] {
   return getAllDraftEntries().filter((e) => e.draft.status === "active");
 }
 
@@ -479,10 +493,10 @@ export function getActiveDraftEntries(): Array<{
  * Returns only sent drafts, sorted most-recently-updated first.
  * Returns empty — sent records are dropped on read. Kept for test assertions.
  */
-export function getSentDraftEntries(): Array<{
+export function getSentDraftEntries(): {
   key: string;
   draft: DraftState;
-}> {
+}[] {
   return getAllDraftEntries().filter((e) => e.draft.status === "sent");
 }
 

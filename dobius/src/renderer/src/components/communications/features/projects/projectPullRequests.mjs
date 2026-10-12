@@ -56,10 +56,18 @@ function getCloneUrls(event) {
 }
 
 function statusFromEvent(pullRequest, statusEvent) {
-  if (statusEvent?.kind === 1630) return "Open";
-  if (statusEvent?.kind === 1631) return "Merged";
-  if (statusEvent?.kind === 1632) return "Closed";
-  if (statusEvent?.kind === 1633) return "Draft";
+  if (statusEvent?.kind === 1630) {
+    return "Open";
+  }
+  if (statusEvent?.kind === 1631) {
+    return "Merged";
+  }
+  if (statusEvent?.kind === 1632) {
+    return "Closed";
+  }
+  if (statusEvent?.kind === 1633) {
+    return "Draft";
+  }
   const labels = getAllTags(pullRequest, "t").map((label) =>
     label.toLowerCase(),
   );
@@ -83,7 +91,9 @@ export function nextProjectPullRequestReviewCreatedAt(pullRequest, now) {
 
 /** Trusted presentation kind for a compact review timeline row. */
 export function projectPullRequestCommentTimelineKind(comment) {
-  if (comment.isTrustedReviewRequest) return "review-request";
+  if (comment.isTrustedReviewRequest) {
+    return "review-request";
+  }
   if (
     !comment.isTrustedReviewDecision ||
     !comment.reviewDecisionStatus ||
@@ -158,7 +168,9 @@ export const PR_INLINE_COMMENT_LABEL = "inline-comment";
 
 /** Validate an inline diff anchor without normalizing attacker-controlled paths. */
 export function normalizeProjectPullRequestCommentAnchor(anchor) {
-  if (!anchor || typeof anchor.path !== "string") return null;
+  if (!anchor || typeof anchor.path !== "string") {
+    return null;
+  }
   const path = anchor.path;
   if (
     path.length === 0 ||
@@ -172,8 +184,12 @@ export function normalizeProjectPullRequestCommentAnchor(anchor) {
   ) {
     return null;
   }
-  if (anchor.side !== "old" && anchor.side !== "new") return null;
-  if (!Number.isSafeInteger(anchor.line) || anchor.line < 1) return null;
+  if (anchor.side !== "old" && anchor.side !== "new") {
+    return null;
+  }
+  if (!Number.isSafeInteger(anchor.line) || anchor.line < 1) {
+    return null;
+  }
   return { line: anchor.line, path, side: anchor.side };
 }
 
@@ -251,7 +267,9 @@ function trustedReviewActors(pullRequest, reviewers) {
   const author = pullRequest.pubkey.toLowerCase();
   const trustedActors = new Set(reviewers);
   for (const actor of allowedActorsForRoot(pullRequest)) {
-    if (actor !== author) trustedActors.add(actor);
+    if (actor !== author) {
+      trustedActors.add(actor);
+    }
   }
   return trustedActors;
 }
@@ -265,11 +283,17 @@ function reviewDecisionsForPullRequest(
 ) {
   const byAuthor = new Map();
   for (const comment of comments) {
-    if (!comment.reviewDecision || !currentCommit) continue;
+    if (!comment.reviewDecision || !currentCommit) {
+      continue;
+    }
     const key = comment.author.toLowerCase();
-    if (!trustedActors.has(key)) continue;
+    if (!trustedActors.has(key)) {
+      continue;
+    }
     const commit = reviewDecisionCommit(comment, initialCommit);
-    if (commit !== currentCommit) continue;
+    if (commit !== currentCommit) {
+      continue;
+    }
     const existing = byAuthor.get(key);
     if (
       !existing ||

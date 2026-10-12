@@ -17,7 +17,7 @@ const FLUSH_IDLE_MS = 2_000;
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** Dependency injection interface — production uses module singletons; tests inject fakes. */
-export interface ArchiveSyncDeps {
+export type ArchiveSyncDeps = {
   relayClient: {
     subscribeLive: (
       filter: RelaySubscriptionFilter,
@@ -26,15 +26,15 @@ export interface ArchiveSyncDeps {
   };
   listSaveSubscriptions: () => Promise<SaveSubscription[]>;
   archiveEvents: (
-    candidates: Array<{
+    candidates: {
       rawEventJson: string;
       matchedScope: { scopeType: ScopeType; scopeValue: string };
-    }>,
+    }[],
   ) => Promise<unknown>;
   onSubscriptionChange: (listener: () => void) => () => void;
   flushBatchSize?: number;
   flushIdleMs?: number;
-}
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -93,10 +93,10 @@ export class ArchiveSyncManager {
   // eliminating all interleaving defects without per-boundary guards.
   private reloading = false;
   private reloadPending = false;
-  private buffer: Array<{
+  private buffer: {
     rawEventJson: string;
     matchedScope: { scopeType: ScopeType; scopeValue: string };
-  }> = [];
+  }[] = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
   private offSubscriptionChange: (() => void) | null = null;
@@ -190,7 +190,9 @@ export class ArchiveSyncManager {
    * list/subscribe awaits structurally impossible.
    */
   private async doResubscribe(): Promise<void> {
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
 
     let subs: SaveSubscription[];
     try {
@@ -200,7 +202,9 @@ export class ArchiveSyncManager {
       return;
     }
 
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
 
     // Full keys (scope+kinds) for the current subscription list.
     const wanted = new Set(
@@ -223,10 +227,14 @@ export class ArchiveSyncManager {
     // ensures this loop body is the only async path running, so nothing
     // can add a duplicate entry to `active` between iterations.
     for (const sub of subs) {
-      if (this.destroyed) return;
+      if (this.destroyed) {
+        return;
+      }
 
       const key = subKey(sub.scopeType, sub.scopeValue, sub.kinds);
-      if (this.active.has(key)) continue;
+      if (this.active.has(key)) {
+        continue;
+      }
 
       const scopeType = sub.scopeType;
       const scopeValue = sub.scopeValue;
@@ -265,7 +273,9 @@ export class ArchiveSyncManager {
     scopeType: ScopeType,
     scopeValue: string,
   ): void {
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      return;
+    }
     this.buffer.push({
       rawEventJson: JSON.stringify(event),
       matchedScope: { scopeType, scopeValue },
@@ -278,7 +288,9 @@ export class ArchiveSyncManager {
   }
 
   private scheduleFlush(): void {
-    if (this.flushTimer !== null) return;
+    if (this.flushTimer !== null) {
+      return;
+    }
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
       this.flush();
@@ -290,7 +302,9 @@ export class ArchiveSyncManager {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
-    if (this.buffer.length === 0) return;
+    if (this.buffer.length === 0) {
+      return;
+    }
     const batch = this.buffer.splice(0);
     void this.deps.archiveEvents(batch).catch((err: unknown) => {
       console.warn("[archiveSyncManager] archive_events failed:", err);
@@ -310,7 +324,9 @@ import * as React from "react";
  */
 export function useArchiveSync(ready: boolean): void {
   React.useEffect(() => {
-    if (!ready) return;
+    if (!ready) {
+      return;
+    }
 
     const manager = new ArchiveSyncManager();
     void manager.start();

@@ -8,7 +8,7 @@ export type BuildDispatcher = (req: {
   buildAgent: TuiAgent
 }) => Promise<{ worktreeId: string; ok: boolean; error?: string }>
 
-export type RepoLister = () => { id: string; name: string }[]
+export type RepoLister = () => { id: string; name: string; path: string }[]
 
 let buildDispatcher: BuildDispatcher | null = null
 let repoLister: RepoLister | null = null

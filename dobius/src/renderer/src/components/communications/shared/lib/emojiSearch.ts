@@ -24,11 +24,11 @@ export function normalizeShortcode(value: string): string {
   return value.toLowerCase().replace(/[:_\s-]/g, "");
 }
 
-export interface ShortcodeMatch {
+export type ShortcodeMatch = {
   tier: number;
   /** Lower is better within a tier. */
   score: number;
-}
+};
 
 /**
  * If `query` is a subsequence of `target` (all chars in order, gaps allowed),
@@ -41,12 +41,16 @@ function subsequenceSpan(query: string, target: string): number | null {
   let qi = 0;
   for (let ti = 0; ti < target.length && qi < query.length; ti++) {
     if (target[ti] === query[qi]) {
-      if (first === -1) first = ti;
+      if (first === -1) {
+        first = ti;
+      }
       last = ti;
       qi++;
     }
   }
-  if (qi < query.length) return null;
+  if (qi < query.length) {
+    return null;
+  }
   return last - first;
 }
 
@@ -59,16 +63,28 @@ export function scoreShortcodeMatch(
   shortcode: string,
 ): ShortcodeMatch | null {
   const q = normalizeShortcode(query);
-  if (q.length === 0) return null;
+  if (q.length === 0) {
+    return null;
+  }
   const target = normalizeShortcode(shortcode);
-  if (target.length === 0) return null;
+  if (target.length === 0) {
+    return null;
+  }
 
-  if (q === target) return { tier: TIER_EXACT, score: 0 };
-  if (target.startsWith(q)) return { tier: TIER_PREFIX, score: 0 };
+  if (q === target) {
+    return { tier: TIER_EXACT, score: 0 };
+  }
+  if (target.startsWith(q)) {
+    return { tier: TIER_PREFIX, score: 0 };
+  }
   const idx = target.indexOf(q);
-  if (idx !== -1) return { tier: TIER_SUBSTRING, score: idx };
+  if (idx !== -1) {
+    return { tier: TIER_SUBSTRING, score: idx };
+  }
   const span = subsequenceSpan(q, target);
-  if (span !== null) return { tier: TIER_SUBSEQUENCE, score: span };
+  if (span !== null) {
+    return { tier: TIER_SUBSEQUENCE, score: span };
+  }
   return null;
 }
 
@@ -83,14 +99,16 @@ export function rankByShortcode<T>(
   shortcodeOf: (item: T) => string,
   limit: number,
 ): T[] {
-  if (limit <= 0) return [];
-  const scored: Array<{
+  if (limit <= 0) {
+    return [];
+  }
+  const scored: {
     item: T;
     tier: number;
     score: number;
     len: number;
     code: string;
-  }> = [];
+  }[] = [];
   for (const item of items) {
     const code = shortcodeOf(item);
     const match = scoreShortcodeMatch(query, code);
@@ -141,11 +159,11 @@ export function rankShortcodeMatchesFirst<T>(
   ];
 }
 
-export interface StandardEmoji {
+export type StandardEmoji = {
   id: string;
   name: string;
   native: string;
-}
+};
 
 type EmojiMartData = {
   emojis?: Record<
@@ -153,7 +171,7 @@ type EmojiMartData = {
     {
       id?: string;
       name?: string;
-      skins?: Array<{ native?: string }>;
+      skins?: { native?: string }[];
     }
   >;
 };
@@ -164,12 +182,16 @@ type EmojiMartData = {
 let standardIndex: StandardEmoji[] | null = null;
 
 function getStandardIndex(): StandardEmoji[] {
-  if (standardIndex) return standardIndex;
+  if (standardIndex) {
+    return standardIndex;
+  }
   const emojis = (data as EmojiMartData).emojis ?? {};
   const out: StandardEmoji[] = [];
   for (const [id, emoji] of Object.entries(emojis)) {
     const native = emoji.skins?.[0]?.native ?? "";
-    if (!native) continue;
+    if (!native) {
+      continue;
+    }
     out.push({ id: emoji.id ?? id, name: emoji.name ?? id, native });
   }
   standardIndex = out;
@@ -186,7 +208,9 @@ export function fuzzyStandardEmoji(
   limit: number,
   excludeIds: ReadonlySet<string>,
 ): StandardEmoji[] {
-  if (limit <= 0) return [];
+  if (limit <= 0) {
+    return [];
+  }
   const candidates = getStandardIndex().filter((e) => !excludeIds.has(e.id));
   return rankByShortcode(query, candidates, (e) => e.id, limit);
 }

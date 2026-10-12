@@ -86,7 +86,7 @@ export function writeSecureJsonFile(targetPath: string, value: unknown): void {
   writeSecureFile(targetPath, JSON.stringify(value, null, 2))
 }
 
-export function writeSecureFile(targetPath: string, contents: string): void {
+export function writeSecureFile(targetPath: string, contents: string | Uint8Array): void {
   const dir = dirname(targetPath)
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true, mode: 0o700 })

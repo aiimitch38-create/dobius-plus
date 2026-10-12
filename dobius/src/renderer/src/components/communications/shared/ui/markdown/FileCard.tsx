@@ -7,8 +7,12 @@ import { useSmoothCorners } from "@comms/shared/ui/smoothCorners";
 
 /** Human-readable byte size: "820 B", "12.4 KB", "3.1 MB". */
 function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "";
-  if (bytes < 1024) return `${bytes} B`;
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    return "";
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
   const units = ["KB", "MB", "GB", "TB"];
   let size = bytes / 1024;
   let i = 0;

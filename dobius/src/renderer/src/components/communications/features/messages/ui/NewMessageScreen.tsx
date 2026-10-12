@@ -424,8 +424,7 @@ export function NewMessageScreen() {
                       selectedUsers.length > 0
                     ) {
                       event.preventDefault();
-                      const lastRecipient =
-                        selectedUsers[selectedUsers.length - 1];
+                      const lastRecipient = selectedUsers.at(-1);
                       if (lastRecipient) {
                         document
                           .querySelector<HTMLElement>(

@@ -7,7 +7,7 @@ import { preloadE2EConfig } from './e2e-config'
 import { cloudBackupApi } from './cloud-backup'
 import { glApi } from './gitlab'
 import type { AppIdentity } from '../shared/app-identity'
-import type { AsanaConfig, AsanaTasksSnapshot } from '../shared/asana'
+import type { AsanaConfig, AsanaRequeueResult, AsanaTasksSnapshot } from '../shared/asana'
 import type {
   AgentRun,
   AgentRunEvent,
@@ -19,6 +19,7 @@ import type {
   AgentIdentityFileName,
   PendingAgentDecision,
   AgentReadableFiles,
+  AgentsExecutionState,
   BriefingItem,
   CustomAgent,
   CustomAgentInput,
@@ -26,6 +27,7 @@ import type {
   CustomHarnessDefinition
 } from '../shared/agents'
 import type { DobiusPrompt } from '../shared/prompts'
+import type { SecretStorageStatus } from '../shared/secret-storage-status'
 import type {
   ImessageBridgeConfig,
   ImessageBridgeSendResult,
@@ -167,6 +169,7 @@ import type {
 } from '../shared/agent-status-types'
 import type { AgentInterruptInferenceRequest } from '../shared/agent-interrupt-intent'
 import type {
+  ElevenLabsKeyStatus,
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
@@ -1101,6 +1104,9 @@ const api = {
       ipcRenderer.invoke('asana:clearLocalDone', gid),
     completeTask: (gid: string): Promise<AsanaTasksSnapshot> =>
       ipcRenderer.invoke('asana:completeTask', gid),
+    listBlockedTasks: (): Promise<string[]> => ipcRenderer.invoke('asana:listBlockedTasks'),
+    requeueTask: (gid: string): Promise<AsanaRequeueResult> =>
+      ipcRenderer.invoke('asana:requeueTask', gid),
     onTasksUpdated: (callback: (snapshot: AsanaTasksSnapshot) => void): (() => void) => {
       const listener = (_event: unknown, snapshot: AsanaTasksSnapshot): void => callback(snapshot)
       ipcRenderer.on('asana:tasksUpdated', listener)
@@ -1129,8 +1135,9 @@ const api = {
     writeFile: (
       agentId: string,
       name: AgentIdentityFileName | 'brief' | 'memory',
-      content: string
-    ): Promise<void> => ipcRenderer.invoke('agents:writeFile', agentId, name, content),
+      content: string,
+      expected?: string
+    ): Promise<void> => ipcRenderer.invoke('agents:writeFile', agentId, name, content, expected),
     readCrewFiles: (): Promise<AgentCrewFiles> => ipcRenderer.invoke('agents:readCrewFiles'),
     writeCrewFile: (name: AgentCrewFileName, content: string): Promise<void> =>
       ipcRenderer.invoke('agents:writeCrewFile', name, content),
@@ -1156,6 +1163,8 @@ const api = {
     discardDraft: (id: string): Promise<AgentDraftComment> =>
       ipcRenderer.invoke('agents:discardDraft', id),
     getPaused: (): Promise<boolean> => ipcRenderer.invoke('agents:getPaused'),
+    getExecutionState: (): Promise<AgentsExecutionState> =>
+      ipcRenderer.invoke('agents:getExecutionState'),
     setPaused: (paused: boolean): Promise<boolean> =>
       ipcRenderer.invoke('agents:setPaused', paused),
     getPingStatus: (): Promise<{ used: number; max: number; date: string }> =>
@@ -1922,6 +1931,9 @@ const api = {
   settings: {
     get: (): Promise<unknown> => ipcRenderer.invoke('settings:get'),
 
+    getSecretStorageStatus: (): Promise<SecretStorageStatus> =>
+      ipcRenderer.invoke('settings:getSecretStorageStatus'),
+
     set: (args: Record<string, unknown>): Promise<unknown> =>
       ipcRenderer.invoke('settings:set', args),
 
@@ -2047,6 +2059,8 @@ const api = {
       ipcRenderer.invoke('vertexTasks:create', input),
     update: (taskId: string, patch: VertexTaskPatch): Promise<VertexTask | null> =>
       ipcRenderer.invoke('vertexTasks:update', { taskId, patch }),
+    releaseInterruptedClaims: (args: { activeTaskIds: string[] }): Promise<void> =>
+      ipcRenderer.invoke('vertexTasks:releaseInterruptedClaims', args),
     move: (taskId: string, to: VertexTaskStatus, toIndex: number): Promise<VertexTask | null> =>
       ipcRenderer.invoke('vertexTasks:move', { taskId, to, toIndex }),
     remove: (taskId: string): Promise<boolean> => ipcRenderer.invoke('vertexTasks:remove', taskId)
@@ -4268,6 +4282,7 @@ const api = {
   },
 
   mobile: {
+    enableScreenSharing: (): Promise<{ opened: true }> => ipcRenderer.invoke('screenSharing:enable'),
     listNetworkInterfaces: (): Promise<{
       interfaces: { name: string; address: string }[]
     }> => ipcRenderer.invoke('mobile:listNetworkInterfaces'),
@@ -4313,8 +4328,11 @@ const api = {
     revokeRuntimeAccess: (args: { deviceId: string }): Promise<{ revoked: boolean }> =>
       ipcRenderer.invoke('mobile:revokeRuntimeAccess', args),
 
-    isWebSocketReady: (): Promise<{ ready: boolean; endpoint: string | null }> =>
-      ipcRenderer.invoke('mobile:isWebSocketReady')
+    isWebSocketReady: (): Promise<{
+      ready: boolean
+      endpoint: string | null
+      startedWithListenerEnabled: boolean
+    }> => ipcRenderer.invoke('mobile:isWebSocketReady')
   },
 
   agentStatus: {
@@ -4371,9 +4389,9 @@ const api = {
   speech: {
     getCatalog: (): Promise<SpeechModelManifest[]> => ipcRenderer.invoke('speech:getCatalog'),
     getModelStates: (): Promise<SpeechModelState[]> => ipcRenderer.invoke('speech:getModelStates'),
-    getOpenAiApiKeyStatus: (): Promise<{ configured: boolean }> =>
+    getOpenAiApiKeyStatus: (): Promise<{ configured: boolean; sessionOnly?: boolean }> =>
       ipcRenderer.invoke('speech:getOpenAiApiKeyStatus'),
-    saveOpenAiApiKey: (apiKey: string): Promise<{ configured: boolean }> =>
+    saveOpenAiApiKey: (apiKey: string): Promise<{ configured: boolean; sessionOnly?: boolean }> =>
       ipcRenderer.invoke('speech:saveOpenAiApiKey', apiKey),
     clearOpenAiApiKey: (): Promise<{ configured: boolean }> =>
       ipcRenderer.invoke('speech:clearOpenAiApiKey'),
@@ -4463,8 +4481,12 @@ const api = {
       ipcRenderer.invoke('jarvis:proposeSelfEdit', path, content, description),
     applySelfEdit: (
       id: string
-    ): Promise<{ ok: true; displayPath: string } | { ok: false; error: string }> =>
+    ): Promise<{ ok: true; displayPath: string } | { ok: false; error: string; conflict?: true }> =>
       ipcRenderer.invoke('jarvis:applySelfEdit', id),
+    undoSelfEdit: (
+      id: string
+    ): Promise<{ ok: true; displayPath: string } | { ok: false; error: string; conflict?: true }> =>
+      ipcRenderer.invoke('jarvis:undoSelfEdit', id),
     discardSelfEdit: (id: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('jarvis:discardSelfEdit', id),
     onSelfEditProposal: (callback: (proposal: unknown) => void): (() => void) => {
@@ -4478,6 +4500,12 @@ const api = {
       ipcRenderer.invoke('jarvis:status'),
     agentSignedUrl: (): Promise<{ ok: true; url: string } | { ok: false; error: string }> =>
       ipcRenderer.invoke('jarvis:agentSignedUrl'),
+    getElevenLabsKeyStatus: (): Promise<ElevenLabsKeyStatus> =>
+      ipcRenderer.invoke('jarvis:getElevenLabsKeyStatus'),
+    saveElevenLabsKey: (apiKey: string): Promise<ElevenLabsKeyStatus> =>
+      ipcRenderer.invoke('jarvis:saveElevenLabsKey', apiKey),
+    clearElevenLabsKey: (): Promise<ElevenLabsKeyStatus> =>
+      ipcRenderer.invoke('jarvis:clearElevenLabsKey'),
     askAdamText: (utterance: string): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:askAdamText', utterance),
     onState: (callback: (event: JarvisStateEvent) => void): (() => void) => {

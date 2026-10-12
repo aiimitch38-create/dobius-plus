@@ -107,7 +107,9 @@ export function useTrayMenu({
   }, [activities]);
 
   React.useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri()) {
+      return;
+    }
     void invoke("update_tray_agent_activity", {
       activities,
       recentActivities,
@@ -117,13 +119,17 @@ export function useTrayMenu({
   }, [activities, recentActivities]);
 
   React.useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri()) {
+      return;
+    }
 
     let disposed = false;
     let unlisten: (() => void) | undefined;
 
     const handlePendingActions = async () => {
-      if (disposed) return;
+      if (disposed) {
+        return;
+      }
       const actions = await invoke<TrayAction[]>("take_tray_actions");
       if (disposed) {
         if (actions.length > 0) {

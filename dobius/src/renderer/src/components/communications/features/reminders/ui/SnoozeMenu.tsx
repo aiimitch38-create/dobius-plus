@@ -95,7 +95,9 @@ export function SnoozeMenu({
               className="w-full"
               disabled={customTimestamp === null}
               onClick={() => {
-                if (customTimestamp === null) return;
+                if (customTimestamp === null) {
+                  return;
+                }
                 onSnooze(customTimestamp);
                 setCustomOpen(false);
               }}

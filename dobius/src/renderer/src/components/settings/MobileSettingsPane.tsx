@@ -2,8 +2,10 @@ import { SearchableSetting } from './SearchableSetting'
 import { SettingsSwitchRow } from './SettingsFormControls'
 import { MobilePane } from './MobilePane'
 import { ImessageBridgeSetting } from './ImessageBridgeSetting'
+import { MobileScreenSharingSection } from './MobileScreenSharingSection'
 import { isMacUserAgent } from '@/components/terminal-pane/pane-helpers'
 import {
+  getMobileListenerSearchEntry,
   getMobileOverviewSearchEntry,
   getMobileSidebarShortcutSearchEntry,
   getMobileSettingsPaneSearchEntries
@@ -19,6 +21,7 @@ const DOBIUS_ANDROID_APK_URL = 'https://github.com/statusdigitalmarketing/dobius
 
 export function MobileSettingsPane(): React.JSX.Element {
   const showMobileButton = useAppStore((s) => s.settings?.showMobileButton !== false)
+  const mobileListenerEnabled = useAppStore((s) => s.settings?.mobileListenerEnabled === true)
   const updateSettings = useAppStore((s) => s.updateSettings)
 
   return (
@@ -87,9 +90,26 @@ export function MobileSettingsPane(): React.JSX.Element {
         />
       </SearchableSetting>
 
+      <SearchableSetting
+        title={getMobileListenerSearchEntry().title}
+        description={getMobileListenerSearchEntry().description}
+        keywords={getMobileListenerSearchEntry().keywords}
+      >
+        {/* Why: main reads this once at startup (BUILD-003), so the label must
+            say a change only applies on the next launch. Saved through the
+            desktop settings IPC; the remote settings.update RPC rejects it. */}
+        <SettingsSwitchRow
+          label={getMobileListenerSearchEntry().title}
+          description={getMobileListenerSearchEntry().description}
+          checked={mobileListenerEnabled}
+          onChange={() => void updateSettings({ mobileListenerEnabled: !mobileListenerEnabled })}
+        />
+      </SearchableSetting>
+
       {/* Why: the bridge reads chat.db and drives Messages.app, so it only
           exists on macOS; hide the section entirely elsewhere. */}
       {isMacUserAgent() ? <ImessageBridgeSetting /> : null}
+      {isMacUserAgent() ? <MobileScreenSharingSection /> : null}
 
       <div className="rounded-xl border border-border/60 bg-card/50 p-4">
         <MobilePane />

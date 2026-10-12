@@ -76,7 +76,9 @@ function PairingStatusDialog({
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) onClose();
+        if (!nextOpen) {
+          onClose();
+        }
       }}
       open={open}
     >
@@ -229,8 +231,11 @@ export function MobilePairingCard({
         setStep("sas");
       }
     }).then((fn) => {
-      if (cancelled) fn();
-      else unlisteners.push(fn);
+      if (cancelled) {
+        fn();
+      } else {
+        unlisteners.push(fn);
+      }
     });
 
     listen("pairing-complete", () => {
@@ -239,8 +244,11 @@ export function MobilePairingCard({
         setStep("done");
       }
     }).then((fn) => {
-      if (cancelled) fn();
-      else unlisteners.push(fn);
+      if (cancelled) {
+        fn();
+      } else {
+        unlisteners.push(fn);
+      }
     });
 
     listen<{ reason: string }>("pairing-aborted", (event) => {
@@ -250,8 +258,11 @@ export function MobilePairingCard({
         setStep("error");
       }
     }).then((fn) => {
-      if (cancelled) fn();
-      else unlisteners.push(fn);
+      if (cancelled) {
+        fn();
+      } else {
+        unlisteners.push(fn);
+      }
     });
 
     listen<{ message: string }>("pairing-error", (event) => {
@@ -269,15 +280,20 @@ export function MobilePairingCard({
         setStep("error");
       }
     }).then((fn) => {
-      if (cancelled) fn();
-      else unlisteners.push(fn);
+      if (cancelled) {
+        fn();
+      } else {
+        unlisteners.push(fn);
+      }
     });
 
     return () => {
       cancelled = true;
       ++requestIdRef.current;
       pairingActiveRef.current = false;
-      for (const fn of unlisteners) fn();
+      for (const fn of unlisteners) {
+        fn();
+      }
       if (stepRef.current !== "idle" && stepRef.current !== "done") {
         cancelPairing().catch(() => {});
       }
@@ -285,7 +301,9 @@ export function MobilePairingCard({
   }, [currentPubkey]);
 
   async function handleCopy() {
-    if (!qrUri) return;
+    if (!qrUri) {
+      return;
+    }
     await writeTextToClipboard(qrUri);
     toast.success("Copied to clipboard");
   }

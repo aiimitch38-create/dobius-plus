@@ -230,7 +230,7 @@ export function NostrBindConsentDialog() {
   const [copyFailed, setCopyFailed] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [isManualFallbackOpen, setIsManualFallbackOpen] = React.useState(false);
-  const codeInputRefs = React.useRef<Array<HTMLInputElement | null>>([]);
+  const codeInputRefs = React.useRef<(HTMLInputElement | null)[]>([]);
   const codeShakeRef = React.useRef<HTMLDivElement | null>(null);
   const codeShakeAnimationRef = React.useRef<Animation | null>(null);
   const copiedTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(

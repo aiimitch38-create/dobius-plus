@@ -42,18 +42,26 @@ export function scoreUserCandidate({
 
   for (const candidateLabel of labels) {
     const lower = candidateLabel.toLowerCase();
-    if (lower.startsWith(normalizedQuery)) return 0;
+    if (lower.startsWith(normalizedQuery)) {
+      return 0;
+    }
     if (
       lower.split(/[\s\-_]+/).some((word) => word.startsWith(normalizedQuery))
     ) {
       return 1;
     }
-    if (lower.includes(normalizedQuery)) return 2;
+    if (lower.includes(normalizedQuery)) {
+      return 2;
+    }
   }
 
   const pubkey = normalizePubkey(user.pubkey);
-  if (pubkey.startsWith(normalizedQuery)) return 3;
-  if (pubkey.includes(normalizedQuery)) return 4;
+  if (pubkey.startsWith(normalizedQuery)) {
+    return 3;
+  }
+  if (pubkey.includes(normalizedQuery)) {
+    return 4;
+  }
 
   return null;
 }

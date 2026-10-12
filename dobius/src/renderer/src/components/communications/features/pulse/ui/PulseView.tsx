@@ -266,7 +266,9 @@ export function PulseView({ currentPubkey }: PulseViewProps) {
   };
 
   function renderTimeline() {
-    if (isLoading) return <TimelineSkeleton />;
+    if (isLoading) {
+      return <TimelineSkeleton />;
+    }
 
     if (activeTab === "agents") {
       return agentNoteGroups.length === 0 ? (

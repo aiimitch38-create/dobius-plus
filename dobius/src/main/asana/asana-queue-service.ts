@@ -1,11 +1,12 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import type { AsanaTask, AsanaTasksSnapshot } from '../../shared/asana'
 import { ASANA_GID_RE, EMPTY_ASANA_SNAPSHOT } from '../../shared/asana'
+import { SafeJsonFile } from '../storage/safe-json-file'
 import { getAsanaConfig } from './asana-config'
 import { hasAsanaToken } from './asana-token-store'
 import { fetchLane, markTaskComplete } from './asana-client'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Locally-ticked task gids live in their own JSON so ticking a task "done" in
 // the panel never touches Asana (house rule: never auto-close Asana tasks).
@@ -15,39 +16,29 @@ let buildTasks: AsanaTask[] = []
 let reviewTasks: AsanaTask[] = []
 let lastSync: number | null = null
 let lastError: string | null = null
-let localDone: Set<string> | null = null
 let refreshing = false
 
 function localDonePath(): string {
-  return path.join(app.getPath('userData'), LOCAL_DONE_FILE)
+  return path.join(getUserDataRoot(), LOCAL_DONE_FILE)
 }
+
+// Why: a non-string entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+const localDoneFile = new SafeJsonFile<string[]>({
+  filePath: localDonePath,
+  parse: (raw) =>
+    Array.isArray(raw) && raw.every((gid) => typeof gid === 'string') ? raw : undefined,
+  fallback: () => [],
+  label: `[asana] ${LOCAL_DONE_FILE}`
+})
 
 function loadLocalDone(): Set<string> {
-  if (localDone) {
-    return localDone
-  }
-  try {
-    const raw = JSON.parse(readFileSync(localDonePath(), 'utf-8'))
-    localDone = new Set(Array.isArray(raw) ? raw.filter((g) => typeof g === 'string') : [])
-  } catch {
-    localDone = new Set()
-  }
-  return localDone
+  return new Set(localDoneFile.get())
 }
 
-function persistLocalDone(): void {
-  const target = localDonePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify([...loadLocalDone()], null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[asana] failed to persist local-done:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+// Warn-and-continue like before; SafeJsonFile logs a refused or failed save.
+function persistLocalDone(done: Set<string>): void {
+  localDoneFile.set([...done])
 }
 
 export function getAsanaSnapshot(): AsanaTasksSnapshot {
@@ -105,16 +96,18 @@ export async function refreshAsanaTasks(): Promise<AsanaTasksSnapshot> {
 /** Tick a task done in the panel only — does NOT call Asana. */
 export function markLocalDone(gid: string): AsanaTasksSnapshot {
   if (ASANA_GID_RE.test(gid)) {
-    loadLocalDone().add(gid)
-    persistLocalDone()
+    const done = loadLocalDone()
+    done.add(gid)
+    persistLocalDone(done)
     broadcast()
   }
   return getAsanaSnapshot()
 }
 
 export function clearLocalDone(gid: string): AsanaTasksSnapshot {
-  if (loadLocalDone().delete(gid)) {
-    persistLocalDone()
+  const done = loadLocalDone()
+  if (done.delete(gid)) {
+    persistLocalDone(done)
     broadcast()
   }
   return getAsanaSnapshot()

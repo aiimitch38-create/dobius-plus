@@ -217,11 +217,11 @@ export function ProfileTabBar({
 }: {
   activeTab: ProfilePanelTab;
   onTabChange: (tab: ProfilePanelTab) => void;
-  tabs: Array<{
+  tabs: {
     id: ProfilePanelTab;
     label: string;
     trailing?: React.ReactNode;
-  }>;
+  }[];
 }) {
   const { didDragRef, onPointerDown, scrollRef } = useHorizontalDragScroll();
 

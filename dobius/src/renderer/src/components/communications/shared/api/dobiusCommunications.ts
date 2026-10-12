@@ -207,9 +207,13 @@ async function discoverDobiusAgentRuntimes(): Promise<unknown[]> {
       continue;
     }
     for (const candidate of accounts) {
-      if (!candidate || typeof candidate !== "object") continue;
+      if (!candidate || typeof candidate !== "object") {
+        continue;
+      }
       const account = candidate as Record<string, unknown>;
-      if (typeof account.id !== "string") continue;
+      if (typeof account.id !== "string") {
+        continue;
+      }
       entries.push(runtimeCatalogEntry({
         engine,
         accountId: account.id,
@@ -263,10 +267,14 @@ function localIdentity(): DobiusLocalIdentity {
  * where the old private-key version was not.
  */
 async function signedEvent(args: unknown, kindOverride?: number): Promise<string> {
-  if (!args || typeof args !== "object") throw new Error("Missing event payload");
+  if (!args || typeof args !== "object") {
+    throw new Error("Missing event payload");
+  }
   const input = args as Record<string, unknown>;
   const kind = kindOverride ?? input.kind;
-  if (typeof kind !== "number") throw new Error("Missing event kind");
+  if (typeof kind !== "number") {
+    throw new Error("Missing event kind");
+  }
   const signed = await window.api.communications.signEvent({
     kind,
     content: typeof input.content === "string" ? input.content : "",
@@ -287,10 +295,14 @@ async function signEventAsAgent(
   args: unknown,
   kindOverride?: number,
 ): Promise<string> {
-  if (!args || typeof args !== "object") throw new Error("Missing event payload");
+  if (!args || typeof args !== "object") {
+    throw new Error("Missing event payload");
+  }
   const input = args as Record<string, unknown>;
   const kind = kindOverride ?? input.kind;
-  if (typeof kind !== "number") throw new Error("Missing event kind");
+  if (typeof kind !== "number") {
+    throw new Error("Missing event kind");
+  }
   const signed = await window.api.communications.signEventAsAgent(agentId, {
     kind,
     content: typeof input.content === "string" ? input.content : "",
@@ -309,7 +321,7 @@ type RelayEventRecord = {
   content: string;
 };
 
-async function queryRelay(filters: Array<Record<string, unknown>>): Promise<RelayEventRecord[]> {
+async function queryRelay(filters: Record<string, unknown>[]): Promise<RelayEventRecord[]> {
   const response = await fetch(`${DOBIUS_RELAY_HTTP_URL}/query`, {
     method: "POST",
     headers: {
@@ -318,7 +330,9 @@ async function queryRelay(filters: Array<Record<string, unknown>>): Promise<Rela
     },
     body: JSON.stringify(filters),
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
   return response.json() as Promise<RelayEventRecord[]>;
 }
 
@@ -341,8 +355,12 @@ async function submitRelayEvent(
     body: serializedEvent,
   });
   const responseText = await response.text();
-  if (!response.ok) throw new Error(responseText);
-  if (!responseText) return {};
+  if (!response.ok) {
+    throw new Error(responseText);
+  }
+  if (!responseText) {
+    return {};
+  }
   return JSON.parse(responseText) as RelaySubmissionResponse;
 }
 
@@ -426,7 +444,9 @@ async function loadDobiusUsersBatch(args: unknown): Promise<unknown> {
     : [];
   const latestByAuthor = new Map<string, RelayEventRecord>();
   for (const event of events.sort((a, b) => b.created_at - a.created_at)) {
-    if (!latestByAuthor.has(event.pubkey)) latestByAuthor.set(event.pubkey, event);
+    if (!latestByAuthor.has(event.pubkey)) {
+      latestByAuthor.set(event.pubkey, event);
+    }
   }
   const profiles: Record<string, unknown> = {};
   const missing: string[] = [];
@@ -472,7 +492,9 @@ async function searchDobiusUsers(args: unknown): Promise<unknown> {
 }
 
 function normalizedParticipantPubkeys(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
   return [...new Set(value
     .filter((pubkey): pubkey is string => typeof pubkey === "string")
     .map((pubkey) => pubkey.trim().toLowerCase())
@@ -484,8 +506,12 @@ async function openDobiusDm(args: unknown): Promise<unknown> {
   const pubkeys = normalizedParticipantPubkeys(input.pubkeys).filter(
     (pubkey) => pubkey !== localIdentity().pubkey.toLowerCase(),
   );
-  if (pubkeys.length === 0) throw new Error("Select at least one person to start a DM.");
-  if (pubkeys.length > 8) throw new Error("A DM can include at most eight other participants.");
+  if (pubkeys.length === 0) {
+    throw new Error("Select at least one person to start a DM.");
+  }
+  if (pubkeys.length > 8) {
+    throw new Error("A DM can include at most eight other participants.");
+  }
 
   const submission = await submitRelayEvent(await signedEvent({
     kind: 41010,
@@ -530,7 +556,9 @@ async function openDobiusDm(args: unknown): Promise<unknown> {
 }
 
 function normalizedStringTags(value: unknown): string[][] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
   return value
     .filter((tag): tag is unknown[] => Array.isArray(tag))
     .map((tag) => tag.filter((part): part is string => typeof part === "string"))
@@ -553,7 +581,9 @@ function resolveRelayThreadRoot(
   parent: RelayEventRecord | null | undefined,
   parentEventId: string,
 ): string {
-  if (!parent) return parentEventId;
+  if (!parent) {
+    return parentEventId;
+  }
   const rootTag = parent.tags.find((tag) => tag[0] === "e" && tag[3] === "root")?.[1];
   const replyTag = parent.tags.find((tag) => tag[0] === "e" && tag[3] === "reply")?.[1];
   return rootTag ?? replyTag ?? parentEventId;
@@ -567,7 +597,9 @@ const publishedAgentProfiles = new Set<string>();
 
 async function ensureDobiusAgentProfile(agent: DobiusAgentRecord): Promise<void> {
   const pubkey = await projectionPubkey(agent.id);
-  if (publishedAgentProfiles.has(pubkey)) return;
+  if (publishedAgentProfiles.has(pubkey)) {
+    return;
+  }
   try {
     await submitRelayEvent(
       await signEventAsAgent(agent.id, {
@@ -603,14 +635,18 @@ async function publishDobiusAgentReply(args: {
       () => [undefined],
     );
     const rootEventId = resolveRelayThreadRoot(parent, args.parentEventId);
-    if (rootEventId !== args.parentEventId) tags.push(["e", rootEventId, "", "root"]);
+    if (rootEventId !== args.parentEventId) {
+      tags.push(["e", rootEventId, "", "root"]);
+    }
     tags.push(["e", args.parentEventId, "", "reply"]);
     // A bare reply e-tag hides the message in a thread (threadPanel's main-timeline
     // filter). ["broadcast","1"] is the reader's existing "reply that renders on the
     // channel timeline" marker — agents answer in the channel, still linked to the
     // message they answered. Thread-triggered replies stay un-broadcast on purpose:
     // threads are the direct line to one agent.
-    if (args.broadcast) tags.push(["broadcast", "1"]);
+    if (args.broadcast) {
+      tags.push(["broadcast", "1"]);
+    }
   }
   const submission = await submitRelayEvent(
     await signEventAsAgent(args.agent.id, { kind: 9, content: args.content, tags }),
@@ -672,8 +708,16 @@ const REVIVAL_WINDOW_MS = 2 * 60 * 60 * 1000;
 const MAX_REVIVALS_PER_BOOT = 4;
 let revivalStarted = false;
 
+// First words of every Kanban board-task prompt (board-dispatch.ts builds it).
+// Why revival skips them: the Kanban store marks the interrupted card failed
+// for the operator to retry, and a revived run is an unrequested, uncapped
+// paid run the card never hears about.
+export const BOARD_TASK_PROMPT_LEAD = "You have been assigned a Dobius board task";
+
 export async function reviveInterruptedChannelRuns(): Promise<void> {
-  if (revivalStarted) return;
+  if (revivalStarted) {
+    return;
+  }
   revivalStarted = true;
   let handled: string[] = [];
   try {
@@ -689,12 +733,17 @@ export async function reviveInterruptedChannelRuns(): Promise<void> {
   const agents = recordsAt(agentsResponse, "agents").filter(isDobiusAgentRecord);
   const interrupted = recordsAt(runsResponse, "runs")
     .filter((candidate): candidate is Record<string, unknown> => {
-      if (!candidate || typeof candidate !== "object") return false;
+      if (!candidate || typeof candidate !== "object") {
+        return false;
+      }
       const run = candidate as Record<string, unknown>;
       return (
         run.source === "channel" &&
         typeof run.sessionKey === "string" &&
         run.sessionKey !== "default" &&
+        // Not a channel id: iMessage runs (IMESSAGE_SESSION_KEY in shared/agents.ts).
+        run.sessionKey !== "imessage" &&
+        !String(run.prompt ?? "").startsWith(BOARD_TASK_PROMPT_LEAD) &&
         run.status === "error" &&
         run.summary === "app restarted during run" &&
         typeof run.startedAt === "number" &&
@@ -704,8 +753,12 @@ export async function reviveInterruptedChannelRuns(): Promise<void> {
       );
     })
     .slice(-MAX_REVIVALS_PER_BOOT);
-  if (!interrupted.length) return;
-  for (const run of interrupted) handledSet.add(run.id as string);
+  if (!interrupted.length) {
+    return;
+  }
+  for (const run of interrupted) {
+    handledSet.add(run.id as string);
+  }
   window.localStorage.setItem(
     REVIVED_RUNS_STORAGE_KEY,
     JSON.stringify([...handledSet].slice(-200)),
@@ -713,7 +766,9 @@ export async function reviveInterruptedChannelRuns(): Promise<void> {
   for (const run of interrupted) {
     const agent = agents.find((candidate) => candidate.id === run.agentId);
     const channelId = run.sessionKey as string;
-    if (!agent) continue;
+    if (!agent) {
+      continue;
+    }
     void (async () => {
       const prompt = `The app restarted and interrupted your previous turn in this channel. Your per-channel session memory is intact — continue (or redo) the task below and post your result to the channel as usual.\n\n<interrupted-task>\n${String(run.prompt ?? "")}\n</interrupted-task>`;
       try {
@@ -757,13 +812,19 @@ async function publishDobiusAgentRunOutbox(
     response && typeof response === "object"
       ? (response as Record<string, unknown>).items
       : null;
-  if (!Array.isArray(items)) return afterId;
+  if (!Array.isArray(items)) {
+    return afterId;
+  }
   let lastId = afterId;
   for (const raw of items) {
-    if (!raw || typeof raw !== "object") continue;
+    if (!raw || typeof raw !== "object") {
+      continue;
+    }
     const item = raw as Record<string, unknown>;
     const id = typeof item.id === "string" ? item.id : null;
-    if (!id) continue;
+    if (!id) {
+      continue;
+    }
     lastId = id;
     const caption = typeof item.content === "string" ? item.content.trim() : "";
     const image =
@@ -771,7 +832,9 @@ async function publishDobiusAgentRunOutbox(
         ? `\n\n![screenshot](${item.imageDataUrl})`
         : "";
     const body = `${caption}${image}`.trim();
-    if (!body) continue;
+    if (!body) {
+      continue;
+    }
     await publishDobiusAgentReply({
       agent,
       channelId: live.channelId,
@@ -803,7 +866,9 @@ async function awaitDobiusAgentRun(
     }
     if (run && run.status !== "running") {
       const summary = typeof run.summary === "string" ? run.summary.trim() : "";
-      if (run.status === "success") return summary || `${agent.name} completed the task.`;
+      if (run.status === "success") {
+        return summary || `${agent.name} completed the task.`;
+      }
       return `${agent.name} could not complete the task${summary ? `: ${summary}` : "."}`;
     }
     await delay(750);
@@ -838,13 +903,19 @@ function clampText(value: string, max: number): string {
 export function contentMentionsAgent(content: string, agent: DobiusAgentRecord): boolean {
   const haystack = content.toLowerCase();
   const name = agent.name.trim().toLowerCase();
-  if (!name) return false;
+  if (!name) {
+    return false;
+  }
   const compact = name.replace(/\s+/g, "");
-  if (haystack.includes(`@${name}`) || haystack.includes(`@${compact}`)) return true;
+  if (haystack.includes(`@${name}`) || haystack.includes(`@${compact}`)) {
+    return true;
+  }
   // Why: Carson types "adam", not "@Adam". A human naming an agent should route
   // to that agent alone. Word-boundary + length>=4 so "adam" matches but
   // "adamant" does not, and short names cannot collide with ordinary words.
-  if (compact.length < 4) return false;
+  if (compact.length < 4) {
+    return false;
+  }
   const escaped = compact.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`\\b${escaped}\\b`, "i").test(haystack);
 }
@@ -861,7 +932,9 @@ async function dispatchMessageToDobiusAgents(args: {
   depth?: number;
 }): Promise<void> {
   const depth = args.depth ?? 0;
-  if (depth >= MAX_AGENT_CHAIN_DEPTH) return;
+  if (depth >= MAX_AGENT_CHAIN_DEPTH) {
+    return;
+  }
   const response = await invokeDobiusRuntime("agent.list");
   const agents = recordsAt(response, "agents").filter(isDobiusAgentRecord);
   // Why: ordinary DM messages do not repeat the recipient as an @mention. Resolve
@@ -879,11 +952,17 @@ async function dispatchMessageToDobiusAgents(args: {
   const members: DobiusAgentRecord[] = [];
   for (const agent of agents) {
     // An agent never answers itself.
-    if (args.author && agent.id === args.author.agentId) continue;
-    if (!targetPubkeys.has(dispatchAgentPubkeyById.get(agent.id) ?? "")) continue;
+    if (args.author && agent.id === args.author.agentId) {
+      continue;
+    }
+    if (!targetPubkeys.has(dispatchAgentPubkeyById.get(agent.id) ?? "")) {
+      continue;
+    }
     // For an agent-authored message the target must be mentioned in it —
     // otherwise every member agent would answer every other agent forever.
-    if (args.author && !contentMentionsAgent(args.content, agent)) continue;
+    if (args.author && !contentMentionsAgent(args.content, agent)) {
+      continue;
+    }
     members.push(agent);
   }
   // Why: a HUMAN message that names agents wakes only those. Naming nobody
@@ -905,7 +984,9 @@ async function dispatchMessageToDobiusAgents(args: {
   ]);
   for (const candidate of agents) {
     const candidatePubkey = dispatchAgentPubkeyById.get(candidate.id);
-    if (candidatePubkey) nameByPubkey.set(candidatePubkey.toLowerCase(), candidate.name);
+    if (candidatePubkey) {
+      nameByPubkey.set(candidatePubkey.toLowerCase(), candidate.name);
+    }
   }
   const channelAgentNames = agents
     .filter((candidate) => targetPubkeys.has(dispatchAgentPubkeyById.get(candidate.id) ?? ""))
@@ -934,7 +1015,9 @@ async function dispatchMessageToDobiusAgents(args: {
       try {
         const parsed = JSON.parse(profile.content) as { name?: string; display_name?: string };
         const label = parsed.name || parsed.display_name;
-        if (label) nameByPubkey.set(profile.pubkey.toLowerCase(), label);
+        if (label) {
+          nameByPubkey.set(profile.pubkey.toLowerCase(), label);
+        }
       } catch {
         // A malformed profile just leaves that key unresolved.
       }
@@ -957,7 +1040,9 @@ async function dispatchMessageToDobiusAgents(args: {
   let budget = HISTORY_TOTAL_CHARS;
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index];
-    if (line.length > budget) break;
+    if (line.length > budget) {
+      break;
+    }
     budget -= line.length + 1;
     kept.unshift(line);
   }
@@ -1051,7 +1136,9 @@ async function sendDobiusChannelMessage(args: unknown): Promise<unknown> {
   );
   const tags: string[][] = [["h", channelId]];
 
-  for (const pubkey of mentionPubkeys) tags.push(["p", pubkey]);
+  for (const pubkey of mentionPubkeys) {
+    tags.push(["p", pubkey]);
+  }
   if (parentEventId) {
     const [parent] = await queryRelay([{ ids: [parentEventId], limit: 1 }]);
     // Root = the parent's root tag, else the parent's OWN reply target (a
@@ -1063,7 +1150,9 @@ async function sendDobiusChannelMessage(args: unknown): Promise<unknown> {
     if (parent?.pubkey && parent.pubkey.toLowerCase() !== selfPubkey) {
       tags.push(["p", parent.pubkey]);
     }
-    if (rootEventId !== parentEventId) tags.push(["e", rootEventId, "", "root"]);
+    if (rootEventId !== parentEventId) {
+      tags.push(["e", rootEventId, "", "root"]);
+    }
     tags.push(["e", parentEventId, "", "reply"]);
   }
 
@@ -1162,7 +1251,9 @@ async function loadRelayChannels(): Promise<unknown[]> {
   for (const event of metadata) {
     const id = eventTag(event, "d") ?? "";
     const held = newestByChannel.get(id);
-    if (!held || event.created_at > held.created_at) newestByChannel.set(id, event);
+    if (!held || event.created_at > held.created_at) {
+      newestByChannel.set(id, event);
+    }
   }
   return [...newestByChannel.values()]
     // Drop nameless metadata rows — EXCEPT DMs. relay-dm.ts provisions DM
@@ -1276,11 +1367,21 @@ function channelMetadataTags(args: {
     ["name", args.name],
     ["t", args.channelType ?? "stream"],
   ];
-  if (args.description) tags.push(["about", args.description]);
-  if (args.topic) tags.push(["topic", args.topic]);
-  if (args.purpose) tags.push(["purpose", args.purpose]);
-  if (args.visibility === "private") tags.push(["private", "true"]);
-  if (args.archived) tags.push(["archived", "true"]);
+  if (args.description) {
+    tags.push(["about", args.description]);
+  }
+  if (args.topic) {
+    tags.push(["topic", args.topic]);
+  }
+  if (args.purpose) {
+    tags.push(["purpose", args.purpose]);
+  }
+  if (args.visibility === "private") {
+    tags.push(["private", "true"]);
+  }
+  if (args.archived) {
+    tags.push(["archived", "true"]);
+  }
   if (typeof args.ttlSeconds === "number" && args.ttlSeconds > 0) {
     tags.push(["ttl", String(args.ttlSeconds)]);
     tags.push(["ttl_deadline", String(Math.floor(Date.now() / 1000) + args.ttlSeconds)]);
@@ -1312,7 +1413,9 @@ async function channelMembership(
 
 async function publishChannelMembership(channelId: string, members: Map<string, string>): Promise<void> {
   const tags: string[][] = [["d", channelId]];
-  for (const [pubkey, role] of members) tags.push(["p", pubkey, role]);
+  for (const [pubkey, role] of members) {
+    tags.push(["p", pubkey, role]);
+  }
   const submission = await submitRelayEvent(
     await signedEvent({ kind: DOBIUS_CHANNEL_MEMBERSHIP_KIND, content: "", tags }),
   );
@@ -1369,7 +1472,9 @@ async function getDobiusChannelDetails(args: unknown): Promise<unknown> {
     latestChannelEvent(DOBIUS_CHANNEL_METADATA_KIND, channelId),
     channelMembership(channelId),
   ]);
-  if (!metadata) throw new Error(`Channel not found: ${channelId}`);
+  if (!metadata) {
+    throw new Error(`Channel not found: ${channelId}`);
+  }
   return channelDetailFromEvent(metadata, [...members.keys()]);
 }
 
@@ -1392,7 +1497,9 @@ async function createDobiusChannel(args: unknown): Promise<unknown> {
   const selfPubkey = localIdentity().pubkey.toLowerCase();
   const members = new Map<string, string>([[selfPubkey, "owner"]]);
   for (const pubkey of normalizedParticipantPubkeys(input.memberPubkeys)) {
-    if (pubkey !== selfPubkey) members.set(pubkey, "member");
+    if (pubkey !== selfPubkey) {
+      members.set(pubkey, "member");
+    }
   }
   await publishChannelMembership(channelId, members);
 
@@ -1410,7 +1517,9 @@ async function updateDobiusChannel(args: unknown): Promise<unknown> {
   const input = unwrapChannelUpdateInput(args);
   const channelId = requiredText(input.channelId, "channel id");
   const existing = await latestChannelEvent(DOBIUS_CHANNEL_METADATA_KIND, channelId);
-  if (!existing) throw new Error(`Channel not found: ${channelId}`);
+  if (!existing) {
+    throw new Error(`Channel not found: ${channelId}`);
+  }
 
   const name = typeof input.name === "string" ? input.name : eventTag(existing, "name") ?? channelId;
   const description =
@@ -1457,7 +1566,9 @@ async function deleteDobiusChannel(args: unknown): Promise<void> {
   const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
   const channelId = requiredText(input.channelId, "channel id");
   const metadata = await latestChannelEvent(DOBIUS_CHANNEL_METADATA_KIND, channelId);
-  if (!metadata) throw new Error(`Channel not found: ${channelId}`);
+  if (!metadata) {
+    throw new Error(`Channel not found: ${channelId}`);
+  }
 
   // Nostr has no hard delete for addressable events; archive so the channel
   // stops surfacing as active, and publish a NIP-09 delete request against
@@ -1470,7 +1581,9 @@ async function setDobiusChannelArchived(args: unknown, archived: boolean): Promi
   const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
   const channelId = requiredText(input.channelId, "channel id");
   const existing = await latestChannelEvent(DOBIUS_CHANNEL_METADATA_KIND, channelId);
-  if (!existing) throw new Error(`Channel not found: ${channelId}`);
+  if (!existing) {
+    throw new Error(`Channel not found: ${channelId}`);
+  }
 
   await publishChannelMetadata(
     channelMetadataTags({
@@ -1511,7 +1624,9 @@ async function addDobiusChannelMembers(args: unknown): Promise<unknown> {
   const requested = normalizedParticipantPubkeys(input.pubkeys);
 
   const { members } = await channelMembership(channelId);
-  for (const pubkey of requested) members.set(pubkey, role);
+  for (const pubkey of requested) {
+    members.set(pubkey, role);
+  }
   await publishChannelMembership(channelId, members);
 
   return { added: requested, errors: [] };
@@ -1540,7 +1655,7 @@ async function changeDobiusChannelMemberRole(args: unknown): Promise<void> {
 }
 
 async function ensureDobiusStarterChannels(): Promise<unknown[]> {
-  const existing = (await loadRelayChannels()) as Array<Record<string, unknown>>;
+  const existing = (await loadRelayChannels()) as Record<string, unknown>[];
   const existingIds = new Set(existing.map((channel) => channel.id));
   // Both are required. Onboarding's findStarterChannels() looks for "general"
   // AND "welcome-everyone" and fails the whole setup step if either is
@@ -1559,7 +1674,9 @@ async function ensureDobiusStarterChannels(): Promise<unknown[]> {
     },
   ];
   for (const starter of starters) {
-    if (existingIds.has(starter.id)) continue;
+    if (existingIds.has(starter.id)) {
+      continue;
+    }
     await createDobiusChannel({
       channelId: starter.id,
       name: starter.name,
@@ -1605,7 +1722,7 @@ async function getDobiusChannelWindow(args: unknown): Promise<unknown> {
         );
   const page = filtered.slice(0, limitRows);
   const hasMore = filtered.length > limitRows;
-  const oldest = page[page.length - 1] ?? null;
+  const oldest = page.at(-1) ?? null;
   const nextCursor = hasMore && oldest ? { created_at: oldest.created_at, id: oldest.id } : null;
   // parseChannelWindowResponse THROWS unless exactly one kind-39006 bounds event
   // is present, keyed to the request cursor — without it every cold load of the
@@ -1666,7 +1783,9 @@ async function getDobiusEvent(args: unknown): Promise<string> {
   const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
   const eventId = requiredText(input.eventId, "event id");
   const [event] = await queryRelay([{ ids: [eventId], limit: 1 }]);
-  if (!event) throw new Error(`Message not found: ${eventId}`);
+  if (!event) {
+    throw new Error(`Message not found: ${eventId}`);
+  }
   return JSON.stringify(event);
 }
 
@@ -1679,9 +1798,15 @@ async function searchDobiusMessages(args: unknown): Promise<unknown> {
   // Fetch the newest 1000 candidates and match client-side; full-history
   // search needs relay-side FTS.
   const filter: Record<string, unknown> = { kinds: [1, 9, 40002, 45001, 45003], limit: 1000 };
-  if (typeof input.channelId === "string" && input.channelId) filter["#h"] = [input.channelId];
-  if (Array.isArray(input.authors) && input.authors.length) filter.authors = input.authors;
-  if (typeof input.since === "number") filter.since = input.since;
+  if (typeof input.channelId === "string" && input.channelId) {
+    filter["#h"] = [input.channelId];
+  }
+  if (Array.isArray(input.authors) && input.authors.length) {
+    filter.authors = input.authors;
+  }
+  if (typeof input.since === "number") {
+    filter.since = input.since;
+  }
   const needle = query.toLowerCase();
   const untilAt = typeof input.until === "number" ? input.until : null;
   const events = (await queryRelay([filter]))
@@ -1719,7 +1844,9 @@ async function getDobiusThreadReplies(args: unknown): Promise<unknown> {
     "#e": [rootEventId],
     limit: 1000,
   };
-  if (typeof input.channelId === "string" && input.channelId) filter["#h"] = [input.channelId];
+  if (typeof input.channelId === "string" && input.channelId) {
+    filter["#h"] = [input.channelId];
+  }
   const sorted = (await queryRelay([filter])).sort(
     (left, right) => left.created_at - right.created_at || left.id.localeCompare(right.id),
   );
@@ -1741,7 +1868,7 @@ async function getDobiusThreadReplies(args: unknown): Promise<unknown> {
             (event.created_at === cursorAt && event.id.localeCompare(cursorId) > 0),
         );
   const events = after.slice(0, limit);
-  const last = events[events.length - 1];
+  const last = events.at(-1);
   const next_cursor =
     events.length === limit && last ? { created_at: last.created_at, event_id: last.id } : null;
   return { events, next_cursor };
@@ -1749,7 +1876,9 @@ async function getDobiusThreadReplies(args: unknown): Promise<unknown> {
 
 async function publishDobiusMutation(kind: number, content: string, tags: string[][]): Promise<void> {
   const submission = await submitRelayEvent(await signedEvent({ kind, content, tags }));
-  if (submission.accepted === false) throw new Error(submission.message || "The relay rejected the action.");
+  if (submission.accepted === false) {
+    throw new Error(submission.message || "The relay rejected the action.");
+  }
 }
 
 async function editDobiusMessage(args: unknown): Promise<void> {
@@ -1787,7 +1916,9 @@ async function removeDobiusReaction(args: unknown): Promise<void> {
     authors: [localIdentity().pubkey],
     limit: 100,
   }]).then((events) => events.filter((event) => event.content === emoji));
-  if (!reaction) return;
+  if (!reaction) {
+    return;
+  }
   await publishDobiusMutation(5, "", [["e", reaction.id]]);
 }
 
@@ -1812,6 +1943,8 @@ export async function runDobiusBoardTaskInChannel(args: {
   prompt: string;
   maxBudgetUsd: number;
   maxTurns: number;
+  /** Awaited before waiting on the run, so the board can record the run id. */
+  onRunStarted?: (runId: string) => Promise<void>;
 }): Promise<{ reply: string; costUsd: number | null }> {
   const agentsResponse = await invokeDobiusRuntime("agent.list");
   const agent = recordsAt(agentsResponse, "agents")
@@ -1842,6 +1975,7 @@ export async function runDobiusBoardTaskInChannel(args: {
       : undefined,
     "agent run id",
   );
+  await args.onRunStarted?.(runId);
   // parentEventId null = post at channel top level. The board task has no
   // originating message to thread under.
   const live: DobiusAgentRunLiveTarget = {
@@ -1921,7 +2055,9 @@ export async function loadDobiusWorkstationSnapshot(
         errors[key] = reason instanceof Error ? reason.message : String(reason);
         return [key, null] as const;
       } finally {
-        if (timeout) clearTimeout(timeout);
+        if (timeout) {
+          clearTimeout(timeout);
+        }
       }
     }),
   );
@@ -1933,30 +2069,42 @@ export async function loadDobiusWorkstationSnapshot(
 }
 
 export function collectionSize(value: unknown, keys: readonly string[]): number {
-  if (Array.isArray(value)) return value.length;
-  if (!value || typeof value !== "object") return 0;
+  if (Array.isArray(value)) {
+    return value.length;
+  }
+  if (!value || typeof value !== "object") {
+    return 0;
+  }
   const record = value as Record<string, unknown>;
   for (const key of keys) {
     const candidate = record[key];
-    if (Array.isArray(candidate)) return candidate.length;
+    if (Array.isArray(candidate)) {
+      return candidate.length;
+    }
   }
   return 0;
 }
 
 function recordsAt(value: unknown, key: string): unknown[] {
-  if (!value || typeof value !== "object") return [];
+  if (!value || typeof value !== "object") {
+    return [];
+  }
   const candidate = (value as Record<string, unknown>)[key];
   return Array.isArray(candidate) ? candidate : [];
 }
 
 function isDobiusAgentRecord(value: unknown): value is DobiusAgentRecord {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object") {
+    return false;
+  }
   const candidate = value as Partial<DobiusAgentRecord>;
   return typeof candidate.id === "string" && typeof candidate.name === "string";
 }
 
 function isDobiusAgentRunRecord(value: unknown): value is DobiusAgentRunRecord {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object") {
+    return false;
+  }
   const candidate = value as Partial<DobiusAgentRunRecord>;
   return (
     typeof candidate.agentId === "string" && typeof candidate.status === "string"
@@ -1978,7 +2126,9 @@ type DobiusTeamRecord = {
 };
 
 function isDobiusTeamRecord(value: unknown): value is DobiusTeamRecord {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object") {
+    return false;
+  }
   const candidate = value as Partial<DobiusTeamRecord>;
   return typeof candidate.id === "string" && typeof candidate.name === "string";
 }
@@ -1993,7 +2143,9 @@ async function projectionPubkey(agentId: string): Promise<string> {
   // Why: room participants need a real signing identity, not a display-only
   // hash, so native Dobius runs can answer as themselves in Communications.
   const cached = agentPubkeyCache.get(agentId);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
   const { pubkey } = await window.api.communications.getAgentIdentity(agentId);
   agentPubkeyCache.set(agentId, pubkey);
   return pubkey;
@@ -2012,9 +2164,11 @@ async function agentPubkeysById(
   const settled = await Promise.allSettled(
     agents.map(async (agent): Promise<[string, string]> => [agent.id, await projectionPubkey(agent.id)]),
   );
-  const entries: Array<[string, string]> = [];
+  const entries: [string, string][] = [];
   for (const result of settled) {
-    if (result.status === "fulfilled") entries.push(result.value);
+    if (result.status === "fulfilled") {
+      entries.push(result.value);
+    }
   }
   return new Map(entries);
 }
@@ -2177,16 +2331,22 @@ function workflowRunWireShape(run: DobiusWorkflowRunRecord): unknown {
 // still recognizes the structured recovery payload instead of falling back
 // to a generic error banner.
 function projectMergeError(error: unknown): Error {
-  if (!(error instanceof Error)) return new Error(String(error));
+  if (!(error instanceof Error)) {
+    return new Error(String(error));
+  }
   const jsonStart = error.message.indexOf("{");
-  if (jsonStart < 0) return error;
+  if (jsonStart < 0) {
+    return error;
+  }
   try {
     const parsed = JSON.parse(error.message.slice(jsonStart)) as {
       code?: unknown;
       message?: unknown;
       recovery?: unknown;
     };
-    if (typeof parsed.code !== "string" || typeof parsed.message !== "string") return error;
+    if (typeof parsed.code !== "string" || typeof parsed.message !== "string") {
+      return error;
+    }
     return Object.assign(new Error(parsed.message), {
       code: parsed.code,
       recovery: parsed.recovery ?? null,
@@ -2291,7 +2451,9 @@ async function managedAgentByPubkey(args: unknown): Promise<DobiusManagedAgentPr
   const agent = (await loadDobiusManagedAgents()).find(
     (candidate) => candidate.pubkey.toLowerCase() === pubkey,
   );
-  if (!agent) throw new Error(`Dobius agent not found for ${pubkey}`);
+  if (!agent) {
+    throw new Error(`Dobius agent not found for ${pubkey}`);
+  }
   return agent;
 }
 
@@ -2380,14 +2542,20 @@ async function updateDobiusPersona(args: unknown): Promise<DobiusPersonaProjecti
   const input = objectAt(args, "input");
   const id = requiredText(input.id, "agent id");
   const updates: Record<string, unknown> = {};
-  if (typeof input.displayName === "string") updates.name = input.displayName.trim();
-  if (typeof input.systemPrompt === "string") updates.systemPrompt = input.systemPrompt;
+  if (typeof input.displayName === "string") {
+    updates.name = input.displayName.trim();
+  }
+  if (typeof input.systemPrompt === "string") {
+    updates.systemPrompt = input.systemPrompt;
+  }
   if (typeof input.runtime === "string") {
     const runtime = parseRuntimeSelection(input.runtime);
     updates.engine = runtime.engine;
     updates.accountId = runtime.accountId;
   }
-  if (typeof input.model === "string") updates.model = input.model;
+  if (typeof input.model === "string") {
+    updates.model = input.model;
+  }
   const response = await invokeDobiusRuntime("agent.update", { id, updates });
   const agent = objectAt(response, "agent");
   if (!isDobiusAgentRecord(agent)) {
@@ -2453,9 +2621,15 @@ async function updateDobiusTeam(args: unknown): Promise<DobiusTeamProjection> {
   const input = objectAt(args, "input");
   const id = requiredText(input.id, "team id");
   const updates: Record<string, unknown> = {};
-  if (typeof input.name === "string") updates.name = input.name.trim();
-  if (typeof input.description === "string") updates.description = input.description;
-  if (typeof input.instructions === "string") updates.instructions = input.instructions;
+  if (typeof input.name === "string") {
+    updates.name = input.name.trim();
+  }
+  if (typeof input.description === "string") {
+    updates.description = input.description;
+  }
+  if (typeof input.instructions === "string") {
+    updates.instructions = input.instructions;
+  }
   if (Array.isArray(input.personaIds)) {
     updates.personaIds = input.personaIds.filter(
       (personaId): personaId is string => typeof personaId === "string",
@@ -2532,21 +2706,31 @@ async function sendDobiusManagedAgentChannelMessage(args: unknown): Promise<unkn
   const agent = agents.find(
     (candidate) => (sendAgentPubkeyById.get(candidate.id) ?? "").toLowerCase() === agentPubkey,
   );
-  if (!agent) throw new Error(`Dobius agent not found for ${agentPubkey}`);
+  if (!agent) {
+    throw new Error(`Dobius agent not found for ${agentPubkey}`);
+  }
   // Same guarantee as publishDobiusAgentReply: an agent never posts nameless.
   await ensureDobiusAgentProfile(agent);
   const senderPubkey = await projectionPubkey(agent.id);
 
   const tags: string[][] = [["h", channelId]];
-  for (const pubkey of mentionPubkeys) tags.push(["p", pubkey]);
-  if (marker) tags.push(["marker", marker, markerScope]);
-  for (const extra of additionalMarkers) tags.push(["marker", extra, markerScope]);
+  for (const pubkey of mentionPubkeys) {
+    tags.push(["p", pubkey]);
+  }
+  if (marker) {
+    tags.push(["marker", marker, markerScope]);
+  }
+  for (const extra of additionalMarkers) {
+    tags.push(["marker", extra, markerScope]);
+  }
   let rootEventId: string | null = null;
   if (parentEventId) {
     const [parent] = await queryRelay([{ ids: [parentEventId], limit: 1 }]);
     // Same fallback chain as sendDobiusChannelMessage — see resolveRelayThreadRoot.
     rootEventId = resolveRelayThreadRoot(parent, parentEventId);
-    if (rootEventId !== parentEventId) tags.push(["e", rootEventId, "", "root"]);
+    if (rootEventId !== parentEventId) {
+      tags.push(["e", rootEventId, "", "root"]);
+    }
     tags.push(["e", parentEventId, "", "reply"]);
   }
 
@@ -2574,7 +2758,9 @@ async function hasDobiusManagedAgentChannelMessageMarker(args: unknown): Promise
   const marker = requiredText(input.marker, "marker");
   const agentPubkey = typeof input.agentPubkey === "string" ? input.agentPubkey.toLowerCase() : null;
   const events = await queryRelay([{ kinds: [9], "#h": [channelId], "#marker": [marker], limit: 50 }]);
-  if (!agentPubkey) return events.length > 0;
+  if (!agentPubkey) {
+    return events.length > 0;
+  }
   return events.some((event) => event.pubkey.toLowerCase() === agentPubkey);
 }
 
@@ -2593,16 +2779,24 @@ function relayMemberRoleFromTag(name: string, maybeRoleOrRelay?: string, maybePT
 }
 
 function relayMembersFromSnapshot(snapshot: RelayEventRecord | null): unknown[] {
-  if (!snapshot) return [];
+  if (!snapshot) {
+    return [];
+  }
   const createdAtIso = new Date(snapshot.created_at * 1000).toISOString();
   const seen = new Set<string>();
   const members: unknown[] = [];
   for (const tag of snapshot.tags) {
     const [name, rawPubkey, maybeRoleOrRelay, maybePTagRole] = tag;
-    if (name !== "member" && name !== "p") continue;
-    if (!rawPubkey) continue;
+    if (name !== "member" && name !== "p") {
+      continue;
+    }
+    if (!rawPubkey) {
+      continue;
+    }
     const pubkey = rawPubkey.toLowerCase();
-    if (!/^[a-f0-9]{64}$/.test(pubkey) || seen.has(pubkey)) continue;
+    if (!/^[a-f0-9]{64}$/.test(pubkey) || seen.has(pubkey)) {
+      continue;
+    }
     seen.add(pubkey);
     members.push({
       pubkey,
@@ -2621,7 +2815,9 @@ async function latestRelayMembershipSnapshot(): Promise<RelayEventRecord | null>
 
 async function publishDobiusRelayAdminEvent(kind: number, targetPubkey: string, role?: string): Promise<void> {
   const tags: string[][] = [["p", requiredText(targetPubkey, "target pubkey").trim().toLowerCase()]];
-  if (role) tags.push(["role", role]);
+  if (role) {
+    tags.push(["role", role]);
+  }
   const submission = await submitRelayEvent(await signedEvent({ kind, content: "", tags }));
   if (submission.accepted === false) {
     throw new Error(submission.message || "The relay rejected the membership update.");
@@ -2634,10 +2830,16 @@ const DOBIUS_PRESENCE_ONLINE_WINDOW_SECONDS = 5 * 60;
 const DOBIUS_PRESENCE_AWAY_WINDOW_SECONDS = 30 * 60;
 
 function presenceStatusFromLastSeen(lastSeenCreatedAt: number | null, nowSeconds: number): string {
-  if (lastSeenCreatedAt === null) return "offline";
+  if (lastSeenCreatedAt === null) {
+    return "offline";
+  }
   const age = nowSeconds - lastSeenCreatedAt;
-  if (age <= DOBIUS_PRESENCE_ONLINE_WINDOW_SECONDS) return "online";
-  if (age <= DOBIUS_PRESENCE_AWAY_WINDOW_SECONDS) return "away";
+  if (age <= DOBIUS_PRESENCE_ONLINE_WINDOW_SECONDS) {
+    return "online";
+  }
+  if (age <= DOBIUS_PRESENCE_AWAY_WINDOW_SECONDS) {
+    return "away";
+  }
   return "offline";
 }
 
@@ -2665,7 +2867,9 @@ function forumReplyLinkage(event: RelayEventRecord): { parentEventId: string | n
 
 async function forumThreadSummary(rootEventId: string): Promise<unknown | null> {
   const replies = await queryRelay([{ kinds: [DOBIUS_FORUM_COMMENT_KIND], "#e": [rootEventId], limit: 5000 }]);
-  if (replies.length === 0) return null;
+  if (replies.length === 0) {
+    return null;
+  }
   return {
     reply_count: replies.length,
     descendant_count: replies.length,
@@ -2706,9 +2910,9 @@ async function getDobiusChannelMessagesBefore(args: unknown): Promise<unknown> {
     (event) => event.created_at < before || (event.created_at === before && event.id > beforeId),
   );
   const page = olderNewestFirst.slice(0, limit);
-  const oldest = page[page.length - 1];
+  const oldest = page.at(-1);
   return {
-    events: [...page].reverse(),
+    events: page.toReversed(),
     next_cursor: page.length === limit && oldest ? { created_at: oldest.created_at, event_id: oldest.id } : null,
   };
 }
@@ -2740,7 +2944,7 @@ async function getMyDobiusRelayMembership(): Promise<unknown> {
   if (!snapshot) {
     return bootstrapOwnerMemberRow(selfPubkey);
   }
-  const members = relayMembersFromSnapshot(snapshot) as Array<{ pubkey: string }>;
+  const members = relayMembersFromSnapshot(snapshot) as { pubkey: string }[];
   const mine = members.find((member) => member.pubkey === selfPubkey);
   if (!mine) {
     // A snapshot exists and explicitly does not include this pubkey — matches
@@ -2791,7 +2995,7 @@ async function getDobiusForumPosts(args: unknown): Promise<unknown> {
   const filtered = before === null ? events : events.filter((event) => event.created_at < before);
   const page = filtered.slice(0, limit);
   const messages = await Promise.all(page.map((post) => forumPostFromEvent(post)));
-  const oldest = page[page.length - 1];
+  const oldest = page.at(-1);
   return {
     messages,
     next_cursor: page.length === limit && oldest ? oldest.created_at : null,
@@ -2804,7 +3008,9 @@ async function getDobiusForumThread(args: unknown): Promise<unknown> {
   const limit = typeof input.limit === "number" ? Math.max(1, Math.min(input.limit, 500)) : 100;
 
   const [root] = await queryRelay([{ ids: [eventId], limit: 1 }]);
-  if (!root) throw new Error(`Forum post not found: ${eventId}`);
+  if (!root) {
+    throw new Error(`Forum post not found: ${eventId}`);
+  }
 
   const replyEvents = (
     await queryRelay([{ kinds: [DOBIUS_FORUM_COMMENT_KIND], "#e": [eventId], limit: 5000 }])
@@ -2881,9 +3087,13 @@ async function listDobiusRelayAgents(): Promise<unknown> {
   const latestByChannel = new Map<string, RelayEventRecord>();
   for (const event of memberships) {
     const channelId = eventTag(event, "d");
-    if (!channelId) continue;
+    if (!channelId) {
+      continue;
+    }
     const existing = latestByChannel.get(channelId);
-    if (!existing || event.created_at > existing.created_at) latestByChannel.set(channelId, event);
+    if (!existing || event.created_at > existing.created_at) {
+      latestByChannel.set(channelId, event);
+    }
   }
 
   return Promise.all(
@@ -2910,10 +3120,14 @@ async function listDobiusRelayAgents(): Promise<unknown> {
 async function fetchDobiusLinkPreviewTitle(args: unknown): Promise<string | null> {
   const input = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
   const href = typeof input.href === "string" ? input.href : "";
-  if (!href) return null;
+  if (!href) {
+    return null;
+  }
   try {
     const response = await fetch(href);
-    if (!response.ok) return null;
+    if (!response.ok) {
+      return null;
+    }
     const html = await response.text();
     const title = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim();
     return title || null;
@@ -2975,7 +3189,9 @@ export async function invokeDobiusBackedTauriCommand(
   command: string,
   args?: unknown,
 ): Promise<{ handled: false } | { handled: true; result: unknown }> {
-  if (!isDobiusCommunicationsAvailable()) return { handled: false };
+  if (!isDobiusCommunicationsAvailable()) {
+    return { handled: false };
+  }
 
   switch (command) {
     case "is_shared_identity":
@@ -2996,7 +3212,9 @@ export async function invokeDobiusBackedTauriCommand(
     case "sign_event":
       return { handled: true, result: await signedEvent(args) };
     case "create_auth_event": {
-      if (!args || typeof args !== "object") throw new Error("Missing auth payload");
+      if (!args || typeof args !== "object") {
+        throw new Error("Missing auth payload");
+      }
       const input = args as Record<string, unknown>;
       const relayUrl = requiredText(input.relayUrl, "relay URL");
       const challenge = requiredText(input.challenge, "relay challenge");
@@ -3033,6 +3251,9 @@ export async function invokeDobiusBackedTauriCommand(
       // bindings, never through Dobius's independent filesystem preference.
       return { handled: true, result: undefined };
     case "get_relay_http_url":
+      // mediaUrl.ts needs the relay origin to tell relay media (proxied) apart
+      // from blob-store media (served directly); without it every /media/ URL
+      // was rewritten onto the unregistered buzz-media:// scheme and broke.
       return { handled: true, result: DOBIUS_RELAY_HTTP_URL };
     case "get_relay_ws_url":
       return { handled: true, result: DOBIUS_RELAY_WEBSOCKET_URL };
@@ -3536,13 +3757,19 @@ export async function invokeDobiusBackedTauriCommand(
       const selectedId = typeof record.selectedModelId === "string" ? record.selectedModelId : "";
       const selected = models.find((m) => m.id === selectedId) ?? models[0];
       const sttStatus = (): unknown => {
-        if (!selected) return "unavailable";
-        if (selected.status === "ready") return "ready";
+        if (!selected) {
+          return "unavailable";
+        }
+        if (selected.status === "ready") {
+          return "ready";
+        }
         if (selected.status === "downloading") {
           const progress = typeof selected.progress === "number" ? selected.progress : 0;
           return { downloading: { progress_percent: Math.round(progress * 100) } };
         }
-        if (selected.status === "error") return { error: "download failed" };
+        if (selected.status === "error") {
+          return { error: "download failed" };
+        }
         return "pending";
       };
       return { handled: true, result: { stt: sttStatus(), tts: "unavailable" } };
@@ -3588,11 +3815,6 @@ export async function invokeDobiusBackedTauriCommand(
     }
     case "get_media_proxy_port":
       return { handled: true, result: await invokeDobiusRuntime("media.getProxyPort") };
-    case "get_relay_http_url":
-      // mediaUrl.ts needs the relay origin to tell relay media (proxied) apart
-      // from blob-store media (served directly); without it every /media/ URL
-      // was rewritten onto the unregistered buzz-media:// scheme and broke.
-      return { handled: true, result: DOBIUS_RELAY_HTTP_URL };
     case "get_agent_config_surface": {
       const agent = await managedAgentByPubkey(args);
       // The client's NormalizedConfig contract wants NormalizedField OBJECTS
@@ -3681,9 +3903,15 @@ export async function invokeDobiusBackedTauriCommand(
           ? (input.payload as Record<string, unknown>)
           : {};
       const updates: Record<string, unknown> = {};
-      if (typeof payload.model === "string") updates.model = payload.model;
-      if (typeof payload.systemPrompt === "string") updates.systemPrompt = payload.systemPrompt;
-      if (typeof payload.provider === "string") updates.accountId = payload.provider;
+      if (typeof payload.model === "string") {
+        updates.model = payload.model;
+      }
+      if (typeof payload.systemPrompt === "string") {
+        updates.systemPrompt = payload.systemPrompt;
+      }
+      if (typeof payload.provider === "string") {
+        updates.accountId = payload.provider;
+      }
       if (Object.keys(updates).length > 0) {
         await invokeDobiusRuntime("agent.update", { id: agent.backend_agent_id, updates });
       }
@@ -3696,10 +3924,18 @@ export async function invokeDobiusBackedTauriCommand(
       const pubkey = requiredText(input.pubkey, "agent pubkey").toLowerCase();
       const agent = await managedAgentByPubkey({ pubkey });
       const updates: Record<string, unknown> = {};
-      if (typeof input.name === "string") updates.name = input.name;
-      if (typeof input.model === "string") updates.model = input.model;
-      if (typeof input.provider === "string") updates.accountId = input.provider;
-      if (typeof input.systemPrompt === "string") updates.systemPrompt = input.systemPrompt;
+      if (typeof input.name === "string") {
+        updates.name = input.name;
+      }
+      if (typeof input.model === "string") {
+        updates.model = input.model;
+      }
+      if (typeof input.provider === "string") {
+        updates.accountId = input.provider;
+      }
+      if (typeof input.systemPrompt === "string") {
+        updates.systemPrompt = input.systemPrompt;
+      }
       const response = await invokeDobiusRuntime("agent.update", {
         id: agent.backend_agent_id,
         updates,
@@ -3822,7 +4058,9 @@ export async function invokeDobiusBackedTauriCommand(
       await invokeDobiusRuntime("agentLocalOverrides.set", { agentId: id, key: "active", value: active });
       const response = await invokeDobiusRuntime("agent.show", { id });
       const agent = objectAt(response, "agent");
-      if (!isDobiusAgentRecord(agent)) throw new Error("Dobius returned an invalid agent");
+      if (!isDobiusAgentRecord(agent)) {
+        throw new Error("Dobius returned an invalid agent");
+      }
       return { handled: true, result: { ...personaFromAgent(agent), is_active: active } };
     }
     case "set_persona_shared": {
@@ -3830,7 +4068,9 @@ export async function invokeDobiusBackedTauriCommand(
       const id = requiredText(input.id, "agent id");
       const response = await invokeDobiusRuntime("agent.show", { id });
       const agent = objectAt(response, "agent");
-      if (!isDobiusAgentRecord(agent)) throw new Error("Dobius returned an invalid agent");
+      if (!isDobiusAgentRecord(agent)) {
+        throw new Error("Dobius returned an invalid agent");
+      }
       return {
         handled: true,
         result: {

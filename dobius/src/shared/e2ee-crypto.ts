@@ -2,6 +2,7 @@
 // desktop, CLI, and mobile pairing. Keeping the Node-compatible primitives in
 // shared code prevents the CLI from importing main-process modules.
 import nacl from 'tweetnacl'
+import { acceptE2EEReceivedNonce, nextE2EESendNonce } from './e2ee-sequencing'
 
 export function generateKeyPair(): nacl.BoxKeyPair {
   return nacl.box.keyPair()
@@ -38,7 +39,7 @@ export function encryptBytes(
   plaintext: Uint8Array<ArrayBufferLike>,
   sharedKey: Uint8Array
 ): Uint8Array {
-  const nonce = nacl.randomBytes(nacl.box.nonceLength)
+  const nonce = nextE2EESendNonce(sharedKey, nacl.randomBytes(nacl.box.nonceLength))
   const ciphertext = nacl.box.after(plaintext, nonce, sharedKey)
 
   const bundle = new Uint8Array(nonce.length + ciphertext.length)
@@ -57,7 +58,7 @@ export function decryptBytes(bundle: Uint8Array, sharedKey: Uint8Array): Uint8Ar
   const ciphertext = bundle.slice(nacl.box.nonceLength)
   const plaintext = nacl.box.open.after(ciphertext, nonce, sharedKey)
 
-  if (!plaintext) {
+  if (!plaintext || !acceptE2EEReceivedNonce(sharedKey, nonce)) {
     return null
   }
 

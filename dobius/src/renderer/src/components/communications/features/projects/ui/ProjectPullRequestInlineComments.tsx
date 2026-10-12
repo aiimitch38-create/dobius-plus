@@ -44,7 +44,9 @@ export function ProjectPullRequestInlineCommentThread({
   ) => Promise<unknown>;
   profiles?: UserProfileLookup;
 }) {
-  if (comments.length === 0 && !activeAnchor) return null;
+  if (comments.length === 0 && !activeAnchor) {
+    return null;
+  }
 
   return (
     <div

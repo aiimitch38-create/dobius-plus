@@ -641,7 +641,7 @@ export function buildPingPongAvatarFrames<T>(frames: T[]): T[] {
     return frames;
   }
 
-  return frames.concat(frames.slice(1, -1).reverse());
+  return frames.concat(frames.slice(1, -1).toReversed());
 }
 
 /** Encode composed frames as an infinitely looping ping-pong animated PNG. */

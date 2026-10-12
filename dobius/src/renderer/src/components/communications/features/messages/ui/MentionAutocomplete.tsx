@@ -53,7 +53,9 @@ export const MentionAutocomplete = React.memo(function MentionAutocomplete({
 
   const handleScroll = React.useCallback(() => {
     const list = listRef.current;
-    if (!list || !onFetchMore) return;
+    if (!list || !onFetchMore) {
+      return;
+    }
 
     if (list.scrollHeight - list.scrollTop - list.clientHeight < 48) {
       onFetchMore();

@@ -83,7 +83,9 @@ export function createSendGuard(): {
   let inFlight = false;
   return {
     runGuarded: async (action) => {
-      if (inFlight) return false;
+      if (inFlight) {
+        return false;
+      }
       inFlight = true;
       try {
         return await action();
@@ -404,7 +406,9 @@ export function useSnapshotSendController(
   ): Promise<boolean | null> {
     // A duplicate action is intentionally ignored; distinguish it from a
     // failed send so the caller does not show a false failure toast.
-    if (guardRef.current.inFlight) return null;
+    if (guardRef.current.inFlight) {
+      return null;
+    }
 
     return runGuardedSend(
       guardRef.current,

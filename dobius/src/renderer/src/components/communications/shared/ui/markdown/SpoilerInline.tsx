@@ -34,7 +34,9 @@ export function SpoilerInline({
 
   const handlePointerDownCapture = React.useCallback(
     (event: React.PointerEvent<HTMLElement>) => {
-      if (revealed) return;
+      if (revealed) {
+        return;
+      }
       event.stopPropagation();
     },
     [revealed],
@@ -42,7 +44,9 @@ export function SpoilerInline({
 
   const handleClickCapture = React.useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
-      if (revealed) return;
+      if (revealed) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       toggleRevealed();
@@ -52,7 +56,9 @@ export function SpoilerInline({
 
   const handleClick = React.useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
-      if (revealed && isBlock && event.target !== event.currentTarget) return;
+      if (revealed && isBlock && event.target !== event.currentTarget) {
+        return;
+      }
       toggleRevealed();
     },
     [isBlock, revealed, toggleRevealed],
@@ -60,7 +66,9 @@ export function SpoilerInline({
 
   const handleKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLElement>) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
       event.preventDefault();
       toggleRevealed();
     },

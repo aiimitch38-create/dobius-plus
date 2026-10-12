@@ -67,7 +67,7 @@ describe('terminal live pending flush state', () => {
 })
 
 describe('terminal live mirror send queue', () => {
-  it('Given a failed previous send When a mirror send queues Then it still runs in order', async () => {
+  it('Given a failed previous send When a dependent mirror delta queues Then it is suppressed', async () => {
     // Given
     const state: TerminalLivePendingFlushState = { current: null }
     const order: string[] = []
@@ -84,11 +84,11 @@ describe('terminal live mirror send queue', () => {
 
     // Then
     await expect(first).resolves.toBe(false)
-    await expect(second).resolves.toBe(true)
-    expect(order).toEqual(['first', 'second'])
+    await expect(second).resolves.toBe(false)
+    expect(order).toEqual(['first'])
   })
 
-  it('Given a throwing send When a mirror send queues Then the promise resolves false and the chain continues', async () => {
+  it('Given a throwing send When a dependent mirror delta queues Then the chain stays failed', async () => {
     // Given
     const state: TerminalLivePendingFlushState = { current: null }
     const first = queueTerminalLiveMirrorSend(state, async () => {
@@ -100,7 +100,7 @@ describe('terminal live mirror send queue', () => {
 
     // Then
     await expect(first).resolves.toBe(false)
-    await expect(second).resolves.toBe(true)
+    await expect(second).resolves.toBe(false)
   })
 
   it('Given a settled mirror send When it was the newest Then the state resets to null', async () => {

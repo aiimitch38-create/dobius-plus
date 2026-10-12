@@ -356,7 +356,7 @@ test("test_foreign_entry_with_no_local_copy_stays_unselected", () => {
     BOB,
   );
 
-  assert.equal(personas[0].id, "catalog:" + ALICE + ":reviewer");
+  assert.equal(personas[0].id, `catalog:${ALICE}:reviewer`);
   assert.equal(personas[0].isActive, false);
 });
 
@@ -377,7 +377,7 @@ test("test_catalog_source_match_is_scoped_to_the_publishing_owner", () => {
     ALICE,
   );
 
-  assert.equal(personas[0].id, "catalog:" + BOB + ":reviewer");
+  assert.equal(personas[0].id, `catalog:${BOB}:reviewer`);
   assert.equal(personas[0].isActive, false);
 });
 
@@ -455,7 +455,7 @@ test("test_overlapping_pages_are_deduped_by_event_id", async (t) => {
   const firstPage = pageOfEvents(500, 0, (index) => 10_000 - index);
   const secondPage = [
     // The boundary event repeats because `until` includes its timestamp.
-    firstPage[firstPage.length - 1],
+    firstPage.at(-1),
     ...pageOfEvents(2, 500, 9_000),
   ];
   stubPagedRelay([firstPage, secondPage]);

@@ -185,7 +185,9 @@ export function useFeedDesktopNotifications(
       const excess = nextSeenItemIds.size - HOME_FEED_SEEN_MAX_ITEMS;
       let removed = 0;
       for (const id of nextSeenItemIds) {
-        if (removed >= excess) break;
+        if (removed >= excess) {
+          break;
+        }
         nextSeenItemIds.delete(id);
         removed++;
       }

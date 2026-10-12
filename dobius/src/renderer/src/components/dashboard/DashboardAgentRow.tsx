@@ -190,7 +190,9 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
   )
   const handleOpenTerminal = useCallback(
     (e: React.MouseEvent) => {
-      if (!onOpenTerminal) return
+      if (!onOpenTerminal) {
+        return
+      }
       e.stopPropagation()
       if (pendingSingleClickRef.current !== null) {
         window.clearTimeout(pendingSingleClickRef.current)

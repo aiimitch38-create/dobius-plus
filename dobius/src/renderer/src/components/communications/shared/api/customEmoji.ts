@@ -35,9 +35,11 @@ export const CUSTOM_EMOJI_SET_D_TAG = "buzz:custom-emoji";
  */
 export function reactionEmojiUrl(
   emoji: string,
-  set: ReadonlyArray<CustomEmoji> | undefined,
+  set: readonly CustomEmoji[] | undefined,
 ): string | undefined {
-  if (!set || !emoji.startsWith(":") || !emoji.endsWith(":")) return undefined;
+  if (!set || !emoji.startsWith(":") || !emoji.endsWith(":")) {
+    return undefined;
+  }
   const shortcode = emoji.slice(1, -1).toLowerCase();
   return set.find((e) => e.shortcode === shortcode)?.url;
 }
@@ -79,18 +81,26 @@ export function suggestShortcodeFromFilename(filename: string): string | null {
  * within the one event are skipped (first wins).
  */
 export function customEmojiFromTags(
-  tags: ReadonlyArray<ReadonlyArray<string>>,
+  tags: readonly (readonly string[])[],
 ): CustomEmoji[] {
   const seen = new Set<string>();
   const emoji: CustomEmoji[] = [];
 
   for (const tag of tags) {
     const [name, rawShortcode, url] = tag;
-    if (name !== "emoji") continue;
-    if (!rawShortcode || !url) continue;
+    if (name !== "emoji") {
+      continue;
+    }
+    if (!rawShortcode || !url) {
+      continue;
+    }
     const shortcode = normalizeShortcode(rawShortcode);
-    if (!shortcode) continue;
-    if (seen.has(shortcode)) continue;
+    if (!shortcode) {
+      continue;
+    }
+    if (seen.has(shortcode)) {
+      continue;
+    }
     seen.add(shortcode);
     emoji.push({ shortcode, url });
   }
@@ -99,7 +109,9 @@ export function customEmojiFromTags(
 }
 
 export function customEmojiFromEvent(event: RelayEvent | null): CustomEmoji[] {
-  if (!event) return [];
+  if (!event) {
+    return [];
+  }
   return customEmojiFromTags(event.tags);
 }
 
@@ -112,9 +124,7 @@ export function customEmojiFromEvent(event: RelayEvent | null): CustomEmoji[] {
  * the same set of events always yields the same palette. Output is sorted by
  * shortcode.
  */
-export function unionCustomEmoji(
-  events: ReadonlyArray<RelayEvent>,
-): CustomEmoji[] {
+export function unionCustomEmoji(events: readonly RelayEvent[]): CustomEmoji[] {
   const byShortcode = new Map<string, { url: string; createdAt: number }>();
   for (const event of events) {
     for (const { shortcode, url } of customEmojiFromTags(event.tags)) {
@@ -154,19 +164,21 @@ export async function listCustomEmoji(): Promise<CustomEmoji[]> {
 /** Fetch the caller's OWN current set (latest 30030 under the d-tag). */
 export async function fetchOwnEmoji(): Promise<CustomEmoji[]> {
   const { pubkey: me } = await getIdentity();
-  if (!me) return [];
+  if (!me) {
+    return [];
+  }
   const events = await relayClient.fetchEvents({
     kinds: [KIND_EMOJI_SET],
     "#d": [CUSTOM_EMOJI_SET_D_TAG],
     authors: [me],
     limit: 1,
   });
-  return customEmojiFromEvent(events[events.length - 1] ?? null);
+  return customEmojiFromEvent(events.at(-1) ?? null);
 }
 
 /** Publish the caller's (replaced) own 30030 set, signed as the caller. */
 async function publishOwnSet(
-  emojis: ReadonlyArray<CustomEmoji>,
+  emojis: readonly CustomEmoji[],
   timeoutMessage: string,
   errorMessage: string,
 ): Promise<void> {
@@ -210,10 +222,14 @@ export async function setCustomEmoji(
 /** Remove a custom emoji from the caller's OWN set by shortcode. */
 export async function removeCustomEmoji(shortcode: string): Promise<void> {
   const normalized = normalizeShortcode(shortcode);
-  if (!normalized) return;
+  if (!normalized) {
+    return;
+  }
   const own = await fetchOwnEmoji();
   const next = own.filter((e) => e.shortcode !== normalized);
-  if (next.length === own.length) return; // not present — nothing to republish
+  if (next.length === own.length) {
+    return;
+  } // not present — nothing to republish
   await publishOwnSet(
     next,
     "Timed out while removing emoji.",

@@ -1,8 +1,19 @@
+import crypto from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import SyncDatabase from '../sqlite/sync-database'
 import { extractChatDbMessageText } from '../imessage-bridge/chat-db-message-text'
-import { sendImessage } from '../imessage-bridge/imessage-send'
+import {
+  isValidImessageHandle,
+  sendImessage,
+  stripControlChars
+} from '../imessage-bridge/imessage-send'
+import { selfHandleSpellings } from '../imessage-bridge/self-handle-spellings'
+import {
+  CONDUCTOR_OUTBOUND_TAG,
+  outboundSince,
+  wasSentByDobius
+} from '../imessage-bridge/outbound-ring'
 import type { IMessageBridge } from './types'
 
 // Voice Conductor iMessage bridge (macOS only). Lets the background conductor
@@ -11,6 +22,7 @@ import type { IMessageBridge } from './types'
 // Reuses the app's existing primitives instead of re-implementing them:
 //   - sendImessage()             → osascript send + outbound rate limit
 //   - extractChatDbMessageText() → decode plain/attributedBody message text
+//   - selfHandleSpellings()      → exact chat.db spellings of the handle
 //   - SyncDatabase               → node:sqlite reader for chat.db
 //
 // Permissions required (one-time, macOS System Settings → Privacy & Security):
@@ -20,14 +32,25 @@ import type { IMessageBridge } from './types'
 const DEFAULT_CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db')
 const DEFAULT_POLL_INTERVAL_MS = 2_000
 const DEFAULT_ASK_TIMEOUT_MS = 5 * 60 * 1000
+// Codes are never reused within a session until this many have been issued,
+// so a late reply to an expired question can't answer a newer one.
+const MAX_REMEMBERED_CODES = 5_000
+
+export const IMESSAGE_HANDLE_MISSING =
+  'iMessage handle not configured: set your handle in Settings → iMessage bridge'
+export const IMESSAGE_HANDLE_INVALID =
+  'iMessage handle in Settings → iMessage bridge is not a phone number or email'
 
 /**
  * Config for {@link createIMessageBridge}. The recipient handle and any machine
  * path come from here — nothing is hardcoded.
  */
 export type VoiceConductorImessageConfig = {
-  /** Carson's iMessage handle (email or phone) that the conductor texts. */
-  handle: string
+  /**
+   * Carson's iMessage handle (email or phone), read at each use so a Settings
+   * change applies without restarting the conductor. Null/empty = not set.
+   */
+  resolveHandle: () => string | null
   /** Override the chat.db path (default: ~/Library/Messages/chat.db). */
   chatDbPath?: string
   /** How often ask() re-scans chat.db for a reply (default 2000ms). */
@@ -39,11 +62,11 @@ export type VoiceConductorImessageConfig = {
   platform?: NodeJS.Platform
 }
 
-// Reply lookup: any message in the conductor↔Carson thread newer than the
-// baseline ROWID captured before we sent the question. is_from_me is NOT
-// filtered so this works whether Carson replies from a separate device
-// (inbound, is_from_me=0) or the same Apple ID / self-thread (is_from_me=1).
-// The question's own echo row is excluded by text comparison in the caller.
+// Reply lookup: rows newer than the baseline ROWID in the EXACT 1:1 chat with
+// the handle (selfHandleSpellings; never LIKE, never a group chat), sent either
+// by the handle itself or from this Apple ID (is_from_me, for the self-thread
+// case). Rows with no chat link fall back to an exact handle match. The caller
+// then accepts only a row that starts with this question's reply code.
 const NEW_REPLY_SQL = `
   SELECT message.ROWID AS rowid,
          message.text AS text,
@@ -53,10 +76,20 @@ const NEW_REPLY_SQL = `
   LEFT JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
   LEFT JOIN chat ON chat_message_join.chat_id = chat.ROWID
   WHERE message.ROWID > ?
-    AND (handle.id = ? OR chat.guid LIKE ?)
+    AND (
+      (chat.ROWID IS NOT NULL
+        AND lower(chat.chat_identifier) IN (SELECT value FROM json_each(?))
+        AND instr(chat.guid, ';+;') = 0
+        AND (message.is_from_me = 1 OR lower(handle.id) IN (SELECT value FROM json_each(?))))
+      OR (chat.ROWID IS NULL AND lower(handle.id) IN (SELECT value FROM json_each(?)))
+    )
+  GROUP BY message.ROWID
   ORDER BY message.ROWID ASC
   LIMIT 50
 `
+
+// "<code> <answer>": the code must be the first token, exactly four digits.
+const CODED_REPLY_RE = /^\s*(\d{4})(?!\d)[\s:.,)-]*([\s\S]*)$/
 
 type ReplyRow = {
   rowid: number
@@ -75,62 +108,114 @@ function maxRowid(db: SyncDatabase.Database): number {
   return row.maxRowid
 }
 
+/** The answer text when `text` is a reply to `code`, else null. */
+export function parseCodedReply(text: string, code: string): string | null {
+  const match = CODED_REPLY_RE.exec(text)
+  if (!match || match[1] !== code) {
+    return null
+  }
+  const answer = match[2].trim()
+  return answer.length > 0 ? answer : null
+}
+
+function codeLeakedInOutbound(code: string, ownQuestion: string, since: number): boolean {
+  const own = ownQuestion.trim()
+  const codeToken = new RegExp(`(?<!\\d)${code}(?!\\d)`)
+  return outboundSince(since).some((record) => record.text !== own && codeToken.test(record.text))
+}
+
 /**
  * Create the Voice Conductor's iMessage bridge.
  *
- * - `isAvailable()` — true only on macOS. It does NOT probe Automation / Full
- *   Disk Access permissions (that would spawn osascript and could trigger a
- *   TCC prompt); it is a cheap platform gate. send()/ask() surface the real
- *   permission errors when they run.
- * - `send(text)` — sends an iMessage to `config.handle`. Rejects on non-macOS
- *   or if the send fails (rate limit, Automation denied, empty text).
- * - `ask(question, timeoutMs = 5min)` — sends `question`, then polls chat.db
- *   for the next NEW message in that thread that isn't the question echo.
- *   Resolves with the reply text, or an EMPTY STRING '' on timeout (the
- *   sentinel — callers distinguish "no answer yet" from a thrown error).
- *   Rejects on non-macOS, or if chat.db can't be opened / the send fails.
+ * - `unavailableReason()` — null when usable; otherwise why not (non-macOS,
+ *   handle missing or invalid). Cheap: no osascript / TCC probe.
+ * - `send(text)` — sends an iMessage to the configured handle.
+ * - `ask(question, timeoutMs = 5min)` — sends `question` with a fresh 4-digit
+ *   reply code and resolves with the answer from the first NEW message in the
+ *   exact chat that starts with that code (the code is stripped). Resolves ''
+ *   on timeout. Messages without the code, other questions' codes, and any
+ *   text Dobius sent (outbound-ring) are never taken as the answer. Every
+ *   outbound text carries CONDUCTOR_OUTBOUND_TAG so the `d:` bridge ignores it.
  */
 export function createIMessageBridge(config: VoiceConductorImessageConfig): IMessageBridge {
   const platform = config.platform ?? process.platform
   const chatDbPath = config.chatDbPath ?? DEFAULT_CHAT_DB_PATH
   const pollIntervalMs = config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
+  const issuedCodes = new Set<string>()
 
-  function isAvailable(): boolean {
-    return platform === 'darwin'
+  function unavailableReason(): string | null {
+    if (platform !== 'darwin') {
+      return 'iMessage bridge unavailable: macOS only'
+    }
+    const handle = config.resolveHandle()?.trim() ?? ''
+    if (!handle) {
+      return IMESSAGE_HANDLE_MISSING
+    }
+    return isValidImessageHandle(handle) ? null : IMESSAGE_HANDLE_INVALID
+  }
+
+  function requireHandle(): string {
+    const reason = unavailableReason()
+    if (reason) {
+      throw new Error(reason)
+    }
+    return (config.resolveHandle() ?? '').trim()
+  }
+
+  function issueCode(): string {
+    if (issuedCodes.size >= MAX_REMEMBERED_CODES) {
+      issuedCodes.clear()
+    }
+    let code: string
+    do {
+      code = String(crypto.randomInt(1000, 10_000))
+    } while (issuedCodes.has(code))
+    issuedCodes.add(code)
+    return code
   }
 
   async function send(text: string): Promise<void> {
-    if (!isAvailable()) {
-      throw new Error('iMessage bridge unavailable: macOS only')
-    }
-    await sendImessage(config.handle, text)
+    const handle = requireHandle()
+    await sendImessage(handle, `${CONDUCTOR_OUTBOUND_TAG}${text}`)
   }
 
   async function ask(question: string, timeoutMs = DEFAULT_ASK_TIMEOUT_MS): Promise<string> {
-    if (!isAvailable()) {
-      throw new Error('iMessage bridge unavailable: macOS only')
-    }
+    const handle = requireHandle()
     // Open chat.db first so a missing Full Disk Access grant fails BEFORE we
     // text the user a question we could never read the answer to.
     const db = new SyncDatabase(chatDbPath, { readonly: true, fileMustExist: true })
     try {
       const baseline = maxRowid(db)
-      await sendImessage(config.handle, question)
+      const code = issueCode()
+      const minutes = Math.max(1, Math.round(timeoutMs / 60_000))
+      // Why: stripped the way sendImessage will, so the ring copy equals `outbound`
+      // and the ask never mistakes its own question for a leak.
+      const outbound = `${CONDUCTOR_OUTBOUND_TAG}${stripControlChars(question).trim()}\n\nReply "${code} <your answer>" within ${minutes} min.`
+      const askedAt = Date.now()
+      await sendImessage(handle, outbound)
 
       const statement = db.prepare(NEW_REPLY_SQL)
-      const chatGuidLike = `%${config.handle}%`
-      const questionEcho = question.trim()
+      const spellings = JSON.stringify(selfHandleSpellings(handle))
       const deadline = Date.now() + timeoutMs
+      let cursor = baseline
 
       while (Date.now() < deadline) {
-        const rows = statement.all(baseline, config.handle, chatGuidLike) as ReplyRow[]
+        // Why: if anything else Dobius sent since the question carries the code
+        // (an agent echoing it back), the code may be forged: deny this ask.
+        if (codeLeakedInOutbound(code, outbound, askedAt)) {
+          return ''
+        }
+        const rows = statement.all(cursor, spellings, spellings, spellings) as ReplyRow[]
         for (const row of rows) {
-          const reply = extractChatDbMessageText(row)?.trim()
-          // Skip empties and our own outbound question row (same text, newer ROWID).
-          if (!reply || reply === questionEcho) {
+          cursor = Math.max(cursor, row.rowid)
+          const text = extractChatDbMessageText(row)?.trim()
+          if (!text || wasSentByDobius(text)) {
             continue
           }
-          return reply
+          const answer = parseCodedReply(text, code)
+          if (answer !== null) {
+            return answer
+          }
         }
         await delay(Math.min(pollIntervalMs, Math.max(0, deadline - Date.now())))
       }
@@ -140,5 +225,10 @@ export function createIMessageBridge(config: VoiceConductorImessageConfig): IMes
     }
   }
 
-  return { isAvailable, send, ask }
+  return {
+    isAvailable: () => unavailableReason() === null,
+    unavailableReason,
+    send,
+    ask
+  }
 }

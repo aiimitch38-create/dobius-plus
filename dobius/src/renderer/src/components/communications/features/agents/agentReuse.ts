@@ -8,7 +8,7 @@ function normalizePubkey(pubkey: string): string {
 function commandBasename(command: string) {
   const normalized = command.trim().replace(/\\/g, "/");
   const parts = normalized.split("/");
-  return parts[parts.length - 1] ?? normalized;
+  return parts.at(-1) ?? normalized;
 }
 
 function normalizeCommandIdentity(command: string) {

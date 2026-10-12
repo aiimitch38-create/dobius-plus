@@ -19,9 +19,11 @@ async function withStorage(storage, run) {
     );
     await run(module);
   } finally {
-    if (descriptor)
+    if (descriptor) {
       Object.defineProperty(globalThis, "localStorage", descriptor);
-    else delete globalThis.localStorage;
+    } else {
+      delete globalThis.localStorage;
+    }
   }
 }
 

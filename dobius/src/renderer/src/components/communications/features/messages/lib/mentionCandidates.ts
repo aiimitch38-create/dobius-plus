@@ -44,7 +44,9 @@ export function globalSearchIdentityKey(candidate: MentionCandidate) {
   }
 
   const label = candidate.displayName?.trim().toLowerCase();
-  if (!label) return null;
+  if (!label) {
+    return null;
+  }
 
   const secondaryLabel = candidate.secondaryLabel?.trim().toLowerCase() ?? "";
   return `global-person:${label}:${secondaryLabel}`;
@@ -61,9 +63,15 @@ function findTeamMemberTarget(
     )
     .sort((left, right) => {
       const rank = (candidate: MentionCandidate) => {
-        if (candidate.kind === "identity" && candidate.isMember) return 0;
-        if (candidate.kind === "identity" && candidate.isManagedAgent) return 1;
-        if (candidate.kind === "identity") return 2;
+        if (candidate.kind === "identity" && candidate.isMember) {
+          return 0;
+        }
+        if (candidate.kind === "identity" && candidate.isManagedAgent) {
+          return 1;
+        }
+        if (candidate.kind === "identity") {
+          return 2;
+        }
         return 3;
       };
       return rank(left) - rank(right);
@@ -94,20 +102,28 @@ export function buildTeamMentionCandidates(
   candidates: readonly MentionCandidate[],
 ): MentionCandidate[] {
   return teams.flatMap((team) => {
-    if (team.isBuiltin || !team.name.trim()) return [];
+    if (team.isBuiltin || !team.name.trim()) {
+      return [];
+    }
 
     const resolution = resolveTeamPersonas(team, personas);
-    if (!resolution.isUsable) return [];
+    if (!resolution.isUsable) {
+      return [];
+    }
 
     const teamMembers = resolution.resolvedPersonas
       .map((persona) => findTeamMemberTarget(persona, candidates))
       .filter((member): member is TeamMentionMember => member !== null);
-    if (teamMembers.length !== resolution.resolvedPersonas.length) return [];
+    if (teamMembers.length !== resolution.resolvedPersonas.length) {
+      return [];
+    }
 
     const mentionNames = new Set<string>();
     for (const member of teamMembers) {
       const mentionName = member.displayName.trim().toLowerCase();
-      if (mentionNames.has(mentionName)) return [];
+      if (mentionNames.has(mentionName)) {
+        return [];
+      }
       mentionNames.add(mentionName);
     }
 

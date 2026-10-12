@@ -71,7 +71,7 @@ function resolveChannelIdFromOperator(
 
 function resolveAuthorFromOperator(
   raw: string | null,
-  candidates: Array<{ pubkey: string; displayName?: string | null }>,
+  candidates: { pubkey: string; displayName?: string | null }[],
 ): OperatorResolveResult<string> {
   if (!raw) {
     return { status: "none" };
@@ -156,8 +156,7 @@ export function useSearchResults({
   });
 
   const authorCandidateSeed = React.useMemo(() => {
-    const candidates: Array<{ pubkey: string; displayName?: string | null }> =
-      [];
+    const candidates: { pubkey: string; displayName?: string | null }[] = [];
     const seen = new Set<string>();
     const push = (pubkey: string, displayName?: string | null) => {
       const key = normalizePubkey(pubkey);

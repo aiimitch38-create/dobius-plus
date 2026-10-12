@@ -32,14 +32,18 @@ export function CommunityIconSettingsCard({
   const hasLocalEditRef = React.useRef(false);
 
   React.useEffect(() => {
-    if (hasLocalEditRef.current) return;
+    if (hasLocalEditRef.current) {
+      return;
+    }
     setDraftIcon(persistedIcon);
   }, [persistedIcon]);
 
   const mutation = useMutation({
     mutationFn: (icon: string) => setCommunityIcon(icon),
     onSuccess: async (_data, icon) => {
-      if (!relayUrl) return;
+      if (!relayUrl) {
+        return;
+      }
       queryClient.setQueryData(communityIconQueryKey(relayUrl), icon || null);
       await queryClient.invalidateQueries({
         queryKey: communityIconQueryKey(relayUrl),
@@ -54,7 +58,9 @@ export function CommunityIconSettingsCard({
       hasLocalEditRef.current = true;
       queuedIconRef.current = icon;
       setDraftIcon(icon);
-      if (isSavingRef.current) return;
+      if (isSavingRef.current) {
+        return;
+      }
 
       isSavingRef.current = true;
       const drainQueue = async () => {
@@ -76,7 +82,9 @@ export function CommunityIconSettingsCard({
             );
           }
         }
-        if (lastAttemptFailed) setDraftIcon(confirmedIcon);
+        if (lastAttemptFailed) {
+          setDraftIcon(confirmedIcon);
+        }
         hasLocalEditRef.current = false;
         isSavingRef.current = false;
       };

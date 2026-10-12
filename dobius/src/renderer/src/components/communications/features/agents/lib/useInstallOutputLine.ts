@@ -35,8 +35,12 @@ export function nextInstallOutputLine(
   event: InstallOutputEvent,
   runtimeId: string,
 ): InstallOutputState | null {
-  if (event.runtime_id !== runtimeId) return current;
-  if (current && event.seq <= current.seq) return current;
+  if (event.runtime_id !== runtimeId) {
+    return current;
+  }
+  if (current && event.seq <= current.seq) {
+    return current;
+  }
   return { seq: event.seq, line: event.line };
 }
 
@@ -72,7 +76,9 @@ export function useInstallOutputLine(
         const stop = await listen<InstallOutputEvent>(
           "acp-install-output",
           (event) => {
-            if (cancelled) return;
+            if (cancelled) {
+              return;
+            }
             setState((current) =>
               nextInstallOutputLine(current, event.payload, runtimeId),
             );
@@ -98,7 +104,9 @@ export function useInstallOutputLine(
   // would make every event of the following install look superseded. Settling
   // is the run boundary, so it is where the ordering key resets.
   React.useEffect(() => {
-    if (!isInstalling) setState(null);
+    if (!isInstalling) {
+      setState(null);
+    }
   }, [isInstalling]);
 
   // Events that arrive after the install settles — a drain flushing its last

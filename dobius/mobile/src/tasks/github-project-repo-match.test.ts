@@ -12,7 +12,9 @@ const repos = [
 
 describe('GitHub project repo matching', () => {
   it('normalizes owner/repo slugs case-insensitively', () => {
-    expect(normalizeGitHubRepositorySlug(' statusdigitalmarketing/Dobius ')).toBe('statusdigitalmarketing/dobius-plus')
+    expect(normalizeGitHubRepositorySlug(' statusdigitalmarketing/Dobius ')).toBe(
+      'statusdigitalmarketing/dobius'
+    )
     expect(normalizeGitHubRepositorySlug('dobius')).toBeNull()
     expect(normalizeGitHubRepositorySlug('statusdigitalmarketing/dobius-plus/extra')).toBeNull()
   })
@@ -37,24 +39,46 @@ describe('GitHub project repo matching', () => {
   it('falls back to exact display/path slug matching when slug resolution is unavailable', () => {
     expect(
       findRepoForGitHubProjectRepository('statusdigitalmarketing/dobius-plus', [
-        { id: 'repo-1', path: '/Users/me/statusdigitalmarketing/dobius-plus', displayName: 'dobius' }
+        {
+          id: 'repo-1',
+          path: '/Users/me/statusdigitalmarketing/dobius-plus',
+          displayName: 'dobius'
+        }
       ])
-    ).toEqual({ id: 'repo-1', path: '/Users/me/statusdigitalmarketing/dobius-plus', displayName: 'dobius' })
+    ).toEqual({
+      id: 'repo-1',
+      path: '/Users/me/statusdigitalmarketing/dobius-plus',
+      displayName: 'dobius'
+    })
   })
 
   it('normalizes Windows paths before path slug fallback matching', () => {
     expect(
-      findRepoForGitHubProjectRepository('statusdigitalmarketing/dobius-plus', [
-        { id: 'repo-1', path: 'C:\\Users\\me\\statusdigitalmarketing\\dobius', displayName: 'dobius' }
+      findRepoForGitHubProjectRepository('statusdigitalmarketing/dobius', [
+        {
+          id: 'repo-1',
+          path: 'C:\\Users\\me\\statusdigitalmarketing\\dobius',
+          displayName: 'dobius'
+        }
       ])
-    ).toEqual({ id: 'repo-1', path: 'C:\\Users\\me\\statusdigitalmarketing\\dobius', displayName: 'dobius' })
+    ).toEqual({
+      id: 'repo-1',
+      path: 'C:\\Users\\me\\statusdigitalmarketing\\dobius',
+      displayName: 'dobius'
+    })
   })
 
   it('does not path-match a repo whose resolved slug points somewhere else', () => {
     expect(
       findRepoForGitHubProjectRepository(
         'statusdigitalmarketing/dobius-plus',
-        [{ id: 'repo-1', path: '/Users/me/statusdigitalmarketing/dobius-plus', displayName: 'dobius' }],
+        [
+          {
+            id: 'repo-1',
+            path: '/Users/me/statusdigitalmarketing/dobius-plus',
+            displayName: 'dobius'
+          }
+        ],
         {
           'repo-1': { path: '/Users/me/statusdigitalmarketing/dobius-plus', slug: 'fork/dobius' }
         }

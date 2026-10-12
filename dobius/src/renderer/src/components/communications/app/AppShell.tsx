@@ -676,7 +676,6 @@ export function AppShell() {
       if (key === "a" && event.shiftKey) {
         event.preventDefault();
         void goHome();
-        return;
       }
     }
 

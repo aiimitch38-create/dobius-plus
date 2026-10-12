@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- Why: this integration-style RPC test keeps the request/response contract together so regressions in the external CLI surface are easier to spot. */
-import { existsSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createConnection, type Socket } from 'node:net'
@@ -14,6 +14,7 @@ import { readRuntimeMetadata } from './runtime-metadata'
 import { createRuntimeTransportMetadata, DobiusRuntimeRpcServer } from './runtime-rpc'
 import { parsePairingCode } from '../../shared/pairing'
 import { decrypt, deriveSharedKey, encrypt, generateKeyPair } from './rpc/e2ee-crypto'
+import { enableE2EESequencing } from '../../shared/e2ee-sequencing'
 import { DeviceRegistry } from './device-registry'
 
 vi.mock('../git/worktree', () => ({
@@ -149,9 +150,13 @@ function waitForWsClose(ws: WebSocket): Promise<void> {
 type AuthenticatedMobileWs = {
   ws: WebSocket
   sharedKey: Uint8Array
+  deviceToken: string
 }
 
-async function authenticateMobileWsSession(pairingUrl: string): Promise<AuthenticatedMobileWs> {
+async function authenticateMobileWsSession(
+  pairingUrl: string,
+  deviceTokenOverride?: string
+): Promise<AuthenticatedMobileWs> {
   const parsed = parsePairingCode(pairingUrl)
   expect(parsed).toBeTruthy()
   const ws = await connectWs(parsed!.endpoint)
@@ -165,20 +170,37 @@ async function authenticateMobileWsSession(pairingUrl: string): Promise<Authenti
       publicKeyB64: Buffer.from(mobileKeys.publicKey).toString('base64')
     })
   )
-  expect(JSON.parse(await nextWsMessage(ws))).toEqual({ type: 'e2ee_ready' })
+  const ready = JSON.parse(await nextWsMessage(ws)) as { type: string; challenge: string }
+  expect(ready).toMatchObject({ type: 'e2ee_ready', version: 2 })
+  enableE2EESequencing(sharedKey, 'client')
 
+  const presentedToken = deviceTokenOverride ?? parsed!.deviceToken
   ws.send(
-    encrypt(JSON.stringify({ type: 'e2ee_auth', deviceToken: parsed!.deviceToken }), sharedKey)
+    encrypt(
+      JSON.stringify({
+        type: 'e2ee_auth',
+        deviceToken: presentedToken,
+        challenge: ready.challenge
+      }),
+      sharedKey
+    )
   )
-  expect(JSON.parse(decrypt(await nextWsMessage(ws), sharedKey)!)).toEqual({
-    type: 'e2ee_authenticated'
-  })
+  const authenticated = JSON.parse(decrypt(await nextWsMessage(ws), sharedKey)!) as {
+    type: string
+    deviceToken?: string
+  }
+  expect(authenticated.type).toBe('e2ee_authenticated')
 
-  return { ws, sharedKey }
+  // Why: a mobile pairing token is single-use; the server hands back the
+  // phone's own token on first login (F1).
+  return { ws, sharedKey, deviceToken: authenticated.deviceToken ?? presentedToken }
 }
 
-async function authenticateMobileWs(pairingUrl: string): Promise<WebSocket> {
-  return (await authenticateMobileWsSession(pairingUrl)).ws
+async function authenticateMobileWs(
+  pairingUrl: string,
+  deviceTokenOverride?: string
+): Promise<WebSocket> {
+  return (await authenticateMobileWsSession(pairingUrl, deviceTokenOverride)).ws
 }
 
 function sendEncryptedWsRequest(
@@ -358,6 +380,35 @@ describe('DobiusRuntimeRpcServer', () => {
     await server.stop()
   })
 
+  it('reports pairing unavailable instead of throwing when the device registry is unreadable', async () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'dobius-runtime-rpc-'))
+    const registryPath = join(userDataPath, 'dobius-devices.json')
+    writeFileSync(registryPath, '[{"deviceId":', { mode: 0o600 })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const runtime = new DobiusRuntimeService()
+    const server = new DobiusRuntimeRpcServer({
+      runtime,
+      userDataPath,
+      enableWebSocket: true,
+      wsPort: 0
+    })
+
+    try {
+      await server.start()
+
+      // Why: headless serve awaits this before printing dobius_server_ready.
+      for (const rotate of [false, true]) {
+        const offer = server.createPairingOffer({ address: '100.64.1.20', rotate })
+        expect(offer.available).toBe(false)
+        expect(offer.available ? '' : offer.reason).toContain('unreadable')
+      }
+      expect(readFileSync(registryPath, 'utf-8')).toBe('[{"deviceId":')
+    } finally {
+      await server.stop()
+      errorSpy.mockRestore()
+    }
+  })
+
   it('includes a web client URL when the web bundle is served by the runtime', async () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'dobius-runtime-rpc-'))
     const runtime = new DobiusRuntimeService()
@@ -523,7 +574,7 @@ describe('DobiusRuntimeRpcServer', () => {
           publicKeyB64: Buffer.from(mobileKeys.publicKey).toString('base64')
         })
       )
-      expect(JSON.parse(await nextWsMessage(ws))).toEqual({ type: 'e2ee_ready' })
+      expect(JSON.parse(await nextWsMessage(ws))).toMatchObject({ type: 'e2ee_ready' })
       expect(server['e2eeChannels'].size).toBe(1)
       expect(server['wsConnectionIds'].size).toBe(1)
 
@@ -558,8 +609,9 @@ describe('DobiusRuntimeRpcServer', () => {
       if (!offer.available) {
         throw new Error('WebSocket pairing unavailable')
       }
-      const first = await authenticateMobileWs(offer.pairingUrl)
-      const second = await authenticateMobileWs(offer.pairingUrl)
+      const firstSession = await authenticateMobileWsSession(offer.pairingUrl)
+      const first = firstSession.ws
+      const second = await authenticateMobileWs(offer.pairingUrl, firstSession.deviceToken)
 
       expect(server.revokeMobileDevice(offer.deviceId)).toBe(true)
       await Promise.all([waitForWsClose(first), waitForWsClose(second)])
@@ -977,6 +1029,17 @@ describe('DobiusRuntimeRpcServer', () => {
     const server = new DobiusRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
     server['deviceRegistry'] = new DeviceRegistry(userDataPath)
     const mobile = server['deviceRegistry']!.addDevice('phone', 'mobile')
+    // Why: high-risk mobile methods need an explicit per-device grant
+    // (BUILD-034); this test covers their routing once granted.
+    server['deviceRegistry']!.getDevice(mobile.deviceId)!.grants = [
+      'git.push',
+      'settings.update',
+      'remote.merge',
+      'remote.write',
+      'git.discard',
+      'git.sync',
+      'browser.control'
+    ]
     const replies: Record<string, unknown>[] = []
 
     await server['handleWebSocketMessage'](
@@ -2650,6 +2713,8 @@ describe('DobiusRuntimeRpcServer', () => {
       throw new Error('WebSocket pairing unavailable')
     }
     expect(parsePairingCode(phoneOffer.pairingUrl)?.scope).toBe('mobile')
+    // Why: terminal.send from a phone needs an explicit grant (BUILD-034).
+    server.getDeviceRegistry()!.getDevice(phoneOffer.deviceId)!.grants = ['terminal.send']
     const phone = await authenticateMobileWsSession(phoneOffer.pairingUrl)
     const phoneResponses = createEncryptedWsResponseReader(phone)
     const metadata = readRuntimeMetadata(userDataPath)

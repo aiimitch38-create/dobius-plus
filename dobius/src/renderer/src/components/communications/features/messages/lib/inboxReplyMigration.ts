@@ -58,11 +58,15 @@ export async function migrateInboxReplyDraft(
     ) => "migrated" | "collision" | "noop";
   },
 ): Promise<InboxReplyMigrationResult | null> {
-  if (!legacyKey.startsWith(INBOX_REPLY_PREFIX)) return null;
+  if (!legacyKey.startsWith(INBOX_REPLY_PREFIX)) {
+    return null;
+  }
 
   const rawId = legacyKey.slice(INBOX_REPLY_PREFIX.length).trim();
   // Must be a 64-character hex string (Nostr event ID).
-  if (!/^[0-9a-f]{64}$/i.test(rawId)) return null;
+  if (!/^[0-9a-f]{64}$/i.test(rawId)) {
+    return null;
+  }
 
   let event: RelayEvent;
   try {
@@ -72,17 +76,23 @@ export async function migrateInboxReplyDraft(
   }
 
   // Reject if the relay returned a different event than requested.
-  if (event.id !== rawId) return null;
+  if (event.id !== rawId) {
+    return null;
+  }
 
   const eventChannelId = deps.getChannelIdFromTags(event.tags);
-  if (!eventChannelId || eventChannelId !== storedDraft.channelId) return null;
+  if (!eventChannelId || eventChannelId !== storedDraft.channelId) {
+    return null;
+  }
 
   const ref = deps.getThreadReference(event.tags);
   const conversationId = ref.rootId ?? ref.parentId ?? event.id;
   const newDraftKey = `${THREAD_DRAFT_PREFIX}${conversationId}`;
 
   const result = deps.renameDraftEntry(legacyKey, newDraftKey);
-  if (result !== "migrated") return null;
+  if (result !== "migrated") {
+    return null;
+  }
 
   return { newDraftKey, conversationId, channelId: eventChannelId };
 }

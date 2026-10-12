@@ -30,14 +30,18 @@ export function useHomeInboxAutoSelection({
   urlSelectedItemId,
 }: UseHomeInboxAutoSelectionOptions) {
   React.useEffect(() => {
-    if (!isMessagesMode) return;
+    if (!isMessagesMode) {
+      return;
+    }
 
     if (hasPersonalSelection || urlSelectedItemId !== null) {
       setAutoSelectedEventId(null);
       return;
     }
 
-    if (isLoading || !hasFeed) return;
+    if (isLoading || !hasFeed) {
+      return;
+    }
 
     if (filteredItems.length === 0) {
       setAutoSelectedEventId(null);
@@ -45,14 +49,18 @@ export function useHomeInboxAutoSelection({
     }
 
     // Wait for the width measurement so narrow Home does not cold-load detail.
-    if (homeInboxWidthPx === 0) return;
+    if (homeInboxWidthPx === 0) {
+      return;
+    }
 
     const selectedConversationIsVisible =
       selectedConversationId !== null &&
       filteredItems.some(
         (item) => item.conversationId === selectedConversationId,
       );
-    if (selectedConversationIsVisible || coldResolutionPending) return;
+    if (selectedConversationIsVisible || coldResolutionPending) {
+      return;
+    }
 
     setAutoSelectedEventId(
       isNarrowHomeViewport ? null : (filteredItems[0]?.id ?? null),

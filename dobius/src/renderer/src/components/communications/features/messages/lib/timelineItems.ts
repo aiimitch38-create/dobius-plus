@@ -73,7 +73,9 @@ type MembershipChangePayload = {
 function parseMembershipChangePayload(
   entry: MainTimelineEntry,
 ): MembershipChangePayload | null {
-  if (entry.message.kind !== KIND_SYSTEM_MESSAGE) return null;
+  if (entry.message.kind !== KIND_SYSTEM_MESSAGE) {
+    return null;
+  }
 
   try {
     const payload = JSON.parse(entry.message.body) as {
@@ -91,7 +93,9 @@ function parseMembershipChangePayload(
 
     const actor = payload.actor.trim().toLowerCase();
     const target = payload.target.trim().toLowerCase();
-    if (!actor || !target) return null;
+    if (!actor || !target) {
+      return null;
+    }
 
     return actor === target
       ? { actor: null, mode: "joined", target }
@@ -148,7 +152,9 @@ function buildMembershipGroups(
       start -= 1;
     }
 
-    if (start < end) groups.set(start, entries.slice(start, end + 1));
+    if (start < end) {
+      groups.set(start, entries.slice(start, end + 1));
+    }
     end = start - 1;
   }
 
@@ -182,7 +188,9 @@ export function buildTimelineItems(
     const unreadIndex = entries.findIndex(
       (entry) => entry.message.id === firstUnreadMessageId,
     );
-    if (unreadIndex > 0) membershipBarrierIndexes.add(unreadIndex);
+    if (unreadIndex > 0) {
+      membershipBarrierIndexes.add(unreadIndex);
+    }
   }
   const membershipGroupsByStartIndex = buildMembershipGroups(
     entries,

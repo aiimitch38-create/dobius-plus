@@ -7,10 +7,10 @@ import { rewriteRelayUrl } from "@comms/shared/lib/mediaUrl";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@comms/shared/ui/tooltip";
 
 type QuickBotBarProps = {
-  personas: Array<{
+  personas: {
     persona: AgentPersona;
     instanceName: string;
-  }>;
+  }[];
   pending: boolean;
   onAdd: (persona: AgentPersona, instanceName: string) => void;
 };
@@ -25,7 +25,9 @@ export function QuickBotBar({ personas, pending, onAdd }: QuickBotBarProps) {
     }
   }, [pending, pendingId]);
 
-  if (personas.length === 0) return null;
+  if (personas.length === 0) {
+    return null;
+  }
 
   return (
     <div

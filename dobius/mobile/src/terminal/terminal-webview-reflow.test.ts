@@ -53,7 +53,10 @@ describe('terminal WebView reflow', () => {
     expect(htmlSource).toContain('var MIN_FIT_COLS = 20;')
     expect(htmlSource).toContain('if (cols < MIN_FIT_COLS) return;')
     expect(htmlSource).toContain("flog('measure-skip-small-width'")
-    expect(htmlSource).toContain("notify({ type: 'measure-result', cols: null, rows: null });")
+    expect(htmlSource).toContain(
+      "notify({ type: 'measure-result', id: requestId, cols: null, rows: null });"
+    )
+    expect(htmlSource).toContain('measureFitDimensions(msg.containerHeight, msg.id)')
   })
 
   // Why: the raw-source assertions above pass even if the reflow module is

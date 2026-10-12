@@ -5,6 +5,7 @@ import type { RuntimeRpcResponse, RuntimeRpcSuccess } from '../../../shared/runt
 import { isKeepaliveFrame } from '../../../shared/runtime-rpc-envelope'
 import type { WebPairingOffer } from './web-pairing'
 import { withRemoteRuntimeTailscaleHint } from '../../../shared/remote-runtime-tailscale-hint'
+import { beginE2EEAuth } from '../../../shared/e2ee-handshake'
 import {
   decrypt,
   decryptBytes,
@@ -12,6 +13,7 @@ import {
   encrypt,
   encryptBytes,
   generateKeyPair,
+  isE2EESequenceViolated,
   publicKeyFromBase64,
   publicKeyToBase64
 } from './web-e2ee'
@@ -429,7 +431,7 @@ export class WebRuntimeClient {
       try {
         const control = JSON.parse(raw) as { type?: unknown }
         if (control.type === 'e2ee_ready') {
-          this.sendEncrypted({ type: 'e2ee_auth', deviceToken: this.pairing.deviceToken })
+          this.sendEncrypted(beginE2EEAuth(this.sharedKey, this.pairing.deviceToken, control))
           return
         }
       } catch {
@@ -438,6 +440,7 @@ export class WebRuntimeClient {
 
       const plaintext = decrypt(raw, this.sharedKey)
       if (plaintext === null) {
+        this.dropIfOutOfSequence()
         return
       }
       try {
@@ -476,6 +479,7 @@ export class WebRuntimeClient {
       }
       const plaintext = decryptBytes(encrypted, this.sharedKey)
       if (!plaintext) {
+        this.dropIfOutOfSequence()
         return
       }
       for (const subscription of this.subscriptions.values()) {
@@ -486,6 +490,7 @@ export class WebRuntimeClient {
 
     const plaintext = decrypt(raw, this.sharedKey)
     if (plaintext === null) {
+      this.dropIfOutOfSequence()
       return
     }
 
@@ -583,6 +588,15 @@ export class WebRuntimeClient {
         }
       })
     })
+  }
+
+  // Why: an authentic frame out of sequence means frames were replayed,
+  // reordered or deleted on the path. Drop this socket; the close handler
+  // reconnects with a fresh key and counters.
+  private dropIfOutOfSequence(): void {
+    if (this.sharedKey && isE2EESequenceViolated(this.sharedKey)) {
+      this.ws?.close()
+    }
   }
 
   private handleSocketClosed(closedWs: WebSocket): void {

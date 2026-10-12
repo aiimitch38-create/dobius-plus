@@ -2195,6 +2195,8 @@ export type UpdateCheckOptions = {
   includePerfPrerelease?: boolean
 }
 
+export type UpdateDisabledReason = 'disconnected' | 'not-enabled' | 'dev-build'
+
 export type UpdateStatus =
   | { state: 'idle' }
   | { state: 'checking'; userInitiated?: boolean }
@@ -2215,6 +2217,9 @@ export type UpdateStatus =
       changelog: ChangelogData | null
     }
   | { state: 'not-available'; userInitiated?: boolean }
+  // Why: 'disabled' is distinct from 'not-available' so a build whose updater is
+  // off (disconnected, not opted in, or dev) never claims to be up to date.
+  | { state: 'disabled'; reason: UpdateDisabledReason; userInitiated?: boolean }
   | { state: 'downloading'; percent: number; version: string; activeNudgeId?: string }
   | { state: 'downloaded'; version: string; releaseUrl?: string; activeNudgeId?: string }
   | { state: 'error'; message: string; userInitiated?: boolean; activeNudgeId?: string }
@@ -2801,6 +2806,10 @@ export type GlobalSettings = {
   /** Why: disabling must persist so startup does not reinstall global agent
    *  hook entries right after the user removes them from Settings or CLI. */
   agentStatusHooksEnabled: boolean
+  /** Why: kernel sandbox for Claude agent runs (Bash file writes/reads).
+   *  Local-only escape valve: never accepted over RPC (`settings.update`),
+   *  and absent means on. Off keeps the rails and the file-tool deny rules. */
+  agentSandboxEnabled?: boolean
   /** Why: generated tab titles are semantic but subjective, so they stay opt-in
    *  and manual renames remain the stronger user intent. */
   tabAutoGenerateTitle: boolean
@@ -2850,6 +2859,10 @@ export type GlobalSettings = {
    *  on read into [5_000ms, 60min] to defend against bad config.
    *  See docs/mobile-fit-hold.md. */
   mobileAutoRestoreFitMs: number | null
+  /** Why: the phone/web WebSocket listener binds 0.0.0.0 and exposes terminal,
+   *  git and file RPCs to the LAN, so it is opt-in (read once at startup; a
+   *  change takes effect on next launch). Missing or non-true means off. */
+  mobileListenerEnabled?: boolean
   /** Experimental: floating animated pet (claude.webp) in the bottom-right
    *  corner. Opt-in because it's a cosmetic joke feature; users who leave it
    *  off never mount the overlay. Toggling takes effect immediately in the

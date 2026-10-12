@@ -62,9 +62,15 @@ type ProjectsPullRequestsListProps = {
 };
 
 function nextStepLabel(status: ProjectPullRequest["status"]) {
-  if (status === "Draft") return "View draft";
-  if (status === "Merged") return "View merge";
-  if (status === "Closed") return "View closed";
+  if (status === "Draft") {
+    return "View draft";
+  }
+  if (status === "Merged") {
+    return "View merge";
+  }
+  if (status === "Closed") {
+    return "View closed";
+  }
   return "Review PR";
 }
 

@@ -46,7 +46,9 @@ export function projectPullRequestTags(
     ["branch-name", input.branch],
     ["target-branch", input.targetBranch],
   ];
-  if (input.mergeBase) tags.push(["merge-base", input.mergeBase]);
+  if (input.mergeBase) {
+    tags.push(["merge-base", input.mergeBase]);
+  }
   return tags;
 }
 
@@ -72,7 +74,9 @@ export function projectPullRequestUpdateTags(
         : project.cloneUrls),
     ],
   ];
-  if (mergeBase) tags.push(["merge-base", mergeBase]);
+  if (mergeBase) {
+    tags.push(["merge-base", mergeBase]);
+  }
   return tags;
 }
 
@@ -111,7 +115,9 @@ async function publishProjectPullRequest(
   input: CreateProjectPullRequestInput,
 ) {
   const title = input.title.trim();
-  if (!title) throw new Error("Pull request title cannot be empty.");
+  if (!title) {
+    throw new Error("Pull request title cannot be empty.");
+  }
   if (title.length > 256) {
     throw new Error("Pull request title must be 256 characters or fewer.");
   }
@@ -146,7 +152,9 @@ export async function publishProjectPullRequestUpdate({
   project: Project;
   pullRequest: ProjectPullRequest;
 }): Promise<boolean> {
-  if (pullRequest.commit?.toLowerCase() === commit.toLowerCase()) return false;
+  if (pullRequest.commit?.toLowerCase() === commit.toLowerCase()) {
+    return false;
+  }
   const identity = await getIdentity();
   if (
     !canPublishProjectPullRequestUpdate(identity.pubkey, project, pullRequest)
@@ -188,7 +196,9 @@ export function useCreateProjectPullRequestMutation(
   const invalidate = useProjectPullRequestWriteInvalidation(project);
   return useMutation({
     mutationFn: (input: CreateProjectPullRequestInput) => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return publishProjectPullRequest(project, input);
     },
     onSuccess: invalidate,
@@ -208,9 +218,12 @@ export function useUpdateProjectPullRequestMutation(
       commit: string;
       mergeBase: string | null;
     }) => {
-      if (!project) throw new Error("No project selected.");
-      if (!pullRequest)
+      if (!project) {
+        throw new Error("No project selected.");
+      }
+      if (!pullRequest) {
         throw new Error("No open pull request for this branch.");
+      }
       return publishProjectPullRequestUpdate({
         commit,
         mergeBase,
@@ -232,7 +245,9 @@ export function useMergeProjectPullRequestMutation(
     }: {
       pullRequest: ProjectPullRequest;
     }) => {
-      if (!project?.cloneUrls[0]) throw new Error("No project selected.");
+      if (!project?.cloneUrls[0]) {
+        throw new Error("No project selected.");
+      }
       if (!pullRequest.branchName || !pullRequest.commit) {
         throw new Error("Pull request branch information is incomplete.");
       }
@@ -263,7 +278,9 @@ export function usePublishProjectPullRequestMergedMutation(
   const invalidate = useProjectPullRequestWriteInvalidation(project);
   return useMutation({
     mutationFn: ({ statusEvent }: { statusEvent: string }) => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return publishProjectPullRequestMerged(project, statusEvent);
     },
     onSuccess: invalidate,

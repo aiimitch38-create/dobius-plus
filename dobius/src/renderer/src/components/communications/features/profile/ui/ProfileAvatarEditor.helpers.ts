@@ -50,7 +50,9 @@ export function useUploadPreviewLifecycle({
     },
     onUploadSuccess: (uploadedUrl: string) => {
       const pendingFile = pendingFileRef.current;
-      if (pendingFile) beginAvatarPresentation(uploadedUrl, pendingFile);
+      if (pendingFile) {
+        beginAvatarPresentation(uploadedUrl, pendingFile);
+      }
       onSuccess(uploadedUrl);
     },
   };
@@ -61,13 +63,17 @@ export function useLocalAvatarPreview() {
   const previewUrlRef = React.useRef<string | null>(null);
 
   const clearPreview = React.useCallback(() => {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
     previewUrlRef.current = null;
     setPreviewUrl(null);
   }, []);
 
   const showFilePreview = React.useCallback((file: File) => {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
     const nextUrl = URL.createObjectURL(file);
     previewUrlRef.current = nextUrl;
     setPreviewUrl(nextUrl);

@@ -2,6 +2,7 @@ import * as React from "react";
 import { ArrowLeft, ChevronRight, Link2, Plus } from "lucide-react";
 
 import type { AddCommunityPrefillRequest } from "@comms/features/communities/addCommunityPrefill";
+import type { Community } from "@comms/features/communities/types";
 import { HostedCommunityCreateFlow } from "@comms/features/communities/ui/HostedCommunityCreateFlow";
 import { useCommunityOnboarding } from "@comms/features/onboarding/communityOnboarding";
 import { InviteRedeemForm } from "@comms/features/onboarding/ui/InviteRedeemForm";
@@ -15,9 +16,7 @@ import {
 
 type AddCommunityDialogProps = {
   prefill?: AddCommunityPrefillRequest | null;
-  onSubmit?: (
-    community: import("@comms/features/communities/types").Community,
-  ) => void;
+  onSubmit?: (community: Community) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
@@ -38,7 +37,9 @@ export function AddCommunityDialog({
   const appliedPrefillId = React.useRef<string | null>(null);
 
   React.useEffect(() => {
-    if (!prefill || appliedPrefillId.current === prefill.requestId) return;
+    if (!prefill || appliedPrefillId.current === prefill.requestId) {
+      return;
+    }
     appliedPrefillId.current = prefill.requestId;
     setJoinError(null);
     setMode("join");
@@ -98,8 +99,11 @@ export function AddCommunityDialog({
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) handleClose();
-        else onOpenChange(true);
+        if (!nextOpen) {
+          handleClose();
+        } else {
+          onOpenChange(true);
+        }
       }}
       open={open}
     >

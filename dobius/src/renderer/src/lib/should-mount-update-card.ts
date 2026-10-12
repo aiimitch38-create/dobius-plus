@@ -4,7 +4,11 @@ export function shouldMountUpdateCardForStatus(status: UpdateStatus): boolean {
   if (status.state === 'idle') {
     return false
   }
-  if (status.state === 'checking' || status.state === 'not-available') {
+  if (
+    status.state === 'checking' ||
+    status.state === 'not-available' ||
+    status.state === 'disabled'
+  ) {
     return status.userInitiated === true
   }
   return true

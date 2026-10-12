@@ -37,7 +37,9 @@ export function CreateProjectDialog({
   const nameInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
 
     setName("");
     setDescription("");
@@ -56,7 +58,9 @@ export function CreateProjectDialog({
     event.preventDefault();
 
     const trimmedName = name.trim();
-    if (!trimmedName) return;
+    if (!trimmedName) {
+      return;
+    }
 
     setErrorMessage(null);
 
@@ -79,7 +83,9 @@ export function CreateProjectDialog({
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && isCreating) return;
+        if (!nextOpen && isCreating) {
+          return;
+        }
         onOpenChange(nextOpen);
       }}
       open={open}

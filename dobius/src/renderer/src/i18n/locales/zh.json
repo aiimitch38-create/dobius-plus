@@ -1805,7 +1805,8 @@
         "a726967bd3": "关闭",
         "d5253b54af": "错误",
         "7ffc08506e": "查看",
-        "522df222b9": "旋转器"
+        "522df222b9": "旋转器",
+        "f528af4816": "更新由安装脚本管理。"
       },
       "WorktreeJumpPalette": {
         "ac037cfac2": "手机",
@@ -5327,7 +5328,8 @@
           "31fd7150cf": "正在检查更新...",
           "3394d1f663": "检查中",
           "d69a09b672": "启动时会自动检查更新。",
-          "7173352632": "空闲"
+          "7173352632": "空闲",
+          "9b7a940bd3": "更新由安装脚本管理。"
         },
         "GeneralWorkspaceSettingsSection": {
           "3d538a98f7": "从工作区的“打开方式”菜单中选择可用的应用程序。",
@@ -5649,7 +5651,10 @@
           "aa1263e881": "保持手机尺寸（默认）",
           "6436e56546": "用于手机配对的二维码",
           "1b1b70279a": "尚未配对任何设备。",
-          "1592afcc7a": "尚未配对任何设备。使用 Dobius+ 手机应用程序扫描二维码。"
+          "1592afcc7a": "尚未配对任何设备。使用 Dobius+ 手机应用程序扫描二维码。",
+          "listenerPendingRestart": "The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.",
+          "listenerOff": "The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.",
+          "listenerFailedToStart": "The phone listener was on at launch but failed to start (see logs). Restart Dobius+ to try again."
         },
         "MobileSettingsPane": {
           "9a3c280e49": "GitHub 发布",
@@ -5795,7 +5800,9 @@
           "fe904ac984": "共享匿名使用数据",
           "77410e0566": "隐私政策",
           "8bfdd23a88": "帮助我们弄清楚下一步要构建什么。 Dobius+ 会发送匿名计数，记录您使用的功能以及出现故障的位置。",
-          "afec8b03be": "CI"
+          "afec8b03be": "CI",
+          "transportUnavailable": "Not available in this build: Dobius+ sends no usage data, so this switch has no effect.",
+          "transportUnavailableDescription": "This build of Dobius+ does not send usage data."
         },
         "QuickCommandsPane": {
           "8764c6e9e4": "删除 {{value0}}",
@@ -7783,7 +7790,14 @@
               "671eb4173c": "通过手机控制终端和智能体。",
               "ffd52a96e4": "移动端",
               "1de96ec8a6": "显示 Dobius+ Mobile 按钮",
-              "682293cadf": "在左侧边栏顶部显示 Dobius+ Mobile 按钮。"
+              "682293cadf": "在左侧边栏顶部显示 Dobius+ Mobile 按钮。",
+              "listenerTitle": "Phone Listener (takes effect on next launch)",
+              "listenerDescription": "Lets phones on your local network connect to Dobius+. Changes take effect the next time Dobius+ starts.",
+              "listenerKeywordListener": "listener",
+              "listenerKeywordNetwork": "local network",
+              "listenerKeywordLan": "lan",
+              "listenerKeywordPhone": "phone",
+              "listenerKeywordWebsocket": "websocket"
             }
           }
         },
@@ -8868,7 +8882,8 @@
           "testButton": "Test",
           "statusLine": "Status: {{state}} · last message row: {{rowid}} · sent in last minute: {{outbound}}",
           "statusRunning": "running",
-          "statusStopped": "stopped"
+          "statusStopped": "stopped",
+          "configUnreadable": "imessage-bridge.json can't be read ({{detail}}), so changes are not saved; repair or remove it"
         },
         "imessage": {
           "bridge": {
@@ -8903,7 +8918,9 @@
           "buildAgentLabel": "Build agent",
           "buildAgentDescription": "Terminal agent used when dispatch_build creates a build worktree.",
           "intervalLabel": "Poll interval",
-          "intervalDescription": "Minutes between Asana refreshes while Auto Mode is enabled."
+          "intervalDescription": "Minutes between Asana refreshes while Auto Mode is enabled.",
+          "autoModeBlockedPaused": "Blocked: crew paused. Resume the crew on the Agents page to run Auto Mode.",
+          "autoModeBlockedUnreadable": "Blocked: crew control file could not be read ({{filePath}}). Fix or remove it, then resume the crew."
         },
         "asana": {
           "search": {
@@ -8955,6 +8972,10 @@
           "remove": "Remove",
           "configured": "A key is stored, encrypted on this machine. It is never shown again.",
           "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "agent-sandbox-copy": {
+          "title": "代理沙盒（推荐）",
+          "description": "Claude 代理运行的命令只能写入代理的工作文件夹、其 git 仓库、临时文件夹和包缓存，并且无法读取其他代理的记忆或已保存的凭据。关闭后，代理可以写入你主文件夹中的任何位置。钩子、设置和 shell 启动文件在两种情况下都会受到保护。"
         }
       },
       "right": {
@@ -12223,7 +12244,12 @@
           "a21f6c33ad": "自动化来源已刷新。",
           "53f06f0ad5": "重试来源",
           "pendingAutomationMissing": "自动化已不可用。",
-          "pendingAutomationRunMissing": "运行历史已不可用。"
+          "pendingAutomationRunMissing": "运行历史已不可用。",
+          "pauseFailed": "Failed to pause automation.",
+          "resumeFailed": "Failed to resume automation.",
+          "deleteFailed": "Failed to delete automation.",
+          "runNowFailed": "Failed to run automation.",
+          "runNowNotStarted": "Automation run did not start."
         },
         "CreateFromPicker": {
           "f061f49e3f": "搜索仓库分支...",
@@ -12585,7 +12611,9 @@
           "notConnected": "Connect Asana in Settings → Automation to see your build and review lanes.",
           "title": "Tasks",
           "sync": "Sync",
-          "empty": "Nothing here."
+          "empty": "Nothing here.",
+          "requeue": "Re-queue",
+          "confirmRequeue": "Re-queue this task for Asana Auto Mode? It will be triaged again and may start a new build."
         },
         "PromptsPanel": {
           "title": "Prompts",

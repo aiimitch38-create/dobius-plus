@@ -46,7 +46,9 @@ function SkeletonReveal({
     const wasLoading = previousLoadingRef.current;
     previousLoadingRef.current = loading;
 
-    if (!loading || wasLoading) return;
+    if (!loading || wasLoading) {
+      return;
+    }
 
     setIsResetting(true);
     rootRef.current?.getBoundingClientRect();

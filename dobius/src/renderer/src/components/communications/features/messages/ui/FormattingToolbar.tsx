@@ -78,9 +78,13 @@ function documentRangeForEmptySelection(editor: Editor): {
   to: number;
 } | null {
   const { doc, selection } = editor.state;
-  if (!selection.empty) return null;
+  if (!selection.empty) {
+    return null;
+  }
 
-  if (doc.textContent.trim().length === 0) return null;
+  if (doc.textContent.trim().length === 0) {
+    return null;
+  }
 
   const from = 1;
   const to = doc.content.size - 1;
@@ -163,7 +167,9 @@ export const FormattingToolbar = React.memo(function FormattingToolbar({
   }, [editor]);
 
   const formattingChain = React.useCallback(() => {
-    if (!editor) return null;
+    if (!editor) {
+      return null;
+    }
 
     const range = pendingSelectionRef.current;
     pendingSelectionRef.current = null;
@@ -202,7 +208,9 @@ export const FormattingToolbar = React.memo(function FormattingToolbar({
 
   const toggleCodeBlock = React.useCallback(() => {
     const chain = formattingChain();
-    if (!chain) return;
+    if (!chain) {
+      return;
+    }
     chain
       .command(({ tr, chain: currentChain }) => {
         if (tr.selection.empty) {
@@ -229,7 +237,9 @@ export const FormattingToolbar = React.memo(function FormattingToolbar({
   }, [formattingChain]);
 
   const toggleLink = React.useCallback(() => {
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
 
     // Restore the range captured on pointer-down before opening the modal.
     // WKWebView may otherwise collapse it as focus moves to the toolbar.
@@ -240,7 +250,9 @@ export const FormattingToolbar = React.memo(function FormattingToolbar({
     }
 
     const chain = formattingChain();
-    if (!chain) return;
+    if (!chain) {
+      return;
+    }
     chain.run();
 
     // Legacy fallback (no modal wired): the native prompts below are a no-op
@@ -274,7 +286,9 @@ export const FormattingToolbar = React.memo(function FormattingToolbar({
         return true;
       })
       .command(({ tr, chain: currentChain }) => {
-        if (!selectionIncludesList(tr)) return true;
+        if (!selectionIncludesList(tr)) {
+          return true;
+        }
         return currentChain().liftListItem("listItem").run();
       })
       .toggleBulletList()
@@ -288,7 +302,9 @@ export const FormattingToolbar = React.memo(function FormattingToolbar({
         return true;
       })
       .command(({ tr, chain: currentChain }) => {
-        if (!selectionIncludesList(tr)) return true;
+        if (!selectionIncludesList(tr)) {
+          return true;
+        }
         return currentChain().liftListItem("listItem").run();
       })
       .toggleOrderedList()
@@ -302,7 +318,9 @@ export const FormattingToolbar = React.memo(function FormattingToolbar({
         return true;
       })
       .command(({ tr, chain: currentChain }) => {
-        if (!selectionIncludesList(tr)) return true;
+        if (!selectionIncludesList(tr)) {
+          return true;
+        }
         return currentChain().liftListItem("listItem").run();
       })
       .toggleBlockquote()
@@ -310,12 +328,16 @@ export const FormattingToolbar = React.memo(function FormattingToolbar({
   }, [formattingChain]);
 
   const toggleSpoiler = React.useCallback(() => {
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
     restorePendingSelection();
     toggleSpoilerFormatting(editor);
   }, [editor, restorePendingSelection]);
 
-  if (!editor || !activeStates) return null;
+  if (!editor || !activeStates) {
+    return null;
+  }
 
   const items = [
     {

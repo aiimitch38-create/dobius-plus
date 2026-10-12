@@ -132,6 +132,7 @@ import {
   pruneStaleLocalWorktreeRegistrationAfterFilesystemRemoval,
   recoverLocalWindowsLongPathWorktreeRemoval
 } from '../local-worktree-removal-recovery'
+import { refreshSessionWorkspaceBrief } from '../agents/session-workspace-brief'
 
 const WORKTREE_ARCHIVE_HOOK_TIMEOUT_MS = 120_000
 const WORKTREE_LIST_ALL_CONCURRENCY = 8
@@ -1214,6 +1215,9 @@ export function registerWorktreeHandlers(
           throw error
         }
         finishAutomationWorkspaceProvenanceRequest(args.automationProvenanceRequest)
+        if (!isFolderRepo(repo) && !repo.connectionId) {
+          await refreshSessionWorkspaceBrief(result.worktree.path)
+        }
 
         // Why: emit `workspace_created` only after the underlying create has
         // resolved (the helpers throw on failure, so reaching this line means

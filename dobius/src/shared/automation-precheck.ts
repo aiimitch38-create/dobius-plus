@@ -45,3 +45,24 @@ export function formatAutomationPrecheckFailure(result: AutomationPrecheckResult
   }
   return `Precheck exited with code ${result.exitCode ?? 'unknown'}.`
 }
+
+// A precheck that could not run because its target was unavailable.
+export function buildUnavailablePrecheckResult(
+  command: string,
+  error: string,
+  now: number = Date.now()
+): AutomationPrecheckResult {
+  return {
+    command,
+    exitCode: null,
+    timedOut: false,
+    durationMs: 0,
+    stdout: '',
+    stderr: '',
+    stdoutTruncated: false,
+    stderrTruncated: false,
+    error,
+    startedAt: now,
+    completedAt: now
+  }
+}

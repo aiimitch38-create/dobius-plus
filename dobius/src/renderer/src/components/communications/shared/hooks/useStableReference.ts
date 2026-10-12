@@ -17,9 +17,13 @@ export function useStableMap<K, V>(next: Map<K, V>): Map<K, V> {
 }
 
 function mapsEqual<K, V>(a: Map<K, V>, b: Map<K, V>): boolean {
-  if (a.size !== b.size) return false;
+  if (a.size !== b.size) {
+    return false;
+  }
   for (const [key, value] of a) {
-    if (!b.has(key) || !Object.is(b.get(key), value)) return false;
+    if (!b.has(key) || !Object.is(b.get(key), value)) {
+      return false;
+    }
   }
   return true;
 }
@@ -46,9 +50,13 @@ function arraysShallowEqual(
   a: readonly unknown[],
   b: readonly unknown[],
 ): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length) {
+    return false;
+  }
   for (let i = 0; i < a.length; i += 1) {
-    if (!Object.is(a[i], b[i])) return false;
+    if (!Object.is(a[i], b[i])) {
+      return false;
+    }
   }
   return true;
 }
@@ -70,9 +78,13 @@ export function useStableSet<T>(next: ReadonlySet<T>): ReadonlySet<T> {
 }
 
 function setsEqual<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): boolean {
-  if (a.size !== b.size) return false;
+  if (a.size !== b.size) {
+    return false;
+  }
   for (const value of a) {
-    if (!b.has(value)) return false;
+    if (!b.has(value)) {
+      return false;
+    }
   }
   return true;
 }

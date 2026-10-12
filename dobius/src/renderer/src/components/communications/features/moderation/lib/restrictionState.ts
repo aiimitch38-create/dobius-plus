@@ -21,8 +21,12 @@ export type MemberRestrictionState = {
 export function parseRestrictionTimestampMs(
   value: string | number | null,
 ): number | null {
-  if (value == null) return null;
-  if (typeof value === "number") return value * 1000;
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === "number") {
+    return value * 1000;
+  }
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? null : parsed;
 }

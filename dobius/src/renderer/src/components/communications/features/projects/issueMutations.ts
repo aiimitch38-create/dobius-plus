@@ -38,7 +38,9 @@ export function useCreateProjectIssueMutation(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateProjectIssueInput) => {
-      if (!project) throw new Error("No project selected.");
+      if (!project) {
+        throw new Error("No project selected.");
+      }
       return publishProjectIssue(project, input);
     },
     onSuccess: async () => {

@@ -27,7 +27,9 @@ async function decryptAndParse(
   try {
     const plaintext = await nip44DecryptFromSelf(event.content);
     const store = parseChannelSectionPayload(JSON.parse(plaintext));
-    if (!store) return null;
+    if (!store) {
+      return null;
+    }
     return { store, createdAt: event.created_at, eventId: event.id };
   } catch {
     return null;
@@ -54,8 +56,12 @@ export class ChannelSectionSyncManager {
         "#d": [D_TAG],
         limit: 1,
       });
-      if (events.length === 0) return null;
-      if (events[0].pubkey !== this.pubkey) return null;
+      if (events.length === 0) {
+        return null;
+      }
+      if (events[0].pubkey !== this.pubkey) {
+        return null;
+      }
       const result = await decryptAndParse(events[0]);
       if (result) {
         this.lastRemoteCreatedAt = Math.max(
@@ -101,9 +107,13 @@ export class ChannelSectionSyncManager {
         "#d": [D_TAG],
         limit: 1,
       });
-      if (events.length === 0 || events[0].pubkey !== this.pubkey) return store;
+      if (events.length === 0 || events[0].pubkey !== this.pubkey) {
+        return store;
+      }
       const remote = await decryptAndParse(events[0]);
-      if (!remote) return store;
+      if (!remote) {
+        return store;
+      }
       // Sections use whole-blob LWW: take whichever is newer
       if (remote.createdAt > this.lastRemoteCreatedAt) {
         this.lastRemoteCreatedAt = remote.createdAt;
@@ -116,10 +126,14 @@ export class ChannelSectionSyncManager {
   }
 
   private isIdenticalToLastPublished(store: ChannelSectionStore): boolean {
-    if (!this.lastPublishedStore) return false;
+    if (!this.lastPublishedStore) {
+      return false;
+    }
     const lastSections = this.lastPublishedStore.sections;
     const currentSections = store.sections;
-    if (lastSections.length !== currentSections.length) return false;
+    if (lastSections.length !== currentSections.length) {
+      return false;
+    }
     for (let i = 0; i < currentSections.length; i++) {
       const last = lastSections[i] as ChannelSection | undefined;
       const current = currentSections[i] as ChannelSection;
@@ -129,15 +143,19 @@ export class ChannelSectionSyncManager {
         last.name !== current.name ||
         last.icon !== current.icon ||
         last.order !== current.order
-      )
+      ) {
         return false;
+      }
     }
     const lastAssignKeys = Object.keys(this.lastPublishedStore.assignments);
     const currentAssignKeys = Object.keys(store.assignments);
-    if (lastAssignKeys.length !== currentAssignKeys.length) return false;
+    if (lastAssignKeys.length !== currentAssignKeys.length) {
+      return false;
+    }
     for (const key of currentAssignKeys) {
-      if (this.lastPublishedStore.assignments[key] !== store.assignments[key])
+      if (this.lastPublishedStore.assignments[key] !== store.assignments[key]) {
         return false;
+      }
     }
     return true;
   }
@@ -148,7 +166,9 @@ export class ChannelSectionSyncManager {
       // Guard: manager may have been destroyed while fetchOwnBlobBeforePublish
       // was awaited (community switch during in-flight fetch). If so, abort
       // before touching the relay.
-      if (this.destroyed) return;
+      if (this.destroyed) {
+        return;
+      }
       if (this.isIdenticalToLastPublished(merged)) {
         this.pendingStore = null;
         return;
@@ -175,7 +195,9 @@ export class ChannelSectionSyncManager {
       // Final guard immediately before the network call — sign/encrypt are
       // synchronous-ish but cheap; the relay socket may have moved to a
       // different community by the time we reach this point.
-      if (this.destroyed) return;
+      if (this.destroyed) {
+        return;
+      }
       await relayClient.publishEvent(
         event,
         "Timed out publishing channel sections.",
@@ -203,7 +225,9 @@ export class ChannelSectionSyncManager {
         limit: 0,
       },
       (event: RelayEvent) => {
-        if (event.pubkey !== this.pubkey) return;
+        if (event.pubkey !== this.pubkey) {
+          return;
+        }
         void decryptAndParse(event).then((result) => {
           if (result) {
             this.lastRemoteCreatedAt = Math.max(

@@ -61,7 +61,9 @@ export function HuddleIndicator({
   const [isJoining, setIsJoining] = React.useState(false);
 
   React.useEffect(() => {
-    if (!channelId) return;
+    if (!channelId) {
+      return;
+    }
 
     let disposed = false;
     let cleanup: (() => void) | null = null;
@@ -103,7 +105,9 @@ export function HuddleIndicator({
 
         switch (ev.kind) {
           case KIND_HUDDLE_STARTED: {
-            if (!ephId) break;
+            if (!ephId) {
+              break;
+            }
             // A new start supersedes any previous ended state for this channel.
             endedChannels.delete(ephId);
             huddle = {
@@ -113,10 +117,14 @@ export function HuddleIndicator({
             break;
           }
           case KIND_HUDDLE_PARTICIPANT_JOINED: {
-            if (!ephId) break;
+            if (!ephId) {
+              break;
+            }
             // Skip if this ephemeral channel has already ended — don't
             // resurrect a phantom huddle from a late-arriving relay event.
-            if (endedChannels.has(ephId)) break;
+            if (endedChannels.has(ephId)) {
+              break;
+            }
             // 48101 events are relay-signed — the actual participant is in the "p" tag.
             const joinedPk =
               ev.tags.find((t) => t[0] === "p")?.[1] ?? ev.pubkey;
@@ -130,9 +138,13 @@ export function HuddleIndicator({
             break;
           }
           case KIND_HUDDLE_PARTICIPANT_LEFT: {
-            if (!ephId) break;
+            if (!ephId) {
+              break;
+            }
             // Skip if this ephemeral channel has already ended.
-            if (endedChannels.has(ephId)) break;
+            if (endedChannels.has(ephId)) {
+              break;
+            }
             // 48102 events are relay-signed — the actual participant is in the "p" tag.
             const leftPk = ev.tags.find((t) => t[0] === "p")?.[1] ?? ev.pubkey;
             if (!huddle || ephId !== huddle.ephemeralChannelId) {
@@ -145,7 +157,9 @@ export function HuddleIndicator({
             break;
           }
           case KIND_HUDDLE_ENDED: {
-            if (!ephId) break;
+            if (!ephId) {
+              break;
+            }
             endedChannels.add(ephId);
             if (huddle && ephId === huddle.ephemeralChannelId) {
               huddle = null;
@@ -164,10 +178,14 @@ export function HuddleIndicator({
     // limit: 100 covers long-lived huddles with many join/leave cycles.
     relayClient
       .subscribeToHuddleEvents(channelId, (event: RelayEvent) => {
-        if (disposed) return;
+        if (disposed) {
+          return;
+        }
 
         // Dedup by event ID — ignore replayed events from reconnect.
-        if (seenEvents.has(event.id)) return;
+        if (seenEvents.has(event.id)) {
+          return;
+        }
         seenEvents.set(event.id, event);
 
         // Reconstruct from full history on every new event.
@@ -205,8 +223,11 @@ export function HuddleIndicator({
         setActiveHuddle(null);
       }
     }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
     });
 
     return () => {
@@ -217,7 +238,9 @@ export function HuddleIndicator({
 
   // No active huddle — render the start button (if onStart provided).
   if (!activeHuddle) {
-    if (!onStart) return null;
+    if (!onStart) {
+      return null;
+    }
     if (renderMode === "menu-item") {
       return (
         <DropdownMenuItem
@@ -266,7 +289,9 @@ export function HuddleIndicator({
   const participantCount = Math.max(1, activeHuddle.participants.size);
 
   async function doJoin() {
-    if (!activeHuddle || isJoining) return;
+    if (!activeHuddle || isJoining) {
+      return;
+    }
     setIsJoining(true);
     try {
       await joinHuddle(channelId, activeHuddle.ephemeralChannelId);

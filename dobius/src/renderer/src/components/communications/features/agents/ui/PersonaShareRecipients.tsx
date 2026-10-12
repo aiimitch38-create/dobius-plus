@@ -111,7 +111,9 @@ export function PersonaShareRecipients({
   }, [open]);
 
   function selectUser(user: UserSearchResult) {
-    if (selectedUsers.length >= RECIPIENT_LIMIT) return;
+    if (selectedUsers.length >= RECIPIENT_LIMIT) {
+      return;
+    }
     onSelectionChange([...selectedUsers, user]);
     setSearchQuery("");
     setIsPickerOpen(true);
@@ -141,7 +143,9 @@ export function PersonaShareRecipients({
             className="grid min-h-10 min-w-0 cursor-text grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-md border border-input bg-background px-2 py-1.5 focus-within:ring-1 focus-within:ring-ring"
             data-testid={`${testIdPrefix}-recipient-field`}
             onClick={() => {
-              if (disabled) return;
+              if (disabled) {
+                return;
+              }
               setIsPickerOpen(true);
               searchInputRef.current?.focus({ preventScroll: true });
             }}
@@ -197,18 +201,24 @@ export function PersonaShareRecipients({
                     selectedUsers.length > 0
                   ) {
                     event.preventDefault();
-                    const lastUser = selectedUsers[selectedUsers.length - 1];
-                    if (lastUser) removeUser(lastUser.pubkey);
+                    const lastUser = selectedUsers.at(-1);
+                    if (lastUser) {
+                      removeUser(lastUser.pubkey);
+                    }
                     return;
                   }
 
-                  if (event.key !== "Enter") return;
+                  if (event.key !== "Enter") {
+                    return;
+                  }
                   const selection = getKeyboardSearchSelection({
                     currentQuery: searchQuery,
                     rankedQuery: deferredSearchQuery,
                     results: visibleSearchResults,
                   });
-                  if (!selection) return;
+                  if (!selection) {
+                    return;
+                  }
                   event.preventDefault();
                   selectUser(selection);
                 }}

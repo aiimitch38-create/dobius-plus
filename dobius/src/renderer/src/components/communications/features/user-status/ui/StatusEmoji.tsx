@@ -28,7 +28,9 @@ const SHORTCODE_RE = /^:([^:\s]+):$/;
 export function StatusEmoji({ value, className }: StatusEmojiProps) {
   const customEmoji = useCustomEmoji();
 
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   const displayName = emojiDisplayName(value);
   const match = value.match(SHORTCODE_RE);

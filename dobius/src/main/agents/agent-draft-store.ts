@@ -1,89 +1,66 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import type { AgentDraftComment } from '../../shared/agents'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agent-drafts.json'
 const MAX_DRAFTS = 100
 const RECENT_FINALIZED_COUNT = 20
 
-let cached: AgentDraftComment[] | null = null
-
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function sanitizeStatus(value: unknown): AgentDraftComment['status'] {
   return value === 'approved' || value === 'discarded' ? value : 'pending'
 }
 
-function sanitize(raw: unknown): AgentDraftComment[] {
-  if (!Array.isArray(raw)) {
-    return []
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitizeDraft(entry: unknown): AgentDraftComment | null {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return null
   }
-  return raw.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) {
-      return []
-    }
-    const record = entry as Partial<Record<keyof AgentDraftComment, unknown>>
-    const target = record.target
-    const targetRecord =
-      typeof target === 'object' && target !== null
-        ? (target as Partial<AgentDraftComment['target']>)
-        : null
-    const id = typeof record.id === 'string' ? record.id : ''
-    const agentId = typeof record.agentId === 'string' ? record.agentId : ''
-    const gid = typeof targetRecord?.gid === 'string' ? targetRecord.gid : ''
-    const body = typeof record.body === 'string' ? record.body : ''
-    const createdAt = typeof record.createdAt === 'number' ? record.createdAt : 0
-    if (!id || !agentId || !gid || !createdAt) {
-      return []
-    }
-    return [
-      {
-        id,
-        agentId,
-        target: { kind: 'asana', gid },
-        body,
-        createdAt,
-        status: sanitizeStatus(record.status)
-      }
-    ]
-  })
+  const record = entry as Partial<Record<keyof AgentDraftComment, unknown>>
+  const target = record.target
+  const targetRecord =
+    typeof target === 'object' && target !== null
+      ? (target as Partial<AgentDraftComment['target']>)
+      : null
+  const id = typeof record.id === 'string' ? record.id : ''
+  const agentId = typeof record.agentId === 'string' ? record.agentId : ''
+  const gid = typeof targetRecord?.gid === 'string' ? targetRecord.gid : ''
+  const body = typeof record.body === 'string' ? record.body : ''
+  const createdAt = typeof record.createdAt === 'number' ? record.createdAt : 0
+  if (!id || !agentId || !gid || !createdAt) {
+    return null
+  }
+  return {
+    id,
+    agentId,
+    target: { kind: 'asana', gid },
+    body,
+    createdAt,
+    status: sanitizeStatus(record.status)
+  }
 }
 
+const file = new SafeJsonFile<AgentDraftComment[]>({
+  filePath,
+  parse: (raw) =>
+    Array.isArray(raw) ? parseEveryEntry(raw, sanitizeDraft)?.slice(-MAX_DRAFTS) : undefined,
+  fallback: () => [],
+  label: '[agents] agent-drafts.json'
+})
+
 function load(): AgentDraftComment[] {
-  if (cached) {
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(filePath(), 'utf-8'))).slice(-MAX_DRAFTS)
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[agents] failed to load drafts:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = []
-  }
-  return cached
+  return file.get()
 }
 
 function persist(drafts: AgentDraftComment[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(drafts.slice(-MAX_DRAFTS), null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[agents] failed to persist drafts:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+  file.set(drafts.slice(-MAX_DRAFTS))
 }
 
 export function broadcastDraftsChanged(): void {
@@ -105,8 +82,7 @@ export function appendDraft(input: {
     createdAt: Date.now(),
     status: 'pending'
   }
-  cached = [...load(), draft].slice(-MAX_DRAFTS)
-  persist(cached)
+  persist([...load(), draft])
   broadcastDraftsChanged()
   return { ...draft, target: { ...draft.target } }
 }
@@ -138,8 +114,7 @@ export function setDraftStatus(
     return null
   }
   draft.status = status
-  cached = drafts.slice(-MAX_DRAFTS)
-  persist(cached)
+  persist(drafts)
   broadcastDraftsChanged()
   return { ...draft, target: { ...draft.target } }
 }

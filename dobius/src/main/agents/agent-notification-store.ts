@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import type {
   AgentRun,
   AgentNotificationEntry,
   AgentNotificationsSnapshot
 } from '../../shared/agents'
 import type { CustomAgent } from '../../shared/agents'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agents-notifications.json'
 const MAX_ENTRIES = 50
@@ -17,10 +18,8 @@ type PersistedNotifications = {
   lastReadTs: number
 }
 
-let cached: PersistedNotifications | null = null
-
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function sanitizeEntry(raw: unknown): AgentNotificationEntry | null {
@@ -56,58 +55,40 @@ function sanitizeEntry(raw: unknown): AgentNotificationEntry | null {
   }
 }
 
-function sanitize(raw: unknown): PersistedNotifications {
-  if (typeof raw !== 'object' || raw === null) {
-    return { entries: [], lastReadTs: 0 }
-  }
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitize(raw: object): PersistedNotifications | undefined {
   const record = raw as Partial<PersistedNotifications>
+  const entries = Array.isArray(record.entries)
+    ? parseEveryEntry(record.entries, sanitizeEntry)
+    : record.entries === undefined
+      ? []
+      : undefined
+  if (!entries) {
+    return undefined
+  }
   return {
-    entries: Array.isArray(record.entries)
-      ? record.entries.flatMap((entry) => {
-          const sanitized = sanitizeEntry(entry)
-          return sanitized ? [sanitized] : []
-        })
-      : [],
+    entries,
     lastReadTs: typeof record.lastReadTs === 'number' ? record.lastReadTs : 0
   }
 }
 
+const file = new SafeJsonFile<PersistedNotifications>({
+  filePath,
+  parse: (raw) =>
+    typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? sanitize(raw) : undefined,
+  fallback: () => ({ entries: [], lastReadTs: 0 }),
+  label: '[agents] agents-notifications.json'
+})
+
 function load(): PersistedNotifications {
-  if (cached) {
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(filePath(), 'utf-8')))
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[agents] failed to load notifications:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = { entries: [], lastReadTs: 0 }
-  }
-  cached.entries = cached.entries.slice(-MAX_ENTRIES)
-  return cached
+  const data = file.get()
+  data.entries = data.entries.slice(-MAX_ENTRIES)
+  return data
 }
 
 function persist(data: PersistedNotifications): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(
-      tmp,
-      `${JSON.stringify({ ...data, entries: data.entries.slice(-MAX_ENTRIES) }, null, 2)}\n`,
-      'utf-8'
-    )
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[agents] failed to persist notifications:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+  file.set({ ...data, entries: data.entries.slice(-MAX_ENTRIES) })
 }
 
 export function broadcastAgentNotificationsChanged(): void {
@@ -133,8 +114,7 @@ export function appendAgentNotification(
 ): AgentNotificationEntry {
   const data = load()
   const entry: AgentNotificationEntry = { ...input, id: randomUUID(), ts: Date.now() }
-  cached = { ...data, entries: [...data.entries, entry].slice(-MAX_ENTRIES) }
-  persist(cached)
+  persist({ ...data, entries: [...data.entries, entry].slice(-MAX_ENTRIES) })
   broadcastAgentNotificationsChanged()
   return entry
 }
@@ -157,8 +137,7 @@ export function appendAgentRunNotification(agent: CustomAgent, run: AgentRun): v
 
 export function markAgentNotificationsRead(): AgentNotificationsSnapshot {
   const data = load()
-  cached = { ...data, lastReadTs: Date.now() }
-  persist(cached)
+  persist({ ...data, lastReadTs: Date.now() })
   broadcastAgentNotificationsChanged()
   return listAgentNotifications()
 }

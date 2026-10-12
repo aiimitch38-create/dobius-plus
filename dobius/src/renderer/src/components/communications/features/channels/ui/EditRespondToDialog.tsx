@@ -41,7 +41,9 @@ export function EditRespondToDialog({
     respondTo !== "allowlist" || respondToAllowlist.length > 0;
 
   async function handleSave() {
-    if (!agent) return;
+    if (!agent) {
+      return;
+    }
     await updateMutation.mutateAsync({
       pubkey: agent.pubkey,
       respondTo,

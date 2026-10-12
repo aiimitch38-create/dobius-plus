@@ -105,7 +105,9 @@ function MessageComposerImpl({
   spoileredAttachmentUrlsRef.current = spoileredAttachmentUrls;
 
   const handleFormattingToggle = React.useCallback((pressed: boolean) => {
-    if (pressed) setIsEmojiPickerOpen(false);
+    if (pressed) {
+      setIsEmojiPickerOpen(false);
+    }
     setIsFormattingOpen(pressed);
   }, []);
 
@@ -222,7 +224,9 @@ function MessageComposerImpl({
   const scrollComposerToBottom = React.useCallback(() => {
     window.requestAnimationFrame(() => {
       const scrollElement = composerScrollRef.current;
-      if (!scrollElement) return;
+      if (!scrollElement) {
+        return;
+      }
       scrollElement.scrollTop = scrollElement.scrollHeight;
     });
   }, []);
@@ -245,7 +249,9 @@ function MessageComposerImpl({
     onEditLastOwnMessage: () => {
       // Never re-enter edit from an empty edit (e.g. image-only edit whose
       // text body is empty) — `editTarget` means we're already editing.
-      if (editTargetRef.current) return false;
+      if (editTargetRef.current) {
+        return false;
+      }
       const handler = onEditLastOwnMessageRef.current;
       return handler ? handler() : false;
     },
@@ -367,9 +373,11 @@ function MessageComposerImpl({
       } = preEditSnapshotRef.current;
       preEditSnapshotRef.current = null;
       setComposerContent(restoredContent);
-      restoredContent
-        ? richText.setContent(restoredContent)
-        : richText.clearContent();
+      if (restoredContent) {
+        richText.setContent(restoredContent);
+      } else {
+        richText.clearContent();
+      }
       media.setPendingImeta(restoredImeta);
       setSpoileredAttachmentUrls(restoredSpoileredAttachmentUrls);
     }
@@ -381,7 +389,9 @@ function MessageComposerImpl({
   // Use focusPreserve so that re-renders (e.g. new messages arriving in
   // a thread) don't yank the cursor to the end while the user is editing.
   React.useEffect(() => {
-    if (!replyTarget || disabled) return;
+    if (!replyTarget || disabled) {
+      return;
+    }
     richText.focusPreserve();
   }, [disabled, replyTarget, richText.focusPreserve]);
 
@@ -442,7 +452,9 @@ function MessageComposerImpl({
   // ── Emoji insertion ─────────────────────────────────────────────────
   const insertEmoji = React.useCallback(
     (emoji: string) => {
-      if (!richText.editor) return;
+      if (!richText.editor) {
+        return;
+      }
       // A `:shortcode:` for a known custom emoji becomes a selectable atom
       // node (same as the input rule / autocomplete), so it can be selected,
       // copied, and deleted as one unit. Everything else (native unicode)
@@ -478,7 +490,9 @@ function MessageComposerImpl({
 
   // ── @ mention picker (toolbar button) ───────────────────────────────
   const openMentionPicker = React.useCallback(() => {
-    if (!richText.editor) return;
+    if (!richText.editor) {
+      return;
+    }
     const { text, cursor } = richText.getPlainTextAndCursor();
 
     // Check if there's already an @-query in progress
@@ -513,12 +527,16 @@ function MessageComposerImpl({
 
     // Edit mode
     if (editTargetRef.current && onEditSaveRef.current) {
-      if (isSendingRef.current || isUploadingRef.current) return;
+      if (isSendingRef.current || isUploadingRef.current) {
+        return;
+      }
       const currentPendingImeta = media.pendingImetaRef.current;
       const hasMedia = currentPendingImeta.length > 0;
       // Empty text + zero attachments is a no-op (don't let edit become an
       // effective deletion).
-      if (!trimmed && !hasMedia) return;
+      if (!trimmed && !hasMedia) {
+        return;
+      }
 
       // Build the edit's body + imeta tag set. Coerce `mediaTags ?? []`
       // because edit semantics use `[]` as the explicit "wipe all
@@ -733,7 +751,6 @@ function MessageComposerImpl({
       if (event.key === "Escape" && editTargetRef.current && onCancelEdit) {
         event.preventDefault();
         onCancelEdit();
-        return;
       }
     },
     [
@@ -754,7 +771,9 @@ function MessageComposerImpl({
   uploadFileRef.current = media.uploadFile;
 
   React.useEffect(() => {
-    if (!richText.editor) return;
+    if (!richText.editor) {
+      return;
+    }
 
     richText.editor.setOptions({
       editorProps: {
@@ -802,8 +821,9 @@ function MessageComposerImpl({
           }
 
           // Restore Dobius snapshots before normal styled-HTML normalization.
-          if (handleAgentSnapshotPaste(event, media.setPendingImeta))
+          if (handleAgentSnapshotPaste(event, media.setPendingImeta)) {
             return true;
+          }
           // Strip mention/channel wrappers that Tiptap would misread as bold.
           const html = event.clipboardData?.getData("text/html");
           if (html && hasMentionClipboardHtml(html)) {
@@ -851,7 +871,9 @@ function MessageComposerImpl({
   const handleRemoveAttachment = React.useCallback(
     (url: string) => {
       setSpoileredAttachmentUrls((current) => {
-        if (!current.has(url)) return current;
+        if (!current.has(url)) {
+          return current;
+        }
         const next = new Set(current);
         next.delete(url);
         return next;

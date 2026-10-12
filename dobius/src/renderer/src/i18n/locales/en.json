@@ -1805,7 +1805,8 @@
         "a726967bd3": "Dismiss",
         "d5253b54af": "error",
         "7ffc08506e": "check",
-        "522df222b9": "spinner"
+        "522df222b9": "spinner",
+        "f528af4816": "Updates are managed by the install script."
       },
       "WorktreeJumpPalette": {
         "ac037cfac2": "Move",
@@ -5342,7 +5343,8 @@
           "31fd7150cf": "Checking for updates...",
           "3394d1f663": "checking",
           "d69a09b672": "Updates are checked automatically on launch.",
-          "7173352632": "idle"
+          "7173352632": "idle",
+          "9b7a940bd3": "Updates are managed by the install script."
         },
         "GeneralWorkspaceSettingsSection": {
           "3d538a98f7": "Choose apps available from a workspace's Open in menu.",
@@ -5701,7 +5703,10 @@
           "aa1263e881": "Keep at phone size (default)",
           "6436e56546": "QR Code for mobile pairing",
           "1b1b70279a": "No devices paired yet.",
-          "1592afcc7a": "No devices paired yet. Scan the QR code with the Dobius+ mobile app."
+          "1592afcc7a": "No devices paired yet. Scan the QR code with the Dobius+ mobile app.",
+          "listenerPendingRestart": "The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.",
+          "listenerOff": "The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.",
+          "listenerFailedToStart": "The phone listener was on at launch but failed to start (see logs). Restart Dobius+ to try again."
         },
         "MobileSettingsPane": {
           "9a3c280e49": "GitHub Releases",
@@ -5847,7 +5852,9 @@
           "fe904ac984": "Share anonymous usage data",
           "77410e0566": "Privacy policy",
           "8bfdd23a88": "Help us figure out what to build next. Dobius+ sends anonymous counts of which features you use and where things break.",
-          "afec8b03be": "ci"
+          "afec8b03be": "ci",
+          "transportUnavailable": "Not available in this build: Dobius+ sends no usage data, so this switch has no effect.",
+          "transportUnavailableDescription": "This build of Dobius+ does not send usage data."
         },
         "QuickCommandsPane": {
           "8764c6e9e4": "Remove {{value0}}",
@@ -7835,7 +7842,14 @@
               "671eb4173c": "Control terminals and agents from your phone.",
               "ffd52a96e4": "Mobile",
               "1de96ec8a6": "Show Dobius+ Mobile Button",
-              "682293cadf": "Show the Dobius+ Mobile button at the top of the left sidebar."
+              "682293cadf": "Show the Dobius+ Mobile button at the top of the left sidebar.",
+              "listenerTitle": "Phone Listener (takes effect on next launch)",
+              "listenerDescription": "Lets phones on your local network connect to Dobius+. Changes take effect the next time Dobius+ starts.",
+              "listenerKeywordListener": "listener",
+              "listenerKeywordNetwork": "local network",
+              "listenerKeywordLan": "lan",
+              "listenerKeywordPhone": "phone",
+              "listenerKeywordWebsocket": "websocket"
             }
           }
         },
@@ -8868,7 +8882,8 @@
           "testButton": "Test",
           "statusLine": "Status: {{state}} · last message row: {{rowid}} · sent in last minute: {{outbound}}",
           "statusRunning": "running",
-          "statusStopped": "stopped"
+          "statusStopped": "stopped",
+          "configUnreadable": "imessage-bridge.json can't be read ({{detail}}), so changes are not saved; repair or remove it"
         },
         "imessage": {
           "bridge": {
@@ -8895,6 +8910,8 @@
           "autoModeLabel": "Auto Mode",
           "autoModeDescription": "Polls Asana (enable in a later phase).",
           "autoModeAriaLabel": "Toggle Asana Auto Mode",
+          "autoModeBlockedPaused": "Blocked: crew paused. Resume the crew on the Agents page to run Auto Mode.",
+          "autoModeBlockedUnreadable": "Blocked: crew control file could not be read ({{filePath}}). Fix or remove it, then resume the crew.",
           "tokenFailed": "Could not save token.",
           "tokenClearFailed": "Could not clear token.",
           "triageAgentLabel": "Triage agent",
@@ -8955,6 +8972,10 @@
           "remove": "Remove",
           "configured": "A key is stored, encrypted on this machine. It is never shown again.",
           "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "agent-sandbox-copy": {
+          "title": "Agent sandbox (recommended)",
+          "description": "Commands run by Claude agents can only write to the agent's working folder, its git repository, temp folders and package caches, and cannot read other agents' memory or saved credentials. Turning this off lets agents write anywhere in your home folder. Hook, settings and shell startup files stay protected either way."
         }
       },
       "right": {
@@ -12190,6 +12211,11 @@
           "4d7878402c": "External automation queued.",
           "4c22bc9913": "External automation deleted.",
           "3a4c476aa0": "Failed to rerun automation.",
+          "pauseFailed": "Failed to pause automation.",
+          "resumeFailed": "Failed to resume automation.",
+          "deleteFailed": "Failed to delete automation.",
+          "runNowFailed": "Failed to run automation.",
+          "runNowNotStarted": "Automation run did not start.",
           "a1bdb57008": "Automation run queued.",
           "8a3226f172": "Open Settings",
           "d2a01b0b6f": "You can change this in Settings.",
@@ -12585,7 +12611,9 @@
           "notConnected": "Connect Asana in Settings → Automation to see your build and review lanes.",
           "title": "Tasks",
           "sync": "Sync",
-          "empty": "Nothing here."
+          "empty": "Nothing here.",
+          "requeue": "Re-queue",
+          "confirmRequeue": "Re-queue this task for Asana Auto Mode? It will be triaged again and may start a new build."
         },
         "PromptsPanel": {
           "title": "Prompts",

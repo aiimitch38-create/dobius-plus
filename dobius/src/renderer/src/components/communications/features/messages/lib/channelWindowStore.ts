@@ -81,8 +81,9 @@ function assertValidPage(page: ChannelWindowPage) {
   const seen = new Set<string>();
   for (let index = 0; index < page.rows.length; index += 1) {
     const event = page.rows[index].event;
-    if (seen.has(event.id))
+    if (seen.has(event.id)) {
       throw new Error(`Duplicate channel row ${event.id}.`);
+    }
     seen.add(event.id);
     if (page.startCursor && !isStrictlyOlder(event, page.startCursor)) {
       throw new Error(
@@ -127,8 +128,10 @@ export function appendOlderChannelWindow(
   page: ChannelWindowPage,
 ): ChannelWindowStore {
   assertValidPage(page);
-  const tail = current.pages[current.pages.length - 1];
-  if (!tail) throw new Error("Load the newest channel page first.");
+  const tail = current.pages.at(-1);
+  if (!tail) {
+    throw new Error("Load the newest channel page first.");
+  }
   if (!tail.hasMore || !tail.nextCursor) {
     throw new Error("The channel window is already complete.");
   }
@@ -169,7 +172,9 @@ export function mergeLiveThreadSummary(
   incoming: LiveThreadSummary,
 ): ChannelWindowStore {
   const existing = current.liveSummaries[rootId];
-  if (existing && existing.createdAt >= incoming.createdAt) return current;
+  if (existing && existing.createdAt >= incoming.createdAt) {
+    return current;
+  }
   return {
     ...current,
     liveSummaries: { ...current.liveSummaries, [rootId]: incoming },
@@ -203,8 +208,8 @@ export function mergeLiveChannelWindowEvent(
   ) {
     return current;
   }
-  const oldestPage = current.pages[current.pages.length - 1];
-  const oldest = oldestPage?.rows[oldestPage.rows.length - 1]?.event;
+  const oldestPage = current.pages.at(-1);
+  const oldest = oldestPage?.rows.at(-1)?.event;
   if (
     oldest &&
     (event.created_at < oldest.created_at ||
@@ -243,7 +248,9 @@ export function mapChannelWindowEvents(
   let changed = false;
   const mapEvent = (event: RelayEvent) => {
     const next = map(event);
-    if (next !== event) changed = true;
+    if (next !== event) {
+      changed = true;
+    }
     return next;
   };
   const pages = store.pages.map((page) => {
@@ -266,11 +273,19 @@ export function mapChannelWindowEvents(
 export function flattenChannelWindowEvents(store: ChannelWindowStore) {
   const byId = new Map<string, RelayEvent>();
   for (const page of store.pages) {
-    for (const row of page.rows) byId.set(row.event.id, row.event);
-    for (const event of page.aux) byId.set(event.id, event);
+    for (const row of page.rows) {
+      byId.set(row.event.id, row.event);
+    }
+    for (const event of page.aux) {
+      byId.set(event.id, event);
+    }
   }
-  for (const event of store.liveOverlay) byId.set(event.id, event);
-  for (const event of store.liveAux) byId.set(event.id, event);
+  for (const event of store.liveOverlay) {
+    byId.set(event.id, event);
+  }
+  for (const event of store.liveAux) {
+    byId.set(event.id, event);
+  }
   return [...byId.values()].sort((left, right) =>
     compareRelayOrder(right, left),
   );
@@ -284,7 +299,7 @@ export function flattenChannelWindowEvents(store: ChannelWindowStore) {
  * `replaceNewestChannelWindow` makes the signal authoritative.
  */
 export function channelWindowHasMore(store: ChannelWindowStore) {
-  const tail = store.pages[store.pages.length - 1];
+  const tail = store.pages.at(-1);
   return tail?.hasMore ?? false;
 }
 
@@ -295,7 +310,7 @@ export function channelWindowHasMore(store: ChannelWindowStore) {
  * Only a resolved tail page saying `hasMore: false` proves the start.
  */
 export function channelWindowHistoryExhausted(store: ChannelWindowStore) {
-  const tail = store.pages[store.pages.length - 1];
+  const tail = store.pages.at(-1);
   return tail !== undefined && !tail.hasMore;
 }
 

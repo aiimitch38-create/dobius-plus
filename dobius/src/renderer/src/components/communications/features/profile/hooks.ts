@@ -124,7 +124,9 @@ export function useProfileQuery(enabled = true) {
   // identity/community resolve on a fresh QueryClient — seed the cache
   // imperatively once they arrive, without ever stomping a real fetch result.
   React.useEffect(() => {
-    if (!initialData || !cached) return;
+    if (!initialData || !cached) {
+      return;
+    }
     if (queryClient.getQueryData(profileQueryKey) === undefined) {
       queryClient.setQueryData(profileQueryKey, initialData, {
         updatedAt: cached.updatedAt,
@@ -226,7 +228,9 @@ export function useFollowMutation(currentPubkey?: string) {
 
   return useMutation({
     mutationFn: async (targetPubkey: string) => {
-      if (!currentPubkey) throw new Error("No identity");
+      if (!currentPubkey) {
+        throw new Error("No identity");
+      }
       const current = await getContactList(currentPubkey);
       if (current.contacts.some((c) => c.pubkey === targetPubkey)) {
         return;
@@ -252,7 +256,9 @@ export function useUnfollowMutation(currentPubkey?: string) {
 
   return useMutation({
     mutationFn: async (targetPubkey: string) => {
-      if (!currentPubkey) throw new Error("No identity");
+      if (!currentPubkey) {
+        throw new Error("No identity");
+      }
       const current = await getContactList(currentPubkey);
       const updated = current.contacts.filter((c) => c.pubkey !== targetPubkey);
       return setContactList(updated);
@@ -344,8 +350,11 @@ export function useUsersBatchQuery(
           usersBatchEntryKey(pubkey),
         );
         if (entry && now - entry.fetchedAt < 60_000) {
-          if (entry.summary) profiles[pubkey] = entry.summary;
-          else missing.push(pubkey);
+          if (entry.summary) {
+            profiles[pubkey] = entry.summary;
+          } else {
+            missing.push(pubkey);
+          }
         } else {
           toFetch.push(pubkey);
         }
@@ -358,8 +367,11 @@ export function useUsersBatchQuery(
             usersBatchEntryKey(pubkey),
             { summary, fetchedAt: now },
           );
-          if (summary) profiles[pubkey] = summary;
-          else missing.push(pubkey);
+          if (summary) {
+            profiles[pubkey] = summary;
+          } else {
+            missing.push(pubkey);
+          }
         }
       }
       return { profiles, missing };
@@ -376,7 +388,9 @@ export function useUsersBatchQuery(
   // cache hits instead of fresh network requests.
   React.useEffect(() => {
     const profiles = query.data?.profiles;
-    if (!profiles) return;
+    if (!profiles) {
+      return;
+    }
     for (const [pubkey, summary] of Object.entries(profiles)) {
       queryClient.setQueryData<Profile>(
         ["user-profile", pubkey],

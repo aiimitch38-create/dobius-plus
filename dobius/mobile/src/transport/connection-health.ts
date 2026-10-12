@@ -25,6 +25,16 @@ export type ConnectionVerdict =
   | { kind: 'warning'; label: string } // "Can't connect"
   | { kind: 'unreachable'; label: string; reason: 'never-connected' | 'stale' }
   | { kind: 'auth-failed'; label: string }
+  | { kind: 'update-required'; label: string }
+
+export function isErrorVerdict(v: ConnectionVerdict): boolean {
+  return (
+    v.kind === 'warning' ||
+    v.kind === 'unreachable' ||
+    v.kind === 'auth-failed' ||
+    v.kind === 'update-required'
+  )
+}
 
 // Why: the rpc-client's lastConnectedAt is a one-shot timestamp; we have
 // to recompute "are we currently stale" against now() each render.
@@ -40,6 +50,9 @@ export function classifyConnection(args: {
 
   if (state === 'auth-failed') {
     return { kind: 'auth-failed', label: 'Auth failed' }
+  }
+  if (state === 'update-required') {
+    return { kind: 'update-required', label: 'Update the Dobius+ app' }
   }
 
   // Connected / connecting / handshaking are normal.

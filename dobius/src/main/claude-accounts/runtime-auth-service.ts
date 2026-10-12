@@ -2,9 +2,8 @@
 boundary: runtime auth materialization. Keeping file, Keychain, snapshot, and
 env-patch semantics together prevents PTY launch and quota fetch paths drifting. */
 import { execFileSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { app } from 'electron'
 import type { ClaudeManagedAccount } from '../../shared/types'
 import type { Store } from '../persistence'
 import { writeFileAtomically } from '../codex-accounts/fs-utils'
@@ -36,6 +35,7 @@ import {
   setSelectedClaudeAccountIdForTarget,
   type ClaudeAccountSelectionTarget
 } from './runtime-selection'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 export type ClaudeRuntimeAuthPreparation = {
   configDir: string
@@ -441,10 +441,19 @@ export class ClaudeRuntimeAuthService {
       try {
         await writeActiveClaudeKeychainCredentialsForRuntime(credentialsJson, paths.configDir)
       } catch (error) {
-        await this.restoreSystemDefaultSnapshot(
-          credentialsJson,
-          this.readManagedOauthAccount(activeAccount)
-        )
+        try {
+          await this.restoreSystemDefaultSnapshot(
+            credentialsJson,
+            this.readManagedOauthAccount(activeAccount)
+          )
+        } catch (restoreError) {
+          // Why: the Keychain failure is the real cause; a snapshot problem
+          // during the rollback must not replace it.
+          console.warn(
+            '[claude-runtime-auth] Rollback after Keychain write failure did not complete:',
+            restoreError instanceof Error ? restoreError.message : String(restoreError)
+          )
+        }
         throw error
       }
     }
@@ -1320,21 +1329,43 @@ export class ClaudeRuntimeAuthService {
     return null
   }
 
+  /**
+   * Returns null when there is no usable snapshot. Never deletes it: a file
+   * that could not be READ (EACCES, EIO, ...) throws and stays in place, so
+   * the caller aborts instead of acting as if the user had no system login.
+   * Only bytes that were read but are not a valid snapshot are set aside as
+   * `<file>.unreadable-<ms>`, then treated as missing.
+   */
   private readSystemDefaultSnapshot(snapshotPath: string): ClaudeSystemDefaultSnapshot | null {
-    if (!existsSync(snapshotPath)) {
-      return null
-    }
+    let text: string
     try {
-      const parsed = JSON.parse(readFileSync(snapshotPath, 'utf-8')) as unknown
-      if (this.isSystemDefaultSnapshot(parsed)) {
-        return parsed
-      }
-      throw new Error('Invalid Claude system-default auth snapshot shape')
+      text = readFileSync(snapshotPath, 'utf-8')
     } catch (error) {
-      console.warn('[claude-runtime-auth] Ignoring invalid system-default auth snapshot:', error)
-      rmSync(snapshotPath, { force: true })
-      return null
+      const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
+      if (code === 'ENOENT') {
+        return null
+      }
+      throw new Error(
+        `Claude system-default auth snapshot is unreadable (${code || 'read failed'}); left it in place`
+      )
     }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      parsed = undefined
+    }
+    if (parsed !== undefined && this.isSystemDefaultSnapshot(parsed)) {
+      return parsed
+    }
+    const asidePath = `${snapshotPath}.unreadable-${Date.now()}`
+    // Throws if the rename fails: a corrupt snapshot left in place must not be
+    // treated as missing, or the next capture would overwrite it.
+    renameSync(snapshotPath, asidePath)
+    console.warn(
+      `[claude-runtime-auth] Invalid system-default auth snapshot set aside at ${asidePath}`
+    )
+    return null
   }
 
   private async clearRuntimeAuthForAccount(
@@ -1831,7 +1862,7 @@ export class ClaudeRuntimeAuthService {
   }
 
   private getRuntimeMetadataDir(): string {
-    const metadataDir = join(app.getPath('userData'), 'claude-runtime-auth')
+    const metadataDir = join(getUserDataRoot(), 'claude-runtime-auth')
     mkdirSync(metadataDir, { recursive: true })
     return metadataDir
   }

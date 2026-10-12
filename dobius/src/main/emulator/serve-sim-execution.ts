@@ -13,6 +13,7 @@ import { platform, tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import { EmulatorError } from './emulator-errors'
 import { materializeServeSimRuntime } from './serve-sim-runtime-materializer'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const EXEC_TIMEOUT_MS = 90_000
 const MAC_OPEN_SHIM_DIR = join(tmpdir(), 'dobius-serve-sim-open-shim')
@@ -77,7 +78,7 @@ function resolveMaterializedServeSimPackageDir(bundledPackageDir: string): strin
   }
   materializedServeSimPackageDir = materializeServeSimRuntime({
     bundledPackageDir,
-    targetRootDir: join(app.getPath('userData'), 'serve-sim-runtime'),
+    targetRootDir: join(getUserDataRoot(), 'serve-sim-runtime'),
     version: app.getVersion()
   })
   if (materializedServeSimPackageDir === null) {

@@ -49,9 +49,13 @@ function StepStatusIcon({ status }: { status: string }) {
 }
 
 function formatDuration(startedAt: number | null, completedAt: number | null) {
-  if (startedAt === null || completedAt === null) return null;
+  if (startedAt === null || completedAt === null) {
+    return null;
+  }
   const seconds = completedAt - startedAt;
-  if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;
+  if (seconds < 1) {
+    return `${Math.round(seconds * 1000)}ms`;
+  }
   return `${seconds.toFixed(1)}s`;
 }
 

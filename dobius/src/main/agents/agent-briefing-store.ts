@@ -1,79 +1,59 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import type { BriefingItem } from '../../shared/agents'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agents-briefing.json'
 const MAX_ITEMS = 200
 const RECENT_WINDOW_MS = 48 * 60 * 60 * 1000
 
-let cached: BriefingItem[] | null = null
+// Why: dismissing hides items from the 48 h view; it must not delete history (#46).
+type StoredBriefingItem = BriefingItem & { dismissed?: true }
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
-function sanitizeItems(raw: unknown): BriefingItem[] {
-  if (!Array.isArray(raw)) {
-    return []
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitizeItem(entry: unknown): StoredBriefingItem | null {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return null
   }
-  return raw.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) {
-      return []
-    }
-    const record = entry as Partial<Record<keyof BriefingItem, unknown>>
-    const id = typeof record.id === 'string' ? record.id : ''
-    const agentId = typeof record.agentId === 'string' ? record.agentId : ''
-    const ts = typeof record.ts === 'number' ? record.ts : 0
-    const summary = typeof record.summary === 'string' ? record.summary : ''
-    if (!id || !agentId || !ts || !summary) {
-      return []
-    }
-    return [
-      {
-        id,
-        agentId,
-        ts,
-        urgency: record.urgency === 'now' ? 'now' : 'digest',
-        summary,
-        demoted: record.demoted === true
-      }
-    ]
-  })
+  const record = entry as Partial<Record<keyof StoredBriefingItem, unknown>>
+  const id = typeof record.id === 'string' ? record.id : ''
+  const agentId = typeof record.agentId === 'string' ? record.agentId : ''
+  const ts = typeof record.ts === 'number' ? record.ts : 0
+  const summary = typeof record.summary === 'string' ? record.summary : ''
+  if (!id || !agentId || !ts || !summary) {
+    return null
+  }
+  return {
+    id,
+    agentId,
+    ts,
+    urgency: record.urgency === 'now' ? 'now' : 'digest',
+    summary,
+    demoted: record.demoted === true,
+    ...(record.dismissed === true ? { dismissed: true as const } : {})
+  }
 }
 
-function load(): BriefingItem[] {
-  if (cached) {
-    return cached
-  }
-  try {
-    cached = sanitizeItems(JSON.parse(readFileSync(filePath(), 'utf-8')))
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[agents] failed to load briefing:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = []
-  }
-  return cached
+const file = new SafeJsonFile<StoredBriefingItem[]>({
+  filePath,
+  parse: (raw) => (Array.isArray(raw) ? parseEveryEntry(raw, sanitizeItem) : undefined),
+  fallback: () => [],
+  label: '[agents] agents-briefing.json'
+})
+
+function load(): StoredBriefingItem[] {
+  return file.get()
 }
 
-function persist(items: BriefingItem[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(items.slice(-MAX_ITEMS), null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[agents] failed to persist briefing:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+function persist(items: StoredBriefingItem[]): void {
+  file.set(items.slice(-MAX_ITEMS))
 }
 
 export function broadcastBriefingChanged(): void {
@@ -86,8 +66,7 @@ export function broadcastBriefingChanged(): void {
 
 export function appendBriefingItem(input: Omit<BriefingItem, 'id' | 'ts'>): BriefingItem {
   const item: BriefingItem = { ...input, id: randomUUID(), ts: Date.now() }
-  cached = [...load(), item].slice(-MAX_ITEMS)
-  persist(cached)
+  persist([...load(), item])
   broadcastBriefingChanged()
   return item
 }
@@ -95,13 +74,15 @@ export function appendBriefingItem(input: Omit<BriefingItem, 'id' | 'ts'>): Brie
 export function listRecentBriefingItems(): BriefingItem[] {
   const cutoff = Date.now() - RECENT_WINDOW_MS
   return load()
-    .filter((item) => item.ts >= cutoff)
+    .filter((item) => item.ts >= cutoff && !item.dismissed)
     .sort((a, b) => b.ts - a.ts)
+    .map(({ dismissed: _dismissed, ...item }) => item)
 }
 
 export function dismissBriefingItems(): void {
   const now = Date.now()
-  cached = load().filter((item) => item.ts > now)
-  persist(cached)
+  persist(
+    load().map((item) => (item.ts <= now && !item.dismissed ? { ...item, dismissed: true } : item))
+  )
   broadcastBriefingChanged()
 }

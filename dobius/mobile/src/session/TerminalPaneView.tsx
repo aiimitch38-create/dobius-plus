@@ -7,6 +7,7 @@ import {
   type TerminalModes,
   type TerminalWebViewHandle
 } from '../terminal/TerminalWebView'
+import { createTerminalWebViewDiagnosticKey } from '../terminal/terminal-webview-lifecycle-diagnostics'
 
 type TerminalPaneViewProps = {
   handle: string
@@ -72,6 +73,9 @@ export function TerminalPaneView({
         style={styles.terminalWebView}
         terminalTheme={terminalTheme}
         textScale={textScale}
+        diagnosticTerminalKey={createTerminalWebViewDiagnosticKey(handle)}
+        diagnosticActive={active}
+        diagnosticEnabled={__DEV__}
         onWebReady={() => onWebReady(handle)}
         onSelectionMode={(a) => onSelectionMode(handle, a)}
         onSelectionCopy={(t) => onSelectionCopy(handle, t)}

@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { useAppStore } from '../../store'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { useMobilePairingDevicePolling } from './mobile-pairing-device-polling'
+import { usePairingQrAutoRefresh } from '../mobile/use-pairing-qr-auto-refresh'
 import {
   selectRefreshedNetworkAddress,
   type MobileNetworkInterface
@@ -14,9 +15,20 @@ import { MobileAutoRestoreFitSection } from './MobileAutoRestoreFitSection'
 import { translate } from '@/i18n/i18n'
 export { getMobilePaneSearchEntries } from './mobile-pane-search'
 
+type ListenerStatus = { ready: boolean; startedWithListenerEnabled: boolean }
+
+function isListenerOffAtLaunch(status: ListenerStatus | null): boolean {
+  return status !== null && !status.ready && !status.startedWithListenerEnabled
+}
+
 export function MobilePane(): React.JSX.Element {
   const autoRestoreFitMs = useAppStore((s) => s.settings?.mobileAutoRestoreFitMs ?? null)
   const updateSettings = useAppStore((s) => s.updateSettings)
+  const mobileListenerEnabled = useAppStore((s) => s.settings?.mobileListenerEnabled === true)
+  // Why: null until checked. startedWithListenerEnabled separates "off at
+  // launch" (explain it, no error toast) from "on at launch but failed to
+  // start" (a real error, e.g. port in use).
+  const [listenerStatus, setListenerStatus] = useState<ListenerStatus | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [pairingUrl, setPairingUrl] = useState<string | null>(null)
   const [endpoint, setEndpoint] = useState<string | null>(null)
@@ -48,6 +60,23 @@ export function MobilePane(): React.JSX.Element {
       }
     } catch {
       // Silently fail — device list is non-critical
+    }
+  }, [mountedRef])
+
+  const loadListenerStatus = useCallback(async (): Promise<ListenerStatus | null> => {
+    try {
+      const result = await window.api.mobile.isWebSocketReady()
+      const status: ListenerStatus = {
+        ready: result.ready,
+        startedWithListenerEnabled: result.startedWithListenerEnabled
+      }
+      if (mountedRef.current) {
+        setListenerStatus(status)
+      }
+      return status
+    } catch {
+      // Unknown status: callers fall back to the generic error message.
+      return null
     }
   }, [mountedRef])
 
@@ -100,7 +129,10 @@ export function MobilePane(): React.JSX.Element {
             void loadDevices()
           }
         } else {
-          if (mountedRef.current) {
+          // Why: when the listener was off at launch, the inline notice
+          // explains why pairing is unavailable; a raw error toast would not.
+          const status = await loadListenerStatus()
+          if (!isListenerOffAtLaunch(status) && mountedRef.current) {
             toast.error(
               translate(
                 'auto.components.settings.MobilePane.cb9067c1c1',
@@ -124,13 +156,17 @@ export function MobilePane(): React.JSX.Element {
         }
       }
     },
-    [clearCodeCopiedResetTimer, loadDevices, mountedRef, selectedAddress]
+    [clearCodeCopiedResetTimer, loadDevices, loadListenerStatus, mountedRef, selectedAddress]
   )
 
   useEffect(() => {
     void loadDevices()
     void loadNetworkInterfaces()
-  }, [loadDevices, loadNetworkInterfaces])
+    void loadListenerStatus()
+  }, [loadDevices, loadListenerStatus, loadNetworkInterfaces])
+
+  // Why: keep the shown QR inside its 15 min lifetime while this pane is open.
+  usePairingQrAutoRefresh(qrDataUrl != null, () => void generateQR())
 
   useMobilePairingDevicePolling({
     deviceCountAtQr,
@@ -160,6 +196,28 @@ export function MobilePane(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
+      {listenerStatus && !listenerStatus.ready ? (
+        <p
+          role="status"
+          className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+        >
+          {listenerStatus.startedWithListenerEnabled
+            ? translate(
+                'auto.components.settings.MobilePane.listenerFailedToStart',
+                'The phone listener was on at launch but failed to start (see logs). Restart Dobius+ to try again.'
+              )
+            : mobileListenerEnabled
+              ? translate(
+                  'auto.components.settings.MobilePane.listenerPendingRestart',
+                  'The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.'
+                )
+              : translate(
+                  'auto.components.settings.MobilePane.listenerOff',
+                  'The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.'
+                )}
+        </p>
+      ) : null}
+
       <MobileNetworkInterfaceSection
         networkInterfaces={networkInterfaces}
         selectedAddress={selectedAddress}

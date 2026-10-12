@@ -99,7 +99,9 @@ export function parseMessageLink(url: string): MessageLinkParseResult {
  * Cheap pre-check used by the markdown renderer before parsing.
  */
 export function isMessageLink(href: string | undefined | null): boolean {
-  if (!href) return false;
+  if (!href) {
+    return false;
+  }
   return href.startsWith("buzz://message?") || href === "buzz://message";
 }
 
@@ -123,10 +125,14 @@ export function resolveMessageLinkRenderTarget({
   href,
   label,
 }: MessageLinkRenderInput): MessageLinkRenderTarget {
-  if (!isMessageLink(href)) return { kind: "none" };
+  if (!isMessageLink(href)) {
+    return { kind: "none" };
+  }
 
   const parsed = parseMessageLink(href);
-  if (!parsed.ok) return { kind: "none" };
+  if (!parsed.ok) {
+    return { kind: "none" };
+  }
 
   return {
     kind: label === href ? "pill" : "label",

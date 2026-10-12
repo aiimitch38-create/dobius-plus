@@ -44,7 +44,9 @@ function extractNotBefore(event: RelayEvent): number | undefined {
  * relay would reject, so the client ignores reminders the relay calls malformed.
  */
 export function parseNotBefore(raw: string): number | undefined {
-  if (!/^(0|[1-9][0-9]*)$/.test(raw)) return undefined;
+  if (!/^(0|[1-9][0-9]*)$/.test(raw)) {
+    return undefined;
+  }
   const val = Number(raw);
   return val <= Number.MAX_SAFE_INTEGER ? val : undefined;
 }
@@ -76,12 +78,16 @@ export function parseReminderContent(
   ) {
     return null;
   }
-  if (obj.note !== undefined && typeof obj.note !== "string") return null;
+  if (obj.note !== undefined && typeof obj.note !== "string") {
+    return null;
+  }
 
   let target: ReminderTarget | undefined;
   if (obj.target !== undefined) {
     const parsedTarget = parseTarget(obj.target);
-    if (!parsedTarget) return null;
+    if (!parsedTarget) {
+      return null;
+    }
     target = parsedTarget;
   }
 
@@ -116,7 +122,9 @@ function parseTarget(value: unknown): ReminderTarget | null {
 
 async function decryptReminder(event: RelayEvent): Promise<Reminder | null> {
   const dTag = extractDTag(event);
-  if (!dTag) return null;
+  if (!dTag) {
+    return null;
+  }
 
   let plaintext: string;
   try {

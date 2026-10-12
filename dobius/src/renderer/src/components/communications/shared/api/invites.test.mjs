@@ -104,8 +104,12 @@ function setupTauriStubs(
   globalThis.window.__TAURI_INTERNALS__ = {
     invoke: async (command, args) => {
       calls.invokeArgs.push({ command, args });
-      if (command === "get_relay_http_url") return httpBase;
-      if (command === "sign_event") return JSON.stringify(authEvent);
+      if (command === "get_relay_http_url") {
+        return httpBase;
+      }
+      if (command === "sign_event") {
+        return JSON.stringify(authEvent);
+      }
       throw new Error(`Unexpected Tauri command: ${command}`);
     },
   };

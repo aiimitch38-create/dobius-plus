@@ -58,8 +58,12 @@ export function buildMemoryGraph(listing: AgentMemoryListing): MemoryGraph {
   // `core` lives in this index too so that a `[[core]]` ref from a memory
   // back-references correctly (rare but possible).
   const bySlug = new Map<string, EngramEntry>();
-  if (listing.core) bySlug.set(listing.core.slug, listing.core);
-  for (const m of listing.memories) bySlug.set(m.slug, m);
+  if (listing.core) {
+    bySlug.set(listing.core.slug, listing.core);
+  }
+  for (const m of listing.memories) {
+    bySlug.set(m.slug, m);
+  }
 
   // Track which entries we've already placed in the tree.
   const visited = new Set<string>();
@@ -73,7 +77,9 @@ export function buildMemoryGraph(listing: AgentMemoryListing): MemoryGraph {
       // Don't double-count if the same body refs the same dangling slug
       // twice — duplicate `[[foo]] [[foo]]` should still surface a single
       // referrer in the UI.
-      if (!list.includes(referencedBy)) list.push(referencedBy);
+      if (!list.includes(referencedBy)) {
+        list.push(referencedBy);
+      }
     } else {
       danglingMap.set(refSlug, [referencedBy]);
     }
@@ -90,7 +96,9 @@ export function buildMemoryGraph(listing: AgentMemoryListing): MemoryGraph {
       }
       // Skip self-refs and already-visited nodes; the visited guard makes
       // the recursion finite even on cyclic graphs.
-      if (visited.has(target.slug)) continue;
+      if (visited.has(target.slug)) {
+        continue;
+      }
       children.push(buildNode(target));
     }
     return { entry, children };
@@ -109,7 +117,9 @@ export function buildMemoryGraph(listing: AgentMemoryListing): MemoryGraph {
   // (no tree, just ref resolution) so dangling targets are complete.
   for (const o of orphans) {
     for (const refSlug of o.outgoingRefs) {
-      if (!bySlug.has(refSlug)) recordDangling(refSlug, o.slug);
+      if (!bySlug.has(refSlug)) {
+        recordDangling(refSlug, o.slug);
+      }
     }
   }
 

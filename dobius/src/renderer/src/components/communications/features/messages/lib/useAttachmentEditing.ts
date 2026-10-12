@@ -23,7 +23,9 @@ export function useAttachmentEditing({
   const migrateSpoileredUrl = React.useCallback(
     (fromUrl: string, toUrl: string) => {
       setSpoileredAttachmentUrls((current) => {
-        if (!current.has(fromUrl)) return current;
+        if (!current.has(fromUrl)) {
+          return current;
+        }
         const next = new Set(current);
         next.delete(fromUrl);
         next.add(toUrl);
@@ -36,7 +38,9 @@ export function useAttachmentEditing({
   const handleAttachmentEditSave = React.useCallback(
     async (url: string, bytes: Uint8Array) => {
       const descriptor = await uploadEditedAttachment(url, bytes);
-      if (descriptor) migrateSpoileredUrl(url, descriptor.url);
+      if (descriptor) {
+        migrateSpoileredUrl(url, descriptor.url);
+      }
     },
     [migrateSpoileredUrl, uploadEditedAttachment],
   );
@@ -44,7 +48,9 @@ export function useAttachmentEditing({
   const handleAttachmentRevert = React.useCallback(
     (url: string) => {
       const original = revertAttachment(url);
-      if (original) migrateSpoileredUrl(url, original.url);
+      if (original) {
+        migrateSpoileredUrl(url, original.url);
+      }
     },
     [migrateSpoileredUrl, revertAttachment],
   );

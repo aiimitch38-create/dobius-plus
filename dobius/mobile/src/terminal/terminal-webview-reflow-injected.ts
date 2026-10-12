@@ -20,6 +20,7 @@ export const TERMINAL_REFLOW_JS = `
     var distanceFromBottom = buffer.baseY - buffer.viewportY;
     initRows = nextRows;
     term.resize(nextCols, nextRows);
+    emitKeyboardAvoidanceMetrics();
     var rewrapped = term.buffer.active;
     if (wasAtBottom) {
       term.scrollToBottom();

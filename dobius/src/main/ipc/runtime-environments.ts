@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import { randomUUID } from 'node:crypto'
 import {
   addEnvironmentFromPairingCode,
@@ -16,6 +16,7 @@ import type { RemoteRuntimeSubscription } from '../../shared/remote-runtime-clie
 import type { Store } from '../persistence'
 import { clearActiveRuntimeEnvironmentFocusIfMatches } from '../runtime-environment-focus-self-heal'
 import { closeRemoteRuntimeRequestConnection } from './runtime-environment-request-connections'
+import { getUserDataRoot } from '../storage/user-data-root'
 import {
   callRuntimeEnvironment,
   clearSharedControlSupport,
@@ -44,7 +45,7 @@ type RetainedRemoteRuntimeSubscription = RemoteRuntimeSubscription & {
 const remoteRuntimeSubscriptions = new Map<string, RetainedRemoteRuntimeSubscription>()
 
 function getUserDataPath(): string {
-  return app.getPath('userData')
+  return getUserDataRoot()
 }
 
 function closeSubscriptionsForEnvironment(environmentId: string): void {

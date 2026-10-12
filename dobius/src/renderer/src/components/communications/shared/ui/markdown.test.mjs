@@ -6,11 +6,19 @@ import test from "node:test";
 // useMediaUpload.test.mjs inlining shortHash.
 
 function shallowArrayEqual(a, b) {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  if (a.length !== b.length) return false;
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
+    if (a[i] !== b[i]) {
+      return false;
+    }
   }
   return true;
 }
@@ -68,7 +76,9 @@ function isHastText(node) {
 }
 
 function isHastImageOnlyParagraph(node) {
-  if (!isHastElement(node) || node.tagName !== "p") return false;
+  if (!isHastElement(node) || node.tagName !== "p") {
+    return false;
+  }
   const meaningful = node.children.filter(
     (child) => !isIgnorableImageSeparator(child),
   );
@@ -86,7 +96,9 @@ function isIgnorableImageSeparator(node) {
 }
 
 function splitTrailingImageRun(node) {
-  if (!isHastElement(node) || node.tagName !== "p") return [node];
+  if (!isHastElement(node) || node.tagName !== "p") {
+    return [node];
+  }
 
   let cursor = node.children.length - 1;
   const trailingImages = [];
@@ -104,7 +116,9 @@ function splitTrailingImageRun(node) {
     break;
   }
 
-  if (trailingImages.length < 2 || cursor < 0) return [node];
+  if (trailingImages.length < 2 || cursor < 0) {
+    return [node];
+  }
   return [
     { ...node, children: node.children.slice(0, cursor + 1) },
     {

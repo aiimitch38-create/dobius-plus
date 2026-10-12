@@ -11,8 +11,12 @@ import {
   existsSync,
   realpathSync,
   statSync,
-  symlinkSync
+  symlinkSync,
+  readdirSync,
+  utimesSync
 } from 'node:fs'
+import type * as FsModule from 'node:fs'
+import type * as FsPromisesModule from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type {
@@ -122,6 +126,42 @@ vi.mock('electron', () => ({
     }
   }
 }))
+
+// Why: pass-through fs wrappers let recovery/rotation tests inject a failure or
+// a quit-time flush at an exact filesystem step; with no hook set they are inert.
+const fsHooks = vi.hoisted(() => ({
+  beforeRenameSync: null as null | ((src: string, dst: string) => void),
+  beforeAsyncOp: null as null | ((op: string) => void)
+}))
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof FsModule>()
+  return {
+    ...actual,
+    renameSync: (src: FsModule.PathLike, dst: FsModule.PathLike) => {
+      fsHooks.beforeRenameSync?.(String(src), String(dst))
+      actual.renameSync(src, dst)
+    }
+  }
+})
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof FsPromisesModule>()
+  const hooked =
+    <A extends unknown[], R>(op: string, fn: (...args: A) => Promise<R>) =>
+    (...args: A): Promise<R> => {
+      fsHooks.beforeAsyncOp?.(op)
+      return fn(...args)
+    }
+  return {
+    ...actual,
+    writeFile: hooked('writeFile', actual.writeFile),
+    rename: hooked('rename', actual.rename),
+    mkdir: hooked('mkdir', actual.mkdir),
+    rm: hooked('rm', actual.rm),
+    copyFile: hooked('copyFile', actual.copyFile)
+  }
+})
 
 vi.mock('./telemetry/client', () => ({
   track: trackMock
@@ -8721,6 +8761,292 @@ describe('Store', () => {
       const store = await createStore()
       expect(store.getRepos().map((r) => r.id)).toEqual(['survives'])
       expect(store.getSettings().theme).toBe('dark')
+    })
+
+    function validBackupState(repoId: string): unknown {
+      return {
+        schemaVersion: 1,
+        repos: [makeRepo({ id: repoId })],
+        worktreeMeta: {},
+        settings: {},
+        ui: {},
+        githubCache: { pr: {}, issue: {} },
+        workspaceSession: {}
+      }
+    }
+
+    // Valid JSON whose migration throws (sshTargets must be an array).
+    function badMigrationState(repoId: string): unknown {
+      return { ...(validBackupState(repoId) as object), sshTargets: 5 }
+    }
+
+    function snapshotCandidates(): Map<string, { bytes: string; mtimeMs: number } | null> {
+      const snapshot = new Map<string, { bytes: string; mtimeMs: number } | null>()
+      for (let i = 0; i < 5; i++) {
+        const file = backupFile(i)
+        snapshot.set(
+          file,
+          existsSync(file)
+            ? { bytes: readFileSync(file, 'utf-8'), mtimeMs: statSync(file).mtimeMs }
+            : null
+        )
+      }
+      return snapshot
+    }
+
+    function tmpFilesInDataDir(): string[] {
+      return readdirSync(testState.dir).filter((name) => name.endsWith('.tmp'))
+    }
+
+    it('recovers the newest backup whose full load succeeds without touching any candidate (#31)', async () => {
+      writeDataFile(badMigrationState('bad-primary'))
+      const primaryBytes = readFileSync(dataFile(), 'utf-8')
+      writeFileSync(backupFile(0), '{{bak0-not-json', 'utf-8')
+      writeBackup(1, badMigrationState('bad-bak1'))
+      writeBackup(2, validBackupState('from-bak2'))
+      writeBackup(3, validBackupState('from-bak3'))
+      const before = snapshotCandidates()
+
+      const store = await createStore()
+
+      expect(store.getRepos().map((r) => r.id)).toEqual(['from-bak2'])
+      expect(snapshotCandidates()).toEqual(before)
+      expect(readFileSync(dataFile(), 'utf-8')).toBe(before.get(backupFile(2))!.bytes)
+      const preserved = readdirSync(testState.dir).filter((name) =>
+        name.startsWith('dobius-data.json.failed-')
+      )
+      expect(preserved).toHaveLength(1)
+      expect(readFileSync(join(testState.dir, preserved[0]), 'utf-8')).toBe(primaryBytes)
+      expect(tmpFilesInDataDir()).toEqual([])
+    })
+
+    it('keeps one failed-primary copy when the same bad file fails on every launch (#31)', async () => {
+      writeDataFile(badMigrationState('bad-primary'))
+      const primaryBytes = readFileSync(dataFile(), 'utf-8')
+      await createStore()
+      // Simulates a crash before the first save: the same bad bytes on the next launch.
+      writeFileSync(dataFile(), primaryBytes, 'utf-8')
+      await createStore()
+      const preserved = readdirSync(testState.dir).filter((name) =>
+        name.startsWith('dobius-data.json.failed-')
+      )
+      expect(preserved).toHaveLength(1)
+    })
+
+    it('never rotates defaults into the backup ring when every candidate fails (#31)', async () => {
+      writeDataFile(badMigrationState('bad-primary'))
+      for (let i = 0; i < 5; i++) {
+        writeBackup(i, badMigrationState(`bad-bak${i}`))
+        const old = new Date(Date.now() - 2 * 60 * 60 * 1000)
+        utimesSync(backupFile(i), old, old)
+      }
+      const before = snapshotCandidates()
+
+      const store = await createStore()
+      expect(store.getRepos()).toEqual([])
+      store.addRepo(makeRepo({ id: 'new-after-defaults' }))
+      store.flush()
+
+      expect(snapshotCandidates()).toEqual(before)
+      expect(existsSync(backupFile(5))).toBe(false)
+    })
+
+    it('restores the primary atomically via tmp + rename (N6)', async () => {
+      writeFileSync(dataFile(), '{{{corrupt', 'utf-8')
+      writeBackup(0, validBackupState('atomic'))
+      const backupBytes = readFileSync(backupFile(0), 'utf-8')
+      const primaryAtRename: string[] = []
+      fsHooks.beforeRenameSync = (src, dst) => {
+        if (dst === dataFile()) {
+          primaryAtRename.push(readFileSync(dst, 'utf-8'))
+          expect(src.endsWith('.tmp')).toBe(true)
+          expect(readFileSync(src, 'utf-8')).toBe(backupBytes)
+        }
+      }
+      try {
+        const store = await createStore()
+        expect(store.getRepos().map((r) => r.id)).toEqual(['atomic'])
+      } finally {
+        fsHooks.beforeRenameSync = null
+      }
+
+      expect(primaryAtRename).toEqual(['{{{corrupt'])
+      expect(readFileSync(dataFile(), 'utf-8')).toBe(backupBytes)
+      expect(readFileSync(backupFile(0), 'utf-8')).toBe(backupBytes)
+      expect(tmpFilesInDataDir()).toEqual([])
+    })
+
+    it('leaves the primary untouched when the restore write fails (N6)', async () => {
+      writeFileSync(dataFile(), '{{{corrupt', 'utf-8')
+      writeBackup(0, validBackupState('still-loaded'))
+      const before = snapshotCandidates()
+      fsHooks.beforeRenameSync = (_src, dst) => {
+        if (dst === dataFile()) {
+          throw Object.assign(new Error('injected rename failure'), { code: 'EIO' })
+        }
+      }
+      try {
+        const store = await createStore()
+        expect(store.getRepos().map((r) => r.id)).toEqual(['still-loaded'])
+      } finally {
+        fsHooks.beforeRenameSync = null
+      }
+
+      expect(readFileSync(dataFile(), 'utf-8')).toBe('{{{corrupt')
+      expect(snapshotCandidates()).toEqual(before)
+      expect(tmpFilesInDataDir()).toEqual([])
+    })
+  })
+
+  // ── Rotation vs. quit flush (#33) ──────────────────────────────────
+
+  describe('backup rotation interleaved with the quit flush', () => {
+    function backupFile(index: number): string {
+      return `${dataFile()}.bak.${index}`
+    }
+
+    // Why a sweep: the lost-generation race only shows when the sync flush
+    // lands between two awaited steps of the async writer, so fire it at every
+    // async filesystem step in turn and check the ring each time.
+    for (let flushAtOp = 1; flushAtOp <= 12; flushAtOp++) {
+      it(`keeps five distinct generations when the flush lands at async fs step ${flushAtOp}`, async () => {
+        vi.useFakeTimers()
+        try {
+          writeDataFile({
+            schemaVersion: 1,
+            repos: [makeRepo({ id: 'seed' })],
+            worktreeMeta: {},
+            settings: {},
+            ui: {},
+            githubCache: { pr: {}, issue: {} },
+            workspaceSession: {}
+          })
+          const old = new Date(Date.now() - 2 * 60 * 60 * 1000)
+          for (let i = 0; i < 5; i++) {
+            writeFileSync(backupFile(i), JSON.stringify({ generation: `old-${i}` }), 'utf-8')
+            utimesSync(backupFile(i), old, old)
+          }
+
+          const store = await createStore()
+          let asyncOps = 0
+          fsHooks.beforeAsyncOp = () => {
+            asyncOps++
+            if (asyncOps === flushAtOp) {
+              store.flush()
+            }
+          }
+          store.addRepo(makeRepo({ id: 'latest', path: '/latest' }))
+          vi.advanceTimersByTime(1000)
+          await store.waitForPendingWrite()
+          fsHooks.beforeAsyncOp = null
+          store.flush()
+
+          const bak0 = JSON.parse(readFileSync(backupFile(0), 'utf-8')) as { repos: Repo[] }
+          expect(bak0.repos.map((r) => r.id).sort()).toEqual(['latest', 'seed'])
+          for (let i = 1; i < 5; i++) {
+            expect(JSON.parse(readFileSync(backupFile(i), 'utf-8'))).toEqual({
+              generation: `old-${i - 1}`
+            })
+          }
+          expect(existsSync(backupFile(5))).toBe(false)
+        } finally {
+          fsHooks.beforeAsyncOp = null
+          vi.useRealTimers()
+        }
+      })
+    }
+  })
+
+  // ── Workspace session salvage (#32) ────────────────────────────────
+
+  describe('workspace session field salvage', () => {
+    function tab(id: string, worktreeId: string, extra: Record<string, unknown> = {}): unknown {
+      return {
+        id,
+        worktreeId,
+        title: 'Terminal',
+        customTitle: null,
+        color: null,
+        sortOrder: 0,
+        createdAt: 1,
+        ptyId: null,
+        ...extra
+      }
+    }
+
+    function layout(leafId: string): unknown {
+      return {
+        root: { type: 'leaf', leafId },
+        activeLeafId: leafId,
+        expandedLeafId: null
+      }
+    }
+
+    it('drops only the invalid tab and keeps every other tab and layout', async () => {
+      writeDataFile({
+        schemaVersion: 1,
+        repos: [makeRepo()],
+        worktreeMeta: {},
+        settings: {},
+        ui: {},
+        githubCache: { pr: {}, issue: {} },
+        workspaceSession: {
+          activeRepoId: 'r1',
+          activeWorktreeId: 'wt1',
+          activeTabId: 'tab-a',
+          tabsByWorktree: {
+            wt1: [tab('tab-a', 'wt1'), tab('tab-bad', 'wt1', { title: 5 }), tab('tab-b', 'wt1')],
+            wt2: [tab('tab-c', 'wt2')]
+          },
+          terminalLayoutsByTabId: {
+            'tab-a': layout(TEST_LEAF_1),
+            'tab-b': layout(TEST_LEAF_2),
+            'tab-c': layout(TEST_LEAF_LIVE)
+          }
+        }
+      })
+
+      const store = await createStore()
+      const session = store.getWorkspaceSession()
+
+      expect(session.activeRepoId).toBe('r1')
+      expect(session.activeTabId).toBe('tab-a')
+      expect(session.tabsByWorktree.wt1.map((t) => t.id)).toEqual(['tab-a', 'tab-b'])
+      expect(session.tabsByWorktree.wt2.map((t) => t.id)).toEqual(['tab-c'])
+      expect(Object.keys(session.terminalLayoutsByTabId).sort()).toEqual([
+        'tab-a',
+        'tab-b',
+        'tab-c'
+      ])
+    })
+
+    it('resets only an invalid top-level field and keeps the tabs', async () => {
+      writeDataFile({
+        schemaVersion: 1,
+        repos: [makeRepo()],
+        worktreeMeta: {},
+        settings: {},
+        ui: {},
+        githubCache: { pr: {}, issue: {} },
+        workspaceSession: {
+          activeRepoId: 12345,
+          activeWorktreeId: 'wt1',
+          activeTabId: 'tab-a',
+          tabsByWorktree: { wt1: [tab('tab-a', 'wt1')] },
+          terminalLayoutsByTabId: {
+            'tab-a': { root: 'not-a-layout' },
+            'tab-b': layout(TEST_LEAF_2)
+          }
+        }
+      })
+
+      const store = await createStore()
+      const session = store.getWorkspaceSession()
+
+      expect(session.activeRepoId).toBeNull()
+      expect(session.activeWorktreeId).toBe('wt1')
+      expect(session.tabsByWorktree.wt1.map((t) => t.id)).toEqual(['tab-a'])
+      expect(Object.keys(session.terminalLayoutsByTabId)).toEqual(['tab-b'])
     })
   })
 

@@ -16,7 +16,9 @@ import {
 
 function groupByLabel(label) {
   const g = KIND_GROUPS.find((g) => g.label === label);
-  if (!g) throw new Error(`group not found: ${label}`);
+  if (!g) {
+    throw new Error(`group not found: ${label}`);
+  }
   return g;
 }
 
@@ -283,7 +285,9 @@ test("parseCustomKinds_malformedInput_onlyValidReturned", () => {
 // Helper: get all kinds in a named group
 function kindsOfGroupBySR(label) {
   const g = KIND_GROUPS.find((g) => g.label === label);
-  if (!g) throw new Error(`group not found: ${label}`);
+  if (!g) {
+    throw new Error(`group not found: ${label}`);
+  }
   return g.items.map((i) => i.kind);
 }
 

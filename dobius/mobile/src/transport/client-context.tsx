@@ -19,8 +19,15 @@ import {
   useState,
   type ReactNode
 } from 'react'
-import { connect, type RpcClient } from './rpc-client'
+import type { RpcClient } from './rpc-client'
 import { subscribeConnectionRevivalTriggers } from './connection-revival-triggers'
+import { connectHostProfile } from './connect-host-profile'
+import {
+  closeHostEntry,
+  HostOpenLifecycle,
+  loadPendingHostProfile,
+  notifyHostOpenFailure
+} from './host-open-lifecycle'
 import { loadHosts } from './host-store'
 import type { ConnectionState, HostProfile } from './types'
 
@@ -65,7 +72,7 @@ export function RpcClientProvider({ children }: { children: ReactNode }) {
   // Pending opens (avoid two acquire() callers in the same render racing the
   // host lookup). Keyed by hostId, value is a sentinel resolved when the
   // entry materialises.
-  const pendingOpensRef = useRef<Map<string, Promise<void>>>(new Map())
+  const openLifecycleRef = useRef(new HostOpenLifecycle())
 
   // Why: a fast-path cache of already-loaded HostProfiles. Screens that
   // have run loadHosts() can call primeHosts() to populate this and skip
@@ -90,28 +97,29 @@ export function RpcClientProvider({ children }: { children: ReactNode }) {
   }
 
   const closeEntry = useCallback((hostId: string) => {
-    const entry = storeRef.current.get(hostId)
-    if (!entry) {
-      return
-    }
-    entry.unsubState()
-    entry.client.close()
-    storeRef.current.delete(hostId)
-    notifyHostState(hostId, 'disconnected')
-    notifyAllHosts()
+    closeHostEntry(
+      hostId,
+      storeRef.current,
+      openLifecycleRef.current,
+      primedHostsRef.current,
+      notifyHostState,
+      notifyAllHosts
+    )
   }, [])
 
   const openEntry = useCallback(async (hostId: string): Promise<StoreEntry | null> => {
-    const existing = pendingOpensRef.current.get(hostId)
-    if (existing) {
-      await existing
+    const lifecycle = openLifecycleRef.current
+    const existing = lifecycle.pending.get(hostId)
+    if (existing && lifecycle.isCurrent(hostId, existing)) {
+      await existing.promise
       return storeRef.current.get(hostId) ?? null
     }
     let resolve: () => void = () => {}
     const promise = new Promise<void>((res) => {
       resolve = res
     })
-    pendingOpensRef.current.set(hostId, promise)
+    const pendingOpen = lifecycle.begin(hostId, promise)
+    const isCurrentOpen = () => lifecycle.isCurrent(hostId, pendingOpen)
 
     try {
       // Why: prefer the primed cache (populated by primeHosts when the
@@ -119,22 +127,16 @@ export function RpcClientProvider({ children }: { children: ReactNode }) {
       // Keychain pass behind the first one on cold start.
       let host = primedHostsRef.current.get(hostId)
       if (!host) {
-        try {
-          const hosts = await loadHosts()
-          host = hosts.find((h) => h.id === hostId)
-        } catch {
-          // Why: a Keychain failure on cold start (rare but observed —
-          // happens when iOS Keychain is mid-unlock or Android Keystore
-          // races the JS bridge). Surface it as 'disconnected' so the
-          // home card flips off the perma-spinner and the user can hit
-          // Reconnect from the action sheet to retry.
-          notifyHostState(hostId, 'disconnected')
-          notifyAllHosts()
-          return null
-        }
+        host = await loadPendingHostProfile(hostId, isCurrentOpen, loadHosts, () =>
+          notifyHostOpenFailure(hostId, notifyHostState, notifyAllHosts)
+        )
         if (!host) {
           return null
         }
+      }
+
+      if (!isCurrentOpen()) {
+        return null
       }
 
       // Re-check after any await — another acquire() may have completed.
@@ -145,13 +147,18 @@ export function RpcClientProvider({ children }: { children: ReactNode }) {
 
       let client: RpcClient
       try {
-        client = connect(host.endpoint, host.deviceToken, host.publicKeyB64)
+        client = connectHostProfile(host)
       } catch {
         // Why: connect() can throw synchronously if the public key is
         // malformed or the endpoint URL is invalid. Notify so the UI
         // doesn't sit on a stale 'connecting' label forever.
-        notifyHostState(hostId, 'disconnected')
-        notifyAllHosts()
+        if (isCurrentOpen()) {
+          notifyHostOpenFailure(hostId, notifyHostState, notifyAllHosts)
+        }
+        return null
+      }
+      if (!isCurrentOpen()) {
+        client.close()
         return null
       }
       const unsubState = client.onStateChange((state) => {
@@ -173,7 +180,7 @@ export function RpcClientProvider({ children }: { children: ReactNode }) {
       notifyAllHosts()
       return entry
     } finally {
-      pendingOpensRef.current.delete(hostId)
+      lifecycle.finish(hostId, pendingOpen)
       resolve()
     }
   }, [])
@@ -232,6 +239,9 @@ export function RpcClientProvider({ children }: { children: ReactNode }) {
 
   const forceReconnect = useCallback(
     async (hostId: string) => {
+      // A reconnect supersedes any pending open, but may reuse the current
+      // profile cached by primeHosts().
+      openLifecycleRef.current.invalidateHost(hostId)
       const entry = storeRef.current.get(hostId)
       // Why: preserve refcount across the swap. If the user reaches
       // forceReconnect via the Disconnect → Reconnect path, the entry
@@ -314,7 +324,9 @@ export function RpcClientProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const store = storeRef.current
+    openLifecycleRef.current.activateProvider()
     return () => {
+      openLifecycleRef.current.deactivateProvider()
       for (const [hostId] of store) {
         closeEntry(hostId)
       }

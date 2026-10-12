@@ -22,6 +22,7 @@ const TEN_MINUTES_MS = 10 * TICK_MS
 type PrepareClaudeLaunch = () => Promise<ClaudeRuntimeAuthPreparation>
 
 let interval: NodeJS.Timeout | null = null
+const warnedCodexAgents = new Set<string>()
 
 function minutesOfDay(value: string): number {
   const [hourText, minuteText] = value.split(':')
@@ -64,7 +65,9 @@ function isDue(agent: CustomAgent, now: Date): boolean {
     return now.getTime() - last >= TEN_MINUTES_MS
   }
   if (agent.heartbeat.frequency === 'hourly') {
-    return now.getMinutes() === 0 && last < startOfHour(now)
+    // Why: due once per clock hour whenever a tick lands in it; requiring the
+    // tick at exactly :00 skipped whole hours after a delayed tick or a wake.
+    return last < startOfHour(now)
   }
   if (agent.heartbeat.frequency === 'weekdays') {
     const day = now.getDay()
@@ -204,6 +207,17 @@ async function tick(prepareClaudeLaunch: PrepareClaudeLaunch): Promise<void> {
     if (!isDue(agent, now)) {
       continue
     }
+    // Why: the runner refuses heartbeat runs on Codex (no cheap model, verdict
+    // schema or tool limits there); skipping here stops a refusal every tick.
+    if (agent.engine === 'codex') {
+      if (!warnedCodexAgents.has(agent.id)) {
+        warnedCodexAgents.add(agent.id)
+        console.warn(
+          `[agents] heartbeat skipped for ${agent.name}: Codex agents cannot run heartbeats`
+        )
+      }
+      continue
+    }
     void maybeStartHeartbeat(agent, prepareClaudeLaunch).catch((error) => {
       console.warn(
         '[agents] heartbeat failed:',
@@ -221,3 +235,6 @@ export function startAgentHeartbeats(prepareClaudeLaunch: PrepareClaudeLaunch): 
   interval.unref?.()
   void tick(prepareClaudeLaunch)
 }
+
+// Test seam only.
+export const agentHeartbeatInternals = { isDue }

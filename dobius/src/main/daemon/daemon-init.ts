@@ -23,6 +23,7 @@ import {
 import { DaemonPtyAdapter } from './daemon-pty-adapter'
 import { DaemonPtyRouter } from './daemon-pty-router'
 import { DaemonClient } from './client'
+import { runHistoryRetentionSweep } from './history-retention'
 import {
   PREVIOUS_DAEMON_PROTOCOL_VERSIONS,
   PROTOCOL_VERSION,
@@ -44,6 +45,7 @@ import {
   rebindLocalProviderListeners
 } from '../ipc/pty'
 import { isStartupDiagnosticsEnabled, logStartupDiagnostic } from '../startup/startup-diagnostics'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Why: daemon init runs concurrently with window load, so harness-side stderr
 // arrival times are useless — in-process `t` lets the startup benchmark derive
@@ -65,15 +67,46 @@ let adapter: DaemonProvider | null = null
 let restartInFlight: Promise<RestartDaemonResult> | null = null
 
 function getRuntimeDir(): string {
-  const dir = join(app.getPath('userData'), 'daemon')
+  const dir = join(getUserDataRoot(), 'daemon')
   mkdirSync(dir, { recursive: true })
   return dir
 }
 
 function getHistoryDir(): string {
-  const dir = join(app.getPath('userData'), 'terminal-history')
+  const dir = join(getUserDataRoot(), 'terminal-history')
   mkdirSync(dir, { recursive: true })
   return dir
+}
+
+// Why a delay: the sweep walks every history dir; keep it off the startup path.
+const HISTORY_RETENTION_DELAY_MS = 30_000
+
+// Why opt-in: the sweep deletes ended-session scrollback, so it runs only after
+// the user writes {"maxTotalMB": N} to terminal-history-retention.json.
+function scheduleHistoryRetentionSweep(): void {
+  const timer = setTimeout(() => {
+    // Why the module-level adapter: read at fire time so a daemon restart in
+    // the meantime still supplies the current live-session list.
+    Promise.resolve()
+      .then(() =>
+        runHistoryRetentionSweep(
+          adapter,
+          getHistoryDir(),
+          join(getUserDataRoot(), 'terminal-history-retention.json')
+        )
+      )
+      .then((result) => {
+        if (result && result.removedSessions > 0) {
+          console.log(
+            `[daemon] terminal history retention removed ${result.removedSessions} ended sessions (${result.freedBytes} bytes)`
+          )
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn('[daemon] terminal history retention sweep failed:', error)
+      })
+  }, HISTORY_RETENTION_DELAY_MS)
+  timer.unref?.()
 }
 
 function getDaemonEntryPath(): string {
@@ -259,7 +292,7 @@ function createOutOfProcessLauncher(runtimeDir: string): DaemonLauncher {
     // before respawn so the new daemon does not race the stale process.
     await killStaleDaemon(runtimeDir, socketPath, tokenPath)
 
-    const userDataPath = app.getPath('userData')
+    const userDataPath = getUserDataRoot()
     const child = fork(entryPath, ['--socket', socketPath, '--token', tokenPath], {
       // Why: detached daemons can outlive dev worktrees. Starting from
       // userData keeps process.cwd() valid after a repo/worktree is deleted.
@@ -453,6 +486,7 @@ export async function initDaemonPtyProvider(signal?: AbortSignal): Promise<void>
   // before daemon init finishes. Rebind here so daemon PTYs still fan out
   // data/exit events through the renderer and runtime listeners.
   rebindLocalProviderListeners()
+  scheduleHistoryRetentionSweep()
   logDaemonMilestone('daemon-init-done', { legacyAdapters: legacyAdapters.length })
 }
 

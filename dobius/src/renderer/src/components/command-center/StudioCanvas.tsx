@@ -283,9 +283,11 @@ export function StudioCanvas(props: Props): React.JSX.Element {
         )}
       </div>
       <div className="studio-dock" aria-label="Canvas tools">
-        <Button size="sm" onClick={() => props.onAdd('brief')}>
+        {/* Why: no generation pipeline exists yet; briefs are still added from the sidebar Create list. */}
+        <Button size="sm" disabled title="Not available yet">
           <Layers />
           Generate
+          <span className="text-[10px] opacity-80">Not available yet</span>
         </Button>
         <Button size="sm" variant="ghost" onClick={() => props.onAction('browser')}>
           <Globe />

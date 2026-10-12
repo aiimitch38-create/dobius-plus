@@ -52,7 +52,7 @@ export type ThinkingEffortValue =
  * `is_adaptive_thinking_model`, `clamp_adaptive_effort`). Keep in sync.
  */
 export type ProviderEffortConfig = {
-  validValues: ReadonlyArray<ThinkingEffortValue>;
+  validValues: readonly ThinkingEffortValue[];
   /** Provider/model's semantic default, or `null` when Inherit is the default. */
   defaultValue: ThinkingEffortValue | null;
 };
@@ -193,11 +193,15 @@ function gpt5TokenMatches(m: string, token: string): boolean {
   let start = 0;
   while (true) {
     const idx = m.indexOf(token, start);
-    if (idx === -1) return false;
+    if (idx === -1) {
+      return false;
+    }
     const afterIdx = idx + token.length;
     const afterChar = afterIdx < m.length ? m[afterIdx] : "";
     // Boundary: end-of-string or a `-` separator (not a digit or letter).
-    if (afterChar === "" || afterChar === "-") return true;
+    if (afterChar === "" || afterChar === "-") {
+      return true;
+    }
     start = afterIdx;
   }
 }
@@ -207,10 +211,14 @@ function gpt5BaseMatches(m: string, token: string): boolean {
   let start = 0;
   while (true) {
     const idx = m.indexOf(token, start);
-    if (idx === -1) return false;
+    if (idx === -1) {
+      return false;
+    }
     const afterIdx = idx + token.length;
     const suffix = m.slice(afterIdx);
-    if (suffix === "") return true;
+    if (suffix === "") {
+      return true;
+    }
     if (!suffix.startsWith("-")) {
       start = afterIdx;
       continue;

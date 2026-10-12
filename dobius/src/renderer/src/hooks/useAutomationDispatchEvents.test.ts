@@ -10,6 +10,8 @@ const mockCreateWorktree = vi.fn()
 const mockMarkDispatchResult = vi.fn()
 const mockOnDispatchRequested = vi.fn()
 const mockRendererReady = vi.fn()
+const mockGetExecutionState = vi.fn()
+const mockRunPrecheck = vi.fn()
 
 const setupLaunch = {
   runnerScriptPath: '/tmp/setup.sh',
@@ -88,7 +90,8 @@ async function registerAndDispatch(automation = makeAutomation()): Promise<void>
   await handler({
     automation,
     run: makeRun(),
-    dispatchToken: 'dispatch-token'
+    dispatchToken: 'dispatch-token',
+    honorExecutionGate: true
   })
 }
 
@@ -155,15 +158,23 @@ describe('useAutomationDispatchEvents setup launch', () => {
       startupPlan: {}
     })
     mockOnDispatchRequested.mockReturnValue(() => {})
+    mockGetExecutionState.mockResolvedValue({
+      paused: false,
+      status: 'ok',
+      detail: null,
+      filePath: '/x'
+    })
+    mockRunPrecheck.mockResolvedValue(null)
     vi.stubGlobal('window', {
       api: {
         automations: {
           onDispatchRequested: mockOnDispatchRequested,
           rendererReady: mockRendererReady,
           markDispatchResult: mockMarkDispatchResult,
-          runPrecheck: vi.fn(),
+          runPrecheck: mockRunPrecheck,
           listRuns: vi.fn().mockResolvedValue([])
         },
+        agents: { getExecutionState: mockGetExecutionState },
         ssh: {
           needsPassphrasePrompt: vi.fn().mockResolvedValue(false),
           getState: vi.fn().mockResolvedValue({ status: 'connected' }),
@@ -309,6 +320,76 @@ describe('useAutomationDispatchEvents setup launch', () => {
         worktreeId: 'wt-existing',
         prompt: 'run this'
       })
+    )
+  })
+
+  // CX12 F4: Pause crew turned on after main admitted the run.
+  it('skips a scheduled run paused before launch and creates no worktree or agent', async () => {
+    mockGetExecutionState.mockResolvedValue({
+      paused: true,
+      status: 'ok',
+      detail: null,
+      filePath: '/x'
+    })
+
+    await registerAndDispatch()
+
+    expect(mockCreateWorktree).not.toHaveBeenCalled()
+    expect(mockLaunchAgentBackgroundSession).not.toHaveBeenCalled()
+    expect(mockMarkDispatchResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        status: 'skipped_unavailable',
+        error: expect.stringContaining('Crew is paused')
+      })
+    )
+  })
+
+  it('re-checks after the precheck await and skips when paused during it', async () => {
+    mockGetExecutionState
+      .mockResolvedValueOnce({ paused: false, status: 'ok', detail: null, filePath: '/x' })
+      .mockResolvedValue({ paused: true, status: 'ok', detail: null, filePath: '/x' })
+
+    await registerAndDispatch(makeAutomation({ precheck: { command: 'true' } }))
+
+    expect(mockRunPrecheck).toHaveBeenCalled()
+    expect(mockCreateWorktree).not.toHaveBeenCalled()
+    expect(mockLaunchAgentBackgroundSession).not.toHaveBeenCalled()
+    expect(mockMarkDispatchResult).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'skipped_unavailable' })
+    )
+  })
+
+  it('fails closed when the crew control state cannot be read', async () => {
+    mockGetExecutionState.mockRejectedValue(new Error('ipc down'))
+
+    await registerAndDispatch()
+
+    expect(mockCreateWorktree).not.toHaveBeenCalled()
+    expect(mockLaunchAgentBackgroundSession).not.toHaveBeenCalled()
+    expect(mockMarkDispatchResult).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'skipped_unavailable' })
+    )
+  })
+
+  it('re-checks after workspace creation and skips when paused during it', async () => {
+    mockCreateWorktree.mockImplementation(async () => {
+      mockGetExecutionState.mockResolvedValue({
+        paused: true,
+        status: 'ok',
+        detail: null,
+        filePath: '/x'
+      })
+      return { worktree: createdWorktree, setup: setupLaunch }
+    })
+
+    await registerAndDispatch()
+
+    expect(mockCreateWorktree).toHaveBeenCalled()
+    expect(mockLaunchWorktreeBackgroundTerminals).not.toHaveBeenCalled()
+    expect(mockLaunchAgentBackgroundSession).not.toHaveBeenCalled()
+    expect(mockMarkDispatchResult).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'skipped_unavailable', workspaceId: 'wt-created' })
     )
   })
 })

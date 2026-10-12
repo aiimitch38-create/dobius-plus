@@ -277,11 +277,11 @@ export function ProfileSummaryView({
   });
 
   const tabs = React.useMemo(() => {
-    const items: Array<{
+    const items: {
       id: ProfilePanelTab;
       label: string;
       trailing?: React.ReactNode;
-    }> = [];
+    }[] = [];
     if (showInfoTab) {
       items.push({ id: "info", label: "Info" });
     }

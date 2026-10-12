@@ -5,9 +5,9 @@
  * cheap slice instead of a full-file scan. Same atomic tmp-then-rename write
  * as workflow-store.ts.
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app } from 'electron'
+import { parseEveryEntry, parseEveryValue, SafeJsonFile } from '../../storage/safe-json-file'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 const FILE_NAME = 'workflow-runs.json'
 // Why: an unbounded run history for one workflow would grow the JSON file
@@ -46,10 +46,8 @@ export type WorkflowRun = {
 
 type RunsByWorkflow = Record<string, WorkflowRun[]>
 
-let cached: RunsByWorkflow | null = null
-
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function cloneRun(run: WorkflowRun): WorkflowRun {
@@ -90,54 +88,26 @@ function sanitizeRun(value: unknown): WorkflowRun | null {
   }
 }
 
-function sanitize(raw: unknown): RunsByWorkflow {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return {}
-  }
-  const result: RunsByWorkflow = {}
-  for (const [workflowId, entries] of Object.entries(raw as Record<string, unknown>)) {
-    if (!Array.isArray(entries)) {
-      continue
-    }
-    const runs = entries.map(sanitizeRun).filter((run): run is WorkflowRun => run !== null)
-    if (runs.length > 0) {
-      result[workflowId] = runs
-    }
-  }
-  return result
+// Why: a malformed run makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitizeRunList(entries: unknown): WorkflowRun[] | null {
+  return Array.isArray(entries) ? (parseEveryEntry(entries, sanitizeRun) ?? null) : null
 }
+
+const file = new SafeJsonFile<RunsByWorkflow>({
+  filePath,
+  parse: (raw) => parseEveryValue(raw, sanitizeRunList),
+  fallback: () => ({}),
+  label: `[workflow-runs] ${FILE_NAME}`
+})
 
 function load(): RunsByWorkflow {
-  if (cached) {
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(filePath(), 'utf-8')))
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[workflow-runs] failed to load run history:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = {}
-  }
-  return cached
+  return file.get()
 }
 
+// Warn-and-continue like before; SafeJsonFile logs a refused or failed save.
 function persist(runs: RunsByWorkflow): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(runs, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[workflow-runs] failed to persist run history:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+  file.set(runs)
 }
 
 export function listRuns(workflowId: string, limit?: number): WorkflowRun[] {
@@ -157,7 +127,6 @@ export function appendRun(run: WorkflowRun): WorkflowRun {
   const existing = all[run.workflowId] ?? []
   const updated = [run, ...existing].slice(0, MAX_RUNS_PER_WORKFLOW)
   const next: RunsByWorkflow = { ...all, [run.workflowId]: updated }
-  cached = next
   persist(next)
   return cloneRun(run)
 }
@@ -170,6 +139,5 @@ export function removeRunsForWorkflow(workflowId: string): void {
   }
   const next = { ...all }
   delete next[workflowId]
-  cached = next
   persist(next)
 }

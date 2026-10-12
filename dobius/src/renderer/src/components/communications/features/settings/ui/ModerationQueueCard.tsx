@@ -89,7 +89,9 @@ function statusForAction(action: ResolutionAction): "resolved" | "dismissed" {
 async function resolveTargetAuthor(
   group: ModerationQueueGroup,
 ): Promise<string> {
-  if (group.targetKind === "pubkey") return group.target;
+  if (group.targetKind === "pubkey") {
+    return group.target;
+  }
   const event = await getEventById(group.target);
   if (!event?.pubkey) {
     throw new Error("Could not resolve the message author.");
@@ -114,7 +116,9 @@ async function enforceResolution(
   switch (action) {
     case "delete":
       // Gated to event targets with a channel (resolvableActions).
-      if (group.channelId == null) throw new Error("Report has no channel.");
+      if (group.channelId == null) {
+        throw new Error("Report has no channel.");
+      }
       await deleteMessage(group.channelId, group.target);
       return;
     case "ban":
@@ -122,7 +126,9 @@ async function enforceResolution(
       return;
     case "kick":
       // Gated to event targets with a channel (resolvableActions).
-      if (group.channelId == null) throw new Error("Report has no channel.");
+      if (group.channelId == null) {
+        throw new Error("Report has no channel.");
+      }
       await removeChannelMember(
         group.channelId,
         await resolveTargetAuthor(group),
@@ -176,7 +182,9 @@ const RESOLUTION_OPTIONS: {
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
   return date.toLocaleString(undefined, {
     month: "short",
     day: "numeric",

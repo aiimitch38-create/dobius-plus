@@ -54,14 +54,20 @@ type MembershipCheckResult = "denied" | "ok" | "unreachable" | "error";
 async function checkMembershipStatus(): Promise<MembershipCheckResult> {
   try {
     const { membership, snapshotFound } = await getMyRelayMembershipLookup();
-    if (snapshotFound && membership === null) return "denied";
+    if (snapshotFound && membership === null) {
+      return "denied";
+    }
     return "ok";
   } catch (error) {
-    if (isRelayMembershipDeniedError(error)) return "denied";
+    if (isRelayMembershipDeniedError(error)) {
+      return "denied";
+    }
     // Native Tauri commands report connectivity failures with the stable
     // "relay unreachable:" prefix (see desktop/src-tauri/src/relay.rs), which
     // the legacy browser-fetch substrings below do not match.
-    if (isRelayUnreachableError(error)) return "unreachable";
+    if (isRelayUnreachableError(error)) {
+      return "unreachable";
+    }
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
       if (
@@ -470,7 +476,7 @@ export function OnboardingFlow({
                 {membershipError.kind === "unreachable" ? (
                   <>
                     <p className="font-medium text-destructive">
-                      Can't reach this relay
+                      Can&apos;t reach this relay
                     </p>
                     <p className="mt-1 text-muted-foreground">
                       Check your connection or change your community.

@@ -73,7 +73,7 @@ export function mergeCurrentProfileIntoLookup(
   }
 
   return {
-    ...(profiles ?? {}),
+    ...profiles,
     [normalizePubkey(currentProfile.pubkey)]: {
       displayName: currentProfile.displayName,
       // `Profile` does not carry the kind-0 `name`; keep whatever the batch

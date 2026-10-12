@@ -7,24 +7,24 @@
  */
 
 // Minimal HAST types — matches the pattern in rehypeImageGallery.ts.
-interface HastText {
+type HastText = {
   type: "text";
   value: string;
-}
+};
 
-interface HastElement {
+type HastElement = {
   type: "element";
   tagName: string;
   properties: Record<string, unknown>;
   children: HastNode[];
-}
+};
 
 type HastNode = HastElement | HastText | { type: string };
 
-interface HastRoot {
+type HastRoot = {
   type: "root";
   children: HastNode[];
-}
+};
 
 function isElement(node: HastNode): node is HastElement {
   return node.type === "element";
@@ -41,7 +41,9 @@ function escapeRegExp(string: string): string {
 export default function rehypeSearchHighlight({ query }: { query: string }) {
   return (tree: HastRoot) => {
     const trimmed = query.trim();
-    if (trimmed.length < 2) return;
+    if (trimmed.length < 2) {
+      return;
+    }
 
     const pattern = new RegExp(`(${escapeRegExp(trimmed)})`, "i");
 
@@ -58,7 +60,9 @@ export default function rehypeSearchHighlight({ query }: { query: string }) {
 
           for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
-            if (!part) continue;
+            if (!part) {
+              continue;
+            }
 
             if (i % 2 === 1) {
               // Odd indices from split-with-capture are always the match.

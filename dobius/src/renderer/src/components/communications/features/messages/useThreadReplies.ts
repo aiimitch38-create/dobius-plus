@@ -86,7 +86,9 @@ export function useThreadReplies(
       activeChannel.channelType !== "forum" &&
       openThreadRootId !== null,
     queryFn: async (): Promise<RelayEvent[]> => {
-      if (!activeChannel || !openThreadRootId) return [];
+      if (!activeChannel || !openThreadRootId) {
+        return [];
+      }
       const replies: RelayEvent[] = [];
       let cursor: ThreadCursor | null = null;
       for (let page = 0; page < MAX_THREAD_PAGES; page += 1) {
@@ -110,7 +112,9 @@ export function useThreadReplies(
           const current =
             queryClient.getQueryData<RelayEvent[]>(queryKey) ?? [];
           const byId = new Map(current.map((event) => [event.id, event]));
-          for (const event of fetched) byId.set(event.id, event);
+          for (const event of fetched) {
+            byId.set(event.id, event);
+          }
           return sortMessages([...byId.values()]);
         }
         cursor = response.nextCursor;

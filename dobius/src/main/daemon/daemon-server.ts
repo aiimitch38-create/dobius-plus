@@ -13,6 +13,7 @@ import { HistoryManager } from './history-manager'
 import { HistoryReader } from './history-reader'
 import { readCurrentProcessMacSystemResolverHealth } from '../network/macos-system-resolver-health'
 import type { SubprocessHandle } from './session'
+import type { StartupCommandDelivery } from '../../shared/codex-startup-delivery'
 import { checkPtySpawnHealth } from './pty-subprocess'
 import {
   PROTOCOL_VERSION,
@@ -23,6 +24,10 @@ import {
   type TakePendingOutputResult,
   type TerminalSnapshot
 } from './types'
+
+function historyErrorCode(error: Error): string {
+  return (error as NodeJS.ErrnoException).code ?? error.name
+}
 
 export type DaemonServerOptions = {
   socketPath: string
@@ -37,7 +42,7 @@ export type DaemonServerOptions = {
     env?: Record<string, string>
     envToDelete?: string[]
     command?: string
-    startupCommandDelivery?: import('../../shared/codex-startup-delivery').StartupCommandDelivery
+    startupCommandDelivery?: StartupCommandDelivery
     shellOverride?: string
     terminalWindowsWslDistro?: string | null
     terminalWindowsPowerShellImplementation?: 'auto' | 'powershell.exe' | 'pwsh.exe'
@@ -79,7 +84,13 @@ export class DaemonServer {
     this.socketPath = opts.socketPath
     this.tokenPath = opts.tokenPath
     this.token = randomUUID()
-    this.historyManager = opts.historyPath ? new HistoryManager(opts.historyPath) : null
+    this.historyManager = opts.historyPath
+      ? new HistoryManager(opts.historyPath, {
+          // Why only id + code: history errors must never log terminal content.
+          onWriteError: (sessionId, error) =>
+            console.warn('[history] write failed:', sessionId, historyErrorCode(error))
+        })
+      : null
     this.historyReader = opts.historyPath ? new HistoryReader(opts.historyPath) : null
     this.host = new TerminalHost({
       spawnSubprocess: opts.spawnSubprocess,
@@ -510,13 +521,11 @@ export class DaemonServer {
       return
     }
     this.sessionsNeedingFullCheckpoint.delete(sessionId)
-    if (snapshot) {
-      await this.historyManager.checkpoint(sessionId, snapshot)
-      if (records.length > 0) {
-        await this.historyManager.appendIncrements(sessionId, seq, records)
-      }
-    }
-    await this.historyManager.closeSession(sessionId, code)
+    await this.historyManager.finalizeSession(
+      sessionId,
+      code,
+      snapshot ? { snapshot, seq, records } : null
+    )
   }
 
   private scheduleCheckpointTimer(): void {

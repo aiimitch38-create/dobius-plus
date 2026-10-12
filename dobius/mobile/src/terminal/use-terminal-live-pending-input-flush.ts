@@ -22,7 +22,7 @@ type TerminalLivePendingInputFlushOptions<TTabType extends string> = {
 
 type TerminalLivePendingInputFlush = {
   readonly applyLiveInputMirror: (handle: string, fieldText: string) => void
-  readonly clearPendingLiveInputCommit: () => void
+  readonly clearPendingLiveInputCommit: (options?: { detachPendingSends?: boolean }) => void
   readonly flushPendingLiveInputText: (expectedHandle: string | null) => Promise<boolean>
   readonly heldLiveInputTextRef: RefObject<string>
   readonly pendingLiveInputHandleRef: RefObject<string | null>
@@ -43,6 +43,9 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
   const heldLiveInputTextRef = useRef('')
   const sentLiveInputTextRef = useRef('')
   const pendingLiveInputHandleRef = useRef<string | null>(null)
+  const mirrorSendFailedRef = useRef(false)
+  const liveInputSessionGenerationRef = useRef(0)
+  const currentLiveInputTextRef = useRef('')
   const runMirrorStepRef = useRef<
     (handle: string, fieldText: string, commitHeld: boolean) => Promise<boolean>
   >(async () => false)
@@ -59,20 +62,44 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
     heldLiveInputTextRef.current = ''
     sentLiveInputTextRef.current = ''
     pendingLiveInputHandleRef.current = null
+    mirrorSendFailedRef.current = false
+    currentLiveInputTextRef.current = ''
+    liveInputSessionGenerationRef.current += 1
   }, [clearHeldCommitTimer])
 
-  const clearPendingLiveInputCommit = useCallback(() => {
+  const resetFailedEmptyInputSession = useCallback(() => {
     resetMirrorState()
-    setLiveInputCapture('')
-    liveInputRef.current?.setNativeProps({ text: '' })
-  }, [liveInputRef, resetMirrorState, setLiveInputCapture])
+    // Why: any queued dependent deltas have already been suppressed behind the
+    // failed send. Detach their settled chain so fresh input after an explicit
+    // clear starts an independent send instead of inheriting the old failure.
+    pendingLiveInputFlushRef.current = null
+  }, [resetMirrorState])
+
+  const clearPendingLiveInputCommit = useCallback(
+    (options?: { detachPendingSends?: boolean }) => {
+      resetMirrorState()
+      if (options?.detachPendingSends) {
+        // Why: mirror deltas on another terminal are independent. A rejected
+        // request for the previous handle must not suppress the new handle's
+        // first input while its old network request is still settling.
+        pendingLiveInputFlushRef.current = null
+      }
+      setLiveInputCapture('')
+      liveInputRef.current?.setNativeProps({ text: '' })
+    },
+    [liveInputRef, resetMirrorState, setLiveInputCapture]
+  )
 
   const waitForPendingLiveInputFlush = useCallback(async (): Promise<boolean> => {
+    if (mirrorSendFailedRef.current) {
+      return false
+    }
     return waitForTerminalLivePendingFlush(pendingLiveInputFlushRef)
   }, [])
 
   const runMirrorStep = useCallback(
     async (handle: string, fieldText: string, commitHeld: boolean): Promise<boolean> => {
+      currentLiveInputTextRef.current = fieldText
       if (
         handle !== activeHandleRef.current ||
         (activeSessionTabTypeRef.current != null &&
@@ -83,6 +110,18 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
         // active terminal would inherit wrong erase counts. A null tab type is
         // "unknown" during tab-list lag, not "left the terminal", so it must not trip.
         resetMirrorState()
+        return false
+      }
+
+      if (mirrorSendFailedRef.current) {
+        // A failed delta leaves it unknown which bytes reached the PTY. Keep
+        // later edits local until the user clears this input session; never
+        // replay uncertain commands automatically after reconnect.
+        clearHeldCommitTimer()
+        if (fieldText.length === 0) {
+          resetFailedEmptyInputSession()
+          return true
+        }
         return false
       }
 
@@ -107,9 +146,24 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
       if (payload.length === 0) {
         return waitForPendingLiveInputFlush()
       }
-      return queueTerminalLiveMirrorSend(pendingLiveInputFlushRef, () =>
+      const sendSessionGeneration = liveInputSessionGenerationRef.current
+      const sendPromise = queueTerminalLiveMirrorSend(pendingLiveInputFlushRef, () =>
         sendLiveTerminalInputRef.current(handle, payload)
       )
+      void sendPromise.then((accepted) => {
+        if (!accepted && sendSessionGeneration === liveInputSessionGenerationRef.current) {
+          if (currentLiveInputTextRef.current.length === 0) {
+            // An explicit clear may happen while this RPC is pending. Once the
+            // failed chain settles, reset that empty session so the next edit
+            // starts fresh; an old completion must not poison a newer session.
+            resetFailedEmptyInputSession()
+            return
+          }
+          mirrorSendFailedRef.current = true
+          clearHeldCommitTimer()
+        }
+      })
+      return sendPromise
     },
     [
       activeHandleRef,
@@ -117,6 +171,7 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
       clearHeldCommitTimer,
       liveInputTerminalHandlesRef,
       resetMirrorState,
+      resetFailedEmptyInputSession,
       sendLiveTerminalInputRef,
       waitForPendingLiveInputFlush
     ]
@@ -140,6 +195,9 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
         clearPendingLiveInputCommit()
         return waitForPendingLiveInputFlush()
       }
+      if (mirrorSendFailedRef.current) {
+        return false
+      }
 
       const heldText = heldLiveInputTextRef.current
       const result =
@@ -147,12 +205,18 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
           ? await runMirrorStep(handle, sentLiveInputTextRef.current + heldText, true)
           : await waitForPendingLiveInputFlush()
 
+      if (!result) {
+        mirrorSendFailedRef.current = true
+        clearHeldCommitTimer()
+        return false
+      }
+
       // Why: an explicit flush ends the field's editing session; the echoed PTY
       // text stays, so local mirror state must restart from empty.
       clearPendingLiveInputCommit()
       return result
     },
-    [clearPendingLiveInputCommit, runMirrorStep, waitForPendingLiveInputFlush]
+    [clearHeldCommitTimer, clearPendingLiveInputCommit, runMirrorStep, waitForPendingLiveInputFlush]
   )
 
   useEffect(() => {

@@ -1,15 +1,19 @@
 import { Bot, Pause, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import type { AgentsExecutionState } from '../../../../shared/agents'
 
 export function AgentsPageHeader({
   agentCount,
   paused,
+  resumeBlocked,
   pingStatus,
   onTogglePaused
 }: {
   agentCount: number
   paused: boolean
+  // Why: an unreadable pause file keeps the crew paused; resuming must wait until it is fixed.
+  resumeBlocked: boolean
   pingStatus: { used: number; max: number; date: string } | null
   onTogglePaused: () => void
 }): React.JSX.Element {
@@ -39,11 +43,34 @@ export function AgentsPageHeader({
             ))}
           </span>
         </div>
-        <Button type="button" variant="outline" size="xs" onClick={onTogglePaused}>
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          disabled={paused && resumeBlocked}
+          onClick={onTogglePaused}
+        >
           {paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
           {paused ? 'Resume crew' : 'Pause crew'}
         </Button>
       </div>
     </header>
+  )
+}
+
+export function CrewControlUnreadableNotice({
+  state
+}: {
+  state: AgentsExecutionState | null
+}): React.JSX.Element | null {
+  if (state?.status !== 'unreadable') {
+    return null
+  }
+  return (
+    <p role="alert" className="shrink-0 border-b border-border px-5 py-2 text-xs text-destructive">
+      Crew is paused: the crew control file could not be read (
+      <span className="break-all font-mono">{state.filePath}</span>
+      {state.detail ? `: ${state.detail}` : ''}). Fix or remove the file to resume.
+    </p>
   )
 }

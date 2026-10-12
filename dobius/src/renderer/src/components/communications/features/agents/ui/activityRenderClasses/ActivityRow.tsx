@@ -207,8 +207,12 @@ export function splitActivityRowCountedObject(
   object: string,
 ): ActivityRowCountedObject | null {
   const match = object.match(/^(\d+)(\s.+)$/);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   const count = Number(match[1]);
-  if (!Number.isFinite(count)) return null;
+  if (!Number.isFinite(count)) {
+    return null;
+  }
   return { count, rest: match[2] };
 }

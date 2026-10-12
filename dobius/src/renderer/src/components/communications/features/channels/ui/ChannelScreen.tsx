@@ -195,7 +195,9 @@ export function ChannelScreen({
     useFetchOlderMessages(activeChannel);
   const latestActiveMessage = React.useMemo(() => {
     const messages = messagesQuery.data;
-    if (!messages) return null;
+    if (!messages) {
+      return null;
+    }
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       if (getThreadReference(messages[index].tags).parentId === null) {
         return messages[index];
@@ -268,7 +270,7 @@ export function ChannelScreen({
     relaySelfPubkey,
   );
   const latestMessageEvent = React.useMemo(
-    () => resolvedMessages[resolvedMessages.length - 1] ?? null,
+    () => resolvedMessages.at(-1) ?? null,
     [resolvedMessages],
   );
   const typingEntries = useChannelTyping(
@@ -388,7 +390,9 @@ export function ChannelScreen({
       rLookup.set(key, agent.respondTo);
       aLookup.set(key, agent.name);
       const pName = agent.personaId ? personaById.get(agent.personaId) : null;
-      if (pName) pLookup.set(key, pName);
+      if (pName) {
+        pLookup.set(key, pName);
+      }
     }
     return { personaLookup: pLookup, respondToLookup: rLookup, agentNameByPubkey: aLookup };
   }, [managedAgentsQuery.data, personasQuery.data]);

@@ -116,7 +116,9 @@ export function useChannelUnreadState({
   // it recomputes a normal marker rather than staying suppressed forever.
   React.useEffect(() => {
     const channelId = activeChannelId;
-    if (!channelId) return;
+    if (!channelId) {
+      return;
+    }
     return () => {
       forcedUnreadRef.current.delete(channelId);
       // Clear per-message forced-unread too: switching channels ends the
@@ -130,7 +132,9 @@ export function useChannelUnreadState({
   // already-read messages.
   React.useEffect(() => {
     const channelId = activeChannelId;
-    if (!channelId) return;
+    if (!channelId) {
+      return;
+    }
     return () => {
       openFrontierRef.current.delete(channelId);
     };
@@ -230,7 +234,9 @@ export function useChannelUnreadState({
   // (the snapshot is dropped on close by the effect below).
   const captureDividerReadState = React.useCallback(
     (replyId: string) => {
-      if (!openThreadHeadId) return;
+      if (!openThreadHeadId) {
+        return;
+      }
       let snapshot = threadOpenReadSnapshotRef.current.get(openThreadHeadId);
       if (!snapshot) {
         snapshot = new Map<string, number | null>();
@@ -255,7 +261,9 @@ export function useChannelUnreadState({
   }
   React.useEffect(() => {
     const rootId = openThreadHeadId;
-    if (!rootId) return;
+    if (!rootId) {
+      return;
+    }
     return () => {
       threadOpenReadSnapshotRef.current.delete(rootId);
     };
@@ -267,8 +275,12 @@ export function useChannelUnreadState({
   // gets its own msg:<id> marker advanced to its createdAt; a NEWER reply
   // re-raises the badge because the predicate is strictly createdAt > read.
   React.useEffect(() => {
-    if (!openThreadHeadId) return;
-    if (isThreadMuted(openThreadHeadId)) return;
+    if (!openThreadHeadId) {
+      return;
+    }
+    if (isThreadMuted(openThreadHeadId)) {
+      return;
+    }
     for (const entry of threadMessages) {
       markMessageRead(entry.message.id, entry.message.createdAt);
     }
@@ -383,7 +395,9 @@ export function useChannelUnreadState({
   const isMessageUnread = React.useCallback(
     (messageId: string): boolean => {
       const message = messageById.get(messageId);
-      if (!message) return false;
+      if (!message) {
+        return false;
+      }
       const { firstUnreadReplyId } = computeThreadUnreadMarker(
         [message],
         getMessageReadAt,
@@ -403,7 +417,9 @@ export function useChannelUnreadState({
   );
 
   const handleMarkUnread = React.useCallback(() => {
-    if (!activeChannelId) return;
+    if (!activeChannelId) {
+      return;
+    }
     // Mirror the deliberate mark-unread locally so the timeline marker is
     // suppressed (see forcedUnreadRef above). Re-render so the memo re-runs.
     forcedUnreadRef.current.add(activeChannelId);
@@ -450,7 +466,9 @@ export function useChannelUnreadState({
       for (const id of ids) {
         forcedUnreadMsgRef.current.delete(id);
         const createdAt = createdAtByMessageId.get(id);
-        if (createdAt !== undefined) markMessageRead(id, createdAt);
+        if (createdAt !== undefined) {
+          markMessageRead(id, createdAt);
+        }
       }
       forceUnreadRender();
     },

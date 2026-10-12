@@ -67,18 +67,25 @@ export function useChannelStars(pubkey: string | undefined): {
   const applyRemote = React.useCallback(
     (remote: RemoteStars): ((prev: ChannelStarStore) => ChannelStarStore) => {
       return (prev) => {
-        if (!pubkey) return prev;
-        if (remote.createdAt < lastAppliedRemoteTs.current) return prev;
+        if (!pubkey) {
+          return prev;
+        }
+        if (remote.createdAt < lastAppliedRemoteTs.current) {
+          return prev;
+        }
         if (
           remote.createdAt === lastAppliedRemoteTs.current &&
           remote.eventId <= lastAppliedEventId.current
-        )
+        ) {
           return prev;
+        }
         lastAppliedRemoteTs.current = remote.createdAt;
         lastAppliedEventId.current = remote.eventId;
         managerRef.current?.cancelPendingStarPublish();
         const merged = mergeStores(prev, remote.store);
-        if (!writeChannelStarsStore(pubkey, merged)) return prev;
+        if (!writeChannelStarsStore(pubkey, merged)) {
+          return prev;
+        }
         return merged;
       };
     },
@@ -86,10 +93,14 @@ export function useChannelStars(pubkey: string | undefined): {
   );
 
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
     let cancelled = false;
     void managerRef.current?.fetchRemoteStars().then((remote) => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
       if (remote) {
         setStore(applyRemote(remote));
       } else {
@@ -105,12 +116,16 @@ export function useChannelStars(pubkey: string | undefined): {
   }, [pubkey, applyRemote]);
 
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
     let unsub: (() => Promise<void>) | null = null;
     let cancelled = false;
     void managerRef.current
       ?.subscribeToStars((remote) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setStore(applyRemote(remote));
       })
       .then((dispose) => {
@@ -122,16 +137,22 @@ export function useChannelStars(pubkey: string | undefined): {
       });
     return () => {
       cancelled = true;
-      if (unsub) void unsub();
+      if (unsub) {
+        void unsub();
+      }
     };
   }, [pubkey, applyRemote]);
 
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
     let cancelled = false;
     const unsub = relayClient.subscribeToReconnects(() => {
       void managerRef.current?.fetchRemoteStars().then((remote) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         if (remote) {
           setStore(applyRemote(remote));
         }
@@ -155,7 +176,9 @@ export function useChannelStars(pubkey: string | undefined): {
 
   const setStarState = React.useCallback(
     (channelId: string, starred: boolean) => {
-      if (!pubkey) return;
+      if (!pubkey) {
+        return;
+      }
       const entry: ChannelStarEntry = {
         starred,
         updatedAt: Math.floor(Date.now() / 1000),
@@ -165,7 +188,9 @@ export function useChannelStars(pubkey: string | undefined): {
           version: 1,
           channels: { ...prev.channels, [channelId]: entry },
         };
-        if (!writeChannelStarsStore(pubkey, next)) return prev;
+        if (!writeChannelStarsStore(pubkey, next)) {
+          return prev;
+        }
         managerRef.current?.publishStars(next);
         return next;
       });

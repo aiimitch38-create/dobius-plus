@@ -7,6 +7,8 @@ import {
   isClaudeManagementTitle,
   isShellProcess
 } from '../../shared/agent-detection'
+import type { DesktopScreenEndpoint } from './screen/screen-contracts'
+import { DESKTOP_SCREEN_CAPABILITY } from '../../shared/desktop-screen-protocol'
 import { extractOscTitleScanTail } from '../../shared/osc-title-scan-tail'
 import { extractLastOsc7Uri, extractOscScanTail } from '../daemon/osc7-uri-extraction'
 import { parseFileUriPathParts } from '../daemon/osc7-file-uri'
@@ -702,6 +704,14 @@ import {
   resolveNestedRepoSelection
 } from '../project-groups/nested-repo-import'
 import { createNestedRepoImportTargetResolver } from '../project-groups/nested-repo-import-target'
+import {
+  checkExecutionAdmission,
+  ExecutionBlockedError,
+  isExecutionBlockedError,
+  type ExecutionOrigin
+} from '../agents/execution-gate'
+import { refreshSessionWorkspaceBrief } from '../agents/session-workspace-brief'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 function sanitizeNestedRepoRuntimeImportError(context: string, error: unknown): string {
   console.warn(`[project-groups] ${context}`, error)
@@ -1990,6 +2000,7 @@ async function hasLocalWorktreeBaseRef(
 }
 
 export class DobiusRuntimeService {
+  desktopScreen?: DesktopScreenEndpoint
   private readonly runtimeId = randomUUID()
   private readonly startedAt = Date.now()
   private readonly store: RuntimeStore | null
@@ -2671,9 +2682,8 @@ export class DobiusRuntimeService {
   // to inject an in-memory DB without touching the filesystem.
   getOrchestrationDb(): OrchestrationDb {
     if (!this._orchestrationDb) {
-      const { app } = require('electron')
-      const dbPath = join(app.getPath('userData'), 'orchestration.db')
-      this._orchestrationDb = new OrchestrationDb(dbPath)
+      const dbPath = join(getUserDataRoot(), 'orchestration.db')
+      this._orchestrationDb = OrchestrationDb.openForProcess(dbPath)
     }
     return this._orchestrationDb
   }
@@ -2710,6 +2720,7 @@ export class DobiusRuntimeService {
     if (hasOffscreen) {
       capabilities.push(BROWSER_HEADLESS_RUNTIME_CAPABILITY)
     }
+    if (this.desktopScreen?.supported) capabilities.push(DESKTOP_SCREEN_CAPABILITY)
     return {
       runtimeId: this.runtimeId,
       rendererGraphEpoch: this.rendererGraphEpoch,
@@ -5099,6 +5110,15 @@ export class DobiusRuntimeService {
     const localGitOptions =
       repo && !connectionId ? getLocalProjectWorktreeGitOptions(store, repo) : {}
     return { worktree, repo, connectionId, localGitOptions }
+  }
+
+  // Why: mobile write guards (mobile-write-path-guard.ts) check targets
+  // relative to the real worktree root, and skip disk checks over SSH.
+  async resolveMobileWriteRoot(
+    worktreeSelector: string
+  ): Promise<{ root: string; connectionId?: string }> {
+    const target = await this.resolveRuntimeFileTarget(worktreeSelector)
+    return { root: target.worktree.path, connectionId: target.connectionId }
   }
 
   private async resolveRuntimeFileTarget(worktreeSelector: string): Promise<{
@@ -8202,6 +8222,7 @@ export class DobiusRuntimeService {
         priority: 'high',
         payload: JSON.stringify({
           taskId: dispatch.task_id,
+          dispatchId: dispatch.id,
           exitCode,
           handle
         })
@@ -12446,6 +12467,25 @@ export class DobiusRuntimeService {
     }
   }
 
+  // Why: autonomous launches re-check Pause crew after the awaited worktree
+  // work, right before the agent spawns. When the workspace was just created,
+  // its path goes into the refusal instead of being silently left behind.
+  private assertAgentSpawnAdmitted(
+    origin: ExecutionOrigin | undefined,
+    createdWorkspacePath?: string
+  ): void {
+    if (!origin) {
+      return
+    }
+    const admission = checkExecutionAdmission(origin)
+    if (!admission.allowed) {
+      const created = createdWorkspacePath
+        ? ` Workspace ${createdWorkspacePath} was created, but no agent was started in it.`
+        : ''
+      throw new ExecutionBlockedError(origin, admission.reason, `${admission.message}${created}`)
+    }
+  }
+
   private markLocalWorkspaceTrustedForAgent(agent: TuiAgent, workspacePath: string): void {
     const preset = TUI_AGENT_CONFIG[agent].preflightTrust
     if (!preset) {
@@ -12820,6 +12860,8 @@ export class DobiusRuntimeService {
     createdWithAgent?: TuiAgent
     startupAgent?: TuiAgent
     startupPrompt?: string
+    /** Set by autonomous launches: Pause crew is re-checked right before the agent spawns. */
+    executionOrigin?: ExecutionOrigin
     pendingFirstAgentMessageRename?: boolean
     automationProvenance?: AutomationWorkspaceProvenance
     startup?: WorktreeStartupLaunch
@@ -12921,6 +12963,7 @@ export class DobiusRuntimeService {
           if (startupTrustAgent) {
             this.markLocalWorkspaceTrustedForAgent(startupTrustAgent, worktree.path)
           }
+          this.assertAgentSpawnAdmitted(args.executionOrigin, worktree.path)
           const terminal = await this.createTerminal(`id:${worktree.id}`, {
             command: effectiveStartup.command,
             env: effectiveStartup.env,
@@ -12939,6 +12982,9 @@ export class DobiusRuntimeService {
           }
           didSpawnStartup = true
         } catch (err) {
+          if (isExecutionBlockedError(err)) {
+            throw err
+          }
           const message = err instanceof Error ? err.message : String(err)
           warning = `Failed to create the startup terminal for ${worktree.path}: ${message}`
           console.warn(`[worktree-create] ${warning}`)
@@ -13551,6 +13597,7 @@ export class DobiusRuntimeService {
       console.warn(`[hooks] ${warning}`)
     }
 
+    await refreshSessionWorkspaceBrief(worktreePath)
     this.invalidateResolvedWorktreeCache()
     // Why: the filesystem-auth layer maintains a separate cache of registered
     // worktree roots used by git IPC handlers (branchCompare, diff, status, etc.)
@@ -13603,6 +13650,7 @@ export class DobiusRuntimeService {
         if (startupTrustAgent) {
           this.markLocalWorkspaceTrustedForAgent(startupTrustAgent, worktreePath)
         }
+        this.assertAgentSpawnAdmitted(args.executionOrigin, worktreePath)
         const terminal = await this.createTerminal(`id:${worktree.id}`, {
           command: sequencedStartup.command,
           ...(setup && effectiveStartup
@@ -13626,6 +13674,9 @@ export class DobiusRuntimeService {
         startupTerminalPaneKey = terminal.paneKey ?? null
         startupTerminalPtyId = terminal.ptyId ?? null
       } catch (err) {
+        if (isExecutionBlockedError(err)) {
+          throw err
+        }
         const message = err instanceof Error ? err.message : String(err)
         warning = warning
           ? `${warning} Also failed to create the startup terminal for ${worktreePath}: ${message}`
@@ -13801,6 +13852,7 @@ export class DobiusRuntimeService {
       createdWithAgent?: TuiAgent
       pendingFirstAgentMessageRename?: boolean
       automationProvenance?: AutomationWorkspaceProvenance
+      executionOrigin?: ExecutionOrigin
       startup?: WorktreeStartupLaunch
       startupFollowup?: WorktreeStartupFollowup
       startupDraftPaste?: WorktreeStartupDraftPaste
@@ -13904,6 +13956,7 @@ export class DobiusRuntimeService {
             result.worktree.path
           )
         }
+        this.assertAgentSpawnAdmitted(args.executionOrigin, result.worktree.path)
         const terminal = await this.createTerminal(`path:${result.worktree.path}`, {
           command: sequencedStartup.command,
           ...(result.setup && args.startup
@@ -13927,6 +13980,9 @@ export class DobiusRuntimeService {
         startupTerminalPaneKey = terminal.paneKey ?? null
         startupTerminalPtyId = terminal.ptyId ?? null
       } catch (err) {
+        if (isExecutionBlockedError(err)) {
+          throw err
+        }
         const message = err instanceof Error ? err.message : String(err)
         warning = warning
           ? `${warning} Also failed to create the startup terminal for ${result.worktree.path}: ${message}`
@@ -15946,7 +16002,7 @@ export class DobiusRuntimeService {
 
   async launchAgentTerminal(
     worktreeSelector: string,
-    opts: { agent: TuiAgent; prompt: string; title?: string }
+    opts: { agent: TuiAgent; prompt: string; title?: string; executionOrigin?: ExecutionOrigin }
   ): Promise<RuntimeTerminalCreate> {
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
     const repo = this.store?.getRepo(worktree.repoId)
@@ -15959,6 +16015,8 @@ export class DobiusRuntimeService {
     } else {
       this.markLocalWorkspaceTrustedForAgent(opts.agent, worktree.path)
     }
+    // Why: Pause crew can turn on during the awaits above; re-check before the spawn.
+    this.assertAgentSpawnAdmitted(opts.executionOrigin)
     return await this.createTerminal(`id:${worktree.id}`, {
       command: startup.startup.command,
       env: startup.startup.env,

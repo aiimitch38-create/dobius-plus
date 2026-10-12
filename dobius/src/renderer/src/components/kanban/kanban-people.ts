@@ -12,9 +12,11 @@ import type { Person } from './kanban-types'
 /** Two-letter monogram for an avatar with no image. */
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) return '??'
+  if (!parts.length) {
+    return '??'
+  }
   const first = parts[0][0] ?? ''
-  const second = parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : (parts[0][1] ?? '')
+  const second = parts.length > 1 ? (parts.at(-1)?.[0] ?? '') : (parts[0][1] ?? '')
   return `${first}${second}`.toUpperCase()
 }
 
@@ -28,7 +30,9 @@ export function useAssignablePeople(): Person[] {
     void window.api?.agents
       ?.list()
       .then((list) => {
-        if (cancelled) return
+        if (cancelled) {
+          return
+        }
         setAgents(
           list.map((agent) => ({
             kind: 'agent' as const,
@@ -41,7 +45,9 @@ export function useAssignablePeople(): Person[] {
       .catch(() => {
         // Why swallow: outside Electron (the standalone preview) there is no
         // agent roster, and the panel is still usable with just the operator.
-        if (!cancelled) setAgents([])
+        if (!cancelled) {
+          setAgents([])
+        }
       })
     return () => {
       cancelled = true

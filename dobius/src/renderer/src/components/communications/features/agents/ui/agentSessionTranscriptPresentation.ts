@@ -95,6 +95,8 @@ export function isMeaningfulItem(item: TranscriptItem): boolean {
  *    session start / idle.
  */
 export function isSpineItem(item: TranscriptItem): boolean {
-  if (!isMeaningfulItem(item)) return false;
+  if (!isMeaningfulItem(item)) {
+    return false;
+  }
   return item.type !== "metadata";
 }

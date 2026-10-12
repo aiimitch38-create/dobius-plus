@@ -13,17 +13,27 @@ const availableListeners = new Set<() => void>();
 export function requestAddCommunityPrefill(
   request: AddCommunityPrefillRequest,
 ): boolean {
-  if (currentRequest) return false;
+  if (currentRequest) {
+    return false;
+  }
   currentRequest = request;
-  for (const listener of listeners) listener();
+  for (const listener of listeners) {
+    listener();
+  }
   return true;
 }
 
 export function clearAddCommunityPrefill(requestId: string): void {
-  if (!currentRequest || currentRequest.requestId !== requestId) return;
+  if (!currentRequest || currentRequest.requestId !== requestId) {
+    return;
+  }
   currentRequest = null;
-  for (const listener of listeners) listener();
-  for (const listener of availableListeners) listener();
+  for (const listener of listeners) {
+    listener();
+  }
+  for (const listener of availableListeners) {
+    listener();
+  }
 }
 
 export function onAddCommunityPrefillAvailable(
@@ -49,13 +59,17 @@ export function useAddCommunityDialogState() {
   const [open, setOpen] = React.useState(false);
 
   React.useEffect(() => {
-    if (prefill) setOpen(true);
+    if (prefill) {
+      setOpen(true);
+    }
   }, [prefill]);
 
   const onOpenChange = React.useCallback(
     (nextOpen: boolean) => {
       setOpen(nextOpen);
-      if (!nextOpen && prefill) clearAddCommunityPrefill(prefill.requestId);
+      if (!nextOpen && prefill) {
+        clearAddCommunityPrefill(prefill.requestId);
+      }
     },
     [prefill],
   );

@@ -21,14 +21,14 @@ function writePreference(enabled: boolean) {
   window.localStorage.setItem(STORAGE_KEY, String(enabled));
 }
 
-interface PreventSleepValue {
+type PreventSleepValue = {
   enabled: boolean;
   setEnabled: (value: boolean) => void;
   active: boolean;
   hasRunningAgents: boolean;
   expired: boolean;
   clearExpired: () => void;
-}
+};
 
 const PreventSleepContext = React.createContext<PreventSleepValue | null>(null);
 
@@ -94,7 +94,9 @@ function usePreventSleepInternal() {
   }, []);
 
   React.useEffect(() => {
-    if (!enabled || !runningAgentPubkeyKey) return;
+    if (!enabled || !runningAgentPubkeyKey) {
+      return;
+    }
 
     const observedPubkeys = runningAgentPubkeyKey.split(",");
     const tracker = createPreventSleepActivityTracker();
@@ -105,7 +107,9 @@ function usePreventSleepInternal() {
           events: getAgentObserverSnapshot(pubkey, true).events,
         })),
       );
-      if (!hasNewActivity) return;
+      if (!hasNewActivity) {
+        return;
+      }
 
       if (expired) {
         setExpired(false);

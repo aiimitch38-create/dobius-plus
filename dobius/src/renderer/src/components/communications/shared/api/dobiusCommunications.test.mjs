@@ -140,7 +140,9 @@ test("returns a degraded snapshot instead of loading forever", async () => {
   globalThis.window = {
     dobiusCommunications: {
       invoke: async (command) => {
-        if (command === "accounts.list") return new Promise(() => {});
+        if (command === "accounts.list") {
+          return new Promise(() => {});
+        }
         return { version: 1, id: command, ok: true, result: command };
       },
     },
@@ -268,7 +270,9 @@ test("one agent's identity lookup failing does not blank the whole managed-agent
   // the healthy agent's resolution.
   const bridgedGetAgentIdentity = globalThis.window.api.communications.getAgentIdentity;
   globalThis.window.api.communications.getAgentIdentity = async (agentId) => {
-    if (agentId === "broken-agent") throw new Error("Keychain access denied");
+    if (agentId === "broken-agent") {
+      throw new Error("Keychain access denied");
+    }
     return bridgedGetAgentIdentity(agentId);
   };
 
@@ -872,21 +876,33 @@ async function installFakeRelay(privateKeyHex, username = "Owner") {
           (stored) => stored.kind === event.kind && stored.pubkey === event.pubkey &&
             stored.tags.find((tag) => tag[0] === "d")?.[1] === dTag,
         );
-        if (priorIndex !== -1) events.splice(priorIndex, 1);
+        if (priorIndex !== -1) {
+          events.splice(priorIndex, 1);
+        }
       }
       events.push(event);
       return { ok: true, text: async () => JSON.stringify({ accepted: true, event_id: event.id }) };
     }
     const [filter] = JSON.parse(init.body);
     const matches = events.filter((event) => {
-      if (filter.kinds && !filter.kinds.includes(event.kind)) return false;
-      if (filter.ids && !filter.ids.includes(event.id)) return false;
-      if (typeof filter.until === "number" && event.created_at > filter.until) return false;
+      if (filter.kinds && !filter.kinds.includes(event.kind)) {
+        return false;
+      }
+      if (filter.ids && !filter.ids.includes(event.id)) {
+        return false;
+      }
+      if (typeof filter.until === "number" && event.created_at > filter.until) {
+        return false;
+      }
       for (const key of Object.keys(filter)) {
-        if (!key.startsWith("#")) continue;
+        if (!key.startsWith("#")) {
+          continue;
+        }
         const tagName = key.slice(1);
         const wanted = filter[key];
-        if (!event.tags.some((tag) => tag[0] === tagName && wanted.includes(tag[1]))) return false;
+        if (!event.tags.some((tag) => tag[0] === tagName && wanted.includes(tag[1]))) {
+          return false;
+        }
       }
       return true;
     });

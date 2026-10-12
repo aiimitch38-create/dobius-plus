@@ -63,12 +63,16 @@ function parseSidebarLoadingRows(
   rows: unknown,
   maxRows: number,
 ): SidebarLoadingRowShape[] {
-  if (!Array.isArray(rows)) return [];
+  if (!Array.isArray(rows)) {
+    return [];
+  }
 
   return rows
     .slice(0, maxRows)
     .filter((row: unknown): row is SidebarLoadingRowShape => {
-      if (typeof row !== "object" || row === null) return false;
+      if (typeof row !== "object" || row === null) {
+        return false;
+      }
       const record = row as Record<string, unknown>;
       return (
         typeof record.key === "string" &&
@@ -80,9 +84,13 @@ function parseSidebarLoadingRows(
 }
 
 function parseSidebarLoadingShape(value: unknown): SidebarLoadingShape | null {
-  if (typeof value !== "object" || value === null) return null;
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
   const record = value as Record<string, unknown>;
-  if (record.version !== 1) return null;
+  if (record.version !== 1) {
+    return null;
+  }
 
   const shape = {
     channels: parseSidebarLoadingRows(record.channels, 3),
@@ -100,14 +108,18 @@ function sidebarSkeletonCacheKey(
   communityId: string | null | undefined,
   pubkey: string | undefined,
 ) {
-  if (!communityId) return null;
+  if (!communityId) {
+    return null;
+  }
   return `${SIDEBAR_SKELETON_CACHE_PREFIX}:${communityId}:${pubkey ?? "anonymous"}`;
 }
 
 function readSidebarLoadingShape(
   cacheKey: string | null,
 ): SidebarLoadingShape | null {
-  if (!cacheKey || typeof window === "undefined") return null;
+  if (!cacheKey || typeof window === "undefined") {
+    return null;
+  }
 
   try {
     const raw = window.localStorage.getItem(cacheKey);
@@ -145,10 +157,18 @@ function writeSidebarLoadingShape(
 
 function sidebarWidthClassForText(text: string): SidebarLoadingWidthClass {
   const length = text.trim().length;
-  if (length >= 20) return "w-32";
-  if (length >= 14) return "w-28";
-  if (length >= 10) return "w-24";
-  if (length >= 6) return "w-20";
+  if (length >= 20) {
+    return "w-32";
+  }
+  if (length >= 14) {
+    return "w-28";
+  }
+  if (length >= 10) {
+    return "w-24";
+  }
+  if (length >= 6) {
+    return "w-20";
+  }
   return "w-16";
 }
 
@@ -210,11 +230,15 @@ export function useSidebarLoadingShape({
   );
 
   React.useEffect(() => {
-    if (isLoading || !hasSidebarLoadingRows(liveShape)) return;
+    if (isLoading || !hasSidebarLoadingRows(liveShape)) {
+      return;
+    }
     writeSidebarLoadingShape(cacheKey, liveShape);
   }, [cacheKey, isLoading, liveShape]);
 
-  if (hasSidebarLoadingRows(liveShape)) return liveShape;
+  if (hasSidebarLoadingRows(liveShape)) {
+    return liveShape;
+  }
   return cachedShape ?? fallbackSidebarLoadingShape;
 }
 

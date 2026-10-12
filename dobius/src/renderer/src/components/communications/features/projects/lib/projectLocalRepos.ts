@@ -15,11 +15,13 @@ function localRepoNameCandidate(value: string | null | undefined) {
 }
 
 function cloneUrlRepoName(cloneUrl: string | undefined) {
-  if (!cloneUrl) return null;
+  if (!cloneUrl) {
+    return null;
+  }
   try {
     const parsed = new URL(cloneUrl);
     const segments = parsed.pathname.split("/").filter(Boolean);
-    const lastSegment = segments[segments.length - 1];
+    const lastSegment = segments.at(-1);
     return localRepoNameCandidate(lastSegment);
   } catch {
     return null;

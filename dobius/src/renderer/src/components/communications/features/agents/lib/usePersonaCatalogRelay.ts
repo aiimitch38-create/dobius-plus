@@ -32,7 +32,9 @@ export function usePersonaCatalogLiveUpdates(communityId: string | null): void {
   const queryClient = useQueryClient();
 
   React.useEffect(() => {
-    if (!communityId) return;
+    if (!communityId) {
+      return;
+    }
     let disposed = false;
     let dispose: (() => Promise<void>) | null = null;
 
@@ -65,7 +67,9 @@ export function usePersonaCatalogLiveUpdates(communityId: string | null): void {
     return () => {
       disposed = true;
       unsubscribeReconnect();
-      if (dispose) void dispose();
+      if (dispose) {
+        void dispose();
+      }
     };
   }, [communityId, queryClient]);
 }

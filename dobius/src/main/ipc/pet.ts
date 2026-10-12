@@ -1,5 +1,5 @@
 /* eslint-disable max-lines */
-import { app, BrowserWindow, dialog, ipcMain, nativeImage } from 'electron'
+import { BrowserWindow, dialog, ipcMain, nativeImage } from 'electron'
 import { copyFile, mkdir, open, readFile, rename, rm, stat, lstat } from 'node:fs/promises'
 import { constants as fsConstants, createWriteStream } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
@@ -13,6 +13,7 @@ import {
   type PetManifestLike,
   type ResolvedPetManifest
 } from './pet-bundle'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // Why: image-only pet uploads. Static + animated variants render natively
 // via <img>, so no 3D engine is needed. Main owns the accepted-format table as
@@ -40,7 +41,7 @@ function classifyFile(src: string): { mimeType: string; ext: string } | null {
 // keep rendering after the product rename. The renderer only knows CustomPet.id;
 // main resolves it to an absolute path inside this folder.
 function getPetsDir(): string {
-  return join(app.getPath('userData'), 'sidekicks', 'custom')
+  return join(getUserDataRoot(), 'sidekicks', 'custom')
 }
 
 const MAX_BYTES = 64 * 1024 * 1024 // 64 MB — generous but bounded so a user can't point at a multi-GB file and OOM the renderer when it builds a Blob URL.

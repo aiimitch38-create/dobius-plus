@@ -75,7 +75,9 @@ function RuntimeReadinessIndicator({
 }) {
   // Checkmark temporarily hidden; flip to true to restore it.
   const showReadinessCheckmark = false;
-  if (!ready || !showReadinessCheckmark) return null;
+  if (!ready || !showReadinessCheckmark) {
+    return null;
+  }
 
   return (
     <span
@@ -116,13 +118,17 @@ function RuntimeStatus({
   const isReady = runtimeIsReadyForOnboarding(runtime);
 
   React.useEffect(() => {
-    if (!isWaitingForSignIn || !isReady) return;
+    if (!isWaitingForSignIn || !isReady) {
+      return;
+    }
     setIsWaitingForSignIn(false);
     setDidSignInCheckTimeOut(false);
   }, [isReady, isWaitingForSignIn]);
 
   React.useEffect(() => {
-    if (!isWaitingForSignIn) return;
+    if (!isWaitingForSignIn) {
+      return;
+    }
 
     const interval = window.setInterval(() => {
       void runtimesQuery.refetch();
@@ -398,7 +404,9 @@ function isSupportedOnboardingAuthMethod(
   runtime: AcpRuntimeCatalogEntry,
   method: AcpAuthMethod,
 ) {
-  if (runtime.id !== "codex") return true;
+  if (runtime.id !== "codex") {
+    return true;
+  }
   return !/api[-_ ]?key/i.test(`${method.id} ${method.name}`);
 }
 

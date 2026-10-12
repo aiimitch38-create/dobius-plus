@@ -15,7 +15,14 @@ type DecisionQueueContext = {
   agentId: string
   cwd: string
   branch?: string
+  /** Whether the session can switch into bypass mode (fixed when it launched). */
+  bypassRunSupported: boolean
 }
+
+export const BYPASS_RUN_UNSUPPORTED_REASON =
+  'Bypass is unavailable for this run: it was not started with bypass support, and the Claude CLI ' +
+  'cannot switch a running session into bypass. Turn on "Bypass permissions" for this agent and ' +
+  'start a new run instead.'
 
 type ResolveDecisionResult = {
   ok: true
@@ -93,7 +100,10 @@ export function createAgentCanUseTool(context: DecisionQueueContext): CanUseTool
         description: options.description ?? options.decisionReason,
         cwd: context.cwd,
         branch: context.branch,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        ...(context.bypassRunSupported
+          ? {}
+          : { bypassRunUnavailableReason: BYPASS_RUN_UNSUPPORTED_REASON })
       }
       decisions.set(id, { decision, resolve, suggestions: options.suggestions })
       options.signal.addEventListener(
@@ -163,6 +173,10 @@ export async function resolveAgentDecision(
     return { ok: true }
   }
   if (resolution.action === 'bypassRun') {
+    // Why: refuse before the SDK call; the CLI would reject the transition anyway.
+    if (decision.bypassRunUnavailableReason) {
+      throw new Error(decision.bypassRunUnavailableReason)
+    }
     if (!bypassRunHandler) {
       throw new Error('Bypass is not available for this run')
     }

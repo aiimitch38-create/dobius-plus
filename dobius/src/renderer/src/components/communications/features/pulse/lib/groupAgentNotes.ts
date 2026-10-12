@@ -22,7 +22,9 @@ export function groupAgentNotes(
   notes: UserNote[],
   windowSeconds = 300,
 ): AgentNoteGroup[] {
-  if (notes.length === 0) return [];
+  if (notes.length === 0) {
+    return [];
+  }
 
   const groups: AgentNoteGroup[] = [];
   let current: AgentNoteGroup | null = null;
@@ -30,7 +32,7 @@ export function groupAgentNotes(
   for (const note of notes) {
     // Compare against the previous (most recently added) note in the group,
     // not the group's earliest — prevents the window from growing unboundedly.
-    const lastNoteInGroup = current?.notes[current.notes.length - 1];
+    const lastNoteInGroup = current?.notes.at(-1);
     if (
       current &&
       lastNoteInGroup &&
@@ -40,7 +42,9 @@ export function groupAgentNotes(
       current.notes.push(note);
       current.earliestAt = note.createdAt;
     } else {
-      if (current) groups.push(current);
+      if (current) {
+        groups.push(current);
+      }
       current = {
         pubkey: note.pubkey,
         notes: [note],
@@ -50,6 +54,8 @@ export function groupAgentNotes(
     }
   }
 
-  if (current) groups.push(current);
+  if (current) {
+    groups.push(current);
+  }
   return groups;
 }

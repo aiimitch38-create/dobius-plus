@@ -180,13 +180,21 @@ export function shouldRenderModelControl({
   modelIsOptional: boolean;
   showCustomModelOption: boolean;
 }): boolean {
-  if (!modelIsOptional) return true;
-  if (modelDiscoveryLoading) return false;
+  if (!modelIsOptional) {
+    return true;
+  }
+  if (modelDiscoveryLoading) {
+    return false;
+  }
   const hasExplicitModel = (discoveredModelOptions ?? []).some(
     (option) => option.id.trim().length > 0,
   );
-  if (hasExplicitModel) return true;
-  if (showCustomModelOption) return true;
+  if (hasExplicitModel) {
+    return true;
+  }
+  if (showCustomModelOption) {
+    return true;
+  }
   // Omit only on confirmed successful empty — not on failure/unavailable.
   return !modelDiscoverySuccessfulEmpty;
 }
@@ -403,22 +411,34 @@ export function AgentConfigFields({
 
   const autoSelectedModelScopeRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!autoSelectModelOnProviderChange) return;
-    if (!mayMutateDependentFieldsRef.current) return;
+    if (!autoSelectModelOnProviderChange) {
+      return;
+    }
+    if (!mayMutateDependentFieldsRef.current) {
+      return;
+    }
     const trimmedProvider = providerForDiscovery.trim();
     if (trimmedProvider.length === 0 || isCustomProvider) {
       autoSelectedModelScopeRef.current = null;
       return;
     }
-    if ((config.model ?? "").trim().length > 0) return;
-    if (modelDiscoveryLoading || discoveredModelOptions === null) return;
+    if ((config.model ?? "").trim().length > 0) {
+      return;
+    }
+    if (modelDiscoveryLoading || discoveredModelOptions === null) {
+      return;
+    }
     const selectionScope = `${selectedRuntimeId}:${trimmedProvider}`;
-    if (autoSelectedModelScopeRef.current === selectionScope) return;
+    if (autoSelectedModelScopeRef.current === selectionScope) {
+      return;
+    }
 
     const firstModel = discoveredModelOptions.find(
       (option) => option.id.trim().length > 0,
     );
-    if (!firstModel) return;
+    if (!firstModel) {
+      return;
+    }
 
     autoSelectedModelScopeRef.current = selectionScope;
     onCustomModelEditingChange(false);
@@ -447,10 +467,16 @@ export function AgentConfigFields({
   // empty catalog — never while discovery failed/unavailable (transient
   // failures must not erase saved model/effort).
   React.useEffect(() => {
-    if (!healOnMount) return;
+    if (!healOnMount) {
+      return;
+    }
     const currentModel = (config.model ?? "").trim();
-    if (currentModel.length === 0) return;
-    if (modelDiscoveryLoading) return;
+    if (currentModel.length === 0) {
+      return;
+    }
+    if (modelDiscoveryLoading) {
+      return;
+    }
 
     const catalogMiss =
       discoveredModelOptions !== null &&
@@ -459,10 +485,14 @@ export function AgentConfigFields({
       );
     const omittedAfterSuccessfulEmpty =
       modelIsOptional && !modelControlVisible && modelDiscoverySuccessfulEmpty;
-    if (!catalogMiss && !omittedAfterSuccessfulEmpty) return;
+    if (!catalogMiss && !omittedAfterSuccessfulEmpty) {
+      return;
+    }
 
     const nextEnvVars = { ...config.env_vars };
-    if (effortPersistenceKey) delete nextEnvVars[effortPersistenceKey];
+    if (effortPersistenceKey) {
+      delete nextEnvVars[effortPersistenceKey];
+    }
     onCustomModelEditingChange(false);
     onConfigChange({ ...config, env_vars: nextEnvVars, model: null });
   }, [
@@ -487,8 +517,12 @@ export function AgentConfigFields({
   // Onboarding heals on open by design (discriminating spec: "gates stale
   // saved model and effort until provider selection").
   React.useEffect(() => {
-    if (!mayMutateDependentFieldsRef.current) return;
-    if (!dependentFieldsDisabled) return;
+    if (!mayMutateDependentFieldsRef.current) {
+      return;
+    }
+    if (!dependentFieldsDisabled) {
+      return;
+    }
     if (
       (config.model ?? "").trim().length === 0 &&
       currentEffortForAutoClear.length === 0
@@ -497,7 +531,9 @@ export function AgentConfigFields({
     }
 
     const nextEnvVars = { ...config.env_vars };
-    if (effortPersistenceKey) delete nextEnvVars[effortPersistenceKey];
+    if (effortPersistenceKey) {
+      delete nextEnvVars[effortPersistenceKey];
+    }
     onCustomModelEditingChange(false);
     onConfigChange({ ...config, env_vars: nextEnvVars, model: null });
   }, [
@@ -517,7 +553,9 @@ export function AgentConfigFields({
     effortValid: effortValidForAutoClear,
     onClear: () => {
       const nextEnvVars = { ...config.env_vars };
-      if (effortPersistenceKey) delete nextEnvVars[effortPersistenceKey];
+      if (effortPersistenceKey) {
+        delete nextEnvVars[effortPersistenceKey];
+      }
       onConfigChange({ ...config, env_vars: nextEnvVars });
     },
   });
@@ -611,7 +649,9 @@ export function AgentConfigFields({
     : providerValue || AUTO_PROVIDER_DROPDOWN_VALUE;
 
   const providerZeroLabel = React.useMemo(() => {
-    if (!bakedProvider) return null;
+    if (!bakedProvider) {
+      return null;
+    }
     return getBakedProviderInheritLabel(bakedProvider, providerOptions);
   }, [bakedProvider, providerOptions]);
   const compactProviderZeroLabel = React.useMemo(() => {
@@ -850,11 +890,13 @@ export function AgentConfigFields({
             onChange={(value) => {
               const nextEnvVars = { ...config.env_vars };
               if (value === "") {
-                if (effortPersistenceKey)
+                if (effortPersistenceKey) {
                   delete nextEnvVars[effortPersistenceKey];
+                }
               } else {
-                if (effortPersistenceKey)
+                if (effortPersistenceKey) {
                   nextEnvVars[effortPersistenceKey] = value;
+                }
               }
               onConfigChange({ ...config, env_vars: nextEnvVars });
             }}

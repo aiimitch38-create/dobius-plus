@@ -62,7 +62,7 @@ describe('extractGitHubIssueSourceFallback', () => {
     ).toEqual({
       repoId: 'repo-1',
       repoPath: '/work/dobius',
-      repoLabel: 'statusdigitalmarketing/dobius-plus'
+      repoLabel: 'statusdigitalmarketing/dobius'
     })
   })
 

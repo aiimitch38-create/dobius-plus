@@ -1,5 +1,5 @@
 import type { SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { CustomAgent } from '../../shared/agents'
+import { IMESSAGE_SESSION_KEY, type CustomAgent } from '../../shared/agents'
 import type { PrepareClaudeLaunch } from './agent-runner'
 
 const CHANNEL_TOOLS = ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch']
@@ -104,9 +104,16 @@ function resultReply(agent: CustomAgent, message: SDKResultMessage): string {
 export async function handleChannelMessage(
   args: ChannelMessageArgs
 ): Promise<'handled' | 'not-handled'> {
-  const [{ listAgents }, { startAgentRun }] = await Promise.all([
+  const [
+    { listAgents },
+    { startAgentRun },
+    { isExecutionBlockedError },
+    { isCodexRunUnsupportedError }
+  ] = await Promise.all([
     import('./agents-store'),
-    import('./agent-runner')
+    import('./agent-runner'),
+    import('./execution-gate'),
+    import('./codex-run-policy')
   ])
   const agents = listAgents()
   const match = matchAgentMention(args.text.trim(), agents)
@@ -134,6 +141,8 @@ export async function handleChannelMessage(
       prepareClaudeLaunch: args.prepareClaudeLaunch,
       options: {
         source: 'channel',
+        profile: 'imessage',
+        sessionKey: IMESSAGE_SESSION_KEY,
         resume: false,
         permissionMode: 'dontAsk',
         allowedTools: readonlyTools(match.agent),
@@ -153,8 +162,14 @@ export async function handleChannelMessage(
         }
       }
     })
-  } catch {
-    await sendOnce(`${match.agent.name} is busy — try again in a minute.`)
+  } catch (error) {
+    await sendOnce(
+      isExecutionBlockedError(error)
+        ? `${match.agent.name}: Dobius+ crew is paused, so the run was not started.`
+        : isCodexRunUnsupportedError(error)
+          ? `${match.agent.name} runs on Codex and can't answer iMessage.`
+          : `${match.agent.name} is busy — try again in a minute.`
+    )
   }
   return 'handled'
 }

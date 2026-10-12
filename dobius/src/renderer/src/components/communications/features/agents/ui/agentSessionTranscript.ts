@@ -145,7 +145,9 @@ function rememberTriggeringEventIds(
   turnKey: string | number | null,
   ids: string[],
 ) {
-  if (ids.length === 0) return;
+  if (ids.length === 0) {
+    return;
+  }
   d.triggeringEventIdsByTurn = new Map(d.triggeringEventIdsByTurn);
   d.triggeringEventIdsByTurn.set(turnMapKey(channelKey, turnKey), ids);
 }
@@ -193,9 +195,15 @@ function describePermissionRequest(payload: Record<string, unknown>) {
         .filter((option): option is string => Boolean(option))
     : [];
   const detail: string[] = [];
-  if (title !== "Permission requested") detail.push(title);
-  if (toolCallId) detail.push(`Tool call: ${toolCallId}`);
-  if (options.length > 0) detail.push(`Options: ${options.join(", ")}`);
+  if (title !== "Permission requested") {
+    detail.push(title);
+  }
+  if (toolCallId) {
+    detail.push(`Tool call: ${toolCallId}`);
+  }
+  if (options.length > 0) {
+    detail.push(`Options: ${options.join(", ")}`);
+  }
 
   // Build optionId → kind map for outcome labeling on the response.
   const optionNames = new Map<string, string>();
@@ -257,9 +265,12 @@ function describePermissionOutcome(
  * booleans) so callers can gate on presence without a separate type check.
  */
 function jsonRpcId(value: unknown): string | null {
-  if (typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "number" && Number.isFinite(value))
+  if (typeof value === "string") {
     return JSON.stringify(value);
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return JSON.stringify(value);
+  }
   return null;
 }
 
@@ -268,7 +279,9 @@ function describeFreeformStatus(payload: Record<string, unknown>) {
   const title =
     asString(payload.title) ?? (statusType ? titleCase(statusType) : null);
   const text = asString(payload.text) ?? asString(payload.message);
-  if (!title || !text) return null;
+  if (!title || !text) {
+    return null;
+  }
   return { statusType: statusType ?? title.toLowerCase(), title, text };
 }
 
@@ -390,8 +403,12 @@ function upsertTextItem(
 }
 
 function joinLifecycleText(existing: string, next: string) {
-  if (!existing) return next;
-  if (!next) return existing;
+  if (!existing) {
+    return next;
+  }
+  if (!next) {
+    return existing;
+  }
   return `${existing}\n${next}`;
 }
 
@@ -1078,7 +1095,7 @@ export function processTranscriptEvent(
         );
       } else if (updateType === "config_option_update") {
         const opts = Array.isArray(update.configOptions)
-          ? (update.configOptions as Array<Record<string, unknown>>)
+          ? (update.configOptions as Record<string, unknown>[])
           : [];
         const optText = opts
           .map((o) => {

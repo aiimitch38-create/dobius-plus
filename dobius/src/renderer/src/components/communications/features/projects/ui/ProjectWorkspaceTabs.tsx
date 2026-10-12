@@ -262,7 +262,9 @@ export function WorkspaceTabs({
   );
   const handleOpenPullRequestComment = React.useCallback(
     (anchor: ProjectPullRequestCommentAnchor) => {
-      if (!selectedPullRequestId) return;
+      if (!selectedPullRequestId) {
+        return;
+      }
       setPullRequestCommentTarget({
         anchor: { ...anchor },
         pullRequestId: selectedPullRequestId,

@@ -40,7 +40,9 @@ export async function resolveOaOwner(
   const raw = await invokeTauri<RawOwnerOfAgent | null>("resolve_oa_owner", {
     targetPubkey,
   });
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
   return { owner: raw.owner, isMe: raw.is_me };
 }
 

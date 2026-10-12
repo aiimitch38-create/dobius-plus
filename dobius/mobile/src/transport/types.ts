@@ -56,6 +56,8 @@ export type ConnectionState =
   | 'disconnected'
   | 'reconnecting'
   | 'auth-failed'
+  // Why: the desktop requires a newer handshake than this app build.
+  | 'update-required'
 
 export type HostProfile = {
   id: string

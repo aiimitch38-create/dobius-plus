@@ -58,10 +58,9 @@ const AgentRunStart = z.object({
   // Task-context key — Communications passes the channel id so each channel
   // is its own continuing conversation for the agent.
   sessionKey: OptionalString,
-  // Why these are here: startAgentRun has NO default budget, so a run started
-  // over this RPC without them is uncapped. A person watching a chat can stop
-  // a runaway; an automatic board dispatch has nobody watching, so it must
-  // pass its own ceiling.
+  // Omitted = startAgentRun's defaults: 100 turns and $2 ($1 for 'channel').
+  // An automatic board dispatch has nobody watching, so it passes its own,
+  // tighter ceiling.
   maxBudgetUsd: z.number().positive().max(100).optional(),
   maxTurns: z.number().int().positive().max(200).optional(),
   // Default (omitted) = resume the sessionKey's conversation, which is what
@@ -149,9 +148,10 @@ export const CUSTOM_AGENT_METHODS: RpcMethod[] = [
         agentId: params.id,
         prompt: params.prompt,
         prepareClaudeLaunch,
-        // Channel runs are headless — nobody sits at the agent panel to click
-        // tool approvals, so undecided prompts would hang the conversation.
-        // 'dontAsk' lets the agent's allowlisted tools run and denies the rest.
+        // Every RPC run is headless (startAgentRun only queues prompts for runs
+        // started on the Agents page), so its prompts are denied and recorded
+        // on the run. Channel runs also use 'dontAsk' so the CLI refuses
+        // non-allowlisted tools without asking at all.
         options:
           params.source ||
           params.sessionKey ||

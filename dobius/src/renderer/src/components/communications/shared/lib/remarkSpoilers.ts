@@ -3,10 +3,7 @@
  * custom HAST element rendered by `markdown.tsx`.
  */
 
-type Node = {
-  // biome-ignore lint/suspicious/noExplicitAny: building mdast-compatible nodes
-  [key: string]: any;
-};
+type Node = Record<string, any>;
 
 type Part =
   | { type: "delimiter" }
@@ -97,13 +94,16 @@ function splitDelimiterParts(children: Node[]): Part[] {
       const delimiterIndex = text.indexOf("||", cursor);
       if (delimiterIndex === -1) {
         const value = text.slice(cursor);
-        if (value) parts.push({ type: "node", node: { ...child, value } });
+        if (value) {
+          parts.push({ type: "node", node: { ...child, value } });
+        }
         break;
       }
 
       const before = text.slice(cursor, delimiterIndex);
-      if (before)
+      if (before) {
         parts.push({ type: "node", node: { ...child, value: before } });
+      }
       parts.push({ type: "delimiter" });
       cursor = delimiterIndex + 2;
     }
@@ -113,7 +113,9 @@ function splitDelimiterParts(children: Node[]): Part[] {
 }
 
 function isTableDelimiterRow(children: Node[]): boolean {
-  if (children.some((child) => child.type !== "text")) return false;
+  if (children.some((child) => child.type !== "text")) {
+    return false;
+  }
 
   const value = children.map((child) => String(child.value ?? "")).join("");
   return /^\s*:?-{3,}:?(?:\s*\|\s*:?-{3,}:?)+\s*$/.test(value);
@@ -159,7 +161,9 @@ function groupBlockSpoilers(children: Node[]): Node[] {
   }
 
   if (spoilerBuffer) {
-    if (openingDelimiter) output.push(openingDelimiter);
+    if (openingDelimiter) {
+      output.push(openingDelimiter);
+    }
     output.push(...spoilerBuffer);
   }
 

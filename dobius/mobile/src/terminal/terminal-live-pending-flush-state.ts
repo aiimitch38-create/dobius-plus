@@ -8,10 +8,10 @@ export function waitForTerminalLivePendingFlush(
   return state.current ?? Promise.resolve(true)
 }
 
-// Why: mirror payloads are erase/append deltas against the PTY echo. A skipped
-// delta desyncs every later diff, so this chain runs each send even when the
-// previous one failed. state.current should never reject; the catch keeps a
-// future raw assignment from skipping a delta.
+// Why: mirror payloads are erase/append deltas against the PTY echo. A later
+// delta depends on every earlier delta being accepted; after any failure the
+// mirror is uncertain, so stop the chain instead of sending bytes against a
+// state the PTY may not have. state.current should never reject.
 export function queueTerminalLiveMirrorSend(
   state: TerminalLivePendingFlushState,
   sendMirrorPayload: () => Promise<boolean>
@@ -19,7 +19,10 @@ export function queueTerminalLiveMirrorSend(
   const previousSend = state.current
   const sendPromise = (async () => {
     if (previousSend) {
-      await previousSend.catch(() => false)
+      const previousAccepted = await previousSend.catch(() => false)
+      if (!previousAccepted) {
+        return false
+      }
     }
     return sendMirrorPayload()
   })().catch(() => false)

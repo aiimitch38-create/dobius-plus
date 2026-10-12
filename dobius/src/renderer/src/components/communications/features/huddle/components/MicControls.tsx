@@ -58,7 +58,9 @@ function micMeterBarStyle(heightRem: number): MicMeterBarStyle {
 
 function micMeterHeights(level: number): [number, number, number] {
   const normalized = clamp01(level);
-  if (normalized <= 0.01) return MIC_METER_IDLE_HEIGHTS;
+  if (normalized <= 0.01) {
+    return MIC_METER_IDLE_HEIGHTS;
+  }
 
   return [
     MIC_METER_IDLE_HEIGHT_REM + normalized * 0.5,
@@ -140,7 +142,9 @@ export function MicControls({
                 !isMuted && !micUnavailable && "buzz-huddle-split-main",
               )}
               onClick={() => {
-                if (!micConnected) return;
+                if (!micConnected) {
+                  return;
+                }
                 onToggleMute();
               }}
               size="icon"
@@ -320,7 +324,9 @@ export function SpeakerControls({
         <Popover
           open={showHeadphonesHint}
           onOpenChange={(open) => {
-            if (!open) onHeadphonesHintDismiss?.();
+            if (!open) {
+              onHeadphonesHintDismiss?.();
+            }
           }}
         >
           <PopoverAnchor asChild>

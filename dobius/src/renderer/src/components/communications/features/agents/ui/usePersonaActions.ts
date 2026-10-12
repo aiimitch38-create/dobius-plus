@@ -505,7 +505,9 @@ export function usePersonaActions() {
     persona: AgentPersona,
     shareLevel: CatalogPersonaShareLevel,
   ): Promise<void> {
-    if (persona.isBuiltIn) return;
+    if (persona.isBuiltIn) {
+      return;
+    }
 
     clearFeedback("library");
     try {

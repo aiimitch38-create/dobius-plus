@@ -203,6 +203,8 @@ export type AutomationDispatchRequest = {
   automation: Automation
   run: AutomationRun
   dispatchToken: string
+  /** Scheduled and RPC/CLI-triggered runs honor "Pause crew" up to the launch. */
+  honorExecutionGate: boolean
 }
 
 export type AutomationDispatchResult = {

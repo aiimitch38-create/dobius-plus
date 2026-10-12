@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app } from 'electron'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agents-config.json'
 
@@ -34,7 +34,7 @@ function todayKey(): string {
 }
 
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function sanitize(raw: unknown): AgentsConfig {
@@ -56,36 +56,93 @@ function sanitize(raw: unknown): AgentsConfig {
   }
 }
 
-function load(): AgentsConfig {
-  if (cached) {
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(filePath(), 'utf-8')))
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[agents] failed to load config:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = { ...DEFAULT_CONFIG }
-  }
-  return rolloverPingDate(cached)
+export type AgentsControlStatus = 'ok' | 'missing' | 'unreadable'
+
+export type AgentsControlState = {
+  // Effective value: always true while status is 'unreadable'.
+  paused: boolean
+  status: AgentsControlStatus
+  // errno code or parse problem; never file contents.
+  detail: string | null
+  filePath: string
 }
 
-function persist(config: AgentsConfig): void {
+let loadStatus: AgentsControlStatus = 'ok'
+let loadDetail: string | null = null
+let lastLoggedDetail: string | null = null
+
+function readConfigFile(): void {
+  let text: string
+  try {
+    text = readFileSync(filePath(), 'utf-8')
+  } catch (error) {
+    const code =
+      error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined
+    if (code === 'ENOENT') {
+      // Why: first launch has no file; keep the historical unpaused default.
+      loadStatus = 'missing'
+      loadDetail = null
+      cached = { ...DEFAULT_CONFIG }
+      return
+    }
+    markUnreadable(code ?? (error instanceof Error ? error.message : String(error)))
+    return
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    markUnreadable('invalid JSON')
+    return
+  }
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    Array.isArray(parsed) ||
+    typeof (parsed as { agentsPaused?: unknown }).agentsPaused !== 'boolean'
+  ) {
+    markUnreadable('agentsPaused missing or not a boolean')
+    return
+  }
+  loadStatus = 'ok'
+  loadDetail = null
+  cached = sanitize(parsed)
+}
+
+// Why: a file that exists but can't be trusted must never unpause the crew.
+function markUnreadable(detail: string): void {
+  loadStatus = 'unreadable'
+  loadDetail = detail
+  cached = { ...DEFAULT_CONFIG, agentsPaused: true }
+  if (lastLoggedDetail !== detail) {
+    lastLoggedDetail = detail
+    console.error(`[agents] crew control file unreadable (${filePath()}: ${detail}); crew paused`)
+  }
+}
+
+function load(): AgentsConfig {
+  // Unreadable state re-reads every call so a repaired file takes effect without a restart.
+  if (cached && loadStatus !== 'unreadable') {
+    return cached
+  }
+  readConfigFile()
+  return rolloverPingDate(cached as AgentsConfig)
+}
+
+function persist(config: AgentsConfig): boolean {
   const target = filePath()
   const tmp = `${target}.${process.pid}.tmp`
   try {
     mkdirSync(path.dirname(target), { recursive: true })
     writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, 'utf-8')
     renameSync(tmp, target)
+    return true
   } catch (error) {
     console.warn(
       '[agents] failed to persist config:',
       error instanceof Error ? error.message : String(error)
     )
+    return false
   }
 }
 
@@ -96,18 +153,42 @@ function rolloverPingDate(config: AgentsConfig): AgentsConfig {
   }
   const next = { ...config, pingDate: date, pingsUsed: 0 }
   cached = next
-  persist(next)
+  if (loadStatus !== 'unreadable') {
+    persist(next)
+  }
   return next
 }
 
+export function getAgentsControlState(): AgentsControlState {
+  const config = load()
+  return {
+    paused: loadStatus === 'unreadable' ? true : config.agentsPaused,
+    status: loadStatus,
+    detail: loadDetail,
+    filePath: filePath()
+  }
+}
+
 export function getAgentsPaused(): boolean {
-  return load().agentsPaused
+  return getAgentsControlState().paused
 }
 
 export function setAgentsPaused(paused: boolean): boolean {
-  const config = { ...load(), agentsPaused: paused }
+  const current = load()
+  if (loadStatus === 'unreadable') {
+    if (paused) {
+      // Already effectively paused; leave the unreadable file as evidence.
+      return true
+    }
+    throw new Error(
+      `Crew control file could not be read (${filePath()}: ${loadDetail}). Fix or remove it, then resume.`
+    )
+  }
+  const config = { ...current, agentsPaused: paused }
   cached = config
-  persist(config)
+  if (!persist(config) && paused) {
+    console.error('[agents] pause could not be saved; crew is paused for this session only')
+  }
   return config.agentsPaused
 }
 
@@ -118,7 +199,7 @@ export function getPingStatus(): AgentPingStatus {
 
 export function consumePingBudget(): boolean {
   const config = load()
-  if (config.pingsUsed >= config.maxPingsPerDay) {
+  if (loadStatus === 'unreadable' || config.pingsUsed >= config.maxPingsPerDay) {
     return false
   }
   const next = { ...config, pingsUsed: config.pingsUsed + 1 }

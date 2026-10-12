@@ -1,5 +1,5 @@
 import type { SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AsanaLane, AsanaTask } from '../../shared/asana'
+import type { AsanaLane, AsanaProjectRef, AsanaTask } from '../../shared/asana'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
 import { getAsanaConfig } from '../asana/asana-config'
 import { refreshAsanaTasks } from '../asana/asana-queue-service'
@@ -8,14 +8,18 @@ import { appendBriefingItem } from './agent-briefing-store'
 import { appendAgentNotification } from './agent-notification-store'
 import { getAgentsPaused } from './agents-config-store'
 import { getAgent } from './agents-store'
+import { isCodexRunUnsupportedError } from './codex-run-policy'
+import { checkExecutionAdmission, isExecutionBlockedError } from './execution-gate'
 import { startAgentRun } from './agent-runner'
 import {
   claimTask,
   hasBeenClaimed,
   isDead,
   pruneOld,
+  reconcileInterruptedClaims,
   recordBriefed,
-  recordFailure
+  recordFailure,
+  releaseClaim
 } from './asana-dispatch-ledger'
 import { triageOutputFormat, validateTriageVerdict } from './asana-triage-verdict'
 import { wrapUntrustedTaskText } from './asana-untrusted-text'
@@ -31,18 +35,38 @@ let interval: NodeJS.Timeout | null = null
 let ticking = false
 let lastPollAt = 0
 const inFlightTriageGids = new Set<string>()
+// Triage agent ids already told they cannot triage on Codex (one brief, not one per tick).
+const codexTriageBriefed = new Set<string>()
+// Tasks waiting because no triage agent is set; one aggregate brief per process.
+const noAgentWaiting = new Set<string>()
+let noAgentBriefSent = false
 
-function taskLabel(task: AsanaTask): string {
-  return task.name.trim() || task.gid
-}
-
-function appendNoAgentBrief(task: AsanaTask, lane: AsanaLane): void {
+// Why: no triage agent is a blocked configuration, not a finished intake, so
+// the task stays unclaimed and is triaged once an agent is picked. Sent after
+// a poll, once per process, as one line for all waiting tasks.
+function flushNoAgentBrief(): void {
+  if (noAgentBriefSent || noAgentWaiting.size === 0) {
+    return
+  }
+  noAgentBriefSent = true
+  const count = noAgentWaiting.size
   appendBriefingItem({
     agentId: ASANA_BRIEFING_AGENT_ID,
     urgency: 'digest',
-    summary: `New Asana task in ${lane} lane: ${taskLabel(task)} (no triage agent set)`
+    summary: `Asana Auto Mode is blocked: ${count} ${count === 1 ? 'task' : 'tasks'} waiting, no triage agent set. They will be triaged once you pick one.`
   })
-  recordBriefed(task.gid)
+}
+
+function appendCodexTriageBrief(triageAgentId: string, name: string): void {
+  if (codexTriageBriefed.has(triageAgentId)) {
+    return
+  }
+  codexTriageBriefed.add(triageAgentId)
+  appendBriefingItem({
+    agentId: ASANA_BRIEFING_AGENT_ID,
+    urgency: 'now',
+    summary: `Asana Auto Mode is on hold: ${name} is a Codex agent, and Codex agents can't triage. Pick a Claude agent as the triage agent.`
+  })
 }
 
 function appendDeadLetterBrief(gid: string): void {
@@ -134,8 +158,13 @@ async function dispatchTriage(
       prepareClaudeLaunch,
       options: {
         source: 'asana',
+        // The lane comes from the Asana assignee routing, never from the model;
+        // only the build lane's profile carries dispatch_build.
+        asanaLane: lane,
+        asanaTaskGid: task.gid,
         permissionMode: 'dontAsk',
-        allowedTools: ['mcp__dobius__*'],
+        // No built-in tools: triage works only through its profile's dobius tools.
+        allowedTools: [],
         maxTurns: 15,
         maxBudgetUsd: 0.3,
         outputFormat: triageOutputFormat(),
@@ -148,12 +177,28 @@ async function dispatchTriage(
     })
   } catch (error) {
     inFlightTriageGids.delete(task.gid)
+    // Why: neither a pause nor an unsupported engine is the task's fault, so
+    // counting it as an attempt would dead-letter the whole queue.
+    if (isExecutionBlockedError(error) || isCodexRunUnsupportedError(error)) {
+      releaseClaim(task.gid)
+      console.info(`[agents] Asana triage not started: ${error.message}`)
+      return
+    }
     handleFailure(task.gid, triageAgentId)
     console.warn(
       '[agents] Asana triage dispatch failed:',
       error instanceof Error ? error.message : String(error)
     )
   }
+}
+
+// Empty allowlist = every project (and tasks in no project); see asana-config.ts.
+function isAllowedForAutoMode(task: AsanaTask, allowedProjects: AsanaProjectRef[]): boolean {
+  if (allowedProjects.length === 0) {
+    return true
+  }
+  const taskProjects = new Set(task.projectGids ?? [])
+  return allowedProjects.some((project) => taskProjects.has(project.gid))
 }
 
 function maybeDispatchTask(
@@ -166,19 +211,36 @@ function maybeDispatchTask(
   if (lane === 'build' && task.completed) {
     return
   }
+  const config = getAsanaConfig()
+  if (!isAllowedForAutoMode(task, config.allowedProjects)) {
+    return
+  }
   if (hasBeenClaimed(task.gid) || isDead(task.gid)) {
     return
   }
   if (inFlightTriageGids.size >= MAX_IN_FLIGHT_TRIAGE) {
     return
   }
-  const record = claimTask(task.gid, lane)
-  if (!record) {
+  // Why: the pause can flip while tick awaits the Asana refresh; never claim while blocked.
+  if (!checkExecutionAdmission('agent-run').allowed) {
     return
   }
-  const triageAgentId = getAsanaConfig().autoMode.triageAgentId
-  if (!triageAgentId || !getAgent(triageAgentId)) {
-    appendNoAgentBrief(task, lane)
+  const triageAgentId = config.autoMode.triageAgentId
+  const triageAgent = triageAgentId ? getAgent(triageAgentId) : null
+  if (triageAgentId && triageAgent?.engine === 'codex') {
+    appendCodexTriageBrief(triageAgentId, triageAgent.name)
+    return
+  }
+  if (!triageAgentId || !triageAgent) {
+    noAgentWaiting.add(task.gid)
+    return
+  }
+  // A later switch back to a Codex agent, or to no agent, should brief again.
+  codexTriageBriefed.clear()
+  noAgentWaiting.clear()
+  noAgentBriefSent = false
+  const record = claimTask(task.gid, lane)
+  if (!record) {
     return
   }
   void dispatchTriage(task, lane, triageAgentId, prepareClaudeLaunch)
@@ -205,6 +267,14 @@ function safeMaybeDispatchTask(
   }
 }
 
+function reconcileInterrupted(): void {
+  for (const record of reconcileInterruptedClaims()) {
+    if (record.status === 'dead') {
+      appendDeadLetterBrief(record.gid)
+    }
+  }
+}
+
 async function tick(prepareClaudeLaunch: PrepareClaudeLaunch): Promise<void> {
   if (ticking || getAgentsPaused() || !hasAsanaToken()) {
     return
@@ -220,6 +290,7 @@ async function tick(prepareClaudeLaunch: PrepareClaudeLaunch): Promise<void> {
   ticking = true
   lastPollAt = Date.now()
   try {
+    reconcileInterrupted()
     pruneOld()
     const snapshot = await refreshAsanaTasks()
     for (const task of snapshot.build) {
@@ -228,6 +299,7 @@ async function tick(prepareClaudeLaunch: PrepareClaudeLaunch): Promise<void> {
     for (const task of snapshot.review) {
       safeMaybeDispatchTask(task, 'review', prepareClaudeLaunch)
     }
+    flushNoAgentBrief()
   } finally {
     ticking = false
   }
@@ -248,4 +320,12 @@ export function stopAsanaAutoMode(): void {
   }
   clearInterval(interval)
   interval = null
+}
+
+// Test seam only.
+export const asanaAutoModeInternals = {
+  maybeDispatchTask,
+  dispatchTriage,
+  reconcileInterrupted,
+  flushNoAgentBrief
 }

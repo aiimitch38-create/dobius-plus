@@ -34,7 +34,9 @@ export function ProfileAvatarModeTabs({
     <Tabs
       className={isOnboardingModal ? "flex w-full justify-center" : "w-full"}
       onValueChange={(nextMode) => {
-        if (!disabled) onModeChange(nextMode as AvatarMode);
+        if (!disabled) {
+          onModeChange(nextMode as AvatarMode);
+        }
       }}
       value={mode}
     >

@@ -272,7 +272,9 @@ export function AgentDefinitionDialog({
       return;
     }
 
-    if (runtime !== defaultRuntime.id) setRuntime(defaultRuntime.id);
+    if (runtime !== defaultRuntime.id) {
+      setRuntime(defaultRuntime.id);
+    }
     isRuntimeAutoSeededRef.current = true;
     hasSeededForOpenRef.current = true;
   }, [
@@ -326,7 +328,9 @@ export function AgentDefinitionDialog({
   async function handleSubmit() {
     // D1: the same localModeSatisfied gate as canSubmit prevents form-submit
     // (Enter) from bypassing a missing credential.
-    if (!initialValues || !localModeSatisfied || !canSubmit) return;
+    if (!initialValues || !localModeSatisfied || !canSubmit) {
+      return;
+    }
 
     const {
       runtime: runtimeForSubmit,
@@ -734,7 +738,9 @@ export function AgentDefinitionDialog({
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && (isPending || isAvatarUploadPending)) return;
+        if (!nextOpen && (isPending || isAvatarUploadPending)) {
+          return;
+        }
         handleOpenChange(nextOpen);
       }}
       open={open}

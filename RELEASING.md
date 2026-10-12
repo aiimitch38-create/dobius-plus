@@ -1,154 +1,202 @@
 # Releasing Dobius+
 
-How to ship a signed, notarized, auto-updating release of Dobius+ to users.
+How to build Dobius+ and put it on a Mac: the everyday local install, and the signed release
+build. Every command here is checked against the repo by
+`dobius/config/scripts/check-docs-references.test.mjs`; if you change a script, flag or exit
+code, update this file in the same commit.
 
-## Architecture (one-time read)
+## What is being built
 
-- **Code signing** uses the `Developer ID Application: Status Consulting Firm LLC` certificate (already in this Mac's Keychain). Identity hash: `E95B5A61D673D466CCDA22615C9BF0F061BB9F2B`. Team ID: `Z349CC556Z`.
-- **Notarization** uses Apple's `notarytool` against `sahil.nihal09@gmail.com` (the Apple Developer account holder for Status Consulting Firm LLC).
-- **Auto-update** uses [`electron-updater`](https://www.electron.build/auto-update) pointed at GitHub Releases for `statusdigitalmarketing/dobius-plus`. The app checks 30s after launch and every 4 hours after that.
-- **Hardened runtime + entitlements** are in `build/entitlements.mac.plist`. Required for notarization. The entitlements allow JIT (V8), unsigned executable memory, and library validation skip (for the `node-pty` native module).
-- **DMG container signing is currently manual** — `electron-builder` v26 signs the .app inside but not the DMG wrapping it. See "Step 4" below.
-- **Artifact filenames must use `${name}` not `${productName}`** — `latest-mac.yml` writes URLs using `${name}` (`dobius-plus`), but the default `artifactName` uses `${productName}` (`Dobius+`). They never match, so auto-update downloads 404. Fixed by pinning `mac.artifactName: ${name}-${version}-${arch}-mac.${ext}` and `dmg.artifactName: ${name}-${version}.${ext}` in `electron-builder.yml`. Don't change those without verifying the YAML still matches the actual files.
+- The app is **Dobius+ V2**, the code under `dobius/`. Its version is the `version` field in
+  `dobius/package.json`.
+- The repo root (`electron/`, `src/`, `package.json` at version 1.0.x, `electron-builder.yml`) is
+  the **legacy V1 app**. Never package or ship it. The root `package.json` scripts without a
+  `legacy:` prefix just forward to `pnpm --dir dobius …`.
+- All commands below run from the repo root, `~/Projects (Code)/Dobius/dobius-plus`, with pnpm.
+  Do not use npm.
+- The repo pins Node 24 (`dobius/package.json` `engines.node`, `dobius/.nvmrc`).
+  `pnpm --dir dobius run check:node-toolchain` prints the active and required versions.
 
-## One-time setup
+## Local build and install (the everyday path)
 
-Add to `~/.zshrc` and `source` it:
-
-```bash
-# Apple notarization
-export APPLE_ID="sahil.nihal09@gmail.com"
-export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"   # generate at https://account.apple.com (Sign-In and Security -> App-Specific Passwords)
-export APPLE_TEAM_ID="Z349CC556Z"
-
-# GitHub release publishing (token needs repo scope)
-export GH_TOKEN="ghp_..."   # generate at https://github.com/settings/tokens
-```
-
-The Apple ID and team ID are not secret — only the app-specific password is. If it ever leaks (ends up in chat / a commit / a screenshot), revoke it at https://account.apple.com and generate a new one.
-
-## Releasing a new version
-
-### 1. Bump the version
+There is exactly one way to put a build into `/Applications/Dobius+.app`:
 
 ```bash
-npm version patch    # 1.0.1 -> 1.0.2 (bugfix)
-npm version minor    # 1.0.1 -> 1.1.0 (new feature)
-npm version major    # 1.0.1 -> 2.0.0 (breaking)
+pnpm --dir dobius run build:unpack
+scripts/install-dobius-gated.sh dobius/dist/mac-arm64/Dobius+.app
 ```
 
-This updates `package.json`, creates a git tag, and commits the bump.
+`build:unpack` does, in order:
 
-### 2. Build, sign, notarize, and publish to GitHub
+1. `config/scripts/check-node-toolchain.mjs --warn-only` — warns (does not stop) when the active
+   Node is not 24.
+2. `config/scripts/electron-builder-with-build-number.mjs --snapshot-source` — records the source
+   state (branch, commit, dirty flag, diff digest, tag) BEFORE compiling.
+3. `pnpm run build` — the full graph: typecheck, relay, electron-vite, web, CLI, native helper.
+4. `pnpm run ensure:electron-runtime`.
+5. electron-builder `--dir` through the same wrapper, which hands out the next machine-wide build
+   number (counter file `~/.dobius-build-number`, becomes `CFBundleVersion`) and seals the
+   pre-compile source record into the app as `Contents/Resources/BUILD-PROVENANCE.json`. If the
+   tree changed during the compile, packaging stops.
 
-```bash
-npm run electron:build -- --publish always
-```
+The output path above is for an Apple-silicon Mac (it is the path the retired scripts print).
 
-This single command will:
-1. Run `vite build` to produce the renderer bundle
-2. Run `electron-builder --mac` to package the .app
-3. Sign the .app with the Developer ID cert
-4. Submit the .app to Apple's notary service and wait (~5–10 min)
-5. Staple the notarization ticket to the .app
-6. Build `Dobius+-x.y.z-arm64.dmg`, `Dobius+-x.y.z-arm64-mac.zip`, and `latest-mac.yml`
-7. Upload all three to GitHub as a **draft** release
+`scripts/install-dobius-gated.sh` then:
 
-If something fails before step 7, fix the issue and re-run — `electron-builder` will skip steps that already completed.
+1. checks that `python3` and its helpers (`scripts/semver-compare.py`, `scripts/source-state.py`,
+   `scripts/bundle-manifest.py`, `scripts/install-record.py`) are present;
+2. takes the lock `~/.dobius-install.lock` (waits up to 300 s for another install; a stale lock
+   is reported, never broken);
+3. refuses a build from another branch than the installed one unless `--take-over`;
+4. refuses a build whose version is not valid SemVer, and one that is OLDER than the installed
+   app (SemVer precedence: `2.0.0-rc.1` is older than `2.0.0`) unless `--allow-downgrade`;
+5. copies the build to a stage beside the app, prepares the install record, and validates the
+   stage (Info.plist, executable, arch, `app.asar`, and every artifact in
+   `scripts/bundle-manifest.py`). Nothing is written into the bundle, so its code signature stays
+   intact;
+6. only then quits the app (the terminal daemon and its shells keep running), swaps the stage in
+   with one atomic rename, writes the install record, keeps ONE rollback copy (with its record),
+   removes the `dobius/dist` build copy, re-registers the app with LaunchServices and relaunches
+   it;
+7. logs the install to `~/.dobius-install-history.log`.
 
-### 3. Sign + notarize the DMG container (manual, ~3 min)
+Any failure before the swap leaves the installed app untouched and running.
 
-`electron-builder` v26 doesn't sign the DMG file itself. Without this step, double-clicking the DMG triggers a Gatekeeper warning even though the .app inside is fully notarized. Until automated:
+### Flags
 
-```bash
-cd dist-electron
+| Flag | Use it when |
+|---|---|
+| `--take-over` | The installed app was built from another branch and you mean to replace it. Tell that lane. |
+| `--allow-downgrade` | You really mean to install an older version, or the installed app has no valid version. |
 
-# Sign the DMG
-codesign --sign E95B5A61D673D466CCDA22615C9BF0F061BB9F2B \
-  --timestamp \
-  "dobius-plus-$(node -p "require('../package.json').version").dmg"
+`--take-over` never bypasses the version guard, and `--allow-downgrade` never bypasses the branch
+check. Any other option is refused.
 
-# Notarize and staple
-xcrun notarytool submit "dobius-plus-$(node -p "require('../package.json').version").dmg" \
-  --apple-id "$APPLE_ID" \
-  --team-id "$APPLE_TEAM_ID" \
-  --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-  --wait
+### Installer exit codes
 
-xcrun stapler staple "dobius-plus-$(node -p "require('../package.json').version").dmg"
-
-# Verify
-spctl -a -vvv -t install "dobius-plus-$(node -p "require('../package.json').version").dmg"
-# Expected: "accepted, source=Notarized Developer ID"
-```
-
-Then re-upload the now-signed DMG to the GitHub release (it overwrites the unsigned one):
-
-```bash
-gh release upload "v$(node -p "require('./package.json').version")" \
-  "dist-electron/dobius-plus-$(node -p "require('./package.json').version").dmg" \
-  --clobber
-```
-
-### 4. Publish the release
-
-```bash
-gh release edit "v$(node -p "require('./package.json').version")" --draft=false
-```
-
-Or publish via the web UI at https://github.com/statusdigitalmarketing/dobius-plus/releases.
-
-**Important:** `electron-updater` ignores draft releases. The release must be marked Published for users to receive the update.
-
-### 5. Push the tag + commit
-
-```bash
-git push origin main --tags
-```
-
-## What users see
-
-Once you publish, every user running a prior version will:
-
-1. Within 30 seconds of next app launch (or within 4 hours if already running), the app checks GitHub Releases.
-2. Detects the new version, downloads it in the background.
-3. Shows a native macOS notification: *"Dobius+ x.y.z ready"*.
-4. Shows an in-app banner (bottom-right) with a **Restart** button.
-5. Click Restart -> app relaunches on the new version.
-
-If they never click Restart, the update installs automatically the next time they fully quit and reopen the app.
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
+| Exit | Meaning | Installed app |
 |---|---|---|
-| `notarytool` returns `Invalid: ...code signature could not be verified` | Hardened runtime missing or wrong entitlements | Check `electron-builder.yml` has `hardenedRuntime: true` and `entitlements: build/entitlements.mac.plist` |
-| `notarytool` returns `Invalid: ...not signed with a valid Developer ID` | Wrong cert (e.g. used "Apple Distribution" instead of "Developer ID Application") | Confirm `mac.identity` in `electron-builder.yml` is the SHA hash of the Developer ID cert (`security find-identity -v -p codesigning`) |
-| `notarize: should be a boolean` | electron-builder v26 schema | Use `notarize: true`, not the object form. Team ID comes from `APPLE_TEAM_ID` env var. |
-| User sees "Apple could not verify..." after double-clicking DMG | DMG container wasn't signed/notarized (only the .app inside) | Run Step 3 above |
-| User doesn't see the update | Release is still in draft, or `latest-mac.yml` is missing from the release | Check release is published; check release assets include all three files |
-| Auto-update silently fails (downloads start, never complete) | Filename in `latest-mac.yml` doesn't match the uploaded asset (404 on download URL) | Verify with `python3 -c "import urllib.request; print(urllib.request.urlopen('https://github.com/statusdigitalmarketing/dobius-plus/releases/latest/download/latest-mac.yml').read().decode())"` then HEAD-check each `url:` field. If they 404, your `artifactName` config drifted — see Architecture note above. |
-| `GH_TOKEN` not set | Missing or expired | Regenerate at https://github.com/settings/tokens with `repo` scope |
+| 1 | Bad arguments: unknown option, no bundle at the path, missing install folder, or the path is the installed app itself | untouched |
+| 3 | The installed app belongs to another branch; re-run with `--take-over` if you mean it | untouched |
+| 4 | Another install held the lock for longer than the wait | untouched |
+| 5 | Version guard: the build has no valid version, or it would downgrade (or the installed version is invalid) | untouched |
+| 6 | Copying the build to the stage failed | untouched |
+| 7 | The staged copy is not a runnable, complete build (lists the missing artifacts) | untouched, never quit |
+| 8 | The atomic swap failed | untouched, relaunched |
+| 9 | `python3` or an installer helper is missing, or the installed app's record cannot be looked up, so the guards cannot run | untouched |
+| 130 | Interrupted (Ctrl-C or TERM); a partial stage is removed. A signal that lands between the quit and the rollback move waits until the swap, the install record and the rollback copy are done | relaunched if it was quit |
 
-## Build output reference
+### Rollback
 
-After a successful build, `dist-electron/` contains:
-
-- `dobius-plus-x.y.z.dmg` — the installer users download
-- `dobius-plus-x.y.z-arm64-mac.zip` — used by `electron-updater` for delta updates
-- `latest-mac.yml` — manifest the app reads to detect new versions
-- `mac-arm64/Dobius+.app` — the unpackaged app (for local testing)
-- `*.blockmap` — diff support for delta updates (optional, but ships with default config)
-
-All of `*.dmg`, `*.zip`, and `latest-mac.yml` must be uploaded to the GitHub release for auto-update to work.
-
-## Skipping notarization (local testing only)
-
-If you just want to build a local .app for testing without burning a notarization round-trip:
+Every install that replaced an app keeps the previous one at
+`~/Library/Application Support/dobius-plus-install-backups/Dobius+.previous` (no `.app` suffix,
+so macOS never registers it as a second app). The installer prints the exact command; it is:
 
 ```bash
-unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
-npm run electron:build
+scripts/install-dobius-gated.sh "$HOME/Library/Application Support/dobius-plus-install-backups/Dobius+.previous" --take-over --allow-downgrade
 ```
 
-The .app will be signed but not notarized. It will run on your machine but other Macs will trigger Gatekeeper warnings.
+### Install record
+
+The installer records whose build is installed (branch, commit, repo, dirty, tag, version,
+buildNumber, artifactSha256, install time) OUTSIDE the app, so the app's code signature stays
+valid (`codesign --verify --deep --strict "/Applications/Dobius+.app"` passes):
+
+- the installed app: `~/Library/Application Support/dobius-plus-install-backups/INSTALL-PROVENANCE.json`
+- the rollback copy:
+  `~/Library/Application Support/dobius-plus-install-backups/Dobius+.previous.INSTALL-PROVENANCE.json`. A rollback reinstall
+  takes its source state from this record when the bundle has no build record.
+
+```bash
+cat "$HOME/Library/Application Support/dobius-plus-install-backups/INSTALL-PROVENANCE.json"
+```
+
+Each record carries `bundleIdentity` (a hash of the bundle's Info.plist and code seal, see
+`scripts/install-record.py`); readers use it only for the bundle it names. An app installed
+before this change has its record inside the bundle at `Contents/Resources/INSTALL-PROVENANCE.json`,
+and readers fall back to that.
+
+### Retired entry points
+
+`build-and-install.sh` and `scripts/install-dobius-v2.sh` are retired. They only print the two
+commands above and exit 1. Never write to `/Applications/Dobius+.app` by hand (copy, move or
+delete); the global install-gate hook blocks it and the gated script is the only path it allows.
+
+### Stopping the app by hand
+
+Never kill by bundle path (a pattern like `Dobius+.app`): the terminal daemon runs from inside
+the bundle as a `Dobius+ Helper` process, and killing it ends every live terminal session.
+The installer's own quit uses `pkill -a -x "Dobius\+"` (main app only) and
+`pkill -f "Dobius\+ Helper.*--type="` (Chromium helpers only).
+
+## Versions and tags
+
+- `dobius/package.json` `version` is set by a person, on purpose, as SemVer. Builds never rewrite
+  it. It is the only thing the downgrade guard compares.
+- Each local build gets the next build number automatically. macOS shows it as
+  "Version 2.0.0 (57)". It orders builds on this machine only and never makes an older version
+  look newer.
+- Moving forward (rc.1 → rc.2 → 2.0.0 → 2.0.1) installs with no flag. Reinstalling the same
+  version is allowed. Anything older needs `--allow-downgrade`.
+- A release is an annotated tag `v<version>` on a clean commit. The install record
+  (`tag`, `commit`, `dirty`, `version`, `artifactSha256`) lets you check an install against
+  the tag.
+
+## Signed release build (other Macs)
+
+Auto-update is **off** in this build. `dobius/src/main/dobius-disconnect.ts` sets
+`DOBIUS_SERVICES_DISCONNECTED = true`, and `dobius/src/main/updater-policy.ts` also requires
+`DOBIUS_ENABLE_DOBIUS_UPDATES=1` in a packaged app. Publishing a GitHub release therefore updates
+nobody: every Mac, including this one, installs through the gated installer. Turning updates back
+on is a code change and a separate decision.
+
+To produce signed, notarized artifacts:
+
+```bash
+pnpm --dir dobius run build:mac:release
+```
+
+It stops before building unless:
+
+- the active Node is 24 (strict `config/scripts/check-node-toolchain.mjs`, no `--warn-only`);
+- these environment variables are set (checked by `config/scripts/verify-macos-release-env.mjs`):
+  `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, `CSC_LINK` (the Developer ID
+  certificate file), `CSC_KEY_PASSWORD`. Keep them in your shell or keychain, never in the repo.
+
+With `DOBIUS_MAC_RELEASE=1` (set by the script), `dobius/config/electron-builder.config.cjs` turns
+on the hardened runtime, notarization and forced code signing, using the entitlements in
+`dobius/resources/build/entitlements.mac.plist`. Output goes to `dobius/dist/`:
+
+- `dobius-plus-macos-arm64.dmg` and `dobius-plus-macos-x64.dmg` (`dmg.artifactName`);
+- a `.zip` per arch with electron-builder's default name (no `artifactName` is set for it);
+- the unpacked apps (for example `dobius/dist/mac-arm64/Dobius+.app`), plus any update metadata
+  electron-builder writes, which only matters if auto-update is ever re-enabled.
+
+The DMG file itself is not signed: the config sets no `dmg.sign`, and electron-builder's default
+is `false`. The app inside it is signed and notarized.
+
+`build:mac:release` does not use the build-number wrapper: `CFBundleVersion` is the plain version
+and no `Contents/Resources/BUILD-PROVENANCE.json` is sealed, so a gated install of it records the source state at
+install time (`"sourceStateFrom": "install"`).
+
+Check the app before handing it to anyone:
+
+```bash
+spctl -a -vvv dobius/dist/mac-arm64/Dobius+.app
+```
+
+Expected: `accepted` with `source=Notarized Developer ID`.
+
+The release target in the config is GitHub `statusdigitalmarketing/dobius-plus`. The workflows
+under `dobius/.github/workflows/` are inherited from the upstream engine; GitHub only runs
+workflows from the repository root's `.github/`, so they do not run for this repo. Upload
+artifacts by hand with `gh release upload` if you publish one.
+
+## Local signing (optional)
+
+Local builds (`build:unpack`, `build:mac`) sign with `CSC_NAME` if set, otherwise the first
+keychain identity found in this order: Developer ID Application, Apple Distribution, Apple
+Development, `Dobius Local Signing`. With none of these they are signed ad-hoc, and macOS then
+treats each build as a new app (permission grants for microphone, accessibility and screen
+recording are dropped). A self-signed `Dobius Local Signing` certificate keeps one identity
+across builds.

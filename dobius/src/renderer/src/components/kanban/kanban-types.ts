@@ -1,4 +1,5 @@
 import type {
+  VertexAssignee,
   VertexTask,
   VertexTaskInput,
   VertexTaskPatch,
@@ -9,7 +10,7 @@ import type {
 } from '../../../../shared/vertex-task-types'
 
 export type Task = VertexTask
-export type Person = import('../../../../shared/vertex-task-types').VertexAssignee
+export type Person = VertexAssignee
 export type TaskStatus = VertexTaskStatus
 export type TaskPriority = VertexTaskPriority
 export type TaskType = VertexTaskType

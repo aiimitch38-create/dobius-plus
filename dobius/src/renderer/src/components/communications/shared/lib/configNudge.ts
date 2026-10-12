@@ -93,18 +93,26 @@ const FENCE_CLOSE = "```";
  */
 export function extractConfigNudge(content: string): ConfigNudgePayload | null {
   const openIdx = content.indexOf(FENCE_OPEN);
-  if (openIdx === -1) return null;
+  if (openIdx === -1) {
+    return null;
+  }
 
   // The JSON starts on the line after the opening fence.
   const jsonStart = content.indexOf("\n", openIdx);
-  if (jsonStart === -1) return null;
+  if (jsonStart === -1) {
+    return null;
+  }
 
   // The JSON ends at the next closing ``` that appears on its own line.
   const closeIdx = content.indexOf(`\n${FENCE_CLOSE}`, jsonStart);
-  if (closeIdx === -1) return null;
+  if (closeIdx === -1) {
+    return null;
+  }
 
   const json = content.slice(jsonStart + 1, closeIdx).trim();
-  if (!json) return null;
+  if (!json) {
+    return null;
+  }
 
   try {
     const parsed: unknown = JSON.parse(json);
@@ -123,10 +131,14 @@ export function extractConfigNudge(content: string): ConfigNudgePayload | null {
  */
 export function stripConfigNudgeSentinel(content: string): string {
   const openIdx = content.indexOf(FENCE_OPEN);
-  if (openIdx === -1) return content;
+  if (openIdx === -1) {
+    return content;
+  }
 
   const closeIdx = content.indexOf(`\n${FENCE_CLOSE}`, openIdx);
-  if (closeIdx === -1) return content;
+  if (closeIdx === -1) {
+    return content;
+  }
 
   const afterFence = closeIdx + `\n${FENCE_CLOSE}`.length;
   // Trim a preceding blank line so the prose doesn't gain a trailing gap.
@@ -137,9 +149,13 @@ export function stripConfigNudgeSentinel(content: string): string {
 // ── Type-guard ─────────────────────────────────────────────────────────────────
 
 function isConfigNudgeRequirement(v: unknown): v is ConfigNudgeRequirement {
-  if (typeof v !== "object" || v === null) return false;
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
   const r = v as Record<string, unknown>;
-  if (typeof r.surface !== "string") return false;
+  if (typeof r.surface !== "string") {
+    return false;
+  }
   switch (r.surface) {
     case "normalized_field":
       return typeof r.field === "string";
@@ -173,7 +189,9 @@ function isConfigNudgeRequirement(v: unknown): v is ConfigNudgeRequirement {
 }
 
 function isConfigNudgePayload(v: unknown): v is ConfigNudgePayload {
-  if (typeof v !== "object" || v === null) return false;
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
   const p = v as Record<string, unknown>;
   return (
     typeof p.agent_name === "string" &&

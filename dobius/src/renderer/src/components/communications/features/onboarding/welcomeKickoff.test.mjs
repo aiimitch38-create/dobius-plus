@@ -96,7 +96,9 @@ test("readiness wait retries transient presence failures", async () => {
     isCancelled: () => false,
     loadPresence: async () => {
       reads += 1;
-      if (reads === 1) throw new Error("relay unavailable");
+      if (reads === 1) {
+        throw new Error("relay unavailable");
+      }
       return { [atlas.pubkey]: "online", [sage.pubkey]: "online" };
     },
     pollMs: 0,

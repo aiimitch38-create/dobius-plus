@@ -40,8 +40,12 @@ export function useIsManagedAgent(
   agentPubkey: string | null | undefined,
 ): boolean | undefined {
   const query = useManagedAgentsQuery();
-  if (!agentPubkey) return false;
-  if (!query.data) return undefined;
+  if (!agentPubkey) {
+    return false;
+  }
+  if (!query.data) {
+    return undefined;
+  }
   const lower = agentPubkey.toLowerCase();
   return query.data.some((m) => m.pubkey.toLowerCase() === lower);
 }
@@ -90,7 +94,9 @@ export function useAgentMemoryGraph(
 } {
   const query = useAgentMemoryQuery(agentPubkey, options);
   const graph = React.useMemo<MemoryGraph | null>(() => {
-    if (!query.data) return null;
+    if (!query.data) {
+      return null;
+    }
     return buildMemoryGraph(query.data);
   }, [query.data]);
   return { query, graph };

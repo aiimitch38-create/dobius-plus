@@ -64,7 +64,9 @@ export function EncryptedBackupProvider({
   }, []);
 
   React.useEffect(() => {
-    if (availableUntil === null) return;
+    if (availableUntil === null) {
+      return;
+    }
     const expiresIn = Math.max(0, availableUntil - Date.now());
     const timer = window.setTimeout(() => {
       autoSaveStartedForRef.current = null;
@@ -79,12 +81,16 @@ export function EncryptedBackupProvider({
   const pendingPassphrase = pendingEncryptPassphrase(state);
   const skipDebounce = state.downloadPending;
   React.useEffect(() => {
-    if (!pendingPassphrase) return;
+    if (!pendingPassphrase) {
+      return;
+    }
     let started = false;
     let cancelledBeforeStart = false;
     const requestId = state.nextRequestId;
     const start = () => {
-      if (cancelledBeforeStart) return;
+      if (cancelledBeforeStart) {
+        return;
+      }
       started = true;
       dispatch({ type: "encrypt-started", requestId });
       void createNcryptsecBackup(pendingPassphrase)
@@ -107,7 +113,9 @@ export function EncryptedBackupProvider({
       skipDebounce ? 0 : ENCRYPT_DEBOUNCE_MS,
     );
     return () => {
-      if (!started) cancelledBeforeStart = true;
+      if (!started) {
+        cancelledBeforeStart = true;
+      }
       window.clearTimeout(timer);
     };
   }, [pendingPassphrase, skipDebounce, state.nextRequestId]);
@@ -148,15 +156,20 @@ export function EncryptedBackupProvider({
         description,
         id: BACKUP_READY_TOAST_ID,
       };
-      if (error) toast.error("Backup ready to download", options);
-      else toast.success("Backup ready to download", options);
+      if (error) {
+        toast.error("Backup ready to download", options);
+      } else {
+        toast.success("Backup ready to download", options);
+      }
     },
     [],
   );
 
   const saveBackup = React.useCallback(
     async (ncryptsec: string) => {
-      if (isSaving) return;
+      if (isSaving) {
+        return;
+      }
       setIsSaving(true);
       setSaveError(null);
       toast("Saving backup…", {
@@ -173,7 +186,9 @@ export function EncryptedBackupProvider({
           );
         }
       } catch (err) {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) {
+          return;
+        }
         const message =
           err instanceof Error ? err.message : "Failed to save your key.";
         setSaveError(message);
@@ -182,7 +197,9 @@ export function EncryptedBackupProvider({
           true,
         );
       } finally {
-        if (mountedRef.current) setIsSaving(false);
+        if (mountedRef.current) {
+          setIsSaving(false);
+        }
       }
     },
     [isSaving, showAvailableToast],
@@ -190,14 +207,18 @@ export function EncryptedBackupProvider({
 
   React.useEffect(() => {
     const ncryptsec = state.ncryptsec;
-    if (!ncryptsec || autoSaveStartedForRef.current === ncryptsec) return;
+    if (!ncryptsec || autoSaveStartedForRef.current === ncryptsec) {
+      return;
+    }
     autoSaveStartedForRef.current = ncryptsec;
     setAvailableUntil(Date.now() + BACKUP_AVAILABILITY_MS);
     void saveBackup(ncryptsec);
   }, [saveBackup, state.ncryptsec]);
 
   const downloadBackup = React.useCallback(async () => {
-    if (!state.ncryptsec) return;
+    if (!state.ncryptsec) {
+      return;
+    }
     await saveBackup(state.ncryptsec);
   }, [saveBackup, state.ncryptsec]);
 

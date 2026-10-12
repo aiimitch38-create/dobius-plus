@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { View, StyleSheet } from 'react-native'
+import { StyleSheet } from 'react-native'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { Stack, useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
@@ -11,6 +12,7 @@ import { RpcClientProvider } from '../src/transport/client-context'
 import { getNotificationNavigationPath } from '../src/notifications/notification-routing'
 import { loadHosts } from '../src/transport/host-store'
 import { extractPairingCodeFromUrl } from '../src/transport/pairing'
+import { DesktopFloatingWidget } from '../src/desktop/desktop-floating-widget'
 
 // Why: keeps the native splash screen visible until the React tree is mounted
 // and ready to render. Without this the user sees a blank white/black frame
@@ -137,7 +139,7 @@ export default function RootLayout() {
 
   return (
     <RpcClientProvider>
-      <View style={styles.root} onLayout={onNavigatorLayout}>
+      <GestureHandlerRootView style={styles.root} onLayout={onNavigatorLayout}>
         <StatusBar style="light" />
         <Stack
           screenOptions={{
@@ -172,7 +174,8 @@ export default function RootLayout() {
           <Stack.Screen name="about" options={{ headerShown: false }} />
           <Stack.Screen name="h" options={{ headerShown: false }} />
         </Stack>
-      </View>
+        <DesktopFloatingWidget />
+      </GestureHandlerRootView>
     </RpcClientProvider>
   )
 }

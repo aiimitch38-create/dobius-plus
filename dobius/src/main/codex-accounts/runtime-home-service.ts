@@ -30,7 +30,6 @@ import {
   resolve,
   win32 as pathWin32
 } from 'node:path'
-import { app } from 'electron'
 import type { CodexManagedAccount } from '../../shared/types'
 import type { Store } from '../persistence'
 import { writeFileAtomically } from './fs-utils'
@@ -53,6 +52,7 @@ import {
   type CodexAccountSelectionTarget
 } from './runtime-selection'
 import { getDefaultWslDistro, getWslHome } from '../wsl'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 type CodexAuthIdentity = {
   email: string | null
@@ -1014,7 +1014,7 @@ export class CodexRuntimeHomeService {
   }
 
   private getRuntimeMetadataDir(): string {
-    const metadataDir = join(app.getPath('userData'), 'codex-runtime-home')
+    const metadataDir = join(getUserDataRoot(), 'codex-runtime-home')
     mkdirSync(metadataDir, { recursive: true })
     return metadataDir
   }
@@ -1032,7 +1032,7 @@ export class CodexRuntimeHomeService {
   }
 
   private getManagedAccountsRoot(): string {
-    return join(app.getPath('userData'), 'codex-accounts')
+    return join(getUserDataRoot(), 'codex-accounts')
   }
 
   private repointLegacyActiveHomePointer(activeHomePath: string, runtimeHomePath: string): void {

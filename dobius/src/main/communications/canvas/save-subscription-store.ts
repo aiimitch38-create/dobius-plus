@@ -6,9 +6,8 @@
  * single `id`, since a subscription is identified by
  * (identityPubkey, relayUrl, scopeType, scopeValue), not a generated id.
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { app } from 'electron'
+import { parseEveryEntry, SafeJsonFile } from '../../storage/safe-json-file'
 import {
   assertValidIdentityPubkey,
   assertValidRelayUrl,
@@ -20,39 +19,31 @@ import {
   subscriptionKey,
   type SaveSubscription
 } from './save-subscription-record'
+import { getUserDataRoot } from '../../storage/user-data-root'
 
 const FILE_NAME = 'save-subscriptions.json'
 
-let cached: SaveSubscription[] | null = null
-
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
+
+// Why: a malformed row makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+const file = new SafeJsonFile<SaveSubscription[]>({
+  filePath,
+  parse: (raw) => (Array.isArray(raw) ? parseEveryEntry(raw, sanitizeSaveSubscriptionRow) : undefined),
+  fallback: () => [],
+  label: `[save-subscriptions] ${FILE_NAME}`
+})
 
 function load(): SaveSubscription[] {
-  if (cached) {return cached}
-  try {
-    const raw = JSON.parse(readFileSync(filePath(), 'utf-8'))
-    cached = Array.isArray(raw) ? raw.map(sanitizeSaveSubscriptionRow).filter((row): row is SaveSubscription => row !== null) : []
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn('[save-subscriptions] failed to load save subscriptions:', error instanceof Error ? error.message : String(error))
-    }
-    cached = []
-  }
-  return cached
+  return file.get()
 }
 
+// Why: throws so the renderer's error path shows a refused save instead of
+// an edit that silently disappears on restart.
 function persist(subscriptions: SaveSubscription[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(subscriptions, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn('[save-subscriptions] failed to persist save subscriptions:', error instanceof Error ? error.message : String(error))
-  }
+  file.save(subscriptions)
 }
 
 export function listSaveSubscriptions(identityPubkey: string, relayUrl: string): SaveSubscription[] {
@@ -84,7 +75,6 @@ export function createSaveSubscription(
   const key = subscriptionKey(record)
   const subscriptions = load().filter((entry) => subscriptionKey(entry) !== key)
   subscriptions.push(record)
-  cached = subscriptions
   persist(subscriptions)
   return record
 }
@@ -100,7 +90,6 @@ export function deleteSaveSubscription(identityPubkey: string, relayUrl: string,
   const next = subscriptions.filter((entry) => subscriptionKey(entry) !== key)
   const removed = next.length !== subscriptions.length
   if (removed) {
-    cached = next
     persist(next)
   }
   return removed
@@ -115,13 +104,11 @@ function upsertOwnerRow(identityPubkey: string, relayUrl: string, mutate: (kinds
   const others = subscriptions.filter((entry) => subscriptionKey(entry) !== targetKey)
 
   if (nextKinds.length === 0) {
-    cached = others
     persist(others)
     return null
   }
   const record: SaveSubscription = { ...target, kinds: normalizeKinds(nextKinds), createdAt: existing?.createdAt ?? Date.now() }
   const next = [...others, record]
-  cached = next
   persist(next)
   return record
 }

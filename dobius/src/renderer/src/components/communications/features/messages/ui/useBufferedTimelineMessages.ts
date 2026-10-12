@@ -17,8 +17,12 @@ export function selectBufferedTimelineMessages<T extends { id: string }>({
   isAtBottom: boolean;
   messages: T[];
 }): T[] {
-  if (isAtBottom || frozenMessageIds === null) return messages;
-  if (frozenMessageIds.length === 0) return [];
+  if (isAtBottom || frozenMessageIds === null) {
+    return messages;
+  }
+  if (frozenMessageIds.length === 0) {
+    return [];
+  }
 
   const currentById = new Map(messages.map((message) => [message.id, message]));
   if (frozenMessageIds.some((id) => !currentById.has(id))) {

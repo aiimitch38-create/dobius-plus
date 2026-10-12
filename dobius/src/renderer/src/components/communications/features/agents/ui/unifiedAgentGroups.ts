@@ -28,7 +28,9 @@ export function buildUnifiedGroups(
 
   const unknown: ManagedAgent[] = [];
   for (const [id, list] of byPersonaId) {
-    if (!matched.has(id)) unknown.push(...list);
+    if (!matched.has(id)) {
+      unknown.push(...list);
+    }
   }
 
   return { groups, ungrouped, unknown };
@@ -38,7 +40,9 @@ export function pickProfileAgent(agents: ManagedAgent[]) {
   return [...agents].sort((left, right) => {
     const activeDiff =
       Number(isManagedAgentActive(right)) - Number(isManagedAgentActive(left));
-    if (activeDiff !== 0) return activeDiff;
+    if (activeDiff !== 0) {
+      return activeDiff;
+    }
     return left.name.localeCompare(right.name);
   })[0];
 }

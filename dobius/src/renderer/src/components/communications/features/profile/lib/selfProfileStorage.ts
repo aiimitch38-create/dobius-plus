@@ -80,9 +80,13 @@ export function storageKey(relayUrl: string, pubkey: string): string {
  * Returns null if the payload is not a recognizable v1 cache object.
  */
 export function parseSelfProfileCache(json: unknown): SelfProfileCache | null {
-  if (typeof json !== "object" || json === null) return null;
+  if (typeof json !== "object" || json === null) {
+    return null;
+  }
   const obj = json as Record<string, unknown>;
-  if (obj.version !== 1) return null;
+  if (obj.version !== 1) {
+    return null;
+  }
 
   const displayName =
     typeof obj.displayName === "string" ? obj.displayName : null;
@@ -125,7 +129,9 @@ export function readSelfProfileCache(
 ): SelfProfileCache {
   try {
     const raw = window.localStorage.getItem(storageKey(relayUrl, pubkey));
-    if (!raw) return DEFAULT_CACHE;
+    if (!raw) {
+      return DEFAULT_CACHE;
+    }
     const parsed = JSON.parse(raw);
     return parseSelfProfileCache(parsed) ?? DEFAULT_CACHE;
   } catch {
@@ -150,7 +156,9 @@ export function writeSelfProfileCache(
     // The 30s profile refetch otherwise re-stringifies ~341KB, rewrites it,
     // dispatches the cache event, and re-parses on the listener side even
     // when nothing changed. Skip the write and event entirely when identical.
-    if (window.localStorage.getItem(key) === serialized) return true;
+    if (window.localStorage.getItem(key) === serialized) {
+      return true;
+    }
     window.localStorage.setItem(key, serialized);
     // localStorage is not reactive — dispatch a custom event so any mounted
     // listeners (e.g. useEffect with addEventListener) can re-read the cache
@@ -214,8 +222,12 @@ export function resolveAvatarDataUrl(
   fetched: string | null,
   existing: SelfProfileCache,
 ): string | null {
-  if (nextAvatarUrl === null) return null;
-  if (fetched !== null) return fetched;
+  if (nextAvatarUrl === null) {
+    return null;
+  }
+  if (fetched !== null) {
+    return fetched;
+  }
   return nextAvatarUrl === existing.avatarUrl ? existing.avatarDataUrl : null;
 }
 
@@ -235,13 +247,19 @@ export async function fetchAvatarDataUrl(
 ): Promise<string | null> {
   try {
     const response = await fetch(avatarProxyUrl);
-    if (!response.ok) return null;
+    if (!response.ok) {
+      return null;
+    }
 
     const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.startsWith("image/")) return null;
+    if (!contentType.startsWith("image/")) {
+      return null;
+    }
 
     const blob = await response.blob();
-    if (blob.size > 256 * 1024) return null;
+    if (blob.size > 256 * 1024) {
+      return null;
+    }
 
     return await new Promise<string | null>((resolve) => {
       const reader = new FileReader();

@@ -222,7 +222,7 @@ function buildSummaryForDirectReplies(
     threadHeadId: messageId,
     replyCount: descendantStats.descendantCount,
     lastReplyAt: descendantStats.lastReplyAt,
-    participants: [...descendantStats.recentParticipantsNewestFirst].reverse(),
+    participants: descendantStats.recentParticipantsNewestFirst.toReversed(),
   };
 }
 
@@ -307,7 +307,7 @@ export function buildThreadSummaryFromVisibleEntries(
     threadHeadId,
     replyCount,
     lastReplyAt,
-    participants: recentParticipantsNewestFirst.reverse(),
+    participants: recentParticipantsNewestFirst.toReversed(),
   };
 }
 
@@ -398,7 +398,7 @@ function buildRelayThreadSummary(
     // (`buildSummaryForDirectReplies`, which also reverses to oldest-first).
     participants: summary.participantPubkeys
       .slice(0, 3)
-      .reverse()
+      .toReversed()
       .map((pubkey) => ({
         id: pubkey,
         author: profiles?.[pubkey.toLowerCase()]?.displayName ?? pubkey,
@@ -411,8 +411,12 @@ function mergeThreadSummaries(
   local: TimelineThreadSummary | null,
   relay: TimelineThreadSummary | null,
 ): TimelineThreadSummary | null {
-  if (!local) return relay;
-  if (!relay) return local;
+  if (!local) {
+    return relay;
+  }
+  if (!relay) {
+    return local;
+  }
   const participants = new Map(
     [...relay.participants, ...local.participants].map((participant) => [
       participant.id,

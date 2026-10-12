@@ -20,7 +20,9 @@ function completionKey(prefix: string, pubkey: string) {
 }
 
 export function readMachineOnboardingCompletion(pubkey: string | null) {
-  if (typeof window === "undefined" || !pubkey) return false;
+  if (typeof window === "undefined" || !pubkey) {
+    return false;
+  }
   return (
     window.localStorage.getItem(
       completionKey(MACHINE_ONBOARDING_COMPLETION_STORAGE_KEY, pubkey),
@@ -29,14 +31,18 @@ export function readMachineOnboardingCompletion(pubkey: string | null) {
 }
 
 function clearMachineOnboardingCompletion(pubkey: string | null) {
-  if (typeof window === "undefined" || !pubkey) return;
+  if (typeof window === "undefined" || !pubkey) {
+    return;
+  }
   window.localStorage.removeItem(
     completionKey(MACHINE_ONBOARDING_COMPLETION_STORAGE_KEY, pubkey),
   );
 }
 
 function forceMachineOnboarding() {
-  if (!import.meta.env?.DEV || typeof window === "undefined") return false;
+  if (!import.meta.env?.DEV || typeof window === "undefined") {
+    return false;
+  }
   return (
     new URL(window.location.href).searchParams.get("machineOnboarding") === "1"
   );
@@ -59,8 +65,12 @@ export function migrateMachineOnboardingCompletion(
   activeCommunityPubkey: string | null | undefined,
   isSharedIdentity: boolean,
 ) {
-  if (forceMachineOnboarding()) return false;
-  if (readMachineOnboardingCompletion(pubkey)) return true;
+  if (forceMachineOnboarding()) {
+    return false;
+  }
+  if (readMachineOnboardingCompletion(pubkey)) {
+    return true;
+  }
 
   const completedLegacyOnboarding =
     window.localStorage.getItem(
@@ -135,10 +145,14 @@ export function useMachineOnboardingState({
     }
   }, [currentPubkey, identityQuery.status]);
   React.useEffect(() => {
-    if (identityLost) setBootedLost(true);
+    if (identityLost) {
+      setBootedLost(true);
+    }
   }, [identityLost]);
   React.useEffect(() => {
-    if (identityLocked) setBootedLocked(true);
+    if (identityLocked) {
+      setBootedLocked(true);
+    }
   }, [identityLocked]);
 
   React.useEffect(() => {
@@ -171,7 +185,9 @@ export function useMachineOnboardingState({
   const complete = React.useCallback(
     (completedIdentityPubkey?: string) => {
       const pubkey = completedIdentityPubkey ?? currentPubkey;
-      if (!pubkey) return;
+      if (!pubkey) {
+        return;
+      }
       window.localStorage.setItem(
         completionKey(MACHINE_ONBOARDING_COMPLETION_STORAGE_KEY, pubkey),
         "true",

@@ -17,7 +17,9 @@ export function AgentManagementDialogs() {
           isDefinitionPending={management.isPending}
           mode="definition"
           onOpenChange={(open) => {
-            if (!open) management.dismiss();
+            if (!open) {
+              management.dismiss();
+            }
           }}
           onSubmitDefinition={management.submitCreate}
           runtimes={management.runtimes}
@@ -30,7 +32,9 @@ export function AgentManagementDialogs() {
           created={management.createdAgent}
           isRetryingAttachment={management.isRetryingAttachment}
           onOpenChange={(open) => {
-            if (!open) management.dismissCreatedAgent();
+            if (!open) {
+              management.dismissCreatedAgent();
+            }
           }}
           onRetryAttachment={() => {
             void management.retryAttachment();
@@ -45,7 +49,9 @@ export function AgentManagementDialogs() {
           isPending={management.isPending}
           mode="definition-edit"
           onOpenChange={(open) => {
-            if (!open) management.dismiss();
+            if (!open) {
+              management.dismiss();
+            }
           }}
           onSubmit={management.submitUpdate}
           open

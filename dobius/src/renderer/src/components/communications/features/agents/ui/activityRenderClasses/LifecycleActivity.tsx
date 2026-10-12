@@ -32,8 +32,12 @@ function splitPermissionText(text: string): {
  *   "Approved (...)" | "Denied (...)" | "Cancelled"
  */
 function permissionOutcomeTone(outcome: string): "approve" | "deny" | "cancel" {
-  if (outcome.startsWith("Approved")) return "approve";
-  if (outcome.startsWith("Denied")) return "deny";
+  if (outcome.startsWith("Approved")) {
+    return "approve";
+  }
+  if (outcome.startsWith("Denied")) {
+    return "deny";
+  }
   return "cancel";
 }
 

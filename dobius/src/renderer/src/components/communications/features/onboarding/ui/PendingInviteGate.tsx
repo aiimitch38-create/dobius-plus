@@ -13,7 +13,9 @@ export function PendingInviteGate() {
   const { transaction, update, clear } = useCommunityOnboarding();
   const systemColorScheme = useSystemColorScheme();
 
-  if (!transaction) return null;
+  if (!transaction) {
+    return null;
+  }
 
   return (
     <div

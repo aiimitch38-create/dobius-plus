@@ -11,10 +11,10 @@ import {
   DropdownMenuTrigger,
 } from "@comms/shared/ui/dropdown-menu";
 
-const INBOX_FILTER_OPTIONS: Array<{
+const INBOX_FILTER_OPTIONS: {
   label: string;
   value: InboxFilter;
-}> = [
+}[] = [
   { value: "all", label: "All" },
   { value: "project", label: "Projects" },
   { value: "mention", label: "Mentions" },

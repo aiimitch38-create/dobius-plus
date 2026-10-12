@@ -18,6 +18,7 @@ import { Activity, Bot, LayoutList, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CustomAgent, AgentRun } from '../../../../shared/agents'
 import type { VertexTask, VertexTaskStatus } from '../../../../shared/vertex-task-types'
+import { crewSubtitle } from './crew-running-counts'
 
 const REFRESH_MS = 5_000
 
@@ -92,8 +93,12 @@ function Row({
 
 function ago(ms: number): string {
   const minutes = Math.max(0, Math.round((Date.now() - ms) / 60_000))
-  if (minutes < 60) return `${minutes}m`
-  if (minutes < 60 * 24) return `${Math.round(minutes / 60)}h`
+  if (minutes < 60) {
+    return `${minutes}m`
+  }
+  if (minutes < 60 * 24) {
+    return `${Math.round(minutes / 60)}h`
+  }
   return `${Math.round(minutes / (60 * 24))}d`
 }
 
@@ -101,14 +106,27 @@ export function AgentsOverview(): React.JSX.Element {
   const [tasks, setTasks] = useState<VertexTask[]>([])
   const [agents, setAgents] = useState<CustomAgent[]>([])
   const [runs, setRuns] = useState<AgentRun[]>([])
+  const [boardError, setBoardError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const [t, a, r] = await Promise.all([
-      window.api?.vertexTasks?.list().catch(() => []) ?? [],
+      // Why not [] on failure: an unreadable board would read as "Nothing open".
+      window.api?.vertexTasks?.list().then(
+        (list) => {
+          setBoardError(null)
+          return list
+        },
+        () => {
+          setBoardError('Board could not be loaded')
+          return null
+        }
+      ) ?? [],
       window.api?.agents?.list().catch(() => []) ?? [],
       window.api?.agents?.listRuns?.().catch(() => []) ?? []
     ])
-    setTasks(t as VertexTask[])
+    if (t) {
+      setTasks(t as VertexTask[])
+    }
     setAgents(a as CustomAgent[])
     setRuns(r as AgentRun[])
   }, [])
@@ -130,7 +148,6 @@ export function AgentsOverview(): React.JSX.Element {
   )
   // Real money, summed from real runs — not a mockup percentage.
   const spend = useMemo(() => runs.reduce((sum, run) => sum + (run.costUsd ?? 0), 0), [runs])
-  const running = useMemo(() => runs.filter((run) => run.status === 'running').length, [runs])
 
   return (
     <main className="ops-dashboard h-full min-h-0 bg-background p-2 text-foreground">
@@ -139,7 +156,8 @@ export function AgentsOverview(): React.JSX.Element {
           icon={LayoutList}
           title="Board"
           subtitle={
-            openTasks.length ? `${openTasks.length} open of ${tasks.length}` : 'Nothing open'
+            boardError ??
+            (openTasks.length ? `${openTasks.length} open of ${tasks.length}` : 'Nothing open')
           }
           tone="bg-ops-violet-soft text-ops-violet"
         >
@@ -164,11 +182,7 @@ export function AgentsOverview(): React.JSX.Element {
         <Panel
           icon={Bot}
           title="Crew"
-          subtitle={
-            agents.length
-              ? `${agents.length} agents · ${running} running`
-              : 'No agents configured'
-          }
+          subtitle={crewSubtitle(agents, runs)}
           tone="bg-ops-blue-soft text-ops-blue"
         >
           {agents.length ? (

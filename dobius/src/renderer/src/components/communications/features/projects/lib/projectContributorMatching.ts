@@ -19,7 +19,9 @@ function profileMatchesContributor(
   profile: UserProfileLookup[string] | undefined,
   pubkey?: string,
 ) {
-  if (!profile) return false;
+  if (!profile) {
+    return false;
+  }
   const name = contributor.name.trim().toLowerCase();
   const email = contributor.email.trim().toLowerCase();
   const candidates = [
@@ -41,7 +43,9 @@ export function profileForContributor(
   contributor: ProjectRepoContributor,
   profiles: UserProfileLookup | undefined,
 ) {
-  if (!profiles) return null;
+  if (!profiles) {
+    return null;
+  }
   for (const [pubkey, profile] of Object.entries(profiles)) {
     if (profileMatchesContributor(contributor, profile, pubkey)) {
       return { pubkey, profile };
@@ -54,7 +58,9 @@ export function profileForCommitAuthor(
   commit: ProjectRepoCommit,
   profiles: UserProfileLookup | undefined,
 ) {
-  if (!profiles) return null;
+  if (!profiles) {
+    return null;
+  }
   const contributor = {
     name: commit.authorName,
     email: commit.authorEmail,

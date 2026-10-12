@@ -9,7 +9,7 @@
  * what gets reset under what condition.
  */
 
-export interface ArchivePagingState {
+export type ArchivePagingState = {
   /** Whether the current identity has an owner_p save subscription.
    *  null = not yet checked; true/false = result of listSaveSubscriptions(). */
   hasSubscription: boolean | null;
@@ -42,7 +42,7 @@ export interface ArchivePagingState {
    *  after every async boundary — a mismatch means a channel switch occurred
    *  mid-flight (even A→B→A), and results are discarded. */
   resetGeneration: number;
-}
+};
 
 /**
  * Create a fresh ArchivePagingState with an eagerly-initialized backfill

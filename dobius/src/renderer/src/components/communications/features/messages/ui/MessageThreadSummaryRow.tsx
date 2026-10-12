@@ -68,10 +68,10 @@ export function MessageThreadSummaryRow({
   summaryIndentOffsetRem = 0,
   unreadCount,
 }: {
-  collapseDepthGuideActions?: ReadonlyArray<ThreadDepthGuideAction>;
+  collapseDepthGuideActions?: readonly ThreadDepthGuideAction[];
   depth?: number;
-  depthGuideDepths?: ReadonlyArray<number>;
-  highlightThreadLineDepths?: ReadonlyArray<number>;
+  depthGuideDepths?: readonly number[];
+  highlightThreadLineDepths?: readonly number[];
   message: TimelineMessage;
   onCollapseDepthGuide?: (message: TimelineMessage) => void;
   onCollapseDepthGuideHoverChange?: (

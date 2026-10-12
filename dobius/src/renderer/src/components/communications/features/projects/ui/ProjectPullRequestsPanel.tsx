@@ -71,16 +71,28 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
 }
 
 function pullRequestStatusClassName(status: ProjectPullRequest["status"]) {
-  if (status === "Closed") return "text-destructive";
-  if (status === "Draft") return "text-muted-foreground";
-  if (status === "Merged") return "text-purple-400";
+  if (status === "Closed") {
+    return "text-destructive";
+  }
+  if (status === "Draft") {
+    return "text-muted-foreground";
+  }
+  if (status === "Merged") {
+    return "text-purple-400";
+  }
   return "text-green-500";
 }
 
 function pullRequestStatusBadgeClassName(status: ProjectPullRequest["status"]) {
-  if (status === "Closed") return "bg-destructive";
-  if (status === "Draft") return "bg-muted-foreground/80";
-  if (status === "Merged") return "bg-purple-600";
+  if (status === "Closed") {
+    return "bg-destructive";
+  }
+  if (status === "Draft") {
+    return "bg-muted-foreground/80";
+  }
+  if (status === "Merged") {
+    return "bg-purple-600";
+  }
   return "bg-green-600";
 }
 
@@ -851,7 +863,9 @@ export function ProjectPullRequestDetail({
                       aria-label={`Open ${item.anchor.path} ${item.anchor.side} line ${item.anchor.line} in Files changed`}
                       className="mt-1 inline-flex min-w-0 items-center gap-1 rounded-md bg-muted/65 px-1.5 py-0.5 font-mono text-2xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       onClick={() => {
-                        if (item.anchor) onOpenInlineComment?.(item.anchor);
+                        if (item.anchor) {
+                          onOpenInlineComment?.(item.anchor);
+                        }
                       }}
                       type="button"
                     >

@@ -36,7 +36,9 @@ export function useHomeInboxContextMessages({
   selectedItem,
 }: UseHomeInboxContextMessagesOptions): InboxContextMessage[] {
   return React.useMemo(() => {
-    if (!selectedItem) return [];
+    if (!selectedItem) {
+      return [];
+    }
 
     const eventById = new Map(events.map((event) => [event.id, event]));
     const contextEventIds = new Set(eventById.keys());
@@ -44,7 +46,9 @@ export function useHomeInboxContextMessages({
       ...(channelMessages ?? []),
       ...reactionEvents,
     ].filter((event) => {
-      if (event.kind !== KIND_REACTION) return false;
+      if (event.kind !== KIND_REACTION) {
+        return false;
+      }
       const targetId = getReactionTargetId(event.tags);
       return Boolean(targetId && contextEventIds.has(targetId));
     });

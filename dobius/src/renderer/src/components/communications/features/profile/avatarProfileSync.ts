@@ -53,13 +53,17 @@ export function createAvatarProfileSync(
 
   const reset = () => {
     generation += 1;
-    for (const stop of pendingSyncs.values()) stop();
+    for (const stop of pendingSyncs.values()) {
+      stop();
+    }
     pendingSyncs.clear();
   };
 
   const queueSave = (input: PendingAvatarSave, assumeReady = false): void => {
     const syncKey = `${input.relayUrl}:${input.expectedPubkey}:${input.avatarUrl}`;
-    if (pendingSyncs.has(syncKey)) return;
+    if (pendingSyncs.has(syncKey)) {
+      return;
+    }
 
     let isSaving = false;
     let isReady = assumeReady;
@@ -74,20 +78,28 @@ export function createAvatarProfileSync(
       pendingSyncs.delete(syncKey);
     };
     const saveIfReady = () => {
-      if (generation !== queuedGeneration || cancelRetry !== null) return;
+      if (generation !== queuedGeneration || cancelRetry !== null) {
+        return;
+      }
       const presentation = dependencies.getPresentation(input.avatarUrl);
-      if (presentation?.state === "ready") isReady = true;
+      if (presentation?.state === "ready") {
+        isReady = true;
+      }
       if (!presentation && !isReady) {
         stop();
         return;
       }
-      if (!isReady || isSaving) return;
+      if (!isReady || isSaving) {
+        return;
+      }
 
       isSaving = true;
       void dependencies
         .saveProfile(input)
         .then(async (profile) => {
-          if (generation !== queuedGeneration) return;
+          if (generation !== queuedGeneration) {
+            return;
+          }
           const activePubkey = await dependencies.getActivePubkey();
           if (
             generation !== queuedGeneration ||
@@ -143,14 +155,18 @@ export function createAvatarProfileSync(
     let active = true;
     const queuedGeneration = generation;
     const observe = () => {
-      if (generation !== queuedGeneration) return;
+      if (generation !== queuedGeneration) {
+        return;
+      }
       if (dependencies.getPresentation(input.avatarUrl)?.state === "ready") {
         observedReady = true;
       }
     };
     const unsubscribe = dependencies.subscribe(observe);
     const cancel = () => {
-      if (!active) return;
+      if (!active) {
+        return;
+      }
       active = false;
       unsubscribe();
       pendingSyncs.delete(registrationKey);
@@ -161,7 +177,9 @@ export function createAvatarProfileSync(
     return {
       cancel,
       release: (completion) => {
-        if (!active || generation !== queuedGeneration) return;
+        if (!active || generation !== queuedGeneration) {
+          return;
+        }
         cancel();
         queueSave({ ...input, ...completion }, observedReady);
       },
@@ -215,7 +233,9 @@ export function createProfileCacheRefreshQueue(
       client = nextClient;
       flush(nextClient);
       return () => {
-        if (client === nextClient) client = null;
+        if (client === nextClient) {
+          client = null;
+        }
       };
     },
   };

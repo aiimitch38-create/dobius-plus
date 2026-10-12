@@ -82,7 +82,9 @@ function isConversationScroller(element: HTMLElement) {
  */
 export function useWebviewScrollBoundaryLock(enabled = true) {
   React.useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      return;
+    }
 
     function handleWheel(event: WheelEvent) {
       if (event.defaultPrevented || event.ctrlKey) {

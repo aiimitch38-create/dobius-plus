@@ -8,6 +8,11 @@ const MARKER = `# dobius-cli v${CLI_VERSION}`
 const PORT = 8421
 const RETIRED_MESSAGE =
   'This Dobius+ command was retired in the new engine. See dobius --help / the Tasks panel.'
+// Why: the conductor prompt gates risky actions on these; a retired copy must
+// read as an explicit NO, never as "tool missing, carry on".
+const RETIRED_APPROVAL_MESSAGE =
+  'DENIED: no approval channel (the Voice Conductor is not running). Do not proceed.'
+const APPROVAL_CLIS: ReadonlySet<string> = new Set(['dobius-confirm', 'dobius-ask'])
 const LEGACY_MARKERS = ['voice-bridge-token', '127.0.0.1:8421'] as const
 export const STALE_LEGACY_CLIS = [
   'dobius-tabs',
@@ -68,12 +73,36 @@ function writeIfChanged(file: string, contents: string): void {
   chmodSync(file, 0o755)
 }
 
-function retiredStub(): string {
+function retiredStub(name: string): string {
+  const message = APPROVAL_CLIS.has(name) ? RETIRED_APPROVAL_MESSAGE : RETIRED_MESSAGE
   return `#!/bin/bash
 ${MARKER}
-echo "${RETIRED_MESSAGE}" >&2
+echo "${message}" >&2
 exit 1
 `
+}
+
+// Why: the Voice Conductor installer (voice-conductor/cli-install.ts) also
+// writes dobius-send / dobius-tabs / dobius-status, with different arguments
+// and a different server. Rewriting its copies on every boot made whichever
+// installer ran last win. The conductor copy is kept; a user's own script
+// with the same name is never replaced either.
+function mayWriteScript(file: string): boolean {
+  let existing: string
+  try {
+    existing = readFileSync(file, 'utf8')
+  } catch {
+    return true
+  }
+  return existing.includes('# dobius-cli v') || LEGACY_MARKERS.some((m) => existing.includes(m))
+}
+
+// A stub this installer wrote earlier (any version) — safe to rewrite.
+function isOwnRetiredStub(contents: string): boolean {
+  return (
+    contents.includes('# dobius-cli v') &&
+    (contents.includes(RETIRED_MESSAGE) || contents.includes(RETIRED_APPROVAL_MESSAGE))
+  )
 }
 
 function replaceStaleLegacyClis(dir: string): void {
@@ -84,10 +113,13 @@ function replaceStaleLegacyClis(dir: string): void {
     const file = path.join(dir, name)
     try {
       const contents = readFileSync(file, 'utf8')
-      if (!LEGACY_MARKERS.some((marker) => contents.includes(marker))) {
+      if (
+        !LEGACY_MARKERS.some((marker) => contents.includes(marker)) &&
+        !isOwnRetiredStub(contents)
+      ) {
         continue
       }
-      writeIfChanged(file, retiredStub())
+      writeIfChanged(file, retiredStub(name))
     } catch (err) {
       // Missing or unreadable stale scripts are harmless.
       void err
@@ -142,7 +174,12 @@ BODY=$(python3 -c 'import json,sys; print(json.dumps({"ref": sys.argv[1]}))' "$R
 
   for (const [name, body] of Object.entries(scripts)) {
     try {
-      writeIfChanged(path.join(dir, name), body)
+      const file = path.join(dir, name)
+      if (!mayWriteScript(file)) {
+        console.warn(`[dobius-cli] not replacing ${name}: owned by another installer or the user`)
+        continue
+      }
+      writeIfChanged(file, body)
     } catch (err) {
       console.warn(`[dobius-cli] could not install ${name}: ${(err as Error).message}`)
     }

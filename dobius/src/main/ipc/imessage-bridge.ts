@@ -5,7 +5,7 @@ import {
   getImessageBridgeStatus,
   restartImessageBridge,
   testImessageSend,
-  updateImessageBridgeConfig
+  updateImessageBridgeSettings
 } from '../imessage-bridge/bridge-service'
 
 // Deep link to the Full Disk Access pane; reading chat.db requires the grant.
@@ -23,7 +23,8 @@ export function registerImessageBridgeHandlers(): void {
       // Why: lastSeenRowid is bridge-owned dispatch state; a renderer must not
       // be able to rewind it and replay old messages as commands.
       const { enabled, triggerPrefix, selfHandle } = updates
-      const next = updateImessageBridgeConfig({ enabled, triggerPrefix, selfHandle })
+      // Throws while imessage-bridge.json is unreadable (BUILD-009C review F1).
+      const next = updateImessageBridgeSettings({ enabled, triggerPrefix, selfHandle })
       restartImessageBridge()
       return next
     }

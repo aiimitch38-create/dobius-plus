@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import type { CustomAgent } from '../../../../shared/agents'
+import { NEW_SESSION_SCOPE_MESSAGE } from './agent-session-reset-copy'
 
 // Memory save, session reset, and tagline save for the selected agent.
 export function useAgentDetailActions(args: {
   selectedAgentId: string | null
   selectedAgent: CustomAgent | null
-  memoryContent: string
+  saveMemoryFile: (agentId: string) => Promise<void>
+  reportSaveError: (error: unknown, fallback: string) => void
   setAgents: (agents: CustomAgent[]) => void
 }): {
   savingMemory: boolean
@@ -15,7 +17,7 @@ export function useAgentDetailActions(args: {
   resetSession: () => Promise<void>
   saveTagline: (value: string) => Promise<void>
 } {
-  const { selectedAgentId, selectedAgent, memoryContent, setAgents } = args
+  const { selectedAgentId, selectedAgent, saveMemoryFile, reportSaveError, setAgents } = args
   const [savingMemory, setSavingMemory] = useState(false)
   const [resettingSession, setResettingSession] = useState(false)
 
@@ -25,11 +27,10 @@ export function useAgentDetailActions(args: {
     }
     setSavingMemory(true)
     try {
-      await window.api.agents.writeFile(selectedAgentId, 'memory', memoryContent)
+      await saveMemoryFile(selectedAgentId)
       toast.success('Memory saved')
     } catch (error) {
-      console.error('Failed to save memory:', error)
-      toast.error(error instanceof Error ? error.message : 'Could not save memory')
+      reportSaveError(error, 'Could not save memory')
     } finally {
       setSavingMemory(false)
     }
@@ -42,7 +43,7 @@ export function useAgentDetailActions(args: {
     setResettingSession(true)
     try {
       setAgents(await window.api.agents.resetSession(selectedAgentId))
-      toast.success('New session will start on next run')
+      toast.success(NEW_SESSION_SCOPE_MESSAGE)
     } catch (error) {
       console.error('Failed to reset session:', error)
       toast.error(error instanceof Error ? error.message : 'Could not reset session')

@@ -6,28 +6,43 @@ import type {
   ImessageBridgeStatus,
   ImessageBridgeChatDbProbe
 } from '../../shared/imessage-bridge'
-import { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-config'
+import {
+  getImessageBridgeConfig,
+  getImessageBridgeConfigUnreadableDetail,
+  updateImessageBridgeConfig
+} from './bridge-config'
 import { extractChatDbMessageText } from './chat-db-message-text'
 import { countOutboundLastMinute, sendImessage } from './imessage-send'
+import { isDobiusAuthoredRow } from './outbound-ring'
 import { handleChannelMessage } from '../agents/agent-channel-service'
+import { checkExecutionAdmission } from '../agents/execution-gate'
 import type { PrepareClaudeLaunch } from '../agents/agent-runner'
+import {
+  assertSendAllowed,
+  dispatchFailureReply,
+  PAUSED_REPLY,
+  type ImessageBridgeTerminalDispatcher
+} from './terminal-send-guard'
+import { selfHandleSpellings } from './self-handle-spellings'
 
-export { getImessageBridgeConfig, updateImessageBridgeConfig } from './bridge-config'
-
-/** The slice of DobiusRuntimeService the bridge needs; kept structural so the
- *  service stays testable without the full runtime. */
-export type ImessageBridgeTerminalDispatcher = {
-  resolveActiveTerminal: () => Promise<string>
-  sendTerminal: (handle: string, action: { text?: string; enter?: boolean }) => Promise<unknown>
-}
+export {
+  getImessageBridgeConfig,
+  updateImessageBridgeConfig,
+  updateImessageBridgeSettings
+} from './bridge-config'
+export type { ImessageBridgeTerminalDispatcher } from './terminal-send-guard'
 
 const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db')
 const POLL_INTERVAL_MS = 2_000
 const MAX_COMMAND_LENGTH = 4_000
 
-// Self-thread filter: only messages the user sent (is_from_me) in the chat
-// with their own handle. `chat.guid LIKE ?` also matches the self-chat rows
-// whose handle join is NULL on some macOS versions.
+// Self-thread filter: only messages the user sent (is_from_me) in the 1:1
+// chat whose identifier exactly equals one spelling of their own handle
+// (selfHandleSpellings). Why exact: a substring match on chat.guid also
+// accepted longer numbers/emails containing the handle and group chats. Group
+// chat guids carry ';+;' (1:1 chats carry ';-;'). Rows with no chat join fall
+// back to an exact handle match, which covers the self-chat rows some macOS
+// versions store without a chat link.
 const NEW_MESSAGES_SQL = `
   SELECT message.ROWID AS rowid, message.text AS text, message.attributedBody AS attributedBody
   FROM message
@@ -36,7 +51,13 @@ const NEW_MESSAGES_SQL = `
   LEFT JOIN chat ON chat_message_join.chat_id = chat.ROWID
   WHERE message.ROWID > ?
     AND message.is_from_me = 1
-    AND (handle.id = ? OR chat.guid LIKE ?)
+    AND (
+      (chat.ROWID IS NOT NULL
+        AND lower(chat.chat_identifier) IN (SELECT value FROM json_each(?))
+        AND instr(chat.guid, ';+;') = 0)
+      OR (chat.ROWID IS NULL AND lower(handle.id) IN (SELECT value FROM json_each(?)))
+    )
+  GROUP BY message.ROWID
   ORDER BY message.ROWID ASC
   LIMIT 50
 `
@@ -91,20 +112,22 @@ export function startImessageBridge(
     )
     return
   }
-  // Why: on first enable, jump the high-water mark to the newest row so the
-  // entire message history is never replayed as commands.
-  if (config.lastSeenRowid <= 0) {
-    try {
-      const row = db.prepare('SELECT COALESCE(MAX(ROWID), 0) AS maxRowid FROM message').get() as {
-        maxRowid: number
-      }
-      updateImessageBridgeConfig({ lastSeenRowid: row.maxRowid })
-    } catch (error) {
-      console.warn(
-        '[imessage-bridge] could not initialize lastSeenRowid:',
-        error instanceof Error ? error.message : String(error)
-      )
+  // Why: on every start/enable (not only the first), jump the watermark to the
+  // newest row, so nothing sent while the bridge was off (history, or a
+  // conductor/agent text from before a restart, when the outbound ring was
+  // empty) runs as a command. If that fails, don't poll at all.
+  try {
+    const row = db.prepare('SELECT COALESCE(MAX(ROWID), 0) AS maxRowid FROM message').get() as {
+      maxRowid: number
     }
+    updateImessageBridgeConfig({ lastSeenRowid: row.maxRowid })
+  } catch (error) {
+    console.warn(
+      '[imessage-bridge] could not initialize lastSeenRowid; not starting:',
+      error instanceof Error ? error.message : String(error)
+    )
+    stopImessageBridge()
+    return
   }
   pollTimer = setInterval(() => void pollNewMessages(), POLL_INTERVAL_MS)
   console.log(`[imessage-bridge] watching ${CHAT_DB_PATH} for handle ${config.selfHandle}`)
@@ -161,7 +184,8 @@ export function getImessageBridgeStatus(): ImessageBridgeStatus {
       process.platform === 'darwin'
         ? probeChatDb()
         : { ok: false, error: 'iMessage bridge is only available on macOS' },
-    outboundLastMin: countOutboundLastMinute()
+    outboundLastMin: countOutboundLastMinute(),
+    unreadableDetail: getImessageBridgeConfigUnreadableDetail()
   }
 }
 
@@ -178,8 +202,19 @@ export async function testImessageSend(): Promise<ImessageBridgeSendResult> {
   }
 }
 
-async function pollNewMessages(): Promise<void> {
-  if (isPolling || !db) {
+function readNewSelfMessages(
+  database: SyncDatabase.Database,
+  lastSeenRowid: number,
+  selfHandle: string
+): NewMessageRow[] {
+  const spellings = JSON.stringify(selfHandleSpellings(selfHandle))
+  return database
+    .prepare(NEW_MESSAGES_SQL)
+    .all(lastSeenRowid, spellings, spellings) as NewMessageRow[]
+}
+
+async function pollNewMessages(database: SyncDatabase.Database | null = db): Promise<void> {
+  if (isPolling || !database) {
     return
   }
   isPolling = true
@@ -188,31 +223,20 @@ async function pollNewMessages(): Promise<void> {
     if (!config.selfHandle) {
       return
     }
-    const rows = db
-      .prepare(NEW_MESSAGES_SQL)
-      .all(config.lastSeenRowid, config.selfHandle, `%${config.selfHandle}%`) as NewMessageRow[]
-    if (rows.length === 0) {
-      return
-    }
-    const maxRowid = rows.at(-1)?.rowid ?? config.lastSeenRowid
+    const rows = readNewSelfMessages(database, config.lastSeenRowid, config.selfHandle)
     for (const row of rows) {
-      const text = extractChatDbMessageText(row)?.trim()
-      if (!text) {
-        continue
+      // Why: at-most-once. The watermark moves past this message BEFORE it can
+      // type anything, so a later throw or a restart never re-types it. Skipped
+      // non-command messages advance it too, so they are not re-scanned forever.
+      updateImessageBridgeConfig({ lastSeenRowid: row.rowid })
+      try {
+        await handleIncomingMessage(row, config.selfHandle, config.triggerPrefix)
+      } catch (error) {
+        console.warn(
+          `[imessage-bridge] message ${row.rowid} not processed:`,
+          error instanceof Error ? error.message : String(error)
+        )
       }
-      const handled = await tryHandleChannelMessage(text, config.selfHandle)
-      if (handled) {
-        continue
-      }
-      const command = matchTriggeredCommand(text, config.triggerPrefix)
-      if (command) {
-        void dispatchCommand(command, config.selfHandle)
-      }
-    }
-    // Why: advance the high-water mark past skipped non-command messages too,
-    // otherwise every poll re-scans them forever.
-    if (maxRowid > config.lastSeenRowid) {
-      updateImessageBridgeConfig({ lastSeenRowid: maxRowid })
     }
   } catch (error) {
     console.warn(
@@ -221,6 +245,27 @@ async function pollNewMessages(): Promise<void> {
     )
   } finally {
     isPolling = false
+  }
+}
+
+async function handleIncomingMessage(
+  row: NewMessageRow,
+  selfHandle: string,
+  triggerPrefix: string
+): Promise<void> {
+  const text = extractChatDbMessageText(row)?.trim()
+  // Why: a conductor question or an agent's reply sits in this same self-chat;
+  // only Carson's own texts may reach an agent or a terminal.
+  if (!text || isDobiusAuthoredRow(text)) {
+    return
+  }
+  if (await tryHandleChannelMessage(text, selfHandle)) {
+    return
+  }
+  const command = matchTriggeredCommand(text, triggerPrefix)
+  if (command) {
+    // Why: awaited so two commands from one poll are never typed interleaved.
+    await dispatchCommand(command, selfHandle)
   }
 }
 
@@ -248,27 +293,58 @@ function matchTriggeredCommand(text: string, triggerPrefix: string): string | nu
 /**
  * Type the command into Dobius's active terminal and press Enter, then close the
  * loop with a short iMessage ack (or a hint when no terminal is available).
+ * The target is pinned once (explicit handle, never re-resolved mid-send) and
+ * only accepted while an agent is its foreground process and the crew is not
+ * paused; both are rechecked before every write, including the Enter.
  */
-async function dispatchCommand(command: string, selfHandle: string): Promise<void> {
+async function dispatchCommand(
+  command: string,
+  selfHandle: string,
+  target: ImessageBridgeTerminalDispatcher | null = dispatcher
+): Promise<void> {
+  // Why: refused, not queued — the watermark still advances, so a command sent
+  // while paused is never replayed on resume.
+  const admission = checkExecutionAdmission('imessage-command')
+  if (!admission.allowed) {
+    console.warn(`[imessage-bridge] command not sent: ${admission.reason}`)
+    await sendImessage(selfHandle, PAUSED_REPLY).catch((error) => {
+      console.warn(
+        '[imessage-bridge] pause reply failed:',
+        error instanceof Error ? error.message : String(error)
+      )
+    })
+    return
+  }
   const singleLine = command.replace(/[\r\n]+/g, ' ').slice(0, MAX_COMMAND_LENGTH)
+  let typingStarted = false
   try {
-    if (!dispatcher) {
+    if (!target) {
       throw new Error('no_active_terminal')
     }
-    const handle = await dispatcher.resolveActiveTerminal()
-    await dispatcher.sendTerminal(handle, { text: singleLine, enter: true })
-    console.log(`[imessage-bridge] dispatched to ${handle}: ${singleLine.slice(0, 80)}`)
+    const handle = await target.resolveActiveTerminal()
+    await assertSendAllowed(target, handle)
+    await target.sendTerminal(
+      handle,
+      { text: singleLine, enter: true },
+      {
+        beforeWrite: async () => {
+          await assertSendAllowed(target, handle)
+          typingStarted = true
+        }
+      }
+    )
+    console.log(`[imessage-bridge] dispatched to ${handle}`)
     await sendImessage(selfHandle, '(sent to the active Dobius+ terminal)')
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.warn(`[imessage-bridge] dispatch failed: ${message}`)
-    const reply =
-      message === 'no_active_terminal'
-        ? '(no active terminal in Dobius+ right now; open a terminal and resend)'
-        : `(Dobius could not deliver that command: ${message})`
+    const reply = dispatchFailureReply(message, typingStarted)
     await sendImessage(selfHandle, reply).catch(() => {
       // Why: the failure reply is best-effort; a rate-limit or Automation
       // permission error here must not crash the poll loop.
     })
   }
 }
+
+// Test seam only.
+export const bridgeServiceInternals = { dispatchCommand, pollNewMessages, readNewSelfMessages }

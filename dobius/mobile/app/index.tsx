@@ -15,6 +15,7 @@ import {
   ListTodo
 } from 'lucide-react-native'
 import { ClaudeIcon, OpenAIIcon } from '../src/components/AgentIcons'
+import { DesktopQuickAction } from '../src/desktop/DesktopNavigationButtons'
 import {
   type AccountsSnapshot,
   type ProviderKey,
@@ -832,7 +833,8 @@ export default function HomeScreen() {
             const isError =
               verdict.kind === 'warning' ||
               verdict.kind === 'unreachable' ||
-              verdict.kind === 'auth-failed'
+              verdict.kind === 'auth-failed' ||
+              verdict.kind === 'update-required'
             return (
               <Pressable
                 style={({ pressed }) => [styles.hostCard, pressed && styles.hostCardPressed]}
@@ -920,6 +922,7 @@ export default function HomeScreen() {
               {/* ─── Quick actions ─── */}
               <Text style={[styles.sectionHeading, { marginTop: spacing.xl }]}>Quick Actions</Text>
               <View style={styles.quickActions}>
+                <DesktopQuickAction hostId={primaryConnectedHost?.id} />
                 <Pressable
                   style={({ pressed }) => [styles.quickAction, pressed && styles.hostCardPressed]}
                   onPress={() => router.push('/pair-scan')}

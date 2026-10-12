@@ -32,7 +32,9 @@ export function useCommunityNavigationTransitions({
   const router = useRouter();
   const saveActiveDestination = React.useCallback(() => {
     const activeCommunityId = communities.activeCommunity?.id;
-    if (!activeCommunityId) return;
+    if (!activeCommunityId) {
+      return;
+    }
     saveCommunityDestination(
       activeCommunityId,
       selectedView === "channel" && selectedChannelId
@@ -46,7 +48,9 @@ export function useCommunityNavigationTransitions({
   const switchCommunity = React.useCallback(
     async (id: string) => {
       const activeCommunityId = communities.activeCommunity?.id;
-      if (id === activeCommunityId) return;
+      if (id === activeCommunityId) {
+        return;
+      }
       if (!activeCommunityId) {
         communities.switchCommunity(id);
         return;
@@ -78,7 +82,9 @@ export function useCommunityNavigationTransitions({
       const fallback = communities.communities.find(
         (community) => community.id !== id,
       );
-      if (!fallback) return;
+      if (!fallback) {
+        return;
+      }
 
       await runCommunityViewTransition(async () => {
         saveActiveDestination();

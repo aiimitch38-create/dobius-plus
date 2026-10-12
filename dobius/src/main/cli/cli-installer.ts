@@ -18,6 +18,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { promisify } from 'node:util'
 import type { CliInstallMethod, CliInstallStatus } from '../../shared/cli-install-types'
 import { buildAppImageCliWrapper } from './appimage-cli-wrapper'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const execFileAsync = promisify(execFile)
 const DEFAULT_MAC_COMMAND_PATH = '/usr/local/bin/dobius'
@@ -80,7 +81,7 @@ export class CliInstaller {
   constructor(options: CliInstallerOptions = {}) {
     this.platform = options.platform ?? process.platform
     this.isPackaged = options.isPackaged ?? app.isPackaged
-    this.userDataPath = options.userDataPath ?? app.getPath('userData')
+    this.userDataPath = options.userDataPath ?? getUserDataRoot()
     this.resourcesPath = options.resourcesPath ?? process.resourcesPath
     this.execPathValue = options.execPath ?? process.execPath
     this.appPathValue = options.appPath ?? app.getAppPath()

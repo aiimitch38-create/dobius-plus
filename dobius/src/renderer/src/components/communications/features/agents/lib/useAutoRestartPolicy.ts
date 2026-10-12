@@ -51,7 +51,9 @@ export function useAutoRestartPolicy() {
   // No dependency array by design: the tick pattern re-runs this effect
   // every render so it reads live store state; all mutation is ref-local.
   React.useEffect(() => {
-    if (!agents) return;
+    if (!agents) {
+      return;
+    }
     const now = Date.now();
     const edges = edgesRef.current;
 
@@ -90,7 +92,9 @@ export function useAutoRestartPolicy() {
       }
 
       // decision === "fire"
-      if (inFlightRef.current.has(agent.pubkey)) continue;
+      if (inFlightRef.current.has(agent.pubkey)) {
+        continue;
+      }
       inFlightRef.current.add(agent.pubkey);
       // Consume the edge BEFORE the attempt: a failed restart badges only
       // until needsRestart cycles (edge-triggered debounce, no retry loops).
@@ -127,7 +131,9 @@ export function useAutoRestartPolicy() {
     // Drop edge state for agents that no longer exist.
     const known = new Set(agents.map((a) => a.pubkey));
     for (const pubkey of edges.keys()) {
-      if (!known.has(pubkey)) edges.delete(pubkey);
+      if (!known.has(pubkey)) {
+        edges.delete(pubkey);
+      }
     }
   });
 }

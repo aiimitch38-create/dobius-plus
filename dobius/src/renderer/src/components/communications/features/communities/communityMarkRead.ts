@@ -39,13 +39,13 @@ export function chunkChannelContexts(
   clientId: string,
   maxBytes: number = READ_STATE_MAX_PLAINTEXT_BYTES,
   maxSlots: number = OBSERVER_MAX_SLOTS,
-): Array<Record<string, number>> {
+): Record<string, number>[] {
   const encoder = new TextEncoder();
   const blobBytes = (contexts: Record<string, number>) =>
     encoder.encode(JSON.stringify({ v: 1, client_id: clientId, contexts }))
       .length;
 
-  const chunks: Array<Record<string, number>> = [];
+  const chunks: Record<string, number>[] = [];
   let current: Record<string, number> = {};
 
   for (const channelId of channelIds) {
@@ -87,7 +87,9 @@ export async function publishCommunityReadState(args: {
   const nowSeconds = args.nowSeconds ?? Math.floor(Date.now() / 1_000);
 
   const channels = await fetchObservedChannels(client, pubkey);
-  if (channels.length === 0) return;
+  if (channels.length === 0) {
+    return;
+  }
 
   const clientId = persistedId(`${OBSERVER_CLIENT_ID_KEY_PREFIX}:${pubkey}`);
   const chunks = chunkChannelContexts(

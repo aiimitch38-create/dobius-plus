@@ -31,8 +31,12 @@ export function mergePresenceUpdate(
   pubkey: string,
   status: PresenceStatus,
 ): PresenceLookup | undefined {
-  if (!old) return old;
-  if (old[pubkey] === status) return old;
+  if (!old) {
+    return old;
+  }
+  if (old[pubkey] === status) {
+    return old;
+  }
   return { ...old, [pubkey]: status };
 }
 

@@ -39,6 +39,8 @@ export type AsanaTask = {
   completed: boolean
   lane: AsanaLane
   assignee: string | null
+  // Gids of the Asana projects the task belongs to; used by the Auto Mode allowlist.
+  projectGids?: string[]
 }
 
 export type AsanaTasksSnapshot = {
@@ -47,6 +49,13 @@ export type AsanaTasksSnapshot = {
   localDone: string[]
   lastSync: number | null
   error: string | null
+}
+
+/** Result of a human re-queue; blockedGids is the refreshed list of tasks Auto Mode skips for good. */
+export type AsanaRequeueResult = {
+  ok: boolean
+  error: string | null
+  blockedGids: string[]
 }
 
 export const EMPTY_ASANA_SNAPSHOT: AsanaTasksSnapshot = {

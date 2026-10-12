@@ -24,7 +24,9 @@ export function useAgentLifecycleActions({
   stopManagedAgent: (pubkey: string) => Promise<unknown>;
 }) {
   const handleAgentPrimaryAction = React.useCallback(async () => {
-    if (!managedAgent) return;
+    if (!managedAgent) {
+      return;
+    }
 
     try {
       if (isManagedAgentActive(managedAgent)) {
@@ -64,7 +66,9 @@ export function useAgentLifecycleActions({
   ]);
 
   const handleAgentRestart = React.useCallback(async () => {
-    if (!managedAgent) return;
+    if (!managedAgent) {
+      return;
+    }
 
     try {
       await respawnManagedAgentWithRules({

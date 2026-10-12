@@ -33,7 +33,9 @@ const PEN_WIDTH_DEFAULT_CSS = 6;
 
 function drawStroke(ctx: CanvasRenderingContext2D, stroke: EditorStroke) {
   const [first, ...rest] = stroke.points;
-  if (!first) return;
+  if (!first) {
+    return;
+  }
   ctx.strokeStyle = stroke.color;
   ctx.fillStyle = stroke.color;
   ctx.lineWidth = stroke.width;
@@ -48,7 +50,9 @@ function drawStroke(ctx: CanvasRenderingContext2D, stroke: EditorStroke) {
   }
   ctx.beginPath();
   ctx.moveTo(first.x, first.y);
-  for (const point of rest) ctx.lineTo(point.x, point.y);
+  for (const point of rest) {
+    ctx.lineTo(point.x, point.y);
+  }
   ctx.stroke();
 }
 
@@ -96,14 +100,20 @@ async function renderAnnotatedPng(
     canvas.width = image.naturalWidth;
     canvas.height = image.naturalHeight;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas 2D context unavailable");
+    if (!ctx) {
+      throw new Error("Canvas 2D context unavailable");
+    }
     ctx.drawImage(image, 0, 0);
-    for (const stroke of strokes) drawStroke(ctx, stroke);
+    for (const stroke of strokes) {
+      drawStroke(ctx, stroke);
+    }
 
     const blob = await new Promise<Blob | null>((resolve) => {
       canvas.toBlob(resolve, "image/png");
     });
-    if (!blob) throw new Error("PNG encoding failed");
+    if (!blob) {
+      throw new Error("PNG encoding failed");
+    }
     return new Uint8Array(await blob.arrayBuffer());
   } finally {
     URL.revokeObjectURL(blobUrl);
@@ -189,15 +199,21 @@ export function ComposerImageEditor({
   React.useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
+    if (!canvas || !ctx) {
+      return;
+    }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const stroke of strokes) drawStroke(ctx, stroke);
+    for (const stroke of strokes) {
+      drawStroke(ctx, stroke);
+    }
   }, [strokes]);
 
   const undo = React.useCallback(() => {
     setHistory((prev) => {
-      const last = prev.strokes[prev.strokes.length - 1];
-      if (!last) return prev;
+      const last = prev.strokes.at(-1);
+      if (!last) {
+        return prev;
+      }
       return {
         strokes: prev.strokes.slice(0, -1),
         undone: [...prev.undone, last],
@@ -207,8 +223,10 @@ export function ComposerImageEditor({
 
   const redo = React.useCallback(() => {
     setHistory((prev) => {
-      const last = prev.undone[prev.undone.length - 1];
-      if (!last) return prev;
+      const last = prev.undone.at(-1);
+      if (!last) {
+        return prev;
+      }
       return {
         strokes: [...prev.strokes, last],
         undone: prev.undone.slice(0, -1),
@@ -222,7 +240,9 @@ export function ComposerImageEditor({
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
         event.key.toLowerCase() === "z";
-      if (!isModZ) return;
+      if (!isModZ) {
+        return;
+      }
       event.preventDefault();
       if (event.shiftKey) {
         redo();
@@ -237,9 +257,13 @@ export function ComposerImageEditor({
   const toNaturalPoint = React.useCallback(
     (event: React.PointerEvent<HTMLCanvasElement>): EditorPoint | null => {
       const canvas = canvasRef.current;
-      if (!canvas) return null;
+      if (!canvas) {
+        return null;
+      }
       const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return null;
+      if (rect.width === 0 || rect.height === 0) {
+        return null;
+      }
       return {
         x: ((event.clientX - rect.left) / rect.width) * canvas.width,
         y: ((event.clientY - rect.top) / rect.height) * canvas.height,
@@ -250,10 +274,14 @@ export function ComposerImageEditor({
 
   const handlePointerDown = React.useCallback(
     (event: React.PointerEvent<HTMLCanvasElement>) => {
-      if (event.button !== 0 || saving) return;
+      if (event.button !== 0 || saving) {
+        return;
+      }
       const canvas = canvasRef.current;
       const point = toNaturalPoint(event);
-      if (!canvas || !point) return;
+      if (!canvas || !point) {
+        return;
+      }
       canvas.setPointerCapture(event.pointerId);
       const rect = canvas.getBoundingClientRect();
       const stroke: EditorStroke = {
@@ -265,7 +293,9 @@ export function ComposerImageEditor({
       };
       activeStrokeRef.current = stroke;
       const ctx = canvas.getContext("2d");
-      if (ctx) drawStroke(ctx, stroke);
+      if (ctx) {
+        drawStroke(ctx, stroke);
+      }
     },
     [activeColor, activeWidthCss, saving, toNaturalPoint],
   );
@@ -274,27 +304,37 @@ export function ComposerImageEditor({
     (event: React.PointerEvent<HTMLCanvasElement>) => {
       const stroke = activeStrokeRef.current;
       const canvas = canvasRef.current;
-      if (!stroke || !canvas) return;
+      if (!stroke || !canvas) {
+        return;
+      }
       const point = toNaturalPoint(event);
-      if (!point) return;
-      const previous = stroke.points[stroke.points.length - 1];
+      if (!point) {
+        return;
+      }
+      const previous = stroke.points.at(-1);
       stroke.points.push(point);
       const ctx = canvas.getContext("2d");
-      if (ctx && previous) drawSegment(ctx, previous, point, stroke);
+      if (ctx && previous) {
+        drawSegment(ctx, previous, point, stroke);
+      }
     },
     [toNaturalPoint],
   );
 
   const commitActiveStroke = React.useCallback(() => {
     const stroke = activeStrokeRef.current;
-    if (!stroke) return;
+    if (!stroke) {
+      return;
+    }
     activeStrokeRef.current = null;
     // A new stroke invalidates the redo stack, matching editor conventions.
     setHistory((prev) => ({ strokes: [...prev.strokes, stroke], undone: [] }));
   }, []);
 
   const handleSave = React.useCallback(async () => {
-    if (saving || strokes.length === 0) return;
+    if (saving || strokes.length === 0) {
+      return;
+    }
     setSavingState(true);
     setSaveError(null);
     try {
@@ -319,7 +359,9 @@ export function ComposerImageEditor({
     (event: React.PointerEvent<HTMLCanvasElement>) => {
       const preview = brushPreviewRef.current;
       const rect = canvasRef.current?.getBoundingClientRect();
-      if (!preview || !rect) return;
+      if (!preview || !rect) {
+        return;
+      }
       preview.style.opacity = "1";
       preview.style.transform = `translate(${event.clientX - rect.left}px, ${event.clientY - rect.top}px) translate(-50%, -50%)`;
     },
@@ -328,7 +370,9 @@ export function ComposerImageEditor({
 
   const hideBrushPreview = React.useCallback(() => {
     const preview = brushPreviewRef.current;
-    if (preview) preview.style.opacity = "0";
+    if (preview) {
+      preview.style.opacity = "0";
+    }
   }, []);
 
   return (

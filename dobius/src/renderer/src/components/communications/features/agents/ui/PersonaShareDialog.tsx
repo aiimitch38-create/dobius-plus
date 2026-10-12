@@ -131,9 +131,15 @@ function buildSnapshotShareLevels(itemLabel: "Agent" | "Team") {
 }
 
 function formatRecipientAudience(names: readonly string[]): string {
-  if (names.length === 0) return "The people you selected";
-  if (names.length === 1) return names[0] ?? "The person you selected";
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  if (names.length === 0) {
+    return "The people you selected";
+  }
+  if (names.length === 1) {
+    return names[0] ?? "The person you selected";
+  }
+  if (names.length === 2) {
+    return `${names[0]} and ${names[1]}`;
+  }
   return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
 }
 
@@ -160,7 +166,9 @@ function MemoryShareConfirmation({
   return (
     <AlertDialog
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) onCancel();
+        if (!nextOpen) {
+          onCancel();
+        }
       }}
       open={pendingShare !== null}
     >
@@ -185,7 +193,9 @@ function MemoryShareConfirmation({
             <Button
               data-testid={`${testIdPrefix}-memory-confirm`}
               onClick={() => {
-                if (pendingShare) onConfirm(pendingShare);
+                if (pendingShare) {
+                  onConfirm(pendingShare);
+                }
               }}
               type="button"
             >
@@ -297,7 +307,9 @@ export function SnapshotShareDialog({
     (memoryLevel: SnapshotMemoryLevel) => {
       const effectiveMemoryLevel = hasMemoryOptions ? memoryLevel : "none";
       const cached = encodedSnapshotCacheRef.current.get(effectiveMemoryLevel);
-      if (cached) return cached;
+      if (cached) {
+        return cached;
+      }
 
       const pending = encodeSnapshot(effectiveMemoryLevel).catch((error) => {
         if (
@@ -326,7 +338,9 @@ export function SnapshotShareDialog({
   }, [open, onReset, snapshotSendController.reset]);
 
   React.useEffect(() => {
-    if (copyStatus !== "copied") return;
+    if (copyStatus !== "copied") {
+      return;
+    }
 
     const resetTimer = window.setTimeout(
       () => setCopyStatus("idle"),
@@ -352,7 +366,9 @@ export function SnapshotShareDialog({
   }
 
   async function copyLink(memoryLevel: SnapshotMemoryLevel) {
-    if (isActionPending) return;
+    if (isActionPending) {
+      return;
+    }
 
     setCopyStatus("copying");
     try {
@@ -373,7 +389,9 @@ export function SnapshotShareDialog({
   }
 
   async function sendToRecipients(memoryLevel: SnapshotMemoryLevel) {
-    if (isActionPending || selectedRecipients.length === 0) return;
+    if (isActionPending || selectedRecipients.length === 0) {
+      return;
+    }
 
     const sent = await snapshotSendController.beginSend(
       () => getEncodedSnapshot(memoryLevel),
@@ -399,7 +417,9 @@ export function SnapshotShareDialog({
     action: PendingMemoryShare["action"],
     memoryLevel: SnapshotMemoryLevel,
   ) {
-    if (isActionPending) return;
+    if (isActionPending) {
+      return;
+    }
 
     const effectiveMemoryLevel = hasMemoryOptions ? memoryLevel : "none";
     if (effectiveMemoryLevel !== "none") {
@@ -431,7 +451,9 @@ export function SnapshotShareDialog({
   }
 
   function handleDialogOpenChange(nextOpen: boolean) {
-    if (!nextOpen && isActionPending) return;
+    if (!nextOpen && isActionPending) {
+      return;
+    }
     onOpenChange(nextOpen);
   }
 

@@ -8,7 +8,7 @@ export type FeaturePlatform = "desktop" | "mobile";
  * membership signals "this needs gating." Anything not in the manifest is
  * treated as stable and renders unconditionally (fail-open).
  */
-export interface FeatureDefinition {
+export type FeatureDefinition = {
   id: string;
   name: string;
   description: string;
@@ -16,10 +16,10 @@ export interface FeatureDefinition {
   defaultEnabled?: boolean;
   /** If omitted, feature is available on all platforms */
   platforms?: FeaturePlatform[];
-}
+};
 
 /** The root manifest schema */
-export interface FeaturesManifest {
+export type FeaturesManifest = {
   version: number;
   features: FeatureDefinition[];
-}
+};

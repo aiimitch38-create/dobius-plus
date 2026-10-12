@@ -9,6 +9,7 @@ import { TERMINAL_METHODS } from './terminal'
 import { BROWSER_CORE_METHODS } from './browser-core'
 import { BROWSER_EXTRA_METHODS } from './browser-extras'
 import { BROWSER_SCREENCAST_METHODS } from './browser-screencast'
+import { DESKTOP_SCREEN_METHODS } from './desktop-screen'
 import { ORCHESTRATION_METHODS } from './orchestration'
 import { NOTIFICATION_METHODS } from './notifications'
 import { STATS_METHODS } from './stats'
@@ -70,6 +71,7 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...TERMINAL_METHODS,
   ...BROWSER_CORE_METHODS,
   ...BROWSER_SCREENCAST_METHODS,
+  ...DESKTOP_SCREEN_METHODS,
   ...BROWSER_EXTRA_METHODS,
   ...ORCHESTRATION_METHODS,
   ...NOTIFICATION_METHODS,

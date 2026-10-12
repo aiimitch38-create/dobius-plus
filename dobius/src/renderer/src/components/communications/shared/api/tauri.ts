@@ -52,10 +52,10 @@ type RawPresenceLookup = Record<string, PresenceStatus>;
 
 type RawAddChannelMembersResult = {
   added: string[];
-  errors: Array<{
+  errors: {
     pubkey: string;
     error: string;
-  }>;
+  }[];
 };
 
 type RawFeedItem = {

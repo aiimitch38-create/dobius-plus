@@ -1,5 +1,7 @@
 import { ipcMain } from 'electron'
-import type { AsanaConfig } from '../../shared/asana'
+import type { AsanaConfig, AsanaRequeueResult } from '../../shared/asana'
+import { ASANA_GID_RE } from '../../shared/asana'
+import { listBlockedTaskGids, requeueTask } from '../agents/asana-dispatch-ledger'
 import { getAsanaConfig, updateAsanaConfig } from '../asana/asana-config'
 import { clearAsanaToken, hasAsanaToken, setAsanaToken } from '../asana/asana-token-store'
 import {
@@ -43,6 +45,24 @@ export function registerAsanaHandlers(): void {
 
   ipcMain.removeHandler('asana:clearLocalDone')
   ipcMain.handle('asana:clearLocalDone', (_event, gid: string) => clearLocalDone(gid))
+
+  ipcMain.removeHandler('asana:listBlockedTasks')
+  ipcMain.handle('asana:listBlockedTasks', () => listBlockedTaskGids())
+
+  // Local ledger reset only (never writes to Asana). Renderer-only on purpose:
+  // re-queueing can start a new paid build, so agents get no RPC for it.
+  ipcMain.removeHandler('asana:requeueTask')
+  ipcMain.handle('asana:requeueTask', (_event, gid: unknown): AsanaRequeueResult => {
+    if (typeof gid !== 'string' || !ASANA_GID_RE.test(gid)) {
+      return { ok: false, error: 'Invalid Asana task id.', blockedGids: listBlockedTaskGids() }
+    }
+    const result = requeueTask(gid)
+    return {
+      ok: result.ok,
+      error: result.ok ? null : result.error,
+      blockedGids: listBlockedTaskGids()
+    }
+  })
 
   // The single Asana write. Reachable only from an explicit user click.
   ipcMain.removeHandler('asana:completeTask')

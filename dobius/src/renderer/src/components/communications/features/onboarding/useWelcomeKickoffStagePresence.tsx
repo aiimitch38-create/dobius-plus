@@ -44,9 +44,15 @@ export function useWelcomeKickoffStagePresence(
   const announcedChannelIdRef = React.useRef<string | null>(null);
   const channelId = activeChannel?.id ?? null;
   React.useEffect(() => {
-    if (!channelId || isTimelineLoading) return;
-    if (!isWelcomeChannel(activeChannel)) return;
-    if (announcedChannelIdRef.current === channelId) return;
+    if (!channelId || isTimelineLoading) {
+      return;
+    }
+    if (!isWelcomeChannel(activeChannel)) {
+      return;
+    }
+    if (announcedChannelIdRef.current === channelId) {
+      return;
+    }
     announcedChannelIdRef.current = channelId;
     notifyWelcomeSurfaceReady(channelId);
   }, [activeChannel, channelId, isTimelineLoading]);

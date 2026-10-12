@@ -48,7 +48,9 @@ function topLanguages(files: ProjectRepoFile[]) {
   const counts: Record<string, number> = {};
   for (const file of files) {
     const language = languageForPath(file.path);
-    if (language) counts[language] = (counts[language] ?? 0) + 1;
+    if (language) {
+      counts[language] = (counts[language] ?? 0) + 1;
+    }
   }
   return topLanguagesFromCounts(counts);
 }
@@ -95,7 +97,7 @@ function PeopleAvatars({
 export function LanguageChips({
   languages,
 }: {
-  languages: Array<[string, number]>;
+  languages: [string, number][];
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">

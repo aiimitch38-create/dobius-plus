@@ -27,6 +27,7 @@ import {
   setupAutoUpdater,
   dismissNudge
 } from '../updater'
+import { getUpdatePolicy } from '../updater-policy'
 import { scheduleHistoryGc } from '../terminal-history'
 import { hydrateLocalPtyRegistryAtBoot } from '../memory/hydrate-local-pty-registry'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
@@ -48,7 +49,6 @@ import {
 import { logStartupMilestone } from '../startup/startup-diagnostics'
 import { registerTearOffWindowHandlers } from './tear-off-window'
 import { registerFloatingPhoneWindowHandlers } from './floating-phone-window'
-import { registerFloatingOrbWindowHandlers } from './floating-orb-window'
 import { registerJarvisIpcHandlers } from '../jarvis/jarvis-ipc'
 
 const UPDATER_SETUP_FALLBACK_MS = 15_000
@@ -141,10 +141,9 @@ export function attachMainWindowServices(
   registerRemoteWorkspaceHandlers(store, () => mainWindow)
   registerTearOffWindowHandlers()
   registerFloatingPhoneWindowHandlers()
-  registerFloatingOrbWindowHandlers()
-  // Why here: Jarvis IPC needs the settings store and the orb window module,
-  // both of which are wired in this main-window attach pass.
-  registerJarvisIpcHandlers(store)
+  // Why here: Jarvis IPC needs the settings store, which is wired in this
+  // main-window attach pass.
+  registerJarvisIpcHandlers(store, mainWindow)
   registerFileDropRelay(mainWindow)
   // Why: setupAutoUpdater's first getAutoUpdater() call synchronously
   // require()s electron-updater in packaged builds — seconds on a cold
@@ -159,8 +158,9 @@ export function attachMainWindowServices(
     updaterSetupDone = true
     // Dobius+ fork: auto-updates disabled by default so this build never fetches
     // or installs from statusdigitalmarketing/dobius-plus's release feed (which would overwrite the
-    // rebrand). Re-enable only by launching with DOBIUS_ENABLE_DOBIUS_UPDATES=1.
-    if (process.env.DOBIUS_ENABLE_DOBIUS_UPDATES !== '1') {
+    // rebrand). The shared policy needs DOBIUS_ENABLE_DOBIUS_UPDATES=1 AND the
+    // disconnect switch off; the gated install script owns updates otherwise.
+    if (!getUpdatePolicy().enabled) {
       return
     }
     setupAutoUpdater(mainWindow, {

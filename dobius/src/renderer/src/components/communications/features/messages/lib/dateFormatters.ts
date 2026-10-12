@@ -115,10 +115,18 @@ export function formatThreadSummaryLastReplyTime(
 ): string {
   const diff = Math.max(0, nowSeconds - unixSeconds);
 
-  if (diff < 60) return "just now";
-  if (diff < 3_600) return formatAgo(Math.floor(diff / 60), "minute");
-  if (diff < 86_400) return formatAgo(Math.floor(diff / 3_600), "hour");
-  if (diff < 604_800) return formatAgo(Math.floor(diff / 86_400), "day");
+  if (diff < 60) {
+    return "just now";
+  }
+  if (diff < 3_600) {
+    return formatAgo(Math.floor(diff / 60), "minute");
+  }
+  if (diff < 86_400) {
+    return formatAgo(Math.floor(diff / 3_600), "hour");
+  }
+  if (diff < 604_800) {
+    return formatAgo(Math.floor(diff / 86_400), "day");
+  }
 
   return `on ${formatShortMonthDayOrdinal(unixSeconds)}`;
 }

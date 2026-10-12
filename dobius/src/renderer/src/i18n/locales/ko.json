@@ -1805,7 +1805,8 @@
         "a726967bd3": "닫기",
         "d5253b54af": "오류",
         "7ffc08506e": "확인",
-        "522df222b9": "스피너"
+        "522df222b9": "스피너",
+        "f528af4816": "업데이트는 설치 스크립트로 관리됩니다."
       },
       "WorktreeJumpPalette": {
         "ac037cfac2": "이동",
@@ -5327,7 +5328,8 @@
           "31fd7150cf": "업데이트 확인 중...",
           "3394d1f663": "확인 중",
           "d69a09b672": "업데이트는 시작 시 자동으로 확인됩니다.",
-          "7173352632": "idle"
+          "7173352632": "idle",
+          "9b7a940bd3": "업데이트는 설치 스크립트로 관리됩니다."
         },
         "GeneralWorkspaceSettingsSection": {
           "3d538a98f7": "워크스페이스의 열기 메뉴에서 사용 가능한 앱을 선택하세요.",
@@ -5649,7 +5651,10 @@
           "aa1263e881": "휴대폰 크기로 유지(기본값)",
           "6436e56546": "모바일 페어링을 위한 QR 코드",
           "1b1b70279a": "아직 페어링된 기기가 없습니다.",
-          "1592afcc7a": "아직 페어링된 기기가 없습니다. Dobius+ 모바일 앱으로 QR 코드를 스캔하세요."
+          "1592afcc7a": "아직 페어링된 기기가 없습니다. Dobius+ 모바일 앱으로 QR 코드를 스캔하세요.",
+          "listenerPendingRestart": "The phone listener is turned on but only starts the next time Dobius+ launches. Restart Dobius+ to pair a phone.",
+          "listenerOff": "The phone listener is off, so phones cannot pair or connect. Turn on Phone Listener above, then restart Dobius+.",
+          "listenerFailedToStart": "The phone listener was on at launch but failed to start (see logs). Restart Dobius+ to try again."
         },
         "MobileSettingsPane": {
           "9a3c280e49": "GitHub 릴리스",
@@ -5795,7 +5800,9 @@
           "fe904ac984": "익명의 사용 데이터 공유",
           "77410e0566": "개인 정보 보호 정책",
           "8bfdd23a88": "다음에 무엇을 빌드할지 알아내도록 도와주세요. Dobius+는 귀하가 사용하는 기능과 문제가 발생한 부분에 대한 개수를 익명으로 보냅니다.",
-          "afec8b03be": "ci"
+          "afec8b03be": "ci",
+          "transportUnavailable": "Not available in this build: Dobius+ sends no usage data, so this switch has no effect.",
+          "transportUnavailableDescription": "This build of Dobius+ does not send usage data."
         },
         "QuickCommandsPane": {
           "8764c6e9e4": "{{value0}} 제거",
@@ -7783,7 +7790,14 @@
               "671eb4173c": "휴대폰에서 terminals과 agents를 제어하세요.",
               "ffd52a96e4": "모바일",
               "1de96ec8a6": "Dobius+ Mobile 버튼 표시",
-              "682293cadf": "왼쪽 사이드바 상단에 Dobius+ Mobile 버튼을 표시합니다."
+              "682293cadf": "왼쪽 사이드바 상단에 Dobius+ Mobile 버튼을 표시합니다.",
+              "listenerTitle": "Phone Listener (takes effect on next launch)",
+              "listenerDescription": "Lets phones on your local network connect to Dobius+. Changes take effect the next time Dobius+ starts.",
+              "listenerKeywordListener": "listener",
+              "listenerKeywordNetwork": "local network",
+              "listenerKeywordLan": "lan",
+              "listenerKeywordPhone": "phone",
+              "listenerKeywordWebsocket": "websocket"
             }
           }
         },
@@ -8868,7 +8882,8 @@
           "testButton": "Test",
           "statusLine": "Status: {{state}} · last message row: {{rowid}} · sent in last minute: {{outbound}}",
           "statusRunning": "running",
-          "statusStopped": "stopped"
+          "statusStopped": "stopped",
+          "configUnreadable": "imessage-bridge.json can't be read ({{detail}}), so changes are not saved; repair or remove it"
         },
         "imessage": {
           "bridge": {
@@ -8903,7 +8918,9 @@
           "buildAgentLabel": "Build agent",
           "buildAgentDescription": "Terminal agent used when dispatch_build creates a build worktree.",
           "intervalLabel": "Poll interval",
-          "intervalDescription": "Minutes between Asana refreshes while Auto Mode is enabled."
+          "intervalDescription": "Minutes between Asana refreshes while Auto Mode is enabled.",
+          "autoModeBlockedPaused": "Blocked: crew paused. Resume the crew on the Agents page to run Auto Mode.",
+          "autoModeBlockedUnreadable": "Blocked: crew control file could not be read ({{filePath}}). Fix or remove it, then resume the crew."
         },
         "asana": {
           "search": {
@@ -8955,6 +8972,10 @@
           "remove": "Remove",
           "configured": "A key is stored, encrypted on this machine. It is never shown again.",
           "missing": "No key stored yet. This provider will fail to launch until one is added."
+        },
+        "agent-sandbox-copy": {
+          "title": "에이전트 샌드박스(권장)",
+          "description": "Claude 에이전트가 실행하는 명령은 에이전트의 작업 폴더, 해당 git 저장소, 임시 폴더, 패키지 캐시에만 쓸 수 있으며 다른 에이전트의 메모리나 저장된 자격 증명을 읽을 수 없습니다. 끄면 에이전트가 홈 폴더 어디에나 쓸 수 있습니다. 훅, 설정, 셸 시작 파일은 어느 경우에도 보호됩니다."
         }
       },
       "right": {
@@ -12223,7 +12244,12 @@
           "a21f6c33ad": "자동화 소스를 새로 고쳤습니다.",
           "53f06f0ad5": "소스 다시 시도",
           "pendingAutomationMissing": "자동화를 더 이상 사용할 수 없습니다.",
-          "pendingAutomationRunMissing": "실행 기록을 더 이상 사용할 수 없습니다."
+          "pendingAutomationRunMissing": "실행 기록을 더 이상 사용할 수 없습니다.",
+          "pauseFailed": "Failed to pause automation.",
+          "resumeFailed": "Failed to resume automation.",
+          "deleteFailed": "Failed to delete automation.",
+          "runNowFailed": "Failed to run automation.",
+          "runNowNotStarted": "Automation run did not start."
         },
         "CreateFromPicker": {
           "f061f49e3f": "repo 브랜치 검색...",
@@ -12585,7 +12611,9 @@
           "notConnected": "Connect Asana in Settings → Automation to see your build and review lanes.",
           "title": "Tasks",
           "sync": "Sync",
-          "empty": "Nothing here."
+          "empty": "Nothing here.",
+          "requeue": "Re-queue",
+          "confirmRequeue": "Re-queue this task for Asana Auto Mode? It will be triaged again and may start a new build."
         },
         "PromptsPanel": {
           "title": "Prompts",

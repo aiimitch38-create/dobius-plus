@@ -2,13 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { ChildProcess } from 'node:child_process'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { Options, Query, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
-import {
-  CHANNEL_AGENT_BASELINE_TOOLS,
-  type AgentRun,
-  type AgentRunContext,
-  type AgentRunSource,
-  type CustomAgent
-} from '../../shared/agents'
+import type { AgentRun, AgentRunContext, AgentRunSource, CustomAgent } from '../../shared/agents'
+import type { AsanaLane } from '../../shared/asana'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
 import { resolveClaudeCommand } from '../codex-cli/command'
 import { getAgent, getAgentSessionForKey, updateAgentSession } from './agents-store'
@@ -24,16 +19,38 @@ import {
   setDecisionBypassRunHandler
 } from './agent-decision-queue'
 import { buildAgentHardRailHooks } from './agent-hard-rails'
+import { resolveAgentRunSandboxPolicy } from './agent-sandbox-context'
+import {
+  createHeadlessCanUseTool,
+  forgetPermissionDenials,
+  recordStreamPermissionDenials,
+  withPermissionDenialNote
+} from './agent-headless-permissions'
+import { assertExecutionAdmitted, type ExecutionOrigin } from './execution-gate'
+import { claimRunSession, currentRunSessionKey, releaseRunSession } from './agent-session-lease'
 import { appendAgentRunNotification } from './agent-notification-store'
+import {
+  appendRunNotificationSafely,
+  guardRunEndCallbacks,
+  type GuardedRunEndCallbacks
+} from './agent-run-end-callbacks'
 import { appendRunProgress } from './agent-run-progress-log'
 import { buildRunEnv, currentGitBranch, resolveAgentRunCwd } from './agent-runner-environment'
-import { buildDobiusRunMcpServer, withDobiusToolAllowRule } from './agent-runner-dobius-tools'
+import { scheduleSessionWorkspaceBriefRefresh } from './session-workspace-brief'
+import {
+  buildDobiusRunMcpServer,
+  buildProfileAllowedTools,
+  builtInToolsFor,
+  resolveAgentRunProfile,
+  type AgentRunProfileId
+} from './agent-runner-dobius-tools'
 import { buildSystemPrompt } from './agent-run-prompt'
 import {
   getDefaultPrepareCodexLaunch,
   type PrepareCodexLaunch
 } from './default-codex-launch'
 import { startCodexAgentProcess } from './codex-agent-execution'
+import { assertCodexRunSupported, DEFAULT_CODEX_MAX_STEPS } from './codex-run-policy'
 import {
   addStoredAgentRun,
   getStoredAgentRun,
@@ -91,7 +108,19 @@ type AgentRunOptions = {
   /** Per-run model override. Absent = the agent's configured model. */
   model?: string
   permissionMode?: Options['permissionMode']
+  /**
+   * Explicit tool list for this run. When given it also bounds which built-in
+   * tools are available (SDK `tools`); omitted = the agent's allowlist with the
+   * SDK's default built-in set.
+   */
   allowedTools?: string[]
+  /** Tool profile; defaults to `source`. See agent-runner-dobius-tools.ts. */
+  profile?: AgentRunProfileId
+  /** Set when the Voice Conductor started this run; it inherits the conductor's hard rails. */
+  spawnedBy?: 'voice-conductor'
+  /** Trusted Asana lane and task for 'asana' runs; only a build-lane task grants dispatch_build. */
+  asanaLane?: AsanaLane
+  asanaTaskGid?: string
   outputFormat?: Options['outputFormat']
   resume?: boolean
   onResult?: (message: SDKResultMessage) => void
@@ -99,6 +128,11 @@ type AgentRunOptions = {
   // Why: onResult only fires when the SDK emits a result message — abnormal EOF
   // and thrown-stream errors need their own hook so channel replies never go silent.
   onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
+  // Fires once, after the run's session lease and slot are released: a caller
+  // that starts the next turn from onResult would find the session still busy.
+  onSettled?: () => void
+  // Omitted = autonomous, so a new caller cannot bypass Pause crew by forgetting it.
+  origin?: ExecutionOrigin
 }
 
 type LiveRun = {
@@ -128,6 +162,15 @@ function updateRun(runId: string, updates: Partial<AgentRun>): void {
   }
 }
 
+// Why: keyed by the run's claim, not the stored run: history is display state,
+// and a reset since the run started must not be undone by it.
+function recordRunSession(agentId: string, runId: string, sessionId: string, cwd: string): void {
+  const sessionKey = currentRunSessionKey(runId)
+  if (sessionKey !== null) {
+    updateAgentSession(agentId, { lastSessionId: sessionId, lastSessionCwd: cwd, sessionKey })
+  }
+}
+
 async function consumeRun(
   runId: string,
   agent: CustomAgent,
@@ -135,9 +178,9 @@ async function consumeRun(
   options: Options,
   prompt: string,
   resolvedCwd: string,
-  onResult: ((message: SDKResultMessage) => void) | undefined,
-  onRunEnded: ((status: 'error' | 'cancelled', summary: string) => void) | undefined
+  callbacks: GuardedRunEndCallbacks
 ): Promise<void> {
+  const { onResult, onRunEnded } = callbacks
   let sawResult = false
   let sawSystemInit = false
   let activeQuery = sdkQuery
@@ -147,23 +190,16 @@ async function consumeRun(
     for await (const message of activeQuery) {
       if (message.type === 'system' && message.subtype === 'init') {
         sawSystemInit = true
-        updateAgentSession(agent.id, {
-          lastSessionId: message.session_id,
-          lastSessionCwd: resolvedCwd,
-          sessionKey: getStoredAgentRun(runId)?.sessionKey
-        })
+        recordRunSession(agent.id, runId, message.session_id, resolvedCwd)
       }
       for (const event of reduceMessage(message, runId, agent.id)) {
         broadcastRunEvent(event)
       }
+      recordStreamPermissionDenials({ runId, agentId: agent.id }, message)
       if (message.type === 'result') {
         sawResult = true
-        onResult?.(message)
-        updateAgentSession(agent.id, {
-          lastSessionId: message.session_id,
-          lastSessionCwd: resolvedCwd,
-          sessionKey: getStoredAgentRun(runId)?.sessionKey
-        })
+        onResult(message)
+        recordRunSession(agent.id, runId, message.session_id, resolvedCwd)
         // Why: a result already in flight when stopAgentRun fires must not flip a
         // cancelled run back to success/error.
         const current = getStoredAgentRun(runId)
@@ -171,13 +207,16 @@ async function consumeRun(
           updateRun(runId, {
             endedAt: Date.now(),
             status: message.subtype === 'success' ? 'success' : 'error',
-            summary: message.subtype === 'success' ? message.result : message.errors.join('\n'),
+            summary: withPermissionDenialNote(
+              runId,
+              message.subtype === 'success' ? message.result : message.errors.join('\n')
+            ),
             numTurns: message.num_turns,
             costUsd: message.total_cost_usd
           })
           const finishedRun = getStoredAgentRun(runId)
           if (finishedRun) {
-            appendAgentRunNotification(agent, finishedRun)
+            appendRunNotificationSafely(agent, finishedRun)
           }
         }
       }
@@ -189,13 +228,17 @@ async function consumeRun(
       updateRun(runId, {
         endedAt: Date.now(),
         status: 'error',
-        summary: 'Run ended unexpectedly without a result'
+        summary: withPermissionDenialNote(runId, 'Run ended unexpectedly without a result')
       })
       const finishedRun = getStoredAgentRun(runId)
       if (finishedRun) {
-        appendAgentRunNotification(agent, finishedRun)
+        appendRunNotificationSafely(agent, finishedRun)
       }
-      onRunEnded?.('error', 'Run ended unexpectedly without a result')
+      onRunEnded('error', 'Run ended unexpectedly without a result')
+    } else if (!sawResult && run?.status === 'cancelled') {
+      // Why: a stop can end the stream cleanly instead of throwing; callers
+      // holding a slot until the run ends must still hear about it.
+      onRunEnded('cancelled', 'stopped by user')
     }
   } catch (error) {
     if (options.resume && !sawSystemInit && !resumeRetriedFresh) {
@@ -220,23 +263,26 @@ async function consumeRun(
         retryOptions,
         prompt,
         resolvedCwd,
-        onResult,
-        onRunEnded
+        callbacks
       )
       return
     }
     const message = error instanceof Error ? error.message : String(error)
     const run = getStoredAgentRun(runId)
     if (run?.status !== 'cancelled') {
-      updateRun(runId, { endedAt: Date.now(), status: 'error', summary: message })
+      updateRun(runId, {
+        endedAt: Date.now(),
+        status: 'error',
+        summary: withPermissionDenialNote(runId, message)
+      })
       const finishedRun = getStoredAgentRun(runId)
       if (finishedRun) {
-        appendAgentRunNotification(agent, finishedRun)
+        appendRunNotificationSafely(agent, finishedRun)
       }
       broadcastRunEvent({ ...eventBase(runId, agent.id), kind: 'error', text: message })
-      onRunEnded?.('error', message)
+      onRunEnded('error', message)
     } else {
-      onRunEnded?.('cancelled', 'stopped by user')
+      onRunEnded('cancelled', 'stopped by user')
     }
   } finally {
     // The retry invocation owns finalization when we delegated to it.
@@ -247,9 +293,12 @@ async function consumeRun(
         appendRunProgress(agent.id, finalRun.status, finalRun.summary)
       }
       liveRuns.delete(runId)
+      forgetPermissionDenials(runId)
+      releaseRunSession(runId)
       releaseAgentRun(agent.id)
       reservedRuns -= 1
       broadcastRunsChanged()
+      callbacks.onSettled()
     }
   }
 }
@@ -262,6 +311,8 @@ export async function startAgentRun(args: {
   prepareCodexLaunch?: PrepareCodexLaunch
   options?: AgentRunOptions
 }): Promise<string> {
+  const origin = args.options?.origin ?? 'agent-run'
+  assertExecutionAdmitted(origin)
   if (reservedRuns >= MAX_CONCURRENT_RUNS) {
     throw new Error('Too many concurrent agent runs')
   }
@@ -273,20 +324,19 @@ export async function startAgentRun(args: {
   if (!prompt) {
     throw new Error('Prompt is required')
   }
+  if (agent.engine === 'codex') {
+    // Before any reservation or spawn: Codex cannot enforce restricted profiles.
+    assertCodexRunSupported(args.options)
+  }
   reservedRuns += 1
   reserveAgentRun(agent.id)
   const sessionKey = args.options?.sessionKey ?? 'default'
+  const runId = randomUUID()
   // A live run on the SAME (agent, sessionKey) means that conversation thread
   // is mid-turn: the new run must not resume its session (two writers on one
   // transcript) and starts fresh. Different sessionKeys (other channels) run
-  // in parallel, each resuming its own thread.
-  const sessionKeyBusy = listStoredAgentRuns().some(
-    (run) =>
-      run.status === 'running' &&
-      run.agentId === agent.id &&
-      (run.sessionKey ?? 'default') === sessionKey
-  )
-  const runId = randomUUID()
+  // in parallel, each resuming its own thread. Claimed before any await.
+  const sessionKeyBusy = !claimRunSession(runId, agent.id, sessionKey)
   let runAdded = false
   try {
     if (agent.engine === 'codex') {
@@ -317,15 +367,20 @@ export async function startAgentRun(args: {
         prompt,
         resolvedCwd,
         codexHome,
-        onRunEnded: args.options?.onRunEnded
+        model: args.options?.model,
+        maxSteps: args.options?.maxTurns ?? DEFAULT_CODEX_MAX_STEPS,
+        callbacks: guardRunEndCallbacks(args.options)
       })
       return runId
     }
     const preparation = await args.prepareClaudeLaunch(
       agent.accountId ? { accountId: agent.accountId } : undefined
     )
+    // Why: the crew can be paused while auth preparation is awaited.
+    assertExecutionAdmitted(origin)
     const abortController = new AbortController()
     const resolvedCwd = resolveAgentRunCwd(args.cwd ?? agent.cwd)
+    void scheduleSessionWorkspaceBriefRefresh(resolvedCwd)
     const branch = currentGitBranch(resolvedCwd)
     const systemPrompt = buildSystemPrompt(agent)
     const keyedSession = getAgentSessionForKey(agent, sessionKey)
@@ -338,14 +393,16 @@ export async function startAgentRun(args: {
         : undefined
     const permissionMode =
       args.options?.permissionMode ?? (agent.bypassPermissions ? 'bypassPermissions' : 'default')
+    const profile = resolveAgentRunProfile({
+      source: args.options?.source ?? 'manual',
+      profile: args.options?.profile,
+      asanaLane: args.options?.asanaLane,
+      asanaTaskGid: args.options?.asanaTaskGid
+    })
     const configuredTools = args.options?.allowedTools ?? agent.allowedTools
-    // Channel runs get the working baseline unioned in — see
+    // Channel-profile runs get the working baseline unioned in — see
     // CHANNEL_AGENT_BASELINE_TOOLS for why old agents need it.
-    const sourcedTools =
-      (args.options?.source ?? 'manual') === 'channel'
-        ? [...new Set([...configuredTools, ...CHANNEL_AGENT_BASELINE_TOOLS])]
-        : configuredTools
-    const allowedTools = withDobiusToolAllowRule(sourcedTools)
+    const allowedTools = buildProfileAllowedTools(profile, configuredTools)
     const isChannelRun = (args.options?.source ?? 'manual') === 'channel'
     const options: Options = {
       systemPrompt: systemPrompt || undefined,
@@ -353,7 +410,7 @@ export async function startAgentRun(args: {
       cwd: resolvedCwd,
       allowedTools,
       skills: agent.skills.length > 0 ? agent.skills : undefined,
-      tools: args.options?.allowedTools,
+      tools: builtInToolsFor(args.options?.allowedTools),
       permissionMode,
       allowDangerouslySkipPermissions: permissionMode === 'bypassPermissions' ? true : undefined,
       resume,
@@ -379,22 +436,43 @@ export async function startAgentRun(args: {
     // be spawned as a real file. Resolve the user's installed Claude CLI so native
     // Communications agents reuse the same OAuth account as Dobius terminals.
     options.pathToClaudeCodeExecutable = resolveClaudeCommand()
-    options.mcpServers = {
-      dobius: buildDobiusRunMcpServer(agent.id, runId, args.options?.source)
-    }
+    options.mcpServers =
+      profile.dobiusTools.length > 0
+        ? { dobius: buildDobiusRunMcpServer(agent.id, runId, profile) }
+        : {}
     // Not strict: agents should see the user's configured MCP servers
     // (Playwright browsing, connectors) alongside the per-run dobius server.
     // Access is still gated per-agent by allowedTools — an MCP server being
     // loaded does not allow its tools unless the agent's allowlist names them.
     options.strictMcpConfig = false
-    options.hooks = buildAgentHardRailHooks({ agentId: agent.id })
-    if (permissionMode === 'default' && (args.options?.source ?? 'manual') === 'manual') {
+    options.hooks = buildAgentHardRailHooks({ agentId: agent.id, profile: profile.id, spawnedBy: args.options?.spawnedBy })
+    // Kernel-enforced file and credential limits for Bash, plus matching deny
+    // rules for the file tools; the rails above stay as defense in depth.
+    // Sets options.sandbox and options.disallowedTools.
+    Object.assign(options, resolveAgentRunSandboxPolicy({
+      agentId: agent.id,
+      cwd: resolvedCwd,
+      claudeConfigDir: preparation.configDir,
+      claudeExecutable: options.pathToClaudeCodeExecutable
+    }))
+    const source = args.options?.source ?? 'manual'
+    // Only a person who pressed Run on the Agents page watches the decision
+    // queue. Every other run (heartbeat, Asana, iMessage, workflows, RPC/CLI,
+    // even with source 'manual') is headless: its prompts are denied at once
+    // and recorded on the run, never left waiting or silently refused.
+    const attended = source === 'manual' && origin === 'agents-page'
+    if (attended && permissionMode === 'default') {
       options.canUseTool = createAgentCanUseTool({
         runId,
         agentId: agent.id,
         cwd: resolvedCwd,
-        branch
+        branch,
+        // The CLI only accepts a switch into bypass for sessions launched with
+        // --allow-dangerously-skip-permissions.
+        bypassRunSupported: options.allowDangerouslySkipPermissions === true
       })
+    } else if (!attended) {
+      options.canUseTool = createHeadlessCanUseTool({ runId, agentId: agent.id, source })
     }
     const run: AgentRun = {
       id: runId,
@@ -419,13 +497,13 @@ export async function startAgentRun(args: {
       options,
       prompt,
       resolvedCwd,
-      args.options?.onResult,
-      args.options?.onRunEnded
+      guardRunEndCallbacks(args.options)
     )
     return runId
   } catch (error) {
     reservedRuns -= 1
     releaseAgentRun(agent.id)
+    releaseRunSession(runId)
     liveRuns.delete(runId)
     const message = error instanceof Error ? error.message : String(error)
     if (runAdded) {
@@ -442,13 +520,17 @@ function startCodexRun(args: {
   prompt: string
   resolvedCwd: string
   codexHome: string | null
-  onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
+  model?: string
+  maxSteps: number
+  callbacks: GuardedRunEndCallbacks
 }): void {
   const child = startCodexAgentProcess({
     agent: args.agent,
     prompt: args.prompt,
     cwd: args.resolvedCwd,
     codexHome: args.codexHome,
+    model: args.model,
+    maxSteps: args.maxSteps,
     isCancelled: () => getStoredAgentRun(args.runId)?.status === 'cancelled',
     onAssistantText: (text) => {
       broadcastRunEvent({
@@ -466,7 +548,7 @@ function finishCodexRun(
   args: {
     runId: string
     agent: CustomAgent
-    onRunEnded?: (status: 'error' | 'cancelled', summary: string) => void
+    callbacks: GuardedRunEndCallbacks
   },
   status: 'success' | 'error' | 'cancelled',
   summary: string
@@ -478,15 +560,17 @@ function finishCodexRun(
   updateRun(args.runId, { endedAt: Date.now(), status, summary })
   const run = getStoredAgentRun(args.runId)
   if (run) {
-    appendAgentRunNotification(args.agent, run)
+    appendRunNotificationSafely(args.agent, run)
   }
   if (status !== 'success') {
-    args.onRunEnded?.(status, summary)
+    args.callbacks.onRunEnded(status, summary)
   }
   appendRunProgress(args.agent.id, status, summary)
+  releaseRunSession(args.runId)
   releaseAgentRun(args.agent.id)
   reservedRuns -= 1
   broadcastRunsChanged()
+  args.callbacks.onSettled()
 }
 
 export async function stopAgentRun(runId: string): Promise<void> {

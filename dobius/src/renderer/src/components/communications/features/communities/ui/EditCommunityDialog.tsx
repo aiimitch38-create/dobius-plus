@@ -139,7 +139,7 @@ export function EditCommunityDialog({
         <DialogHeader>
           <DialogTitle>Edit Community</DialogTitle>
           <DialogDescription>
-            Update this community's name or relay URL.
+            Update this community&apos;s name or relay URL.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -230,7 +230,7 @@ export function EditCommunityDialog({
               <p className="text-xs text-destructive">{reposDirError}</p>
             ) : null}
             <p className="text-xs text-muted-foreground">
-              Point the agent's <code>REPOS</code> directory at an existing
+              Point the agent&apos;s <code>REPOS</code> directory at an existing
               folder so agents work in your local checkouts. Leave blank to use
               the default location.
             </p>

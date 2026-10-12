@@ -1,6 +1,8 @@
 const TERMINAL_STREAM_KIND = 0x74
 const TERMINAL_STREAM_VERSION = 1
 const HEADER_BYTES = 16
+export const TERMINAL_SNAPSHOT_TOO_LARGE_MESSAGE =
+  'Terminal view could not be restored. New output will still appear.'
 
 export enum TerminalStreamOpcode {
   Output = 1,

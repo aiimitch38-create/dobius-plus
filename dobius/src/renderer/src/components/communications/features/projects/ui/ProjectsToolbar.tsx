@@ -55,10 +55,10 @@ export function ProjectsToolbar({
   filter,
   onFilterChange,
 }: ProjectsToolbarProps) {
-  const filterOptions: Array<{
+  const filterOptions: {
     label: string;
     value: ProjectsFilter;
-  }> = [
+  }[] = [
     { label: "Overview", value: "all" },
     { label: "Repositories", value: "repositories" },
     { label: "Pull Requests", value: "prs" },

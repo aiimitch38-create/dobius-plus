@@ -12,7 +12,9 @@ function maskRange(
   end: number,
 ): void {
   for (let index = start; index < end; index += 1) {
-    if (text[index] !== "\n" && text[index] !== "\r") chars[index] = " ";
+    if (text[index] !== "\n" && text[index] !== "\r") {
+      chars[index] = " ";
+    }
   }
 }
 
@@ -22,7 +24,7 @@ function maskRange(
  */
 function maskMarkdownCode(text: string): string {
   const chars = text.split("");
-  const lines: Array<{ start: number; end: number; content: string }> = [];
+  const lines: { start: number; end: number; content: string }[] = [];
 
   let lineStart = 0;
   while (lineStart < text.length) {
@@ -39,7 +41,9 @@ function maskMarkdownCode(text: string): string {
       end: lineEnd,
       content: text.slice(lineStart, lineEnd),
     });
-    if (text[lineEnd] === "\r" && text[lineEnd + 1] === "\n") lineEnd += 1;
+    if (text[lineEnd] === "\r" && text[lineEnd + 1] === "\n") {
+      lineEnd += 1;
+    }
     lineStart = lineEnd + 1;
   }
 
@@ -122,7 +126,9 @@ function maskMarkdownCode(text: string): string {
       closer = closerEnd;
     }
 
-    if (closer >= text.length) index = openerEnd;
+    if (closer >= text.length) {
+      index = openerEnd;
+    }
   }
 
   return chars.join("");

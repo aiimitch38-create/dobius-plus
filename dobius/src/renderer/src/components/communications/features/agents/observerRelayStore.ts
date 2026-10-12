@@ -85,7 +85,9 @@ export function getLatestLiveSessionId(
   agentPubkey: string | null | undefined,
   channelId: string | null | undefined,
 ): string | null {
-  if (!agentPubkey) return null;
+  if (!agentPubkey) {
+    return null;
+  }
   return (
     latestLiveSessionByAgentChannel.get(
       liveSessionKey(agentPubkey, channelId ?? null),
@@ -215,7 +217,7 @@ function appendAgentEvent(agentPubkey: string, event: ObserverEvent) {
   // Determine whether the new event landed at the end of the sorted array.
   // If it did (common case), we can incrementally process just this event.
   // If not (out-of-order arrival) or if we trimmed, fall back to full rebuild.
-  const eventAtEnd = sorted[sorted.length - 1] === event;
+  const eventAtEnd = sorted.at(-1) === event;
 
   if (eventAtEnd && !trimmed) {
     // Fast path: incremental update
@@ -295,7 +297,9 @@ export function getArchivedChannelEvents(
   agentPubkey: string | null | undefined,
   channelId: string | null | undefined,
 ): ObserverEvent[] {
-  if (!agentPubkey || !channelId) return EMPTY_EVENTS;
+  if (!agentPubkey || !channelId) {
+    return EMPTY_EVENTS;
+  }
   return (
     archiveEventsByChannel.get(archiveChannelKey(agentPubkey, channelId)) ??
     EMPTY_EVENTS
@@ -686,7 +690,9 @@ export async function ingestArchivedObserverEvents(
           parsed.channelId,
           parsed,
         );
-        if (added) archiveChanged = true;
+        if (added) {
+          archiveChanged = true;
+        }
       } else {
         // Live path already calls notifyListeners() inside appendAgentEvent.
         appendAgentEvent(agentPubkey, parsed);

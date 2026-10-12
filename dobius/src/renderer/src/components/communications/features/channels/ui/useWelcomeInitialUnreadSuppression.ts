@@ -71,7 +71,9 @@ export function useWelcomeInitialUnreadSuppression(
 
   const cancelPendingClear = React.useCallback((channelId: string) => {
     const timerId = clearTimersRef.current.get(channelId);
-    if (timerId === undefined) return;
+    if (timerId === undefined) {
+      return;
+    }
 
     window.clearTimeout(timerId);
     clearTimersRef.current.delete(channelId);
@@ -79,7 +81,9 @@ export function useWelcomeInitialUnreadSuppression(
 
   React.useEffect(() => {
     const channelId = activeChannelId;
-    if (!channelId) return;
+    if (!channelId) {
+      return;
+    }
 
     cancelPendingClear(channelId);
 
@@ -91,12 +95,16 @@ export function useWelcomeInitialUnreadSuppression(
     }
 
     return () => {
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current) {
+        return;
+      }
 
       cancelPendingClear(channelId);
       const timerId = window.setTimeout(() => {
         clearTimersRef.current.delete(channelId);
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current) {
+          return;
+        }
 
         setSuppressedChannelIds((current) =>
           removeWelcomeUnreadSuppressedChannelId(current, channelId),

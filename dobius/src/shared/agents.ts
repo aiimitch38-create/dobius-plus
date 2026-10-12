@@ -137,6 +137,13 @@ export type AgentRunOutboxItem = {
   createdAt: number
 }
 
+/**
+ * Session key for iMessage `@Agent` runs. Their own key, never 'default': a
+ * phone-driven run must not overwrite (or be resumed from) the session a
+ * manual run continues, and it is not a Communications channel id.
+ */
+export const IMESSAGE_SESSION_KEY = 'imessage'
+
 export type AgentRun = {
   id: string
   agentId: string
@@ -151,6 +158,16 @@ export type AgentRun = {
   summary?: string
   numTurns?: number
   costUsd?: number
+  /** Tool requests refused because nobody could approve them (headless runs). */
+  permissionDenials?: AgentRunPermissionDenial[]
+}
+
+export type AgentRunPermissionDenial = {
+  toolName: string
+  /** SDK tool_use id; dedupes the canUseTool, stream and result reports of one denial. */
+  toolUseId?: string
+  reason: string
+  at: number
 }
 
 export type PendingAgentDecision = {
@@ -165,6 +182,8 @@ export type PendingAgentDecision = {
   cwd: string
   branch?: string
   createdAt: number
+  /** Present when "Bypass run" cannot work for this run; the UI disables it with this text. */
+  bypassRunUnavailableReason?: string
 }
 
 export type AgentDecisionResolutionAction =
@@ -205,6 +224,15 @@ export type AgentNotificationsSnapshot = {
   entries: AgentNotificationEntry[]
   lastReadTs: number
   unreadCount: number
+}
+
+// Effective crew pause state as the gate sees it. `detail` is an errno code or
+// parse problem, never file contents.
+export type AgentsExecutionState = {
+  paused: boolean
+  status: 'ok' | 'missing' | 'unreadable'
+  detail: string | null
+  filePath: string
 }
 
 export type BriefingItem = {

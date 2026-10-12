@@ -11,15 +11,25 @@ import type { ClaudeUsageStore } from '../claude-usage/store'
 import type { CodexUsageStore } from '../codex-usage/store'
 import { runAutomationPrecheck } from './precheck-runner'
 import { resolveAutomationRunTarget, type AutomationRunTargetResult } from './run-target-resolution'
-import { collectAutomationRunUsage } from './run-usage-collection'
 import type { HeadlessAutomationDispatcher } from './headless-dispatch'
-import { clearAutomationDispatchTokens, createAutomationDispatchToken } from './dispatch-tokens'
+import { createAutomationDispatchToken } from './dispatch-tokens'
 import {
+  buildUnavailablePrecheckResult,
   didAutomationPrecheckPass,
   formatAutomationPrecheckFailure
 } from '../../shared/automation-precheck'
-import { deliverAutomationRunNotification } from './run-notification-delivery'
-import { isFinalRunStatus } from './run-final-status'
+import {
+  finalizeAutomationRunResult,
+  markInterruptedAutomationRuns,
+  recordAutomationEvaluationFailure,
+  reportAutomationBackgroundFailure,
+  settleHeadlessCompletion
+} from './run-lifecycle'
+import {
+  checkExecutionAdmission,
+  ExecutionBlockedError,
+  isExecutionBlockedError
+} from '../agents/execution-gate'
 
 const DEFAULT_TICK_MS = 60 * 1000
 
@@ -51,6 +61,9 @@ export class AutomationService {
     this.codexUsage = opts.codexUsage ?? null
     this.allowRemoteHostScheduling = opts.allowRemoteHostScheduling ?? false
     this.headlessDispatcher = opts.headlessDispatcher ?? null
+    // Why: constructed once per process, before any dispatch, so every
+    // 'dispatching' run here was left by a previous process.
+    markInterruptedAutomationRuns(store)
   }
 
   setWebContents(webContents: WebContents | null): void {
@@ -85,13 +98,18 @@ export class AutomationService {
     this.timer = null
   }
 
-  async runNow(automationId: string): Promise<AutomationRun> {
+  /**
+   * `humanTrigger` is true only for the desktop UI's IPC. Why: RPC/CLI callers
+   * can be any local process (including an agent), so their runNow honors
+   * "Pause crew" like a scheduled run.
+   */
+  async runNow(automationId: string, humanTrigger = false): Promise<AutomationRun> {
     const automation = this.store.listAutomations().find((entry) => entry.id === automationId)
     if (!automation) {
       throw new Error('Automation not found.')
     }
     const run = this.store.createAutomationRun(automation, Date.now(), 'manual')
-    return await this.requestDispatch(automation, run)
+    return await this.requestDispatch(automation, run, !humanTrigger)
   }
 
   async runPrecheck(automationId: string, runId: string): Promise<AutomationPrecheckResult | null> {
@@ -110,19 +128,7 @@ export class AutomationService {
       allowRemoteHostScheduling: this.allowRemoteHostScheduling
     })
     if (!target.ok) {
-      return {
-        command: automation.precheck.command,
-        exitCode: null,
-        timedOut: false,
-        durationMs: 0,
-        stdout: '',
-        stderr: '',
-        stdoutTruncated: false,
-        stderrTruncated: false,
-        error: target.error,
-        startedAt: Date.now(),
-        completedAt: Date.now()
-      }
+      return buildUnavailablePrecheckResult(automation.precheck.command, target.error)
     }
     return await runAutomationPrecheck({
       precheck: automation.precheck,
@@ -134,33 +140,10 @@ export class AutomationService {
   }
 
   async markDispatchResult(result: AutomationDispatchResult): Promise<AutomationRun> {
-    const run = this.store.updateAutomationRun(result)
-    clearAutomationDispatchTokens(run.automationId, run.id)
-    if (!isFinalRunStatus(run.status)) {
-      return run
-    }
-    // Why: the renderer's mark-completed effect can re-fire for the same run
-    // before refresh() flips its status snapshot off 'dispatched'. Re-running
-    // collectRunUsage advances the attribution window and can rewrite an
-    // already-collected 'known' usage to 'unavailable'/'ambiguous_session'.
-    if (run.usage) {
-      return run
-    }
-    const usage = await collectAutomationRunUsage({
-      automation: this.store.listAutomations().find((entry) => entry.id === run.automationId),
-      run,
-      claudeUsage: this.claudeUsage,
-      codexUsage: this.codexUsage
-    })
-    deliverAutomationRunNotification(this.store, run)
-    return this.store.updateAutomationRun({
-      runId: run.id,
-      status: run.status,
-      workspaceId: run.workspaceId,
-      terminalSessionId: run.terminalSessionId,
-      usage,
-      error: run.error
-    })
+    return await finalizeAutomationRunResult(
+      { store: this.store, claudeUsage: this.claudeUsage, codexUsage: this.codexUsage },
+      result
+    )
   }
 
   private async evaluateDueRuns(): Promise<void> {
@@ -174,8 +157,14 @@ export class AutomationService {
         if (!automation.enabled || automation.nextRunAt > now) {
           continue
         }
-        await this.evaluateAutomation(automation, now)
+        try {
+          await this.evaluateAutomation(automation, now)
+        } catch (error) {
+          recordAutomationEvaluationFailure(this.store, automation, now, error)
+        }
       }
+    } catch (error) {
+      reportAutomationBackgroundFailure('scheduler tick failed', error)
     } finally {
       this.evaluating = false
     }
@@ -188,41 +177,58 @@ export class AutomationService {
       return
     }
     const run = this.store.createAutomationRun(automation, scheduledFor)
+    // Why: createAutomationRun returns the existing run for this occurrence. If
+    // it already left 'pending' (a crash before nextRunAt advanced), it was
+    // already launched or closed and must not be dispatched again.
+    if (run.status !== 'pending') {
+      this.store.advanceAutomationNextRun(automation.id, now)
+      return
+    }
     const graceMs = automation.missedRunGraceMinutes * 60 * 1000
-    if (now - scheduledFor > graceMs) {
+    const missed = now - scheduledFor > graceMs
+    // Why: scheduled runs are autonomous and must honor "Pause crew" (manual runNow
+    // stays allowed). Advancing nextRunAt keeps a paused tick from re-firing.
+    const admission = missed ? null : checkExecutionAdmission('agent-run')
+    if (missed || !admission?.allowed) {
       this.store.updateAutomationRun({
         runId: run.id,
-        status: 'skipped_missed',
+        status: missed ? 'skipped_missed' : 'skipped_unavailable',
         workspaceId: automation.workspaceId,
-        error: 'Dobius was unavailable during the missed-run grace window.'
+        error:
+          admission?.allowed === false
+            ? admission.message
+            : 'Dobius was unavailable during the missed-run grace window.'
       })
       this.store.advanceAutomationNextRun(automation.id, now)
       return
     }
 
-    await this.requestDispatch(automation, run)
+    await this.requestDispatch(automation, run, true)
     this.store.advanceAutomationNextRun(automation.id, now)
   }
 
   private async requestDispatch(
     automation: Automation,
-    run: AutomationRun
+    run: AutomationRun,
+    honorExecutionGate: boolean
   ): Promise<AutomationRun> {
     const target = resolveAutomationRunTarget(this.store, automation, {
       allowRemoteHostScheduling: this.allowRemoteHostScheduling
     })
-    if (!target.ok) {
+    // Why: re-checked at launch; Pause crew can be turned on after the scheduler's check.
+    const admission = honorExecutionGate ? checkExecutionAdmission('agent-run') : null
+    if (!target.ok || admission?.allowed === false) {
       return this.store.updateAutomationRun({
         runId: run.id,
         status: 'skipped_unavailable',
         workspaceId: automation.workspaceId,
-        error: target.error
+        error: admission?.allowed === false ? admission.message : target.ok ? null : target.error
       })
     }
     const webContents = this.webContents
     if (!webContents || webContents.isDestroyed() || !this.rendererReady) {
       if (this.headlessDispatcher) {
-        return await this.requestHeadlessDispatch(automation, run, target)
+        return await this.requestHeadlessDispatch(automation, run, target, honorExecutionGate)
       }
       return this.store.updateAutomationRun({
         runId: run.id,
@@ -240,7 +246,8 @@ export class AutomationService {
     const payload: AutomationDispatchRequest = {
       automation,
       run: updated,
-      dispatchToken: createAutomationDispatchToken(automation.id, updated.id)
+      dispatchToken: createAutomationDispatchToken(automation.id, updated.id),
+      honorExecutionGate
     }
     webContents.send('automations:dispatchRequested', payload)
     return updated
@@ -249,7 +256,8 @@ export class AutomationService {
   private async requestHeadlessDispatch(
     automation: Automation,
     run: AutomationRun,
-    target: Extract<AutomationRunTargetResult, { ok: true }>
+    target: Extract<AutomationRunTargetResult, { ok: true }>,
+    honorExecutionGate: boolean
   ): Promise<AutomationRun> {
     const precheckResult =
       run.trigger === 'scheduled' && automation.precheck
@@ -265,7 +273,20 @@ export class AutomationService {
       })
     }
     try {
-      const launch = await this.headlessDispatcher!({ automation, run, target })
+      // Why: the precheck await above gives Pause crew time to turn on.
+      const admission = honorExecutionGate ? checkExecutionAdmission('agent-run') : null
+      if (admission?.allowed === false) {
+        throw new ExecutionBlockedError('agent-run', admission.reason, admission.message)
+      }
+      // Why: persist the launch intent first; a crash mid-launch then leaves
+      // 'dispatching', which startup closes as interrupted instead of re-running.
+      const dispatching = this.store.updateAutomationRun({ runId: run.id, status: 'dispatching' })
+      const launch = await this.headlessDispatcher!({
+        automation,
+        run: dispatching,
+        target,
+        honorExecutionGate
+      })
       const launchRunTarget = {
         workspaceId: launch.workspaceId,
         workspaceDisplayName: launch.workspaceDisplayName ?? null,
@@ -280,31 +301,18 @@ export class AutomationService {
         error: null
       })
       if (launch.completion) {
-        void launch.completion
-          .then((completion) =>
-            this.markDispatchResult({
-              runId: run.id,
-              status: completion.status,
-              ...launchRunTarget,
-              precheckResult,
-              outputSnapshot: completion.outputSnapshot ?? null,
-              error: completion.error ?? null
-            })
-          )
-          .catch((error) =>
-            this.markDispatchResult({
-              runId: run.id,
-              status: 'dispatch_failed',
-              ...launchRunTarget,
-              error: error instanceof Error ? error.message : String(error)
-            })
-          )
+        settleHeadlessCompletion(
+          (result) => this.markDispatchResult(result),
+          { runId: run.id, ...launchRunTarget },
+          precheckResult,
+          launch.completion
+        )
       }
       return updated
     } catch (error) {
       return this.store.updateAutomationRun({
         runId: run.id,
-        status: 'dispatch_failed',
+        status: isExecutionBlockedError(error) ? 'skipped_unavailable' : 'dispatch_failed',
         workspaceId: automation.workspaceId,
         error: error instanceof Error ? error.message : String(error)
       })

@@ -6,7 +6,10 @@
 // live in `rpc/unix-socket-transport.ts` and `rpc/ws-transport.ts`.
 import { randomBytes } from 'node:crypto'
 import { readdirSync, rmSync } from 'node:fs'
+import { connect } from 'node:net'
 import { join } from 'node:path'
+import { constantTimeEqual } from '../lib/constant-time-equal'
+import { isPidAlive } from '../lib/is-pid-alive'
 import type { RuntimeMetadata, RuntimeTransportMetadata } from '../../shared/runtime-bootstrap'
 import type { DobiusRuntimeService } from './dobius-runtime'
 import { writeRuntimeMetadata } from './runtime-metadata'
@@ -17,14 +20,21 @@ import type { RpcMessageContext, RpcTransport } from './rpc/transport'
 import { UnixSocketTransport } from './rpc/unix-socket-transport'
 import { WebSocketTransport } from './rpc/ws-transport'
 import type { WebSocket } from 'ws'
-import { DeviceRegistry, type DeviceScope } from './device-registry'
+import {
+  DeviceRegistry,
+  DeviceRegistryUnreadableError,
+  type DeviceEntry,
+  type DeviceScope
+} from './device-registry'
 import { loadOrCreateE2EEKeypair, type E2EEKeypair } from './e2ee-keypair'
 import { E2EEChannel } from './rpc/e2ee-channel'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../shared/pairing'
 import {
   decodeTerminalStreamFrame,
+  TerminalStreamOpcode,
   type TerminalStreamFrame
 } from '../../shared/terminal-stream-protocol'
+import { deviceHasMobileRpcGrant, mobileRpcRequirement } from './mobile-rpc-grants'
 
 const DEFAULT_WS_PORT = 6768
 
@@ -117,7 +127,7 @@ function webClientPathForEndpoint(pathname: string): string {
   return `${pathname.replace(/\/$/, '')}/web-index.html`
 }
 
-const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
+export const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'voice.intent',
   'voice.reply',
   'accounts.list',
@@ -140,6 +150,10 @@ const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'browser.reload',
   'browser.screencast',
   'browser.screencast.unsubscribe',
+  'screen.capabilities',
+  'screen.stream',
+  'screen.stream.unsubscribe',
+  'screen.lease.renew',
   'browser.tabCreate',
   'browser.viewport',
   'clipboard.abortImageUpload',
@@ -319,8 +333,6 @@ const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'speech.models.list',
   'stats.summary',
   'status.get',
-  'agentTeams.prepareLaunch',
-  'agentTeams.tmuxCompat',
   'terminal.clearBuffer',
   'terminal.close',
   'terminal.create',
@@ -370,6 +382,20 @@ function isLongPollRequest(request: RpcRequest): boolean {
   return false
 }
 
+// Why: returns the forbidden message for a mobile request that is rejected
+// outright or lacks a grant (see mobile-rpc-grants.ts), else null.
+function mobileRpcDenial(device: DeviceEntry, request: RpcRequest): string | null {
+  const requirement = mobileRpcRequirement(request.method, request.params)
+  if ('rejected' in requirement) {
+    return `Method '${request.method}' rejected: ${requirement.rejected}`
+  }
+  const missing = requirement.grants.filter((grant) => !deviceHasMobileRpcGrant(device, grant))
+  if (missing.length === 0) {
+    return null
+  }
+  return `Method '${request.method}' needs the ${missing.map((g) => `'${g}'`).join(', ')} grant for this mobile device`
+}
+
 // Why: stamp the authenticated connection's scope onto the status.get success
 // envelope. status.get has no per-connection context inside the dispatcher, so
 // the scope is added here at the transport boundary where the device is known.
@@ -401,7 +427,6 @@ export class DobiusRuntimeRpcServer {
   private readonly longPollCap: number
   private deviceRegistry: DeviceRegistry | null = null
   private e2eeKeypair: E2EEKeypair | null = null
-  private tlsFingerprint: string | null = null
   private wsTransport: WebSocketTransport | null = null
   private activeTransports: RpcTransport[] = []
   private transports: RuntimeTransportMetadata[] = []
@@ -452,10 +477,6 @@ export class DobiusRuntimeRpcServer {
     return this.deviceRegistry
   }
 
-  getTlsFingerprint(): string | null {
-    return this.tlsFingerprint
-  }
-
   getE2EEPublicKey(): string | null {
     return this.e2eeKeypair?.publicKeyB64 ?? null
   }
@@ -470,6 +491,7 @@ export class DobiusRuntimeRpcServer {
       return false
     }
     this.wsTransport?.terminateClientConnections(device.token)
+    this.runtime.desktopScreen?.revokeDevice(deviceId)
     return true
   }
 
@@ -480,6 +502,12 @@ export class DobiusRuntimeRpcServer {
     }
     this.wsTransport?.terminateClientConnections(device.token)
     return true
+  }
+
+  // Why: lets the UI tell "listener off at launch" apart from "on at launch
+  // but failed to start" (e.g. port in use), which both have no endpoint.
+  isWebSocketEnabled(): boolean {
+    return this.enableWebSocket
   }
 
   getWebSocketEndpoint(): string | null {
@@ -493,7 +521,7 @@ export class DobiusRuntimeRpcServer {
     rotate?: boolean
     scope?: DeviceScope
   }):
-    | { available: false }
+    | { available: false; reason?: string }
     | {
         available: true
         pairingUrl: string
@@ -510,9 +538,20 @@ export class DobiusRuntimeRpcServer {
     const endpoint = resolvePairingEndpoint(rawEndpoint, args.address)
     const deviceName = args.name ?? `CLI ${new Date().toLocaleDateString()}`
     const scope = args.scope ?? 'runtime'
-    const device = args.rotate
-      ? this.deviceRegistry.rotatePendingDevice(deviceName, scope)
-      : this.deviceRegistry.getOrCreatePendingDevice(deviceName, scope)
+    let device: DeviceEntry
+    try {
+      device = args.rotate
+        ? this.deviceRegistry.rotatePendingDevice(deviceName, scope)
+        : this.deviceRegistry.getOrCreatePendingDevice(deviceName, scope)
+    } catch (error) {
+      // Why: headless serve awaits this before printing readiness; a throw
+      // there would hang anything waiting for dobius_server_ready.
+      if (error instanceof DeviceRegistryUnreadableError) {
+        console.error(`[runtime] pairing unavailable: ${error.message}`)
+        return { available: false, reason: error.message }
+      }
+      throw error
+    }
     const pairingUrl = encodePairingOffer({
       v: PAIRING_OFFER_VERSION,
       endpoint,
@@ -636,7 +675,7 @@ export class DobiusRuntimeRpcServer {
     // not leave filesystem entries in userData, so the sweep is a no-op
     // there.
     if (this.platform !== 'win32') {
-      sweepOrphanedRuntimeSockets(this.userDataPath, this.pid)
+      await sweepOrphanedRuntimeSockets(this.userDataPath, this.pid)
     }
 
     const transportMeta = createRuntimeTransportMetadata(
@@ -719,6 +758,7 @@ export class DobiusRuntimeRpcServer {
             channel = new E2EEChannel(ws, {
               serverSecretKey: this.e2eeKeypair!.secretKey,
               validateToken: (token) => this.deviceRegistry?.validateToken(token) != null,
+              claimToken: (token) => this.deviceRegistry?.consumePairingOffer(token) ?? null,
               onReady: (ch) => {
                 if (ch.deviceToken) {
                   wsTransport.setClientId(ws, ch.deviceToken)
@@ -900,7 +940,7 @@ export class DobiusRuntimeRpcServer {
     if (typeof request.authToken !== 'string' || request.authToken.length === 0) {
       return { error: this.buildError(request.id, 'unauthorized', 'Missing auth token') }
     }
-    if (request.authToken !== this.authToken) {
+    if (!constantTimeEqual(request.authToken, this.authToken)) {
       return { error: this.buildError(request.id, 'unauthorized', 'Invalid auth token') }
     }
 
@@ -938,7 +978,11 @@ export class DobiusRuntimeRpcServer {
       typeof (request as Record<string, unknown>).deviceToken === 'string'
         ? ((request as Record<string, unknown>).deviceToken as string)
         : null
-    if (authenticatedDeviceToken && requestToken && requestToken !== authenticatedDeviceToken) {
+    if (
+      authenticatedDeviceToken &&
+      requestToken &&
+      !constantTimeEqual(requestToken, authenticatedDeviceToken)
+    ) {
       reply(JSON.stringify(this.buildError(request.id, 'unauthorized', 'Device token mismatch')))
       return
     }
@@ -964,6 +1008,11 @@ export class DobiusRuntimeRpcServer {
           )
         )
       )
+      return
+    }
+    const denial = device.scope === 'mobile' ? mobileRpcDenial(device, request) : null
+    if (denial) {
+      reply(JSON.stringify(this.buildError(request.id, 'forbidden', denial)))
       return
     }
 
@@ -1004,19 +1053,43 @@ export class DobiusRuntimeRpcServer {
       await this.dispatcher.dispatchStreaming(request, replyForRequest, {
         connectionId,
         clientId: token,
+        clientDeviceId: device.deviceId,
         // Why: gates the mobile-only payload diet (native-chat char clipping) so
         // full-screen web/desktop runtime clients aren't truncated.
         clientKind: device.scope,
         signal: abortRegistration?.signal,
         sendBinary,
         registerBinaryStreamHandler: (streamId, handler) =>
-          this.registerBinaryStreamHandler(connectionId, streamId, handler)
+          this.registerBinaryStreamHandler(
+            connectionId,
+            streamId,
+            device.scope === 'mobile' ? this.guardMobileTerminalInput(token, handler) : handler
+          )
       })
     } finally {
       abortRegistration?.dispose()
       if (longPoll) {
         this.activeLongPolls = Math.max(0, this.activeLongPolls - 1)
       }
+    }
+  }
+
+  // Why: binary Input frames on terminal.subscribe / terminal.multiplex type
+  // into the PTY exactly like terminal.send, so they need the same grant. The
+  // lookup is per frame against the in-memory registry, so an in-app revoke
+  // stops input at once; grants themselves are read from disk only at startup.
+  private guardMobileTerminalInput(
+    token: string,
+    handler: (frame: TerminalStreamFrame) => void
+  ): (frame: TerminalStreamFrame) => void {
+    return (frame) => {
+      if (frame.opcode === TerminalStreamOpcode.Input) {
+        const device = this.deviceRegistry?.validateToken(token)
+        if (!device || !deviceHasMobileRpcGrant(device, 'terminal.send')) {
+          return
+        }
+      }
+      handler(frame)
     }
   }
 
@@ -1045,7 +1118,68 @@ export class DobiusRuntimeRpcServer {
  */
 export const RUNTIME_SOCKET_NAME_REGEX = /^o-(\d+)-[A-Za-z0-9_-]+\.sock$/
 
-export function sweepOrphanedRuntimeSockets(userDataPath: string, ownPid: number): void {
+// Why: a live pid is not proof the socket is live — after a crash the OS can
+// hand the dead runtime's pid to an unrelated process, and the old socket then
+// survived every sweep. So a live-pid socket is test-connected: ENOENT/ENOTSOCK
+// means there is no socket to protect; ECONNREFUSED means no listener, but a
+// live runtime whose accept queue is momentarily full can refuse too, so it
+// must refuse twice, ~200 ms apart. A connect, a timeout or any other error
+// keeps the socket, so a running runtime is never swept.
+const SOCKET_PROBE_TIMEOUT_MS = 500
+const SOCKET_REPROBE_DELAY_MS = 200
+
+export type RuntimeSocketProbeResult = 'listening' | 'refused' | 'gone' | 'unknown'
+export type RuntimeSocketProbe = (socketPath: string) => Promise<RuntimeSocketProbeResult>
+
+function probeRuntimeSocket(socketPath: string): Promise<RuntimeSocketProbeResult> {
+  return new Promise((resolve) => {
+    const probe = connect(socketPath)
+    const finish = (result: RuntimeSocketProbeResult): void => {
+      clearTimeout(timer)
+      probe.destroy()
+      resolve(result)
+    }
+    const timer = setTimeout(() => finish('unknown'), SOCKET_PROBE_TIMEOUT_MS)
+    probe.once('connect', () => finish('listening'))
+    probe.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ECONNREFUSED') {
+        finish('refused')
+      } else if (error.code === 'ENOENT' || error.code === 'ENOTSOCK') {
+        finish('gone')
+      } else {
+        finish('unknown')
+      }
+    })
+  })
+}
+
+async function isOrphanedLivePidSocket(
+  socketPath: string,
+  probe: RuntimeSocketProbe
+): Promise<boolean> {
+  const first = await probe(socketPath)
+  if (first !== 'refused') {
+    return first === 'gone'
+  }
+  await new Promise((resolve) => setTimeout(resolve, SOCKET_REPROBE_DELAY_MS))
+  const second = await probe(socketPath)
+  return second === 'refused' || second === 'gone'
+}
+
+function removeOrphanedSocket(socketPath: string): void {
+  try {
+    rmSync(socketPath, { force: true })
+  } catch (error) {
+    // Why: best-effort sweep — a later start() or a reboot cleans it up.
+    console.warn(`[runtime] could not remove orphaned socket ${socketPath}:`, error)
+  }
+}
+
+export async function sweepOrphanedRuntimeSockets(
+  userDataPath: string,
+  ownPid: number,
+  probe: RuntimeSocketProbe = probeRuntimeSocket
+): Promise<void> {
   let entries: string[]
   try {
     entries = readdirSync(userDataPath)
@@ -1054,6 +1188,7 @@ export function sweepOrphanedRuntimeSockets(userDataPath: string, ownPid: number
     // below will create it. Nothing to sweep in that case.
     return
   }
+  const probes: Promise<void>[] = []
   for (const entry of entries) {
     const match = RUNTIME_SOCKET_NAME_REGEX.exec(entry)
     if (!match) {
@@ -1069,26 +1204,20 @@ export function sweepOrphanedRuntimeSockets(userDataPath: string, ownPid: number
     if (pid === ownPid) {
       continue
     }
-    try {
-      // Why: signal 0 is the POSIX liveness probe — it delivers no signal
-      // but returns success iff the pid resolves AND the caller has
-      // permission to signal it. ESRCH = no such process; EPERM = pid
-      // exists but owned by another user, which is extremely unusual on a
-      // desktop app's userData dir but we conservatively leave those
-      // sockets alone.
-      process.kill(pid, 0)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
-        try {
-          rmSync(join(userDataPath, entry), { force: true })
-        } catch {
-          // Why: best-effort sweep — a permission error on unlink is fine
-          // to ignore; the socket will be cleaned by a later start() or
-          // by the OS on reboot.
-        }
-      }
+    const socketPath = join(userDataPath, entry)
+    if (!isPidAlive(pid)) {
+      removeOrphanedSocket(socketPath)
+      continue
     }
+    probes.push(
+      isOrphanedLivePidSocket(socketPath, probe).then((orphaned) => {
+        if (orphaned) {
+          removeOrphanedSocket(socketPath)
+        }
+      })
+    )
   }
+  await Promise.all(probes)
 }
 
 export function createRuntimeTransportMetadata(

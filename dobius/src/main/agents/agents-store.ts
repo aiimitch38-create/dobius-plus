@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 import type {
@@ -16,6 +16,9 @@ import {
   normalizeNotify,
   normalizeSkills
 } from './agent-record-normalization'
+import { invalidateAgentSessions, sessionsAfterReset } from './agent-session-lease'
+import { parseEveryEntry, SafeJsonFile } from '../storage/safe-json-file'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'agents.json'
 const DEFAULT_MODEL = 'claude-opus-4-8'
@@ -29,10 +32,8 @@ function normalizeModel(value: unknown, engine: AgentEngine): string {
   return typeof value === 'string' && value ? value : engine === 'codex' ? '' : DEFAULT_MODEL
 }
 
-let cached: CustomAgent[] | null = null
-
 function filePath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME)
+  return path.join(getUserDataRoot(), FILE_NAME)
 }
 
 function cloneAgent(agent: CustomAgent): CustomAgent {
@@ -54,7 +55,9 @@ function sanitizeSessionsByKey(
   }
   const sessions: Record<string, { sessionId: string; cwd: string }> = {}
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (!value || typeof value !== 'object') continue
+    if (!value || typeof value !== 'object') {
+      continue
+    }
     const entry = value as Record<string, unknown>
     if (typeof entry.sessionId === 'string' && typeof entry.cwd === 'string') {
       sessions[key] = { sessionId: entry.sessionId, cwd: entry.cwd }
@@ -63,85 +66,57 @@ function sanitizeSessionsByKey(
   return Object.keys(sessions).length > 0 ? sessions : undefined
 }
 
-function sanitize(raw: unknown): CustomAgent[] {
-  if (!Array.isArray(raw)) {
-    return []
+// Why: a malformed entry makes the whole file unreadable instead of being
+// dropped and then saved over (CX12 F2).
+function sanitizeAgent(entry: unknown): CustomAgent | null {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return null
   }
-  return raw.flatMap((entry) => {
-    if (typeof entry !== 'object' || entry === null) {
-      return []
-    }
-    const record = entry as Partial<Record<keyof CustomAgent, unknown>>
-    const id = typeof record.id === 'string' ? record.id : ''
-    const name = typeof record.name === 'string' ? record.name.trim() : ''
-    if (!id || !name) {
-      return []
-    }
-    const engine = normalizeEngine(record.engine)
-    return [
-      {
-        id,
-        name,
-        description: typeof record.description === 'string' ? record.description : '',
-        icon: normalizeIcon(record.icon),
-        color: normalizeColor(record.color),
-        systemPrompt: typeof record.systemPrompt === 'string' ? record.systemPrompt : '',
-        engine,
-        accountId: typeof record.accountId === 'string' && record.accountId ? record.accountId : null,
-        model: normalizeModel(record.model, engine),
-        allowedTools: Array.isArray(record.allowedTools)
-          ? record.allowedTools.filter((tool): tool is string => typeof tool === 'string' && !!tool)
-          : [...DEFAULT_ALLOWED_TOOLS],
-        skills: normalizeSkills(record.skills),
-        cwd: typeof record.cwd === 'string' ? record.cwd : '',
-        bypassPermissions: record.bypassPermissions === true,
-        heartbeat: normalizeHeartbeat(record.heartbeat),
-        notify: normalizeNotify(record.notify),
-        channels: normalizeChannels(record.channels),
-        lastHeartbeatAt:
-          typeof record.lastHeartbeatAt === 'number' ? record.lastHeartbeatAt : undefined,
-        lastSessionId: typeof record.lastSessionId === 'string' ? record.lastSessionId : undefined,
-        lastSessionCwd:
-          typeof record.lastSessionCwd === 'string' ? record.lastSessionCwd : undefined,
-        sessionsByKey: sanitizeSessionsByKey(record.sessionsByKey),
-        createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
-        updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now()
-      }
-    ]
-  })
+  const record = entry as Partial<Record<keyof CustomAgent, unknown>>
+  const id = typeof record.id === 'string' ? record.id : ''
+  const name = typeof record.name === 'string' ? record.name.trim() : ''
+  if (!id || !name) {
+    return null
+  }
+  const engine = normalizeEngine(record.engine)
+  return {
+    id,
+    name,
+    description: typeof record.description === 'string' ? record.description : '',
+    icon: normalizeIcon(record.icon),
+    color: normalizeColor(record.color),
+    systemPrompt: typeof record.systemPrompt === 'string' ? record.systemPrompt : '',
+    engine,
+    accountId: typeof record.accountId === 'string' && record.accountId ? record.accountId : null,
+    model: normalizeModel(record.model, engine),
+    allowedTools: Array.isArray(record.allowedTools)
+      ? record.allowedTools.filter((tool): tool is string => typeof tool === 'string' && !!tool)
+      : [...DEFAULT_ALLOWED_TOOLS],
+    skills: normalizeSkills(record.skills),
+    cwd: typeof record.cwd === 'string' ? record.cwd : '',
+    bypassPermissions: record.bypassPermissions === true,
+    heartbeat: normalizeHeartbeat(record.heartbeat),
+    notify: normalizeNotify(record.notify),
+    channels: normalizeChannels(record.channels),
+    lastHeartbeatAt:
+      typeof record.lastHeartbeatAt === 'number' ? record.lastHeartbeatAt : undefined,
+    lastSessionId: typeof record.lastSessionId === 'string' ? record.lastSessionId : undefined,
+    lastSessionCwd: typeof record.lastSessionCwd === 'string' ? record.lastSessionCwd : undefined,
+    sessionsByKey: sanitizeSessionsByKey(record.sessionsByKey),
+    createdAt: typeof record.createdAt === 'number' ? record.createdAt : Date.now(),
+    updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : Date.now()
+  }
 }
+
+const file = new SafeJsonFile<CustomAgent[]>({
+  filePath,
+  parse: (raw) => (Array.isArray(raw) ? parseEveryEntry(raw, sanitizeAgent) : undefined),
+  fallback: () => [],
+  label: '[agents] agents.json'
+})
 
 function load(): CustomAgent[] {
-  if (cached) {
-    return cached
-  }
-  try {
-    cached = sanitize(JSON.parse(readFileSync(filePath(), 'utf-8')))
-  } catch (error) {
-    if (error && typeof error === 'object' && 'code' in error && error.code !== 'ENOENT') {
-      console.warn(
-        '[agents] failed to load agents:',
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-    cached = []
-  }
-  return cached
-}
-
-function persist(agents: CustomAgent[]): void {
-  const target = filePath()
-  const tmp = `${target}.${process.pid}.tmp`
-  try {
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(tmp, `${JSON.stringify(agents, null, 2)}\n`, 'utf-8')
-    renameSync(tmp, target)
-  } catch (error) {
-    console.warn(
-      '[agents] failed to persist agents:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+  return file.get()
 }
 
 function assertValidName(name: string): void {
@@ -206,8 +181,7 @@ export function createAgent(input: CustomAgentInput): CustomAgent[] {
     createdAt: now,
     updatedAt: now
   })
-  cached = agents
-  persist(agents)
+  file.set(agents)
   return listAgents()
 }
 
@@ -270,8 +244,7 @@ export function updateAgent(id: string, updates: CustomAgentUpdate): CustomAgent
     agent.channels = normalizeChannels(updates.channels)
   }
   agent.updatedAt = Date.now()
-  cached = agents
-  persist(agents)
+  file.set(agents)
   return listAgents()
 }
 
@@ -283,8 +256,7 @@ export function updateAgentHeartbeatAt(id: string, lastHeartbeatAt: number): voi
   }
   agent.lastHeartbeatAt = lastHeartbeatAt
   agent.updatedAt = Date.now()
-  cached = agents
-  persist(agents)
+  file.set(agents)
 }
 
 export function updateAgentSession(
@@ -310,8 +282,7 @@ export function updateAgentSession(
     agent.lastSessionCwd = updates.lastSessionCwd
   }
   agent.updatedAt = Date.now()
-  cached = agents
-  persist(agents)
+  file.set(agents)
 }
 
 /** The continuing session for a task key, falling back to the legacy fields for 'default'. */
@@ -330,21 +301,29 @@ export function getAgentSessionForKey(
   return null
 }
 
-export function resetAgentSession(id: string): CustomAgent[] {
+/**
+ * Starts fresh: no key given = every session of the agent (default and each
+ * channel key); a key = only that one. Runs already in flight are told not to
+ * record their session back over the reset.
+ */
+export function resetAgentSession(id: string, sessionKey?: string): CustomAgent[] {
   const agents = load()
   const agent = agents.find((entry) => entry.id === id)
   if (!agent) {
     throw new Error('Agent not found')
   }
-  agent.lastSessionId = undefined
+  agent.sessionsByKey = sessionsAfterReset(agent.sessionsByKey, sessionKey)
+  if (sessionKey === undefined || sessionKey === 'default') {
+    agent.lastSessionId = undefined
+    agent.lastSessionCwd = undefined
+  }
+  invalidateAgentSessions(id, sessionKey)
   agent.updatedAt = Date.now()
-  cached = agents
-  persist(agents)
+  file.set(agents)
   return listAgents()
 }
 
 export function removeAgent(id: string): CustomAgent[] {
-  cached = load().filter((agent) => agent.id !== id)
-  persist(cached)
+  file.set(load().filter((agent) => agent.id !== id))
   return listAgents()
 }

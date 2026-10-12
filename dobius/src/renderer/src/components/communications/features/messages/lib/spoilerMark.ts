@@ -10,7 +10,9 @@ export function registerSpoilerMarkdownIt(
   // biome-ignore lint/suspicious/noExplicitAny: markdown-it is untyped here
   md: any,
 ): void {
-  if (md.renderer.rules[SPOILER_OPEN_TOKEN]) return;
+  if (md.renderer.rules[SPOILER_OPEN_TOKEN]) {
+    return;
+  }
 
   // biome-ignore lint/suspicious/noExplicitAny: markdown-it state/silent
   const rule = (state: any, silent: boolean): boolean => {
@@ -28,7 +30,9 @@ export function registerSpoilerMarkdownIt(
       contentStart,
       state.posMax,
     );
-    if (contentEnd <= contentStart) return false;
+    if (contentEnd <= contentStart) {
+      return false;
+    }
 
     if (!silent) {
       const previousPosMax = state.posMax;

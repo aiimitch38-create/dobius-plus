@@ -18,6 +18,8 @@
 // never required; these numbers define the supported compatibility window.
 
 export const RUNTIME_PROTOCOL_VERSION = 3
+// Graphical hosts advertise this separately only when their capture endpoint is installed.
+export { DESKTOP_SCREEN_CAPABILITY } from './desktop-screen-protocol'
 export const MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION = 2
 export const MIN_COMPATIBLE_RUNTIME_SERVER_VERSION = 2
 

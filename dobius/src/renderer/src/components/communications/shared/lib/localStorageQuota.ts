@@ -43,17 +43,21 @@ function evictPureCacheEntries(): number {
   return toRemove.length;
 }
 
-function pureCacheEntriesExcluding(excludedKey: string): Array<{
+function pureCacheEntriesExcluding(excludedKey: string): {
   bytes: number;
   key: string;
   updatedAt: number;
-}> {
-  const entries: Array<{ bytes: number; key: string; updatedAt: number }> = [];
+}[] {
+  const entries: { bytes: number; key: string; updatedAt: number }[] = [];
   for (let i = 0; i < window.localStorage.length; i++) {
     const key = window.localStorage.key(i);
-    if (key === null || key === excludedKey || !isPureCacheKey(key)) continue;
+    if (key === null || key === excludedKey || !isPureCacheKey(key)) {
+      continue;
+    }
     const value = window.localStorage.getItem(key);
-    if (value === null) continue;
+    if (value === null) {
+      continue;
+    }
 
     let updatedAt = 0;
     try {
@@ -75,18 +79,24 @@ function pureCacheEntriesExcluding(excludedKey: string): Array<{
 function trimPureCacheForWrite(key: string, writeBytes: number): void {
   const entries = pureCacheEntriesExcluding(key);
   let totalBytes = entries.reduce((total, entry) => total + entry.bytes, 0);
-  if (totalBytes + writeBytes <= PURE_CACHE_BYTE_BUDGET) return;
+  if (totalBytes + writeBytes <= PURE_CACHE_BYTE_BUDGET) {
+    return;
+  }
 
   entries.sort((a, b) => a.updatedAt - b.updatedAt);
   for (const entry of entries) {
     window.localStorage.removeItem(entry.key);
     totalBytes -= entry.bytes;
-    if (totalBytes + writeBytes <= PURE_CACHE_BYTE_BUDGET) return;
+    if (totalBytes + writeBytes <= PURE_CACHE_BYTE_BUDGET) {
+      return;
+    }
   }
 }
 
 function preparePureCacheWrite(key: string, value: string): boolean {
-  if (!isPureCacheKey(key)) return true;
+  if (!isPureCacheKey(key)) {
+    return true;
+  }
 
   const writeBytes = storageEntryBytes(key, value);
   if (writeBytes > PURE_CACHE_BYTE_BUDGET) {
@@ -107,7 +117,9 @@ function preparePureCacheWrite(key: string, value: string): boolean {
  */
 export function recoverLocalStorageQuotaOnStartup(): void {
   try {
-    if (window.localStorage.getItem(QUOTA_RECOVERY_MARKER_KEY) === "1") return;
+    if (window.localStorage.getItem(QUOTA_RECOVERY_MARKER_KEY) === "1") {
+      return;
+    }
     try {
       window.localStorage.setItem(QUOTA_RECOVERY_MARKER_KEY, "1");
       return;
@@ -123,7 +135,9 @@ export function recoverLocalStorageQuotaOnStartup(): void {
 let warnedPersistentFailure = false;
 
 function notifyStorageFull(): void {
-  if (warnedPersistentFailure) return;
+  if (warnedPersistentFailure) {
+    return;
+  }
   warnedPersistentFailure = true;
   // Dynamic import keeps this module usable from node unit tests.
   import("sonner")
@@ -146,7 +160,9 @@ export function setLocalStorageItemWithRecovery(
   value: string,
 ): boolean {
   try {
-    if (!preparePureCacheWrite(key, value)) return false;
+    if (!preparePureCacheWrite(key, value)) {
+      return false;
+    }
     window.localStorage.setItem(key, value);
     return true;
   } catch (error) {

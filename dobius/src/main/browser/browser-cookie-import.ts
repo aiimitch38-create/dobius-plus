@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- Why: cookie import is a single pipeline (detect → decrypt → stage → swap)
    that must stay together so the encryption, schema, and staging steps remain in sync. */
-import { app, type BrowserWindow, dialog, session } from 'electron'
+import { type BrowserWindow, dialog, session } from 'electron'
 import { execFileSync } from 'node:child_process'
 import { createDecipheriv, pbkdf2Sync, randomUUID } from 'node:crypto'
 import {
@@ -25,7 +25,7 @@ let _diagLog: string | null = null
 function getDiagLogPath(): string {
   if (!_diagLog) {
     try {
-      _diagLog = join(app.getPath('userData'), 'cookie-import-diag.log')
+      _diagLog = join(getUserDataRoot(), 'cookie-import-diag.log')
     } catch {
       _diagLog = join(tmpdir(), 'dobius-cookie-import-diag.log')
     }
@@ -78,6 +78,7 @@ import type {
 } from '../../shared/types'
 import { browserSessionRegistry } from './browser-session-registry'
 import { setupClientHintsOverride } from './browser-session-ua'
+import { getUserDataRoot } from '../storage/user-data-root'
 
 // ---------------------------------------------------------------------------
 // Browser detection
@@ -1526,7 +1527,7 @@ export async function importCookiesFromBrowser(
   await targetSession.cookies.flushStore()
 
   const partitionName = targetPartition.replace('persist:', '')
-  const liveCookiesPath = join(app.getPath('userData'), 'Partitions', partitionName, 'Cookies')
+  const liveCookiesPath = join(getUserDataRoot(), 'Partitions', partitionName, 'Cookies')
 
   // Why: Electron only creates the partition's Cookies SQLite file after the
   // session has actually stored a cookie. For newly created profiles that have
@@ -1547,7 +1548,7 @@ export async function importCookiesFromBrowser(
     return { ok: false, reason: 'Target cookie database not found. Open a browser tab first.' }
   }
 
-  const stagingDir = join(app.getPath('userData'), 'cookie-import-staging')
+  const stagingDir = join(getUserDataRoot(), 'cookie-import-staging')
   const partitionSegment = partitionName.replace(/[^a-zA-Z0-9_-]/g, '_')
   const stagingCookiesPath = join(
     stagingDir,

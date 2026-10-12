@@ -27,7 +27,9 @@ function storageKey(identityPubkey: string): string {
 export function hasExplicitAgentMetricArchiveChoice(
   identityPubkey: string,
 ): boolean {
-  if (typeof window === "undefined") return true; // SSR/test: treat as set
+  if (typeof window === "undefined") {
+    return true;
+  } // SSR/test: treat as set
   try {
     return window.localStorage.getItem(storageKey(identityPubkey)) !== null;
   } catch {
@@ -44,7 +46,9 @@ export function setExplicitAgentMetricArchiveChoice(
   identityPubkey: string,
   enabled: boolean,
 ): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") {
+    return;
+  }
   try {
     window.localStorage.setItem(
       storageKey(identityPubkey),
@@ -62,7 +66,9 @@ export function setExplicitAgentMetricArchiveChoice(
 export function clearExplicitAgentMetricArchiveChoice(
   identityPubkey: string,
 ): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") {
+    return;
+  }
   try {
     window.localStorage.removeItem(storageKey(identityPubkey));
   } catch {

@@ -12,11 +12,11 @@
 // Color Utilities
 // =============================================================================
 
-interface RGB {
+type RGB = {
   r: number;
   g: number;
   b: number;
-}
+};
 
 function hexToRgb(hex: string): RGB {
   const long = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})?$/i.exec(
@@ -89,7 +89,9 @@ function calculateLumDiff(bgLum: number): number {
 
 function findColorWithLuminance(baseColor: string, targetLum: number): string {
   const baseLum = luminance(baseColor);
-  if (Math.abs(baseLum - targetLum) < 0.001) return baseColor;
+  if (Math.abs(baseLum - targetLum) < 0.001) {
+    return baseColor;
+  }
 
   const target = targetLum < baseLum ? "#000000" : "#ffffff";
   let lo = 0;
@@ -100,14 +102,22 @@ function findColorWithLuminance(baseColor: string, targetLum: number): string {
     const testLum = luminance(mix(baseColor, target, mid));
     const diff = testLum - targetLum;
 
-    if (Math.abs(diff) < 0.001) break;
+    if (Math.abs(diff) < 0.001) {
+      break;
+    }
 
     if (target === "#000000") {
-      if (testLum > targetLum) lo = mid;
-      else hi = mid;
+      if (testLum > targetLum) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
     } else {
-      if (testLum < targetLum) lo = mid;
-      else hi = mid;
+      if (testLum < targetLum) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
     }
   }
   return mix(baseColor, target, (lo + hi) / 2);
@@ -171,16 +181,16 @@ export function hexToHsl(hex: string): string {
 // Adaptive Theme Generator — emits shadcn CSS vars directly
 // =============================================================================
 
-export interface ThemeGitColors {
+export type ThemeGitColors = {
   added: string | null;
   deleted: string | null;
   modified: string | null;
-}
+};
 
-export interface ThemeResult {
+export type ThemeResult = {
   isDark: boolean;
   vars: Record<string, string>;
-}
+};
 
 /**
  * Derive a full set of shadcn CSS variables from syntax theme colors.

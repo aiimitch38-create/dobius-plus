@@ -47,7 +47,9 @@ export async function refreshProfileCaches(
         queryContainsPubkey(query, pubkey),
     },
     (current) => {
-      if (!current?.profiles[pubkey]) return current;
+      if (!current?.profiles[pubkey]) {
+        return current;
+      }
       return {
         ...current,
         profiles: {
@@ -81,9 +83,13 @@ export async function refreshProfileCaches(
   writeSelfProfileCache(relayUrl, profile.pubkey, baseCache);
 
   const snapshotUrl = getAvatarSnapshotUrl(profile.avatarUrl);
-  if (!snapshotUrl) return;
+  if (!snapshotUrl) {
+    return;
+  }
   const fetched = await fetchAvatarDataUrl(rewriteRelayUrl(snapshotUrl));
-  if (!fetched) return;
+  if (!fetched) {
+    return;
+  }
   writeSelfProfileCache(relayUrl, profile.pubkey, {
     ...baseCache,
     avatarDataUrl: fetched,

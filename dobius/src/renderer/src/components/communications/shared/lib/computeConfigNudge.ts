@@ -18,9 +18,13 @@ export function computeConfigNudge(
   interactive: boolean,
   configNudgeAuthorPubkey: string | undefined | null,
 ): ConfigNudgePayload | null {
-  if (!interactive || !configNudgeAuthorPubkey) return null;
+  if (!interactive || !configNudgeAuthorPubkey) {
+    return null;
+  }
   const payload = extractConfigNudge(content);
-  if (payload === null) return null;
+  if (payload === null) {
+    return null;
+  }
   if (
     normalizePubkey(payload.agent_pubkey) !==
     normalizePubkey(configNudgeAuthorPubkey)

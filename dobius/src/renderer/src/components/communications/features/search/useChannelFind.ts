@@ -93,7 +93,9 @@ export function useChannelFind({
   // Clamp active index when results change.
   React.useEffect(() => {
     setActiveIndex((current) => {
-      if (matchedIds.length === 0) return 0;
+      if (matchedIds.length === 0) {
+        return 0;
+      }
       return current >= matchedIds.length ? 0 : current;
     });
   }, [matchedIds.length]);
@@ -110,9 +112,13 @@ export function useChannelFind({
   }, [relaySearch.data?.hits]);
 
   React.useEffect(() => {
-    if (!activeMatch) return;
+    if (!activeMatch) {
+      return;
+    }
     const hit = relayHitById.get(activeMatch.messageId);
-    if (hit) onSearchHit?.(hit);
+    if (hit) {
+      onSearchHit?.(hit);
+    }
   }, [activeMatch, onSearchHit, relayHitById]);
 
   const matchingMessageIds = React.useMemo(() => {
@@ -124,12 +130,16 @@ export function useChannelFind({
   }, [reset]);
 
   const goToNext = React.useCallback(() => {
-    if (matchedIds.length === 0) return;
+    if (matchedIds.length === 0) {
+      return;
+    }
     setActiveIndex((current) => (current + 1) % matchedIds.length);
   }, [matchedIds.length]);
 
   const goToPrevious = React.useCallback(() => {
-    if (matchedIds.length === 0) return;
+    if (matchedIds.length === 0) {
+      return;
+    }
     setActiveIndex((current) =>
       current === 0 ? matchedIds.length - 1 : current - 1,
     );

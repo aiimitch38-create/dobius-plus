@@ -14,10 +14,10 @@
 // else in this local relay setup does either.
 import { createHash } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { mkdir, open, rename, writeFile } from 'node:fs/promises'
 import { extname, join, resolve, relative, isAbsolute, sep } from 'node:path'
-import { app } from 'electron'
+import { removeTempFile, sweepStaleTempFiles, uniqueTmpPath } from '../../../storage/safe-json-file'
+import { getUserDataRoot } from '../../../storage/user-data-root'
 
 export type BlobDescriptor = {
   url: string
@@ -29,7 +29,7 @@ export type BlobDescriptor = {
 }
 
 function blobStoreDir(): string {
-  return join(app.getPath('userData'), 'workstation-media')
+  return join(getUserDataRoot(), 'workstation-media')
 }
 
 const MAGIC_SIGNATURES: { bytes: number[]; type: string; ext: string }[] = [
@@ -82,12 +82,11 @@ export async function ensureMediaServerStarted(): Promise<number> {
             res.writeHead(404).end()
             return
           }
-          const filePath = blobFilePath(match[1] as string, match[2] as string)
-          if (!existsSync(filePath)) {
+          const bytes = await readVerifiedBlob(match[1] as string, match[2] as string)
+          if (!bytes) {
             res.writeHead(404).end()
             return
           }
-          const bytes = await readFile(filePath)
           res.writeHead(200, {
             'Content-Type': sniffMimeType(bytes, match[2] as string).type,
             'Content-Length': bytes.length,
@@ -129,16 +128,90 @@ function blobFilePath(sha256: string, ext: string): string {
   return candidate
 }
 
+function sha256Hex(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
+// Why: hashing a large blob on every GET/HEAD blocks the main process. A blob
+// is immutable once renamed into place, so a file whose size/mtime/inode are
+// unchanged since it last verified does not need hashing again.
+const VERIFIED_CACHE_LIMIT = 4096
+const verifiedBlobs = new Map<string, string>()
+
+function rememberVerified(filePath: string, fingerprint: string): void {
+  verifiedBlobs.delete(filePath)
+  verifiedBlobs.set(filePath, fingerprint)
+  if (verifiedBlobs.size > VERIFIED_CACHE_LIMIT) {
+    const oldest = verifiedBlobs.keys().next().value
+    if (oldest !== undefined) {verifiedBlobs.delete(oldest)}
+  }
+}
+
+/**
+ * Returns the blob's bytes only when they hash to `sha256`; null when the
+ * file is missing or incomplete, so a partial file is never served as the blob.
+ */
+async function readVerifiedBlob(sha256: string, ext: string): Promise<Buffer | null> {
+  const filePath = blobFilePath(sha256, ext)
+  let bytes: Buffer
+  let fingerprint: string
+  try {
+    // One handle for stat + read, so the fingerprint describes the bytes read.
+    const handle = await open(filePath, 'r')
+    try {
+      const stat = await handle.stat()
+      fingerprint = `${stat.size}:${stat.mtimeMs}:${stat.ino}`
+      bytes = await handle.readFile()
+    } finally {
+      await handle.close()
+    }
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {return null}
+    throw error
+  }
+  if (verifiedBlobs.get(filePath) === fingerprint) {
+    rememberVerified(filePath, fingerprint)
+    return bytes
+  }
+  if (sha256Hex(bytes) !== sha256) {
+    verifiedBlobs.delete(filePath)
+    return null
+  }
+  rememberVerified(filePath, fingerprint)
+  return bytes
+}
+
+// <sha256>.<ext>.<pid>.<random>.tmp, from uniqueTmpPath.
+const BLOB_TEMP_PATTERN = /^[0-9a-f]{64}\.[a-z0-9]+\.(\d+)\.[0-9a-f]{12}\.tmp$/
+let staleTempsSwept = false
+
+// Temp + rename: the final path only ever holds complete content.
+async function publishBlob(filePath: string, bytes: Buffer): Promise<void> {
+  const tmp = uniqueTmpPath(filePath)
+  try {
+    await writeFile(tmp, bytes)
+    await rename(tmp, filePath)
+  } catch (error) {
+    removeTempFile(tmp)
+    throw error
+  }
+}
+
 /** Stores `bytes` content-addressed by its SHA-256 and returns a BlobDescriptor for it. */
 export async function storeBlob(bytes: Buffer, filename?: string): Promise<BlobDescriptor> {
   await ensureMediaServerStarted()
-  const sha256 = createHash('sha256').update(bytes).digest('hex')
+  const sha256 = sha256Hex(bytes)
   const fallbackExt = filename ? extname(filename).slice(1) : null
   const { type, ext } = sniffMimeType(bytes, fallbackExt)
   await mkdir(blobStoreDir(), { recursive: true })
-  const filePath = blobFilePath(sha256, ext)
-  if (!existsSync(filePath)) {
-    await writeFile(filePath, bytes)
+  if (!staleTempsSwept) {
+    staleTempsSwept = true
+    sweepStaleTempFiles(blobStoreDir(), BLOB_TEMP_PATTERN)
+  }
+  // Why: an existing file may be the residue of an interrupted write; only
+  // content that hashes to `sha256` counts as already stored.
+  if (!(await readVerifiedBlob(sha256, ext))) {
+    await publishBlob(blobFilePath(sha256, ext), bytes)
   }
   return {
     url: `${mediaServerOrigin()}/media/${sha256}.${ext}`,
@@ -166,8 +239,11 @@ export async function readBlobBytesByUrl(url: string): Promise<Buffer> {
   if (!match) {
     throw new Error('URL does not reference a known blob')
   }
-  const filePath = blobFilePath(match[1] as string, match[2] as string)
-  return readFile(filePath)
+  const bytes = await readVerifiedBlob(match[1] as string, match[2] as string)
+  if (!bytes) {
+    throw new Error('Blob is missing or incomplete')
+  }
+  return bytes
 }
 
 /** Test-only: stops the server and resets module state so tests get a fresh port. */
@@ -176,4 +252,6 @@ export async function stopMediaServerForTests(): Promise<void> {
   server = null
   serverPort = 0
   startPromise = null
+  staleTempsSwept = false
+  verifiedBlobs.clear()
 }

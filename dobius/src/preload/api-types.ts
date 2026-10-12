@@ -17,7 +17,7 @@ import type {
 } from '../shared/imessage-bridge'
 import type { ReadClipboardTextOptions } from '../shared/clipboard-text'
 import type { AppIdentity } from '../shared/app-identity'
-import type { AsanaConfig, AsanaTasksSnapshot } from '../shared/asana'
+import type { AsanaConfig, AsanaRequeueResult, AsanaTasksSnapshot } from '../shared/asana'
 import type {
   AgentRun,
   AgentRunEvent,
@@ -29,6 +29,7 @@ import type {
   AgentIdentityFileName,
   PendingAgentDecision,
   AgentReadableFiles,
+  AgentsExecutionState,
   BriefingItem,
   CustomAgent,
   CustomAgentInput,
@@ -38,6 +39,7 @@ import type {
   AgentProviderStatusSnapshot
 } from '../shared/agents'
 import type { DobiusPrompt } from '../shared/prompts'
+import type { SecretStorageStatus } from '../shared/secret-storage-status'
 import type { TerminalPaneSplitSource } from '../shared/feature-education-telemetry'
 import type { TaskSourceContext } from '../shared/task-source-context'
 import type { ProjectExecutionRuntimeResolution } from '../shared/project-execution-runtime'
@@ -373,6 +375,7 @@ import type {
   RateLimitState
 } from '../shared/rate-limit-types'
 import type {
+  ElevenLabsKeyStatus,
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
@@ -1351,6 +1354,8 @@ export type PreloadApi = {
     markLocalDone: (gid: string) => Promise<AsanaTasksSnapshot>
     clearLocalDone: (gid: string) => Promise<AsanaTasksSnapshot>
     completeTask: (gid: string) => Promise<AsanaTasksSnapshot>
+    listBlockedTasks: () => Promise<string[]>
+    requeueTask: (gid: string) => Promise<AsanaRequeueResult>
     onTasksUpdated: (callback: (snapshot: AsanaTasksSnapshot) => void) => () => void
   }
   agents: {
@@ -1362,7 +1367,8 @@ export type PreloadApi = {
     writeFile: (
       agentId: string,
       name: AgentIdentityFileName | 'brief' | 'memory',
-      content: string
+      content: string,
+      expected?: string
     ) => Promise<void>
     readCrewFiles: () => Promise<AgentCrewFiles>
     writeCrewFile: (name: AgentCrewFileName, content: string) => Promise<void>
@@ -1380,6 +1386,7 @@ export type PreloadApi = {
     approveDraft: (id: string) => Promise<AgentDraftComment>
     discardDraft: (id: string) => Promise<AgentDraftComment>
     getPaused: () => Promise<boolean>
+    getExecutionState: () => Promise<AgentsExecutionState>
     setPaused: (paused: boolean) => Promise<boolean>
     getPingStatus: () => Promise<{ used: number; max: number; date: string }>
     pickDirectory: (args: { defaultPath?: string }) => Promise<string | null>
@@ -2092,6 +2099,7 @@ export type PreloadApi = {
   cloudBackup: CloudBackupApi
   settings: {
     get: () => Promise<GlobalSettings>
+    getSecretStorageStatus: () => Promise<SecretStorageStatus>
     set: (args: Partial<GlobalSettings>) => Promise<GlobalSettings>
     listFonts: () => Promise<string[]>
     previewGhosttyImport: () => Promise<GhosttyImportPreview>
@@ -2173,6 +2181,8 @@ export type PreloadApi = {
     reload: () => Promise<VertexTask[]>
     create: (input: VertexTaskInput) => Promise<VertexTask | null>
     update: (taskId: string, patch: VertexTaskPatch) => Promise<VertexTask | null>
+    /** Ends this window's claims its dispatcher no longer awaits (reload, failed settle). */
+    releaseInterruptedClaims: (args: { activeTaskIds: string[] }) => Promise<void>
     move: (taskId: string, to: VertexTaskStatus, toIndex: number) => Promise<VertexTask | null>
     remove: (taskId: string) => Promise<boolean>
   }
@@ -3135,6 +3145,7 @@ export type PreloadApi = {
     dropByTabPrefix: (tabId: string) => void
   }
   mobile: {
+    enableScreenSharing: () => Promise<{ opened: true }>
     listNetworkInterfaces: () => Promise<{
       interfaces: { name: string; address: string }[]
     }>
@@ -3165,13 +3176,17 @@ export type PreloadApi = {
     revokeDevice: (args: { deviceId: string }) => Promise<{ revoked: boolean }>
     listRuntimeAccessGrants: () => Promise<{ grants: RuntimeAccessGrant[] }>
     revokeRuntimeAccess: (args: { deviceId: string }) => Promise<{ revoked: boolean }>
-    isWebSocketReady: () => Promise<{ ready: boolean; endpoint: string | null }>
+    isWebSocketReady: () => Promise<{
+      ready: boolean
+      endpoint: string | null
+      startedWithListenerEnabled: boolean
+    }>
   }
   speech: {
     getCatalog: () => Promise<SpeechModelManifest[]>
     getModelStates: () => Promise<SpeechModelState[]>
-    getOpenAiApiKeyStatus: () => Promise<{ configured: boolean }>
-    saveOpenAiApiKey: (apiKey: string) => Promise<{ configured: boolean }>
+    getOpenAiApiKeyStatus: () => Promise<{ configured: boolean; sessionOnly?: boolean }>
+    saveOpenAiApiKey: (apiKey: string) => Promise<{ configured: boolean; sessionOnly?: boolean }>
     clearOpenAiApiKey: () => Promise<{ configured: boolean }>
     downloadModel: (modelId: string) => Promise<void>
     cancelDownload: (modelId: string) => Promise<void>
@@ -3212,10 +3227,14 @@ export type PreloadApi = {
       content: string,
       description: string
     ) => Promise<{ ok: true; id: string; displayPath: string } | { ok: false; error: string }>
-    /** Writes an approved change, keeping a backup. */
+    /** Writes an approved change, keeping a backup. Refuses (conflict) if the file changed since the proposal. */
     applySelfEdit: (
       id: string
-    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string }>
+    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string; conflict?: true }>
+    /** Restores the bytes from before an applied change. Refuses (conflict) if the file changed after it. */
+    undoSelfEdit: (
+      id: string
+    ) => Promise<{ ok: true; displayPath: string } | { ok: false; error: string; conflict?: true }>
     /** Throws away a pending change. */
     discardSelfEdit: (id: string) => Promise<{ ok: boolean }>
     /** Review window subscription for incoming proposals. */
@@ -3230,6 +3249,11 @@ export type PreloadApi = {
     status: () => Promise<{ shortcutActive: boolean; phase: string }>
     /** Mints a signed websocket URL for the configured ElevenLabs agent. */
     agentSignedUrl: () => Promise<{ ok: true; url: string } | { ok: false; error: string }>
+    /** Whether an ElevenLabs key is saved; the key itself never reaches the renderer. */
+    getElevenLabsKeyStatus: () => Promise<ElevenLabsKeyStatus>
+    /** Saves the key to the encrypted store (session-only when encryption is unavailable). */
+    saveElevenLabsKey: (apiKey: string) => Promise<ElevenLabsKeyStatus>
+    clearElevenLabsKey: () => Promise<ElevenLabsKeyStatus>
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
     askAdamText: (utterance: string) => Promise<JarvisAskResult>
     onState: (callback: (event: JarvisStateEvent) => void) => () => void

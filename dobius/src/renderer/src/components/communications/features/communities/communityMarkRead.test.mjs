@@ -83,8 +83,12 @@ function makeClient({ channelIds, metadata }) {
   return {
     published,
     async fetchEvents(filter) {
-      if (filter.kinds?.includes(39002)) return [membersEvent(channelIds)];
-      if (filter.kinds?.includes(39000)) return metadata;
+      if (filter.kinds?.includes(39002)) {
+        return [membersEvent(channelIds)];
+      }
+      if (filter.kinds?.includes(39000)) {
+        return metadata;
+      }
       return [];
     },
     async publishEvent(event) {

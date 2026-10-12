@@ -53,7 +53,9 @@ export function buildReconnectReplayFilter(
   until?: number,
   limit = Math.min(filter.limit, RECONNECT_REPLAY_PAGE_LIMIT),
 ) {
-  if (since === undefined) return filter;
+  if (since === undefined) {
+    return filter;
+  }
 
   const replayFilter: RelaySubscriptionFilter = {
     ...filter,
@@ -94,7 +96,9 @@ export async function replayReconnectHistoryPages({
   let pageUntil = until;
 
   while (pageUntil >= since) {
-    if (!isActive()) return;
+    if (!isActive()) {
+      return;
+    }
 
     const events = await requestHistory(
       buildReconnectReplayFilter(
@@ -105,13 +109,21 @@ export async function replayReconnectHistoryPages({
       ),
     );
 
-    if (!isActive()) return;
+    if (!isActive()) {
+      return;
+    }
 
-    for (const event of events) subscription.onEvent(event);
-    if (events.length < RECONNECT_REPLAY_PAGE_LIMIT) return;
+    for (const event of events) {
+      subscription.onEvent(event);
+    }
+    if (events.length < RECONNECT_REPLAY_PAGE_LIMIT) {
+      return;
+    }
 
     const oldestCreatedAt = events[0]?.created_at;
-    if (oldestCreatedAt === undefined || oldestCreatedAt <= since) return;
+    if (oldestCreatedAt === undefined || oldestCreatedAt <= since) {
+      return;
+    }
 
     pageUntil =
       oldestCreatedAt < pageUntil ? oldestCreatedAt : oldestCreatedAt - 1;
@@ -153,11 +165,15 @@ export async function replayLiveSubscriptions({
 }) {
   // If the relay has signalled back-pressure, wait for the gate to clear
   // before blasting a full set of REQs that would immediately be rate-limited.
-  if (isRateLimited()) await waitForRateLimit();
+  if (isRateLimited()) {
+    await waitForRateLimit();
+  }
 
   // A newer connection may have replayed while this one was suspended at the
   // gate — abort silently to avoid double-sending every REQ on the live socket.
-  if (!isActive()) return;
+  if (!isActive()) {
+    return;
+  }
 
   const replayRequests = Array.from(subscriptions.entries())
     .filter(
@@ -193,7 +209,9 @@ export async function replayLiveSubscriptions({
         (b.subscription.filter["#h"] as string[] | undefined)?.includes(
           visibleChannelId,
         ) ?? false;
-      if (aVis === bVis) return 0;
+      if (aVis === bVis) {
+        return 0;
+      }
       return aVis ? -1 : 1;
     });
   }
@@ -205,8 +223,12 @@ export async function replayLiveSubscriptions({
     // admission control and armed the gate mid-replay. Wait for it to clear,
     // then verify the connection is still current — a newer connection may have
     // replayed while we were suspended.
-    if (isRateLimited()) await waitForRateLimit();
-    if (!isActive()) return;
+    if (isRateLimited()) {
+      await waitForRateLimit();
+    }
+    if (!isActive()) {
+      return;
+    }
     const batch = replayRequests.slice(i, i + replayBatchSize);
     await Promise.all(
       batch.map(({ subId, subscription, replaySince, shouldPageReplay }) =>

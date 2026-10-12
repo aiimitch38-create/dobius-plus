@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process'
-import { writeFile as writeFileAsync } from 'node:fs/promises'
-import { mkdtempSync } from 'node:fs'
+import { mkdtemp, rm, writeFile as writeFileAsync } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { resolveElevenLabsApiKey } from './elevenlabs-key-store'
 
 export type ElevenLabsConfig = {
   apiKey: string
@@ -20,16 +20,20 @@ export type ElevenLabsSettings = {
 /**
  * Settings win over env: the in-app Voice pane is where a user can actually
  * change this, and a GUI app launched from Finder inherits no shell exports.
+ * The key comes from the protected key store (#24), which also covers a legacy
+ * settings key that has not been migrated out yet.
  */
 export function resolveElevenLabsConfig(
   settings?: ElevenLabsSettings | null,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  readStoredApiKey: () => string = () => resolveElevenLabsApiKey(settings ?? undefined)
 ): ElevenLabsConfig | null {
-  const apiKey = settings?.elevenlabsApiKey?.trim() || env.ELEVENLABS_API_KEY?.trim()
   const voiceId = settings?.elevenlabsVoiceId?.trim() || env.ELEVENLABS_VOICE_ID?.trim()
   // No key or no voice pinned -> stay on the free local engine rather than
   // guessing a billed voice or failing a spoken reply over missing config.
-  if (!apiKey || !voiceId) {return null}
+  if (!voiceId) {return null}
+  const apiKey = readStoredApiKey().trim() || env.ELEVENLABS_API_KEY?.trim()
+  if (!apiKey) {return null}
   const modelId =
     settings?.elevenlabsModelId?.trim() || env.ELEVENLABS_MODEL_ID?.trim() || 'eleven_turbo_v2_5'
   return { apiKey, voiceId, modelId }
@@ -72,25 +76,71 @@ export function chunkForSpeech(text: string): string[] {
   return [trimmed.slice(0, cut + 1).trim(), trimmed.slice(cut + 1).trim()]
 }
 
-export async function speakWithElevenLabs(text: string, config: ElevenLabsConfig): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), 'jarvis-tts-'))
+/** Seams for tests; production uses the real HTTP, afplay and temp dir. */
+export type ElevenLabsSpeechIo = {
+  synthesize: (text: string, config: ElevenLabsConfig) => Promise<Buffer>
+  write: (filePath: string, data: Buffer) => Promise<void>
+  play: (filePath: string) => Promise<void>
+  tempRoot: () => string
+}
+
+const DEFAULT_SPEECH_IO: ElevenLabsSpeechIo = {
+  synthesize: (text, config) => synthesizeToMp3(text, config),
+  write: (filePath, data) => writeFileAsync(filePath, data),
+  play: playMp3,
+  tempRoot: tmpdir
+}
+
+/**
+ * Rejects only when nothing was heard, so the caller's local-engine fallback
+ * can say the reply instead. Once a chunk has played in full, a later failure
+ * ends the reply there (#91): the fallback would restate the whole reply on
+ * top of what was already said.
+ */
+export async function speakWithElevenLabs(
+  text: string,
+  config: ElevenLabsConfig,
+  io: ElevenLabsSpeechIo = DEFAULT_SPEECH_IO
+): Promise<void> {
+  const dir = await mkdtemp(join(io.tempRoot(), 'jarvis-tts-'))
   const chunks = chunkForSpeech(text)
+  let playedChunks = 0
   // afplay has no stdin, so each chunk lands in a file; playback is chained
   // while the next chunk is still being synthesized.
   let playing: Promise<void> = Promise.resolve()
-  for (let index = 0; index < chunks.length; index += 1) {
-    let mp3: Buffer
-    try {
-      mp3 = await synthesizeToMp3(chunks[index], config)
-    } catch (error) {
-      // Once audio is playing, keep it: the caller's local-engine fallback
-      // would otherwise restate the whole reply on top of what was said.
-      if (index > 0) {break}
+  try {
+    for (let index = 0; index < chunks.length; index += 1) {
+      const mp3 = await io.synthesize(chunks[index], config)
+      const file = join(dir, `reply-${index}.mp3`)
+      await io.write(file, mp3)
+      playing = playing.then(async () => {
+        await io.play(file)
+        playedChunks += 1
+      })
+      // Why: a playback failure during the next synthesis would otherwise be
+      // an unhandled rejection; it is still read by the awaits below.
+      playing.catch(() => undefined)
+    }
+    await playing
+  } catch (error) {
+    // Why wait: an earlier chunk may still be playing. Whether it finishes
+    // decides if anything was heard, and the fallback must not talk over it.
+    await playing.catch(() => undefined)
+    if (playedChunks === 0) {
       throw error
     }
-    const file = join(dir, `reply-${index}.mp3`)
-    await writeFileAsync(file, mp3)
-    playing = playing.then(() => playMp3(file))
+    console.warn(
+      '[jarvis] ElevenLabs reply cut short after audio played:',
+      error instanceof Error ? error.message : String(error)
+    )
+  } finally {
+    await playing.catch(() => undefined)
+    // Why after playback settles: afplay reads the files until it exits (#90).
+    await rm(dir, { recursive: true, force: true }).catch((error: unknown) => {
+      console.warn(
+        '[jarvis] could not remove TTS temp dir:',
+        error instanceof Error ? error.message : String(error)
+      )
+    })
   }
-  await playing
 }

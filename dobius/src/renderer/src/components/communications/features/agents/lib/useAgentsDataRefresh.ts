@@ -38,7 +38,9 @@ export function useAgentsDataRefresh(): void {
     });
 
     const unlisten = listen("agents-data-changed", () => {
-      if (timer !== undefined) clearTimeout(timer);
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
       timer = setTimeout(() => {
         void queryClient.invalidateQueries({ queryKey: personasQueryKey });
         void queryClient.invalidateQueries({ queryKey: teamsQueryKey });
@@ -48,7 +50,9 @@ export function useAgentsDataRefresh(): void {
     });
 
     return () => {
-      if (timer !== undefined) clearTimeout(timer);
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
       void unlisten.then((fn) => fn());
       void unlistenRuntime.then((fn) => fn());
     };

@@ -6,6 +6,7 @@ import { existsSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import os from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron'
+import { installDesktopScreenSharing } from './runtime/screen/install-screen-sharing'
 import { electronApp, is } from '@electron-toolkit/utils'
 import * as QRCode from 'qrcode'
 import {
@@ -14,6 +15,7 @@ import {
   getCanonicalUserDataPath,
   migrateMobilePairingDataToCanonicalUserDataPath
 } from './persistence'
+import { reportUserDataRootDivergence } from './storage/user-data-root'
 import { applyAppIcon } from './app-icon'
 import { applyLaunchAtLogin } from './launch-at-login'
 import { StatsCollector, initStatsPath } from './stats/collector'
@@ -30,6 +32,9 @@ import { initObservability, shutdownObservability } from './observability'
 import { startSpan } from './observability/tracer'
 import { registerMobileHandlers } from './ipc/mobile'
 import { initTelemetry, shutdownTelemetry, trackAppOpenedOnce } from './telemetry/client'
+import { setClaudeSettingsOverrideReader } from './codex-cli/command'
+import { setAdamEndpointSettingReader } from './adam-connection'
+import { setAgentSandboxEnabledReader } from './agents/agent-sandbox-context'
 import { runManagedHookInstallers } from './agent-hooks/install-telemetry'
 import {
   isAgentStatusHooksEnabled,
@@ -42,6 +47,7 @@ import { resolveConsent } from './telemetry/consent'
 import { triggerStartupNotificationRegistration } from './ipc/notifications'
 import { DobiusRuntimeService } from './runtime/dobius-runtime'
 import { DobiusRuntimeRpcServer } from './runtime/runtime-rpc'
+import { shouldEnableRuntimeWebSocket } from './runtime/mobile-listener-setting'
 import { awaitRuntimeFileWatcherUnsubscribes } from './runtime/dobius-runtime-files'
 import { clearRuntimeMetadataIfOwned } from './runtime/runtime-metadata'
 import { ensureMainI18n, setMainUiLanguage } from './i18n/main-i18n'
@@ -86,6 +92,7 @@ import { maybeRedirectAppImageCliLaunch } from './startup/appimage-cli-redirect'
 import { maybeRedirectPackagedCliEntryLaunch } from './startup/packaged-cli-entry-redirect'
 import { startFirstWindowStartupServices } from './startup/first-window-startup-services'
 import { migrateLegacyDobiusConfig } from './migrate-legacy-dobius-config'
+import { claimV2WriterMarker } from './storage/v2-writer-marker'
 import { getDevInstanceIdentity } from './startup/dev-instance-identity'
 import { hydrateShellPath, mergePathSegments } from './startup/hydrate-shell-path'
 import {
@@ -582,6 +589,9 @@ if (hasSingleInstanceLock) {
   // dobius-dev in dev mode) but before app.setName('Dobius') inside whenReady
   // (which would change the resolved path on case-sensitive filesystems).
   initDataPath()
+  // Why: before anything else writes here, so a legacy V1 launch refuses this
+  // dir (bug #52). Inside the lock branch: a transient second process never writes.
+  claimV2WriterMarker(app.getVersion())
   // Why: same timing constraint as initDataPath — capture the userData path
   // before app.setName changes it. See persistence.ts:20-28.
   initStatsPath()
@@ -641,7 +651,7 @@ function startDesktopFirstWindowStartupServices(): Promise<void> {
         // Why: hooks source this endpoint file at invocation time, so old PTY
         // env still reaches the current Dobius process after an app restart.
         // Dev uses a namespace because all worktrees share `dobius-dev`.
-        userDataPath: app.getPath('userData'),
+        userDataPath: getCanonicalUserDataPath(),
         endpointNamespace: devAgentHookEndpointNamespace
       })
       logStartupMilestone('startup-service-done', { service: 'agent-hook-server' })
@@ -673,7 +683,7 @@ async function startServeAgentHookServer(): Promise<void> {
   try {
     await agentHookServer.start({
       env: app.isPackaged ? 'production' : 'development',
-      userDataPath: app.getPath('userData'),
+      userDataPath: getCanonicalUserDataPath(),
       endpointNamespace: devAgentHookEndpointNamespace
     })
   } catch (error) {
@@ -782,7 +792,7 @@ function openMainWindow(): BrowserWindow {
   // startup/windows-user-data-acl.ts; per-write EPERM retries are the backstop.
   if (process.platform === 'win32') {
     logStartupMilestone('acl-grant-start')
-    ensureWindowsUserDataAclGrant(app.getPath('userData'), {
+    ensureWindowsUserDataAclGrant(getCanonicalUserDataPath(), {
       onDone: (result) => {
         logStartupMilestone('acl-grant-done', { mode: result.mode })
         if (result.mode === 'failed') {
@@ -1137,7 +1147,10 @@ function maybeApplyGpuFallbackForThisLaunch(): void {
   if (isServeMode || process.platform !== 'win32') {
     return
   }
-  const marker = readActiveGpuFallbackMarker(app.getPath('userData'), getGpuFallbackEnvironment())
+  const marker = readActiveGpuFallbackMarker(
+    getCanonicalUserDataPath(),
+    getGpuFallbackEnvironment()
+  )
   if (!marker) {
     return
   }
@@ -1173,7 +1186,7 @@ function handleGpuChildCrash(reason: string, exitCode: number | null): void {
   }
   try {
     writeGpuFallbackMarker(
-      app.getPath('userData'),
+      getCanonicalUserDataPath(),
       {
         engagedAt,
         crashesInWindow: result.crashesInWindow
@@ -1627,16 +1640,27 @@ function shouldSuppressCodexAutoApprovalSyntheticTitleFromHook(args: {
 
 app.whenReady().then(async () => {
   logStartupMilestone('app-ready')
-  void import('./agents/agent-run-event-journal')
-    .then(({ replayRecentAgentRunJournalEvents }) => replayRecentAgentRunJournalEvents())
-    .catch((error) => console.warn('[agents] event journal replay failed:', error))
   electronApp.setAppUserModelId(devInstanceIdentity.appUserModelId)
   app.setName(devInstanceIdentity.name)
+  reportUserDataRootDivergence()
 
   store = new Store()
   await migrateLegacyDobiusConfig(store)
   logStartupMilestone('store-loaded')
-  selfHealRuntimeEnvironmentFocus({ store, userDataPath: app.getPath('userData') })
+  // Why: headless Claude spawns must honor the Settings command override ahead
+  // of the DOBIUS_CLAUDE_CLI_PATH env var (X9); read live so edits apply.
+  setClaudeSettingsOverrideReader(() => store?.getSettings().agentCmdOverrides?.claude)
+  // Why: event delivery has no store handle; read the live Settings endpoint
+  // so it follows the same ADAM connection as Jarvis converse (#81).
+  setAdamEndpointSettingReader(() => store?.getSettings().voice?.adamEndpoint)
+  // Why: read live per run so the Settings switch applies to the next agent run.
+  setAgentSandboxEnabledReader(() => store?.getSettings().agentSandboxEnabled !== false)
+  // Why: after the store, and a background drain that resumes from the saved
+  // cursor instead of re-posting the last 1,000 events on every launch (N5).
+  void import('./agents/agent-run-event-journal')
+    .then(({ startAgentRunEventDelivery }) => startAgentRunEventDelivery())
+    .catch((error) => console.warn('[agents] event delivery failed to start:', error))
+  selfHealRuntimeEnvironmentFocus({ store, userDataPath: getCanonicalUserDataPath() })
   applyAppIcon(store.getSettings().appIcon)
   if (shouldSuppressDevEducation({ isDev: is.dev })) {
     suppressDevEducationForStore(store)
@@ -1814,7 +1838,10 @@ app.whenReady().then(async () => {
     // server process should execute schedules owned by `remote_host_service`.
     allowRemoteHostScheduling: isServeMode,
     headlessDispatcher: isServeMode
-      ? async ({ automation, run, target }) => {
+      ? async ({ automation, run, target, honorExecutionGate }) => {
+          // Why: the spawn happens after awaited worktree work; the runtime
+          // re-checks Pause crew right before it for gated runs.
+          const executionOrigin = honorExecutionGate ? ('agent-run' as const) : undefined
           const terminalSnapshotLimit = 2_000
           let terminalHandle: string
           let terminalSessionId: string | null = null
@@ -1829,7 +1856,8 @@ app.whenReady().then(async () => {
                 automation,
                 run,
                 repo: target.repo
-              })
+              }),
+              executionOrigin
             })
             terminalHandle = created.startupTerminal?.handle ?? ''
             terminalSessionId = created.startupTerminal?.tabId ?? null
@@ -1852,7 +1880,8 @@ app.whenReady().then(async () => {
               {
                 agent: automation.agentId,
                 prompt: automation.prompt,
-                title: run.title
+                title: run.title,
+                executionOrigin
               }
             )
             terminalHandle = terminal.handle
@@ -1920,12 +1949,11 @@ app.whenReady().then(async () => {
   // Reuses the runtime's active-terminal resolution + send path.
   startDobiusCli(runtimeService)
   // Voice Conductor: background Opus session that routes voice/dispatched work.
-  // Starts/stops in step with the voice.conductorEnabled setting. The iMessage
-  // handle (for dobius-ask confirmations) comes from env until it has a setting.
-  const voiceConductorImessageHandle = process.env.DOBIUS_IMESSAGE_HANDLE ?? ''
-  syncVoiceConductorFromSettings(store.getSettings(), runtimeService, voiceConductorImessageHandle)
+  // Starts/stops in step with the voice.conductorEnabled setting. Its iMessage
+  // handle comes from the iMessage bridge setting (voice-conductor/conductor-settings.ts).
+  syncVoiceConductorFromSettings(store.getSettings(), runtimeService)
   store.onSettingsChanged((_updates, nextSettings) => {
-    syncVoiceConductorFromSettings(nextSettings, runtimeService, voiceConductorImessageHandle)
+    syncVoiceConductorFromSettings(nextSettings, runtimeService)
   })
   // Prompt snippets → inject into the active terminal (needs the runtime).
   registerPromptsHandlers(runtimeService)
@@ -2094,13 +2122,19 @@ app.whenReady().then(async () => {
     // app.getPath('userData') that resolves elsewhere and drops paired devices
     // across restarts/updates. See persistence.ts:getCanonicalUserDataPath.
     userDataPath: getCanonicalUserDataPath(),
-    enableWebSocket: true,
+    enableWebSocket: shouldEnableRuntimeWebSocket({
+      settings: store.getSettings(),
+      isServeMode
+    }),
     ...(isE2E ? { wsPort: 0 } : {}),
     ...(devWsPort !== undefined ? { wsPort: devWsPort } : {}),
     ...(serveOptions?.wsPort !== undefined ? { wsPort: serveOptions.wsPort } : {}),
     webClientRoot: getBundledWebClientRoot()
   })
   registerMobileHandlers(runtimeRpc)
+  if (!isServeMode) {
+    installDesktopScreenSharing(runtime, (id) => runtimeRpc?.getDeviceRegistry()?.getDevice(id) ?? null)
+  }
 
   if (!isServeMode) {
     startDesktopFirstWindowStartupServices()

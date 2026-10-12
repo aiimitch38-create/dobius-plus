@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import type { WebSocket } from 'ws'
 import { E2EEChannel, type E2EEChannelOptions } from './e2ee-channel'
 import { generateKeyPair, deriveSharedKey, encrypt, decrypt, encryptBytes } from './e2ee-crypto'
+import { enableE2EESequencing } from '../../../shared/e2ee-sequencing'
 
 function publicKeyToBase64(key: Uint8Array): string {
   return Buffer.from(key).toString('base64')
@@ -43,8 +44,13 @@ function doHandshake(ctx: ReturnType<typeof setup>) {
   })
   ctx.channel.handleRawMessage(hello)
   const sharedKey = deriveSharedKey(ctx.clientKeys.secretKey, ctx.serverKeys.publicKey)
+  enableE2EESequencing(sharedKey, 'client')
+  const ready = JSON.parse(ctx.ws.sent.at(-1)!) as { challenge: string }
   ctx.channel.handleRawMessage(
-    encrypt(JSON.stringify({ type: 'e2ee_auth', deviceToken: 'valid-token' }), sharedKey)
+    encrypt(
+      JSON.stringify({ type: 'e2ee_auth', deviceToken: 'valid-token', challenge: ready.challenge }),
+      sharedKey
+    )
   )
   return sharedKey
 }
@@ -68,7 +74,7 @@ describe('E2EEChannel', () => {
       expect(ctx.channel.deviceToken).toBe('valid-token')
 
       const readyMsg = JSON.parse(ctx.ws.sent[0]!)
-      expect(readyMsg).toEqual({ type: 'e2ee_ready' })
+      expect(readyMsg).toEqual({ type: 'e2ee_ready', version: 2, challenge: expect.any(String) })
       const authMsg = decrypt(
         ctx.ws.sent[1]!,
         deriveSharedKey(ctx.clientKeys.secretKey, ctx.serverKeys.publicKey)
@@ -86,7 +92,7 @@ describe('E2EEChannel', () => {
       )
 
       expect(ctx.onReady).not.toHaveBeenCalled()
-      expect(JSON.parse(ctx.ws.sent[0]!)).toEqual({ type: 'e2ee_ready' })
+      expect(JSON.parse(ctx.ws.sent[0]!)).toMatchObject({ type: 'e2ee_ready' })
     })
 
     it('rejects invalid encrypted token', () => {
@@ -98,8 +104,17 @@ describe('E2EEChannel', () => {
         })
       )
       const sharedKey = deriveSharedKey(ctx.clientKeys.secretKey, ctx.serverKeys.publicKey)
+      enableE2EESequencing(sharedKey, 'client')
+      const ready = JSON.parse(ctx.ws.sent[0]!) as { challenge: string }
       ctx.channel.handleRawMessage(
-        encrypt(JSON.stringify({ type: 'e2ee_auth', deviceToken: 'bad-token' }), sharedKey)
+        encrypt(
+          JSON.stringify({
+            type: 'e2ee_auth',
+            deviceToken: 'bad-token',
+            challenge: ready.challenge
+          }),
+          sharedKey
+        )
       )
 
       expect(ctx.onError).toHaveBeenCalledWith(4001, 'Unauthorized')
@@ -176,7 +191,9 @@ describe('E2EEChannel', () => {
 
       ctx.channel.handleRawMessage(encrypt('{"id":"rpc-1","method":"status.get"}', sharedKey))
 
-      // The reply (ws.sent[2], after ready + authenticated) should be encrypted
+      // The reply (ws.sent[2], after ready + authenticated) should be encrypted;
+      // frames are numbered, so the client reads the auth ack first.
+      decrypt(ctx.ws.sent[1]!, sharedKey)
       const replyEncrypted = ctx.ws.sent[2]!
       const replyPlain = decrypt(replyEncrypted, sharedKey)
       expect(replyPlain).toBe('{"id":"rpc-1","ok":true}')

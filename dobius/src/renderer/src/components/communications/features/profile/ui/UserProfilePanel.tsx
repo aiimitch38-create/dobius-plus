@@ -161,7 +161,9 @@ export function UserProfilePanel({
   // a card or other non-panel surface (e.g. `ConfigNudgeCard`). Mirrors the
   // `subscribeOpenCreateAgent` pattern in AgentsView.
   React.useEffect(() => {
-    if (!pubkey) return;
+    if (!pubkey) {
+      return;
+    }
     // Consume any pending request that arrived before this panel mounted.
     const pending = consumePendingOpenEditAgent(pubkey);
     if (pending !== false) {
@@ -196,7 +198,9 @@ export function UserProfilePanel({
     return undefined;
   }, [managedAgentsQuery.data, persona, pubkey]);
   const personaInstances = React.useMemo(() => {
-    if (!managedAgent?.personaId) return managedAgent ? [managedAgent] : [];
+    if (!managedAgent?.personaId) {
+      return managedAgent ? [managedAgent] : [];
+    }
     return (managedAgentsQuery.data ?? []).filter(
       (agent) => agent.personaId === managedAgent.personaId,
     );
@@ -234,7 +238,9 @@ export function UserProfilePanel({
   const currentProfileQuery = useProfileQuery(currentPubkey !== undefined);
 
   React.useEffect(() => {
-    if (!effectivePubkey) return;
+    if (!effectivePubkey) {
+      return;
+    }
     void profileQuery.refetch();
   }, [effectivePubkey, profileQuery.refetch]);
 
@@ -386,7 +392,9 @@ export function UserProfilePanel({
     effectivePubkey ?? `persona:${resolvedPersona?.id ?? "unknown"}`;
   const prevTargetKeyRef = React.useRef(targetKey);
   React.useEffect(() => {
-    if (prevTargetKeyRef.current === targetKey) return;
+    if (prevTargetKeyRef.current === targetKey) {
+      return;
+    }
     prevTargetKeyRef.current = targetKey;
     setView("summary", { replace: true });
     setTab("info", { replace: true });
@@ -457,7 +465,9 @@ export function UserProfilePanel({
     });
 
   const handleInstantiateAgent = React.useCallback(async () => {
-    if (!resolvedPersona) return;
+    if (!resolvedPersona) {
+      return;
+    }
 
     try {
       const created = await createManagedAgentForPersona(resolvedPersona);
@@ -477,7 +487,9 @@ export function UserProfilePanel({
   }, [createManagedAgentForPersona, resolvedPersona]);
 
   const handleToggleAgentAutoStart = React.useCallback(async () => {
-    if (managedAgent?.backend.type !== "local") return;
+    if (managedAgent?.backend.type !== "local") {
+      return;
+    }
 
     try {
       const updated = await startOnLaunchMutation.mutateAsync({
@@ -499,11 +511,15 @@ export function UserProfilePanel({
   }, [managedAgent, startOnLaunchMutation.mutateAsync]);
 
   const handleDeleteAgent = React.useCallback(async () => {
-    if (!managedAgent) return;
+    if (!managedAgent) {
+      return;
+    }
 
     try {
       const result = await deleteManagedAgentRecord(managedAgent);
-      if (result.cancelled) return;
+      if (result.cancelled) {
+        return;
+      }
 
       toast.success(`Deleted ${managedAgent.name}.`);
       onClose();
@@ -544,12 +560,16 @@ export function UserProfilePanel({
   );
 
   const handleEditPersona = React.useCallback(() => {
-    if (!resolvedPersona) return;
+    if (!resolvedPersona) {
+      return;
+    }
     setPersonaDialogState(editPersonaDialogState(resolvedPersona));
   }, [resolvedPersona]);
 
   const handleDuplicatePersona = React.useCallback(() => {
-    if (!resolvedPersona) return;
+    if (!resolvedPersona) {
+      return;
+    }
     setPersonaDialogState(duplicatePersonaDialogState(resolvedPersona));
   }, [resolvedPersona]);
 
@@ -560,13 +580,17 @@ export function UserProfilePanel({
   }, [resolvedPersona]);
 
   const handleDeletePersona = React.useCallback(async () => {
-    if (!resolvedPersona) return;
+    if (!resolvedPersona) {
+      return;
+    }
 
     if (resolvedPersona.isBuiltIn) {
       try {
         const deletedInstances =
           await deleteManagedAgentsForPersona(resolvedPersona);
-        if (deletedInstances.cancelled) return;
+        if (deletedInstances.cancelled) {
+          return;
+        }
 
         await setPersonaActiveMutation.mutateAsync({
           id: resolvedPersona.id,
@@ -651,7 +675,9 @@ export function UserProfilePanel({
 
   const handleOpenActivity = React.useCallback(
     (channelId?: string | null) => {
-      if (!effectivePubkey) return;
+      if (!effectivePubkey) {
+        return;
+      }
       openAgentActivity(effectivePubkey, { channelId: channelId ?? null });
     },
     [effectivePubkey, openAgentActivity],
@@ -905,7 +931,9 @@ export function UserProfilePanel({
         }
         onOpenChange={(next) => {
           setEditAgentOpen(next);
-          if (!next) setEditAgentFocus(undefined);
+          if (!next) {
+            setEditAgentFocus(undefined);
+          }
         }}
         open={editAgentOpen}
       />
@@ -953,7 +981,9 @@ export function UserProfilePanel({
         <UserProfileSnapshotExportDialog
           linkedAgentPubkey={managedAgent?.pubkey ?? null}
           onOpenChange={(open) => {
-            if (!open) setPersonaToExportSnapshot(null);
+            if (!open) {
+              setPersonaToExportSnapshot(null);
+            }
           }}
           persona={personaToExportSnapshot}
         />

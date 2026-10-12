@@ -37,14 +37,18 @@ export function getResultArray(
   resultRecord: Record<string, unknown>,
   key: string,
 ) {
-  if (Array.isArray(resultValue)) return resultValue;
+  if (Array.isArray(resultValue)) {
+    return resultValue;
+  }
   const value = resultRecord[key];
   return Array.isArray(value) ? value : null;
 }
 
 export function formatCodeValue(value: string): string {
   const trimmed = value.trim();
-  if (!trimmed) return value;
+  if (!trimmed) {
+    return value;
+  }
   try {
     return JSON.stringify(JSON.parse(trimmed), null, 2);
   } catch {
@@ -161,7 +165,9 @@ function getOptionalString(
 
 /** Format a millisecond duration; negative input yields null. */
 export function formatDurationMs(ms: number): string | null {
-  if (ms < 0) return null;
+  if (ms < 0) {
+    return null;
+  }
   const totalSeconds = ms / 1000;
   if (totalSeconds < 60) {
     return totalSeconds < 10
@@ -184,11 +190,15 @@ export function formatDurationMs(ms: number): string | null {
  */
 export function parseToolResultValue(result: string): unknown {
   const trimmed = result.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return null;
+  }
 
   try {
     const parsed = JSON.parse(trimmed);
-    if (typeof parsed !== "string") return parsed;
+    if (typeof parsed !== "string") {
+      return parsed;
+    }
     try {
       return JSON.parse(parsed);
     } catch {
@@ -231,7 +241,9 @@ export function shorten(value: string) {
 }
 
 export function shortenMiddle(value: string, maxLength: number) {
-  if (value.length <= maxLength) return value;
+  if (value.length <= maxLength) {
+    return value;
+  }
   const edgeLength = Math.max(4, Math.floor((maxLength - 3) / 2));
   return `${value.slice(0, edgeLength)}...${value.slice(-edgeLength)}`;
 }
@@ -254,7 +266,9 @@ const transcriptTitleTimeFormat = new Intl.DateTimeFormat(undefined, {
 
 export function formatTranscriptTime(isoTimestamp: string): string | null {
   const date = new Date(isoTimestamp);
-  if (Number.isNaN(date.getTime())) return null;
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
   return transcriptTimeFormat.format(date);
 }
 
@@ -262,7 +276,9 @@ export function formatTranscriptTimestampTitle(
   isoTimestamp: string,
 ): string | undefined {
   const date = new Date(isoTimestamp);
-  if (Number.isNaN(date.getTime())) return isoTimestamp || undefined;
+  if (Number.isNaN(date.getTime())) {
+    return isoTimestamp || undefined;
+  }
   return transcriptTitleTimeFormat.format(date);
 }
 
@@ -270,12 +286,18 @@ export function formatDuration(
   startIso: string,
   endIso: string,
 ): string | null {
-  if (!startIso || !endIso) return null;
+  if (!startIso || !endIso) {
+    return null;
+  }
   const start = new Date(startIso).getTime();
   const end = new Date(endIso).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return null;
+  }
   const ms = end - start;
-  if (ms < 0) return null;
+  if (ms < 0) {
+    return null;
+  }
   const totalSeconds = ms / 1000;
   if (totalSeconds < 60) {
     return totalSeconds < 10
@@ -298,10 +320,14 @@ export function formatDuration(
  */
 export function formatElapsed(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  if (totalSeconds < 60) return `${totalSeconds}s`;
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
   const seconds = totalSeconds % 60;
   const totalMinutes = Math.floor(totalSeconds / 60);
-  if (totalMinutes < 60) return `${totalMinutes}m ${seconds}s`;
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m ${seconds}s`;
+  }
   const minutes = totalMinutes % 60;
   const hours = Math.floor(totalMinutes / 60);
   return `${hours}h ${minutes}m ${seconds}s`;
