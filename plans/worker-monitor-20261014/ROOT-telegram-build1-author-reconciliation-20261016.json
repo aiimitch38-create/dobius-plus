@@ -1,0 +1,13 @@
+{
+  "task_id": "task_bf5bdd524875",
+  "dispatch_id": "ctx_22a22de228b8",
+  "verdict": "AUTHOR_DELIVERY_VERIFIED_PENDING_FINAL_INDEPENDENT_REVIEW",
+  "author_verdict": "SOURCE_FROZEN_SYNTHETIC_PASS_NOT_LIVE",
+  "report": "plans/worker-monitor-20261014/BUILD1-telegram-personal-mtproto.md",
+  "report_sha256": "4fe468203931e96d9a0b64f34f9b4945d4bee962207bda9505b7b10cfcf374bd",
+  "source_files_verified": 10,
+  "root_combined_test_result": "84/84 tests, 10files; node/cli/web project typechecks exit0",
+  "installed": false,
+  "live": false,
+  "verified_at": 1792173441.3435378
+}

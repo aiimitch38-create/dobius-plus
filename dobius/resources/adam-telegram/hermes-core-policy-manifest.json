@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "hashAlgorithm": "sha256",
+  "baseRevision": "b997000cce17ada6a9c7f4a4134cb78013e841bc",
+  "patch": {
+    "path": "hermes-core-policy.patch",
+    "sha256": "8ff9a7f77a89a8501a3e3792300f298a04829c42c4228927fe0a4507e2eb1c00"
+  },
+  "files": [
+    {
+      "path": "agent/host_tool_policy.py",
+      "sha256": "92593bac4677a5433604059be66bc063414a63a234c59aa71ed97104aaff9da3",
+      "baseSha256": null,
+      "role": "runtime"
+    },
+    {
+      "path": "agent/agent_init.py",
+      "sha256": "20dd450a4f791e6289b9d0488f755a67354e3d1294632efff09f76bb39ac61fd",
+      "baseSha256": "1ceab591e0c9215dd8541545a678a8128b3c8f5e4b24cc14f931e8e13aec09cf",
+      "role": "runtime"
+    },
+    {
+      "path": "agent/agent_runtime_helpers.py",
+      "sha256": "aadfa18dfdf2dce4af64801d3311318b45e34863eaf9e31cf53946ff61ce40bc",
+      "baseSha256": "8849b1e428f141f01b880006d493dcb9d30903a2235dfc6737885079531843f9",
+      "role": "runtime"
+    },
+    {
+      "path": "agent/chat_completion_helpers.py",
+      "sha256": "9bd2238e9f1add4670d328ec8d04f4a58a75f927914d924be614c3457242dded",
+      "baseSha256": "b49e9a064b5633f32432fcd2116ff2673f3137f44c00ebb4c80efb2bdaa189a7",
+      "role": "runtime"
+    },
+    {
+      "path": "agent/conversation_loop.py",
+      "sha256": "005306a681b9296b305fc6eddcb783aa30095cb9c5055fbf9872f2fe5286f32b",
+      "baseSha256": "1f9ae200b983938c9a35019c35d19c352ae8bc473cbff45f2592f2fa0fe14ad0",
+      "role": "runtime"
+    },
+    {
+      "path": "agent/tool_executor.py",
+      "sha256": "bddb65a891708dae570751e0cfb971ea0c3ff5e565d5d74910c5044ba75e8d77",
+      "baseSha256": "01dbe91c1dcb36903021ec824b03110a2ac4c8b8ad3d81df52a843b575d1c32b",
+      "role": "runtime"
+    },
+    {
+      "path": "run_agent.py",
+      "sha256": "df1e417f7c7cde9810c3ed73d9e975b653d3e5a8f98e83a94a3105846a7278d4",
+      "baseSha256": "e58fcdcc48d8112e614661a93f288645a85785f8536553f3d3a933dec28c0a12",
+      "role": "runtime"
+    },
+    {
+      "path": "gateway/platform_registry.py",
+      "sha256": "9f6c252660dc8ce7cf542859534ab9a96bd044c51b44f68ba03d696b6f25f13d",
+      "baseSha256": "51f5cd4cf30cf3e00137a0f7bd61d492697e00f691cc46d4fe9659cfdb2bafe2",
+      "role": "runtime"
+    },
+    {
+      "path": "gateway/run.py",
+      "sha256": "d21588ea13b878af9ef25c81473e97f860891d6f834739e406c92ba27405519d",
+      "baseSha256": "3b9f1a53aae26286f8a6d4c03d4ae67e952eab7089ec211dc75d07e4c54d9041",
+      "role": "runtime"
+    },
+    {
+      "path": "gateway/session.py",
+      "sha256": "fee244a6431e197bb450fb1129fd1e743d76806c6808f3f14b80d3ac8d6c2d3d",
+      "baseSha256": "59575638d01d3b598f4c5ea5495a8b24dc61cf7bf3a81ad241c1ade3d82a7df1",
+      "role": "runtime"
+    },
+    {
+      "path": "tests/run_agent/test_host_tool_policy.py",
+      "sha256": "0e50aa3ec1dc307da4c613af0eb23c4220a18243f44ac004161700ac6da26867",
+      "baseSha256": null,
+      "role": "test"
+    },
+    {
+      "path": "tests/gateway/test_runner_scoped_maintenance.py",
+      "sha256": "5fadd34b2a63ad33b362459edbe273130c3ac6922b4f625566d429e1894f4f7e",
+      "baseSha256": null,
+      "role": "test"
+    }
+  ],
+  "provenance": {
+    "scope": "Only host tool policy enforcement and scoped gateway transcript/maintenance seams. No model/provider/account/profile configuration edits.",
+    "priorDirtyOverlap": false,
+    "verification": {
+      "finalFocusedTests": 131,
+      "existingAgentRegressionTests": 372,
+      "ruff": "passed",
+      "pythonCompilation": "passed"
+    },
+    "apply": "Review and apply against baseRevision in a separate clean checkout; never auto-apply to an active Hermes profile/runtime."
+  }
+}

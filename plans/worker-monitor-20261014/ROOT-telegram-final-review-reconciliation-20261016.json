@@ -1,0 +1,12 @@
+{
+  "task_id": "task_8795aea9eb1c",
+  "dispatch_id": "ctx_af1dfe50289b",
+  "verdict": "CHANGES_REQUIRED",
+  "source_files_verified": 53,
+  "report": "plans/worker-monitor-20261014/RESEARCH-telegram-final-source-review.md",
+  "report_sha256": "0225a5753e22f03a7e447c8587a97bef99c7915cc80731dd027134e4807e4a02",
+  "findings": [
+    "Same-process pause then revoke never reaches remote logout; failed logout must preserve paused reconnect choice"
+  ],
+  "live": false
+}

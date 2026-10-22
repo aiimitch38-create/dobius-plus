@@ -1,0 +1,22 @@
+{
+  "id": "2d674a60-f793-45ed-9d2e-151b6ea75024",
+  "ok": true,
+  "result": {
+    "task": {
+      "id": "task_bf5bdd524875",
+      "parent_id": null,
+      "created_by_terminal_handle": "term_ac9f423b-522b-4da0-a656-b22b581952e2",
+      "task_title": "TELEGRAM real personal-account MTProto adapter, new urgent authorized scope 2...",
+      "display_name": "TELEGRAM real personal-account MTProto adapter, new urgent authorized scope 2...",
+      "spec": "TELEGRAM real personal-account MTProto adapter, new urgent authorized scope 2026-10-16. Your joint integration task is independently rerun9/9 and reconciled COMPLETE; its freeze and all ADAM candidates/main26paths stay unchanged. Canonical /Users/bayou/Projects (Code)/Dobius/dobius-plus. OWN ONLY new dobius/src/main/telegram-account-mtproto/** + new report/own build1.json entry. BUILD2 owns main/telegram-account/** and shared/telegram-account.ts; FIXER owns renderer Telegram UI. ROOT IPC/preload and package/lock. Read their actual typed PersonalTelegramClient/Factory in main/telegram-account/types.ts and implement real adapter + focused synthetic tests, not report-only fake. Use GramJS official author docs https://gram.js.org and github.com/gram-js/gramjs; TDLib is official but native packaging larger. Dependency telegram npm needs ROOT-managed pin/install, request exact modules/version early and continue source; do not change packages/lock yourself. No live network/account/credentials/login or installed/profiles/Hermes modifications. Implement requestCode/submitCode/2FA via actual SDK, no signup, abort/stale epochs disconnect socket, never log SDKerrors/auth payloads/session/APIhash. Only emit safe generic typed errors. Use stable Telegram numeric signed peer IDs and server entities; group/supergroup only, never broadcast channels/users. subscribe NewMessage structured events carries no own outgoing or service/media messages, bounded text; random_id controlled by durable caller and actual messages.SendMessage request, no SDK-generated replacement. Telegram has no general get-message-by-random_id query: unknown must remain unknown, do not pretend not-sent and blindly resend. Maintain bounded adapter receipt map for confirmed runtime sends only; reconnect unknown stays unknown pending reconciliation. listDialogs must not fetch message history or send chat text to model. Persistent StringSession lives only protected main-owned vault, no argv/config/logs. Real API app credentials must be provided privately in Settings (root wiring) and stored fail-closed OS encryption if adapter exposes credential owner; APIcredentials factory config can be main-only {apiId,apiHash}, no defaults/borrowed IDs. Expose createGramJsPersonalTelegramClientFactory(credentials) using strict validation, and a separate secure OS encrypted app credential store if useful; ROOT composes with session vault and unavailable until registered credentials and secure storage ready. If SDK updates gap recovery cannot be fully guaranteed, report exact honest gap instead of lost-data claims; no historical fetch to overcome consent. Research report plans/worker-monitor-20261014/RESEARCH-telegram-personal-account-feasibility.md explains existing Hermes Bot API adapter and API server aren't personal/currentinteractivehead transport. Do not wire separate Hermes process, PTY or API new head. Adapter itself doesn't invoke LLM; consent/routing remain service-controlled and disconnected until authorized. Test SDK mocks for actualmethod params, numericIDs, code/2FA, wrongkind, cancellation/no late callbacks, randomIDpreservation, no secret leaks, logout invalidation if providing revoke. Include optional revoke() for remote auth.logOut separately from disconnect (disconnect only socket; never label it revoked). Coordinate interface optional revoke with ROOT; do not edit B2 types. Focused Node24Vitest/scopedtype/lint; no build/install/deploy/restart/user-process/head/Gitactions. AWSdeferred/Storagepaused. Write BUILD1-telegram-personal-mtproto.md and atomic own build1.json key telegram-personal-mtproto-20261016 exacttask/dispatch/files/hashes/tests/limitations. One worker_done exact current ROOT/IDs or single-attempt file fallback, no postcompletion polling.",
+      "status": "ready",
+      "deps": "[]",
+      "result": null,
+      "created_at": "2026-10-16 17:31:51",
+      "completed_at": null
+    }
+  },
+  "_meta": {
+    "runtimeId": "6627a505-a9ea-4b59-90e7-d051eb153516"
+  }
+}

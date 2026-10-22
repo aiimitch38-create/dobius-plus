@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "full_compile": "PASS",
+  "provenance_guard": "PASS source stable",
+  "after_pack": "FAIL missing copied runtime deps big-integer, teleproto",
+  "log": "/tmp/dobius-telegram-build-v2-20261016.log",
+  "log_sha256": "cce1107325c06723765d7fa3c8e5accb49b2b345c7c916be51418611bdf27fa0",
+  "correction_task_id": "task_905a2e437da3",
+  "installed": false,
+  "live": false
+}

@@ -1,0 +1,13 @@
+{
+  "command": "pnpm --dir dobius run build:unpack",
+  "node": "24.18.0",
+  "exit_code": 1,
+  "compilation": "desktop/main/preload, web, CLI and native helper stages completed",
+  "package_result": "No package produced; provenance guard refused source tree drift during compile",
+  "reason": "Independent review artifact and report were written after precompile snapshot; no guard bypass attempted",
+  "log": "/tmp/dobius-telegram-build-20261016.log",
+  "log_sha256": "9b5ef5e999b5b55851e7c35a76b0742ede66b9faf2368d337a675da96d9fc22d",
+  "next": "Rerun full build after correction, exact review and all repository receipt writers are settled",
+  "installed": false,
+  "live": false
+}

@@ -1,0 +1,15 @@
+{
+  "id": "ctx_549ca304bfa0",
+  "task_id": "task_905a2e437da3",
+  "assignee_handle": "term_358c3b7b-bd76-446b-9220-5ad5dfdc9127",
+  "status": "dispatched",
+  "failure_count": 0,
+  "last_failure": null,
+  "dispatched_at": "2026-10-16 18:29:03",
+  "completed_at": null,
+  "created_at": "2026-10-16 18:29:03",
+  "last_heartbeat_at": null,
+  "runtime_id": "6627a505-a9ea-4b59-90e7-d051eb153516",
+  "coordinator_handle": "term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54",
+  "brief_path": "plans/worker-monitor-20261014/FIXER-telegram-runtime-packaging-brief.txt"
+}

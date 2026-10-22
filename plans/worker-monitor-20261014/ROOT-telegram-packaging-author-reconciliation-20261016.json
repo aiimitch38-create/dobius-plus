@@ -1,0 +1,20 @@
+{
+  "task_id": "task_905a2e437da3",
+  "verdict": "AUTHOR_RUNTIME_ROOTS_VERIFIED; ROOT_CORRECTING_PREEXISTING_TEST_FIXTURES",
+  "report": "plans/worker-monitor-20261014/FIXER-telegram-runtime-packaging-correction.md",
+  "report_sha256": "b038267d577de6688ed09f6fc2c8c66b9c4650f24ca7c6c4d2387b37fea33f51",
+  "source_freeze": {
+    "dobius/config/packaged-runtime-node-modules.cjs": {
+      "sha256": "12e7802581d80bde9189a493bfedc190c8174efdfa37155bb85885df137e6aa2",
+      "bytes": 15140
+    },
+    "dobius/config/scripts/electron-builder-config.test.mjs": {
+      "sha256": "655e90bd544fcbddf95a3d92cf0f085873820a62bd8e22f27f6db8fdac6153c3",
+      "bytes": 20916
+    }
+  },
+  "author_new_regressions": "2 PASS",
+  "author_full_suite": "19 PASS/4 stale fixture FAIL",
+  "live": false,
+  "installed": false
+}

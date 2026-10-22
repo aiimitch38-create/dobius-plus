@@ -1,0 +1,22 @@
+{
+  "id": "7e439082-2bb8-4de7-95f5-0bd66d3fa921",
+  "ok": true,
+  "result": {
+    "task": {
+      "id": "task_4134bdbae608",
+      "parent_id": null,
+      "created_by_terminal_handle": "term_ac9f423b-522b-4da0-a656-b22b581952e2",
+      "task_title": "TELEGRAM personal account secure backend implementation, urgent NEW authorize...",
+      "display_name": "TELEGRAM personal account secure backend implementation, urgent NEW authorize...",
+      "spec": "TELEGRAM personal account secure backend implementation, urgent NEW authorized scope 2026-10-16. Read entire current brief; V4 candidate/review now PASS and immutable, previous task complete. Canonical /Users/bayou/Projects (Code)/Dobius/dobius-plus, app dobius. User wants persistent own Telegram ACCOUNT (not bot), exactly THREE selected client groups, assigned Hermes Adam in Settings > Agents, replies on his behalf. Root requested group IDs and reply rules; until answered default approval-required drafts and no ingestion/send activation. Implement actual secure connection/service backend and focused tests, not another design-only report. OWN new dobius/src/main/telegram-account/** and dobius/src/shared/telegram-account.ts only, plus own build2.json/new report. Publish shared typed contract early in telegram-account.ts so ROOT/FIXER can build IPC/UI. Do not edit main/index.ts, runtime bridge/CLI, accepted 26-path ADAM slice or frozen candidates; BUILD1 jointintegration continues. No package.json/lock mutations until ROOT coordinates dependencies. Search existing secure storage/IPC patterns first. Transport adapter can be injected for meaningful tests but final production path needs real MTProto personal adapter, evaluate GramJS/TDLib and report dependency request early; do not fake connected status. Main-only secrets, protected session storage fail closed if secure OS encryption unavailable (Linux basic_text insufficient), API hash/session/OTP/2FA never returned/logged; auth transient parameters only. Bounded state machine sign-in/code/2FA and cancellation; exact three unique valid group IDs, no DMs/channels, selected groups verified server metadata. Filter before model ingestion AND send. All content AI handling remains disabled without verified per-chat individual continued consent/appropriate authorization; Telegram https://core.telegram.org/api/terms 1.5 and https://telegram.org/tos/content-licensing have restrictions and consent exception, do not invent consent. User current instruction authorizes BUILD not actual account login or sends; no live/account access. Draft approval scoped to exact body+chat+revision, pause/disconnect/revoke cancel in-flight operations and invalidate stale callbacks; durable outbox idempotency keyed account/chat/request plus stable MTProto random_id after unknown ACK, never blind retry. Redacted bounded audit log and connection health. Existing Hermes adapter is bot-only; don't silently call it personal connector. Need safe narrowly scoped Adam reply bridge, not raw terminal injection; ROOT handles runtime composition. Keep modules focused max-lines compliant. Meaningful regression tests include scope mismatch, revoked consent/pause while awaits pending, wrong account/group, restart/reconnect/no duplicate send, no plaintext secrets/storage failure, stale login race. Use Node24 Vitest existing config and scoped typecheck/lint. If new adapter dependency needed tell ROOT and continue core/tests. No install/deploy/restart/provider/account/secret/device/Git/head actions. AWS deferred and Storage paused. Read AGENTS. Report exact files/hashes/tests and remaining composition requirements at plans/worker-monitor-20261014/BUILD2-telegram-personal-account.md; atomic own build2.json key telegram-personal-account-backend-20261016. One worker_done using CURRENT assigned task/dispatch+ROOT, or one-attempt report fallback, no postcompletion polling.",
+      "status": "ready",
+      "deps": "[]",
+      "result": null,
+      "created_at": "2026-10-16 17:08:06",
+      "completed_at": null
+    }
+  },
+  "_meta": {
+    "runtimeId": "6627a505-a9ea-4b59-90e7-d051eb153516"
+  }
+}

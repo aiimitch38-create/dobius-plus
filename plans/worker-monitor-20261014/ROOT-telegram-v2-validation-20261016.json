@@ -1,0 +1,32 @@
+{
+  "manifest": "ROOT-telegram-source-freeze-v2-20261016.json",
+  "manifest_sha256": "5c5f3c2ba068409a320f4bb68e744c39161ed7522a4290a19bf97a1ae7d773eb",
+  "root_focused_tests": {
+    "files": 10,
+    "tests": 90,
+    "exit_code": 0
+  },
+  "root_independent_connected_revoke_probe": {
+    "before": "FAIL (expected stale, received success)",
+    "after": "1 PASS; exit0"
+  },
+  "root_project_types": {
+    "tsconfig.node.json": 0,
+    "tsconfig.tc.cli.json": 0,
+    "tsconfig.tc.web.json": 0
+  },
+  "harness_note": "An initial manual invocation used legacy tsconfig.cli.json with tsgo, which rejects removed node10 resolution. Correct package-script tc configs then passed; no source configuration changed.",
+  "independent_review": {
+    "task_id": "task_68fec1bfafe8",
+    "dispatch_id": "ctx_cda37221d01e",
+    "verdict": "PASS_ACCOUNT_CONNECTION_SOURCE_ONLY",
+    "report": {
+      "path": "plans/worker-monitor-20261014/RESEARCH-telegram-account-correction-review.md",
+      "sha256": "6a3eac6414871b1b15436900210bcd68a53c55ebee21d6560a96635725606d19",
+      "bytes": 5030
+    }
+  },
+  "live": false,
+  "root_scoped_lint_format": "6 corrected files PASS",
+  "stable_package_attempt": "Pending; full build next. Post-build receipt will be outside repository to preserve sealed source digest."
+}

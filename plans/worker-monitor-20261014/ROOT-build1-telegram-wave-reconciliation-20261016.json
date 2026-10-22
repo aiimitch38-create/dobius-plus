@@ -1,0 +1,11 @@
+{
+  "task_id": "task_d0a255e2f646",
+  "dispatch_id": "ctx_a5ff3ffc2d3f",
+  "verdict": "PASS_JOINT_SYNTHETIC_SOURCE_INTEROP",
+  "report": "plans/worker-monitor-20261014/BUILD1-adam-dobius-joint-integration.md",
+  "report_sha256": "efe5b7cc4f434d10a79b9c77210c8b60a4d78a5c80b69723ce3da1c7072fe4e9",
+  "source_only": true,
+  "live": false,
+  "verified_at": 1792171803.242889,
+  "root_independent_rerun": "9/9 joint integration tests; source26file freeze preserved"
+}

@@ -1,0 +1,37 @@
+{
+  "scope": "Telegram runtime packaging correction plus ROOT correction of preexisting stale Linux test fixtures; no production artifact naming/launcher changes",
+  "author_task_id": "task_905a2e437da3",
+  "author_dispatch_id": "ctx_549ca304bfa0",
+  "author_report": "FIXER-telegram-runtime-packaging-correction.md",
+  "author_report_sha256": "b038267d577de6688ed09f6fc2c8c66b9c4650f24ca7c6c4d2387b37fea33f51",
+  "root_review": "Explicit teleproto and big-integer roots feed existing recursive closure; mandatory verifier unchanged. Real temporary Resources/node_modules staging covers declared transitive SDK dependencies and negative absent-package rejection. No dependency versions changed.",
+  "test_fixture_correction": {
+    "basis": "git show HEAD:dobius/config/electron-builder.config.cjs and current production config unchanged",
+    "WMClass": "dobius-ide",
+    "AppImage": "dobius-plus-linux.${ext}",
+    "arm64AppImage": "dobius-plus-linux-arm64.${ext}",
+    "deb": "dobius-plus-ide_${version}_${arch}.${ext}",
+    "rpm": "dobius-plus-ide-${version}.${arch}.${ext}",
+    "launcher": "bin/dobius",
+    "change": "stale test fixtures only"
+  },
+  "root_config_tests": {
+    "exit_code": 0,
+    "tests": 23,
+    "files": 1
+  },
+  "root_format_lint": "Both corrected packaging files PASS",
+  "files": {
+    "dobius/config/packaged-runtime-node-modules.cjs": {
+      "sha256": "12e7802581d80bde9189a493bfedc190c8174efdfa37155bb85885df137e6aa2",
+      "bytes": 15140
+    },
+    "dobius/config/scripts/electron-builder-config.test.mjs": {
+      "sha256": "000b75d4af578b6a3ac53af0dc7f9d2768cdfa435e17ac8c4a8253c72e3c93e1",
+      "bytes": 20936
+    }
+  },
+  "feature_55_paths_unchanged": true,
+  "installed": false,
+  "live": false
+}

@@ -1,0 +1,25 @@
+{
+  "task_id": "task_68fec1bfafe8",
+  "verdict": "PASS_ACCOUNT_CONNECTION_SOURCE_ONLY",
+  "dispatch_id": "ctx_cda37221d01e",
+  "report": {
+    "path": "plans/worker-monitor-20261014/RESEARCH-telegram-account-correction-review.md",
+    "sha256": "6a3eac6414871b1b15436900210bcd68a53c55ebee21d6560a96635725606d19",
+    "bytes": 5030
+  },
+  "source_freeze": {
+    "path": "plans/worker-monitor-20261014/ROOT-telegram-source-freeze-v2-20261016.json",
+    "sha256": "5c5f3c2ba068409a320f4bb68e744c39161ed7522a4290a19bf97a1ae7d773eb",
+    "path_count": 55,
+    "source_hashes_sha256_path_nul_hash_nul_bytes_newline_sorted": "f35ac7a1e20568821baa5ec47c1aa1fac5092ca34dbce02dd69eea1f448993fc",
+    "verification": "all 55 declared byte counts and SHA-256 values matched before and after review"
+  },
+  "root_focused_tests": "90/90 across10files",
+  "root_independent_probe": "1/1 PASS (baseline failed)",
+  "root_types": "node/CLI/web PASS",
+  "root_scoped_lint_format": "6 corrected files PASS",
+  "accepted_ADAM_26_paths_preserved": true,
+  "packaged": false,
+  "installed": false,
+  "live": false
+}

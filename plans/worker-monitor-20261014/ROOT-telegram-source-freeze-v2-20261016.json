@@ -1,0 +1,247 @@
+{
+  "scope": "Telegram personal-account connection SOURCE ONLY. Default model routing/consent unconfigured; no live acceptance.",
+  "supersedes": "ROOT-telegram-source-freeze-20261016.json (independent review CHANGES_REQUIRED)",
+  "correction_task_id": "task_6cc363ed9354",
+  "correction_dispatch_id": "ctx_766a77e4ca86",
+  "author_report": {
+    "path": "plans/worker-monitor-20261014/BUILD2-telegram-paused-revoke-correction.md",
+    "sha256": "52f05f227bf9373edbde3b3511179d1d714267018dfbac0b8dceacfc83112d8c",
+    "bytes": 6990
+  },
+  "files": {
+    "dobius/docs/reference/telegram-personal-account.md": {
+      "sha256": "01748e305ca36d6875dc45d377dd1208247154ab3a2f0ec17ed9c8404cf0d1d9",
+      "bytes": 4905
+    },
+    "dobius/package.json": {
+      "sha256": "f259d2a3fa88ba6d5c0924c6df42958df5d53f768798c940ce9019c0a3b7794c",
+      "bytes": 16509
+    },
+    "dobius/pnpm-lock.yaml": {
+      "sha256": "99e9ced387a4734fcec0f5452df4edfee69bcf138a44484f7c0ac0422cfc69d1",
+      "bytes": 510878
+    },
+    "dobius/src/main/ipc/desktop-telegram-account.test.ts": {
+      "sha256": "2bbfbaa339685fc1242fafcda36997bd7dc932b553b2c3eb8c408289b02a26b8",
+      "bytes": 10979
+    },
+    "dobius/src/main/ipc/desktop-telegram-account.ts": {
+      "sha256": "37dc6fff8fdeb48b0111560a8be3af3f876b47050bda12f11e66a0995c91e158",
+      "bytes": 5936
+    },
+    "dobius/src/main/ipc/register-core-handlers.test.ts": {
+      "sha256": "69b39ac258331a0e4361db12c14b6364b66d3ace8de87e8b9fe22ba5937c856c",
+      "bytes": 23450
+    },
+    "dobius/src/main/ipc/register-core-handlers.ts": {
+      "sha256": "e3ac0eb50527584d0f8bc4fb17559cbdce1e13c641a8485687eab6158d450e76",
+      "bytes": 12082
+    },
+    "dobius/src/main/ipc/telegram-account-credentials.test.ts": {
+      "sha256": "fd96af7ce1babb2419051ad2ec20c4ae0554f6c6784485d12d0605b0e6064c72",
+      "bytes": 3203
+    },
+    "dobius/src/main/ipc/telegram-account-credentials.ts": {
+      "sha256": "c3f2ae936346bd00c9b2cd93c9f42b72b2c3e6543d8634a5be53ec1a8e528786",
+      "bytes": 3006
+    },
+    "dobius/src/main/ipc/telegram-account-trust.test.ts": {
+      "sha256": "06ecceb6de1288b4b24a70c9c625dd82eaeadbf2b02314eb170d85170ce85bc7",
+      "bytes": 2466
+    },
+    "dobius/src/main/ipc/telegram-account-trust.ts": {
+      "sha256": "a41cb23359775fdec26a8c2641b2ca768e72386c9b571f8cf57b92bad26ff929",
+      "bytes": 1068
+    },
+    "dobius/src/main/ipc/telegram-account.test.ts": {
+      "sha256": "f7064d364f909a162ed8a1e974ee832e91858311b64bb643f6675b7941c67216",
+      "bytes": 4947
+    },
+    "dobius/src/main/ipc/telegram-account.ts": {
+      "sha256": "f1030f598829af9ffd3f97ee49015df2113c39b7c5332c5d10fae1491d8c9571",
+      "bytes": 4438
+    },
+    "dobius/src/main/ipc/telegram-reconnect-preference.ts": {
+      "sha256": "850e2e4a945e1b373872363e237a8dd51dfefd4c42efe82320ecaec32bd74821",
+      "bytes": 1017
+    },
+    "dobius/src/main/telegram-account-mtproto/index.ts": {
+      "sha256": "205792ee6be1bd3fbd40f44b44257dc8c6a5ae656ad7516863e54f8cdc479b9a",
+      "bytes": 204
+    },
+    "dobius/src/main/telegram-account-mtproto/personal-client.test-support.ts": {
+      "sha256": "82636d14249bc480fab97ae60e2203e4c31a9b189886193ec33b01ebc6dca3c5",
+      "bytes": 4635
+    },
+    "dobius/src/main/telegram-account-mtproto/personal-client.test.ts": {
+      "sha256": "13ca221baa1ed1ba5b266555d71961bc9caddbab3b46412292429534b284a19f",
+      "bytes": 10946
+    },
+    "dobius/src/main/telegram-account-mtproto/personal-client.ts": {
+      "sha256": "de3a4cb5f66921a309643e684176d143394314f937d9316f2e7160219b296d5f",
+      "bytes": 8799
+    },
+    "dobius/src/main/telegram-account-mtproto/telegram-auth-session.ts": {
+      "sha256": "33eacaca453eb6bed4dfceac43ef71c574f63c22f9d2340861ec774bd8532818",
+      "bytes": 4864
+    },
+    "dobius/src/main/telegram-account-mtproto/telegram-errors.ts": {
+      "sha256": "6cc239458f3fb023ed58183dc4bce3cd74ac0bb4a89c19e0dad744608c9c4a05",
+      "bytes": 209
+    },
+    "dobius/src/main/telegram-account-mtproto/telegram-events.ts": {
+      "sha256": "10dda6c7d990a42d418adcb3d735a1392f7767861b543b3bd4730b1126acb70a",
+      "bytes": 2009
+    },
+    "dobius/src/main/telegram-account-mtproto/telegram-factory.ts": {
+      "sha256": "962ab882ef542e0ec76326da47c25cfb8fab86839b6bd06705b877eb05fc7899",
+      "bytes": 1580
+    },
+    "dobius/src/main/telegram-account-mtproto/telegram-peer.ts": {
+      "sha256": "60801a4edeac6c08bf5961874173fc8ebf1a77600a346dae253231507c70cb72",
+      "bytes": 1390
+    },
+    "dobius/src/main/telegram-account-mtproto/teleproto-runtime.ts": {
+      "sha256": "4a53bebc95fca4d60af8f5839fa03a49843ce736366d1986280d6cb1bb8d3e7e",
+      "bytes": 2476
+    },
+    "dobius/src/main/telegram-account/authorization.ts": {
+      "sha256": "ea571ea4024e541355228a070eb763774eea5bbcbed953e36dbd300904896cc5",
+      "bytes": 7906
+    },
+    "dobius/src/main/telegram-account/connection-operation.ts": {
+      "sha256": "0cd8ecf86703a3066086236825f1752216ff7f2f3ee4ad6916a81a20d3d2bc46",
+      "bytes": 1184
+    },
+    "dobius/src/main/telegram-account/connection-revocation.ts": {
+      "sha256": "d19521065053cce00238abaeb4c6a790a9249f030fe077dbadac2d9ac3f43d1b",
+      "bytes": 3959
+    },
+    "dobius/src/main/telegram-account/connection-stop.ts": {
+      "sha256": "6735e504f0096d9d4b41865c422381ec64888e5e397127ab8ef83d6b62c0934e",
+      "bytes": 609
+    },
+    "dobius/src/main/telegram-account/connection.ts": {
+      "sha256": "102d1e06d1331ca38522881c42691dc346cfa4da7a3d800c77132bf6c041984d",
+      "bytes": 10653
+    },
+    "dobius/src/main/telegram-account/consent-policy.ts": {
+      "sha256": "fa8b4d958421fa0461d4a610387f6a925d70f7ee82bdca85eca889353fe31c5b",
+      "bytes": 1058
+    },
+    "dobius/src/main/telegram-account/draft-state.ts": {
+      "sha256": "2de9ddf2ea98a172d541c3c34f295321d81219d1871f35980fae3d922c135d36",
+      "bytes": 730
+    },
+    "dobius/src/main/telegram-account/incoming-message.ts": {
+      "sha256": "7a6eb1e99bb80755a4e663ca59827790f38fb6a445677d961b97f2c92d602d7a",
+      "bytes": 9109
+    },
+    "dobius/src/main/telegram-account/incoming-operation.ts": {
+      "sha256": "b1eee3db4cdf9fbd344f9ad41b8f8639816ba7891097b58f5a656cf79208d6e6",
+      "bytes": 856
+    },
+    "dobius/src/main/telegram-account/recover-state.ts": {
+      "sha256": "98eb4ee30415c5bb31b659fee277bcbcf70229a43ebf961be6ce8a08de2aafa6",
+      "bytes": 954
+    },
+    "dobius/src/main/telegram-account/replies.ts": {
+      "sha256": "20aa7f10e538d178758180226614603dfb29e8b13c6957917650bcd61266105a",
+      "bytes": 9317
+    },
+    "dobius/src/main/telegram-account/service-auth.test.ts": {
+      "sha256": "d715918e50dea35f82cadefa1cba8d47bd853958a96084641224edabaace88ce",
+      "bytes": 10787
+    },
+    "dobius/src/main/telegram-account/service-replies.test.ts": {
+      "sha256": "2e7f28ef84e4175fba40372c3274b6fb84cdc3305a69aa06970c666a505cea24",
+      "bytes": 12724
+    },
+    "dobius/src/main/telegram-account/service.ts": {
+      "sha256": "5e239d2c836e9b6bba1f42bbbc2eecc0b279793e01228dafc854dca0e4127b61",
+      "bytes": 9139
+    },
+    "dobius/src/main/telegram-account/test-support.ts": {
+      "sha256": "c8ed751a6f6e3281d55f538b44ed5ffeb42c1aeeb02b174ef21966bf249bd16e",
+      "bytes": 4378
+    },
+    "dobius/src/main/telegram-account/types.ts": {
+      "sha256": "297a8ac3e7f721703432520420d5aa913230e20d591aebd3543cf1f1a622cb20",
+      "bytes": 3788
+    },
+    "dobius/src/main/telegram-account/validation.ts": {
+      "sha256": "6ef72a220c2649d31d17d5e54f8d183e075411562927d4afef7af51030baea2c",
+      "bytes": 2445
+    },
+    "dobius/src/main/telegram-account/vault.test.ts": {
+      "sha256": "a4cf8cbf3f94be2cb2a95f3f599a94405354092262761f4e0b6b6a5a30d1aecb",
+      "bytes": 3925
+    },
+    "dobius/src/main/telegram-account/vault.ts": {
+      "sha256": "6ac7bbb712a5ad271159aaae0a12912f9da51723ad84c24f3443dc0fd35d255f",
+      "bytes": 9241
+    },
+    "dobius/src/preload/api-types.ts": {
+      "sha256": "c02bad87e04cf60682f8c89313cd62cfc1e537d53080effde7916d5ec42c19eb",
+      "bytes": 124308
+    },
+    "dobius/src/preload/index.ts": {
+      "sha256": "64d16c0350679ff2418eea8046c68efece3fd1c6c62e5a20a9d4faca68354991",
+      "bytes": 190392
+    },
+    "dobius/src/preload/telegram-account.ts": {
+      "sha256": "1430474395ee0300ecd705527f3722d65728b141f3d3c0ce67e5f4031a310fa6",
+      "bytes": 1150
+    },
+    "dobius/src/renderer/src/components/settings/AgentsPane.tsx": {
+      "sha256": "6cb8ae187df5ebd2d1f5e379a9857f523e6cb076410d180da03d54b95a30f150",
+      "bytes": 35285
+    },
+    "dobius/src/renderer/src/components/settings/TelegramAccountAuthPanel.tsx": {
+      "sha256": "b4e90d5af4534e9d9dd49c4c7aac2c0eb1dfa2362f7f622dc18575a88af17faf",
+      "bytes": 6486
+    },
+    "dobius/src/renderer/src/components/settings/TelegramAccountConnectedPanel.tsx": {
+      "sha256": "1bad61d5a36f0c4d691c8de55c6abc5549090e471d89046666ee745cbc73cae9",
+      "bytes": 8396
+    },
+    "dobius/src/renderer/src/components/settings/TelegramAccountSection.test.tsx": {
+      "sha256": "6fe12b564aa6251d13a902d93d17ea06dfa0b9314ab2771bee1f3b850da46acf",
+      "bytes": 13782
+    },
+    "dobius/src/renderer/src/components/settings/TelegramAccountSection.tsx": {
+      "sha256": "27ef71d47ebbdd2ced9b88f58ea9df89f1227afe3d65f98b3f8a4116ee2eeab1",
+      "bytes": 8960
+    },
+    "dobius/src/renderer/src/components/settings/agents-search.ts": {
+      "sha256": "44b683305cbe728543356e43c400a6e1df1cf79a7f79791e96bb467c9686bf87",
+      "bytes": 7643
+    },
+    "dobius/src/renderer/src/components/settings/telegram-account-ui.ts": {
+      "sha256": "99e46fe7a6b158c34f088c65bacebdd24b7591f720b8adab6dcd36f009bce235",
+      "bytes": 2868
+    },
+    "dobius/src/shared/telegram-account-api.ts": {
+      "sha256": "be893a14b3a723ea9cd994c91d1163a55ec27d49411b347ccf5a9f8708faea2e",
+      "bytes": 1128
+    },
+    "dobius/src/shared/telegram-account.ts": {
+      "sha256": "3e674cae55469b3f9d3141fa768a5637d121aa8153bf20c97a00b01f1068fcfa",
+      "bytes": 2587
+    }
+  },
+  "validation": {
+    "author_focused_tests": "90/90 in10files; author node types/lint/format PASS",
+    "ROOT_independent_connected_revoke_probe": "1 PASS, previously failed before correction",
+    "ROOT_combined_tests": "pending independent rerun"
+  },
+  "pending": [
+    "Independent exact source re-review",
+    "Stable whole-repository packaged build",
+    "User-mediated registration/sign-in and3group selection",
+    "Participant consent authority and authenticated scoped Adam Hermes gateway"
+  ],
+  "live": false,
+  "aws": "deferred",
+  "historical_storage": "paused"
+}

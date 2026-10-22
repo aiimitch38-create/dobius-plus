@@ -1,0 +1,22 @@
+{
+  "id": "7962618f-82eb-40c1-8c15-7897f772da68",
+  "ok": true,
+  "result": {
+    "task": {
+      "id": "task_50cd44d1cfe4",
+      "parent_id": null,
+      "created_by_terminal_handle": "term_ac9f423b-522b-4da0-a656-b22b581952e2",
+      "task_title": "TELEGRAM personal account feasibility and implementation audit, urgent new Ca...",
+      "display_name": "TELEGRAM personal account feasibility and implementation audit, urgent new Ca...",
+      "spec": "TELEGRAM personal account feasibility and implementation audit, urgent new Carson-authorized work 2026-10-16. Read this whole current brief; previous V4 review is complete and frozen, do not repeat it. Canonical repo /Users/bayou/Projects (Code)/Dobius/dobius-plus. User wants persistent OWN personal Telegram account connection for exactly three client groups, assigned to existing Hermes Adam, Settings > Agents. No separate bot and no repeated browser login. BUILD1 remains active on joint ADAM-Dobius integration; do not disturb it. AWS deferred/historical Storage paused; Adam/Friday untouched. Read-only research only plus new report/own research.json entry. Verify primary current docs: https://core.telegram.org/api/terms and https://telegram.org/tos/content-licensing (API1.5 prohibits AI use; content terms explicit continued informed individual per-chat consent exception, exception may be granted, not blanket automatic permission). Assess supported personal MTProto/TDLib/GramJS auth+session+group updates+random_id retry dedupe; do not substitute Business Bot unless demonstrably supports personal THREE group requirement. Inspect installed Hermes Telegram adapter (bot-only) and identify actual supported bounded transport into existing Adam profile, avoiding injecting untrusted messages into terminal commands or unrestricted head tool execution. Search local before building, never read secrets or private conversations. Recommend exact reusable APIs, a concrete secure runtime ownership path, required registration/api_id, auth workflow, per-chat consent/provenance gates, one-user-machine trust, duplicate prevention and failure/rollback. Distinguish source-tested vs live; no login, external sends, service activation, install, deploy, Git commits. Write plans/worker-monitor-20261014/RESEARCH-telegram-personal-account-feasibility.md and atomic own report key telegram-personal-account-feasibility-20261016 with task/dispatch IDs. Return actionable findings now; do not spend time duplicating verified bridge work. One worker_done to current ROOT with exact new task/dispatch or single-attempt file fallback, no post-completion polling.",
+      "status": "ready",
+      "deps": "[]",
+      "result": null,
+      "created_at": "2026-10-16 17:08:06",
+      "completed_at": null
+    }
+  },
+  "_meta": {
+    "runtimeId": "6627a505-a9ea-4b59-90e7-d051eb153516"
+  }
+}

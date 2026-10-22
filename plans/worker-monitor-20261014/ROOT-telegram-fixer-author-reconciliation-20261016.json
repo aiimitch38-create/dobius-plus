@@ -1,0 +1,13 @@
+{
+  "task_id": "task_3e73ce24bf4d",
+  "dispatch_id": "ctx_546c7e25fd3d",
+  "verdict": "AUTHOR_DELIVERY_VERIFIED_PENDING_FINAL_INDEPENDENT_REVIEW",
+  "author_verdict": "PASS_RENDERER_CORRECTION; SOURCE_ONLY",
+  "report": "plans/worker-monitor-20261014/FIXER-telegram-control-correction.md",
+  "report_sha256": "67a501f2348cffa50311664ffbe9555530de1b9c7ae65da9941a8f90c4ed9ba5",
+  "source_files_verified": 3,
+  "root_combined_test_result": "84/84 tests, 10files; node/cli/web project typechecks exit0",
+  "installed": false,
+  "live": false,
+  "verified_at": 1792173441.898514
+}

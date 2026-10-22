@@ -1,0 +1,917 @@
+diff --git a/agent/agent_init.py b/agent/agent_init.py
+index 30bb6d8370..0640d35d41 100644
+--- a/agent/agent_init.py
++++ b/agent/agent_init.py
+@@ -284,6 +284,8 @@ def init_agent(
+     agent.tool_progress_mode = tool_progress_mode
+     agent.ephemeral_system_prompt = ephemeral_system_prompt
+     agent.platform = platform  # "cli", "telegram", "discord", "whatsapp", etc.
++    from agent.host_tool_policy import policy_for_platform
++    agent._host_tool_policy = policy_for_platform(platform)
+     agent._user_id = user_id  # Platform user identifier (gateway sessions)
+     agent._user_id_alt = user_id_alt  # Optional stable alternate platform identifier
+     agent._user_name = user_name
+@@ -614,6 +616,10 @@ def init_agent(
+     # Claude uses its own timeout path and is not covered here.
+     _provider_timeout = get_provider_request_timeout(agent.provider, agent.model)
+ 
++    # Reject opaque runtimes before constructing their native subprocess client.
++    from agent.host_tool_policy import validate_runtime_policy
++    validate_runtime_policy(agent)
++
+     if agent.api_mode == "anthropic_messages":
+         from agent.anthropic_adapter import build_anthropic_client, resolve_anthropic_token
+         # Bedrock + Claude → use AnthropicBedrock SDK for full feature parity
+@@ -1738,4 +1744,10 @@ def init_agent(
+ 
+ 
+ 
++    # All provider/plugin/memory/context-engine injections have completed.
++    from agent.host_tool_policy import filter_agent_tools, validate_runtime_policy
++    validate_runtime_policy(agent)
++    filter_agent_tools(agent)
++
++
+ __all__ = ["init_agent"]
+diff --git a/agent/agent_runtime_helpers.py b/agent/agent_runtime_helpers.py
+index f9bfb7a431..243bdf5dc7 100644
+--- a/agent/agent_runtime_helpers.py
++++ b/agent/agent_runtime_helpers.py
+@@ -1629,6 +1629,10 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
+     tools. Used by the concurrent execution path; the sequential path retains
+     its own inline invocation for backward-compatible display handling.
+     """
++    from agent.host_tool_policy import blocked_tool_result
++    blocked = blocked_tool_result(agent, function_name)
++    if blocked is not None:
++        return blocked
+     if not isinstance(function_args, dict):
+         function_args = {}
+ 
+diff --git a/agent/chat_completion_helpers.py b/agent/chat_completion_helpers.py
+index ce066d5564..43c232ebaf 100644
+--- a/agent/chat_completion_helpers.py
++++ b/agent/chat_completion_helpers.py
+@@ -554,6 +554,9 @@ def interruptible_api_call(agent, api_kwargs: dict):
+ 
+ def build_api_kwargs(agent, api_messages: list) -> dict:
+     """Build the keyword arguments dict for the active API mode."""
++    from agent.host_tool_policy import filter_agent_tools, validate_runtime_policy
++    validate_runtime_policy(agent)
++    filter_agent_tools(agent)
+     tools_for_api = agent.tools
+ 
+     if agent.api_mode == "anthropic_messages":
+diff --git a/agent/conversation_loop.py b/agent/conversation_loop.py
+index 73bed6b067..0718f6bb52 100644
+--- a/agent/conversation_loop.py
++++ b/agent/conversation_loop.py
+@@ -444,6 +444,9 @@ def run_conversation(
+     compression_attempts = 0
+     _turn_exit_reason = "unknown"  # Diagnostic: why the loop ended
+ 
++    from agent.host_tool_policy import validate_runtime_policy
++    validate_runtime_policy(agent)
++
+     # Optional opt-in runtime: if api_mode == codex_app_server, hand the
+     # turn to the codex app-server subprocess (terminal/file ops/patching
+     # all run inside Codex). Default Hermes path is bypassed entirely.
+@@ -895,6 +898,9 @@ def run_conversation(
+                     _original_api_kwargs = dict(api_kwargs)
+                     _llm_middleware_trace = []
+ 
++                from agent.host_tool_policy import enforce_request_policy
++                api_kwargs = enforce_request_policy(agent, api_kwargs)
++
+                 try:
+                     from hermes_cli.plugins import (
+                         has_hook,
+@@ -999,6 +1005,7 @@ def run_conversation(
+                         _use_streaming = False
+ 
+                 def _perform_api_call(next_api_kwargs):
++                    next_api_kwargs = enforce_request_policy(agent, next_api_kwargs)
+                     if _use_streaming:
+                         return agent._interruptible_streaming_api_call(
+                             next_api_kwargs, on_first_delta=_stop_spinner
+diff --git a/agent/tool_executor.py b/agent/tool_executor.py
+index 36cbad4b88..9d293e3cfa 100644
+--- a/agent/tool_executor.py
++++ b/agent/tool_executor.py
+@@ -247,6 +247,9 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
+     messages so the API sees them in the expected sequence.
+     """
+     tool_calls = assistant_message.tool_calls
++    from agent.host_tool_policy import reject_tool_batch
++    if reject_tool_batch(agent, assistant_message, messages):
++        return
+     num_tools = len(tool_calls)
+ 
+     # ── Pre-flight: interrupt check ──────────────────────────────────
+@@ -769,6 +772,9 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
+ 
+ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effective_task_id: str, api_call_count: int = 0) -> None:
+     """Execute tool calls sequentially (original behavior). Used for single calls or interactive tools."""
++    from agent.host_tool_policy import reject_tool_batch
++    if reject_tool_batch(agent, assistant_message, messages):
++        return
+     for i, tool_call in enumerate(assistant_message.tool_calls, 1):
+         # SAFETY: check interrupt BEFORE starting each tool.
+         # If the user sent "stop" during a previous tool's execution,
+diff --git a/gateway/platform_registry.py b/gateway/platform_registry.py
+index 97f0c0e1d7..f6dc7fa7ab 100644
+--- a/gateway/platform_registry.py
++++ b/gateway/platform_registry.py
+@@ -158,6 +158,10 @@ class PlatformEntry:
+     # targets when the gateway is not co-resident with the cron process.
+     standalone_sender_fn: Optional[Callable[..., Awaitable[dict]]] = None
+ 
++    # Host restriction applied to every agent created for this platform,
++    # independently of enabled toolsets or injected plugin schemas.
++    tool_execution_policy: str = "unrestricted"
++
+ 
+ class PlatformRegistry:
+     """Central registry of platform adapters.
+@@ -175,6 +179,13 @@ class PlatformRegistry:
+         If an entry with the same name exists, it is replaced (last writer
+         wins -- this lets plugins override built-in adapters if desired).
+         """
++        from agent.host_tool_policy import (
++            NO_TOOLS_POLICY, UNRESTRICTED_POLICY, require_platform_tool_policy,
++        )
++        policies = {"no-tools": NO_TOOLS_POLICY, "unrestricted": UNRESTRICTED_POLICY}
++        if entry.tool_execution_policy not in policies:
++            raise ValueError("Unknown host tool execution policy")
++        require_platform_tool_policy(entry.name, policies[entry.tool_execution_policy])
+         if entry.name in self._entries:
+             prev = self._entries[entry.name]
+             logger.info(
+diff --git a/gateway/run.py b/gateway/run.py
+index 6a0995b4d8..1e66fd7683 100644
+--- a/gateway/run.py
++++ b/gateway/run.py
+@@ -1888,7 +1888,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+     _session_model_overrides: Dict[str, Dict[str, str]] = {}
+     _session_reasoning_overrides: Dict[str, Dict[str, Any]] = {}
+ 
+-    def __init__(self, config: Optional[GatewayConfig] = None):
++    def __init__(self, config: Optional[GatewayConfig] = None, *, session_db=None, perform_maintenance: bool = True):
+         global _gateway_runner_ref
+         self.config = config or load_gateway_config()
+         self.adapters: Dict[Platform, BasePlatformAdapter] = {}
+@@ -1913,6 +1913,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+         self.session_store = SessionStore(
+             self.config.sessions_dir, self.config,
+             has_active_processes_fn=lambda key: process_registry.has_active_for_session(key),
++            session_db=session_db,
+         )
+         self.delivery_router = DeliveryRouter(self.config)
+         self._running = False
+@@ -2049,10 +2050,11 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+             logger.debug("approvals.mode startup check skipped", exc_info=True)
+ 
+         # Initialize session database for session_search tool support
+-        self._session_db = None
++        self._session_db = session_db
+         try:
+-            from hermes_state import SessionDB
+-            self._session_db = SessionDB()
++            if self._session_db is None:
++                from hermes_state import SessionDB
++                self._session_db = SessionDB()
+         except Exception as e:
+             # WARNING (not DEBUG) so the failure appears in errors.log — matches
+             # cli.py's handling of the same init path.  Users hitting NFS-mounted
+@@ -2068,7 +2070,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+         # sessions.min_interval_hours.  Gateway is long-lived so blocking
+         # a few seconds once per day is acceptable; failures are logged
+         # but never raised.
+-        if self._session_db is not None:
++        if perform_maintenance and self._session_db is not None:
+             try:
+                 from hermes_cli.config import load_config as _load_full_config
+                 _sess_cfg = (_load_full_config().get("sessions") or {})
+@@ -2088,7 +2090,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+         try:
+             from hermes_cli.config import load_config as _load_full_config
+             _ckpt_cfg = (_load_full_config().get("checkpoints") or {})
+-            if _ckpt_cfg.get("auto_prune", False):
++            if perform_maintenance and _ckpt_cfg.get("auto_prune", False):
+                 from tools.checkpoint_manager import maybe_auto_prune_checkpoints
+                 maybe_auto_prune_checkpoints(
+                     retention_days=int(_ckpt_cfg.get("retention_days", 7)),
+@@ -8015,6 +8017,8 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+                                     skip_memory=True,
+                                     enabled_toolsets=["memory"],
+                                     session_id=session_entry.session_id,
++                                    platform=_platform_config_key(source.platform),
++                                    session_db=self._session_db,
+                                 )
+                                 try:
+                                     _hyg_agent._print_fn = lambda *a, **kw: None
+diff --git a/gateway/session.py b/gateway/session.py
+index 4d1d26b646..25d2a6abaa 100644
+--- a/gateway/session.py
++++ b/gateway/session.py
+@@ -690,7 +690,7 @@ class SessionStore:
+     """
+     
+     def __init__(self, sessions_dir: Path, config: GatewayConfig,
+-                 has_active_processes_fn=None):
++                 has_active_processes_fn=None, *, session_db=None):
+         self.sessions_dir = sessions_dir
+         self.config = config
+         self._entries: Dict[str, SessionEntry] = {}
+@@ -699,10 +699,11 @@ class SessionStore:
+         self._has_active_processes_fn = has_active_processes_fn
+         
+         # Initialize SQLite session database
+-        self._db = None
++        self._db = session_db
+         try:
+-            from hermes_state import SessionDB
+-            self._db = SessionDB()
++            if self._db is None:
++                from hermes_state import SessionDB
++                self._db = SessionDB()
+         except Exception as e:
+             print(f"[gateway] Warning: SQLite session store unavailable, falling back to JSONL: {e}")
+     
+diff --git a/run_agent.py b/run_agent.py
+index 9c720bcbfe..0f9ba6143c 100644
+--- a/run_agent.py
++++ b/run_agent.py
+@@ -485,6 +485,12 @@ class AIAgent:
+             pass_session_id=pass_session_id,
+         )
+ 
++    @property
++    def host_tool_policy(self):
++        """Immutable host restriction captured when this agent was created."""
++        from agent.host_tool_policy import policy_for_agent
++        return policy_for_agent(self)
++
+     def _get_session_db_for_recall(self):
+         """Return a SessionDB for recall, lazily creating it if an entrypoint forgot.
+ 
+@@ -1418,6 +1424,9 @@ class AIAgent:
+         keep working.
+         """
+         from agent.background_review import spawn_background_review_thread
++        from agent.host_tool_policy import NO_TOOLS_POLICY, policy_for_agent
++        if policy_for_agent(self) == NO_TOOLS_POLICY:
++            return
+         target, _prompt = spawn_background_review_thread(
+             self,
+             messages_snapshot,
+@@ -3955,6 +3964,8 @@ class AIAgent:
+     def _interruptible_api_call(self, api_kwargs: dict):
+         """Forwarder — see ``agent.chat_completion_helpers.interruptible_api_call``."""
+         from agent.chat_completion_helpers import interruptible_api_call
++        from agent.host_tool_policy import enforce_request_policy
++        api_kwargs = enforce_request_policy(self, api_kwargs)
+         return interruptible_api_call(self, api_kwargs)
+ 
+     # ── Unified streaming API call ─────────────────────────────────────────
+@@ -4128,6 +4139,8 @@ class AIAgent:
+     ):
+         """Forwarder — see ``agent.chat_completion_helpers.interruptible_streaming_api_call``."""
+         from agent.chat_completion_helpers import interruptible_streaming_api_call
++        from agent.host_tool_policy import enforce_request_policy
++        api_kwargs = enforce_request_policy(self, api_kwargs)
+         return interruptible_streaming_api_call(self, api_kwargs, on_first_delta=on_first_delta)
+ 
+     def _try_activate_fallback(self, reason: "FailoverReason | None" = None) -> bool:
+@@ -5017,6 +5030,10 @@ class AIAgent:
+         New DELEGATE_TASK_SCHEMA fields only need to be added here to reach all
+         invocation paths (concurrent, sequential, inline).
+         """
++        from agent.host_tool_policy import blocked_tool_result
++        blocked = blocked_tool_result(self, "delegate_task")
++        if blocked is not None:
++            return blocked
+         from tools.delegate_tool import delegate_task as _delegate_task
+         return _delegate_task(
+             goal=function_args.get("goal"),
+diff --git a/agent/host_tool_policy.py b/agent/host_tool_policy.py
+new file mode 100644
+index 0000000000..9a19cc59a3
+--- /dev/null
++++ b/agent/host_tool_policy.py
+@@ -0,0 +1,134 @@
++"""Host-owned execution restrictions, independent of model/config tool selection.
++
++Platform adapters bind a policy before creating agents. Bindings cannot be
++relaxed for the lifetime of the process; agent initialization snapshots the
++frozen value. This is a tool boundary, not a sandbox for trusted Python plugins.
++"""
++
++from dataclasses import dataclass
++import json
++import threading
++
++
++@dataclass(frozen=True)
++class ToolExecutionPolicy:
++    name: str
++    allowed_tool_names: frozenset[str] | None
++
++    def allows(self, name: str) -> bool:
++        return self.allowed_tool_names is None or name in self.allowed_tool_names
++
++
++UNRESTRICTED_POLICY = ToolExecutionPolicy("unrestricted", None)
++NO_TOOLS_POLICY = ToolExecutionPolicy("no-tools", frozenset())
++_POLICIES = {p.name: p for p in (UNRESTRICTED_POLICY, NO_TOOLS_POLICY)}
++_platform_policies: dict[str, ToolExecutionPolicy] = {}
++_policy_lock = threading.Lock()
++
++
++def require_platform_tool_policy(platform: str, policy: ToolExecutionPolicy) -> None:
++    """Install a trusted binding; repeated identical bindings are harmless."""
++    if (
++        not isinstance(platform, str)
++        or not platform
++        or not isinstance(policy, ToolExecutionPolicy)
++        or policy not in _POLICIES.values()
++    ):
++        raise ValueError("Invalid host tool policy binding")
++    # Store our canonical deeply immutable value, even if an external caller
++    # supplied an equal dataclass whose collection was mutable at runtime.
++    policy = _POLICIES[policy.name]
++    with _policy_lock:
++        current = _platform_policies.get(platform)
++        if current is not None and current != policy:
++            raise ValueError("Host tool policy binding cannot be changed")
++        _platform_policies[platform] = policy
++
++
++def policy_for_platform(platform: str | None) -> ToolExecutionPolicy:
++    return _platform_policies.get(platform, UNRESTRICTED_POLICY)
++
++
++def policy_for_agent(agent) -> ToolExecutionPolicy:
++    # Legacy lightweight test agents need no initialization changes.
++    policy = getattr(agent, "_host_tool_policy", None)
++    if not isinstance(policy, ToolExecutionPolicy):
++        policy = policy_for_platform(getattr(agent, "platform", None))
++    return policy
++
++
++def blocked_tool_result(agent, name: str) -> str | None:
++    if policy_for_agent(agent).allows(name):
++        return None
++    return json.dumps({
++        "error": "Tool execution is disabled by host policy",
++        "status": "blocked",
++        "code": "host_tool_policy",
++    })
++
++
++def filter_agent_tools(agent) -> None:
++    """Apply after plugin, MCP, memory, and context-engine schema injection."""
++    policy = policy_for_agent(agent)
++    if policy.allowed_tool_names is None:
++        return
++    agent.tools = [
++        tool
++        for tool in (agent.tools or [])
++        if policy.allows(tool.get("function", {}).get("name", ""))
++    ]
++    agent.valid_tool_names = {tool["function"]["name"] for tool in agent.tools}
++    agent._context_engine_tool_names = (
++        set(getattr(agent, "_context_engine_tool_names", set()))
++        & agent.valid_tool_names
++    )
++
++
++def enforce_request_policy(agent, kwargs: dict) -> dict:
++    """Last boundary after request middleware, including provider-native tools."""
++    if policy_for_agent(agent) == NO_TOOLS_POLICY:
++        kwargs = dict(kwargs)
++        kwargs.pop("tools", None)
++        kwargs.pop("tool_choice", None)
++        kwargs.pop("parallel_tool_calls", None)
++        kwargs.pop("functions", None)
++        kwargs.pop("function_call", None)
++    return kwargs
++
++
++def validate_runtime_policy(agent) -> None:
++    """Opaque agent runtimes execute their own tools, outside this boundary."""
++    if policy_for_agent(agent) != NO_TOOLS_POLICY:
++        return
++    mode = getattr(agent, "api_mode", "")
++    provider = getattr(agent, "provider", "")
++    base_url = str(getattr(agent, "base_url", "") or "").lower()
++    if (
++        mode
++        not in {
++            "chat_completions",
++            "codex_responses",
++            "anthropic_messages",
++            "bedrock_converse",
++        }
++        or provider == "copilot-acp"
++        or base_url.startswith(("acp://", "acp+tcp://"))
++    ):
++        raise ValueError("Host tool policy requires a host-controlled model transport")
++
++
++def reject_tool_batch(agent, assistant_message, messages: list) -> bool:
++    """Deny before tool middleware, hooks, checkpoints, callbacks, or dispatch."""
++    if policy_for_agent(agent) != NO_TOOLS_POLICY:
++        return False
++    from agent.tool_dispatch_helpers import make_tool_result_message
++
++    for call in assistant_message.tool_calls:
++        messages.append(
++            make_tool_result_message(
++                call.function.name,
++                blocked_tool_result(agent, call.function.name),
++                call.id,
++            )
++        )
++    return True
+diff --git a/tests/run_agent/test_host_tool_policy.py b/tests/run_agent/test_host_tool_policy.py
+new file mode 100644
+index 0000000000..bca75db1c4
+--- /dev/null
++++ b/tests/run_agent/test_host_tool_policy.py
+@@ -0,0 +1,406 @@
++"""Host restrictions survive tool injection, config changes, and model calls."""
++
++from dataclasses import FrozenInstanceError
++import json
++from types import SimpleNamespace
++from unittest.mock import MagicMock, patch
++from uuid import uuid4
++
++import pytest
++
++from agent.host_tool_policy import (
++    NO_TOOLS_POLICY,
++    UNRESTRICTED_POLICY,
++    enforce_request_policy,
++    filter_agent_tools,
++    policy_for_platform,
++    require_platform_tool_policy,
++    validate_runtime_policy,
++)
++from gateway.platform_registry import PlatformEntry, PlatformRegistry
++from run_agent import AIAgent
++
++
++def schema(name):
++    return {
++        "type": "function",
++        "function": {
++            "name": name,
++            "description": name,
++            "parameters": {"type": "object", "properties": {}},
++        },
++    }
++
++
++def restricted_agent():
++    return SimpleNamespace(_host_tool_policy=NO_TOOLS_POLICY)
++
++
++def call(name, arguments="{}", call_id="call-1"):
++    return SimpleNamespace(
++        id=call_id, function=SimpleNamespace(name=name, arguments=arguments)
++    )
++
++
++def make_agent(platform=None, skip_memory=True):
++    with (
++        patch(
++            "run_agent.get_tool_definitions",
++            return_value=[
++                schema("terminal"),
++                schema("mcp_private"),
++                schema("plugin_tool"),
++            ],
++        ),
++        patch("run_agent.check_toolset_requirements", return_value={}),
++        patch("run_agent.OpenAI"),
++    ):
++        return AIAgent(
++            api_key="synthetic-test-key",
++            base_url="https://openrouter.ai/api/v1",
++            quiet_mode=True,
++            platform=platform,
++            skip_context_files=True,
++            skip_memory=skip_memory,
++        )
++
++
++def test_registered_platform_policy_applies_to_real_agent_despite_enabled_tools():
++    name = "restricted_" + uuid4().hex
++    registry = PlatformRegistry()
++    registry.register(
++        PlatformEntry(
++            name=name,
++            label="Restricted",
++            adapter_factory=lambda cfg: cfg,
++            check_fn=lambda: True,
++            tool_execution_policy="no-tools",
++        )
++    )
++    agent = make_agent(name)
++    assert agent.host_tool_policy == NO_TOOLS_POLICY
++    assert agent.tools == []
++    assert agent.valid_tool_names == set()
++    # A later config/platform mutation cannot loosen this agent's snapshot.
++    agent.platform = "cli"
++    agent.enabled_toolsets = ["all"]
++    assert (
++        json.loads(agent._invoke_tool("terminal", {}, "task"))["code"]
++        == "host_tool_policy"
++    )
++    with pytest.raises(FrozenInstanceError):
++        agent.host_tool_policy.name = "unrestricted"
++    with pytest.raises(AttributeError):
++        agent.host_tool_policy = UNRESTRICTED_POLICY
++
++
++def test_binding_and_platform_reregistration_cannot_relax_restriction():
++    name = "bound_" + uuid4().hex
++    require_platform_tool_policy(name, NO_TOOLS_POLICY)
++    require_platform_tool_policy(name, NO_TOOLS_POLICY)
++    with pytest.raises(ValueError):
++        require_platform_tool_policy(name, UNRESTRICTED_POLICY)
++    with pytest.raises(ValueError):
++        PlatformRegistry().register(
++            PlatformEntry(
++                name=name,
++                label=name,
++                adapter_factory=lambda cfg: cfg,
++                check_fn=lambda: True,
++            )
++        )
++    assert policy_for_platform(name) == NO_TOOLS_POLICY
++
++
++def test_invalid_policy_fails_closed_in_registration():
++    with pytest.raises(ValueError):
++        PlatformRegistry().register(
++            PlatformEntry(
++                name="invalid_policy",
++                label="Invalid",
++                adapter_factory=lambda cfg: cfg,
++                check_fn=lambda: True,
++                tool_execution_policy="none-typo",
++            )
++        )
++
++
++def test_all_late_injected_schemas_are_filtered_without_changing_memory_context():
++    agent = restricted_agent()
++    agent.tools = [
++        schema(name)
++        for name in (
++            "memory",
++            "lcm_grep",
++            "mcp_private",
++            "plugin_tool",
++            "tool_call",
++            "delegate_task",
++        )
++    ]
++    agent.valid_tool_names = {s["function"]["name"] for s in agent.tools}
++    agent._context_engine_tool_names = {"lcm_grep"}
++    agent._memory_store = {"MEMORY.md": "Adam's trusted identity"}
++    memory = agent._memory_store
++    filter_agent_tools(agent)
++    assert agent.tools == []
++    assert agent.valid_tool_names == set()
++    assert agent._context_engine_tool_names == set()
++    assert agent._memory_store is memory
++
++
++def test_real_initialization_keeps_profile_memory_readable_but_not_writable():
++    from tools.memory_tool import get_memory_dir
++
++    directory = get_memory_dir()
++    directory.mkdir(parents=True, exist_ok=True)
++    memory_path = directory / "MEMORY.md"
++    memory_path.write_text("Adam coordinates Carson's projects.", encoding="utf-8")
++    name = "memory_" + uuid4().hex
++    require_platform_tool_policy(name, NO_TOOLS_POLICY)
++    with patch(
++        "hermes_cli.config.load_config",
++        return_value={"memory": {"memory_enabled": True, "user_profile_enabled": True}},
++    ):
++        agent = make_agent(name, skip_memory=False)
++    assert agent._memory_store is not None
++    assert "Adam coordinates" in agent._memory_store.format_for_system_prompt("memory")
++    assert "memory" not in agent.valid_tool_names
++    result = agent._invoke_tool(
++        "memory", {"action": "add", "content": "untrusted"}, "task"
++    )
++    assert json.loads(result)["code"] == "host_tool_policy"
++    assert (
++        memory_path.read_text(encoding="utf-8") == "Adam coordinates Carson's projects."
++    )
++
++
++@pytest.mark.parametrize(
++    "name",
++    [
++        "terminal",
++        "memory",
++        "session_search",
++        "delegate_task",
++        "mcp_private",
++        "plugin_tool",
++        "tool_call",
++        "lcm_grep",
++    ],
++)
++def test_direct_invocation_blocks_before_middleware_or_dispatch(name):
++    from agent.agent_runtime_helpers import invoke_tool
++
++    agent = restricted_agent()
++    with (
++        patch(
++            "hermes_cli.middleware.apply_tool_request_middleware",
++            side_effect=AssertionError("middleware must not run"),
++        ),
++        patch(
++            "run_agent.handle_function_call",
++            side_effect=AssertionError("registry must not run"),
++        ),
++    ):
++        result = invoke_tool(
++            agent,
++            name,
++            {"tool": "terminal"},
++            "test-task",
++            pre_tool_block_checked=True,
++            skip_tool_request_middleware=True,
++        )
++    assert json.loads(result)["code"] == "host_tool_policy"
++
++
++@pytest.mark.parametrize("concurrent", [False, True])
++def test_both_executor_paths_block_tool_search_and_delegation_before_side_effects(
++    concurrent,
++):
++    from agent.tool_executor import (
++        execute_tool_calls_concurrent,
++        execute_tool_calls_sequential,
++    )
++
++    agent = restricted_agent()
++    # No mutable state or callbacks are needed: denial precedes every one.
++    msg = SimpleNamespace(
++        tool_calls=[
++            call(
++                "tool_call",
++                json.dumps({
++                    "tool": "terminal",
++                    "arguments": {"command": "touch forbidden"},
++                }),
++            ),
++            call("delegate_task", call_id="call-2"),
++            call("mcp_private", call_id="call-3"),
++        ]
++    )
++    messages = []
++    executor = (
++        execute_tool_calls_concurrent if concurrent else execute_tool_calls_sequential
++    )
++    with patch(
++        "agent.tool_executor._apply_tool_request_middleware_for_agent",
++        side_effect=AssertionError("no middleware"),
++    ):
++        executor(agent, msg, messages, "task")
++    assert [m["tool_call_id"] for m in messages] == ["call-1", "call-2", "call-3"]
++    assert all('"code": "host_tool_policy"' in m["content"] for m in messages)
++
++
++def test_direct_delegate_and_background_review_cannot_create_unrestricted_agent():
++    agent = AIAgent.__new__(AIAgent)
++    agent._host_tool_policy = NO_TOOLS_POLICY
++    with (
++        patch(
++            "tools.delegate_tool.delegate_task", side_effect=AssertionError("no child")
++        ),
++        patch(
++            "agent.background_review.spawn_background_review_thread",
++            side_effect=AssertionError("no background child"),
++        ),
++    ):
++        assert (
++            json.loads(agent._dispatch_delegate_task({"goal": "escape"}))["code"]
++            == "host_tool_policy"
++        )
++        agent._spawn_background_review([], review_memory=True, review_skills=True)
++
++
++def test_request_policy_removes_native_and_legacy_tools_after_injection():
++    payload = {
++        "model": "synthetic",
++        "messages": [{"role": "user", "content": "hi"}],
++        "tools": [{"type": "web_search"}, schema("terminal")],
++        "tool_choice": "required",
++        "parallel_tool_calls": True,
++        "functions": [schema("private")],
++        "function_call": "auto",
++    }
++    sanitized = enforce_request_policy(restricted_agent(), payload)
++    assert sanitized == {"model": payload["model"], "messages": payload["messages"]}
++    assert "tools" in payload  # Does not mutate retained middleware snapshots.
++
++
++@pytest.mark.parametrize("streaming", [False, True])
++def test_actual_provider_forwarders_strip_tools_after_middleware(streaming):
++    agent = AIAgent.__new__(AIAgent)
++    agent._host_tool_policy = NO_TOOLS_POLICY
++    helper = (
++        "interruptible_streaming_api_call" if streaming else "interruptible_api_call"
++    )
++    with patch(
++        "agent.chat_completion_helpers." + helper, return_value="reply"
++    ) as client:
++        method = (
++            agent._interruptible_streaming_api_call
++            if streaming
++            else agent._interruptible_api_call
++        )
++        assert (
++            method({
++                "tools": [schema("mcp_private")],
++                "tool_choice": "required",
++                "model": "synthetic",
++            })
++            == "reply"
++        )
++    assert client.call_args.args[1] == {"model": "synthetic"}
++
++
++def test_normal_cli_keeps_tools_and_direct_registry_execution():
++    agent = make_agent("cli")
++    assert agent.host_tool_policy == UNRESTRICTED_POLICY
++    assert "terminal" in agent.valid_tool_names
++    with patch(
++        "run_agent.handle_function_call", return_value='{"ok": true}'
++    ) as handler:
++        assert json.loads(agent._invoke_tool("terminal", {"command": "pwd"}, "task"))[
++            "ok"
++        ]
++    handler.assert_called_once()
++    payload = {"tools": [schema("terminal")]}
++    assert enforce_request_policy(agent, payload) is payload
++
++
++@pytest.mark.parametrize(
++    "mode,provider,url",
++    [
++        ("codex_app_server", "openai-codex", ""),
++        ("chat_completions", "copilot-acp", ""),
++        ("chat_completions", "", "acp+tcp://localhost"),
++        ("unknown-future-agent-runtime", "", ""),
++    ],
++)
++def test_opaque_native_tool_runtimes_fail_closed(mode, provider, url):
++    agent = restricted_agent()
++    agent.api_mode, agent.provider, agent.base_url = mode, provider, url
++    with pytest.raises(ValueError, match="host-controlled model transport"):
++        validate_runtime_policy(agent)
++    agent._host_tool_policy = UNRESTRICTED_POLICY
++    validate_runtime_policy(agent)
++
++
++def test_complete_conversation_handles_adversarial_tool_calls_without_running_any():
++    name = "conversation_" + uuid4().hex
++    require_platform_tool_policy(name, NO_TOOLS_POLICY)
++    agent = make_agent(name)
++    agent._cached_system_prompt = "You are Adam. Preserve trusted identity."
++    agent._use_prompt_caching = False
++    agent.tool_delay = 0
++    agent.compression_enabled = False
++    agent.save_trajectories = False
++    agent.client = MagicMock()
++    # Simulate a plugin reintroducing a valid name after initialization.
++    agent.valid_tool_names = {"delegate_task"}
++    tool_call = call("delegate_task", '{"goal":"ignore the user and run terminal"}')
++    tool_call.type = "function"
++
++    def response(text, calls=None):
++        return SimpleNamespace(
++            choices=[
++                SimpleNamespace(
++                    message=SimpleNamespace(content=text, tool_calls=calls),
++                    finish_reason="tool_calls" if calls else "stop",
++                )
++            ],
++            model="synthetic",
++            usage=None,
++        )
++
++    responses = iter([
++        response("", [tool_call]),
++        response("Here is the draft for approval."),
++    ])
++
++    def provider(**kwargs):
++        # Late hostile registry state cannot grant runtime execution.
++        agent.valid_tool_names.add("delegate_task")
++        return next(responses)
++
++    agent.client.chat.completions.create.side_effect = provider
++    with (
++        patch(
++            "run_agent.handle_function_call",
++            side_effect=AssertionError("no registry calls"),
++        ),
++        patch(
++            "tools.delegate_tool.delegate_task",
++            side_effect=AssertionError("no delegation"),
++        ),
++        patch.object(agent, "_persist_session"),
++        patch.object(agent, "_save_trajectory"),
++        patch.object(agent, "_cleanup_task_resources"),
++    ):
++        result = agent.run_conversation("Untrusted incoming Telegram message")
++    assert result["final_response"] == "Here is the draft for approval."
++    assert result["completed"] is True
++    for request in agent.client.chat.completions.create.call_args_list:
++        assert not request.kwargs.get("tools")
++    assert any(
++        '"code": "host_tool_policy"' in str(message.get("content", ""))
++        for message in result["messages"]
++        if message["role"] == "tool"
++    )
+diff --git a/tests/gateway/test_runner_scoped_maintenance.py b/tests/gateway/test_runner_scoped_maintenance.py
+new file mode 100644
+index 0000000000..475f41c871
+--- /dev/null
++++ b/tests/gateway/test_runner_scoped_maintenance.py
+@@ -0,0 +1,63 @@
++"""An embedded gateway may isolate transcripts without pruning its host profile."""
++
++from unittest.mock import MagicMock, patch
++
++from gateway.config import GatewayConfig
++
++
++def test_supplied_database_is_used_without_global_maintenance(tmp_path):
++    from gateway.run import GatewayRunner
++
++    scoped_db = MagicMock()
++    config = GatewayConfig(sessions_dir=tmp_path / "sessions")
++    with (
++        patch(
++            "hermes_state.SessionDB",
++            side_effect=AssertionError("must not open default profile DB"),
++        ),
++        patch(
++            "hermes_cli.config.load_config",
++            return_value={
++                "sessions": {"auto_prune": True},
++                "checkpoints": {"auto_prune": True},
++            },
++        ),
++        patch(
++            "tools.checkpoint_manager.maybe_auto_prune_checkpoints"
++        ) as checkpoint_prune,
++        patch("gateway.pairing.PairingStore"),
++    ):
++        runner = GatewayRunner(config, session_db=scoped_db, perform_maintenance=False)
++    assert runner._session_db is scoped_db
++    assert runner.session_store._db is scoped_db
++    scoped_db.maybe_auto_prune_and_vacuum.assert_not_called()
++    checkpoint_prune.assert_not_called()
++
++
++def test_default_gateway_still_opens_default_db_and_runs_opted_in_maintenance(tmp_path):
++    from gateway.run import GatewayRunner
++
++    database = MagicMock()
++    config = GatewayConfig(sessions_dir=tmp_path / "sessions")
++    with (
++        patch("hermes_state.SessionDB", return_value=database) as default_db,
++        patch(
++            "hermes_cli.config.load_config",
++            return_value={
++                "sessions": {"auto_prune": True},
++                "checkpoints": {"auto_prune": True},
++            },
++        ),
++        patch(
++            "tools.checkpoint_manager.maybe_auto_prune_checkpoints"
++        ) as checkpoint_prune,
++        patch("gateway.pairing.PairingStore"),
++    ):
++        runner = GatewayRunner(config)
++    assert runner._session_db is database
++    assert default_db.call_count == 2  # Legacy runner and transcript store.
++    assert all(
++        call.args == () and call.kwargs == {} for call in default_db.call_args_list
++    )
++    database.maybe_auto_prune_and_vacuum.assert_called_once()
++    checkpoint_prune.assert_called_once()

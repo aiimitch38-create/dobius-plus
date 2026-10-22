@@ -1,0 +1,22 @@
+{
+  "id": "ctx_766a77e4ca86",
+  "task_id": "task_6cc363ed9354",
+  "assignee_handle": "term_cb1517bc-4e25-4549-9526-1eb3ef4f45c0",
+  "status": "dispatched",
+  "failure_count": 0,
+  "last_failure": null,
+  "dispatched_at": "2026-10-16 18:04:44",
+  "completed_at": null,
+  "created_at": "2026-10-16 18:04:44",
+  "last_heartbeat_at": null,
+  "runtime_id": "6627a505-a9ea-4b59-90e7-d051eb153516",
+  "coordinator_handle": "term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54",
+  "brief_path": "plans/worker-monitor-20261014/BUILD2-telegram-paused-revoke-brief.txt",
+  "root_review_followup": "Before freezing, also fence the connected revoke completion after await stopClient(): stopClient itself begins a new generation then awaits stop/drain/disconnect, and the caller currently clears state with no post-await generation guard. A concurrent pause/disconnect/newer control must not be overwritten by late successful connected revoke cleanup. Add a deferred-disconnect regression for connected revoke superseded by a newer control; keep correction within current owned connection scope. This is current-task feedback, not a second assignment.",
+  "root_probe_evidence": {
+    "path": "plans/worker-monitor-20261014/telegram-revoke-review/root-connected-revoke.test.ts",
+    "command": "Node24 Vitest --config /tmp/dobius-root-revoke-vitest.config.cjs --maxWorkers=1",
+    "baseline_result": "1 FAIL: late connected revoke returned success instead of stale-operation after newer pause during deferred client disconnect",
+    "observed_at": "2026-10-16T18:10:18Z"
+  }
+}

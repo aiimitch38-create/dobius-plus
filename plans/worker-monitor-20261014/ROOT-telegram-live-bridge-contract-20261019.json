@@ -1,0 +1,57 @@
+{
+  "scope": "Finish personal Telegram to existing Adam Hermes profile; approval-required replies; no AWS/Storage work; preserve heads and unrelated projects",
+  "transport": {
+    "kind": "Main-owned child process with private inherited duplex fd3. No public listener, shared bearer file, PTY prompt, provider credentials or Telegram credentials over protocol. Child is spawned only from configured verified Hermes install and exact Adam profile; one GatewayRunner for that profile with existing PID lock. Use registered gateway platform dob ius_adam_telegram without spaces (dobius_adam_telegram).",
+    "protocol": {
+      "v": 1,
+      "request": {
+        "type": "request",
+        "id": "opaque source-correlated id",
+        "groupId": "Telegram signed decimal string",
+        "senderId": "Telegram decimal string",
+        "messageId": "Telegram decimal string",
+        "groupTitle": "bounded display title",
+        "text": "max 16000 chars"
+      },
+      "reply": {
+        "type": "reply",
+        "id": "matching opaque id",
+        "text": "max 16000 chars"
+      },
+      "error": {
+        "type": "error",
+        "id": "matching id",
+        "code": "closed code, no raw exception"
+      },
+      "cancel": {
+        "type": "cancel",
+        "id": "matching id"
+      },
+      "ready": {
+        "type": "ready",
+        "profile": "adam",
+        "platform": "dobius_adam_telegram",
+        "policy": "no-tools"
+      }
+    },
+    "handshake": "Parent first sends {v:1,type:hello,nonce:<random32byte base64url>}; child echoes {v:1,type:ready,nonce,profile:adam,platform:dobius_adam_telegram,policy:no-tools}. Parent binds to exact live child and pipe; fd not accessible through normal RPC. Cancellation and timeout must fence late results."
+  },
+  "public_api_additions": [
+    "getParticipants({groupId}): Promise<TelegramParticipantSummary[]>",
+    "grantConsent({groupId,senderId,evidence,expiresAt}): Promise<void>",
+    "revokeConsent({groupId,senderId}): Promise<void>",
+    "startReplies(): Promise<void>",
+    "stopReplies(): Promise<void>"
+  ],
+  "view_additions": {
+    "replyHandling": "optional {bridge: unavailable|starting|ready|error, listening:boolean, policy:approval-required}",
+    "consents": "optional array of {groupId,senderId,displayName,evidence,grantedAt,expiresAt,revision}; keep evidence bounded, no secrets"
+  },
+  "consent": "Separate encrypted authority file consents.enc, bound to account/group/sender/purpose, per-participant explicit evidence and expiry/revoke. UI grants only actual server-verified participant in selected group, never a blanket group checkbox. Main-owned callback reads dynamic proof; no automatic grants. Consent UI can collect evidence but does not invent it. Participant metadata only; no history scrape.",
+  "ownership": {
+    "root": "Dobius child transport, desktop composition, MTProto participants, package inclusion, actual integration/install and verification",
+    "hermes_policy": "Hermes core no-tools host enforcement, policy tests; owns ~/.hermes/hermes-agent agent execution files only",
+    "hermes_adapter": "canonical dobius/resources/adam-telegram/ Python runner/platform adapter/protocol/durable receipts/test files only; no core modifications",
+    "consent_ui": "shared API/view additions, new encrypted consent authority module/tests, renderer consent/readiness/approval controls/tests, Telegram IPC validation and preload; do not edit desktop composition/MTProto or existing vault/service schemas without coordinating"
+  }
+}

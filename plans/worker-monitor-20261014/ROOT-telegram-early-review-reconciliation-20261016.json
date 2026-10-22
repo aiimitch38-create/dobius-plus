@@ -1,0 +1,11 @@
+{
+  "task_id": "task_f5dda6b02206",
+  "dispatch_id": "ctx_5ad36d33e0af",
+  "verdict": "CHANGES_REQUIRED_FOR_REPLY_ENABLEMENT",
+  "report": "plans/worker-monitor-20261014/RESEARCH-telegram-personal-account-review.md",
+  "report_sha256": "9f1518548eed3d508bb686c2de2c304eae9178c9e04d8c24cb527a41d5779df7",
+  "source_is_moving": true,
+  "followup_owner": "BUILD2 existing task_4134bdbae608",
+  "source_accepted": false,
+  "live": false
+}

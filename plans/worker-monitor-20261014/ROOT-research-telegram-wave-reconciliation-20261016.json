@@ -1,0 +1,11 @@
+{
+  "task_id": "task_50cd44d1cfe4",
+  "dispatch_id": "ctx_a953b9c047b5",
+  "verdict": "FEASIBLE_WITH_NEW_PERSONAL_CLIENT_ADAPTER; NOT_CURRENTLY_SUPPORTED_OR_LIVE",
+  "report": "plans/worker-monitor-20261014/RESEARCH-telegram-personal-account-feasibility.md",
+  "report_sha256": "72787545a582e0900b615967559fe85891cae2986ffb8220db7135f0cc588c97",
+  "source_only": true,
+  "live": false,
+  "verified_at": 1792171803.520402,
+  "review_scope": "Official docs and local source audit, no tests/live evidence claimed"
+}

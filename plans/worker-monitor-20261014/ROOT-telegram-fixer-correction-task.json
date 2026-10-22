@@ -1,0 +1,22 @@
+{
+  "id": "ec80442f-d79f-4da7-981a-05977c8bee2f",
+  "ok": true,
+  "result": {
+    "task": {
+      "id": "task_3e73ce24bf4d",
+      "parent_id": null,
+      "created_by_terminal_handle": "term_ac9f423b-522b-4da0-a656-b22b581952e2",
+      "task_title": "TELEGRAM Settings emergency controls correction and setup documentation, NEW...",
+      "display_name": "TELEGRAM Settings emergency controls correction and setup documentation, NEW...",
+      "spec": "TELEGRAM Settings emergency controls correction and setup documentation, NEW successor to completed UI task_0f1c842369f2; prior sevenfiles/13tests independently verified. Read canonical dobius/AGENTS.md and current API. Own same TelegramAccount renderer files/tests + new dobius/docs/TELEGRAM-PERSONAL-ACCOUNT.md; no backend/preload/package changes. Current TelegramAccountSection disables pause/disconnect/revoke with busy while group refresh can hang; only auth cancel currently interrupts busy. Fix immediate user controls independent cancellation lane: always permit pause/disconnect/revoke while an ordinary account action/refresh pending, invalidate generation beforeawait, fence old runAction finally/busyRef from clearing newer controls, avoid duplicate control operations, keep revoke honest if backend paused client needs resume first (report unsupported, don't call localdisconnect revocation). Add deferred refresh / pause and disconnect/revoke tests, stale completion must not restore old group metadata/status and no double submission. Preserve transientauth secretclearing/currentstyledUI. Backend source WIP muststaydefaultAI-disabled; user has not given groups/consent/replyrules. ROOT reconnect preference now persists explicitpause acrossrestart and surfaces paused beforeuserresume. SharedAPI window.api.telegramAccount live typedsource (no actualinstalledauth). Add concise Markdown user/developer setupguide: Settings > Agents > Telegram personalaccount; register OWN Telegram API ID/hash via https://core.telegram.org/api/obtaining_api_id and use secure inappfields only; persistentencryptedpersonal MTProto session notbot; exactly3verifiedgroups; distinguish account connected from actualAdamreplyroute and continuingindividual groupconsent, currentreplyToAdam/readConsent null andnoauto/modelsend. Explain pausepersist, explicitresume, disconnectvsauth.LogOut remote revoke, uncertain remote sends retained/manualreview no blindresend (random_idnotgenerallyqueryable), secure storage failure and recoverynologging secrets. State sourceonly/pendinggatedinstallation/currentliveactivation prerequisites without inventingreadydate. Link actualprimaryTelegramterms and API, no legalclaim blanketpermission. Include source module map/focusedtestcommand andhonest missingAdamgateway/cursor/consentprovider gates. Don't inspectaccounts/profiles, no network/login/send/install/build/restart/Gitactions; AWSdeferred/Storagepaused. Write FIXER-telegram-control-correction.md plus atomic own fixer.json key telegram-control-correction-20261016 exacttask/dispatch/newhashes/tests. One worker_done currentROOT/IDs or singleattemptfilefallback, no postcompletionpolling.",
+      "status": "pending",
+      "deps": "[\"task_0f1c842369f2\"]",
+      "result": null,
+      "created_at": "2026-10-16 17:51:21",
+      "completed_at": null
+    }
+  },
+  "_meta": {
+    "runtimeId": "6627a505-a9ea-4b59-90e7-d051eb153516"
+  }
+}

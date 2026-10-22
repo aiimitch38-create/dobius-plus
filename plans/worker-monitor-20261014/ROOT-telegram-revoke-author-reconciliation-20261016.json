@@ -1,0 +1,14 @@
+{
+  "task_id": "task_6cc363ed9354",
+  "verdict": "AUTHOR_CORRECTION_DELIVERY_VERIFIED_PENDING_INDEPENDENT_REVIEW",
+  "dispatch_id": "ctx_766a77e4ca86",
+  "report": {
+    "path": "plans/worker-monitor-20261014/BUILD2-telegram-paused-revoke-correction.md",
+    "sha256": "52f05f227bf9373edbde3b3511179d1d714267018dfbac0b8dceacfc83112d8c",
+    "bytes": 6990
+  },
+  "source_files_verified": 6,
+  "author_tests": "90/90",
+  "root_probe": "1/1 PASS; failed before correction",
+  "live": false
+}

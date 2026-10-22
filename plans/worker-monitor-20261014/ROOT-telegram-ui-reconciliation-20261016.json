@@ -1,0 +1,11 @@
+{
+  "task_id": "task_0f1c842369f2",
+  "dispatch_id": "ctx_7d6ab3bf5ff9",
+  "verdict": "PASS_RENDERER_SLICE_NOT_LIVE",
+  "report": "plans/worker-monitor-20261014/FIXER-telegram-personal-account-ui.md",
+  "report_sha256": "19cf1f41d00c73aae3de3f615c75cf6646a9bfb3c32a4fa62a74751cf23c674c",
+  "root_rerun": "13/13 UI tests under Node24",
+  "source_paths_verified": 7,
+  "installed": false,
+  "live": false
+}

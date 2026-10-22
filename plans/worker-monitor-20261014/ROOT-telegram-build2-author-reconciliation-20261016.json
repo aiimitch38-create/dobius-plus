@@ -1,0 +1,13 @@
+{
+  "task_id": "task_4134bdbae608",
+  "dispatch_id": "ctx_39d2588523c7",
+  "verdict": "AUTHOR_DELIVERY_VERIFIED_PENDING_FINAL_INDEPENDENT_REVIEW",
+  "author_verdict": "source-correction-freeze; production ingestion disabled",
+  "report": "plans/worker-monitor-20261014/BUILD2-telegram-personal-account.md",
+  "report_sha256": "d0afa7318b46a7809451b8e5d6928e261c2634480fd778bddd3c35de7f343d31",
+  "source_files_verified": 18,
+  "root_combined_test_result": "84/84 tests, 10files; node/cli/web project typechecks exit0",
+  "installed": false,
+  "live": false,
+  "verified_at": 1792173441.6125498
+}
