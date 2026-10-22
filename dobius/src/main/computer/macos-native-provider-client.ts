@@ -24,6 +24,7 @@ import {
   startMacOSNativeProviderSocket
 } from './macos-native-provider-transport'
 import { validateComputerProviderActionParams } from './computer-provider-action-validation'
+import { requireWindowForCoordinateAction } from './coordinate-window-guard'
 import { normalizeComputerActionResult } from './computer-action-verification-normalization'
 import { RuntimeClientError } from './runtime-client-error'
 
@@ -56,10 +57,9 @@ export class MacOSNativeProviderClient {
     return (await this.call('getAppState', params)) as ComputerSnapshotResult
   }
   async action(method: NativeActionMethod, params: unknown): Promise<ComputerActionResult> {
-    await validateComputerProviderActionParams(
-      method,
-      params && typeof params === 'object' ? (params as Record<string, unknown>) : {}
-    )
+    const record = params && typeof params === 'object' ? (params as Record<string, unknown>) : {}
+    await validateComputerProviderActionParams(method, record)
+    await requireWindowForCoordinateAction(method, record, (query) => this.listWindows(query))
     await this.ensureActionSupported(method)
     return normalizeComputerActionResult((await this.call(method, params)) as ComputerActionResult)
   }
