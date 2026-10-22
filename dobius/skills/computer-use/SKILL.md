@@ -79,6 +79,9 @@ printf '%s' "$TEXT" | dobius computer set-value --app <app> --element-index <ind
 
 ## Action Rules
 
+- Every action passes a decision point before it runs. Two rules can refuse it with `invalid_argument`:
+  - **pick-window:** a coordinate `click`/`scroll`/`drag` is refused when the app has more than one window open and no `--window-id`/`--window-index` was given. Run `list-windows`, pass the id of the window your screenshot came from, or use `--element-index` instead.
+  - **confirm-risky:** clicking an element labeled like Delete, Send, Pay, Purchase, Checkout, Transfer, Sign out, Unsubscribe or Publish is refused until re-run with `--confirm-risky`. Add it only when the user explicitly asked for that exact action; otherwise stop and ask.
 - Prefer semantic actions: `set-value` for editable fields, `click` for controls, `perform-secondary-action` only for listed action names.
 - After any UI-changing action, use the returned state or rerun `get-app-state` before choosing the next element index.
 - Use `type-text` only after focusing a field and confirming the app has a focused text receiver; synthetic keyboard delivery is reported as unverified, so inspect the returned state before assuming text landed.
