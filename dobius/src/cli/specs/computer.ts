@@ -46,22 +46,27 @@ export const COMPUTER_COMMAND_SPECS: CommandSpec[] = [
     path: ['computer', 'click'],
     summary: 'Click an app element or window coordinate',
     usage:
-      'dobius computer click --app <app> (--element-index <n> | --x <x> --y <y>) [--window-id <id> | --window-index <n>] [--click-count <n>] [--mouse-button <left|right|middle>] [--restore-window] [--no-screenshot] [--json]',
+      'dobius computer click --app <app> (--element-index <n> | --x <x> --y <y>) [--window-id <id> | --window-index <n>] [--click-count <n>] [--mouse-button <left|right|middle>] [--confirm-risky] [--restore-window] [--no-screenshot] [--json]',
     allowedFlags: [
       ...COMPUTER_ACTION_FLAGS,
       'element-index',
       'x',
       'y',
       'click-count',
-      'mouse-button'
+      'mouse-button',
+      'confirm-risky'
+    ],
+    notes: [
+      'Clicks on controls labeled like Delete, Send, Pay, Purchase or Sign out are refused until re-run with --confirm-risky. Only add it when the user explicitly asked for that action.',
+      'Coordinate clicks require --window-id when the app has more than one window open.'
     ]
   },
   {
     path: ['computer', 'perform-secondary-action'],
     summary: 'Perform an advertised secondary accessibility action',
     usage:
-      'dobius computer perform-secondary-action --app <app> --element-index <n> --action <name> [--window-id <id> | --window-index <n>] [--restore-window] [--no-screenshot] [--json]',
-    allowedFlags: [...COMPUTER_ACTION_FLAGS, 'element-index', 'action']
+      'dobius computer perform-secondary-action --app <app> --element-index <n> --action <name> [--window-id <id> | --window-index <n>] [--confirm-risky] [--restore-window] [--no-screenshot] [--json]',
+    allowedFlags: [...COMPUTER_ACTION_FLAGS, 'element-index', 'action', 'confirm-risky']
   },
   {
     path: ['computer', 'scroll'],

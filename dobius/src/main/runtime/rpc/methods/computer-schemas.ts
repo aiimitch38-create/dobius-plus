@@ -67,7 +67,8 @@ export const Click = ComputerObserveTargetBase.extend({
   x: OptionalFiniteNumber,
   y: OptionalFiniteNumber,
   clickCount: OptionalPositiveInt,
-  mouseButton: z.enum(['left', 'right', 'middle']).optional()
+  mouseButton: z.enum(['left', 'right', 'middle']).optional(),
+  confirmRisky: z.boolean().optional()
 }).superRefine((value, ctx) => {
   validateComputerTarget(value, ctx)
   const hasElement = value.elementIndex !== undefined
@@ -95,7 +96,8 @@ export const Click = ComputerObserveTargetBase.extend({
 
 export const PerformSecondaryAction = ComputerObserveTargetBase.extend({
   elementIndex: OptionalNonNegativeInt,
-  action: requiredString('Missing action')
+  action: requiredString('Missing action'),
+  confirmRisky: z.boolean().optional()
 }).superRefine((value, ctx) => {
   validateComputerTarget(value, ctx)
   if (value.elementIndex === undefined) {

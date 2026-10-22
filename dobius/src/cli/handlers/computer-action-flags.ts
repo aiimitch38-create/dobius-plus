@@ -60,8 +60,10 @@ export function getComputerClickActionFlags(flags: Map<string, string | boolean>
   y?: number
   clickCount?: number
   mouseButton?: string
+  confirmRisky?: true
 } {
   const result = {
+    confirmRisky: flags.get('confirm-risky') === true ? (true as const) : undefined,
     elementIndex: getOptionalNonNegativeIntegerFlag(flags, 'element-index'),
     x: getOptionalNumberFlag(flags, 'x'),
     y: getOptionalNumberFlag(flags, 'y'),
@@ -76,8 +78,10 @@ export function getComputerClickActionFlags(flags: Map<string, string | boolean>
 export function getComputerSecondaryActionFlags(flags: Map<string, string | boolean>): {
   elementIndex: number
   action: string
+  confirmRisky?: true
 } {
   return {
+    confirmRisky: flags.get('confirm-risky') === true ? true : undefined,
     elementIndex: getRequiredNonNegativeIntegerFlag(flags, 'element-index'),
     action: getRequiredStringFlag(flags, 'action')
   }
