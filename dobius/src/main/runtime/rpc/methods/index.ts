@@ -1,6 +1,10 @@
 import type { RpcAnyMethod } from '../core'
 import { STATUS_METHODS } from './status'
 import { AUTOMATION_METHODS } from './automations'
+import { CLOUD_JOB_METHODS } from './cloud-jobs'
+import { ADAM_CLOUD_CHILD_METHODS } from './adam-cloud-child'
+import { SYSTEM_MONITOR_METHODS } from './system-monitor'
+import { DATA_CATALOG_METHODS } from './data-catalog'
 import { CUSTOM_AGENT_METHODS } from './custom-agents'
 import { TEAM_METHODS } from './teams'
 import { REPO_METHODS } from './repo'
@@ -14,6 +18,7 @@ import { ORCHESTRATION_METHODS } from './orchestration'
 import { NOTIFICATION_METHODS } from './notifications'
 import { STATS_METHODS } from './stats'
 import { DIAGNOSTICS_METHODS } from './diagnostics'
+import { TELEGRAM_METHODS } from './telegram'
 import { ACCOUNT_METHODS } from './accounts'
 import { PREFLIGHT_METHODS } from './preflight'
 import { COMPUTER_METHODS } from './computer'
@@ -64,6 +69,10 @@ import { CANVAS_NOTES_METHODS } from '../../../communications/canvas/canvas-rpc-
 export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...STATUS_METHODS,
   ...AUTOMATION_METHODS,
+  ...CLOUD_JOB_METHODS,
+  ...ADAM_CLOUD_CHILD_METHODS,
+  ...SYSTEM_MONITOR_METHODS,
+  ...DATA_CATALOG_METHODS,
   ...CUSTOM_AGENT_METHODS,
   ...TEAM_METHODS,
   ...REPO_METHODS,
@@ -77,6 +86,7 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...NOTIFICATION_METHODS,
   ...STATS_METHODS,
   ...DIAGNOSTICS_METHODS,
+  ...TELEGRAM_METHODS,
   ...ACCOUNT_METHODS,
   ...PREFLIGHT_METHODS,
   ...COMPUTER_METHODS,
@@ -109,5 +119,5 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...SNAPSHOT_METHODS,
   ...WORKFLOW_METHODS,
   ...WORKSTATION_METHODS,
-  ...CANVAS_NOTES_METHODS,
+  ...CANVAS_NOTES_METHODS
 ]

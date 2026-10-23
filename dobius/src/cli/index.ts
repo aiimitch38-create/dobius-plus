@@ -21,7 +21,10 @@ function shouldIgnoreRemoteSelection(commandPath: string[]): boolean {
     commandPath[0] === 'environment' ||
     commandPath[0] === 'serve' ||
     commandPath[0] === 'agent' ||
-    commandPath[0] === 'vm'
+    commandPath[0] === 'vm' ||
+    commandPath[0] === 'submit-adam-child' ||
+    commandPath[0] === 'lookup-adam-child' ||
+    commandPath[0] === 'seal-adam-intent'
   )
 }
 

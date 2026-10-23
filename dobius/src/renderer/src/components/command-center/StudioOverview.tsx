@@ -1,6 +1,7 @@
 import { ArrowUpRight, Folder, LayoutDashboard, Plus, StickyNote } from 'lucide-react'
 import { Button } from '../ui/button'
 import type { StudioData, StudioAction, StudioPanel, StudioRecord } from './studio-state'
+import { DataCatalogPanel } from './DataCatalogPanel'
 
 export function StudioOverview({
   surface,
@@ -121,6 +122,7 @@ export function StudioOverview({
             ))
         )}
       </div>
+      <DataCatalogPanel />
     </div>
   )
 }

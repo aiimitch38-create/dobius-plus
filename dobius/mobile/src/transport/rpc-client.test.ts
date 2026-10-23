@@ -198,6 +198,31 @@ describe('mobile rpc-client connection timeout', () => {
     client.close()
   })
 
+  it('delivers only strict authenticated preview invalidation events and supports unsubscribe', () => {
+    const client = connect('ws://desktop.invalid', 'token', 'server-key')
+    const socket = mockSockets[0]!
+    socket.open()
+    socket.receive(JSON.stringify({ type: 'e2ee_ready' }))
+    socket.receive('encrypted:{"type":"e2ee_authenticated"}')
+    const listener = vi.fn()
+    const unsubscribe = client.onDataCatalogPreviewInvalidated(listener)
+    const event = {
+      rootId: 'root:test',
+      generation: 'f2e4d210-8bb5-4c19-886c-3ffb816f81ce',
+      reason: 'revoked'
+    }
+
+    socket.receive(`encrypted:${JSON.stringify(event)}`)
+    socket.receive(`encrypted:${JSON.stringify({ ...event, content: 'private' })}`)
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener).toHaveBeenCalledWith(event)
+
+    unsubscribe()
+    socket.receive(`encrypted:${JSON.stringify(event)}`)
+    expect(listener).toHaveBeenCalledTimes(1)
+    client.close()
+  })
+
   it('sends session tabs unsubscribe when a session tab stream is disposed', () => {
     const client = connect('ws://desktop.invalid', 'token', 'server-key')
     const socket = mockSockets[0]!

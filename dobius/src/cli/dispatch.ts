@@ -1,6 +1,7 @@
 import type { RuntimeClient } from './runtime-client'
 import { RuntimeClientError } from './runtime-client'
 import { CORE_HANDLERS } from './handlers/core'
+import { ADAM_CLOUD_CHILD_HANDLERS } from './handlers/adam-cloud-child'
 import { AUTOMATION_HANDLERS } from './handlers/automations'
 import { CUSTOM_AGENT_HANDLERS } from './handlers/custom-agents'
 import { PROJECT_HANDLERS } from './handlers/project'
@@ -21,6 +22,7 @@ import { COMPUTER_HANDLERS } from './handlers/computer'
 import { ENVIRONMENT_HANDLERS } from './handlers/environment'
 import { AGENT_HOOK_HANDLERS } from './handlers/agent-hooks'
 import { DIAGNOSTICS_HANDLERS } from './handlers/diagnostics'
+import { TELEGRAM_HANDLERS } from './handlers/telegram'
 import { EMULATOR_HANDLERS } from './handlers/emulator'
 import { LINEAR_HANDLERS } from './handlers/linear'
 import { VM_HANDLERS } from './handlers/vm'
@@ -39,6 +41,7 @@ function buildHandlers(): Map<string, CommandHandler> {
   const table = new Map<string, CommandHandler>()
   const groups = [
     CORE_HANDLERS,
+    ADAM_CLOUD_CHILD_HANDLERS,
     AUTOMATION_HANDLERS,
     CUSTOM_AGENT_HANDLERS,
     PROJECT_HANDLERS,
@@ -59,6 +62,7 @@ function buildHandlers(): Map<string, CommandHandler> {
     COMPUTER_HANDLERS,
     AGENT_HOOK_HANDLERS,
     DIAGNOSTICS_HANDLERS,
+    TELEGRAM_HANDLERS,
     ENVIRONMENT_HANDLERS,
     LINEAR_HANDLERS,
     VM_HANDLERS

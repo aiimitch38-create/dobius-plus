@@ -72,6 +72,36 @@ const AGENT_RUNTIME_SEARCH_ENTRY_ID = 'agent-runtime'
 
 const getAllAgentsPaneSearchEntries = createLocalizedCatalog(() => [
   {
+    title: translate(
+      'auto.components.settings.agents.search.telegramPersonalAccount',
+      'Telegram personal account'
+    ),
+    description: translate(
+      'auto.components.settings.agents.search.telegramPersonalAccountDescription',
+      'Connect a personal Telegram account, choose groups, and review reply drafts for Adam.'
+    ),
+    keywords: searchKeywords([
+      {
+        key: 'auto.components.settings.agents.search.telegram',
+        fallback: 'telegram',
+        englishOnly: true
+      },
+      {
+        key: 'auto.components.settings.agents.search.personalAccount',
+        fallback: 'personal account'
+      },
+      {
+        key: 'auto.components.settings.agents.search.connectedAccounts',
+        fallback: 'connected accounts'
+      },
+      { key: 'auto.components.settings.agents.search.groupPicker', fallback: 'groups chats' },
+      {
+        key: 'auto.components.settings.agents.search.replyDrafts',
+        fallback: 'reply drafts approval'
+      }
+    ])
+  },
+  {
     title: translate('auto.components.settings.agents.search.bb9ad95777', 'Agents'),
     description: translate(
       'auto.components.settings.agents.search.01926b9d8c',

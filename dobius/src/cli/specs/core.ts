@@ -200,8 +200,21 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
     path: ['terminal', 'send'],
     summary: 'Send input to a live terminal',
     usage:
-      'dobius terminal send [--terminal <handle>] [--text <text>] [--enter] [--interrupt] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'terminal', 'text', 'enter', 'interrupt']
+      'dobius terminal send [--terminal <handle>] [--text <text>] [--enter] [--interrupt] [--expected-runtime-id <id>] [--require-agent-status sendable] [--json]',
+    allowedFlags: [
+      ...GLOBAL_FLAGS,
+      'terminal',
+      'text',
+      'enter',
+      'interrupt',
+      'expected-runtime-id',
+      'require-agent-status'
+    ],
+    notes: [
+      'Use --expected-runtime-id to bind submission to one exact runtime identity; this selects terminal.sendBound.',
+      'Older hosts that do not support terminal.sendBound refuse the request instead of silently falling back to terminal.send.',
+      'Use --require-agent-status sendable to refuse submission when no agent is active or it requests permission.'
+    ]
   },
   {
     path: ['terminal', 'wait'],

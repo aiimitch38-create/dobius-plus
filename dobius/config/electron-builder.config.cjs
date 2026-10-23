@@ -41,7 +41,17 @@ const bundledSkillsExtraResource = {
 const packagedRuntimeNodeModuleResources = createPackagedRuntimeNodeModuleResources()
 
 const commonExtraResources = [
+  {
+    from: 'resources/adam-telegram',
+    to: 'adam-telegram',
+    filter: ['*.py', '*.json', '*.patch', '!test_*.py', '!gateway_fixture.py', '!__pycache__/**']
+  },
   { from: 'config/scripts/cloud-backup', to: 'cloud-backup', filter: ['*.py', '!test_*.py'] },
+  {
+    from: 'config/scripts/data-catalog',
+    to: 'data-catalog',
+    filter: ['descriptor-directory-bridge.py', 'native-root-identity.py']
+  },
   relayExtraResource,
   bundledSkillsExtraResource,
   ...packagedRuntimeNodeModuleResources
@@ -86,7 +96,8 @@ module.exports = {
     '!tsconfig.json',
     // Why: feature-wall media is copied via extraResources so runtime can read
     // it from process.resourcesPath; exclude the source copy from app.asar.
-    '!resources/onboarding/feature-wall/**'
+    '!resources/onboarding/feature-wall/**',
+    '!resources/adam-telegram/**'
   ],
   // Why: the CLI entry-point lives in out/cli/ but imports shared modules
   // from out/shared/ and local hook mutators from out/main/. These paths must be

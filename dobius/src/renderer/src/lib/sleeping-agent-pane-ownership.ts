@@ -1,5 +1,9 @@
-import type { useAppStore } from '@/store'
-import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
+import { useAppStore } from '@/store'
+import type {
+  AgentProviderSessionMetadata,
+  SleepingAgentSessionRecord
+} from '../../../shared/agent-session-resume'
+import { AGENT_STATUS_STALE_AFTER_MS } from '../../../shared/agent-status-types'
 import type {
   TerminalLayoutSnapshot,
   TerminalPaneLayoutNode,
@@ -11,6 +15,156 @@ type AppStoreState = ReturnType<typeof useAppStore.getState>
 
 export function getProviderSessionClaimKey(record: SleepingAgentSessionRecord): string {
   return `${record.worktreeId}\0${record.agent}\0${record.providerSession.key}\0${record.providerSession.id}`
+}
+
+/** Return worktrees whose persisted panes need a one-time startup ownership pass. */
+export function getWorktreeIdsNeedingStartupResume(
+  sleepingAgentSessionsByPaneKey: Readonly<Record<string, SleepingAgentSessionRecord>>,
+  activeWorktreeId: string,
+  alreadySwept: ReadonlySet<string>
+): string[] {
+  const candidates = new Set<string>([
+    activeWorktreeId,
+    ...Object.values(sleepingAgentSessionsByPaneKey).map((record) => record.worktreeId)
+  ])
+  return [...candidates].filter((worktreeId) => !alreadySwept.has(worktreeId))
+}
+
+export function clearPassiveCompletedRecordsForClaimKey(
+  records: readonly SleepingAgentSessionRecord[],
+  claimKey: string,
+  keepPaneKey: string
+): void {
+  const state = useAppStore.getState()
+  for (const record of records) {
+    if (
+      record.paneKey !== keepPaneKey &&
+      isPassiveCompletedHibernationEvidence(record) &&
+      getProviderSessionClaimKey(record) === claimKey
+    ) {
+      state.clearSleepingAgentSession(record.paneKey)
+    }
+  }
+}
+
+export function getCurrentPaneOwnedClaimKeys(
+  records: readonly SleepingAgentSessionRecord[]
+): Set<string> {
+  const state = useAppStore.getState()
+  const keys = new Set<string>()
+  for (const record of records) {
+    if (
+      state.sleepingAgentSessionsByPaneKey[record.paneKey] === record &&
+      !isInvalidWorktreeActivationRecord(record) &&
+      !isPassiveCompletedHibernationEvidence(record) &&
+      recordPaneIsOwnedByPreservedPane(record, state)
+    ) {
+      keys.add(getProviderSessionClaimKey(record))
+    }
+  }
+  return keys
+}
+
+export function getNewestActiveRecordsByClaimKey(
+  records: readonly SleepingAgentSessionRecord[]
+): Map<string, SleepingAgentSessionRecord> {
+  const newestRecords = new Map<string, SleepingAgentSessionRecord>()
+  for (const record of records) {
+    const claimKey = getProviderSessionClaimKey(record)
+    const current = newestRecords.get(claimKey)
+    if (
+      !current ||
+      record.capturedAt > current.capturedAt ||
+      (record.capturedAt === current.capturedAt && record.updatedAt > current.updatedAt)
+    ) {
+      newestRecords.set(claimKey, record)
+    }
+  }
+  return newestRecords
+}
+
+function providerSessionsMatch(
+  left: AgentProviderSessionMetadata | undefined,
+  right: AgentProviderSessionMetadata
+): boolean {
+  return Boolean(left && left.key === right.key && left.id === right.id)
+}
+
+function getAgentStatusTabId(entry: { paneKey: string; tabId?: string }): string | null {
+  if (entry.tabId) {
+    return entry.tabId
+  }
+  const separatorIndex = entry.paneKey.indexOf(':')
+  return separatorIndex === -1 ? null : entry.paneKey.slice(0, separatorIndex)
+}
+
+export function activeOrQueuedResumeClaimsProviderSession(
+  record: SleepingAgentSessionRecord,
+  state: AppStoreState
+): boolean {
+  const worktreeTabIds = new Set(
+    (state.tabsByWorktree[record.worktreeId] ?? []).map((tab) => tab.id)
+  )
+  for (const entry of Object.values(state.agentStatusByPaneKey)) {
+    if (
+      worktreeTabIds.has(getAgentStatusTabId(entry) ?? '') &&
+      entry.worktreeId === record.worktreeId &&
+      entry.agentType === record.agent &&
+      entry.state !== 'done' &&
+      providerSessionsMatch(entry.providerSession, record.providerSession)
+    ) {
+      return true
+    }
+  }
+
+  for (const [tabId, startup] of Object.entries(state.pendingStartupByTabId)) {
+    if (
+      worktreeTabIds.has(tabId) &&
+      startup.launchAgent === record.agent &&
+      providerSessionsMatch(startup.resumeProviderSession, record.providerSession)
+    ) {
+      return true
+    }
+  }
+
+  for (const [tabId, claim] of Object.entries(state.automaticAgentResumeClaimsByTabId)) {
+    if (
+      worktreeTabIds.has(tabId) &&
+      claim.worktreeId === record.worktreeId &&
+      claim.launchAgent === record.agent &&
+      providerSessionsMatch(claim.providerSession, record.providerSession)
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Queued startup owns duplicate suppression, but source evidence must survive failed spawn. */
+export function hasQueuedAutomaticAgentResumeClaim(
+  record: SleepingAgentSessionRecord,
+  state: AppStoreState
+): boolean {
+  const worktreeTabIds = new Set(
+    (state.tabsByWorktree[record.worktreeId] ?? []).map((tab) => tab.id)
+  )
+  return Object.entries(state.automaticAgentResumeClaimsByTabId).some(
+    ([tabId, claim]) =>
+      worktreeTabIds.has(tabId) &&
+      claim.worktreeId === record.worktreeId &&
+      claim.launchAgent === record.agent &&
+      claim.providerSession.key === record.providerSession.key &&
+      claim.providerSession.id === record.providerSession.id
+  )
+}
+
+export function isInvalidWorktreeActivationRecord(record: SleepingAgentSessionRecord): boolean {
+  if (record.interrupted === true || (!record.origin && record.state === 'done')) {
+    return true
+  }
+  return (
+    record.state !== 'done' && record.capturedAt - record.updatedAt > AGENT_STATUS_STALE_AFTER_MS
+  )
 }
 
 export function isPassiveCompletedHibernationEvidence(record: SleepingAgentSessionRecord): boolean {

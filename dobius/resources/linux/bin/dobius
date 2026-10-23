@@ -15,7 +15,7 @@ APP_DIR="$(cd "$RESOURCES_DIR/.." >/dev/null 2>&1 && pwd)"
 
 # Why: `-f` rejects a same-named directory that `-x` alone would accept.
 ELECTRON=""
-for candidate in dobius Dobius+; do
+for candidate in dobius-ide dobius Dobius+; do
 	if [ -f "$APP_DIR/$candidate" ] && [ -x "$APP_DIR/$candidate" ]; then
 		ELECTRON="$APP_DIR/$candidate"
 		break

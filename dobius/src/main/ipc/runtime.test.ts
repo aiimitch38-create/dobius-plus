@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { handleMock, removeHandlerMock, fromWebContentsMock } = vi.hoisted(() => ({
@@ -18,9 +19,15 @@ vi.mock('electron', () => ({
 
 import { registerRuntimeHandlers } from './runtime'
 import { registerRendererWindow } from '../window/renderer-window-registry'
+import { SystemMonitorService } from '../system-monitor/service'
 
-function makeAppWindowSender(): { isDestroyed: () => boolean } {
-  const sender = { isDestroyed: () => false }
+let senderId = 0
+
+function makeAppWindowSender(): EventEmitter & { id: number; isDestroyed: () => boolean } {
+  const sender = Object.assign(new EventEmitter(), {
+    id: ++senderId,
+    isDestroyed: () => false
+  })
   registerRendererWindow({
     once: vi.fn(),
     isDestroyed: () => false,
@@ -115,6 +122,29 @@ describe('registerRuntimeHandlers', () => {
       result: { groups: [{ id: 'group-1', name: 'Platform' }] },
       _meta: { runtimeId: 'runtime-1' }
     })
+  })
+
+  it('exposes the injected storage service only to trusted first-party frames', async () => {
+    const runtime = { getRuntimeId: () => 'runtime-1' }
+    const monitor = new SystemMonitorService('/unconfigured-dobius-monitor')
+    const status = vi.spyOn(monitor, 'status')
+    registerRuntimeHandlers(runtime as never, { systemMonitor: monitor })
+    const handler = handleMock.mock.calls.find(([channel]) => channel === 'runtime:call')![1]
+    expect(
+      await handler(topFrameEvent({ isDestroyed: () => false }), {
+        method: 'system.monitor.status'
+      })
+    ).toMatchObject({ ok: false })
+    expect(status).not.toHaveBeenCalled()
+    expect(
+      await handler(topFrameEvent(makeAppWindowSender()), {
+        method: 'system.monitor.status'
+      })
+    ).toMatchObject({
+      ok: true,
+      result: { configured: true, status: { availability: 'unavailable', cleanupEnabled: false } }
+    })
+    expect(status).toHaveBeenCalledOnce()
   })
 
   describe('runtime:call sender trust (#21)', () => {

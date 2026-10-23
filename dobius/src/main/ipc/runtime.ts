@@ -8,9 +8,10 @@ import type {
   RuntimeTerminalDriverState
 } from '../../shared/runtime-types'
 import type { RuntimeRpcResponse } from '../../shared/runtime-rpc-envelope'
-import { RpcDispatcher } from '../runtime/rpc/dispatcher'
+import { RpcDispatcher, type DispatcherOptions } from '../runtime/rpc/dispatcher'
 import { errorResponse } from '../runtime/rpc/errors'
 import { isRegisteredRendererWebContents } from '../window/renderer-window-registry'
+import { localCatalogPreviewConnection } from './data-catalog-preview-lifecycle'
 
 // Why: runtime:call reaches every RPC method (terminal.send, git.push, ...)
 // with desktop authority and no token. Only the top frame of a first-party app
@@ -27,7 +28,10 @@ function isTrustedRuntimeCallSender(event: IpcMainInvokeEvent): boolean {
   return frame != null && frame.parent === null
 }
 
-export function registerRuntimeHandlers(runtime: DobiusRuntimeService): void {
+export function registerRuntimeHandlers(
+  runtime: DobiusRuntimeService,
+  services: Pick<DispatcherOptions, 'systemMonitor' | 'cloudJobs' | 'dataCatalog'> = {}
+): void {
   ipcMain.removeHandler('runtime:syncWindowGraph')
   ipcMain.removeHandler('runtime:getStatus')
   ipcMain.removeHandler('runtime:call')
@@ -61,12 +65,24 @@ export function registerRuntimeHandlers(runtime: DobiusRuntimeService): void {
           'runtime:call is only available to Dobius app windows'
         ) as RuntimeRpcResponse<unknown>
       }
-      return (await new RpcDispatcher({ runtime }).dispatch({
-        id: 'desktop-ipc',
-        authToken: 'desktop-ipc',
-        method: args.method,
-        params: args.params
-      })) as RuntimeRpcResponse<unknown>
+      const localPreviewConnection = localCatalogPreviewConnection(event.sender)
+      if (!localPreviewConnection) {
+        return errorResponse(
+          'desktop-ipc',
+          { runtimeId: runtime.getRuntimeId() },
+          'forbidden',
+          'runtime:call requires a live first-party document'
+        ) as RuntimeRpcResponse<unknown>
+      }
+      return (await new RpcDispatcher({ runtime, ...services }).dispatch(
+        {
+          id: 'desktop-ipc',
+          authToken: 'desktop-ipc',
+          method: args.method,
+          params: args.params
+        },
+        { authenticatedLocal: true, localPreviewConnection }
+      )) as RuntimeRpcResponse<unknown>
     }
   )
 

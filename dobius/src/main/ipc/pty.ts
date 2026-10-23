@@ -18,6 +18,16 @@ import type { DobiusRuntimeService } from '../runtime/dobius-runtime'
 import type { Store } from '../persistence'
 import type { GlobalSettings, TuiAgent } from '../../shared/types'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
+import {
+  AGENT_RESUME_CLAIM_ENV,
+  parseAgentResumeSpawnClaim,
+  parseAgentResumeOwner,
+  sameAgentResumeSpawnTarget,
+  getAgentResumeOwnerFingerprint,
+  stripAgentResumeSpawnClaimEnv,
+  type AgentResumeOwner
+} from '../../shared/agent-resume-owner'
+import { mainProcessAgentResumeClaims } from '../pty/agent-resume-claims'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 import {
   isWslShellName,
@@ -151,6 +161,10 @@ const ptyPaneKey = new Map<string, string>()
 // back into the pane's data stream) need to find the ptyId for that paneKey.
 // Kept in lock-step with ptyPaneKey via the same spawn and teardown sites.
 const paneKeyPtyId = new Map<string, string>()
+const agentResumePtyIdentityByPaneKey = new Map<
+  string,
+  { ptyId: string; launchToken: string; connectionId: string | null }
+>()
 
 const AGENT_HOOK_RUNTIME_ENV_KEYS = [
   'DOBIUS_AGENT_HOOK_PORT',
@@ -165,6 +179,64 @@ const AGENT_HOOK_RUNTIME_ENV_KEYS = [
 
 export function getPtyIdForPaneKey(paneKey: string): string | undefined {
   return paneKeyPtyId.get(paneKey)
+}
+
+export function getAgentResumePtyIdentityForPaneKey(
+  paneKey: string
+): { ptyId: string; launchToken: string; connectionId: string | null } | undefined {
+  return agentResumePtyIdentityByPaneKey.get(paneKey)
+}
+
+function readAgentResumeSpawnClaim(
+  env: unknown
+): ReturnType<typeof parseAgentResumeSpawnClaim> | undefined {
+  if (typeof env !== 'object' || env === null || Array.isArray(env)) {
+    return undefined
+  }
+  const raw = (env as Record<string, unknown>)[AGENT_RESUME_CLAIM_ENV]
+  if (raw === undefined) {
+    return undefined
+  }
+  const claim = parseAgentResumeSpawnClaim(raw)
+  if (!claim) {
+    throw new Error('Invalid automatic agent-resume claim; refusing PTY spawn')
+  }
+  return claim
+}
+
+function agentResumeSpawnTargetMatchesArgs(
+  claim: NonNullable<ReturnType<typeof parseAgentResumeSpawnClaim>>,
+  worktreeId: string | undefined,
+  connectionId: string | null | undefined
+): boolean {
+  const target = claim.target
+  return (
+    worktreeId === target.worktreeId &&
+    (target.authority.kind === 'ssh'
+      ? connectionId === target.authority.connectionId
+      : !connectionId) &&
+    sameAgentResumeSpawnTarget(target, {
+      worktreeId: claim.owner.worktreeId,
+      authority: claim.owner.authority,
+      paneRelocation: 'new-pane-in-same-worktree'
+    })
+  )
+}
+
+function rememberAgentResumePtyIdentity(
+  ptyId: string,
+  paneKey: string | null,
+  launchToken: unknown,
+  connectionId: string | null | undefined
+): void {
+  if (!paneKey || typeof launchToken !== 'string' || launchToken.length === 0) {
+    return
+  }
+  agentResumePtyIdentityByPaneKey.set(paneKey, {
+    ptyId,
+    launchToken,
+    connectionId: connectionId ?? null
+  })
 }
 
 // Why: consumers (currently the cursor-agent synthesized-spinner loop in
@@ -604,7 +676,8 @@ function resolvePiAgentSourceDir(
 ): string | undefined {
   const sourceKey = kind === 'omp' ? 'DOBIUS_OMP_SOURCE_AGENT_DIR' : 'DOBIUS_PI_SOURCE_AGENT_DIR'
   const overlayKey = kind === 'omp' ? 'DOBIUS_OMP_CODING_AGENT_DIR' : 'DOBIUS_PI_CODING_AGENT_DIR'
-  const otherOverlayKey = kind === 'omp' ? 'DOBIUS_PI_CODING_AGENT_DIR' : 'DOBIUS_OMP_CODING_AGENT_DIR'
+  const otherOverlayKey =
+    kind === 'omp' ? 'DOBIUS_PI_CODING_AGENT_DIR' : 'DOBIUS_OMP_CODING_AGENT_DIR'
 
   const sourceDir = readEnvWithProcessFallback(baseEnv, sourceKey)
   if (sourceDir) {
@@ -745,7 +818,8 @@ function resolveOpenCodeSourceConfigDir(baseEnv: Record<string, string>): string
   }
 
   const configDir = baseEnv.OPENCODE_CONFIG_DIR ?? process.env.OPENCODE_CONFIG_DIR
-  const dobiusConfigDir = baseEnv.DOBIUS_OPENCODE_CONFIG_DIR ?? process.env.DOBIUS_OPENCODE_CONFIG_DIR
+  const dobiusConfigDir =
+    baseEnv.DOBIUS_OPENCODE_CONFIG_DIR ?? process.env.DOBIUS_OPENCODE_CONFIG_DIR
   // Why: nested Dobius terminals inherit OPENCODE_CONFIG_DIR from the parent
   // PTY. If there is no recorded source dir, that value is Dobius-owned, not a
   // user config. Treating it as user config makes child Dobiuss mirror Dobius's
@@ -1082,6 +1156,9 @@ export function clearProviderPtyState(id: string): void {
     if (stillOwnsPaneKey) {
       agentHookServer.clearPaneState(paneKey)
       paneKeyPtyId.delete(paneKey)
+      if (agentResumePtyIdentityByPaneKey.get(paneKey)?.ptyId === id) {
+        agentResumePtyIdentityByPaneKey.delete(paneKey)
+      }
     }
     ptyPaneKey.delete(id)
     // Why: drop the pre-signal pending entry only if it still belongs to THIS
@@ -1291,6 +1368,8 @@ export function registerPtyHandlers(
   ipcMain.removeHandler('pty:getCwd')
   ipcMain.removeHandler('pty:getSize')
   ipcMain.removeHandler('pty:declarePendingPaneSerializer')
+  ipcMain.removeHandler('pty:claimAgentResume')
+  ipcMain.removeHandler('pty:releaseAgentResume')
   ipcMain.removeHandler('pty:settlePaneSerializer')
   ipcMain.removeHandler('pty:clearPendingPaneSerializer')
   ipcMain.removeHandler('pty:getMainBufferSnapshot')
@@ -1301,6 +1380,65 @@ export function registerPtyHandlers(
   ipcMain.removeAllListeners('pty:ackColdRestore')
   ipcMain.removeAllListeners('pty:ackData')
   ipcMain.removeAllListeners('pty:serializeBuffer:response')
+
+  const isPersistedAgentResumeOwner = (
+    owner: AgentResumeOwner,
+    allowClaimedOwnerAfterRecordClear = false
+  ): boolean => {
+    const session = store?.getWorkspaceSession()
+    const saved = session?.sleepingAgentSessionsByPaneKey?.[owner.paneKey]
+    const layoutPtyId =
+      session?.terminalLayoutsByTabId?.[owner.tabId]?.ptyIdsByLeafId?.[owner.leafId]
+    const status = agentHookServer
+      .getStatusSnapshot()
+      .find((entry) => entry.paneKey === owner.paneKey)
+    if (
+      (!saved && !allowClaimedOwnerAfterRecordClear) ||
+      (saved &&
+        (!saved.resumeOwner ||
+          getAgentResumeOwnerFingerprint(saved.resumeOwner) !==
+            getAgentResumeOwnerFingerprint(owner) ||
+          saved.worktreeId !== owner.worktreeId ||
+          (saved.connectionId ?? null) !==
+            (owner.authority.kind === 'ssh' ? owner.authority.connectionId : null) ||
+          saved.agent !== owner.agent ||
+          saved.providerSession.key !== owner.providerSession.key ||
+          saved.providerSession.id !== owner.providerSession.id)) ||
+      layoutPtyId !== owner.ptyId ||
+      (status &&
+        (status.launchToken !== owner.launchToken ||
+          status.worktreeId !== owner.worktreeId ||
+          status.agentType !== owner.agent ||
+          status.ptyId !== owner.ptyId ||
+          status.connectionId !==
+            (owner.authority.kind === 'ssh' ? owner.authority.connectionId : null) ||
+          status.providerSession?.key !== owner.providerSession.key ||
+          status.providerSession?.id !== owner.providerSession.id ||
+          status.state === 'done'))
+    ) {
+      return false
+    }
+    return true
+  }
+
+  ipcMain.handle('pty:claimAgentResume', (_event, request: unknown) => {
+    const owner = parseAgentResumeOwner(request)
+    if (!owner || !isPersistedAgentResumeOwner(owner)) {
+      return null
+    }
+    return mainProcessAgentResumeClaims.claim(owner)
+  })
+  ipcMain.handle('pty:releaseAgentResume', (_event, request: unknown) => {
+    if (typeof request !== 'object' || request === null) {
+      return false
+    }
+    const { token, owner: rawOwner } = request as Record<string, unknown>
+    const owner = parseAgentResumeOwner(rawOwner)
+    if (typeof token !== 'string' || !owner || !isPersistedAgentResumeOwner(owner)) {
+      return false
+    }
+    return mainProcessAgentResumeClaims.release(token, owner)
+  })
 
   // Configure the local provider with app-specific hooks.
   // Why: only LocalPtyProvider has the configure() method — daemon-backed
@@ -2017,6 +2155,7 @@ export function registerPtyHandlers(
   // Hardcoding localProvider.getPtyProcess() would silently fail for remote PTYs.
   runtime?.setPtyController({
     spawn: async (args) => {
+      const resumeClaim = readAgentResumeSpawnClaim(args.env)
       const startupPromise = getLocalPtyStartupPromise(args.connectionId)
       if (startupPromise) {
         await startupPromise
@@ -2094,7 +2233,10 @@ export function registerPtyHandlers(
           leafId: args.leafId
         }
       }
-      const sshScopedEnv = stripRemotePaneEnvWhenHooksDisabled(args.connectionId, args.env)
+      const sshScopedEnv = stripRemotePaneEnvWhenHooksDisabled(
+        args.connectionId,
+        stripAgentResumeSpawnClaimEnv(args.env)
+      )
       let env: Record<string, string> | undefined = claudeAuth
         ? { ...sshScopedEnv, ...claudeAuth.envPatch }
         : sshScopedEnv
@@ -2196,8 +2338,26 @@ export function registerPtyHandlers(
           if (args.preAllocatedHandle) {
             trustedTerminalHandleEnv.add(args.preAllocatedHandle)
           }
+          if (
+            resumeClaim &&
+            (!agentResumeSpawnTargetMatchesArgs(resumeClaim, args.worktreeId, args.connectionId) ||
+              !mainProcessAgentResumeClaims.beginSpawn(
+                resumeClaim.token,
+                resumeClaim.owner,
+                resumeClaim.target
+              ) ||
+              !isPersistedAgentResumeOwner(resumeClaim.owner, true))
+          ) {
+            throw new Error('Automatic agent-resume ownership changed before PTY spawn')
+          }
           result = await provider.spawn(spawnOptions)
+          if (resumeClaim) {
+            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true)
+          }
         } catch (err) {
+          if (resumeClaim) {
+            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, false)
+          }
           const rawMessage = err instanceof Error ? err.message : String(err)
           const spawnError = normalizeNodePtySpawnError(err)
           if (effectiveSessionAppId !== undefined) {
@@ -2301,6 +2461,12 @@ export function registerPtyHandlers(
         // so record their spawn-time paneKey here too. Synthetic hook titles and
         // paneKey-scoped cache cleanup both depend on this reverse lookup.
         const paneKey = rememberPaneKeyForPty(result.id, env?.DOBIUS_PANE_KEY)
+        rememberAgentResumePtyIdentity(
+          result.id,
+          paneKey,
+          env?.DOBIUS_AGENT_LAUNCH_TOKEN,
+          args.connectionId
+        )
         if (!args.connectionId) {
           registerPty({
             ptyId: result.id,
@@ -2596,6 +2762,7 @@ export function registerPtyHandlers(
         }
       }
     ) => {
+      const resumeClaim = readAgentResumeSpawnClaim(args.env)
       const spawnTiming = createPtySpawnTiming()
       const startupPromise = getLocalPtyStartupPromise(args.connectionId)
       if (startupPromise) {
@@ -2692,7 +2859,10 @@ export function registerPtyHandlers(
       // Why: the renderer sets pane env for SSH too. Only forward it to the
       // remote when the relay hook path is enabled; otherwise a newer relay
       // could emit statuses this Dobius build is not prepared to route.
-      const sshSourceEnv = stripRemotePaneEnvWhenHooksDisabled(args.connectionId, args.env)
+      const sshSourceEnv = stripRemotePaneEnvWhenHooksDisabled(
+        args.connectionId,
+        stripAgentResumeSpawnClaimEnv(args.env)
+      )
       const baseEnvWithAuth = claudeAuth
         ? { ...sshSourceEnv, ...claudeAuth.envPatch }
         : sshSourceEnv
@@ -2954,9 +3124,27 @@ export function registerPtyHandlers(
             )
           }
           spawnTiming.mark('options')
+          if (
+            resumeClaim &&
+            (!agentResumeSpawnTargetMatchesArgs(resumeClaim, args.worktreeId, args.connectionId) ||
+              !mainProcessAgentResumeClaims.beginSpawn(
+                resumeClaim.token,
+                resumeClaim.owner,
+                resumeClaim.target
+              ) ||
+              !isPersistedAgentResumeOwner(resumeClaim.owner, true))
+          ) {
+            throw new Error('Automatic agent-resume ownership changed before PTY spawn')
+          }
           result = await provider.spawn(spawnOptions)
+          if (resumeClaim) {
+            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, true)
+          }
           spawnTiming.mark('provider_spawn')
         } catch (err) {
+          if (resumeClaim) {
+            mainProcessAgentResumeClaims.finishSpawn(resumeClaim.token, false)
+          }
           const rawMessage = err instanceof Error ? err.message : String(err)
           const spawnError = normalizeNodePtySpawnError(err)
           if (preSpawnStartupTerminalColorReplyPtyId) {
@@ -3162,6 +3350,12 @@ export function registerPtyHandlers(
         const rememberedPaneKey = validatedPaneKey
           ? rememberPaneKeyForPty(result.id, validatedPaneKey)
           : null
+        rememberAgentResumePtyIdentity(
+          result.id,
+          rememberedPaneKey,
+          spawnEnv?.DOBIUS_AGENT_LAUNCH_TOKEN,
+          args.connectionId
+        )
         if (legacySpawnPaneKey && migrationUnsupportedPaneKey) {
           agentHookServer.registerPaneKeyAlias(
             legacySpawnPaneKey.paneKey,

@@ -41,6 +41,64 @@ describe('parseWorkspaceSession sleeping agents', () => {
     }
   })
 
+  it('preserves only exact pane, PTY, and launch provenance for automatic recovery', () => {
+    const leafId = '3f17c501-bde7-4bcb-b8a1-baa949531184'
+    const validOwner = {
+      authority: { kind: 'local' },
+      worktreeId: 'wt',
+      tabId: 'tab1',
+      leafId,
+      paneKey: `tab1:${leafId}`,
+      ptyId: 'pty-1',
+      launchToken: 'launch-1',
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'codex-session' }
+    }
+    const result = parseWorkspaceSession({
+      activeRepoId: null,
+      activeWorktreeId: null,
+      activeTabId: null,
+      tabsByWorktree: {},
+      terminalLayoutsByTabId: {},
+      sleepingAgentSessionsByPaneKey: {
+        [`tab1:${leafId}`]: {
+          paneKey: `tab1:${leafId}`,
+          tabId: 'tab1',
+          worktreeId: 'wt',
+          agent: 'codex',
+          providerSession: { key: 'session_id', id: 'codex-session' },
+          connectionId: null,
+          resumeOwner: validOwner,
+          prompt: 'continue',
+          state: 'working',
+          capturedAt: 10,
+          updatedAt: 9
+        },
+        [`tab2:${leafId}`]: {
+          paneKey: `tab2:${leafId}`,
+          tabId: 'tab2',
+          worktreeId: 'wt',
+          agent: 'codex',
+          providerSession: { key: 'session_id', id: 'codex-session' },
+          connectionId: null,
+          resumeOwner: validOwner,
+          prompt: 'continue',
+          state: 'working',
+          capturedAt: 10,
+          updatedAt: 9
+        }
+      }
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      const sessions = result.value.sleepingAgentSessionsByPaneKey!
+      expect(sessions[`tab1:${leafId}`]?.resumeOwner).toEqual(validOwner)
+      expect(sessions[`tab2:${leafId}`]).toBeDefined()
+      expect(sessions[`tab2:${leafId}`]?.resumeOwner).toBeUndefined()
+    }
+  })
+
   it('drops invalid sleeping agent launch config without dropping the record', () => {
     const result = parseWorkspaceSession({
       activeRepoId: null,

@@ -42,6 +42,7 @@ export const BOOLEAN_FLAGS = new Set([
   'provision',
   'ready',
   'recipe-json',
+  'request-stdin',
   'relations',
   'reinstall',
   'restore-window',

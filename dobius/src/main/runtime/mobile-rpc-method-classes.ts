@@ -11,6 +11,22 @@ const READ = 'read'
 const BENIGN = 'benign-mutation'
 
 export const MOBILE_RPC_METHOD_CLASSES: Readonly<Record<string, MobileRpcMethodClass>> = {
+  'data.catalog.roots': READ,
+  'data.catalog.page': READ,
+  'data.catalog.preview.policy': READ,
+  'data.catalog.preview.resolve': READ,
+  'data.catalog.preview.start': READ,
+  'data.catalog.preview.chunk': READ,
+  'data.catalog.preview.finish': READ,
+  'data.catalog.preview.renew': READ,
+  // Cleanup remains callable after preview authority has been revoked.
+  'data.catalog.preview.close': READ,
+  'system.monitor.status': READ,
+  'jobs.status': READ,
+  'jobs.list': READ,
+  'jobs.snapshot': READ,
+  'jobs.get': READ,
+  'jobs.events': READ,
   'screen.capabilities': 'screen.view',
   'screen.stream': 'screen.view',
   'screen.lease.renew': 'screen.view',
@@ -52,6 +68,8 @@ export const MOBILE_RPC_METHOD_CLASSES: Readonly<Record<string, MobileRpcMethodC
   'files.createFile': 'files.write',
   'files.list': READ,
   'files.open': BENIGN,
+  'files.openBackground': BENIGN,
+  'files.openDiffBackground': BENIGN,
   'files.openDiff': BENIGN,
   'files.read': READ,
   'files.readChunk': READ,

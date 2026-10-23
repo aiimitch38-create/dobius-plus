@@ -16,7 +16,6 @@ import {
 } from './core'
 import type { TerminalStreamFrame } from '../../../shared/terminal-stream-protocol'
 import type { FeatureInteractionId } from '../../../shared/feature-interactions'
-import { isBrowserPaneUiRuntimeRpcParams } from '../../../shared/runtime-rpc-feature-interaction-source'
 import {
   computerErrorData,
   errorResponse,
@@ -28,22 +27,60 @@ import {
 import { ALL_RPC_METHODS } from './methods'
 import { emulatorProbe, emulatorProbeError } from '../../emulator/emulator-probe'
 import type { DobiusRuntimeService } from '../dobius-runtime'
+import type { CloudJobService } from '../../automations/cloud-job-service'
+import type { SystemMonitorService } from '../../system-monitor/service'
+import type { ApplicationDataCatalog } from '../../storage/data-catalog/application-catalog'
+import type { AdamCloudIntentBridge } from '../../adam-service-principal/adam-cloud-intent-bridge'
+import type { LocalCatalogPreviewConnection } from '../../ipc/data-catalog-preview-lifecycle'
+import { recordRuntimeFeatureInteraction } from './dispatch-feature-interaction'
+import {
+  localWebContentsPreviewPrincipal,
+  websocketPreviewPrincipal
+} from './dispatch-preview-principal'
 
 export type DispatcherOptions = {
   runtime: DobiusRuntimeService
+  cloudJobs?: CloudJobService
+  systemMonitor?: SystemMonitorService
+  dataCatalog?: ApplicationDataCatalog
+  adamCloudIntentBridge?: AdamCloudIntentBridge
   methods?: readonly RpcAnyMethod[]
 }
 
 export class RpcDispatcher {
   private readonly runtime: DobiusRuntimeService
   private readonly registry: RpcRegistry
+  private readonly cloudJobs?: CloudJobService
+  private readonly systemMonitor?: SystemMonitorService
+  private readonly dataCatalog?: ApplicationDataCatalog
+  private readonly adamCloudIntentBridge?: AdamCloudIntentBridge
 
-  constructor({ runtime, methods = ALL_RPC_METHODS }: DispatcherOptions) {
+  constructor({
+    runtime,
+    cloudJobs,
+    systemMonitor,
+    dataCatalog,
+    adamCloudIntentBridge,
+    methods = ALL_RPC_METHODS
+  }: DispatcherOptions) {
     this.runtime = runtime
+    this.cloudJobs = cloudJobs
+    this.systemMonitor = systemMonitor
+    this.dataCatalog = dataCatalog
+    this.adamCloudIntentBridge = adamCloudIntentBridge
     this.registry = buildRegistry(methods)
   }
 
-  async dispatch(request: RpcRequest, options?: { signal?: AbortSignal }): Promise<RpcResponse> {
+  async dispatch(
+    request: RpcRequest,
+    options?: {
+      signal?: AbortSignal
+      authenticatedLocal?: true
+      authenticatedLocalSocket?: true
+      adamPeerEvidence?: object
+      localPreviewConnection?: LocalCatalogPreviewConnection
+    }
+  ): Promise<RpcResponse> {
     const meta = this.meta()
     const method = this.registry.get(request.method)
     if (!method) {
@@ -79,6 +116,18 @@ export class RpcDispatcher {
     try {
       const result = await method.handler(parsedParams.value, {
         runtime: this.runtime,
+        cloudJobs: this.cloudJobs,
+        adamCloudIntentBridge: this.adamCloudIntentBridge,
+        adamPeerEvidence: options?.adamPeerEvidence,
+        systemMonitor: this.systemMonitor,
+        dataCatalog: this.dataCatalog,
+        authenticatedLocal: options?.authenticatedLocal,
+        authenticatedLocalSocket: options?.authenticatedLocalSocket,
+        catalogPreviewPrincipal: options?.localPreviewConnection
+          ? localWebContentsPreviewPrincipal(this.runtime, options.localPreviewConnection)
+          : undefined,
+        connectionSignal: options?.localPreviewConnection?.signal,
+        connectionId: options?.localPreviewConnection?.connectionId,
         signal: options?.signal
       })
       this.recordRuntimeFeatureInteraction(request.method, result, undefined, request.params)
@@ -100,6 +149,7 @@ export class RpcDispatcher {
     options?: {
       connectionId?: string
       signal?: AbortSignal
+      connectionSignal?: AbortSignal
       clientId?: string
       clientDeviceId?: string
       clientKind?: 'mobile' | 'runtime'
@@ -131,9 +181,14 @@ export class RpcDispatcher {
       try {
         const result = await method.handler(parsedParams.value, {
           runtime: this.runtime,
+          cloudJobs: this.cloudJobs,
+          systemMonitor: this.systemMonitor,
+          dataCatalog: this.dataCatalog,
           signal: options?.signal,
+          connectionSignal: options?.connectionSignal,
           requestId: request.id,
           connectionId: options?.connectionId,
+          catalogPreviewPrincipal: websocketPreviewPrincipal(this.runtime, options ?? {}),
           clientId: options?.clientId,
           clientDeviceId: options?.clientDeviceId,
           clientKind: options?.clientKind,
@@ -166,9 +221,14 @@ export class RpcDispatcher {
         parsedParams.value,
         {
           runtime: this.runtime,
+          cloudJobs: this.cloudJobs,
+          systemMonitor: this.systemMonitor,
+          dataCatalog: this.dataCatalog,
           signal: options?.signal,
+          connectionSignal: options?.connectionSignal,
           requestId: request.id,
           connectionId: options?.connectionId,
+          catalogPreviewPrincipal: websocketPreviewPrincipal(this.runtime, options ?? {}),
           clientId: options?.clientId,
           clientDeviceId: options?.clientDeviceId,
           clientKind: options?.clientKind,
@@ -251,65 +311,6 @@ export class RpcDispatcher {
     alreadyRecorded?: Set<FeatureInteractionId>,
     rawParams?: unknown
   ): void {
-    const id = getRuntimeFeatureInteractionId(method, result, rawParams)
-    if (!id) {
-      return
-    }
-    if (alreadyRecorded?.has(id)) {
-      return
-    }
-    try {
-      this.runtime.recordFeatureInteraction(id)
-      alreadyRecorded?.add(id)
-    } catch {
-      // Best-effort education state must not break runtime tools.
-    }
+    recordRuntimeFeatureInteraction(this.runtime, method, result, alreadyRecorded, rawParams)
   }
-}
-
-function getRuntimeFeatureInteractionId(
-  method: string,
-  result: unknown,
-  rawParams?: unknown
-): FeatureInteractionId | null {
-  if (method === 'browser.profileImportFromBrowser') {
-    return hasBooleanResult(result, 'ok') ? 'cookie-import' : null
-  }
-  if (method === 'browser.profileClearDefaultCookies') {
-    return hasBooleanResult(result, 'cleared') ? 'cookie-import' : null
-  }
-  if (method === 'browser.screencast.unsubscribe') {
-    return null
-  }
-  if (method.startsWith('browser.') && isBrowserPaneUiRuntimeRpcParams(rawParams)) {
-    return null
-  }
-  if (method.startsWith('browser.') && !method.startsWith('browser.profile')) {
-    return 'agent-browser-use'
-  }
-  if (method.startsWith('emulator.')) {
-    // Emulator commands are allowed from terminal/CLI (workspace-scoped, like other automation).
-    // Return null to indicate no special feature-interaction restriction (or add 'emulator-use' later).
-    return null
-  }
-  if (method === 'computer.permissions') {
-    return 'computer-use-setup'
-  }
-  if (
-    method.startsWith('computer.') &&
-    method !== 'computer.capabilities' &&
-    method !== 'computer.permissionsStatus'
-  ) {
-    return 'computer-use'
-  }
-  if (method.startsWith('orchestration.')) {
-    return 'agent-orchestration'
-  }
-  return null
-}
-
-function hasBooleanResult(value: unknown, key: string): boolean {
-  return (
-    value !== null && typeof value === 'object' && (value as Record<string, unknown>)[key] === true
-  )
 }

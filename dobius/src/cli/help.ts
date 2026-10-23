@@ -14,6 +14,11 @@ Startup:
 Diagnostics:
   diagnostics memory        Collect a memory snapshot for Dobius+ and managed terminals
 
+Telegram:
+  telegram status           Show the Telegram listener, selected groups and Adam's drafts
+  telegram history          Read a selected group's message history, page by page
+  telegram send             Send an Adam draft after Carson confirms it in Dobius+
+
 Environments:
   environment add           Save a remote Dobius+ runtime from a pairing code
   environment list          List saved remote Dobius+ runtimes
@@ -203,6 +208,9 @@ Common Commands:
   dobius serve [--port <port>] [--pairing-address <host>] [--mobile-pairing] [--no-pairing] [--project-root <path>] [--recipe-json] [--json]
   dobius status [--json]
   dobius diagnostics memory [--json]
+  dobius telegram status [--json]
+  dobius telegram send --draft <id> [--json]
+  dobius telegram history --group <title|id> [--limit <1-200>] [--before <message-id>] [--json]
   dobius environment add --name <name> --pairing-code <code> [--json]
   dobius environment list [--json]
   dobius environment show --environment <selector> [--json]
@@ -220,7 +228,7 @@ Common Commands:
   dobius terminal list [--worktree <selector>] [--limit <n>] [--json]
   dobius terminal show [--terminal <handle>] [--json]
   dobius terminal read [--terminal <handle>] [--cursor <n>] [--limit <n>] [--json]
-  dobius terminal send [--terminal <handle>] [--text <text>] [--enter] [--interrupt] [--json]
+  dobius terminal send [--terminal <handle>] [--text <text>] [--enter] [--interrupt] [--expected-runtime-id <id>] [--require-agent-status sendable] [--json]
   dobius terminal wait [--terminal <handle>] --for exit|tui-idle [--timeout-ms <ms>] [--json]
   dobius terminal stop --worktree <selector> [--json]
   dobius terminal create [--worktree <selector>] [--title <name>] [--command <text>] [--focus] [--json]
@@ -251,6 +259,8 @@ Terminal Send Options:
   --text <text>             Text to send to the terminal
   --enter                   Append Enter after sending text
   --interrupt               Send as an interrupt-style input when supported
+  --expected-runtime-id <id> Bind the send to this exact runtime; requires terminal.sendBound support
+  --require-agent-status sendable Refuse submission when no agent is active or it requests permission
 
 Wait Options:
   --for exit                Wait until the target terminal exits
@@ -266,6 +276,7 @@ Behavior:
   Most commands require a running Dobius+ runtime. If Dobius+ is not open yet, run \`dobius open\` first.
   Remote runtime access can also be supplied with DOBIUS_PAIRING_CODE or DOBIUS_ENVIRONMENT.
   Use selectors for discovery and handles for repeated live terminal operations.
+  terminal send --expected-runtime-id uses a distinct RPC; older hosts refuse it instead of silently dropping the runtime binding.
 
 Agent Sessions And Worktrees:
   \`worktree create --agent\` creates a new checkout with an agent.
@@ -492,6 +503,8 @@ export function formatFlagHelp(flag: string): string {
     skills: '--skills <a,b>         Comma-separated skill names available to the agent',
     cwd: '--cwd <path>           Default working directory for agent runs',
     'element-index': '--element-index <n>   Element index from get-app-state',
+    'expected-runtime-id':
+      '--expected-runtime-id <id> Bind send to the exact live runtime identity',
     title: '--title <text>         Custom title for the terminal tab (omit to reset)',
     enter: '--enter                Append Enter after sending text',
     force: '--force                Force worktree removal when supported',
@@ -534,6 +547,8 @@ export function formatFlagHelp(flag: string): string {
     'dispatch-id': '--dispatch-id <id>    Dispatch id to include in orchestration payload JSON',
     'files-modified': '--files-modified <csv> Comma-separated files for orchestration payload JSON',
     'report-path': '--report-path <path>  Report path to include in orchestration payload JSON',
+    'require-agent-status':
+      '--require-agent-status sendable Refuse when no agent is active or permission is required',
     phase: '--phase <text>        Worker phase to include in orchestration payload JSON',
     'timeout-ms': '--timeout-ms <ms>     Maximum wait time before timing out',
     'to-element-index': '--to-element-index <n> Destination element index from get-app-state',

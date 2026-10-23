@@ -99,6 +99,12 @@ export type AgentStatusEntry = {
   worktreeId?: string
   /** Tab attribution from the hook IPC payload, when available. */
   tabId?: string
+  /** Main-enriched live PTY identity; never supplied by the hook payload. */
+  ptyId?: string
+  /** Main-stamped local/SSH authority for this exact hook event. */
+  connectionId?: string | null
+  /** Launch generation stamped from the PTY environment by the hook server. */
+  launchToken?: string
   terminalTitle?: string
   /** Rolling log of previous states. Each entry records a state the agent was in
    *  before transitioning to the current one. Capped at AGENT_STATE_HISTORY_MAX. */
@@ -178,6 +184,8 @@ export type ParsedAgentStatusPayload = Omit<AgentStatusPayload, 'prompt'> & { pr
  */
 export type AgentStatusIpcPayload = ParsedAgentStatusPayload & {
   paneKey: string
+  /** Main-enriched only after pane, connection, and launch generation agree. */
+  ptyId?: string
   launchToken?: string
   terminalHandle?: string
   tabId?: string

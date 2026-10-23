@@ -115,6 +115,7 @@ import { GLOBAL_FLAGS } from './args'
 import { RuntimeRpcFailureError } from './runtime-client'
 import { buildWorktree, okFixture, queueFixtures, worktreeListFixture } from './test-fixtures'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../shared/pairing'
+import { TERMINAL_HANDLERS } from './handlers/terminal'
 
 describe('COMMAND_SPECS collision check', () => {
   it('has no duplicate command paths', () => {
@@ -138,6 +139,165 @@ describe('COMMAND_SPECS collision check', () => {
         ).toBe(true)
       }
     }
+  })
+})
+
+describe('terminal send runtime binding', () => {
+  it('uses terminal.sendBound only when an expected runtime ID is supplied', async () => {
+    const localCall = vi.fn().mockResolvedValue({
+      result: { send: { handle: 'term-1', accepted: true, bytesWritten: 5 } }
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const client = { call: localCall, isRemote: false } as never
+
+    await TERMINAL_HANDLERS['terminal send']({
+      flags: new Map([
+        ['terminal', 'term-1'],
+        ['text', 'hello'],
+        ['expected-runtime-id', 'runtime-a'],
+        ['require-agent-status', 'sendable']
+      ]),
+      client,
+      cwd: '/tmp/repo',
+      json: true
+    })
+
+    expect(localCall).toHaveBeenCalledWith('terminal.sendBound', {
+      terminal: 'term-1',
+      text: 'hello',
+      enter: false,
+      interrupt: false,
+      expectedRuntimeId: 'runtime-a',
+      requireAgentStatus: 'sendable',
+      client: { id: 'dobius-cli', type: 'desktop' }
+    })
+    expect(logSpy).toHaveBeenCalledOnce()
+    logSpy.mockRestore()
+  })
+
+  it('keeps unbound sends on the legacy RPC and rejects unsupported status modes', async () => {
+    const localCall = vi.fn().mockResolvedValue({
+      result: { send: { handle: 'term-1', accepted: true, bytesWritten: 1 } }
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const client = { call: localCall, isRemote: false } as never
+
+    await TERMINAL_HANDLERS['terminal send']({
+      flags: new Map([
+        ['terminal', 'term-1'],
+        ['text', 'x']
+      ]),
+      client,
+      cwd: '/tmp/repo',
+      json: true
+    })
+    expect(localCall).toHaveBeenCalledWith(
+      'terminal.send',
+      expect.objectContaining({
+        terminal: 'term-1',
+        text: 'x'
+      })
+    )
+    expect(localCall.mock.calls[0]?.[1]).not.toHaveProperty('expectedRuntimeId')
+
+    localCall.mockClear()
+    await expect(
+      TERMINAL_HANDLERS['terminal send']({
+        flags: new Map([
+          ['terminal', 'term-1'],
+          ['require-agent-status', 'permission']
+        ]),
+        client,
+        cwd: '/tmp/repo',
+        json: true
+      })
+    ).rejects.toMatchObject({ code: 'invalid_argument' })
+    expect(localCall).not.toHaveBeenCalled()
+    logSpy.mockRestore()
+  })
+})
+
+describe('terminal send parser routing', () => {
+  beforeEach(() => {
+    callMock.mockReset()
+    process.exitCode = 0
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    callMock.mockReset()
+  })
+
+  it('parses the bound runtime and sendable flags into terminal.sendBound', async () => {
+    callMock.mockResolvedValueOnce(
+      okFixture('req_send', {
+        send: { handle: 'term-1', accepted: true, bytesWritten: 5 }
+      })
+    )
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await main(
+      [
+        'terminal',
+        'send',
+        '--terminal',
+        'term-1',
+        '--text',
+        'hello',
+        '--expected-runtime-id',
+        'runtime-a',
+        '--require-agent-status',
+        'sendable',
+        '--json'
+      ],
+      '/tmp/repo'
+    )
+
+    expect(callMock).toHaveBeenCalledWith('terminal.sendBound', {
+      terminal: 'term-1',
+      text: 'hello',
+      enter: false,
+      interrupt: false,
+      expectedRuntimeId: 'runtime-a',
+      requireAgentStatus: 'sendable',
+      client: { id: 'dobius-cli', type: 'desktop' }
+    })
+    expect(process.exitCode).toBe(0)
+  })
+
+  it('does not downgrade to terminal.send when an older host rejects terminal.sendBound', async () => {
+    callMock.mockRejectedValueOnce(
+      new RuntimeRpcFailureError({
+        id: 'req_send',
+        ok: false,
+        error: {
+          code: 'method_not_found',
+          message: "Unknown RPC method 'terminal.sendBound'."
+        }
+      })
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await main(
+      [
+        'terminal',
+        'send',
+        '--terminal',
+        'term-1',
+        '--text',
+        'hello',
+        '--expected-runtime-id',
+        'runtime-a',
+        '--json'
+      ],
+      '/tmp/repo'
+    )
+
+    expect(callMock).toHaveBeenCalledOnce()
+    expect(callMock.mock.calls[0]?.[0]).toBe('terminal.sendBound')
+    expect(callMock).not.toHaveBeenCalledWith('terminal.send', expect.anything())
+    expect(process.exitCode).toBe(1)
   })
 })
 
@@ -273,7 +433,7 @@ describe('dobius root help', () => {
     expect(createHelp).toContain('folder:<folderId>')
     expect(createHelp).toContain('worktree:<id>')
     expect(createHelp).toContain(
-      '--no-parent only affects Dobius lineage; omit --base-branch to use the repo default base'
+      '--no-parent only affects Dobius+ lineage; omit --base-branch to use the repo default base'
     )
 
     logSpy.mockClear()
@@ -2340,7 +2500,14 @@ describe('dobius cli worktree awareness', () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['project', 'setups', '--project', 'github:statusdigitalmarketing/dobius-plus', '--host', 'runtime:gpu'],
+      [
+        'project',
+        'setups',
+        '--project',
+        'github:statusdigitalmarketing/dobius-plus',
+        '--host',
+        'runtime:gpu'
+      ],
       '/tmp/repo'
     )
 

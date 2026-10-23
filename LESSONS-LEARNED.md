@@ -402,3 +402,14 @@ that is one plain command and passes every time.
 - Tried: added `cn`, `BOARD_MONO_CLASS`, `BOARD_MENU_CONTENT_CLASS` usages to BoardUsagePanel.tsx via a scripted replace, then ran only `oxlint` on the file (exit 0).
 - Failed because: oxlint does not resolve identifiers across modules, so undefined names pass lint; vite builds without type-checking too. Only `typecheck:web` caught TS2304, after another worker hit it.
 - Works instead: after ANY scripted edit that introduces a new identifier, grep the file's import block for it in the same script (assert it is imported), and run `pnpm run typecheck:web` before reporting, not just oxlint. When moving shared class exports, grep every importer and update them in the same edit.
+
+## 2026-09-23 — `rg` only exists as a shell function in Claude Code sessions
+- **What happened**: during the six-agent Dobius bug hunt, subagents hit 5+ Bash failures building helper scripts around `rg` (`which rg`, `subprocess.run(['rg'...])`). `rg` is defined as a shell function in the Claude Code shell snapshot; no binary is on PATH.
+- **Rule**: use `rg` only directly on the Bash command line. Inside Python/scripts/xargs/find -exec use `grep -rn`. Captured in skill `learned-macos-shell-quoting`.
+- The other failures that turn were read-only `sed -n`/`ls` probes on missing paths; nothing to reverse.
+
+## 2026-10-06 — CocoaPods for the Expo mobile build: brew and plain `gem install` both fail
+- Tried: `brew install cocoapods` (fails: "Your Command Line Tools are too outdated" — Homebrew lives in ~/homebrew, a non-default prefix, so it builds from source). Then `gem install cocoapods --user-install` on macOS system Ruby 2.6 (fails: ffi needs Ruby >= 3.0, securerandom needs >= 3.1). Then `pod` crashed with `uninitialized constant ActiveSupport::LoggerThreadSafeLevel::Logger` because concurrent-ruby 1.3.8 loaded ahead of the pinned 1.3.4.
+- Failed because: the newest CocoaPods dependency chain no longer supports Ruby 2.6, and rubygems 3.0 doesn't resolve by Ruby version.
+- Works instead: pinned user install — ffi 1.16.3, zeitwerk 2.6.18, i18n 1.14.7, concurrent-ruby 1.3.4, activesupport 6.1.7.10, cocoapods 1.15.2; uninstall concurrent-ruby 1.3.8; run Expo with `PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH" LANG=en_US.UTF-8`. Captured in skill `learned-cocoapods-system-ruby`.
+- Side note: `pnpm install` in dobius/mobile reorders pnpm-lock.yaml with no real change — revert it with `git checkout -- dobius/mobile/pnpm-lock.yaml`.

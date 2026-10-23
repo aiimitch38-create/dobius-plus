@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Why: filesystem, editor-file, and search commands share the same local/SSH path authorization rules. Keeping that IO adapter together prevents separate command paths from drifting on safety checks. */
+import type { RuntimeFileOpenOptions } from '../../shared/runtime-files'
 import type { ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { watch as watchFs } from 'node:fs'
@@ -201,14 +202,16 @@ export type RuntimeFileCommandHost = {
     worktreeId: string,
     filePath: string,
     relativePath: string,
-    runtimeEnvironmentId?: string | null
+    runtimeEnvironmentId?: string | null,
+    options?: RuntimeFileOpenOptions
   ): void
   openDiff(
     worktreeId: string,
     filePath: string,
     relativePath: string,
     staged: boolean,
-    runtimeEnvironmentId?: string | null
+    runtimeEnvironmentId?: string | null,
+    options?: RuntimeFileOpenOptions
   ): void
 }
 
@@ -246,7 +249,8 @@ export class RuntimeFileCommands {
 
   async openMobileFile(
     worktreeSelector: string,
-    relativePath: string
+    relativePath: string,
+    options?: RuntimeFileOpenOptions
   ): Promise<RuntimeFileOpenResult> {
     const { worktree } = await this.host.resolveRuntimeFileTarget(worktreeSelector)
     if (!isSafeMobileRelativePath(relativePath)) {
@@ -271,14 +275,22 @@ export class RuntimeFileCommands {
     // used by agents). Instead pass undefined so the renderer openFile falls back to
     // the current activeRuntimeEnvironmentId (or null), matching sidebar opens and
     // allowing correct routing for local vs remote envs.
-    this.host.openFile(worktree.id, filePath, relativePath, undefined)
+    // Background opens use this host's resolved workspace, never desktop runtime selection.
+    this.host.openFile(
+      worktree.id,
+      filePath,
+      relativePath,
+      options?.activate === false ? null : undefined,
+      ...(options ? [options] : [])
+    )
     return { worktree: worktree.id, relativePath, kind, opened: true }
   }
 
   async openMobileDiff(
     worktreeSelector: string,
     relativePath: string,
-    staged: boolean
+    staged: boolean,
+    options?: RuntimeFileOpenOptions
   ): Promise<RuntimeFileOpenResult> {
     const { worktree } = await this.host.resolveRuntimeFileTarget(worktreeSelector)
     if (!isSafeMobileRelativePath(relativePath)) {
@@ -291,7 +303,14 @@ export class RuntimeFileCommands {
         : 'text'
     const filePath = joinWorktreeRelativePath(worktree.path, relativePath)
     // Why: see openMobileFile; avoid stamping internal runtimeId as runtimeEnvironmentId.
-    this.host.openDiff(worktree.id, filePath, relativePath, staged, undefined)
+    this.host.openDiff(
+      worktree.id,
+      filePath,
+      relativePath,
+      staged,
+      options?.activate === false ? null : undefined,
+      ...(options ? [options] : [])
+    )
     return { worktree: worktree.id, relativePath, kind, opened: true }
   }
 

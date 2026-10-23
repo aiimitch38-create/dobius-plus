@@ -15,6 +15,16 @@ import { constantTimeEqual } from '../lib/constant-time-equal'
 import { readSafeJsonFile } from '../storage/safe-json-file'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 import { isMobileRpcGrant, type MobileRpcGrant } from './mobile-rpc-grants'
+import {
+  previewAuthorityFingerprint,
+  type DeviceRegistryAuthorityChange,
+  type DeviceRegistryOptions
+} from './device-registry-authority'
+
+export type {
+  DeviceRegistryAuthorityChange,
+  DeviceRegistryOptions
+} from './device-registry-authority'
 
 export type { DeviceScope }
 
@@ -121,12 +131,14 @@ function parseDevices(raw: unknown): DeviceEntry[] | undefined {
 
 export class DeviceRegistry {
   private readonly registryPath: string
+  private readonly onSecurityAuthorityChange: (reason: DeviceRegistryAuthorityChange) => void
   private devices: DeviceEntry[] = []
   // Non-null while the file on disk exists but could not be read.
   private unreadableDetail: string | null = null
 
-  constructor(userDataPath: string) {
+  constructor(userDataPath: string, options: DeviceRegistryOptions = {}) {
     this.registryPath = join(userDataPath, DEVICE_REGISTRY_FILENAME)
+    this.onSecurityAuthorityChange = options.onSecurityAuthorityChange ?? (() => undefined)
     this.load()
   }
 
@@ -179,9 +191,9 @@ export class DeviceRegistry {
 
   removeDevice(deviceId: string): boolean {
     this.assertWritable()
-    const before = this.devices.length
-    this.devices = this.devices.filter((d) => d.deviceId !== deviceId)
-    if (this.devices.length < before) {
+    const nextDevices = this.devices.filter((device) => device.deviceId !== deviceId)
+    if (nextDevices.length < this.devices.length) {
+      this.replaceDevices(nextDevices, 'device_revoked')
       this.save()
       return true
     }
@@ -235,36 +247,41 @@ export class DeviceRegistry {
       return null
     }
     this.assertWritable()
-    const previous = { ...device }
+    const previousDevices = this.devices
+    const nextDevice = { ...device }
     if (firstUse) {
-      device.pairingToken = token
-      device.pairingTokenExpiresAt = now + MOBILE_PAIRING_TOKEN_GRACE_MS
+      nextDevice.pairingToken = token
+      nextDevice.pairingTokenExpiresAt = now + MOBILE_PAIRING_TOKEN_GRACE_MS
     }
-    device.token = randomBytes(24).toString('hex')
-    device.lastSeenAt = now
+    nextDevice.token = randomBytes(24).toString('hex')
+    nextDevice.lastSeenAt = now
+    this.replaceDevices(
+      this.devices.map((entry) => (entry === device ? nextDevice : entry)),
+      firstUse ? 'confirmed_mobile_eligibility' : 'device_token_changed'
+    )
     try {
       this.save()
     } catch (error) {
-      Object.assign(device, previous)
-      if (firstUse) {
-        delete device.pairingToken
-        delete device.pairingTokenExpiresAt
-      }
+      this.devices = previousDevices
       throw error
     }
-    return device.token
+    return nextDevice.token
   }
 
   private retirePairingToken(device: DeviceEntry): void {
-    const { pairingToken, pairingTokenExpiresAt } = device
-    delete device.pairingToken
-    delete device.pairingTokenExpiresAt
+    const previousDevices = this.devices
+    const nextDevice = { ...device }
+    delete nextDevice.pairingToken
+    delete nextDevice.pairingTokenExpiresAt
+    this.replaceDevices(
+      this.devices.map((entry) => (entry === device ? nextDevice : entry)),
+      'device_token_changed'
+    )
     try {
       this.save()
     } catch (error) {
       // Why: keep memory and disk in step; the grace window still ends on time.
-      device.pairingToken = pairingToken
-      device.pairingTokenExpiresAt = pairingTokenExpiresAt
+      this.devices = previousDevices
       console.warn('[mobile] could not retire used pairing token:', error)
     }
   }
@@ -276,7 +293,11 @@ export class DeviceRegistry {
     }
     const device = this.devices.find((d) => d.deviceId === deviceId)
     if (device) {
-      device.lastSeenAt = Date.now()
+      const nextDevice = { ...device, lastSeenAt: Date.now() }
+      this.replaceDevices(
+        this.devices.map((entry) => (entry === device ? nextDevice : entry)),
+        'confirmed_mobile_eligibility'
+      )
       this.save()
     }
   }
@@ -296,25 +317,26 @@ export class DeviceRegistry {
   }
 
   private load(): void {
+    const previousAuthority = previewAuthorityFingerprint(this.devices)
     try {
       hardenExistingSecureFile(this.registryPath)
     } catch (error) {
-      this.markUnreadable(errorDetail(error))
+      this.markUnreadable(errorDetail(error), previousAuthority)
       return
     }
     const result = readSafeJsonFile(this.registryPath, parseDevices, () => [])
     if (result.status === 'unreadable') {
-      this.markUnreadable(result.detail ?? 'unreadable')
+      this.markUnreadable(result.detail ?? 'unreadable', previousAuthority)
       return
     }
     if (this.unreadableDetail !== null) {
       console.warn(`[mobile] device registry ${this.registryPath} is readable again`)
     }
     this.unreadableDetail = null
-    this.devices = result.value
+    this.replaceDevices(result.value, 'registry_reloaded', previousAuthority)
   }
 
-  private markUnreadable(detail: string): void {
+  private markUnreadable(detail: string, previousAuthority: string): void {
     if (this.unreadableDetail !== detail) {
       console.error(
         `[mobile] device registry ${this.registryPath} unreadable (${detail}); pairing changes are blocked until it is fixed`
@@ -322,7 +344,18 @@ export class DeviceRegistry {
     }
     this.unreadableDetail = detail
     // Why: no token may authenticate against a registry we cannot read.
-    this.devices = []
+    this.replaceDevices([], 'registry_unreadable', previousAuthority)
+  }
+
+  private replaceDevices(
+    nextDevices: DeviceEntry[],
+    reason: DeviceRegistryAuthorityChange,
+    previousFingerprint = previewAuthorityFingerprint(this.devices)
+  ): void {
+    if (previewAuthorityFingerprint(nextDevices) !== previousFingerprint) {
+      this.onSecurityAuthorityChange(reason)
+    }
+    this.devices = nextDevices
   }
 
   private save(): void {

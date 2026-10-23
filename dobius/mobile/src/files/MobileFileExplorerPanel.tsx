@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Database,
   File,
   FileText,
   Folder,
@@ -55,6 +56,9 @@ export function MobileFileExplorerPanel(props: {
   const [error, setError] = useState<string | null>(null)
   const [truncated, setTruncated] = useState(false)
   const worktreeLabel = getWorktreeLabel(name, worktreeId)
+  const openCatalog = useCallback(() => {
+    router.push({ pathname: '/h/[hostId]/data', params: { hostId } })
+  }, [hostId, router])
 
   const loadFiles = useCallback(async () => {
     if (!client || connState !== 'connected') {
@@ -209,6 +213,16 @@ export function MobileFileExplorerPanel(props: {
           {truncated ? ' - Showing first 5000' : ''}
         </Text>
       </View>
+      <Pressable
+        style={({ pressed }) => [styles.backButton, pressed && styles.rowPressed]}
+        onPress={openCatalog}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Registered files catalog"
+      >
+        <Database size={18} color={colors.textSecondary} />
+        <Text style={styles.meta}>Catalog</Text>
+      </Pressable>
     </View>
   )
 

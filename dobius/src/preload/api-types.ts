@@ -1,3 +1,9 @@
+import type {
+  RuntimeFileOpenNotification,
+  RuntimeDiffOpenNotification
+} from '../shared/runtime-files'
+import type { AgentResumeOwner, AgentResumeSpawnTarget } from '../shared/agent-resume-owner'
+import type { DataCatalogPreviewInvalidatedEvent } from '../shared/data-catalog-preview-schema'
 /* eslint-disable max-lines -- Why: the preload contract is intentionally centralized in one declaration file so renderer and preload stay in lockstep when IPC surfaces change. */
 import type {
   CreateHostedReviewArgs,
@@ -9,6 +15,7 @@ import type {
   HostedReviewProvider
 } from '../shared/hosted-review'
 import type { CloudBackupApi } from '../shared/cloud-backup'
+import type { TelegramAccountApi } from '../shared/telegram-account-api'
 import type { NativeFileDropPayload } from '../shared/native-file-drop'
 import type {
   ImessageBridgeConfig,
@@ -1212,6 +1219,10 @@ export type PreloadApi = {
     ) => () => void
   }
   pty: {
+    claimAgentResume: (
+      owner: AgentResumeOwner
+    ) => Promise<{ ok: true; token: string; target: AgentResumeSpawnTarget } | null>
+    releaseAgentResume: (token: string, owner: AgentResumeOwner) => Promise<boolean>
     spawn: (opts: {
       cols: number
       rows: number
@@ -2105,6 +2116,7 @@ export type PreloadApi = {
    *  limit as `telemetrySetOptIn`. */
   telemetryAcknowledgeBanner: () => Promise<void>
   cloudBackup: CloudBackupApi
+  telegramAccount: TelegramAccountApi
   settings: {
     get: () => Promise<GlobalSettings>
     getSecretStorageStatus: () => Promise<SecretStorageStatus>
@@ -2881,23 +2893,8 @@ export type PreloadApi = {
     onMoveSessionTab: (
       callback: (data: { worktreeId: string } & RuntimeMobileSessionTabMove) => void
     ) => () => void
-    onOpenFileFromMobile: (
-      callback: (data: {
-        worktreeId: string
-        filePath: string
-        relativePath: string
-        runtimeEnvironmentId?: string
-      }) => void
-    ) => () => void
-    onOpenDiffFromMobile: (
-      callback: (data: {
-        worktreeId: string
-        filePath: string
-        relativePath: string
-        staged: boolean
-        runtimeEnvironmentId?: string
-      }) => void
-    ) => () => void
+    onOpenFileFromMobile: (callback: (data: RuntimeFileOpenNotification) => void) => () => void
+    onOpenDiffFromMobile: (callback: (data: RuntimeDiffOpenNotification) => void) => () => void
     onMobileMarkdownRequest: (
       callback: (request: RuntimeMobileMarkdownRequest) => void
     ) => () => void
@@ -2980,6 +2977,9 @@ export type PreloadApi = {
     ) => () => void
     onBrowserDriverChanged: (
       callback: (event: { browserPageId: string; driver: RuntimeBrowserDriverState }) => void
+    ) => () => void
+    onDataCatalogPreviewInvalidated: (
+      callback: (event: DataCatalogPreviewInvalidatedEvent) => void
     ) => () => void
   }
   runtimeEnvironments: {

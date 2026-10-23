@@ -10,6 +10,12 @@ import {
 } from '../../shared/terminal-input'
 import { CLIPBOARD_TEXT_MEASURE_YIELD_CODE_UNITS } from '../../shared/clipboard-text'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
+import type { AgentResumeOwner, AgentResumeSpawnTarget } from '../../shared/agent-resume-owner'
+import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
+import {
+  AGENT_RESUME_CLAIM_ENV,
+  encodeAgentResumeSpawnClaim
+} from '../../shared/agent-resume-owner'
 
 const isWindowsHost = process.platform === 'win32'
 const posixOnlyIt = isWindowsHost ? it.skip : it
@@ -54,7 +60,8 @@ const {
   setMigrationUnsupportedPtyMock,
   clearMigrationUnsupportedPtyMock,
   clearMigrationUnsupportedPtysForPaneKeyMock,
-  clearPaneKeyAliasesForPtyMock
+  clearPaneKeyAliasesForPtyMock,
+  getAgentStatusSnapshotMock
 } = vi.hoisted(() => ({
   handleMock: vi.fn(),
   onMock: vi.fn(),
@@ -85,7 +92,8 @@ const {
   setMigrationUnsupportedPtyMock: vi.fn(),
   clearMigrationUnsupportedPtyMock: vi.fn(),
   clearMigrationUnsupportedPtysForPaneKeyMock: vi.fn(),
-  clearPaneKeyAliasesForPtyMock: vi.fn()
+  clearPaneKeyAliasesForPtyMock: vi.fn(),
+  getAgentStatusSnapshotMock: vi.fn<() => AgentStatusIpcPayload[]>(() => [])
 }))
 
 vi.mock('electron', () => ({
@@ -139,7 +147,8 @@ vi.mock('../agent-hooks/server', () => ({
     buildPtyEnv: buildAgentHookEnvMock,
     clearPaneState: clearAgentHookPaneStateMock,
     registerPaneKeyAlias: registerPaneKeyAliasMock,
-    clearPaneKeyAliasesForPty: clearPaneKeyAliasesForPtyMock
+    clearPaneKeyAliasesForPty: clearPaneKeyAliasesForPtyMock,
+    getStatusSnapshot: getAgentStatusSnapshotMock
   }
 }))
 
@@ -190,6 +199,7 @@ import {
   unregisterSshPtyProvider,
   getLocalPtyProvider
 } from './pty'
+import { registerRendererWindow } from '../window/renderer-window-registry'
 import { hasLiveClaudePtys, markClaudePtySpawned } from '../claude-accounts/live-pty-gate'
 import * as livePtyGate from '../claude-accounts/live-pty-gate'
 import {
@@ -230,9 +240,14 @@ function makeDeferred() {
 
 describe('registerPtyHandlers', () => {
   const handlers = new Map<string, (_event: unknown, args: unknown) => unknown>()
+  let removeTestRendererWindow: (() => void) | null = null
   const mainWindow = {
     isDestroyed: () => false,
+    once: vi.fn((_event: string, listener: () => void) => {
+      removeTestRendererWindow = listener
+    }),
     webContents: {
+      isDestroyed: () => false,
       on: vi.fn(),
       send: vi.fn(),
       removeListener: vi.fn()
@@ -258,6 +273,8 @@ describe('registerPtyHandlers', () => {
   const savedDisableMacosLoginShell = process.env.DOBIUS_DISABLE_MACOS_LOGIN_SHELL
 
   beforeEach(() => {
+    removeTestRendererWindow = null
+    registerRendererWindow(mainWindow as never)
     // Why: most PTY spawn tests assert POSIX shell behavior; Windows-specific
     // cases opt into win32 explicitly below.
     Object.defineProperty(process, 'platform', {
@@ -311,6 +328,8 @@ describe('registerPtyHandlers', () => {
     clearMigrationUnsupportedPtyMock.mockReset()
     clearMigrationUnsupportedPtysForPaneKeyMock.mockReset()
     clearPaneKeyAliasesForPtyMock.mockReset()
+    getAgentStatusSnapshotMock.mockReset()
+    getAgentStatusSnapshotMock.mockReturnValue([])
     mainWindow.webContents.on.mockReset()
     mainWindow.webContents.send.mockReset()
     mainWindow.webContents.removeListener.mockReset()
@@ -370,6 +389,8 @@ describe('registerPtyHandlers', () => {
   })
 
   afterEach(() => {
+    removeTestRendererWindow?.()
+    removeTestRendererWindow = null
     _resetWslCachesForTests()
     vi.useRealTimers()
     unregisterSshPtyProvider('ssh-1')
@@ -683,6 +704,253 @@ describe('registerPtyHandlers', () => {
       { cwd: string; env: Record<string, string> }
     ]
   }
+
+  it('requires a persisted owner claim and carries it across renderer record consumption', async () => {
+    const paneKey = 'tab-resume:11111111-1111-4111-8111-111111111111'
+    const owner: AgentResumeOwner = {
+      authority: { kind: 'local' },
+      worktreeId: 'wt-resume',
+      tabId: 'tab-resume',
+      leafId: '11111111-1111-4111-8111-111111111111',
+      paneKey,
+      ptyId: 'old-resume-pty',
+      launchToken: 'old-launch-token',
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'resume-session' }
+    }
+    const sleepingAgentSessionsByPaneKey: Record<string, unknown> = {
+      [paneKey]: {
+        paneKey,
+        worktreeId: owner.worktreeId,
+        agent: owner.agent,
+        providerSession: owner.providerSession,
+        resumeOwner: owner
+      }
+    }
+    const session = {
+      sleepingAgentSessionsByPaneKey,
+      terminalLayoutsByTabId: {
+        [owner.tabId]: { ptyIdsByLeafId: { [owner.leafId]: owner.ptyId } }
+      }
+    }
+    const store = { getWorkspaceSession: () => session }
+    // A captured owner and exact saved leaf binding are sufficient after app restart.
+    getAgentStatusSnapshotMock.mockReturnValue([])
+    handlers.clear()
+    registerPtyHandlers(
+      mainWindow as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      store as never
+    )
+
+    const claim = await handlers.get('pty:claimAgentResume')!(null, owner)
+    expect(claim).toMatchObject({ ok: true })
+    session.sleepingAgentSessionsByPaneKey = {}
+
+    const encodedClaim = encodeAgentResumeSpawnClaim({
+      token: (claim as { token: string }).token,
+      owner,
+      target: (claim as { target: AgentResumeSpawnTarget }).target
+    })
+    await expect(
+      handlers.get('pty:spawn')!(null, {
+        cols: 80,
+        rows: 24,
+        worktreeId: 'different-worktree',
+        tabId: owner.tabId,
+        leafId: owner.leafId,
+        launchAgent: owner.agent,
+        command: 'codex resume resume-session',
+        env: { [AGENT_RESUME_CLAIM_ENV]: encodedClaim }
+      })
+    ).rejects.toThrow('Automatic agent-resume ownership changed before PTY spawn')
+    expect(spawnMock).not.toHaveBeenCalled()
+
+    await handlers.get('pty:spawn')!(null, {
+      cols: 80,
+      rows: 24,
+      worktreeId: owner.worktreeId,
+      tabId: owner.tabId,
+      leafId: owner.leafId,
+      launchAgent: owner.agent,
+      launchToken: 'new-launch-token',
+      command: 'codex resume resume-session',
+      env: { [AGENT_RESUME_CLAIM_ENV]: encodedClaim }
+    })
+
+    expect(spawnMock).toHaveBeenCalledOnce()
+    const spawnedEnv = spawnMock.mock.calls.at(-1)?.[2].env as Record<string, string>
+    expect(spawnedEnv[AGENT_RESUME_CLAIM_ENV]).toBeUndefined()
+  })
+
+  it.each([
+    ['agent type', { agentType: 'claude' }],
+    ['PTY identity', { ptyId: 'replacement-pty' }]
+  ])('refuses a saved owner when live hook %s disagrees', (_label, mismatch) => {
+    const paneKey = 'tab-resume:11111111-1111-4111-8111-111111111111'
+    const owner: AgentResumeOwner = {
+      authority: { kind: 'local' },
+      worktreeId: 'wt-resume',
+      tabId: 'tab-resume',
+      leafId: '11111111-1111-4111-8111-111111111111',
+      paneKey,
+      ptyId: 'old-resume-pty',
+      launchToken: 'old-launch-token',
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'resume-session' }
+    }
+    const store = {
+      getWorkspaceSession: () => ({
+        sleepingAgentSessionsByPaneKey: {
+          [paneKey]: {
+            paneKey,
+            worktreeId: owner.worktreeId,
+            agent: owner.agent,
+            providerSession: owner.providerSession,
+            resumeOwner: owner
+          }
+        },
+        terminalLayoutsByTabId: {
+          [owner.tabId]: { ptyIdsByLeafId: { [owner.leafId]: owner.ptyId } }
+        }
+      })
+    }
+    getAgentStatusSnapshotMock.mockReturnValue([
+      {
+        paneKey,
+        state: 'working',
+        prompt: '',
+        agentType: 'codex',
+        worktreeId: owner.worktreeId,
+        ptyId: owner.ptyId,
+        launchToken: owner.launchToken,
+        connectionId: null,
+        providerSession: owner.providerSession,
+        receivedAt: 1,
+        stateStartedAt: 1,
+        ...mismatch
+      }
+    ])
+    handlers.clear()
+    registerPtyHandlers(
+      mainWindow as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      store as never
+    )
+
+    expect(handlers.get('pty:claimAgentResume')!(null, owner)).toBeNull()
+  })
+
+  it('refuses an owner claim when the persisted per-leaf PTY no longer matches', async () => {
+    const paneKey = 'tab-resume:11111111-1111-4111-8111-111111111111'
+    const owner: AgentResumeOwner = {
+      authority: { kind: 'local' },
+      worktreeId: 'wt-resume',
+      tabId: 'tab-resume',
+      leafId: '11111111-1111-4111-8111-111111111111',
+      paneKey,
+      ptyId: 'old-resume-pty',
+      launchToken: 'old-launch-token',
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'resume-session' }
+    }
+    const store = {
+      getWorkspaceSession: () => ({
+        sleepingAgentSessionsByPaneKey: {
+          [paneKey]: { ...owner, resumeOwner: owner }
+        },
+        terminalLayoutsByTabId: {
+          [owner.tabId]: { ptyIdsByLeafId: { [owner.leafId]: 'newer-pty' } }
+        }
+      })
+    }
+    getAgentStatusSnapshotMock.mockReturnValue([
+      {
+        paneKey,
+        state: 'working',
+        prompt: '',
+        worktreeId: owner.worktreeId,
+        launchToken: owner.launchToken,
+        connectionId: null,
+        providerSession: owner.providerSession,
+        receivedAt: 1,
+        stateStartedAt: 1
+      }
+    ])
+    handlers.clear()
+    registerPtyHandlers(
+      mainWindow as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      store as never
+    )
+
+    expect(handlers.get('pty:claimAgentResume')!(null, owner)).toBeNull()
+  })
+
+  it('refuses an SSH owner claim when the current hook authority differs', () => {
+    const paneKey = 'tab-remote:11111111-1111-4111-8111-111111111111'
+    const owner: AgentResumeOwner = {
+      authority: { kind: 'ssh', connectionId: 'ssh-host-a' },
+      worktreeId: 'wt-remote',
+      tabId: 'tab-remote',
+      leafId: '11111111-1111-4111-8111-111111111111',
+      paneKey,
+      ptyId: 'remote-pty',
+      launchToken: 'remote-launch',
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'remote-session' }
+    }
+    const store = {
+      getWorkspaceSession: () => ({
+        sleepingAgentSessionsByPaneKey: {
+          [paneKey]: {
+            paneKey,
+            worktreeId: owner.worktreeId,
+            connectionId: 'ssh-host-a',
+            agent: owner.agent,
+            providerSession: owner.providerSession,
+            resumeOwner: owner
+          }
+        },
+        terminalLayoutsByTabId: {
+          [owner.tabId]: { ptyIdsByLeafId: { [owner.leafId]: owner.ptyId } }
+        }
+      })
+    }
+    getAgentStatusSnapshotMock.mockReturnValue([
+      {
+        paneKey,
+        state: 'working',
+        prompt: '',
+        worktreeId: owner.worktreeId,
+        launchToken: owner.launchToken,
+        connectionId: 'ssh-host-b',
+        providerSession: owner.providerSession,
+        receivedAt: 1,
+        stateStartedAt: 1
+      }
+    ])
+    handlers.clear()
+    registerPtyHandlers(
+      mainWindow as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      store as never
+    )
+
+    expect(handlers.get('pty:claimAgentResume')!(null, owner)).toBeNull()
+  })
 
   describe('spawn environment', () => {
     it('marks local Claude launches live until the PTY is killed', async () => {
@@ -1109,7 +1377,8 @@ describe('registerPtyHandlers', () => {
         DOBIUS_AGENT_HOOK_ENV: 'production',
         DOBIUS_AGENT_HOOK_VERSION: 'stale-version',
         DOBIUS_AGENT_HOOK_ENDPOINT: '/tmp/stale-endpoint.env',
-        DOBIUS_CLAUDE_AGENT_STATUS_SETTINGS: '/tmp/dobius/agent-hooks/claude-agent-status-settings.json'
+        DOBIUS_CLAUDE_AGENT_STATUS_SETTINGS:
+          '/tmp/dobius/agent-hooks/claude-agent-status-settings.json'
       })
 
       expect(env.DOBIUS_AGENT_HOOK_PORT).toBe('5678')
@@ -1129,7 +1398,8 @@ describe('registerPtyHandlers', () => {
         DOBIUS_AGENT_HOOK_ENV: 'production',
         DOBIUS_AGENT_HOOK_VERSION: 'stale-version',
         DOBIUS_AGENT_HOOK_ENDPOINT: '/tmp/stale-endpoint.env',
-        DOBIUS_CLAUDE_AGENT_STATUS_SETTINGS: '/tmp/dobius/agent-hooks/claude-agent-status-settings.json'
+        DOBIUS_CLAUDE_AGENT_STATUS_SETTINGS:
+          '/tmp/dobius/agent-hooks/claude-agent-status-settings.json'
       })
 
       expect(env.DOBIUS_AGENT_HOOK_PORT).toBeUndefined()
@@ -1146,9 +1416,15 @@ describe('registerPtyHandlers', () => {
       }))
 
       expect(env.DOBIUS_ENABLE_GIT_ATTRIBUTION).toBe('1')
-      expect(env.DOBIUS_GIT_COMMIT_TRAILER).toBe('Co-authored-by: Dobius <noreply@statusdigitalmarketing.com>')
-      expect(env.DOBIUS_GH_PR_FOOTER).toBe('Made with [Dobius](https://github.com/statusdigitalmarketing/dobius-plus) 🐋')
-      expect(env.DOBIUS_GH_ISSUE_FOOTER).toBe('Made with [Dobius](https://github.com/statusdigitalmarketing/dobius-plus) 🐋')
+      expect(env.DOBIUS_GIT_COMMIT_TRAILER).toBe(
+        'Co-authored-by: Dobius <noreply@statusdigitalmarketing.com>'
+      )
+      expect(env.DOBIUS_GH_PR_FOOTER).toBe(
+        'Made with [Dobius](https://github.com/statusdigitalmarketing/dobius-plus) 🐋'
+      )
+      expect(env.DOBIUS_GH_ISSUE_FOOTER).toBe(
+        'Made with [Dobius](https://github.com/statusdigitalmarketing/dobius-plus) 🐋'
+      )
       expect(env.PATH).toContain(expectedAttributionShimDir)
     })
 
@@ -1500,7 +1776,8 @@ describe('registerPtyHandlers', () => {
             undefined,
             {
               CODEX_HOME: 'C:\\Users\\test\\AppData\\Roaming\\Dobius\\codex-runtime-home\\home',
-              DOBIUS_CODEX_HOME: 'C:\\Users\\test\\AppData\\Roaming\\Dobius\\codex-runtime-home\\home'
+              DOBIUS_CODEX_HOME:
+                'C:\\Users\\test\\AppData\\Roaming\\Dobius\\codex-runtime-home\\home'
             },
             {
               cwd: '\\\\wsl.localhost\\Ubuntu\\home\\test\\repo',
@@ -1534,7 +1811,8 @@ describe('registerPtyHandlers', () => {
             undefined,
             {
               CODEX_HOME: 'C:\\Users\\test\\.codex',
-              DOBIUS_CODEX_HOME: 'C:\\Users\\test\\AppData\\Roaming\\Dobius\\codex-runtime-home\\home'
+              DOBIUS_CODEX_HOME:
+                'C:\\Users\\test\\AppData\\Roaming\\Dobius\\codex-runtime-home\\home'
             },
             { shellOverride: 'wsl.exe' }
           )
@@ -1604,6 +1882,120 @@ describe('registerPtyHandlers', () => {
         )
         expect(spawnOptions.env.DOBIUS_AGENT_HOOK_PORT).toBe('5678')
         expect(spawnOptions.env.DOBIUS_AGENT_HOOK_TOKEN).toBe('agent-token')
+      })
+
+      it('binds runtime spawn claims to the server-approved worktree and authority', async () => {
+        type RuntimeSpawnController = {
+          spawn(args: {
+            cols: number
+            rows: number
+            worktreeId?: string
+            connectionId?: string | null
+            env?: Record<string, string>
+          }): Promise<{ id: string }>
+        }
+        const daemonSpawn = setupDaemonAdapter()
+        const sshSpawn = vi.fn(async () => ({ id: 'wrong-authority-pty' }))
+        const owner: AgentResumeOwner = {
+          authority: { kind: 'local' },
+          worktreeId: 'wt-runtime-resume',
+          tabId: 'tab-runtime-resume',
+          leafId: '11111111-1111-4111-8111-111111111111',
+          paneKey: 'tab-runtime-resume:11111111-1111-4111-8111-111111111111',
+          ptyId: 'source-runtime-pty',
+          launchToken: 'source-runtime-launch',
+          agent: 'codex',
+          providerSession: { key: 'session_id', id: 'runtime-resume-session' }
+        }
+        const runtime = {
+          setPtyController: vi.fn(),
+          registerPty: vi.fn(),
+          onPtySpawned: vi.fn(),
+          onPtyExit: vi.fn(),
+          onPtyData: vi.fn()
+        }
+        const store = {
+          getWorkspaceSession: () => ({
+            sleepingAgentSessionsByPaneKey: {
+              [owner.paneKey]: {
+                paneKey: owner.paneKey,
+                worktreeId: owner.worktreeId,
+                agent: owner.agent,
+                providerSession: owner.providerSession,
+                resumeOwner: owner
+              }
+            },
+            terminalLayoutsByTabId: {
+              [owner.tabId]: { ptyIdsByLeafId: { [owner.leafId]: owner.ptyId } }
+            }
+          })
+        }
+        getAgentStatusSnapshotMock.mockReturnValue([])
+        handlers.clear()
+        registerPtyHandlers(
+          mainWindow as never,
+          runtime as never,
+          undefined,
+          undefined,
+          undefined,
+          store as never
+        )
+        const claim = (await handlers.get('pty:claimAgentResume')!(null, owner)) as {
+          token: string
+          target: AgentResumeSpawnTarget
+        }
+        const env = {
+          [AGENT_RESUME_CLAIM_ENV]: encodeAgentResumeSpawnClaim({
+            token: claim.token,
+            owner,
+            target: claim.target
+          })
+        }
+        const controller = runtime.setPtyController.mock.calls[0]?.[0] as RuntimeSpawnController
+
+        registerSshPtyProvider('ssh-other-authority', {
+          spawn: sshSpawn,
+          write: vi.fn(),
+          resize: vi.fn(),
+          shutdown: vi.fn(),
+          sendSignal: vi.fn(),
+          getCwd: vi.fn(),
+          getInitialCwd: vi.fn(),
+          clearBuffer: vi.fn(),
+          acknowledgeDataEvent: vi.fn(),
+          hasChildProcesses: vi.fn(),
+          getForegroundProcess: vi.fn(),
+          serialize: vi.fn(),
+          revive: vi.fn(),
+          onData: vi.fn(() => () => {}),
+          onReplay: vi.fn(() => () => {}),
+          onExit: vi.fn(() => () => {}),
+          listProcesses: vi.fn(async () => []),
+          attach: vi.fn(),
+          getDefaultShell: vi.fn(),
+          getProfiles: vi.fn()
+        } as never)
+        try {
+          await expect(
+            controller.spawn({ cols: 80, rows: 24, worktreeId: 'other-worktree', env })
+          ).rejects.toThrow('Automatic agent-resume ownership changed before PTY spawn')
+          expect(daemonSpawn).not.toHaveBeenCalled()
+          await expect(
+            controller.spawn({
+              cols: 80,
+              rows: 24,
+              worktreeId: owner.worktreeId,
+              connectionId: 'ssh-other-authority',
+              env
+            })
+          ).rejects.toThrow('Automatic agent-resume ownership changed before PTY spawn')
+          expect(sshSpawn).not.toHaveBeenCalled()
+
+          await controller.spawn({ cols: 80, rows: 24, worktreeId: owner.worktreeId, env })
+          expect(daemonSpawn).toHaveBeenCalledOnce()
+        } finally {
+          unregisterSshPtyProvider('ssh-other-authority')
+        }
       })
 
       it('uses the owning project WSL runtime for runtime-created daemon PTYs', async () => {

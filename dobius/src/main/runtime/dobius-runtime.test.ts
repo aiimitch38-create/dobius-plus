@@ -6513,6 +6513,59 @@ describe('DobiusRuntimeService', () => {
     })
   })
 
+  it('keeps the Codex update menu blocked despite its idle title', async () => {
+    const runtime = new DobiusRuntimeService(store)
+    runtime.setPtyController({
+      spawn: vi.fn().mockResolvedValue({ id: 'pty-1' }),
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    const leafId = '11111111-1111-4111-8111-111111111111'
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [
+        {
+          tabId: 'tab-1',
+          worktreeId: TEST_WORKTREE_ID,
+          title: 'Codex',
+          activeLeafId: leafId,
+          layout: null
+        }
+      ],
+      leaves: [
+        {
+          tabId: 'tab-1',
+          worktreeId: TEST_WORKTREE_ID,
+          leafId,
+          paneRuntimeId: 1,
+          ptyId: 'pty-1'
+        }
+      ]
+    })
+    runtime.onPtyData(
+      'pty-1',
+      [
+        '✨ Update available! 0.159.0 -> 0.160.0\n',
+        'Release notes: https://github.com/openai/codex/releases/latest\n',
+        '› 1. Update now (runs `npm install -g @openai/codex`)\n',
+        '  2. Skip\n',
+        '  3. Skip until next version\n',
+        'Press enter to continue\n',
+        '\x1b]0;Codex ready\x07'
+      ].join(''),
+      123
+    )
+
+    const [terminal] = (await runtime.listTerminals()).terminals
+
+    await expect(runtime.getTerminalAgentStatus(terminal.handle)).resolves.toEqual({
+      handle: terminal.handle,
+      isRunningAgent: true,
+      status: 'permission'
+    })
+  })
+
   it('maps fresh explicit waiting hook state to permission over a working title', async () => {
     const leafId = '11111111-1111-4111-8111-111111111111'
     const paneKey = makePaneKey('tab-1', leafId)
@@ -13939,8 +13992,9 @@ describe('DobiusRuntimeService', () => {
     expect(focusTerminal).toHaveBeenCalledWith('tab-1', TEST_WORKTREE_ID, 'pane:2')
   })
 
-  it('activates mobile session tabs without focusing desktop clients when requested', async () => {
+  it('keeps shared desktop selection unchanged on phone-local activation', async () => {
     const focusTerminal = vi.fn()
+    const focusEditorTab = vi.fn()
     const runtime = new DobiusRuntimeService(store)
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
@@ -13951,6 +14005,7 @@ describe('DobiusRuntimeService', () => {
       splitTerminal: vi.fn(),
       renameTerminal: vi.fn(),
       focusTerminal,
+      focusEditorTab,
       closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
@@ -13987,6 +14042,45 @@ describe('DobiusRuntimeService', () => {
               ptyId: 'pty-pane-2',
               title: 'right',
               isActive: true
+            },
+            {
+              type: 'browser',
+              id: 'browser',
+              title: 'Browser',
+              browserWorkspaceId: 'browser',
+              browserPageId: null,
+              url: 'about:blank',
+              loading: false,
+              canGoBack: false,
+              canGoForward: false,
+              isActive: false
+            },
+            {
+              type: 'file',
+              id: 'diff',
+              title: 'Diff',
+              filePath: '/repo/note.md',
+              relativePath: 'note.md',
+              language: 'markdown',
+              mode: 'diff',
+              diffSource: 'staged',
+              isDirty: false,
+              isActive: false
+            },
+            {
+              type: 'markdown',
+              id: 'note',
+              title: 'Note',
+              filePath: '/repo/note.md',
+              relativePath: 'note.md',
+              language: 'markdown',
+              mode: 'edit',
+              isDirty: false,
+              isActive: false,
+              sourceFileId: 'note',
+              sourceFilePath: '/repo/note.md',
+              sourceRelativePath: 'note.md',
+              documentVersion: 'v1'
             }
           ]
         }
@@ -13995,6 +14089,9 @@ describe('DobiusRuntimeService', () => {
     runtime.registerPty('pty-pane-1', TEST_WORKTREE_ID)
     runtime.registerPty('pty-pane-2', TEST_WORKTREE_ID)
 
+    const before = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    const published = vi.fn()
+    const unsubscribe = runtime.onMobileSessionTabsChanged(published)
     const activated = await runtime.activateMobileSessionTab(
       `id:${TEST_WORKTREE_ID}`,
       'tab-1::pane:1',
@@ -14003,15 +14100,23 @@ describe('DobiusRuntimeService', () => {
     )
 
     expect(focusTerminal).not.toHaveBeenCalled()
-    expect(activated).toMatchObject({
-      activeTabId: 'tab-1::pane:1',
-      activeTabType: 'terminal',
-      tabGroups: [expect.objectContaining({ id: 'group-1', activeTabId: 'tab-1' })]
-    })
-    expect(activated.tabs).toEqual([
-      expect.objectContaining({ id: 'tab-1::pane:1', isActive: true }),
-      expect.objectContaining({ id: 'tab-1::pane:2', isActive: false })
-    ])
+    expect(activated).toEqual(before)
+    expect(await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).toEqual(before)
+    for (const id of ['browser', 'diff', 'note']) {
+      expect(
+        await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, id, undefined, {
+          notifyClients: false
+        })
+      ).toEqual(before)
+    }
+    expect(focusEditorTab).not.toHaveBeenCalled()
+    expect(published).not.toHaveBeenCalled()
+    unsubscribe()
+    // The explicit desktop/default route still activates the requested pane.
+    await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'tab-1::pane:1')
+    expect(focusTerminal).toHaveBeenCalledWith('tab-1', TEST_WORKTREE_ID, 'pane:1')
+    await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'note')
+    expect(focusEditorTab).toHaveBeenCalledWith('note', TEST_WORKTREE_ID)
   })
 
   it('clears unread metadata on mobile worktree activation without focusing desktop clients', async () => {
@@ -14301,7 +14406,7 @@ describe('DobiusRuntimeService', () => {
     ])
   })
 
-  it('keeps the target group active when phone-local activation materializes a tab', async () => {
+  it('preserves desktop group and tab selection while materializing a phone-selected tab', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'group-target-pty' })
     const focusTerminal = vi.fn()
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
@@ -14375,6 +14480,8 @@ describe('DobiusRuntimeService', () => {
       getForegroundProcess: async () => null
     })
 
+    const before = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    const savedSelection = structuredClone(runtimeStore.getWorkspaceSession())
     const activated = await runtime.activateMobileSessionTab(
       `id:${TEST_WORKTREE_ID}`,
       'host-tab-2',
@@ -14383,12 +14490,16 @@ describe('DobiusRuntimeService', () => {
     )
 
     expect(focusTerminal).not.toHaveBeenCalled()
-    expect(activated.activeGroupId).toBe('group-right')
-    expect(activated.tabGroups).toEqual([
-      expect.objectContaining({ id: 'group-left', activeTabId: 'host-tab' }),
-      expect.objectContaining({ id: 'group-right', activeTabId: 'host-tab-2' })
-    ])
-    expect(activated.activeTabId).toBe(`host-tab-2::${HEADLESS_SECOND_LEAF_ID}`)
+    expect(activated.activeGroupId).toBe(before.activeGroupId)
+    expect(activated.activeTabId).toBe(before.activeTabId)
+    expect(activated.tabGroups).toEqual(before.tabGroups)
+    expect(
+      activated.tabs.find((tab) => tab.id === `host-tab-2::${HEADLESS_SECOND_LEAF_ID}`)
+    ).toMatchObject({ isActive: false, status: 'ready', terminal: expect.any(String) })
+    expect(activated.tabs.find((tab) => tab.id === `host-tab::${HEADLESS_LEAF_ID}`)?.isActive).toBe(
+      true
+    )
+    expect(runtimeStore.getWorkspaceSession()).toEqual(savedSelection)
   })
 
   it('refreshes stale daemon liveness before phone-local terminal materialization', async () => {

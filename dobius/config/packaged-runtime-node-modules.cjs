@@ -18,7 +18,10 @@ const PACKAGED_RUNTIME_PACKAGE_ROOTS = [
   '@anthropic-ai/claude-agent-sdk-darwin-arm64',
   '@electron-toolkit/utils',
   '@linear/sdk',
+  // Why: the unbundled CLI loads the shared ADAM receipt digest implementation.
+  '@noble/hashes',
   '@parcel/watcher',
+  'big-integer',
   'electron-updater',
   'i18next',
   'jsonc-parser',
@@ -28,6 +31,9 @@ const PACKAGED_RUNTIME_PACKAGE_ROOTS = [
   'serve-sim',
   'qrcode',
   'ssh2',
+  // Why: the main MTProto adapter imports the SDK and its integer runtime;
+  // their declared package dependencies are collected recursively below.
+  'teleproto',
   'tweetnacl',
   'ws',
   'yaml',
@@ -214,14 +220,19 @@ function verifyPackagedMainRuntimeDeps(resourcesDir, asar = require('@electron/a
 
   const mainFiles = ['out/main/index.js', 'out/main/agent-hooks/managed-agent-hook-controls.js']
   const entries = asar.listPackage(asarPath)
-  const missing = new Set()
-
   for (const file of mainFiles) {
-    const entry = findAsarEntry(entries, file)
-    if (!entry) {
+    if (!findAsarEntry(entries, file)) {
       throw new Error(`Packaged main file ${file} was not found in ${asarPath}`)
     }
+  }
 
+  // Why: CLI imports remain unbundled, so shared and helper modules can require
+  // packages that never appear in the bundled main entry point.
+  const runtimeEntries = entries.filter((entry) =>
+    /^out\/(?:main|cli|shared)\/.*\.js$/.test(normalizeAsarEntryPath(entry))
+  )
+  const missing = new Set()
+  for (const entry of runtimeEntries) {
     // Why: @electron/asar lists entries with host separators; Windows returns
     // backslashes, and extractFile expects that same host-style path.
     const internalPath = entry.replace(/^[\\/]+/, '')

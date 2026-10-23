@@ -1,28 +1,10 @@
 #!/usr/bin/env python3
-"""Artifact manifest for a packaged macOS Dobius+.app (BUILD-045, #101).
-
-Usage: bundle-manifest.py <path to Dobius+.app>
-  exit 0  every required artifact is present
-  exit 1  one or more are missing; each is printed on its own line (stdout)
-  exit 2  usage error
-
-Why: the old build-and-install.sh ran only part of the build graph (no
-build:cli / relay / web / native) and still produced an installable-looking
-bundle. ADAM's Dobius adapter (service/src/adapters/dobius.ts, snapshotBundle)
-then refused it because Contents/Resources/app.asar.unpacked/out/cli/index.js
-was missing. The gated installer runs this on the staged copy BEFORE it quits
-the app, so a partial build is refused and the installed app stays untouched.
-
-Each entry names the build step that produces it (dobius/package.json).
-"""
-import json
+"""Validate a packaged macOS Dobius+.app before the installer quits the current app."""
+import importlib.util
 import os
-import struct
 import sys
 
 RESOURCES = "Contents/Resources"
-
-# Files that must be inside app.asar (non-empty entries).
 ASAR_ENTRIES = [
     ("out/main/index.js", "build:electron-vite"),
     ("out/preload/index.js", "build:electron-vite"),
@@ -30,7 +12,6 @@ ASAR_ENTRIES = [
     ("out/web/web-index.html", "build:web"),
     ("out/cli/index.js", "build:cli"),
 ]
-
 RELAY_PLATFORMS = [
     "linux-x64",
     "linux-arm64",
@@ -39,14 +20,10 @@ RELAY_PLATFORMS = [
     "win32-x64",
     "win32-arm64",
 ]
-
-# Non-empty regular files on disk, relative to the bundle root.
 DISK_FILES = [
-    # ADAM's adapter launches this exact path outside the asar.
     (RESOURCES + "/app.asar.unpacked/out/cli/index.js", "build:cli"),
     (RESOURCES + "/app.asar.unpacked/out/package.json", "build:cli"),
     (RESOURCES + "/app.asar.unpacked/out/main/daemon-entry.js", "build:electron-vite"),
-    # ADAM's adapter also requires the Electron framework and its signature.
     (
         "Contents/Frameworks/Electron Framework.framework/Electron Framework",
         "electron-builder",
@@ -56,11 +33,31 @@ DISK_FILES = [
         "electron-builder",
     ),
 ]
+CATALOG_HELPER_FILES = [
+    (
+        RESOURCES + "/data-catalog/descriptor-directory-bridge.py",
+        "electron-builder extraResources (data catalog)",
+    ),
+    (
+        RESOURCES + "/data-catalog/native-root-identity.py",
+        "electron-builder extraResources (data catalog)",
+    ),
+]
+ADAM_GATEWAY_FILES = [
+    (RESOURCES + "/adam-telegram/" + filename, "electron-builder extraResources (Adam gateway)")
+    for filename in (
+        "bridge_runner.py", "bridge_protocol.py", "bridge_receipts.py", "bridge_dispatch.py",
+        "gateway_host.py", "platform_adapter.py", "policy_manifest.py",
+        "hermes-core-policy-manifest.json", "hermes-core-policy.patch",
+    )
+]
 for _platform in RELAY_PLATFORMS:
-    DISK_FILES.append((RESOURCES + "/relay/" + _platform + "/relay.js", "build:relay"))
-    DISK_FILES.append((RESOURCES + "/relay/" + _platform + "/.version", "build:relay"))
-
-# Non-empty executable files on disk.
+    DISK_FILES.extend(
+        [
+            (RESOURCES + "/relay/" + _platform + "/relay.js", "build:relay"),
+            (RESOURCES + "/relay/" + _platform + "/.version", "build:relay"),
+        ]
+    )
 DISK_EXECUTABLES = [
     (RESOURCES + "/bin/dobius", "electron-builder extraResources"),
     (
@@ -69,69 +66,99 @@ DISK_EXECUTABLES = [
     ),
 ]
 
+_CONTRACT_PATH = os.path.join(os.path.dirname(__file__), "bundle-resource-contract.py")
+_CONTRACT_SPEC = importlib.util.spec_from_file_location("bundle_resource_contract", _CONTRACT_PATH)
+if _CONTRACT_SPEC is None or _CONTRACT_SPEC.loader is None:
+    raise ImportError("cannot load bundle resource contract")
+resource_contract = importlib.util.module_from_spec(_CONTRACT_SPEC)
+_CONTRACT_SPEC.loader.exec_module(resource_contract)
 
-def read_asar_header(asar_path):
-    """Return (header dict, data offset, file size) or raise ValueError."""
-    size = os.path.getsize(asar_path)
-    with open(asar_path, "rb") as handle:
-        prefix = handle.read(8)
-        if len(prefix) != 8:
-            raise ValueError("too short to be an asar archive")
-        size_payload, header_size = struct.unpack("<II", prefix)
-        if size_payload != 4 or header_size < 8 or 8 + header_size > size:
-            raise ValueError("not an asar archive (bad size header)")
-        header = handle.read(header_size)
-    string_length = struct.unpack("<I", header[4:8])[0]
-    if 8 + string_length > header_size:
-        raise ValueError("not an asar archive (bad header string length)")
-    return json.loads(header[8 : 8 + string_length].decode("utf-8")), 8 + header_size, size
-
-
-def asar_entry(header, relative_path):
-    node = header
-    for part in relative_path.split("/"):
-        children = node.get("files") if isinstance(node, dict) else None
-        if not isinstance(children, dict) or part not in children:
-            return None
-        node = children[part]
-    return node
-
-
-def asar_entry_ok(entry, data_offset, archive_size):
-    if not isinstance(entry, dict) or "files" in entry:
-        return False
-    entry_size = entry.get("size")
-    if not isinstance(entry_size, int) or entry_size <= 0:
-        return False
-    # Unpacked entries live on disk; their data is not in the archive.
-    if entry.get("unpacked") is True:
-        return True
-    try:
-        offset = int(entry.get("offset"))
-    except (TypeError, ValueError):
-        return False
-    return data_offset + offset + entry_size <= archive_size
+read_asar_header = resource_contract.read_asar_header
+asar_entry = resource_contract.asar_entry
+asar_entry_ok = resource_contract.asar_entry_ok
 
 
 def disk_file_ok(path, executable):
-    # os.path.isfile follows symlinks, as the framework's top-level entry is one.
+    # Framework entries intentionally follow electron-builder's legitimate symlinks.
     if not os.path.isfile(path) or os.path.getsize(path) <= 0:
         return False
-    return os.access(path, os.X_OK) if executable else True
+    return not executable or os.access(path, os.X_OK)
+
+
+def _catalog_helper_status(bundle, relative_path):
+    return resource_contract.regular_resource_status(bundle, relative_path)
+
+
+def _missing_adam_gateway_resources(bundle, header, data_offset, archive_size, descriptor, identity):
+    enabled, error = resource_contract.adam_gateway_capability(
+        bundle, header, data_offset, archive_size, descriptor, identity
+    )
+    if error is not None:
+        return ["%s/app.asar out/main Adam gateway capability could not be inspected (%s)"
+                % (RESOURCES, error)]
+    # The directory itself counts: even an empty or unsafe partial resource
+    # tree must not masquerade as a legacy build lacking this feature.
+    resource_present, _valid = resource_contract.regular_resource_status(
+        bundle, RESOURCES + "/adam-telegram"
+    )
+    if not enabled and not resource_present:
+        return []
+    return [
+        "%s (from %s, must be a non-empty readable regular file under Resources; "
+        "symlinks and unsafe parent directories are refused)" % (relative_path, step)
+        for relative_path, step in ADAM_GATEWAY_FILES
+        if not resource_contract.regular_resource_status(bundle, relative_path)[1]
+    ]
 
 
 def missing_artifacts(bundle):
     missing = []
-    asar_path = os.path.join(bundle, RESOURCES, "app.asar")
+    asar_descriptor = None
     try:
-        header, data_offset, archive_size = read_asar_header(asar_path)
-    except (OSError, ValueError, UnicodeDecodeError) as error:
+        header, data_offset, archive_size, asar_descriptor, asar_identity = read_asar_header(bundle)
+    except (OSError, ValueError, UnicodeDecodeError, RecursionError) as error:
         missing.append("%s/app.asar is not a readable asar archive (%s)" % (RESOURCES, error))
         header = None
     if header is not None:
-        for relative_path, step in ASAR_ENTRIES:
-            if not asar_entry_ok(asar_entry(header, relative_path), data_offset, archive_size):
-                missing.append("%s/app.asar:%s (from %s)" % (RESOURCES, relative_path, step))
+        try:
+            for relative_path, step in ASAR_ENTRIES:
+                if not asar_entry_ok(asar_entry(header, relative_path), data_offset, archive_size):
+                    missing.append("%s/app.asar:%s (from %s)" % (RESOURCES, relative_path, step))
+
+            missing.extend(_missing_adam_gateway_resources(
+                bundle, header, data_offset, archive_size, asar_descriptor, asar_identity
+            ))
+
+            # A missing required entry already rejects the bundle; avoid duplicate diagnostics.
+            if asar_entry(header, "out/main/index.js") is None:
+                catalog_enabled, inspection_error = False, None
+            else:
+                catalog_enabled, inspection_error = resource_contract.catalog_capability(
+                    bundle, header, data_offset, archive_size, asar_descriptor, asar_identity
+                )
+            if inspection_error is not None:
+                missing.append(
+                    "%s/app.asar out/main catalog capability could not be inspected (%s)"
+                    % (RESOURCES, inspection_error)
+                )
+            else:
+                helper_status = [
+                    _catalog_helper_status(bundle, relative_path)
+                    for relative_path, _step in CATALOG_HELPER_FILES
+                ]
+                if catalog_enabled or any(present for present, _valid in helper_status):
+                    for (relative_path, step), (_present, valid) in zip(
+                        CATALOG_HELPER_FILES, helper_status
+                    ):
+                        if not valid:
+                            missing.append(
+                                "%s (from %s, must be a non-empty readable regular file under Resources; "
+                                "symlinks and unsafe parent directories are refused)"
+                                % (relative_path, step)
+                            )
+        finally:
+            os.close(asar_descriptor)
+
     for relative_path, step in DISK_FILES:
         if not disk_file_ok(os.path.join(bundle, relative_path), False):
             missing.append("%s (from %s)" % (relative_path, step))

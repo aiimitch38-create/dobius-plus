@@ -80,6 +80,28 @@ export type AgentHookStatusChangeEntry = {
   observedInCurrentRuntime: boolean
 }
 
+export function enrichAgentStatusIpcPayload(
+  data: AgentStatusIpcPayload,
+  enrichment: {
+    terminalHandle?: string
+    orchestration?: AgentStatusIpcPayload['orchestration']
+    ptyIdentity?: { ptyId: string; launchToken: string; connectionId: string | null }
+  }
+): AgentStatusIpcPayload {
+  const ptyId =
+    enrichment.ptyIdentity &&
+    data.launchToken === enrichment.ptyIdentity.launchToken &&
+    data.connectionId === enrichment.ptyIdentity.connectionId
+      ? enrichment.ptyIdentity.ptyId
+      : undefined
+  return {
+    ...data,
+    ...(enrichment.terminalHandle ? { terminalHandle: enrichment.terminalHandle } : {}),
+    ...(ptyId ? { ptyId } : {}),
+    ...(enrichment.orchestration ? { orchestration: enrichment.orchestration } : {})
+  }
+}
+
 type StatusChangeListener = (statuses: AgentHookStatusChangeEntry[]) => void
 type PaneStatusClearListener = (paneKey: string) => void
 type PaneKeyAliasPersistenceListener = (entries: LegacyPaneKeyAliasEntry[]) => void

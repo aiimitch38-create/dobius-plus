@@ -1,3 +1,4 @@
+import type { RuntimeFileOpenOptions } from '../../shared/runtime-files'
 /* eslint-disable max-lines -- Why: DobiusRuntimeService still owns the mutable live graph, PTY handles, waiters, mobile floor/layout state, and managed-worktree reconciliation. Stateless browser and file command adapters live beside it; the remaining split points need state-owner extraction before enforcing max-lines. */
 /* eslint-disable unicorn/no-useless-spread -- Why: waiter sets and handle keys are cloned intentionally before mutation so resolution and rejection can safely remove entries while iterating. */
 /* eslint-disable no-control-regex -- Why: terminal normalization must strip ANSI and OSC control sequences from PTY output before returning bounded text to agents. */
@@ -1266,14 +1267,16 @@ type RuntimeNotifier = {
     worktreeId: string,
     filePath: string,
     relativePath: string,
-    runtimeEnvironmentId?: string | null
+    runtimeEnvironmentId?: string | null,
+    options?: RuntimeFileOpenOptions
   ): void
   openDiff?(
     worktreeId: string,
     filePath: string,
     relativePath: string,
     staged: boolean,
-    runtimeEnvironmentId?: string | null
+    runtimeEnvironmentId?: string | null,
+    options?: RuntimeFileOpenOptions
   ): void
   readMobileMarkdownTab?(worktreeId: string, tabId: string): Promise<RuntimeMarkdownReadTabResult>
   saveMobileMarkdownTab?(
@@ -2720,7 +2723,9 @@ export class DobiusRuntimeService {
     if (hasOffscreen) {
       capabilities.push(BROWSER_HEADLESS_RUNTIME_CAPABILITY)
     }
-    if (this.desktopScreen?.supported) capabilities.push(DESKTOP_SCREEN_CAPABILITY)
+    if (this.desktopScreen?.supported) {
+      capabilities.push(DESKTOP_SCREEN_CAPABILITY)
+    }
     return {
       runtimeId: this.runtimeId,
       rendererGraphEpoch: this.rendererGraphEpoch,
@@ -3964,16 +3969,21 @@ export class DobiusRuntimeService {
           group.tabOrder.includes(tab.parentTabId)
         )?.id
         try {
-          await this.createHeadlessMobileSessionTerminal(worktreeId, true, undefined, {
-            identity: {
-              tabId: tab.parentTabId,
-              leafId: tab.leafId,
-              sessionId
-            },
-            cwd: tab.startupCwd,
-            launchAgent: tab.launchAgent,
-            targetGroupId
-          })
+          await this.createHeadlessMobileSessionTerminal(
+            worktreeId,
+            opts.notifyClients !== false,
+            undefined,
+            {
+              identity: {
+                tabId: tab.parentTabId,
+                leafId: tab.leafId,
+                sessionId
+              },
+              cwd: tab.startupCwd,
+              launchAgent: tab.launchAgent,
+              targetGroupId
+            }
+          )
         } catch (err) {
           if (sessionId && parseAppSshPtyId(sessionId)) {
             // Why: an expired SSH reattach clears durable bindings in the store,
@@ -3995,7 +4005,7 @@ export class DobiusRuntimeService {
             )
       const targetTab = activeSibling ?? tab
       if (opts.notifyClients === false) {
-        this.activateMobileSessionTabForRemoteClient(worktreeId, snapshot!, targetTab)
+        // Phone selection lives on the client; only resource readiness is shared.
         return this.getMobileSessionTabsForWorktree(worktreeId)
       }
       if (!this.notifier?.focusTerminal) {
@@ -4010,7 +4020,6 @@ export class DobiusRuntimeService {
       this.notifier?.focusTerminal(targetTab.parentTabId, worktreeId, targetTab.leafId)
     } else if (tab.type === 'browser') {
       if (opts.notifyClients === false) {
-        this.activateMobileSessionTabForRemoteClient(worktreeId, snapshot!, tab)
         return this.getMobileSessionTabsForWorktree(worktreeId)
       }
       // Why: browser mobile tabs are renderer-owned unified tabs; focusing the
@@ -4018,46 +4027,11 @@ export class DobiusRuntimeService {
       this.notifier?.focusEditorTab?.(tab.id, worktreeId)
     } else {
       if (opts.notifyClients === false) {
-        this.activateMobileSessionTabForRemoteClient(worktreeId, snapshot!, tab)
         return this.getMobileSessionTabsForWorktree(worktreeId)
       }
       this.notifier?.focusEditorTab?.(tab.id, worktreeId)
     }
     return this.getMobileSessionTabsForWorktree(worktreeId)
-  }
-
-  private activateMobileSessionTabForRemoteClient(
-    worktreeId: string,
-    snapshot: RuntimeMobileSessionTabsSnapshot,
-    activeTab: RuntimeMobileSessionSnapshotTab
-  ): void {
-    // Why: phone tab selection should update the mobile snapshot without
-    // asking desktop renderers to focus the phone's background worktree.
-    const activeTopLevelId = activeTab.type === 'terminal' ? activeTab.parentTabId : activeTab.id
-    const tabs = snapshot.tabs.map((tab) => ({
-      ...tab,
-      isActive: tab.id === activeTab.id
-    }))
-    const tabGroups = snapshot.tabGroups?.map((group) =>
-      group.tabOrder.includes(activeTopLevelId)
-        ? { ...group, activeTabId: activeTopLevelId }
-        : group
-    )
-    const activeGroupId =
-      tabGroups?.find((group) => group.tabOrder.includes(activeTopLevelId))?.id ??
-      snapshot.activeGroupId
-    const nextSnapshot: RuntimeMobileSessionTabsSnapshot = {
-      ...snapshot,
-      publicationEpoch: `mobile-local:${Date.now().toString(36)}`,
-      snapshotVersion: snapshot.snapshotVersion + 1,
-      activeGroupId,
-      activeTabId: activeTab.id,
-      activeTabType: activeTab.type,
-      ...(tabGroups ? { tabGroups } : {}),
-      tabs
-    }
-    this.mobileSessionTabsByWorktree.set(worktreeId, nextSnapshot)
-    this.emitMobileSessionTabsSnapshot(nextSnapshot)
   }
 
   private shouldMaterializeHeadlessMobileSessionTab(
@@ -4942,17 +4916,24 @@ export class DobiusRuntimeService {
     hasRecentTerminalOutputPath: (terminalHandle, pathText, absolutePath) =>
       this.hasRecentTerminalOutputPath(terminalHandle, pathText, absolutePath),
     resolveRuntimeGitTarget: (selector) => this.resolveRuntimeGitTarget(selector),
-    openFile: (worktreeId, filePath, relativePath, runtimeEnvironmentId) => {
+    openFile: (worktreeId, filePath, relativePath, runtimeEnvironmentId, options) => {
       if (!this.notifier?.openFile) {
         throw new Error('renderer_unavailable')
       }
-      this.notifier.openFile(worktreeId, filePath, relativePath, runtimeEnvironmentId)
+      this.notifier.openFile(worktreeId, filePath, relativePath, runtimeEnvironmentId, options)
     },
-    openDiff: (worktreeId, filePath, relativePath, staged, runtimeEnvironmentId) => {
+    openDiff: (worktreeId, filePath, relativePath, staged, runtimeEnvironmentId, options) => {
       if (!this.notifier?.openDiff) {
         throw new Error('renderer_unavailable')
       }
-      this.notifier.openDiff(worktreeId, filePath, relativePath, staged, runtimeEnvironmentId)
+      this.notifier.openDiff(
+        worktreeId,
+        filePath,
+        relativePath,
+        staged,
+        runtimeEnvironmentId,
+        options
+      )
     }
   })
 
@@ -8749,7 +8730,12 @@ export class DobiusRuntimeService {
     const terminal = this.getTerminalAgentStatusSnapshot(handle)
     const explicitStatus = this.getFreshExplicitAgentStatusForHandle(handle)
     const blockedByWaitText = detectTerminalWaitBlockedReason(terminal.waitText)
+    // Why: Codex keeps an idle-looking OSC title while its startup update menu
+    // is waiting for a choice. That menu must win over the title or automated
+    // sends can be consumed as "Update now" instead of an agent prompt.
+    const updatePromptIsVisible = blockedByWaitText === 'codex-update-prompt'
     const liveTitleClearsBlockedText =
+      !updatePromptIsVisible &&
       terminal.titleStatusIsLive &&
       terminal.titleStatus !== null &&
       terminal.titleStatus !== 'permission'
@@ -8759,7 +8745,8 @@ export class DobiusRuntimeService {
     if (
       blockedByWaitText &&
       !liveTitleClearsBlockedText &&
-      (!explicitStatus ||
+      (updatePromptIsVisible ||
+        !explicitStatus ||
         explicitStatus.status === 'permission' ||
         (terminal.waitBlockedAt !== null && terminal.waitBlockedAt >= explicitStatus.updatedAt))
     ) {
@@ -16348,7 +16335,8 @@ export class DobiusRuntimeService {
       ...(cwd ? { startupCwd: cwd } : {}),
       ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
       parentLayout,
-      isActive: activate
+      // Binding a PTY must preserve an existing desktop selection.
+      isActive: activate || (existingSurface?.isActive ?? false)
     }
     const tabs = (existing?.tabs ?? [])
       .filter((candidate) => candidate.id !== tab.id)

@@ -82,7 +82,7 @@ describe('openMobileTerminalFileTap', () => {
       })
     })
     expect(triggerOpenFeedback).toHaveBeenCalledTimes(1)
-    expect(client.sendRequest).not.toHaveBeenCalledWith('files.open', expect.anything())
+    expect(client.sendRequest).not.toHaveBeenCalledWith('files.openBackground', expect.anything())
   })
 
   it('preserves the worktree-contained files.open flow', async () => {
@@ -128,11 +128,50 @@ describe('openMobileTerminalFileTap', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(client.sendRequest).toHaveBeenCalledWith(
-      'files.open',
+      'files.openBackground',
       { worktree: 'id:wt-1', relativePath: 'src/index.ts' },
       { timeoutMs: 15_000 }
     )
     expect(switchSessionTab).toHaveBeenCalledWith(openedTab)
+  })
+
+  it('reports an old-host background-open refusal without scheduling activation or a foreground retry', async () => {
+    const client = createClient([
+      ok({ exists: true, isDirectory: false, relativePath: 'note.md' }),
+      {
+        ok: false,
+        error: {
+          code: 'forbidden',
+          message: "Method 'files.openBackground' is not available to mobile clients"
+        }
+      }
+    ])
+    const onOpenError = vi.fn()
+    const scheduleDelayedAction = vi.fn()
+    const switchSessionTab = vi.fn()
+    openMobileTerminalFileTap({
+      client,
+      hostId: 'host',
+      worktreeId: 'wt',
+      pathText: 'note.md',
+      line: null,
+      column: null,
+      pushPreviewRoute: vi.fn(),
+      openBrowser: vi.fn(),
+      triggerOpenFeedback: vi.fn(),
+      onOpenError,
+      fetchSessionTabs: vi.fn(),
+      getSessionTabs: () => [],
+      getActiveSessionTabId: () => 'terminal',
+      getActivationState: activeTerminalState,
+      switchSessionTab,
+      scheduleDelayedAction
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(onOpenError).toHaveBeenCalledWith(expect.stringContaining('Host update required'))
+    expect(client.sendRequest).toHaveBeenCalledTimes(2)
+    expect(scheduleDelayedAction).not.toHaveBeenCalled()
+    expect(switchSessionTab).not.toHaveBeenCalled()
   })
 
   it('opens worktree-contained line references through the preview route', async () => {
@@ -187,7 +226,7 @@ describe('openMobileTerminalFileTap', () => {
       })
     })
     expect(triggerOpenFeedback).toHaveBeenCalledTimes(1)
-    expect(client.sendRequest).not.toHaveBeenCalledWith('files.open', expect.anything())
+    expect(client.sendRequest).not.toHaveBeenCalledWith('files.openBackground', expect.anything())
   })
 
   it('encodes worktree HTML paths before opening a browser tab', async () => {
@@ -228,7 +267,7 @@ describe('openMobileTerminalFileTap', () => {
     await Promise.resolve()
 
     expect(openBrowser).toHaveBeenCalledWith('file:///repo/public/report%20%231%3F.html')
-    expect(client.sendRequest).not.toHaveBeenCalledWith('files.open', expect.anything())
+    expect(client.sendRequest).not.toHaveBeenCalledWith('files.openBackground', expect.anything())
   })
 
   it('passes the terminal cwd when resolving relative taps', async () => {
@@ -318,7 +357,7 @@ describe('openMobileTerminalFileTap', () => {
 
     expect(openBrowser).not.toHaveBeenCalled()
     expect(client.sendRequest).toHaveBeenCalledWith(
-      'files.open',
+      'files.openBackground',
       { worktree: 'id:wt-1', relativePath: 'report.html' },
       { timeoutMs: 15_000 }
     )

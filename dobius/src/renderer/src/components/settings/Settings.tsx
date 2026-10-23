@@ -55,6 +55,7 @@ import { TasksPane } from './TasksPane'
 import { AsanaPane } from './AsanaPane'
 import { QuickCommandsPane } from './QuickCommandsPane'
 import { DeveloperPermissionsPane } from './DeveloperPermissionsPane'
+import { DataCatalogSetting } from './DataCatalogSetting'
 import { ComputerUsePane } from './ComputerUsePane'
 import { MobileSettingsPane } from './MobileSettingsPane'
 import { MobileEmulatorSettingsPane } from './MobileEmulatorSettingsPane'
@@ -1229,6 +1230,9 @@ function Settings(): React.JSX.Element {
                       wslDistros={windowsTerminalCapabilities.wslDistros}
                       wslCapabilitiesLoading={windowsTerminalCapabilities.isLoading}
                     />
+                  ) : null}
+                  {isSectionMounted('general') && showDesktopOnlySettings ? (
+                    <DataCatalogSetting />
                   ) : null}
                 </SettingsSection>
 

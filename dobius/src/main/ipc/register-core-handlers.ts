@@ -1,3 +1,6 @@
+import { SystemMonitorService } from '../system-monitor/service'
+import { defaultSystemMonitorStateDirectory } from '../system-monitor/state-directory'
+import type { ApplicationDataCatalog } from '../storage/data-catalog/application-catalog'
 import { registerAppHandlers } from './app'
 import { registerCliHandlers } from './cli'
 import { registerPreflightHandlers } from './preflight'
@@ -53,6 +56,11 @@ import { registerWorkspacePortHandlers } from './workspace-ports'
 import { registerLocalhostWorktreeLabelHandlers } from './localhost-worktree-labels'
 import { registerAutomationHandlers } from './automations'
 import { registerDestinationHandlers } from './destinations'
+import {
+  registerTelegramAccountHandlers,
+  setTrustedTelegramAccountRenderer
+} from './telegram-account'
+import { createDesktopTelegramAccountApi } from './desktop-telegram-account'
 import { registerKeybindingHandlers } from './keybindings'
 import { registerTelemetryHandlers } from './telemetry'
 import { registerBrowserHandlers } from './browser'
@@ -89,6 +97,7 @@ import { setBuildDispatcher, setRepoLister } from '../agents/agent-dispatch-regi
 let registered = false
 
 type CoreHandlerLifecycleOptions = {
+  dataCatalog?: ApplicationDataCatalog
   onBeforeRelaunch?: () => void | Promise<void>
   getAdditionalAiVaultCodexHomePaths?: () => readonly string[]
 }
@@ -119,6 +128,7 @@ export function registerCoreHandlers(
   setTrustedClipboardRendererWebContentsId(mainWindowWebContentsId)
   setTrustedUIRendererWebContentsId(mainWindowWebContentsId)
   setTrustedCloudBackupRenderer(mainWindowWebContentsId)
+  setTrustedTelegramAccountRenderer(mainWindowWebContentsId)
   setAgentBrowserBridgeRef(runtime.getAgentBrowserBridge())
   setRepoLister(() =>
     runtime
@@ -211,6 +221,7 @@ export function registerCoreHandlers(
     registerAutomationHandlers(store, automations)
   }
   registerDestinationHandlers()
+  registerTelegramAccountHandlers(createDesktopTelegramAccountApi())
   if (keybindings) {
     registerKeybindingHandlers(keybindings)
   }
@@ -231,7 +242,10 @@ export function registerCoreHandlers(
     registerFilesystemHandlers(store)
   }
   registerFilesystemWatcherHandlers()
-  registerRuntimeHandlers(runtime)
+  registerRuntimeHandlers(runtime, {
+    dataCatalog: lifecycleOptions.dataCatalog,
+    systemMonitor: new SystemMonitorService(defaultSystemMonitorStateDirectory())
+  })
   registerCommunicationsGateway(runtime)
   registerRelayStatusHandler()
   // Why here: the gateway exposes the Buzz bridge, but the bundled client also

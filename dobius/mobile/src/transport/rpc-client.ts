@@ -1,10 +1,4 @@
-import type {
-  RpcResponse,
-  RpcSuccess,
-  ConnectionState,
-  ConnectionLogLevel,
-  ConnectionLogSink
-} from './types'
+import type { RpcResponse, RpcSuccess, ConnectionState, ConnectionLogLevel } from './types'
 import {
   generateKeyPair,
   deriveSharedKey,
@@ -34,8 +28,9 @@ import { describeSocketEvent } from './socket-event-debug'
 import { isRpcResponse } from './rpc-response-shape'
 import { websocketPayloadToUint8 } from './websocket-payload-bytes'
 import { DesktopScreenStreamRouting } from './desktop-screen-stream-routing'
-import type { RpcClient, SendRequestOptions } from './rpc-client-contract'
-export type { RpcClient } from './rpc-client-contract'
+import { createDataCatalogPreviewEventRouter } from './rpc-client-data-catalog-preview-events'
+import type { ConnectOptions, RpcClient, SendRequestOptions } from './rpc-client-contract'
+export type { ConnectOptions, RpcClient } from './rpc-client-contract'
 import {
   isBrowserScreencastReadyResult,
   isTerminalSubscribedResult,
@@ -96,17 +91,6 @@ const WEBSOCKET_CONNECTING_STATE = 0
 // a probe starts proves the link is alive; otherwise an unanswered probe
 // force-closes the socket so the reconnect path can recover.
 const ACTIVITY_PROBE_INTERVAL_MS = 20_000
-
-export type ConnectOptions = {
-  onStateChange?: (state: ConnectionState) => void
-  // Fires for every observable lifecycle event so the UI can render a
-  // detailed connection log. Useful when 'Connecting…' hangs forever
-  // (e.g. broken Tailscale route) and you need to see *where* it's stuck.
-  onLog?: ConnectionLogSink
-  // Why: fires when the desktop replaced the pairing token (first login with
-  // a QR). The caller must persist it; the scanned token no longer works.
-  onDeviceTokenRotated?: (deviceToken: string) => void
-}
 
 // Mirrors E2EE_HANDSHAKE_VERSION / E2EE_CLIENT_UPDATE_REQUIRED in
 // src/shared/e2ee-handshake.ts.
@@ -203,6 +187,7 @@ export function connect(
   let activeBrowserScreencastRequestId: string | null = null
   let pendingBrowserScreencastRequestId: string | null = null
   const stateListeners = new Set<(state: ConnectionState) => void>()
+  const previewInvalidationEvents = createDataCatalogPreviewEventRouter()
   const connectWaiters: ConnectWaiter[] = []
 
   if (onStateChange) {
@@ -593,6 +578,9 @@ export function connect(
       try {
         response = JSON.parse(plaintext)
       } catch {
+        return
+      }
+      if (previewInvalidationEvents.handle(response, recordValidatedInboundTraffic)) {
         return
       }
       if (!isRpcResponse(response)) {
@@ -1255,6 +1243,8 @@ export function connect(
       return () => stateListeners.delete(listener)
     },
 
+    onDataCatalogPreviewInvalidated: previewInvalidationEvents.subscribe,
+
     notifyForeground(): void {
       if (intentionallyClosed) {
         return
@@ -1307,6 +1297,7 @@ export function connect(
       sharedKey = null
       setState('disconnected')
       rejectAllPending('Client closed')
+      previewInvalidationEvents.clear()
     }
   }
 }

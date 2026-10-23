@@ -133,11 +133,9 @@ describe('mobile RPC grants (#18)', () => {
     const ws = new FakeWebSocket()
     server['wsConnectionIds'].set(ws as unknown as WebSocket, 'conn-1')
     const onFrame = vi.fn()
-    dispatchStreaming.mockImplementation(
-      async (_request, _reply, options?: StreamingOptions) => {
-        options!.registerBinaryStreamHandler!(1, onFrame)
-      }
-    )
+    dispatchStreaming.mockImplementation(async (_request, _reply, options?: StreamingOptions) => {
+      options!.registerBinaryStreamHandler!(1, onFrame)
+    })
 
     await server['handleWebSocketMessage'](
       JSON.stringify({ id: 'req_mux', method: 'terminal.multiplex', deviceToken: phone.token }),
@@ -173,11 +171,9 @@ describe('mobile RPC grants (#18)', () => {
     const ws = new FakeWebSocket()
     server['wsConnectionIds'].set(ws as unknown as WebSocket, 'conn-2')
     const onFrame = vi.fn()
-    dispatchStreaming.mockImplementation(
-      async (_request, _reply, options?: StreamingOptions) => {
-        options!.registerBinaryStreamHandler!(1, onFrame)
-      }
-    )
+    dispatchStreaming.mockImplementation(async (_request, _reply, options?: StreamingOptions) => {
+      options!.registerBinaryStreamHandler!(1, onFrame)
+    })
 
     await server['handleWebSocketMessage'](
       JSON.stringify({ id: 'req_mux', method: 'terminal.multiplex', deviceToken: cli.token }),
@@ -233,6 +229,28 @@ describe('mobile grant storage', () => {
     expect(mobileRpcRequirement('git.generateCommitMessage', { worktree: 'id:wt' })).toEqual({
       grants: []
     })
+  })
+})
+
+describe('mobile data catalog preview method classification', () => {
+  const previewReads = [
+    'data.catalog.preview.policy',
+    'data.catalog.preview.resolve',
+    'data.catalog.preview.start',
+    'data.catalog.preview.chunk',
+    'data.catalog.preview.finish',
+    'data.catalog.preview.renew',
+    'data.catalog.preview.close'
+  ]
+
+  it('allowlists preview reads and cleanup without grants, but never mobile grant mutation', () => {
+    for (const method of previewReads) {
+      expect(MOBILE_RPC_METHOD_ALLOWLIST.has(method)).toBe(true)
+      expect(MOBILE_RPC_METHOD_CLASSES[method]).toBe('read')
+      expect(mobileRpcRequirement(method, {})).toEqual({ grants: [] })
+    }
+    expect(MOBILE_RPC_METHOD_ALLOWLIST.has('data.catalog.setPreviewAccess')).toBe(false)
+    expect(MOBILE_RPC_METHOD_CLASSES['data.catalog.setPreviewAccess']).toBeUndefined()
   })
 })
 
@@ -331,7 +349,10 @@ describe('mobile RPC grants: review bypasses', () => {
     const { registry, send } = setup()
     const phone = registry.addDevice('phone', 'mobile')
     await expect(
-      send(phone.token, 'repo.update', { repo: 'id:r', updates: { issueSourcePreference: 'origin' } })
+      send(phone.token, 'repo.update', {
+        repo: 'id:r',
+        updates: { issueSourcePreference: 'origin' }
+      })
     ).resolves.toMatchObject({ ok: true })
   })
 
@@ -419,11 +440,14 @@ describe('mobile RPC grants: round-2 review', () => {
     ['files.createFile', { worktree: 'id:wt', relativePath: 'dobius.yaml' }],
     ['files.createFile', { worktree: 'id:wt', relativePath: 'AGENT\u017F.md' }],
     ['files.createFile', { worktree: 'id:wt', relativePath: 'pkg\\package.json' }]
-  ])('F2: %s refuses agent-instruction, hook and .git paths even with files.write (%o)', async (method, params) => {
-    const { reply, dispatched } = await sendWithAllGrants(method, params)
-    expect(reply).toMatchObject(forbidden)
-    expect(dispatched).toBe(false)
-  })
+  ])(
+    'F2: %s refuses agent-instruction, hook and .git paths even with files.write (%o)',
+    async (method, params) => {
+      const { reply, dispatched } = await sendWithAllGrants(method, params)
+      expect(reply).toMatchObject(forbidden)
+      expect(dispatched).toBe(false)
+    }
+  )
 
   it('F2: files.createFile of an ordinary file is allowed with files.write', async () => {
     const { reply } = await sendWithAllGrants('files.createFile', {
@@ -463,6 +487,16 @@ describe('mobile RPC grants: round-2 review', () => {
 })
 
 describe('mobile RPC grants: round-3 review (default deny)', () => {
+  it.each(['files.openBackground', 'files.openDiffBackground'])(
+    'allows benign background resource method %s without adding write grants',
+    (method) => {
+      expect(MOBILE_RPC_METHOD_ALLOWLIST.has(method)).toBe(true)
+      expect(mobileRpcRequirement(method, { worktree: 'id:wt', relativePath: 'note.md' })).toEqual({
+        grants: []
+      })
+    }
+  )
+
   it('classifies every mobile-allowlisted method, and nothing else', () => {
     const allowlisted = [...MOBILE_RPC_METHOD_ALLOWLIST]
     const unclassified = allowlisted.filter(
@@ -623,9 +657,9 @@ describe('mobile RPC grants: final review', () => {
   it('worktree.activate that the desktop would act on (agent resume) needs terminal.send', async () => {
     const { registry, send } = setup()
     const phone = registry.addDevice('phone', 'mobile')
-    await expect(send(phone.token, 'worktree.activate', { worktree: 'id:wt' })).resolves.toMatchObject(
-      forbidden
-    )
+    await expect(
+      send(phone.token, 'worktree.activate', { worktree: 'id:wt' })
+    ).resolves.toMatchObject(forbidden)
     await expect(
       send(phone.token, 'worktree.activate', { worktree: 'id:wt', notifyClients: true })
     ).resolves.toMatchObject(forbidden)

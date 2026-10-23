@@ -224,6 +224,62 @@ describe('RuntimeFileCommands', () => {
     vi.useRealTimers()
   })
 
+  it('opens and reads an SSH note in the resolved workspace without selecting the desktop runtime', async () => {
+    const openFile = vi.fn()
+    const openDiff = vi.fn()
+    const stat = vi.fn().mockResolvedValue({ size: 10 })
+    const readFile = vi.fn().mockResolvedValue({ content: '# Remote note', isBinary: false })
+    vi.mocked(getSshFilesystemProvider).mockReturnValue({ stat, readFile } as never)
+    const { commands } = createRuntimeFileCommands({
+      openFile,
+      openDiff,
+      resolveRuntimeFileTarget: vi.fn(async () => ({
+        worktree: { id: 'ssh-wt', repoId: 'ssh-repo', path: '/srv/source' },
+        connectionId: 'ssh-owner'
+      }))
+    })
+    expect(
+      await commands.openMobileFile('id:ssh-wt', 'notes/note.md', { activate: false })
+    ).toMatchObject({ opened: true, kind: 'markdown', worktree: 'ssh-wt' })
+    expect(openFile).toHaveBeenCalledWith(
+      'ssh-wt',
+      '/srv/source/notes/note.md',
+      'notes/note.md',
+      null,
+      { activate: false }
+    )
+    expect(await commands.readMobileFile('id:ssh-wt', 'notes/note.md')).toMatchObject({
+      content: '# Remote note',
+      worktree: 'ssh-wt'
+    })
+    expect(getSshFilesystemProvider).toHaveBeenCalledWith('ssh-owner')
+    expect(readFile).toHaveBeenCalledWith('/srv/source/notes/note.md')
+    await commands.openMobileDiff('id:ssh-wt', 'notes/note.md', true, { activate: false })
+    expect(openDiff).toHaveBeenCalledWith(
+      'ssh-wt',
+      '/srv/source/notes/note.md',
+      'notes/note.md',
+      true,
+      null,
+      { activate: false }
+    )
+    for (const path of [
+      '../outside.md',
+      'notes/../../outside.md',
+      'notes\\..\\outside.md',
+      '/outside.md'
+    ]) {
+      await expect(commands.openMobileFile('id:ssh-wt', path, { activate: false })).rejects.toThrow(
+        'invalid_relative_path'
+      )
+      await expect(
+        commands.openMobileDiff('id:ssh-wt', path, false, { activate: false })
+      ).rejects.toThrow('invalid_relative_path')
+    }
+    expect(openFile).toHaveBeenCalledTimes(1)
+    expect(openDiff).toHaveBeenCalledTimes(1)
+  })
+
   it('opens source control diffs through the renderer host (inheriting active runtime env)', async () => {
     const openDiff = vi.fn()
     const { commands } = createRuntimeFileCommands({ openDiff })

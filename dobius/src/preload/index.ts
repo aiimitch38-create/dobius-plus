@@ -1,3 +1,8 @@
+import type {
+  RuntimeFileOpenNotification,
+  RuntimeDiffOpenNotification
+} from '../shared/runtime-files'
+import type { AgentResumeOwner } from '../shared/agent-resume-owner'
 /* eslint-disable max-lines -- Why: the preload bridge is the audited contract between
 renderer and Electron. Keeping the IPC surface co-located in one file makes security
 review and type drift checks easier than scattering these bindings across modules. */
@@ -5,8 +10,11 @@ import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { preloadE2EConfig } from './e2e-config'
 import { cloudBackupApi } from './cloud-backup'
+import { telegramAccountApi } from './telegram-account'
 import { glApi } from './gitlab'
+import { subscribeDataCatalogPreviewInvalidated } from './data-catalog-preview-events'
 import type { AppIdentity } from '../shared/app-identity'
+import type { DataCatalogPreviewInvalidatedEvent } from '../shared/data-catalog-preview-schema'
 import type { AsanaConfig, AsanaRequeueResult, AsanaTasksSnapshot } from '../shared/asana'
 import type {
   AgentRun,
@@ -834,6 +842,10 @@ const api = {
   } satisfies PreloadApi['workspacePorts'],
 
   pty: {
+    claimAgentResume: (owner: AgentResumeOwner): Promise<{ ok: true; token: string } | null> =>
+      ipcRenderer.invoke('pty:claimAgentResume', owner),
+    releaseAgentResume: (token: string, owner: AgentResumeOwner): Promise<boolean> =>
+      ipcRenderer.invoke('pty:releaseAgentResume', { token, owner }),
     spawn: (opts: {
       cols: number
       rows: number
@@ -1937,6 +1949,7 @@ const api = {
   },
 
   cloudBackup: cloudBackupApi,
+  telegramAccount: telegramAccountApi,
 
   settings: {
     get: (): Promise<unknown> => ipcRenderer.invoke('settings:get'),
@@ -3655,45 +3668,15 @@ const api = {
       ipcRenderer.on('ui:moveSessionTab', listener)
       return () => ipcRenderer.removeListener('ui:moveSessionTab', listener)
     },
-    onOpenFileFromMobile: (
-      callback: (data: {
-        worktreeId: string
-        filePath: string
-        relativePath: string
-        runtimeEnvironmentId?: string
-      }) => void
-    ): (() => void) => {
-      const listener = (
-        _event: Electron.IpcRendererEvent,
-        data: {
-          worktreeId: string
-          filePath: string
-          relativePath: string
-          runtimeEnvironmentId?: string
-        }
-      ) => callback(data)
+    onOpenFileFromMobile: (callback: (data: RuntimeFileOpenNotification) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: RuntimeFileOpenNotification) =>
+        callback(data)
       ipcRenderer.on('ui:openFileFromMobile', listener)
       return () => ipcRenderer.removeListener('ui:openFileFromMobile', listener)
     },
-    onOpenDiffFromMobile: (
-      callback: (data: {
-        worktreeId: string
-        filePath: string
-        relativePath: string
-        staged: boolean
-        runtimeEnvironmentId?: string
-      }) => void
-    ): (() => void) => {
-      const listener = (
-        _event: Electron.IpcRendererEvent,
-        data: {
-          worktreeId: string
-          filePath: string
-          relativePath: string
-          staged: boolean
-          runtimeEnvironmentId?: string
-        }
-      ) => callback(data)
+    onOpenDiffFromMobile: (callback: (data: RuntimeDiffOpenNotification) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: RuntimeDiffOpenNotification) =>
+        callback(data)
       ipcRenderer.on('ui:openDiffFromMobile', listener)
       return () => ipcRenderer.removeListener('ui:openDiffFromMobile', listener)
     },
@@ -4021,7 +4004,10 @@ const api = {
       ) => callback(data)
       ipcRenderer.on('runtime:browserDriverChanged', listener)
       return () => ipcRenderer.removeListener('runtime:browserDriverChanged', listener)
-    }
+    },
+    onDataCatalogPreviewInvalidated: (
+      callback: (event: DataCatalogPreviewInvalidatedEvent) => void
+    ) => subscribeDataCatalogPreviewInvalidated(ipcRenderer, callback)
   },
 
   runtimeEnvironments: {

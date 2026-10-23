@@ -1,3 +1,4 @@
+import { openMobileBackgroundResource } from './mobile-background-resource-open'
 import type { RuntimeTerminalPathResolution } from '../../../src/shared/runtime-types'
 import { filesystemPathToFileUri } from '../../../src/shared/file-uri-path'
 import { createMobileFilePreviewHref } from '../files/mobile-file-preview-route'
@@ -23,6 +24,7 @@ type OpenMobileTerminalFileTapOptions<T extends TerminalFileTapSessionTab> = {
   column: number | null
   pushPreviewRoute: (href: ReturnType<typeof createMobileFilePreviewHref>) => void
   openBrowser: (url: string) => void
+  onOpenError?: (message: string) => void
   triggerOpenFeedback: () => void
   fetchSessionTabs: () => Promise<void>
   getSessionTabs: () => readonly T[]
@@ -42,9 +44,10 @@ type OpenMobileTerminalFileTapOptions<T extends TerminalFileTapSessionTab> = {
 export function openMobileTerminalFileTap<T extends TerminalFileTapSessionTab>(
   options: OpenMobileTerminalFileTapOptions<T>
 ): void {
-  void openMobileTerminalFileTapAsync(options).catch(() => {
-    // Terminal file taps are best-effort: a failed host resolution should leave
-    // terminal focus/input untouched, matching the existing silent miss behavior.
+  void openMobileTerminalFileTapAsync(options).catch((error: unknown) => {
+    options.onOpenError?.(error instanceof Error ? error.message : 'Unable to open file')
+    // A failed open leaves terminal input untouched; surface host compatibility
+    // errors when the session provides an error presenter.
   })
 }
 
@@ -129,14 +132,10 @@ async function openMobileTerminalFileTapAsync<T extends TerminalFileTapSessionTa
     options.openBrowser(filesystemPathToFileUri(resolved.openTarget.absolutePath))
     return
   }
-  const openResponse = await options.client.sendRequest(
-    'files.open',
-    { worktree, relativePath: openedPath },
-    { timeoutMs: 15_000 }
-  )
-  if (!openResponse.ok) {
-    return
-  }
+  await openMobileBackgroundResource(options.client, 'files.openBackground', {
+    worktree,
+    relativePath: openedPath
+  })
   scheduleOpenedWorktreeTabActivation(options, openedPath)
 }
 

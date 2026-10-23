@@ -39,12 +39,17 @@ scripts/install-dobius-gated.sh dobius/dist/mac-arm64/Dobius+.app
    pre-compile source record into the app as `Contents/Resources/BUILD-PROVENANCE.json`. If the
    tree changed during the compile, packaging stops.
 
+Packaging also checks bare runtime imports in the compiled main, CLI, and shared JavaScript
+against the dependencies copied to the bundle's Resources/node_modules directory. After installing, verify the
+packaged CLI with `dobius status --json`; a successful GUI launch alone does not validate the CLI.
+
 The output path above is for an Apple-silicon Mac (it is the path the retired scripts print).
 
 `scripts/install-dobius-gated.sh` then:
 
 1. checks that `python3` and its helpers (`scripts/semver-compare.py`, `scripts/source-state.py`,
-   `scripts/bundle-manifest.py`, `scripts/install-record.py`) are present;
+   `scripts/bundle-manifest.py`, its sibling `scripts/bundle-resource-contract.py`, and
+   `scripts/install-record.py`) are present;
 2. takes the lock `~/.dobius-install.lock` (waits up to 300 s for another install; a stale lock
    is reported, never broken);
 3. refuses a build from another branch than the installed one unless `--take-over`;
@@ -52,12 +57,27 @@ The output path above is for an Apple-silicon Mac (it is the path the retired sc
    app (SemVer precedence: `2.0.0-rc.1` is older than `2.0.0`) unless `--allow-downgrade`;
 5. copies the build to a stage beside the app, prepares the install record, and validates the
    stage (Info.plist, executable, arch, `app.asar`, and every artifact in
-   `scripts/bundle-manifest.py`). Nothing is written into the bundle, so its code signature stays
-   intact;
-6. only then quits the app (the terminal daemon and its shells keep running), swaps the stage in
-   with one atomic rename, writes the install record, keeps ONE rollback copy (with its record),
-   removes the `dobius/dist` build copy, re-registers the app with LaunchServices and relaunches
-   it;
+   `scripts/bundle-manifest.py`). The manifest inspects the bounded `out/main` JavaScript graph
+   for the catalog RPC methods `data.catalog.roots` and `data.catalog.page`, including packed
+   chunks and files in `app.asar.unpacked`. When either method is present, or either catalog
+   helper resource is present, both
+   `Contents/Resources/data-catalog/descriptor-directory-bridge.py` and
+   `Contents/Resources/data-catalog/native-root-identity.py` must be readable, non-empty regular
+   files below `Contents/Resources`; symlinked helpers or parent directories are refused. A
+   legacy bundle with neither catalog RPC code nor either helper remains eligible, so the
+   documented rollback command can restore builds from before the catalog feature. Malformed or
+   oversized capability graphs fail closed. The same bounded main-code inspection requires all
+   nine `Contents/Resources/adam-telegram/` runtime assets when the compiled Adam bridge or any
+   part of its resource tree is present: seven Python modules, the reviewed Hermes policy
+   manifest, and its maintained patch. Legacy bundles without that feature remain eligible.
+   Nothing is written into the bundle, so its code
+   signature stays intact;
+6. only then requests app quit (the terminal daemon and its shells keep running), applies the
+   existing scoped main/Chromium quit signals, and verifies the main process has exited before
+   swapping. If the main app survives, it refuses before the swap and keeps the installed bundle
+   and rollback state; otherwise it swaps the stage in with one atomic rename, writes the install
+   record, keeps ONE rollback copy (with its record), removes the `dobius/dist` build copy,
+   re-registers the app with LaunchServices and relaunches it;
 7. logs the install to `~/.dobius-install-history.log`.
 
 Any failure before the swap leaves the installed app untouched and running.
@@ -84,6 +104,7 @@ check. Any other option is refused.
 | 7 | The staged copy is not a runnable, complete build (lists the missing artifacts) | untouched, never quit |
 | 8 | The atomic swap failed | untouched, relaunched |
 | 9 | `python3` or an installer helper is missing, or the installed app's record cannot be looked up, so the guards cannot run | untouched |
+| 10 | The main app is still running or its exit could not be verified after the scoped quit attempt | untouched; staged copy removed and unchanged app reopened |
 | 130 | Interrupted (Ctrl-C or TERM); a partial stage is removed. A signal that lands between the quit and the rollback move waits until the swap, the install record and the rollback copy are done | relaunched if it was quit |
 
 ### Rollback
@@ -127,7 +148,11 @@ delete); the global install-gate hook blocks it and the gated script is the only
 Never kill by bundle path (a pattern like `Dobius+.app`): the terminal daemon runs from inside
 the bundle as a `Dobius+ Helper` process, and killing it ends every live terminal session.
 The installer's own quit uses `pkill -a -x "Dobius\+"` (main app only) and
-`pkill -f "Dobius\+ Helper.*--type="` (Chromium helpers only).
+`pkill -f "Dobius\+ Helper.*--type="` (Chromium helpers only), then checks that the main app
+process is gone before replacing its bundle. A surviving main process or an inconclusive process
+check makes the installer refuse with exit 10; it does not broaden the kill scope.
+The wait and final check match the exact `Dobius+` process name, so valid command-line arguments
+such as `--remote-debugging-port` do not hide the running app.
 
 ## Versions and tags
 

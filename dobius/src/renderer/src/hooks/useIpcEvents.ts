@@ -1,3 +1,4 @@
+import { openMobileResourceInStore } from './mobile-resource-open'
 /* oxlint-disable max-lines -- Why: this App-level IPC bridge intentionally keeps the renderer's main-process event contract in one place so shortcut, runtime, updater, and agent-status wiring do not drift across files. */
 import { BOARD_ZOOM_EVENT } from '@/components/board/board-zoom-event'
 import { useEffect } from 'react'
@@ -85,7 +86,6 @@ import { createWorktreeChangeRefreshQueue } from './worktree-change-refresh-queu
 import { subscribeRuntimeClientEvents } from '@/runtime/runtime-client-events'
 import { createRuntimeProjectRefreshScheduler } from './runtime-project-refresh-scheduler'
 import { createRuntimeClientEventsSync } from './runtime-client-events-sync'
-import { detectLanguage } from '@/lib/language-detect'
 import { makePaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
 import { collectLeafIdsInOrder } from '@/components/terminal-pane/layout-serialization'
 import { track } from '@/lib/telemetry'
@@ -1823,47 +1823,13 @@ export function useIpcEvents(): void {
     )
 
     unsubs.push(
-      window.api.ui.onOpenFileFromMobile(
-        ({ worktreeId, filePath, relativePath, runtimeEnvironmentId }) => {
-          const store = useAppStore.getState()
-          const basename = relativePath.split(/[\\/]/).pop() || relativePath
-          store.setActiveWorktree(worktreeId)
-          store.markWorktreeVisited(worktreeId)
-          store.setActiveView('terminal')
-          // Why: mobile only sends a desktop-backed path. The renderer owns
-          // editor tab creation so grouped tab order and markdown bridges update
-          // through the same store path as desktop File Explorer.
-          store.openFile({
-            filePath,
-            relativePath,
-            worktreeId,
-            language: detectLanguage(basename),
-            runtimeEnvironmentId,
-            mode: 'edit'
-          })
-          store.setActiveTabType('editor')
-          store.revealWorktreeInSidebar(worktreeId)
-        }
+      window.api.ui.onOpenFileFromMobile((data) =>
+        openMobileResourceInStore(useAppStore.getState(), data)
       )
     )
-
     unsubs.push(
-      window.api.ui.onOpenDiffFromMobile(
-        ({ worktreeId, filePath, relativePath, staged, runtimeEnvironmentId }) => {
-          const store = useAppStore.getState()
-          const language = detectLanguage(relativePath)
-          store.setActiveWorktree(worktreeId)
-          store.markWorktreeVisited(worktreeId)
-          store.setActiveView('terminal')
-          // Why: mobile renders diff tabs from diff metadata. The desktop
-          // markdown Changes-mode shortcut is editor-local and would publish
-          // plain markdown content back to mobile.
-          store.openDiff(worktreeId, filePath, relativePath, language, staged, {
-            runtimeEnvironmentId
-          })
-          store.setActiveTabType('editor')
-          store.revealWorktreeInSidebar(worktreeId)
-        }
+      window.api.ui.onOpenDiffFromMobile((data) =>
+        openMobileResourceInStore(useAppStore.getState(), data)
       )
     )
 
@@ -2987,10 +2953,12 @@ export function useIpcEvents(): void {
           worktreeId: statusWorktreeId,
           terminalHandle: data.terminalHandle
         },
-        data.providerSession || data.launchToken
+        data.providerSession || data.launchToken || data.ptyId || data.connectionId !== undefined
           ? {
               ...(data.providerSession ? { providerSession: data.providerSession } : {}),
-              ...(data.launchToken ? { launchToken: data.launchToken } : {})
+              ...(data.launchToken ? { launchToken: data.launchToken } : {}),
+              ...(data.ptyId ? { ptyId: data.ptyId } : {}),
+              ...(data.connectionId !== undefined ? { connectionId: data.connectionId } : {})
             }
           : undefined
       )

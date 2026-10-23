@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { accessSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
@@ -17,6 +18,54 @@ const {
   prunePackagedZodSources,
   verifyPackagedMainRuntimeDeps
 } = require('../packaged-runtime-node-modules.cjs')
+
+function packageNameFromResourceTarget(target) {
+  const parts = target.split(sep)
+  const nodeModulesIndex = parts.lastIndexOf('node_modules')
+  const first = parts[nodeModulesIndex + 1]
+  return first.startsWith('@') ? `${first}/${parts[nodeModulesIndex + 2]}` : first
+}
+
+function packageJsonPath(packageName, fromDir) {
+  const nestedPath = join(fromDir, 'node_modules', packageName, 'package.json')
+  try {
+    return realpathSync(nestedPath)
+  } catch {
+    const packageRequire = createRequire(join(fromDir, 'package.json'))
+    let entryPath = packageRequire.resolve(packageName)
+    let directory = dirname(entryPath)
+    while (directory !== dirname(directory)) {
+      const candidate = join(directory, 'package.json')
+      try {
+        accessSync(candidate)
+        return realpathSync(candidate)
+      } catch {
+        directory = dirname(directory)
+      }
+    }
+    throw new Error(`Could not find installed package metadata for ${packageName}`)
+  }
+}
+
+function declaredPackageClosure(roots) {
+  const packages = new Map()
+  const visit = (packageName, fromDir) => {
+    const manifestPath = packageJsonPath(packageName, fromDir)
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    if (packages.has(manifest.name)) {
+      return
+    }
+    const directory = dirname(manifestPath)
+    packages.set(manifest.name, directory)
+    for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+      visit(dependency, directory)
+    }
+  }
+  for (const root of roots) {
+    visit(root, process.cwd())
+  }
+  return packages
+}
 
 describe('electron-builder config', () => {
   it('excludes repo-only source trees from app.asar', () => {
@@ -74,16 +123,16 @@ describe('electron-builder config', () => {
   })
 
   it('matches the Linux desktop entry to Electron window class', () => {
-    expect(electronBuilderConfig.linux.desktop.entry.StartupWMClass).toBe('dobius')
+    expect(electronBuilderConfig.linux.desktop.entry.StartupWMClass).toBe('dobius-ide')
   })
 
   it('uses AppImage and deb as local Linux targets without changing existing artifact names', () => {
     expect(electronBuilderConfig.linux.target).toEqual(['AppImage', 'deb'])
-    expect(electronBuilderConfig.appImage.artifactName).toBe('dobius-linux.${ext}')
-    expect(electronBuilderConfig.deb.artifactName).toBe('dobius-ide_${version}_${arch}.${ext}')
+    expect(electronBuilderConfig.appImage.artifactName).toBe('dobius-plus-linux.${ext}')
+    expect(electronBuilderConfig.deb.artifactName).toBe('dobius-plus-ide_${version}_${arch}.${ext}')
     expect(electronBuilderConfig.rpm).toMatchObject({
       packageName: 'dobius-ide',
-      artifactName: 'dobius-ide-${version}.${arch}.${ext}'
+      artifactName: 'dobius-plus-ide-${version}.${arch}.${ext}'
     })
   })
 
@@ -94,7 +143,7 @@ describe('electron-builder config', () => {
       delete require.cache[configPath]
       process.env.DOBIUS_LINUX_ARM64_RELEASE = '1'
       expect(require('../electron-builder.config.cjs').appImage.artifactName).toBe(
-        'dobius-linux-arm64.${ext}'
+        'dobius-plus-linux-arm64.${ext}'
       )
     } finally {
       if (original === undefined) {
@@ -154,9 +203,9 @@ describe('electron-builder config', () => {
         from: recordFile,
         to: 'BUILD-PROVENANCE.json'
       })
-      expect(
-        load(undefined).mac.extraResources.some((r) => r.to === 'BUILD-PROVENANCE.json')
-      ).toBe(false)
+      expect(load(undefined).mac.extraResources.some((r) => r.to === 'BUILD-PROVENANCE.json')).toBe(
+        false
+      )
       expect(() => load(join(root, 'missing.json'))).toThrow('missing file')
     } finally {
       load(original)
@@ -191,11 +240,78 @@ describe('electron-builder config', () => {
     }
   })
 
+  it('rejects a bare main runtime import when its package was not copied', async () => {
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'dobius-runtime-deps-missing-'))
+    try {
+      await writeFile(join(resourcesDir, 'app.asar'), '', 'utf8')
+      const sources = new Map([
+        ['out/main/index.js', 'require("teleproto")'],
+        ['out/main/agent-hooks/managed-agent-hook-controls.js', 'require("node:fs")']
+      ])
+      const asar = {
+        listPackage: () => [...sources.keys()],
+        extractFile: (_asarPath, internalPath) => Buffer.from(sources.get(internalPath), 'utf8')
+      }
+
+      expect(() => verifyPackagedMainRuntimeDeps(resourcesDir, asar)).toThrow(
+        'without copied node_modules: teleproto'
+      )
+    } finally {
+      await rm(resourcesDir, { recursive: true, force: true })
+    }
+  })
+
   it('normalizes host-specific asar entry separators', () => {
     expect(findAsarEntry(['\\out\\main\\index.js'], 'out/main/index.js')).toBe(
       '\\out\\main\\index.js'
     )
     expect(findAsarEntry(['/out/main/index.js'], 'out/main/index.js')).toBe('/out/main/index.js')
+  })
+
+  it('rejects missing dependencies in shared modules loaded by the packaged CLI', async () => {
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'dobius-cli-runtime-missing-'))
+    try {
+      await writeFile(join(resourcesDir, 'app.asar'), '', 'utf8')
+      const sources = new Map([
+        ['out/main/index.js', 'require("node:fs")'],
+        ['out/main/agent-hooks/managed-agent-hook-controls.js', 'require("node:path")'],
+        ['out/cli/index.js', 'require("../shared/cloud-job-adam-receipts")'],
+        ['out/shared/cloud-job-adam-receipts.js', 'require("@noble/hashes/sha256")']
+      ])
+      const asar = {
+        listPackage: () => [...sources.keys()].map((entry) => `\\${entry.replaceAll('/', '\\')}`),
+        extractFile: (_asarPath, internalPath) =>
+          Buffer.from(sources.get(internalPath.replaceAll('\\', '/')), 'utf8')
+      }
+      expect(() => verifyPackagedMainRuntimeDeps(resourcesDir, asar)).toThrow(
+        'without copied node_modules: @noble/hashes'
+      )
+    } finally {
+      await rm(resourcesDir, { recursive: true, force: true })
+    }
+  })
+
+  it('loads the receipt hash implementation entirely from staged runtime resources', async () => {
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'dobius-cli-receipt-hash-'))
+    try {
+      const resource = createPackagedRuntimeNodeModuleResources().find(
+        (entry) => entry.to === join('node_modules', '@noble', 'hashes')
+      )
+      expect(resource).toBeDefined()
+      const destination = join(resourcesDir, resource.to)
+      await mkdir(dirname(destination), { recursive: true })
+      await cp(resource.from, destination, { recursive: true })
+      const stagedRequire = createRequire(join(resourcesDir, 'cli-probe.cjs'))
+      expect(
+        stagedRequire.resolve('@noble/hashes/sha256').startsWith(realpathSync(resourcesDir) + sep)
+      ).toBe(true)
+      const { sha256 } = stagedRequire('@noble/hashes/sha256')
+      expect(Buffer.from(sha256(new TextEncoder().encode('abc'))).toString('hex')).toBe(
+        'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+      )
+    } finally {
+      await rm(resourcesDir, { recursive: true, force: true })
+    }
   })
 
   it('prunes non-target node-pty prebuilds from packaged runtime resources', async () => {
@@ -276,6 +392,42 @@ describe('electron-builder config', () => {
         target.startsWith(join('node_modules', '@parcel', 'watcher-'))
       )
     ).toBe(true)
+  })
+
+  it('stages the Telegram SDK roots and declared dependency closure under Resources/node_modules', async () => {
+    const roots = ['teleproto', 'big-integer']
+    const expectedPackages = declaredPackageClosure(roots)
+    const resources = createPackagedRuntimeNodeModuleResources()
+    const resourcesByName = new Map(
+      resources.map((resource) => [packageNameFromResourceTarget(resource.to), resource])
+    )
+    const temporaryResources = await mkdtemp(join(tmpdir(), 'dobius-telegram-runtime-resources-'))
+    const resourcesNodeModules = join(temporaryResources, 'Resources', 'node_modules')
+
+    try {
+      expect(expectedPackages.has('teleproto')).toBe(true)
+      expect(expectedPackages.has('big-integer')).toBe(true)
+
+      for (const [name, sourceDir] of expectedPackages) {
+        const resource = resourcesByName.get(name)
+        expect(resource, `collector resource for ${name}`).toBeDefined()
+        expect(resource.from).toBe(sourceDir)
+
+        const stagedPackage = join(resourcesNodeModules, ...name.split('/'))
+        await mkdir(dirname(stagedPackage), { recursive: true })
+        await cp(resource.from, stagedPackage, { recursive: true })
+        expect((await stat(stagedPackage)).isDirectory()).toBe(true)
+
+        const sourceManifest = JSON.parse(await readFile(join(sourceDir, 'package.json'), 'utf8'))
+        const stagedManifest = JSON.parse(
+          await readFile(join(stagedPackage, 'package.json'), 'utf8')
+        )
+        expect(stagedManifest.name).toBe(sourceManifest.name)
+        expect(stagedManifest.version).toBe(sourceManifest.version)
+      }
+    } finally {
+      await rm(temporaryResources, { recursive: true, force: true })
+    }
   })
 
   it('prunes non-target @parcel/watcher platform subpackages from packaged runtime resources', async () => {
@@ -383,7 +535,7 @@ describe('electron-builder config', () => {
       const root = await mkdtemp(join(tmpdir(), 'dobius-electron-builder-config-'))
       try {
         const resourcesDir = join(root, 'linux-unpacked', 'resources')
-        const launcherPath = join(resourcesDir, 'bin', 'dobius-ide')
+        const launcherPath = join(resourcesDir, 'bin', 'dobius')
         await mkdir(join(resourcesDir, 'bin'), { recursive: true })
         await mkdir(join(resourcesDir, 'node_modules', 'zod', 'src'), { recursive: true })
         await writeFile(launcherPath, '#!/usr/bin/env bash\n', { encoding: 'utf8', mode: 0o644 })

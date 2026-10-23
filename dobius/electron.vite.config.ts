@@ -3,6 +3,7 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { commsAliases } from './config/comms-alias'
+import { sandboxPreloadBundlePlugin } from './config/sandbox-preload-bundle'
 
 // Why: the telemetry transport is gated by two compile-time constants that
 // only the official CI release workflow sets. Contributor / `pnpm dev` /
@@ -212,6 +213,7 @@ export default defineConfig({
     }
   },
   preload: {
+    plugins: [sandboxPreloadBundlePlugin()],
     build: {
       rollupOptions: {
         // Why single entry: sandboxed preload (sandbox: true) can't require()
@@ -224,7 +226,8 @@ export default defineConfig({
         }
       },
       externalizeDeps: {
-        exclude: ['@electron-toolkit/preload']
+        // Schema validation must be inlined: sandbox require cannot resolve npm packages.
+        exclude: ['@electron-toolkit/preload', 'zod']
       }
     }
   },

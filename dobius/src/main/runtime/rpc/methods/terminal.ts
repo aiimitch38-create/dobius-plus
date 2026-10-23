@@ -28,6 +28,10 @@ import {
 import { measureClipboardTextByteLength } from '../../../../shared/clipboard-text'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import {
+  assertTerminalRuntimeBinding,
+  isTerminalRuntimeBindingMismatch
+} from '../terminal-runtime-binding'
+import {
   MOBILE_SNAPSHOT_BYTE_BUDGET,
   MOBILE_SUBSCRIBE_SCROLLBACK_ROWS,
   TERMINAL_SNAPSHOT_MAX_BYTES
@@ -314,6 +318,126 @@ function getTerminalSendGuardRefusedReason(error: unknown): 'no-agent' | 'permis
 function isTerminalSendGuardNotWritable(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
   return message.includes('terminal_guard_not_writable')
+}
+
+function refusedTerminalSend(handle: string) {
+  return { send: { handle, accepted: false, bytesWritten: 0 } }
+}
+
+async function handleTerminalSend(
+  params: z.infer<typeof TerminalSend>,
+  runtime: DobiusRuntimeService,
+  expectedRuntimeId?: string
+) {
+  const isBound = expectedRuntimeId !== undefined
+  if (isBound && runtime.getRuntimeId() !== expectedRuntimeId) {
+    return refusedTerminalSend(params.terminal)
+  }
+  await assertTerminalSendTextWithinLimit(params.text)
+  const leaf = runtime.resolveLeafForHandle(params.terminal)
+  const driver = leaf?.ptyId ? runtime.getDriver(leaf.ptyId) : null
+  if (leaf?.ptyId && isTerminalInputLockedForClient(runtime, leaf.ptyId, params.client)) {
+    return refusedTerminalSend(params.terminal)
+  }
+  const hasText = typeof params.text === 'string' && params.text.length > 0
+  const hasSuffix = params.enter === true || params.interrupt === true
+  if (params.requireAgentStatus === 'sendable' && hasText && hasSuffix) {
+    // Why: guarded sends are two-phase writes. Reject combined payload +
+    // submit so guard flips cannot create ambiguous partial delivery.
+    return refusedTerminalSend(params.terminal)
+  }
+  // Why: bound sends must revalidate identity at every PTY write boundary,
+  // including after status awaits and before Enter or interrupt suffixes.
+  const assertSendPreconditions =
+    isBound || params.requireAgentStatus === 'sendable'
+      ? async (ptyId?: string): Promise<void> => {
+          if (isBound) {
+            assertTerminalRuntimeBinding(() => runtime.getRuntimeId(), expectedRuntimeId)
+          }
+          const assertWritable = (): void => {
+            if (ptyId && isTerminalInputLockedForClient(runtime, ptyId, params.client)) {
+              throw new Error('terminal_guard_not_writable')
+            }
+          }
+          assertWritable()
+          if (params.requireAgentStatus === 'sendable') {
+            const agentStatus = await runtime.getTerminalAgentStatus(params.terminal)
+            if (isBound) {
+              assertTerminalRuntimeBinding(() => runtime.getRuntimeId(), expectedRuntimeId)
+            }
+            assertWritable()
+            if (!agentStatus.isRunningAgent) {
+              throw new Error('terminal_guard_no_agent')
+            }
+            if (agentStatus.status === 'permission') {
+              throw new Error('terminal_guard_permission')
+            }
+          }
+          if (isBound) {
+            assertTerminalRuntimeBinding(() => runtime.getRuntimeId(), expectedRuntimeId)
+          }
+        }
+      : undefined
+  if (params.requireAgentStatus === 'sendable' || isBound) {
+    try {
+      await assertSendPreconditions?.(leaf?.ptyId ?? undefined)
+    } catch (error) {
+      if (isTerminalSendGuardNotWritable(error) || isTerminalRuntimeBindingMismatch(error)) {
+        return refusedTerminalSend(params.terminal)
+      }
+      const refusedReason = getTerminalSendGuardRefusedReason(error)
+      if (!refusedReason) {
+        throw error
+      }
+      return {
+        send: {
+          handle: params.terminal,
+          accepted: false,
+          bytesWritten: 0,
+          refusedReason
+        }
+      }
+    }
+  }
+  let result
+  try {
+    result = await runtime.sendTerminal(
+      params.terminal,
+      {
+        text: params.text,
+        enter: params.enter === true,
+        interrupt: params.interrupt === true
+      },
+      { beforeWrite: assertSendPreconditions }
+    )
+  } catch (error) {
+    if (isTerminalSendGuardNotWritable(error) || isTerminalRuntimeBindingMismatch(error)) {
+      return refusedTerminalSend(params.terminal)
+    }
+    const refusedReason = getTerminalSendGuardRefusedReason(error)
+    if (refusedReason) {
+      return {
+        send: {
+          handle: params.terminal,
+          accepted: false,
+          bytesWritten: 0,
+          refusedReason
+        }
+      }
+    }
+    throw error
+  }
+  if (isBound && runtime.getRuntimeId() !== expectedRuntimeId) {
+    return refusedTerminalSend(params.terminal)
+  }
+  // Why: deliberate mobile input is a take-floor action. Drives the
+  // `* → mobile{clientId}` driver transition so the desktop banner remounts
+  // and active phone-fit dims follow the most recent actor.
+  const mobileFloorClientId = resolveMobileFloorClientId(driver, params.client)
+  if (leaf?.ptyId && mobileFloorClientId) {
+    await runtime.mobileTookFloor(leaf.ptyId, mobileFloorClientId)
+  }
+  return { send: result }
 }
 
 function appendPendingMultiplexOutput(
@@ -654,6 +778,10 @@ const TerminalSend = TerminalHandle.extend({
     .optional()
 })
 
+const TerminalSendBound = TerminalSend.extend({
+  expectedRuntimeId: requiredString('Missing expected runtime ID')
+})
+
 const TerminalViewport = z.object({
   cols: z.number().int().min(1).max(1000),
   rows: z.number().int().min(1).max(500)
@@ -916,121 +1044,13 @@ export const TERMINAL_METHODS: RpcAnyMethod[] = [
   defineMethod({
     name: 'terminal.send',
     params: TerminalSend,
-    handler: async (params, { runtime }) => {
-      await assertTerminalSendTextWithinLimit(params.text)
-      const leaf = runtime.resolveLeafForHandle(params.terminal)
-      const driver = leaf?.ptyId ? runtime.getDriver(leaf.ptyId) : null
-      if (leaf?.ptyId && isTerminalInputLockedForClient(runtime, leaf.ptyId, params.client)) {
-        return {
-          send: {
-            handle: params.terminal,
-            accepted: false,
-            bytesWritten: 0
-          }
-        }
-      }
-      const hasText = typeof params.text === 'string' && params.text.length > 0
-      const hasSuffix = params.enter === true || params.interrupt === true
-      if (params.requireAgentStatus === 'sendable' && hasText && hasSuffix) {
-        // Why: guarded sends are two-phase writes. Reject combined payload +
-        // submit so guard flips cannot create ambiguous partial delivery.
-        return {
-          send: {
-            handle: params.terminal,
-            accepted: false,
-            bytesWritten: 0
-          }
-        }
-      }
-      // Why: selected note sends submit with Enter. The runtime must recheck
-      // permission/no-agent state immediately before accepting the PTY write.
-      const assertSendPreconditions =
-        params.requireAgentStatus === 'sendable'
-          ? async (ptyId?: string): Promise<void> => {
-              if (ptyId && isTerminalInputLockedForClient(runtime, ptyId, params.client)) {
-                throw new Error('terminal_guard_not_writable')
-              }
-              const agentStatus = await runtime.getTerminalAgentStatus(params.terminal)
-              if (!agentStatus.isRunningAgent) {
-                throw new Error('terminal_guard_no_agent')
-              }
-              if (agentStatus.status === 'permission') {
-                throw new Error('terminal_guard_permission')
-              }
-            }
-          : undefined
-      if (params.requireAgentStatus === 'sendable') {
-        try {
-          await assertSendPreconditions?.(leaf?.ptyId ?? undefined)
-        } catch (error) {
-          if (isTerminalSendGuardNotWritable(error)) {
-            return {
-              send: {
-                handle: params.terminal,
-                accepted: false,
-                bytesWritten: 0
-              }
-            }
-          }
-          const refusedReason = getTerminalSendGuardRefusedReason(error)
-          if (!refusedReason) {
-            throw error
-          }
-          return {
-            send: {
-              handle: params.terminal,
-              accepted: false,
-              bytesWritten: 0,
-              refusedReason
-            }
-          }
-        }
-      }
-      let result
-      try {
-        result = await runtime.sendTerminal(
-          params.terminal,
-          {
-            text: params.text,
-            enter: params.enter === true,
-            interrupt: params.interrupt === true
-          },
-          { beforeWrite: assertSendPreconditions }
-        )
-      } catch (error) {
-        const refusedReason = getTerminalSendGuardRefusedReason(error)
-        if (refusedReason) {
-          return {
-            send: {
-              handle: params.terminal,
-              accepted: false,
-              bytesWritten: 0,
-              refusedReason
-            }
-          }
-        }
-        if (isTerminalSendGuardNotWritable(error)) {
-          return {
-            send: {
-              handle: params.terminal,
-              accepted: false,
-              bytesWritten: 0
-            }
-          }
-        }
-        throw error
-      }
-      // Why: deliberate mobile input is a take-floor action. Drives the
-      // `* → mobile{clientId}` driver transition so the desktop banner
-      // remounts (if previously reclaimed) and active phone-fit dims follow
-      // the most recent actor. Clientless sends are old mobile builds, so use
-      // the current mobile driver as their compatibility identity.
-      const mobileFloorClientId = resolveMobileFloorClientId(driver, params.client)
-      if (leaf?.ptyId && mobileFloorClientId) {
-        await runtime.mobileTookFloor(leaf.ptyId, mobileFloorClientId)
-      }
-      return { send: result }
-    }
+    handler: async (params, { runtime }) => handleTerminalSend(params, runtime)
+  }),
+  defineMethod({
+    name: 'terminal.sendBound',
+    params: TerminalSendBound,
+    handler: async (params, { runtime }) =>
+      handleTerminalSend(params, runtime, params.expectedRuntimeId)
   }),
   defineMethod({
     name: 'terminal.wait',
