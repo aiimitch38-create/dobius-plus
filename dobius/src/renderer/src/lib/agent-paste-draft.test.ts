@@ -331,7 +331,35 @@ describe('pasteDraftWhenAgentReady', () => {
     expect(testState.sendRuntimePtyInputVerified).not.toHaveBeenCalled()
   })
 
+  it('never submits into a bare shell even when the shell prompt looks paste-ready', async () => {
+    testState.inspectRuntimeTerminalProcess.mockResolvedValue({
+      foregroundProcess: 'zsh',
+      hasChildProcesses: false
+    })
+    const onTimeout = vi.fn()
+    const promise = pasteDraftWhenAgentReady({
+      tabId: 'tab-1',
+      content: ISSUE_URL,
+      agent: 'claude',
+      submit: true,
+      forcePaste: true,
+      onTimeout
+    })
+    await flushMicrotasks()
+
+    testState.ptyObserver?.(DECSET_BRACKETED_PASTE)
+    await vi.advanceTimersByTimeAsync(5000)
+
+    await expect(promise).resolves.toBe(false)
+    expect(onTimeout).toHaveBeenCalledTimes(1)
+    expect(testState.sendRuntimePtyInputVerified).not.toHaveBeenCalled()
+  })
+
   it('submits in a separate write after force-pasting native-prefill agents', async () => {
+    testState.inspectRuntimeTerminalProcess.mockResolvedValue({
+      foregroundProcess: 'claude',
+      hasChildProcesses: false
+    })
     const promise = pasteDraftWhenAgentReady({
       tabId: 'tab-1',
       content: ISSUE_URL,
@@ -360,6 +388,10 @@ describe('pasteDraftWhenAgentReady', () => {
 
   it('does not submit when the verified paste write fails', async () => {
     testState.sendRuntimePtyInputVerified.mockResolvedValueOnce(false)
+    testState.inspectRuntimeTerminalProcess.mockResolvedValue({
+      foregroundProcess: 'claude',
+      hasChildProcesses: false
+    })
 
     const promise = pasteDraftWhenAgentReady({
       tabId: 'tab-1',

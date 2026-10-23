@@ -915,4 +915,44 @@ describe('activateAndRevealWorktree', () => {
     expect(result).toEqual({ primaryTabId: 'tab-1' })
     expect(queueTabInitialCwd).toHaveBeenCalledWith('tab-1', '/repo/packages/web')
   })
+
+  it('keeps the current view when keepView is set (Board workspace switch)', () => {
+    const setActiveView = vi.fn()
+    const setActiveWorktree = vi.fn()
+    const worktree = {
+      id: 'wt-1',
+      repoId: 'repo-1',
+      path: '/repo',
+      displayName: 'main',
+      branch: 'main',
+      head: 'abc',
+      isBare: false,
+      isMainWorktree: true
+    }
+    useAppStore.setState({
+      activeRepoId: 'repo-1',
+      activeWorktreeId: 'wt-0',
+      activeView: 'board',
+      filterRepoIds: [],
+      isNavigatingHistory: false,
+      repos: [{ id: 'repo-1', connectionId: null }],
+      worktreesByRepo: { 'repo-1': [worktree] },
+      getKnownWorktreeById: (worktreeId: string) =>
+        worktreeId === 'wt-1' ? (worktree as never) : null,
+      setActiveRepo: vi.fn(),
+      setActiveView,
+      setActiveWorktree,
+      markWorktreeVisited: vi.fn(),
+      recordWorktreeVisit: vi.fn(),
+      reconcileWorktreeTabModel: vi.fn(() => ({ renderableTabCount: 1 })),
+      revealWorktreeInSidebar: vi.fn()
+    } as never)
+
+    activateAndRevealWorktree('wt-1', { keepView: true })
+    expect(setActiveWorktree).toHaveBeenCalledWith('wt-1')
+    expect(setActiveView).not.toHaveBeenCalled()
+
+    activateAndRevealWorktree('wt-1')
+    expect(setActiveView).toHaveBeenCalledWith('terminal')
+  })
 })

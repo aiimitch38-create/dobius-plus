@@ -157,6 +157,7 @@ import { OffscreenBrowserBackend } from './browser/offscreen-browser-backend'
 import { initializeBrowserSessionsForApp } from './browser/browser-session-startup'
 import { setUnreadDockBadgeCount } from './dock/unread-badge'
 import { AutomationService } from './automations/service'
+import { createRuntimeLoopTerminals } from './automations/loop-terminals'
 import { createHeadlessAutomationOutputSnapshotBuffer } from './automations/headless-dispatch'
 import { buildHeadlessAutomationWorktreeCreateArgs } from './automations/headless-workspace-create'
 import { AgentAwakeService } from './agent-awake-service'
@@ -1834,6 +1835,8 @@ app.whenReady().then(async () => {
   automations = new AutomationService(store, {
     claudeUsage,
     codexUsage,
+    // Why: Board loops read and type into console tabs through the runtime.
+    loopTerminals: createRuntimeLoopTerminals(() => runtime),
     // Why: desktop clients may mirror remote-host automations, but only a
     // server process should execute schedules owned by `remote_host_service`.
     allowRemoteHostScheduling: isServeMode,
@@ -2133,7 +2136,10 @@ app.whenReady().then(async () => {
   })
   registerMobileHandlers(runtimeRpc)
   if (!isServeMode) {
-    installDesktopScreenSharing(runtime, (id) => runtimeRpc?.getDeviceRegistry()?.getDevice(id) ?? null)
+    installDesktopScreenSharing(
+      runtime,
+      (id) => runtimeRpc?.getDeviceRegistry()?.getDevice(id) ?? null
+    )
   }
 
   if (!isServeMode) {

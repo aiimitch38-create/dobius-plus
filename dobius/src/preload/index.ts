@@ -1153,6 +1153,16 @@ const api = {
       ipcRenderer.invoke('agents:resolveDecision', resolution),
     listNotifications: (): Promise<AgentNotificationsSnapshot> =>
       ipcRenderer.invoke('agents:listNotifications'),
+    conductorCommand: (input: {
+      requestId: string
+      transcript: string
+    }): Promise<{ ok: true } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('agents:conductorCommand', input),
+    conductorReply: (input: {
+      requestId: string
+      sinceTs?: number
+    }): Promise<{ message: string; ts: number } | null> =>
+      ipcRenderer.invoke('agents:conductorReply', input),
     markNotificationsRead: (): Promise<AgentNotificationsSnapshot> =>
       ipcRenderer.invoke('agents:markNotificationsRead'),
     listBriefing: (): Promise<BriefingItem[]> => ipcRenderer.invoke('agents:listBriefing'),
@@ -4282,7 +4292,8 @@ const api = {
   },
 
   mobile: {
-    enableScreenSharing: (): Promise<{ opened: true }> => ipcRenderer.invoke('screenSharing:enable'),
+    enableScreenSharing: (): Promise<{ opened: true }> =>
+      ipcRenderer.invoke('screenSharing:enable'),
     listNetworkInterfaces: (): Promise<{
       interfaces: { name: string; address: string }[]
     }> => ipcRenderer.invoke('mobile:listNetworkInterfaces'),

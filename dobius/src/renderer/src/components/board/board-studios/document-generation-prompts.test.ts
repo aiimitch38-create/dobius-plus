@@ -1,0 +1,25 @@
+import { describe, expect, it } from 'vitest'
+import {
+  DOCUMENT_TEMPLATE_IDS,
+  buildDocumentRequest,
+  documentTemplateFile
+} from './document-generation-prompts'
+
+describe('buildDocumentRequest', () => {
+  it('names the target file for every built-in template', () => {
+    for (const id of DOCUMENT_TEMPLATE_IDS.filter((t) => t !== 'custom')) {
+      const prompt = buildDocumentRequest(id)
+      expect(prompt).toContain(documentTemplateFile(id)!)
+      expect(prompt).not.toContain('\n')
+    }
+  })
+
+  it('returns null for an empty custom ask', () => {
+    expect(buildDocumentRequest('custom', '   ')).toBeNull()
+    expect(documentTemplateFile('custom')).toBeNull()
+  })
+
+  it('flattens a multi-line custom ask into one line', () => {
+    expect(buildDocumentRequest('custom', 'a release\nchecklist')).toContain('a release checklist.')
+  })
+})

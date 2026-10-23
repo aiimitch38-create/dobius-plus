@@ -2,6 +2,10 @@
 import type { IPty } from 'node-pty'
 import type * as NodePty from 'node-pty'
 import { resolveWindowsGitBashShellPath } from '../main/git-bash'
+import {
+  isForegroundSignal,
+  signalForegroundProcessGroup
+} from '../main/providers/foreground-process-group'
 import { WINDOWS_GIT_BASH_SHELL } from '../shared/windows-terminal-shell'
 import type { RelayDispatcher, RequestContext } from './dispatcher'
 import {
@@ -777,7 +781,7 @@ export class PtyHandler {
   private async sendSignal(params: Record<string, unknown>): Promise<void> {
     const id = params.id as string
     const signal = params.signal as string
-    if (!ALLOWED_SIGNALS.has(signal)) {
+    if (!ALLOWED_SIGNALS.has(signal) && !isForegroundSignal(signal)) {
       throw new Error(`Signal not allowed: ${signal}`)
     }
     const managed = this.ptys.get(id)
@@ -786,6 +790,13 @@ export class PtyHandler {
     // error, no action). Convert to the existing "not found" error.
     if (!managed || managed.disposed) {
       throw new Error(`PTY "${id}" not found`)
+    }
+    if (isForegroundSignal(signal)) {
+      // Board pause/resume: suspend the agent job on the remote host, not the shell.
+      await signalForegroundProcessGroup(managed.pty.pid, signal, {
+        write: (data) => managed.pty.write(data)
+      })
+      return
     }
     managed.pty.kill(signal)
   }

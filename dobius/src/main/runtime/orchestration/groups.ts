@@ -20,6 +20,40 @@ export type GroupAddress =
   | `@${(typeof AGENT_NAME_GROUPS)[number]}`
   | `@worktree:${string}`
 
+// Why: Board groups ("@Team A") live in renderer-persisted UI state; main
+// registers a lookup so relays reach their member tabs. Scoped to one worktree
+// so a same-named group elsewhere never receives the message. Returns null when
+// that worktree has no custom group by that name.
+type CustomGroupResolver = (name: string, worktreeId: string) => string[] | null
+let customGroupResolver: CustomGroupResolver | null = null
+
+export function setCustomGroupResolver(resolver: CustomGroupResolver | null): void {
+  customGroupResolver = resolver
+}
+
+/**
+ * Board group members in one worktree for an "@Group" address, as terminal
+ * handles; null when that worktree has no such group. For senders that are not
+ * terminals (the Voice Conductor), which pass the worktree the Board shows.
+ */
+export function resolveBoardGroupInWorktree(
+  to: string,
+  worktreeId: string,
+  terminals: readonly Pick<RuntimeTerminalSummary, 'handle' | 'tabId' | 'worktreeId'>[]
+): string[] | null {
+  if (!isGroupAddress(to)) {
+    return null
+  }
+  const tabIds = customGroupResolver?.(to.slice(1), worktreeId) ?? null
+  if (!tabIds) {
+    return null
+  }
+  const members = new Set(tabIds)
+  return terminals
+    .filter((t) => t.worktreeId === worktreeId && members.has(t.tabId))
+    .map((t) => t.handle)
+}
+
 export function isGroupAddress(to: string): boolean {
   return to.startsWith('@')
 }
@@ -78,6 +112,18 @@ export function resolveGroupAddress(
         }
         return titleMatchesAgentNameGroup(t.title ?? '', agentName)
       })
+      .map((t) => t.handle)
+  }
+
+  // A custom group resolves inside the sender's worktree only; an unknown sender gets none.
+  const senderWorktreeId = terminals.find((t) => t.handle === senderHandle)?.worktreeId
+  const customTabIds = senderWorktreeId
+    ? (customGroupResolver?.(to.slice(1), senderWorktreeId) ?? null)
+    : null
+  if (customTabIds) {
+    const members = new Set(customTabIds)
+    return terminals
+      .filter((t) => t.handle !== senderHandle && members.has(t.tabId))
       .map((t) => t.handle)
   }
 

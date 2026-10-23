@@ -1,5 +1,6 @@
 import type { SetupDecision, TuiAgent } from './types'
 import type { TaskSourceContext, WorkspaceRunContext } from './task-source-context'
+import type { AutomationLoop, AutomationLoopTriggerKind } from './automation-loop-types'
 
 export type AutomationWorkspaceMode = 'existing' | 'new_per_run'
 export type AutomationExecutionTargetType = 'local' | 'ssh'
@@ -15,7 +16,14 @@ export type AutomationRunStatus =
   | 'skipped_unavailable'
   | 'skipped_needs_interactive_auth'
   | 'dispatch_failed'
-export type AutomationRunTrigger = 'scheduled' | 'manual'
+export type {
+  AutomationLoop,
+  AutomationLoopState,
+  AutomationLoopTarget,
+  AutomationLoopTrigger,
+  AutomationLoopTriggerKind
+} from './automation-loop-types'
+export type AutomationRunTrigger = 'scheduled' | 'manual' | AutomationLoopTriggerKind
 
 export type AutomationSchedulePreset = 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'custom'
 export type AutomationRunUsageProvider = 'claude' | 'codex'
@@ -119,6 +127,7 @@ export type Automation = {
   missedRunPolicy: AutomationMissedRunPolicy
   missedRunGraceMinutes: number
   notification?: AutomationNotification | null
+  loop?: AutomationLoop | null
   createdAt: number
   updatedAt: number
 }
@@ -196,6 +205,7 @@ export type AutomationUpdateInput = Partial<
     | 'enabled'
     | 'missedRunGraceMinutes'
     | 'notification'
+    | 'loop'
   >
 >
 

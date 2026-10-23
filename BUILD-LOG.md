@@ -86,3 +86,9 @@
 - Extracted into its own file rather than inlining in `CustomChannelSection.tsx`, which was already 761 lines (over its 400-line oxlint cap) before this task touched it — kept that file's net growth to +11 lines.
 - Commit: `768c7dc1`.
 - **All 4 Communications Hub tasks now done.** Two live-verification items still owed (both need a build+install, out of scope for this build's routine per-task gate) — see `HANDOFF.md` for the full list. One pre-existing test-infrastructure gap surfaced during COMMS.1 (async `@comms/**/*.test.mjs` files don't actually run under this repo's real `pnpm test`) — also flagged there, not fixed, out of scope.
+
+## 2026-10-23 00:30–04:30 — Board (Symvibe-style canvas) built into Dobius+ V2
+- Branch `aiimitch38-create/agent-canvas` (from 1c5c9e07). Orchestrated: Builder 1, Builder 2, Studio A, Studio B/Visual QA, Design Lead, Reviewer, Capture engineer (Claude) + 2 OpenCode GLM tabs; subagents for research/capture.
+- Built: Board as default view (Classic one click away), canvas + rails + side-apps dock + command bar (VoiceOrb), live console cards (portal, fixed columns on zoom), typed planner + delivery gate + mission reports, pause/resume agents, cards (15 kinds), studios (9), presets, loops (schedule/idle/output/goal/templates), undo/redo, shortcuts, context menu, styles. Details: dobius/docs/board/MORNING-SUMMARY.md.
+- Verified: typecheck web clean; 6,328 tests pass; the 24 failing tests fail identically on 1c5c9e07 (pre-existing); hook checks run by hand (hook not installed in worktree).
+- Lessons: long `dobius terminal send` messages lose their start — send briefs as files; `--wait --json` output needs heartbeat filtering (learned skill); UI crawlers on a real app must deny-list spawn/add/copy/settings and never use Cmd+Z off the canvas; swap can eat 1 GB+ disk under many agents — watch `df`.

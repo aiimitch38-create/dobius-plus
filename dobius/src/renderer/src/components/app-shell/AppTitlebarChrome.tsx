@@ -1,5 +1,12 @@
 import type { RefObject } from 'react'
-import { ArrowLeft, ArrowRight, Minimize2, MoreHorizontal, PanelLeft, PanelRight } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Minimize2,
+  MoreHorizontal,
+  PanelLeft,
+  PanelRight
+} from 'lucide-react'
 import logo from '../../../../../resources/logo.svg'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -13,6 +20,7 @@ import type { AppState } from '@/store'
 import { shouldShowWorktreeHistoryControls } from '@/lib/titlebar-worktree-history-controls'
 import { translate } from '@/i18n/i18n'
 import { DobiusTitlebarButtons } from '../DobiusTitlebarButtons'
+import { OpenBoardTitlebarButton } from './OpenBoardTitlebarButton'
 import { ActivityTitlebarControls } from '../activity/ActivityTitlebarControls'
 
 export type AppTitlebarLeftControlsProps = {
@@ -275,6 +283,10 @@ export function AppTitlebarMainStrip({
           </TooltipContent>
         </Tooltip>
       )}
+      {/* Why: Open Board must stay reachable regardless of right-sidebar state.
+      In workspace chrome the floating cluster (AppWorkspaceShell) owns it, so
+      this strip shows it only otherwise: exactly one copy in every state. */}
+      {!workspaceChromeActive ? <OpenBoardTitlebarButton /> : null}
       {/* Why: when the right sidebar is open, its own header renders
       an identical close button — hide this copy so only one is
       visible at a time. */}

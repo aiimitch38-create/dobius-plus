@@ -12776,5 +12776,924 @@
   },
   "commandCenter": {
     "navigation": "Command Center"
-  }
+  },
+  "board": {
+    "image": {
+      "readFailed": "Could not read that image.",
+      "clearMarks": "Clear marks ({{count}})"
+    },
+    "thread": {
+      "languageAuto": "Auto",
+      "title": "Thread",
+      "emptyTitle": "Nothing said yet",
+      "emptyHint": "Tell your agents what to do, move the board, or open a tool. Try “spawn two reviewers”, “fit the board”, “open loops”, or “what can you do?”",
+      "seeOutput": "See output"
+    },
+    "agentPicker": {
+      "titleMany": "Spawn {{count}} consoles",
+      "title": "New console",
+      "none": "No agents are enabled in Settings"
+    },
+    "insert": {
+      "checklist": "Checklist",
+      "railLabel": "Insert",
+      "presets": "Layers and presets",
+      "todo": "To-do list",
+      "kanban": "Kanban",
+      "calendar": "Calendar",
+      "orchestrator": "Orchestrator",
+      "code": "Browse code",
+      "docs": "Markdown docs",
+      "generateDoc": "Generate document",
+      "loops": "Loops",
+      "note": "Note",
+      "skill": "Skill",
+      "branches": "Git branches"
+    },
+    "tools": {
+      "select": "Select",
+      "spawn": "Spawn agent",
+      "shape": "Shapes",
+      "screen": "Diagrams",
+      "text": "Text",
+      "pen": "Pen",
+      "eraser": "Eraser",
+      "web": "Web tile",
+      "image": "Image",
+      "railLabel": "Board tools",
+      "fitView": "Fit view",
+      "github": "GitHub",
+      "textGlyph": "Aa",
+      "sticky": "Sticky note"
+    },
+    "topBar": {
+      "noProject": "No project",
+      "backToHome": "Back to home",
+      "workspaces": "Workspaces",
+      "addWorkspace": "New workspace",
+      "close": "Close",
+      "needsYou": "{{count}} need you",
+      "live": "{{count}} live",
+      "missionMap": "Mission Map",
+      "skills": "Skills",
+      "settings": "Settings",
+      "accountSettings": "Account settings",
+      "renameWorkspace": "Workspace name",
+      "renameHint": "Double-click to rename",
+      "noWorkspaces": "That project has no workspaces yet.",
+      "usageHint": "Usage limits. Opens Settings.",
+      "usageResets": "{{percent}}% · resets {{time}}",
+      "usage": "{{percent}}% used",
+      "resets": "resets",
+      "needsYouHint": "Show the console that needs you",
+      "accounts": "Accounts"
+    },
+    "zoom": {
+      "out": "Zoom out",
+      "reset": "Reset to 100%",
+      "in": "Zoom in"
+    },
+    "chips": {
+      "pauseAllHint": "Stops new autonomous agent runs from starting. Live consoles keep running.",
+      "resumeAllHint": "Lets autonomous agent runs start again.",
+      "newConsole": "New console",
+      "spawn4": "Spawn 4",
+      "group": "Group",
+      "presets": "Presets",
+      "pauseAll": "Pause all",
+      "resumeAll": "Resume all",
+      "memory": "Memory",
+      "loops": "Loops",
+      "docs": "Docs",
+      "code": "Code",
+      "skills": "Skills",
+      "missionMap": "Mission Map",
+      "killAll": "Kill all"
+    },
+    "commandBar": {
+      "expand": "Show thread",
+      "collapse": "Hide thread",
+      "stopListening": "Stop listening",
+      "startListening": "Speak",
+      "inputLabel": "Command",
+      "placeholder": "Hold space to speak · @ to direct…",
+      "send": "Send",
+      "placeholderAsk": "Hold space to speak · ask “what can you do?”"
+    },
+    "group": {
+      "deleteTitle": "Delete {{name}}?",
+      "deleteBody": "This closes {{count}} console(s) in the group and ends their agents. Notes and other cards stay.",
+      "deleteConfirm": "Delete group",
+      "actions": "{{name}} actions",
+      "ungroup": "Ungroup",
+      "delete": "Delete group…",
+      "none": "Select one or more consoles to group.",
+      "name": "Group {{n}}",
+      "needTwo": "Select at least two consoles to group.",
+      "needTwoCards": "Select at least two cards to group."
+    },
+    "loops": {
+      "kind": {
+        "idle": "When it goes idle",
+        "match": "When output matches",
+        "goal": "Until a goal is met",
+        "schedule": "On a schedule"
+      },
+      "field": {
+        "name": "Name",
+        "trigger": "Trigger",
+        "target": "Console or group",
+        "goal": "Goal",
+        "instruction": "Tell the console",
+        "debounce": "Wait after idle (seconds)",
+        "pattern": "Pattern (regex)",
+        "cooldown": "Cooldown (seconds)",
+        "checkEvery": "Check every (seconds)",
+        "maxRuns": "Max runs",
+        "everyMin": "Every (minutes)",
+        "stopAfter": "Stop after (minutes, 0 = never)"
+      },
+      "create": "Create loop",
+      "untitled": "Board loop",
+      "title": "Loops",
+      "new": "New loop",
+      "needConsole": "Add a console to the board to loop on it.",
+      "empty": "No loops yet. A loop tells consoles what to do next when they go idle, print something, or until a goal is met.",
+      "last": "Last: {{result}}",
+      "pause": "Pause loop",
+      "resume": "Resume loop",
+      "delete": "Delete loop",
+      "error": {
+        "target": "Pick a console or group.",
+        "instruction": "Write what to tell the console.",
+        "matchTab": "Output match watches one console.",
+        "patternLong": "Pattern is longer than 200 characters.",
+        "pattern": "Enter a valid pattern (regular expression).",
+        "goal": "Describe the goal.",
+        "patternUnsafe": "This pattern could freeze the app (repeated groups or backreferences). Simplify it."
+      },
+      "next": {
+        "retired": "Finished",
+        "paused": "Paused",
+        "idle": "When the target goes idle",
+        "match": "When output matches /{{pattern}}/",
+        "goalStart": "Starts on the next check",
+        "goal": "Check in {{seconds}}s · run {{runs}} of {{max}}",
+        "scheduleStart": "Every {{every}} min",
+        "schedule": "Next run in {{minutes}} min"
+      },
+      "templates": "Templates",
+      "target": {
+        "board": "Every console (and new ones)",
+        "orchestrator": "Wired to {{name}}"
+      },
+      "heroTitle": "Keep your agents working on their own",
+      "fromScratch": "Start from scratch"
+    },
+    "common": {
+      "cancel": "Cancel"
+    },
+    "kanban": {
+      "todo": "To do",
+      "doing": "Doing",
+      "done": "Done",
+      "add": "Add a card"
+    },
+    "spawn": {
+      "noWorkspace": "Open a workspace before spawning consoles.",
+      "partial": "{{failed}} of {{count}} consoles did not start."
+    },
+    "killAll": {
+      "title": "Close {{count}} consoles?",
+      "description": "Stops every console on this board. Terminals in other workspaces are not touched.",
+      "confirm": "Close all"
+    },
+    "pause": {
+      "on": "Autonomous runs paused. Live consoles keep running.",
+      "off": "Autonomous runs can start again.",
+      "windows": "Pausing live agents is not available on Windows yet.",
+      "paused": "Paused {{names}}.",
+      "resumed": "Resumed {{names}}.",
+      "failedPause": "Could not pause {{names}}.",
+      "failedResume": "Could not resume {{names}}; restart them if they stay frozen.",
+      "none": "No running console to change."
+    },
+    "presets": {
+      "unbuilt": "Presets are not built yet.",
+      "someFailed": "{{count}} console(s) could not start.",
+      "title": "Presets",
+      "namePlaceholder": "Name this arrangement",
+      "name": "Preset name",
+      "save": "Save current board",
+      "empty": "No presets for this project yet. Save the board to reuse its consoles and layout later.",
+      "summary": "{{consoles}} console(s) · {{cards}} card(s)",
+      "apply": "Apply",
+      "delete": "Delete preset",
+      "agent": {
+        "shell": "Terminal"
+      },
+      "fillAll": "Fill every lane with",
+      "moreAgents": "More agents",
+      "agents": "Agents",
+      "allAgent": "All {{agent}} · {{count}} consoles",
+      "mixed": "Mixed · {{count}} consoles",
+      "cycleAgent": "{{agent}} · click to change",
+      "consoleAgent": "{{lane}} console {{n}}: {{agent}}",
+      "alsoOnBoard": "Also on the board",
+      "deploying": "Starting consoles…",
+      "deploy": "Deploy",
+      "ungrouped": "Loose consoles",
+      "extra": {
+        "orchestrator": "Orchestrator",
+        "orchestratorDetail": "Directs every group",
+        "kanban": "Task board",
+        "kanbanDetail": "Starts empty",
+        "web": "Live preview",
+        "webDetail": "No address yet"
+      },
+      "meta": "{{consoles}} consoles · {{groups}} groups",
+      "confirmTitle": "Start {{count}} consoles?",
+      "confirmBody": "Each console launches its own agent, which uses your plan limits and machine resources.",
+      "confirmAction": "Start {{count}}",
+      "partial": "{{failed}} of {{count}} consoles did not start.",
+      "subtitle": "Whole arrangements of crews, task boards and previews, wired up for you. Choose one, pick its agents, deploy.",
+      "workspaces": "Full workspaces",
+      "workspacesSub": "Crews with roles around a task board or preview, directed by one orchestrator.",
+      "plain": {
+        "description": "Consoles with no roles or extras, grouped and ready for your first instruction.",
+        "twoUp": "Two up",
+        "threeUp": "Three up",
+        "fourUp": "Four up",
+        "twoByFour": "Eight in two groups",
+        "threeByFour": "Twelve in three groups",
+        "fourByFour": "Sixteen in four groups"
+      },
+      "plainSub": "Just consoles in frames. The sizes people reach for most.",
+      "yours": "Your presets",
+      "yoursSub": "Saved from this project’s boards. Agents restart fresh on deploy.",
+      "saveCurrent": "Save current board as preset",
+      "userDescription": "A board you saved, laid out exactly as it was.",
+      "catalog": {
+        "commandDeck": {
+          "name": "Command Deck",
+          "description": "Everything at once: two build crews on either side of a shared task board and a live preview, a review crew below, and one orchestrator directing all of them."
+        },
+        "pairingBay": {
+          "name": "Pairing Bay",
+          "description": "Two pairs working one task board: one pair writes, the other checks the work. Small enough to follow every console."
+        },
+        "previewLab": {
+          "name": "Preview Lab",
+          "description": "Front-end work with the running app in view: builders change the page, testers click through it in the live preview."
+        },
+        "releaseTrain": {
+          "name": "Release Train",
+          "description": "A release in four stations: plan it, build it, test it, write it up. Each station is a pair, all reporting to one orchestrator."
+        },
+        "triageDesk": {
+          "name": "Triage Desk",
+          "description": "For a bad day: three agents reproduce and narrow down bugs, two fix what they find, tracked on one task board."
+        }
+      },
+      "lane": {
+        "interface": "Interface",
+        "review": "Review",
+        "services": "Services",
+        "writers": "Writers",
+        "checkers": "Checkers",
+        "builders": "Builders",
+        "testers": "Testers",
+        "plan": "Plan",
+        "build": "Build",
+        "test": "Test",
+        "docs": "Docs",
+        "reproduce": "Reproduce",
+        "fix": "Fix",
+        "consoles": "Consoles"
+      },
+      "noWorkspace": "Open a workspace to deploy a preset.",
+      "plainTitle": "Plain groups"
+    },
+    "relay": {
+      "sent": "Sent to {{name}}."
+    },
+    "conductor": {
+      "enable": "Turn on Voice Conductor in Settings"
+    },
+    "voice": {
+      "off": "Turn on voice dictation in Settings to talk to the Board."
+    },
+    "github": {
+      "none": "This project has no GitHub remote."
+    },
+    "studio": {
+      "title": {
+        "skills": "Skills",
+        "settings": "Settings",
+        "memory": "Memory",
+        "code": "Code",
+        "markdown": "Markdown docs",
+        "chat": "Chat",
+        "docs": "Documents",
+        "loops": "Loops",
+        "missionMap": "Mission Map",
+        "kanban": "Kanban",
+        "presets": "Presets"
+      },
+      "loading": "Loading…",
+      "close": "Close",
+      "crashed": "This studio hit an error.",
+      "crashedDetail": "The board underneath is still running. Retry, or close the studio.",
+      "chat": {
+        "selectConsole": "Select a console card first.",
+        "selectConsoleDetail": "Chat follows the console you pick on the board.",
+        "terminalGone": "That console has no terminal anymore."
+      },
+      "code": {
+        "noWorkspace": "Open a workspace to browse its code.",
+        "inactiveWorkspace": "The code browser follows the active workspace. Switch to this board’s workspace to browse its files.",
+        "pickFile": "Pick a file to open it here."
+      },
+      "memory": {
+        "saveFailed": "Could not save memory",
+        "resetFailed": "Could not start a new session",
+        "loadFailed": "Could not load your crew.",
+        "noAgents": "No crew agents yet.",
+        "noAgentsDetail": "Create an agent on the Agents page and its memory will show up here.",
+        "agentList": "Crew agents",
+        "views": "Memory views",
+        "viewCrew": "Crew",
+        "viewKnowledge": "Project knowledge",
+        "knowledgeFailed": "Could not load project knowledge.",
+        "scope": "Knowledge scope",
+        "scopeRepo": "This project",
+        "scopeGlobal": "Global",
+        "noRepoNotes": "No notes for this project yet.",
+        "noGlobalNotes": "No global notes yet.",
+        "pickNote": "Pick a note to read it here.",
+        "readFailed": "Could not open this note.",
+        "pushToConsole": "Push to console",
+        "pushNeedsWorkspace": "Open a workspace to push notes.",
+        "viewFacts": "Facts"
+      },
+      "missionMap": {
+        "empty": "No consoles on this board yet.",
+        "emptyDetail": "Spawn a console and the map will show how orchestrators, groups and consoles connect.",
+        "graphLabel": "Mission map graph",
+        "ungrouped": "UNGROUPED",
+        "kind": {
+          "group": "Group",
+          "orchestrator": "Orchestrator"
+        },
+        "focus": "Show {{name}} on the board"
+      },
+      "docs": {
+        "noWorkspace": "Open a workspace to see its documents.",
+        "listTitle": "Documents",
+        "refresh": "Refresh list",
+        "pickDocument": "Pick a document to read it here.",
+        "listFailed": "Could not list documents.",
+        "none": "No documents in this workspace.",
+        "readFailed": "Could not open this document.",
+        "binary": "This file cannot be shown as text.",
+        "template": {
+          "overview": "Overview",
+          "onboarding": "Onboarding",
+          "architecture": "Architecture",
+          "custom": "Custom",
+          "customHint": "Describe it below"
+        },
+        "generateSent": "Asked {{name}} to write it",
+        "templateHeading": "What should it write?",
+        "customLabel": "Describe the document",
+        "customPlaceholder": "e.g. a release checklist for this repo",
+        "agentHeading": "Which agent writes it?",
+        "noAgents": "Spawn a console on this board first; the document is written by an agent.",
+        "generateHint": "When the agent saves {{file}}, press refresh to see it in the list.",
+        "generateSend": "Send to agent",
+        "generate": "Generate document"
+      },
+      "markdown": {
+        "listTitle": "Markdown",
+        "saveFailed": "Could not save {{name}}: {{error}}",
+        "unsaved": "unsaved",
+        "save": "Save",
+        "graphLoading": "Reading links…",
+        "graphEmpty": "No links between these docs yet.",
+        "graphEmptyDetail": "Link docs with [[name]] or a relative markdown link and they will show up here.",
+        "graphLabel": "Markdown link graph",
+        "graphSummary": "{{linked}} linked docs · {{links}} links · {{unlinked}} without links",
+        "graphCapped": "first {{count}} docs scanned",
+        "linkAmbiguous": "More than one doc matches {{target}}.",
+        "linkMissing": "No doc named {{target}} in this workspace.",
+        "graph": "Link graph"
+      },
+      "kanbanUnavailable": "The workspace Kanban board is tied to the sidebar drawer and cannot open here yet.",
+      "addToBoard": "Add to board",
+      "loops": {
+        "noWorkspace": "Open a workspace to set up loops.",
+        "automationsHint": "Scheduled repo automations (cron-style runs) live on the Automations page.",
+        "openAutomations": "Open Automations"
+      },
+      "subtitle": {
+        "missionMap": "Who directs whom on this board. Click a node to jump to it.",
+        "docs": "Read the repo’s documents, or have an agent write a new one.",
+        "generateDoc": "Pick what to write and which agent writes it. It lands in the repo as markdown.",
+        "markdown": "Edit the repo’s markdown and see how the docs link together.",
+        "code": "Browse and edit files, then pin one to the board.",
+        "loops": "Recurring instructions for your consoles: on idle, on matching output, or until a goal is met.",
+        "memory": "Durable facts per repo. They reach an agent only when a memory card pushes them.",
+        "skills": "Installed skills from home, repo, bundled and plugin folders.",
+        "settings": "Dobius settings, without leaving the board."
+      }
+    },
+    "card": {
+      "actions": "{{title}} actions",
+      "bringToFront": "Bring to front",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "removeItem": "Remove {{name}}",
+      "rename": "Rename",
+      "sendToBack": "Send to back",
+      "turnDirection": "Turn direction"
+    },
+    "calendar": {
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month",
+      "addEvent": "Add event on {{date}}"
+    },
+    "checklist": {
+      "progress": "{{done}}/{{total}} done",
+      "itemText": "Item text",
+      "add": "Add a to-do"
+    },
+    "markdown": {
+      "notText": "This file is not text.",
+      "truncated": "Showing the first part of a large file."
+    },
+    "note": {
+      "text": "{{title}} text",
+      "placeholder": "Write a note",
+      "pushed": "Sent to {{name}}",
+      "push": "Push",
+      "pushTo": "Send this note to"
+    },
+    "orchestrator": {
+      "wired": "{{count}} wired",
+      "emptyUnwired": "Wire consoles to this card to direct them.",
+      "emptyWired": "No messages yet.",
+      "message": "Message {{name}}",
+      "placeholder": "Tell {{name}}…",
+      "send": "Send",
+      "noConsoles": "No consoles on this board.",
+      "noneRunning": "None of the wired consoles is running.",
+      "spawnWired": "Spawn an agent wired to this orchestrator",
+      "agentHint": "Click to switch the team’s agent. Right-click for the full list.",
+      "noAgents": "No agents found",
+      "done": "Done",
+      "connect": "Connect",
+      "growTo": "Grow the team to",
+      "teamSize": "Team size",
+      "grow": "Grow",
+      "connectingTitle": "Pick consoles to wire",
+      "noneWiredTitle": "No agents wired",
+      "readyTitle": "Ready",
+      "connectHint": "Click consoles or group names on the board, or wire them from the list above. Tap Done when finished.",
+      "spawnAgent": "Spawn agent",
+      "refuseScope": "That console isn’t wired to this card, so nothing was sent. Tap Connect to wire it.",
+      "refuseWorkspace": "Workspaces are managed from the main command bar, not from an orchestrator card.",
+      "refuseUndo": "Undo and redo work from the main command bar only.",
+      "refuseNothingWired": "No consoles are wired yet. Tap Connect, or spawn one with +.",
+      "noneConnected": "No consoles connected",
+      "connected": "{{count}} consoles connected"
+    },
+    "text": {
+      "label": "Text",
+      "placeholder": "Type something"
+    },
+    "web": {
+      "loadFailed": "Could not load {{url}}.",
+      "enterAddress": "Enter a web address.",
+      "back": "Back",
+      "forward": "Forward",
+      "reload": "Reload",
+      "address": "Address",
+      "placeholder": "localhost:3000",
+      "empty": "Type an address above to load a page.",
+      "preview": "Preview · {{port}}",
+      "device": "Simulate a device viewport",
+      "rescan": "Rescan dev ports",
+      "inspector": "Open the Web Inspector",
+      "devServers": "Dev servers in this workspace",
+      "scanning": "Scanning…",
+      "noServers": "No dev server is listening for this workspace.",
+      "deviceFill": "Fit the tile",
+      "reloadHint": "Reload · Shift-click for a hard reload (skip cache)",
+      "waiting": "Waiting for the dev server to start…"
+    },
+    "console": {
+      "closed": "This terminal was closed.",
+      "elsewhere": "This terminal is shown in another card.",
+      "starting": "Starting…",
+      "status": {
+        "working": "Working",
+        "waiting": "Needs you",
+        "idle": "Idle",
+        "paused": "Paused",
+        "done": "Done",
+        "error": "Terminal closed",
+        "shell": "At its shell",
+        "gone": "Terminal closed"
+      },
+      "close": "Close this agent",
+      "closeTitle": "Close {{name}}?",
+      "closeBody": "This ends the agent and closes its terminal.",
+      "closeConfirm": "Close agent",
+      "yoloHint": "Permission prompts are skipped for this agent",
+      "yolo": "Yolo",
+      "restartTitle": "{{verb}} {{name}}?",
+      "restartBody": "It is working right now; its current turn will stop.",
+      "restart": "Restart",
+      "switchTo": "Relaunch as {{agent}}"
+    },
+    "foundBug": "Found a bug?",
+    "sideApps": {
+      "railLabel": "Side apps",
+      "kanban": "Kanban",
+      "communications": "Communications"
+    },
+    "titlebar": {
+      "open": "Open Board"
+    },
+    "canvasMenu": {
+      "duplicate": "Duplicate",
+      "bringToFront": "Bring to front",
+      "delete": "Delete",
+      "spawn": "Spawn agent",
+      "spawnGroup": "Spawn group",
+      "image": "Insert image",
+      "web": "Insert web",
+      "todo": "Insert checklist",
+      "kanban": "Insert board",
+      "calendar": "Insert calendar",
+      "shape": "Insert flow shapes",
+      "selectAll": "Select all",
+      "fit": "Fit to content",
+      "zoom100": "Zoom to 100%",
+      "memory": "Insert memory",
+      "skill": "Insert skill",
+      "gitBranches": "Insert Git branches",
+      "missionMap": "Mission Map"
+    },
+    "usage": {
+      "resetsLine": "Resets {{time}}"
+    },
+    "usagePanel": {
+      "unavailable": "Usage data is unavailable.",
+      "session": "5h session",
+      "weekly": "Weekly",
+      "limitsHeading": "Rate limits",
+      "refresh": "Refresh",
+      "noProviders": "No usage data yet.",
+      "caveat": "Limits come from the provider and may lag your actual usage.",
+      "limitsTab": "Limits",
+      "tokensTab": "Tokens",
+      "loadingTokens": "Loading token usage..."
+    },
+    "outputViewer": {
+      "copyFailed": "Could not copy.",
+      "saved": "Saved to {{path}}",
+      "saveFailed": "Could not save: {{message}}",
+      "copy": "Copy",
+      "save": "Save to outputs/"
+    },
+    "clean": {
+      "none": "No ended consoles to close.",
+      "done": "Closed {{count}} ended console(s): {{names}}."
+    },
+    "delivery": {
+      "sent": "Sent to {{names}}.",
+      "busy": "{{names}} busy, will take it after the current turn.",
+      "failed": "{{name}}: {{reason}}",
+      "nobody": "No console to send to.",
+      "paused": "{{name}} is paused; resume it first.",
+      "shell": "{{name}} is at its shell; restart it to send work.",
+      "gone": "{{name}} is closed.",
+      "heldTooLong": "{{name}} stayed on a dialog for 5 minutes; dropped the message.",
+      "cancelled": "{{name}}: cancelled before it was typed."
+    },
+    "diagram": {
+      "quiet": "The agent went quiet before finishing. What was drawn stays.",
+      "noWorkspace": "Open a workspace first.",
+      "describe": "Describe the diagram first.",
+      "nothingToExport": "There is no diagram to export.",
+      "template": {
+        "architecture": "System architecture",
+        "userFlow": "Primary user flow",
+        "dataFlow": "Data flow",
+        "componentMap": "Component map",
+        "requestLifecycle": "Request lifecycle",
+        "stateMachine": "Core state machine",
+        "custom": "Describe your own"
+      },
+      "defaultLayer": "Main",
+      "starter": {
+        "flow": "Flow",
+        "steps": "Steps",
+        "decision": "Decision branch",
+        "mindMap": "Mind map"
+      },
+      "node": {
+        "step": "Step {{n}}",
+        "branch": "Branch {{n}}"
+      },
+      "effort": {
+        "quick": "Quick",
+        "balanced": "Balanced",
+        "thorough": "Thorough"
+      },
+      "status": {
+        "waiting": "Waiting for the agent to start drawing…",
+        "drawing": "Drawing… {{nodes}} shapes, {{edges}} arrows",
+        "done": "Done: {{nodes}} shapes, {{edges}} arrows.",
+        "stopped": "Stopped. {{nodes}} shapes stay on the board.",
+        "quiet": "The agent went quiet. {{nodes}} shapes stay."
+      },
+      "agent": "Agent",
+      "noAgents": "Spawn a console to draw from your project. Starter shapes work without one.",
+      "effortLabel": "Effort",
+      "style": "Style",
+      "ink": "Ink",
+      "colorful": "Colorful",
+      "fromProject": "From your project",
+      "describeLabel": "Describe a diagram",
+      "describePlaceholder": "Describe a diagram…",
+      "generate": "Generate",
+      "stop": "Stop (keep what’s drawn)",
+      "exported": "Saved {{path}}",
+      "exportFailed": "Couldn’t export the file: {{error}}",
+      "exportExcalidraw": "Export as Excalidraw",
+      "starters": "Starter shapes"
+    },
+    "forward": {
+      "preface": "Results from other agents are below. Act on all of them: {{ask}}",
+      "question": "They were asked: {{question}}",
+      "closing": "End of forwarded results.",
+      "yourPart": "This is your part of the work; {{others}} have the rest.",
+      "summary": "Forwarded results: {{ask}}",
+      "armedNoOrder": "No order yet. When the next order finishes, its replies go to {{targets}}.",
+      "armed": "When {{sources}} finish, their replies go to {{targets}}."
+    },
+    "handoff": {
+      "request": "Another coding agent is about to take over your current task. Stop working and write a compact brief for it: the goal, what is done, what is left, files touched, and anything risky. Put the brief between a line {{start}} and a line {{end}}, and nothing else after it.",
+      "brief": "You are taking over a task from {{name}}. Their brief is below. Continue the work from where they stopped.\n\n{{brief}}",
+      "summary": "Handoff brief from {{name}}",
+      "spawnFailed": "Could not start {{agent}} for the handoff.",
+      "title": "{{agent}} (from {{name}})",
+      "noBrief": "{{name}} sent no brief, so {{title}} starts clean.",
+      "notReady": "{{title}} did not become ready, so the brief was not typed. It is on your clipboard to paste.",
+      "briefSummary": "Handoff brief to {{title}}",
+      "unknownAgent": "{{cli}} is not an agent Dobius can start.",
+      "oneSource": "Handoff needs exactly one source console. Name the one to hand off from.",
+      "busy": "A handoff is already in progress. Try again after it lands.",
+      "started": "Asked {{name}} for a brief. A fresh {{agent}} console takes over when it arrives (up to 4 minutes)."
+    },
+    "links": {
+      "disconnectGroup": "Disconnect group {{name}}",
+      "wireGroup": "Wire group {{name}}",
+      "unwire": "Unwire {{name}}",
+      "wire": "Wire {{name}}",
+      "arrowTo": "Draw the arrow to {{name}}",
+      "removeArrow": "Remove arrow",
+      "drawArrow": "Draw arrow to…"
+    },
+    "plan": {
+      "concern": {
+        "risky": "Text that could {{category}}: \"{{text}}\"",
+        "unnamed": "Reaches consoles you did not name: {{names}}",
+        "everyone": "Sends to everyone, though you named {{names}}",
+        "url": "Opens a link you did not say: {{url}}",
+        "git": "Runs a GitHub {{action}} you did not ask for",
+        "destructive": "Ends {{target}} ({{step}})",
+        "destructiveNoTarget": "Runs {{step}}"
+      },
+      "notBuilt": "{{what}} is not available on the Board yet.",
+      "spawned": "Started {{count}} console(s).",
+      "spawnFailed": "{{count}} console(s) did not start.",
+      "noGroup": "No group named {{name}}.",
+      "groupTooSmall": "A group needs at least two consoles.",
+      "grouped": "Grouped {{count}} consoles as {{name}}.",
+      "ungrouped": "Ungrouped {{name}}; its consoles stay.",
+      "groupClosed": "Closed {{name}} and its {{count}} console(s).",
+      "renamed": "Renamed {{from}} to {{to}}.",
+      "noTarget": "No matching console on the board.",
+      "noPreset": "No preset named {{name}}.",
+      "deployed": "Deployed {{name}} ({{count}} consoles, {{failed}} failed).",
+      "nothingToFit": "Nothing to frame.",
+      "framed": "Framed {{count}} card(s).",
+      "zoomed": "Zoomed.",
+      "opened": "Opened {{name}}.",
+      "closed": "Closed the panel.",
+      "undo": "Undo and redo",
+      "tool": "Switched to {{tool}}.",
+      "theme": "Theme set to {{theme}}.",
+      "workspaceAction": "That workspace action",
+      "noWorkspace": "No workspace {{name}}.",
+      "switched": "Switched to {{name}}.",
+      "git": "GitHub actions",
+      "inserted": "Added {{name}} to the board.",
+      "openedUrl": "Opened {{url}} in a web tile.",
+      "added": "Added a {{kind}}.",
+      "orchAdded": "Added an orchestrator wired to {{count}} console(s).",
+      "orchWired": "Wired {{count}} console(s) to {{name}}.",
+      "killed": "Closed {{names}}.",
+      "restarted": "Restarted {{names}}.",
+      "restartFailed": "Could not restart those consoles.",
+      "noOrder": "There is no recent order to cancel.",
+      "cancelledSome": "Dropped {{dropped}} untyped message(s). {{names}} already have it and keep working.",
+      "cancelledAll": "Dropped {{dropped}} untyped message(s).",
+      "noOrderReport": "There is no recent order to report on.",
+      "reportLane": "{{name}}: {{delivery}}, now {{state}}",
+      "got": "got it",
+      "notTyped": "not typed",
+      "noConsoles": "No consoles on the board.",
+      "loopFromPlanner": "Creating a loop by voice",
+      "needsPlanner": "The planner is not answering, and without it I can’t write or split instructions. Say who and what plainly, for example “@Codex 1 run the tests”.",
+      "rejected": "I could not make a valid plan: {{reason}}",
+      "unsafe": "Ignored: that looked like instructions hidden inside the text.",
+      "confirmTitle": "Go ahead with this?",
+      "confirmAction": "Confirm",
+      "notSent": "Nothing was sent."
+    },
+    "mission": {
+      "settled": "{{count}} agent(s) finished.",
+      "timeout": "{{name}} has not answered in 20 minutes; a later reply will still show here.",
+      "late": "{{name}} replied late.",
+      "finishedNone": "Nothing finished yet.",
+      "finishedOne": "{{name}} finished.",
+      "finishedTwo": "{{first}} and {{second}} finished.",
+      "finishedMany": "{{count}} agents finished."
+    },
+    "memory": {
+      "cat": {
+        "architecture": "Architecture",
+        "structure": "Structure",
+        "commands": "Commands",
+        "conventions": "Conventions",
+        "gotchas": "Gotchas",
+        "context": "Context"
+      },
+      "category": "Category",
+      "title": "Title",
+      "active": "Active",
+      "off": "Off",
+      "refreshHint": "Ask an agent to re-answer this title from the repo as it is now",
+      "delete": "Delete fact",
+      "fact": "Fact",
+      "proposals": "{{count}} proposals. Nothing is saved until you accept.",
+      "acceptUpdate": "Update",
+      "accept": "Accept",
+      "drop": "Drop",
+      "duplicate": "An equivalent fact is already in: {{title}}",
+      "saveFailed": "Could not save memory.",
+      "needConsole": "Add a console to the board first.",
+      "cardAdded": "Memory card added to the board.",
+      "scopeAllRepos": "All repos",
+      "newTitle": "New fact",
+      "add": "Add fact",
+      "addCard": "Memory card on board",
+      "scanLabel": "Scan this repo with",
+      "scanConsole": "Console",
+      "noConsoles": "No consoles",
+      "effort": "Effort",
+      "effortQuick": "Quick",
+      "effortBalanced": "Balanced",
+      "effortThorough": "Thorough",
+      "scan": "Scan",
+      "waiting": "{{name}} is reading the repo. You can close this; the answer is kept in the repo.",
+      "stopWaiting": "Stop waiting",
+      "empty": "Scan the repo with a CLI, or write the first fact yourself.",
+      "scanTimeout": "No answer from the agent after 15 minutes.",
+      "needWorkspace": "Open a workspace first.",
+      "wireTo": "Push memory to",
+      "nothingActive": "Nothing active. Push would send nothing.",
+      "pushFailed": "Could not push memory.",
+      "activeCount": "{{count}} active facts",
+      "nothingWired": "Nothing wired yet.",
+      "pushResult": "Sent {{sent}} · busy {{busy}} · shell {{shell}} · failed {{failed}}",
+      "push": "Push to wired agents"
+    },
+    "skill": {
+      "cardHint": "Run a skill in a board console with arguments from a skill card.",
+      "addCard": "Skill card on board",
+      "pick": "Skill",
+      "pickPrompt": "Pick a skill",
+      "args": "Arguments (optional)",
+      "console": "Run in",
+      "run": "Run"
+    },
+    "style": {
+      "title": "Style: {{name}}",
+      "close": "Close style editor",
+      "edit": "Edit style…"
+    },
+    "toolPanel": {
+      "stroke": "Stroke",
+      "background": "Background",
+      "fillStyle": "Fill",
+      "strokeWidth": "Stroke width",
+      "strokeStyle": "Stroke style",
+      "sloppinessLabel": "Sloppiness",
+      "edgesLabel": "Edges",
+      "opacity": "Opacity",
+      "textColor": "Text color",
+      "fontLabel": "Font",
+      "textSizeLabel": "Size",
+      "textAlign": "Align",
+      "shapes": "Shapes",
+      "shapeLabel": "Shape",
+      "pen": "Pen",
+      "text": "Text",
+      "eyedropper": "Pick a color from the screen",
+      "shape": {
+        "rect": "Rectangle",
+        "ellipse": "Ellipse",
+        "diamond": "Diamond",
+        "line": "Line",
+        "arrow": "Arrow",
+        "sticky": "Sticky"
+      },
+      "color": {
+        "none": "No fill",
+        "text": "Ink",
+        "red": "Red",
+        "accent": "Accent",
+        "green": "Green",
+        "blue": "Blue",
+        "purple": "Purple",
+        "yellow": "Yellow",
+        "pink": "Pink"
+      },
+      "width": {
+        "thin": "Thin",
+        "medium": "Medium",
+        "bold": "Bold"
+      },
+      "style": {
+        "solid": "Solid",
+        "dashed": "Dashed",
+        "dotted": "Dotted"
+      },
+      "sloppiness": {
+        "architect": "Straight",
+        "artist": "Hand-drawn",
+        "cartoonist": "Very loose"
+      },
+      "edges": {
+        "sharp": "Sharp corners",
+        "round": "Round corners"
+      },
+      "textSize": {
+        "small": "Small",
+        "medium": "Medium",
+        "large": "Large",
+        "xlarge": "Extra large"
+      },
+      "align": {
+        "left": "Align left",
+        "center": "Align center",
+        "right": "Align right"
+      },
+      "font": {
+        "sans": "Clean",
+        "rounded": "Rounded",
+        "serif": "Serif",
+        "mono": "Typewriter",
+        "hand": "Handwritten",
+        "script": "Script"
+      },
+      "fill": {
+        "solid": "Solid fill",
+        "hachure": "Hatched fill",
+        "crossHatch": "Cross-hatched fill"
+      }
+    },
+    "branches": {
+      "filter": "Filter branches",
+      "refresh": "Refresh branches",
+      "none": "No branches match.",
+      "copy": "Copy branch name",
+      "copied": "Copied {{ref}}",
+      "copyFailed": "Could not copy."
+    }
+  },
+  "start": "Start",
+  "process": "Process",
+  "end": "End",
+  "question": "Question?",
+  "yes": "Yes path",
+  "no": "No path",
+  "yesEdge": "yes",
+  "noEdge": "no",
+  "idea": "Central idea"
 }

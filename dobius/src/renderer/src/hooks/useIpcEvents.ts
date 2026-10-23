@@ -1,4 +1,5 @@
 /* oxlint-disable max-lines -- Why: this App-level IPC bridge intentionally keeps the renderer's main-process event contract in one place so shortcut, runtime, updater, and agent-status wiring do not drift across files. */
+import { BOARD_ZOOM_EVENT } from '@/components/board/board-zoom-event'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
 import { useAppStore } from '../store'
@@ -2749,6 +2750,10 @@ export function useIpcEvents(): void {
           activeElement: document.activeElement
         })
         if (target === 'terminal') {
+          return
+        }
+        if (target === 'board') {
+          window.dispatchEvent(new CustomEvent(BOARD_ZOOM_EVENT, { detail: direction }))
           return
         }
         if (target === 'editor') {

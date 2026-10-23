@@ -1,0 +1,16 @@
+// Studios are existing Dobius pages opened as a centered overlay on the Board.
+export type BoardStudioId =
+  | 'skills'
+  | 'settings'
+  | 'memory'
+  | 'code'
+  | 'markdown'
+  | 'chat'
+  | 'docs'
+  | 'generate-doc'
+  | 'loops'
+  | 'mission-map'
+  | 'agents'
+  | 'kanban'
+  | 'communications'
+  | 'presets'

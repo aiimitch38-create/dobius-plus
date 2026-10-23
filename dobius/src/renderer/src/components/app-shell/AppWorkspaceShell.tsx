@@ -8,6 +8,7 @@ import Sidebar from '../Sidebar'
 import RightSidebar from '../right-sidebar'
 import { FloatingTerminalToggleButton } from '../floating-terminal/FloatingTerminalToggleButton'
 import { DobiusTitlebarButtons } from '../DobiusTitlebarButtons'
+import { OpenBoardTitlebarButton } from './OpenBoardTitlebarButton'
 import { AppRightSidebarToggleButton } from './AppTitlebarChrome'
 import { AgentsHubSubNav, isAgentsHubView } from '../agents-hub/AgentsHubSubNav'
 import { AgentsOverview } from '../agents-hub/AgentsOverview'
@@ -218,7 +219,7 @@ export function AppWorkspaceShell({
             top-0 anchor so the icon's vertical center is identical between
             open and closed states — otherwise toggling makes the icon jump
             a few pixels, which reads as layout jitter. */}
-                {workspaceChromeActive && !rightSidebarOpen && (
+                {workspaceChromeActive && (
                   <div
                     ref={titlebarRightClusterRef}
                     className="absolute top-0 z-10 flex items-center h-[36px]"
@@ -236,12 +237,21 @@ export function AppWorkspaceShell({
                       } as React.CSSProperties
                     }
                   >
-                    <DobiusTitlebarButtons />
-                    <AppRightSidebarToggleButton
-                      show={showRightSidebarControls}
-                      onToggle={onToggleRightSidebar}
-                      shortcutLabel={rightSidebarShortcutLabel}
-                    />
+                    {/* Why: Open Board must stay visible whether the right
+                    sidebar is open or closed, so it renders outside the
+                    `!rightSidebarOpen` guard below (which exists only to
+                    avoid duplicating the right sidebar's own close button). */}
+                    <OpenBoardTitlebarButton />
+                    {!rightSidebarOpen && (
+                      <>
+                        <DobiusTitlebarButtons />
+                        <AppRightSidebarToggleButton
+                          show={showRightSidebarControls}
+                          onToggle={onToggleRightSidebar}
+                          shortcutLabel={rightSidebarShortcutLabel}
+                        />
+                      </>
+                    )}
                   </div>
                 )}
                 <div className="flex flex-1 min-w-0 min-h-0 flex-col">

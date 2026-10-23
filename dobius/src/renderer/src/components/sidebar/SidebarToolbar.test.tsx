@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
   activeTooltipOpen: false,
   state: {
     persistedUIReady: true,
-    featureInteractions: {}
+    featureInteractions: {},
+    activeView: 'terminal'
   } as Partial<AppState>
 }))
 
@@ -70,7 +71,8 @@ describe('SidebarToolbar moved workspace board hint', () => {
     mocks.activeTooltipOpen = false
     mocks.state = {
       persistedUIReady: true,
-      featureInteractions: {}
+      featureInteractions: {},
+      activeView: 'terminal'
     }
   })
 
@@ -114,12 +116,28 @@ describe('SidebarToolbar moved workspace board hint', () => {
       persistedUIReady: true,
       featureInteractions: {
         'workspace-board': { firstInteractedAt: 100, interactionCount: 2 }
-      }
+      },
+      activeView: 'terminal'
     }
 
     const { container } = await renderToolbar()
 
     expect(container.textContent).toContain('Workspace board moved to the bottom bar')
     expect(window.localStorage.getItem('dobius.workspaceBoardMovedHintSeen.v1')).toBe('true')
+  })
+
+  it('does not show the moved hint while the Board surface is active, and does not mark it seen', async () => {
+    mocks.state = {
+      persistedUIReady: true,
+      featureInteractions: {
+        'workspace-board': { firstInteractedAt: 100, interactionCount: 2 }
+      },
+      activeView: 'board'
+    }
+
+    const { container } = await renderToolbar()
+
+    expect(container.textContent).not.toContain('Workspace board moved to the bottom bar')
+    expect(window.localStorage.getItem('dobius.workspaceBoardMovedHintSeen.v1')).toBeNull()
   })
 })

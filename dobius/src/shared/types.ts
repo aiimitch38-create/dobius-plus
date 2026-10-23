@@ -3195,6 +3195,12 @@ export type VisibleWorkspaceHostIds = Exclude<WorkspaceHostScope, 'all'>[] | nul
 export type WorkspaceHostOrder = Exclude<WorkspaceHostScope, 'all'>[]
 
 export type PersistedUIState = {
+  /** Board surface cards/groups/viewport per worktree; validated by the renderer's board slice. */
+  boardsByWorktree?: unknown
+  /** Saved Board arrangements per repo; validated by the renderer's preset module. */
+  boardPresetsByRepo?: unknown
+  /** Board memory facts per repo id (plus "global"); validated by the renderer's memory module. */
+  boardMemoryByRepo?: unknown
   lastActiveRepoId: string | null
   lastActiveWorktreeId: string | null
   sidebarWidth: number

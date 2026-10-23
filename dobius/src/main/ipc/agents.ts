@@ -25,6 +25,7 @@ import {
   type PrepareCodexLaunch
 } from '../agents/default-codex-launch'
 import { listAgentDecisions, resolveAgentDecision } from '../agents/agent-decision-queue'
+import { getVoiceConductorReply, postVoiceConductorTranscript } from '../voice-conductor/service'
 import {
   listAgentNotifications,
   markAgentNotificationsRead
@@ -126,8 +127,7 @@ export function registerAgentsHandlers(
       name: AgentIdentityFileName | 'brief' | 'memory',
       content: string,
       expected?: unknown
-    ) =>
-      writeAgentFile(requireAgentId(agentId), name, content, parseExpectedAgentFile(expected))
+    ) => writeAgentFile(requireAgentId(agentId), name, content, parseExpectedAgentFile(expected))
   )
 
   ipcMain.removeHandler('agents:readCrewFiles')
@@ -164,6 +164,28 @@ export function registerAgentsHandlers(
   ipcMain.removeHandler('agents:resolveDecision')
   ipcMain.handle('agents:resolveDecision', (_event, resolution: AgentDecisionResolution) =>
     resolveAgentDecision(resolution)
+  )
+
+  // Why: the Board command bar drives the same conductor the phone uses, so
+  // board orders get full agent tooling (spawn, relay, reply) with no new engine.
+  ipcMain.removeHandler('agents:conductorCommand')
+  ipcMain.handle(
+    'agents:conductorCommand',
+    async (_event, input: { requestId: string; transcript: string }) => {
+      try {
+        await postVoiceConductorTranscript(input)
+        return { ok: true as const }
+      } catch (error) {
+        return { ok: false as const, error: error instanceof Error ? error.message : String(error) }
+      }
+    }
+  )
+
+  ipcMain.removeHandler('agents:conductorReply')
+  ipcMain.handle(
+    'agents:conductorReply',
+    (_event, input: { requestId: string; sinceTs?: number }) =>
+      getVoiceConductorReply(input.requestId, input.sinceTs)
   )
 
   ipcMain.removeHandler('agents:listNotifications')

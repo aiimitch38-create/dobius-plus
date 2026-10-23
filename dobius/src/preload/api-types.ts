@@ -1379,6 +1379,14 @@ export type PreloadApi = {
     listDecisions: () => Promise<PendingAgentDecision[]>
     resolveDecision: (resolution: AgentDecisionResolution) => Promise<{ ok: true; note?: string }>
     listNotifications: () => Promise<AgentNotificationsSnapshot>
+    conductorCommand: (input: {
+      requestId: string
+      transcript: string
+    }) => Promise<{ ok: true } | { ok: false; error: string }>
+    conductorReply: (input: {
+      requestId: string
+      sinceTs?: number
+    }) => Promise<{ message: string; ts: number } | null>
     markNotificationsRead: () => Promise<AgentNotificationsSnapshot>
     listBriefing: () => Promise<BriefingItem[]>
     dismissBriefing: () => Promise<void>

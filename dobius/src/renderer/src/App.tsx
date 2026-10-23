@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { SYNC_FIT_PANES_EVENT, TOGGLE_TERMINAL_PANE_EXPAND_EVENT } from '@/constants/terminal'
 import { resolveLeftSidebarStyleVariables } from '@/lib/left-sidebar-appearance'
 import { canShowRightSidebarForView } from '@/lib/right-sidebar-visibility'
@@ -10,6 +10,8 @@ import { resolveLeftTitlebarChromeLayout } from '@/lib/titlebar-left-chrome'
 import { shouldShowWorktreeCreationSurface } from '@/lib/worktree-creation-surface'
 import { Toaster } from '@/components/ui/sonner'
 import { BoardDispatchGate } from './components/kanban/BoardDispatchGate'
+import { BoardRoute } from './app-lazy-pages'
+import { resolveEffectiveActiveView } from './components/board/board-effective-view'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useIpcEvents } from './hooks/useIpcEvents'
 import { useAutomationDispatchEvents } from './hooks/useAutomationDispatchEvents'
@@ -39,7 +41,10 @@ import type { VirtualizedScrollAnchor } from './hooks/useVirtualizedScrollAnchor
 import { resolveMountedLazyModalIds, type LazyModalId } from './lazy-modal-mount-state'
 import PinnedTabCloseDialog from './components/terminal-pane/PinnedTabCloseDialog'
 import { WindowControls } from './components/app-shell/WindowControls'
-import { AppTitlebarLeftControls, AppTitlebarMainStrip } from './components/app-shell/AppTitlebarChrome'
+import {
+  AppTitlebarLeftControls,
+  AppTitlebarMainStrip
+} from './components/app-shell/AppTitlebarChrome'
 import { AppWorkspaceShell } from './components/app-shell/AppWorkspaceShell'
 import { AppRootOverlays } from './components/app-shell/AppRootOverlays'
 import { shouldMountUpdateCardForStatus } from '@/lib/should-mount-update-card'
@@ -73,7 +78,7 @@ function App(): React.JSX.Element {
   useWebSessionTabsSync()
   const actions = useAppActions()
   const {
-    activeView,
+    activeView: storedActiveView,
     activeModal,
     featureTipsSeenIds,
     featureInteractions,
@@ -119,6 +124,7 @@ function App(): React.JSX.Element {
     canGoBackWorktree,
     canGoForwardWorktree
   } = useAppShellStoreState()
+  const activeView = resolveEffectiveActiveView(storedActiveView, activeWorktreeId)
   // Why: App swaps the sidebar between workspace and landing layouts when the
   // active workspace is slept/deleted. Keep virtualized scroll memory above
   // that remount so the left workspace list doesn't restart at scrollTop 0.
@@ -466,7 +472,9 @@ function App(): React.JSX.Element {
               shouldMountFloatingTerminalPanel={shouldMountFloatingTerminalPanel}
               floatingTerminalOpen={floatingTerminalOpen}
               setFloatingTerminalOpenWithFocus={setFloatingTerminalOpenWithFocus}
-              floatingWorkspaceTourInteractionSnapshotRef={floatingWorkspaceTourInteractionSnapshotRef}
+              floatingWorkspaceTourInteractionSnapshotRef={
+                floatingWorkspaceTourInteractionSnapshotRef
+              }
               statusBarVisible={statusBarVisible}
               activeView={activeView}
               activeModal={activeModal}
@@ -487,11 +495,20 @@ function App(): React.JSX.Element {
               shouldMountDictationController={shouldMountDictationController}
               showFloatingTerminalButton={showFloatingTerminalButton}
             />
+            {activeView === 'board' ? (
+              <Suspense fallback={null}>
+                <BoardRoute />
+              </Suspense>
+            ) : null}
           </LinkRoutingPreferenceDialogProvider>
         </ConfirmationDialogProvider>
       </TooltipProvider>
       <BoardDispatchGate enabled={settings?.vertexAutoModeEnabled === true} />
-      <Toaster closeButton toastOptions={{ className: 'font-sans text-sm' }} />
+      <Toaster
+        closeButton
+        position={activeView === 'board' ? 'top-center' : undefined}
+        toastOptions={{ className: 'font-sans text-sm' }}
+      />
       <PinnedTabCloseDialog />
       {/* Why: rendered last so it sits after all -webkit-app-region:drag elements
           in DOM order. Electron's hit-test for drag regions is DOM-order-based and

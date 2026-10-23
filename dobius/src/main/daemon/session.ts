@@ -1,5 +1,9 @@
 /* oxlint-disable max-lines */
 import { HeadlessEmulator } from './headless-emulator'
+import {
+  isForegroundSignal,
+  signalForegroundProcessGroup
+} from '../providers/foreground-process-group'
 import { isValidPtySize, normalizePtySize } from './daemon-pty-size'
 import { PostReadyFlushGate } from './post-ready-flush-gate'
 import {
@@ -205,6 +209,12 @@ export class Session {
 
   signal(sig: string): void {
     if (this._state === 'exited') {
+      return
+    }
+    if (isForegroundSignal(sig)) {
+      void signalForegroundProcessGroup(this.subprocess.pid, sig, {
+        write: (data) => this.subprocess.write(data)
+      })
       return
     }
     this.subprocess.signal(sig)

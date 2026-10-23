@@ -22,6 +22,7 @@ import { createConductorAgentSpawner } from './agent-spawn'
 import { createPersistentWorkRegistry } from './persistent-work-registry'
 import type { WorkRegistry } from './types'
 import { getUserDataRoot } from '../storage/user-data-root'
+import { isGroupAddress, resolveBoardGroupInWorktree } from '../runtime/orchestration/groups'
 
 const conductor = createVoiceConductor()
 let started = false
@@ -65,6 +66,30 @@ function buildTerminalDispatch(
   return {
     resolveActiveTab: () => runtime.resolveActiveTerminal(),
     sendToTab: async (tabId, text) => {
+      // Why: "@Team A" names a Board group; the conductor has no terminal of its
+      // own, so scope the group to the worktree of the terminal the user is on.
+      if (isGroupAddress(tabId)) {
+        const [active, { terminals }] = await Promise.all([
+          runtime.resolveActiveTerminal().catch(() => null),
+          runtime.listTerminals()
+        ])
+        // The real runtime returns full summaries; the dispatcher type only declares a subset.
+        const located = terminals.flatMap((t) => {
+          const { tabId: tab, worktreeId: wt } = t as { tabId?: unknown; worktreeId?: unknown }
+          return typeof tab === 'string' && typeof wt === 'string'
+            ? [{ handle: t.handle, tabId: tab, worktreeId: wt }]
+            : []
+        })
+        const worktreeId = located.find((t) => t.handle === active)?.worktreeId
+        const handles = worktreeId ? resolveBoardGroupInWorktree(tabId, worktreeId, located) : null
+        if (!handles || handles.length === 0) {
+          throw new Error(`No Board group ${tabId} with running consoles in the current workspace`)
+        }
+        for (const handle of handles) {
+          await runtime.sendTerminal(handle, { text, enter: true })
+        }
+        return { sent: text.length * handles.length }
+      }
       await runtime.sendTerminal(tabId, { text, enter: true })
       return { sent: text.length }
     },

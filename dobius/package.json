@@ -100,6 +100,7 @@
     "@emoji-mart/react": "^1.1.1",
     "@floating-ui/dom": "1.7.6",
     "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@linear/sdk": "^82.1.0",
     "@mediapipe/tasks-vision": "^1.0.1",
     "@paper-design/shaders-react": "^0.0.77",

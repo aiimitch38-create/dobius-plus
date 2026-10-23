@@ -387,3 +387,18 @@ that is one plain command and passes every time.
 - Tried: extracting capture contracts and geometry after the session module exceeded 300 lines; the formatted result still exceeded the ceiling.
 - Failed because: expanded callbacks and imports consume the line budget as well as executable statements.
 - Works instead: move session state and parameter validation into the focused capture-contract module; format before checking the budget. Do not disable or raise max-lines.
+
+## 2026-10-23 — Parsing `dobius orchestration check --wait --json` output
+- Tried: `json.loads` on the saved background-task output (sliced from first `{` to last `}`), twice.
+- Failed because: the stream is NOT one JSON document — it is many one-line `{"_heartbeat":...}` objects every 15 s, then ONE pretty-printed multi-line result object, then the harness appends `[exited with code 0]`. Any slice spanning more than one object raises "Extra data".
+- Works instead: drop heartbeats and decode only the first remaining object: `grep -v _heartbeat FILE | python3 -c 'import sys,json;s=sys.stdin.read();d,_=json.JSONDecoder().raw_decode(s[s.find("{"):]);...'` — or run the wait with `| grep -v _heartbeat` from the start.
+
+## 2026-10-23 — `timeout` wrapper silently killed a Playwright capture
+- Tried: `(timeout 180 node quick.mjs ...) 2>&1 | grep -E "^shot|fail"` to cap the Board screenshot run.
+- Failed because: macOS has no `timeout` binary; zsh printed "command not found: timeout", but the grep filter dropped that line, so the step produced no output and no screenshots (only the later `ls` failed). A skill for this already existed (`learned-no-timeout-on-macos`) and was not checked first.
+- Works instead: run `node` directly (the Bash tool already has its own timeout), and when piping through a filter, add `|command not found|Error` to the pattern so shell errors still surface.
+
+## 2026-10-23 — Styling edit shipped missing imports (BoardUsagePanel.tsx)
+- Tried: added `cn`, `BOARD_MONO_CLASS`, `BOARD_MENU_CONTENT_CLASS` usages to BoardUsagePanel.tsx via a scripted replace, then ran only `oxlint` on the file (exit 0).
+- Failed because: oxlint does not resolve identifiers across modules, so undefined names pass lint; vite builds without type-checking too. Only `typecheck:web` caught TS2304, after another worker hit it.
+- Works instead: after ANY scripted edit that introduces a new identifier, grep the file's import block for it in the same script (assert it is imported), and run `pnpm run typecheck:web` before reporting, not just oxlint. When moving shared class exports, grep every importer and update them in the same edit.

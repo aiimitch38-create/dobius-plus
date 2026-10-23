@@ -68,11 +68,22 @@ function getInitialWorktreeCreationPhase(request: WorktreeCreationRequest): Work
   return request.ephemeralVmRecipe && !request.ephemeralVmRuntimeId ? 'provisioning-vm' : 'fetching'
 }
 
+// Why: a workspace created from the Board ("+") stays on the Board: the flow
+// never forces Classic for it and activates the result in place (keepView).
+const boardOriginCreations = new Set<string>()
+
+function staysOnBoard(creationId: string): boolean {
+  return boardOriginCreations.has(creationId) && useAppStore.getState().activeView === 'board'
+}
+
 // Why: activePendingCreationId can outlive the terminal route when the user
 // switches app views; only the terminal route renders the creation panel.
 function isPendingCreationSurfaceVisible(creationId: string): boolean {
   const state = useAppStore.getState()
-  return state.activeView === 'terminal' && state.activePendingCreationId === creationId
+  return (
+    (state.activeView === 'terminal' && state.activePendingCreationId === creationId) ||
+    staysOnBoard(creationId)
+  )
 }
 
 function revealPendingCreation(
@@ -93,6 +104,10 @@ function revealPendingCreation(
     loaderVisible: true,
     request
   })
+  if (store.activeView === 'board') {
+    boardOriginCreations.add(creationId)
+    return
+  }
   // Why: the creation panel only renders under the terminal view (App content
   // router), so force it active so the panel is what fills the content area.
   store.setActiveView('terminal')
@@ -167,6 +182,9 @@ async function executeWorktreeCreation(
         preparedRequest.compareBaseRef
       )
   } catch (error) {
+    // Why: the Board has no creation panel, so a Board-started failure must toast;
+    // dropping the origin first makes the visibility check below see "not shown".
+    boardOriginCreations.delete(creationId)
     // Why: a missing entry means the user cancelled mid-flight — abandon
     // silently rather than surfacing an error for work they already dismissed.
     if (!useAppStore.getState().pendingWorktreeCreations[creationId]) {
@@ -223,6 +241,7 @@ async function executeWorktreeCreation(
   if (stillActive) {
     activation = activateAndRevealWorktree(worktree.id, {
       sidebarRevealBehavior: 'auto',
+      keepView: staysOnBoard(creationId),
       ...(result.setup ? { setup: result.setup } : {}),
       ...(result.defaultTabs ? { defaultTabs: result.defaultTabs } : {}),
       ...(startupOpt ? { startup: startupOpt } : {}),
@@ -247,6 +266,7 @@ async function executeWorktreeCreation(
   // Why: clearing synchronously right after activation lets React commit the
   // panel→terminal swap in one frame — no two-row flicker, no empty-terminal flash.
   useAppStore.getState().removePendingWorktreeCreation(creationId, { cleanupVm: false })
+  boardOriginCreations.delete(creationId)
   if (preparedRequest.startupPlan && !backendSpawned) {
     void ensureAgentStartupInTerminal({
       worktreeId: worktree.id,
@@ -315,7 +335,7 @@ export function continueBackgroundWorktreeCreation(
   })
   // Why: background work-item preflight can finish after the user moved on; keep
   // the pending row alive without reselecting the creation panel in that case.
-  if (options.revealCreationSurface !== false) {
+  if (options.revealCreationSurface !== false && !staysOnBoard(creationId)) {
     store.setActivePendingWorktreeCreation(creationId)
     store.setActiveView('terminal')
     store.setSidebarOpen(true)

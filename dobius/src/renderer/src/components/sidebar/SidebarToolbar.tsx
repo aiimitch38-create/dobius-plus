@@ -28,9 +28,13 @@ const SidebarToolbar = React.memo(function SidebarToolbar({
   const hasUsedWorkspaceBoard = useAppStore((state) =>
     hasFeatureInteraction(state.featureInteractions, 'workspace-board')
   )
+  // Why: read the RAW store value (not an effective/derived one) — Classic
+  // stays mounted underneath the full-window Board surface, and this tip
+  // must not draw over the Board while it's up.
+  const activeView = useAppStore((state) => state.activeView)
 
   React.useEffect(() => {
-    if (!persistedUIReady) {
+    if (!persistedUIReady || activeView === 'board') {
       return
     }
     // Why: only users who had already opened the old board location should
@@ -55,7 +59,15 @@ const SidebarToolbar = React.memo(function SidebarToolbar({
       setWorkspaceBoardMovedHintOpen(false)
     }, WORKSPACE_BOARD_MOVED_HINT_DURATION_MS)
     return () => window.clearTimeout(timeoutId)
-  }, [hasUsedWorkspaceBoard, persistedUIReady])
+  }, [activeView, hasUsedWorkspaceBoard, persistedUIReady])
+
+  React.useEffect(() => {
+    // Why: close an already-open hint the instant the Board surface comes
+    // up, rather than waiting for its auto-dismiss timeout to elapse.
+    if (activeView === 'board') {
+      setWorkspaceBoardMovedHintOpen(false)
+    }
+  }, [activeView])
 
   const handleWorkspaceBoardClick = (): void => {
     setWorkspaceBoardMovedHintOpen(false)

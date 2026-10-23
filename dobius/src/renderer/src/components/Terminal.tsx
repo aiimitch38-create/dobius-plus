@@ -281,8 +281,9 @@ function Terminal(): React.JSX.Element | null {
   // activeTabId here used to flash the wrong terminal — selectThread updates
   // the store in multiple steps and intermediate renders briefly pointed the
   // portal at the new worktree's stale last-active tab.
+  // Why: the Board's console cards borrow live panes through the same portal registry.
   const activityTerminalPortals: ActivityTerminalPortalTarget[] = useActivityTerminalPortals(
-    activeView === 'activity'
+    activeView === 'activity' || activeView === 'board'
   )
   const foregroundTerminalTabIds = useMemo(() => {
     const ids = new Set<string>()
@@ -571,7 +572,9 @@ function Terminal(): React.JSX.Element | null {
     // owns that write path now, so the dialog signals it through a custom
     // event instead of poking at editor component refs.
     setSaveDialogFileId(null)
-    window.dispatchEvent(new CustomEvent(DOBIUS_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId } }))
+    window.dispatchEvent(
+      new CustomEvent(DOBIUS_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId } })
+    )
     inFlightSaveFileIdRef.current = fileId
     let closed = false
     try {

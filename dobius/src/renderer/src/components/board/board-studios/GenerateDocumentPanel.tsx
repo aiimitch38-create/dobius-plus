@@ -1,0 +1,165 @@
+import React, { useState } from 'react'
+import { Loader2, Send } from 'lucide-react'
+import { toast } from 'sonner'
+import { translate } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
+import { useAppStore } from '@/store'
+import { getBoard } from '@/store/slices/board'
+import { notePushTargets, pushNoteToConsole } from '../cards/note-push'
+import {
+  DOCUMENT_TEMPLATE_IDS,
+  buildDocumentRequest,
+  documentTemplateFile,
+  type DocumentTemplateId
+} from './document-generation-prompts'
+
+function templateLabel(id: DocumentTemplateId): string {
+  switch (id) {
+    case 'overview':
+      return translate('board.studio.docs.template.overview', 'Overview')
+    case 'onboarding':
+      return translate('board.studio.docs.template.onboarding', 'Onboarding')
+    case 'architecture':
+      return translate('board.studio.docs.template.architecture', 'Architecture')
+    case 'custom':
+      return translate('board.studio.docs.template.custom', 'Custom')
+  }
+}
+
+const PICK_CLASS =
+  'rounded-[12px] border border-[var(--board-panel-border)] px-3 py-2 text-left hover:bg-[var(--board-panel-2)] aria-pressed:border-[var(--board-accent)] aria-pressed:bg-[var(--board-accent-tint)]'
+
+// Why: the writing happens in a real console agent (notes-send path, SSH-aware),
+// so the document lands in the repo with the agent's normal tools and review.
+export function GenerateDocumentPanel({
+  worktreeId,
+  onSent
+}: {
+  worktreeId: string
+  onSent: () => void
+}): React.JSX.Element {
+  const targets = notePushTargets(useAppStore((s) => getBoard(s, worktreeId)))
+  const [template, setTemplate] = useState<DocumentTemplateId>('overview')
+  const [customAsk, setCustomAsk] = useState('')
+  const [tabId, setTabId] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
+  const target = targets.find((t) => t.tabId === tabId) ?? targets[0] ?? null
+  const prompt = buildDocumentRequest(template, customAsk)
+  const file = documentTemplateFile(template)
+
+  const send = async (): Promise<void> => {
+    if (!target || !prompt) {
+      return
+    }
+    setSending(true)
+    try {
+      const error = await pushNoteToConsole(worktreeId, target.tabId, prompt)
+      if (error) {
+        toast.error(error)
+        return
+      }
+      toast.success(
+        translate('board.studio.docs.generateSent', 'Asked {{name}} to write it', {
+          name: target.title
+        })
+      )
+      onSent()
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="scrollbar-sleek min-h-0 flex-1 space-y-6 overflow-y-auto px-8 py-6">
+        <section className="space-y-2">
+          <h3 className="text-[13px] font-semibold text-[var(--board-text)]">
+            {translate('board.studio.docs.templateHeading', 'What should it write?')}
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {DOCUMENT_TEMPLATE_IDS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={template === id}
+                onClick={() => setTemplate(id)}
+                className={PICK_CLASS}
+              >
+                <span className="block text-[13px] font-medium text-[var(--board-text)]">
+                  {templateLabel(id)}
+                </span>
+                <span className="block truncate font-mono text-[11px] text-[var(--board-text-muted)]">
+                  {documentTemplateFile(id) ??
+                    translate('board.studio.docs.template.customHint', 'Describe it below')}
+                </span>
+              </button>
+            ))}
+          </div>
+          {template === 'custom' ? (
+            <textarea
+              value={customAsk}
+              onChange={(event) => setCustomAsk(event.target.value)}
+              rows={3}
+              aria-label={translate('board.studio.docs.customLabel', 'Describe the document')}
+              placeholder={translate(
+                'board.studio.docs.customPlaceholder',
+                'e.g. a release checklist for this repo'
+              )}
+              className="w-full resize-none rounded-[12px] border border-[var(--board-panel-border)] bg-[var(--board-panel-2)] px-3 py-2 text-[13px] text-[var(--board-text)] outline-none placeholder:text-[var(--board-text-muted)] focus:border-[var(--board-accent)]"
+            />
+          ) : null}
+        </section>
+        <section className="space-y-2">
+          <h3 className="text-[13px] font-semibold text-[var(--board-text)]">
+            {translate('board.studio.docs.agentHeading', 'Which agent writes it?')}
+          </h3>
+          {targets.length === 0 ? (
+            <p className="text-[12px] text-[var(--board-text-muted)]">
+              {translate(
+                'board.studio.docs.noAgents',
+                'Spawn a console on this board first; the document is written by an agent.'
+              )}
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {targets.map((t) => (
+                <button
+                  key={t.cardId}
+                  type="button"
+                  aria-pressed={target?.tabId === t.tabId}
+                  onClick={() => setTabId(t.tabId)}
+                  className={cn(
+                    PICK_CLASS,
+                    'rounded-full py-1 text-[12px] text-[var(--board-text)]'
+                  )}
+                >
+                  {t.title}
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+        {file ? (
+          <p className="text-[12px] text-[var(--board-text-muted)]">
+            {translate(
+              'board.studio.docs.generateHint',
+              'When the agent saves {{file}}, press refresh to see it in the list.',
+              { file }
+            )}
+          </p>
+        ) : null}
+      </div>
+      <footer className="shrink-0 border-t border-[var(--board-panel-border)] px-8 py-4">
+        <button
+          type="button"
+          disabled={!target || !prompt || sending}
+          onClick={() => void send()}
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[var(--board-accent)] text-[14px] font-semibold text-[var(--board-accent-fg)] hover:opacity-90 disabled:opacity-40"
+        >
+          {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+          {translate('board.studio.docs.generateSend', 'Send to agent')}
+        </button>
+      </footer>
+    </div>
+  )
+}

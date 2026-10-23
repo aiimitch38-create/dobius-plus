@@ -31,6 +31,20 @@ export type UseOnboardingAndFeatureTipsGateParams = {
   actions: OnboardingGateActions
 }
 
+// Why: `onboarding === null` is the startup loading state. Suppress
+// contextual tours until the persisted onboarding state is known so a
+// first-run user cannot have a tour marked seen before onboarding appears.
+// Not suppressed on the Board: it is the default view, so blanket suppression
+// would hide every Dobius tour. Classic-chrome tips gate themselves instead
+// (e.g. SidebarToolbar's "moved to the bottom bar" hint).
+export function shouldSuppressContextualTours(args: {
+  activeView: AppState['activeView']
+  onboarding: OnboardingState | null
+  onboardingLoaded: boolean
+}): boolean {
+  return !args.onboardingLoaded || shouldShowOnboarding(args.onboarding)
+}
+
 export type UseOnboardingAndFeatureTipsGateResult = {
   onboarding: OnboardingState | null
   setOnboarding: Dispatch<SetStateAction<OnboardingState | null>>
@@ -71,12 +85,13 @@ export function useOnboardingAndFeatureTipsGate({
   }, [])
 
   useEffect(() => {
-    // Why: `onboarding === null` is the startup loading state. Suppress
-    // contextual tours until the persisted onboarding state is known so a
-    // first-run user cannot have a tour marked seen before onboarding appears.
-    const suppressTours = !onboardingLoaded || shouldShowOnboarding(onboarding)
+    const suppressTours = shouldSuppressContextualTours({
+      activeView,
+      onboarding,
+      onboardingLoaded
+    })
     actions.setContextualToursOnboardingVisible(suppressTours)
-  }, [actions, onboarding, onboardingLoaded])
+  }, [actions, activeView, onboarding, onboardingLoaded])
 
   useEffect(() => {
     if (!persistedUIReady || !onboardingLoaded || contextualToursAutoEligible !== null) {

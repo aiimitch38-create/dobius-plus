@@ -10,7 +10,7 @@ const { prepareEphemeralVmWorkspaceTargetMock } = vi.hoisted(() => ({
   prepareEphemeralVmWorkspaceTargetMock: vi.fn()
 }))
 
-type TestActiveView = 'terminal' | 'tasks'
+type TestActiveView = 'terminal' | 'tasks' | 'board'
 
 const store = {
   settings: { activeRuntimeEnvironmentId: null as string | null },
@@ -585,6 +585,25 @@ describe('staged background worktree creation', () => {
       })
     )
     expect(toast.error).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Board-started worktree creation', () => {
+  it('stays on the Board: no forced Classic view while the create runs', async () => {
+    store.activeView = 'board'
+    store.setActiveView.mockClear()
+    store.setSidebarOpen.mockClear()
+    store.setActivePendingWorktreeCreation.mockClear()
+    try {
+      beginBackgroundWorktreePreparation(makeRequest({ displayName: 'From board' }))
+      continueBackgroundWorktreeCreation('creation-1', makeRequest())
+      await Promise.resolve()
+      expect(store.setActiveView).not.toHaveBeenCalled()
+      expect(store.setSidebarOpen).not.toHaveBeenCalled()
+      expect(store.setActivePendingWorktreeCreation).not.toHaveBeenCalled()
+    } finally {
+      store.activeView = 'terminal'
+    }
   })
 })
 

@@ -30,6 +30,8 @@ import {
   ExecutionBlockedError,
   isExecutionBlockedError
 } from '../agents/execution-gate'
+import { LoopRunner } from './loop-runner'
+import type { LoopTerminals } from './loop-terminals'
 
 const DEFAULT_TICK_MS = 60 * 1000
 
@@ -37,6 +39,7 @@ export class AutomationService {
   private readonly store: Store
   private readonly tickMs: number
   private timer: ReturnType<typeof setInterval> | null = null
+  private readonly loops: LoopRunner
   private webContents: WebContents | null = null
   private rendererReady = false
   private evaluating = false
@@ -53,6 +56,7 @@ export class AutomationService {
       codexUsage?: CodexUsageStore
       allowRemoteHostScheduling?: boolean
       headlessDispatcher?: HeadlessAutomationDispatcher
+      loopTerminals?: LoopTerminals
     } = {}
   ) {
     this.store = store
@@ -61,6 +65,7 @@ export class AutomationService {
     this.codexUsage = opts.codexUsage ?? null
     this.allowRemoteHostScheduling = opts.allowRemoteHostScheduling ?? false
     this.headlessDispatcher = opts.headlessDispatcher ?? null
+    this.loops = new LoopRunner(store, opts.loopTerminals ?? null)
     // Why: constructed once per process, before any dispatch, so every
     // 'dispatching' run here was left by a previous process.
     markInterruptedAutomationRuns(store)
@@ -83,6 +88,7 @@ export class AutomationService {
     this.timer = setInterval(() => {
       void this.evaluateDueRuns()
     }, this.tickMs)
+    this.loops.start()
     // Why: headless serve never gets a renderer-ready IPC, but due runs still
     // need the same startup catch-up pass desktop gets after renderer attach.
     if (this.rendererReady || this.headlessDispatcher) {
@@ -96,6 +102,7 @@ export class AutomationService {
     }
     clearInterval(this.timer)
     this.timer = null
+    this.loops.stop()
   }
 
   /**
@@ -107,6 +114,9 @@ export class AutomationService {
     const automation = this.store.listAutomations().find((entry) => entry.id === automationId)
     if (!automation) {
       throw new Error('Automation not found.')
+    }
+    if (automation.loop) {
+      return await this.loops.runNow(automation)
     }
     const run = this.store.createAutomationRun(automation, Date.now(), 'manual')
     return await this.requestDispatch(automation, run, !humanTrigger)
@@ -154,7 +164,8 @@ export class AutomationService {
     try {
       const now = Date.now()
       for (const automation of this.store.listAutomations()) {
-        if (!automation.enabled || automation.nextRunAt > now) {
+        // Why: loops are event-driven; their rrule is a placeholder and must never fire.
+        if (!automation.enabled || automation.loop || automation.nextRunAt > now) {
           continue
         }
         try {

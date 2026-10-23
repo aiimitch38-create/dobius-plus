@@ -4,6 +4,7 @@
  */
 export function resolveZoomTarget(args: {
   activeView:
+    | 'board'
     | 'terminal'
     | 'settings'
     | 'tasks'
@@ -20,7 +21,7 @@ export function resolveZoomTarget(args: {
     | 'mobile'
   activeTabType: 'terminal' | 'editor' | 'browser' | 'simulator'
   activeElement: unknown
-}): 'terminal' | 'editor' | 'simulator' | 'ui' {
+}): 'board' | 'terminal' | 'editor' | 'simulator' | 'ui' {
   const { activeView, activeTabType, activeElement } = args
   const terminalInputFocused =
     typeof activeElement === 'object' &&
@@ -46,6 +47,10 @@ export function resolveZoomTarget(args: {
       )
     )
 
+  // Why: on the Board, Cmd +/- zooms the canvas; the app menu eats the keys first.
+  if (activeView === 'board') {
+    return 'board'
+  }
   if (activeView !== 'terminal') {
     return 'ui'
   }

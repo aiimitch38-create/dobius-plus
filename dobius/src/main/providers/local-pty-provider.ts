@@ -3,6 +3,7 @@
 tightly coupled PTY lifecycle logic (scan → ready → write → exit cleanup) across
 files without a cleaner ownership seam. */
 import { basename, delimiter } from 'node:path'
+import { isForegroundSignal, signalForegroundProcessGroup } from './foreground-process-group'
 import { win32 as pathWin32 } from 'node:path'
 import { resolveWindowsShellLaunchArgs } from './windows-shell-args'
 import {
@@ -874,6 +875,10 @@ export class LocalPtyProvider implements IPtyProvider {
   async sendSignal(id: string, signal: string): Promise<void> {
     const proc = ptyProcesses.get(id)
     if (!proc) {
+      return
+    }
+    if (isForegroundSignal(signal)) {
+      await signalForegroundProcessGroup(proc.pid, signal, { write: (data) => proc.write(data) })
       return
     }
     try {

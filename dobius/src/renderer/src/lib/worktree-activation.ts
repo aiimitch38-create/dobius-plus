@@ -292,6 +292,8 @@ export function activateAndRevealWorktree(
     sidebarRevealBehavior?: PendingSidebarWorktreeReveal['behavior']
     notifyHostRuntime?: boolean
     revealInSidebar?: boolean
+    /** Keep the current view (the Board switches workspaces in place). */
+    keepView?: boolean
   }
 ): ActivateAndRevealResult | false {
   const state = useAppStore.getState()
@@ -308,15 +310,16 @@ export function activateAndRevealWorktree(
     !hasActivationWork &&
     state.activeRepoId === wt.repoId &&
     state.activeWorktreeId === worktreeId &&
-    state.activeView === 'terminal'
+    (state.activeView === 'terminal' || opts?.keepView === true)
 
   // 1. Set activeRepoId if crossing repos
   if (wt.repoId !== state.activeRepoId) {
     state.setActiveRepo(wt.repoId)
   }
 
-  // 2. Switch any non-terminal view back to terminal
-  if (state.activeView !== 'terminal') {
+  // 2. Switch any non-terminal view back to terminal, unless the caller (the
+  // Board) owns the view and only wants the workspace changed underneath it.
+  if (state.activeView !== 'terminal' && opts?.keepView !== true) {
     state.setActiveView('terminal')
   }
 
@@ -332,7 +335,8 @@ export function activateAndRevealWorktree(
     void activateWebRuntimeSessionWorktree({
       worktreeId,
       environmentId: ownerRuntimeEnvironmentId,
-      notifyDesktop: (globalThis as { __DOBIUS_WEB_CLIENT__?: boolean }).__DOBIUS_WEB_CLIENT__ !== true
+      notifyDesktop:
+        (globalThis as { __DOBIUS_WEB_CLIENT__?: boolean }).__DOBIUS_WEB_CLIENT__ !== true
     })
   }
 

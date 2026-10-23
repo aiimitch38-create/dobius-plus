@@ -120,6 +120,11 @@ export async function pasteDraftWhenAgentReady(args: {
     }
   }
 
+  if (submit === true && !(await agentOwnsPtyForSubmit(ptyId, agentConfig, settings))) {
+    onTimeout?.()
+    return false
+  }
+
   return await sendBracketedPasteToAgent({
     settings,
     ptyId,
@@ -157,6 +162,11 @@ export async function pasteDraftToAgentPtyWhenReady(args: {
       onTimeout?.()
       return false
     }
+  }
+
+  if (submit === true && !(await agentOwnsPtyForSubmit(ptyId, agentConfig, settings))) {
+    onTimeout?.()
+    return false
   }
 
   return await sendBracketedPasteToAgent({
@@ -247,6 +257,27 @@ async function waitForPtyId(tabId: string, timeoutMs: number): Promise<string | 
     await new Promise<void>((resolve) => window.setTimeout(resolve, 50))
   }
   return null
+}
+
+// Why: the draft-ready signal (bracketed paste on, quiet render) is also what a
+// plain shell prompt emits (zsh enables bracketed paste). A submitting paste
+// must never land in a shell, where the Enter would run it as a command, so it
+// waits for the launched agent to own the PTY's foreground.
+const SUBMIT_AGENT_CONFIRM_MS = 3000
+
+async function agentOwnsPtyForSubmit(
+  ptyId: string,
+  agentConfig: (typeof TUI_AGENT_CONFIG)[TuiAgent] | null,
+  settings: Pick<GlobalSettings, 'activeRuntimeEnvironmentId'> | null | undefined
+): Promise<boolean> {
+  return agentConfig
+    ? await waitForExpectedAgentOnPty(
+        ptyId,
+        agentConfig.expectedProcess,
+        SUBMIT_AGENT_CONFIRM_MS,
+        settings
+      )
+    : false
 }
 
 async function waitForExpectedAgentOnPty(

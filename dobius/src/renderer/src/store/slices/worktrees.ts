@@ -1732,6 +1732,8 @@ function buildWorktreeRenameState(
     files.map(withNewWorktreeId)
   )
   renameKey('remoteStatusesByWorktree')
+  // Why: Board cards/groups are per worktree; a rename must keep the board.
+  renameKey('boardsByWorktree')
 
   const openFiles = s.openFiles?.some((f) => f.worktreeId === oldWorktreeId)
     ? s.openFiles.map((f) =>
@@ -2054,6 +2056,9 @@ function buildWorktreePurgeState(s: AppState, worktreeIds: string[]): Partial<Ap
     // Why: keyed by worktreeId; re-keyed on rename but missed by both removal
     // paths, leaking an upstream-status entry per removed worktree.
     remoteStatusesByWorktree: omitByWorktree(s.remoteStatusesByWorktree),
+    // Why: main also reads Board groups from this map; stale boards would keep
+    // routing "@group" relays and loop targets to removed consoles.
+    boardsByWorktree: omitByWorktree(s.boardsByWorktree ?? {}),
     gitStatusHeadByWorktree: omitByWorktree(s.gitStatusHeadByWorktree),
     gitIgnoredPathsByWorktree: omitByWorktree(s.gitIgnoredPathsByWorktree),
     gitConflictOperationByWorktree: omitByWorktree(s.gitConflictOperationByWorktree),
@@ -3284,6 +3289,11 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
           })(),
           defaultTerminalTabsAppliedByWorktreeId: (() => {
             const next = { ...s.defaultTerminalTabsAppliedByWorktreeId }
+            delete next[worktreeId]
+            return next
+          })(),
+          boardsByWorktree: (() => {
+            const next = { ...s.boardsByWorktree }
             delete next[worktreeId]
             return next
           })(),

@@ -1,0 +1,344 @@
+// Why: the Board's own fonts (SIL OFL) load with its lazy chunk, not the Classic shell.
+import '@fontsource-variable/inter/wght.css'
+import '@fontsource-variable/jetbrains-mono/wght.css'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { dispatchDictationControl } from '@/components/dictation/dictation-control-events'
+import { voiceOrbLevelSource } from '@/components/dictation/voice-orb-live-level'
+import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
+import { BoardPage } from './BoardPage'
+import { boardFreeSpawnCenter, boardSpawnBlockSize } from './board-canvas/board-spawn-placement'
+import { screenToWorld, type BoardPoint, type BoardViewport } from './board-canvas/board-viewport'
+import { BoardAgentPicker, type BoardAgentPickerRequest } from './board-chrome/BoardAgentPicker'
+import type { BoardSideAppId } from './board-chrome/BoardSideApps'
+import { isBoardShortcutBlockedTarget } from './board-chrome/board-tools'
+import { BoardLoopsObserver } from './board-loops/BoardLoopsObserver'
+import { BoardDevServerWatcher } from './board-web/BoardDevServerWatcher'
+import { BoardStudioHost } from './board-studios/BoardStudioHost'
+import { BoardCanvasMenu } from './board-chrome/BoardCanvasMenu'
+import { useBoardCanvasMenu } from './board-route/use-board-canvas-menu'
+import { useBoardHistory } from './board-route/use-board-history'
+import { useBoardImageInsert } from './board-route/use-board-image-insert'
+import { useBoardToolPanel } from './board-route/use-board-tool-panel'
+import { useBoardShortcuts } from './board-route/use-board-shortcuts'
+import { BoardToolOptionsPanel } from './board-tool-panels/BoardToolOptionsPanel'
+import { BoardCardStyleInspector } from './board-tool-panels/BoardCardStyleInspector'
+import { useCardStyleEditor } from './board-tool-panels/card-style-editor'
+import type { BoardStudioId } from './board-studios/board-studio-ids'
+import { BoardCardsLayer } from './board-route/BoardCardsLayer'
+import { boardInsertCard } from './board-route/board-insert-cards'
+import { clampRectIntoArea } from './cards/card-geometry'
+import { useBoardActions } from './board-route/use-board-actions'
+import { useBoardCommand } from './board-route/use-board-command'
+import { useBoardPlanner } from './board-planner/use-board-planner'
+import { resumeAllPausedConsoles } from './board-delivery/pause-consoles'
+import { useBoardConductor } from './board-route/use-board-conductor'
+import { useBoardPen } from './board-route/use-board-pen'
+import { useBoardPushToTalk } from './board-route/use-board-push-to-talk'
+import { useBoardRouteData } from './board-route/use-board-route-data'
+import { useBoardSelection } from './board-route/use-board-selection'
+import { useBoardTopBarProps } from './board-route/use-board-top-bar-props'
+
+// The expanded thread (560x~602, 28px above the bottom, centered) is treated as
+// occupied even when collapsed, so a card never lands where the thread opens.
+function threadWorldRect(v: BoardViewport): { x: number; y: number; w: number; h: number } {
+  const tl = screenToWorld({ x: window.innerWidth / 2 - 280, y: window.innerHeight - 630 }, v)
+  const br = screenToWorld({ x: window.innerWidth / 2 + 280, y: window.innerHeight - 28 }, v)
+  return { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y }
+}
+
+type PickerState = { request: BoardAgentPickerRequest; world: BoardPoint }
+
+const SIDE_APP_STUDIO: Record<BoardSideAppId, BoardStudioId> = {
+  agents: 'agents',
+  automations: 'loops',
+  skills: 'skills',
+  kanban: 'kanban',
+  communications: 'communications',
+  settings: 'settings'
+}
+
+// Why: the Board renders as a full-window layer over the Classic shell so the
+// shell (and every live TerminalPane in it) stays mounted while the Board is up.
+export default function BoardRoute(): React.JSX.Element {
+  const data = useBoardRouteData()
+  const { worktreeId, board } = data
+  const [studio, setStudio] = useState<BoardStudioId | null>(null)
+  const [picker, setPicker] = useState<PickerState | null>(null)
+  const [draft, setDraft] = useState('')
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const inputRef = useRef<HTMLInputElement>(null)
+  const listening = useAppStore(
+    (s) => s.dictationState === 'listening' || s.dictationState === 'starting'
+  )
+
+  const openSettings = useCallback(() => setStudio('settings'), [])
+  const conductor = useBoardConductor(openSettings, data.repoId)
+  const selection = useBoardSelection(worktreeId, board.tool)
+  const pen = useBoardPen(worktreeId, board.viewport)
+  // Chrome insets (rails, top bar, collapsed command bar) bound the visible area
+  // new consoles may use, so they never land hidden under the composer.
+  const freeCenter = useCallback(
+    (block: { w: number; h: number }): BoardPoint => {
+      const v = board.viewport
+      const topLeft = screenToWorld({ x: 96, y: 72 }, v)
+      const bottomRight = screenToWorld(
+        { x: window.innerWidth - 80, y: window.innerHeight - 170 },
+        v
+      )
+      return boardFreeSpawnCenter(
+        {
+          x: topLeft.x,
+          y: topLeft.y,
+          w: bottomRight.x - topLeft.x,
+          h: bottomRight.y - topLeft.y
+        },
+        block,
+        [...board.cards, threadWorldRect(v)]
+      )
+    },
+    [board.cards, board.viewport]
+  )
+  const closeStudio = useCallback(() => setStudio(null), [])
+  const plannerContext = useMemo(
+    () => ({ openStudio: setStudio, closeStudio, freeCenter }),
+    [closeStudio, freeCenter]
+  )
+  const planner = useBoardPlanner({ data, conductor, context: plannerContext })
+  const onCommand = useBoardCommand(data, conductor, planner)
+  // Why: leaving the Board must never leave a paused agent frozen in the background.
+  useEffect(
+    () => () => {
+      void resumeAllPausedConsoles()
+    },
+    []
+  )
+  const openPicker = useCallback(
+    (count: number, anchor?: DOMRect) =>
+      setPicker({
+        request: {
+          count,
+          side: 'top',
+          screen: anchor
+            ? { x: anchor.left, y: anchor.top }
+            : { x: window.innerWidth / 2 - 104, y: window.innerHeight - 160 }
+        },
+        world: freeCenter(boardSpawnBlockSize(count))
+      }),
+    [freeCenter]
+  )
+  const actions = useBoardActions({
+    data,
+    selectedIds: selection.selectedIds,
+    conductor,
+    openStudio: setStudio,
+    openPicker,
+    freeCenter
+  })
+  const ptt = useBoardPushToTalk(inputRef, () => {
+    const text = draftRef.current.trim()
+    if (text) {
+      onCommand(text)
+      setDraft('')
+    }
+  })
+  const topBar = useBoardTopBarProps(data, setStudio)
+  const history = useBoardHistory(worktreeId)
+  useBoardShortcuts({
+    worktreeId,
+    selection,
+    undo: history.undo,
+    redo: history.redo,
+    onChip: actions.onChip,
+    openStudio: setStudio,
+    openGitHub: topBar.onOpenGitHub
+  })
+
+  const { toolPanelOpen, setTool } = useBoardToolPanel(worktreeId, board.tool)
+  const styleEditorOpen = useCardStyleEditor((s) => s.target?.worktreeId === worktreeId)
+  const images = useBoardImageInsert(worktreeId, () => setTool('select'))
+  const canvasMenu = useBoardCanvasMenu({
+    worktreeId,
+    board,
+    selection,
+    spawnAt: (at, count) => setPicker({ request: { count, screen: at.screen }, world: at.world }),
+    pickImageAt: images.pickAt,
+    openMissionMap: () => setStudio('mission-map')
+  })
+
+  // Escape closes the agent picker first, then lets studios handle their own Esc.
+  useEffect(() => {
+    if (!picker) {
+      return
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setPicker(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [picker])
+
+  const onEmptyPointerDown = (world: BoardPoint, event: React.PointerEvent): void => {
+    if (!worktreeId) {
+      return
+    }
+    const tool = board.tool
+    // Why: Diagrams draws from its panel (an agent generates it), not from a canvas click.
+    if (tool === 'select' || tool === 'eraser' || tool === 'screen') {
+      if (!event.shiftKey) {
+        selection.clear()
+      }
+      return
+    }
+    if (tool === 'spawn') {
+      setPicker({ request: { count: 1, screen: { x: event.clientX, y: event.clientY } }, world })
+      return
+    }
+    if (tool === 'pen') {
+      pen.start(world)
+      return
+    }
+    if (tool === 'image') {
+      images.pickAt(world)
+      return
+    }
+    // Why: a card placed at the click point must still keep its title bar on
+    // screen (a 900x600 web tile clicked near the top sat under the top bar).
+    const placed = boardInsertCard(tool, world)
+    const v = board.viewport
+    const tl = screenToWorld({ x: 96, y: 72 }, v)
+    const br = screenToWorld({ x: window.innerWidth - 80, y: window.innerHeight - 28 }, v)
+    useAppStore.getState().addCard(worktreeId, {
+      ...placed,
+      ...clampRectIntoArea(placed, { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y })
+    })
+    setTool('select')
+  }
+
+  // Delete removes the selection, unless the key is meant for a console or field.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (
+        (event.key === 'Delete' || event.key === 'Backspace') &&
+        !isBoardShortcutBlockedTarget(event.target)
+      ) {
+        selection.removeSelected()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selection])
+
+  const chatTabId = data.consoles.find((c) => selection.selectedIds.has(c.id))?.tabId ?? null
+
+  return (
+    <div data-surface="board" className="fixed inset-0 z-40 bg-[var(--board-canvas)]">
+      <BoardPage
+        viewport={board.viewport}
+        onViewportChange={(viewport) =>
+          worktreeId && useAppStore.getState().setViewport(worktreeId, viewport)
+        }
+        tool={board.tool}
+        onToolChange={setTool}
+        contentRects={board.cards.map((c) => ({ x: c.x, y: c.y, width: c.w, height: c.h }))}
+        onEmptyPointerDown={onEmptyPointerDown}
+        onMarquee={canvasMenu.onMarquee}
+        onEmptyContextMenu={canvasMenu.open}
+        toolOptions={
+          styleEditorOpen ? (
+            <BoardCardStyleInspector />
+          ) : toolPanelOpen ? (
+            <BoardToolOptionsPanel key={board.tool} tool={board.tool} worktreeId={worktreeId} />
+          ) : null
+        }
+        spaceHeld={ptt.spaceHeld}
+        onSpacePanStart={ptt.cancelForPan}
+        onInsert={actions.onInsert}
+        onOpenGitHub={topBar.onOpenGitHub}
+        onOpenSideApp={(app) => setStudio(SIDE_APP_STUDIO[app])}
+        activeSideApp={
+          (Object.keys(SIDE_APP_STUDIO) as BoardSideAppId[]).find(
+            (app) => SIDE_APP_STUDIO[app] === studio
+          ) ?? null
+        }
+        topBar={topBar.props}
+        commandBar={{
+          messages: conductor.messages,
+          projectName: topBar.projectName,
+          languageLabel: translate('board.thread.languageAuto', 'Auto'),
+          draft,
+          onDraftChange: setDraft,
+          inputRef,
+          onCommand,
+          onChip: actions.onChip,
+          getVoiceLevel: () => voiceOrbLevelSource.current(),
+          listening,
+          onMicToggle: () => {
+            inputRef.current?.focus()
+            dispatchDictationControl('toggle')
+          },
+          busy: conductor.busy
+        }}
+        overlay={
+          <>
+            <BoardCanvasMenu
+              at={canvasMenu.at?.screen ?? null}
+              hasSelection={selection.selectedIds.size > 0}
+              onAction={canvasMenu.onAction}
+              onClose={canvasMenu.close}
+            />
+            <BoardAgentPicker
+              request={picker?.request ?? null}
+              agents={data.agents}
+              onPick={(agent) => {
+                if (picker) {
+                  actions.spawn(agent, picker.request.count, picker.world)
+                }
+                setPicker(null)
+                if (board.tool === 'spawn') {
+                  setTool('select')
+                }
+              }}
+              onClose={() => setPicker(null)}
+            />
+            {/* On-idle loops only fire while this observer is mounted (once, with the Board). */}
+            {worktreeId ? <BoardLoopsObserver key={worktreeId} worktreeId={worktreeId} /> : null}
+            {worktreeId ? <BoardDevServerWatcher worktreeId={worktreeId} /> : null}
+            <BoardStudioHost
+              studio={studio}
+              worktreeId={worktreeId}
+              chatTabId={chatTabId}
+              onClose={() => setStudio(null)}
+            />
+            <input
+              ref={images.inputRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(event) => {
+                images.onPicked(event.target.files?.[0])
+                event.target.value = ''
+              }}
+            />
+          </>
+        }
+      >
+        {worktreeId ? (
+          <BoardCardsLayer
+            worktreeId={worktreeId}
+            board={board}
+            selectedIds={selection.selectedIds}
+            onSelect={selection.onSelect}
+            onDragBy={selection.onDragBy}
+            onDragEnd={selection.onDragEnd}
+            guides={selection.guides}
+            penPoints={pen.points}
+          />
+        ) : null}
+      </BoardPage>
+    </div>
+  )
+}

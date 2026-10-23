@@ -550,6 +550,7 @@ export type UISlice = {
   acknowledgeAgents: (paneKeys: string[]) => void
   unacknowledgeAgents: (paneKeys: string[]) => void
   activeView:
+    | 'board'
     | 'terminal'
     | 'settings'
     | 'tasks'
@@ -565,6 +566,7 @@ export type UISlice = {
     | 'dobius'
     | 'buzz'
   previousViewBeforeTasks:
+    | 'board'
     | 'terminal'
     | 'settings'
     | 'activity'
@@ -579,6 +581,7 @@ export type UISlice = {
     | 'dobius'
     | 'buzz'
   previousViewBeforeSettings:
+    | 'board'
     | 'terminal'
     | 'tasks'
     | 'activity'
@@ -593,6 +596,7 @@ export type UISlice = {
     | 'dobius'
     | 'buzz'
   previousViewBeforeActivity:
+    | 'board'
     | 'terminal'
     | 'settings'
     | 'tasks'
@@ -607,6 +611,7 @@ export type UISlice = {
     | 'dobius'
     | 'buzz'
   previousViewBeforeAutomations:
+    | 'board'
     | 'terminal'
     | 'settings'
     | 'tasks'
@@ -621,6 +626,7 @@ export type UISlice = {
     | 'dobius'
     | 'buzz'
   previousViewBeforeSpace:
+    | 'board'
     | 'terminal'
     | 'settings'
     | 'tasks'
@@ -635,6 +641,7 @@ export type UISlice = {
     | 'dobius'
     | 'buzz'
   previousViewBeforeSkills:
+    | 'board'
     | 'terminal'
     | 'settings'
     | 'tasks'
@@ -649,6 +656,7 @@ export type UISlice = {
     | 'dobius'
     | 'buzz'
   previousViewBeforeKnowledge:
+    | 'board'
     | 'terminal'
     | 'settings'
     | 'tasks'
@@ -663,6 +671,7 @@ export type UISlice = {
     | 'dobius'
     | 'buzz'
   previousViewBeforeMobile:
+    | 'board'
     | 'terminal'
     | 'settings'
     | 'tasks'
@@ -1198,7 +1207,8 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
       return next ? { acknowledgedAgentsByPaneKey: next } : s
     }),
 
-  activeView: 'terminal',
+  // Why: the Board is the default Dobius+ surface; Classic stays one click away.
+  activeView: 'board',
   previousViewBeforeTasks: 'terminal',
   previousViewBeforeSettings: 'terminal',
   previousViewBeforeActivity: 'terminal',
@@ -2293,7 +2303,10 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
   editorFontZoomLevel: 0,
   setEditorFontZoomLevel: (level) => set({ editorFontZoomLevel: level }),
 
-  hydratePersistedUI: (ui) =>
+  hydratePersistedUI: (ui) => {
+    // Why: boards ride the persisted-UI payload; the board slice validates and de-echoes it.
+    // Optional: slice-only test stores compose UI without the board slice.
+    get().hydrateBoards?.(ui.boardsByWorktree)
     set((s) => {
       const validRepoIds = new Set(s.repos.map((repo) => repo.id))
       // Why: persisted UI from pre-rename builds used sidekick* keys. Read
@@ -2474,7 +2487,8 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
       // Why: main rebroadcasts UI written by any client. Identical hydration must
       // not create fresh references that App's debounced writer echoes to main.
       return hydratedUIPartialMatchesState(s, hydrated) ? s : hydrated
-    }),
+    })
+  },
 
   updateStatus: { state: 'idle' },
   setUpdateStatus: (status) => {

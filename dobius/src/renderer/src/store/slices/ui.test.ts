@@ -1838,8 +1838,16 @@ describe('createUISlice new workspace draft', () => {
 })
 
 describe('createUISlice page navigation history', () => {
-  it('records and rewinds Tasks visits on close', () => {
+  // Why: the default view is now the Board (Board is home). These cases cover
+  // returning to Classic after Tasks/Automations, so they start from Classic.
+  const createClassicUIStore = (): ReturnType<typeof createUIStore> => {
     const store = createUIStore()
+    store.setState({ activeView: 'terminal' })
+    return store
+  }
+
+  it('records and rewinds Tasks visits on close', () => {
+    const store = createClassicUIStore()
     store.setState({ worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
 
     store.getState().recordWorktreeVisit('a')
@@ -1853,7 +1861,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('rewinds Tasks detail visits on close', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     const workItem = makeGitHubWorkItem()
     store.setState({ worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
 
@@ -1880,7 +1888,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('records provider-depth interactions for direct Tasks detail opens', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     const recordFeatureInteraction = vi.fn()
     store.setState({ recordFeatureInteraction } as Partial<AppState>)
     const workItem = makeGitHubWorkItem()
@@ -1898,7 +1906,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('preserves GitHub task detail source context in navigation history', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     const workItem = makeGitHubWorkItem({ repoId: 'repo-remote' })
     const sourceContext: TaskSourceContext = {
       kind: 'task-source',
@@ -1926,7 +1934,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('preserves Linear task detail source context in navigation history', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     const linearIssue = makeLinearIssue()
     const sourceContext: TaskSourceContext = {
       kind: 'task-source',
@@ -1951,7 +1959,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('preserves GitLab task detail source context in navigation history', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     const workItem = makeGitLabWorkItem({ repoId: 'repo-remote' })
     const sourceContext: TaskSourceContext = {
       kind: 'task-source',
@@ -1978,7 +1986,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('preserves Jira task detail source context in navigation history', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     const issue = makeJiraIssue()
     const sourceContext: TaskSourceContext = {
       kind: 'task-source',
@@ -2004,7 +2012,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('can suppress the Tasks surface interaction for in-page provider navigation', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     const recordFeatureInteraction = vi.fn()
     store.setState({ recordFeatureInteraction } as Partial<AppState>)
     const workItem = makeGitHubWorkItem()
@@ -2037,7 +2045,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('skips the whole Tasks detail stack on close', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     const workItem = makeGitHubWorkItem()
     store.setState({ worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
 
@@ -2063,7 +2071,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('records and rewinds Automations visits on close', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     store.setState({ worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
 
     store.getState().recordWorktreeVisit('a')
@@ -2077,7 +2085,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('dedupes repeated Automations opens against the current history entry', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     store.setState({ worktreesByRepo: { 'repo-1': [makeWorktree('a')] } })
 
     store.getState().recordWorktreeVisit('a')
@@ -2090,7 +2098,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('keeps the Automations history index when Automations is the only entry', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
 
     store.getState().openAutomationsPage()
     expect(store.getState().worktreeNavHistory).toEqual(['automations'])
@@ -2102,7 +2110,7 @@ describe('createUISlice page navigation history', () => {
   })
 
   it('skips deleted prior worktrees when closing Automations', () => {
-    const store = createUIStore()
+    const store = createClassicUIStore()
     store.setState({
       activeView: 'automations',
       previousViewBeforeAutomations: 'terminal',
