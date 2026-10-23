@@ -13,7 +13,7 @@ import {
 import type { BoardStudioId } from './board-studio-ids'
 import { boardStudioIcon, boardStudioSubtitle } from './board-studio-header'
 import { listenStudioEscape } from './studio-escape-guard'
-import { AgentsPage, BuzzPage } from './board-studio-lazy-pages'
+import { AgentsPage, BuzzPage, KanbanPage } from './board-studio-lazy-pages'
 import { ChatStudio } from './ChatStudio'
 import { CodeStudio } from './CodeStudio'
 import { MemoryStudio } from './MemoryStudio'
@@ -123,20 +123,10 @@ function StudioBody({
         />
       )
     case 'kanban':
-      // Why: WorkspaceKanbanDrawer is a Sheet tightly coupled to the Classic
-      // sidebar's own open/menu/drag state (leftSidebarStyle, onMenuOpenChange,
-      // preserveOpenForMenu) that this standalone studio host cannot supply
-      // without reaching into sidebar-only state. Honest empty state instead
-      // of a half-wired drawer.
-      return (
-        <StudioEmptyState
-          title={translate('board.studio.title.kanban', 'Kanban')}
-          detail={translate(
-            'board.studio.kanbanUnavailable',
-            'The workspace Kanban board is tied to the sidebar drawer and cannot open here yet.'
-          )}
-        />
-      )
+      // Why: the full Kanban page owns its task source, unlike the Classic
+      // WorkspaceKanbanDrawer, which needs sidebar-only drawer state.
+      return <KanbanPage />
+
   }
 }
 

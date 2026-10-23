@@ -12,3 +12,5 @@ export const EditorPanel = lazy(() => import('@/components/editor/EditorPanel'))
 export const AgentsPage = lazy(() => import('@/components/agents/AgentsPage'))
 // Same restored Communications client the Classic sidebar mounts as BuzzPage.
 export const BuzzPage = lazy(() => import('@/components/communications/CommunicationsPage'))
+// Same Vertex Kanban the Classic Tasks page lazily mounts (TaskPage.tsx VertexBoard).
+export const KanbanPage = lazy(() => import('@/components/kanban/KanbanBoard'))
