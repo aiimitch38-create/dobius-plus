@@ -3,31 +3,32 @@ import type {
   Automation,
   AutomationLoop,
   AutomationLoopState,
-  AutomationLoopTarget,
   AutomationRun
 } from '../../shared/automations-types'
 import {
-  admitGoalStep,
   admitLoopFire,
   admitOutputMatch,
-  buildGoalPrompt,
   normalizeAutomationLoop,
-  readGoalVerdict,
   validateLoopPattern
 } from '../../shared/automation-loops'
 import { loopTimeUp, scheduleDue } from '../../shared/automation-loop-schedule'
 import { stopStateAfterRun } from '../../shared/automation-loop-stop'
 import { checkExecutionAdmission } from '../agents/execution-gate'
-import {
-  boardGroupTabIdsByName,
-  loopTabIdsFromBoards,
-  loopTargetTabIdsFromBoards
-} from './board-group-members'
+import { boardGroupTabIdsByName, loopTabIdsFromBoards } from './board-group-members'
 import { setCustomGroupResolver } from '../runtime/orchestration/groups'
 import type { LoopDeliveryStatus, LoopTerminals } from './loop-terminals'
 import { matchLoopPattern } from './loop-pattern-match'
 import { HELD_RESULT, LoopHolds, heldFiredAt, notifyLoopHeldByDefault } from './loop-hold'
-import { LoopStopChecks, type LoopStopChecksOptions, type StopCheckStore } from './loop-stop-check'
+import {
+  LoopStopChecks,
+  anyWorking,
+  type LoopStopChecksOptions,
+  type StopCheckStore
+} from './loop-stop-check'
+import { loopInstruction, loopRunsInBackground } from '../../shared/automation-loop-judge'
+import { LoopBoardVisibility } from './loop-board-visibility'
+import type { LoopGoalJudge } from './loop-goal-judge'
+import { LoopGoalJudging } from './loop-goal-judging'
 
 // Board loops ride the existing automation records: each fire is an
 // AutomationRun (trigger = loop kind) so history, last result and deletion
@@ -50,15 +51,31 @@ export class LoopRunner {
   private ticking = false
   private readonly holds: LoopHolds
   private readonly stopChecks: LoopStopChecks
+  private readonly goals: LoopGoalJudging
+  private readonly visibility = new LoopBoardVisibility()
 
   constructor(
     private readonly store: LoopStore,
     private readonly terminals: LoopTerminals | null,
     notifyHeld: (loopName: string) => void = notifyLoopHeldByDefault,
-    opts: LoopStopChecksOptions = {}
+    opts: LoopStopChecksOptions & { judge?: LoopGoalJudge } = {}
   ) {
     this.holds = new LoopHolds(notifyHeld)
     this.stopChecks = new LoopStopChecks(store, opts)
+    this.goals = new LoopGoalJudging(
+      store,
+      {
+        fire: (...args) => this.fire(...args),
+        saveState: (...args) => this.saveState(...args),
+        resolveTabIds: (loop) => loopTabIdsFromBoards(this.store.getUI().boardsByWorktree, loop)
+      },
+      opts.judge
+    )
+  }
+
+  /** Renderer heartbeat: whether a window shows this worktree's Board right now. */
+  setBoardVisible(worktreeId: string, senderId: string, visible: boolean, now = Date.now()): void {
+    this.visibility.report(worktreeId, senderId, visible, now)
   }
 
   private timer: ReturnType<typeof setInterval> | null = null
@@ -105,8 +122,7 @@ export class LoopRunner {
     if (!admitLoopFire(loop.state, now, minGap)) {
       return null
     }
-    const instruction =
-      loop.trigger.kind === 'goal' ? buildGoalPrompt(loop.trigger.goal) : automation.prompt
+    const instruction = loopInstruction(loop.trigger, automation.prompt)
     return await this.fire(automation, loop, now, instruction, loop.state)
   }
 
@@ -130,14 +146,21 @@ export class LoopRunner {
           })
           continue
         }
+        const visible = this.visibility.isVisible(loop.worktreeId, now)
         try {
           if (await this.stopChecks.tick(automation, loop, now, this.terminals)) {
+            continue
+          }
+          // "Keep running behind other tabs" off: the loop waits with its Board, then catches up.
+          if (!visible && !loopRunsInBackground(loop)) {
             continue
           }
           if (loop.trigger.kind === 'on-output-match') {
             await this.tickOutputMatch(automation, loop, now)
           } else if (loop.trigger.kind === 'goal') {
-            await this.tickGoal(automation, loop, now)
+            await this.goals.tick(automation, loop, now, this.terminals)
+          } else if (loop.trigger.kind === 'on-idle') {
+            await this.tickHiddenIdle(automation, loop, now, visible)
           } else if (
             loop.trigger.kind === 'schedule' &&
             scheduleDue(loop.state, automation.createdAt, now, loop.trigger.everyMs)
@@ -172,14 +195,20 @@ export class LoopRunner {
     const match = hadCursor ? matchLoopPattern(pattern, read.lines) : ({ kind: 'none' } as const)
     // Why: the cursor always moves past what was just judged, fire or not, so
     // the same output range can never fire twice.
-    const advanced: AutomationLoopState = { ...loop.state, outputCursor: read.cursor }
+    const advanced: AutomationLoopState = {
+      ...loop.state,
+      outputCursor: read.cursor
+    }
     if (match.kind === 'timeout') {
       // A pattern that blew its time budget would do it again every tick: stop the loop.
       this.store.updateAutomation(automation.id, {
         enabled: false,
         loop: {
           ...loop,
-          state: { ...advanced, lastResult: 'Pattern took too long to match; loop paused.' }
+          state: {
+            ...advanced,
+            lastResult: 'Pattern took too long to match; loop paused.'
+          }
         }
       })
       return
@@ -202,56 +231,26 @@ export class LoopRunner {
     await this.fire(automation, loop, now, automation.prompt, advanced)
   }
 
-  private async tickGoal(automation: Automation, loop: AutomationLoop, now: number): Promise<void> {
-    if (loop.trigger.kind !== 'goal') {
+  /** On-idle while the Board is hidden (the renderer observer covers it when visible). */
+  private async tickHiddenIdle(
+    automation: Automation,
+    loop: AutomationLoop,
+    now: number,
+    visible: boolean
+  ): Promise<void> {
+    if (loop.trigger.kind !== 'on-idle' || visible) {
+      this.visibility.resetIdle(automation.id)
       return
     }
-    const [watchTab] = this.resolveTabIds(loop.trigger.target, loop.worktreeId)
-    const read = watchTab ? await this.terminals!.read(watchTab, loop.state.outputCursor) : null
-    if (!read) {
-      return
-    }
-    const verdict = readGoalVerdict(read.lines) ?? loop.state.lastVerdict
-    const state: AutomationLoopState = {
-      ...loop.state,
-      outputCursor: read.cursor,
-      lastVerdict: verdict
-    }
-    const decision = admitGoalStep({
-      state,
-      verdict,
-      now,
-      checkEveryMs: loop.trigger.checkEveryMs,
-      maxRuns: loop.trigger.maxRuns
-    })
-    if (decision === 'fire') {
-      await this.fire(automation, loop, now, buildGoalPrompt(loop.trigger.goal), {
-        ...state,
-        lastVerdict: null
-      })
-      return
-    }
-    if (decision === 'retire-met' || decision === 'retire-exhausted') {
-      this.saveState(automation, loop, {
-        ...state,
-        retiredAt: now,
-        lastResult:
-          decision === 'retire-met'
-            ? 'Goal met.'
-            : `Stopped after ${state.runCount} runs; goal not met.`
-      })
-      return
-    }
+    const tabIds = loopTabIdsFromBoards(this.store.getUI().boardsByWorktree, loop)
+    const working = await anyWorking(this.terminals, tabIds)
+    const { debounceMs } = loop.trigger
     if (
-      state.outputCursor !== loop.state.outputCursor ||
-      state.lastVerdict !== loop.state.lastVerdict
+      this.visibility.stepIdle(automation.id, working, now, debounceMs) &&
+      admitLoopFire(loop.state, now, debounceMs)
     ) {
-      this.saveState(automation, loop, state)
+      await this.fire(automation, loop, now, automation.prompt, loop.state)
     }
-  }
-
-  private resolveTabIds(target: AutomationLoopTarget, worktreeId: string): string[] {
-    return loopTargetTabIdsFromBoards(this.store.getUI().boardsByWorktree, target, worktreeId)
   }
 
   private async fire(

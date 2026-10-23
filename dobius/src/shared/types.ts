@@ -2674,6 +2674,9 @@ export type GlobalSettings = {
    *  command, with no `cd … &&` prefix. Turn off to fall back to the
    *  cd-prefixed form. Readers default to true. */
   cleanClaudeResume?: boolean
+  /** When the app reopens, Board consoles resume their last chat automatically
+   *  ('auto', the default when unset) or wait for a "Resume all?" answer ('ask'). */
+  boardResumeMode?: 'auto' | 'ask'
   /** Controls how Ctrl+Tab chooses the next visible tab. Optional for
    *  profiles saved before this setting existed; readers default to MRU. */
   ctrlTabOrderMode?: CtrlTabOrderMode

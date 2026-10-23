@@ -12,6 +12,14 @@ import { useBoardLoops } from './board-loop-list'
 import { loopTargetTabIds, targetIsWorking } from './loop-form'
 
 const SAMPLE_MS = 1_000
+// Shorter than main's 75s lease, so a visible Board never lapses between beats.
+const VISIBLE_HEARTBEAT_MS = 30_000
+
+function reportBoardVisible(worktreeId: string, visible: boolean): void {
+  window.api.automations
+    .boardVisible({ worktreeId, visible })
+    .catch((error: unknown) => console.debug('[board-loops] visibility report failed', error))
+}
 
 /**
  * Mount once while the Board is visible. Watches on-idle loops' targets and
@@ -23,6 +31,20 @@ const SAMPLE_MS = 1_000
 export function BoardLoopsObserver({ worktreeId }: { worktreeId: string }): null {
   const { loops } = useBoardLoops(worktreeId)
   const watches = useRef(new Map<string, IdleWatch>())
+
+  // Why: loops with "Keep running behind other tabs" off only fire while main
+  // hears this heartbeat; unmounting (leaving the Board) pauses them at once.
+  useEffect(() => {
+    reportBoardVisible(worktreeId, true)
+    const timer = window.setInterval(
+      () => reportBoardVisible(worktreeId, true),
+      VISIBLE_HEARTBEAT_MS
+    )
+    return () => {
+      window.clearInterval(timer)
+      reportBoardVisible(worktreeId, false)
+    }
+  }, [worktreeId])
 
   useEffect(() => {
     const idleLoops = loops.filter((l) => l.enabled && l.loop?.trigger.kind === 'on-idle')

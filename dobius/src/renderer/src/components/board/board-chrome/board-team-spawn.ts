@@ -1,19 +1,23 @@
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
+import { getBoard } from '@/store/slices/board'
 import { BOARD_CONSOLE_SIZE, boardSpawnPlacements } from '../board-canvas/board-spawn-placement'
 import type { BoardPoint } from '../board-canvas/board-viewport'
 import { spawnConsoles } from '../board-delivery/console-lifecycle'
-import { groupBoardCards } from '../board-route/board-groupable'
+import { groupBoardCards, groupableCardIds } from '../board-route/board-groupable'
 import type { TeamSlot } from './team-composer'
 
 /**
  * Spawns one console per slot (its agent and role) as a block at `center`,
- * then frames them as one group. No brief is typed: each agent starts empty.
+ * then frames them as one group named `name` (default "Group N"). No brief is
+ * typed: each agent starts empty.
  */
 export function spawnTeamOnBoard(
   worktreeId: string | null,
   slots: readonly TeamSlot[],
-  center: BoardPoint
+  center: BoardPoint,
+  name: string | null = null
 ): string[] {
   if (!worktreeId) {
     toast.error(translate('board.spawn.noWorkspace', 'Open a workspace before spawning consoles.'))
@@ -45,6 +49,20 @@ export function spawnTeamOnBoard(
       })
     )
   }
-  groupBoardCards(worktreeId, new Set(cardIds))
+  groupTeam(worktreeId, cardIds, name)
   return cardIds
+}
+
+function groupTeam(worktreeId: string, cardIds: readonly string[], name: string | null): void {
+  if (!name) {
+    groupBoardCards(worktreeId, new Set(cardIds))
+    return
+  }
+  // Why: same rule as the Group chip (two or more live cards), read from the
+  // live board so just-spawned cards count; only the name differs.
+  const state = useAppStore.getState()
+  const ids = groupableCardIds(getBoard(state, worktreeId).cards, new Set(cardIds))
+  if (ids) {
+    state.createGroup(worktreeId, { name, cardIds: ids })
+  }
 }

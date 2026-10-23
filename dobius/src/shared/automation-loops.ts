@@ -1,4 +1,4 @@
-import { normalizeLoopStopFields } from './automation-loop-stop'
+import { withLoopExtras } from './automation-loop-extras'
 import type {
   AutomationLoop,
   AutomationLoopState,
@@ -164,7 +164,11 @@ function normalizeTrigger(raw: unknown): AutomationLoopTrigger | null {
   if (raw.kind === 'on-idle') {
     const target = normalizeTarget(raw.target)
     return target
-      ? { kind: 'on-idle', target, debounceMs: num(raw.debounceMs, LOOP_MIN_DEBOUNCE_MS, 5_000) }
+      ? {
+          kind: 'on-idle',
+          target,
+          debounceMs: num(raw.debounceMs, LOOP_MIN_DEBOUNCE_MS, 5_000)
+        }
       : null
   }
   if (raw.kind === 'on-output-match') {
@@ -221,11 +225,10 @@ export function normalizeAutomationLoop(raw: unknown): AutomationLoop | null {
     typeof raw.stopAfterMs === 'number' && Number.isFinite(raw.stopAfterMs) && raw.stopAfterMs > 0
       ? Math.max(LOOP_MIN_SCHEDULE_MS, raw.stopAfterMs)
       : undefined
-  return {
+  return withLoopExtras(raw, {
     worktreeId: raw.worktreeId,
     trigger,
     ...(stopAfterMs ? { stopAfterMs } : {}),
-    ...normalizeLoopStopFields(raw),
     state: {
       paused: s.paused === true,
       runCount: Math.round(num(s.runCount, 0, 0)),
@@ -236,7 +239,7 @@ export function normalizeAutomationLoop(raw: unknown): AutomationLoop | null {
       lastVerdict: s.lastVerdict === 'met' || s.lastVerdict === 'not-met' ? s.lastVerdict : null,
       stopCheckSince: typeof s.stopCheckSince === 'number' ? s.stopCheckSince : null
     }
-  }
+  })
 }
 
 export function isLoopActive(state: AutomationLoopState): boolean {

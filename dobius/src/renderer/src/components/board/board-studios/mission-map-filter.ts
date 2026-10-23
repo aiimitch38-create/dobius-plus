@@ -52,7 +52,8 @@ export function missionMapFilterCounts(
 
 /**
  * Node ids that stay lit under a filter: matching consoles, groups holding a
- * match, and orchestrators wired to a lit console or group. `statuses` is keyed
+ * match, orchestrators wired to a lit console or group, and the command center
+ * while any console is lit. `statuses` is keyed
  * by console node id; a console with no status yet counts as idle.
  */
 export function missionMapVisibleNodeIds(
@@ -78,6 +79,13 @@ export function missionMapVisibleNodeIds(
   for (const edge of edges) {
     if (edge.kind === 'wire' && visible.has(edge.to)) {
       visible.add(edge.from)
+    }
+  }
+  // Why: every console belongs to the command center, so it stays lit while any console is.
+  const anyConsoleLit = nodes.some((n) => n.kind === 'console' && visible.has(n.id))
+  for (const node of nodes) {
+    if (node.kind === 'command-center' && anyConsoleLit) {
+      visible.add(node.id)
     }
   }
   return visible

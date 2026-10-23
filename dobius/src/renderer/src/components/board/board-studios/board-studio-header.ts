@@ -41,8 +41,8 @@ export function boardStudioSubtitle(studio: BoardStudioId): string | null {
   switch (studio) {
     case 'mission-map':
       return translate(
-        'board.studio.subtitle.missionMap',
-        'Who directs whom on this board. Click a node to jump to it.'
+        'board.studio.subtitle.missionMapInspect',
+        'Who directs whom on this board. Click a node to inspect it, double-click to jump to it.'
       )
     case 'docs':
       return translate(

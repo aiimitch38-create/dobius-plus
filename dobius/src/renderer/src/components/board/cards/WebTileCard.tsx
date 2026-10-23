@@ -8,6 +8,7 @@ import { translate } from '@/i18n/i18n'
 import { isLoopbackUrl } from '../board-web/dev-server-url'
 import { deviceFitScale, findWebTileDevice, mobileUserAgent } from '../board-web/web-tile-devices'
 import { WebTileExtras } from '../board-web/WebTileExtras'
+import { WebTileInspectorDock } from '../board-web/WebTileInspectorDock'
 
 // Chromium net error for "connection refused": the dev server is not up yet.
 const ERR_CONNECTION_REFUSED = -102
@@ -37,6 +38,10 @@ export function WebTileCard({
   const [nav, setNav] = useState({ back: false, forward: false })
   const [error, setError] = useState<string | null>(null)
   const [waiting, setWaiting] = useState(false)
+  const [inspectorDocked, setInspectorDocked] = useState(false)
+  // Why: once a guest has docked, Electron keeps the (now closed) dock as its
+  // DevTools target, so a detached window is no longer safe for this guest.
+  const inspectorEverDocked = useRef(false)
   const [bodySize, setBodySize] = useState({ width: 0, height: 0 })
   const bodyRef = useRef<HTMLDivElement>(null)
   const defaultUserAgent = useRef(navigator.userAgent)
@@ -178,6 +183,23 @@ export function WebTileCard({
       }
     : { inset: 0 }
 
+  // Why: detached DevTools stay as the fallback when Electron refuses to dock.
+  const openDetachedInspector = (): void => {
+    if (inspectorEverDocked.current) {
+      setInspectorDocked(true)
+      return
+    }
+    setInspectorDocked(false)
+    try {
+      webviewRef.current?.openDevTools()
+    } catch (error) {
+      setError(
+        translate('board.web.inspectorUnavailable', 'Load a page before opening the Web Inspector.')
+      )
+      console.debug('[board-web] inspector unavailable', error)
+    }
+  }
+
   const navigate = (): void => {
     const target = toNavigableUrl(draft)
     if (target) {
@@ -245,30 +267,44 @@ export function WebTileCard({
             deviceId={card.device ?? null}
             onDevice={(id) => onChange({ device: id ?? undefined })}
             onNavigate={(url) => onChange({ url })}
-            onOpenInspector={() => webviewRef.current?.openDevTools()}
+            inspectorOpen={inspectorDocked}
+            onOpenInspector={() => setInspectorDocked((open) => !open)}
+            onOpenDetachedInspector={openDetachedInspector}
           />
         ) : null}
       </div>
-      <div
-        ref={bodyRef}
-        className={`relative min-h-0 flex-1 overflow-hidden ${device ? 'bg-[var(--board-panel-2)]' : 'bg-[var(--board-panel)]'}`}
-      >
+      <div className="flex min-h-0 flex-1">
         <div
-          ref={containerRef}
-          className={
-            device
-              ? 'absolute overflow-hidden bg-[var(--board-panel)] shadow-(--board-shadow)'
-              : 'absolute'
-          }
-          style={frameStyle}
-        />
-        {(error || waiting || !card.url) && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[var(--board-panel)]/85 p-4 text-center text-[13px] text-[var(--board-text-muted)]">
-            {waiting
-              ? translate('board.web.waiting', 'Waiting for the dev server to start…')
-              : (error ?? translate('board.web.empty', 'Type an address above to load a page.'))}
-          </div>
-        )}
+          ref={bodyRef}
+          className={`relative min-h-0 min-w-0 flex-1 overflow-hidden ${device ? 'bg-[var(--board-panel-2)]' : 'bg-[var(--board-panel)]'}`}
+        >
+          <div
+            ref={containerRef}
+            className={
+              device
+                ? 'absolute overflow-hidden bg-[var(--board-panel)] shadow-(--board-shadow)'
+                : 'absolute'
+            }
+            style={frameStyle}
+          />
+          {(error || waiting || !card.url) && (
+            <div className="absolute inset-0 flex items-center justify-center bg-[var(--board-panel)]/85 p-4 text-center text-[13px] text-[var(--board-text-muted)]">
+              {waiting
+                ? translate('board.web.waiting', 'Waiting for the dev server to start…')
+                : (error ?? translate('board.web.empty', 'Type an address above to load a page.'))}
+            </div>
+          )}
+        </div>
+        {inspectorDocked ? (
+          <WebTileInspectorDock
+            getGuest={() => webviewRef.current}
+            onClose={() => setInspectorDocked(false)}
+            onDocked={() => {
+              inspectorEverDocked.current = true
+            }}
+            onDockFailed={openDetachedInspector}
+          />
+        ) : null}
       </div>
     </div>
   )

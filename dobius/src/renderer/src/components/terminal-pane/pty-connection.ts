@@ -152,6 +152,7 @@ import {
 } from '@/lib/worktree-runtime-owner'
 import { CLIENT_PLATFORM } from '@/lib/new-workspace'
 import { buildAgentResumeStartupPlan, buildAgentStartupPlan } from '@/lib/tui-agent-startup'
+import { shouldDeferBoardConsoleResume } from '@/components/board/board-resume/board-resume-gate'
 import { resolveAgentStatusTerminalTitle } from '@/lib/agent-status-terminal-title'
 import {
   resolveTuiAgentLaunchArgs,
@@ -3421,7 +3422,9 @@ export function connectPanePty(
       }
       return CLIENT_PLATFORM
     }
-    const buildColdRestoreAgentResumeStartup = (): ColdRestoreAgentResumeStartup | null => {
+    const buildColdRestoreAgentResumeStartup = (
+      options: { allowBoardResumeDeferral?: boolean } = {}
+    ): ColdRestoreAgentResumeStartup | null => {
       if (pendingStartupCommand) {
         return null
       }
@@ -3589,6 +3592,21 @@ export function connectPanePty(
       const launchConfig =
         (liveEntry ? state.getAgentLaunchConfigForStatusEntry(liveEntry) : undefined) ??
         matchingSleepingLaunchConfig
+      // Why: with the Board's "Ask first" reopen setting, a Board console starts
+      // fresh and its session waits for the "Resume all conversations?" toast.
+      // Under the default setting this is always false.
+      if (
+        options.allowBoardResumeDeferral !== false &&
+        shouldDeferBoardConsoleResume({
+          worktreeId: deps.worktreeId,
+          tabId: deps.tabId,
+          agent,
+          providerSession,
+          ...(launchConfig ? { launchConfig } : {})
+        })
+      ) {
+        return buildFreshFallback()
+      }
       const resumePlatform = getColdRestoreAgentResumePlatform()
       const startupPlan = buildAgentResumeStartupPlan({
         agent,
@@ -3734,7 +3752,12 @@ export function connectPanePty(
     }
     // Why: the hibernation wake fires from noteVisibilityResume in the outer
     // connection scope, long after this deferred-connect closure has run.
-    wakeHibernatedAgentPane = () => startFreshColdRestoreAgentResume()
+    // A wake is the user asking for this pane back, never a reopen, so it skips
+    // the Board's "Ask first" deferral.
+    wakeHibernatedAgentPane = () =>
+      startFreshColdRestoreAgentResume(
+        buildColdRestoreAgentResumeStartup({ allowBoardResumeDeferral: false })
+      )
     const isStartupPasteTargetCurrent = (ptyId: string | null): boolean =>
       !disposed &&
       deps.paneTransportsRef.current.get(pane.id) === transport &&

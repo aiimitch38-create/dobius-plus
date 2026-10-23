@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { BoardCard, BoardGroup } from '@/store/slices/board'
 import {
+  COMMAND_CENTER_NODE_ID,
   MISSION_MAP_NODE_W,
   consoleNodeId,
   groupNodeId,
   layoutMissionMap,
+  missionMapCommandersOf,
   missionMapEdgePath,
   missionMapNodeCardIds,
   orchestratorNodeId
@@ -71,7 +73,7 @@ describe('layoutMissionMap', () => {
       color: 'pink'
     }
     const layout = layoutMissionMap([note, console('c1')], [group('g-empty', ['n1'])])
-    expect(layout.nodes.map((n) => n.id)).toEqual([consoleNodeId('c1')])
+    expect(layout.nodes.map((n) => n.id)).toEqual([COMMAND_CENTER_NODE_ID, consoleNodeId('c1')])
   })
 
   it('wires an orchestrator to the console group when the console is grouped, else to the console', () => {
@@ -99,6 +101,50 @@ describe('layoutMissionMap', () => {
         kind: 'member'
       }
     ])
+  })
+
+  it('heads column 0 with a command center that reaches every unwired console', () => {
+    const layout = layoutMissionMap(
+      [orchestrator('o1', ['c1']), console('c1'), console('c2'), console('c3'), console('c4')],
+      [group('g1', ['c1', 'c2'])],
+      'Command center'
+    )
+    const byId = new Map(layout.nodes.map((n) => [n.id, n]))
+    const center = byId.get(COMMAND_CENTER_NODE_ID)!
+    const o = byId.get(orchestratorNodeId('o1'))!
+    expect(center.kind).toBe('command-center')
+    expect(center.x).toBe(o.x)
+    expect(center.y).toBeLessThan(o.y)
+    expect(center.kind === 'command-center' && center.cardIds).toEqual(['c1', 'c2', 'c3', 'c4'])
+    // c2 is reached through its wired group, so only c3 and c4 are command-bar-only.
+    expect(center.kind === 'command-center' && center.unwiredCount).toBe(2)
+    expect(layout.edges.filter((e) => e.kind === 'command').map((e) => e.to)).toEqual([
+      consoleNodeId('c3'),
+      consoleNodeId('c4')
+    ])
+  })
+
+  it('reports who commands a console: direct, through its group, or nobody', () => {
+    const layout = layoutMissionMap(
+      [
+        orchestrator('o1', ['c1']),
+        orchestrator('o2', ['c3', 'c1']),
+        console('c1'),
+        console('c2'),
+        console('c3'),
+        console('c4')
+      ],
+      [group('g1', ['c1', 'c2'])]
+    )
+    const summary = (id: string) =>
+      missionMapCommandersOf(layout, consoleNodeId(id)).map((c) => [c.node.cardId, c.viaGroup])
+    expect(summary('c2')).toEqual([
+      ['o1', true],
+      ['o2', true]
+    ])
+    expect(summary('c3')).toEqual([['o2', false]])
+    expect(summary('c4')).toEqual([])
+    expect(missionMapCommandersOf(layout, 'nope')).toEqual([])
   })
 
   it('dedupes wires to the same group and keeps one group per console', () => {
@@ -139,5 +185,6 @@ describe('missionMapNodeCardIds', () => {
     expect(missionMapNodeCardIds(byId.get(orchestratorNodeId('o'))!, groups)).toEqual(['o'])
     expect(missionMapNodeCardIds(byId.get(groupNodeId('g'))!, groups)).toEqual(['a', 'b'])
     expect(missionMapNodeCardIds(byId.get(groupNodeId('g'))!, [])).toEqual([])
+    expect(missionMapNodeCardIds(byId.get(COMMAND_CENTER_NODE_ID)!, groups)).toEqual(['a', 'b'])
   })
 })

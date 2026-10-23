@@ -20,6 +20,8 @@ import {
   buildLoopTrigger,
   describeNextFire,
   loopStopFields,
+  loopTargetTabIds,
+  parseTargetKey,
   type LoopFormValues
 } from './loop-form'
 
@@ -59,6 +61,11 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
     [board]
   )
 
+  const consoleCountFor = (key: string): number => {
+    const target = parseTargetKey(key)
+    return target ? loopTargetTabIds(target, board).length : 0
+  }
+
   const firstConsoleKey =
     targets.find((t) => t.key.startsWith('tab:'))?.key ?? targets[0]?.key ?? ''
   const startFromScratch = (): void =>
@@ -87,7 +94,10 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
       // it as a plain scheduled automation in between.
       const created = await window.api.automations.create({
         name: form.name.trim() || translate('board.loops.untitled', 'Board loop'),
-        prompt: form.kind === 'goal' ? form.goal.trim() : form.instruction.trim(),
+        prompt:
+          form.kind === 'goal'
+            ? (form.judge === 'agent' && form.instruction.trim()) || form.goal.trim()
+            : form.instruction.trim(),
         agentId: agentKind && isTuiAgent(agentKind) ? agentKind : 'claude',
         projectId: getRepoIdFromWorktreeId(worktreeId),
         workspaceMode: 'existing',
@@ -104,6 +114,7 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
             worktreeId,
             trigger: built.trigger,
             state: newLoopState(),
+            background: form.background,
             ...stop.fields
           },
           enabled: true
@@ -165,6 +176,7 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
         <BoardLoopForm
           initial={creating}
           targets={targets}
+          consoleCountFor={consoleCountFor}
           busy={busy}
           onCancel={() => setCreating(null)}
           onSubmit={(form) => void create(form)}

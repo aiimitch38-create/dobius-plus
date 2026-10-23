@@ -509,6 +509,11 @@ export type BrowserApi = {
   }) => Promise<void>
   unregisterGuest: (args: { browserPageId: string }) => Promise<void>
   openDevTools: (args: { browserPageId: string }) => Promise<boolean>
+  /** Show a Board web tile's DevTools inside a second blank webview the same window owns. */
+  dockGuestDevTools: (args: {
+    guestWebContentsId: number
+    devToolsWebContentsId: number
+  }) => Promise<boolean>
   setViewportOverride: (args: {
     browserPageId: string
     override: BrowserViewportOverride | null
@@ -3118,6 +3123,7 @@ export type PreloadApi = {
     markDispatchResult: (result: AutomationDispatchResult) => Promise<AutomationRun>
     snapshotWorkspaceName: (args: { workspaceId: string; displayName: string }) => Promise<number>
     rendererReady: () => Promise<void>
+    boardVisible: (args: { worktreeId: string; visible: boolean }) => Promise<void>
     onDispatchRequested: (callback: (request: AutomationDispatchRequest) => void) => () => void
   }
   destinations: {

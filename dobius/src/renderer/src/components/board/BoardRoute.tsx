@@ -9,8 +9,10 @@ import { useAppStore } from '@/store'
 import { BoardPage } from './BoardPage'
 import { boardFreeSpawnCenter, boardSpawnBlockSize } from './board-canvas/board-spawn-placement'
 import { screenToWorld, type BoardPoint, type BoardViewport } from './board-canvas/board-viewport'
+import { BOARD_CHROME_INSETS } from './board-canvas/board-reveal'
 import { BoardAgentPicker, type BoardAgentPickerRequest } from './board-chrome/BoardAgentPicker'
 import { spawnTeamOnBoard } from './board-chrome/board-team-spawn'
+import { BoardResumePrompt } from './board-resume/BoardResumePrompt'
 import type { BoardSideAppId } from './board-chrome/BoardSideApps'
 import { isBoardShortcutBlockedTarget } from './board-chrome/board-tools'
 import { BoardLoopsObserver } from './board-loops/BoardLoopsObserver'
@@ -83,9 +85,10 @@ export default function BoardRoute(): React.JSX.Element {
   const freeCenter = useCallback(
     (block: { w: number; h: number }): BoardPoint => {
       const v = board.viewport
-      const topLeft = screenToWorld({ x: 96, y: 72 }, v)
+      const inset = BOARD_CHROME_INSETS
+      const topLeft = screenToWorld({ x: inset.left, y: inset.top }, v)
       const bottomRight = screenToWorld(
-        { x: window.innerWidth - 80, y: window.innerHeight - 170 },
+        { x: window.innerWidth - inset.right, y: window.innerHeight - inset.bottom },
         v
       )
       return boardFreeSpawnCenter(
@@ -310,13 +313,19 @@ export default function BoardRoute(): React.JSX.Element {
                 }
               }}
               onClose={() => setPicker(null)}
-              onSpawnTeam={(slots) =>
-                spawnTeamOnBoard(worktreeId, slots, freeCenter(boardSpawnBlockSize(slots.length)))
+              onSpawnTeam={(slots, name) =>
+                spawnTeamOnBoard(
+                  worktreeId,
+                  slots,
+                  freeCenter(boardSpawnBlockSize(slots.length)),
+                  name
+                )
               }
             />
             {/* On-idle loops only fire while this observer is mounted (once, with the Board). */}
             {worktreeId ? <BoardLoopsObserver key={worktreeId} worktreeId={worktreeId} /> : null}
             {worktreeId ? <BoardDevServerWatcher worktreeId={worktreeId} /> : null}
+            {worktreeId ? <BoardResumePrompt key={worktreeId} worktreeId={worktreeId} /> : null}
             <BoardStudioHost
               studio={studio}
               worktreeId={worktreeId}

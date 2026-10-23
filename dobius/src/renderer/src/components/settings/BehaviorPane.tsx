@@ -2,7 +2,12 @@ import { CheckCircle2 } from 'lucide-react'
 import type { GlobalSettings } from '../../../../shared/types'
 import { useAppStore } from '../../store'
 import { Button } from '../ui/button'
-import { SettingsSubsectionHeader, SettingsSwitchRow } from './SettingsFormControls'
+import {
+  SettingsRow,
+  SettingsSegmentedControl,
+  SettingsSubsectionHeader,
+  SettingsSwitchRow
+} from './SettingsFormControls'
 
 type BehaviorPaneProps = {
   settings: GlobalSettings
@@ -13,7 +18,8 @@ type BehaviorPaneProps = {
 // than becoming toggles. Project terminals are security-contained to their
 // worktree (a home-directory start would be rejected at spawn); terminal focus
 // is entangled with multi-pane focus restoration; window controls have no valid
-// off-position. Only Clean Claude resume below is a real user preference.
+// off-position. Clean Claude resume and the Board reopen choice below are real
+// user preferences.
 const AUTOMATIC_BEHAVIORS = [
   ['Project terminal folder', 'New project terminals start in that project folder.'],
   ['Terminal focus', 'Opening or selecting a terminal moves keyboard input into that terminal.'],
@@ -37,6 +43,22 @@ export function BehaviorPane({ settings, updateSettings }: BehaviorPaneProps): R
             checked={settings.cleanClaudeResume ?? true}
             onChange={() =>
               updateSettings({ cleanClaudeResume: !(settings.cleanClaudeResume ?? true) })
+            }
+          />
+          <SettingsRow
+            label="When reopening the Board"
+            description="Board consoles pick up their last chat automatically. Ask first starts them fresh and offers to resume them all."
+            control={
+              <SettingsSegmentedControl
+                size="sm"
+                ariaLabel="When reopening the Board"
+                value={settings.boardResumeMode ?? 'auto'}
+                onChange={(boardResumeMode) => updateSettings({ boardResumeMode })}
+                options={[
+                  { value: 'auto', label: 'Resume automatically' },
+                  { value: 'ask', label: 'Ask first' }
+                ]}
+              />
             }
           />
         </div>

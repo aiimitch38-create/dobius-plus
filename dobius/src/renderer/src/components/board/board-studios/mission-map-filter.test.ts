@@ -7,6 +7,7 @@ import {
   missionMapVisibleNodeIds
 } from './mission-map-filter'
 import {
+  COMMAND_CENTER_NODE_ID,
   consoleNodeId,
   groupNodeId,
   layoutMissionMap,
@@ -85,13 +86,25 @@ describe('missionMapVisibleNodeIds', () => {
   it('lights a match, its group and the orchestrator wired to that group', () => {
     const visible = missionMapVisibleNodeIds(layout.nodes, layout.edges, statuses, 'waiting')
     expect([...visible].sort()).toEqual(
-      [consoleNodeId('c2'), groupNodeId('g1'), orchestratorNodeId('o1')].sort()
+      [
+        consoleNodeId('c2'),
+        groupNodeId('g1'),
+        orchestratorNodeId('o1'),
+        COMMAND_CENTER_NODE_ID
+      ].sort()
     )
   })
 
   it('lights an orchestrator wired straight to a matching console', () => {
     const visible = missionMapVisibleNodeIds(layout.nodes, layout.edges, statuses, 'working')
-    expect([...visible].sort()).toEqual([consoleNodeId('c3'), orchestratorNodeId('o2')].sort())
+    expect([...visible].sort()).toEqual(
+      [consoleNodeId('c3'), orchestratorNodeId('o2'), COMMAND_CENTER_NODE_ID].sort()
+    )
+  })
+
+  it('dims the command center when no console matches', () => {
+    const visible = missionMapVisibleNodeIds(layout.nodes, layout.edges, statuses, 'done')
+    expect(visible.size).toBe(0)
   })
 
   it('treats a console without a status yet as idle', () => {

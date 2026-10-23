@@ -2332,6 +2332,11 @@ const api = {
     openDevTools: (args: { browserPageId: string }): Promise<boolean> =>
       ipcRenderer.invoke('browser:openDevTools', args),
 
+    dockGuestDevTools: (args: {
+      guestWebContentsId: number
+      devToolsWebContentsId: number
+    }): Promise<boolean> => ipcRenderer.invoke('browser:dockGuestDevTools', args),
+
     setViewportOverride: (args: {
       browserPageId: string
       override: BrowserViewportOverride | null
@@ -4261,6 +4266,8 @@ const api = {
     snapshotWorkspaceName: (args: { workspaceId: string; displayName: string }): Promise<number> =>
       ipcRenderer.invoke('automations:snapshotWorkspaceName', args),
     rendererReady: (): Promise<void> => ipcRenderer.invoke('automations:rendererReady'),
+    boardVisible: (args: { worktreeId: string; visible: boolean }): Promise<void> =>
+      ipcRenderer.invoke('automations:boardVisible', args),
     onDispatchRequested: (callback: (request: AutomationDispatchRequest) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, request: AutomationDispatchRequest) =>
         callback(request)

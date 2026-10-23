@@ -108,6 +108,27 @@ export function findByTitle(entries: readonly MemoryEntry[], title: string): Mem
   return entries.find((e) => key(e.title) === k) ?? null
 }
 
+/**
+ * Moves one fact between scopes (a repo id and MEMORY_GLOBAL_SCOPE). An
+ * all-repos fact is stored once under the global scope and every repo reads it.
+ * A fact equivalent to one already in the target is merged, not duplicated.
+ */
+export function moveEntryBetweenScopes(
+  all: Readonly<Record<string, MemoryEntry[]>>,
+  from: string,
+  to: string,
+  id: string
+): Record<string, MemoryEntry[]> {
+  const source = all[from] ?? []
+  const entry = source.find((e) => e.id === id)
+  if (!entry || from === to) {
+    return { ...all }
+  }
+  const target = all[to] ?? []
+  const merged = entry.fact && findDuplicate(target, entry) ? target : [...target, entry]
+  return { ...all, [from]: source.filter((e) => e.id !== id), [to]: merged }
+}
+
 /** Reads the agent-written proposals file: `{ "proposals": [...] }` or a bare array. */
 export function parseProposals(text: string): MemoryProposal[] | null {
   let raw: unknown

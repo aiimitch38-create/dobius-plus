@@ -28,16 +28,29 @@ export function documentTemplateFile(template: DocumentTemplateId): string | nul
   return template === 'custom' ? null : TEMPLATE_FILES[template]
 }
 
+/** The notice line every generated document starts with (the text is localized by the caller). */
+export function documentNoticeInstruction(notice: string): string {
+  const text = notice.replace(/\s+/g, ' ').trim()
+  return text
+    ? ` Start the document with this notice as a markdown blockquote, word for word: "> **Note:** ${text}"`
+    : ''
+}
+
 /**
  * The prompt pushed to the agent, or null when a custom request is empty.
  * Why: one line so the terminal paste submits as a single message.
  */
-export function buildDocumentRequest(template: DocumentTemplateId, customAsk = ''): string | null {
+export function buildDocumentRequest(
+  template: DocumentTemplateId,
+  customAsk = '',
+  notice = ''
+): string | null {
+  const start = documentNoticeInstruction(notice)
   if (template === 'custom') {
     const ask = customAsk.replace(/\s+/g, ' ').trim()
     return ask
-      ? `Write a markdown document for this repository: ${ask}. Read the code first, keep it factual, and tell me the file path when done.`
+      ? `Write a markdown document for this repository: ${ask}. Read the code first, keep it factual, and tell me the file path when done.${start}`
       : null
   }
-  return `Write ${TEMPLATE_BRIEFS[template]}. Read the code first, keep it factual, and save it as ${TEMPLATE_FILES[template]} (create the folder if needed). Tell me the file path when done.`
+  return `Write ${TEMPLATE_BRIEFS[template]}. Read the code first, keep it factual, and save it as ${TEMPLATE_FILES[template]} (create the folder if needed). Tell me the file path when done.${start}`
 }

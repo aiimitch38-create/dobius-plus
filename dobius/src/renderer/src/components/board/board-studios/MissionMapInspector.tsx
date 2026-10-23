@@ -15,7 +15,16 @@ import {
 import { consoleStatusLabel, type ConsoleCardStatus } from '../console-card/console-card-status'
 import { useConsoleCardStatus } from '../console-card/use-console-card-status'
 import { missionMapCanPause as canPause } from './mission-map-filter'
-import { consoleNodeId, missionMapNodeCardIds, type MissionMapNode } from './mission-map-layout'
+import {
+  MISSION_MAP_SECTION_TITLE as SECTION_TITLE,
+  MissionMapBelongsTo as BelongsTo
+} from './MissionMapBelongsTo'
+import {
+  consoleNodeId,
+  missionMapNodeCardIds,
+  type MissionMapLayout,
+  type MissionMapNode
+} from './mission-map-layout'
 
 type Console = BoardCardOf<'console'>
 
@@ -65,13 +74,15 @@ function ConsoleInspector({
   card,
   groupName,
   statusColor,
-  onFocus
+  onFocus,
+  belongsTo
 }: {
   worktreeId: string
   card: Console
   groupName: string | null
   statusColor: (status: ConsoleCardStatus) => string
   onFocus: () => void
+  belongsTo: React.ReactNode
 }): React.JSX.Element {
   const confirm = useConfirmationDialog()
   const { status, lastReply } = useConsoleCardStatus(worktreeId, card.tabId)
@@ -92,8 +103,9 @@ function ConsoleInspector({
           {groupName ?? translate('board.studio.missionMap.inspector.ungrouped', 'Ungrouped')}
         </Field>
       </dl>
+      {belongsTo}
       <section className="flex flex-col gap-1.5">
-        <h3 className="text-[11px] font-semibold tracking-[0.05em] text-[var(--board-text-muted)] uppercase">
+        <h3 className={SECTION_TITLE}>
           {translate('board.studio.missionMap.inspector.lastReport', 'Last report')}
         </h3>
         {lastReply ? (
@@ -182,7 +194,7 @@ function TeamInspector({
   return (
     <>
       <section className="flex flex-col gap-1.5">
-        <h3 className="text-[11px] font-semibold tracking-[0.05em] text-[var(--board-text-muted)] uppercase">
+        <h3 className={SECTION_TITLE}>
           {translate('board.studio.missionMap.inspector.consoles', 'Consoles ({{count}})', {
             count: members.length
           })}
@@ -236,6 +248,8 @@ function TeamInspector({
 export function MissionMapInspector({
   worktreeId,
   node,
+  layout,
+  onSelect,
   statuses,
   statusColor,
   onFocus,
@@ -243,6 +257,9 @@ export function MissionMapInspector({
 }: {
   worktreeId: string
   node: MissionMapNode
+  layout: MissionMapLayout
+  /** Opens another node in this inspector (the "Belongs to" rows). */
+  onSelect: (node: MissionMapNode) => void
   statuses: Readonly<Record<string, ConsoleCardStatus>>
   statusColor: (status: ConsoleCardStatus) => string
   onFocus: (node: MissionMapNode) => void
@@ -255,21 +272,45 @@ export function MissionMapInspector({
       ? translate('board.studio.missionMap.kind.console', 'Console')
       : node.kind === 'group'
         ? translate('board.studio.missionMap.kind.group', 'Group')
-        : translate('board.studio.missionMap.kind.orchestrator', 'Orchestrator')
+        : node.kind === 'command-center'
+          ? translate('board.studio.missionMap.kind.commandBar', 'Command bar')
+          : translate('board.studio.missionMap.kind.orchestrator', 'Orchestrator')
 
   let body: React.ReactNode = null
   if (node.kind === 'console') {
     const card = consoles.find((c) => c.id === node.cardId)
+    const groupName = board.groups.find((g) => g.id === node.groupId)?.name ?? null
     body = card ? (
       <ConsoleInspector
         key={card.id}
         worktreeId={worktreeId}
         card={card}
-        groupName={board.groups.find((g) => g.id === node.groupId)?.name ?? null}
+        groupName={groupName}
         statusColor={statusColor}
         onFocus={() => onFocus(node)}
+        belongsTo={
+          <BelongsTo node={node} layout={layout} groupName={groupName} onSelect={onSelect} />
+        }
       />
     ) : null
+  } else if (node.kind === 'command-center') {
+    body = (
+      <>
+        <p className="text-[12px] leading-relaxed text-[var(--board-text-muted)]">
+          {translate(
+            'board.studio.missionMap.inspector.commandCenterDetail',
+            'Every console takes orders from the command bar. {{count}} of {{total}} are not wired to any orchestrator.',
+            { count: node.unwiredCount, total: node.cardIds.length }
+          )}
+        </p>
+        <TeamInspector
+          members={consoles.filter((c) => node.cardIds.includes(c.id))}
+          statuses={statuses}
+          statusColor={statusColor}
+          onFocus={() => onFocus(node)}
+        />
+      </>
+    )
   } else {
     const ids =
       node.kind === 'group'

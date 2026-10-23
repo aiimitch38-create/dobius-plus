@@ -10,7 +10,9 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { translate } from '@/i18n/i18n'
+import { Checkbox } from '@/components/ui/checkbox'
 import type { LoopFormValues, LoopKind } from './loop-form'
+import { describePromptsPerHour, estimatePromptsPerHour } from './loop-form-estimate'
 
 type Target = { key: string; label: string }
 
@@ -33,10 +35,13 @@ function kindLabel(kind: LoopKind): string {
 function NumberField({
   label,
   value,
+  min = 1,
   onChange
 }: {
   label: string
   value: number
+  /** 0 for the "0 = never" stop fields; the browser blocks Save below this. */
+  min?: number
   onChange: (n: number) => void
 }): React.JSX.Element {
   return (
@@ -44,7 +49,7 @@ function NumberField({
       <Label className="text-[12px]">{label}</Label>
       <Input
         type="number"
-        min={1}
+        min={min}
         value={value}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
         className="h-8"
@@ -53,15 +58,80 @@ function NumberField({
   )
 }
 
+type SetField = <K extends keyof LoopFormValues>(key: K, value: LoopFormValues[K]) => void
+
+function GoalFields({ form, set }: { form: LoopFormValues; set: SetField }): React.JSX.Element {
+  return (
+    <>
+      <div className="space-y-1">
+        <Label className="text-[12px]">{translate('board.loops.field.goal', 'Goal')}</Label>
+        <textarea
+          className={TEXTAREA_CLASS}
+          value={form.goal}
+          placeholder={translate(
+            'board.loops.field.goalHint',
+            'e.g. All tests pass and the README documents the new flag'
+          )}
+          onChange={(e) => set('goal', e.target.value)}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-[12px]">
+          {translate('board.loops.field.judge', 'Who decides the goal is met')}
+        </Label>
+        <Select value={form.judge} onValueChange={(v) => set('judge', v as 'agent' | 'self')}>
+          <SelectTrigger size="sm" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="agent">
+              {translate('board.loops.judge.agent', 'An agent judges (separate Claude session)')}
+            </SelectItem>
+            <SelectItem value="self">
+              {translate('board.loops.judge.self', 'The console reports it')}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-[12px] text-[var(--board-text-muted)]">
+          {form.judge === 'agent'
+            ? translate(
+                'board.loops.judge.agentHint',
+                'A throwaway, read-only Claude session reads the latest console output and gives a verdict. It has no tools and never types into a console. Checked after the targeted agent settles.'
+              )
+            : translate(
+                'board.loops.judge.selfHint',
+                'The console is asked to print whether the goal is met when it stops.'
+              )}
+        </p>
+      </div>
+      {form.judge === 'agent' && (
+        <div className="space-y-1">
+          <Label className="text-[12px]">
+            {translate('board.loops.field.goalInstruction', 'Tell the console (optional)')}
+          </Label>
+          <textarea
+            className={TEXTAREA_CLASS}
+            value={form.instruction}
+            onChange={(e) => set('instruction', e.target.value)}
+          />
+        </div>
+      )}
+    </>
+  )
+}
+
 export function BoardLoopForm({
   initial,
   targets,
+  consoleCountFor,
   busy,
   onCancel,
   onSubmit
 }: {
   initial: LoopFormValues
   targets: readonly Target[]
+  /** How many consoles a target key reaches right now (for the prompts/hour estimate). */
+  consoleCountFor: (targetKey: string) => number
   busy: boolean
   onCancel: () => void
   onSubmit: (form: LoopFormValues) => void
@@ -69,6 +139,7 @@ export function BoardLoopForm({
   const [form, setForm] = useState(initial)
   const set = <K extends keyof LoopFormValues>(key: K, value: LoopFormValues[K]): void =>
     setForm((f) => ({ ...f, [key]: value }))
+  const estimate = estimatePromptsPerHour(form, consoleCountFor(form.targetKey))
 
   return (
     <form
@@ -123,14 +194,7 @@ export function BoardLoopForm({
         </div>
       </div>
       {form.kind === 'goal' ? (
-        <div className="space-y-1">
-          <Label className="text-[12px]">{translate('board.loops.field.goal', 'Goal')}</Label>
-          <textarea
-            className={TEXTAREA_CLASS}
-            value={form.goal}
-            onChange={(e) => set('goal', e.target.value)}
-          />
-        </div>
+        <GoalFields form={form} set={set} />
       ) : (
         <div className="space-y-1">
           <Label className="text-[12px]">
@@ -195,11 +259,13 @@ export function BoardLoopForm({
         <div className="grid grid-cols-2 gap-2">
           <NumberField
             label={translate('board.loops.field.stopAfter', 'Stop after (minutes, 0 = never)')}
+            min={0}
             value={form.stopAfterMin}
             onChange={(n) => set('stopAfterMin', n)}
           />
           <NumberField
             label={translate('board.loops.field.stopAfterRuns', 'Stop after runs (0 = never)')}
+            min={0}
             value={form.stopAfterRuns}
             onChange={(n) => set('stopAfterRuns', n)}
           />
@@ -217,6 +283,29 @@ export function BoardLoopForm({
           className="h-8 font-mono"
         />
       </div>
+      <label className="flex items-start gap-2 text-[12px]">
+        <Checkbox
+          checked={form.background}
+          onCheckedChange={(checked) => set('background', checked === true)}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="font-medium">
+            {translate('board.loops.field.background', 'Keep running behind other tabs')}
+          </span>
+          <span className="block text-[var(--board-text-muted)]">
+            {translate(
+              'board.loops.field.backgroundHint',
+              'On: the loop keeps firing while you look at something else. Off: it waits while the Board is hidden and catches up when you come back.'
+            )}
+          </span>
+        </span>
+      </label>
+      {estimate && (
+        <p className="font-mono text-[11px] text-[var(--board-text-muted)]">
+          {describePromptsPerHour(estimate)}
+        </p>
+      )}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           {translate('board.common.cancel', 'Cancel')}

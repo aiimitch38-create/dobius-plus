@@ -24,6 +24,8 @@ import {
   BOARD_MENU_SEPARATOR_CLASS
 } from '../board-chrome/board-surface-classes'
 import { translate } from '@/i18n/i18n'
+import { shouldStartCardDrag } from './card-drag-target'
+import { focusMovedOutOfMenu } from './card-menu-focus'
 
 export type BoardCardAction = {
   label: string
@@ -167,7 +169,7 @@ export function BoardCardFrame({
   const px = (n: number): number => n / (zoom > 0 ? zoom : 1)
 
   const startDrag = (e: React.PointerEvent<HTMLElement>): void => {
-    if (e.button !== 0 || (e.target as Element).closest('[data-board-card-control]')) {
+    if (!shouldStartCardDrag(e.button, e.target as Element, e.currentTarget)) {
       return
     }
     e.stopPropagation()
@@ -284,6 +286,17 @@ export function BoardCardFrame({
                 sideOffset={4}
                 data-surface="board"
                 className={BOARD_MENU_CONTENT_CLASS}
+                onCloseAutoFocus={(e) => {
+                  if (
+                    focusMovedOutOfMenu(
+                      document.activeElement,
+                      document.body,
+                      e.target as Element | null
+                    )
+                  ) {
+                    e.preventDefault()
+                  }
+                }}
               >
                 {actions.map((action, i) => (
                   <React.Fragment key={action.label}>

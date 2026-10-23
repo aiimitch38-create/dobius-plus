@@ -155,7 +155,7 @@ export class LoopStopChecks {
   }
 }
 
-async function anyWorking(
+export async function anyWorking(
   terminals: LoopTerminals | null,
   tabIds: readonly string[]
 ): Promise<boolean> {

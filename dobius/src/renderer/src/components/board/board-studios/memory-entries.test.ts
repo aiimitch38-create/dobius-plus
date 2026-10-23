@@ -8,6 +8,7 @@ import {
   classifyPushStatus,
   findByTitle,
   findDuplicate,
+  moveEntryBetweenScopes,
   parseProposals,
   sanitizeEntries,
   sanitizeMemoryByScope,
@@ -113,5 +114,42 @@ describe('classifyPushStatus', () => {
     expect(classifyPushStatus('permission')).toBe('busy')
     expect(classifyPushStatus('no-agent')).toBe('shell')
     expect(classifyPushStatus('no-active-terminal')).toBe('failed')
+  })
+})
+
+describe('moveEntryBetweenScopes', () => {
+  const fact = (id: string, text: string): MemoryEntry => ({
+    id,
+    category: 'commands',
+    title: id,
+    fact: text,
+    active: true
+  })
+
+  it('moves a repo fact to all repos (stored once) and back', () => {
+    const all = { r1: [fact('a', 'pnpm test'), fact('b', 'pnpm lint')], global: [] }
+    const toGlobal = moveEntryBetweenScopes(all, 'r1', 'global', 'a')
+    expect(toGlobal.r1.map((e) => e.id)).toEqual(['b'])
+    expect(toGlobal.global.map((e) => e.id)).toEqual(['a'])
+    const back = moveEntryBetweenScopes(toGlobal, 'global', 'r1', 'a')
+    expect(back.r1.map((e) => e.id)).toEqual(['b', 'a'])
+    expect(back.global).toEqual([])
+    expect(all.r1).toHaveLength(2)
+  })
+
+  it('merges into an equivalent fact instead of duplicating it', () => {
+    const all = { r1: [fact('a', 'Run pnpm test.')], global: [fact('g', 'run PNPM test')] }
+    const next = moveEntryBetweenScopes(all, 'r1', 'global', 'a')
+    expect(next.r1).toEqual([])
+    expect(next.global.map((e) => e.id)).toEqual(['g'])
+  })
+
+  it('creates the target scope and ignores unknown ids', () => {
+    expect(
+      moveEntryBetweenScopes({ r1: [fact('a', 'x')] }, 'r1', 'global', 'a').global
+    ).toHaveLength(1)
+    expect(moveEntryBetweenScopes({ r1: [fact('a', 'x')] }, 'r1', 'global', 'zz')).toEqual({
+      r1: [fact('a', 'x')]
+    })
   })
 })

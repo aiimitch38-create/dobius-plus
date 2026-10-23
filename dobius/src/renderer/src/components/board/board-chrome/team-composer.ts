@@ -86,6 +86,41 @@ export function addSlot(
   return agent ? [...slots, { role, agent }] : [...slots]
 }
 
+/** Sets every slot to `agent`, keeping each slot's role (the "Fill all" row). */
+export function fillAllSlots(slots: readonly TeamSlot[], agent: TuiAgent): TeamSlot[] {
+  return slots.map((slot) => ({ ...slot, agent }))
+}
+
+/** Grows (copying the last slot's role) or trims the team to `count`, clamped to 1–12. */
+export function resizeTeam(
+  slots: readonly TeamSlot[],
+  count: number,
+  available: readonly TuiAgent[],
+  saved: RoleAgentMap
+): TeamSlot[] {
+  if (slots.length === 0 || !Number.isFinite(count)) {
+    return [...slots]
+  }
+  const target = Math.min(TEAM_MAX_SLOTS, Math.max(1, Math.floor(count)))
+  let next = slots.slice(0, target)
+  while (next.length < target) {
+    const grown = addSlot(next, available, saved)
+    if (grown.length === next.length) {
+      break
+    }
+    next = grown
+  }
+  return next
+}
+
+export const TEAM_NAME_MAX_CHARS = 60
+
+/** The group name typed in the composer, or null to keep the default "Group N". */
+export function teamGroupName(raw: string): string | null {
+  const name = raw.replace(/\s+/g, ' ').trim().slice(0, TEAM_NAME_MAX_CHARS).trim()
+  return name.length > 0 ? name : null
+}
+
 /** Removes a slot but never the last one. */
 export function removeSlot(slots: readonly TeamSlot[], index: number): TeamSlot[] {
   return slots.length <= 1 ? [...slots] : slots.filter((_, i) => i !== index)

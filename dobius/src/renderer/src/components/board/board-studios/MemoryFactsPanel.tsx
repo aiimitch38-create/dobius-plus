@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, Plus, ScanSearch, StickyNote } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -6,7 +6,6 @@ import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 import { getBoard } from '@/store/slices/board'
-import { notePushTargets } from '../cards/note-push'
 import { getRepoIdFromWorktreeId } from '../../../../../shared/worktree-id'
 import {
   MEMORY_GLOBAL_SCOPE,
@@ -16,7 +15,9 @@ import {
   type MemoryEntry,
   type MemoryScanEffort
 } from './memory-entries'
-import { listMemoryEntries, saveMemoryEntries } from './memory-entry-store'
+import { listMemoryEntries, moveMemoryEntry, saveMemoryEntries } from './memory-entry-store'
+import { consoleAgentChoices, pickAgentConsole } from './document-generation-agents'
+import { AgentCliPicker } from './GenerateDocumentAgentPicker'
 import { addCardAtViewCenter } from './add-card-at-view-center'
 import { StudioEmptyState } from './StudioEmptyState'
 import { EntryRow, FIELD, ProposalsReview } from './MemoryFactRows'
@@ -25,15 +26,21 @@ import { useMemoryProposals } from './use-memory-proposals'
 /** Board memory facts for this repo or all repos, with agent scan/refresh. */
 export function MemoryFactsPanel({ worktreeId }: { worktreeId: string | null }): React.JSX.Element {
   const [scopeKind, setScopeKind] = useState<'repo' | 'global'>(worktreeId ? 'repo' : 'global')
-  const scope =
-    scopeKind === 'repo' && worktreeId ? getRepoIdFromWorktreeId(worktreeId) : MEMORY_GLOBAL_SCOPE
+  const repoScope = worktreeId ? getRepoIdFromWorktreeId(worktreeId) : null
+  const scope = scopeKind === 'repo' && repoScope ? repoScope : MEMORY_GLOBAL_SCOPE
+  const otherScope = scope === MEMORY_GLOBAL_SCOPE ? repoScope : MEMORY_GLOBAL_SCOPE
   const [entries, setEntries] = useState<MemoryEntry[] | null>(null)
+  const [otherCount, setOtherCount] = useState(0)
   const [effort, setEffort] = useState<MemoryScanEffort>('balanced')
+  const [agent, setAgent] = useState<string | null>(null)
   const [tabId, setTabId] = useState<string | null>(null)
   const board = useAppStore((s) => (worktreeId ? getBoard(s, worktreeId) : null))
-  const targets = board ? notePushTargets(board) : []
-  const target = targets.find((t) => t.tabId === tabId) ?? targets[0] ?? null
+  const choices = board ? consoleAgentChoices(board.cards) : []
+  const picked = pickAgentConsole(choices, agent, tabId)
+  const target = picked?.target ?? null
   const { state: proposalsState, request, reset, setProposals } = useMemoryProposals(worktreeId)
+  // Why: saves and scope moves each read-modify-write persisted UI; one at a time keeps both.
+  const writes = useRef<Promise<unknown>>(Promise.resolve())
 
   useEffect(() => {
     let cancelled = false
@@ -47,21 +54,47 @@ export function MemoryFactsPanel({ worktreeId }: { worktreeId: string | null }):
         }
       }
     )
+    if (otherScope) {
+      listMemoryEntries(otherScope).then(
+        (list) => !cancelled && setOtherCount(list.length),
+        (error: unknown) => console.error('Failed to count memory:', error)
+      )
+    }
     return () => {
       cancelled = true
     }
-  }, [scope])
+  }, [scope, otherScope])
 
   const commit = useCallback(
     (next: MemoryEntry[]) => {
       setEntries(next)
-      saveMemoryEntries(scope, next).catch((error: unknown) => {
-        console.error('Failed to save memory:', error)
-        toast.error(translate('board.memory.saveFailed', 'Could not save memory.'))
-      })
+      writes.current = writes.current
+        .then(() => saveMemoryEntries(scope, next))
+        .catch((error: unknown) => {
+          console.error('Failed to save memory:', error)
+          toast.error(translate('board.memory.saveFailed', 'Could not save memory.'))
+        })
     },
     [scope]
   )
+
+  /** "Applies to": moves one fact between this repo and all repos. */
+  const moveEntry = (entry: MemoryEntry): void => {
+    if (!otherScope) {
+      return
+    }
+    setEntries((list) => list?.filter((e) => e.id !== entry.id) ?? list)
+    writes.current = writes.current
+      .then(() => moveMemoryEntry(scope, otherScope, entry.id))
+      .then((moved) => {
+        setEntries(moved.from)
+        setOtherCount(moved.to.length)
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to move memory:', error)
+        toast.error(translate('board.memory.saveFailed', 'Could not save memory.'))
+      })
+  }
 
   const ask = async (prompt: string): Promise<void> => {
     if (!target) {
@@ -121,6 +154,9 @@ export function MemoryFactsPanel({ worktreeId }: { worktreeId: string | null }):
             {value === 'repo'
               ? translate('board.studio.memory.scopeRepo', 'This project')
               : translate('board.memory.scopeAllRepos', 'All repos')}
+            <span className="ml-1.5 tabular-nums opacity-70">
+              {value === scopeKind ? entries.length : otherCount}
+            </span>
           </button>
         ))}
         <span className="ml-auto" />
@@ -162,23 +198,22 @@ export function MemoryFactsPanel({ worktreeId }: { worktreeId: string | null }):
           <span className="text-[12px] text-[var(--board-text)]">
             {translate('board.memory.scanLabel', 'Scan this repo with')}
           </span>
-          <select
-            value={target?.tabId ?? ''}
-            onChange={(e) => setTabId(e.target.value)}
-            disabled={targets.length === 0}
-            aria-label={translate('board.memory.scanConsole', 'Console')}
-            className={cn(FIELD, 'w-auto')}
-          >
-            {targets.length === 0 ? (
-              <option value="">{translate('board.memory.noConsoles', 'No consoles')}</option>
-            ) : (
-              targets.map((t) => (
-                <option key={t.tabId} value={t.tabId}>
-                  {t.title}
-                </option>
-              ))
-            )}
-          </select>
+          {choices.length === 0 ? (
+            <span className="text-[12px] text-[var(--board-text-muted)]">
+              {translate('board.memory.noConsoles', 'No consoles')}
+            </span>
+          ) : (
+            <AgentCliPicker
+              choices={choices}
+              agent={picked?.agent ?? null}
+              tabId={target?.tabId ?? null}
+              disabled={proposalsState.status === 'waiting'}
+              onPick={(nextAgent, nextTab) => {
+                setAgent(nextAgent)
+                setTabId(nextTab)
+              }}
+            />
+          )}
           <select
             value={effort}
             onChange={(e) => setEffort(e.target.value as MemoryScanEffort)}
@@ -241,7 +276,10 @@ export function MemoryFactsPanel({ worktreeId }: { worktreeId: string | null }):
             <EntryRow
               key={entry.id}
               entry={entry}
-              canRefresh={scopeKind === 'repo' && Boolean(target)}
+              canRefresh={Boolean(worktreeId && target) && proposalsState.status !== 'waiting'}
+              scopeKind={scopeKind}
+              canMove={Boolean(otherScope)}
+              onMove={() => moveEntry(entry)}
               onChange={(patch) =>
                 commit(entries.map((e) => (e.id === entry.id ? { ...e, ...patch } : e)))
               }

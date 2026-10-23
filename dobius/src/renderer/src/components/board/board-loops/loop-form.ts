@@ -41,6 +41,10 @@ export type LoopFormValues = {
   stopAfterRuns: number
   /** Stop once this command exits 0 in the loop's worktree; '' = none. */
   stopCommand: string
+  /** Goal loops: a separate read-only judge session decides, or the console reports. */
+  judge: 'agent' | 'self'
+  /** Keep firing while the Board is not the visible view. */
+  background: boolean
 }
 
 export const DEFAULT_LOOP_FORM: LoopFormValues = {
@@ -57,7 +61,9 @@ export const DEFAULT_LOOP_FORM: LoopFormValues = {
   everyMin: 15,
   stopAfterMin: 0,
   stopAfterRuns: 0,
-  stopCommand: ''
+  stopCommand: '',
+  judge: 'agent',
+  background: true
 }
 
 export const BOARD_TARGET_KEY = 'board:all'
@@ -175,7 +181,8 @@ export function buildLoopTrigger(form: LoopFormValues): LoopFormResult {
       target,
       goal: form.goal.trim(),
       checkEveryMs: Math.max(LOOP_MIN_CHECK_EVERY_MS, form.checkEverySec * 1000),
-      maxRuns: Math.min(LOOP_MAX_RUNS_LIMIT, Math.max(1, Math.round(form.maxRuns)))
+      maxRuns: Math.min(LOOP_MAX_RUNS_LIMIT, Math.max(1, Math.round(form.maxRuns))),
+      judge: form.judge
     }
   }
 }
@@ -285,8 +292,8 @@ export function loopStopFields(
           ? translate('board.loops.error.stopLong', 'Stop command is longer than 200 characters.')
           : problem === 'shell'
             ? translate(
-                'board.loops.error.stopShell',
-                'Stop command must be one plain command, without ; | & > or $.'
+                'board.loops.error.stopShellPlain',
+                'Use one plain command — no quotes, wildcards, ~, pipes, ; & > or $'
               )
             : translate(
                 'board.loops.error.stopDestructive',

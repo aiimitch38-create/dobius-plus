@@ -1751,6 +1751,7 @@ function createBrowserApi(): NonNullable<Partial<PreloadApi>['browser']> {
     registerGuest: () => Promise.resolve(),
     unregisterGuest: () => Promise.resolve(),
     openDevTools: () => Promise.resolve(false),
+    dockGuestDevTools: () => Promise.resolve(false),
     setViewportOverride: () => Promise.resolve(false),
     setAnnotationViewportBridge: () => Promise.resolve(false),
     onGuestLoadFailed: () => noopUnsubscribe,

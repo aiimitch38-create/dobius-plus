@@ -1,12 +1,38 @@
 import { translate } from '@/i18n/i18n'
 import type { SafetyConcern } from './plan-safety'
 
+/** Finishes "Text that …" for one risky-text category. */
+export function riskyCategoryPhrase(category: string): string {
+  switch (category) {
+    case 'delete':
+      return translate('board.plan.concern.risk.delete', 'could delete files or data')
+    case 'history':
+      return translate('board.plan.concern.risk.history', 'could rewrite git history')
+    case 'publish':
+      return translate('board.plan.concern.risk.publish', 'could publish or deploy')
+    case 'credentials':
+      return translate('board.plan.concern.risk.credentials', 'mentions passwords, keys or secrets')
+    case 'install':
+      return translate('board.plan.concern.risk.install', 'could install software')
+    case 'files':
+      return translate('board.plan.concern.risk.files', 'could move files or change permissions')
+    case 'admin':
+      return translate('board.plan.concern.risk.admin', 'runs as admin (sudo)')
+    case 'permissions':
+      return translate('board.plan.concern.risk.permissions', "skips the agent's permission checks")
+    default:
+      return translate('board.plan.concern.risk.other', 'could be risky ({{category}})', {
+        category
+      })
+  }
+}
+
 /** One plain line per safety concern, for the confirmation dialog. */
 export function concernText(c: SafetyConcern): string {
   switch (c.kind) {
     case 'risky-text':
-      return translate('board.plan.concern.risky', 'Text that could {{category}}: "{{text}}"', {
-        category: c.category,
+      return translate('board.plan.concern.riskyText', 'Text that {{what}}: "{{text}}"', {
+        what: riskyCategoryPhrase(c.category),
         text: c.text.slice(0, 120)
       })
     case 'unnamed-consoles':

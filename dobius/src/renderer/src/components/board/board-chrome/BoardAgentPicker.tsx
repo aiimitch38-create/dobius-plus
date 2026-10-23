@@ -32,7 +32,7 @@ type BoardAgentPickerProps = {
   onPick: (agent: TuiAgent) => void
   onClose: () => void
   /** Multi-spawns (Spawn 4, group) offer a team composer: one role + agent per slot. */
-  onSpawnTeam?: (slots: TeamSlot[]) => void
+  onSpawnTeam?: (slots: TeamSlot[], name: string | null) => void
 }
 
 // Why: one picker serves the Spawn tool (opens where you clicked), "New console"
@@ -52,9 +52,9 @@ export function BoardAgentPicker({
         count={teamCount}
         agents={agents}
         onClose={() => setTeamCount(null)}
-        onSpawn={(slots) => {
+        onSpawn={(slots, name) => {
           setTeamCount(null)
-          onSpawnTeam(slots)
+          onSpawnTeam(slots, name)
         }}
       />
     )

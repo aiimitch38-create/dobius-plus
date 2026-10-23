@@ -50,24 +50,44 @@ function overlaps(a: Box, b: Box): boolean {
   )
 }
 
+/** True when `box` clears every occupied box by the shared clearance. */
+export function boardBoxIsFree(box: Box, occupied: readonly Box[]): boolean {
+  return !occupied.some((o) => overlaps(box, o))
+}
+
 /**
  * Center for a new spawn block: the first spot (scanning rows top-left to
- * bottom-right) inside the visible world area that clears every card. When the
- * view is full it goes just right of the rightmost card, so a spawn never lands
- * hidden under the command bar or on top of other consoles.
+ * bottom-right) inside the visible world area that clears every card, or with
+ * `near`, the clear spot whose center is closest to it. When the area is full
+ * it goes just right of the rightmost card, so a spawn never lands hidden under
+ * the command bar or on top of other consoles.
  */
 export function boardFreeSpawnCenter(
   visible: Box,
   block: { w: number; h: number },
-  occupied: readonly Box[]
+  occupied: readonly Box[],
+  near?: BoardPoint
 ): BoardPoint {
+  let best: BoardPoint | null = null
+  let bestDistance = Infinity
   for (let y = visible.y; y + block.h <= visible.y + visible.h; y += SCAN_STEP) {
     for (let x = visible.x; x + block.w <= visible.x + visible.w; x += SCAN_STEP) {
-      const candidate = { x, y, w: block.w, h: block.h }
-      if (!occupied.some((o) => overlaps(candidate, o))) {
-        return { x: x + block.w / 2, y: y + block.h / 2 }
+      if (!boardBoxIsFree({ x, y, w: block.w, h: block.h }, occupied)) {
+        continue
+      }
+      const center = { x: x + block.w / 2, y: y + block.h / 2 }
+      if (!near) {
+        return center
+      }
+      const distance = Math.hypot(center.x - near.x, center.y - near.y)
+      if (distance < bestDistance) {
+        best = center
+        bestDistance = distance
       }
     }
+  }
+  if (best) {
+    return best
   }
   if (occupied.length === 0) {
     return { x: visible.x + visible.w / 2, y: visible.y + block.h / 2 }

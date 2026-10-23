@@ -1,8 +1,21 @@
-// Pure layout for the Mission Map studio: three columns (orchestrators → groups
-// → consoles) with edges from the board's wiring. No DOM, no store.
+// Pure layout for the Mission Map studio: three columns (command center +
+// orchestrators → groups → consoles) with edges from the board's wiring. No
+// DOM, no store.
 import type { BoardCard, BoardCardOf, BoardGroup, BoardSwatch } from '@/store/slices/board'
 
 export type MissionMapNode =
+  | {
+      id: string
+      /** The board's command bar: every console takes orders from it. */
+      kind: 'command-center'
+      label: string
+      /** Every console card on the board. */
+      cardIds: string[]
+      /** Consoles no orchestrator is wired to (reachable only from the command bar). */
+      unwiredCount: number
+      x: number
+      y: number
+    }
   | {
       id: string
       kind: 'orchestrator'
@@ -36,8 +49,11 @@ export type MissionMapEdge = {
   id: string
   from: string
   to: string
-  /** `wire` = orchestrator → target, `member` = group → console. */
-  kind: 'wire' | 'member'
+  /**
+   * `wire` = orchestrator → target, `member` = group → console, `command` =
+   * command center → a console no orchestrator is wired to.
+   */
+  kind: 'wire' | 'member' | 'command'
 }
 
 export type MissionMapLayout = {
@@ -56,6 +72,7 @@ const ROW_GAP = 14
 const BUCKET_GAP = 36
 const PADDING = 28
 
+export const COMMAND_CENTER_NODE_ID = 'command-center'
 export const orchestratorNodeId = (cardId: string): string => `orchestrator:${cardId}`
 export const groupNodeId = (groupId: string): string => `group:${groupId}`
 export const consoleNodeId = (cardId: string): string => `console:${cardId}`
@@ -73,7 +90,8 @@ function stackY(index: number, extraGap = 0): number {
 
 export function layoutMissionMap(
   cards: readonly BoardCard[],
-  groups: readonly BoardGroup[]
+  groups: readonly BoardGroup[],
+  commandCenterLabel = 'Command center'
 ): MissionMapLayout {
   const consoles = cards.filter((c): c is ConsoleCard => c.kind === 'console')
   const orchestrators = cards.filter((c): c is OrchestratorCard => c.kind === 'orchestrator')
@@ -95,7 +113,37 @@ export function layoutMissionMap(
   }
   const ungrouped = consoles.filter((c) => !groupOfConsole.has(c.id))
 
+  // Why: a wire to a grouped console lands on its group, so the map shows the
+  // whole group as commanded; count its members as wired to match the picture.
+  const directlyWired = new Set(
+    orchestrators.flatMap((card) => card.wiredCardIds.filter((id) => consoleById.has(id)))
+  )
+  const wiredGroupIds = new Set(
+    [...directlyWired].map((id) => groupOfConsole.get(id)).filter((id) => id !== undefined)
+  )
+  const wiredConsoleIds = new Set(
+    consoles
+      .filter((c) => directlyWired.has(c.id) || wiredGroupIds.has(groupOfConsole.get(c.id) ?? ''))
+      .map((c) => c.id)
+  )
+  const unwired = consoles.filter((c) => !wiredConsoleIds.has(c.id))
+
   const nodes: MissionMapNode[] = []
+  // Why: the command bar reaches every console, so it heads column 0 whenever
+  // the board has one; orchestrators stack below it.
+  const hasCommandCenter = consoles.length > 0
+  if (hasCommandCenter) {
+    nodes.push({
+      id: COMMAND_CENTER_NODE_ID,
+      kind: 'command-center',
+      label: commandCenterLabel,
+      cardIds: consoles.map((c) => c.id),
+      unwiredCount: unwired.length,
+      x: columnX(0),
+      y: stackY(0)
+    })
+  }
+  const orchestratorRowOffset = hasCommandCenter ? 1 : 0
   orchestrators.forEach((card, i) => {
     nodes.push({
       id: orchestratorNodeId(card.id),
@@ -103,7 +151,7 @@ export function layoutMissionMap(
       cardId: card.id,
       label: card.name || card.title,
       x: columnX(0),
-      y: stackY(i)
+      y: stackY(i + orchestratorRowOffset)
     })
   })
   consoleGroups.forEach(({ group }, i) => {
@@ -171,8 +219,16 @@ export function layoutMissionMap(
       addEdge(groupNodeId(group.id), consoleNodeId(id), 'member')
     }
   }
+  for (const card of unwired) {
+    addEdge(COMMAND_CENTER_NODE_ID, consoleNodeId(card.id), 'command')
+  }
 
-  const rows = Math.max(orchestrators.length, consoleGroups.length, consoles.length, 1)
+  const rows = Math.max(
+    orchestrators.length + orchestratorRowOffset,
+    consoleGroups.length,
+    consoles.length,
+    1
+  )
   return {
     nodes,
     edges,
@@ -195,13 +251,45 @@ export function missionMapEdgePath(
   return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`
 }
 
-/** Board card ids a node stands for: its own card, or a group's members. */
+/** Board card ids a node stands for: its own card, a group's members, or every console. */
 export function missionMapNodeCardIds(
   node: MissionMapNode,
   groups: readonly BoardGroup[]
 ): string[] {
+  if (node.kind === 'command-center') {
+    return node.cardIds
+  }
   if (node.kind !== 'group') {
     return [node.cardId]
   }
   return groups.find((g) => g.id === node.groupId)?.cardIds ?? []
+}
+
+export type MissionMapCommander = {
+  node: Extract<MissionMapNode, { kind: 'orchestrator' }>
+  /** True when the wire lands on the console's group rather than the console. */
+  viaGroup: boolean
+}
+
+/** Orchestrators that command a console, directly or through its group. */
+export function missionMapCommandersOf(
+  layout: Pick<MissionMapLayout, 'nodes' | 'edges'>,
+  consoleId: string
+): MissionMapCommander[] {
+  const target = layout.nodes.find((n) => n.id === consoleId)
+  if (!target || target.kind !== 'console') {
+    return []
+  }
+  const groupId = target.groupId ? groupNodeId(target.groupId) : null
+  const commanders: MissionMapCommander[] = []
+  for (const edge of layout.edges) {
+    if (edge.kind !== 'wire' || (edge.to !== consoleId && edge.to !== groupId)) {
+      continue
+    }
+    const node = layout.nodes.find((n) => n.id === edge.from)
+    if (node?.kind === 'orchestrator') {
+      commanders.push({ node, viaGroup: edge.to === groupId })
+    }
+  }
+  return commanders
 }

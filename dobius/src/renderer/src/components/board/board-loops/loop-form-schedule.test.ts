@@ -96,4 +96,19 @@ describe('loopStopFields', () => {
       ).toBe(false)
     }
   })
+  it('zero stop values mean "never" and save without stop fields', () => {
+    expect(
+      loopStopFields({ kind: 'schedule', stopAfterMin: 0, stopAfterRuns: 0, stopCommand: '' })
+    ).toEqual({ ok: true, fields: {} })
+  })
+  it('explains quotes, wildcards and ~ when refusing a shell-shaped stop command', () => {
+    for (const stopCommand of ["'rm' -rf ~", 'pnpm test *', 'ls ~']) {
+      expect(
+        loopStopFields({ kind: 'on-idle', stopAfterMin: 0, stopAfterRuns: 0, stopCommand })
+      ).toEqual({
+        ok: false,
+        error: 'Use one plain command — no quotes, wildcards, ~, pipes, ; & > or $'
+      })
+    }
+  })
 })

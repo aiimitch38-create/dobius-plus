@@ -2,6 +2,7 @@
    trust boundary (isTrustedBrowserRenderer) and handler teardown stay consistent. */
 import { BrowserWindow, ipcMain, webContents } from 'electron'
 import { browserManager } from '../browser/browser-manager'
+import { dockGuestDevTools, type GuestDevToolsDockArgs } from '../browser/guest-devtools-dock'
 import type { AgentBrowserBridge } from '../browser/agent-browser-bridge'
 import { browserSessionRegistry } from '../browser/browser-session-registry'
 import {
@@ -170,6 +171,7 @@ export function registerBrowserHandlers(): void {
   ipcMain.removeHandler('browser:registerGuest')
   ipcMain.removeHandler('browser:unregisterGuest')
   ipcMain.removeHandler('browser:openDevTools')
+  ipcMain.removeHandler('browser:dockGuestDevTools')
   ipcMain.removeHandler('browser:setViewportOverride')
   ipcMain.removeHandler('browser:setAnnotationViewportBridge')
   ipcMain.removeHandler('browser:acceptDownload')
@@ -263,6 +265,15 @@ export function registerBrowserHandlers(): void {
       return false
     }
     return browserManager.openDevTools(args.browserPageId)
+  })
+
+  // Why: Board web tiles are standalone guests (not browser tabs), so they
+  // address DevTools by webview id; ownership is checked against the sender.
+  ipcMain.handle('browser:dockGuestDevTools', (event, args: GuestDevToolsDockArgs) => {
+    if (!isTrustedBrowserRenderer(event.sender)) {
+      return false
+    }
+    return dockGuestDevTools(event.sender, args)
   })
 
   ipcMain.handle(

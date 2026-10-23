@@ -7,9 +7,11 @@ import { getAgentLabel } from '@/lib/agent-catalog'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { pauseResultText, setConsolesPaused } from '../board-delivery/pause-consoles'
 import { useAppStore } from '@/store'
+import { getBoard } from '@/store/slices/board'
 import type { TuiAgent } from '../../../../../shared/types'
 import { boardSpawnPlacements, BOARD_CONSOLE_SIZE } from '../board-canvas/board-spawn-placement'
 import type { BoardPoint } from '../board-canvas/board-viewport'
+import { revealRectViewport } from '../board-canvas/board-reveal'
 import type { BoardInsertKind } from '../board-chrome/board-tools'
 import type { BoardChipId } from '../board-command-bar/board-command-chips'
 import type { BoardStudioId } from '../board-studios/board-studio-ids'
@@ -250,9 +252,19 @@ export function useBoardActions({
           if (!worktreeId) {
             return
           }
-          useAppStore
-            .getState()
-            .addCard(worktreeId, boardInsertCard(kind, freeCenter(boardInsertCardSize(kind))))
+          const card = boardInsertCard(kind, freeCenter(boardInsertCardSize(kind)))
+          const state = useAppStore.getState()
+          state.addCard(worktreeId, card)
+          // Why: when the view is full the free-spot scan falls back past the
+          // rightmost card; pan so the new card is never left off-screen.
+          const viewport = getBoard(state, worktreeId).viewport
+          const next = revealRectViewport(viewport, card, {
+            w: window.innerWidth,
+            h: window.innerHeight
+          })
+          if (next !== viewport) {
+            state.setViewport(worktreeId, next)
+          }
         }
       }
     },

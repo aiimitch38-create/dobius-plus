@@ -85,6 +85,14 @@ export function registerAutomationHandlers(store: Store, service: AutomationServ
     (_event, args: { workspaceId: string; displayName: string }): number =>
       store.snapshotAutomationRunWorkspaceDisplayName(args.workspaceId, args.displayName)
   )
+  ipcMain.handle(
+    'automations:boardVisible',
+    (event, args: { worktreeId: string; visible: boolean }): void => {
+      if (typeof args?.worktreeId === 'string' && typeof args.visible === 'boolean') {
+        service.loops.setBoardVisible(args.worktreeId, String(event.sender.id), args.visible)
+      }
+    }
+  )
   ipcMain.handle('automations:rendererReady', (): void => {
     service.setRendererReady()
   })

@@ -27,13 +27,19 @@ export function WebTileExtras({
   deviceId,
   onDevice,
   onNavigate,
-  onOpenInspector
+  inspectorOpen,
+  onOpenInspector,
+  onOpenDetachedInspector
 }: {
   worktreeId: string
   deviceId: string | null
   onDevice: (deviceId: string | null) => void
   onNavigate: (url: string) => void
+  inspectorOpen: boolean
+  /** Toggles the inspector docked beside the page. */
   onOpenInspector: () => void
+  /** Shift-click: Chromium's separate DevTools window instead. */
+  onOpenDetachedInspector: () => void
 }): React.JSX.Element {
   const [servers, setServers] = useState<DevServer[] | null>(null)
   const [scanError, setScanError] = useState<string | null>(null)
@@ -56,7 +62,13 @@ export function WebTileExtras({
 
   const deviceLabel = translate('board.web.device', 'Simulate a device viewport')
   const scanLabel = translate('board.web.rescan', 'Rescan dev ports')
-  const inspectorLabel = translate('board.web.inspector', 'Open the Web Inspector')
+  const inspectorLabel = inspectorOpen
+    ? translate('board.web.closeInspector', 'Close the Web Inspector')
+    : translate('board.web.inspector', 'Open the Web Inspector')
+  const inspectorHint = translate(
+    'board.web.inspectorHint',
+    'Web Inspector · Shift-click to open it in its own window'
+  )
   return (
     <>
       <DropdownMenu onOpenChange={(open) => open && rescan()}>
@@ -123,9 +135,10 @@ export function WebTileExtras({
       <button
         type="button"
         aria-label={inspectorLabel}
-        title={inspectorLabel}
-        onClick={onOpenInspector}
-        className={NAV_BUTTON}
+        aria-pressed={inspectorOpen}
+        title={inspectorHint}
+        onClick={(e) => (e.shiftKey ? onOpenDetachedInspector() : onOpenInspector())}
+        className={`${NAV_BUTTON} aria-pressed:text-[var(--board-accent)]`}
       >
         <Braces className="size-4" />
       </button>

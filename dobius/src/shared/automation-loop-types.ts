@@ -13,13 +13,21 @@ export type AutomationLoopTarget =
 
 export type AutomationLoopTrigger =
   | { kind: 'on-idle'; target: AutomationLoopTarget; debounceMs: number }
-  | { kind: 'on-output-match'; tabId: string; pattern: string; cooldownMs: number }
+  | {
+      kind: 'on-output-match'
+      tabId: string
+      pattern: string
+      cooldownMs: number
+    }
   | {
       kind: 'goal'
       target: AutomationLoopTarget
       goal: string
       checkEveryMs: number
       maxRuns: number
+      /** Who decides the goal is met: 'agent' = a separate read-only judge
+       *  session; absent/'self' = the console prints DOBIUS_GOAL itself. */
+      judge?: 'agent' | 'self'
     }
   /** Fires every `everyMs`, first one `everyMs` after the loop is created. */
   | { kind: 'schedule'; target: AutomationLoopTarget; everyMs: number }
@@ -36,6 +44,8 @@ export type AutomationLoopState = {
   lastVerdict: 'met' | 'not-met' | null
   /** Command-stop loops: when the last delivered run happened and its check is still owed. */
   stopCheckSince?: number | null
+  /** Judged goal loops: when the judge last started; it waits checkEveryMs before the next. */
+  judgedAt?: number | null
 }
 
 /** Why: a loop is an automation whose run is triggered by board events instead
@@ -50,4 +60,7 @@ export type AutomationLoop = {
   stopAfterRuns?: number
   /** Command stop: run in the loop's worktree after each run; exit 0 retires the loop. */
   stopCommand?: string
+  /** Keep firing while the Board is not the visible view. Absent = legacy
+   *  behavior (on-idle pauses with the Board, every other kind keeps running). */
+  background?: boolean
 }

@@ -19,6 +19,7 @@ import {
 } from './board-command-history'
 import { onCommandBarPrefill } from './board-command-prefill'
 import { BoardThread, type BoardThreadMessage } from './BoardThread'
+import { BoardVoiceCaption } from './BoardVoiceCaption'
 
 export type BoardCommandBarProps = {
   messages: readonly BoardThreadMessage[]
@@ -157,9 +158,10 @@ export function BoardCommandBar({
         className={cn(
           BOARD_FLOATING_PANEL_CLASS,
           // The dark reference lifts the composer to a lighter neutral than the rails.
-          'pointer-events-auto flex w-full flex-col rounded-[20px] bg-[var(--board-composer)]'
+          'pointer-events-auto relative flex w-full flex-col rounded-[20px] bg-[var(--board-composer)]'
         )}
       >
+        <BoardVoiceCaption draft={draft} />
         {collapsed ? null : (
           <>
             <BoardThread

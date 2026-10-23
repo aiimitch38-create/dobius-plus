@@ -4,12 +4,15 @@ import {
   TEAM_MAX_SLOTS,
   addSlot,
   defaultAgentForRole,
+  fillAllSlots,
   initialTeam,
   parseRoleAgentMap,
   rememberRoleAgents,
   removeSlot,
+  resizeTeam,
   setSlotAgent,
-  setSlotRole
+  setSlotRole,
+  teamGroupName
 } from './team-composer'
 
 const BOTH: TuiAgent[] = ['claude', 'codex']
@@ -65,5 +68,44 @@ describe('saved role map', () => {
     expect(parseRoleAgentMap('not json', isAgent)).toEqual({})
     expect(parseRoleAgentMap('{"review":"rm -rf","ghost":"claude"}', isAgent)).toEqual({})
     expect(parseRoleAgentMap(null, isAgent)).toEqual({})
+  })
+})
+
+describe('fillAllSlots', () => {
+  it('sets every slot to one agent and keeps roles', () => {
+    const team = setSlotRole(initialTeam(3, BOTH, {}), 1, 'review', BOTH, {})
+    expect(team[1].agent).toBe('codex')
+    const filled = fillAllSlots(team, 'claude')
+    expect(filled.map((s) => s.agent)).toEqual(['claude', 'claude', 'claude'])
+    expect(filled.map((s) => s.role)).toEqual(['general', 'review', 'general'])
+  })
+})
+
+describe('resizeTeam', () => {
+  it('grows by copying the last role and trims from the end', () => {
+    const team = setSlotRole(initialTeam(2, BOTH, {}), 1, 'review', BOTH, {})
+    const grown = resizeTeam(team, 4, BOTH, {})
+    expect(grown).toHaveLength(4)
+    expect(grown.slice(2)).toEqual([
+      { role: 'review', agent: 'codex' },
+      { role: 'review', agent: 'codex' }
+    ])
+    expect(resizeTeam(grown, 1, BOTH, {})).toEqual([team[0]])
+  })
+
+  it('clamps to 1-12 and leaves an empty team alone', () => {
+    const team = initialTeam(3, BOTH, {})
+    expect(resizeTeam(team, 0, BOTH, {})).toHaveLength(1)
+    expect(resizeTeam(team, 99, BOTH, {})).toHaveLength(TEAM_MAX_SLOTS)
+    expect(resizeTeam(team, Number.NaN, BOTH, {})).toHaveLength(3)
+    expect(resizeTeam([], 5, BOTH, {})).toEqual([])
+  })
+})
+
+describe('teamGroupName', () => {
+  it('trims and collapses whitespace, null when blank', () => {
+    expect(teamGroupName('  Docs   crew ')).toBe('Docs crew')
+    expect(teamGroupName('   ')).toBeNull()
+    expect(teamGroupName('x'.repeat(80))).toHaveLength(60)
   })
 })

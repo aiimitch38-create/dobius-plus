@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import type { BoardCard, BoardGroup } from '@/store/slices/board'
 import { boundsOf, screenDeltaToWorld } from './card-geometry'
 import { swatchEdge, swatchFill } from './card-swatch'
+import { shouldStartCardDrag } from './card-drag-target'
 import { GroupFrameMenu } from '../board-groups/GroupFrameMenu'
 
 const GROUP_PADDING = 24
@@ -52,7 +53,7 @@ export function GroupFrame({
         className="pointer-events-auto absolute left-4 flex -translate-y-1/2 cursor-grab items-center gap-1 rounded-full px-3 py-1 text-[12px] font-semibold text-[var(--board-text)] select-none active:cursor-grabbing"
         style={{ top: 0, background: swatchFill(group.color), border: `1px solid ${edge}` }}
         onPointerDown={(e) => {
-          if (e.button !== 0) {
+          if (!shouldStartCardDrag(e.button, e.target as Element, e.currentTarget)) {
             return
           }
           e.stopPropagation()

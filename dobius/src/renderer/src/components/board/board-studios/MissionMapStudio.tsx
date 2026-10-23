@@ -1,12 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useAppStore } from '@/store'
 import { getBoard } from '@/store/slices/board'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
-import { swatchEdge, swatchFill } from '../cards/card-swatch'
 import { focusBoardCards } from '../console-card/console-actions'
 import { consoleStatusLabel, type ConsoleCardStatus } from '../console-card/console-card-status'
-import { useConsoleCardStatus } from '../console-card/use-console-card-status'
 import {
   MISSION_MAP_FILTERS,
   missionMapFilterCounts,
@@ -15,8 +13,14 @@ import {
 } from './mission-map-filter'
 import { MissionMapInspector } from './MissionMapInspector'
 import {
-  MISSION_MAP_NODE_H,
-  MISSION_MAP_NODE_W,
+  CommandCenterNode,
+  ConsoleNode,
+  DIMMED_OPACITY,
+  StaticNode,
+  edgeDash,
+  statusColor
+} from './MissionMapNodes'
+import {
   layoutMissionMap,
   missionMapEdgePath,
   missionMapNodeCardIds,
@@ -33,8 +37,6 @@ const LEGEND_STATUSES: readonly ConsoleCardStatus[] = [
   'shell',
   'gone'
 ]
-const LABEL_MAX_CHARS = 20
-const DIMMED_OPACITY = 0.25
 
 function filterLabel(filter: MissionMapFilter): string {
   switch (filter) {
@@ -49,30 +51,6 @@ function filterLabel(filter: MissionMapFilter): string {
     case 'done':
       return translate('board.studio.missionMap.filter.done', 'Done')
   }
-}
-
-// Why: the map is read at a glance, so each live state gets one Board token.
-function statusColor(status: ConsoleCardStatus): string {
-  switch (status) {
-    case 'working':
-      return 'var(--board-live)'
-    case 'waiting':
-      return 'var(--board-accent)'
-    case 'done':
-      return 'var(--board-chip-border-alt)'
-    case 'paused':
-      return 'var(--board-text-muted)'
-    case 'idle':
-      return 'var(--board-chip-border)'
-    case 'shell':
-      return 'var(--board-text-muted)'
-    case 'gone':
-      return 'var(--board-danger-text)'
-  }
-}
-
-function clipLabel(label: string): string {
-  return label.length > LABEL_MAX_CHARS ? `${label.slice(0, LABEL_MAX_CHARS - 1)}…` : label
 }
 
 // Frames the node's cards on the Board and raises them.
@@ -90,7 +68,15 @@ export function MissionMapStudio({
   onClose: () => void
 }): React.JSX.Element {
   const board = useAppStore((s) => getBoard(s, worktreeId))
-  const layout = useMemo(() => layoutMissionMap(board.cards, board.groups), [board])
+  const layout = useMemo(
+    () =>
+      layoutMissionMap(
+        board.cards,
+        board.groups,
+        translate('board.studio.missionMap.commandCenter', 'Command center')
+      ),
+    [board]
+  )
   const hasConsoles = layout.nodes.some((n) => n.kind === 'console')
   const [filter, setFilter] = useState<MissionMapFilter>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -165,8 +151,10 @@ export function MissionMapStudio({
             role="img"
             aria-label={translate('board.studio.missionMap.graphLabel', 'Mission map graph')}
             viewBox={`0 0 ${layout.width} ${layout.height}`}
-            width={layout.width}
-            height={layout.height}
+            preserveAspectRatio="xMinYMin meet"
+            // Why: the inspector takes 18rem of the row; the graph shrinks to the
+            // space left (never past natural size) so no column is cut off.
+            style={{ width: '100%', maxWidth: layout.width, height: 'auto' }}
             className="block"
           >
             <defs>
@@ -188,6 +176,7 @@ export function MissionMapStudio({
               if (!from || !to) {
                 return null
               }
+              const lit = visible.has(edge.from) && visible.has(edge.to)
               return (
                 <path
                   key={edge.id}
@@ -195,9 +184,10 @@ export function MissionMapStudio({
                   fill="none"
                   stroke={edge.kind === 'wire' ? 'var(--board-accent)' : 'var(--board-text-muted)'}
                   strokeWidth={edge.kind === 'wire' ? 1.75 : 1.25}
-                  strokeDasharray={edge.kind === 'member' ? '4 4' : undefined}
-                  markerEnd="url(#mission-map-arrow)"
-                  opacity={visible.has(edge.from) && visible.has(edge.to) ? 0.9 : DIMMED_OPACITY}
+                  strokeDasharray={edgeDash(edge.kind)}
+                  markerEnd={edge.kind === 'command' ? undefined : 'url(#mission-map-arrow)'}
+                  // Why: command-bar reach is ambient, so it reads quieter than real wiring.
+                  opacity={lit ? (edge.kind === 'command' ? 0.55 : 0.9) : DIMMED_OPACITY}
                 />
               )
             })}
@@ -214,7 +204,16 @@ export function MissionMapStudio({
               </text>
             ) : null}
             {layout.nodes.map((node) =>
-              node.kind === 'console' ? (
+              node.kind === 'command-center' ? (
+                <CommandCenterNode
+                  key={node.id}
+                  node={node}
+                  dimmed={!visible.has(node.id)}
+                  selected={node.id === selectedId}
+                  onSelect={select}
+                  onFocus={focus}
+                />
+              ) : node.kind === 'console' ? (
                 <ConsoleNode
                   key={node.id}
                   node={node}
@@ -242,6 +241,8 @@ export function MissionMapStudio({
           <MissionMapInspector
             worktreeId={worktreeId}
             node={selected}
+            layout={layout}
+            onSelect={select}
             statuses={liveStatuses}
             statusColor={statusColor}
             onFocus={focus}
@@ -260,128 +261,21 @@ export function MissionMapStudio({
             {consoleStatusLabel(status)}
           </span>
         ))}
+        <span className="flex items-center gap-1.5">
+          <svg aria-hidden width={18} height={4} className="block">
+            <line
+              x1={0}
+              y1={2}
+              x2={18}
+              y2={2}
+              stroke="var(--board-text-muted)"
+              strokeWidth={1.25}
+              strokeDasharray={edgeDash('command')}
+            />
+          </svg>
+          {translate('board.studio.missionMap.legend.commandOnly', 'Command bar only')}
+        </span>
       </footer>
     </div>
-  )
-}
-
-type NodeInteraction = {
-  dimmed: boolean
-  selected: boolean
-  /** Click / Enter: open the inspector. */
-  onSelect: (node: MissionMapNode) => void
-  /** Double-click: jump to it on the Board. */
-  onFocus: (node: MissionMapNode) => void
-}
-
-function NodeFrame({
-  node,
-  fill,
-  stroke,
-  label,
-  dimmed,
-  selected,
-  onSelect,
-  onFocus,
-  children
-}: NodeInteraction & {
-  node: MissionMapNode
-  fill: string
-  stroke: string
-  label: string
-  children?: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <g
-      transform={`translate(${node.x} ${node.y})`}
-      role="button"
-      tabIndex={0}
-      aria-pressed={selected}
-      aria-label={translate(
-        'board.studio.missionMap.inspect',
-        'Inspect {{name}}; double-click to show it on the board',
-        { name: label }
-      )}
-      opacity={dimmed ? DIMMED_OPACITY : 1}
-      className="cursor-pointer outline-none [&:focus-visible>rect]:stroke-[var(--board-accent)] [&:hover>rect]:opacity-90"
-      onClick={() => onSelect(node)}
-      onDoubleClick={() => onFocus(node)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onSelect(node)
-        }
-      }}
-    >
-      <rect
-        width={MISSION_MAP_NODE_W}
-        height={MISSION_MAP_NODE_H}
-        rx={10}
-        fill={fill}
-        stroke={selected ? 'var(--board-accent)' : stroke}
-        strokeWidth={selected ? 2.5 : 1.5}
-      />
-      {children}
-    </g>
-  )
-}
-
-function StaticNode({
-  node,
-  ...interaction
-}: NodeInteraction & {
-  node: Extract<MissionMapNode, { kind: 'orchestrator' | 'group' }>
-}): React.JSX.Element {
-  const fill = node.kind === 'group' ? swatchFill(node.color) : 'var(--board-accent-tint)'
-  const stroke = node.kind === 'group' ? swatchEdge(node.color) : 'var(--board-accent)'
-  const kindLabel =
-    node.kind === 'group'
-      ? translate('board.studio.missionMap.kind.group', 'Group')
-      : translate('board.studio.missionMap.kind.orchestrator', 'Orchestrator')
-  return (
-    <NodeFrame {...interaction} node={node} fill={fill} stroke={stroke} label={node.label}>
-      <title>{node.label}</title>
-      <text x={12} y={19} fontSize={13} fontWeight={600} fill="var(--board-text)">
-        {clipLabel(node.label)}
-      </text>
-      <text x={12} y={34} fontSize={11} fill="var(--board-text-muted)">
-        {kindLabel}
-      </text>
-    </NodeFrame>
-  )
-}
-
-function ConsoleNode({
-  node,
-  worktreeId,
-  onStatus,
-  ...interaction
-}: NodeInteraction & {
-  node: Extract<MissionMapNode, { kind: 'console' }>
-  worktreeId: string
-  onStatus: (nodeId: string, status: ConsoleCardStatus) => void
-}): React.JSX.Element {
-  const { status } = useConsoleCardStatus(worktreeId, node.tabId)
-  useEffect(() => {
-    onStatus(node.id, status)
-  }, [node.id, status, onStatus])
-  const color = statusColor(status)
-  return (
-    <NodeFrame
-      {...interaction}
-      node={node}
-      fill="var(--board-panel-2)"
-      stroke={color}
-      label={node.label}
-    >
-      <title>{`${node.label} · ${consoleStatusLabel(status)}`}</title>
-      <circle cx={16} cy={MISSION_MAP_NODE_H / 2} r={4.5} fill={color} />
-      <text x={30} y={19} fontSize={13} fontWeight={600} fill="var(--board-text)">
-        {clipLabel(node.label)}
-      </text>
-      <text x={30} y={34} fontSize={11} fill="var(--board-text-muted)">
-        {`${node.agentKind} · ${consoleStatusLabel(status)}`}
-      </text>
-    </NodeFrame>
   )
 }

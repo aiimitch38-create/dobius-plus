@@ -39,7 +39,8 @@ export class AutomationService {
   private readonly store: Store
   private readonly tickMs: number
   private timer: ReturnType<typeof setInterval> | null = null
-  private readonly loops: LoopRunner
+  /** Public for the Board view heartbeat (automations:boardVisible). */
+  readonly loops: LoopRunner
   private webContents: WebContents | null = null
   private rendererReady = false
   private evaluating = false

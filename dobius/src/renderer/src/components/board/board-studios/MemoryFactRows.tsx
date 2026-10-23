@@ -56,18 +56,59 @@ export function CategorySelect({
   )
 }
 
+function AppliesTo({
+  scopeKind,
+  disabled,
+  onMove
+}: {
+  scopeKind: 'repo' | 'global'
+  disabled: boolean
+  onMove: () => void
+}): React.JSX.Element {
+  return (
+    <div className="flex items-center gap-1 text-[11px] text-[var(--board-text-muted)]">
+      <span>{translate('board.memory.appliesTo', 'Applies to')}</span>
+      {(['repo', 'global'] as const).map((value) => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={scopeKind === value}
+          disabled={disabled || scopeKind === value}
+          onClick={onMove}
+          className={cn(
+            'rounded-[6px] px-2 py-0.5 hover:bg-[var(--board-panel-2)] disabled:cursor-default',
+            scopeKind === value && 'bg-[var(--board-accent-tint)] text-[var(--board-text)]',
+            disabled && scopeKind !== value && 'opacity-40'
+          )}
+        >
+          {value === 'repo'
+            ? translate('board.memory.appliesRepo', 'This repo')
+            : translate('board.memory.scopeAllRepos', 'All repos')}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function EntryRow({
   entry,
   canRefresh,
+  scopeKind,
+  canMove,
   onChange,
   onDelete,
-  onRefresh
+  onRefresh,
+  onMove
 }: {
   entry: MemoryEntry
   canRefresh: boolean
+  scopeKind: 'repo' | 'global'
+  /** False when there is no repo to move an all-repos fact into. */
+  canMove: boolean
   onChange: (patch: Partial<MemoryEntry>) => void
   onDelete: () => void
   onRefresh: () => void
+  onMove: () => void
 }): React.JSX.Element {
   // Local drafts so typing doesn't write persisted UI on every keystroke; commit on blur.
   const [title, setTitle] = useState(entry.title)
@@ -112,6 +153,7 @@ export function EntryRow({
             'board.memory.refreshHint',
             'Ask an agent to re-answer this title from the repo as it is now'
           )}
+          aria-label={translate('board.memory.refresh', 'Refresh this fact')}
           onClick={onRefresh}
         >
           <RefreshCw className="size-3.5" />
@@ -136,8 +178,11 @@ export function EntryRow({
         aria-label={translate('board.memory.fact', 'Fact')}
         className={cn(FIELD, 'resize-none')}
       />
-      <div className="text-right text-[10px] text-[var(--board-text-muted)] tabular-nums">
-        {fact.length}/{MEMORY_FACT_MAX}
+      <div className="flex items-center justify-between gap-2">
+        <AppliesTo scopeKind={scopeKind} disabled={!canMove} onMove={onMove} />
+        <span className="text-[10px] text-[var(--board-text-muted)] tabular-nums">
+          {fact.length}/{MEMORY_FACT_MAX}
+        </span>
       </div>
     </li>
   )
