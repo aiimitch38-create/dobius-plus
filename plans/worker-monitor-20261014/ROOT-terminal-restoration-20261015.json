@@ -1,0 +1,29 @@
+{
+  "checked_at": 1792085667.478871,
+  "runtime_id": "f3546568-4e43-479f-bdf2-f53faba443f1",
+  "heads": {
+    "adam": {
+      "session": "20261014_135102_157d0a",
+      "ready_at": 1792085641.447577,
+      "model": "gpt-6.1-sol",
+      "provider": "openai-codex"
+    },
+    "friday": {
+      "session": "20261014_135702_7dfb85",
+      "ready_at": 1792085511.072866,
+      "model": "gpt-6.1-sol",
+      "provider": "openai-codex"
+    }
+  },
+  "workers": {
+    "BUILD1": "01a1368d-4781-7683-9b97-a2cce56980d1",
+    "BUILD2": "01a1196f-1490-7070-ac65-d446e423e595",
+    "RESEARCH": "01a1197a-0e43-7671-aa88-3a1229850f26",
+    "FIXER": "01a13bc8-de9d-7210-a451-b404631fc46e"
+  },
+  "worker_model": "gpt-6-luna",
+  "readiness": "All six answered exact READY checks; no build task completed or duplicated by restoration.",
+  "monitor_status": "watching",
+  "adam_startup": "Resumed named Chief of Staff session from Dobius cwd, preventing stale Hermes checkout cwd from breaking gateway startup.",
+  "scope": "Existing terminals restored only; AWS deferred and historical Storage paused."
+}

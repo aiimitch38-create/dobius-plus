@@ -1,3 +1,13 @@
+import { SystemMonitorService } from './system-monitor/service'
+import { defaultSystemMonitorStateDirectory } from './system-monitor/state-directory'
+import { createCloudJobAuthority } from './automations/cloud-job-authority'
+import { createDefaultAdamCloudIntentBridge } from './adam-service-principal/create-default-adam-cloud-intent-bridge'
+import { CloudJobAdamClient } from './automations/cloud-jobs/cloud-job-adam-client'
+import { createConfiguredCloudWorkerHostFactory } from './automations/cloud-jobs/cloud-worker-bootstrap'
+import { createPrivateCloudWorkerCapacityReader } from './automations/cloud-jobs/cloud-worker-private-capacity'
+import type { ApplicationDataCatalog } from './storage/data-catalog/application-catalog'
+import { createApplicationDataCatalog } from './storage/data-catalog/application-catalog-factory'
+import { emitCatalogPreviewInvalidated } from './runtime/rpc/data-catalog-preview-invalidation'
 /* eslint-disable max-lines -- Why: this is Dobius's main-process entry point;
    it owns app lifecycle, service wiring, window creation, and hook/daemon
    startup. Splitting by line count would fragment tightly coupled startup
@@ -216,6 +226,8 @@ let claudeRuntimeAuth: ClaudeRuntimeAuthService | null = null
 let runtime: DobiusRuntimeService | null = null
 let rateLimits: RateLimitService | null = null
 let runtimeRpc: DobiusRuntimeRpcServer | null = null
+let dataCatalog: ApplicationDataCatalog | undefined
+let cloudJobs: ReturnType<typeof createCloudJobAuthority>
 // Why: set during early startup; gates whether headless serve installs the
 // offscreen browser backend (and thus advertises browser pane support).
 let headlessBrowserDisplayAvailable = false
@@ -941,6 +953,7 @@ function openMainWindow(): BrowserWindow {
     {
       getAdditionalAiVaultCodexHomePaths: () =>
         codexRuntimeHome ? [codexRuntimeHome.getHostRuntimeHomePath()] : [],
+      dataCatalog,
       onBeforeRelaunch: async () => {
         isQuitting = true
         await preserveAgentAuthBeforeRestart({ codexRuntimeHome, claudeRuntimeAuth, store })
@@ -2115,7 +2128,54 @@ app.whenReady().then(async () => {
   // under the late app.getPath('userData') directory. Copy any missing files
   // forward before the runtime switches exclusively to the canonical path.
   migrateMobilePairingDataToCanonicalUserDataPath(app.getPath('userData'))
+  try {
+    cloudJobs = createCloudJobAuthority(getCanonicalUserDataPath(), isServeMode, {
+      adamClientFactory: () => new CloudJobAdamClient(),
+      workerHostFactory: (context) =>
+        createConfiguredCloudWorkerHostFactory(
+          context,
+          createPrivateCloudWorkerCapacityReader(context.baseDirectory, context.deviceId)
+        )
+    })
+  } catch (error) {
+    // A damaged queue registration must not take down unrelated phone/terminal services.
+    console.error('[cloud-workstation]', error instanceof Error ? error.message : String(error))
+  }
+  dataCatalog = createApplicationDataCatalog({
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    applicationPath: app.getAppPath(),
+    registryPath: join(getCanonicalUserDataPath(), 'data-catalog-roots.json'),
+    // Only the current owning connection receives a content-free revocation signal.
+    onPreviewInvalidated: emitCatalogPreviewInvalidated,
+    pairedDevices: () =>
+      (runtimeRpc?.getDeviceRegistry()?.listDevices() ?? [])
+        .filter((device) => device.lastSeenAt > 0)
+        .map(({ deviceId, name }) => ({ deviceId, name })),
+    pairedMobileDevices: () =>
+      (runtimeRpc?.getDeviceRegistry()?.listDevices() ?? [])
+        .filter((device) => device.scope === 'mobile' && device.lastSeenAt > 0)
+        .map(({ deviceId, name }) => ({ deviceId, name })),
+    chooseDirectory: async () => {
+      if (isServeMode) {
+        throw new Error('Choose folders using the app on this computer')
+      }
+      const window = mainWindow ?? BrowserWindow.getFocusedWindow()
+      if (!window || window.isDestroyed()) {
+        throw new Error('Open the app to choose a folder')
+      }
+      const picked = await dialog.showOpenDialog(window, { properties: ['openDirectory'] })
+      return picked.canceled ? null : (picked.filePaths[0] ?? null)
+    }
+  })
   runtimeRpc = new DobiusRuntimeRpcServer({
+    dataCatalog,
+    cloudJobs,
+    adamCloudIntentBridge: createDefaultAdamCloudIntentBridge({
+      runtimeId: () => runtime?.getRuntimeId() ?? '',
+      cloudJobs: () => cloudJobs
+    }),
+    systemMonitor: new SystemMonitorService(defaultSystemMonitorStateDirectory()),
     runtime,
     // Why: mobile pairing (DeviceRegistry + E2EE keypair + runtime metadata)
     // must share the stable path captured before app.setName(), not a late
@@ -2133,7 +2193,10 @@ app.whenReady().then(async () => {
   })
   registerMobileHandlers(runtimeRpc)
   if (!isServeMode) {
-    installDesktopScreenSharing(runtime, (id) => runtimeRpc?.getDeviceRegistry()?.getDevice(id) ?? null)
+    installDesktopScreenSharing(
+      runtime,
+      (id) => runtimeRpc?.getDeviceRegistry()?.getDevice(id) ?? null
+    )
   }
 
   if (!isServeMode) {
@@ -2321,6 +2384,17 @@ app.on('will-quit', (e) => {
     // re-invoke runtimeRpc.stop() (redundant rmSync on an already-removed
     // socket) and re-run the ownership-guarded clear against a metadata file
     // that may now belong to the auto-updater's replacement process.
+    const catalogShutdown = dataCatalog?.close() ?? Promise.resolve()
+    const cloudWorkerShutdown =
+      cloudJobs?.shutdown(5_000).then(({ drained, dispatchPausePersisted }) => {
+        if (!dispatchPausePersisted) {
+          console.warn('[cloud-workstation] Dispatch pause persistence failed during shutdown.')
+        }
+        if (!drained) {
+          // Preserve unresolved journals/reservations; next startup must reconcile them.
+          console.warn('[cloud-workstation] Worker drain unproven; durable ownership retained.')
+        }
+      }) ?? Promise.resolve()
     const rpcStopAndClear = runtimeRpc
       ? runtimeRpc
           .stop()
@@ -2349,7 +2423,14 @@ app.on('will-quit', (e) => {
     // Why: normal quits preserve the detached daemon for warm reattach, but a
     // dev parent dying means the temp/dev profile has no owner left to reattach.
     const daemonTeardown = isDevParentShutdownRequested() ? shutdownDaemon() : disconnectDaemon()
-    Promise.allSettled([daemonTeardown, rpcStopAndClear, watcherShutdown, emulatorShutdown])
+    Promise.allSettled([
+      daemonTeardown,
+      rpcStopAndClear,
+      watcherShutdown,
+      emulatorShutdown,
+      catalogShutdown,
+      cloudWorkerShutdown
+    ])
       .then(() => shutdownTelemetry())
       .then(() => shutdownObservability())
       .catch(() => {

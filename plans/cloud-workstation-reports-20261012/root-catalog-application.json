@@ -1,0 +1,33 @@
+{
+  "recorded_at": "2026-10-13T22:46:25.907685+00:00",
+  "state": "FROZEN_FOR_INDEPENDENT_REVIEW_NATIVE_INCARNATION",
+  "previous_freeze_superseded": "c70ee27d7fd082c9a0be687526be088a091b05ef653fb52eb8c3f126e6d131cc",
+  "files": {
+    "dobius/config/electron-builder.config.cjs": "f85b62f60125563d8bef9ff66b69cfa1de9c8eceeefbc5a1c2e880bc94f20a0b",
+    "dobius/docs/DATA-CATALOG-APPLICATION.md": "c1c844c79970eff150af0e2fceb5bba1c22ef46fdafb61a8193b19ea3f727960",
+    "dobius/docs/reference/DATA-CATALOG-APPLICATION.md": "c1c844c79970eff150af0e2fceb5bba1c22ef46fdafb61a8193b19ea3f727960",
+    "dobius/src/main/index.ts": "55cbfd586dc0237c8468e76a7277065f7ec34c2f437f8d1543c3435c196ae634",
+    "dobius/src/main/ipc/register-core-handlers.ts": "be0cf4a6cdc17b36a148180df47051820894dc6947d29987d9facb485243a879",
+    "dobius/src/main/ipc/runtime.ts": "a8dfec60f1f8906f96df151c2e35246f89f099c085bba13fd81b9982b8e9e6c9",
+    "dobius/src/main/runtime/mobile-rpc-method-classes.ts": "2558e6fdbb17f70bff77515bb067d595b7d8950fcb0d7cd17a5e40a0a7132fc0",
+    "dobius/src/main/runtime/rpc/core.ts": "7fff244963bf4de9909677a957e21477b562944a4d2093badd869c7d74b1a654",
+    "dobius/src/main/runtime/rpc/dispatcher.ts": "a15aab01ae3a957af2c1c8e928c07b701c2e55f29fd3660ae8eaf865ced0fab3",
+    "dobius/src/main/runtime/rpc/methods/data-catalog.test.ts": "c71a996b3ff88e1416c318140853246e04f424d8a94bc4b53442c6bdfb162b09",
+    "dobius/src/main/runtime/rpc/methods/data-catalog.ts": "33b095ae41cae9dcc87105b46c760ee42885badb0d3e864020c4fe65a5596fea",
+    "dobius/src/main/runtime/rpc/methods/index.ts": "6160166654d3384d27c1ef6205d953975529e0e5e36413b1010176ce4cad1a78",
+    "dobius/src/main/runtime/runtime-rpc.ts": "15d15eed920e36d11479149aee731d5a0156c7b3e9bcc933cea764267cf5b246",
+    "dobius/src/main/storage/data-catalog/application-catalog-factory.test.ts": "5d120eedacdecdabe553f8d29ac6a3109b579df6af7b56c0d3bda50bd3a41d27",
+    "dobius/src/main/storage/data-catalog/application-catalog-factory.ts": "1740203a01dc364626278a4402e904fced1544631d17730576785da204ad906d",
+    "dobius/src/main/storage/data-catalog/application-catalog.ts": "7513bda6aaa4203fafdfd44a7304b62211fafc31878316aaa3ad153729f3289c"
+  },
+  "aggregate_sha256": "67632b6aa6ef0c9bb8edd1d779fa83a558b844eb5ed110bd6eaa144feec513d2",
+  "aggregate_recipe": "sorted repository-relative UTF8 path + NUL + raw file bytes + NUL",
+  "test_evidence": {
+    "Node24_factory_and_actual_RPC_dispatcher_suites": "10 tests PASS exit0; development and staged packaged Python sibling resources, missing helper refuses enrollment, phone authentication/grants/revocation, pending native proof shutdown refusal",
+    "scoped_lint_format": "PASS"
+  },
+  "native_reader": "Injects bridge native capture into main-only root store; close aborts in-flight native proof. Packaging copies only production descriptor/native identity modules.",
+  "dependency_gates": "RESEARCH native bridge/recovery peer and Linux fixture pending; core3a70c3ed peerPASS; registration peer pending",
+  "production_scan": false,
+  "installation": false
+}

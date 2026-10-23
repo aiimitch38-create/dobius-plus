@@ -1,0 +1,751 @@
+{
+  "schemaVersion": 1,
+  "taskId": "task_c31f8cefdc18",
+  "dispatchId": "ctx_117be2210cfa",
+  "candidateRoot": "plans/worker-monitor-20261014/adam-production-composition-candidate-v3",
+  "status": "immutable-candidate-pending-independent-review",
+  "preservedV1ManifestSha256": "31d705aed3d657f9436ed0d065c57625f8a5a1ece9d20466fe88499753a25a98",
+  "preservedV2ManifestSha256": "7fc192a3c8311f5b2d07b662a7cb506276b445741f15ebba9b82c94254c060d4",
+  "wireContracts": {
+    "base": "f31b56bec89ac9841afed587eea76e6f5ba085c800f0a26e7760ba60a7e26e6f",
+    "recovery": "75d3cc984bd37cc2279ddcd3793c08c3b3554812c065250af06bf4b268ffb0ac"
+  },
+  "readOnlyBaselineRoot": "/Users/bayou/dobius/projects/ADAM/service",
+  "sourceFiles": [
+    {
+      "baseline_sha256": "6b5167cad2534c50a68490d07aaef272850a4f1087340b9af74f2c97a87a079b",
+      "bytes": 8936,
+      "path": "service/src/adapters/dobius.ts",
+      "sha256": "6b5167cad2534c50a68490d07aaef272850a4f1087340b9af74f2c97a87a079b",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "502465e5ebbc07e05c374a657cf20860d6d03f542fd98948c2824f690e4e37d1",
+      "bytes": 3142,
+      "path": "service/src/capabilities/registry.ts",
+      "sha256": "502465e5ebbc07e05c374a657cf20860d6d03f542fd98948c2824f690e4e37d1",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "493963e78c3b23364adce4c496a3fcb7318ffdeb7f72bf4a10821d96d3df4bbd",
+      "bytes": 8063,
+      "path": "service/src/converse/converse.ts",
+      "sha256": "493963e78c3b23364adce4c496a3fcb7318ffdeb7f72bf4a10821d96d3df4bbd",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "f72d88a8c29d59695b05a02d03b3e2d8e70a56346f9965e84bd7146dec319c91",
+      "bytes": 1218,
+      "path": "service/src/db/database.ts",
+      "sha256": "f72d88a8c29d59695b05a02d03b3e2d8e70a56346f9965e84bd7146dec319c91",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "db8cbf4b6120df1ea4c4f5a4646dd2a2147780ee50958d6e4ea9ed800cbbab3f",
+      "bytes": 226,
+      "path": "service/src/db/index.ts",
+      "sha256": "db8cbf4b6120df1ea4c4f5a4646dd2a2147780ee50958d6e4ea9ed800cbbab3f",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "dfac6a4eb3e6d694468c3b980820559021b2996f54f808d8ab5735444fede3ec",
+      "bytes": 23484,
+      "path": "service/src/db/migrations.ts",
+      "sha256": "ab63f722dcad0b5f42720724fa20bafbb86c8341f688cabafb2de8d015fba8e1",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 3115,
+      "path": "service/src/dobius-cloud/approved-decision-contract.ts",
+      "sha256": "7686aea2fbf919bf710c980e72baea4a10238db56a3dcb027e0b24c6596ed046",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 4120,
+      "path": "service/src/dobius-cloud/approved-decision-operation.ts",
+      "sha256": "b49e81e5e6206ad2884ee5e11744640efc3138345169df994e403d1f4827ee01",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 17204,
+      "path": "service/src/dobius-cloud/approved-decision-publisher.ts",
+      "sha256": "a338b4d35c035abaccb4e2bb17e30b7dd23faf750df88a92ceaf16f74e8b1ddf",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 14342,
+      "path": "service/src/dobius-cloud/approved-decision-store.ts",
+      "sha256": "5d3efd14fdb193c472830aa73b5ec52e75ec1b08e728b4471aab9b144f8315fb",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": "7b478d364798bb28f2dc5d052ca8e06a60f6b1db28de7913146af4a14c7560a5",
+      "bytes": 3688,
+      "path": "service/src/dobius-cloud/approved-job-payload.ts",
+      "sha256": "9e5b64b0905e8c8a7e9792468fc0248174a4712a7a2893e46e488a950028d054",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "00200dfefdfa30fb9a5264cdb3b04fe3dd818f3061fb14c0f00ac2731287e066",
+      "bytes": 3721,
+      "path": "service/src/dobius-cloud/child-submit-contract.ts",
+      "sha256": "00200dfefdfa30fb9a5264cdb3b04fe3dd818f3061fb14c0f00ac2731287e066",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "7d0187d71b964863408b1b75cba458ec34472f5fa643861b719058549857df9c",
+      "bytes": 6927,
+      "path": "service/src/dobius-cloud/child-submit-process.ts",
+      "sha256": "7d0187d71b964863408b1b75cba458ec34472f5fa643861b719058549857df9c",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "c1a5408fba3d5dbed7e7187f0764631586f4afd8301dbe260b22d1adfdf57546",
+      "bytes": 4688,
+      "path": "service/src/dobius-cloud/child-submit.ts",
+      "sha256": "e25ac3504169ddae50422e892113ac8676b9ad577296da2b0aee70622a00d46e",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 15424,
+      "path": "service/src/dobius-cloud/intent-bridge-cli.ts",
+      "sha256": "d2704e5dbf538e6a137bf39b2aa431b442b050b120e12d9b40c9fd40530d4eac",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": "60d148b77864bb83025e1d8cfeb6f0b3883d3d995759df306fbce165880a7ecd",
+      "bytes": 1374,
+      "path": "service/src/dobius-cloud/intent-contract.ts",
+      "sha256": "c7976e8c6aeb3bf1381461233091a9f23cbf01ed7a428b35d1e5221a20a085b9",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "8a7c569486e4807547940b306d3f85db98023641bc95255403bfceda79ec722b",
+      "bytes": 963,
+      "path": "service/src/dobius-cloud/intent-migration.ts",
+      "sha256": "8a7c569486e4807547940b306d3f85db98023641bc95255403bfceda79ec722b",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "8248ffc77766abb62c50303bf51fd5a917652899b480a6b714399ff4a0c25544",
+      "bytes": 8768,
+      "path": "service/src/dobius-cloud/intent-publication.ts",
+      "sha256": "3fc65473281cbf4c9f2581d5ac362e777b36508fbf190e021d17ec14134dfe19",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "7cdbfb8624e824311e29f71bb529d02aff2e0a04a76fc72621f11e3a43e45f51",
+      "bytes": 6504,
+      "path": "service/src/dobius-cloud/receipt-contract.ts",
+      "sha256": "7cdbfb8624e824311e29f71bb529d02aff2e0a04a76fc72621f11e3a43e45f51",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "c002f814316756bae64bd6e77ac72503c87013b22e8bfad43a1091626984e5dd",
+      "bytes": 1293,
+      "path": "service/src/dobius-cloud/receipt-migration.ts",
+      "sha256": "c002f814316756bae64bd6e77ac72503c87013b22e8bfad43a1091626984e5dd",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "f53ffe295a5b27d01934489cef907cca59e9e4a159019bdfcc932a65a5ed5e2a",
+      "bytes": 19516,
+      "path": "service/src/dobius-cloud/receipt-store.ts",
+      "sha256": "29f10bb72ae5c8943a7945f59c17fc2270374d29ef320695013a3a72a4b92d92",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "46f01b58ae4ee0cbd9a4d8c3e40890ae11c270498d2c0f72fd4cc671c1df3207",
+      "bytes": 2152,
+      "path": "service/src/events/ingest.ts",
+      "sha256": "46f01b58ae4ee0cbd9a4d8c3e40890ae11c270498d2c0f72fd4cc671c1df3207",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "eb20a1ab90abdf0852554da389984d5c87dadccfdafe125dcf6aaf6a73df5391",
+      "bytes": 1595,
+      "path": "service/src/events/obsidian-projection.ts",
+      "sha256": "eb20a1ab90abdf0852554da389984d5c87dadccfdafe125dcf6aaf6a73df5391",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "5804ef47c36b3f66b6abd73881eb49d56a97cf5f80ef4f7179ab0d940f1d6c3a",
+      "bytes": 4940,
+      "path": "service/src/health/channel-heartbeat.ts",
+      "sha256": "5804ef47c36b3f66b6abd73881eb49d56a97cf5f80ef4f7179ab0d940f1d6c3a",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "96179a6e927e584aefb6114c5e98c55fe47108593f7de5a09728403d1e6aa7a8",
+      "bytes": 1572,
+      "path": "service/src/imessage/backfill.ts",
+      "sha256": "96179a6e927e584aefb6114c5e98c55fe47108593f7de5a09728403d1e6aa7a8",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "b2a5ac11303a73d32b9c6b4c7673c0382e8da55515deaf046e6f1f0ab7b0c4e1",
+      "bytes": 1921,
+      "path": "service/src/imessage/decoder.ts",
+      "sha256": "b2a5ac11303a73d32b9c6b4c7673c0382e8da55515deaf046e6f1f0ab7b0c4e1",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "81e2a28ca736ce588b25a8e6683b6d05e6cbad42c8fc1e01923c1b7020b895ab",
+      "bytes": 6291,
+      "path": "service/src/imessage/frame.ts",
+      "sha256": "81e2a28ca736ce588b25a8e6683b6d05e6cbad42c8fc1e01923c1b7020b895ab",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "e59f8bb96bb26408d804776964d396915029b6dedf16e11dc9e5b44d0e719c71",
+      "bytes": 10549,
+      "path": "service/src/imessage/gateway.ts",
+      "sha256": "e59f8bb96bb26408d804776964d396915029b6dedf16e11dc9e5b44d0e719c71",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "14b9719bccacf4bb05b93cbb1fa5a669aec3e5f39efa76171bfed10140cf0494",
+      "bytes": 6064,
+      "path": "service/src/imessage/ingester.ts",
+      "sha256": "14b9719bccacf4bb05b93cbb1fa5a669aec3e5f39efa76171bfed10140cf0494",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "b79f47ec2da707899633c1f0aee11728328f5a616a6af0cc1b3cbf73a2910f07",
+      "bytes": 4019,
+      "path": "service/src/imessage/intents.ts",
+      "sha256": "b79f47ec2da707899633c1f0aee11728328f5a616a6af0cc1b3cbf73a2910f07",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "0a2f4518b516d0e6448f877781d5faa7879a19ade345fd92e84cc76c44604c55",
+      "bytes": 6144,
+      "path": "service/src/imessage/source.ts",
+      "sha256": "0a2f4518b516d0e6448f877781d5faa7879a19ade345fd92e84cc76c44604c55",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "ac3461c6c3958bbe8487b9b5cc19e43aa247d1aab4e6e0ef56914b28480df4a4",
+      "bytes": 629,
+      "path": "service/src/intelligence/attention.ts",
+      "sha256": "ac3461c6c3958bbe8487b9b5cc19e43aa247d1aab4e6e0ef56914b28480df4a4",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "9ab13f6b2b92e7dfd340fe9be0538a74bfc2989ce37adfa74a35d56e1d7cb790",
+      "bytes": 2298,
+      "path": "service/src/intelligence/commitments.ts",
+      "sha256": "9ab13f6b2b92e7dfd340fe9be0538a74bfc2989ce37adfa74a35d56e1d7cb790",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "f2c402eadc5676f56ce5c8e8b550d67c662dee6b9089467541e5993922ecf244",
+      "bytes": 2724,
+      "path": "service/src/intelligence/executive-brief.ts",
+      "sha256": "f2c402eadc5676f56ce5c8e8b550d67c662dee6b9089467541e5993922ecf244",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "b3991827785c1b47e3520dcd02f6642a100bd10b1b4904c7f3bdca19e8e57ee7",
+      "bytes": 2786,
+      "path": "service/src/intelligence/import-commitments.ts",
+      "sha256": "b3991827785c1b47e3520dcd02f6642a100bd10b1b4904c7f3bdca19e8e57ee7",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "32d93a66992205db5d761e7263fd9f5060f68b0fa4b2a52b4c57b6298fd0f7df",
+      "bytes": 1762,
+      "path": "service/src/jobs/states.ts",
+      "sha256": "32d93a66992205db5d761e7263fd9f5060f68b0fa4b2a52b4c57b6298fd0f7df",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "e155bdf80a037a1de17364e0a9865941932b19a9f02717d0864f8084a80feb46",
+      "bytes": 11761,
+      "path": "service/src/jobs/store.ts",
+      "sha256": "e155bdf80a037a1de17364e0a9865941932b19a9f02717d0864f8084a80feb46",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "58159e34ecb3948a2ce809429b92a7da8a484d5683f27eae2bd556ce8bcad066",
+      "bytes": 2957,
+      "path": "service/src/main.ts",
+      "sha256": "392a0e80a0bf1b940ebb0c804fd7ee2cf619722fdb466093fcacecf018a607a3",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "a4a878075d394a421715a3b67c4fd87bcb8d0f728da723be6d57e17d529ac68a",
+      "bytes": 908,
+      "path": "service/src/models/config.ts",
+      "sha256": "a4a878075d394a421715a3b67c4fd87bcb8d0f728da723be6d57e17d529ac68a",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "0cb9a3fc619472a66f2aa44583dedf019fe19799050dd6a08f554d753c71dae9",
+      "bytes": 4274,
+      "path": "service/src/models/imessage-classifier.ts",
+      "sha256": "0cb9a3fc619472a66f2aa44583dedf019fe19799050dd6a08f554d753c71dae9",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "bdfc0fb67d636496e2aac84b53e8948ab93824b3e6c3b69f6ddb5fd87fc31884",
+      "bytes": 778,
+      "path": "service/src/models/request.ts",
+      "sha256": "bdfc0fb67d636496e2aac84b53e8948ab93824b3e6c3b69f6ddb5fd87fc31884",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "9a3d1743a8f6da210fd8321cc5ca1a28c2daf68abfc830b2a43cb02a43c21fbd",
+      "bytes": 7005,
+      "path": "service/src/models/router.ts",
+      "sha256": "9a3d1743a8f6da210fd8321cc5ca1a28c2daf68abfc830b2a43cb02a43c21fbd",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "e96111b9d613822118018a48e5256d6b0350875c5f8f3c1ef14eac03045e29ab",
+      "bytes": 966,
+      "path": "service/src/orchestration/contract.ts",
+      "sha256": "e96111b9d613822118018a48e5256d6b0350875c5f8f3c1ef14eac03045e29ab",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "7fdf98cc1be184f3fd2701f0281524f1397866e491a4c8cb6fed6be61a2ff0cf",
+      "bytes": 27127,
+      "path": "service/src/orchestration/supervisor.ts",
+      "sha256": "7fdf98cc1be184f3fd2701f0281524f1397866e491a4c8cb6fed6be61a2ff0cf",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "b1c3309580e73e8967d241972f23e5698bb78bce71b913319815ef682fc39a65",
+      "bytes": 783,
+      "path": "service/src/policy/action-digest.ts",
+      "sha256": "b1c3309580e73e8967d241972f23e5698bb78bce71b913319815ef682fc39a65",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "406c182a5f6b263d42189e6e119ed0341a919b0a6388479a37f2ba896e3dcd14",
+      "bytes": 511,
+      "path": "service/src/policy/approval.ts",
+      "sha256": "406c182a5f6b263d42189e6e119ed0341a919b0a6388479a37f2ba896e3dcd14",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "29a6a4c045fd58e6cd9386b9ac43c80de604a49d0dd81b9326f63afed4160374",
+      "bytes": 1609,
+      "path": "service/src/policy/evaluate.ts",
+      "sha256": "29a6a4c045fd58e6cd9386b9ac43c80de604a49d0dd81b9326f63afed4160374",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "fc466ed655e0dc7b1fba0d0397d8d19b8b54de0d69926a5a5b0cbd949c19aa6b",
+      "bytes": 425,
+      "path": "service/src/policy/index.ts",
+      "sha256": "fc466ed655e0dc7b1fba0d0397d8d19b8b54de0d69926a5a5b0cbd949c19aa6b",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "ec80ae04c255d45dde02919da4ea176f66277d2d43ec21d94ffa66d2fc541016",
+      "bytes": 329,
+      "path": "service/src/policy/load-config.ts",
+      "sha256": "ec80ae04c255d45dde02919da4ea176f66277d2d43ec21d94ffa66d2fc541016",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "6c97293d4cacbcaf92b102b5e0c8261ba179a5da286ba9ccc56c3169899ceb27",
+      "bytes": 1846,
+      "path": "service/src/policy/schema.ts",
+      "sha256": "6c97293d4cacbcaf92b102b5e0c8261ba179a5da286ba9ccc56c3169899ceb27",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "725c1a5179cbc8a9b5c2ac5bcefb02867022ff30d6504c1472ed6608f8bb54f8",
+      "bytes": 8365,
+      "path": "service/src/projects/handshake.ts",
+      "sha256": "725c1a5179cbc8a9b5c2ac5bcefb02867022ff30d6504c1472ed6608f8bb54f8",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "675428d2d69c753980c22d68c227fa7e1ada8ba76425bdda431a3a10597444e6",
+      "bytes": 6671,
+      "path": "service/src/projects/registry.ts",
+      "sha256": "675428d2d69c753980c22d68c227fa7e1ada8ba76425bdda431a3a10597444e6",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "3695624ac91ff6bafbaa078b647ee1c05ef65310b15f6095609d4c097ae1cf27",
+      "bytes": 3708,
+      "path": "service/src/projects/resolver.ts",
+      "sha256": "3695624ac91ff6bafbaa078b647ee1c05ef65310b15f6095609d4c097ae1cf27",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "c46617f96d36220f9810f70d17779bb6a04180362d1d035fda816fac2649ac15",
+      "bytes": 3491,
+      "path": "service/src/prompts/compiler.ts",
+      "sha256": "c46617f96d36220f9810f70d17779bb6a04180362d1d035fda816fac2649ac15",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "ca822d3b58b839fc7439ed29ddc6b924d372a3380d90c5e4e23cc0de3c293a8f",
+      "bytes": 10503,
+      "path": "service/src/reconciliation/inventory.ts",
+      "sha256": "ca822d3b58b839fc7439ed29ddc6b924d372a3380d90c5e4e23cc0de3c293a8f",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "75484e4986a36650bfa031a674519800bd8ca9b222769e04b9beee4c93e0b466",
+      "bytes": 8366,
+      "path": "service/src/reconciliation/workspace.ts",
+      "sha256": "75484e4986a36650bfa031a674519800bd8ca9b222769e04b9beee4c93e0b466",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 7058,
+      "path": "service/src/runtime/process-lifecycle.ts",
+      "sha256": "2346808dc5cc314a569d4190730e501fcf2ad524d0de0fceea2fbc29773a734b",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": "251b62dd624918e43c27cdaa37ca02a7e3d21c72162fe92ff681196826504862",
+      "bytes": 47967,
+      "path": "service/src/runtime/service.ts",
+      "sha256": "efb09c9291bccfefba2c77ca77e837b803f6a30b78de5aad66813311f7547b33",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "d3c7fbb5183e0d1b53a6eb9693adb53dbc53cce619d8b370d3a827f910449694",
+      "bytes": 5828,
+      "path": "service/src/sessions/awareness.ts",
+      "sha256": "d3c7fbb5183e0d1b53a6eb9693adb53dbc53cce619d8b370d3a827f910449694",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "b836601d7a4da016f6ef8788d6ccb72768319f11885727a3d012c76c520f662f",
+      "bytes": 7757,
+      "path": "service/src/sessions/monitor.ts",
+      "sha256": "b836601d7a4da016f6ef8788d6ccb72768319f11885727a3d012c76c520f662f",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "38d10d05502df48fc9f0dc3bbcbb1414e9c867832f25c28a46b02eab162fd9f7",
+      "bytes": 3255,
+      "path": "service/src/supervisor/planner.ts",
+      "sha256": "38d10d05502df48fc9f0dc3bbcbb1414e9c867832f25c28a46b02eab162fd9f7",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "233f078a47569e1ef1d3495a9b2234863371320a6c6eca1b517b92e19072e84a",
+      "bytes": 7192,
+      "path": "service/src/supervisor/supervisor.ts",
+      "sha256": "233f078a47569e1ef1d3495a9b2234863371320a6c6eca1b517b92e19072e84a",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "8c9e7c6e0f16d04bfae0e242172cd6eaff924b245c0832824de33c4e9bc58d0c",
+      "bytes": 5372,
+      "path": "service/src/terminals/dispatch.ts",
+      "sha256": "8c9e7c6e0f16d04bfae0e242172cd6eaff924b245c0832824de33c4e9bc58d0c",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "054b77fa725fa56113b23558eb7992f1790d1d9b1c15726076a3aa9ae66b2690",
+      "bytes": 2744,
+      "path": "service/src/terminals/prompt.ts",
+      "sha256": "054b77fa725fa56113b23558eb7992f1790d1d9b1c15726076a3aa9ae66b2690",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "86208df6d55accfeb6103ba0bdab21d3bf15f55d12f6be93b2dea47a8eb6a610",
+      "bytes": 1510,
+      "path": "service/src/verifiers/definition-of-done.ts",
+      "sha256": "86208df6d55accfeb6103ba0bdab21d3bf15f55d12f6be93b2dea47a8eb6a610",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "e9370272b74cdf57dd2cc37adb360efd7231d7f9de4772de157f12e01320e6da",
+      "bytes": 2332,
+      "path": "service/src/verifiers/executive-brief.ts",
+      "sha256": "e9370272b74cdf57dd2cc37adb360efd7231d7f9de4772de157f12e01320e6da",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "2cf48f95d45a5c744756b28a3547bce6e0f5c0d973980374c75ce6198b7b7079",
+      "bytes": 8700,
+      "path": "service/src/workers/launcher.ts",
+      "sha256": "2cf48f95d45a5c744756b28a3547bce6e0f5c0d973980374c75ce6198b7b7079",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "907d6cf297511ba8f07d8d3ac9609eff393b114be8b20a07dd8746d94f931b28",
+      "bytes": 2935,
+      "path": "service/src/workers/preflight.ts",
+      "sha256": "907d6cf297511ba8f07d8d3ac9609eff393b114be8b20a07dd8746d94f931b28",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "339ea2b267a612828f2670dbb07e57de6867f454643260fc1664cbb48e1ac68c",
+      "bytes": 965,
+      "path": "service/src/workers/request.ts",
+      "sha256": "339ea2b267a612828f2670dbb07e57de6867f454643260fc1664cbb48e1ac68c",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "18bf42c1c1b937994f21cb62d3ce71e6edef7e8da81eb2764234335993f43177",
+      "bytes": 1751,
+      "path": "service/src/workers/tool-policy.ts",
+      "sha256": "18bf42c1c1b937994f21cb62d3ce71e6edef7e8da81eb2764234335993f43177",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 20094,
+      "path": "service/tests/dobius-cloud-approved-decision-publisher.test.ts",
+      "sha256": "a83c45f6e1aceaa7b5a0040bb551f04ac6fa6104b67efd5ad183bb0d29e772ba",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 8654,
+      "path": "service/tests/dobius-cloud-approved-decision-shutdown.test.ts",
+      "sha256": "250a6738e2c02e023a364cf70fc8605269fa4fdc4a17cb76d400fe14c1b8c20c",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": "77e461de1294f0c8f8e6ade6adcb99f619c1a1ffb3d946857bbbd1b939975663",
+      "bytes": 11361,
+      "path": "service/tests/dobius-cloud-approved-payload.test.ts",
+      "sha256": "77e461de1294f0c8f8e6ade6adcb99f619c1a1ffb3d946857bbbd1b939975663",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "b20888478a27214c18873aa4c36b96570c123e8a32d33293e03ce0ce43768014",
+      "bytes": 21722,
+      "path": "service/tests/dobius-cloud-child-submit.test.ts",
+      "sha256": "b20888478a27214c18873aa4c36b96570c123e8a32d33293e03ce0ce43768014",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "e06aa74c4c67d3ba4a2aa158cb03dd37c5ebe5aed422a2393c2036ccdcc6c128",
+      "bytes": 13375,
+      "path": "service/tests/dobius-cloud-intents.test.ts",
+      "sha256": "e06aa74c4c67d3ba4a2aa158cb03dd37c5ebe5aed422a2393c2036ccdcc6c128",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": "33a29ce749fb7d7dd135bcf29f0678e7228daa58e000cad58fd93fabc847d54e",
+      "bytes": 2908,
+      "path": "service/tests/dobius-cloud-receipt-recovery.test.ts",
+      "sha256": "7143d13690ed78b9c3973b4e59b6faee45c73f399bceb4a93a1d57be981e8dda",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "d3e4bcc764b062f101b28dffb5b0294c5044512918751caad960b2f070d2fbe0",
+      "bytes": 5485,
+      "path": "service/tests/dobius-cloud-receipts.test.ts",
+      "sha256": "d3e4bcc764b062f101b28dffb5b0294c5044512918751caad960b2f070d2fbe0",
+      "status": "unchanged"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 8793,
+      "path": "service/tests/process-lifecycle.test.ts",
+      "sha256": "8124c98199dc4b3124af7d6614dcc61314b457b8a099007548500ac9a10fc457",
+      "status": "new"
+    }
+  ],
+  "changedOrNewSourceFiles": [
+    {
+      "baseline_sha256": "dfac6a4eb3e6d694468c3b980820559021b2996f54f808d8ab5735444fede3ec",
+      "bytes": 23484,
+      "path": "service/src/db/migrations.ts",
+      "sha256": "ab63f722dcad0b5f42720724fa20bafbb86c8341f688cabafb2de8d015fba8e1",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 3115,
+      "path": "service/src/dobius-cloud/approved-decision-contract.ts",
+      "sha256": "7686aea2fbf919bf710c980e72baea4a10238db56a3dcb027e0b24c6596ed046",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 4120,
+      "path": "service/src/dobius-cloud/approved-decision-operation.ts",
+      "sha256": "b49e81e5e6206ad2884ee5e11744640efc3138345169df994e403d1f4827ee01",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 17204,
+      "path": "service/src/dobius-cloud/approved-decision-publisher.ts",
+      "sha256": "a338b4d35c035abaccb4e2bb17e30b7dd23faf750df88a92ceaf16f74e8b1ddf",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 14342,
+      "path": "service/src/dobius-cloud/approved-decision-store.ts",
+      "sha256": "5d3efd14fdb193c472830aa73b5ec52e75ec1b08e728b4471aab9b144f8315fb",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": "7b478d364798bb28f2dc5d052ca8e06a60f6b1db28de7913146af4a14c7560a5",
+      "bytes": 3688,
+      "path": "service/src/dobius-cloud/approved-job-payload.ts",
+      "sha256": "9e5b64b0905e8c8a7e9792468fc0248174a4712a7a2893e46e488a950028d054",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "c1a5408fba3d5dbed7e7187f0764631586f4afd8301dbe260b22d1adfdf57546",
+      "bytes": 4688,
+      "path": "service/src/dobius-cloud/child-submit.ts",
+      "sha256": "e25ac3504169ddae50422e892113ac8676b9ad577296da2b0aee70622a00d46e",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 15424,
+      "path": "service/src/dobius-cloud/intent-bridge-cli.ts",
+      "sha256": "d2704e5dbf538e6a137bf39b2aa431b442b050b120e12d9b40c9fd40530d4eac",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": "60d148b77864bb83025e1d8cfeb6f0b3883d3d995759df306fbce165880a7ecd",
+      "bytes": 1374,
+      "path": "service/src/dobius-cloud/intent-contract.ts",
+      "sha256": "c7976e8c6aeb3bf1381461233091a9f23cbf01ed7a428b35d1e5221a20a085b9",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "8248ffc77766abb62c50303bf51fd5a917652899b480a6b714399ff4a0c25544",
+      "bytes": 8768,
+      "path": "service/src/dobius-cloud/intent-publication.ts",
+      "sha256": "3fc65473281cbf4c9f2581d5ac362e777b36508fbf190e021d17ec14134dfe19",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "f53ffe295a5b27d01934489cef907cca59e9e4a159019bdfcc932a65a5ed5e2a",
+      "bytes": 19516,
+      "path": "service/src/dobius-cloud/receipt-store.ts",
+      "sha256": "29f10bb72ae5c8943a7945f59c17fc2270374d29ef320695013a3a72a4b92d92",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "58159e34ecb3948a2ce809429b92a7da8a484d5683f27eae2bd556ce8bcad066",
+      "bytes": 2957,
+      "path": "service/src/main.ts",
+      "sha256": "392a0e80a0bf1b940ebb0c804fd7ee2cf619722fdb466093fcacecf018a607a3",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 7058,
+      "path": "service/src/runtime/process-lifecycle.ts",
+      "sha256": "2346808dc5cc314a569d4190730e501fcf2ad524d0de0fceea2fbc29773a734b",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": "251b62dd624918e43c27cdaa37ca02a7e3d21c72162fe92ff681196826504862",
+      "bytes": 47967,
+      "path": "service/src/runtime/service.ts",
+      "sha256": "efb09c9291bccfefba2c77ca77e837b803f6a30b78de5aad66813311f7547b33",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 20094,
+      "path": "service/tests/dobius-cloud-approved-decision-publisher.test.ts",
+      "sha256": "a83c45f6e1aceaa7b5a0040bb551f04ac6fa6104b67efd5ad183bb0d29e772ba",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 8654,
+      "path": "service/tests/dobius-cloud-approved-decision-shutdown.test.ts",
+      "sha256": "250a6738e2c02e023a364cf70fc8605269fa4fdc4a17cb76d400fe14c1b8c20c",
+      "status": "new"
+    },
+    {
+      "baseline_sha256": "33a29ce749fb7d7dd135bcf29f0678e7228daa58e000cad58fd93fabc847d54e",
+      "bytes": 2908,
+      "path": "service/tests/dobius-cloud-receipt-recovery.test.ts",
+      "sha256": "7143d13690ed78b9c3973b4e59b6faee45c73f399bceb4a93a1d57be981e8dda",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 8793,
+      "path": "service/tests/process-lifecycle.test.ts",
+      "sha256": "8124c98199dc4b3124af7d6614dcc61314b457b8a099007548500ac9a10fc457",
+      "status": "new"
+    }
+  ],
+  "supportFiles": [
+    {
+      "baseline_sha256": null,
+      "bytes": 1440,
+      "path": "README.md",
+      "sha256": "2742d9d37bc6d22e5b32b1fd0b8f65983be68fe3a420359d4a9c20a3fb503c63",
+      "status": "candidate_protocol_notes"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 139992,
+      "path": "patches/adam-production-composition.patch",
+      "sha256": "3ac4ce82a8ec2169875bb8cd5009f1cb57a4314f83b866a92522332f9cc955e0",
+      "status": "review_patch"
+    },
+    {
+      "baseline_sha256": null,
+      "bytes": 33,
+      "path": "service/package.json",
+      "sha256": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428",
+      "status": "candidate_test_harness_only"
+    }
+  ],
+  "counts": {
+    "sourceAndTestFiles": 78,
+    "changedOrNewSourceFiles": 18,
+    "supportFiles": 3,
+    "regularFilesExcludingManifest": 81
+  },
+  "patch": {
+    "path": "patches/adam-production-composition.patch",
+    "sha256": "3ac4ce82a8ec2169875bb8cd5009f1cb57a4314f83b866a92522332f9cc955e0",
+    "bytes": 139992,
+    "dryRun": "PASS git apply --check -p1 on disposable tree reconstructed from exact ADAM baseline hashes",
+    "applied": "PASS; all changed/new source files byte-identical to candidate"
+  },
+  "verification": {
+    "node": "v24.18.0",
+    "focusedTests": "PASS 65/65 tests across eight test files: 55 preserved V1/V2 regressions plus 10 production-entrypoint lifecycle tests.",
+    "focusedTestCommand": "NODE_PATH='/Users/bayou/dobius/projects/ADAM/node_modules' ./dobius/node_modules/.bin/esbuild plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/dobius-cloud-approved-decision-publisher.test.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/dobius-cloud-approved-decision-shutdown.test.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/dobius-cloud-approved-payload.test.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/dobius-cloud-child-submit.test.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/dobius-cloud-intents.test.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/dobius-cloud-receipt-recovery.test.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/dobius-cloud-receipts.test.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/process-lifecycle.test.ts --bundle --platform=node --format=esm --target=node24 --external:yaml --outbase=plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service --outdir=/private/tmp/adam-prod-v3-tests-20261015e; temporary output only: link existing read-only ADAM node_modules; /Users/bayou/homebrew/opt/node@24/bin/node --experimental-test-isolation=none --test /private/tmp/adam-prod-v3-tests-20261015e/tests/dobius-cloud-approved-decision-publisher.test.js /private/tmp/adam-prod-v3-tests-20261015e/tests/dobius-cloud-approved-decision-shutdown.test.js /private/tmp/adam-prod-v3-tests-20261015e/tests/dobius-cloud-approved-payload.test.js /private/tmp/adam-prod-v3-tests-20261015e/tests/dobius-cloud-child-submit.test.js /private/tmp/adam-prod-v3-tests-20261015e/tests/dobius-cloud-intents.test.js /private/tmp/adam-prod-v3-tests-20261015e/tests/dobius-cloud-receipt-recovery.test.js /private/tmp/adam-prod-v3-tests-20261015e/tests/dobius-cloud-receipts.test.js /private/tmp/adam-prod-v3-tests-20261015e/tests/process-lifecycle.test.js",
+    "strictTypecheck": "PASS strict NodeNext noEmit over main, process lifecycle coordinator, its tests, and V2 publisher/shutdown tests (recursive imports include relevant runtime modules).",
+    "strictTypecheckCommand": "In /private/tmp/adam-prod-v3-typecheck-20261015d/service, with candidate copied and existing ADAM node_modules linked read-only: /Users/bayou/homebrew/opt/node@24/bin/node /Users/bayou/dobius/projects/ADAM/node_modules/typescript/bin/tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --types node --skipLibCheck --allowImportingTsExtensions src/main.ts src/runtime/process-lifecycle.ts tests/process-lifecycle.test.ts tests/dobius-cloud-approved-decision-publisher.test.ts tests/dobius-cloud-approved-decision-shutdown.test.ts",
+    "lint": "PASS oxlint 1.71.0 --deny-warnings --no-ignore across all 18 changed/new TypeScript source and test paths listed in changedOrNewSourceFiles.",
+    "format": "PASS oxfmt --check on nine selected new or updated modules/tests: plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/src/main.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/src/runtime/process-lifecycle.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/process-lifecycle.test.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/src/dobius-cloud/approved-decision-contract.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/src/dobius-cloud/approved-decision-operation.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/src/dobius-cloud/approved-decision-publisher.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/src/dobius-cloud/intent-bridge-cli.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/dobius-cloud-approved-decision-publisher.test.ts plans/worker-monitor-20261014/adam-production-composition-candidate-v3/service/tests/dobius-cloud-approved-decision-shutdown.test.ts. Existing V1/V2 formatting outside that selected scope was preserved; no ADAM formatter configuration exists.",
+    "patchApplication": "PASS git apply --check -p1 and disposable application from exact actual ADAM baseline hashes; all 18 changed/new source paths byte-identical to candidate.",
+    "manifestIntegrity": "PASS 81 regular files excluding manifest; every listed source/support file hash and byte count verified; candidate contains no symlinks; V1/V2 manifests unchanged."
+  },
+  "limitations": [
+    "V3 is a staged candidate only; actual ADAM source and database were not changed.",
+    "No service restart, live CLI, provider, credential, sealer, account, device, endpoint or process-signal actions were performed.",
+    "Feature remains default-disabled; no decision or custody authority was added.",
+    "Permanent false/rejected drains intentionally keep the process alive and retry with bounded attempts/backoff until a later safe drain returns true; no terminal force-exit path exists.",
+    "Service-level shutdown regression uses a synthetic server/request because localhost listen is sandbox-blocked; entrypoint lifecycle tests use fake signals/timers and production-used coordinator.",
+    "Independent V3 review and joint production integration remain pending."
+  ],
+  "validationHistory": [
+    "First isolated esbuild execution could not resolve external yaml from the temporary ESM output; linked the existing ADAM node_modules read-only into that temporary output and reran all tests successfully. No dependency install or candidate symlink was used.",
+    "Initial scoped lint found one unused canonical hash import in the staged store module; removed the unused import in V3 and reran lint successfully.",
+    "A broad oxfmt check reported the existing staged approved-decision-store file is not default-formatted; kept its pre-existing formatting except the minimal import removal and ran oxfmt --check on the nine selected new/updated files listed above.",
+    "An initial patch check referenced a disposable tree with stale contents; rebuilt a fresh tree from exact actual baseline hashes, then check and application passed byte-for-byte."
+  ]
+}

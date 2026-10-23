@@ -1,0 +1,26 @@
+{
+  "command": [
+    "pnpm",
+    "--dir",
+    "dobius",
+    "exec",
+    "tsgo",
+    "--noEmit",
+    "--composite",
+    "false",
+    "--incremental",
+    "false",
+    "-p",
+    "config/tsconfig.node.json"
+  ],
+  "exit_code": 0,
+  "stdout": "",
+  "stderr": "",
+  "at": "2026-10-14T21:56:38.435879+00:00",
+  "sealer_hashes": {
+    "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.ts": "0bcb63eb669bc8d3d75e66fb837bae753bebf6e1a77691a19e74ad308a2e20dd",
+    "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.test.ts": "83815c66fb5765f38dd424fe6eb93e10e42844eaad134b88760f3b52846cd75b",
+    "plans/worker-monitor-20261014/BUILD1-adam-main-intent-sealer-source.md": "c89399d1ec2d67bbda45b787351702850149e231133ad2e54920f7f171f76e23"
+  },
+  "source_unchanged_during_check": true
+}

@@ -1,0 +1,10 @@
+{
+  "blocking_task": "task_870200e6587d",
+  "dispatch_id": "ctx_65f0283a235a",
+  "tool_calls_after_prompt": 24,
+  "last_tool_at": "2026-10-15T18:30:04.914Z",
+  "worker_reported_tests": "69 focused tests pass in terminal; final frozen report not yet delivered or accepted",
+  "current_phase": "V3 reproduction and narrow final checks before V4 freeze",
+  "checked_at": 1792089007.625298,
+  "restart_or_duplicate_dispatch": false
+}

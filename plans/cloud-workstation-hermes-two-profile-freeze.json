@@ -1,0 +1,35 @@
+{
+  "source_freeze_sha256": "ae280f16044124e5609731a745ef00a90dccac25e82e42435df1fc34e82fae1a",
+  "files": {
+    "dobius/config/scripts/workstation-worker/README.md": {
+      "sha256": "574dd3c5f956d1919e2c3d53d2a588e9e8b86007c501225863a30a7d3ac6544d",
+      "bytes": 9444
+    },
+    "dobius/src/main/automations/workstation-worker/registry.ts": {
+      "sha256": "33ab52fe5d05509495e91fcc7b0868f74527c10c631251299815704d6d7b1c7f",
+      "bytes": 7679
+    },
+    "dobius/src/main/automations/workstation-worker/worker.test.ts": {
+      "sha256": "2a89f3c5491941a5a484ace0d837fb076feb71420401bada2a3a05dc362a6746",
+      "bytes": 31970
+    },
+    "dobius/src/shared/workstation-worker.ts": {
+      "sha256": "944e6241b47fabb48f45ec80051f9b22ca8518976a98bd9acda2800f691e68d1",
+      "bytes": 4318
+    },
+    "plans/DOBIUS-CLOUD-WORKSTATION-BUILD-PLAN-20261012.md": {
+      "sha256": "ea049ed3e58e7ae58a44fa3df7f151281bb23178d8ade67dd3b01c3ae58d185d",
+      "bytes": 36007
+    }
+  },
+  "verification": {
+    "worker_tests": 28,
+    "strict_production_typecheck": "PASS",
+    "production_lint": "PASS"
+  },
+  "target": [
+    "hermes-1",
+    "hermes-2"
+  ],
+  "live_profiles_changed": false
+}

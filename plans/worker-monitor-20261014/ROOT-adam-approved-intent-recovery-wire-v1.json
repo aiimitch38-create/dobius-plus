@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "status": "SOURCE_ONLY_DEFAULT_DISABLED_ADDITIVE_RECOVERY_CONTRACT",
+  "base_wire_contract": {
+    "path": "plans/worker-monitor-20261014/ROOT-adam-approved-intent-wire-v1.json",
+    "sha256": "f31b56bec89ac9841afed587eea76e6f5ba085c800f0a26e7760ba60a7e26e6f",
+    "unchanged": true
+  },
+  "lookup": {
+    "rpc": "adam.lookupApprovedIntent",
+    "cli": [
+      "lookup-adam-child",
+      "--request-stdin",
+      "--json"
+    ],
+    "params": "Exactly the strict adam.submitApprovedIntent request packet from the base contract, including ephemeral credential, stable intent, identity, sealedEnvelope, canonical approvedJob and audienceRuntimeId.",
+    "result": {
+      "schemaVersion": 1,
+      "audienceRuntimeId": "same current runtime",
+      "intentId": "same stable intent",
+      "identity": "same complete binding identity",
+      "job": "existing exact CloudJob DTO or null if absent; never a created row."
+    },
+    "max_json_stdin_bytes": 131072,
+    "scope": "Separate enrolled allowed method adam.lookupApprovedIntent; exact project/resource(intentId), instance, generation and runtime audience. No generic bearer fallback."
+  },
+  "main_semantics": [
+    "Registry.verify before any crypto, require transport peer and independent service credential, exact adam instance and scope. Reauthorize after unseal and immediately adjacent to read and before reply; dispose/revoke fail closed.",
+    "Unseal only exact persisted envelope; match full identity, intent UUID, project and canonical payload fingerprint. Expired original grant may read an existing exact child.",
+    "Read only same CloudJobStore and stored consumed binding linkage. No ADAM consume API, new binding, publication, sealer, submit/store-write, expiry renewal, parent change or executor action. Verify job creator/requestKey/full input and persisted binding identity/digest match, return null for absent only; mismatch refuses.",
+    "Current decision authority is not required to observe an already accepted job; independent service transport/credential authorization remains mandatory. Revoked service credentials cannot use lookup."
+  ],
+  "adam_recovery_semantics": [
+    "From exact previously published persisted intent DTO, bounded authenticated lookup may reconcile same existing child even when human decision remains permanently revoked. Validate response runtime, intent, full identity and child input; durably record child acknowledgement as observation only.",
+    "An absent lookup result cannot grant fresh authority. Fresh submit requires current exact decision source/generation, original unexpired approval and all normal admission fences; revoked/expired decisions never submit/reseal/renew.",
+    "Regression fake executor commits and records consumed binding plus child BEFORE dropping ACK; permanently revoke decision, reopen ADAM DB and recover same child through lookup only; one child and zero second submit.",
+    "Never-settling decision resolution/custody operations and full shutdown sequence are deadline-bounded, cancellation/generation-fenced; late promise completion is inert. Retain DB if unsettled callbacks may still write."
+  ],
+  "gates": [
+    "Frozen prior candidate remains immutable; correction staged as new v2 candidate.",
+    "Actual main ingress source remains frozen during FIXER review; schedule main lookup extension only after review reconciliation.",
+    "Both sides require independent re-review plus joint synthetic integration before applying ADAM candidate or accepting the composed source.",
+    "No OS enrollment, custody setup, head change, install, live activation, AWS or historical Storage actions."
+  ]
+}

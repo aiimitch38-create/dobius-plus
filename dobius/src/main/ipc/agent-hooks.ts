@@ -6,7 +6,7 @@ import type {
 } from '../../shared/agent-status-types'
 import type { AgentInterruptInferenceRequest } from '../../shared/agent-interrupt-intent'
 import type { DobiusRuntimeService } from '../runtime/dobius-runtime'
-import { agentHookServer, isValidPaneKey } from '../agent-hooks/server'
+import { agentHookServer, enrichAgentStatusIpcPayload, isValidPaneKey } from '../agent-hooks/server'
 import { isValidTerminalTabId } from '../../shared/terminal-tab-id'
 import { ampHookService } from '../amp/hook-service'
 import {
@@ -27,6 +27,7 @@ import { hermesHookService } from '../hermes/hook-service'
 import { devinHookService } from '../devin/hook-service'
 import { kimiHookService } from '../kimi/hook-service'
 import { openClaudeHookService } from '../openclaude/hook-service'
+import { getAgentResumePtyIdentityForPaneKey } from './pty'
 
 type AgentStatusRuntimeEnrichment = Pick<
   DobiusRuntimeService,
@@ -34,22 +35,6 @@ type AgentStatusRuntimeEnrichment = Pick<
 >
 
 const MAX_AGENT_STATUS_DROP_TAB_ID_LENGTH = 160
-
-function enrichAgentStatusIpcPayload(
-  data: AgentStatusIpcPayload,
-  runtime: AgentStatusRuntimeEnrichment | undefined
-): AgentStatusIpcPayload {
-  if (!runtime) {
-    return data
-  }
-  const terminalHandle = runtime.getAgentStatusTerminalHandleForPaneKey(data.paneKey)
-  const orchestration = runtime.getAgentStatusOrchestrationContextForPaneKey(data.paneKey)
-  return {
-    ...data,
-    ...(terminalHandle ? { terminalHandle } : {}),
-    ...(orchestration ? { orchestration } : {})
-  }
-}
 
 function isValidAgentStatusDropTabId(value: unknown): value is string {
   return (
@@ -124,9 +109,13 @@ export function registerAgentHookHandlers(runtime?: AgentStatusRuntimeEnrichment
     // Why: the renderer pulls this after workspace hydration, so startup cannot
     // lose replayed statuses while its local store is still empty. Match the
     // live push enrichment in main/index.ts so parent/child rows survive replay.
-    return agentHookServer
-      .getStatusSnapshot()
-      .map((entry) => enrichAgentStatusIpcPayload(entry, runtime))
+    return agentHookServer.getStatusSnapshot().map((entry) =>
+      enrichAgentStatusIpcPayload(entry, {
+        terminalHandle: runtime?.getAgentStatusTerminalHandleForPaneKey(entry.paneKey),
+        orchestration: runtime?.getAgentStatusOrchestrationContextForPaneKey(entry.paneKey),
+        ptyIdentity: getAgentResumePtyIdentityForPaneKey(entry.paneKey)
+      })
+    )
   })
   ipcMain.handle('agentStatus:inferInterrupt', (_event, request: unknown): boolean => {
     if (typeof request !== 'object' || request === null) {

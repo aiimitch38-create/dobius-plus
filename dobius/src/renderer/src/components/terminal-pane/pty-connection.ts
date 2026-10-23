@@ -17,6 +17,7 @@ import { parseTerminalOscColorQuery } from '../../../../shared/terminal-osc-colo
 import type { PtyBufferSnapshot, PtyConnectResult } from './pty-transport'
 import { createIpcPtyTransport } from './pty-transport'
 import { createRemoteRuntimePtyTransport } from './remote-runtime-pty-transport'
+import { createPtyReattachOutputGate } from './pty-reattach-output-gate'
 import { getConnectionId } from '@/lib/connection-context'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import {
@@ -134,10 +135,12 @@ import { createTerminalGitHubPRLinkDetector } from '@/lib/terminal-github-pr-lin
 import { scheduleTerminalWebglAtlasRecovery } from './terminal-webgl-atlas-recovery'
 import {
   CONPTY_DA1_RESPONSE,
+  DEFAULT_DA1_RESPONSE,
   createTerminalPixelSizeQueryResponder,
   installTerminalCapabilityReplyHandlers,
   sendTerminalOscColorQueryReplies
 } from './terminal-capability-replies'
+import { createPtyReattachQueryPreserver } from './pty-reattach-query-preserver'
 import {
   cancelScheduledHiddenOutputRestore,
   scheduleHiddenOutputRestore
@@ -161,6 +164,13 @@ import {
   normalizeAgentProviderSession,
   type SleepingAgentSessionRecord
 } from '../../../../shared/agent-session-resume'
+import {
+  AGENT_RESUME_CLAIM_ENV,
+  encodeAgentResumeSpawnClaim,
+  getAgentResumeOwnerFingerprint,
+  parseAgentResumeSpawnClaim,
+  type AgentResumeOwner
+} from '../../../../shared/agent-resume-owner'
 import {
   normalizeCompatibleAgentTitleForOwner,
   resolveCompatibleAgentTypeForOwner
@@ -224,6 +234,8 @@ const FOREGROUND_GRID_DRIFT_CHECK_MIN_MS = 250
 // terminal state is unavailable, so the user has an explicit loss signal.
 const HIDDEN_OUTPUT_RESTORE_UNAVAILABLE_WARNING =
   '\x18\x1b[0m\r\n[Dobius+ skipped hidden terminal output because main recovery was unavailable.]\r\n'
+const REATTACH_OUTPUT_SNAPSHOT_UNAVAILABLE_WARNING =
+  '\x18\x1b[0m\r\n[Dobius+ reattach output exceeded its safe buffer and no authoritative snapshot was available; the terminal may be incomplete.]\r\n'
 type E2eTerminalPtyDataInjectionApi = {
   inject: (paneKey: string, data: string, meta?: PtyDataMeta) => boolean
   keys: () => string[]
@@ -379,6 +391,7 @@ type ColdRestoreAgentResumeStartup = PendingStartupCommand & {
   useLiveEntry: boolean
   hasSleepingRecord: boolean
   sleepingRecordEntry: { paneKey: string; record: SleepingAgentSessionRecord } | null
+  resumeOwner: AgentResumeOwner
 }
 
 const e2eTerminalPtyOutputDebugState: E2eTerminalPtyOutputDebugSnapshot = {
@@ -1045,6 +1058,8 @@ export function connectPanePty(
 ): PanePtyBinding {
   exposeE2eTerminalPtyOutputDebug()
   let disposed = false
+  let reattachOutputGateGeneration = 0
+  let activeReattachOutputGate: ReturnType<typeof createPtyReattachOutputGate> | null = null
   let connectFrame: number | null = null
   let connectFallbackTimer: ReturnType<typeof setTimeout> | null = null
   let startupGridSettleHandle: TerminalStartupGridSettleHandle | null = null
@@ -2738,7 +2753,6 @@ export function connectPanePty(
     pane.terminal,
     (data) => transport.sendInput(data)
   )
-
   const onDataDisposable = pane.terminal.onData((data) => {
     // Why: xterm auto-replies to embedded query sequences (DA1, DECRQM,
     // OSC 10/11, focus, CPR) via onData. When we replay recorded PTY bytes
@@ -3417,6 +3431,43 @@ export function connectPanePty(
       const sleepingRecord = sleepingRecordEntry?.record
       const liveEntry = entry && entry.state !== 'done' ? entry : null
       const useLiveEntry = Boolean(liveEntry)
+      const resumeOwner = sleepingRecord?.resumeOwner
+      const currentLayoutPtyId =
+        state.terminalLayoutsByTabId[deps.tabId]?.ptyIdsByLeafId?.[pane.leafId]
+      const ownerMatchesPane = (
+        agent: TuiAgent,
+        providerSession?: ReturnType<typeof normalizeAgentProviderSession>
+      ) => {
+        if (
+          !resumeOwner ||
+          resumeOwner.paneKey !== cacheKey ||
+          resumeOwner.tabId !== deps.tabId ||
+          resumeOwner.leafId !== pane.leafId ||
+          resumeOwner.worktreeId !== deps.worktreeId ||
+          resumeOwner.agent !== agent ||
+          currentLayoutPtyId !== resumeOwner.ptyId ||
+          (connectionId
+            ? resumeOwner.authority.kind !== 'ssh' ||
+              resumeOwner.authority.connectionId !== connectionId
+            : resumeOwner.authority.kind !== 'local') ||
+          (providerSession &&
+            (resumeOwner.providerSession.key !== providerSession.key ||
+              resumeOwner.providerSession.id !== providerSession.id))
+        ) {
+          return false
+        }
+        if (liveEntry) {
+          return (
+            liveEntry.agentType === resumeOwner.agent &&
+            liveEntry.launchToken === resumeOwner.launchToken &&
+            liveEntry.connectionId ===
+              (resumeOwner.authority.kind === 'ssh' ? connectionId : null) &&
+            liveEntry.providerSession?.key === resumeOwner.providerSession.key &&
+            liveEntry.providerSession?.id === resumeOwner.providerSession.id
+          )
+        }
+        return true
+      }
 
       // When the provider session can't be resumed, an agent terminal should still
       // come back as its agent (or the default), not a blank shell (#4557). A plain
@@ -3440,7 +3491,7 @@ export function connectPanePty(
         // agent terminal whose specific agent is unrecoverable - never for a
         // genuine plain shell or a stale completed live row.
         const fallbackAgent = priorAgent ?? (liveEntry || sleepingRecord ? defaultAgent : undefined)
-        if (!fallbackAgent) {
+        if (!fallbackAgent || !resumeOwner || !ownerMatchesPane(fallbackAgent)) {
           return null
         }
         const liveLaunchConfig =
@@ -3471,7 +3522,8 @@ export function connectPanePty(
             // "restored" banner; the stale sleeping record is still cleared
             // after the spawn.
             hasSleepingRecord: false,
-            sleepingRecordEntry
+            sleepingRecordEntry,
+            resumeOwner
           }
         }
         const freshPlan = buildAgentStartupPlan({
@@ -3507,7 +3559,8 @@ export function connectPanePty(
           // "restored" banner; the stale sleeping record is still cleared after
           // the spawn.
           hasSleepingRecord: false,
-          sleepingRecordEntry
+          sleepingRecordEntry,
+          resumeOwner
         }
       }
 
@@ -3520,6 +3573,9 @@ export function connectPanePty(
       )
       if (!providerSession) {
         return buildFreshFallback()
+      }
+      if (!resumeOwner || !ownerMatchesPane(agent, providerSession)) {
+        return null
       }
       const sleepingProviderSession = normalizeAgentProviderSession(sleepingRecord?.providerSession)
       const matchingSleepingLaunchConfig =
@@ -3566,7 +3622,8 @@ export function connectPanePty(
         launchToken: coldRestoreLaunchToken,
         useLiveEntry: Boolean(useLiveEntry),
         hasSleepingRecord: Boolean(sleepingRecord),
-        sleepingRecordEntry
+        sleepingRecordEntry,
+        resumeOwner
       }
     }
     const applyColdRestoreAgentResumeStartup = (
@@ -3584,11 +3641,21 @@ export function connectPanePty(
       })
       return true
     }
-    const clearSleepingRecordAfterColdRestoreSpawn = (
-      startup: ColdRestoreAgentResumeStartup | null
+    const clearSleepingRecordAfterAgentResumeSpawn = (
+      startup: PendingStartupCommand | ColdRestoreAgentResumeStartup | null
     ): void => {
-      if (startup && !startup.useLiveEntry && startup.sleepingRecordEntry) {
-        clearSleepingRecordProviderDuplicates(useAppStore.getState(), startup.sleepingRecordEntry)
+      const claim = parseAgentResumeSpawnClaim(startup?.env?.[AGENT_RESUME_CLAIM_ENV])
+      if (!claim) {
+        return
+      }
+      const state = useAppStore.getState()
+      const record = state.sleepingAgentSessionsByPaneKey[claim.owner.paneKey]
+      if (
+        record?.resumeOwner &&
+        getAgentResumeOwnerFingerprint(record.resumeOwner) ===
+          getAgentResumeOwnerFingerprint(claim.owner)
+      ) {
+        clearSleepingRecordProviderDuplicates(state, { paneKey: record.paneKey, record })
       }
     }
     const mergeStartupEnvWithPaneIdentity = (
@@ -3600,15 +3667,70 @@ export function connectPanePty(
             ...paneIdentityEnv,
             ...(env.DOBIUS_AGENT_LAUNCH_TOKEN
               ? { DOBIUS_AGENT_LAUNCH_TOKEN: env.DOBIUS_AGENT_LAUNCH_TOKEN }
+              : {}),
+            ...(env[AGENT_RESUME_CLAIM_ENV]
+              ? { [AGENT_RESUME_CLAIM_ENV]: env[AGENT_RESUME_CLAIM_ENV] }
               : {})
           }
         : undefined
+    const claimColdRestoreStartup = async (
+      startup: ColdRestoreAgentResumeStartup | null
+    ): Promise<ColdRestoreAgentResumeStartup | null> => {
+      if (!startup || startup.env?.[AGENT_RESUME_CLAIM_ENV]) {
+        return startup
+      }
+      const claim = await window.api.pty.claimAgentResume(startup.resumeOwner).catch(() => null)
+      if (!claim?.ok) {
+        return null
+      }
+      if (disposed) {
+        void window.api.pty.releaseAgentResume(claim.token, startup.resumeOwner)
+        return null
+      }
+      return {
+        ...startup,
+        env: {
+          ...startup.env,
+          [AGENT_RESUME_CLAIM_ENV]: encodeAgentResumeSpawnClaim({
+            token: claim.token,
+            owner: startup.resumeOwner,
+            target: claim.target
+          })
+        }
+      }
+    }
     const startFreshColdRestoreAgentResume = (
       startup: ColdRestoreAgentResumeStartup | null = buildColdRestoreAgentResumeStartup(),
       options: FreshSpawnOptions = {}
     ): void => {
-      applyColdRestoreAgentResumeStartup(startup)
-      startFreshSpawn(startup, options)
+      if (!startup) {
+        const state = useAppStore.getState()
+        const sleepingRecord = getSleepingRecordForPane(state)
+        const liveStatus = state.agentStatusByPaneKey[cacheKey]
+        // A plain shell may safely recover as a plain shell after its PTY
+        // disappears. An agent row without a matching owner is different:
+        // keep its record available for manual recovery and do not launch an
+        // unproven provider session (or create a blank replacement pane).
+        if (!sleepingRecord && (!liveStatus || liveStatus.state === 'done')) {
+          startFreshSpawn(undefined, options)
+        }
+        return
+      }
+      void (async () => {
+        const claimedStartup = await claimColdRestoreStartup(startup)
+        if (!claimedStartup) {
+          return
+        }
+        try {
+          applyColdRestoreAgentResumeStartup(claimedStartup)
+          startFreshSpawn(claimedStartup, options)
+        } catch {
+          const claim = parseAgentResumeSpawnClaim(claimedStartup.env?.[AGENT_RESUME_CLAIM_ENV])
+          if (claim) {
+            void window.api.pty.releaseAgentResume(claim.token, claim.owner)
+          }
+        }
+      })()
     }
     // Why: the hibernation wake fires from noteVisibilityResume in the outer
     // connection scope, long after this deferred-connect closure has run.
@@ -3748,7 +3870,7 @@ export function connectPanePty(
             if (coldRestoreOverride?.hasSleepingRecord) {
               showSessionRestoredBanner()
             }
-            clearSleepingRecordAfterColdRestoreSpawn(coldRestoreOverride)
+            clearSleepingRecordAfterAgentResumeSpawn(startupOverride ?? paneStartup)
           } else if (
             paneStartup?.launchConfig ||
             (startupOverride && 'launchConfig' in startupOverride)
@@ -4020,19 +4142,27 @@ export function connectPanePty(
     type PendingReplayData = {
       data: string
       clearBeforeReplay: boolean
+      isCurrent: () => boolean
     }
 
     let pendingReplayData: PendingReplayData | null = null
     let replayDrainQueued = false
     const drainReplayDataQueue = async (): Promise<void> => {
       while (pendingReplayData !== null) {
-        const { data, clearBeforeReplay } = pendingReplayData
+        const { data, clearBeforeReplay, isCurrent } = pendingReplayData
         pendingReplayData = null
+        if (disposed || !isCurrent()) {
+          pendingReplayData = null
+          return
+        }
         // Relay replay buffers may overlap with content already rendered in
         // xterm. Local eager replay decides this earlier so metadata-only frames
         // can keep restored scrollback while still using the replay guard.
         if (clearBeforeReplay) {
           await writeReplayDataAsync('\x1b[2J\x1b[3J\x1b[H')
+          if (disposed || !isCurrent()) {
+            return
+          }
         }
         if (clearBeforeReplay || data.length > 0) {
           // Why: an empty clearing frame is still an authoritative repaint and
@@ -4040,8 +4170,14 @@ export function connectPanePty(
           rememberReattachPayloadAgentSignal(data, { fullScreenReplay: clearBeforeReplay })
         }
         await writeReplayDataAsync(data)
+        if (disposed || !isCurrent()) {
+          return
+        }
         if (clearBeforeReplay || data.length > 0) {
           await writeReplayDataAsync(reattachReplayResetSequence())
+          if (disposed || !isCurrent()) {
+            return
+          }
           sendFocusedReattachFocusInAfterReplay()
         }
         if (disposed) {
@@ -4054,10 +4190,18 @@ export function connectPanePty(
         manager.rebuildPaneWebgl(pane.id)
       }
     }
-    const replayDataCallback = (data: string, meta: { clearBeforeReplay?: boolean } = {}): void => {
+    const replayDataCallback = (
+      data: string,
+      meta: { clearBeforeReplay?: boolean } = {},
+      isCurrent: () => boolean = () => !disposed
+    ): void => {
+      if (disposed || !isCurrent()) {
+        return
+      }
       pendingReplayData = {
         data,
-        clearBeforeReplay: meta.clearBeforeReplay !== false
+        clearBeforeReplay: meta.clearBeforeReplay !== false,
+        isCurrent
       }
       if (replayDrainQueued) {
         return
@@ -4069,9 +4213,13 @@ export function connectPanePty(
         .finally(() => {
           replayDrainQueued = false
           if (pendingReplayData !== null) {
-            replayDataCallback(pendingReplayData.data, {
-              clearBeforeReplay: pendingReplayData.clearBeforeReplay
-            })
+            replayDataCallback(
+              pendingReplayData.data,
+              {
+                clearBeforeReplay: pendingReplayData.clearBeforeReplay
+              },
+              pendingReplayData.isCurrent
+            )
           }
         })
     }
@@ -4994,7 +5142,13 @@ export function connectPanePty(
       enforceTerminalWriteScrollIntent(pane.terminal, scrollIntent)
     }
 
-    function requestHiddenOutputRestoreIfNeeded(opts?: { bypassScheduler?: boolean }): boolean {
+    function requestHiddenOutputRestoreIfNeeded(opts?: {
+      bypassScheduler?: boolean
+      isCurrent?: () => boolean
+    }): boolean {
+      if (disposed || opts?.isCurrent?.() === false) {
+        return false
+      }
       resetHiddenOutputRestoreIfPtyChanged()
       const ptyId = hiddenOutputRestorePtyId ?? transport.getPtyId()
       if (!hiddenOutputRestoreNeeded && hiddenOutputRestorePendingChunks.length === 0) {
@@ -5024,6 +5178,7 @@ export function connectPanePty(
                 hiddenOutputRestoreScheduled = false
                 if (
                   disposed ||
+                  opts?.isCurrent?.() === false ||
                   hiddenOutputRestoreGeneration !== scheduledGeneration ||
                   hiddenOutputRestorePtyId !== scheduledPtyId ||
                   transport.getPtyId() !== scheduledPtyId ||
@@ -5047,7 +5202,7 @@ export function connectPanePty(
       hiddenOutputRestoreRetryDeferred = false
 
       hiddenOutputRestoreInFlight = (async () => {
-        while (!disposed) {
+        while (!disposed && opts?.isCurrent?.() !== false) {
           const currentPtyId = hiddenOutputRestorePtyId
           if (currentPtyId === null) {
             clearHiddenOutputRestoreState()
@@ -5076,7 +5231,7 @@ export function connectPanePty(
           } catch {
             snapshot = null
           }
-          if (disposed) {
+          if (disposed || opts?.isCurrent?.() === false) {
             return
           }
           const restoreGenerationChanged = hiddenOutputRestoreGeneration !== restoreGeneration
@@ -5130,6 +5285,7 @@ export function connectPanePty(
           armHiddenOutputRestoreForegroundDeadline()
         }
         if (
+          opts?.isCurrent?.() !== false &&
           !hiddenOutputRestoreRetryDeferred &&
           hiddenOutputRestoreNeeded &&
           shouldWritePtyOutputForeground(deps.isVisibleRef.current)
@@ -5266,6 +5422,69 @@ export function connectPanePty(
 
       schedulePendingStartupCommandDelivery()
     }
+    const discardReattachOutputGate = (
+      gate: ReturnType<typeof createPtyReattachOutputGate>
+    ): void => {
+      gate.discard()
+      if (activeReattachOutputGate === gate) {
+        activeReattachOutputGate = null
+        reattachOutputGateGeneration += 1
+      }
+    }
+
+    const isCurrentReattachOutputGate = (
+      gate: ReturnType<typeof createPtyReattachOutputGate>
+    ): boolean => !disposed && activeReattachOutputGate === gate
+
+    const createReattachOutputGate = (): ReturnType<typeof createPtyReattachOutputGate> => {
+      if (activeReattachOutputGate) {
+        discardReattachOutputGate(activeReattachOutputGate)
+      }
+      const generation = ++reattachOutputGateGeneration
+      let gate: ReturnType<typeof createPtyReattachOutputGate>
+      const isCurrent = (): boolean =>
+        !disposed &&
+        generation === reattachOutputGateGeneration &&
+        activeReattachOutputGate === gate
+      const queryPreserver = createPtyReattachQueryPreserver((query) => {
+        if (!isCurrent()) {
+          return
+        }
+        if (query.kind === 'da1') {
+          transport.sendInput(isNativeWindowsConpty ? CONPTY_DA1_RESPONSE : DEFAULT_DA1_RESPONSE)
+        } else if (query.kind === 'pixel-14' || query.kind === 'pixel-16') {
+          respondToTerminalPixelSizeQueries(query.data)
+        } else {
+          sendTerminalOscColorQueryReplies(query.data, pane.terminal, (reply) =>
+            transport.sendInput(reply)
+          )
+        }
+      })
+      gate = createPtyReattachOutputGate(
+        (data, meta) => {
+          if (isCurrent()) {
+            dataCallback(data, meta)
+          }
+        },
+        {
+          onOverflowData: (data) => {
+            if (isCurrent()) {
+              queryPreserver.pushOverflowData(data)
+            }
+          },
+          onAfterOverflowData: (data) => {
+            if (!isCurrent()) {
+              queryPreserver.reset()
+              return data.length
+            }
+            return queryPreserver.continuePendingQuery(data)
+          },
+          onDiscard: queryPreserver.reset
+        }
+      )
+      activeReattachOutputGate = gate
+      return gate
+    }
     unregisterE2ePtyDataInjection = registerE2eTerminalPtyDataInjection(cacheKey, (data, meta) => {
       if (!disposed) {
         dataCallback(data, meta)
@@ -5275,10 +5494,11 @@ export function connectPanePty(
     const handleReattachResult = (
       result: PtyConnectResult | string | void,
       staleSessionId?: string | null,
-      coldRestoreStartup?: ColdRestoreAgentResumeStartup | null
-    ): void => {
-      if (disposed) {
-        return
+      coldRestoreStartup?: ColdRestoreAgentResumeStartup | null,
+      reattachOutputGate?: ReturnType<typeof createPtyReattachOutputGate>
+    ): boolean => {
+      if (disposed || (reattachOutputGate && !isCurrentReattachOutputGate(reattachOutputGate))) {
+        return false
       }
       const connectResult =
         result && typeof result === 'object' && 'id' in result ? (result as PtyConnectResult) : null
@@ -5306,7 +5526,7 @@ export function connectPanePty(
         startFreshColdRestoreAgentResume(coldRestoreStartup, {
           forceBlankRestoredViewport: true
         })
-        return
+        return false
       }
       registerEffectiveLaunchConfig(connectResult?.launchConfig, {
         ...(coldRestoreStartup ? { launchToken: coldRestoreStartup.launchToken } : {}),
@@ -5327,7 +5547,7 @@ export function connectPanePty(
         startFreshColdRestoreAgentResume(coldRestoreStartup, {
           forceBlankRestoredViewport: true
         })
-        return
+        return false
       }
       setPanePtyFitBinding(ptyId)
       reportPanePtyVisibility(ptyId, deps.isVisibleRef.current)
@@ -5340,6 +5560,17 @@ export function connectPanePty(
       // serializer and the onTitleChange-driven lastTitle source so the
       // main-process hydration path has full status parity.
       registerPaneSerializerFor(ptyId)
+
+      const coldRestoreOnly = Boolean(
+        connectResult?.coldRestore && !connectResult.snapshot && !connectResult.replay
+      )
+      const reattachOutputOverflowed = reattachOutputGate?.overflowed() === true
+      // Why: only cold-restore text is historical scrollback that must precede
+      // the new shell stream. Snapshot/replay sources clear and replace xterm,
+      // so drain their in-flight bytes first to avoid replaying them twice.
+      if (!coldRestoreOnly) {
+        reattachOutputGate?.release()
+      }
 
       // Strict precedence: snapshot > replay > coldRestore. Paint exactly
       // one source per reattach. Painting snapshot AND replay produced the
@@ -5387,14 +5618,22 @@ export function connectPanePty(
         // may contain query sequences the previous agent CLI emitted;
         // writing them through xterm.write would trigger auto-replies that
         // land in the new shell's stdin. See replay-guard.ts.
-        writeReplayData(connectResult.coldRestore.scrollback)
+        if (reattachOutputGate?.overflowed()) {
+          writeTerminalOutput(
+            pane.terminal,
+            '\r\n[Restored scrollback was skipped because PTY output exceeded the bounded reattach buffer.]\r\n',
+            { foreground: true, beforeWrite: beforeTerminalOutputWrite }
+          )
+        } else {
+          writeReplayData(connectResult.coldRestore.scrollback)
+        }
         const preparedStartup = coldRestoreStartup ?? buildColdRestoreAgentResumeStartup()
         const didPrepareResume = applyColdRestoreAgentResumeStartup(preparedStartup)
         if (didPrepareResume) {
           if (preparedStartup?.hasSleepingRecord) {
             showSessionRestoredBanner()
           }
-          clearSleepingRecordAfterColdRestoreSpawn(preparedStartup)
+          // Keep the recovery record until the resume PTY spawn itself succeeds.
         }
         // Cold-restore means the daemon lost the session and spawned a
         // fresh shell — no TUI is consuming the mode-setting bytes that a
@@ -5408,6 +5647,28 @@ export function connectPanePty(
         }
         if (didPrepareResume && !coldRestoreStartup) {
           schedulePendingStartupCommandDelivery()
+        }
+      }
+      if (coldRestoreOnly) {
+        reattachOutputGate?.release()
+      }
+      if (reattachOutputOverflowed) {
+        if (canUseHiddenOutputSnapshot(ptyId)) {
+          // Why: a dropped bounded stream cannot reconstruct TUI state; refresh
+          // from the PTY snapshot and sequence-reconcile bytes arriving meanwhile.
+          hiddenOutputRestorePtyId = ptyId
+          hiddenOutputRestoreNeeded = true
+          requestHiddenOutputRestoreIfNeeded({
+            bypassScheduler: true,
+            ...(reattachOutputGate
+              ? { isCurrent: () => isCurrentReattachOutputGate(reattachOutputGate) }
+              : {})
+          })
+        } else if (!coldRestoreOnly) {
+          writeTerminalOutput(pane.terminal, REATTACH_OUTPUT_SNAPSHOT_UNAVAILABLE_WARNING, {
+            foreground: true,
+            beforeWrite: beforeTerminalOutputWrite
+          })
         }
       }
       // Why: when a mobile-fit override is active, skip sending desktop dims
@@ -5430,6 +5691,7 @@ export function connectPanePty(
       scheduleReattachIdleAgentCursorReset()
 
       scheduleRuntimeGraphSync()
+      return true
     }
 
     // Why: if this tab has a deferred SSH session ID, trigger the SSH
@@ -5591,14 +5853,21 @@ export function connectPanePty(
             // cooperation gate uniformly applies to remote sessions. Issue
             // declare and connect back-to-back; Electron preserves order. See
             // docs/mobile-prefer-renderer-scrollback.md.
+            let expiredReattachError = false
+            const startupCandidate = buildColdRestoreAgentResumeStartup()
+            const coldRestoreStartup = startupCandidate
+              ? await claimColdRestoreStartup(startupCandidate)
+              : null
+            if (disposed) {
+              return
+            }
             const preSignalPromise =
               runtimeEnvironmentId || isRemoteRuntimePtyId(pendingSessionId)
                 ? Promise.resolve(null)
                 : window.api.pty.declarePendingPaneSerializer(cacheKey).catch(() => null)
-            let expiredReattachError = false
-            const coldRestoreStartup = buildColdRestoreAgentResumeStartup()
             clearPaneMode2031State()
             clearHiddenOutputRestoreState()
+            const reattachOutputGate = createReattachOutputGate()
             const reattachPromise = transport.connect({
               url: '',
               cols,
@@ -5616,8 +5885,14 @@ export function connectPanePty(
                 : {}),
               ...(coldRestoreStartup?.agent ? { launchAgent: coldRestoreStartup.agent } : {}),
               callbacks: {
-                onData: dataCallback,
-                onReplayData: replayDataCallback,
+                onData: reattachOutputGate.onData,
+                onReplayData: (data, meta) => {
+                  if (isCurrentReattachOutputGate(reattachOutputGate)) {
+                    replayDataCallback(data, meta, () =>
+                      isCurrentReattachOutputGate(reattachOutputGate)
+                    )
+                  }
+                },
                 onError: (message) => {
                   if (isSshSessionExpiredError(message)) {
                     expiredReattachError = true
@@ -5639,6 +5914,7 @@ export function connectPanePty(
                     : 'undefined'
                 )
                 if (!result && expiredReattachError) {
+                  discardReattachOutputGate(reattachOutputGate)
                   const gen = await preSignalPromise
                   if (typeof gen === 'number') {
                     void window.api.pty.clearPendingPaneSerializer(cacheKey, gen).catch(() => {})
@@ -5653,7 +5929,15 @@ export function connectPanePty(
                   })
                   return
                 }
-                handleReattachResult(result, pendingSessionId, coldRestoreStartup)
+                const canReleaseOutput = handleReattachResult(
+                  result,
+                  pendingSessionId,
+                  coldRestoreStartup,
+                  reattachOutputGate
+                )
+                if (!canReleaseOutput) {
+                  discardReattachOutputGate(reattachOutputGate)
+                }
                 const gen = await preSignalPromise
                 if (typeof gen === 'number') {
                   if (!isRemoteRuntimePtyId(pendingSessionId)) {
@@ -5662,6 +5946,7 @@ export function connectPanePty(
                 }
               })
               .catch(async (err) => {
+                discardReattachOutputGate(reattachOutputGate)
                 const gen = await preSignalPromise
                 if (typeof gen === 'number') {
                   void window.api.pty.clearPendingPaneSerializer(cacheKey, gen).catch(() => {})
@@ -5769,100 +6054,125 @@ export function connectPanePty(
       allowInitialIdleCacheSeed = true
       recordPtyConnectDiagnostic(`pane=${pane.id} -> REATTACH ${deferredReattachSessionId}`)
 
-      // Why: reattach also pre-signals so the cooperation gate suppresses
-      // the daemon seed for this paneKey. Reattach paths register their
-      // serializer in handleReattachResult (via registerPaneSerializerFor),
-      // mirroring the fresh-spawn path. We issue declare and the reattach
-      // connect back-to-back without awaiting; Electron's ipcRenderer→ipcMain
-      // channel preserves order. See
-      // docs/mobile-prefer-renderer-scrollback.md (Renderer-side prerequisite
-      // requirement #4).
-      const preSignalPromise =
-        runtimeEnvironmentId || isRemoteRuntimePtyId(deferredReattachSessionId)
-          ? Promise.resolve(null)
-          : window.api.pty.declarePendingPaneSerializer(cacheKey).catch(() => null)
+      const startDeferredReattach = (
+        coldRestoreStartup: ColdRestoreAgentResumeStartup | null
+      ): void => {
+        if (disposed) {
+          return
+        }
+        // Why: reserve ownership before the reattach RPC can turn into a fresh
+        // provider spawn on either the local PTY or remote runtime.
+        const preSignalPromise =
+          runtimeEnvironmentId || isRemoteRuntimePtyId(deferredReattachSessionId)
+            ? Promise.resolve(null)
+            : window.api.pty.declarePendingPaneSerializer(cacheKey).catch(() => null)
 
-      let expiredReattachError = false
-      const coldRestoreStartup = buildColdRestoreAgentResumeStartup()
-      const reattachPromise = transport.connect({
-        url: '',
-        cols,
-        rows,
-        sessionId: deferredReattachSessionId,
-        ...(coldRestoreStartup?.command ? { command: coldRestoreStartup.command } : {}),
-        ...(coldRestoreStartup?.env
-          ? { env: mergeStartupEnvWithPaneIdentity(coldRestoreStartup.env) }
-          : {}),
-        ...(coldRestoreStartup?.launchConfig
-          ? { launchConfig: coldRestoreStartup.launchConfig }
-          : {}),
-        ...(coldRestoreStartup?.launchToken ? { launchToken: coldRestoreStartup.launchToken } : {}),
-        ...(coldRestoreStartup?.agent ? { launchAgent: coldRestoreStartup.agent } : {}),
-        callbacks: {
-          onData: dataCallback,
-          onReplayData: replayDataCallback,
-          onError: (message) => {
-            if (isSshSessionExpiredError(message)) {
-              expiredReattachError = true
+        let expiredReattachError = false
+        const reattachOutputGate = createReattachOutputGate()
+        const reattachPromise = transport.connect({
+          url: '',
+          cols,
+          rows,
+          sessionId: deferredReattachSessionId,
+          ...(coldRestoreStartup?.command ? { command: coldRestoreStartup.command } : {}),
+          ...(coldRestoreStartup?.env
+            ? { env: mergeStartupEnvWithPaneIdentity(coldRestoreStartup.env) }
+            : {}),
+          ...(coldRestoreStartup?.launchConfig
+            ? { launchConfig: coldRestoreStartup.launchConfig }
+            : {}),
+          ...(coldRestoreStartup?.launchToken
+            ? { launchToken: coldRestoreStartup.launchToken }
+            : {}),
+          ...(coldRestoreStartup?.agent ? { launchAgent: coldRestoreStartup.agent } : {}),
+          callbacks: {
+            onData: reattachOutputGate.onData,
+            onReplayData: (data, meta) => {
+              if (isCurrentReattachOutputGate(reattachOutputGate)) {
+                replayDataCallback(data, meta, () =>
+                  isCurrentReattachOutputGate(reattachOutputGate)
+                )
+              }
+            },
+            onError: (message) => {
+              if (isSshSessionExpiredError(message)) {
+                expiredReattachError = true
+                return
+              }
+              reportError(message)
+            }
+          }
+        })
+
+        void Promise.resolve(reattachPromise)
+          .then(async (result) => {
+            if (!result && expiredReattachError) {
+              discardReattachOutputGate(reattachOutputGate)
+              const gen = await preSignalPromise
+              if (typeof gen === 'number') {
+                void window.api.pty.clearPendingPaneSerializer(cacheKey, gen).catch(() => {})
+              }
+              if (disposed) {
+                return
+              }
+              deps.clearExitedPanePtyLayoutBinding(pane.id, deferredReattachSessionId)
+              deps.clearTabPtyId(deps.tabId, deferredReattachSessionId)
+              startFreshColdRestoreAgentResume(coldRestoreStartup, {
+                forceBlankRestoredViewport: true
+              })
               return
             }
-            reportError(message)
-          }
-        }
-      })
-
-      void Promise.resolve(reattachPromise)
-        .then(async (result) => {
-          if (!result && expiredReattachError) {
+            const canReleaseOutput = handleReattachResult(
+              result,
+              deferredReattachSessionId,
+              coldRestoreStartup,
+              reattachOutputGate
+            )
+            if (!canReleaseOutput) {
+              discardReattachOutputGate(reattachOutputGate)
+            }
+            const gen = await preSignalPromise
+            if (typeof gen === 'number') {
+              if (!isRemoteRuntimePtyId(deferredReattachSessionId)) {
+                void window.api.pty.settlePaneSerializer(cacheKey, gen).catch(() => {})
+              }
+            }
+          })
+          .catch(async (err) => {
+            discardReattachOutputGate(reattachOutputGate)
             const gen = await preSignalPromise
             if (typeof gen === 'number') {
               void window.api.pty.clearPendingPaneSerializer(cacheKey, gen).catch(() => {})
             }
-            if (disposed) {
-              return
-            }
+            const message = err instanceof Error ? err.message : String(err)
+            warnTerminalLifecycleAnomaly('restored PTY reattach threw', {
+              tabId: deps.tabId,
+              worktreeId: deps.worktreeId,
+              leafId: deps.restoredLeafId ?? pane.leafId,
+              paneId: pane.id,
+              ptyId: deferredReattachSessionId,
+              reason: message
+            })
             deps.clearExitedPanePtyLayoutBinding(pane.id, deferredReattachSessionId)
             deps.clearTabPtyId(deps.tabId, deferredReattachSessionId)
-            startFreshColdRestoreAgentResume(coldRestoreStartup, {
-              forceBlankRestoredViewport: true
-            })
-            return
-          }
-          handleReattachResult(result, deferredReattachSessionId, coldRestoreStartup)
-          const gen = await preSignalPromise
-          if (typeof gen === 'number') {
-            if (!isRemoteRuntimePtyId(deferredReattachSessionId)) {
-              void window.api.pty.settlePaneSerializer(cacheKey, gen).catch(() => {})
+            if (connectionId && isSshSessionExpiredError(err)) {
+              startFreshColdRestoreAgentResume(coldRestoreStartup, {
+                forceBlankRestoredViewport: true
+              })
+              return
             }
-          }
-        })
-        .catch(async (err) => {
-          const gen = await preSignalPromise
-          if (typeof gen === 'number') {
-            void window.api.pty.clearPendingPaneSerializer(cacheKey, gen).catch(() => {})
-          }
-          const message = err instanceof Error ? err.message : String(err)
-          warnTerminalLifecycleAnomaly('restored PTY reattach threw', {
-            tabId: deps.tabId,
-            worktreeId: deps.worktreeId,
-            leafId: deps.restoredLeafId ?? pane.leafId,
-            paneId: pane.id,
-            ptyId: deferredReattachSessionId,
-            reason: message
-          })
-          deps.clearExitedPanePtyLayoutBinding(pane.id, deferredReattachSessionId)
-          deps.clearTabPtyId(deps.tabId, deferredReattachSessionId)
-          if (connectionId && isSshSessionExpiredError(err)) {
+            reportError(message)
             startFreshColdRestoreAgentResume(coldRestoreStartup, {
               forceBlankRestoredViewport: true
             })
-            return
-          }
-          reportError(message)
-          startFreshColdRestoreAgentResume(coldRestoreStartup, {
-            forceBlankRestoredViewport: true
           })
-        })
+      }
+      const startupCandidate = buildColdRestoreAgentResumeStartup()
+      if (startupCandidate) {
+        void claimColdRestoreStartup(startupCandidate).then(startDeferredReattach)
+      } else {
+        startDeferredReattach(null)
+      }
     } else if (detachedRemoteLeafPtyId || detachedLivePtyId || eagerLivePtyId) {
       // Why: mirrored web terminal layouts mount one pane per host leaf.
       // Later leaves already have a pane transport, but must still attach to
@@ -5962,6 +6272,7 @@ export function connectPanePty(
           startFreshSpawn()
         }
       }
+      return
     }
     scheduleRuntimeGraphSync()
   }
@@ -6064,6 +6375,11 @@ export function connectPanePty(
     reconcileIfSessionMissing,
     dispose() {
       disposed = true
+      if (activeReattachOutputGate) {
+        activeReattachOutputGate.discard()
+        activeReattachOutputGate = null
+        reattachOutputGateGeneration += 1
+      }
       // Why: the post-spawn reconcile polls across frames; cancel its pending
       // rAF so a torn-down pane cannot keep fitting/resizing after disposal.
       ptySizeReconcileHandle?.cancel()

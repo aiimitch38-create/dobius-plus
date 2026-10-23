@@ -1,3 +1,4 @@
+import { openMobileBackgroundResource } from './mobile-background-resource-open'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { FlatList } from 'react-native'
 import type { ConnectionState } from '../transport/types'
@@ -182,13 +183,14 @@ export function useMobileDiffReviewInteractions(input: InteractionInput) {
       if (!client || !currentItem || currentItem.scope === 'branch') {
         return
       }
-      const response = await client.sendRequest('files.openDiff', {
-        worktree: `id:${worktreeId}`,
-        relativePath: currentItem.filePath,
-        staged: currentItem.scope === 'staged'
-      })
-      if (!response.ok) {
-        setActionError(response.error?.message || 'Unable to open in session')
+      try {
+        await openMobileBackgroundResource(client, 'files.openDiffBackground', {
+          worktree: `id:${worktreeId}`,
+          relativePath: currentItem.filePath,
+          staged: currentItem.scope === 'staged'
+        })
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'Unable to open in session')
         return
       }
       onOpenSession()

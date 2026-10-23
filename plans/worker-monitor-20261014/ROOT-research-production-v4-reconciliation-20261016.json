@@ -1,0 +1,13 @@
+{
+  "verdict": "PASS_BOUNDED_SOURCE_ONLY",
+  "dispatch_id": "ctx_6a8b09d9bacb",
+  "report": "plans/worker-monitor-20261014/RESEARCH-adam-production-composition-v4-review.md",
+  "report_sha256": "194934d0d91c9149b7253fb74aaf9c0234984d7a347ba9982fb9b97a9235724d",
+  "reviewed_manifest_sha256": "ddb8bc73f8521af2563cf32cf1d67c1ae20c77fc3db7e65dfe7b22b24d38a96e",
+  "candidate_files_verified": 84,
+  "baselines_verified": 21,
+  "independent_tests": "70/70in9files with isolated child natural-exit assertions",
+  "source_accepted_scope": "Exact staged ADAM V4 source and synthetic tests only",
+  "actual_adam_applied": false,
+  "live_installed": false
+}

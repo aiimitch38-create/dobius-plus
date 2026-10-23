@@ -571,7 +571,9 @@ function Terminal(): React.JSX.Element | null {
     // owns that write path now, so the dialog signals it through a custom
     // event instead of poking at editor component refs.
     setSaveDialogFileId(null)
-    window.dispatchEvent(new CustomEvent(DOBIUS_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId } }))
+    window.dispatchEvent(
+      new CustomEvent(DOBIUS_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId } })
+    )
     inFlightSaveFileIdRef.current = fileId
     let closed = false
     try {

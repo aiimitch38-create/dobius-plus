@@ -1,0 +1,103 @@
+{
+  "status": "source_frozen_for_independent_review",
+  "aggregate_sha256": "119980b3f6d1905bbfa57b619ca29703ec19d375674f24d759e60804e67b709c",
+  "algorithm": "sorted repo-relative path NUL bytes NUL",
+  "files": [
+    {
+      "path": "dobius/src/main/automations/cloud-job-authority.test.ts",
+      "bytes": 9835,
+      "sha256": "d5577b98f21487eda7cb19165e3ae860ece32a984f8278e0fd553eebeec7201a"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-authority.ts",
+      "bytes": 5390,
+      "sha256": "68c2b71503572c895482718fe5c3aacf386e6e63d645c9f433102704db599ed7"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-receipt-host.test.ts",
+      "bytes": 1899,
+      "sha256": "c7826a207130fe693d700cc37a226d0e4b0b23f7e7d13b8b3ee1c6eb7bb44670"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-receipt-host.ts",
+      "bytes": 1740,
+      "sha256": "7a63ac2238a6fc8739408ccd5bead76dd8b3b74988f9859c1168c69e5e246f61"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-service.ts",
+      "bytes": 10081,
+      "sha256": "b363a06fc51ace6225a005c863b06726d172407049e6880a0dc14e686554c440"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-submit-admission.ts",
+      "bytes": 1980,
+      "sha256": "586d9edaa14a49095e39a80f32ddc7e71dbdc0d1e52ffa129829fa3ee13b6bb1"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-job-adam-atomic-events.test.ts",
+      "bytes": 7184,
+      "sha256": "25a52172c414c12a34655b24979f5897b078b013172e95c1b08bbe136f15a583"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-job-adam-event-receipt.ts",
+      "bytes": 2551,
+      "sha256": "b967c1e02774a72fe165c0047b697aec577a4973d8fc06c514579bf51f5b05b3"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-job-catalog.ts",
+      "bytes": 9544,
+      "sha256": "9fbc431e208c1de84309d16857126b868466c7a17cf1f8a8b3a81f67ab992ca9"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-queue-port.test.ts",
+      "bytes": 20454,
+      "sha256": "dcdc98e1075a9b99248e643ff96c7895c2808bb696830620a7a94572d1a09fc7"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-start-ledger.ts",
+      "bytes": 9016,
+      "sha256": "d9b6b45f68a58c1400a607df96eb077768a10fec06a6a53ff3f757641ba1e5bb"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/database.ts",
+      "bytes": 8251,
+      "sha256": "8bdfeb3627071b8107c4cac2aed75b3be4cf10fb7993b7f3dfc540b59ee89022"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/store.test.ts",
+      "bytes": 24265,
+      "sha256": "3e4c62efa097321852aa1f706b8d8b4a39db8472a0d5c421caad5adbd2e197c6"
+    },
+    {
+      "path": "dobius/src/main/index.ts",
+      "bytes": 103172,
+      "sha256": "d91ac3cb77b4caf807e25ac8e6b23f13d9cf563038fa8e932cb0e07de48ce97c"
+    }
+  ],
+  "dependencies": [
+    "BUILD1 current drainer de2947b0 five files; FIXER PASS_AUTHORITY_ADMISSION_CORRECTION, prior e480 lifecyclePASS preserved",
+    "FIXER ten-file outbox a28a13b0 RESEARCH PASS",
+    "ADAM receiving side bce3cd43 RESEARCH PASS",
+    "Parent receipt client a4b0fac7 RESEARCH PASS"
+  ],
+  "verification": {
+    "fresh_node_types": "PASS",
+    "new_authority_and_receipt_lifecycle": "13 tests /2 files passed",
+    "lint": "PASS scoped type-aware",
+    "broader_log": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/adam-cloud-composed-host-tests.log",
+    "final_drainer_authority_host": "21 tests/4files PASS afterauthority-admission correction; freshNode typecheckPASS"
+  },
+  "behavior": [
+    "Private authority adamReceiptBridgeEnabled defaults false; factory constructed only when enabled, missing factory fails before queue opens",
+    "Same-store child state/event/binding/outbox commit and consumed authenticated parent link",
+    "One startup/shutdown owner composes two-worker host and receipt drainer, persists unproven ownership",
+    "Receipt-only host is never eligible for worker dispatch, initial dispatch remains paused",
+    "No generic RPC grant/parent-ID input; trusted main-only parent planner entry"
+  ],
+  "limits": [
+    "No live private policy activation, ADAM DB migration/service deployment or networkcalls",
+    "Synthetic exact ACK tested; no parent automatically completed",
+    "Prior root13 and atomic9 source hashes remain historical; this current14 includes owner/startup wiring",
+    "No actual Hermes provider/enrollment, original note reads, physical phone acceptance, Laya gate or AWS acceptance"
+  ]
+}

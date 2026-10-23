@@ -75,6 +75,14 @@ describe('mobile session startup', () => {
     }
   })
 
+  it('keeps tab switching separate from desktop focus and terminal input ownership', () => {
+    expect(source).not.toContain("sendRequest('terminal.focus'")
+    const tabSwitch = sliceBetween('const switchTab = useCallback(', 'const switchSessionTab =')
+    expect(tabSwitch).toContain('selectionScope.controller.select(matchingTab?.id ?? null, handle)')
+    expect(tabSwitch).toContain('subscribeToTerminal(handle, { acquire: true })')
+    expect(tabSwitch).toContain('unsubscribeTerminal(prev)')
+  })
+
   it('keeps dynamic agent rows above fixed New Tab actions', () => {
     const newTabActions = sliceBetween('title="New Tab"', 'onClose={() => setShowCreateTabDrawer')
 

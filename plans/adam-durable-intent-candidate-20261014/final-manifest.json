@@ -1,0 +1,86 @@
+{
+  "task_id": "task_127d2376449d",
+  "dispatch_id": "ctx_5003ba7145ae",
+  "repository": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+  "branch": "fix/channel-cost",
+  "upstream": "/Users/bayou/dobius/projects/ADAM",
+  "baseline_manifest": {
+    "path": "plans/adam-durable-intent-candidate-20261014/baseline-manifest.json",
+    "sha256": "56b387edbc3eb6e40558c438e463a8cf23830d98b5e3f4f93326c61ad42cbf47"
+  },
+  "status": "corrected unapplied source candidate",
+  "scope": "Atomic grant plus sealed intent publication with strict instance-bound duplicate replay; no unseal, recovery transport, planner caller, runtime worker, or live activation.",
+  "aggregate": {
+    "algorithm": "SHA-256 over sorted candidate-relative path bytes, NUL, exact file bytes, NUL for each implementation/test source path.",
+    "sha256": "989e56f6ca4d99662b2cb7adae242ecd2d535f7826784c18bab7375fa41f5555"
+  },
+  "patch_applicability": {
+    "existing_targets": "PASS: actual ADAM target hashes still match the nine-file prepared baseline manifest for both modified source targets; no upstream files were written.",
+    "new_targets": "PASS: all four new ADAM target paths were absent during read-only preflight.",
+    "application": "Review and apply the candidate files against these exact baselines; stop if either existing target hash has changed. Candidate files are staged here and are not a patch applied to the ADAM checkout. ROOT separately applied four child-submit files in ADAM; this candidate does not include or overwrite them."
+  },
+  "files": [
+    {
+      "candidate_path": "service/src/db/migrations.ts",
+      "target_path": "/Users/bayou/dobius/projects/ADAM/service/src/db/migrations.ts",
+      "target_baseline_sha256": "fc986082dae3175742421c5e3489370032e0c498b00d9de9a39b9adcd2c5954e",
+      "target_current_sha256": "fc986082dae3175742421c5e3489370032e0c498b00d9de9a39b9adcd2c5954e",
+      "candidate_sha256": "e54ea453716a30c938fb01a9f4f24658b0e257505a781e4ec20394f070adc26e",
+      "change": "Adds migration version 19 for pending sealed intent identity rows."
+    },
+    {
+      "candidate_path": "service/src/dobius-cloud/receipt-store.ts",
+      "target_path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/receipt-store.ts",
+      "target_baseline_sha256": "7f49efb0be1e500873b196ccb12478f19aa22e8d1167e7a465811a2dce4cf9a1",
+      "target_current_sha256": "7f49efb0be1e500873b196ccb12478f19aa22e8d1167e7a465811a2dce4cf9a1",
+      "candidate_sha256": "04d066e92024af51ed4e19cc58954f61bfc5c975d29fdcb0dc079c48b0dbc9c3",
+      "change": "Adds required-sealer issueGrantWithIntent API and joined duplicate-row loading; legacy issueGrant, consume and receive implementations remain unchanged."
+    },
+    {
+      "candidate_path": "service/src/dobius-cloud/intent-contract.ts",
+      "target_path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/intent-contract.ts",
+      "target_baseline_sha256": null,
+      "target_current": "absent",
+      "candidate_sha256": "60d148b77864bb83025e1d8cfeb6f0b3883d3d995759df306fbce165880a7ecd",
+      "change": "Strict request, immutable sealed envelope, result and mandatory sealer types."
+    },
+    {
+      "candidate_path": "service/src/dobius-cloud/intent-migration.ts",
+      "target_path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/intent-migration.ts",
+      "target_baseline_sha256": null,
+      "target_current": "absent",
+      "candidate_sha256": "ce3c0b4bcc37e392361d08dbc04ab02a2d284c979a027e59400f52be092ef93e",
+      "change": "Creates intent rows tied to unique binding rows; persists hashes, exact identity and sealed envelope, never raw capability."
+    },
+    {
+      "candidate_path": "service/src/dobius-cloud/intent-publication.ts",
+      "target_path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/intent-publication.ts",
+      "target_baseline_sha256": null,
+      "target_current": "absent",
+      "candidate_sha256": "9cb9e986979a61a9ad7eba5fb9c9a46cbe63a849e5ad39e8264270fea1d12ba8",
+      "change": "Prepares and freezes the exact identity envelope, seals before publication, and validates both duplicate paths against canonical persisted intent/binding identities and current instance metadata."
+    },
+    {
+      "candidate_path": "service/tests/dobius-cloud-intents.test.ts",
+      "target_path": "/Users/bayou/dobius/projects/ADAM/service/tests/dobius-cloud-intents.test.ts",
+      "target_baseline_sha256": null,
+      "target_current": "absent",
+      "candidate_sha256": "e06aa74c4c67d3ba4a2aa158cb03dd37c5ebe5aed422a2393c2036ccdcc6c128",
+      "change": "Thirteen deterministic temporary-SQLite intent tests using only a synthetic fake sealer, including copied/rebound instance and duplicate-race corruption cases."
+    }
+  ],
+  "verification": {
+    "runtime": "Node v24.18.0, existing ADAM tsx/typescript/node_modules linked read-only into isolated temporary staging closure.",
+    "focused_command": "/Users/bayou/homebrew/Cellar/node@24/24.18.0/bin/node --import /Users/bayou/dobius/projects/ADAM/node_modules/tsx/dist/loader.mjs --test /private/tmp/adam-intent-candidate.WfkZAI/service/tests/dobius-cloud-intents.test.ts /private/tmp/adam-intent-candidate.WfkZAI/service/tests/dobius-cloud-receipts.test.ts",
+    "focused_result": "PASS: 18 tests across new intent tests and existing receipt receiver regression tests.",
+    "typecheck_command": "/Users/bayou/homebrew/Cellar/node@24/24.18.0/bin/node /Users/bayou/dobius/projects/ADAM/node_modules/typescript/bin/tsc --noEmit -p /private/tmp/adam-intent-candidate.WfkZAI/tsconfig.json",
+    "typecheck_result": "PASS: strict NodeNext typecheck of staged service source and tests.",
+    "limitations": [
+      "The injected fake sealer is deterministic test machinery, not OS-backed encryption or proof of key availability.",
+      "No production planner caller, unseal operation, recovery worker, or runtime integration is included.",
+      "No full suite/build/install/deploy, live service/provider, credentials/private config, original database/data, AWS/Storage activity, Git mutation, or Adam/Friday head-profile action occurred.",
+      "This source candidate is unapplied and is not packaged or live acceptance.",
+      "ROOT separately applied four ADAM child-submit files; these are outside this candidate and remain untouched by this packet."
+    ]
+  }
+}

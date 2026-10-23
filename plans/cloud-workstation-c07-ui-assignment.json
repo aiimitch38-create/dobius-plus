@@ -1,0 +1,50 @@
+{
+  "package": "C07 metadata catalog UI in existing desktop Knowledge/Settings and phone Files",
+  "owner": "BUILD1",
+  "allowed_paths": [
+    "dobius/src/renderer/src/components/command-center/StudioOverview.tsx",
+    "dobius/src/renderer/src/components/command-center/DataCatalogPanel.tsx",
+    "dobius/src/renderer/src/components/command-center/DataCatalogPanel.test.tsx",
+    "dobius/src/renderer/src/components/command-center/use-data-catalog.ts",
+    "dobius/src/renderer/src/components/command-center/use-data-catalog.test.ts",
+    "dobius/src/renderer/src/components/settings/Settings.tsx",
+    "dobius/src/renderer/src/components/settings/DataCatalogSetting.tsx",
+    "dobius/src/renderer/src/components/settings/DataCatalogSetting.test.tsx",
+    "dobius/mobile/app/h/[hostId]/data.tsx",
+    "dobius/mobile/src/files/MobileDataCatalogPanel.tsx",
+    "dobius/mobile/src/files/MobileDataCatalogPanel.test.ts",
+    "dobius/mobile/src/files/use-mobile-data-catalog.ts",
+    "dobius/mobile/src/files/use-mobile-data-catalog.test.ts",
+    "dobius/mobile/src/files/MobileFileExplorerPanel.tsx",
+    "dobius/docs/DATA-CATALOG-UI.md",
+    "dobius/src/renderer/src/components/command-center/data-catalog-reader-state.ts",
+    "dobius/mobile/src/files/mobile-data-catalog-reader-state.ts"
+  ],
+  "report": "plans/cloud-workstation-reports-20261012/build1.json",
+  "apis": {
+    "data.catalog.roots": "No params; {state:ready|unavailable|denied,roots:[{rootId,kind,label,generation,allowedDeviceIds?:UUID[]}]}. Pure shared/data-catalog-roots.ts validators exist. Remote roster excludes allowedDeviceIds.",
+    "data.catalog.page": "{rootId,cursor?:string|null,pageSize?:1..200}; use FIXER forthcoming shared/data-catalog-schema.ts CatalogResultSchema; metadata only, state complete|partial|denied|unavailable, entries, cursor, scannedEntries, typed reason.",
+    "data.catalog.chooseRoot": "LOCAL only; {kind:repository|folder-workspace|obsidian-vault|artifact}; returns root view|null for cancelled. Native picker in main; UI never sends an absolute path.",
+    "data.catalog.devices": "LOCAL only; no params; {devices:[{deviceId,name}]}, current paired IDs.",
+    "data.catalog.setAccess": "LOCAL only; {rootId,deviceIds:UUID[]}; returns root view; explicit per-device checkboxes initially none.",
+    "data.catalog.removeRoot": "LOCAL only; {rootId}; {removed:true}; removes browse registration only, never files."
+  },
+  "contract": [
+    "Read dobius/AGENTS.md and STYLEGUIDE. Preserve prior source, root registration peer PASS and C03/C06 behavior. No new active workspace/tab/focus mutation. Only owned paths. ROOT implements RPC native wiring; do not add mock product data.",
+    "Desktop Knowledge: metadata catalog section separate from existing StudioData notes, explicit host selector local or chosen registered environment; do not derive target from activeRuntimeEnvironmentId/selected tab. Responses from old host/root/generation/requests must be discarded. Render empty/unavailable/denied/partial/complete and cursor expiry with refresh action, bounded loaded list. Filter labels must say they search listed entries, not all filesystem.",
+    "Settings: local native folder registration controls and explicit paired-device browse sharing/revoke. Do not merge with AWS panel. Explain original files stay at their own folder and backup coverage unknown. Native picker cancellation is quiet and creates no row; persisted grant errors must show honestly. No remote enrollment path or workspaceDir trust.",
+    "Phone: route /h/[hostId]/data.tsx using explicit hostId and existing Files surface link; authenticated client for that exact host only. No global host/client selection changes or terminal.focus. Read roots and metadata pages only; never send local-only grant/picker mutations from phone.",
+    "Metadata display does not read notes/frontmatter/content, open arbitrary paths, claim archive/backup coverage, count bytes as reclaimable or enable cleanup. Original preview/open remains next API step; no fake clickable rows or feature-complete claim.",
+    "Test actual API state/races: host/root switch late responses, revoke/offline, rejected/bad schema, opaque cursor expiry/replay refresh, no content methods or focus calls, native cancelled picker, permission failure, per-device explicit grant updates. Node24 focused suites maxWorkers1, typecheck and scoped lint/format after source freeze; no production scans/deploy/install/Git/agents.",
+    "FIXER shared CatalogResultSchema module and descriptor core are moving; inspect current fields but wait for export before final typecheck/freeze. Report exact additional path requests to ROOT. No shared/main files edits."
+  ],
+  "approved_path_extension": {
+    "paths": [
+      "dobius/src/renderer/src/components/command-center/data-catalog-reader-state.ts",
+      "dobius/mobile/src/files/mobile-data-catalog-reader-state.ts"
+    ],
+    "reason": "Split response validation/state mapping to obey max-lines; preserve behavior; no suppression",
+    "approved_by": "ROOT",
+    "approved_at": "2026-10-13T21:57:00Z"
+  }
+}

@@ -55,12 +55,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 SEMVER="$SCRIPT_DIR/semver-compare.py"
 SOURCE_STATE="$SCRIPT_DIR/source-state.py"
 MANIFEST="$SCRIPT_DIR/bundle-manifest.py"
+RESOURCE_CONTRACT="$SCRIPT_DIR/bundle-resource-contract.py"
 RECORD="$SCRIPT_DIR/install-record.py"
 if ! command -v python3 >/dev/null 2>&1; then
   echo "REFUSED: python3 is not on PATH; the version guard needs it. Nothing was installed." >&2
   exit 9
 fi
-for helper in "$SEMVER" "$SOURCE_STATE" "$MANIFEST" "$RECORD"; do
+for helper in "$SEMVER" "$SOURCE_STATE" "$MANIFEST" "$RESOURCE_CONTRACT" "$RECORD"; do
   if [ ! -f "$helper" ]; then
     echo "REFUSED: installer helper $helper is missing; the install guards cannot run. Nothing was installed." >&2
     exit 9
@@ -379,9 +380,13 @@ fi
 STAGE_INODE=$(stat -f %i "$STAGE")
 trap 'SIGNALLED=1' INT TERM
 if [ "$MANAGE_APP" = "1" ]; then
+  # Mark before requesting quit so a refusal reopens the unchanged app.
+  APP_QUIT=1
   osascript -e 'quit app "Dobius+"' 2>/dev/null || true
   for _ in $(seq 1 10); do
-    pgrep -a -f "Dobius\\+.app/Contents/MacOS/Dobius\\+$" > /dev/null || break
+    # Match the app's process name, not a path-shaped argv suffix: supported
+    # launch arguments must not make a still-running main app invisible.
+    pgrep -a -x "Dobius\+" > /dev/null || break
     sleep 1
   done
   # Kill only the main app (exact name "Dobius+") and Chromium helpers (--type=
@@ -393,7 +398,16 @@ if [ "$MANAGE_APP" = "1" ]; then
   # escaped (regex quantifier).
   pkill -a -x "Dobius\+" 2>/dev/null || true
   pkill -f "Dobius\+ Helper.*--type=" 2>/dev/null || true
-  APP_QUIT=1
+  if pgrep -a -x "Dobius\+" > /dev/null; then
+    echo "REFUSED: Dobius+ main process is still running after quit; installed app was not changed. Quit it and retry." >&2
+    exit 10
+  else
+    MAIN_PGREP_STATUS=$?
+    if [ "$MAIN_PGREP_STATUS" -ne 1 ]; then
+      echo "REFUSED: could not verify whether the Dobius+ main process exited (pgrep status $MAIN_PGREP_STATUS); installed app was not changed." >&2
+      exit 10
+    fi
+  fi
 fi
 
 # Swap (#104): with an app already installed, exchange the two bundles in ONE

@@ -68,6 +68,98 @@ describe('captureAllSleepingAgentSessions', () => {
     })
   })
 
+  it('captures exact owner proof only when the hook launch and per-leaf PTY agree', () => {
+    const store = createTestStore()
+    const leafId = '3f17c501-bde7-4bcb-b8a1-baa949531184'
+    const paneKey = `tab-1:${leafId}`
+    const providerSession = { key: 'session_id' as const, id: 'codex-session-1' }
+    store.setState({
+      tabsByWorktree: { 'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })] },
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: { type: 'leaf', leafId },
+          activeLeafId: leafId,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leafId]: 'pty-current' }
+        }
+      }
+    } as Partial<AppState>)
+
+    store.getState().setAgentStatus(
+      paneKey,
+      { state: 'working', prompt: 'continue', agentType: 'codex' },
+      'Codex',
+      { updatedAt: 10, stateStartedAt: 10 },
+      { tabId: 'tab-1', worktreeId: 'wt-1' },
+      {
+        providerSession,
+        launchToken: 'launch-current',
+        ptyId: 'pty-current',
+        connectionId: null
+      }
+    )
+    expect(store.getState().sleepingAgentSessionsByPaneKey[paneKey]?.resumeOwner).toMatchObject({
+      authority: { kind: 'local' },
+      paneKey,
+      ptyId: 'pty-current',
+      launchToken: 'launch-current',
+      providerSession
+    })
+
+    store
+      .getState()
+      .setAgentStatus(
+        paneKey,
+        { state: 'working', prompt: 'stale launch', agentType: 'codex' },
+        'Codex',
+        { updatedAt: 11, stateStartedAt: 10 },
+        { tabId: 'tab-1', worktreeId: 'wt-1' },
+        { providerSession, launchToken: 'launch-stale', connectionId: null }
+      )
+    expect(store.getState().agentStatusByPaneKey[paneKey]?.ptyId).toBeUndefined()
+    expect(store.getState().sleepingAgentSessionsByPaneKey[paneKey]?.resumeOwner).toBeUndefined()
+  })
+
+  it('captures the exact SSH connection as resume authority', () => {
+    const store = createTestStore()
+    const leafId = '4d28c501-bde7-4bcb-b8a1-baa949531184'
+    const paneKey = `tab-1:${leafId}`
+    const providerSession = { key: 'session_id' as const, id: 'remote-codex-session' }
+    store.setState({
+      tabsByWorktree: { 'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })] },
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: { type: 'leaf', leafId },
+          activeLeafId: leafId,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leafId]: 'remote-pty' }
+        }
+      }
+    } as Partial<AppState>)
+
+    store.getState().setAgentStatus(
+      paneKey,
+      { state: 'working', prompt: 'continue remotely', agentType: 'codex' },
+      'Codex',
+      { updatedAt: 10, stateStartedAt: 10 },
+      { tabId: 'tab-1', worktreeId: 'wt-1' },
+      {
+        providerSession,
+        launchToken: 'remote-launch',
+        ptyId: 'remote-pty',
+        connectionId: 'ssh-host-a'
+      }
+    )
+
+    expect(store.getState().sleepingAgentSessionsByPaneKey[paneKey]?.resumeOwner).toMatchObject({
+      authority: { kind: 'ssh', connectionId: 'ssh-host-a' },
+      paneKey,
+      ptyId: 'remote-pty',
+      launchToken: 'remote-launch',
+      providerSession
+    })
+  })
+
   it('captures launch config into live checkpoints and refreshes late registration', () => {
     const store = createTestStore()
     store.setState({

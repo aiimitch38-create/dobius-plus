@@ -1,0 +1,32 @@
+{
+  "status": "SOURCE_APPLIED_TARGETED_TESTS_TYPECHECK_PASS",
+  "task_id": "task_a192abad117c",
+  "dispatch_id": "ctx_52a12809776a",
+  "aggregate_sha256": "b22197fdad3e6fa51ad8679790235b50cea39245a86705ad66f3d7f2a12235b6",
+  "at": "2026-10-14T21:22:22.683935+00:00",
+  "findings": "ROOT read all three candidate modules and corrected startup/deadline/proof fixtures. One absolute deadline and current proof are rechecked directly before stdin grant delivery; late error sinks and one settlement remain through close. Previous review blocker resolved. New target paths absent; shared receipt contract matches reviewed source.",
+  "files": [
+    {
+      "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/child-submit-contract.ts",
+      "sha256": "00200dfefdfa30fb9a5264cdb3b04fe3dd818f3061fb14c0f00ac2731287e066"
+    },
+    {
+      "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/child-submit-process.ts",
+      "sha256": "7d0187d71b964863408b1b75cba458ec34472f5fa643861b719058549857df9c"
+    },
+    {
+      "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/child-submit.ts",
+      "sha256": "c1a5408fba3d5dbed7e7187f0764631586f4afd8301dbe260b22d1adfdf57546"
+    },
+    {
+      "path": "/Users/bayou/dobius/projects/ADAM/service/tests/dobius-cloud-child-submit.test.ts",
+      "sha256": "b20888478a27214c18873aa4c36b96570c123e8a32d33293e03ce0ce43768014"
+    }
+  ],
+  "scope": "Source application only; no planner/production authority configuration, durable unseal/recovery wiring or live activation.",
+  "verified_at": "2026-10-14T21:23:15.973992+00:00",
+  "targeted_tests": "PASS: 12 tests in actual ADAM source checkout; all use synthetic/disposable fixtures.",
+  "targeted_typecheck": "PASS: strict/exactOptionalPropertyTypes/noUncheckedIndexedAccess ES2023 NodeNext; --ignoreConfig required by installed compiler for explicit file list. No project-wide typecheck or build.",
+  "production_caller_wired": false,
+  "live_activation": false
+}

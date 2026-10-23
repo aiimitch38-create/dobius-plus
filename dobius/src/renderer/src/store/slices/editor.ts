@@ -289,6 +289,7 @@ export type ClosedEditorTabSnapshot = Omit<
 const MAX_RECENT_CLOSED_EDITOR_TABS = 10
 
 type EditorOpenTargetOptions = {
+  activate?: boolean
   targetGroupId?: string
   preview?: boolean
   runtimeEnvironmentId?: string | null
@@ -455,6 +456,7 @@ export type EditorSlice = {
   openFile: (
     file: Omit<OpenFile, 'id' | 'isDirty'>,
     options?: {
+      activate?: boolean
       preview?: boolean
       targetGroupId?: string
       recordReplacedPreview?: boolean
@@ -721,7 +723,8 @@ function openWorkspaceEditorItem(
   label: string,
   contentType: 'editor' | 'diff' | 'conflict-review' | 'check-details',
   isPreview?: boolean,
-  targetGroupId?: string
+  targetGroupId?: string,
+  activate = true
 ): string {
   const resolvedGroupId = resolveEditorOpenTargetGroupId(state, worktreeId, targetGroupId)
   if (resolvedGroupId) {
@@ -734,7 +737,9 @@ function openWorkspaceEditorItem(
     if (existing) {
       // Why: sidebar preview reopens should focus the tab without making it
       // permanent; explicit tab activation still promotes previews by default.
-      state.activateTab?.(existing.id, { preservePreview: isPreview })
+      if (activate) {
+        state.activateTab?.(existing.id, { preservePreview: isPreview })
+      }
       return existing.id
     }
   }
@@ -742,6 +747,7 @@ function openWorkspaceEditorItem(
     entityId: fileId,
     label,
     isPreview,
+    ...(activate ? {} : { activate: false, recordInteraction: false }),
     ...(resolvedGroupId ? { targetGroupId: resolvedGroupId } : {})
   })
   return created?.id ?? fileId
@@ -1620,7 +1626,7 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
         reusableOpenFileModes
       )
       editorItemFileId = id
-      const isPreview = options?.preview ?? false
+      const isPreview = options?.activate === false ? false : (options?.preview ?? false)
       const recordReplacedPreview = options?.recordReplacedPreview ?? false
       // Why: resolve the target group up-front so preview replacement can be
       // scoped to that group. Opening as preview in group B must not evict a
@@ -1628,7 +1634,9 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
       const targetGroupId =
         resolveEditorOpenTargetGroupId(s, worktreeId, options?.targetGroupId) ?? undefined
       editorItemTargetGroupId = targetGroupId
-      const activeResult = buildEditorActiveResult(s, worktreeId, id)
+      // A background open publishes a resource without changing either client selection.
+      const activeResult =
+        options?.activate === false ? {} : buildEditorActiveResult(s, worktreeId, id)
 
       if (existing) {
         // If opening as non-preview, also pin the existing tab
@@ -1810,7 +1818,8 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
       editorItemLabel,
       editorItemContentType,
       options?.preview ?? false,
-      editorItemTargetGroupId
+      editorItemTargetGroupId,
+      options?.activate !== false
     )
   },
 
@@ -2468,7 +2477,7 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
     })),
 
   openDiff: (worktreeId, filePath, relativePath, language, staged, options) => {
-    const isPreview = options?.preview ?? false
+    const isPreview = options?.activate === false ? false : (options?.preview ?? false)
     let editorItemTargetGroupId = options?.targetGroupId
     let editorItemFileId = ''
     set((s) => {
@@ -2479,6 +2488,18 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
       )
       const diffSource: DiffSource = staged ? 'staged' : 'unstaged'
       const id = buildDiffEditorFileId(worktreeId, diffSource, relativePath, runtimeEnvironmentId)
+      const activeResult =
+        options?.activate === false
+          ? {}
+          : {
+              activeFileId: id,
+              activeTabType: 'editor' as const,
+              activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
+              activeTabTypeByWorktree: {
+                ...s.activeTabTypeByWorktree,
+                [worktreeId]: 'editor' as const
+              }
+            }
       editorItemFileId = id
       const targetGroupId =
         resolveEditorOpenTargetGroupId(s, worktreeId, options?.targetGroupId) ?? undefined
@@ -2498,10 +2519,7 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
         })
         return {
           openFiles: s.openFiles.map((f) => (f.id === id ? reopenedDiff : f)),
-          activeFileId: id,
-          activeTabType: 'editor',
-          activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-          activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+          ...activeResult
         }
       }
       const newFile: OpenFile = {
@@ -2530,19 +2548,13 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
               index === replaceablePreviewIndex ? newFile : file
             ),
             ...removeEditorStateForReplacedPreview(s, s.openFiles[replaceablePreviewIndex], id),
-            activeFileId: id,
-            activeTabType: 'editor',
-            activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-            activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+            ...activeResult
           }
         }
       }
       return {
         openFiles: [...s.openFiles, newFile],
-        activeFileId: id,
-        activeTabType: 'editor',
-        activeFileIdByWorktree: { ...s.activeFileIdByWorktree, [worktreeId]: id },
-        activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [worktreeId]: 'editor' }
+        ...activeResult
       }
     })
     void openWorkspaceEditorItem(
@@ -2552,7 +2564,8 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
       relativePath,
       'diff',
       isPreview,
-      editorItemTargetGroupId
+      editorItemTargetGroupId,
+      options?.activate !== false
     )
   },
 

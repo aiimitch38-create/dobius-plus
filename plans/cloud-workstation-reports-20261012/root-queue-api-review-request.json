@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "owner": "ROOT",
+  "status": "EXTENDED_SOURCE_FROZEN_PENDING_RESEARCH_REVIEW",
+  "recorded_at": "2026-10-13T19:41:53.201117+00:00",
+  "frozen_sha256": {
+    "dobius/src/main/automations/cloud-job-service.ts": "9ae579d17be77af8ba7f6b9fbf6513ee47d40d391d722fe299a9a1c7139a5790",
+    "dobius/src/main/automations/cloud-job-service.test.ts": "063d6140879a8695b9989c1f3a8484b584c2f2f22845bac7ddd1a9927fd0bf6f",
+    "dobius/src/main/runtime/rpc/core.ts": "acf1fdb60c31004e0f29a629929c3f8e55ccffe19dec384069c978c3e714f292",
+    "dobius/src/main/runtime/rpc/dispatcher.ts": "fba202c7a59b464423b480d16d724f7d1880c4d24d336a62f3b4fba9bd74b662",
+    "dobius/src/main/runtime/rpc/methods/cloud-jobs.ts": "73af2ce524989398160ef2b3496311ea8b7a30535671d38cb1b49ce638327d86",
+    "dobius/src/main/runtime/rpc/methods/cloud-jobs.test.ts": "1f19cf1c42a0d5e8461c878f4786f0113a26924dd70eee6a2d09337dcf5a15bf",
+    "dobius/src/main/runtime/rpc/methods/index.ts": "42b7d7e9079aeecc24d59fe608c7e993fe49fc1a8c1744d98341ea1b9f4ae852",
+    "scripts/worker_report_watch.py": "fa2ccb625329294959e24ca26a4dd66c02acd13f65eb562797508481febc3940",
+    "scripts/test_worker_report_watch.py": "61bdc323dd34b13d81c4a0267d64880393b048d229c4db616b2fed843c1256cf",
+    "dobius/src/main/runtime/runtime-rpc.ts": "cf23e323b366d72c4f7ab3bd9554f043fe19796f6d93c982bc6f671916d08937",
+    "dobius/src/main/runtime/runtime-rpc-cloud-jobs.test.ts": "6d533768b7d3c28390634ad1c0030c4bbeaa9fa12a74d5285604b53bdb7c4721",
+    "dobius/src/main/automations/cloud-job-snapshot.ts": "e9c3e44c7a48236158a79f77bd210accac841ab56ae6a5eb36b0a55605e20e58",
+    "dobius/src/main/automations/cloud-job-authority.ts": "f81348f06b4185434051a71cad10b2491ff21793a140e2a1bbb5535cbff26cdb",
+    "dobius/src/main/automations/cloud-job-authority.test.ts": "d50a7973cab1a4e52dbc0aa9db5e0dd8ee9b0424fbe7060aa523e79601efe236",
+    "dobius/src/main/ipc/runtime.ts": "8dfe7e6df10b46439a541abd08c14255918c85dcc3bd0c9d6281efd80703b1d1",
+    "dobius/src/main/ipc/runtime.test.ts": "e75db0aeb754809bd27b70af8b8706b4079273aecf516a3833f06ba89ae42634",
+    "dobius/src/main/ipc/register-core-handlers.ts": "36262668adb26c2cdee188c125c9a22aa5dd3e9a2d6aff8932d14720b46d23d0",
+    "dobius/src/main/index.ts": "60a970808ef1fae34d607c6d6e014c3df2325a84c520e27aefd2bb1e64bf6189",
+    "dobius/src/main/system-monitor/state-directory.ts": "618d47c83d9949213b9b429de4bf7392d6f7bae6ac189506d9472c8dc92bb63c",
+    "dobius/src/main/runtime/mobile-rpc-method-classes.ts": "596fed41ae79d8895b5eb9e67f3b77c609cbde55f05e675b7c652ce34d2b6006",
+    "dobius/src/main/runtime/rpc/methods/system-monitor.ts": "d0c78786d6097a637cf8588b2d3ef1f40136612223f6124ecb3a568ae22a7b82",
+    "dobius/docs/CLOUD-WORKSTATION-AUTHORITY.md": "480bdecb34f96350f7a671fad14cd65aa7062bc83f553b52a3b7fb3f9f0cecc3"
+  },
+  "verification": [
+    "Node24 4API/transport/authority files25testsPASS",
+    "Node24 7IPC/mobilegrant/adapter/service/API files171testsPASS before authority3tests were added",
+    "Python9observer testsPASS",
+    "ScopedROOTlint/formatPASS; fullNode previouslyPASS and currentlymovingC02 integrationdiagnostics ownedBUILD2"
+  ],
+  "source_contract": [
+    "Authenticated paired identity comes from server context; no creator spoofing or bearer storage. Paired clients cannot register roots, enable dispatch or accept Done. Scoped async authority is rechecked after awaits.",
+    "Reconnection event cursor advances across denied rows; snapshot/event limits capped200. New methods are inert/unconfigured without injected authority.",
+    "Completion requires trusted independent verification callback and current version; unverified dispatch remains disabled.",
+    "Worker-report observer coalesces/deduplicates report changes; checks current root runtime before input; only filenames transmitted; no assignments or jobs."
+  ],
+  "remaining_integration": [
+    "C00 bound RPC/server candidate not installed; observer inactive",
+    "Service authority bootstrap and client board wiring not deployed",
+    "Live execution disabled until worker/capacity/authority gates",
+    "Existing Vertex task master unchanged; no old queue cutover"
+  ],
+  "reviewer": "RESEARCH",
+  "freeze_update": "Snapshot encrypted/principal-bound/expiry cursors, row watermark/event generation+reset; headless private configured authority startup with recheckedaccess/revocation and defaultpause; storageRPC+firstpartyIPC+index DI; read-only phone methods classification; docs. C04 service/helper remainsFIXER-owned and separately reviewed."
+}

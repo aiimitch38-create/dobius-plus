@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeviceRegistry, DeviceRegistryUnreadableError } from './device-registry'
+import { previewAuthorityFingerprint } from './device-registry-authority'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 
 // Why: the registry is hardened (chmod 600) before it is read, so a real
@@ -85,9 +86,7 @@ describe('DeviceRegistry with an unreadable file', () => {
       expect(() => registry.getOrCreatePendingDevice('new phone')).toThrow(
         DeviceRegistryUnreadableError
       )
-      expect(() => registry.rotatePendingDevice('new phone')).toThrow(
-        DeviceRegistryUnreadableError
-      )
+      expect(() => registry.rotatePendingDevice('new phone')).toThrow(DeviceRegistryUnreadableError)
       expect(() => registry.removeDevice('phone-1')).toThrow(DeviceRegistryUnreadableError)
       registry.updateLastSeen('phone-1')
       // Fail closed: nothing authenticates against a registry we cannot read.
@@ -128,5 +127,103 @@ describe('DeviceRegistry with an unreadable file', () => {
     )
 
     expect(new DeviceRegistry(dir).getDevice('old')?.scope).toBe('mobile')
+  })
+})
+
+describe('DeviceRegistry preview authority observer', () => {
+  it('notifies synchronously before pairing eligibility and revocation are published', () => {
+    const observations: {
+      reason: string
+      devices: readonly { deviceId: string; lastSeenAt: number }[]
+    }[] = []
+    let registry: DeviceRegistry
+    registry = new DeviceRegistry(dir, {
+      onSecurityAuthorityChange: (reason) => {
+        observations.push({ reason, devices: registry.listDevices() })
+      }
+    })
+    const pending = registry.addDevice('phone', 'mobile')
+    expect(observations).toEqual([])
+
+    const phoneToken = registry.consumePairingOffer(pending.token)
+    expect(phoneToken).toMatch(/^[0-9a-f]{48}$/)
+    expect(observations).toHaveLength(1)
+    expect(observations[0]).toMatchObject({
+      reason: 'confirmed_mobile_eligibility',
+      devices: [{ deviceId: pending.deviceId, lastSeenAt: 0 }]
+    })
+    expect(registry.getDevice(pending.deviceId)?.lastSeenAt).toBeGreaterThan(0)
+
+    registry.updateLastSeen(pending.deviceId)
+    expect(observations).toHaveLength(1)
+
+    expect(registry.removeDevice(pending.deviceId)).toBe(true)
+    expect(observations).toHaveLength(2)
+    expect(observations[1]).toMatchObject({
+      reason: 'device_revoked',
+      devices: [{ deviceId: pending.deviceId }]
+    })
+    expect(registry.getDevice(pending.deviceId)).toBeNull()
+  })
+
+  it('invalidates when a confirmed pairing token rotates', () => {
+    const token = 'confirmed-token'
+    const qrToken = 'pairing-token'
+    writeFileSync(
+      registryPath,
+      JSON.stringify([
+        {
+          deviceId: 'phone',
+          name: 'Phone',
+          token,
+          scope: 'mobile',
+          pairedAt: 1,
+          lastSeenAt: 2,
+          pairingToken: qrToken,
+          pairingTokenExpiresAt: Date.now() + 60_000
+        }
+      ]),
+      { mode: 0o600 }
+    )
+    const notifications: { reason: string; token: string | undefined }[] = []
+    let registry: DeviceRegistry | undefined
+    registry = new DeviceRegistry(dir, {
+      onSecurityAuthorityChange: (reason) =>
+        notifications.push({ reason, token: registry?.listDevices()[0]?.token })
+    })
+    expect(notifications).toEqual([{ reason: 'registry_reloaded', token: undefined }])
+    notifications.length = 0
+
+    registry.updateLastSeen('phone')
+    expect(notifications).toEqual([])
+
+    const rotated = registry.consumePairingOffer(qrToken)
+    expect(rotated).toMatch(/^[0-9a-f]{48}$/)
+    expect(notifications).toEqual([{ reason: 'device_token_changed', token }])
+    expect(registry.getDevice('phone')?.token).toBe(rotated)
+  })
+
+  it('tracks scope, grants and tokens but ignores name and last-seen telemetry', () => {
+    const device = {
+      deviceId: 'phone',
+      name: 'Phone',
+      token: 'confirmed-token',
+      scope: 'mobile' as const,
+      pairedAt: 1,
+      lastSeenAt: 2,
+      grants: ['files.write'] as 'files.write'[]
+    }
+    const fingerprint = previewAuthorityFingerprint([device])
+
+    expect(previewAuthorityFingerprint([{ ...device, name: 'Renamed', lastSeenAt: 3 }])).toBe(
+      fingerprint
+    )
+    expect(previewAuthorityFingerprint([{ ...device, token: 'rotated-token' }])).not.toBe(
+      fingerprint
+    )
+    expect(previewAuthorityFingerprint([{ ...device, grants: ['screen.view'] }])).not.toBe(
+      fingerprint
+    )
+    expect(previewAuthorityFingerprint([{ ...device, scope: 'runtime' }])).not.toBe(fingerprint)
   })
 })

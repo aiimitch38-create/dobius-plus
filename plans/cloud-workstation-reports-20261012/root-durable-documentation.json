@@ -1,0 +1,42 @@
+{
+  "at": "2026-10-13T22:23:46.082826+00:00",
+  "reason": "Canonical dobius/.gitignore allows durable runbooks under docs/reference; original ignored freeze files preserved",
+  "originals_unchanged": true,
+  "documents": [
+    {
+      "local_original": "dobius/docs/AGENT-SESSION-RESTORE.md",
+      "durable_path": "dobius/docs/reference/AGENT-SESSION-RESTORE.md",
+      "sha256": "5146a0711ebf033070b4d322f585e03238e909235bce6e0cbc3209d54bd3d282"
+    },
+    {
+      "local_original": "dobius/docs/CLOUD-JOB-BOARD.md",
+      "durable_path": "dobius/docs/reference/CLOUD-JOB-BOARD.md",
+      "sha256": "1712bb3139aa9dc060b9c55f1047cef8ab6c8cafcc1a9c1a50e209a855a25f7b"
+    },
+    {
+      "local_original": "dobius/docs/CLOUD-WORKSTATION-AUTHORITY.md",
+      "durable_path": "dobius/docs/reference/CLOUD-WORKSTATION-AUTHORITY.md",
+      "sha256": "480bdecb34f96350f7a671fad14cd65aa7062bc83f553b52a3b7fb3f9f0cecc3"
+    },
+    {
+      "local_original": "dobius/docs/DATA-CATALOG-APPLICATION.md",
+      "durable_path": "dobius/docs/reference/DATA-CATALOG-APPLICATION.md",
+      "sha256": "ac6abb5b46b9d7ae045d2c62561a5e90d61f08097e22a9c08dc9a138533a564d"
+    },
+    {
+      "local_original": "dobius/docs/DATA-CATALOG-DESCRIPTOR-BRIDGE.md",
+      "durable_path": "dobius/docs/reference/DATA-CATALOG-DESCRIPTOR-BRIDGE.md",
+      "sha256": "5149de8e23c38215d042459af66879cb7e33dd02d712f56bca0f05606d60d395"
+    },
+    {
+      "local_original": "dobius/docs/DATA-CATALOG-REGISTRATION.md",
+      "durable_path": "dobius/docs/reference/DATA-CATALOG-REGISTRATION.md",
+      "sha256": "48c2a5121f118ba9edff4c8b46867a2081090f0ec4f66cd01a4bfde8f8af55bb"
+    },
+    {
+      "local_original": "dobius/docs/DATA-CATALOG-UI.md",
+      "durable_path": "dobius/docs/reference/DATA-CATALOG-UI.md",
+      "sha256": "a5d4048aac2086c9796f0e8af7b1a9da1fb3a7de5b327833da78b8399b9a35e4"
+    }
+  ]
+}

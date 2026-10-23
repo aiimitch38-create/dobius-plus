@@ -5,6 +5,11 @@
 import { ZodError, type ZodType } from 'zod'
 import type { TerminalStreamFrame } from '../../../shared/terminal-stream-protocol'
 import type { DobiusRuntimeService } from '../dobius-runtime'
+import type { CloudJobService } from '../../automations/cloud-job-service'
+import type { SystemMonitorService } from '../../system-monitor/service'
+import type { ApplicationDataCatalog } from '../../storage/data-catalog/application-catalog'
+import type { CatalogPreviewPrincipal } from '../../storage/data-catalog/preview-principal'
+import type { AdamCloudIntentBridge } from '../../adam-service-principal/adam-cloud-intent-bridge'
 
 export type RpcEnvelopeMeta = {
   runtimeId: string
@@ -40,6 +45,19 @@ export type RpcRequest = {
 
 export type RpcContext = {
   runtime: DobiusRuntimeService
+  cloudJobs?: CloudJobService
+  adamCloudIntentBridge?: AdamCloudIntentBridge
+  // Main transport adapters only; never decoded from RpcRequest.params.
+  adamPeerEvidence?: object
+  systemMonitor?: SystemMonitorService
+  dataCatalog?: ApplicationDataCatalog
+  // Derived only by main-process transport adapters; request parameters never
+  // carry this principal or its lifecycle signal.
+  catalogPreviewPrincipal?: CatalogPreviewPrincipal
+  // Only the local transport sets this after validating its private runtime token.
+  authenticatedLocal?: true
+  // Set only after private socket/named-pipe token validation; IPC is excluded.
+  authenticatedLocalSocket?: true
   // Why: long-poll handlers (e.g. orchestration.check with wait=true) need to
   // observe the underlying socket's lifetime so they can release their slot
   // and resolve their inner waiters immediately when a client disconnects
@@ -47,6 +65,9 @@ export type RpcContext = {
   // runtime-rpc transport (direct in-process callers don't need it).
   // See design doc §3.1 counter-lifecycle.
   signal?: AbortSignal
+  // A resource session survives a request but not its owning IPC document or
+  // WebSocket, so preview uses a distinct connection-lifetime signal.
+  connectionSignal?: AbortSignal
   // Why: streaming handlers (notifications/accounts/terminal subscribe)
   // register cleanup callbacks against the runtime so reconnects don't leak
   // listeners. Keying those cleanups by per-WebSocket connectionId lets the

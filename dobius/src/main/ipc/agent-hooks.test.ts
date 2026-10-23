@@ -13,6 +13,7 @@ const getStatusSnapshot = vi.fn()
 const inferInterrupt = vi.fn()
 const clearMigrationUnsupportedPtysByTabPrefix = vi.fn()
 const clearMigrationUnsupportedPtysForPaneKey = vi.fn()
+const getAgentResumePtyIdentityForPaneKey = vi.fn()
 const onHandlers = new Map<string, (event: unknown, ...args: unknown[]) => void>()
 const handleHandlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 const removeHandler = vi.fn()
@@ -53,6 +54,7 @@ vi.mock('../agent-hooks/migration-unsupported-pty-state', () => ({
   clearMigrationUnsupportedPtysForPaneKey,
   getMigrationUnsupportedPtySnapshot: vi.fn(() => [])
 }))
+vi.mock('./pty', () => ({ getAgentResumePtyIdentityForPaneKey }))
 
 vi.mock('../claude/hook-service', () => ({
   claudeHookService: { getStatus: vi.fn(() => ({ agent: 'claude', state: 'absent' })) }
@@ -104,6 +106,7 @@ beforeEach(() => {
   inferInterrupt.mockReset()
   clearMigrationUnsupportedPtysByTabPrefix.mockReset()
   clearMigrationUnsupportedPtysForPaneKey.mockReset()
+  getAgentResumePtyIdentityForPaneKey.mockReset()
   onHandlers.clear()
   handleHandlers.clear()
   removeHandler.mockReset()
@@ -133,6 +136,39 @@ describe('agentStatus:getSnapshot IPC', () => {
     const handler = handleHandlers.get('agentStatus:getSnapshot')
     expect(handler).toBeDefined()
     expect(handler!({})).toEqual(snapshot)
+  })
+
+  it('attaches a live PTY only when launch token and authority match the main PTY owner', async () => {
+    const snapshot = [
+      {
+        paneKey: PANE_KEY,
+        launchToken: 'launch-current',
+        connectionId: null,
+        state: 'working',
+        prompt: 'resume this session',
+        providerSession: { key: 'session_id', id: 'provider-session' },
+        receivedAt: 1_700_000_001_000,
+        stateStartedAt: 1_700_000_000_000
+      }
+    ]
+    getStatusSnapshot.mockReturnValue(snapshot)
+    getAgentResumePtyIdentityForPaneKey.mockReturnValue({
+      ptyId: 'pty-current',
+      launchToken: 'launch-current',
+      connectionId: null
+    })
+    const { registerAgentHookHandlers } = await import('./agent-hooks')
+    registerAgentHookHandlers()
+    const handler = handleHandlers.get('agentStatus:getSnapshot')!
+
+    expect(handler({})).toEqual([{ ...snapshot[0], ptyId: 'pty-current' }])
+
+    getAgentResumePtyIdentityForPaneKey.mockReturnValue({
+      ptyId: 'pty-reused',
+      launchToken: 'launch-new',
+      connectionId: null
+    })
+    expect(handler({})).toEqual(snapshot)
   })
 
   it('enriches the hook cache snapshot with runtime lineage metadata', async () => {

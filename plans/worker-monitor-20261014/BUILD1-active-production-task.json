@@ -1,0 +1,23 @@
+{
+  "task_id": "task_d0a255e2f646",
+  "dispatch_id": "ctx_a5ff3ffc2d3f",
+  "status": "ACTIVE_JOINT_SYNTHETIC_INTEGRATION",
+  "coordinator_handle": "term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54",
+  "runtime_id": "6627a505-a9ea-4b59-90e7-d051eb153516",
+  "worker_handle": "term_7127bcf7-89b5-4a5b-9c99-9b185d6662cc",
+  "objective": "Exercise actual reviewed ADAM producer against actual Dobius main bridge with two temporary DBs and synthetic trust/transport.",
+  "full_brief": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/BUILD1-adam-dobius-joint-integration-dispatch.txt",
+  "required_report": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/BUILD1-adam-dobius-joint-integration.md",
+  "required_report_key": "adam-dobius-joint-integration-20261016",
+  "gate_resolution": {
+    "gate_resolution": "Both exact independently reviewed source freezes verified. V4 PASS replaces rejected V3 gate in original queued specification. Execute synthetic interop only, no live/apply authority.",
+    "dobius_review_task": "task_4050055d577b",
+    "dobius_review_sha256": "b59821ee55e8c16c01f0c756a72845ebde2540c4a98109f24ab7083e04dc05df",
+    "dobius_source_aggregate": "d0bde5b35d036aa6cbcb69d85a13d7482f09baa6de8385f43a728c17bd1deddd",
+    "adam_review_task": "task_1788a470460e",
+    "adam_review_sha256": "194934d0d91c9149b7253fb74aaf9c0234984d7a347ba9982fb9b97a9235724d",
+    "adam_manifest_sha256": "ddb8bc73f8521af2563cf32cf1d67c1ae20c77fc3db7e65dfe7b22b24d38a96e",
+    "live_accepted": false,
+    "released_at": 1792169815.2184231
+  }
+}

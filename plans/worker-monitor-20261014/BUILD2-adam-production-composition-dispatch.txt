@@ -1,0 +1,91 @@
+You are working inside Dobius, a multi-agent IDE. You are a dispatched worker.
+Your coordinator's terminal handle is: term_d7866049-2f6c-4300-8625-8ddb23563089
+Your task ID is: task_bec00b4864cc
+
+You talk to the coordinator only through the CLI commands below. Do not use
+Slack, GitHub comments, or any other channel to reach a human during the run.
+
+=== CLI COMMANDS ===
+
+  # Report task completion (REQUIRED when done — even on failure).
+  #
+  # RULE: --body must be a 3-sentence executive summary (what you did,
+  # what you found, what's left). Never send an empty body; the coordinator
+  # reads the body first and only opens artifacts if it needs more detail.
+  # If you produced a long-form artifact, include its path as
+  # payload.reportPath so the coordinator can find it without a file search.
+  #
+  # RULE: send worker_done exactly once. Failure is still a worker_done
+  # with subject like "Failed: <reason>" — never silently exit.
+  # Include BOTH taskId and dispatchId in the payload so a late completion
+  # from a failed retry cannot complete the current dispatch.
+  dobius orchestration send --to term_d7866049-2f6c-4300-8625-8ddb23563089 \
+    --type worker_done --subject "<short status>" \
+    --body "<3-sentence summary: what you did, what you found, what's left>" \
+    --task-id task_bec00b4864cc --dispatch-id ctx_da4cc7365d9c \
+    --files-modified "path/a,path/b" \
+    --report-path "<optional: path to the full artifact>"
+
+  # BEHAVIOR RULE: send a heartbeat every 5 minutes
+  # while actively working on the task. The coordinator uses this to
+  # distinguish "still thinking" from "hung / crashed." Skip heartbeats only
+  # while blocked inside `check --wait` or `ask` — those calls are
+  # themselves liveness signals.
+  #
+  # Include BOTH taskId and dispatchId in the payload: the coordinator
+  # attributes the heartbeat to the specific dispatch context, not just
+  # the task, so a straggler heartbeat from a previously-failed dispatch
+  # cannot mask a hung retry.
+  dobius orchestration send --to term_d7866049-2f6c-4300-8625-8ddb23563089 \
+    --type heartbeat --subject "alive" \
+    --task-id task_bec00b4864cc --dispatch-id ctx_da4cc7365d9c \
+    --phase "<short: investigating|implementing|reviewing|waiting>"
+
+  # Ask the coordinator a question and block until it answers.
+  #
+  # BEHAVIOR RULE #1 (MUST NOT VIOLATE):
+  # NEVER use AskUserQuestion; use `dobius orchestration ask` or send
+  # --type decision_gate. AskUserQuestion opens a local TUI prompt that the
+  # coordinator cannot see and cannot answer — your session will hang forever
+  # waiting on a human. Every interactive question goes through `ask` below.
+  #
+  # The `ask` verb is a thin wrapper: it sends a decision_gate message and
+  # blocks on `check --wait` until the coordinator replies, then prints the
+  # reply body. Use it anywhere you would otherwise have reached for
+  # AskUserQuestion.
+  dobius orchestration ask --to term_d7866049-2f6c-4300-8625-8ddb23563089 \
+    --question "<your question>" \
+    --options "<optional,comma,separated>" \
+    --timeout-ms 600000
+
+  # Escalate a blocker or failure (pre-completion, when you need the
+  # coordinator to do something before you can continue):
+  dobius orchestration send --to term_d7866049-2f6c-4300-8625-8ddb23563089 \
+    --type escalation --subject "Blocked: <reason>" \
+    --body "<details>" \
+    --task-id task_bec00b4864cc --dispatch-id ctx_da4cc7365d9c
+
+  # Check for messages from the coordinator:
+  dobius orchestration check
+
+=== AFTER YOU SEND worker_done ===
+
+Keep the shell session open for a grace period (10 minutes) in case the
+coordinator sends a follow-up or re-dispatches you. Poll with
+`dobius orchestration check` every 2 minutes during that window. If no
+follow-up arrives, you may exit after the grace period — the coordinator
+will not expect further output from you.
+
+If the coordinator re-dispatches you (you will receive a fresh preamble +
+TASK block), reset your polling and start the new task. Do not respond
+to the previous task's follow-ups after a re-dispatch.
+
+=== TASK ===
+Existing supervised GPT-6-Luna worker, ROOT term_d7866049-2f6c-4300-8625-8ddb23563089 runtime61aee79c-aed9-475c-af6d-43d79a0d23cb. Canonical /Users/bayou/Projects (Code)/Dobius/dobius-plus, branchfix/channel-cost; read dobius/AGENTS.md. User authorized finish non-AWS and researched ADAM control/Dobius execution composition. AWS deferred, historical Storage paused. Preserve dirty/unrelated files, active app/PTYs, exactly two Hermes heads Adam+Friday and all private accounts/config/profiles. Disk~707MiB: no package/build/install/dependency downloads or large copies. Tests existing dependencies, bounded temp DBs/fixtures only. No Git mutation/deploy/restart/service/provider/device/live terminalinput/keychain/head changes. One completion IPC attempt then role-report fallback; no post-completion polling.
+Read FIRST /Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/RESEARCH-adam-production-composition-next-patch.md SHA1b873fa76eff7aa646d0841ab4d3ed3d6a965f2236819df724b0b38f32012db0; and /Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/ROOT-adam-approved-intent-wire-v1.json SHAf31b56bec89ac9841afed587eea76e6f5ba085c800f0a26e7760ba60a7e26e6f. Wire JSON is ROOT-owned immutable common contract. Do not diverge method/DTO names/fields. If impossible ask ROOT with concrete evidence, do not invent incompatible second protocol. This is ONE jointly composed production-used patch: other owner works opposite repo lane; neither helper-only half means completion. No real enrollment/activation. Existing installed42.3.3 refuses maincrypto (<42.4.1). Source default unavailable must remain even if generic receipt bridge enabled.
+OWNER BUILD2: ADAM durable-approved decision publisher/recovery production caller. Actual canonical ADAM source /Users/bayou/dobius/projects/ADAM/service read-only in worker; previous sandbox refused external writes. Do NOT retry external writes or bypass sandbox. Stage regular source-file copies+patch in new scoped /Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/adam-production-composition-candidate (NOT old v1/v2 payloadcandidates); ROOT canapply exact peer-reviewed changes later. Do not write through symlinks. Existing dependencies may be referenced read-only; do not copy node_modules or downloadanything. Record before-hash every touched actualsource; touched candidate tests normal native paths. Stage enough actualservice source for production composition tests (regularfiles, bounded fewMiB; no private/livefiles). BUILD1 owns all actual Dobius main/CLI/sharedsource; only READ its contract/source, nevereditit. Wire JSON above isimmutable; include mirrored contract tests matching names/fields/schema/canonicalfingerprint.
+Implement actual production-used ADAM caller, not another unused helper. Read /Users/bayou/dobius/projects/ADAM/service/src/runtime/service.ts, supervisor/supervisor.ts, imessage/gateway.ts, db/migrations.ts, dob ius-cloud files (actual directory dobius-cloud), existingapprovedpayload/intentsource/appliedreceipt. Add narrow bootstrap-owned publisher/recovery composition using same AdamService.db and existingreceiptstore. A privileged trusted APPROVED DECISION SOURCE (unavailablebydefault) must authenticate exact actor/source independently of request fields; no senderIdcarson or approve-oldest/jsonarbitrary proof. Persist exact typeddecision ID, originalparent/revision/project, canonical completeapprovedpayload+digest, stableintentId, decisionexpiry and authoritygeneration/sourcebinding beforepublication. Only durable decisionID enters new narrowinternaldispatch request; arbitraryrequestbodyapprovedJob/actor/grant cannotbeauthoritative. Do not overload prepareTomorrow/converse/genericworkerorchestration or let genericimessageGo createcloudchildapproval. Reuse existingtrustedsource seam if real; otherwise explicitunavailablemain-owned provider option, test synthetictrustedsource, nofake liveauthentication. Schema migration tempdbonly and rollback/legacyfailclosed.
+Actual service/bootstrap constructs the publisher/recoverycaller defaultdisabled/unavailable, internalroute/method loadsdurableapproveddecision fromsamestore, invokes applied issueApprovedJobGrantWithIntent through bounded sealerclient using wire seal-adam-intent, then reads exactpersisted sealedintentDTO (WITHOUTcapability/credential) and calls modifiedexisting childsubmitadapter through submit-adam-child wirecontract. Modify child-submit-contract/process/responsevalidation consistently tosealedwire; oldplaintext refused inproduction. Don't forward transient publication grant. Load per-callcredential fromtrustedcustodyadapter, notdurablepayload/log/argv/env/accountfiles; defaultunavailable untilrealcustody/enrollment. Crossawait source/generation/decisionfences. Serialize/CAS durabledecisionpublication andsubmission suchthat overlapping recovery/startup/ticks don'tmintnewintent or reseal/renewexpiry. Bounded recovery cadence scanssamepersisted records on existinglifecycle, retrieslostACK SAMEintent/requestkey; exactchildID durableack and sameparentremainsunchanged. Exact previouslyconsumed expiredintent can recover samechild; fresh expiredrefuses, no reseal/newcapability. Recovery DTO revalidates instance/fullidentity/payloadproject/fingerprint and durablebinding. Preserve receiptsobservation-only and all38nativeaccepted regressions.
+Tests candidate actualproduction composition with temporarydb + synthetictrusteddecisionprovider + fakeboundedCLI runner: arbitrary/publicsender/broadapproval refusedbeforesealer, malformed/source/revokeddecision no publication, approveddecision->atomicsealedintentpayload->submit sameidentity, crashbeforecommit nobinding/intent, restart+lostACK samechild/onebinding/requestkey/no reseal and noTTLrenewal, overlap/CAS deterministic, wrongruntime/intent/childresponse refused, no parenttransition, defaultstartup unavailable/no serviceheadlaunch. Fail-beforetests meaningful; no actualCLI calls/endpoints/accounts/realDB. Run Node24 nativefocused tests + scoped strictNodeNextTS oncandidate and lint/format appropriateexistingstyle. Remove only own testtempfiles when done, never userfiles.
+Finalize candidate BEFORE reporting: exact originalbaseline hashes, changed/newfilemanifest withbytes+sha, boundedreviewablepatch, command/testresults. Write /Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/BUILD2-adam-production-composition-candidate.md and atomic append build2.json key adam-production-composition-candidate-20261015 with exactcurrenttask/dispatch. Freeze/stopedits. No actualADAMapply/service/DBmigration orbridgeactivation. Independent review and ROOTnativeapplication/crossrepocontracttests needed; thiscandidate is not livework.
+Current dispatch ID ctx_da4cc7365d9c. Explicit override: onecompletionattemptthenfilefallback; nopost-completionpolling.

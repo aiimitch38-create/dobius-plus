@@ -1,0 +1,48 @@
+{
+  "status": "SOURCE_APPLIED_TARGETED_TESTS_TYPECHECK_PASS",
+  "at": "2026-10-14T21:35:44.314642+00:00",
+  "review_task": "task_fbe4d2531d62",
+  "review_dispatch": "ctx_bc5697918d39",
+  "aggregate_sha256": "989e56f6ca4d99662b2cb7adae242ecd2d535f7826784c18bab7375fa41f5555",
+  "source_only": true,
+  "live_service_or_database_changed": false,
+  "files": [
+    {
+      "path": "/Users/bayou/dobius/projects/ADAM/service/src/db/migrations.ts",
+      "baseline_sha256": "fc986082dae3175742421c5e3489370032e0c498b00d9de9a39b9adcd2c5954e",
+      "applied_sha256": "e54ea453716a30c938fb01a9f4f24658b0e257505a781e4ec20394f070adc26e"
+    },
+    {
+      "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/intent-contract.ts",
+      "baseline_sha256": null,
+      "applied_sha256": "60d148b77864bb83025e1d8cfeb6f0b3883d3d995759df306fbce165880a7ecd"
+    },
+    {
+      "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/intent-migration.ts",
+      "baseline_sha256": null,
+      "applied_sha256": "ce3c0b4bcc37e392361d08dbc04ab02a2d284c979a027e59400f52be092ef93e"
+    },
+    {
+      "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/intent-publication.ts",
+      "baseline_sha256": null,
+      "applied_sha256": "9cb9e986979a61a9ad7eba5fb9c9a46cbe63a849e5ad39e8264270fea1d12ba8"
+    },
+    {
+      "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/receipt-store.ts",
+      "baseline_sha256": "7f49efb0be1e500873b196ccb12478f19aa22e8d1167e7a465811a2dce4cf9a1",
+      "applied_sha256": "04d066e92024af51ed4e19cc58954f61bfc5c975d29fdcb0dc079c48b0dbc9c3"
+    },
+    {
+      "path": "/Users/bayou/dobius/projects/ADAM/service/tests/dobius-cloud-intents.test.ts",
+      "baseline_sha256": null,
+      "applied_sha256": "e06aa74c4c67d3ba4a2aa158cb03dd37c5ebe5aed422a2393c2036ccdcc6c128"
+    }
+  ],
+  "limits": "Atomic grant/intent publication source only; no OS sealer, authenticated unseal transport, planner/recovery worker or activation.",
+  "verified_at": "2026-10-14T21:38:09.152935+00:00",
+  "targeted_tests": "PASS: 30 tests / 3 files in actual ADAM checkout: 13 intent, 5 receipt receiver, 12 child-submit; all synthetic/disposable fixtures.",
+  "targeted_typecheck": "PASS: explicit-file strict NodeNext with exactOptionalPropertyTypes/noUncheckedIndexedAccess and --ignoreConfig; original source and new intent/submit modules/tests included.",
+  "production_sealer_available": false,
+  "unseal_transport_wired": false,
+  "planner_recovery_wired": false
+}

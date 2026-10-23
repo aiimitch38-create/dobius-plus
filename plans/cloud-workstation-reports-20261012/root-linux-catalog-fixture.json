@@ -1,0 +1,7 @@
+{
+  "state": "prepared",
+  "tag": "bcd8134e",
+  "source_file_count": 27,
+  "source_aggregate_sha256": "bcd8134e4c1735f61dd776b3c86257edacfe9404e414875df67a680ad9a52717",
+  "scope": "Isolated Linux source/temporary roots only, no production artifacts or source changes"
+}

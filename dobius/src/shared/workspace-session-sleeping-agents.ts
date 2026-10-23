@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { normalizeAgentProviderSession, RESUMABLE_TUI_AGENTS } from './agent-session-resume'
 import { isValidTerminalTabId } from './terminal-tab-id'
+import { agentResumeOwnerSchema, parseAgentResumeOwner } from './agent-resume-owner'
 
 const terminalTabIdSchema = z
   .string()
@@ -79,6 +80,12 @@ const sleepingAgentSessionRecordSchema = z.object({
   lastAssistantMessage: z.string().optional(),
   interrupted: z.boolean().optional(),
   connectionId: z.string().nullable().optional(),
+  // Why: legacy records stay available for manual recovery, but malformed or
+  // incomplete provenance must never become evidence for automatic resume.
+  resumeOwner: z.preprocess(
+    (raw) => parseAgentResumeOwner(raw) ?? undefined,
+    agentResumeOwnerSchema.optional()
+  ),
   launchConfig: sleepingAgentLaunchConfigSchema.optional(),
   origin: z.enum(['worktree-sleep', 'quit', 'live']).optional()
 })
@@ -97,7 +104,19 @@ export const sleepingAgentSessionsByPaneKeySchema = z.preprocess((raw) => {
     }
     const parsed = sleepingAgentSessionRecordSchema.safeParse(value)
     if (parsed.success && parsed.data.paneKey === paneKey) {
-      cleaned[paneKey] = parsed.data
+      const { resumeOwner, ...record } = parsed.data
+      const ownerMatchesRecord = Boolean(
+        resumeOwner &&
+        resumeOwner.paneKey === record.paneKey &&
+        resumeOwner.worktreeId === record.worktreeId &&
+        resumeOwner.agent === record.agent &&
+        resumeOwner.providerSession.key === record.providerSession.key &&
+        resumeOwner.providerSession.id === record.providerSession.id &&
+        (resumeOwner.authority.kind === 'local'
+          ? record.connectionId === null
+          : resumeOwner.authority.connectionId === record.connectionId)
+      )
+      cleaned[paneKey] = ownerMatchesRecord ? parsed.data : record
     }
   }
 

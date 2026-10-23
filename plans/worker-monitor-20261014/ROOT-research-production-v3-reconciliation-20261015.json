@@ -1,0 +1,16 @@
+{
+  "verdict": "CHANGES_REQUIRED",
+  "dispatch_id": "ctx_191cc095469c",
+  "report": "plans/worker-monitor-20261014/RESEARCH-adam-production-composition-v3-review.md",
+  "report_sha256": "8b5fdfb583701b039e1070a99f470a0840bd3d8f8cbaeb440e93f17d579e7049",
+  "manifest_sha256": "8ce0583a2f24ca3a3d61d97767c95b3e24676a44522741d3408fcb009555567c",
+  "frozen_files_verified": 81,
+  "baselines_verified": 18,
+  "independent_tests": "65/65 in8suites Node24",
+  "root_reproduced": [
+    "signal-during-once-unresolved exits0 before stop",
+    "signal-stop-with-unref-deadline exits0 before retry"
+  ],
+  "source_accepted": false,
+  "live_installed": false
+}

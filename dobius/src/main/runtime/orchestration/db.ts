@@ -580,6 +580,9 @@ export class OrchestrationDb {
     if (status === 'completed') {
       this.promoteReadyTasks(id)
       this.completeActiveDispatchForTask(id)
+    } else if (status === 'failed') {
+      // A terminal failure must release the worker without promoting dependent work.
+      this.failActiveDispatchForTask(id, 'Task marked failed by coordinator.')
     }
 
     return this.getTask(id)

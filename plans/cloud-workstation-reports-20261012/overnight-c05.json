@@ -1,0 +1,543 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-13T20:38:27.309Z",
+  "role": "OVERNIGHT",
+  "package": "C05",
+  "status": "FROZEN_AWAITING_ROOT_REVIEW",
+  "terminal": "term_b41fe8b1-4141-463e-a405-ce06124b6ae4",
+  "coordinator": "term_f4a4221f-4226-4419-aa87-dc2489beb812",
+  "canonical_repository": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+  "branch": "fix/channel-cost",
+  "head": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+  "reviewer": "ROOT",
+  "peer_review": {
+    "status": "AWAITING_ROOT_ACCEPTANCE_FOR_SHORT_WRITE_CORRECTION",
+    "next_reviewer": "ROOT",
+    "routing": "New exact seven-file C05 source freeze is ready for Node 24 acceptance and peer review; prior 615566d2 freeze is superseded."
+  },
+  "owns": [
+    "dobius/src/main/automations/workstation-worker/",
+    "dobius/src/shared/workstation-worker.ts",
+    "dobius/config/scripts/workstation-worker/"
+  ],
+  "frozen_files_sha256": {
+    "dobius/config/scripts/workstation-worker/README.md": "0359d5309f35fa6e803633e328222c9961a342e0e597f09a77cd740cc98f8c47",
+    "dobius/src/main/automations/workstation-worker/cancellation.ts": "c9ab2373fff852adcb04e79430b4f8719a6959053e5e381276b3bd31e38fbe02",
+    "dobius/src/main/automations/workstation-worker/lease-sealer-key-file.ts": "d3d82865666997ac67571eba4f33296bb99d4061d22935461ef6926ec790ea1f",
+    "dobius/src/main/automations/workstation-worker/lease-sealer.test.ts": "76719bf7511b1a5f6bcb72f85a26a7c1fa5872e67fb867e9c2cc3e21de3aa40c",
+    "dobius/src/main/automations/workstation-worker/lease-sealer.ts": "5e938fa52bd79aaa7d98d6bfd9812e3f191f8ed66069caa63c22776d6499a424",
+    "dobius/src/main/automations/workstation-worker/process-identity.ts": "df4fe98ee36046fee75b274aded7be5448d3b058e2793b7aa11dff55efe22119",
+    "dobius/src/main/automations/workstation-worker/worker.test.ts": "e9f531d29752de4b9636fe906cfeb3ff0aa2d5f80bf26839e7cd7b154364f2e2"
+  },
+  "manifest_sha256": "2be1bd0d9e7ba187daf18c8e73fcd239ca56930b90ebdf09f1812f05cee0dd8e",
+  "manifest_digest_encoding": "sha256 of sorted compact JSON object frozen_files_sha256; UTF-8, separators comma/colon",
+  "changes": [
+    "Add an injectable executor/queue port with stable enrolled device identity, fixed local recipe argv and strict job schema; job payloads cannot supply command text or executable paths.",
+    "Verify canonical enrolled repository and linked worktree, exact Git HEAD revision, recipe permissions and registered resource caps before spawning with shell:false.",
+    "Persist launch intent, attempt/job/worker/incarnation/boot identity, PID/start/PGID, owned descendant observations, worktree/profile identity, output cursor and a sealed lease receipt in an atomic private journal; add an exclusive worker lock with stale-owner identity checks.",
+    "Bound runtime and output, keep an exact 64 KiB byte tail, hash fixed recipe-allowlisted artifacts under a byte/count cap, and fence heartbeat/result/stop failures as ambiguous.",
+    "Cancel only the recorded process group and observed descendants after PID/start checks; retain the attempt until the queue accepts a cleanup receipt. On restart, reconcile server lease and process identity, resume heartbeats for a surviving same-boot process, and never replay its recipe.",
+    "Define exactly three exclusive Hermes profile/worktree registration slots and refuse launch unless pinned runtime and auth are verified; no Hermes executable, auth, provider or profile was inspected or configured.",
+    "Document supervisor, service UID, private state, backoff, bounded logs, OS resource enforcement and enrollment gates without installing a service.",
+    "Require an authenticated fresh start permit before launch intent/spawn, bound to attempt, stable worker/profile ID, target device, Hermes profile, root, worktree, recipe, exact revision and all resource caps; recheck permit expiry and canonical local execution identity immediately before spawn.",
+    "Separate stable worker/profile ID from enrolled hardware device ID throughout registry and queue lease/receipt semantics; validate worker and attempt identifiers against a path/control-safe allowlist.",
+    "Add temporary marker regressions for rejected schema-valid leases, mismatched permits, and permits expiring during prelaunch verification; all prove no executable side effect occurs.",
+    "Require a clean initial Git worktree at the exact requested HEAD; reject tracked edits and untracked files without resetting or deleting user content.",
+    "Capture bounded post-run source-change status/diff hashes as attempt result evidence so intentional agent edits remain in place and attributable.",
+    "Fence each physical worktree and Hermes home across worker processes and separate journal paths using a shared private coordination directory; hold reservations until cleanup and queue settlement are proven.",
+    "Replace stale-lock reclamation with fail-closed directory locks. Never auto-unlink stale or replaced lock identities; require explicit operator reconciliation.",
+    "Require canonical private Hermes profile homes owned by the service account, pin root/worktree/profile-home device/inode identity across awaited authorization, and recheck identities immediately before spawn.",
+    "Require exact live PID start-time and PGID identity before cancellation signals; missing process inspection is unknown and refuses numeric process-group signaling.",
+    "Probe process inspection during worker construction before journals or claims, so a runner that denies ps cannot spawn a recipe child.",
+    "Serialize reconcile and cancel journal mutations with the supervisor lock; hold the lock through a recovered watcher and release it after terminal settlement.",
+    "Recover physical worktree/profile reservations only after exact process identity and queue ownership reconcile; transfer stale owner records through a guarded atomic claim and fail closed on changed identity.",
+    "Recovered watchers stop renewal when PID/start/PGID identity is not positively observable and enforce the original persisted deadline/output state.",
+    "Add real temporary root/worktree inode replacement and unavailable-process-inspection startup regressions.",
+    "Track recovered watcher lifecycle as an owned promise and expose drainRecovery() so shutdown and fixtures can await the actual finalizer.",
+    "Catch watcher and finalizer errors, persist bounded recoveryError evidence, fence a still-running attempt as ambiguous, and keep reservation locks fail-closed when journal updates fail.",
+    "Update reattachment and remaining-wall fixtures to await recovered watcher finalization; add an owner-replacement regression for observable finalizer failure.",
+    "Correct the worker README to describe implemented local root/worktree identity, clean revision, and active reservation checks while retaining server mount/provisioning and OS containment limits.",
+    "Add a POSIX durable lease sealer using a private canonical mode-0700 state directory, exclusive atomic 256-bit key creation, no-follow bounded key reads, stable restart decryption, AES-256-GCM versioned AAD, and fail-closed tamper/key replacement handling; no production key was generated and the worker does not auto-wire it.",
+    "Route every worker process-group TERM/KILL through a fresh recorded PID/start/PGID ownership check, including startup cleanup; unknown ownership remains ambiguous with reservation held. Add an injected identity-replacement regression proving no unowned TERM/KILL is sent.",
+    "Loop over partial key writes until all 32 bytes are stored; reject zero or invalid progress, fsync and verify temporary file identity/size/contents before exclusive hard-link publication, and remove only the temporary file this initializer created.",
+    "Add injected short-write, zero-progress, changed-temporary-content, and existing-exclusive-temp regressions proving incomplete keys are never published and pre-existing temporary files/errors are preserved.",
+    "Reject oversized sealed lease strings before key IO, regex matching, or base64 decoding."
+  ],
+  "validation": [
+    {
+      "command": "node_modules/.bin/oxlint src/shared/workstation-worker.ts src/main/automations/workstation-worker && node_modules/.bin/tsgo --noEmit -p config/tsconfig.node.json",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "exit_code": 0,
+      "stage": "post-correction static checks",
+      "result": "C05 lint and full application Node typecheck passed."
+    },
+    {
+      "command": "node_modules/.bin/oxlint src/shared/workstation-worker.ts src/main/automations/workstation-worker && node_modules/.bin/tsgo --ignoreConfig --noEmit --strict --skipLibCheck --types node --target ES2022 src/shared/workstation-worker.ts src/main/automations/workstation-worker/index.ts src/main/automations/workstation-worker/worker.test.ts",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "exit_code": 0,
+      "stage": "final candidate static checks",
+      "result": "C05 lint and focused strict source/test typecheck passed."
+    },
+    {
+      "command": "node_modules/.bin/oxlint src/shared/workstation-worker.ts src/main/automations/workstation-worker && node_modules/.bin/tsgo --ignoreConfig --noEmit --strict --skipLibCheck --types node --target ES2022 src/shared/workstation-worker.ts src/main/automations/workstation-worker/index.ts src/main/automations/workstation-worker/worker.test.ts",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "exit_code": 0,
+      "stage": "final candidate static checks",
+      "result": "C05 lint and focused strict source/test typecheck passed."
+    },
+    {
+      "command": "node_modules/.bin/oxlint src/shared/workstation-worker.ts src/main/automations/workstation-worker && node_modules/.bin/tsgo --ignoreConfig --noEmit --strict --skipLibCheck --types node --target ES2022 src/shared/workstation-worker.ts src/main/automations/workstation-worker/index.ts src/main/automations/workstation-worker/worker.test.ts",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "exit_code": 0,
+      "stage": "final candidate static checks",
+      "result": "Focused C05 lint and strict source/test typecheck passed."
+    },
+    {
+      "command": "node_modules/.bin/vitest run --config config/vitest.config.ts src/main/automations/workstation-worker/worker.test.ts --maxWorkers=1",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "stage": "final frozen ROOT acceptance",
+      "status": "PASS",
+      "note": "Run after this freeze. Previous post-freeze candidate had 25 passes and one failed assertion; not a pass.",
+      "exit_code": 0,
+      "result": "27 temporary-fixture tests passed; Vitest completed without unhandled rejections. Recovery lifecycle tests awaited the tracked finalizer."
+    },
+    {
+      "command": "node_modules/.bin/tsgo --noEmit -p config/tsconfig.node.json",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "exit_code": 1,
+      "stage": "full application check after latest C02 lane movement",
+      "result": "C05 had already passed focused strict source/test typecheck. Full application check now reports four unused declarations in out-of-scope dobius/src/main/automations/cloud-jobs/store.ts (CapacitySample, WorkerStartBinding, WorkerStopProof, local job); no C05 findings. No C02 files edited."
+    },
+    {
+      "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm exec vitest run --config config/vitest.config.ts src/main/automations/workstation-worker/lease-sealer.test.ts src/main/automations/workstation-worker/worker.test.ts",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "runtime": "Node v24.18.0",
+      "exit_code": 0,
+      "tests_total": 39,
+      "tests_passed": 38,
+      "tests_failed": 0,
+      "tests_skipped": 1,
+      "result": "Focused sealer and worker fixture suites passed; one Windows-only test skipped."
+    },
+    {
+      "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm run typecheck:node",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "runtime": "Node v24.18.0",
+      "exit_code": 0,
+      "result": "Full application Node typecheck passed with the current shared capacity DTO."
+    },
+    {
+      "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm exec oxlint src/main/automations/workstation-worker/lease-sealer.ts src/main/automations/workstation-worker/lease-sealer-key-file.ts src/main/automations/workstation-worker/lease-sealer.test.ts src/main/automations/workstation-worker/cancellation.ts src/main/automations/workstation-worker/process-identity.ts src/main/automations/workstation-worker/worker.test.ts",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "runtime": "Node v24.18.0",
+      "exit_code": 0,
+      "result": "Focused lint passed."
+    },
+    {
+      "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm exec oxfmt --check src/main/automations/workstation-worker/lease-sealer.ts src/main/automations/workstation-worker/lease-sealer-key-file.ts src/main/automations/workstation-worker/lease-sealer.test.ts config/scripts/workstation-worker/README.md src/main/automations/workstation-worker/cancellation.ts src/main/automations/workstation-worker/process-identity.ts src/main/automations/workstation-worker/worker.test.ts",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "runtime": "Node v24.18.0",
+      "exit_code": 0,
+      "result": "All seven frozen files passed formatting check."
+    }
+  ],
+  "tool_versions": {
+    "node": "v24.18.0",
+    "pnpm": "10.24.0",
+    "vitest": "4.1.5",
+    "oxlint": "1.71.0",
+    "oxfmt": "0.52.0",
+    "typescript_native_preview": "7.0.0-dev.20260421.2",
+    "repository_node_requirement": "24"
+  },
+  "integration_limitations": [
+    "No authenticated RPC adapter, scheduler loop, C02/C04 integration, queue database migration, or VPS authority is connected. QueuePort is an interface only; ROOT owns transport, auth and reservation wiring.",
+    "Wall-time/output/artifact limits are enforced in-process. Memory/CPU values are admission ceilings until launchd/systemd plus Linux cgroups or verified macOS resource controls are configured and measured.",
+    "POSIX process groups and a 100 ms ancestry scan catch tested detached descendants, but they are not OS-enforced containment and can miss a descendant that escapes and exits between scans. Do not treat the stop receipt as deployment proof until host-specific containment is independently verified. Windows is explicitly refused.",
+    "Root and worktree canonical paths and exact HEAD are checked locally; device/inode, mount identity, dirty/untracked source manifest, exclusive worktree leasing across device profiles and physical storage-pool attestation remain server enrollment/reservation responsibilities.",
+    "Artifact evidence covers only registered relative files. No remote artifact upload/store is connected. Logs remain local in the private journal and are not published by this slice.",
+    "Hermes slot contracts are declarations only. Actual Hermes binary/version, supported arguments/resume, profile homes, credentials, tool permissions, provider budget and isolation remain unverified; no model/provider calls or real project job ran.",
+    "No launchd/systemd service was installed or exercised. No AWS connection or historical external-drive queue action occurred; AWS and the historical queue remain deferred/paused.",
+    "All local workers must be configured with the same private coordinationPath on a device. Stale/unreadable reservation directories fail closed and require operator verification; no automatic stale-lock deletion or lock-transfer RPC is implemented.",
+    "The portable worker enforces wall time, output-byte and artifact-evidence caps. MemoryBytes and CPUCount are validated admission ceilings only; no cgroup, rlimit, macOS resource limit, or hard CPU/RSS enforcement is implemented.",
+    "After supervisor restart the prior stdout/stderr pipes cannot be reattached, so output already persisted is checked but additional bytes from a surviving process cannot be measured. Recipes requiring strict restart-time output enforcement remain disabled.",
+    "Recovery depends on working POSIX process inspection. If PID/start/PGID cannot be positively inspected or cleanup cannot be proven, the worker leaves journal/resource locks fenced and does not rerun.",
+    "The new durable lease sealer is a local POSIX file-key primitive and is not automatically wired into the worker or production state; no user-state key was created. Windows remains unsupported pending verified ACL enforcement.",
+    "The current six-file freeze has only local Node v26 validation; ROOT Node 24 acceptance and peer review remain pending."
+  ],
+  "preservation": {
+    "git_mutations": false,
+    "installed_or_deployed": false,
+    "model_or_provider_calls": false,
+    "real_project_jobs": false,
+    "additional_agents_spawned": false,
+    "C02_or_C04_files_edited": false,
+    "unrelated_dirty_work": "preserved",
+    "aws": "deferred",
+    "historical_external_drive_queue": "paused"
+  },
+  "api_contract_coordination": {
+    "build2_api_changes_for_c05_and_root": "Read and acknowledged from build2.json.",
+    "root_authority": "ROOT adapter must bind authenticated C02 claims to server-owned CloudRootAuthority.getFreshRoot({projectId, deviceId}); job paths confer no authority. C05 canonical root and exact revision checks are an additional local execution gate.",
+    "reservation": "CloudWorker.reservedBytes is total heartbeat reservation including queue-owned estimates; adapter reports once without double counting. C05 does not implement the adapter.",
+    "routing": "ROOT to coordinate these meanings with C02 and route BUILD2 review, followed by ROOT review."
+  },
+  "reported_findings_recheck": {
+    "unused_active_field": "No unused active field remains; full Node typecheck passes.",
+    "HEARTBEAT_MS": "No unresolved HEARTBEAT_MS reference remains; full Node typecheck passes.",
+    "start_before_queue_authority": "Fresh authenticated start permit is required before launch intent and spawn; rejected/fake leases have zero child side effects.",
+    "worktree_profile_collision": "Shared execution reservations fence physical worktrees and profile homes across independent state paths.",
+    "stale_lock_unlink": "Stale lock reclamation was removed; stale/replaced lock identities fail closed without unlink.",
+    "dirty_source_and_profile_home": "Dirty/untracked initial source, symlinked homes and identity replacement are rejected; agent-created result edits are preserved and hashed.",
+    "lifecycle": "Cancellation ownership checks, cleanup-proof reservation fencing, same-boot reattachment, reboot ambiguity and no-replay behavior retained."
+  },
+  "start_authorization_boundary": {
+    "queue_contract": "QueuePort.authorizeStart must authenticate the durable lease, ownership, current device/root authority and reservation before returning a permit. This interface is not an authenticated transport implementation.",
+    "permit_binding": [
+      "attemptId",
+      "workerId",
+      "deviceId",
+      "profileId",
+      "rootId",
+      "worktreeId",
+      "recipeId",
+      "sourceRevision",
+      "caps"
+    ],
+    "pre_spawn_checks": "Permit expiry is checked after fresh authorization and again after durable launch-intent journaling; root/worktree canonical paths, linked-worktree status, exact HEAD, recipe executable/argv and profile home are resolved again immediately before spawn.",
+    "identity": "Queue claims, lease receipts and stop receipts use registry.workerId. WorkerJob.deviceId remains the enrolled hardware target; a device may host distinct worker/profile identities."
+  },
+  "additional_boundary_findings": {
+    "BUILD2_2026-10-13": {
+      "status": "CORRECTED_PENDING_ROOT_ACCEPTANCE",
+      "corrections": [
+        "bounded TERM-to-KILL cleanup",
+        "serialized monotonic lease renewal with identity/token checks and stale-write fencing",
+        "remaining launch deadline on recovery",
+        "exact identity required for cancellation",
+        "journal supervisor lock and duplicate watcher fence",
+        "guarded stale execution reservation adoption",
+        "pre-spawn ps identity preflight",
+        "root/worktree inode replacement fixtures"
+      ],
+      "environment": "BUILD2 process listing was denied for ps and pgrep; its spawn-suite run is NONPASS environment and is not counted as validation. ROOT-owned acceptance run is pending against this post-correction freeze."
+    }
+  },
+  "build2_sandbox_note": "BUILD2 previously reported its environment denied ps and pgrep; its spawn suite result is NONPASS environment, not a C05 pass. The ROOT-owned post-freeze acceptance suite passed against this exact manifest.",
+  "superseded_freeze": {
+    "manifest_sha256": "369873fc4e610bf80f66b9d7b133387ddf0049c5004b5d03a50e4ece044f2e91",
+    "actual_root_acceptance": {
+      "exit_code": 1,
+      "result": "26 tests passed but Vitest emitted one unhandled rejection in WorkerInstanceLock.release during recovered watcher finalization; not a PASS."
+    }
+  },
+  "root_acceptance_provenance": {
+    "previous_exact18_candidate": {
+      "exit_code": 1,
+      "tests_passed": 26,
+      "unhandled_rejections": 1,
+      "counted_as_pass": false
+    },
+    "previous_tracked_lifecycle_candidate": {
+      "exit_code": 1,
+      "tests_passed": 25,
+      "tests_failed": 1,
+      "counted_as_pass": false
+    },
+    "previous_finalizer_test_candidate": {
+      "exit_code": 1,
+      "tests_passed": 25,
+      "tests_failed": 1,
+      "counted_as_pass": false
+    },
+    "final_candidate": {
+      "manifest_sha256": "5f413517dd2f7e866fa3aac93023876a9cf3b7f356f64009d1fb6d284f487982",
+      "exit_code": 0,
+      "tests_passed": 27,
+      "tests_failed": 0,
+      "unhandled_rejections": 0,
+      "status": "PASS"
+    },
+    "current_freeze": {
+      "manifest_sha256": "2be1bd0d9e7ba187daf18c8e73fcd239ca56930b90ebdf09f1812f05cee0dd8e",
+      "status": "PENDING_ROOT_ACCEPTANCE",
+      "local_runtime": "Node v24.18.0",
+      "focused_tests_total": 39,
+      "focused_tests_passed": 38,
+      "focused_tests_failed": 0,
+      "focused_tests_skipped": 1,
+      "external_dependencies": {
+        "c02_freeze_manifest_prefix": "4c9cdbeb",
+        "capacity_field": "externalReservedBytes",
+        "sha256": {
+          "dobius/src/shared/workstation-worker.ts": "cadf24ad5ce68f1c6426c3102bb42d880e0d36790401c6808ff994e96ce7adea",
+          "dobius/src/shared/cloud-worker-enrollment.ts": "b8fe2de17817a67861584595a859c224503c03b00fa7084e627c3547d57e180e",
+          "dobius/src/shared/cloud-jobs.ts": "49d61c89d6688a928839b598bbee90b4053cdd3b8c807d027087b4cb3a0d8348"
+        },
+        "ownership": "External C02 dependency; no shared source file was edited for this correction."
+      }
+    }
+  },
+  "superseded_freezes": [
+    {
+      "manifest_sha256": "79e417b2deb0e2e8f119024ff94568abc15090a6bf81de23684518e97960c7c0",
+      "root_acceptance": {
+        "exit_code": 1,
+        "tests_passed": 25,
+        "tests_failed": 1,
+        "result": "The new finalizer test exposed stale in-memory phase overwriting settled journal state while persisting recoveryError. This candidate is superseded."
+      }
+    },
+    {
+      "manifest_sha256": "66dba2cd098670b1e17cc5ef87e6296ad9883f2a2a040892d6c5d6274a91bb54",
+      "root_acceptance": {
+        "exit_code": 1,
+        "tests_passed": 25,
+        "tests_failed": 1,
+        "result": "The reattachment test attempted to induce a lock-release error but the race did not reliably produce a persisted error. Replaced this with a deterministic recovered-lifecycle finalizer regression; superseded."
+      }
+    },
+    {
+      "manifest_sha256": "5f413517dd2f7e866fa3aac93023876a9cf3b7f356f64009d1fb6d284f487982",
+      "manifest_digest_encoding": "sha256 of sorted compact JSON object frozen_files_sha256; UTF-8, separators comma/colon",
+      "frozen_files_sha256": {
+        "dobius/config/scripts/workstation-worker/README.md": "b183eaff9e99e7a6958cc63384c83cbd82ea125a79760e8a430a322cad8717df",
+        "dobius/src/main/automations/workstation-worker/artifact-evidence.ts": "259c9cde79f2d599387a535dfd9be31de02c32e5e496244a618f068f70ee4044",
+        "dobius/src/main/automations/workstation-worker/attempt-observer.ts": "31035ef8031365a22f827bde19cc513c6d01e342eb3d9aa42ba511e6dd3acd81",
+        "dobius/src/main/automations/workstation-worker/cancellation.ts": "d982cfc449e1287393969ab7710cad3b51c4621605e35eb26a690bb46dd11460",
+        "dobius/src/main/automations/workstation-worker/execution-reservation.ts": "4290bbf4dd437fbc9c80e57c5f59ebcdb804b8d2bb33d918990930990cfa025c",
+        "dobius/src/main/automations/workstation-worker/index.ts": "6b46f959b42c97a4b4165bd7b558914bed46660f60bdf8c665f00d42624037ba",
+        "dobius/src/main/automations/workstation-worker/instance-lock.ts": "4cbf9d9b4daf6184a4b705eb79360380910c860792032a5507f01f0040d66dee",
+        "dobius/src/main/automations/workstation-worker/journal.ts": "0d38fbff3c33b669e2e7b15815e87b618c6e2133e473edad4069cb382b2ddc54",
+        "dobius/src/main/automations/workstation-worker/lease-renewal.ts": "efa112d93b0b7ed499f2aedc46cc6f3e2562808e00adff3ca93bf54aecf8f9ee",
+        "dobius/src/main/automations/workstation-worker/process-identity.ts": "ddc83e277969d4239794f6dcaac522077a7a106881b9919747c15e35764735ec",
+        "dobius/src/main/automations/workstation-worker/recovered-lifecycle.ts": "73e3258609552e23a8c70f94ed272612f96b5b7b15dad93a9c0ae5c1ee856634",
+        "dobius/src/main/automations/workstation-worker/recovered-reservation.ts": "2df65fa6997b6a8db08122cb6f048cfde5c8ec215658c21dc88948612c177281",
+        "dobius/src/main/automations/workstation-worker/recovery-watcher.ts": "7ee59bb7e3c0b138e39277a4d708f5484ce9bf703b59a98637c1b0272e5c81cf",
+        "dobius/src/main/automations/workstation-worker/registry.ts": "d41e82985045f9e4e754e866e9e5102e46daa28027c57f4262c6f7d823c64a70",
+        "dobius/src/main/automations/workstation-worker/source-change-evidence.ts": "90d4ed5abd2e187aa5f52b1327107b86d7b0416ac393f426d4283e8b8ad71ea8",
+        "dobius/src/main/automations/workstation-worker/start-authorization.ts": "8bc6b921f75beaa03bdb873009ad633039df961e4e0e5bfb38c748d5f9d2345f",
+        "dobius/src/main/automations/workstation-worker/worker.test.ts": "6c5a58feee4dea47bde984a100816d2676a989d4b77b9cb779ac82e3b2001c60",
+        "dobius/src/main/automations/workstation-worker/worker.ts": "85e9f5f0e33f1e21d4ccdf3bd18e3838dc18208e1e5b15eea210173b915ecb90",
+        "dobius/src/shared/workstation-worker.ts": "9e4dd7b8940b5b99339d8ca2ad0d1c9707e7f566c50cde52964528eca0253e79"
+      },
+      "root_acceptance": {
+        "manifest_sha256": "5f413517dd2f7e866fa3aac93023876a9cf3b7f356f64009d1fb6d284f487982",
+        "exit_code": 0,
+        "tests_passed": 27,
+        "tests_failed": 0,
+        "unhandled_rejections": 0,
+        "status": "PASS"
+      },
+      "superseded_reason": "Superseded by the six-file durable lease sealer and owned-group cancellation correction freeze; prior ROOT PASS remains historical evidence for its exact prior source."
+    },
+    {
+      "manifest_sha256": "615566d22f7e9bcef25c1ceb68af01173c7b6aba18b4468170a11ad9a9778dea",
+      "frozen_files_sha256": {
+        "dobius/config/scripts/workstation-worker/README.md": "0359d5309f35fa6e803633e328222c9961a342e0e597f09a77cd740cc98f8c47",
+        "dobius/src/main/automations/workstation-worker/cancellation.ts": "c9ab2373fff852adcb04e79430b4f8719a6959053e5e381276b3bd31e38fbe02",
+        "dobius/src/main/automations/workstation-worker/lease-sealer.test.ts": "dd86ecbcb867557e368e523253d8d0c789d90cda1247a8be9ff909a29de320b0",
+        "dobius/src/main/automations/workstation-worker/lease-sealer.ts": "72182bfe1fad95cb1e4bf8ae64951e3242017e031b733c4abff9a52acbd778df",
+        "dobius/src/main/automations/workstation-worker/process-identity.ts": "df4fe98ee36046fee75b274aded7be5448d3b058e2793b7aa11dff55efe22119",
+        "dobius/src/main/automations/workstation-worker/worker.test.ts": "e9f531d29752de4b9636fe906cfeb3ff0aa2d5f80bf26839e7cd7b154364f2e2"
+      },
+      "manifest_digest_encoding": "sha256 of sorted compact JSON object frozen_files_sha256; UTF-8, separators comma/colon",
+      "root_acceptance": {
+        "prior_suite": "ROOT Node 24 focused suite passed 34 tests with one Windows-only skip, as reported by ROOT.",
+        "disposition": "Superseded after RESEARCH identified incomplete temporary key publication on short writes."
+      }
+    }
+  ],
+  "current_freeze": {
+    "recorded_at": "2026-10-13T20:38:27.309Z",
+    "manifest_sha256": "2be1bd0d9e7ba187daf18c8e73fcd239ca56930b90ebdf09f1812f05cee0dd8e",
+    "frozen_files_sha256": {
+      "dobius/config/scripts/workstation-worker/README.md": "0359d5309f35fa6e803633e328222c9961a342e0e597f09a77cd740cc98f8c47",
+      "dobius/src/main/automations/workstation-worker/cancellation.ts": "c9ab2373fff852adcb04e79430b4f8719a6959053e5e381276b3bd31e38fbe02",
+      "dobius/src/main/automations/workstation-worker/lease-sealer-key-file.ts": "d3d82865666997ac67571eba4f33296bb99d4061d22935461ef6926ec790ea1f",
+      "dobius/src/main/automations/workstation-worker/lease-sealer.test.ts": "76719bf7511b1a5f6bcb72f85a26a7c1fa5872e67fb867e9c2cc3e21de3aa40c",
+      "dobius/src/main/automations/workstation-worker/lease-sealer.ts": "5e938fa52bd79aaa7d98d6bfd9812e3f191f8ed66069caa63c22776d6499a424",
+      "dobius/src/main/automations/workstation-worker/process-identity.ts": "df4fe98ee36046fee75b274aded7be5448d3b058e2793b7aa11dff55efe22119",
+      "dobius/src/main/automations/workstation-worker/worker.test.ts": "e9f531d29752de4b9636fe906cfeb3ff0aa2d5f80bf26839e7cd7b154364f2e2"
+    },
+    "scope": "C05 durable lease sealer short-write correction, temporary key verification, bounded sealed input, and owned-group cancellation freeze.",
+    "validation": [
+      {
+        "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm exec vitest run --config config/vitest.config.ts src/main/automations/workstation-worker/lease-sealer.test.ts src/main/automations/workstation-worker/worker.test.ts",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "runtime": "Node v24.18.0",
+        "exit_code": 0,
+        "tests_total": 39,
+        "tests_passed": 38,
+        "tests_failed": 0,
+        "tests_skipped": 1,
+        "result": "Focused sealer and worker fixture suites passed; one Windows-only test skipped."
+      },
+      {
+        "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm run typecheck:node",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "runtime": "Node v24.18.0",
+        "exit_code": 0,
+        "result": "Full application Node typecheck passed with the current shared capacity DTO."
+      },
+      {
+        "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm exec oxlint src/main/automations/workstation-worker/lease-sealer.ts src/main/automations/workstation-worker/lease-sealer-key-file.ts src/main/automations/workstation-worker/lease-sealer.test.ts src/main/automations/workstation-worker/cancellation.ts src/main/automations/workstation-worker/process-identity.ts src/main/automations/workstation-worker/worker.test.ts",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "runtime": "Node v24.18.0",
+        "exit_code": 0,
+        "result": "Focused lint passed."
+      },
+      {
+        "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm exec oxfmt --check src/main/automations/workstation-worker/lease-sealer.ts src/main/automations/workstation-worker/lease-sealer-key-file.ts src/main/automations/workstation-worker/lease-sealer.test.ts config/scripts/workstation-worker/README.md src/main/automations/workstation-worker/cancellation.ts src/main/automations/workstation-worker/process-identity.ts src/main/automations/workstation-worker/worker.test.ts",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "runtime": "Node v24.18.0",
+        "exit_code": 0,
+        "result": "All seven frozen files passed formatting check."
+      }
+    ],
+    "external_dependencies": {
+      "c02_freeze_manifest_prefix": "4c9cdbeb",
+      "capacity_field": "externalReservedBytes",
+      "sha256": {
+        "dobius/src/shared/workstation-worker.ts": "cadf24ad5ce68f1c6426c3102bb42d880e0d36790401c6808ff994e96ce7adea",
+        "dobius/src/shared/cloud-worker-enrollment.ts": "b8fe2de17817a67861584595a859c224503c03b00fa7084e627c3547d57e180e",
+        "dobius/src/shared/cloud-jobs.ts": "49d61c89d6688a928839b598bbee90b4053cdd3b8c807d027087b4cb3a0d8348"
+      },
+      "ownership": "External C02 dependency; no shared source file was edited for this correction."
+    },
+    "root_acceptance": "PENDING"
+  },
+  "new_c05_sealer_cancel_freeze": {
+    "recorded_at": "2026-10-13T20:10:57.692Z",
+    "repository": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+    "paths_sha256": {
+      "dobius/config/scripts/workstation-worker/README.md": "0359d5309f35fa6e803633e328222c9961a342e0e597f09a77cd740cc98f8c47",
+      "dobius/src/main/automations/workstation-worker/cancellation.ts": "c9ab2373fff852adcb04e79430b4f8719a6959053e5e381276b3bd31e38fbe02",
+      "dobius/src/main/automations/workstation-worker/lease-sealer.test.ts": "dd86ecbcb867557e368e523253d8d0c789d90cda1247a8be9ff909a29de320b0",
+      "dobius/src/main/automations/workstation-worker/lease-sealer.ts": "72182bfe1fad95cb1e4bf8ae64951e3242017e031b733c4abff9a52acbd778df",
+      "dobius/src/main/automations/workstation-worker/process-identity.ts": "df4fe98ee36046fee75b274aded7be5448d3b058e2793b7aa11dff55efe22119",
+      "dobius/src/main/automations/workstation-worker/worker.test.ts": "e9f531d29752de4b9636fe906cfeb3ff0aa2d5f80bf26839e7cd7b154364f2e2"
+    },
+    "aggregate_sha256": "615566d22f7e9bcef25c1ceb68af01173c7b6aba18b4468170a11ad9a9778dea",
+    "aggregate_encoding": "sha256 of sorted compact JSON object paths_sha256; UTF-8, separators comma/colon",
+    "versions": {
+      "node": "v26.0.0",
+      "pnpm": "10.24.0",
+      "vitest": "4.1.5",
+      "oxlint": "1.71.0",
+      "oxfmt": "0.52.0",
+      "typescript_native_preview": "7.0.0-dev.20260421.2",
+      "repository_node_requirement": "24"
+    },
+    "tests": {
+      "total": 35,
+      "passed": 34,
+      "failed": 0,
+      "skipped": 1
+    },
+    "commands": [
+      {
+        "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/automations/workstation-worker/worker.test.ts src/main/automations/workstation-worker/lease-sealer.test.ts",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "exit_code": 0,
+        "result": "34 passed; 1 Windows-only test skipped; no failures."
+      },
+      {
+        "command": "pnpm exec oxlint src/main/automations/workstation-worker/lease-sealer.ts src/main/automations/workstation-worker/lease-sealer.test.ts src/main/automations/workstation-worker/cancellation.ts src/main/automations/workstation-worker/process-identity.ts src/main/automations/workstation-worker/worker.test.ts",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "exit_code": 0,
+        "result": "Focused lint passed."
+      },
+      {
+        "command": "pnpm exec oxfmt --check src/main/automations/workstation-worker/lease-sealer.ts src/main/automations/workstation-worker/lease-sealer.test.ts config/scripts/workstation-worker/README.md src/main/automations/workstation-worker/cancellation.ts src/main/automations/workstation-worker/process-identity.ts src/main/automations/workstation-worker/worker.test.ts",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "exit_code": 0,
+        "result": "All six frozen files passed formatting check."
+      },
+      {
+        "command": "pnpm run typecheck:node",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "exit_code": 0,
+        "result": "Full application Node typecheck passed."
+      }
+    ],
+    "root_node24_acceptance": "PENDING",
+    "peer_review": "PENDING",
+    "acceptance_provenance": "Local validation only under Node v26.0.0; does not claim ROOT acceptance."
+  },
+  "new_c05_sealer_cancel_short_write_freeze": {
+    "recorded_at": "2026-10-13T20:38:27.309Z",
+    "repository": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+    "paths_sha256": {
+      "dobius/config/scripts/workstation-worker/README.md": "0359d5309f35fa6e803633e328222c9961a342e0e597f09a77cd740cc98f8c47",
+      "dobius/src/main/automations/workstation-worker/cancellation.ts": "c9ab2373fff852adcb04e79430b4f8719a6959053e5e381276b3bd31e38fbe02",
+      "dobius/src/main/automations/workstation-worker/lease-sealer-key-file.ts": "d3d82865666997ac67571eba4f33296bb99d4061d22935461ef6926ec790ea1f",
+      "dobius/src/main/automations/workstation-worker/lease-sealer.test.ts": "76719bf7511b1a5f6bcb72f85a26a7c1fa5872e67fb867e9c2cc3e21de3aa40c",
+      "dobius/src/main/automations/workstation-worker/lease-sealer.ts": "5e938fa52bd79aaa7d98d6bfd9812e3f191f8ed66069caa63c22776d6499a424",
+      "dobius/src/main/automations/workstation-worker/process-identity.ts": "df4fe98ee36046fee75b274aded7be5448d3b058e2793b7aa11dff55efe22119",
+      "dobius/src/main/automations/workstation-worker/worker.test.ts": "e9f531d29752de4b9636fe906cfeb3ff0aa2d5f80bf26839e7cd7b154364f2e2"
+    },
+    "aggregate_sha256": "2be1bd0d9e7ba187daf18c8e73fcd239ca56930b90ebdf09f1812f05cee0dd8e",
+    "aggregate_encoding": "sha256 of sorted compact JSON object frozen_files_sha256; UTF-8, separators comma/colon",
+    "versions": {
+      "node": "v24.18.0",
+      "pnpm": "10.24.0",
+      "vitest": "4.1.5",
+      "oxlint": "1.71.0",
+      "oxfmt": "0.52.0",
+      "typescript_native_preview": "7.0.0-dev.20260421.2",
+      "repository_node_requirement": "24"
+    },
+    "tests": {
+      "total": 39,
+      "passed": 38,
+      "failed": 0,
+      "skipped": 1
+    },
+    "commands": [
+      {
+        "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm exec vitest run --config config/vitest.config.ts src/main/automations/workstation-worker/lease-sealer.test.ts src/main/automations/workstation-worker/worker.test.ts",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "runtime": "Node v24.18.0",
+        "exit_code": 0,
+        "tests_total": 39,
+        "tests_passed": 38,
+        "tests_failed": 0,
+        "tests_skipped": 1,
+        "result": "Focused sealer and worker fixture suites passed; one Windows-only test skipped."
+      },
+      {
+        "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm run typecheck:node",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "runtime": "Node v24.18.0",
+        "exit_code": 0,
+        "result": "Full application Node typecheck passed with the current shared capacity DTO."
+      },
+      {
+        "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm exec oxlint src/main/automations/workstation-worker/lease-sealer.ts src/main/automations/workstation-worker/lease-sealer-key-file.ts src/main/automations/workstation-worker/lease-sealer.test.ts src/main/automations/workstation-worker/cancellation.ts src/main/automations/workstation-worker/process-identity.ts src/main/automations/workstation-worker/worker.test.ts",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "runtime": "Node v24.18.0",
+        "exit_code": 0,
+        "result": "Focused lint passed."
+      },
+      {
+        "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm exec oxfmt --check src/main/automations/workstation-worker/lease-sealer.ts src/main/automations/workstation-worker/lease-sealer-key-file.ts src/main/automations/workstation-worker/lease-sealer.test.ts config/scripts/workstation-worker/README.md src/main/automations/workstation-worker/cancellation.ts src/main/automations/workstation-worker/process-identity.ts src/main/automations/workstation-worker/worker.test.ts",
+        "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+        "runtime": "Node v24.18.0",
+        "exit_code": 0,
+        "result": "All seven frozen files passed formatting check."
+      }
+    ],
+    "external_dependencies": {
+      "c02_freeze_manifest_prefix": "4c9cdbeb",
+      "capacity_field": "externalReservedBytes",
+      "sha256": {
+        "dobius/src/shared/workstation-worker.ts": "cadf24ad5ce68f1c6426c3102bb42d880e0d36790401c6808ff994e96ce7adea",
+        "dobius/src/shared/cloud-worker-enrollment.ts": "b8fe2de17817a67861584595a859c224503c03b00fa7084e627c3547d57e180e",
+        "dobius/src/shared/cloud-jobs.ts": "49d61c89d6688a928839b598bbee90b4053cdd3b8c807d027087b4cb3a0d8348"
+      },
+      "ownership": "External C02 dependency; no shared source file was edited for this correction."
+    },
+    "root_acceptance": "PENDING; no ROOT acceptance is claimed for this manifest."
+  }
+}

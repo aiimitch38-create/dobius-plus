@@ -1,0 +1,44 @@
+[
+  {
+    "profile": "adam",
+    "pid": 92034,
+    "role": "launcher/child",
+    "profile_home": "/Users/bayou/.hermes/profiles/adam"
+  },
+  {
+    "profile": "friday",
+    "pid": 80642,
+    "role": "launcher/child",
+    "profile_home": "/Users/bayou/.hermes/profiles/friday"
+  },
+  {
+    "profile": "friday",
+    "pid": 89617,
+    "role": "TUI frontend",
+    "profile_home": "/Users/bayou/.hermes/profiles/friday"
+  },
+  {
+    "profile": "friday",
+    "pid": 89638,
+    "role": "Python backend",
+    "profile_home": "/Users/bayou/.hermes/profiles/friday"
+  },
+  {
+    "profile": "adam",
+    "pid": 80563,
+    "role": "launcher/child",
+    "profile_home": "/Users/bayou/.hermes/profiles/adam"
+  },
+  {
+    "profile": "adam",
+    "pid": 86614,
+    "role": "TUI frontend",
+    "profile_home": "/Users/bayou/.hermes/profiles/adam"
+  },
+  {
+    "profile": "adam",
+    "pid": 86646,
+    "role": "Python backend",
+    "profile_home": "/Users/bayou/.hermes/profiles/adam"
+  }
+]

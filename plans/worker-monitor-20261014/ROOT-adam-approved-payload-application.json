@@ -1,0 +1,35 @@
+{
+  "at": "2026-10-15T03:28:34.945632+00:00",
+  "status": "APPLIED_REVIEWED_SOURCE_NATIVE_CHECKS_PASS",
+  "author_task": "task_4a82d5909af6",
+  "review_task": "task_b7c711b49a88",
+  "candidate_manifest_sha256": "31a4771906a3da0b7f0e082dbf0e29f091971c8e0567eb6bd142e7423d547d1f",
+  "review_artifact_sha256": "f24a4600fb4d1e67ad53c3d6fe4d335f82c2c7148b2200ab43e581a3de7e6adc",
+  "target": "/Users/bayou/dobius/projects/ADAM/service",
+  "before_sha256": {
+    "src/dobius-cloud/intent-publication.ts": "9cb9e986979a61a9ad7eba5fb9c9a46cbe63a849e5ad39e8264270fea1d12ba8",
+    "src/dobius-cloud/intent-migration.ts": "ce3c0b4bcc37e392361d08dbc04ab02a2d284c979a027e59400f52be092ef93e",
+    "src/dobius-cloud/receipt-store.ts": "04d066e92024af51ed4e19cc58954f61bfc5c975d29fdcb0dc079c48b0dbc9c3",
+    "src/db/migrations.ts": "e54ea453716a30c938fb01a9f4f24658b0e257505a781e4ec20394f070adc26e",
+    "src/dobius-cloud/approved-job-payload.ts": null,
+    "tests/dobius-cloud-approved-payload.test.ts": null
+  },
+  "after_sha256": {
+    "src/dobius-cloud/intent-publication.ts": "8248ffc77766abb62c50303bf51fd5a917652899b480a6b714399ff4a0c25544",
+    "src/dobius-cloud/intent-migration.ts": "8a7c569486e4807547940b306d3f85db98023641bc95255403bfceda79ec722b",
+    "src/dobius-cloud/receipt-store.ts": "f53ffe295a5b27d01934489cef907cca59e9e4a159019bdfcc932a65a5ed5e2a",
+    "src/db/migrations.ts": "dfac6a4eb3e6d694468c3b980820559021b2996f54f808d8ab5735444fede3ec",
+    "src/dobius-cloud/approved-job-payload.ts": "7b478d364798bb28f2dc5d052ca8e06a60f6b1db28de7913146af4a14c7560a5",
+    "tests/dobius-cloud-approved-payload.test.ts": "77e461de1294f0c8f8e6ade6adcb99f619c1a1ffb3d946857bbbd1b939975663"
+  },
+  "source_only": true,
+  "service_restart": false,
+  "live_database_migration": false,
+  "production_bridge_enabled": false,
+  "verified_at": "2026-10-15T03:32:20.095619+00:00",
+  "native_validation": {
+    "tests": "PASS: 38 tests; 0 failures; Node v24 with tsx; intents, approved payload, receipts and child submit suites",
+    "strict_types": "PASS: scoped strict NodeNext TypeScript validation; no emit",
+    "execution_evidence": "ROOT native checks completed exit 0 in prior execution checkpoint; tests session 99135; strict check completed exit 0."
+  }
+}

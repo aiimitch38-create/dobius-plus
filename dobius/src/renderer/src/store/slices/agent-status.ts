@@ -19,10 +19,15 @@ import {
   type SleepingAgentSessionRecord
 } from '../../../../shared/agent-session-resume'
 import {
+  getAgentResumeOwnerFingerprint,
+  parseAgentResumeOwner
+} from '../../../../shared/agent-resume-owner'
+import {
   resolveAgentStatusIdentity,
   shouldSuppressInheritedTerminalStatus
 } from '../../../../shared/agent-status-identity'
 import type { TerminalTab } from '../../../../shared/types'
+import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { isExplicitAgentStatusFresh } from '@/lib/agent-status'
 import { createFreshnessScheduler } from './agent-status-freshness-scheduler'
 
@@ -130,6 +135,8 @@ export type AgentStatusSlice = {
       providerSession?: AgentProviderSessionMetadata
       launchConfig?: SleepingAgentLaunchConfig
       launchToken?: string
+      ptyId?: string
+      connectionId?: string | null
     }
   ) => void
 
@@ -355,10 +362,41 @@ function sleepingRecordFromEntry(args: {
     return null
   }
   const tab = args.tab ?? findTabForAgentEntry(args.state, args.worktreeId, args.entry)
+  const stablePane = parsePaneKey(args.entry.paneKey)
+  const tabId = args.entry.tabId ?? tab?.id
+  const leafPtyId =
+    tabId && stablePane
+      ? args.state.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId?.[stablePane.leafId]
+      : undefined
+  const resumeOwner =
+    stablePane &&
+    tabId === stablePane.tabId &&
+    args.entry.connectionId !== undefined &&
+    args.entry.ptyId &&
+    args.entry.ptyId === leafPtyId &&
+    args.entry.launchToken
+      ? (parseAgentResumeOwner({
+          authority:
+            args.entry.connectionId === null
+              ? { kind: 'local' }
+              : { kind: 'ssh', connectionId: args.entry.connectionId },
+          worktreeId: args.worktreeId,
+          tabId,
+          leafId: stablePane.leafId,
+          paneKey: args.entry.paneKey,
+          ptyId: args.entry.ptyId,
+          launchToken: args.entry.launchToken,
+          ...(args.entry.terminalHandle ? { terminalHandle: args.entry.terminalHandle } : {}),
+          agent,
+          providerSession: args.entry.providerSession
+        }) ?? undefined)
+      : undefined
   return {
     paneKey: args.entry.paneKey,
     ...(tab ? { tabId: tab.id } : {}),
     worktreeId: args.worktreeId,
+    ...(resumeOwner ? { resumeOwner } : {}),
+    ...(args.entry.connectionId !== undefined ? { connectionId: args.entry.connectionId } : {}),
     agent,
     providerSession: args.entry.providerSession,
     prompt: args.entry.prompt,
@@ -549,7 +587,13 @@ function recoveryRecordMatches(
   if (!existing) {
     return false
   }
+  const ownersMatch =
+    existing.resumeOwner === undefined || next.resumeOwner === undefined
+      ? existing.resumeOwner === next.resumeOwner
+      : getAgentResumeOwnerFingerprint(existing.resumeOwner) ===
+        getAgentResumeOwnerFingerprint(next.resumeOwner)
   return (
+    ownersMatch &&
     existing.origin === next.origin &&
     existing.agent === next.agent &&
     existing.worktreeId === next.worktreeId &&
@@ -1088,6 +1132,9 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
         const statusTabId =
           routing?.tabId ?? existing?.tabId ?? getTabIdFromPaneKey(paneKey) ?? undefined
         const statusTerminalHandle = routing?.terminalHandle ?? existing?.terminalHandle
+        const hasRuntimeProvenance = Boolean(
+          metadata && ('connectionId' in metadata || 'ptyId' in metadata)
+        )
         const registryEntry = s.agentLaunchConfigByPaneKey[paneKey]
         const matchedRegistryLaunchConfig = registryEntryMatchesStatus({
           entry: registryEntry,
@@ -1134,6 +1181,15 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
             findAgentPaneWorktreeId(s, paneKey) ??
             undefined,
           tabId: statusTabId,
+          ...(metadata?.ptyId ? { ptyId: metadata.ptyId } : {}),
+          ...(metadata && 'connectionId' in metadata
+            ? { connectionId: metadata.connectionId }
+            : existing?.connectionId !== undefined
+              ? { connectionId: existing.connectionId }
+              : {}),
+          ...(metadata?.launchToken || (!hasRuntimeProvenance && existing?.launchToken)
+            ? { launchToken: metadata?.launchToken ?? existing?.launchToken }
+            : {}),
           terminalTitle: effectiveTitle,
           stateHistory: history,
           toolName: payload.toolName,

@@ -185,6 +185,20 @@ export const FILE_METHODS: RpcAnyMethod[] = [
       runtime.openMobileFile(params.worktree, params.relativePath)
   }),
   defineMethod({
+    name: 'files.openBackground',
+    params: FileOpen,
+    handler: async (params, { runtime }) =>
+      runtime.openMobileFile(params.worktree, params.relativePath, { activate: false })
+  }),
+  defineMethod({
+    name: 'files.openDiffBackground',
+    params: FileOpenDiff,
+    handler: async (params, { runtime }) =>
+      runtime.openMobileDiff(params.worktree, params.relativePath, params.staged === true, {
+        activate: false
+      })
+  }),
+  defineMethod({
     name: 'files.openDiff',
     params: FileOpenDiff,
     handler: async (params, { runtime }) =>

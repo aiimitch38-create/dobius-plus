@@ -1,0 +1,70 @@
+{
+  "status": "source_ready_for_independent_review",
+  "repository": "/Users/bayou/dobius/projects/ADAM",
+  "aggregate_sha256": "bce3cd430d3e01f048202c65cd77fc85a4c7a129fd049ede2d21b5c0549a0897",
+  "algorithm": "sorted repo relative path NUL bytes NUL",
+  "files": [
+    {
+      "path": "service/src/db/database.ts",
+      "bytes": 1218,
+      "sha256": "f72d88a8c29d59695b05a02d03b3e2d8e70a56346f9965e84bd7146dec319c91"
+    },
+    {
+      "path": "service/src/db/migrations.ts",
+      "bytes": 21528,
+      "sha256": "fc986082dae3175742421c5e3489370032e0c498b00d9de9a39b9adcd2c5954e"
+    },
+    {
+      "path": "service/src/dobius-cloud/receipt-contract.ts",
+      "bytes": 6504,
+      "sha256": "7cdbfb8624e824311e29f71bb529d02aff2e0a04a76fc72621f11e3a43e45f51"
+    },
+    {
+      "path": "service/src/dobius-cloud/receipt-migration.ts",
+      "bytes": 1293,
+      "sha256": "c002f814316756bae64bd6e77ac72503c87013b22e8bfad43a1091626984e5dd"
+    },
+    {
+      "path": "service/src/dobius-cloud/receipt-store.ts",
+      "bytes": 7709,
+      "sha256": "7f49efb0be1e500873b196ccb12478f19aa22e8d1167e7a465811a2dce4cf9a1"
+    },
+    {
+      "path": "service/src/runtime/service.ts",
+      "bytes": 40255,
+      "sha256": "251b62dd624918e43c27cdaa37ca02a7e3d21c72162fe92ff681196826504862"
+    },
+    {
+      "path": "service/tests/connections.test.ts",
+      "bytes": 14813,
+      "sha256": "744a1c44fdde7f12d872424ca8a0bc116378f1cbdb8e6d6edbd08ced6775d186"
+    },
+    {
+      "path": "service/tests/dobius-cloud-receipt-recovery.test.ts",
+      "bytes": 2908,
+      "sha256": "33a29ce749fb7d7dd135bcf29f0678e7228daa58e000cad58fd93fabc847d54e"
+    },
+    {
+      "path": "service/tests/dobius-cloud-receipt-routes.test.ts",
+      "bytes": 4823,
+      "sha256": "42edbc03b92d71bf8e65230b9feb8b05ec13e92d1edea0a0ce6b024a07569f1b"
+    },
+    {
+      "path": "service/tests/dobius-cloud-receipts.test.ts",
+      "bytes": 5485,
+      "sha256": "d3e4bcc764b062f101b28dffb5b0294c5044512918751caad960b2f070d2fbe0"
+    }
+  ],
+  "verification": {
+    "full_tests": "249/249 passed",
+    "typecheck": "PASS fresh tsc --noEmit",
+    "build": "PASS tsc -p tsconfig.build.json"
+  },
+  "limits": [
+    "No live ADAM DB/service/credential accessed or changed",
+    "Receipt routes authenticated through real handler on temporary local test server",
+    "Internal grant issuance API only; no issuance HTTP route or parent planner dispatch integration",
+    "Parent state unchanged, no child success auto-completion",
+    "Preexisting COMMITMENTS.md and LEARNINGS-INBOX.md preserved"
+  ]
+}

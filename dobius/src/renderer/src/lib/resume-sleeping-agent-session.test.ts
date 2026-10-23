@@ -1,16 +1,29 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
-import { makePaneKey } from '../../../shared/stable-pane-id'
+import type { AgentResumeOwner } from '../../../shared/agent-resume-owner'
+import { getAgentResumeSpawnTarget } from '../../../shared/agent-resume-owner'
+import { makePaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
 import { parseWorkspaceSession } from '../../../shared/workspace-session-schema'
 import { useAppStore } from '@/store'
-import {
-  getWorktreeIdsNeedingStartupResume,
-  resumeSleepingAgentSessionsForWorktree
-} from './resume-sleeping-agent-session'
+import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
 
 const initialAppStoreState = useAppStore.getState()
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const OTHER_LEAF_ID = '22222222-2222-4222-8222-222222222222'
+const claimAgentResume = vi.fn(async (owner: AgentResumeOwner) => ({
+  ok: true as const,
+  token: 'claim-token',
+  target: getAgentResumeSpawnTarget(owner)
+}))
+const releaseAgentResume = vi.fn(async () => true)
+
+beforeEach(() => {
+  vi.stubGlobal('window', {
+    api: { pty: { claimAgentResume, releaseAgentResume } }
+  })
+  claimAgentResume.mockClear()
+  releaseAgentResume.mockClear()
+})
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -20,8 +33,8 @@ afterEach(() => {
 function makeRecord(
   overrides: Partial<SleepingAgentSessionRecord> = {}
 ): SleepingAgentSessionRecord {
-  return {
-    paneKey: 'tab-1:leaf-1',
+  const record: SleepingAgentSessionRecord = {
+    paneKey: makePaneKey('tab-1', LEAF_ID),
     tabId: 'tab-1',
     worktreeId: 'wt-1',
     agent: 'claude',
@@ -32,6 +45,25 @@ function makeRecord(
     updatedAt: 1,
     ...overrides
   }
+  if (!('resumeOwner' in overrides)) {
+    const pane = parsePaneKey(record.paneKey)
+    if (pane) {
+      record.resumeOwner = {
+        authority: record.connectionId
+          ? { kind: 'ssh', connectionId: record.connectionId }
+          : { kind: 'local' },
+        worktreeId: record.worktreeId,
+        tabId: record.tabId ?? pane.tabId,
+        leafId: pane.leafId,
+        paneKey: record.paneKey,
+        ptyId: 'pty-1',
+        launchToken: 'launch-1',
+        agent: record.agent as AgentResumeOwner['agent'],
+        providerSession: record.providerSession
+      }
+    }
+  }
+  return record
 }
 
 function makeTerminalTab(id: string, worktreeId: string): Record<string, unknown> {
@@ -84,59 +116,8 @@ function makeActiveTerminalState(tabId: string, worktreeId = 'wt-1'): Record<str
   }
 }
 
-describe('resumeSleepingAgentSessionsForWorktree', () => {
-  it('resumes quit-captured records when no preserved pane can own recovery', () => {
-    const record = makeRecord({ origin: 'quit' })
-    useAppStore.setState({
-      tabsByWorktree: { 'wt-1': [makeTerminalTab('tab-1', 'wt-1')] },
-      sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
-
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
-
-    expect(launched).toBe(1)
-    const state = useAppStore.getState()
-    const resumedTab = state.tabsByWorktree['wt-1']?.find((tab) => tab.id !== 'tab-1')
-    expect(resumedTab?.launchAgent).toBe('claude')
-    expect(state.pendingStartupByTabId[resumedTab!.id]?.showSessionRestoredBanner).toBe(true)
-    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
-  })
-
-  it('resumes live-checkpoint records when no preserved pane can own recovery', () => {
-    const record = makeRecord({ origin: 'live' })
-    useAppStore.setState({
-      tabsByWorktree: { 'wt-1': [makeTerminalTab('tab-1', 'wt-1')] },
-      sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
-
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
-
-    expect(launched).toBe(1)
-    const state = useAppStore.getState()
-    const resumedTab = state.tabsByWorktree['wt-1']?.find((tab) => tab.id !== 'tab-1')
-    expect(resumedTab?.launchAgent).toBe('claude')
-    expect(state.pendingStartupByTabId[resumedTab!.id]?.showSessionRestoredBanner).toBe(true)
-    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
-  })
-
-  it('resumes legacy sleep records without an origin when no preserved pane can own recovery', () => {
-    const record = makeRecord()
-    useAppStore.setState({
-      tabsByWorktree: { 'wt-1': [makeTerminalTab('tab-1', 'wt-1')] },
-      sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
-
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
-
-    expect(launched).toBe(1)
-    const state = useAppStore.getState()
-    const resumedTab = (state.tabsByWorktree['wt-1'] ?? []).find((tab) => tab.id !== 'tab-1')
-    expect(resumedTab?.launchAgent).toBe('claude')
-    expect(state.pendingStartupByTabId[resumedTab!.id]?.showSessionRestoredBanner).toBe(true)
-    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
-  })
-
-  it('skips worktree-sleep records owned by a preserved stable UUID pane', () => {
+describe('resumeSleepingAgentSessionsForWorktree', async () => {
+  it('skips worktree-sleep records owned by a preserved stable UUID pane', async () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord({ paneKey, origin: 'worktree-sleep' })
     useAppStore.setState({
@@ -146,7 +127,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     expect(launched).toBe(0)
@@ -154,7 +135,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('skips active stable-pane records owned by a single-leaf tab-level wake hint', () => {
+  it('skips active stable-pane records owned by a single-leaf tab-level wake hint', async () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord({ paneKey, origin: 'worktree-sleep' })
     useAppStore.setState({
@@ -172,7 +153,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     expect(launched).toBe(0)
@@ -180,7 +161,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('skips active stable-pane records owned by a folder workspace active terminal', () => {
+  it('skips active stable-pane records owned by a folder workspace active terminal', async () => {
     const worktreeId = 'folder:folder-1'
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord({ paneKey, worktreeId, origin: 'worktree-sleep' })
@@ -191,7 +172,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree(worktreeId)
+    const launched = await resumeSleepingAgentSessionsForWorktree(worktreeId)
 
     const state = useAppStore.getState()
     expect(launched).toBe(0)
@@ -199,7 +180,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('resumes active worktree-sleep stable-pane records when the preserved tab is hidden during activation', () => {
+  it('resumes active worktree-sleep stable-pane records when the preserved tab is hidden during activation', async () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord({ paneKey, origin: 'worktree-sleep' })
     useAppStore.setState({
@@ -214,7 +195,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     const resumedTab = state.tabsByWorktree['wt-1']?.find(
@@ -223,10 +204,10 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(launched).toBe(1)
     expect(resumedTab?.launchAgent).toBe('claude')
     expect(state.pendingStartupByTabId[resumedTab!.id]?.showSessionRestoredBanner).toBe(true)
-    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
+    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('rechecks pane ownership after an earlier fresh resume activates a new terminal', () => {
+  it('rechecks pane ownership after an earlier fresh resume activates a new terminal', async () => {
     const initiallyUnownedPaneKey = makePaneKey('missing-tab', OTHER_LEAF_ID)
     const initiallyOwnedPaneKey = makePaneKey('tab-active', LEAF_ID)
     const initiallyUnowned = makeRecord({
@@ -255,7 +236,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     const resumedTabs = (state.tabsByWorktree['wt-1'] ?? []).filter(
@@ -264,11 +245,11 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(launched).toBe(2)
     expect(resumedTabs).toHaveLength(2)
     expect(Object.keys(state.pendingStartupByTabId)).toHaveLength(2)
-    expect(state.sleepingAgentSessionsByPaneKey[initiallyUnowned.paneKey]).toBeUndefined()
-    expect(state.sleepingAgentSessionsByPaneKey[initiallyOwned.paneKey]).toBeUndefined()
+    expect(state.sleepingAgentSessionsByPaneKey[initiallyUnowned.paneKey]).toBe(initiallyUnowned)
+    expect(state.sleepingAgentSessionsByPaneKey[initiallyOwned.paneKey]).toBe(initiallyOwned)
   })
 
-  it('skips active stable-pane records in an inactive split leaf of the active terminal tab', () => {
+  it('skips active stable-pane records in an inactive split leaf of the active terminal tab', async () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord({ paneKey, origin: 'worktree-sleep' })
     const layout = {
@@ -285,7 +266,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     expect(launched).toBe(0)
@@ -293,7 +274,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('skips active stable-pane records owned by a visible non-focused split-group terminal', () => {
+  it('skips active stable-pane records owned by a visible non-focused split-group terminal', async () => {
     const paneKey = makePaneKey('tab-right', LEAF_ID)
     const record = makeRecord({ paneKey, tabId: 'tab-right', origin: 'worktree-sleep' })
     useAppStore.setState({
@@ -339,7 +320,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     expect(launched).toBe(0)
@@ -347,7 +328,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('resumes active worktree-sleep stable-pane records when the preserved leaf has no PTY to cold-restore', () => {
+  it('resumes active worktree-sleep stable-pane records when the preserved leaf has no PTY to cold-restore', async () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord({ paneKey, origin: 'worktree-sleep' })
     useAppStore.setState({
@@ -363,17 +344,17 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     const resumedTab = state.tabsByWorktree['wt-1']?.find((tab) => tab.id !== 'tab-1')
     expect(launched).toBe(1)
     expect(resumedTab?.launchAgent).toBe('claude')
     expect(state.pendingStartupByTabId[resumedTab!.id]?.showSessionRestoredBanner).toBe(true)
-    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
+    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('resumes live stable-pane records when the preserved leaf has no PTY to cold-restore', () => {
+  it('resumes live stable-pane records when the preserved leaf has no PTY to cold-restore', async () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord({ paneKey, origin: 'live' })
     useAppStore.setState({
@@ -389,17 +370,17 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     const resumedTab = state.tabsByWorktree['wt-1']?.find((tab) => tab.id !== 'tab-1')
     expect(launched).toBe(1)
     expect(resumedTab?.launchAgent).toBe('claude')
     expect(state.pendingStartupByTabId[resumedTab!.id]?.showSessionRestoredBanner).toBe(true)
-    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
+    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('does not let a sibling split-pane PTY claim a live stable-pane record', () => {
+  it('does not let a sibling split-pane PTY claim a live stable-pane record', async () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord({ paneKey, origin: 'live' })
     useAppStore.setState({
@@ -413,17 +394,17 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     const resumedTab = state.tabsByWorktree['wt-1']?.find((tab) => tab.id !== 'tab-1')
     expect(launched).toBe(1)
     expect(resumedTab?.launchAgent).toBe('claude')
     expect(state.pendingStartupByTabId[resumedTab!.id]?.showSessionRestoredBanner).toBe(true)
-    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
+    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('skips hibernated stable panes after their live PTY binding is cleared', () => {
+  it('skips hibernated stable panes after their live PTY binding is cleared', async () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord({ paneKey, origin: 'worktree-sleep', state: 'done' })
     useAppStore.setState({
@@ -438,7 +419,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     expect(launched).toBe(0)
@@ -447,7 +428,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('skips legacy numeric pane-key records owned by a preserved tab wake hint', () => {
+  it('skips legacy numeric pane-key records owned by a preserved tab wake hint', async () => {
     const record = makeRecord({ paneKey: 'tab-1:0', origin: 'worktree-sleep' })
     useAppStore.setState({
       ...makeActiveTerminalState('tab-1'),
@@ -457,7 +438,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     expect(launched).toBe(0)
@@ -465,7 +446,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('does not let mixed legacy provider sessions claim the whole preserved tab', () => {
+  it('keeps ambiguous legacy provider sessions for manual recovery', async () => {
     const first = makeRecord({
       paneKey: 'tab-1:0',
       origin: 'worktree-sleep',
@@ -488,23 +469,23 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
-    expect(launched).toBe(2)
-    expect(state.tabsByWorktree['wt-1']).toHaveLength(3)
-    expect(state.sleepingAgentSessionsByPaneKey[first.paneKey]).toBeUndefined()
-    expect(state.sleepingAgentSessionsByPaneKey[second.paneKey]).toBeUndefined()
+    expect(launched).toBe(0)
+    expect(state.tabsByWorktree['wt-1']).toHaveLength(1)
+    expect(state.sleepingAgentSessionsByPaneKey[first.paneKey]).toBe(first)
+    expect(state.sleepingAgentSessionsByPaneKey[second.paneKey]).toBe(second)
   })
 
-  it('resumes worktree-sleep records into a fresh tab', () => {
+  it('resumes worktree-sleep records into a fresh tab', async () => {
     const record = makeRecord({ origin: 'worktree-sleep' })
     useAppStore.setState({
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     expect(launched).toBe(1)
     const state = useAppStore.getState()
@@ -512,10 +493,10 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(tabs).toHaveLength(1)
     expect(tabs[0]?.launchAgent).toBe('claude')
     expect(state.pendingStartupByTabId[tabs[0]!.id]?.showSessionRestoredBanner).toBe(true)
-    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
+    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('uses captured launch config instead of changed settings when resuming worktree sleep', () => {
+  it('uses captured launch config instead of changed settings when resuming worktree sleep', async () => {
     const record = makeRecord({
       agent: 'codex',
       origin: 'worktree-sleep',
@@ -535,7 +516,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     expect(launched).toBe(1)
     const state = useAppStore.getState()
@@ -544,21 +525,23 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(startup?.command).toBe(
       "codex --profile captured '--model' 'gpt-5' '--reasoning-effort' 'high' 'resume' 'sess-1'"
     )
-    expect(startup?.env).toEqual({ CODEX_PROFILE: 'captured' })
+    expect(startup?.env).toMatchObject({ CODEX_PROFILE: 'captured' })
+    expect(startup?.env?.DOBIUS_INTERNAL_AGENT_RESUME_CLAIM).toContain('claim-token')
     expect(startup?.command).not.toContain('changed')
     expect(startup?.launchConfig).toEqual(record.launchConfig)
     expect(startup?.resumeProviderSession).toEqual(record.providerSession)
   })
 
-  it('launches once and clears skipped duplicates for the same provider session', () => {
+  it('launches once and clears skipped duplicates for the same provider session', async () => {
     const first = makeRecord({
-      paneKey: 'tab-1:leaf-1',
+      paneKey: makePaneKey('tab-1', LEAF_ID),
       capturedAt: 1,
       updatedAt: 1,
       launchConfig: { agentArgs: '--older', agentEnv: {} }
     })
     const duplicate = makeRecord({
-      paneKey: 'tab-2:leaf-1',
+      paneKey: makePaneKey('tab-2', LEAF_ID),
+      tabId: 'tab-2',
       capturedAt: 2,
       updatedAt: 2,
       launchConfig: { agentArgs: '--newer', agentEnv: {} }
@@ -571,7 +554,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     expect(launched).toBe(1)
@@ -580,11 +563,11 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.pendingStartupByTabId[resumedTab!.id]?.launchConfig).toMatchObject({
       agentArgs: '--newer'
     })
-    expect(state.sleepingAgentSessionsByPaneKey[first.paneKey]).toBeUndefined()
-    expect(state.sleepingAgentSessionsByPaneKey[duplicate.paneKey]).toBeUndefined()
+    expect(state.sleepingAgentSessionsByPaneKey[first.paneKey]).toBe(first)
+    expect(state.sleepingAgentSessionsByPaneKey[duplicate.paneKey]).toBe(duplicate)
   })
 
-  it('lets a preserved pane claim its provider session and clears only stale duplicates', () => {
+  it('lets a preserved pane claim its provider session and clears only stale duplicates', async () => {
     const ownedPaneKey = makePaneKey('tab-1', LEAF_ID)
     const stalePaneKey = makePaneKey('missing-tab', OTHER_LEAF_ID)
     const owned = makeRecord({ paneKey: ownedPaneKey, origin: 'worktree-sleep' })
@@ -605,7 +588,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     expect(launched).toBe(0)
@@ -614,7 +597,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.sleepingAgentSessionsByPaneKey[stale.paneKey]).toBeUndefined()
   })
 
-  it('lets quit/live pane-owned records claim provider sessions before stale duplicates launch', () => {
+  it('lets quit/live pane-owned records claim provider sessions before stale duplicates launch', async () => {
     const ownedPaneKey = makePaneKey('tab-1', LEAF_ID)
     const stalePaneKey = makePaneKey('missing-tab', OTHER_LEAF_ID)
     const owned = makeRecord({ paneKey: ownedPaneKey, origin: 'quit' })
@@ -635,7 +618,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     expect(launched).toBe(0)
@@ -644,7 +627,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.sleepingAgentSessionsByPaneKey[stale.paneKey]).toBeUndefined()
   })
 
-  it('does not let completed same-provider hibernation evidence launch before an active fresh resume', () => {
+  it('does not let completed same-provider hibernation evidence launch before an active fresh resume', async () => {
     const completedPaneKey = makePaneKey('tab-completed', OTHER_LEAF_ID)
     const activePaneKey = makePaneKey('tab-active', LEAF_ID)
     const completed = makeRecord({
@@ -680,7 +663,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     const resumedTab = state.tabsByWorktree['wt-1']?.find((tab) => tab.id !== 'tab-active')
@@ -691,10 +674,10 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       agentArgs: '--active'
     })
     expect(state.sleepingAgentSessionsByPaneKey[completed.paneKey]).toBeUndefined()
-    expect(state.sleepingAgentSessionsByPaneKey[active.paneKey]).toBeUndefined()
+    expect(state.sleepingAgentSessionsByPaneKey[active.paneKey]).toBe(active)
   })
 
-  it('does not let invalid pane-owned records block a valid duplicate resume', () => {
+  it('does not let invalid pane-owned records block a valid duplicate resume', async () => {
     const invalidPaneKey = makePaneKey('tab-1', LEAF_ID)
     const validPaneKey = makePaneKey('missing-tab', OTHER_LEAF_ID)
     const invalid = makeRecord({
@@ -719,17 +702,17 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     const resumedTab = state.tabsByWorktree['wt-1']?.find((tab) => tab.id !== 'tab-1')
     expect(launched).toBe(1)
     expect(resumedTab?.launchAgent).toBe('claude')
     expect(state.sleepingAgentSessionsByPaneKey[invalid.paneKey]).toBeUndefined()
-    expect(state.sleepingAgentSessionsByPaneKey[valid.paneKey]).toBeUndefined()
+    expect(state.sleepingAgentSessionsByPaneKey[valid.paneKey]).toBe(valid)
   })
 
-  it('fresh-resumes when explicit tabId disagrees with the stable pane-key tab id', () => {
+  it('fresh-resumes when explicit tabId disagrees with the stable pane-key tab id', async () => {
     const paneKey = makePaneKey('parsed-tab', LEAF_ID)
     const record = makeRecord({ paneKey, tabId: 'explicit-tab', origin: 'worktree-sleep' })
     useAppStore.setState({
@@ -743,7 +726,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     const resumedTab = state.tabsByWorktree['wt-1']?.find(
@@ -751,17 +734,17 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     )
     expect(launched).toBe(1)
     expect(resumedTab?.launchAgent).toBe('claude')
-    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
+    expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
   })
 
-  it('clears completed worktree-sleep records without preserved panes instead of resuming', () => {
+  it('clears completed worktree-sleep records without preserved panes instead of resuming', async () => {
     const record = makeRecord({ origin: 'worktree-sleep', state: 'done' })
     useAppStore.setState({
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     const state = useAppStore.getState()
     expect(launched).toBe(0)
@@ -770,35 +753,35 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
   })
 
-  it('clears stale manual records without launching a tab', () => {
+  it('clears stale manual records without launching a tab', async () => {
     const record = makeRecord({ capturedAt: 3_000_000, updatedAt: 1 })
     useAppStore.setState({
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     expect(launched).toBe(0)
     expect(useAppStore.getState().tabsByWorktree['wt-1']).toEqual([])
     expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
   })
 
-  it('clears interrupted manual records without launching a tab', () => {
+  it('clears interrupted manual records without launching a tab', async () => {
     const record = makeRecord({ origin: 'worktree-sleep', interrupted: true })
     useAppStore.setState({
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     expect(launched).toBe(0)
     expect(useAppStore.getState().tabsByWorktree['wt-1']).toEqual([])
     expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
   })
 
-  it('clears hydrated interrupted worktree-sleep records without launching a tab', () => {
+  it('clears hydrated interrupted worktree-sleep records without launching a tab', async () => {
     const parsed = parseWorkspaceSession({
       activeRepoId: null,
       activeWorktreeId: null,
@@ -806,7 +789,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       tabsByWorktree: {},
       terminalLayoutsByTabId: {},
       sleepingAgentSessionsByPaneKey: {
-        'tab-1:leaf-1': makeRecord({
+        [makePaneKey('tab-1', LEAF_ID)]: makeRecord({
           state: 'done',
           origin: 'worktree-sleep',
           interrupted: true
@@ -817,34 +800,35 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     if (!parsed.ok) {
       throw new Error(parsed.error)
     }
-    const record = parsed.value.sleepingAgentSessionsByPaneKey!['tab-1:leaf-1']!
+    const paneKey = makePaneKey('tab-1', LEAF_ID)
+    const record = parsed.value.sleepingAgentSessionsByPaneKey![paneKey]!
     useAppStore.setState({
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     expect(launched).toBe(0)
     expect(useAppStore.getState().tabsByWorktree['wt-1']).toEqual([])
     expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
   })
 
-  it('clears legacy completed live records without launching a tab', () => {
+  it('clears legacy completed live records without launching a tab', async () => {
     const record = makeRecord({ state: 'done' })
     useAppStore.setState({
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     expect(launched).toBe(0)
     expect(useAppStore.getState().tabsByWorktree['wt-1']).toEqual([])
     expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
   })
 
-  it('uses WSL resume quoting for Windows-path projects forced to WSL', () => {
+  it('uses WSL resume quoting for Windows-path projects forced to WSL', async () => {
     const record = makeRecord({
       providerSession: { key: 'session_id', id: "sess-1's" },
       origin: 'worktree-sleep'
@@ -879,7 +863,7 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
-    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+    const launched = await resumeSleepingAgentSessionsForWorktree('wt-1')
 
     expect(launched).toBe(1)
     const state = useAppStore.getState()
@@ -888,38 +872,5 @@ describe('resumeSleepingAgentSessionsForWorktree', () => {
     expect(state.pendingStartupByTabId[resumedTab!.id]?.command).toContain(
       "'--resume' 'sess-1'\\''s'"
     )
-  })
-})
-
-describe('getWorktreeIdsNeedingStartupResume', () => {
-  it('sweeps every worktree that owns a sleeping record, not just the active one', () => {
-    const records = {
-      'tab-1:leaf-1': makeRecord({ paneKey: 'tab-1:leaf-1', worktreeId: 'wt-active' }),
-      'tab-2:leaf-1': makeRecord({ paneKey: 'tab-2:leaf-1', worktreeId: 'wt-background' }),
-      'tab-3:leaf-1': makeRecord({ paneKey: 'tab-3:leaf-1', worktreeId: 'wt-other' })
-    }
-    const result = getWorktreeIdsNeedingStartupResume(records, 'wt-active', new Set())
-    expect([...result].sort()).toEqual(['wt-active', 'wt-background', 'wt-other'])
-  })
-
-  it('always includes the active worktree even with no records', () => {
-    expect(getWorktreeIdsNeedingStartupResume({}, 'wt-active', new Set())).toEqual(['wt-active'])
-  })
-
-  it('deduplicates worktrees that own several panes', () => {
-    const records = {
-      'tab-1:leaf-1': makeRecord({ paneKey: 'tab-1:leaf-1', worktreeId: 'wt-background' }),
-      'tab-2:leaf-1': makeRecord({ paneKey: 'tab-2:leaf-1', worktreeId: 'wt-background' })
-    }
-    const result = getWorktreeIdsNeedingStartupResume(records, 'wt-active', new Set())
-    expect([...result].sort()).toEqual(['wt-active', 'wt-background'])
-  })
-
-  it('skips worktrees already swept so the pass stays once-per-process', () => {
-    const records = {
-      'tab-2:leaf-1': makeRecord({ paneKey: 'tab-2:leaf-1', worktreeId: 'wt-background' })
-    }
-    const alreadySwept = new Set(['wt-active', 'wt-background'])
-    expect(getWorktreeIdsNeedingStartupResume(records, 'wt-active', alreadySwept)).toEqual([])
   })
 })

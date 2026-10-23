@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "verified_at": 1791919483.542849,
+  "label": "com.verlosolutions.dobius.system-monitor",
+  "state": "running",
+  "health": "critical",
+  "sampled_at": 1791919472.555457,
+  "age_seconds": 10.987392902374268,
+  "registered_roots": [
+    {
+      "id": "dobius-source",
+      "state": "available",
+      "inventory_state": "partial"
+    },
+    {
+      "id": "obsidian",
+      "state": "available",
+      "inventory_state": "complete"
+    }
+  ],
+  "volumes": [
+    {
+      "free_gib": 7.190620422363281,
+      "state": "critical"
+    }
+  ],
+  "cleanup_enabled": false,
+  "cloud_publishing_enabled": false,
+  "app_ui_connected": false,
+  "schedule_path": "/Users/bayou/Library/LaunchAgents/com.verlosolutions.dobius.system-monitor.plist",
+  "launchctl_exit": 0,
+  "process_receipt": [
+    "state = running",
+    "pid = 36897",
+    "last exit code = (never exited)"
+  ]
+}

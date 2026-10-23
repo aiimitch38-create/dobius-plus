@@ -107,6 +107,11 @@ import {
 import { normalizeContextualTourIds, type ContextualTourId } from '../../../shared/contextual-tours'
 import { translate } from '@/i18n/i18n'
 import { getDefaultCreateProjectParent } from '@/components/sidebar/create-project-defaults'
+import {
+  callWebRuntimeWithPreviewUnavailable,
+  createWebAgentResumeApi,
+  subscribeWebCatalogPreviewInvalidated
+} from './web-preload-compat'
 
 const SETTINGS_STORAGE_KEY = 'dobius.web.settings.v1'
 const UI_STORAGE_KEY = 'dobius.web.ui.v1'
@@ -1107,7 +1112,8 @@ function createRuntimeApi(): NonNullable<Partial<PreloadApi>['runtime']> {
   return {
     syncWindowGraph: async (_graph: RuntimeSyncWindowGraph) => getRemoteRuntimeStatus(),
     getStatus: () => getRemoteRuntimeStatus(),
-    call: ({ method, params }) => callRuntimeEnvelope(method, params),
+    call: ({ method, params }) =>
+      callWebRuntimeWithPreviewUnavailable(method, () => callRuntimeEnvelope(method, params)),
     getTerminalFitOverrides: () => Promise.resolve([]),
     getTerminalDrivers: () => Promise.resolve([]),
     getBrowserDrivers: () => Promise.resolve([]),
@@ -1115,7 +1121,8 @@ function createRuntimeApi(): NonNullable<Partial<PreloadApi>['runtime']> {
     reclaimBrowserForDesktop: () => Promise.resolve({ reclaimed: false }),
     onTerminalFitOverrideChanged: () => noopUnsubscribe,
     onTerminalDriverChanged: () => noopUnsubscribe,
-    onBrowserDriverChanged: () => noopUnsubscribe
+    onBrowserDriverChanged: () => noopUnsubscribe,
+    onDataCatalogPreviewInvalidated: subscribeWebCatalogPreviewInvalidated
   }
 }
 
@@ -1154,7 +1161,9 @@ function createRuntimeEnvironmentsApi(): NonNullable<Partial<PreloadApi>['runtim
     getStatus: ({ selector, timeoutMs }) =>
       callEnvironmentEnvelope<RuntimeStatus>(selector, 'status.get', undefined, timeoutMs),
     call: ({ selector, method, params, timeoutMs }) =>
-      callEnvironmentEnvelope(selector, method, params, timeoutMs),
+      callWebRuntimeWithPreviewUnavailable(method, () =>
+        callEnvironmentEnvelope(selector, method, params, timeoutMs)
+      ),
     subscribe: async ({ selector, method, params, timeoutMs }, callbacks) => {
       const environment = resolveEnvironment(selector)
       const client = getClientForEnvironment(environment)
@@ -2598,6 +2607,7 @@ function createShellApi(): NonNullable<Partial<PreloadApi>['shell']> {
 
 function createPtyApi(): NonNullable<Partial<PreloadApi>['pty']> {
   return {
+    ...createWebAgentResumeApi(),
     spawn: () => Promise.reject(new Error('Local PTYs are unavailable in the web client.')),
     write: () => {},
     writeAccepted: () => Promise.resolve(false),

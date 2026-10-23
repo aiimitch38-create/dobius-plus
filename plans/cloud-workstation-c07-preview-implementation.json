@@ -1,0 +1,146 @@
+{
+  "recorded_at": "2026-10-14T04:50:48.384149+00:00",
+  "repository": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+  "scope": "C07 registered-root original text previews: implement, test, document, independently review; original personal files excluded from development fixtures",
+  "contract": "dobius/docs/reference/DATA-CATALOG-PREVIEW-CONTRACT.md",
+  "contract_sha256": "d817aa898a9beac9416377630e9d33c0bf055bd6ae3fddffd7e63338b7ea693e",
+  "root_contract_acceptance": "PASS exact corrected contract plus RESEARCH corrected_final_contract_review; source contract only",
+  "rules": [
+    "Canonical Dobius source only. Do not edit Herald-OS or any other project. Preserve preexisting changes.",
+    "No Git mutation, dependency reinstall, services, installs, native phone/version changes, original-file reads, AWS or historical Storage queue actions.",
+    "Only assigned existing paths and concrete preview-domain modules/tests beneath assigned domain. Ask ROOT for additional overlap; send interfaces/findings through named reports, do independent assigned work while waiting.",
+    "Node24; focused Vitest maxWorkers=1. ROOT serializes broad suites/build/install.",
+    "Publish interface/schema readiness early; freeze sorted path-NUL-bytes-NUL hashes, test commands/results and limitations for peer review. Final worker status must be current under this assignment, not old top-level status."
+  ],
+  "supplement": {
+    "policy_rpc": "data.catalog.preview.policy({rootId,generation}) strict. Local trusted UI => {state:local,desktopPreviewEnabled:boolean,deviceIds:UUID[],devices:{deviceId:UUID,name:string}[]}; verified mobile => {state:mobile,enabled:boolean}; denied/unavailable => {state:denied|unavailable}. No path. Paired local list only mobile scope, phone enabled requires both browse+preview. Existing roots/page DTO unchanged.",
+    "bounds": {
+      "listed_witness_ttl_ms": 60000,
+      "listed_witness_per_connection": 512,
+      "listed_witness_global": 2048,
+      "pending_refs_per_principal": 16,
+      "pending_refs_global": 64,
+      "sessions_global": 16,
+      "sessions_per_principal": 1,
+      "active_native_reads_global": 4,
+      "inflight_preview_operations_global": 16,
+      "inflight_per_session": 1
+    },
+    "native_interface": "BUILD2 publishes descriptor-preview-contract.ts: strict raw NativePreviewIdentity (dev,ino,sizeBytes,mtimeNs,ctimeNs canonical bounded decimals,fileType regular), NativePreviewStat adds fileVersion64hex. Extend createDescriptorDirectoryBridge return with preview capability methods statPreview(root,openedRoot,components), readPreviewChunk(root,openedRoot,components,expectedStat,offset,length) returning strict chunk {stat,dataBase64,offset,nextOffset,final}. Root handle is already opened/verified; expectedStat includes complete version, bytes read<=16384, file cap262144. Export pure stat-version function with exact domain-separated length-prefix recipe shared by service/native tests. Listing stat must retain private full-width raw NativePreviewIdentity without content reads, public catalog entry unchanged. Epoch/generation observation sync accessible from bridge; stale/dead/uncleaned transport refuses.",
+    "domain_facade": "FIXER ApplicationDataCatalog exposes previewPolicy(principal,request), setPreviewAccess(principal,request), previewResolve/Start/Chunk/Finish/Renew/Close(principal,request), invalidatePreviewConnection(connectionId), invalidatePreviewAuthority(). page(principalId,request,previewPrincipal?) third optional trusted identity registers only exact actually returned rows. Principal type exported main-only preview-principal.ts. RPC/auth derives identity; principal hostId runtimeId, signal connection/nav lifetime. Never take identity from params.",
+    "authority": "FIXER own central synchronous authority/ticket seam covering enrollment/grants. RESEARCH connects trusted stable WebContents/mobile transport lifecycle and current paired mobile scope; ROOT integrates main index/provider callback and any external device/epoch seams after publishing exact requirements. Preview must stay denied until all authority components wired. Capture ticket before awaits and compare after each and final no-await commit. Native helper epoch must also be compared synchronously; AbortSignal must reflect lifetime, not per-request identity.",
+    "client_identity": "BUILD1 uses existing target/host client lifecycle, stale request fence and foreground state. Shared schemas from FIXER data-catalog-preview-schema.ts; shared assembly/controller modules BUILD1 owns. Deny remote desktop runtime-scope preview and old-host methods explicitly; never files.readPreview fallback.",
+    "events": "RESEARCH binds data.catalog.previewInvalidated content-free delivery to exact connection (no path/name/content); missed event protected by conservative request-start monotonic<=30s display lease. Publish transport callback seam for ROOT. Never broadcast content/session capabilities to other clients.",
+    "native_private_stat_retention": "FIXER owns metadata-scanner.ts; add optional MetadataEntryStat.previewIdentity: NativePreviewIdentity exported BUILD2 descriptor-preview-contract.ts. BUILD2 owns lstat_child raw stat and parser output; no overlapping scanner edit. FIXER exact physical components/version stay in server ledger, not public CatalogEntry.",
+    "paired_authority": "RESEARCH owns optional DeviceRegistry authority-change observer and calls catalog invalidatePreviewAuthority synchronously around security-relevant registry publication; startup/reload/revoke/scope/grant/token/pairing eligibility changes included. Ordinary lastSeen/name telemetry updates must not invalidate every chunk. ROOT wires separate factory/main pairedMobileDevices callback with explicit scope mobile. The same registry is used by current authenticated WS; no caller-supplied scope.",
+    "relative_transport_deadlines": "FIXER schema uses expiresInMs exact30s refs/60s transfer and includes rootId/generation in ready/chunk replies instead of old wall-clock expiresAtMs. ROOT accepts this coherent relative-timing improvement, document it and freeze new contract/schema hashes for independent review. Client binds local request-start and retains absolute server-owned monotonic deadlines internally."
+  },
+  "owners": {
+    "BUILD1": {
+      "task": "Implement desktop/phone consent+preview inline UI and shared complete-byte assembly/lease controller with privacy/focus/stale tests. Early shared schema readiness coordination with FIXER; independent implementation in client-owned modules while schema freezes.",
+      "paths": [
+        "dobius/src/renderer/src/components/settings/DataCatalogSetting.tsx",
+        "dobius/src/renderer/src/components/settings/DataCatalogSetting.test.tsx",
+        "dobius/src/renderer/src/components/command-center/DataCatalogPanel.tsx",
+        "dobius/src/renderer/src/components/command-center/DataCatalogPanel.test.tsx",
+        "dobius/src/renderer/src/components/command-center/use-data-catalog.ts",
+        "dobius/src/renderer/src/components/command-center/use-data-catalog.test.ts",
+        "dobius/src/renderer/src/components/command-center/data-catalog-reader-state.ts",
+        "dobius/mobile/app/h/[hostId]/data.tsx",
+        "dobius/mobile/src/files/MobileDataCatalogPanel.tsx",
+        "dobius/mobile/src/files/MobileDataCatalogPanel.test.ts",
+        "dobius/mobile/src/files/use-mobile-data-catalog.ts",
+        "dobius/mobile/src/files/use-mobile-data-catalog.test.ts",
+        "dobius/mobile/src/files/mobile-data-catalog-reader-state.ts",
+        "dobius/src/shared/data-catalog-preview-assembly.ts",
+        "dobius/src/shared/data-catalog-preview-assembly.test.ts",
+        "dobius/src/shared/data-catalog-preview-client.ts",
+        "dobius/src/shared/data-catalog-preview-client.test.ts",
+        "dobius/docs/reference/DATA-CATALOG-UI.md"
+      ],
+      "domain_extensions": "Dedicated preview UI/hook/state modules and tests under those command-center/settings/mobile-files domains only; shared preview assembly/client domain only.",
+      "report": "plans/cloud-workstation-reports-20261012/build1.json",
+      "reviewer": "FIXER after backend freeze"
+    },
+    "BUILD2": {
+      "task": "Implement POSIX descriptor preview stat/chunk capability, full width identity, helper incarnation/cancellation, prompt FIFO/race refusals using temp fixtures. Publish concrete interface first to FIXER/ROOT.",
+      "paths": [
+        "dobius/config/scripts/data-catalog/descriptor-directory-bridge.py",
+        "dobius/src/main/storage/data-catalog/descriptor-directory-bridge.ts",
+        "dobius/src/main/storage/data-catalog/descriptor-directory-protocol.ts",
+        "dobius/src/main/storage/data-catalog/descriptor-directory-transport.ts",
+        "dobius/src/main/storage/data-catalog/descriptor-directory-bridge.test.ts",
+        "dobius/src/main/storage/data-catalog/descriptor-directory-transport.test.ts",
+        "dobius/src/main/storage/data-catalog/descriptor-preview-contract.ts",
+        "dobius/docs/reference/DATA-CATALOG-DESCRIPTOR-BRIDGE.md"
+      ],
+      "domain_extensions": "Dedicated descriptor-preview/native-stat modules and synthetic tests in data-catalog TS/Python domains. If add Python resource module tell ROOT immediately; ROOT owns bundle resources/release gates.",
+      "report": "plans/cloud-workstation-reports-20261012/build2.json",
+      "reviewer": "RESEARCH after auth freeze"
+    },
+    "FIXER": {
+      "task": "Implement strict shared preview schemas FIRST and publish them; separate default-denied enrollment grants/policy, main-only principal, emitted-entry ledger with exact native stat/physical components, bound single-use refs, ordered sessions, coherent authority tickets, visibility lease and cleanup; preserve metadata wire. Integrate ApplicationDataCatalog facade per supplement.",
+      "paths": [
+        "dobius/src/shared/data-catalog-preview-schema.ts",
+        "dobius/src/shared/data-catalog-preview-schema.test.ts",
+        "dobius/src/main/storage/data-catalog/types.ts",
+        "dobius/src/main/storage/data-catalog/metadata-scanner.ts",
+        "dobius/src/main/storage/data-catalog/metadata-directory-traversal.ts",
+        "dobius/src/main/storage/data-catalog/catalog-service.ts",
+        "dobius/src/main/storage/data-catalog/catalog-session-lifecycle.ts",
+        "dobius/src/main/storage/data-catalog/root-enrollment-store.ts",
+        "dobius/src/main/storage/data-catalog/root-enrollment-store.test.ts",
+        "dobius/src/main/storage/data-catalog/application-catalog.ts",
+        "dobius/src/main/storage/data-catalog/application-catalog.test.ts",
+        "dobius/src/main/storage/data-catalog/preview-principal.ts",
+        "dobius/docs/reference/DATA-CATALOG-APPLICATION.md",
+        "dobius/docs/reference/DATA-CATALOG-PREVIEW-CONTRACT.md"
+      ],
+      "domain_extensions": "Dedicated preview-domain modules/tests under main/storage/data-catalog; schemas only data-catalog-preview-schema*. Preserve accepted roots/page schemas.",
+      "report": "plans/cloud-workstation-reports-20261012/fixer.json",
+      "reviewer": "BUILD1 after UI freeze"
+    },
+    "RESEARCH": {
+      "task": "Implement trusted transport/auth RPC integration: stable trusted IPC WebContents nav identity, mobile verified scope/connection lifetime, deny Unix/runtime-scope, strict preview RPC adapter and classification, targeted content-free invalidation event; tests before handoff. Publish identity/lifecycle/device authority seams early for FIXER and ROOT.",
+      "paths": [
+        "dobius/src/main/ipc/runtime.ts",
+        "dobius/src/main/ipc/runtime.test.ts",
+        "dobius/src/main/runtime/rpc/core.ts",
+        "dobius/src/main/runtime/rpc/dispatcher.ts",
+        "dobius/src/main/runtime/rpc/dispatcher.test.ts",
+        "dobius/src/main/runtime/rpc/methods/data-catalog.ts",
+        "dobius/src/main/runtime/rpc/methods/data-catalog.test.ts",
+        "dobius/src/main/runtime/runtime-rpc.ts",
+        "dobius/src/main/runtime/runtime-rpc.test.ts",
+        "dobius/src/main/runtime/mobile-rpc-grants.ts",
+        "dobius/src/main/runtime/mobile-rpc-grants.test.ts",
+        "dobius/src/shared/mobile-rpc-method-classes.ts",
+        "dobius/src/shared/mobile-rpc-method-classes.test.ts",
+        "dobius/src/main/runtime/mobile-rpc-method-classes.ts",
+        "dobius/src/main/runtime/mobile-rpc-method-classes.test.ts",
+        "dobius/src/main/runtime/device-registry.ts",
+        "dobius/src/main/runtime/device-registry.test.ts"
+      ],
+      "domain_extensions": "Dedicated catalog-preview transport lifecycle/auth modules and tests in main/ipc or runtime/rpc; request other mobile allowlist file ownership if discovered.",
+      "report": "plans/cloud-workstation-reports-20261012/research.json",
+      "reviewer": "BUILD2 after native freeze"
+    },
+    "ROOT": {
+      "paths": [
+        "dobius/src/main/index.ts",
+        "dobius/src/main/storage/data-catalog/application-catalog-factory.ts",
+        "dobius/src/main/storage/data-catalog/application-catalog-factory.test.ts",
+        "dobius/src/main/runtime/runtime-rpc-preview-delivery.integration.test.ts"
+      ],
+      "task": "Compose main callback and test real synthetic native+client and encrypted transport integration; serialize full checks/build/install."
+    }
+  },
+  "invalidation_followup": {
+    "recorded_at": "2026-10-14T05:22:00Z",
+    "finding": "Backend callback exists but factory/main do not supply it; clients have no subscription wiring. Exact-connection content-free event delivery remains required before preview acceptance.",
+    "RESEARCH": "Own IPC/runtime routing, dedicated event modules/tests and required typed preload/mobile transport subscription APIs; publish emitter seam for ROOT. Prior dc459f54 source review retained.",
+    "BUILD1": "Own desktop/phone preview hook subscriptions, strict root/generation validation, immediate clearing and stale/disposal tests; publish revised freeze. Corrected cf46b3e1 source remains pre-event checkpoint only.",
+    "ROOT": "Own application-catalog-factory.ts and main/index.ts callback composition after transport seam publication.",
+    "FIXER": "Continue backend implementation and event production; no additional assignment until frozen/idle."
+  }
+}

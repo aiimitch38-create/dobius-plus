@@ -14,6 +14,8 @@
 export type RpcMessageContext = {
   signal: AbortSignal
   startKeepalive: () => void
+  // Reserved for a privileged authenticated adapter; ordinary Unix sockets leave this absent.
+  adamPeerEvidence?: object
 }
 
 export type RpcTransport = {

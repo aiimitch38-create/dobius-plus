@@ -1,0 +1,255 @@
+{
+  "schemaVersion": 1,
+  "status": "source_audited_contract_proposal_not_implemented",
+  "recordedAt": "2026-10-14",
+  "purpose": "Define a durable, authenticated, idempotent bridge from a Dobius CloudJob child execution to an ADAM parent objective without merging the two stores or treating process success as parent completion.",
+  "scope": {
+    "dobiusCanonicalRepository": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+    "dobiusBranch": "fix/channel-cost",
+    "dobiusHead": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+    "adamAuthoritativeRepository": "/Users/bayou/dobius/projects/ADAM",
+    "adamBranch": "adam-crackbot-2026-09-02",
+    "adamHead": "a46de20cd91174e9fa97354d6c08966ea683af8f",
+    "allowedWrites": [
+      "plans/cloud-workstation-adam-bridge-contract.json",
+      "plans/cloud-workstation-reports-20261012/fixer.json"
+    ],
+    "notInScope": [
+      "editing the separate ADAM application or its database",
+      "credentials or secret contents",
+      "live ADAM requests, service actions, or provider jobs",
+      "AWS and historical Storage work",
+      "implementation, build, install, or deployment"
+    ]
+  },
+  "sourceSnapshot": {
+    "dobius": {
+      "src/shared/cloud-jobs.ts": "49d61c89d6688a928839b598bbee90b4053cdd3b8c807d027087b4cb3a0d8348",
+      "src/main/automations/cloud-job-service.ts": "9ae579d17be77af8ba7f6b9fbf6513ee47d40d391d722fe299a9a1c7139a5790",
+      "src/main/automations/cloud-jobs/store.ts": "c1a8ffe823f4e584bdb702c2229d46c0602a901819297b134ed9200737e33591",
+      "src/main/automations/cloud-jobs/cloud-worker-attempt-lifecycle.ts": "b70b31b5365fb948e356aa11fe37f13b200831ed3d4bf3f4e585baa9f2cfc1c7",
+      "src/main/automations/cloud-jobs/database.ts": "dea21c9c5a554e204bd49b39e9b153ebb5c319b188b3aa27c69acd8ce443450c",
+      "src/main/agents/agent-run-event-delivery.ts": "f074fd97bbc9c69f1aa12ee48c17c1310747773594a6e685fc174b4fdb19fbb7",
+      "src/main/agents/agent-run-event-journal.ts": "5c52b1ad136ea4375b8d9021c8c51457bf3e3abb26d39a59b8b931e3e89ccc40",
+      "src/main/index.ts": "2cdc31c08469e23aa766499e07b7d1ba3e2b6b3311a5280eb235119a8b34a2fc",
+      "src/main/runtime/rpc/methods/cloud-jobs.ts": "73af2ce524989398160ef2b3496311ea8b7a30535671d38cb1b49ce638327d86",
+      "src/main/adam-connection.ts": "47af9d1a1bd3c46056688b18703942de3c189f2b80718eb069d44896a8c1b0af"
+    },
+    "adam": {
+      "service/src/jobs/store.ts": "e155bdf80a037a1de17364e0a9865941932b19a9f02717d0864f8084a80feb46",
+      "service/src/db/migrations.ts": "017986f2db83b1f311d0dcabce31258dcd6fb156f7d93dc42366a4060f910766",
+      "service/src/events/ingest.ts": "46f01b58ae4ee0cbd9a4d8c3e40890ae11c270498d2c0f72fd4cc671c1df3207",
+      "service/src/runtime/service.ts": "71c83c90d3bb1df4142a7e5765602bb5fb459e3ffc2edc3d64c88af3462bbc15",
+      "service/src/orchestration/supervisor.ts": "7fdf98cc1be184f3fd2701f0281524f1397866e491a4c8cb6fed6be61a2ff0cf",
+      "service/src/jobs/states.ts": "32d93a66992205db5d761e7263fd9f5060f68b0fa4b2a52c4b57b6298fd0f7df"
+    },
+    "hashMeaning": "Observed working-tree SHA256 values at contract drafting time, not a clean-commit or installed-artifact claim. No ADAM files were modified."
+  },
+  "currentSourceFacts": [
+    {
+      "fact": "CloudJobStore has its own SQLite job, attempt, capacity, permit, start and event records. Request submission is idempotent by creator plus requestKey and rejects a changed fingerprint. There is no ADAM parent-objective field, correlation table, or CloudJob transactionally-coupled ADAM receipt outbox in the inspected source."
+    },
+    {
+      "fact": "Successful worker settlement records a successful attempt and moves the CloudJob to needs_review. CloudJobStore.accept requires a current version, needs_review state, nonempty evidence, and a verification string. CloudJobService.accept additionally requires its injected verifyAcceptance callback; the current cloud-job-authority composition does not supply that callback, so its production service does not currently accept jobs through that path. Neither exit code zero nor needs_review is an accepted completion."
+    },
+    {
+      "fact": "The CloudJob authority is composed only in serve mode from private registration, turns dispatch off at store initialization, and currently reports liveDispatchReady false. CloudWorkerQueuePort is defined and fixture-tested, but a bounded production-source search found no production construction/wiring. This contract does not claim a live worker executor."
+    },
+    {
+      "fact": "Dobius already has a separate durable agent-run NDJSON journal and authenticated ADAM /v1/events/ingest delivery loop. That loop is not in the same SQLite transaction as CloudJob transitions. Its event context may contain adamJobId, but that field is not a verified parent binding and must not be used to infer one."
+    },
+    {
+      "fact": "ADAM /v1/events/ingest is bearer-protected by the service's general route guard and deduplicates eventId as dobius:<eventId>; ingestion stores an event and queues Obsidian projection. It does not bind the event to an ADAM JobStore parent or update objective state. The public /health route is exempt from bearer auth and says nothing about this bridge."
+    },
+    {
+      "fact": "ADAM JobStore owns separate parent jobs, steps, evidence, audit and notification outbox tables. JobStore.transitionJob(completed) checks all steps and requires passing evidence. Existing ADAM supervisor/verifier logic is separate from CloudJob settlement and is the parent-side completion authority. No CloudJob correlation/receipt table or receipt endpoint was found in inspected ADAM source."
+    },
+    {
+      "fact": "ADAM's current Dobius reverse adapter and worker-launch workflow are a distinct ADAM-to-Dobius CLI path. They do not create a transactional mapping to CloudJobStore."
+    }
+  ],
+  "authorityAndIdentity": {
+    "ownership": {
+      "adamParentObjective": "ADAM JobStore remains sole authority for parent objective state, parent verification, and parent completion.",
+      "dobiusChildExecution": "CloudJobStore remains sole authority for child job state, worker attempts, worker leases, start/stop proof, capacity reservations, and CloudJob acceptance.",
+      "receipt": "A receipt is an authenticated, immutable cross-store observation, not a shared transaction and not an authority transfer."
+    },
+    "identityBinding": {
+      "rule": "Never accept parentObjectiveId, adamJobId, project identity, or context digest as an authority exception merely because it appears in a runtime RPC body, generic event context, caller source string, or local job title.",
+      "proposedHandshake": "ADAM's parent orchestration creates a short-lived, one-use parent-child binding capability in its own DB. A dedicated internal ADAM-origin path passes that opaque capability to a main-process-only Dobius submit adapter. Dobius validates/consumes it through a new authenticated ADAM service-to-service endpoint before committing a linked CloudJob. The endpoint returns canonical ADAM instance ID, parent objective ID and version, project ID, context digest, allowed child request fingerprint, binding ID, and expiry. The capability is bound to the exact canonical CloudJob request fingerprint and is idempotently consumable for that same request after crashes; a changed request or second child is rejected.",
+      "trustBoundary": "The capability is accepted only by the injected main-process parent-binding adapter, never by generic mobile, renderer, web, or paired RPC. The main adapter uses the existing configured authenticated ADAM connection and token resolver; no token is passed to renderer/RPC or persisted in CloudJob DB. The authenticated service bearer identifies the service channel, while the ADAM-held one-use binding proves the exact parent relation. A plain event's adamJobId is informational only.",
+      "unavailable": "If a request explicitly requires an ADAM parent link, unavailable, unauthenticated, expired, or mismatched binding must reject before CloudJob creation. Standalone CloudJob submission can retain its existing behavior only when no parent link is requested. After a binding and local job are committed, ADAM outage must not erase either record or fabricate an acknowledgement."
+    },
+    "bindingFields": [
+      "bindingId",
+      "adamInstanceId",
+      "parentObjectiveId",
+      "parentObjectiveVersion",
+      "projectId",
+      "contextDigest",
+      "cloudRequestFingerprint",
+      "expiresAt"
+    ],
+    "secrets": "Persist only bindingId and a digest of the capability/proof; never store bearer tokens or raw one-use capability. Do not put parent objective text, terminal output, prompt text, raw logs, or secrets in receipts."
+  },
+  "durableDataModel": {
+    "cloudJobStore": {
+      "parentLinkTable": {
+        "purpose": "Durable exact relation from one CloudJob child to one authenticated ADAM parent binding; one ADAM parent may link multiple CloudJob children.",
+        "fields": [
+          "binding_id",
+          "adam_instance_id",
+          "parent_objective_id",
+          "parent_version_at_bind",
+          "project_id",
+          "context_digest",
+          "cloud_job_id",
+          "request_fingerprint",
+          "binding_digest",
+          "created_at"
+        ],
+        "constraints": [
+          "unique(binding_id)",
+          "unique(adam_instance_id, cloud_job_id)",
+          "foreign key cloud_job_id references cloud_jobs(id)",
+          "immutable binding fields after first insert"
+        ]
+      },
+      "receiptOutbox": {
+        "purpose": "Persist receipt delivery atomically with the corresponding CloudJob job/event transition.",
+        "fields": [
+          "receipt_id",
+          "cloud_event_sequence",
+          "binding_id",
+          "cloud_job_id",
+          "attempt_id nullable",
+          "job_version",
+          "event_kind",
+          "payload_json",
+          "payload_sha256",
+          "state pending|leased|acknowledged|blocked",
+          "attempt_count",
+          "next_attempt_at",
+          "lease_owner nullable",
+          "lease_expires_at nullable",
+          "last_error_code nullable",
+          "acknowledged_at nullable"
+        ],
+        "constraints": [
+          "primary key receipt_id",
+          "unique(binding_id, cloud_event_sequence)",
+          "unique(binding_id, event_kind, attempt_id, job_version) with canonical null handling",
+          "payload is immutable once leased or acknowledged"
+        ]
+      },
+      "transactionRule": "CloudJob state mutation, cloud_events append, and linked receipt-outbox insertion occur inside one BEGIN IMMEDIATE transaction. No HTTP, token lookup, or await is performed inside the SQLite transaction."
+    },
+    "adamStore": {
+      "receiptTable": "Dedicated cloud_job_receipts or equivalent ADAM JobStore-owned table; do not overload the iMessage notification outbox or generic event payload as the idempotency ledger.",
+      "requiredConstraints": [
+        "unique(receipt_id)",
+        "unique(binding_id, cloud_event_sequence)",
+        "unique(adam_instance_id, cloud_job_id, cloud_event_sequence)",
+        "foreign key or validated reference to the existing ADAM parent objective and binding"
+      ],
+      "sameKeyReplay": "Same receipt ID and same canonical payload digest returns the original durable acknowledgement. Same key with a different digest returns conflict and changes no parent state."
+    }
+  },
+  "receiptProtocol": {
+    "transport": "New authenticated ADAM service-to-service endpoint over the existing configured ADAM connection; all non-health endpoints require bearer auth. Proposed endpoint POST /v1/dobius/cloud-job-receipts. This endpoint does not exist in inspected ADAM source.",
+    "receiptDto": {
+      "schemaVersion": 1,
+      "receiptId": "stable UUID generated once by Dobius and persisted before delivery",
+      "bindingId": "ADAM-issued verified binding ID",
+      "adamInstanceId": "canonical ADAM instance identifier from binding response",
+      "parentObjectiveId": "canonical parent ID from binding response, never accepted from receipt payload as authority",
+      "parentObjectiveVersion": "parent version at binding for stale-link detection",
+      "cloudJobId": "canonical CloudJob UUID",
+      "cloudJobVersion": "monotonic CloudJob version",
+      "cloudEventSequence": "monotonic per-database event cursor",
+      "attemptId": "canonical attempt UUID or null for pre-attempt events",
+      "attemptNumber": "positive integer or null before first attempt",
+      "eventKind": "submitted | attempt_started | execution_needs_review | execution_failed | cancellation_requested | process_stopped | interrupted | retry_queued | review_accepted",
+      "cloudJobState": "typed CloudJob state snapshot",
+      "projectId": "must equal binding project ID",
+      "contextDigest": "must equal binding context digest",
+      "evidenceDigests": "bounded array of typed evidence identifiers and SHA-256 digests; no raw output or narrative",
+      "occurredAt": "source timestamp for display/audit only; never an authorization or ordering key"
+    },
+    "ackDto": {
+      "ok": true,
+      "receiptId": "same receipt ID",
+      "payloadSha256": "same canonical payload digest",
+      "accepted": "inserted | duplicate",
+      "storedAt": "ADAM's durable receipt timestamp",
+      "parentStateChanged": false
+    },
+    "ordering": "ADAM rejects or parks a receipt whose sequence skips an earlier receipt for the same binding. A replay of an already stored lower sequence returns its original ack. Dobius sends in per-binding event-sequence order; independent bindings may drain concurrently within a small configured cap.",
+    "eventSemantics": {
+      "execution_needs_review": "Means CloudJob worker settlement succeeded and the child awaits its own review; it is not a parent pass or completion receipt.",
+      "review_accepted": "Emitted only after a valid CloudJobService.accept and its independent verifyAcceptance callback succeeds. It is child acceptance evidence, not automatic ADAM parent completion.",
+      "cancellation_requested": "Means cancellation intent only; it does not assert process death or release a CloudJob reservation.",
+      "process_stopped": "May be emitted only after the exact C05 worker stop proof is durably acknowledged. Interrupted/unknown process state stays unresolved."
+    }
+  },
+  "stateAndCompletionRules": {
+    "cloudChild": [
+      "CloudJob claim/start and heartbeat remain CloudJobStore-owned.",
+      "A successful process exit settles the child to needs_review, never completed.",
+      "CloudJob completed is possible only through the separate current-version acceptance path with verified evidence.",
+      "A retry retains the same CloudJob and parent binding but receives a new attemptId and new event sequence; prior attempt receipts remain immutable.",
+      "Failed or interrupted attempts are not retryable until the existing exact worker/process reconciliation rule allows it."
+    ],
+    "adamParent": [
+      "Receipt ingestion appends a child-status receipt/audit item for the bound parent but does not transition the ADAM parent to completed or reported.",
+      "Neither exitCode 0, attempt success, execution_needs_review, missing receipt, nor child CloudJob completion alone can auto-complete the parent objective.",
+      "Only ADAM's existing parent verifier/policy may transition its parent after evaluating the full parent Definition of Done, all required child/other steps, and independent passing evidence. A missing or conflicting child receipt keeps the parent verifying/blocked/awaiting state according to ADAM policy.",
+      "An ADAM-side accepted receipt is an observation, not a command to mark a step complete. If ADAM needs child acceptance as a step prerequisite, that mapping must be explicit in the parent plan and checked by the parent verifier."
+    ],
+    "optimisticConcurrency": "Binding includes parent version. Receipt ingestion verifies the parent still exists and is eligible for linked work; subsequent receipts remain audit facts even if parent version advances, but must not overwrite newer parent state. Parent transitions use ADAM JobStore's own transaction and transition validation."
+  },
+  "deliveryAndRecovery": {
+    "deliveryGuarantee": "At-least-once delivery with receiver-side idempotency; exactly-once network delivery is not claimed.",
+    "claim": "A bounded outbox drainer claims pending/expired-lease rows with compare-and-set owner and finite lease. It reads committed rows only and never starts worker processes.",
+    "retry": "Timeouts, network errors, 429, 5xx, and transient endpoint/auth resolution failures preserve the row and retry with bounded exponential backoff plus jitter. 401/403 or endpoint policy mismatch pauses delivery and marks health blocked; no token fallback or alternate host. Schema/conflict responses remain durable blocked rows requiring operator repair; do not poison-drop parent receipts.",
+    "restart": "On startup, reclaim expired outbox leases and resume oldest pending receipt per binding. Same receipt ID and exact payload are replayed unchanged. Crash after ADAM commits but before Dobius records the ack is resolved by ADAM returning duplicate for the same ID/digest.",
+    "availability": "ADAM unavailable does not roll back a committed CloudJob, forge a parent acknowledgement, or invoke a provider. Linked receipts remain locally pending and inspectable without raw payload/token exposure. Existing standalone CloudJob operations remain governed by existing authority gates.",
+    "separation": "Do not reuse the file-based agent-run NDJSON cursor as the CloudJob transactional outbox. Do not enqueue through ADAM's user-notification outbox."
+  },
+  "suggestedInterfaceAndOwnership": {
+    "rootOwnedDobius": [
+      "shared CloudJobParentBinding and CloudJobReceipt schemas, with strict Zod validation and canonical payload digest",
+      "main-process AdamParentBindingClient and internal submit-for-parent adapter; no generic RPC method accepts a raw parent ID or binding exception",
+      "CloudJob database migration, immutable parent-link table, transactional receipt outbox, ordered lease/ack/retry service and redacted health",
+      "CloudJobStore transition hooks and CloudJobService integration; wire no network call into SQLite transaction or runner callbacks",
+      "cloud-job-authority/index composition, lifecycle shutdown and narrow runtime status surface"
+    ],
+    "rootOwnedAdamSide": [
+      "internal one-use parent-child binding issuance/consumption against the existing parent JobStore identity and version",
+      "authenticated POST /v1/dobius/cloud-job-receipts route and strict DTO validation",
+      "durable receipt dedupe/audit storage and stable accepted/duplicate/conflict acknowledgements",
+      "parent verifier integration that records child facts without bypassing ADAM's parent completion gate"
+    ],
+    "notOwnedByThisTask": "This is a contract only. ROOT owns authority, service, main-process composition, and all implementation/deployment decisions; no ADAM source is changed here."
+  },
+  "verificationMatrix": [
+    "Unauthenticated, expired, wrong-parent, wrong-project, wrong-context-digest, wrong-request-fingerprint, and reused-for-different-child binding is rejected before CloudJob row/outbox creation.",
+    "Exact authenticated binding replay after crash returns the same CloudJob and one immutable binding/outbox event; changed request under same request key conflicts.",
+    "A successful exitCode 0 produces execution_needs_review; parent remains noncompleted and receipt delivery cannot change that.",
+    "A child needs_review receipt is stored as pending child review and cannot satisfy the parent DOD; child review_accepted is still not itself parent completion.",
+    "Independent verified child acceptance emits one review_accepted receipt; invalid/missing verifier rejects and emits no acceptance receipt.",
+    "ADAM timeout after durable acceptance followed by retry returns duplicate ack with no duplicate parent evidence/audit transition.",
+    "Crash after CloudJob state commit but before sender wake, and crash after ADAM receipt commit before local ack, both recover from durable outbox and idempotent receiver.",
+    "Same receipt ID with changed payload digest and out-of-order sequence are rejected/parked without parent mutation.",
+    "ADAM offline, 401/403, 429, 5xx, malformed response and endpoint policy block preserve pending receipt and expose bounded redacted delivery state.",
+    "Cancel request reports cancellation_requested while process/slot remains held; process_stopped appears only after matching stop proof, and interrupted unknown process never releases capacity.",
+    "Explicit retry after allowed reconciliation preserves parent binding, allocates a distinct attempt ID and does not replay old attempt as a new attempt.",
+    "Concurrent duplicate dispatch/replay from two drainers yields one ADAM receipt and stable duplicate ack; stale lease owner cannot acknowledge a newer claim.",
+    "Receipts never include terminal output, prompt text, objective body, credentials, absolute path or unbounded worker logs."
+  ],
+  "acceptanceBoundary": {
+    "current": "No C02-to-ADAM parent-objective receipt bridge was found in inspected working-tree source. Existing generic event ingest and agent-run journal do not supply the atomicity, parent binding, or completion semantics required here.",
+    "build19": "User/ROOT reports Build 19 installed and live-ready. This audit did not inspect a new install receipt, issue an authenticated request, or verify ADAM bridge deployment; no live integration acceptance is claimed.",
+    "nextGate": "ROOT reviews and assigns implementation ownership, then independent tests/source review and authenticated fake-service contract tests precede any separately authorized rollout."
+  }
+}

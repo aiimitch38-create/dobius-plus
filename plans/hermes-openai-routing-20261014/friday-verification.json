@@ -1,0 +1,9 @@
+{
+  "profile": "friday",
+  "provider": "openai-codex",
+  "auth_mode": "chatgpt",
+  "model": "gpt-6.1-sol",
+  "real_inference": "PASS",
+  "reply": "FRIDAY_CODEX_VERIFIED",
+  "checked_at": 1792002417.703476
+}

@@ -1,0 +1,18 @@
+{
+  "verdict": "PASS_BOUNDED_SOURCE",
+  "dispatch_id": "ctx_4eeb2a9a49ae",
+  "report": "plans/worker-monitor-20261014/FIXER-adam-main-dynamic-authority-correction-review.md",
+  "report_sha256": "b59821ee55e8c16c01f0c756a72845ebde2540c4a98109f24ab7083e04dc05df",
+  "source_hashes_verified": 26,
+  "aggregate": "d0bde5b35d036aa6cbcb69d85a13d7482f09baa6de8385f43a728c17bd1deddd",
+  "independent_tests": "148/148in13suites Node24",
+  "accepted_scope": "Exact Dobius main ingress and dynamic-authority source slice plus synthetic regressions",
+  "live_bridge_accepted": false,
+  "packaged_installed": false,
+  "actual_adam_applied": false,
+  "remaining_gates": [
+    "ADAM V3 independent review",
+    "Joint actual producer/consumer synthetic integration",
+    "Real peer enrollment/custody and installed/live acceptance"
+  ]
+}

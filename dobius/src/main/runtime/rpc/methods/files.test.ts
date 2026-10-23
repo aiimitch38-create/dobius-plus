@@ -83,6 +83,38 @@ describe('file RPC methods', () => {
     })
   })
 
+  it.each(['files.openBackground', 'files.openDiffBackground'])(
+    'dispatches %s with background semantics fixed by the method',
+    async (method) => {
+      const runtime = {
+        getRuntimeId: () => 'runtime',
+        openMobileFile: vi.fn().mockResolvedValue({ opened: true }),
+        openMobileDiff: vi.fn().mockResolvedValue({ opened: true })
+      }
+      const dispatcher = new RpcDispatcher({
+        runtime: runtime as unknown as DobiusRuntimeService,
+        methods: FILE_METHODS
+      })
+      expect(
+        await dispatcher.dispatch(
+          makeRequest(method, {
+            worktree: 'id:wt',
+            relativePath: 'note.md',
+            staged: true,
+            activate: true
+          })
+        )
+      ).toMatchObject({ ok: true })
+      if (method === 'files.openBackground') {
+        expect(runtime.openMobileFile).toHaveBeenCalledWith('id:wt', 'note.md', { activate: false })
+      } else {
+        expect(runtime.openMobileDiff).toHaveBeenCalledWith('id:wt', 'note.md', true, {
+          activate: false
+        })
+      }
+    }
+  )
+
   it('browses server directories before a project is added', async () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',

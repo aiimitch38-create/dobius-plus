@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "verdict": "PASS_CURRENT_SOURCE_SLICE",
+  "recorded_at": "2026-10-13T20:25:33.543750+00:00",
+  "reviewed_aggregate": "6ec6457eb8a2755efb4437d90c0b982bf019e90f023eb4d8e865dee4216ab409",
+  "focused_tests": {
+    "files": 5,
+    "passed": 59,
+    "exit_code": 0
+  },
+  "adversarial_actual_store_probe": {
+    "sample": {
+      "freeBytes": 1000,
+      "reportedReservedTotal": 100,
+      "safetyBytes": 100,
+      "sampledAt": 100000
+    },
+    "claimed_jobs": [
+      600,
+      250
+    ],
+    "claimed_total": 850,
+    "real_available": 800,
+    "cause": "Subtracting max(reported total,current queue) loses external reservation from a sample captured before new claims.",
+    "required_change": "Explicit external reservation or authenticated captured queue component; no overlap inference from timestamps; consistent claim/start accounting."
+  },
+  "capacity_correction": {
+    "candidate": "4c9cdbeb91071bbbe08244fdd2518c4ce19ef9dd75be3c8b8908d0a399a59795",
+    "files": 14,
+    "root_tests": {
+      "files": 5,
+      "passed": 62,
+      "exit_code": 0
+    },
+    "peer": "PASS_EXACT_CURRENT_FREEZE",
+    "legacy_total": "Rejected; explicit external reservations plus current SQLite queue commitments counted once",
+    "verdict": "PASS_SOURCE"
+  },
+  "accepted_at": "2026-10-13T20:36:20.532692+00:00"
+}

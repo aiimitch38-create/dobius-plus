@@ -1,0 +1,136 @@
+diff --git a/hermes_cli/mcp_startup.py b/hermes_cli/mcp_startup.py
+index 6d81853bca..685b3b00b0 100644
+--- a/hermes_cli/mcp_startup.py
++++ b/hermes_cli/mcp_startup.py
+@@ -10,6 +10,16 @@ _mcp_discovery_started = False
+ _mcp_discovery_thread: Optional[threading.Thread] = None
+ 
+ 
++def agent_owns_stdin() -> bool:
++    """Keep OAuth prompts out of a running agent's composer.
++
++    Once background startup begins, the CLI/TUI owns stdin for this process,
++    including later discovery retries. Explicit ``hermes mcp login`` runs in
++    its own process and does not start this agent discovery lifecycle.
++    """
++    return _mcp_discovery_started
++
++
+ def _has_configured_mcp_servers() -> bool:
+     """Cheap config probe so non-MCP users avoid importing the MCP stack."""
+     try:
+diff --git a/tools/mcp_oauth.py b/tools/mcp_oauth.py
+index 832a6f5945..e5ae6d471b 100644
+--- a/tools/mcp_oauth.py
++++ b/tools/mcp_oauth.py
+@@ -397,12 +397,24 @@ def _make_callback_handler() -> tuple[type, dict]:
+ # ---------------------------------------------------------------------------
+ 
+ 
++def _require_oauth_input_ownership() -> None:
++    """Never open an independent stdin reader while an agent owns input."""
++    from hermes_cli.mcp_startup import agent_owns_stdin
++
++    if agent_owns_stdin():
++        raise OAuthNonInteractiveError(
++            "MCP authorization needs a separate login: run `hermes mcp login "
++            "<server>` in the same profile. The agent keeps terminal input."
++        )
++
++
+ async def _redirect_handler(authorization_url: str) -> None:
+     """Show the authorization URL to the user.
+ 
+     Opens the browser automatically when possible; always prints the URL
+     as a fallback for headless/SSH/gateway environments.
+     """
++    _require_oauth_input_ownership()
+     msg = (
+         f"\n  MCP OAuth: authorization required.\n"
+         f"  Open this URL in your browser:\n\n"
+@@ -468,6 +480,7 @@ async def _wait_for_callback() -> tuple[str, str | None]:
+             that ``build_oauth_auth`` was skipped — the asserting form below
+             was a silent bug when running Python with ``-O``/``-OO``.
+     """
++    _require_oauth_input_ownership()
+     if _oauth_port is None:
+         raise RuntimeError(
+             "OAuth callback port not set — build_oauth_auth must be called "
+diff --git a/tests/tools/test_mcp_oauth_agent_input.py b/tests/tools/test_mcp_oauth_agent_input.py
+new file mode 100644
+index 0000000000..24b6675e77
+--- /dev/null
++++ b/tests/tools/test_mcp_oauth_agent_input.py
+@@ -0,0 +1,72 @@
++"""Agent startup must never compete with the composer for terminal input."""
++import asyncio
++from unittest.mock import Mock
++
++import pytest
++
++from hermes_cli import mcp_startup
++from tools import mcp_oauth
++
++
++def test_background_discovery_cannot_open_login_browser(monkeypatch, capsys):
++    monkeypatch.setattr(mcp_startup, "_mcp_discovery_started", True)
++    browser = Mock()
++    monkeypatch.setattr(mcp_oauth.webbrowser, "open", browser)
++    with pytest.raises(mcp_oauth.OAuthNonInteractiveError, match="hermes mcp login"):
++        asyncio.run(mcp_oauth._redirect_handler("https://example.test/authorize"))
++    browser.assert_not_called()
++    assert "example.test" not in capsys.readouterr().err
++
++
++def test_late_callback_cannot_start_stdin_reader(monkeypatch):
++    monkeypatch.setattr(mcp_startup, "_mcp_discovery_started", True)
++    monkeypatch.setattr(mcp_oauth, "_oauth_port", 12345)
++    server = Mock(side_effect=AssertionError("callback listener must not start"))
++    reader = Mock(side_effect=AssertionError("agent owns stdin"))
++    monkeypatch.setattr(mcp_oauth, "HTTPServer", server)
++    monkeypatch.setattr(mcp_oauth, "_paste_callback_reader", reader)
++    with pytest.raises(mcp_oauth.OAuthNonInteractiveError, match="hermes mcp login"):
++        asyncio.run(mcp_oauth._wait_for_callback())
++    server.assert_not_called()
++    reader.assert_not_called()
++
++
++def test_explicit_login_still_opens_browser(monkeypatch, capsys):
++    monkeypatch.setattr(mcp_startup, "_mcp_discovery_started", False)
++    monkeypatch.setattr(mcp_oauth, "_can_open_browser", lambda: True)
++    browser = Mock(return_value=True)
++    monkeypatch.setattr(mcp_oauth.webbrowser, "open", browser)
++    asyncio.run(mcp_oauth._redirect_handler("https://example.test/authorize"))
++    browser.assert_called_once_with("https://example.test/authorize")
++    assert "authorization required" in capsys.readouterr().err
++
++
++def test_real_background_startup_keeps_stdin_with_agent(monkeypatch):
++    import logging
++    import sys
++    import threading
++    import types
++
++    done = threading.Event()
++    errors = []
++    browser = Mock()
++    monkeypatch.setattr(mcp_startup, "_mcp_discovery_started", False)
++    monkeypatch.setattr(mcp_startup, "_mcp_discovery_thread", None)
++    monkeypatch.setattr(mcp_startup, "_has_configured_mcp_servers", lambda: True)
++    monkeypatch.setattr(mcp_oauth.webbrowser, "open", browser)
++
++    def discover():
++        try:
++            asyncio.run(mcp_oauth._redirect_handler("https://example.test/authorize"))
++        except mcp_oauth.OAuthNonInteractiveError as error:
++            errors.append(str(error))
++        finally:
++            done.set()
++
++    monkeypatch.setitem(sys.modules, "tools.mcp_tool", types.SimpleNamespace(discover_mcp_tools=discover))
++    mcp_startup.start_background_mcp_discovery(logger=logging.getLogger(__name__), thread_name="test-agent-input")
++    assert done.wait(2)
++    mcp_startup.wait_for_mcp_discovery(timeout=2)
++    assert mcp_startup.agent_owns_stdin()
++    assert len(errors) == 1 and "hermes mcp login" in errors[0]
++    browser.assert_not_called()

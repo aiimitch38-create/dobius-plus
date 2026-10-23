@@ -1,0 +1,78 @@
+{
+  "schema": "dobius-laya-source-preflight/v1",
+  "checked_at": "2026-10-12T22:00:27.817453+00:00",
+  "fork": "https://github.com/aiimitch38-create/laya",
+  "historical_revision": "3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63",
+  "remote_main_revision": "3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63",
+  "commit_subject": "feat(router)!: default to the multilingual checkpoint for undecided text",
+  "tree_sha": "4fb0c42e0ccee2d7088e75b06f5045a36e0d1348",
+  "license": "Apache-2.0",
+  "package_version": "0.4.0",
+  "requires_python": ">=3.10",
+  "pin_options": {
+    "recommended_recovery_candidate": "3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63",
+    "upstream_latest": "separate reviewed upgrade, never substituted"
+  },
+  "sources": [
+    {
+      "path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/aiimitch38-create/laya/3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63/LICENSE",
+      "bytes": 10173,
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "path": "pyproject.toml",
+      "url": "https://raw.githubusercontent.com/aiimitch38-create/laya/3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63/pyproject.toml",
+      "bytes": 3956,
+      "sha256": "2753bcbb3564152b125cf5cd3946f0f4643f3a7bfd698c1b7930b5de730fdb7d"
+    },
+    {
+      "path": "docs/cli-mcp.md",
+      "url": "https://raw.githubusercontent.com/aiimitch38-create/laya/3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63/docs/cli-mcp.md",
+      "bytes": 15476,
+      "sha256": "5d636c722f63435996d6ab7415c3d27f35df892f51096878f3651c4a90212b23"
+    },
+    {
+      "path": "laya/mcp/remote.py",
+      "url": "https://raw.githubusercontent.com/aiimitch38-create/laya/3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63/laya/mcp/remote.py",
+      "bytes": 12258,
+      "sha256": "ec46d54299b1aa61cb8cff16600173ed106cb993068695ff3381f71b9251971a"
+    },
+    {
+      "path": "laya/mcp/server.py",
+      "url": "https://raw.githubusercontent.com/aiimitch38-create/laya/3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63/laya/mcp/server.py",
+      "bytes": 22722,
+      "sha256": "b43f8f193a37d1b6cb99c86206b91ca5303f9f0156e47e6eda67238a0aa59eb1"
+    },
+    {
+      "path": "laya/serve.py",
+      "url": "https://raw.githubusercontent.com/aiimitch38-create/laya/3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63/laya/serve.py",
+      "bytes": 67169,
+      "sha256": "3ddccef7569f1d08acbb1ec9d8e60a0aaa3224826fdf8a6fda47c7f7b02abcad"
+    },
+    {
+      "path": "laya/router.py",
+      "url": "https://raw.githubusercontent.com/aiimitch38-create/laya/3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63/laya/router.py",
+      "bytes": 98714,
+      "sha256": "e543d573f75a6a3bd465bd0dc00906b1df5eb9abd0a0d2adc88c3baaf27e2c13"
+    }
+  ],
+  "candidate_checkpoint": {
+    "repository": "convaiinnovations/laya-multilingual",
+    "observed_revision": "1720e3e3357cfe1e281542e223f8273b0890ca34",
+    "declared_license": "apache-2.0",
+    "url": "https://huggingface.co/api/models/convaiinnovations/laya-multilingual",
+    "selected_for_deployment": false,
+    "weights_downloaded": false
+  },
+  "runtime": "not installed; isolated supported interpreter/dependency lock still required",
+  "inference": "not started; no accuracy/performance measurements",
+  "pending": [
+    "ROOT resource/service approval",
+    "dependency lock",
+    "selected checkpoint license/revision review",
+    "real heldout predictions",
+    "backend memory/latency/Metro-health budget",
+    "authenticated two-adapter proof"
+  ]
+}

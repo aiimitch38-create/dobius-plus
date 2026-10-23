@@ -229,3 +229,17 @@ describe('KanbanBoard analytics completion rate (#95)', () => {
     expect(value).toBe('0%')
   })
 })
+
+describe('KanbanBoard Jobs entry', () => {
+  it('opens the real authority selection without changing manual task state', async () => {
+    const source = memorySource([reviewTask()])
+    render(<KanbanBoard source={source} />)
+    await screen.findByText('Ship the login fix')
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }))
+    expect(await screen.findByText('Choose the registered VPS authority to load jobs.')).toBeTruthy()
+    expect(source.move).not.toHaveBeenCalled()
+    expect(source.update).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Back to tasks' }))
+    expect(await screen.findByText('Ship the login fix')).toBeTruthy()
+  })
+})

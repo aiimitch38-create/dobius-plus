@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-14T22:16:33.757911+00:00",
+  "status": "SOURCE_AND_PRIMARY_DOCUMENTATION_RESEARCH_COMPLETE; RECOMMENDATION_ONLY",
+  "report_path": "plans/worker-monitor-20261014/ROOT-adam-dobius-hermes-bridge-research.md",
+  "report_sha256": "531fb97079cfba1dd4aa67fb43f68132756d5f6b0477fcedbfa25d24317d100e",
+  "owned_application_source_changed": false,
+  "new_bridge_implemented": false,
+  "private_profiles_credentials_read": false,
+  "local_source_hashes": {
+    "dobius/src/main/jarvis/adam-client.ts": "fa683be6230bafe3887b6456bc0fc6a0c1d3dc1c8798218fa5ef1668adbc319d",
+    "dobius/src/main/agents/adam-event-ingest.ts": "79a252bcbcad0e2da0d8dd152386e0cf3cc8516be4d995bf11d7876d259d81ff",
+    "dobius/src/main/agents/agent-run-events.ts": "a4b78e8dda7101eed640c16f0fdd93e8baf403c509def2784c502a5412c4420d",
+    "dobius/src/main/agents/agent-run-event-delivery.ts": "f074fd97bbc9c69f1aa12ee48c17c1310747773594a6e685fc174b4fdb19fbb7",
+    "dobius/src/main/runtime/rpc/methods/client-events.ts": "6e7f47d968629a874e620700df1524b91679a55ee24cafb49cbbde0a81396274",
+    "dobius/src/main/runtime/device-registry.ts": "942b6a15ac64610c93f5d86bbf109ad52dac52d9b7915fa5090a2b2ed7bc9fdb",
+    "dobius/src/main/runtime/rpc/dispatcher.ts": "14d8d3c8f294739e297172eda052ee459dbc7d3afd7c67468c855c38d28f00ae"
+  },
+  "external_source_hashes": {
+    "/Users/bayou/dobius/projects/ADAM/service/src/runtime/service.ts": "251b62dd624918e43c27cdaa37ca02a7e3d21c72162fe92ff681196826504862",
+    "/Users/bayou/dobius/projects/ADAM/service/src/adapters/dobius.ts": "6b5167cad2534c50a68490d07aaef272850a4f1087340b9af74f2c97a87a079b",
+    "/Users/bayou/dobius/projects/ADAM/service/src/orchestration/supervisor.ts": "7fdf98cc1be184f3fd2701f0281524f1397866e491a4c8cb6fed6be61a2ff0cf",
+    "/Users/bayou/dobius/projects/ADAM/service/src/events/ingest.ts": "46f01b58ae4ee0cbd9a4d8c3e40890ae11c270498d2c0f72fd4cc671c1df3207",
+    "/Users/bayou/dobius/projects/ADAM/service/src/models/router.ts": "9a3d1743a8f6da210fd8321cc5ca1a28c2daf68abfc830b2a43cb02a43c21fbd",
+    "/Users/bayou/.hermes/releases/v0.22.0/website/docs/user-guide/features/api-server.md": "0fd3754a5bb066b4d4f3dc64d2c9f9f0989630fa5928330bf43e8803eed1abe4",
+    "/Users/bayou/.hermes/releases/v0.22.0/website/docs/guides/use-mcp-with-hermes.md": "afc46dfb6503079e41e0e6436a543428fe633422c5073fe4d0eb57fe101e4fbe",
+    "/Users/bayou/.hermes/releases/v0.22.0/website/docs/developer-guide/observer-hooks.md": "53a416e4e299f1465b7ed982be09935f3b658b946fb37b4afe60ba748e34d72b"
+  },
+  "recommendation": "Thin typed background bridge around existing Hermes, ADAM service and Dobius RPC/event journals; one head decision owner, continuous state updates and durable acknowledged job delivery",
+  "limits": "Source analysis; no live integration/performance/placement proof. Existing work continues; new bridge code waits for research recommendation."
+}

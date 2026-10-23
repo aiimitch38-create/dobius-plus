@@ -81,13 +81,29 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, formatTerminalRead)
   },
   'terminal send': async ({ flags, client, cwd, json }) => {
-    const result = await client.call<{ send: RuntimeTerminalSend }>('terminal.send', {
-      terminal: await getTerminalHandle(flags, cwd, client),
-      text: getOptionalStringFlag(flags, 'text'),
-      enter: flags.get('enter') === true,
-      interrupt: flags.get('interrupt') === true,
-      client: { id: 'dobius-cli', type: 'desktop' }
-    })
+    const expectedRuntimeId = getOptionalStringFlag(flags, 'expected-runtime-id')
+    if (flags.has('expected-runtime-id') && !expectedRuntimeId?.trim()) {
+      throw new RuntimeClientError('invalid_argument', '--expected-runtime-id must have a value')
+    }
+    const requireAgentStatus = getOptionalStringFlag(flags, 'require-agent-status')
+    if (flags.has('require-agent-status') && requireAgentStatus !== 'sendable') {
+      throw new RuntimeClientError(
+        'invalid_argument',
+        '--require-agent-status supports only the value sendable'
+      )
+    }
+    const result = await client.call<{ send: RuntimeTerminalSend }>(
+      expectedRuntimeId ? 'terminal.sendBound' : 'terminal.send',
+      {
+        terminal: await getTerminalHandle(flags, cwd, client),
+        text: getOptionalStringFlag(flags, 'text'),
+        enter: flags.get('enter') === true,
+        interrupt: flags.get('interrupt') === true,
+        ...(expectedRuntimeId ? { expectedRuntimeId } : {}),
+        ...(requireAgentStatus ? { requireAgentStatus } : {}),
+        client: { id: 'dobius-cli', type: 'desktop' }
+      }
+    )
     printResult(result, json, formatTerminalSend)
   },
   'terminal wait': async ({ flags, client, cwd, json }) => {

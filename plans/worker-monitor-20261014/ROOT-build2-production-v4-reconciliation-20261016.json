@@ -1,0 +1,14 @@
+{
+  "verdict": "V4_SOURCE_DELIVERED_PENDING_INDEPENDENT_REVIEW",
+  "dispatch_id": "ctx_65f0283a235a",
+  "report": "plans/worker-monitor-20261014/BUILD2-adam-production-composition-candidate-v4.md",
+  "report_sha256": "76eec5c0270d0466d01fb96690920cb53a18be72f0cff725c51b5871244eac7f",
+  "manifest_sha256": "ddb8bc73f8521af2563cf32cf1d67c1ae20c77fc3db7e65dfe7b22b24d38a96e",
+  "candidate_files_verified": 84,
+  "actual_baselines_verified": 21,
+  "recorded_tests": "Author70/70in9files, strictTS/scopedlintformat/disposablepatch PASS; not rerun byROOT",
+  "source_accepted": false,
+  "actual_adam_applied": false,
+  "live_installed": false,
+  "completion_transport": "Reconciled exact worker report fallback after runtime restart."
+}

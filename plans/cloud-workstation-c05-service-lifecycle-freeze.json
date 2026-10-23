@@ -1,0 +1,89 @@
+{
+  "at": "2026-10-14T07:24:27.036453+00:00",
+  "status": "source frozen for independent review; not built or installed",
+  "files": [
+    {
+      "path": "dobius/src/main/automations/cloud-job-authority.test.ts",
+      "bytes": 4615,
+      "sha256": "94eb81182545d71f948d4eee9d3d948a944d2301ee15ce85ba35578b08c98dff"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-authority.ts",
+      "bytes": 3587,
+      "sha256": "18dad42111b50cd6b0a0c2d96360b469ea8230915e1ca6f608602abcffaeb0a3"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-service.ts",
+      "bytes": 9628,
+      "sha256": "7eaa560eadaac323ab932137ae82cd9f1fdf7a6d0867a06211044eb342a78fe0"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-worker-lifecycle.test.ts",
+      "bytes": 8839,
+      "sha256": "818f6d02dd2845ed80acc506694805ac0ed284e88f5f84238a30dd47931ec34a"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-worker-lifecycle.ts",
+      "bytes": 2715,
+      "sha256": "ee27a5161ca16c81ed04232af78b5672932c290a7605083679512df9ce3cb2a1"
+    },
+    {
+      "path": "dobius/src/main/index.ts",
+      "bytes": 102600,
+      "sha256": "83cd9ac157e7ce26cfe7396f70e3cd229008d6cb6076e8034a9b95c27039c15a"
+    }
+  ],
+  "aggregate_sha256": "4a6f3c3d7351e92fc7dab30f6ff4637e383c9ae523f0d60d7751068d472c2760",
+  "recipe": "sorted path NUL exact bytes NUL",
+  "verification": {
+    "tests": "5files38testsPASS including dispatch-pause write failure and constructor refusal",
+    "lint": "PASS five focused files",
+    "fresh_node_types": "PASS corrected fresh --composite false --incremental false"
+  },
+  "limits": "Production worker factory/config not yet composed; no live claims or Hermes provider execution. Main shutdown hook source only.",
+  "superseded_freezes": [
+    {
+      "at": "2026-10-14T07:18:13.963403+00:00",
+      "aggregate_sha256": "9903eaa3006ec7471458410666118c1b0eb95c1af0cfb350744321c4ec013f2f",
+      "files": [
+        {
+          "path": "dobius/src/main/automations/cloud-job-authority.test.ts",
+          "bytes": 4615,
+          "sha256": "94eb81182545d71f948d4eee9d3d948a944d2301ee15ce85ba35578b08c98dff"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-authority.ts",
+          "bytes": 3587,
+          "sha256": "18dad42111b50cd6b0a0c2d96360b469ea8230915e1ca6f608602abcffaeb0a3"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-service.ts",
+          "bytes": 9371,
+          "sha256": "c52bf58458ef20804d223da5c2823fd374ccef05a3c38cab287c558a5bbced78"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-worker-lifecycle.test.ts",
+          "bytes": 7204,
+          "sha256": "b84078494c65706f81c580bd118a1a89b066548823ffef0d7e7826a180004321"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-worker-lifecycle.ts",
+          "bytes": 2715,
+          "sha256": "ee27a5161ca16c81ed04232af78b5672932c290a7605083679512df9ce3cb2a1"
+        },
+        {
+          "path": "dobius/src/main/index.ts",
+          "bytes": 102430,
+          "sha256": "2b0376f7cb420ea8991081007f222d1000f4118adb9b5acab87d066ece0f1654"
+        }
+      ],
+      "verification": {
+        "tests": "5files38testsPASS including dispatch-pause write failure and constructor refusal",
+        "lint": "PASS five focused files",
+        "fresh_node_types": "pending corrected pass"
+      },
+      "review": "RESEARCH CHANGES_REQUIRED: pause-write failure skipped worker drain"
+    }
+  ],
+  "correction": "Database dispatch pause error cannot skip worker.stop; return dispatchPausePersisted separately; main logs both pause failure and unproven drain."
+}

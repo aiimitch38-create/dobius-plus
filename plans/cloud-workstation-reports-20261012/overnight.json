@@ -1,0 +1,837 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-12T22:09:46.538617+00:00",
+  "role": "OVERNIGHT",
+  "package": "C04",
+  "status": "FROZEN_AWAITING_FIXER_REVIEW",
+  "terminal": "term_f079ee4e-c7fc-434f-91a4-0d5b1adfa996",
+  "coordinator": "term_f4a4221f-4226-4419-aa87-dc2489beb812",
+  "assignment_conflict": null,
+  "actual_session_cwd": "/Users/bayou/Projects (Code)/Dobius",
+  "canonical_repository": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+  "branch": "fix/channel-cost",
+  "base_head": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+  "owns": [
+    "dobius/config/scripts/system-monitor/",
+    "dobius/src/shared/system-monitor.ts"
+  ],
+  "report_path": "plans/cloud-workstation-reports-20261012/overnight.json",
+  "baseline_hashes": {
+    "dobius/config/scripts/system-monitor/storage_policy.py": "d5f5f1d1a5e65346c21bd1d29d3ff78e6a201e01b4b6ee7bbefa3fcf1cf6a86c",
+    "dobius/config/scripts/system-monitor/root_inventory.py": "4408a0fab586bf644ecca46468ab60941204d1f550dd9ad0ca213bc4d47f782f",
+    "dobius/config/scripts/system-monitor/test_storage_monitor.py": "5c4cfce1904c0d30767e9513d9961cd4b1b6bcbbf92668802ef4a2e6e4efc2b8",
+    "dobius/config/scripts/system-monitor/monitor_state.py": "ceb819e3d2d6196a23ff7c87af3609ba6bf285a46ade0d08d7746f5e308f25aa",
+    "dobius/config/scripts/system-monitor/prepare_monitor.py": "8c61aede8c1c5a622b79922f6ebbff2052c0cad270c92f3d86c0080797e7c4ba",
+    "dobius/config/scripts/system-monitor/storage_monitor.py": "cc43f8837929734048c1e59ec77a923331038729afadde89aa2e73245897e57e",
+    "dobius/src/shared/system-monitor.ts": "5bb4311c3fc1261f9105465b6402f3aa665bbab51fd68d64315675a06b1540c4"
+  },
+  "baseline_identity": "All 7 assignment hashes matched before edits; baseline 23 tests passed. Known fixture mismatch not reproduced.",
+  "reviewer": "FIXER",
+  "peer_review": {
+    "status": "PENDING",
+    "routing": "ROOT requested to relay frozen manifest; owner does not self-approve"
+  },
+  "frozen_files_sha256": {
+    "dobius/config/scripts/system-monitor/README.md": "ad5ef099989f628d41e3a0b70cf9e1c461953a40b879061691b51119e3d5d316",
+    "dobius/config/scripts/system-monitor/monitor_state.py": "405ac1fb324a8526d20bf135210ff190de62f7ff0afe2901dcb645deafe66435",
+    "dobius/config/scripts/system-monitor/prepare_monitor.py": "8c61aede8c1c5a622b79922f6ebbff2052c0cad270c92f3d86c0080797e7c4ba",
+    "dobius/config/scripts/system-monitor/root_inventory.py": "14b37dd76d9441eda51f20b050e44f3ab002c2f4f65f4a56ce5d95574db3a144",
+    "dobius/config/scripts/system-monitor/storage_monitor.py": "c088b4a240c488d3d4d38863839196784ca43468a87666f0a530d4b0ae148852",
+    "dobius/config/scripts/system-monitor/storage_policy.py": "98630a6319629e458b6f7f8cb990bded3b7c08eaea8ae83240deff88241d0c0b",
+    "dobius/config/scripts/system-monitor/test_monitor_limits.py": "1b72ee5c629b49bc8fc9fa12157d3e8746cd98dd92dc175a678090e4b49aaa73",
+    "dobius/config/scripts/system-monitor/test_storage_monitor.py": "5c4cfce1904c0d30767e9513d9961cd4b1b6bcbbf92668802ef4a2e6e4efc2b8",
+    "dobius/src/shared/system-monitor.ts": "e72352d02de1651afb85704d22f8f03eaa87925f4808af9215fe9addc9e986ce"
+  },
+  "manifest_sha256": "f6d9cbeac4957166392833caf0ce031abc9242b6950ecfca6cf88f6f103430d6",
+  "manifest_digest_encoding": "sha256 of sorted compact JSON object frozen_files_sha256; UTF-8, separators comma/colon",
+  "changes": [
+    "Pin active scan by root ID so reordered config cannot retain multiple inode sets/frontiers.",
+    "Bound queued relative path bytes to 2 MiB; release frontier and inode state on exhaustion; bound error payloads to 16 truncated paths.",
+    "Revalidate retained root/directory descriptors between ticks and stop on replacement.",
+    "Reject FIFO state without blocking, config overlap/non-normalized paths, invalid volume state/capacity/device for admission.",
+    "Add 9 meaningful regressions; preserve original 23 tests unchanged.",
+    "Document local service contract, admission reservation responsibilities, scheduling limits and exact main-process/VPS integration work.",
+    "Extend shared error type with pathTruncated and apply repository type/format conventions."
+  ],
+  "validation": [
+    {
+      "command": "python3 -B -m unittest discover -s dobius/config/scripts/system-monitor -p 'test_*.py' -v",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+      "stage": "baseline",
+      "exit_code": 0,
+      "result": "23 tests passed"
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s dobius/config/scripts/system-monitor -p 'test_*.py' -v",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+      "stage": "final Python source",
+      "exit_code": 0,
+      "result": "32 tests passed in 1.183s, including temporary standalone daemon"
+    },
+    {
+      "command": "python3 -B -c \"from pathlib import Path; [compile(p.read_bytes(), str(p), 'exec') for p in sorted(Path('dobius/config/scripts/system-monitor').glob('*.py'))]\"",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+      "exit_code": 0,
+      "result": "All 7 Python files compiled in memory; no py_compile cache write"
+    },
+    {
+      "command": "node_modules/.bin/oxlint src/shared/system-monitor.ts",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "exit_code": 0,
+      "result": "PASS; first run found 9 inherited interface/type style violations, repaired"
+    },
+    {
+      "command": "node_modules/.bin/tsgo --ignoreConfig --noEmit --strict --skipLibCheck --types node --target ES2022 src/shared/system-monitor.ts",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "exit_code": 0,
+      "result": "PASS focused declaration check only; initial invocation without --ignoreConfig was rejected TS5112, corrected"
+    },
+    {
+      "command": "node_modules/.bin/oxfmt --check src/shared/system-monitor.ts",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius",
+      "exit_code": 0,
+      "result": "PASS after scoped formatting"
+    }
+  ],
+  "tool_versions": {
+    "python": "3.14.5 (main, May 10 2026, 10:21:34) [Clang 17.0.0 (clang-1700.0.13.5)]",
+    "python_executable": "/Users/bayou/homebrew/opt/python@3.14/bin/python3.14",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "node": "v26.0.0 (existing shell runtime, not repository Node24)",
+    "oxlint": "1.71.0",
+    "oxfmt": "0.52.0",
+    "tsgo": "7.0.0-dev.20260421.2"
+  },
+  "documentation": "dobius/config/scripts/system-monitor/README.md",
+  "remaining_integration_limitations": [
+    "No typed main-process runtime JSON validator/reader, IPC/RPC integration, UI or authenticated VPS publisher. Shared types are declarations only.",
+    "Admission only calculates using supplied reservations. C02/C05 must atomically reserve per volume, refresh capacity at launch, enforce leases/capabilities and physical APFS pool mapping where needed.",
+    "No live scheduler installed or tested. macOS plist parsed and Linux template text tested only; Linux runtime/resource enforcement pending. Windows descriptor inventory and scheduling unsupported, manual fallback unverified.",
+    "Cooperative scan budgets cannot interrupt a blocked filesystem call. No live RSS/CPU/terminal responsiveness benchmark. Sequential traversal can delay later roots.",
+    "Read-only live observation cannot prove reclaimable storage or prevent every same-user filesystem race. No cleanup, backup proof, pinned-file eviction, process lifecycle or deletion eligibility implemented.",
+    "Full app typechecks/builds, service lifecycle, sleep/offline and both-app acceptance remain ROOT integration/rollout gates. Scoped TS check used existing Node26 and is not locked Node24 full-app verification.",
+    "Peer review and canonical integration are pending; source/test completion is not C04 live delivery."
+  ],
+  "preservation": {
+    "historical_queue": "PAUSED",
+    "git_mutations": false,
+    "installed_or_deployed": false,
+    "additional_agents_spawned": false,
+    "source_deletions": false,
+    "unrelated_changes": "preserved",
+    "generated_artifacts": "Existing/local Python __pycache__ files excluded from source freeze and not deleted; subsequent fixture subprocesses inherit PYTHONDONTWRITEBYTECODE=1."
+  },
+  "next_integration_contract": {
+    "package": "C05",
+    "status": "READ_ONLY_DESIGN_CONTRACT_NOT_IMPLEMENTATION",
+    "inspected_at": "2026-10-12T22:25:32.565651+00:00",
+    "scope": "Local repository source and executable PATH lookup only. Only this report was edited. No SSH connection, application API invocation, service action, agent invocation, credentials/config-home read or queue execution.",
+    "c04_freeze": {
+      "verified_files": 9,
+      "manifest_sha256": "f6d9cbeac4957166392833caf0ce031abc9242b6950ecfca6cf88f6f103430d6",
+      "all_hashes_match": true
+    },
+    "source_evidence": [
+      {
+        "path": "dobius/src/main/index.ts",
+        "sha256_at_inspection": "d6b81c6c2726348aa04eb0dfa8e4e460b76f7bb756d626ebfbd9c6d618c01f93",
+        "anchors": [
+          {
+            "symbol_or_text": "headlessDispatcher: isServeMode",
+            "line": 1840
+          },
+          {
+            "symbol_or_text": "condition: 'tui-idle'",
+            "line": 1898
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/service.ts",
+        "sha256_at_inspection": "936b7eb7e57dd9ca79abf5679a740ea1ea476f4c7eaf348995efcc75b84c781d",
+        "anchors": [
+          {
+            "symbol_or_text": "export class AutomationService",
+            "line": 36
+          },
+          {
+            "symbol_or_text": "private async requestHeadlessDispatch",
+            "line": 256
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/headless-dispatch.ts",
+        "sha256_at_inspection": "6f5946bbdbfba7fa6a4b6803f2178fc1336d4e806adba0b69402f3fbcf652580",
+        "anchors": [
+          {
+            "symbol_or_text": "export type HeadlessAutomationDispatcher",
+            "line": 23
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/headless-workspace-create.ts",
+        "sha256_at_inspection": "7a3b858d939bb235c7f5ec181400ebeb95ac2de9760fc3950db9f39bf628f75a",
+        "anchors": [
+          {
+            "symbol_or_text": "export function buildHeadlessAutomationWorktreeCreateArgs",
+            "line": 24
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/run-target-resolution.ts",
+        "sha256_at_inspection": "8a88b5306eccc691e43ec810d7601b84d2a62bed447592bb142f03b4d1abc11a",
+        "anchors": [
+          {
+            "symbol_or_text": "export function resolveAutomationRunTarget",
+            "line": 26
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/run-lifecycle.ts",
+        "sha256_at_inspection": "86571870406354d7e6f7a82f4949ba41b5d4b4161d7b939830bf19e24c8da911",
+        "anchors": [
+          {
+            "symbol_or_text": "export async function finalizeAutomationRunResult",
+            "line": 31
+          },
+          {
+            "symbol_or_text": "export function markInterruptedAutomationRuns",
+            "line": 105
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/dispatch-tokens.ts",
+        "sha256_at_inspection": "56341269f8b843665536b0044c9eb8f1b318720ffa22a6953b0366003b96760e",
+        "anchors": [
+          {
+            "symbol_or_text": "const DISPATCH_TOKEN_TTL_MS",
+            "line": 3
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/precheck-runner.ts",
+        "sha256_at_inspection": "ec2a2df4a789734ccdc61cc905de92400fde62701887345a00c34541eb88f1b2",
+        "anchors": [
+          {
+            "symbol_or_text": "function killLocalPrecheckProcessTree",
+            "line": 76
+          },
+          {
+            "symbol_or_text": "function runSshChannelPrecheck",
+            "line": 181
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/cloud-jobs/store.ts",
+        "sha256_at_inspection": "0a0c791efe558f189e0db26966f854bdb236c7ac11953f312fb6e94277a4329c",
+        "anchors": [
+          {
+            "symbol_or_text": "const LEASE_MS",
+            "line": 12
+          },
+          {
+            "symbol_or_text": "claim(worker: CloudWorker)",
+            "line": 17
+          },
+          {
+            "symbol_or_text": "acknowledgeStopped(",
+            "line": 222
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/cloud-jobs/cloud-job-catalog.ts",
+        "sha256_at_inspection": "6f8420344623cc06356859b3134955a748a377f8339a417f6e1f96c992d2dc4c",
+        "anchors": [
+          {
+            "symbol_or_text": "registerProject(project: CloudProject)",
+            "line": 29
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/cloud-jobs/database.ts",
+        "sha256_at_inspection": "ff1407a24c7e04d7786420f7878a87dff3fba7d50d87a9a349aa4d425c1a1eff",
+        "anchors": [
+          {
+            "symbol_or_text": "CREATE TABLE IF NOT EXISTS cloud_attempts",
+            "line": 44
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/shared/cloud-jobs.ts",
+        "sha256_at_inspection": "5f4620971328a9c2e6fafb60e1ed67780b8a6b9b6010b65dc50827fe1c798b17",
+        "anchors": [
+          {
+            "symbol_or_text": "export const CloudProject",
+            "line": 44
+          },
+          {
+            "symbol_or_text": "export type CloudWorker",
+            "line": 55
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/runtime/dobius-runtime.ts",
+        "sha256_at_inspection": "b677e392f57c2ec19d2f6a061942ec32148f743ed3ae44c29d30c7172038413d",
+        "anchors": [
+          {
+            "symbol_or_text": "async createTerminal(",
+            "line": 15733
+          },
+          {
+            "symbol_or_text": "async launchAgentTerminal(",
+            "line": 16011
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/runtime/rpc/methods/automations.ts",
+        "sha256_at_inspection": "92544127ca38adb3130fd40185ac644755703ad9b72651d8cda8db6b63e28a5e",
+        "anchors": [
+          {
+            "symbol_or_text": "const AutomationCreate",
+            "line": 102
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/runtime/rpc/methods/host-capabilities.ts",
+        "sha256_at_inspection": "2146890924d9dac8c4ce7b33a29acd8c4e8ef204bb58468eb92a91dda943f2a5",
+        "anchors": [
+          {
+            "symbol_or_text": "export const HOST_CAPABILITY_METHODS",
+            "line": 6
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/shared/execution-host.ts",
+        "sha256_at_inspection": "34bd9cd5cc99126bc64be28933fc24b3851d73957ded3a751a485d72084fb681",
+        "anchors": [
+          {
+            "symbol_or_text": "export type ExecutionHostId",
+            "line": 7
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/providers/types.ts",
+        "sha256_at_inspection": "b37e7737646d3d60269ff4692114016229a236f67a1cee3fd56caca21fc42ba1",
+        "anchors": [
+          {
+            "symbol_or_text": "export type PtySpawnOptions",
+            "line": 27
+          },
+          {
+            "symbol_or_text": "export type PtySpawnResult",
+            "line": 63
+          },
+          {
+            "symbol_or_text": "export type IPtyProvider",
+            "line": 110
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/providers/local-pty-provider.ts",
+        "sha256_at_inspection": "2172ffc5a55bba19d8ca4abf860c5e062c93626d368b428e5a869d3e776399c0",
+        "anchors": [
+          {
+            "symbol_or_text": "async spawn(args: PtySpawnOptions)",
+            "line": 331
+          },
+          {
+            "symbol_or_text": "async shutdown(",
+            "line": 849
+          },
+          {
+            "symbol_or_text": "async sendSignal(",
+            "line": 874
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/providers/pty-default-cwd.ts",
+        "sha256_at_inspection": "ddb07acfd0ee4d45ff62416b013db9c7b2f1db3ef3d3b8120b941d32d71e2f6f",
+        "anchors": [
+          {
+            "symbol_or_text": "export function resolveSafePtyDefaultCwd",
+            "line": 16
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/providers/ssh-pty-provider.ts",
+        "sha256_at_inspection": "b92a5dd5226331d3272a01fd91f3478d5f9fb59d865b088813f65316ecb4db89",
+        "anchors": [
+          {
+            "symbol_or_text": "async spawn(opts: PtySpawnOptions)",
+            "line": 94
+          },
+          {
+            "symbol_or_text": "async sendSignal(",
+            "line": 214
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/daemon/production-launcher.ts",
+        "sha256_at_inspection": "60c05ea7b9dde7e5dc0b023e6a97e084de1294f2e863d67d7623524adb5a211c",
+        "anchors": [
+          {
+            "symbol_or_text": "export function createProductionLauncher",
+            "line": 10
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/daemon/daemon-spawner.ts",
+        "sha256_at_inspection": "3591ab3962b12d1eadffd3048ea6d38b2c779868c079b7b00a6016dc1949c7ea",
+        "anchors": [
+          {
+            "symbol_or_text": "export type DaemonPidFile",
+            "line": 10
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/daemon/daemon-health.ts",
+        "sha256_at_inspection": "df43277bf0e72f5bfda8d00628c3c34cd10cf992ed4d6843c17c9594b0888d44",
+        "anchors": [
+          {
+            "symbol_or_text": "export function startTimeMatches",
+            "line": 389
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/daemon/session.ts",
+        "sha256_at_inspection": "bf35f23e05f00269a15b102322d69a504a3ffd077011723fb0439e78288cfdac",
+        "anchors": [
+          {
+            "symbol_or_text": "kill(): void {",
+            "line": 191
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/daemon/pty-subprocess.ts",
+        "sha256_at_inspection": "3d6a1bd938543a63c00ae34859124f2736e827824c878fb97d1658dddec804b8",
+        "anchors": [
+          {
+            "symbol_or_text": "forceKill: () =>",
+            "line": 1057
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/ssh/ssh-relay-session.ts",
+        "sha256_at_inspection": "33a056fac92de482a012e486cd3b1112a9e250221335709bb5f1bd26030cae16",
+        "anchors": [
+          {
+            "symbol_or_text": "async reconnect(",
+            "line": 341
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/ssh/ssh-remote-platform.ts",
+        "sha256_at_inspection": "746a3cccc392a1626ad821910adf745ff8c813e4fe155114c3d9ce47b296a3d8",
+        "anchors": [
+          {
+            "symbol_or_text": "export type RemoteHostPlatform",
+            "line": 8
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/relay/pty-handler.ts",
+        "sha256_at_inspection": "e0fac97c33f0a6cf9a57acbbfcd439d312636fa93797aa59ff727d9df2d00b11",
+        "anchors": [
+          {
+            "symbol_or_text": "private async shutdown(",
+            "line": 711
+          },
+          {
+            "symbol_or_text": "startGraceTimer(",
+            "line": 959
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/relay/relay.ts",
+        "sha256_at_inspection": "8c231797599b26411cec4c62a2f8e715bd5c036e9c3a7109e7a5b790d35d2372",
+        "anchors": [
+          {
+            "symbol_or_text": "function startGrace(",
+            "line": 895
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/shared/ssh-types.ts",
+        "sha256_at_inspection": "61fb3679521916c7e87d3d057cecfeae184af1ccbc1f2cfdc18302ba813c5f63",
+        "anchors": [
+          {
+            "symbol_or_text": "export const DEFAULT_SSH_RELAY_GRACE_PERIOD_SECONDS",
+            "line": 7
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/agents/execution-gate.ts",
+        "sha256_at_inspection": "18a2e3aede6e3741d56771577facd05b68a941aed1324098771f68637d004f2b",
+        "anchors": [
+          {
+            "symbol_or_text": "export function checkExecutionAdmission",
+            "line": 30
+          },
+          {
+            "symbol_or_text": "export async function checkBuildDispatchAdmission",
+            "line": 169
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/agents/agent-session-lease.ts",
+        "sha256_at_inspection": "a86a878db5076757a98215543cc567739a3e2aac2344aa803e9b669b3b6e6fdb",
+        "anchors": [
+          {
+            "symbol_or_text": "const liveClaims",
+            "line": 17
+          },
+          {
+            "symbol_or_text": "export function claimRunSession",
+            "line": 31
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/agents/agent-runner.ts",
+        "sha256_at_inspection": "77b7a47cf84b569b953449a7f999322e6d0a1f0f9ee49659aa4693f951dc4f3f",
+        "anchors": [
+          {
+            "symbol_or_text": "let reservedRuns",
+            "line": 74
+          },
+          {
+            "symbol_or_text": "export async function stopAgentRun",
+            "line": 576
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/shared/tui-agent-config.ts",
+        "sha256_at_inspection": "16f77266589d7e548887730cc46c52325141440c5021a118cd8af0118e6ae37f",
+        "anchors": [
+          {
+            "symbol_or_text": "launchCmd: 'hermes --tui'",
+            "line": 307
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/shared/agent-session-resume.ts",
+        "sha256_at_inspection": "f97fe2cc5f1012a423641a5b5dc2bb738f58eeec01ce22ff6a0f3011040832dc",
+        "anchors": [
+          {
+            "symbol_or_text": "case 'hermes':",
+            "line": 190
+          },
+          {
+            "symbol_or_text": "export function getAgentResumeArgv",
+            "line": 195
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/hermes/hook-service.ts",
+        "sha256_at_inspection": "0c4c72862abb0b65d5278eabdeaaac364374e788ac96c4ea0070cc72e1b2cbac",
+        "anchors": [
+          {
+            "symbol_or_text": "function getHermesHome",
+            "line": 58
+          },
+          {
+            "symbol_or_text": "async installRemote(",
+            "line": 483
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/external-manager.ts",
+        "sha256_at_inspection": "fc7693f95e9ad478d7fe90e809a432d058be1bd04434f5ce272caf58c0ad60cf",
+        "anchors": [
+          {
+            "symbol_or_text": "const HERMES_HOME",
+            "line": 28
+          },
+          {
+            "symbol_or_text": "async function listRemoteManager",
+            "line": 240
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/main/automations/hermes-cron-output.ts",
+        "sha256_at_inspection": "eed486f234796e1371233e9706a7e54ab34a5198a416e993a15921a66c76576a",
+        "anchors": [
+          {
+            "symbol_or_text": "const HERMES_HOME",
+            "line": 9
+          }
+        ]
+      },
+      {
+        "path": "dobius/config/scripts/system-monitor/storage_policy.py",
+        "sha256_at_inspection": "98630a6319629e458b6f7f8cb990bded3b7c08eaea8ae83240deff88241d0c0b",
+        "anchors": [
+          {
+            "symbol_or_text": "def status_freshness",
+            "line": 23
+          },
+          {
+            "symbol_or_text": "def admission",
+            "line": 34
+          }
+        ]
+      },
+      {
+        "path": "dobius/config/scripts/system-monitor/root_inventory.py",
+        "sha256_at_inspection": "14b37dd76d9441eda51f20b050e44f3ab002c2f4f65f4a56ce5d95574db3a144",
+        "anchors": [
+          {
+            "symbol_or_text": "def open_root",
+            "line": 16
+          }
+        ]
+      },
+      {
+        "path": "dobius/src/shared/system-monitor.ts",
+        "sha256_at_inspection": "e72352d02de1651afb85704d22f8f03eaa87925f4808af9215fe9addc9e986ce",
+        "anchors": [
+          {
+            "symbol_or_text": "export type SystemMonitorStatus",
+            "line": 91
+          }
+        ]
+      }
+    ],
+    "evidence_limits": "C02 and ROOT-owned runtime files are shared working-tree snapshots, not reviewer-approved integration. Hashes above identify the inspected content only. No C05 runtime tests were executed in this read-only task.",
+    "supervision": {
+      "existing_files": [
+        "dobius/src/main/index.ts",
+        "dobius/src/main/automations/service.ts",
+        "dobius/src/main/automations/headless-dispatch.ts",
+        "dobius/src/main/daemon/production-launcher.ts",
+        "dobius/src/main/daemon/daemon-spawner.ts",
+        "dobius/src/main/daemon/daemon-health.ts",
+        "dobius/src/main/ssh/ssh-relay-session.ts",
+        "dobius/src/relay/relay.ts",
+        "dobius/src/relay/pty-handler.ts"
+      ],
+      "observed": [
+        "AutomationService accepts an injected headless dispatcher, persists dispatching before launch, and honors execution gates for scheduled/RPC work. main/index.ts injects the dispatcher only in serve mode; a desktop without a ready window and without this dispatcher skips launch.",
+        "The terminal production launcher forks detached, waits up to 10 seconds for readiness, then unrefs/disconnects. This is terminal hosting, not a persistent job claim/heartbeat supervisor.",
+        "SSH relay reconnect rebuilds provider state; the configured grace governs retained PTYs. Current default grace is 0, meaning until reset/no timer, not immediate expiration. Empty detached startup is separately bounded. Relay disposal kills hosted PTYs; survival through disconnect does not prove survival through relay/service/host restart.",
+        "Daemon PID metadata includes pid and startedAtMs, but startTimeMatches permits missing expected or actual start time. That permissive daemon check is insufficient for worker restart/cancellation authority."
+      ],
+      "required": [
+        "One enrolled background worker supervisor per laptop/VPS device, independent of any app window, owns job slots and local attempt journals. The VPS authoritative queue is not copied to or written over a shared filesystem by workers.",
+        "A launchd/systemd service contract must specify stable executable/source identity, private state directory, service UID, restart backoff, single-instance lock, bounded logs and resource limits. C04 monitor templates are not C05 worker templates. New dobius/config/scripts/workstation-worker/ does not yet exist and needs explicit ROOT ownership before implementation.",
+        "Persist launch intent before spawning; persist attemptId, workerId, worker incarnation/boot identity, PID plus non-null process start identity, process group or cgroup/job object, stable PTY/session handle, profile ID, root/worktree identity, source revision, recipe/policy version and checkpoint/log cursor. Seal lease tokens in private worker state; never include their values in logs or artifacts.",
+        "After restart or reconnect, reconcile server lease and actual process identity before a new claim. Unknown identity blocks launch and destructive signals. Sleep/offline makes capacity stale; reconnect resumes observation of the existing attempt and never blindly reruns its command.",
+        "Use OS-enforced descendant containment for Linux jobs and a verified macOS process-group/descendant strategy with no untracked detach. Windows job containment is a separate unsupported gate until verified. Service shutdown/restart must define whether owned children stop or remain recoverable; no implicit orphaning."
+      ]
+    },
+    "admission": {
+      "existing_files": [
+        "dobius/src/main/agents/execution-gate.ts",
+        "dobius/src/main/automations/cloud-jobs/store.ts",
+        "dobius/src/shared/cloud-jobs.ts",
+        "dobius/config/scripts/system-monitor/storage_policy.py",
+        "dobius/src/shared/system-monitor.ts",
+        "dobius/src/main/runtime/rpc/methods/host-capabilities.ts",
+        "dobius/src/main/ssh/ssh-remote-platform.ts"
+      ],
+      "observed": [
+        "C02 claim checks persistent dispatch pause, matching device/capability/recipe, completed dependencies, safe-integer capacity, <=90-second-old sample, and one live/stopping/interrupted attempt per worker ID. reservedBytes is supplied by the caller; no durable per-device/per-volume reservation ledger is present.",
+        "C04 samples/decisions use Unix seconds, a default 180-second freshness limit with five-second future tolerance, hysteresis and a critical reserve. C02 sampledAt is milliseconds, rejects any future timestamp and uses a 90-second maximum. C02 does not consume C04 health or critical hysteresis directly.",
+        "The generic execution gate is a separate persisted crew pause. The agents-page origin bypasses that gate; normal scheduled/RPC calls use agent-run. dispatch-build additionally contacts the existing ADAM handshake. This is compatibility evidence, not authorization to activate ADAM or the historical queue.",
+        "host.platform returns OS and the remote platform module describes OS/architecture/path dialect; neither proves Apple signing, available toolchains, Hermes authentication, memory or provider budget."
+      ],
+      "required": [
+        "Bind worker identity/device/capabilities to authenticated enrollment, not request-supplied strings. Authorize submit/claim/heartbeat/settle/cancel/review separately. Unknown, offline or revoked workers cannot claim.",
+        "Convert C04 seconds to validated safe-integer milliseconds without replacing the sampling timestamp. Enforce both policies with the stricter freshness/skew bound; unavailable, critical or failed C04 admission remains blocked even if C02 arithmetic passes. Map OS darwin to the schema capability macos and explicitly define portable-recipe eligibility.",
+        "Reserve estimated working bytes, all concurrent attempt reservations, safety margin and critical reserve atomically by device plus verified physical storage pool. Three profile worker IDs must share the device budget. Release reservations only after verified process cleanup/result finalization; unknown estimates use the conservative C04 default before building a CloudJobInput.",
+        "Start with one heavy build per physical device; three profiles allow three isolated small jobs only within measured CPU/RAM/disk/provider budgets. Publish timestamped free RAM/CPU/load, monitor age and estimated-versus-actual spend; define wall-time, output, attempt/model-call and cost limits.",
+        "Check pause/revocation, current lease, root identity, recipe authority and fresh capacity immediately before spawn and after every awaited setup step. Apple signing/iOS jobs require an explicitly verified Mac capability. An operator queuing from phone is not the agents-page pause bypass.",
+        "ROOT must map C05 pause policy explicitly to the generic crew gate without resuming the paused historical W queue or bypassing an applicable existing gate. Missing authority remains blocked."
+      ]
+    },
+    "roots_and_background_identity": {
+      "existing_files": [
+        "dobius/src/main/automations/cloud-jobs/cloud-job-catalog.ts",
+        "dobius/src/main/automations/cloud-jobs/store.ts",
+        "dobius/src/main/automations/run-target-resolution.ts",
+        "dobius/src/main/automations/headless-workspace-create.ts",
+        "dobius/src/main/runtime/dobius-runtime.ts",
+        "dobius/src/main/providers/pty-default-cwd.ts",
+        "dobius/src/main/providers/types.ts",
+        "dobius/config/scripts/system-monitor/root_inventory.py",
+        "dobius/src/shared/execution-host.ts"
+      ],
+      "observed": [
+        "C02 project registration and claim call realpathSync/statSync on the queue process host. CloudProject has one device/path mapping but no stored inode/mount identity. A VPS service cannot validate a laptop-only root through its own filesystem; same-path directory replacement is not detected by string comparison.",
+        "Existing automation target resolution cross-checks projectHostSetup ID, project, host, repo, ready state and path. new_per_run worktree creation uses activate:false. Runtime createTerminal with explicit worktree selector supports background launch; launchAgentTerminal returns a stable handle and currently does not accept a Hermes profile selector.",
+        "PTY spawn options support explicit cwd/env/worktreeId/sessionId and results carry app-routable ID and optional PID. Generic local PTY startup can choose a safe home when cwd is absent; C05 must not rely on that fallback."
+      ],
+      "required": [
+        "Enroll project root mappings per device with root ID, canonical absolute path, device/inode or platform equivalent, permitted recipes and ownership revision. The target worker validates nofollow path components, mounted root identity, executable/source revision and exclusive worktree before launch; the server validates the enrolled attestation and policy version.",
+        "Do not create missing registered roots, recreate external mount paths or fall back to home. Unmounted/changed roots enter waiting/error and require explicit reconciliation. Split trusted worktree creation inside an existing registered parent from arbitrary root creation.",
+        "Record frozen source revision plus dirty/untracked manifest as applicable. Allocate three exclusive profile/worktree leases with disjoint authorized paths; no two live attempts write the same profile/session/worktree.",
+        "Use explicit worktree and terminal handles for input/logs/cancel; preserve per-client selection with activate:false/background presentation. Do not resolve the selected tab as the job target, send terminal.focus, or treat closed UI tabs as permission to kill jobs.",
+        "Keep ROOT ownership of dirty dobius-runtime.ts and coordinate any profile/env/background API extension through ROOT; read-only inspection grants no new edit scope."
+      ]
+    },
+    "lease_and_result_protocol": {
+      "existing_files": [
+        "dobius/src/main/automations/cloud-jobs/store.ts",
+        "dobius/src/main/automations/cloud-jobs/database.ts",
+        "dobius/src/main/automations/dispatch-tokens.ts",
+        "dobius/src/main/automations/run-lifecycle.ts",
+        "dobius/src/main/index.ts",
+        "dobius/src/main/agents/agent-session-lease.ts"
+      ],
+      "observed": [
+        "C02 uses immediate SQLite transactions, random hashed lease tokens and a 60-second lease. Expiry marks interrupted; cancellation marks the attempt stopping. Worker claim remains blocked until acknowledgeStopped validates original worker/token and a reconciliation evidence string.",
+        "Heartbeat and settle fence expired/wrong-owner attempts. Success becomes needs_review and a version-checked evidence-bearing accept performs completion. Stored attempts do not yet include PID/start identity, profile/worktree, reservation or supervisor incarnation.",
+        "Automation dispatch tokens and agent-session leases are in-memory only. Restart closes dispatching automation history as failed with an ambiguity warning. Headless legacy completion currently maps tui-idle to completed, which is weaker than cloud-job verification."
+      ],
+      "required": [
+        "Define authenticated idempotent claim/start-ack/heartbeat/log-event/cancel/stop-ack/settle RPCs around C02. Preserve job ID versus attempt ID, version checks and event cursor. Use one authoritative dispatcher; do not run legacy automation, Hermes cron and C02 dispatch for the same logical job.",
+        "Heartbeat comfortably inside the lease (proposed 15 seconds for the observed 60-second lease), use server-returned expiry and local monotonic deadlines; network/clock uncertainty stops new actions and fences result publication. Lease loss triggers local containment and reconciliation, not automatic replay.",
+        "Store execution identities and reservation/profile leases durably before acknowledging start. Reconcile claim-before-spawn and spawn-before-start-ack crashes; retain ambiguity as interrupted until actual process identity is known.",
+        "After lease loss/cancel, reject late success and late log/result side effects that claim completion; separately allow attributable diagnostic evidence. Stop acknowledgement must prove all owned descendants are absent, not merely carry a caller-created string.",
+        "TUI idle, hook done, PTY exit 0 and SDK return are observations only. Persist bounded/redacted logs, checkpoint and artifact manifest with source/attempt identity; successful execution advances to needs_review, and independent checks/acceptance authorize completed."
+      ]
+    },
+    "cancellation": {
+      "existing_files": [
+        "dobius/src/main/providers/local-pty-provider.ts",
+        "dobius/src/main/providers/ssh-pty-provider.ts",
+        "dobius/src/relay/pty-handler.ts",
+        "dobius/src/main/daemon/session.ts",
+        "dobius/src/main/daemon/pty-subprocess.ts",
+        "dobius/src/main/automations/precheck-runner.ts",
+        "dobius/src/main/agents/agent-runner.ts",
+        "dobius/src/main/agents/codex-agent-execution.ts"
+      ],
+      "observed": [
+        "Local PTY shutdown calls proc.kill and clears its maps; sendSignal targets the stored shell PID. SSH provider forwards pty.shutdown/sendSignal to the relay; relay adds SIGTERM then a five-second SIGKILL fallback. These paths manage a PTY, not a durable C05 process-tree cleanup receipt.",
+        "Local precheck uses a detached POSIX process group and TERM/KILL escalation, or Windows taskkill /t /f. SSH precheck timeout closes the channel. Neither channel close nor PTY-map removal proves every descendant stopped.",
+        "Agent-runner stop uses child SIGTERM for Codex or AbortController plus SDK interrupt for Claude. In-memory session release/counters do not provide cross-process profile or job fencing."
+      ],
+      "required": [
+        "Persist a versioned cancellation request and invalidate further heartbeat/success; deliver to the owning device even if both app clients close. Offline cancellation remains pending cleanup with worker/reservations held.",
+        "Verify worker incarnation, root/worktree lease, PID/start identity and containment identity before signaling. Graceful stop then bounded escalation must target only the owned process group/cgroup/job object, never all Hermes processes or the current UI tab.",
+        "Reconcile escaped descendants and PID reuse; unknown start identity refuses blind kill and requires ROOT reconciliation. Keep process slots/profile leases/space reservations held until an authenticated stop receipt records observed descendant termination.",
+        "Test parent exit with child alive, ignored TERM, detached child, duplicate cancel, stale token, PID reuse, SSH disconnect and worker restart. Existing terminal cleanup tests are reusable starting points, not sufficient acceptance."
+      ]
+    },
+    "three_hermes_profiles": {
+      "existing_files": [
+        "dobius/src/shared/tui-agent-config.ts",
+        "dobius/src/shared/agent-session-resume.ts",
+        "dobius/src/main/hermes/hook-service.ts",
+        "dobius/src/main/automations/external-manager.ts",
+        "dobius/src/main/automations/hermes-cron-output.ts",
+        "dobius/src/main/agents/agent-session-lease.ts",
+        "dobius/src/main/runtime/dobius-runtime.ts"
+      ],
+      "observed": [
+        "The TUI configuration detects hermes, launches hermes --tui and injects prompts after startup. This is not evidence of supported noninteractive execution/profile flags in the installed version.",
+        "Shared session metadata extraction returns null for Hermes, and getAgentResumeArgv provides no Hermes branch. No verified Hermes launch/resume/checkpoint contract exists in these inspected boundaries.",
+        "Local hook service honors process.env.HERMES_HOME or ~/.hermes; cron manager/output modules capture one HERMES_HOME for the process. Remote hook installation targets remoteHome/.hermes directly. Existing interfaces are not a three-profile registry.",
+        "PATH-only lookup found /Users/bayou/.local/bin/hermes in this shell; no executable invocation, version check, profile/config inspection or authentication test was performed."
+      ],
+      "required": [
+        "Enroll three explicit profile IDs, each bound to a distinct private Hermes runtime home, exclusive worktree, worker/device slot, allowed recipes/tools/roots, model/provider credential reference and budget. The profile ID is an authorized registry lookup, not an arbitrary env/path from a job payload.",
+        "Before choosing exact CLI arguments, pin the actual target Hermes executable/version and verify its supported profile, TUI/headless, initial prompt, resume/session ID and checkpoint interfaces. Do not invent --profile or --resume syntax from the generic agent abstraction.",
+        "Scope config/session databases, transcripts, hook installation/discovery and cron provenance to each approved profile. Eliminate implicit shared ~/.hermes access in the worker adapter. No copying provider secrets into Git/job payloads or logging environment values.",
+        "Use durable exclusive profile/session/worktree leases across restarts. The in-memory agent-session helper permits a concurrent fresh session and therefore is not an exclusive Hermes profile lock.",
+        "Keep provider permission gates enabled and limit tools to enrolled roots/capabilities. Profile isolation is configuration isolation, not an OS sandbox. Three available profiles do not authorize three heavy builds or three simultaneous inference workloads.",
+        "Do not import or execute old Hermes cron/historical W jobs automatically; any historical record import is non-executable until reconciled through the new authority."
+      ]
+    },
+    "proposed_implementation_destinations_requiring_root_assignment": [
+      {
+        "path": "dobius/src/main/automations/cloud-jobs/worker-enrollment.ts",
+        "purpose": "Authenticated device/profile/root registry and capability attestations; proposed new module, not created."
+      },
+      {
+        "path": "dobius/src/main/automations/cloud-jobs/worker-runtime.ts",
+        "purpose": "Claim/heartbeat/reconcile/settle loop and durable attempt journal; proposed new module, not created."
+      },
+      {
+        "path": "dobius/src/main/automations/cloud-jobs/worker-process-supervision.ts",
+        "purpose": "Platform containment, PID/start identity and cancellation proof; proposed new module, not created."
+      },
+      {
+        "path": "dobius/src/main/automations/cloud-jobs/worker-hermes-profile.ts",
+        "purpose": "Pinned Hermes launch/resume adapter and exclusive profile/worktree lookup; proposed new module, not created."
+      },
+      {
+        "path": "dobius/src/main/runtime/rpc/methods/cloud-jobs.ts",
+        "purpose": "Authenticated C02/C05 RPC boundary and versioned worker commands; proposed new module, not created."
+      },
+      {
+        "path": "dobius/config/scripts/workstation-worker/",
+        "purpose": "Reviewed staging/bootstrap and macOS/Linux supervision templates; folder absent, no installation authorized."
+      },
+      {
+        "path": "dobius/src/shared/cloud-jobs.ts",
+        "purpose": "Coordinate with BUILD2 for enrollment, root attestation, per-volume reservations and attempt process identities; current C02 ownership preserved."
+      },
+      {
+        "path": "dobius/src/main/runtime/dobius-runtime.ts",
+        "purpose": "ROOT-owned background launch profile/env and durable handle integration; preserve dirty work."
+      }
+    ],
+    "unverified_vps_and_provider_facts": [
+      "October12 plan records VPS two CPUs, roughly 78 GiB available, /srv/dobius/workspaces/dobius-plus and active dobius-metro/dobius-serve. These are dated plan observations, not live checks in this task.",
+      "Plan says Hermes was absent from the inspected VPS PATH. Current VPS executable/version/PATH, provider auth, three profiles, service UID, OS/toolchains, memory and budget remain unverified.",
+      "Local Hermes PATH presence proves no version, provider readiness or supported isolation/resume behavior. No private Hermes or SSH credential/config contents were read.",
+      "No enrolled device identity, private authenticated job transport, expiry/revocation protocol, worker supervisor deployment or descendant containment has been verified.",
+      "C04 and C02 are source slices awaiting integration/review; no catalog API, per-volume reservation ledger or physical phone-to-worker execution is proven."
+    ],
+    "inputs_and_decisions_for_root": [
+      "Freeze reviewed C02/C04 integration identities and assign bounded ownership for worker/RPC/shared-schema additions before implementation.",
+      "Provide approved stable device IDs, mapping from local/ssh/runtime host IDs to enrolled device, private endpoint/transport, service account and credential references with renewal/revocation; no secret values in this report.",
+      "Approve per-device root/worktree/profile directories and recipe permissions, physical storage pool mapping, worker budget and CPU/RAM/process/output/wall-time limits; retain one heavy build per device initially.",
+      "Resolve central VPS registration versus laptop-local filesystem attestation; raw service-local realpath checks cannot validate remote roots.",
+      "Pin VPS Hermes installation and provider/model selection, three named profiles, supported launch/resume interfaces, auth provisioning references and spend limits; installation/provider calls need separate concrete rollout scope.",
+      "Resolve C04-to-C02 timestamp/freshness/critical reserve mapping, durable cross-profile reservations and pause-gate integration without touching the historical queue.",
+      "Authorize later host-specific supervision/containment tests and physical phone acceptance; no live worker/scheduler activation is inferred from this contract."
+    ],
+    "required_acceptance_evidence": [
+      "Two profile workers race for shared device capacity: one heavy job admitted; no root/profile/worktree collisions across three disjoint small jobs.",
+      "Phone submits a Mac-only job; sleeping/offline laptop stays waiting, reconnect executes once in a background handle, both client selections remain unchanged.",
+      "Kill worker at claim/start-ack/result boundaries; restart reconciles PID plus start/boot identity and lease without duplicate side effects.",
+      "Lease expiry/revocation/cancellation fence stale success; parent/descendant cleanup proven before freeing reservations, including ignored TERM and SSH loss.",
+      "Profile auth denied, missing/unmounted/replaced root, stale/critical disk, unsupported capability and provider-budget exhaustion refuse launch with clear waiting/error reasons.",
+      "Local and VPS logs/checkpoints/artifact receipts stay bounded, redacted and attributable to exact source/attempt/profile; no TUI-idle-to-Done shortcut.",
+      "macOS/Linux closed-app supervision and resource enforcement measured alongside Metro/existing services; unsupported Windows behavior explicit."
+    ]
+  }
+}

@@ -332,7 +332,8 @@ export function activateAndRevealWorktree(
     void activateWebRuntimeSessionWorktree({
       worktreeId,
       environmentId: ownerRuntimeEnvironmentId,
-      notifyDesktop: (globalThis as { __DOBIUS_WEB_CLIENT__?: boolean }).__DOBIUS_WEB_CLIENT__ !== true
+      notifyDesktop:
+        (globalThis as { __DOBIUS_WEB_CLIENT__?: boolean }).__DOBIUS_WEB_CLIENT__ !== true
     })
   }
 

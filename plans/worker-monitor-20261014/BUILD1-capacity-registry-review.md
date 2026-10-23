@@ -1,0 +1,4 @@
+
+
+=== CURRENT CORRECTED FREEZE OVERRIDE ===
+Review the author latest managed-capacity-participants-typecheck-correction-20261014 entry in build2.json. The original managed-capacity-participants-20261014 is retained history and no longer current. Exact corrected aggregate d89c584ff7fe0bb35bfc60f07ff6c3c98889b72a50e894e57bfd65355dae89be; test SHA df2bec65705e1dfd064915967ae1a4759fa2b00bed501490941e8d882edfef1c; implementation SHA 4616ed412e7c5f34212c0eb0680f7065ae4e203f820a2742f3d7724f095f97fc. ROOT combined Node typecheck PASS exit 0, receipt plans/worker-monitor-20261014/root-combined-node-typecheck.json. Author latest eight focused tests and scoped checks PASS. Pin independent review to this corrected packet and current review task/dispatch identity. No source edits or new tests; one completion IPC attempt then report-file fallback, no polling or app restart. Current dispatch ID: ctx_db0a841c50d8

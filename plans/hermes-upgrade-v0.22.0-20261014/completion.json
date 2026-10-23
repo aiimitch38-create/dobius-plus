@@ -1,0 +1,50 @@
+{
+  "status": "UPDATED_AND_LIVE_TUI_INPUT_VERIFIED",
+  "version": "0.22.0",
+  "channel": "stable",
+  "release": "https://github.com/NousResearch/hermes-agent/releases/tag/v0.22.0",
+  "source_commit": "e06df9c2eae6",
+  "active_install": "/Users/bayou/.hermes/releases/v0.22.0",
+  "native_managed_launcher": "/Users/bayou/.hermes/releases/v0.22.0/.hermes/bin/hermes",
+  "python": "3.14.7",
+  "profile_defaults": {
+    "default": "tui/openai-codex/gpt-6.1-sol",
+    "adam": "tui/openai-codex/gpt-6.1-sol",
+    "friday": "tui/openai-codex/gpt-6.1-sol"
+  },
+  "head_sessions": {
+    "adam": "20261014_135102_157d0a",
+    "friday": "20261014_135702_7dfb85"
+  },
+  "verification": {
+    "tui_build": "PASS: upstream PM Node/npm and source builder",
+    "oauth_startup_tests": 82,
+    "resume_tests": 8,
+    "profile_tests": 30,
+    "profile_alias_tests": 4,
+    "total_tests_passed": 124,
+    "real_provider_replies": {
+      "adam": "ADAM_CODEX_VERIFIED",
+      "friday": "FRIDAY_CODEX_VERIFIED"
+    },
+    "typing": "Both live TUI composers displayed TUI_KEYBOARD_CHECK; drafts cleared with Ctrl+U",
+    "session_and_message_counts": "All three DB counts equal pre-upgrade snapshots",
+    "required_tools": "PM doctor verifies Python, Node, npm, uv, ffmpeg and ripgrep"
+  },
+  "rollback_backup": "/Users/bayou/Documents/Dobius Recovery/hermes-v0.22.0-update-20261014T191137Z",
+  "old_install_preserved": "/Users/bayou/.hermes/hermes-agent",
+  "old_custom_source_preserved": true,
+  "old_fix_replacement": "New upstream ContextVar MCP OAuth suppression and early profile handling replace the old local core patches; active release source is clean.",
+  "managed_launchers": "Upstream publisher owns ~/.local/bin/hermes; Adam/Friday aliases independently export profile HERMES_HOME. Plain default and both alias config paths verified.",
+  "telemetry": "New startup opt-in prompts declined using their No thanks default",
+  "limitations": [
+    "This updates Hermes and the TUI, not Dobius or the VPS build.",
+    "Optional MCP services retain their previous individual connection prerequisites; no blanket tool-health claim.",
+    "Custom Departments feature code and other local edits remain in the preserved old checkout and rollback patch; no claim that the custom web feature was ported into the upstream TUI."
+  ],
+  "aws": "deferred",
+  "historical_storage_queue": "paused",
+  "upgrade_cache_cleanup": "Removed two unselected, unleased new-release dependency generations through native lease-aware GC, plus the task-created unused bootstrap .venv after verifying no process used it. Current PM generation, live leases, old installation, profiles and rollback backup retained.",
+  "final_disk_check": "See final measured free-space check; rollback/source/profiles retained.",
+  "final_disk_free_bytes": 1028653056
+}

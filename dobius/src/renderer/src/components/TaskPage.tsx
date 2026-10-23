@@ -1,3 +1,4 @@
+import { SystemMonitorCard } from './kanban/SystemMonitorCard'
 /* eslint-disable max-lines -- Why: the tasks page keeps the repo selector,
 task source controls, and GitHub task list co-located so the wiring between the
 selected repo, the task filters, and the work-item list stays readable in one
@@ -7869,6 +7870,7 @@ export default function TaskPage(): React.JSX.Element {
         <div className="flex flex-none items-center gap-2 px-5 pt-1.5 md:px-8">
           <TasksSurfaceToggle boardOpen onChange={setBoardOpen} />
         </div>
+        <div className="shrink-0 px-5 md:px-8"><SystemMonitorCard /></div>
         <React.Suspense fallback={<div className="flex-1" />}>
           <VertexBoard />
         </React.Suspense>

@@ -1,0 +1,71 @@
+{
+  "status": "source_frozen_for_independent_review",
+  "aggregate_sha256": "8cb2acaefef3be4490d7a6879370dd8f6bf0d714ac92c11a6303804891880801",
+  "algorithm": "sorted repo-relative path NUL bytes NUL",
+  "files": [
+    {
+      "path": "dobius/src/main/automations/cloud-job-service.ts",
+      "bytes": 10081,
+      "sha256": "b363a06fc51ace6225a005c863b06726d172407049e6880a0dc14e686554c440"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-submit-admission.ts",
+      "bytes": 1980,
+      "sha256": "586d9edaa14a49095e39a80f32ddc7e71dbdc0d1e52ffa129829fa3ee13b6bb1"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-job-adam-atomic-events.test.ts",
+      "bytes": 7184,
+      "sha256": "25a52172c414c12a34655b24979f5897b078b013172e95c1b08bbe136f15a583"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-job-adam-event-receipt.ts",
+      "bytes": 2551,
+      "sha256": "b967c1e02774a72fe165c0047b697aec577a4973d8fc06c514579bf51f5b05b3"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-job-catalog.ts",
+      "bytes": 9544,
+      "sha256": "9fbc431e208c1de84309d16857126b868466c7a17cf1f8a8b3a81f67ab992ca9"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-queue-port.test.ts",
+      "bytes": 20454,
+      "sha256": "dcdc98e1075a9b99248e643ff96c7895c2808bb696830620a7a94572d1a09fc7"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-start-ledger.ts",
+      "bytes": 9016,
+      "sha256": "d9b6b45f68a58c1400a607df96eb077768a10fec06a6a53ff3f757641ba1e5bb"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/database.ts",
+      "bytes": 8251,
+      "sha256": "8bdfeb3627071b8107c4cac2aed75b3be4cf10fb7993b7f3dfc540b59ee89022"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/store.test.ts",
+      "bytes": 24265,
+      "sha256": "3e4c62efa097321852aa1f706b8d8b4a39db8472a0d5c421caad5adbd2e197c6"
+    }
+  ],
+  "schema_version": 4,
+  "behavior": [
+    "Single CloudJob DB transaction commits state/event/exact binding/outbox or rolls all back",
+    "Claim is not process start; distinct committed post-start event emits attempt_started once",
+    "Generic job RPC has no parent/grant DTO; explicit main-only service method consumes authenticated grant before atomic bound submission",
+    "Dependency sets normalized before fingerprint and final store write",
+    "Final synchronous authority check after all awaits; raw parent IDs never authorize correlation"
+  ],
+  "verification": {
+    "focused": "71 tests /5 files passed; actual host+atomic subsets47 passed",
+    "fresh_node_types": "PASS",
+    "broader_tests_log": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/adam-cloud-atomic-broad-tests.log"
+  },
+  "limits": [
+    "No production database opened/migrated",
+    "No ADAM network or drainer/service startup wiring yet",
+    "Prior ROOT13 service freeze is historical now; no live readiness accepted",
+    "Evidence references are not artifact content hashes; receipt evidenceDigests stays empty pending verified evidence adapter"
+  ]
+}

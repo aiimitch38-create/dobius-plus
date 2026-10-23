@@ -1,0 +1,137 @@
+{
+  "task_id": "task_4a82d5909af6",
+  "dispatch_id": "ctx_b38bfd39692d",
+  "candidate_only": true,
+  "applied_to_external_adam": false,
+  "supersedes_candidate": "plans/worker-monitor-20261014/adam-approved-payload-candidate",
+  "immutable_v1_manifest_sha256": "9a17044c9c54fa4b915d57d5a3b4b04021b7c81d843c41211387e584f2703e9f",
+  "external_adam_baseline_sha256": {
+    "src/dobius-cloud/intent-contract.ts": "60d148b77864bb83025e1d8cfeb6f0b3883d3d995759df306fbce165880a7ecd",
+    "src/dobius-cloud/intent-publication.ts": "9cb9e986979a61a9ad7eba5fb9c9a46cbe63a849e5ad39e8264270fea1d12ba8",
+    "src/dobius-cloud/intent-migration.ts": "ce3c0b4bcc37e392361d08dbc04ab02a2d284c979a027e59400f52be092ef93e",
+    "src/dobius-cloud/receipt-store.ts": "04d066e92024af51ed4e19cc58954f61bfc5c975d29fdcb0dc079c48b0dbc9c3",
+    "src/dobius-cloud/receipt-contract.ts": "7cdbfb8624e824311e29f71bb529d02aff2e0a04a76fc72621f11e3a43e45f51",
+    "src/db/migrations.ts": "e54ea453716a30c938fb01a9f4f24658b0e257505a781e4ec20394f070adc26e",
+    "tests/dobius-cloud-intents.test.ts": "e06aa74c4c67d3ba4a2aa158cb03dd37c5ebe5aed422a2393c2036ccdcc6c128"
+  },
+  "canonical_dobius_fingerprint_sources": {
+    "dobius/src/shared/cloud-jobs.ts": "49d61c89d6688a928839b598bbee90b4053cdd3b8c807d027087b4cb3a0d8348",
+    "dobius/src/shared/cloud-job-adam-receipts.ts": "4d161a0f33309d551b9b863e47e2dfdb4764854af5bf3be98ea3bb8c3e3dd49b"
+  },
+  "candidate_files": [
+    {
+      "path": "README.md",
+      "bytes": 2645,
+      "sha256": "8ea3a088a247b1671566db9dee0b316bc7da33bd2623f2e3f298dafd411e373c"
+    },
+    {
+      "path": "fingerprint-compatibility.test.ts",
+      "bytes": 1569,
+      "sha256": "40f3a1679baf99a87c1209e1e004b5a0e89f9ec415c6bd4475b2d42bba99834e"
+    },
+    {
+      "path": "patches/adam-approved-payload-v2.patch",
+      "bytes": 27827,
+      "sha256": "0aa3d4ce20176d31f2e02205e225047a03c800b3831672116a9a812917d4227d"
+    },
+    {
+      "path": "service/package.json",
+      "bytes": 33,
+      "sha256": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428"
+    },
+    {
+      "path": "service/src/db/database.ts",
+      "bytes": 1218,
+      "sha256": "f72d88a8c29d59695b05a02d03b3e2d8e70a56346f9965e84bd7146dec319c91"
+    },
+    {
+      "path": "service/src/db/migrations.ts",
+      "bytes": 21769,
+      "sha256": "dfac6a4eb3e6d694468c3b980820559021b2996f54f808d8ab5735444fede3ec"
+    },
+    {
+      "path": "service/src/dobius-cloud/approved-job-payload.ts",
+      "bytes": 3624,
+      "sha256": "7b478d364798bb28f2dc5d052ca8e06a60f6b1db28de7913146af4a14c7560a5"
+    },
+    {
+      "path": "service/src/dobius-cloud/intent-contract.ts",
+      "bytes": 1288,
+      "sha256": "60d148b77864bb83025e1d8cfeb6f0b3883d3d995759df306fbce165880a7ecd"
+    },
+    {
+      "path": "service/src/dobius-cloud/intent-migration.ts",
+      "bytes": 963,
+      "sha256": "8a7c569486e4807547940b306d3f85db98023641bc95255403bfceda79ec722b"
+    },
+    {
+      "path": "service/src/dobius-cloud/intent-publication.ts",
+      "bytes": 8446,
+      "sha256": "8248ffc77766abb62c50303bf51fd5a917652899b480a6b714399ff4a0c25544"
+    },
+    {
+      "path": "service/src/dobius-cloud/receipt-contract.ts",
+      "bytes": 6504,
+      "sha256": "7cdbfb8624e824311e29f71bb529d02aff2e0a04a76fc72621f11e3a43e45f51"
+    },
+    {
+      "path": "service/src/dobius-cloud/receipt-migration.ts",
+      "bytes": 1293,
+      "sha256": "c002f814316756bae64bd6e77ac72503c87013b22e8bfad43a1091626984e5dd"
+    },
+    {
+      "path": "service/src/dobius-cloud/receipt-store.ts",
+      "bytes": 13725,
+      "sha256": "f53ffe295a5b27d01934489cef907cca59e9e4a159019bdfcc932a65a5ed5e2a"
+    },
+    {
+      "path": "service/src/jobs/states.ts",
+      "bytes": 1762,
+      "sha256": "32d93a66992205db5d761e7263fd9f5060f68b0fa4b2a52b4c57b6298fd0f7df"
+    },
+    {
+      "path": "service/src/jobs/store.ts",
+      "bytes": 11761,
+      "sha256": "e155bdf80a037a1de17364e0a9865941932b19a9f02717d0864f8084a80feb46"
+    },
+    {
+      "path": "service/tests/dobius-cloud-approved-payload.test.ts",
+      "bytes": 11361,
+      "sha256": "77e461de1294f0c8f8e6ade6adcb99f619c1a1ffb3d946857bbbd1b939975663"
+    },
+    {
+      "path": "service/tests/dobius-cloud-intents.test.ts",
+      "bytes": 13375,
+      "sha256": "e06aa74c4c67d3ba4a2aa158cb03dd37c5ebe5aed422a2393c2036ccdcc6c128"
+    }
+  ],
+  "dependency_link": "node_modules -> /Users/bayou/dobius/projects/ADAM/node_modules (existing read-only resolution; no install or dependency mutation)",
+  "patch_path": "patches/adam-approved-payload-v2.patch",
+  "patch_sha256": "0aa3d4ce20176d31f2e02205e225047a03c800b3831672116a9a812917d4227d",
+  "patch_changed_paths": [
+    "src/dobius-cloud/intent-publication.ts",
+    "src/dobius-cloud/intent-migration.ts",
+    "src/dobius-cloud/receipt-store.ts",
+    "src/db/migrations.ts",
+    "src/dobius-cloud/approved-job-payload.ts",
+    "tests/dobius-cloud-approved-payload.test.ts"
+  ],
+  "correction": [
+    "Require approvedJob.projectId === request.projectId during bounded canonical request parsing, before sealer invocation.",
+    "On every existing-intent duplicate/recovery path, validate stored payload JSON/digest and require its project to match request/binding project; null/null legacy identity-only rows remain non-executable.",
+    "On consume, require stored canonical payload projectId to equal binding.projectId even when payload digest was recomputed and matches the binding fingerprint."
+  ],
+  "verification": {
+    "tests": "PASS: 22 tests, 0 failures, Node v24.18.0; 13 original durable-intent regressions, 8 approved-payload regressions (including the two project-authorization regressions), and 1 Dobius/ADAM fingerprint-parity test.",
+    "test_command": "./dobius/node_modules/.bin/esbuild plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/tests/dobius-cloud-intents.test.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/tests/dobius-cloud-approved-payload.test.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/fingerprint-compatibility.test.ts --bundle --platform=node --format=esm --target=node24 --outbase=plans/worker-monitor-20261014/adam-approved-payload-candidate-v2 --outdir=/private/tmp/adam-approved-payload-candidate-v2-tests && /Users/bayou/homebrew/opt/node@24/bin/node --experimental-test-isolation=none --test /private/tmp/adam-approved-payload-candidate-v2-tests/service/tests/dobius-cloud-intents.test.js /private/tmp/adam-approved-payload-candidate-v2-tests/service/tests/dobius-cloud-approved-payload.test.js /private/tmp/adam-approved-payload-candidate-v2-tests/fingerprint-compatibility.test.js",
+    "strict_typecheck": "PASS: Node v24.18.0, strict noEmit over 13 candidate source/support/test TypeScript files.",
+    "strict_typecheck_command": "/Users/bayou/homebrew/opt/node@24/bin/node /Users/bayou/dobius/projects/ADAM/node_modules/typescript/bin/tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --types node --typeRoots plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/node_modules/@types --skipLibCheck --allowImportingTsExtensions plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/src/dobius-cloud/intent-contract.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/src/dobius-cloud/intent-publication.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/src/dobius-cloud/intent-migration.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/src/dobius-cloud/receipt-store.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/src/dobius-cloud/receipt-contract.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/src/dobius-cloud/approved-job-payload.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/src/db/migrations.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/src/db/database.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/src/jobs/store.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/src/jobs/states.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/tests/dobius-cloud-intents.test.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/service/tests/dobius-cloud-approved-payload.test.ts plans/worker-monitor-20261014/adam-approved-payload-candidate-v2/fingerprint-compatibility.test.ts",
+    "patch_application": "PASS: git apply --check against temporary copies of the exact original ADAM baseline files; no canonical Git index/history mutated.",
+    "tsx_launcher": "Not used in this correction; bundled test suite and strict compiler ran successfully."
+  },
+  "limitations": [
+    "Review candidate only in Dobius workspace; external ADAM source and database were not modified.",
+    "No live migration/service/planner/sealer/runtime or external ADAM native acceptance.",
+    "ROOT review/application in an authorized ADAM checkout remains required."
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "upstream": "/Users/bayou/dobius/projects/ADAM",
+  "scope": "Source/test candidate only; no ADAM checkout modification or live service/private data",
+  "baseline_files": [
+    {
+      "path": "package.json",
+      "sha256": "4a6b40e0d767c4871c672ca2dfef0772d27ec16e8c995cf55a93600e282cdd79",
+      "bytes": 778
+    },
+    {
+      "path": "service/src/db/database.ts",
+      "sha256": "f72d88a8c29d59695b05a02d03b3e2d8e70a56346f9965e84bd7146dec319c91",
+      "bytes": 1218
+    },
+    {
+      "path": "service/src/db/migrations.ts",
+      "sha256": "fc986082dae3175742421c5e3489370032e0c498b00d9de9a39b9adcd2c5954e",
+      "bytes": 21528
+    },
+    {
+      "path": "service/src/dobius-cloud/receipt-store.ts",
+      "sha256": "7f49efb0be1e500873b196ccb12478f19aa22e8d1167e7a465811a2dce4cf9a1",
+      "bytes": 7709
+    },
+    {
+      "path": "service/src/dobius-cloud/receipt-contract.ts",
+      "sha256": "7cdbfb8624e824311e29f71bb529d02aff2e0a04a76fc72621f11e3a43e45f51",
+      "bytes": 6504
+    },
+    {
+      "path": "service/src/dobius-cloud/receipt-migration.ts",
+      "sha256": "c002f814316756bae64bd6e77ac72503c87013b22e8bfad43a1091626984e5dd",
+      "bytes": 1293
+    },
+    {
+      "path": "service/src/jobs/store.ts",
+      "sha256": "e155bdf80a037a1de17364e0a9865941932b19a9f02717d0864f8084a80feb46",
+      "bytes": 11761
+    },
+    {
+      "path": "service/src/jobs/states.ts",
+      "sha256": "32d93a66992205db5d761e7263fd9f5060f68b0fa4b2a52b4c57b6298fd0f7df",
+      "bytes": 1762
+    },
+    {
+      "path": "service/tests/dobius-cloud-receipts.test.ts",
+      "sha256": "d3e4bcc764b062f101b28dffb5b0294c5044512918751caad960b2f070d2fbe0",
+      "bytes": 5485
+    }
+  ],
+  "owned_candidate_paths": [
+    "service/src/db/migrations.ts",
+    "service/src/dobius-cloud/receipt-store.ts",
+    "service/src/dobius-cloud/intent-contract.ts",
+    "service/src/dobius-cloud/intent-migration.ts",
+    "service/src/dobius-cloud/intent-publication.ts",
+    "service/tests/dobius-cloud-intents.test.ts"
+  ]
+}

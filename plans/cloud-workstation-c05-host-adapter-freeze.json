@@ -1,0 +1,67 @@
+{
+  "status": "FROZEN_FOR_INDEPENDENT_REVIEW_SOURCE_ONLY",
+  "recorded_at": "2026-10-14T06:02:01.359654+00:00",
+  "owner": "ROOT",
+  "source_manifest": [
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-host-adapter.fixtures.ts",
+      "bytes": 4007,
+      "sha256": "a2de5b6e42a2667524dc06f0045dffb6eaf0c05fd154ae08bbb8129688d1c6bc"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-host-adapter.test.ts",
+      "bytes": 7322,
+      "sha256": "5949d847fa925bda5945a53889f0bbeb03cdd7b5bec962b8e7753a0745988bfa"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-host-adapter.ts",
+      "bytes": 2282,
+      "sha256": "3b2f222f4c7644b5f839d3b17520dde39f2eb15f1fce1f06ea7580adce0ebcf9"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-host-ledger.ts",
+      "bytes": 4868,
+      "sha256": "d267f085fa8e9022517293136683889bd492f5647c0860a62a7fb8baa2218ada"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/store.ts",
+      "bytes": 8764,
+      "sha256": "c1a8ffe823f4e584bdb702c2229d46c0602a901819297b134ed9200737e33591"
+    },
+    {
+      "path": "dobius/src/main/automations/workstation-worker/claim-validation.ts",
+      "bytes": 810,
+      "sha256": "e3066a56f6e810646de05496b1e86c90a35bc6c99d42a493e8ed678110c239df"
+    },
+    {
+      "path": "dobius/src/main/automations/workstation-worker/lease-observation.test.ts",
+      "bytes": 3057,
+      "sha256": "b16045d9b693a922df919bac3dcfcfe6ec000dcd02a25c5904b87d8cf613842a"
+    },
+    {
+      "path": "dobius/src/main/automations/workstation-worker/lease-observation.ts",
+      "bytes": 1057,
+      "sha256": "6cc85be8a9b71f0a4729ca9a9b96a08c1555041367ff8372683ec940371dbf64"
+    },
+    {
+      "path": "dobius/src/main/automations/workstation-worker/worker.ts",
+      "bytes": 9094,
+      "sha256": "691dcbb875c6752d0fad5278a14ab1c8751a6cddb4de376c7d1d8b74e2f92b1b"
+    }
+  ],
+  "aggregate_sha256": "e803fb851fb7e94ca9162053019a83d29682a320e3d7038d337e41c4e1dbf534",
+  "algorithm": "SHA256 of sorted repository-relative UTF8 path + NUL + exact bytes + NUL",
+  "verification": {
+    "initial_sqlite": "8 tests PASS",
+    "journal_worker_integration": "3 files / 38 tests PASS, including actual process worker lifecycle28 and real durable encryption2",
+    "typechecks": "Full Node/CLI/renderer PASS",
+    "lint_format": "Scoped9 files PASS",
+    "log": "~/Documents/Dobius Recovery/cloud-workstation-20261013/c05-host-journal-worker-integration.log"
+  },
+  "limits": [
+    "Not composed into authority/service/main yet; no second CloudJobStore opened by adapter",
+    "No production jobs/worker/provider/credentials/enrollment/services/deploy/install",
+    "Missing journal with unresolved SQLite attempt remains unknown; tokens only supplied by private decrypted journal",
+    "Start permit alone blocks withdrawal; reservations retained until bound stop proof"
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "verdict": "PASS_CURRENT_SOURCE_SLICE",
+  "reviewed_at": "2026-10-13T19:49:01.235157+00:00",
+  "manifest_sha256": "5f413517dd2f7e866fa3aac93023876a9cf3b7f356f64009d1fb6d284f487982",
+  "frozen_sha256": {
+    "dobius/config/scripts/workstation-worker/README.md": "b183eaff9e99e7a6958cc63384c83cbd82ea125a79760e8a430a322cad8717df",
+    "dobius/src/main/automations/workstation-worker/artifact-evidence.ts": "259c9cde79f2d599387a535dfd9be31de02c32e5e496244a618f068f70ee4044",
+    "dobius/src/main/automations/workstation-worker/attempt-observer.ts": "31035ef8031365a22f827bde19cc513c6d01e342eb3d9aa42ba511e6dd3acd81",
+    "dobius/src/main/automations/workstation-worker/cancellation.ts": "d982cfc449e1287393969ab7710cad3b51c4621605e35eb26a690bb46dd11460",
+    "dobius/src/main/automations/workstation-worker/execution-reservation.ts": "4290bbf4dd437fbc9c80e57c5f59ebcdb804b8d2bb33d918990930990cfa025c",
+    "dobius/src/main/automations/workstation-worker/index.ts": "6b46f959b42c97a4b4165bd7b558914bed46660f60bdf8c665f00d42624037ba",
+    "dobius/src/main/automations/workstation-worker/instance-lock.ts": "4cbf9d9b4daf6184a4b705eb79360380910c860792032a5507f01f0040d66dee",
+    "dobius/src/main/automations/workstation-worker/journal.ts": "0d38fbff3c33b669e2e7b15815e87b618c6e2133e473edad4069cb382b2ddc54",
+    "dobius/src/main/automations/workstation-worker/lease-renewal.ts": "efa112d93b0b7ed499f2aedc46cc6f3e2562808e00adff3ca93bf54aecf8f9ee",
+    "dobius/src/main/automations/workstation-worker/process-identity.ts": "ddc83e277969d4239794f6dcaac522077a7a106881b9919747c15e35764735ec",
+    "dobius/src/main/automations/workstation-worker/recovered-lifecycle.ts": "73e3258609552e23a8c70f94ed272612f96b5b7b15dad93a9c0ae5c1ee856634",
+    "dobius/src/main/automations/workstation-worker/recovered-reservation.ts": "2df65fa6997b6a8db08122cb6f048cfde5c8ec215658c21dc88948612c177281",
+    "dobius/src/main/automations/workstation-worker/recovery-watcher.ts": "7ee59bb7e3c0b138e39277a4d708f5484ce9bf703b59a98637c1b0272e5c81cf",
+    "dobius/src/main/automations/workstation-worker/registry.ts": "d41e82985045f9e4e754e866e9e5102e46daa28027c57f4262c6f7d823c64a70",
+    "dobius/src/main/automations/workstation-worker/source-change-evidence.ts": "90d4ed5abd2e187aa5f52b1327107b86d7b0416ac393f426d4283e8b8ad71ea8",
+    "dobius/src/main/automations/workstation-worker/start-authorization.ts": "8bc6b921f75beaa03bdb873009ad633039df961e4e0e5bfb38c748d5f9d2345f",
+    "dobius/src/main/automations/workstation-worker/worker.test.ts": "6c5a58feee4dea47bde984a100816d2676a989d4b77b9cb779ac82e3b2001c60",
+    "dobius/src/main/automations/workstation-worker/worker.ts": "85e9f5f0e33f1e21d4ccdf3bd18e3838dc18208e1e5b15eea210173b915ecb90",
+    "dobius/src/shared/workstation-worker.ts": "9e4dd7b8940b5b99339d8ca2ad0d1c9707e7f566c50cde52964528eca0253e79"
+  },
+  "prior_nonpass": {
+    "schema_version": 1,
+    "verdict": "CHANGES_REQUIRED",
+    "manifest_sha256": "369873fc4e610bf80f66b9d7b133387ddf0049c5004b5d03a50e4ece044f2e91",
+    "reviewed_at": "2026-10-13T19:40:05.434051+00:00",
+    "command": "Node24 vitest --config config/vitest.config.ts src/main/automations/workstation-worker/worker.test.ts --maxWorkers=1",
+    "tests_passed": 26,
+    "exit_code": 1,
+    "unhandled_errors": 1,
+    "finding": "Recovered watcher finalizer releases missing lock after test cleanup; track/drain lifecycle and observable error handling required. Owner notified."
+  },
+  "independent_validation": [
+    {
+      "command": "Node24 vitest --config config/vitest.config.ts src/main/automations/workstation-worker/worker.test.ts --maxWorkers=1",
+      "exit_code": 0,
+      "tests_passed": 27,
+      "unhandled_errors": 0
+    },
+    {
+      "command": "Node24 tsgo focused strict worker/shared contracts and scoped oxlint",
+      "exit_code": 0
+    }
+  ],
+  "limits": [
+    "No live queue/worker transport or service integration yet",
+    "Hard CPU/RSS/OS descendant containment not accepted",
+    "Hermes binary/profile/provider budget not verified",
+    "Recovery output pipes cannot be reattached; strict-output recipes cannot resume unobserved execution"
+  ],
+  "latest_six_file_test": {
+    "aggregate": "615566d22f7e9bcef25c1ceb68af01173c7b6aba18b4468170a11ad9a9778dea",
+    "Node24": {
+      "passed": 34,
+      "skipped": 1,
+      "exit_code": 0
+    },
+    "verdict": "SUPERSEDED_CHANGES_REQUIRED",
+    "open_findings": [
+      "RESEARCH incomplete durable key publication on short writes",
+      "ROOT finally return suppresses unowned temporary open failure",
+      "ROOT narrow buffer writer type and encoded input bound"
+    ],
+    "owner": "OVERNIGHT correcting; new source freeze required"
+  },
+  "final_seven_file_correction": {
+    "at": "2026-10-13T20:40:25.240623+00:00",
+    "aggregate_sha256": "2be1bd0d9e7ba187daf18c8e73fcd239ca56930b90ebdf09f1812f05cee0dd8e",
+    "file_count": 7,
+    "hash_mismatches": [],
+    "root_node24_suite": {
+      "files": 2,
+      "passed": 38,
+      "skipped": 1,
+      "exit_code": 0
+    },
+    "source_full_typecheck": {
+      "node_cli_renderer": "PASS",
+      "exit_code": 0
+    },
+    "verdict": "PASS_SOURCE",
+    "peer": "RESEARCH exact seven-file and three dependency hash PASS confirmed through actual terminal readback",
+    "limits": [
+      "No live dispatcher or Hermes execution",
+      "Windows durable key explicitly unsupported; Windows-only test skipped on macOS",
+      "Resource and provider enforcement require separate live acceptance"
+    ],
+    "peer_readback": {
+      "handle": "term_9a27e372-28b2-419a-8004-16a4fc944ab3",
+      "runtime": "facae3c3-4dac-4714-86e9-ab58fe29609e",
+      "tail": [
+        "",
+        "sport, C04 capacity freshness, physical volume+ 330 lines (ctrl+t to expand)                                                                                                                  \u2022 C05 seven-file review: PASSfortheexactnew_c05_sealer_cancel_short_write_freezesection. Allsevensourcehashesmatch,andthecomputedaggregateis2be1bd0d9e7ba187daf18c8e73fcd239ca56930b90ebdf09f1812f05cee0dd8e.AllthreeC02capacitydependency hashs lso match theirfrozen values; th sharedschema uses externalResrvedBytes.Thecodeandregressionscoverretryingshortwrites,rejectingzero-progresswriteswithoutpublishing,preservinganunownedtemporaryfileanditsopn error, and jecting sized ecoded okens before decoding. Cancellation rchecks recorded process idnttybefore signaling. The owner\u2019sNode24receipt reports38 passed, 0 fal, and 1 Window-only skip; I didnot rerun the proces-spawningsuit.notclaimROOTacceptanceorlivedeployment.showthesupersededsix-filereceipt;usetheexplicitlynamednewsection.Verifyexacthashes,shortandzerowrites,unowned-temperrorpreservation,  encoded-token bound, and C02 capactydependency hashs. OwnerNode24 suite pased 38 with one Windows skip; ROOT indepndently rerunning.Review andrepor your verdict, then kep all sourcandreorts unchnged for packaging. \u2022 I\u2019ll review only the explicitly named seven-file C05 freeze, verify its file and dependency hashes, then trace the short/zero-write, temporary-fileerror,andencoded-tokenboundcasesinsourceandtests.I\u2019llkeepallsourceandreportfilesunchangedandwon\u2019trunexecutortestsinthisrestricted  environment.\u2022Ran python3 - <<'PY'\u2026  \u2514   },      \"root_acceptance\": \"PENDING; no ROOT acceptance is claimed for this manifest.\" }+74 lines (crl+t to expand)                                                                                                                   \u2022Context compacted \u00b7 12s\u2022 Ran pwd && git status --short --branch && git rev-parse HEAD && python3 - <<'PY'\u2026  \u2514   },      \"root_acceptance\": \"PENDING; no ROOT acceptance is claimed for this manifest.\" }+187 lines (ctrl+t to expand)                                                                                                                  \u2022 Ran python3 - <<'PY' \u2026  \u2514 dobius/src/main/automations/workstation-worker/lease-sealer.test.ts:256:  const keySource = readFileSync(new URL('./lease-sealer-key-file.ts', import.\u2026    dobius/src/main/automations/workstation-worker/lease-sealer.test.ts:260:  const modulePath = join(directory, 'lease-sealer-fixture.cjs') 61writeFileync(join(director, 'lase-sealer-keyfile.js'), keyOuput, { mode+ 538 lines (ctrl+ to expand)                                                                                                                    \u2022 Ran sed -n '30,115p' dobius/src/main/automations/workstation-worker/lease-sealer.test.ts && sed -n '132,153p' dobius/src/main/automations/workstation-wo\u2026  \u2514   leaseToken: string      leaseExpiresAt: number dobiu/cnfig/cpts/workstation-worker/README.md:139:VPS enrollment, authenticated transport, C04 capacity freshness, physical volume+330 lines (ctrl+t to expand)                                                                                                                          \u2022C05 seven-file review: PASS for the exact new_c05_sealer_cancel_short_write_freeze section.  All seven source hashes match, and the omputed aggregate is 2be1bd0d9e7ba187daf18c8e73fcd239ca56930b90ebdf09f1812f05cee0dd8e.AllthreeC02capacitydependencyhashesalsomatchtheirfrozenvalues;thesharedschemausesexternalReservedBytes.The code and regressins cover retrying short writes,rejecting zero-progress writes without publishing,preservinganunownedtemporaryfileanditsopenerror,andrejectingoversizedencodedtokensbeforedecoding.Cancellationrechecksrecordedprocessidentitybeforesignaling.Theowner\u2019sNode24receipt reports 38 passed, 0 failed, and 1 Windows-only skip; Idid not rerunthe process-spawning suite.I made no changes to ource or reports. This review does not claim ROOTacceptance or live deployment.  Worked for 33s \u2022 4:40 PM"
+      ],
+      "recorded_at": "2026-10-13T20:40:38.786119+00:00"
+    }
+  },
+  "accepted_at": "2026-10-13T20:40:58.509271+00:00"
+}

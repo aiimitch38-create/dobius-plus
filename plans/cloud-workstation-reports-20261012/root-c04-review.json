@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "package": "C04",
+  "reviewer": "ROOT",
+  "verdict": "PASS_SOURCE_AND_TYPED_ADAPTER",
+  "reviewed_at": "2026-10-13T18:54:08.082806+00:00",
+  "frozen_sha256": {
+    "dobius/config/scripts/system-monitor/README.md": "f6a920039b71b067b26bb29d07e9af3b409dd9b51412e0b0b2997ce601b867e4",
+    "dobius/config/scripts/system-monitor/monitor_state.py": "405ac1fb324a8526d20bf135210ff190de62f7ff0afe2901dcb645deafe66435",
+    "dobius/config/scripts/system-monitor/prepare_monitor.py": "8c61aede8c1c5a622b79922f6ebbff2052c0cad270c92f3d86c0080797e7c4ba",
+    "dobius/config/scripts/system-monitor/root_inventory.py": "14b37dd76d9441eda51f20b050e44f3ab002c2f4f65f4a56ce5d95574db3a144",
+    "dobius/config/scripts/system-monitor/storage_monitor.py": "f571b941c5c75f34c7be30fce24df3c7fef4de36a0fa14e6d7d790266bc73fd4",
+    "dobius/config/scripts/system-monitor/storage_policy.py": "cd7d30eb5d76b25d33422d544c9b6fa983d84cf031ba5777e5aced3c36f87e79",
+    "dobius/config/scripts/system-monitor/test_monitor_limits.py": "1b72ee5c629b49bc8fc9fa12157d3e8746cd98dd92dc175a678090e4b49aaa73",
+    "dobius/config/scripts/system-monitor/test_storage_monitor.py": "f29cdb18d8df1010a546f232e23f65430981776f69fce858755e5a77829bbc00",
+    "dobius/src/shared/system-monitor.ts": "e72352d02de1651afb85704d22f8f03eaa87925f4808af9215fe9addc9e986ce",
+    "dobius/src/main/system-monitor/README.md": "d3fe9b4321818cc48cdd16bceff83d7230fa069268b830e61ef7009ba55d5706",
+    "dobius/src/main/system-monitor/adapter.ts": "209e0501ed4b834e09e1074254b8953972de7489dc8640d364139afb4b6c0b71",
+    "dobius/src/main/system-monitor/adapter.test.ts": "87a014103b8c31dcd15c2e0e950eda6f5c22408cddcdf8c618a8c4476c536a2c",
+    "dobius/src/main/system-monitor/admission.ts": "7fc17fc4ffd6a476b973865a93747a8145e5d3e47c30a60f0370621ed135bfb5",
+    "dobius/src/main/system-monitor/status-schema.ts": "4c107736df7ffc1e7bc2c180569ab1831bac2175abda2d7603b0fb2102eeebba"
+  },
+  "aggregate_sha256": "1f62404c5a4884d6904233c6e8d76bbb728e76c9349cbf0a62849c5ba54b7045",
+  "independent_verification": [
+    "ROOT Python36 tests passed",
+    "ROOT Node24 adapter5 tests passed",
+    "Inspected bounded private-file reader, descriptor nofollow/nonblock, runtime schema, registration/root identity, second-to-millisecond conversion, fresh/skew/stale policy, critical hysteresis and atomic-reservation input boundary."
+  ],
+  "delivery_limits": [
+    "Live scheduler/app views, authenticated laptop-to-VPS publishing and queued worker admission integration remain open.",
+    "The adapter is read-only; no automatic cleanup or archive permission exists."
+  ],
+  "freshness_ttl_public_age_acceptance": {
+    "at": "2026-10-13T20:30:12.773124+00:00",
+    "verdict": "PASS_SOURCE",
+    "aggregate_sha256": "e29b7090e22f7a16ac3620b74e2b739713c58b0989b83ee31f4d3234a0e30bd0",
+    "files_match": true,
+    "root_tests": {
+      "files": 3,
+      "passed": 26,
+      "exit_code": 0,
+      "runtime": "Node24"
+    },
+    "peer": "RESEARCH PASS same four-file freeze",
+    "producer_changed": false,
+    "deployment": "Read-only producer already running; Electron view awaits gated install."
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "checked_at": 1792086300.658696,
+  "build2": {
+    "task": "task_d6d018ade0b3",
+    "status": "author delivery reconciled, source unaccepted pending independent V2 review",
+    "frozen_candidate_files_verified": 79,
+    "changed_baselines_verified": 15,
+    "review_task": "task_bb3cd73c557e"
+  },
+  "current_workers": {
+    "BUILD1": {
+      "dispatch_id": "ctx_353db44c56fe",
+      "user_prompt_verified": true,
+      "tool_calls_after_prompt": 12,
+      "active_record_read": true
+    },
+    "RESEARCH": {
+      "dispatch_id": "ctx_27fe61f4d61c",
+      "user_prompt_verified": true,
+      "tool_calls_after_prompt": 7,
+      "active_record_read": true
+    }
+  },
+  "aws": "deferred",
+  "historical_storage": "paused"
+}

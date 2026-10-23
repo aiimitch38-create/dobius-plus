@@ -45,6 +45,8 @@ import { getSettingOwnershipSummary } from './setting-ownership'
 import { translate } from '@/i18n/i18n'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { parseAgentDefaultEnvDraft, stringifyAgentDefaultEnvDraft } from './agent-default-env-draft'
+import { TelegramAccountSection } from './TelegramAccountSection'
+import type { TelegramAccountUiApi } from './telegram-account-ui'
 
 export { getAgentsPaneSearchEntries } from './agents-search'
 
@@ -55,6 +57,7 @@ type AgentsPaneProps = {
   wslAvailable?: boolean
   wslDistros?: string[]
   wslCapabilitiesLoading?: boolean
+  telegramAccountApi?: TelegramAccountUiApi | null
 }
 
 type AgentAvailabilityUpdateQueueOptions = {
@@ -688,8 +691,12 @@ export function AgentsPane({
   wslSupportedPlatform,
   wslAvailable,
   wslDistros,
-  wslCapabilitiesLoading
+  wslCapabilitiesLoading,
+  telegramAccountApi = null
 }: AgentsPaneProps): React.JSX.Element {
+  const resolvedTelegramAccountApi =
+    telegramAccountApi ??
+    (typeof window === 'undefined' ? null : (window.api?.telegramAccount ?? null))
   const { detectedIds: detectedList, isRefreshing, refresh } = useDetectedAgents()
   // Why: refresh re-spawns the user's login shell to re-capture PATH
   // (preflight:refreshAgents on the main side). This handles the
@@ -788,6 +795,8 @@ export function AgentsPane({
 
   return (
     <div className="space-y-8">
+      <TelegramAccountSection api={resolvedTelegramAccountApi} />
+
       <section className="space-y-4">
         <SettingsSubsectionHeader
           title={translate('auto.components.settings.AgentsPane.385212c7a1', 'Default Agent')}

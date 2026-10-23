@@ -1,3 +1,4 @@
+import { MobileCloudJobBoard } from '../../../src/tasks/MobileCloudJobBoard'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
@@ -2193,6 +2194,7 @@ function compareTasksByRepository(
 export default function MobileTasksScreen() {
   const { hostId, taskSource } = useLocalSearchParams<{ hostId: string; taskSource?: string }>()
   const router = useRouter()
+  const [jobBoardOpen, setJobBoardOpen] = useState(false)
   const insets = useSafeAreaInsets()
   const { client, state: connState } = useHostClient(hostId)
   const reconnectAttempts = useReconnectAttempt(hostId)
@@ -8669,6 +8671,8 @@ export default function MobileTasksScreen() {
             ? 'No GitLab tasks'
             : 'No Linear tasks'
 
+  if (jobBoardOpen) {return <MobileCloudJobBoard hostId={hostId} onBack={() => setJobBoardOpen(false)} />}
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View ref={setTaskCopyFeedbackRootRef} style={styles.topChrome}>
@@ -8679,6 +8683,7 @@ export default function MobileTasksScreen() {
           <View style={styles.titleWrap}>
             <StatusDot state={connState} verdict={headerVerdict} />
             <Text style={styles.title}>Tasks</Text>
+            <Pressable accessibilityRole="button" onPress={() => setJobBoardOpen(true)}><Text style={styles.segmentButtonText}>Board</Text></Pressable>
           </View>
           <Pressable
             style={styles.iconButton}

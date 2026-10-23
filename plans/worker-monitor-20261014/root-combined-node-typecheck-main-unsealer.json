@@ -1,0 +1,31 @@
+{
+  "command": [
+    "pnpm",
+    "--dir",
+    "dobius",
+    "exec",
+    "tsgo",
+    "--noEmit",
+    "--composite",
+    "false",
+    "--incremental",
+    "false",
+    "-p",
+    "config/tsconfig.node.json"
+  ],
+  "exit_code": 0,
+  "stdout": "",
+  "stderr": "",
+  "at": "2026-10-14T22:09:22.786808+00:00",
+  "owned_hashes": {
+    "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-protocol.ts": "fa37570e1c11df1ac4e8e4123b05e5fef5969edad4a3fe9626a139e5cc3b8737",
+    "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-runtime.ts": "156e1c67f85d6e5418195836a566277ccfb7d8ec4db27357a310ad1effb8307f",
+    "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.ts": "734716077ca29d59102d108d69d7ae9aade36d48a50b8c9e8dabd2f5e0bd63fb",
+    "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.test.ts": "83815c66fb5765f38dd424fe6eb93e10e42844eaad134b88760f3b52846cd75b",
+    "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-unsealer.ts": "b9e07897fedf00e0983215dc5e9d9aaaedc8167f41cc04f7dfca6c55dff50a11",
+    "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-unsealer.test.ts": "f223a7d84902ea09eb4a2cf254b468ae9ef5ace6f312df455259769560f946e0",
+    "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-unsealer-test-fixtures.ts": "5f8ade166aade7e54b45deafe1a6e4837f50dbbd5dfe0c02f8f2a26cc5a1bdb5",
+    "plans/worker-monitor-20261014/BUILD1-adam-main-intent-unsealer-source.md": "7dda56908352f6d46556281e6f9e6fc6b0fb7efa044b85e7bad49c2e9c7ccd6e"
+  },
+  "source_unchanged_during_check": true
+}

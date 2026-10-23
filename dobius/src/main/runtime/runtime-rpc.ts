@@ -35,11 +35,20 @@ import {
   type TerminalStreamFrame
 } from '../../shared/terminal-stream-protocol'
 import { deviceHasMobileRpcGrant, mobileRpcRequirement } from './mobile-rpc-grants'
+import type { CloudJobService } from '../automations/cloud-job-service'
+import type { SystemMonitorService } from '../system-monitor/service'
+import type { ApplicationDataCatalog } from '../storage/data-catalog/application-catalog'
+import type { AdamCloudIntentBridge } from '../adam-service-principal/adam-cloud-intent-bridge'
+import { ensureEncryptedCatalogPreviewInvalidationRegistration } from './rpc/data-catalog-preview-invalidation'
 
 const DEFAULT_WS_PORT = 6768
 
 type DobiusRuntimeRpcServerOptions = {
   runtime: DobiusRuntimeService
+  cloudJobs?: CloudJobService
+  systemMonitor?: SystemMonitorService
+  dataCatalog?: ApplicationDataCatalog
+  adamCloudIntentBridge?: AdamCloudIntentBridge
   userDataPath: string
   pid?: number
   platform?: NodeJS.Platform
@@ -128,6 +137,12 @@ function webClientPathForEndpoint(pathname: string): string {
 }
 
 export const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
+  'system.monitor.status',
+  'jobs.status',
+  'jobs.list',
+  'jobs.snapshot',
+  'jobs.get',
+  'jobs.events',
   'voice.intent',
   'voice.reply',
   'accounts.list',
@@ -165,7 +180,18 @@ export const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'files.browseServerDir',
   'files.createFile',
   'files.list',
+  'data.catalog.roots',
+  'data.catalog.page',
+  'data.catalog.preview.policy',
+  'data.catalog.preview.resolve',
+  'data.catalog.preview.start',
+  'data.catalog.preview.chunk',
+  'data.catalog.preview.finish',
+  'data.catalog.preview.renew',
+  'data.catalog.preview.close',
   'files.open',
+  'files.openBackground',
+  'files.openDiffBackground',
   'files.openDiff',
   'files.read',
   'files.readChunk',
@@ -416,6 +442,8 @@ function injectDeviceScope(response: string, scope: DeviceScope): string {
 export class DobiusRuntimeRpcServer {
   private readonly runtime: DobiusRuntimeService
   private readonly dispatcher: RpcDispatcher
+  private readonly dataCatalog?: ApplicationDataCatalog
+  private readonly adamCloudIntentBridge?: AdamCloudIntentBridge
   private readonly userDataPath: string
   private readonly pid: number
   private readonly platform: NodeJS.Platform
@@ -437,6 +465,8 @@ export class DobiusRuntimeRpcServer {
   // subscriptions, so the server can reap a closing socket's subscriptions
   // without affecting other live sockets that share the same deviceToken.
   private wsConnectionIds = new Map<WebSocket, string>()
+  private wsConnectionSignals = new Map<WebSocket, AbortController>()
+  private readonly wsPreviewInvalidationUnregister = new Map<WebSocket, () => void>()
   private readonly binaryStreamHandlers = new Map<
     string,
     Map<number, (frame: TerminalStreamFrame) => void>
@@ -452,6 +482,10 @@ export class DobiusRuntimeRpcServer {
 
   constructor({
     runtime,
+    cloudJobs,
+    systemMonitor,
+    dataCatalog,
+    adamCloudIntentBridge,
     userDataPath,
     pid = process.pid,
     platform = process.platform,
@@ -462,7 +496,15 @@ export class DobiusRuntimeRpcServer {
     longPollCap = LONG_POLL_CAP
   }: DobiusRuntimeRpcServerOptions) {
     this.runtime = runtime
-    this.dispatcher = new RpcDispatcher({ runtime })
+    this.dataCatalog = dataCatalog
+    this.adamCloudIntentBridge = adamCloudIntentBridge
+    this.dispatcher = new RpcDispatcher({
+      runtime,
+      cloudJobs,
+      systemMonitor,
+      dataCatalog,
+      adamCloudIntentBridge
+    })
     this.userDataPath = userDataPath
     this.pid = pid
     this.platform = platform
@@ -734,7 +776,9 @@ export class DobiusRuntimeRpcServer {
     // tweetnacl) rather than TLS, since React Native can't pin self-signed certs.
     if (this.enableWebSocket) {
       try {
-        this.deviceRegistry = new DeviceRegistry(this.userDataPath)
+        this.deviceRegistry = new DeviceRegistry(this.userDataPath, {
+          onSecurityAuthorityChange: () => this.dataCatalog?.invalidatePreviewAuthority()
+        })
         this.e2eeKeypair = loadOrCreateE2EEKeypair(this.userDataPath)
 
         const wsTransport = new WebSocketTransport({
@@ -755,7 +799,8 @@ export class DobiusRuntimeRpcServer {
             // when this socket closes (without affecting other live sockets
             // that share the same deviceToken).
             this.wsConnectionIds.set(ws, randomBytes(8).toString('hex'))
-            channel = new E2EEChannel(ws, {
+            this.wsConnectionSignals.set(ws, new AbortController())
+            const activeChannel = new E2EEChannel(ws, {
               serverSecretKey: this.e2eeKeypair!.secretKey,
               validateToken: (token) => this.deviceRegistry?.validateToken(token) != null,
               claimToken: (token) => this.deviceRegistry?.consumePairingOffer(token) ?? null,
@@ -777,8 +822,33 @@ export class DobiusRuntimeRpcServer {
                 ws.close(code, reason)
               }
             })
-            channel.onMessage((plaintext, encryptedReply, encryptedBinaryReply) => {
+            channel = activeChannel
+            activeChannel.onMessage((plaintext, encryptedReply, encryptedBinaryReply) => {
+              const connectionId = this.wsConnectionIds.get(ws)
+              const connectionSignal = this.wsConnectionSignals.get(ws)
               const authenticatedDeviceToken = this.e2eeChannels.get(ws)?.deviceToken ?? null
+              const verifiedDevice = authenticatedDeviceToken
+                ? (this.deviceRegistry?.validateToken(authenticatedDeviceToken) ?? null)
+                : null
+              if (connectionId && connectionSignal) {
+                ensureEncryptedCatalogPreviewInvalidationRegistration(
+                  this.wsPreviewInvalidationUnregister,
+                  ws,
+                  connectionId,
+                  verifiedDevice?.scope ?? null,
+                  {
+                    signal: connectionSignal.signal,
+                    isCurrent: () =>
+                      ws.readyState === ws.OPEN &&
+                      this.wsConnectionIds.get(ws) === connectionId &&
+                      this.e2eeChannels.get(ws) === activeChannel &&
+                      typeof activeChannel.deviceToken === 'string' &&
+                      this.deviceRegistry?.validateToken(activeChannel.deviceToken)?.scope ===
+                        'mobile',
+                    sendEncrypted: encryptedReply
+                  }
+                )
+              }
               void this.handleWebSocketMessage(
                 plaintext,
                 encryptedReply,
@@ -788,8 +858,8 @@ export class DobiusRuntimeRpcServer {
                 authenticatedDeviceToken
               )
             })
-            channel.onBinaryMessage((bytes) => this.handleWebSocketBinaryMessage(bytes, ws))
-            this.e2eeChannels.set(ws, channel)
+            activeChannel.onBinaryMessage((bytes) => this.handleWebSocketBinaryMessage(bytes, ws))
+            this.e2eeChannels.set(ws, activeChannel)
           }
           channel.handleRawMessage(msg)
         })
@@ -807,6 +877,10 @@ export class DobiusRuntimeRpcServer {
           // accounts, terminal) don't leak across reconnects. This is
           // independent of the deviceToken-scoped onClientDisconnected.
           const connectionId = this.wsConnectionIds.get(ws)
+          this.wsConnectionSignals.get(ws)?.abort()
+          this.wsConnectionSignals.delete(ws)
+          this.wsPreviewInvalidationUnregister.get(ws)?.()
+          this.wsPreviewInvalidationUnregister.delete(ws)
           if (connectionId) {
             this.runtime.cleanupSubscriptionsForConnection(connectionId)
             this.runtime.cancelMobileDictationForConnection(connectionId)
@@ -858,10 +932,20 @@ export class DobiusRuntimeRpcServer {
   }
 
   async stop(): Promise<void> {
+    this.adamCloudIntentBridge?.dispose()
     const transports = this.activeTransports
     this.activeTransports = []
     this.transports = []
     this.wsTransport = null
+    for (const controller of this.wsConnectionSignals.values()) {
+      controller.abort()
+    }
+    for (const unregister of this.wsPreviewInvalidationUnregister.values()) {
+      unregister()
+    }
+    this.wsPreviewInvalidationUnregister.clear()
+    this.wsConnectionSignals.clear()
+    this.wsConnectionIds.clear()
     if (transports.length === 0) {
       return
     }
@@ -914,6 +998,9 @@ export class DobiusRuntimeRpcServer {
 
     try {
       return await this.dispatcher.dispatch(request, {
+        authenticatedLocal: true,
+        authenticatedLocalSocket: true,
+        adamPeerEvidence: context?.adamPeerEvidence,
         signal: longPoll ? context?.signal : undefined
       })
     } finally {
@@ -1052,6 +1139,7 @@ export class DobiusRuntimeRpcServer {
     try {
       await this.dispatcher.dispatchStreaming(request, replyForRequest, {
         connectionId,
+        connectionSignal: ws ? this.wsConnectionSignals.get(ws)?.signal : undefined,
         clientId: token,
         clientDeviceId: device.deviceId,
         // Why: gates the mobile-only payload diet (native-chat char clipping) so

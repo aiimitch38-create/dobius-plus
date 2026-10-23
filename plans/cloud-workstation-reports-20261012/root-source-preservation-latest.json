@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "archive": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/source-preservation-1791921085.tgz",
+  "sha256": "48556ec22642915184b2bac9f96f0314aee69d815b0871d96c04211954b1368e",
+  "files": 167,
+  "bytes": 1159564,
+  "cloud_copy": "pending_authenticated_VPS_access",
+  "release_identity": "work_in_progress_not_release"
+}

@@ -1,0 +1,12 @@
+{
+  "verdict": "CORRECTED_SOURCE_DELIVERED_PENDING_INDEPENDENT_REVIEW",
+  "dispatch_id": "ctx_353db44c56fe",
+  "report": "plans/worker-monitor-20261014/BUILD1-adam-main-lookup-authority-correction.md",
+  "report_sha256": "768bca42651c31590eaf5f3c1ada30266c2a46d60527e626a26b1c907ed673c4",
+  "source_hashes_verified": 26,
+  "source_aggregate": "161e35a3e607c3016af1fb08dfd18015cd9d5b823436eacf58543128e9ed983c",
+  "recorded_checks": "Author:144 focused tests, main+CLI strictTS, scopedlint/format/diff PASS; not rerun by ROOT.",
+  "source_accepted": false,
+  "live_installed": false,
+  "completion_transport": "Exact author report fallback after one failed worker completion IPC."
+}

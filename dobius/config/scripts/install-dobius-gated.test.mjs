@@ -4,6 +4,7 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -16,8 +17,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   asarOf,
   asarTagCommand,
+  backupsOf,
+  bundleDigest,
   cleanupRoots,
+  currentRecordOf,
   dest,
+  envFor,
   makeBundle,
   makeRoot,
   provenanceOf,
@@ -50,6 +55,35 @@ describe.runIf(process.platform === 'darwin')(
   'install-dobius-gated.sh (fixture dirs only)',
   { timeout: 90_000 },
   () => {
+    it('requires the resource contract before staging or app-management work', () => {
+      const root = makeRoot()
+      makeBundle(dest(root), { asar: 'v1' })
+      const built = makeBundle(path.join(root, 'handoff', 'Dobius+.app'), { asar: 'v2' })
+      const helperDir = path.join(root, 'partial-installer')
+      mkdirSync(helperDir)
+      for (const helper of [
+        'install-dobius-gated.sh',
+        'semver-compare.py',
+        'source-state.py',
+        'bundle-manifest.py',
+        'install-record.py'
+      ]) {
+        copyFileSync(path.join(repoRoot, 'scripts', helper), path.join(helperDir, helper))
+      }
+
+      const result = spawnSync(
+        '/bin/bash',
+        [path.join(helperDir, 'install-dobius-gated.sh'), built],
+        { env: envFor(root), encoding: 'utf8' }
+      )
+
+      expect(result.status, result.stderr).toBe(9)
+      expect(result.stderr).toContain('bundle-resource-contract.py is missing')
+      expect(asarOf(dest(root))).toBe('v1')
+      expect(existsSync(stageOf(root))).toBe(false)
+      expect(existsSync(path.join(root, 'install.lock'))).toBe(false)
+    })
+
     it('installs through a stage, keeps ONE rollback copy outside the install folder, and removes the dist copy', () => {
       const root = makeRoot()
       makeBundle(dest(root), { asar: 'v1' })
@@ -240,7 +274,7 @@ describe.runIf(process.platform === 'darwin')(
 // Quit/kill/relaunch/LaunchServices normally run only for the real
 // /Applications path. DOBIUS_INSTALL_TEST_MANAGE_APP forces them on for a
 // fixture DEST, with every command replaced by a recorder shim first on PATH.
-function withAppShims(root) {
+function withAppShims(root, { mainSurvives = false, mainTerminates = false, pgrepStatus } = {}) {
   const shimDir = path.join(root, 'app-shims')
   const trace = path.join(root, 'app-trace.log')
   const destAsar = path.join(dest(root), 'Contents', 'Resources', 'app.asar')
@@ -255,14 +289,29 @@ function withAppShims(root) {
     return file
   }
   shim('osascript', 0)
-  shim('pgrep', 1)
+  const pgrep = shim('pgrep', pgrepStatus ?? (mainSurvives ? 0 : 1))
+  const mainProcess = mainSurvives || mainTerminates ? 'Dobius+ --remote-debugging-port=9222' : null
+  if (mainProcess) {
+    const countFile = path.join(shimDir, 'pgrep-count')
+    const decision = mainTerminates
+      ? `if [ "$*" != "-a -x Dobius\\\\+" ]; then exit 1; fi\ncount=$(cat '${countFile}' 2>/dev/null || echo 0)\ncount=$((count + 1))\necho "$count" > '${countFile}'\nif [ "$count" -eq 1 ]; then exit 0; fi\nexit 1`
+      : `if [ "$*" = "-a -x Dobius\\\\+" ] && [ "$DOBIUS_INSTALL_TEST_MAIN_PROCESS" = "${mainProcess}" ]; then exit 0; fi\nexit 1`
+    writeFileSync(pgrep, readFileSync(pgrep, 'utf8').replace(/exit \d+\n$/, decision))
+  }
   shim('pkill', 0)
   shim('open', 0)
+  // The survivor test exercises all ten bounded polls without a real delay.
+  const sleep = path.join(shimDir, 'sleep')
+  writeFileSync(sleep, '#!/bin/bash\nexit 0\n')
+  chmodSync(sleep, 0o755)
   const lsregister = shim('lsregister', 0)
   const env = {
     PATH: `${shimDir}:${process.env.PATH}`,
     DOBIUS_INSTALL_TEST_MANAGE_APP: '1',
     DOBIUS_INSTALL_LSREGISTER: lsregister
+  }
+  if (mainProcess) {
+    env.DOBIUS_INSTALL_TEST_MAIN_PROCESS = mainProcess
   }
   const read = () =>
     existsSync(trace)
@@ -274,7 +323,7 @@ function withAppShims(root) {
             return { cmd, args, destAsarAtCall, stage }
           })
       : []
-  return { env, read }
+  return { env, read, mainProcess }
 }
 
 describe.runIf(process.platform === 'darwin')(
@@ -285,17 +334,25 @@ describe.runIf(process.platform === 'darwin')(
       const root = makeRoot()
       makeBundle(dest(root), { asar: 'v1' })
       const built = makeBundle(path.join(root, 'handoff', 'Dobius+.app'), { asar: 'v2' })
-      const shims = withAppShims(root)
+      const shims = withAppShims(root, { mainTerminates: true })
 
       const result = runGated(root, [built], shims.env)
 
       expect(result.status, result.stderr).toBe(0)
       const calls = shims.read()
+      expect(shims.mainProcess).toBe('Dobius+ --remote-debugging-port=9222')
+      expect(
+        calls
+          .filter((call) => call.cmd === 'pgrep')
+          .every((call) => call.args === '-a -x Dobius\\+')
+      ).toBe(true)
       expect(calls.map((c) => c.cmd)).toEqual([
         'osascript',
         'pgrep',
+        'pgrep',
         'pkill',
         'pkill',
+        'pgrep',
         'lsregister',
         'lsregister',
         'open'
@@ -305,16 +362,16 @@ describe.runIf(process.platform === 'darwin')(
       // An install run from a Dobius+ terminal descends from the main app:
       // without -a, pgrep/pkill silently skip it.
       expect(calls[1].args.split(' ')).toContain('-a')
-      expect(calls[2].args).toBe('-a -x Dobius\\+')
+      expect(calls[3].args).toBe('-a -x Dobius\\+')
       // Helpers only (--type=); the daemon's cmdline has no --type=.
-      expect(calls[3].args).toBe('-f Dobius\\+ Helper.*--type=')
+      expect(calls[4].args).toBe('-f Dobius\\+ Helper.*--type=')
       expect(
         calls
           .filter((c) => c.cmd === 'pkill')
           .map((c) => c.args)
           .join(' ')
       ).not.toMatch(/daemon|Contents\/MacOS|\.app/)
-      expect(calls[6]).toMatchObject({
+      expect(calls[8]).toMatchObject({
         args: `-a ${path.join(realpathSync(root), 'Applications', 'Dobius+.app')}`,
         destAsarAtCall: 'v2'
       })
@@ -332,6 +389,58 @@ describe.runIf(process.platform === 'darwin')(
       expect(shims.read()).toEqual([])
     })
 
+    it('refuses the swap when the main app survives quit and preserves rollback state', () => {
+      const root = makeRoot()
+      makeBundle(dest(root), { asar: 'v1' })
+      const built = makeBundle(path.join(root, 'handoff', 'Dobius+.app'), { asar: 'v2' })
+      mkdirSync(backupsOf(root))
+      const previousRollback = makeBundle(rollbackOf(root), { asar: 'v0' })
+      writeFileSync(rollbackRecordOf(root), 'previous rollback record\n')
+      const rollbackHash = bundleDigest(previousRollback)
+      const rollbackRecord = readFileSync(rollbackRecordOf(root), 'utf8')
+      const shims = withAppShims(root, { mainSurvives: true })
+
+      const result = runGated(root, [built], shims.env)
+
+      expect(result.status).toBe(10)
+      expect(result.stderr).toContain('main process is still running after quit')
+      expect(asarOf(dest(root))).toBe('v1')
+      expect(existsSync(stageOf(root))).toBe(false)
+      expect(existsSync(currentRecordOf(root))).toBe(false)
+      expect(bundleDigest(rollbackOf(root))).toBe(rollbackHash)
+      expect(readFileSync(rollbackRecordOf(root), 'utf8')).toBe(rollbackRecord)
+      expect(existsSync(path.join(root, 'install.lock'))).toBe(false)
+      const calls = shims.read()
+      expect(shims.mainProcess).toBe('Dobius+ --remote-debugging-port=9222')
+      expect(
+        calls
+          .filter((call) => call.cmd === 'pgrep')
+          .every((call) => call.args === '-a -x Dobius\\+')
+      ).toBe(true)
+      expect(calls.filter((call) => call.cmd === 'pgrep')).toHaveLength(11)
+      expect(calls.filter((call) => call.cmd === 'pkill')).toHaveLength(2)
+      expect(calls.some((call) => call.cmd === 'lsregister')).toBe(false)
+      expect(calls.at(-1)).toMatchObject({
+        cmd: 'open',
+        args: `-a ${path.join(realpathSync(root), 'Applications', 'Dobius+.app')}`,
+        destAsarAtCall: 'v1'
+      })
+    })
+
+    it('fails closed when pgrep cannot verify that the main app exited', () => {
+      const root = makeRoot()
+      makeBundle(dest(root), { asar: 'v1' })
+      const built = makeBundle(path.join(root, 'handoff', 'Dobius+.app'), { asar: 'v2' })
+      const shims = withAppShims(root, { pgrepStatus: 2 })
+
+      const result = runGated(root, [built], shims.env)
+
+      expect(result.status).toBe(10)
+      expect(result.stderr).toContain('could not verify whether the Dobius+ main process exited')
+      expectPriorBundleKept(root, result)
+      expect(shims.read().some((call) => call.cmd === 'lsregister')).toBe(false)
+    })
+
     it('relaunches the unchanged app when the swap fails after quitting', () => {
       const root = makeRoot()
       makeBundle(dest(root), { asar: 'v1' })
@@ -344,8 +453,15 @@ describe.runIf(process.platform === 'darwin')(
       execFileSync('chflags', ['nouchg', dest(root)])
       expect(result.status).toBe(8)
       const calls = shims.read()
-      expect(calls.map((c) => c.cmd)).toEqual(['osascript', 'pgrep', 'pkill', 'pkill', 'open'])
-      expect(calls[4]).toMatchObject({
+      expect(calls.map((c) => c.cmd)).toEqual([
+        'osascript',
+        'pgrep',
+        'pkill',
+        'pkill',
+        'pgrep',
+        'open'
+      ])
+      expect(calls[5]).toMatchObject({
         args: `-a ${path.join(realpathSync(root), 'Applications', 'Dobius+.app')}`,
         destAsarAtCall: 'v1'
       })

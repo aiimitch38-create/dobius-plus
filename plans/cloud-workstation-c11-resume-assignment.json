@@ -1,0 +1,57 @@
+{
+  "package": "C11 exact session ownership and atomic resume",
+  "owner": "BUILD2",
+  "created_at": "2026-10-13T21:13:20.151220+00:00",
+  "allowed_paths": [
+    "dobius/src/shared/agent-session-resume.ts",
+    "dobius/src/shared/agent-session-resume.test.ts",
+    "dobius/src/shared/workspace-session-sleeping-agents.ts",
+    "dobius/src/shared/workspace-session-schema.sleeping-agent.test.ts",
+    "dobius/src/renderer/src/store/slices/agent-status.ts",
+    "dobius/src/renderer/src/store/slices/agent-status-quit-capture.test.ts",
+    "dobius/src/renderer/src/store/slices/terminals.ts",
+    "dobius/src/renderer/src/store/slices/store-session-cascades.test.ts",
+    "dobius/src/renderer/src/lib/resume-sleeping-agent-session.ts",
+    "dobius/src/renderer/src/lib/resume-sleeping-agent-session.test.ts",
+    "dobius/src/renderer/src/lib/sleeping-agent-pane-ownership.ts",
+    "dobius/src/renderer/src/components/terminal-pane/pty-connection.ts",
+    "dobius/src/renderer/src/components/terminal-pane/pty-connection.test.ts",
+    "dobius/src/main/ipc/pty.ts",
+    "dobius/src/main/ipc/pty.test.ts",
+    "dobius/src/main/pty/agent-resume-claims.ts",
+    "dobius/src/main/pty/agent-resume-claims.test.ts",
+    "dobius/src/shared/agent-resume-owner.ts",
+    "dobius/src/shared/agent-resume-owner.test.ts",
+    "dobius/src/preload/index.ts",
+    "dobius/src/preload/api-types.ts",
+    "dobius/docs/AGENT-SESSION-RESTORE.md",
+    "dobius/src/shared/agent-status-types.ts",
+    "dobius/src/renderer/src/hooks/useIpcEvents.ts",
+    "dobius/src/main/ipc/agent-hooks.ts",
+    "dobius/src/main/agent-hooks/server.ts",
+    "dobius/src/main/agent-hooks/server.test.ts",
+    "dobius/src/main/ipc/agent-hooks.test.ts",
+    "dobius/src/main/runtime/rpc/methods/terminal.ts",
+    "dobius/src/main/runtime/rpc/methods/terminal.test.ts",
+    "dobius/src/renderer/src/lib/resume-sleeping-agent-session-replay.test.ts",
+    "dobius/docs/reference/AGENT-SESSION-RESTORE.md"
+  ],
+  "report": "plans/cloud-workstation-reports-20261012/build2.json",
+  "contract": [
+    "Use your read-only preflight and search before edits. Preserve all preexisting dirty changes, especially C03 preload/runtime behavior. Work in canonical repo only.",
+    "Bind captured provider identity to exact stable tab/leaf, per-leaf PTY hint and actual runtime/connection/launch identity available from trusted hook/transport. Do not fabricate owner evidence or bind a transcript by CWD/latest timestamp. Validate capture, persisted schema/hydration and cold restore. Retain ambiguous legacy records for manual recovery; never automatically resume them when ownership is unproved.",
+    "One atomic claim at actual main-process spawn boundary, scoped by provider authority (local or exact remote connection) plus provider session ID, used by both startup sweep and cold restore BEFORE spawn/await. Exact same owner retry after provable failure; successful spawn forbids duplicate launch. No synthetic blank tab before successful ownership/claim validation. Do not rely only on renderer refs or after-connect alias deletion.",
+    "Design cross-platform and SSH behavior explicitly. Server must validate request and tuple, not merely trust arbitrary renderer session fields. Preserve ordinary terminal startup and explicitly requested manual resume semantics; ambiguous automatic resume fails closed. If server ownership evidence needs additional capture/API paths, report exact extension to ROOT before editing.",
+    "Meaningful tests: concurrent sweep/cold restore one spawn; cross-worktree duplicate same local session refused; distinct remote authorities remain separate; wrong pane/tab/leaf/PTy refuses; distinct split leaves restore correctly; stale status launch token/PTY cannot overwrite owner; failure safe retry; app restart with ambiguous root-session alias spawns nothing; no selected desktop tab mutation.",
+    "No CLI launch/resume, install/deploy, app restart, Git mutations, conversation deletion or production app-state edits. Overnight stays stopped. Existing dependencies only; Node24 focused tests maxWorkers=1; document exact command/exit/hash. Freeze exact files and ask ROOT for independent review; do not claim live acceptance."
+  ],
+  "path_extension": "Trusted hook capture and terminal RPC spawn-boundary additions explicitly approved by ROOT; preserve existing manual/bound send semantics",
+  "root_approved_extension_20261013": {
+    "paths": [
+      "dobius/src/renderer/src/lib/resume-sleeping-agent-session-replay.test.ts",
+      "dobius/docs/reference/AGENT-SESSION-RESTORE.md"
+    ],
+    "reason": "Existing meaningful queued-spawn replay regression and correct durable runbook destination; preserve original doc",
+    "status": "Approved after verified idle; exact full manifest required"
+  }
+}

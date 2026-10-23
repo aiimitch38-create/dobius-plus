@@ -1,0 +1,57 @@
+{
+  "verified_at": 1792009835.719906,
+  "status": "LIVE_MONITOR_VERIFIED",
+  "pid": 10387,
+  "health_age_seconds": 14.1,
+  "interval_seconds": 30,
+  "quiet_check_seconds": 600,
+  "reminder_seconds": 300,
+  "test_count_passed": 18,
+  "native_cli": "/usr/local/bin/dobius",
+  "orchestrator_tasks_and_dispatches": "plans/worker-monitor-20261014/assignments.json",
+  "visible_monitor_handle": "term_74f90380-66dc-4acd-80f7-567425d5223c",
+  "live_proof": "BUILD2 changed-report notice delivered to ROOT; exact 2-file freeze verified; source-delivery task completed through Orchestrator; independent review queued behind current FIXER task.",
+  "old_report_watcher": "paused after replacement",
+  "historical_storage_monitor": "remains paused",
+  "aws": "deferred",
+  "head_agents": "not modified",
+  "limitations": [
+    "Native hooks are missing on some current Codex panes; agent state stays unknown rather than claiming idle. Report changes and last output remain observed, and ROOT checks actual readback before assignment.",
+    "Monitor surfaces work to ROOT; it never auto-completes jobs, retries workers, resolves permissions or activates production features."
+  ],
+  "latest_monitor_verification": {
+    "at": 1792033786.1136441,
+    "pid": 7992,
+    "status": "watching",
+    "health_age_seconds": 22.1,
+    "active_tasks": {
+      "BUILD2": {
+        "task_id": "task_6ad060f67b64",
+        "status": "dispatched",
+        "delivery_verified": true
+      },
+      "BUILD1": {
+        "task_id": "task_6272605624be",
+        "status": "completed",
+        "delivery_verified": true
+      },
+      "RESEARCH": {
+        "task_id": "task_53202f4b2b63",
+        "status": "dispatched",
+        "delivery_verified": false
+      },
+      "FIXER": {
+        "task_id": "task_0a6cd6c049b9",
+        "status": "dispatched",
+        "delivery_verified": false
+      }
+    },
+    "user_execution_hold": "lifted by lets keep building",
+    "research_recommendation": "Presented: independent Hermes Adam/ADAM control, Dobius execution; thin integration; live composition remains pending",
+    "new_source_result": "Principal registry author delivery: 4 hashes verified, 16 focused tests recorded, independent review dispatched",
+    "terminal_repair": "task_0a6cd6c049b9 submitted; diagnosis/delivery activity still needs verification; no fix installed",
+    "aws": "deferred",
+    "historical_storage": "paused",
+    "head_agents": "untouched"
+  }
+}

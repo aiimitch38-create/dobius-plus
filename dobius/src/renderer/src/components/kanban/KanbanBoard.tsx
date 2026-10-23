@@ -43,7 +43,7 @@ import {
 } from '@/components/ui/select'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
-import { kanbanMockSource } from './kanban-mock-source'
+import { KanbanJobLanes } from './KanbanJobLanes'
 import { getKanbanIpcSource } from './kanban-ipc-source'
 import { useAssignablePeople } from './kanban-people'
 import { DAY_MS, parseDueDate, startOfDay } from './kanban-dates'
@@ -531,8 +531,13 @@ function SecondaryView({
   return <ActivityView tasks={tasks} onOpen={onOpen} />
 }
 
+const missingTaskAuthority = async (): Promise<never> => { throw new Error('Vertex task authority is unavailable') }
+const unavailableTaskSource: TaskSource = { list: missingTaskAuthority, create: missingTaskAuthority,
+  update: missingTaskAuthority, move: missingTaskAuthority, remove: missingTaskAuthority }
+
 export default function KanbanBoard({ source }: { source?: TaskSource }): React.JSX.Element {
-  const taskSource = useMemo(() => source ?? getKanbanIpcSource() ?? kanbanMockSource, [source])
+  const taskSource = useMemo(() => source ?? getKanbanIpcSource() ?? unavailableTaskSource, [source])
+  const [jobsOpen, setJobsOpen] = useState(false)
   const [tasks, setTasks] = useState<Task[]>([])
   const [activeView, setActiveView] = useState<(typeof views)[number]['id']>('board')
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
@@ -771,6 +776,11 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
     })
   }
 
+  if (jobsOpen) {
+    return <main className="flex h-full min-h-0 flex-1 flex-col"><div className="border-b border-border p-2">
+      <Button variant="ghost" size="sm" onClick={() => setJobsOpen(false)}>Back to tasks</Button>
+    </div><KanbanJobLanes /></main>
+  }
   return (
     <TooltipProvider>
       <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-kanban-background font-sans text-kanban-foreground">
@@ -780,6 +790,7 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
               Visualize work. Assign agents. Ship faster.
             </p>
             <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => setJobsOpen(true)}>Jobs</Button>
               <Button
                 variant={filterHigh ? 'secondary' : 'outline'}
                 className="h-9 border-kanban-border bg-kanban-control text-xs"

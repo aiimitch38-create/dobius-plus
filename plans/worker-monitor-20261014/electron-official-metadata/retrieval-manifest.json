@@ -1,0 +1,27 @@
+{
+  "retrieved_at": "2026-10-14T21:52:05.399731+00:00",
+  "transport": "ROOT /usr/bin/curl --fail --silent --show-error over HTTPS with certificate verification; JSON metadata only; no tarballs downloaded",
+  "documents": [
+    {
+      "path": "plans/worker-monitor-20261014/electron-official-metadata/42.3.3.json",
+      "url": "https://registry.npmjs.org/electron/42.3.3",
+      "sha256": "7f27a648d75dfdebcac51d5a0d4b87995f382a546c91312ef6843f600e356208",
+      "name": "electron",
+      "version": "42.3.3"
+    },
+    {
+      "path": "plans/worker-monitor-20261014/electron-official-metadata/42.4.1.json",
+      "url": "https://registry.npmjs.org/electron/42.4.1",
+      "sha256": "b8c35768d9b4cedfb44aedd64b5343bab5826f5904d51de2f30f6fe2dbe70703",
+      "name": "electron",
+      "version": "42.4.1"
+    },
+    {
+      "path": "plans/worker-monitor-20261014/electron-official-metadata/electron-internal-extract-zip-1.0.1.json",
+      "url": "https://registry.npmjs.org/@electron-internal%2fextract-zip/1.0.1",
+      "sha256": "7a855415ddc8bb7b1d8e9ac63ec485ceb4570244282adbfc012c3a6f7d530577",
+      "name": "@electron-internal/extract-zip",
+      "version": "1.0.1"
+    }
+  ]
+}

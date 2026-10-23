@@ -1,0 +1,12 @@
+{
+  "verdict": "CORRECTED_DYNAMIC_AUTHORITY_SOURCE_DELIVERED_PENDING_REVIEW",
+  "dispatch_id": "ctx_aa6ca03bdc4d",
+  "report": "plans/worker-monitor-20261014/BUILD1-adam-main-dynamic-authority-correction.md",
+  "report_sha256": "2955c8adfd34ef20a5e2aaec5ac31a679a8bf9dbd57cacf1cc70d3aae8db32df",
+  "source_hashes_verified": 26,
+  "aggregate": "d0bde5b35d036aa6cbcb69d85a13d7482f09baa6de8385f43a728c17bd1deddd",
+  "author_recorded_checks": "148 tests in13suites; main+CLIstrictTS/scopedlint/format/diff PASS; not rerun byROOT",
+  "source_accepted": false,
+  "live_installed": false,
+  "completion_transport": "Exact report fallback; worker completion IPC failed once."
+}

@@ -1,0 +1,472 @@
+--- a/src/dobius-cloud/intent-publication.ts
++++ b/src/dobius-cloud/intent-publication.ts
+@@ -6,6 +6,7 @@
+ import {
+   canonicalCloudJobAdamJson, canonicalCloudJobAdamSha256, CloudJobAdamBindingIdentity
+ } from './receipt-contract.js'
++import { parseApprovedJobIntent } from './approved-job-payload.js'
+ 
+ export type IntentPublicationContext = {
+   instanceId: string
+@@ -24,6 +25,8 @@
+     capabilityHash: string
+     sealedEnvelope: string
+     issuedAtMs: number
++    approvedPayloadJson?: string
++    approvedPayloadDigest?: string
+   }) => AdamCloudIntentResult
+ }
+ 
+@@ -39,8 +42,45 @@
+   const request = parsed.data
+   const requestJson = canonicalCloudJobAdamJson(request)
+   const requestDigest = canonicalCloudJobAdamSha256(request)
++  return issueParsedGrant(context, request, requestJson, requestDigest, sealer)
++}
++
++export async function issueApprovedJobGrantWithIntent(
++  context: IntentPublicationContext,
++  rawApprovedRequest: unknown,
++  sealer: AdamCloudIntentSealer
++): Promise<AdamCloudIntentResult> {
++  if (typeof sealer !== 'function') context.fail('invalid')
++  let approved
++  try {
++    approved = parseApprovedJobIntent(rawApprovedRequest)
++  } catch {
++    context.fail('invalid')
++  }
++  return issueParsedGrant(
++    context,
++    approved.request,
++    approved.requestJson,
++    approved.requestDigest,
++    sealer,
++    { approvedPayloadJson: approved.approvedPayloadJson, approvedPayloadDigest: approved.approvedPayloadDigest }
++  )
++}
++
++async function issueParsedGrant(
++  context: IntentPublicationContext,
++  request: AdamCloudIntentRequest,
++  requestJson: string,
++  requestDigest: string,
++  sealer: AdamCloudIntentSealer,
++  approvedPayload?: { approvedPayloadJson: string; approvedPayloadDigest: string }
++): Promise<AdamCloudIntentResult> {
+   const existing = context.readIntent(request.intentId)
+-  if (existing) return existingIntentResult(existing, request, requestJson, requestDigest, context.instanceId, context.fail)
++  if (existing) {
++    const result = existingIntentResult(existing, request, requestJson, requestDigest, context.instanceId, context.fail)
++    if (approvedPayload) assertApprovedPayload(existing, approvedPayload, context.fail)
++    return result
++  }
+ 
+   const issuedAtMs = context.now()
+   if (!Number.isSafeInteger(issuedAtMs) || issuedAtMs < 0) context.fail('invalid')
+@@ -73,8 +113,22 @@
+   const identityDigest = canonicalCloudJobAdamSha256(identity)
+   return context.publish({
+     request, requestJson, requestDigest, identity, identityJson, identityDigest, capability,
+-    capabilityHash: createHash('sha256').update(capability).digest('hex'), sealedEnvelope: sealedResult.data, issuedAtMs
++    capabilityHash: createHash('sha256').update(capability).digest('hex'), sealedEnvelope: sealedResult.data, issuedAtMs,
++    ...approvedPayload
+   })
++}
++
++export function assertApprovedPayload(
++  row: IntentRow,
++  expected: { approvedPayloadJson: string; approvedPayloadDigest: string },
++  fail: IntentPublicationContext['fail']
++): void {
++  if (
++    row.approved_payload_json !== expected.approvedPayloadJson ||
++    row.approved_payload_digest !== expected.approvedPayloadDigest
++  ) {
++    fail('conflict')
++  }
+ }
+ 
+ export function existingIntentResult(
+--- a/src/dobius-cloud/intent-migration.ts
++++ b/src/dobius-cloud/intent-migration.ts
+@@ -13,3 +13,9 @@
+   );
+   CREATE INDEX dobius_cloud_intents_state_idx ON dobius_cloud_intents(state, expires_at_ms);
+ `
++
++// Null pairs preserve identity-only legacy rows without implying execution approval.
++export const ADAM_CLOUD_APPROVED_PAYLOAD_MIGRATION = `
++  ALTER TABLE dobius_cloud_intents ADD COLUMN approved_payload_json TEXT;
++  ALTER TABLE dobius_cloud_intents ADD COLUMN approved_payload_digest TEXT;
++`
+--- a/src/dobius-cloud/receipt-store.ts
++++ b/src/dobius-cloud/receipt-store.ts
+@@ -1,9 +1,15 @@
+ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+ import type { AdamDatabase } from '../db/database.js'
+ import {
+-  existingIntentResult, issueGrantWithIntent as publishGrantWithIntent, type IntentRow
++  assertApprovedPayload,
++  existingIntentResult,
++  issueApprovedJobGrantWithIntent as publishApprovedJobGrantWithIntent,
++  issueGrantWithIntent as publishGrantWithIntent,
++  type IntentPublicationContext,
++  type IntentRow
+ } from './intent-publication.js'
+ import type { AdamCloudIntentResult, AdamCloudIntentSealer } from './intent-contract.js'
++import { parseCanonicalApprovedJobPayload } from './approved-job-payload.js'
+ import {
+   CloudJobAdamBindingIdentity, CloudJobAdamBindingConsumeRequest,
+   CloudJobAdamReceiptRequest, CloudJobAdamBindingResponse, CloudJobAdamReceiptAck,
+@@ -58,7 +64,16 @@
+     intentId: string; parentObjectiveId: string; parentObjectiveVersion: number; projectId: string;
+     contextDigest: string; requestFingerprint: string; ttlMs: number
+   }, sealEnvelope: AdamCloudIntentSealer): Promise<AdamCloudIntentResult> {
+-    return publishGrantWithIntent({
++    return publishGrantWithIntent(this.publicationContext(), input, sealEnvelope)
++  }
++
++  /** Canonical JSON input keeps untrusted object accessors outside the approval parser. */
++  issueApprovedJobGrantWithIntent(rawApprovedRequest: unknown, sealEnvelope: AdamCloudIntentSealer): Promise<AdamCloudIntentResult> {
++    return publishApprovedJobGrantWithIntent(this.publicationContext(), rawApprovedRequest, sealEnvelope)
++  }
++
++  private publicationContext(): IntentPublicationContext {
++    return {
+       instanceId: this.instanceId,
+       now: this.now,
+       parent: (id) => this.parent(id),
+@@ -68,8 +83,15 @@
+         try { return this.transaction(() => {
+         const existing = this.readIntentRow(publication.request.intentId)
+         if (existing) {
+-          return existingIntentResult(existing, publication.request, publication.requestJson, publication.requestDigest,
++          const result = existingIntentResult(existing, publication.request, publication.requestJson, publication.requestDigest,
+             this.instanceId, (code) => { throw new CloudReceiptError(code) })
++          if (publication.approvedPayloadJson !== undefined && publication.approvedPayloadDigest !== undefined) {
++            assertApprovedPayload(existing, {
++              approvedPayloadJson: publication.approvedPayloadJson,
++              approvedPayloadDigest: publication.approvedPayloadDigest
++            }, (code) => { throw new CloudReceiptError(code) })
++          }
++          return result
+         }
+         const instance = this.db.prepare("SELECT value FROM dobius_cloud_metadata WHERE key='instance_id'").get()
+         if (String(instance?.value) !== this.instanceId) throw new CloudReceiptError('conflict')
+@@ -88,17 +110,18 @@
+             publication.identityJson, publication.identityDigest, publication.capabilityHash, publication.identity.expiresAtMs)
+         this.db.prepare(`INSERT INTO dobius_cloud_intents
+           (intent_id,binding_id,request_identity_json,request_identity_digest,identity_json,identity_digest,
+-           sealed_envelope,state,created_at_ms,expires_at_ms)
+-          VALUES (?,?,?,?,?,?,?,'pending',?,?)`).run(publication.request.intentId, publication.identity.bindingId,
++           sealed_envelope,state,created_at_ms,expires_at_ms,approved_payload_json,approved_payload_digest)
++          VALUES (?,?,?,?,?,?,?,'pending',?,?,?,?)`).run(publication.request.intentId, publication.identity.bindingId,
+             publication.requestJson, publication.requestDigest, publication.identityJson, publication.identityDigest,
+-            publication.sealedEnvelope, at, publication.identity.expiresAtMs)
++            publication.sealedEnvelope, at, publication.identity.expiresAtMs,
++            publication.approvedPayloadJson ?? null, publication.approvedPayloadDigest ?? null)
+         return { status: 'issued', grant: { ...publication.identity, capability: publication.capability } }
+         }) } catch (error) {
+           if (error instanceof CloudReceiptError) throw error
+           throw new CloudReceiptError('invalid')
+         }
+       }
+-    }, input, sealEnvelope)
++    }
+   }
+ 
+   consume(raw: unknown): CloudJobAdamBindingResponse {
+@@ -114,6 +137,19 @@
+           row.identity_json !== canonicalCloudJobAdamJson(binding) || binding.adamInstanceId !== this.instanceId) {
+         throw new CloudReceiptError('conflict')
+       }
++      const approvedIntent = this.db.prepare(`SELECT approved_payload_json,approved_payload_digest
++        FROM dobius_cloud_intents WHERE binding_id=?`).get(binding.bindingId) as
++        { approved_payload_json: string | null; approved_payload_digest: string | null } | undefined
++      if (approvedIntent) {
++        try {
++          const payload = parseCanonicalApprovedJobPayload(approvedIntent.approved_payload_json)
++          if (payload.digest !== approvedIntent.approved_payload_digest || payload.digest !== binding.requestFingerprint) {
++            throw new Error('payload mismatch')
++          }
++        } catch {
++          throw new CloudReceiptError('conflict')
++        }
++      }
+       // Exact consumed replay does not mint another binding or mutate the parent.
+       if (row.response_json !== null) return CloudJobAdamBindingResponse.parse(JSON.parse(String(row.response_json)))
+       const parent = this.parent(binding.parentObjectiveId)
+@@ -177,6 +213,7 @@
+   private readIntentRow(intentId: string): IntentRow | undefined {
+     return this.db.prepare(`SELECT i.intent_id,i.binding_id,i.request_identity_json,i.request_identity_digest,
+       i.identity_json AS intent_identity_json,i.identity_digest,i.sealed_envelope,i.state,i.created_at_ms,i.expires_at_ms,
++      i.approved_payload_json,i.approved_payload_digest,
+       b.parent_job_id,b.identity_json AS binding_identity_json,b.identity_digest AS binding_identity_digest,
+       b.expires_at_ms AS binding_expires_at_ms,m.value AS persisted_instance_id
+       FROM dobius_cloud_intents i
+--- a/src/db/migrations.ts
++++ b/src/db/migrations.ts
+@@ -1,5 +1,8 @@
+ import { CLOUD_RECEIPT_MIGRATION } from '../dobius-cloud/receipt-migration.js'
+-import { ADAM_CLOUD_INTENT_MIGRATION } from '../dobius-cloud/intent-migration.js'
++import {
++  ADAM_CLOUD_APPROVED_PAYLOAD_MIGRATION,
++  ADAM_CLOUD_INTENT_MIGRATION
++} from '../dobius-cloud/intent-migration.js'
+ 
+ export const MIGRATIONS = [
+   {
+@@ -660,5 +663,6 @@
+     `
+   },
+   { version: 18, sql: CLOUD_RECEIPT_MIGRATION },
+-  { version: 19, sql: ADAM_CLOUD_INTENT_MIGRATION }
++  { version: 19, sql: ADAM_CLOUD_INTENT_MIGRATION },
++  { version: 20, sql: ADAM_CLOUD_APPROVED_PAYLOAD_MIGRATION }
+ ] as const
+--- /dev/null
++++ b/src/dobius-cloud/approved-job-payload.ts
+@@ -0,0 +1,86 @@
++import { z } from 'zod'
++import {
++  CLOUD_JOB_ADAM_MAX_CANONICAL_BYTES,
++  canonicalCloudJobAdamJson,
++  canonicalCloudJobAdamSha256
++} from './receipt-contract.js'
++import { AdamCloudIntentRequest } from './intent-contract.js'
++
++const CloudId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/)
++
++export const ApprovedJobPayload = z.object({
++  requestKey: CloudId,
++  taskId: CloudId,
++  projectId: CloudId,
++  workspaceId: CloudId,
++  targetDeviceId: CloudId,
++  recipeId: CloudId,
++  title: z.string().trim().min(1).max(200),
++  sourceRevision: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
++  estimatedBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
++  dependencies: z.array(CloudId).max(50).default([])
++}).strict()
++
++export const ApprovedJobIntentRequest = AdamCloudIntentRequest.extend({
++  approvedJob: ApprovedJobPayload
++}).strict()
++
++export type ApprovedJobPayload = z.infer<typeof ApprovedJobPayload>
++export type ApprovedJobIntentRequest = z.infer<typeof ApprovedJobIntentRequest>
++
++export type ParsedApprovedJobIntent = {
++  request: z.infer<typeof AdamCloudIntentRequest>
++  requestJson: string
++  requestDigest: string
++  approvedPayloadJson: string
++  approvedPayloadDigest: string
++}
++
++export function parseCanonicalApprovedJobPayload(raw: unknown): { json: string; digest: string } {
++  if (typeof raw !== 'string' || Buffer.byteLength(raw, 'utf8') > CLOUD_JOB_ADAM_MAX_CANONICAL_BYTES ||
++      Buffer.from(raw, 'utf8').toString('utf8') !== raw) {
++    throw new TypeError('invalid approved payload')
++  }
++  let decoded: unknown
++  try {
++    decoded = JSON.parse(raw)
++  } catch {
++    throw new TypeError('invalid approved payload')
++  }
++  const parsed = ApprovedJobPayload.safeParse(decoded)
++  if (!parsed.success) throw new TypeError('invalid approved payload')
++  const json = canonicalCloudJobAdamJson(parsed.data)
++  const digest = canonicalCloudJobAdamSha256(parsed.data)
++  if (json !== raw) throw new TypeError('invalid approved payload')
++  return { json, digest }
++}
++
++/** String input prevents object accessors/proxies and canonical equality rejects duplicate keys. */
++export function parseApprovedJobIntent(raw: unknown): ParsedApprovedJobIntent {
++  if (typeof raw !== 'string' || Buffer.byteLength(raw, 'utf8') > CLOUD_JOB_ADAM_MAX_CANONICAL_BYTES) {
++    throw new TypeError('invalid approved intent')
++  }
++  if (Buffer.from(raw, 'utf8').toString('utf8') !== raw) throw new TypeError('invalid approved intent')
++  let decoded: unknown
++  try {
++    decoded = JSON.parse(raw)
++  } catch {
++    throw new TypeError('invalid approved intent')
++  }
++  const parsed = ApprovedJobIntentRequest.safeParse(decoded)
++  if (!parsed.success) throw new TypeError('invalid approved intent')
++  const canonicalRequest = canonicalCloudJobAdamJson(parsed.data)
++  if (canonicalRequest !== raw) throw new TypeError('invalid approved intent')
++
++  const { approvedJob, ...request } = parsed.data
++  const approvedPayloadJson = canonicalCloudJobAdamJson(approvedJob)
++  const approvedPayloadDigest = canonicalCloudJobAdamSha256(approvedJob)
++  if (request.requestFingerprint !== approvedPayloadDigest) throw new TypeError('invalid approved intent')
++  return {
++    request,
++    requestJson: canonicalCloudJobAdamJson(request),
++    requestDigest: canonicalCloudJobAdamSha256(request),
++    approvedPayloadJson,
++    approvedPayloadDigest
++  }
++}
+--- /dev/null
++++ b/tests/dobius-cloud-approved-payload.test.ts
+@@ -0,0 +1,153 @@
++import assert from 'node:assert/strict'
++import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
++import { tmpdir } from 'node:os'
++import { join } from 'node:path'
++import { afterEach, describe, it } from 'node:test'
++import { openDatabase, type AdamDatabase } from '../src/db/database.js'
++import { JobStore } from '../src/jobs/store.js'
++import { CloudReceiptError, DobiusCloudReceiptStore } from '../src/dobius-cloud/receipt-store.js'
++import type { AdamCloudIntentSealer } from '../src/dobius-cloud/intent-contract.js'
++import { canonicalCloudJobAdamJson, canonicalCloudJobAdamSha256 } from '../src/dobius-cloud/receipt-contract.js'
++
++const cleanups: (() => void)[] = []
++afterEach(() => { for (const cleanup of cleanups.splice(0)) cleanup() })
++
++function fixture() {
++  const base = mkdtempSync(join(tmpdir(), 'adam-approved-payload-'))
++  const file = join(base, 'database.sqlite')
++  let now = 100_000
++  let db: AdamDatabase = openDatabase(file)
++  const parentObjectiveId = new JobStore(db).createJob({ objective: 'Synthetic approved intent parent', projectId: 'project' })
++  const job = {
++    requestKey: 'child-request', taskId: 'task-1', projectId: 'project', workspaceId: 'workspace',
++    targetDeviceId: 'hermes-1', recipeId: 'build', title: 'Approved child', sourceRevision: 'a'.repeat(40),
++    estimatedBytes: 0, dependencies: []
++  }
++  const request = {
++    intentId: '8f084f3e-e22e-4413-bc7e-b271cb5626b5', parentObjectiveId, parentObjectiveVersion: 1,
++    projectId: 'project', contextDigest: 'b'.repeat(64), requestFingerprint: canonicalCloudJobAdamSha256(job),
++    ttlMs: 1000, approvedJob: job
++  }
++  const sealer: AdamCloudIntentSealer = async (envelope) => `sealed-test-v1:${envelope.intentId}`
++  const store = () => new DobiusCloudReceiptStore(db, () => now)
++  const reopen = () => { db.close(); db = openDatabase(file) }
++  cleanups.push(() => { try { db.close() } catch {} rmSync(base, { recursive: true, force: true }) })
++  return { base, file, request, parentObjectiveId, sealer, get db() { return db }, get store() { return store() }, reopen,
++    setNow: (value: number) => { now = value } }
++}
++
++function requestText(f: ReturnType<typeof fixture>, overrides: Record<string, unknown> = {}): string {
++  return canonicalCloudJobAdamJson({ ...f.request, ...overrides })
++}
++
++const count = (db: AdamDatabase, table: string): number =>
++  Number(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.n)
++
++function storedMaterial(f: ReturnType<typeof fixture>): Buffer[] {
++  return readdirSync(f.base).filter((name) => name.startsWith('database.sqlite'))
++    .map((name) => readFileSync(join(f.base, name)))
++}
++
++describe('ADAM approved job payload publication candidate', () => {
++  it('atomically stores the exact canonical payload and reopens the same non-secret identity', async () => {
++    const f = fixture()
++    const raw = requestText(f)
++    const issued = await f.store.issueApprovedJobGrantWithIntent(raw, f.sealer)
++    assert.equal(issued.status, 'issued')
++    if (issued.status !== 'issued') return
++    const row = f.db.prepare('SELECT approved_payload_json,approved_payload_digest FROM dobius_cloud_intents').get() as
++      { approved_payload_json: string; approved_payload_digest: string }
++    assert.equal(row.approved_payload_json, canonicalCloudJobAdamJson(f.request.approvedJob))
++    assert.equal(row.approved_payload_digest, f.request.requestFingerprint)
++    for (const material of storedMaterial(f)) assert.equal(material.includes(Buffer.from(issued.grant.capability)), false)
++    const { capability, ...binding } = issued.grant
++    assert.equal(f.store.consume({ schemaVersion: 1, capability, binding }).consumed, true)
++    f.reopen()
++    f.setNow(500_000)
++    const duplicate = await f.store.issueApprovedJobGrantWithIntent(raw,
++      async () => assert.fail('duplicate publication must not reseal'))
++    assert.deepEqual(duplicate, {
++      status: 'existing', intentId: f.request.intentId, bindingId: issued.grant.bindingId,
++      expiresAtMs: issued.grant.expiresAtMs
++    })
++    assert.equal(count(f.db, 'dobius_cloud_bindings'), 1)
++    assert.equal(count(f.db, 'dobius_cloud_intents'), 1)
++  })
++
++  it('rejects object/proxy, malformed, noncanonical, unknown, mismatched and oversized input before sealing', async () => {
++    const f = fixture()
++    let seals = 0
++    const sealer: AdamCloudIntentSealer = async () => { seals += 1; return 'sealed-test-v1' }
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent({ ...f.request }, sealer), CloudReceiptError)
++    let traps = 0
++    const proxy = new Proxy({}, { getPrototypeOf() { traps += 1; throw new Error('proxy inspected') } })
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent(proxy, sealer), CloudReceiptError)
++    assert.equal(traps, 0)
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent('{"bad":undefined}', sealer), CloudReceiptError)
++    const altered = structuredClone(f.request)
++    altered.approvedJob.title = 'Altered child'
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent(canonicalCloudJobAdamJson(altered), sealer), CloudReceiptError)
++    const unknown = structuredClone(f.request) as typeof f.request & { extra: boolean }
++    unknown.extra = true
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent(canonicalCloudJobAdamJson(unknown), sealer), CloudReceiptError)
++    const canonical = requestText(f)
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent(` ${canonical}`, sealer), CloudReceiptError)
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent(canonical.replace('{', '{"ttlMs":60000,'), sealer), CloudReceiptError)
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent(' '.repeat(64 * 1024 + 1), sealer), CloudReceiptError)
++    assert.equal(seals, 0)
++    assert.equal(count(f.db, 'dobius_cloud_bindings'), 0)
++    assert.equal(count(f.db, 'dobius_cloud_intents'), 0)
++  })
++
++  it('refuses a changed payload under an existing intent without reseal or second job', async () => {
++    const f = fixture()
++    await f.store.issueApprovedJobGrantWithIntent(requestText(f), f.sealer)
++    const changed = structuredClone(f.request)
++    changed.approvedJob.title = 'Changed approved child'
++    changed.requestFingerprint = canonicalCloudJobAdamSha256(changed.approvedJob)
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent(canonicalCloudJobAdamJson(changed),
++      async () => assert.fail('changed duplicate must not reseal')),
++    (error: unknown) => error instanceof CloudReceiptError && error.code === 'conflict')
++    assert.equal(count(f.db, 'dobius_cloud_bindings'), 1)
++    assert.equal(count(f.db, 'dobius_cloud_intents'), 1)
++  })
++
++  it('fails closed if a persisted payload or digest is changed', async () => {
++    const f = fixture()
++    const issued = await f.store.issueApprovedJobGrantWithIntent(requestText(f), f.sealer)
++    if (issued.status !== 'issued') return
++    f.db.prepare("UPDATE dobius_cloud_intents SET approved_payload_digest=?").run('0'.repeat(64))
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent(requestText(f), f.sealer),
++      (error: unknown) => error instanceof CloudReceiptError && error.code === 'conflict')
++    const { capability, ...binding } = issued.grant
++    assert.throws(() => f.store.consume({ schemaVersion: 1, capability, binding }),
++      (error: unknown) => error instanceof CloudReceiptError && error.code === 'conflict')
++  })
++
++  it('keeps legacy identity-only intents unavailable without backfilling approval', async () => {
++    const f = fixture()
++    const { approvedJob: _approvedJob, ...legacyRequest } = f.request
++    const legacy = await f.store.issueGrantWithIntent(legacyRequest, f.sealer)
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent(requestText(f),
++      async () => assert.fail('legacy row must not reseal')),
++    (error: unknown) => error instanceof CloudReceiptError && error.code === 'conflict')
++    if (legacy.status === 'issued') {
++      const { capability, ...binding } = legacy.grant
++      assert.throws(() => f.store.consume({ schemaVersion: 1, capability, binding }),
++        (error: unknown) => error instanceof CloudReceiptError && error.code === 'conflict')
++    }
++    const row = f.db.prepare('SELECT approved_payload_json,approved_payload_digest FROM dobius_cloud_intents').get() as
++      { approved_payload_json: string | null; approved_payload_digest: string | null }
++    assert.equal(row.approved_payload_json, null)
++    assert.equal(row.approved_payload_digest, null)
++  })
++
++  it('rolls back payload, intent and binding when the transaction fails', async () => {
++    const f = fixture()
++    f.db.exec(`CREATE TRIGGER fail_approved_intent BEFORE INSERT ON dobius_cloud_intents
++      BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END`)
++    await assert.rejects(f.store.issueApprovedJobGrantWithIntent(requestText(f), f.sealer), CloudReceiptError)
++    assert.equal(count(f.db, 'dobius_cloud_bindings'), 0)
++    assert.equal(count(f.db, 'dobius_cloud_intents'), 0)
++  })
++})

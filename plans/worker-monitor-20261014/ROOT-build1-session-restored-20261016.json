@@ -1,0 +1,23 @@
+{
+  "id": "2dc96862-3956-4846-8af1-257a7b5d2fe2",
+  "ok": true,
+  "result": {
+    "terminal": {
+      "handle": "term_7127bcf7-89b5-4a5b-9c99-9b185d6662cc",
+      "tabId": "4c293cce-77ca-4832-8269-e8f6119a0cf0",
+      "worktreeId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1",
+      "title": "BUILD1",
+      "surface": "visible"
+    }
+  },
+  "_meta": {
+    "runtimeId": "6627a505-a9ea-4b59-90e7-d051eb153516"
+  },
+  "relaunch": {
+    "session_id": "01a1368d-4781-7683-9b97-a2cce56980d1",
+    "model": "gpt-6-luna",
+    "check_for_update_on_startup": false,
+    "reason": "Initial launch selected update prompt; npm update failed ENOTEMPTY and returned to shell. Relaunch existing installed CLI without startup update prompt.",
+    "at": 1792169501.579822
+  }
+}

@@ -1,3 +1,4 @@
+import { openMobileBackgroundResource } from '../session/mobile-background-resource-open'
 import { useCallback, useRef, useState, type MutableRefObject } from 'react'
 import { useRouter } from 'expo-router'
 import type { RpcClient } from '../transport/rpc-client'
@@ -104,19 +105,23 @@ export function useMobileSourceControlOpeners(params: Params) {
         // the session uses it to avoid stealing focus if the user switches tabs
         // during the RPC window.
         onFileOpenStart?.()
-        let response = await client.sendRequest('files.openDiff', {
-          worktree: `id:${worktreeId}`,
-          relativePath: entry.path,
-          staged: entry.area === 'staged'
-        })
-        if (!response.ok && isMobileGitUnavailable(response.error?.code, response.error?.message)) {
-          response = await client.sendRequest('files.open', {
+        try {
+          await openMobileBackgroundResource(client, 'files.openDiffBackground', {
+            worktree: `id:${worktreeId}`,
+            relativePath: entry.path,
+            staged: entry.area === 'staged'
+          })
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            !isMobileGitUnavailable('code' in error ? String(error.code) : undefined, error.message)
+          ) {
+            throw error
+          }
+          await openMobileBackgroundResource(client, 'files.openBackground', {
             worktree: `id:${worktreeId}`,
             relativePath: entry.path
           })
-        }
-        if (!response.ok) {
-          throw new Error(response.error?.message || 'Unable to open diff')
         }
         if (!mountedRef.current) {
           return

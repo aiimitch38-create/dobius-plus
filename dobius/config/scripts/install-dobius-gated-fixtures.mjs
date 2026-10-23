@@ -62,6 +62,10 @@ export const MANIFEST_DISK_FILES = [
     `Contents/Resources/relay/${platform}/.version`
   ])
 ]
+export const MANIFEST_READABLE_FILES = [
+  'Contents/Resources/data-catalog/descriptor-directory-bridge.py',
+  'Contents/Resources/data-catalog/native-root-identity.py'
+]
 export const MANIFEST_EXECUTABLES = [
   'Contents/Resources/bin/dobius',
   'Contents/Resources/Dobius+ Computer Use.app/Contents/MacOS/dobius-computer-use-macos'
@@ -71,7 +75,7 @@ const FIXTURE_TAG_ENTRY = 'fixture-tag'
 // A real asar archive (the @electron/asar header layout): 8-byte size pickle,
 // header pickle holding the JSON file tree, then file data. The fixture's tag
 // ('v1', 'v2', …) is stored as its own entry so tests can tell bundles apart.
-export function fixtureAsar(tag, { omit = [] } = {}) {
+export function fixtureAsar(tag, { omit = [], catalogEnabled = true } = {}) {
   const root = { files: {} }
   const chunks = []
   let offset = 0
@@ -89,7 +93,10 @@ export function fixtureAsar(tag, { omit = [] } = {}) {
   }
   add(FIXTURE_TAG_ENTRY, tag)
   for (const entry of ASAR_ENTRIES.filter((e) => !omit.includes(e))) {
-    add(entry, `// ${entry}\n`)
+    const mainSource = catalogEnabled
+      ? `// ${entry} data.catalog.roots data.catalog.page\n`
+      : `// ${entry}\n`
+    add(entry, entry === 'out/main/index.js' ? mainSource : `// ${entry}\n`)
   }
   const json = Buffer.from(JSON.stringify(root))
   const padded = Math.ceil(json.length / 4) * 4
@@ -124,6 +131,7 @@ export function makeBundle(
     asar = 'v1',
     withAsar = true,
     omit = [],
+    catalogEnabled = true,
     signed = false
   } = {}
 ) {
@@ -149,7 +157,7 @@ ${versionKey}${bundleVersionKey}</dict></plist>
   if (withAsar) {
     writeFileSync(
       path.join(bundlePath, 'Contents', 'Resources', 'app.asar'),
-      fixtureAsar(asar, { omit })
+      fixtureAsar(asar, { omit, catalogEnabled })
     )
   }
   for (const rel of [...MANIFEST_DISK_FILES, ...MANIFEST_EXECUTABLES]) {
@@ -161,6 +169,13 @@ ${versionKey}${bundleVersionKey}</dict></plist>
     if (MANIFEST_EXECUTABLES.includes(rel)) {
       chmodSync(path.join(bundlePath, rel), 0o755)
     }
+  }
+  for (const rel of MANIFEST_READABLE_FILES) {
+    if (omit.includes(rel)) {
+      continue
+    }
+    mkdirSync(path.dirname(path.join(bundlePath, rel)), { recursive: true })
+    writeFileSync(path.join(bundlePath, rel), `fixture ${rel}\n`)
   }
   // Like the real framework: the top-level entry and Versions/Current are symlinks.
   const framework = path.join(bundlePath, 'Contents', 'Frameworks', 'Electron Framework.framework')

@@ -1,0 +1,42 @@
+{
+  "id": "39eb60f7-c77e-4577-849f-5f7b30066fed",
+  "ok": true,
+  "result": {
+    "task": {
+      "id": "task_be6b5cbaf243",
+      "parent_id": null,
+      "created_by_terminal_handle": "term_ac9f423b-522b-4da0-a656-b22b581952e2",
+      "task_title": "QUEUED ONLY: terminal oversight inside Dobius for actual Hermes Adam. Immedia...",
+      "display_name": "QUEUED ONLY: terminal oversight inside Dobius for actual Hermes Adam. Immedia...",
+      "spec": "QUEUED ONLY: terminal oversight inside Dobius for actual Hermes Adam. Immediate successor to Telegram implementation AND ROOT verification, not report completion alone. No dispatch until ROOT checks exact Telegram source/tests/integration acceptance and scopes activation independently; if account registration/sign-in/groups/participant consent/send rules externally block live Telegram, ask Carson sequencing rather than silently bypass. Read /Users/bayou/.hermes/profiles/adam/context/TERMINAL-OVERSIGHT-SCOPE-2026-10-16.md and DOBIUS-CURRENT-WORK-SURFACES-2026-10-16.md plus canonical dobius/AGENTS.md. Build small read-only observer INSIDE existing Dobius runtime over native hook/terminal/task/message/gate machinery; no rival scheduler or additional head. Bind exact runtime generation/terminal/pane/project/provider/session/task/dispatch/run with provenance/freshness; missing/stale=unknown, disconnected != failed, hookdone != verified completion. Recoverable bounded instruction/result event store/cursors/dedupe over existing persistence after inspection; bounded redacted event feed actual Hermes Adam profile via supported authenticated interface, no raw PTY injection/full transcript, no heartbeat model runs. Terminal content evidence never authority. Persist restart/replay/reordering and handle/runtime reuse fences, scope/pause/revoke, hostiletext/secret filtering, source overhead tests. Real event reaching correct head requires separate activation scope. Preserve exactly twoHermesheads/profiles/accounts/currentworkers/unrelatedprojects/frozenADAMsource; AWS deferred historicalStoragepaused. No accounts/login/ingestion/sends/spending/push/merge/install/deploy/restart/destructiveactions or taskclosure authority. ROOT assignment and bounded file ownership required before work.",
+      "status": "pending",
+      "deps": "[\"task_bf5bdd524875\",\"task_4134bdbae608\",\"task_0f1c842369f2\",\"task_f5dda6b02206\"]",
+      "result": null,
+      "created_at": "2026-10-16 17:43:45",
+      "completed_at": null
+    }
+  },
+  "_meta": {
+    "runtimeId": "6627a505-a9ea-4b59-90e7-d051eb153516"
+  },
+  "root_verification_prerequisites": [
+    "Current FIXER task_3e73ce24bf4d correction and docs",
+    "Current BUILD2 race corrections",
+    "Independent final Telegram exact source freeze review",
+    "ROOT current IPC/client/UI tests and builds",
+    "External activation and sequencing scopes remain explicit"
+  ],
+  "final_telegram_review_task_id": "task_8795aea9eb1c",
+  "telegram_final_review_verdict": "CHANGES_REQUIRED",
+  "blocking_source_correction_task_id": "task_6cc363ed9354",
+  "required_successor_review": "Independent exact-source paused-revoke re-review after correction freeze",
+  "required_telegram_correction_review_task_id": "task_68fec1bfafe8",
+  "required_telegram_source_manifest": "ROOT-telegram-source-freeze-v2-20261016.json",
+  "telegram_connection_source_verdict": "PASS_ACCOUNT_CONNECTION_SOURCE_ONLY",
+  "telegram_connection_review_task_id": "task_68fec1bfafe8",
+  "telegram_connection_source_manifest": "plans/worker-monitor-20261014/ROOT-telegram-source-freeze-v2-20261016.json",
+  "telegram_package_evidence_path": "/Users/bayou/Library/Application Support/Dobius Build Monitor/telegram-package-ready-20261016.json",
+  "hold_reason": "Do not dispatch until Telegram verification and Carson sequencing decision for remaining external/live gates. Account connection source only accepted; authenticated Adam gateway/participant consent/login still incomplete.",
+  "required_telegram_package_manifest": "ROOT-telegram-source-package-freeze-20261016.json",
+  "telegram_packaging_correction_task_id": "task_905a2e437da3"
+}

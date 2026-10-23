@@ -1,0 +1,37 @@
+{
+  "status": "FIXED_LIVE_COMMAND_INPUT_VERIFIED",
+  "cause": "Background MCP OAuth creates sys.stdin.readline reader racing the agent composer; reader can survive canceled connect timeout and browser launch steals focus.",
+  "fix": "Agent startup reserves stdin for its process lifetime. OAuth redirect/callback requires an explicit separate MCP login instead of starting a browser or stdin reader. Cached authentication remains intact.",
+  "source_files": {
+    "hermes_cli/mcp_startup.py": "d5a518eca7b6e2d3337d98082a2afc1cc538f918c98f9d716db89692cb5e7566",
+    "tools/mcp_oauth.py": "166d60fa094b40f5b8ada6643fb4030384a28136aa3660a9c485eba472fab704",
+    "tests/tools/test_mcp_oauth_agent_input.py": "f534644d5a7ca24c323dd2a80ba564a16081e8038049d3450ecd1dc4b5480527"
+  },
+  "reproduction_before_fix": {
+    "passed": 1,
+    "failed": 2
+  },
+  "verification": {
+    "new_regressions": 4,
+    "existing_oauth_tests": 67,
+    "existing_startup_tests": 4,
+    "total_passed": 75,
+    "diff_check": "PASS",
+    "py_compile": "PASS"
+  },
+  "private_backup": "/Users/bayou/Documents/Dobius Recovery/hermes-keyboard-20261014T185004Z",
+  "sessions_preserved": true,
+  "credentials_changed": false,
+  "live_handles": {
+    "adam": "term_a593306e-d752-4a72-b0bf-597ceed5fb8f",
+    "friday": "term_ba0001da-8c61-44c1-8e1a-075fe5923c99"
+  },
+  "prior_unrelated_dirty_hermes_files_preserved": true,
+  "live_input_verification": {
+    "adam": "/version accepted; Hermes version response returned; prompt restored",
+    "friday": "/help and /version accepted; commands/version responses returned; prompt restored",
+    "provider_model": "gpt-6.1-sol",
+    "conversations": "existing exact named sessions resumed",
+    "physical_keyboard_test": "Not directly simulated; native app terminal switching and actual PTY input were verified."
+  }
+}

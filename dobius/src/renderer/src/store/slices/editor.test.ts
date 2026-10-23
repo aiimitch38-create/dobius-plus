@@ -1078,6 +1078,57 @@ describe('createEditorSlice split-group editor routing', () => {
 
     expect(findUnifiedTabByEntity(store, '/repo/explicit.ts')?.groupId).toBe(terminalGroupId)
   })
+
+  it('preserves split-group selection, dirty drafts and cursors on new and reused background file/diff opens', () => {
+    const store = createEditorTabsStore()
+    const { terminalGroupId, editorGroupId } = seedTerminalAndEditorGroups(store)
+    const beforeGroups = store
+      .getState()
+      .groupsByWorktree['wt-1'].map((g) => ({ id: g.id, active: g.activeTabId }))
+    const beforeActive = store.getState().activeGroupIdByWorktree
+    const file = {
+      worktreeId: 'wt-1',
+      filePath: '/repo/phone.md',
+      relativePath: 'phone.md',
+      language: 'markdown',
+      mode: 'edit' as const
+    }
+    store.getState().openFile(file, { activate: false, targetGroupId: editorGroupId })
+    const opened = store.getState().openFiles.find((f) => f.filePath === file.filePath)!
+    store.getState().markFileDirty(opened.id, true)
+    store.setState({
+      editorDrafts: { [opened.id]: 'unsaved phone text' },
+      editorCursorLine: { [opened.id]: 17 }
+    })
+    const activeFile = store.getState().activeFileId
+    store
+      .getState()
+      .openFile(file, { activate: false, forceContentReload: true, targetGroupId: editorGroupId })
+    store
+      .getState()
+      .openDiff('wt-1', '/repo/change.ts', 'change.ts', 'typescript', true, {
+        activate: false,
+        targetGroupId: terminalGroupId
+      })
+    store
+      .getState()
+      .openDiff('wt-1', '/repo/change.ts', 'change.ts', 'typescript', true, {
+        activate: false,
+        targetGroupId: terminalGroupId
+      })
+    expect(
+      store.getState().groupsByWorktree['wt-1'].map((g) => ({ id: g.id, active: g.activeTabId }))
+    ).toEqual(beforeGroups)
+    expect(store.getState().activeGroupIdByWorktree).toEqual(beforeActive)
+    expect(store.getState().activeFileId).toBe(activeFile)
+    expect(store.getState().editorDrafts[opened.id]).toBe('unsaved phone text')
+    expect(store.getState().editorCursorLine[opened.id]).toBe(17)
+    expect(store.getState().openFiles.find((f) => f.id === opened.id)).toMatchObject({
+      isDirty: true
+    })
+    expect(findUnifiedTabByEntity(store, opened.id)?.groupId).toBe(editorGroupId)
+    expect(store.getState().openFiles.filter((f) => f.diffSource === 'staged')).toHaveLength(1)
+  })
 })
 
 describe('createEditorSlice untitled cleanup routing', () => {

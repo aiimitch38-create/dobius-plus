@@ -63,6 +63,8 @@ const {
   registerNativeChatHandlersMock,
   registerProjectFilesHandlersMock,
   registerDestinationHandlersMock,
+  registerTelegramAccountHandlersMock,
+  setTrustedTelegramAccountRendererMock,
   registerEmulatorFrameStreamHandlersMock,
   registerEmulatorVideoStreamHandlersMock,
   setBuildDispatcherMock,
@@ -128,6 +130,8 @@ const {
   registerNativeChatHandlersMock: vi.fn(),
   registerProjectFilesHandlersMock: vi.fn(),
   registerDestinationHandlersMock: vi.fn(),
+  registerTelegramAccountHandlersMock: vi.fn(),
+  setTrustedTelegramAccountRendererMock: vi.fn(),
   registerEmulatorFrameStreamHandlersMock: vi.fn(),
   registerEmulatorVideoStreamHandlersMock: vi.fn(),
   setBuildDispatcherMock: vi.fn(),
@@ -144,6 +148,33 @@ vi.mock('./project-files', () => ({
 
 vi.mock('./destinations', () => ({
   registerDestinationHandlers: registerDestinationHandlersMock
+}))
+
+vi.mock('./telegram-account', () => ({
+  registerTelegramAccountHandlers: registerTelegramAccountHandlersMock,
+  setTrustedTelegramAccountRenderer: setTrustedTelegramAccountRendererMock
+}))
+
+vi.mock('./desktop-telegram-account', () => ({
+  createDesktopTelegramAccountApi: () => ({})
+}))
+
+vi.mock('./vertex-tasks', () => ({ registerVertexTaskHandlers: vi.fn() }))
+vi.mock('./cloud-backup', () => ({
+  registerCloudBackupHandlers: vi.fn(),
+  setTrustedCloudBackupRenderer: vi.fn()
+}))
+
+vi.mock('../communications/relay/relay-lifecycle', () => ({
+  registerRelayStatusHandler: vi.fn(),
+  startCommunicationsRelay: vi.fn()
+}))
+vi.mock('../communications/participant-identity-buzz-migration', () => ({
+  runCommunicationsBuzzIdentityMigration: vi.fn()
+}))
+vi.mock('../system-monitor/service', () => ({ SystemMonitorService: class {} }))
+vi.mock('../system-monitor/state-directory', () => ({
+  defaultSystemMonitorStateDirectory: () => '/synthetic/system-monitor'
 }))
 
 vi.mock('./speech', () => ({
@@ -442,6 +473,8 @@ describe('registerCoreHandlers', () => {
     registerNativeChatHandlersMock.mockReset()
     registerProjectFilesHandlersMock.mockReset()
     registerDestinationHandlersMock.mockReset()
+    registerTelegramAccountHandlersMock.mockReset()
+    setTrustedTelegramAccountRendererMock.mockReset()
     registerEmulatorFrameStreamHandlersMock.mockReset()
     registerEmulatorVideoStreamHandlersMock.mockReset()
     setBuildDispatcherMock.mockReset()
@@ -518,7 +551,10 @@ describe('registerCoreHandlers', () => {
     expect(registerEmulatorFrameStreamHandlersMock).toHaveBeenCalled()
     expect(registerEmulatorVideoStreamHandlersMock).toHaveBeenCalled()
     expect(registerFilesystemHandlersMock).toHaveBeenCalledWith(store)
-    expect(registerRuntimeHandlersMock).toHaveBeenCalledWith(runtime)
+    expect(registerRuntimeHandlersMock).toHaveBeenCalledWith(
+      runtime,
+      expect.objectContaining({ systemMonitor: expect.any(Object) })
+    )
     expect(registerCommunicationsGatewayMock).toHaveBeenCalledWith(runtime)
     expect(registerRuntimeEnvironmentHandlersMock).toHaveBeenCalledWith(store)
     expect(registerEphemeralVmHandlersMock).toHaveBeenCalledWith(store)
@@ -528,6 +564,8 @@ describe('registerCoreHandlers', () => {
     expect(registerNativeChatHandlersMock).toHaveBeenCalled()
     expect(registerProjectFilesHandlersMock).toHaveBeenCalledWith(store)
     expect(registerDestinationHandlersMock).toHaveBeenCalled()
+    expect(registerTelegramAccountHandlersMock).toHaveBeenCalledOnce()
+    expect(setTrustedTelegramAccountRendererMock).toHaveBeenCalledWith(null)
     expect(registerCliHandlersMock).toHaveBeenCalled()
     expect(registerPreflightHandlersMock).toHaveBeenCalled()
     expect(registerShellHandlersMock).toHaveBeenCalled()

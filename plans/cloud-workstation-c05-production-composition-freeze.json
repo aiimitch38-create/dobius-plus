@@ -1,0 +1,211 @@
+{
+  "at": "2026-10-14T08:36:21.574620+00:00",
+  "files": [
+    {
+      "path": "dobius/src/main/automations/cloud-job-authority.test.ts",
+      "bytes": 6558,
+      "sha256": "78964f3b41d20281caa309d6fcaf0575c17ac52d7b9591871c43b7f2bb8bfd15"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-authority.ts",
+      "bytes": 4307,
+      "sha256": "08a1f6bbc5c35113609a388d305097c38ef6d3b9104b56bfcf8b28c0b1a37ad9"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-service.ts",
+      "bytes": 9628,
+      "sha256": "7eaa560eadaac323ab932137ae82cd9f1fdf7a6d0867a06211044eb342a78fe0"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-worker-lifecycle.test.ts",
+      "bytes": 8839,
+      "sha256": "818f6d02dd2845ed80acc506694805ac0ed284e88f5f84238a30dd47931ec34a"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-job-worker-lifecycle.ts",
+      "bytes": 2715,
+      "sha256": "ee27a5161ca16c81ed04232af78b5672932c290a7605083679512df9ce3cb2a1"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-private-capacity.test.ts",
+      "bytes": 2195,
+      "sha256": "04b6b0a78ef8888b1cfa3b1df6dc6b412c91dde9434ba591f621e78fb3c58652"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-private-capacity.ts",
+      "bytes": 1177,
+      "sha256": "7f360e56d6ab2115b81a0f27a18517018285c09e24dda00f605bc0367fd4f3f7"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-real-host.fixtures.ts",
+      "bytes": 5285,
+      "sha256": "cac2091fd8e5b42fd41dc57b668ce3e304fc9ba928b85e4ce6cc7b1dccdabfb3"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-real-host.integration.test.ts",
+      "bytes": 4167,
+      "sha256": "21731c0369113c366e08233602780569f36a7cfd1b4843b69491e44befa46fef"
+    },
+    {
+      "path": "dobius/src/main/automations/workstation-worker/execution-directory-separation.test.ts",
+      "bytes": 2168,
+      "sha256": "bdf0508b98f9d5e2b2a03f36c721f41e1296dd4a22b0849e2bcf5dc6d7a6a07f"
+    },
+    {
+      "path": "dobius/src/main/automations/workstation-worker/execution-directory-separation.ts",
+      "bytes": 1690,
+      "sha256": "56452c3f195292ed5af752ec5f1d64a0c0b9e637ac9466b638a3624bb5fea794"
+    },
+    {
+      "path": "dobius/src/main/automations/workstation-worker/registry.ts",
+      "bytes": 7858,
+      "sha256": "5854aa58a5a8f0b37f7b7d1c067e8bdf6fd66bb7ad88f14731a4461c07a8c6df"
+    },
+    {
+      "path": "dobius/src/main/index.ts",
+      "bytes": 103031,
+      "sha256": "1af25d73aa74b33999d750ca2548c97461f6c2c2fd4c3a4fbb86f354607f5ae0"
+    }
+  ],
+  "aggregate_sha256": "4a90036b74661f90997a638e159857a71ab17897c790ab05d475d64d7b0fdb9f",
+  "recipe": "sorted path NUL exactbytes NUL",
+  "tests": "7files45 prior PASS; 28existingworker+4directory+2realprocess34PASS; latestactual3realprocessPASS inclprepermitwithdrawal",
+  "limits": "Main/configuration hook source only; missing workers.json/capacity keeps dispatch unavailable. No live Hermes account/provider enrolled. Original sixfile lifecycle4a6f prior independentPASS retained historically; authority/main nowextended. Existing correctedhostafd54 andbootstrape687 separate freezes/reviews; pending prepermit-rejection supervisor correction.",
+  "superseded": [
+    {
+      "at": "2026-10-14T07:45:20.438103+00:00",
+      "aggregate_sha256": "dab70f207384b3e634a4b7de06d3b859ac37890257d08d2384b2040c9b480ea4",
+      "files": [
+        {
+          "path": "dobius/src/main/automations/cloud-job-authority.test.ts",
+          "bytes": 6558,
+          "sha256": "78964f3b41d20281caa309d6fcaf0575c17ac52d7b9591871c43b7f2bb8bfd15"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-authority.ts",
+          "bytes": 4307,
+          "sha256": "08a1f6bbc5c35113609a388d305097c38ef6d3b9104b56bfcf8b28c0b1a37ad9"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-service.ts",
+          "bytes": 9628,
+          "sha256": "7eaa560eadaac323ab932137ae82cd9f1fdf7a6d0867a06211044eb342a78fe0"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-worker-lifecycle.test.ts",
+          "bytes": 8839,
+          "sha256": "818f6d02dd2845ed80acc506694805ac0ed284e88f5f84238a30dd47931ec34a"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-worker-lifecycle.ts",
+          "bytes": 2715,
+          "sha256": "ee27a5161ca16c81ed04232af78b5672932c290a7605083679512df9ce3cb2a1"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-private-capacity.test.ts",
+          "bytes": 2195,
+          "sha256": "04b6b0a78ef8888b1cfa3b1df6dc6b412c91dde9434ba591f621e78fb3c58652"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-private-capacity.ts",
+          "bytes": 1177,
+          "sha256": "7f360e56d6ab2115b81a0f27a18517018285c09e24dda00f605bc0367fd4f3f7"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-real-host.fixtures.ts",
+          "bytes": 5130,
+          "sha256": "312b4dbba930f6d4b309bf56b00d50160c4111c94a0c9bc7230d1df35325dc73"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-real-host.integration.test.ts",
+          "bytes": 3084,
+          "sha256": "6a8e0c0838b45e653f0d2454596056314c603508337a006fc008699015508ecb"
+        },
+        {
+          "path": "dobius/src/main/index.ts",
+          "bytes": 103031,
+          "sha256": "1af25d73aa74b33999d750ca2548c97461f6c2c2fd4c3a4fbb86f354607f5ae0"
+        }
+      ],
+      "reason": "Actual pre-permit rejection regression and launch-time directory separation added."
+    },
+    {
+      "at": "2026-10-14T08:30:04.739144+00:00",
+      "aggregate_sha256": "0640f0dc8e8197350206ec8223c2af588fd7851a255b8140f75f88bc1daea00a",
+      "files": [
+        {
+          "path": "dobius/src/main/automations/cloud-job-authority.test.ts",
+          "bytes": 6558,
+          "sha256": "78964f3b41d20281caa309d6fcaf0575c17ac52d7b9591871c43b7f2bb8bfd15"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-authority.ts",
+          "bytes": 4307,
+          "sha256": "08a1f6bbc5c35113609a388d305097c38ef6d3b9104b56bfcf8b28c0b1a37ad9"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-service.ts",
+          "bytes": 9628,
+          "sha256": "7eaa560eadaac323ab932137ae82cd9f1fdf7a6d0867a06211044eb342a78fe0"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-worker-lifecycle.test.ts",
+          "bytes": 8839,
+          "sha256": "818f6d02dd2845ed80acc506694805ac0ed284e88f5f84238a30dd47931ec34a"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-job-worker-lifecycle.ts",
+          "bytes": 2715,
+          "sha256": "ee27a5161ca16c81ed04232af78b5672932c290a7605083679512df9ce3cb2a1"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-private-capacity.test.ts",
+          "bytes": 2195,
+          "sha256": "04b6b0a78ef8888b1cfa3b1df6dc6b412c91dde9434ba591f621e78fb3c58652"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-private-capacity.ts",
+          "bytes": 1177,
+          "sha256": "7f360e56d6ab2115b81a0f27a18517018285c09e24dda00f605bc0367fd4f3f7"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-real-host.fixtures.ts",
+          "bytes": 5285,
+          "sha256": "cac2091fd8e5b42fd41dc57b668ce3e304fc9ba928b85e4ce6cc7b1dccdabfb3"
+        },
+        {
+          "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-real-host.integration.test.ts",
+          "bytes": 4167,
+          "sha256": "21731c0369113c366e08233602780569f36a7cfd1b4843b69491e44befa46fef"
+        },
+        {
+          "path": "dobius/src/main/automations/workstation-worker/execution-directory-separation.test.ts",
+          "bytes": 2168,
+          "sha256": "bdf0508b98f9d5e2b2a03f36c721f41e1296dd4a22b0849e2bcf5dc6d7a6a07f"
+        },
+        {
+          "path": "dobius/src/main/automations/workstation-worker/execution-directory-separation.ts",
+          "bytes": 1690,
+          "sha256": "56452c3f195292ed5af752ec5f1d64a0c0b9e637ac9466b638a3624bb5fea794"
+        },
+        {
+          "path": "dobius/src/main/automations/workstation-worker/registry.ts",
+          "bytes": 7812,
+          "sha256": "31adaebfa2dcc542b5a43d2babf63590f006ba42d81d864cce69f0d6b6fa44fa"
+        },
+        {
+          "path": "dobius/src/main/index.ts",
+          "bytes": 103031,
+          "sha256": "1af25d73aa74b33999d750ca2548c97461f6c2c2fd4c3a4fbb86f354607f5ae0"
+        }
+      ],
+      "reason": "Launch identity capture uses full-width BigInt stat values."
+    }
+  ],
+  "dependencies": {
+    "bootstrap6": "c977a6f3999f30d4d729bc3d3a6e3e400c74765af774fa985e8c3ec8f24f4302 independentResearchPASS9",
+    "supervisor7": "f9027ed5902a6487b4c8bec487d8e5994751a0cb143c36dae47ff227ab9cd5be independentResearchPASS19",
+    "host3": "afd54fcd026f527b31f1817633e91c32d0e31ff86e8a3861c1a84b3cd5849b64 independentBUILD1PASS"
+  },
+  "verification_latest": "fresh global NodePASS beforeoutboxcorrection; actual3process+28worker+4directory rerunpending"
+}
