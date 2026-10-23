@@ -23,12 +23,15 @@ import { LoopsStudio } from './LoopsStudio'
 import { SettingsStudio } from './SettingsStudio'
 import { SkillsStudio } from './SkillsStudio'
 import { StudioEmptyState } from './StudioEmptyState'
+import type { BoardPoint } from '../board-canvas/board-viewport'
 import { PresetsStudio } from '../board-presets/PresetsStudio'
 
 export type BoardStudioHostProps = {
   studio: BoardStudioId | null
   worktreeId: string | null
   onClose: () => void
+  /** Free spot in view for a block of this size (Presets deploy lands there). */
+  freeCenter: (block: { w: number; h: number }) => BoardPoint
   chatTabId?: string | null
 }
 
@@ -69,11 +72,13 @@ function StudioBody({
   studio,
   worktreeId,
   chatTabId,
+  freeCenter,
   onClose
 }: {
   studio: BoardStudioId
   worktreeId: string | null
   chatTabId: string | null
+  freeCenter: BoardStudioHostProps['freeCenter']
   onClose: () => void
 }): React.JSX.Element {
   switch (studio) {
@@ -110,7 +115,7 @@ function StudioBody({
       return <BuzzPage />
     case 'presets':
       return worktreeId ? (
-        <PresetsStudio worktreeId={worktreeId} onDone={onClose} />
+        <PresetsStudio worktreeId={worktreeId} freeCenter={freeCenter} onDone={onClose} />
       ) : (
         <StudioEmptyState
           title={translate('board.studio.title.presets', 'Presets')}
@@ -171,6 +176,7 @@ export function BoardStudioHost({
   studio,
   worktreeId,
   onClose,
+  freeCenter,
   chatTabId = null
 }: BoardStudioHostProps): React.JSX.Element | null {
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -263,6 +269,7 @@ export function BoardStudioHost({
                 studio={studio}
                 worktreeId={worktreeId}
                 chatTabId={chatTabId}
+                freeCenter={freeCenter}
                 onClose={onClose}
               />
             </Suspense>

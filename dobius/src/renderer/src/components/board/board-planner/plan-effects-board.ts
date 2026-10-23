@@ -18,7 +18,7 @@ import {
 } from '../board-delivery/console-lifecycle'
 import { deleteBoardGroupAndConsoles } from '../board-groups/group-lifecycle'
 import { presetCatalog } from '../board-presets/preset-catalog'
-import { deployPresetPlan } from '../board-presets/preset-deploy'
+import { deployPresetPlan, PRESET_DEPLOY_BLOCK } from '../board-presets/preset-deploy'
 import { buildCatalogDeployPlan, initialLaneAgents } from '../board-presets/preset-deploy-plan'
 import { presetAgentLabel } from '../board-presets/PresetAgentIcon'
 import type { BoardStudioId } from '../board-studios/board-studio-ids'
@@ -167,7 +167,7 @@ export function boardEffects(ctx: BoardEffectsContext): BoardEffects {
       if (!preset) {
         return failed(translate('board.plan.noPreset', 'No preset named {{name}}.', { name }))
       }
-      const center = ctx.freeCenter({ w: 2400, h: 1400 })
+      const center = ctx.freeCenter(PRESET_DEPLOY_BLOCK)
       const plan = buildCatalogDeployPlan(preset, initialLaneAgents(preset.lanes), center, {
         newId: () => crypto.randomUUID(),
         agentLabel: presetAgentLabel

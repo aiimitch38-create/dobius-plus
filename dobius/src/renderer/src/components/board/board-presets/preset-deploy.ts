@@ -1,8 +1,7 @@
 import { createNewTerminalTab } from '@/components/terminal/terminal-tab-actions'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { useAppStore } from '@/store'
-import { getBoard } from '@/store/slices/board'
-import { fitViewportToRects, screenToWorld, type BoardPoint } from '../board-canvas/board-viewport'
+import { fitViewportToRects } from '../board-canvas/board-viewport'
 import { awaitMirroredConsoleTabs } from '../board-route/board-await-mirrored-tabs'
 import type { DeployPlan, PlanConsole } from './preset-deploy-plan'
 
@@ -11,11 +10,8 @@ import type { DeployPlan, PlanConsole } from './preset-deploy-plan'
 const SPAWN_BATCH = 4
 const SPAWN_BATCH_PAUSE_MS = 250
 
-/** World point at the middle of the window for this worktree's camera. */
-export function boardViewCenter(worktreeId: string): BoardPoint {
-  const { viewport } = getBoard(useAppStore.getState(), worktreeId)
-  return screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewport)
-}
+/** World-space room a deployed preset is centered in (clear of cards and the Thread). */
+export const PRESET_DEPLOY_BLOCK = { w: 2400, h: 1400 }
 
 function newTabIdAfter(worktreeId: string, before: ReadonlySet<string>): string | null {
   const tabs = useAppStore.getState().tabsByWorktree[worktreeId] ?? []

@@ -47,7 +47,7 @@ function threadWorldRect(v: BoardViewport): { x: number; y: number; w: number; h
   return { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y }
 }
 
-type PickerState = { request: BoardAgentPickerRequest; world: BoardPoint }
+type PickerState = { request: BoardAgentPickerRequest; world: BoardPoint; group?: boolean }
 
 const SIDE_APP_STUDIO: Record<BoardSideAppId, BoardStudioId> = {
   agents: 'agents',
@@ -163,6 +163,12 @@ export default function BoardRoute(): React.JSX.Element {
     board,
     selection,
     spawnAt: (at, count) => setPicker({ request: { count, screen: at.screen }, world: at.world }),
+    spawnGroup: (at) =>
+      setPicker({
+        request: { count: 4, screen: at.screen },
+        world: freeCenter(boardSpawnBlockSize(4)),
+        group: true
+      }),
     pickImageAt: images.pickAt,
     openMissionMap: () => setStudio('mission-map')
   })
@@ -295,7 +301,7 @@ export default function BoardRoute(): React.JSX.Element {
               agents={data.agents}
               onPick={(agent) => {
                 if (picker) {
-                  actions.spawn(agent, picker.request.count, picker.world)
+                  actions.spawn(agent, picker.request.count, picker.world, picker.group)
                 }
                 setPicker(null)
                 if (board.tool === 'spawn') {
@@ -311,6 +317,7 @@ export default function BoardRoute(): React.JSX.Element {
               studio={studio}
               worktreeId={worktreeId}
               chatTabId={chatTabId}
+              freeCenter={freeCenter}
               onClose={() => setStudio(null)}
             />
             <input

@@ -36,8 +36,21 @@ describe('runPlanner', () => {
   })
 
   it('gives up after the retry is also invalid', async () => {
-    const out = await runPlanner(base(async () => 'not json'))
+    const out = await runPlanner(base(async () => '{"steps":[{"kind":"explode"}],"say":""}'))
     expect(out).toMatchObject({ kind: 'rejected' })
+  })
+
+  it('treats a reply with no JSON (CLI error text) as planner down, without retrying', async () => {
+    const transport = vi.fn(async () => 'Error: You are out of credits.')
+    expect(await runPlanner(base(transport, 'pause all'))).toMatchObject({
+      kind: 'plan',
+      source: 'fallback'
+    })
+    expect(transport).toHaveBeenCalledTimes(1)
+    expect(await runPlanner(base(transport, 'fix the login bug'))).toMatchObject({
+      kind: 'needs-planner',
+      reason: 'Error: You are out of credits.'
+    })
   })
 
   it('falls back to the parser when the planner is down, and refuses work orders', async () => {

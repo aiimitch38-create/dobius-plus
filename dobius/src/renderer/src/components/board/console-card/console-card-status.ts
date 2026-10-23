@@ -16,6 +16,14 @@ export type ConsoleCardStatus =
 /** What runs in the terminal's foreground, as reported by the PTY layer. */
 export type ConsoleForeground = 'agent' | 'shell' | 'exited' | null
 
+/**
+ * Foreground while the tab has no PTY. Why: the store drops a tab's PTY id when
+ * the process exits, so "had a PTY, now none, tab still open" means it ended.
+ */
+export function foregroundWithoutPty(hadPty: boolean): ConsoleForeground {
+  return hadPty ? 'exited' : null
+}
+
 export type ConsoleCardStatusInput = {
   tabExists: boolean
   /** Board-paused (process suspended) or hibernated by the sleep feature. */

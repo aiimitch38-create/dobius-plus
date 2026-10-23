@@ -53,7 +53,13 @@ export async function runPlanner(input: {
       input.breaker.recordFailure(input.now())
       return fallback(error instanceof Error ? error.message : String(error))
     }
-    const validation = validatePlan(extractPlanJson(reply), input.board)
+    const json = extractPlanJson(reply)
+    // Why: a reply with no JSON is the CLI's error text (rate limited, out of credits), not a bad plan; retrying won't help.
+    if (json === null) {
+      input.breaker.recordFailure(input.now())
+      return fallback(reply.trim().slice(0, 200) || 'empty reply')
+    }
+    const validation = validatePlan(json, input.board)
     if (validation.ok) {
       input.breaker.recordSuccess()
       return { kind: 'plan', plan: validation.plan, source: 'planner' }

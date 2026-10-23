@@ -91,15 +91,19 @@ export function restartConsole(worktreeId: string, card: Console, agent?: TuiAge
   return true
 }
 
-/** True when the console has ended: tab gone, no terminal, or back at a bare shell. */
+/** True when the console has ended: tab gone or back at a bare shell. */
 export async function isConsoleEnded(card: Console): Promise<boolean> {
   const state = useAppStore.getState()
   const tabExists = Object.values(state.tabsByWorktree).some((tabs) =>
     tabs.some((t) => t.id === card.tabId)
   )
-  const ptyId = state.ptyIdsByTabId[card.tabId]?.[0]
-  if (!tabExists || !ptyId) {
+  if (!tabExists) {
     return true
+  }
+  // Why: a live tab with no PTY yet is still spawning (or sleeping); treating it as ended let clean_board close it.
+  const ptyId = state.ptyIdsByTabId[card.tabId]?.[0]
+  if (!ptyId) {
+    return false
   }
   try {
     return isShellProcessName(await window.api.pty.getForegroundProcess(ptyId))

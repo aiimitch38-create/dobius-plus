@@ -15,7 +15,8 @@ import {
   type PresetDefinition,
   type PresetLane
 } from './preset-catalog'
-import { boardViewCenter, deployPresetPlan } from './preset-deploy'
+import type { BoardPoint } from '../board-canvas/board-viewport'
+import { deployPresetPlan, PRESET_DEPLOY_BLOCK } from './preset-deploy'
 import {
   buildCatalogDeployPlan,
   buildUserDeployPlan,
@@ -165,9 +166,12 @@ function Section({
 
 export function PresetsStudio({
   worktreeId,
+  freeCenter,
   onDone
 }: {
   worktreeId: string
+  /** The Board's free-spot finder, shared with spawns and the planner's deploy. */
+  freeCenter: (block: { w: number; h: number }) => BoardPoint
   onDone: () => void
 }): React.JSX.Element {
   const catalog = useMemo(() => presetCatalog(), [])
@@ -197,7 +201,7 @@ export function PresetsStudio({
     selection.kind === 'catalog' ? catalogDiagram(selection.preset) : userDiagram(selection.preset)
 
   const deploy = async (): Promise<void> => {
-    const center = boardViewCenter(worktreeId)
+    const center = freeCenter(PRESET_DEPLOY_BLOCK)
     const newId = (): string => crypto.randomUUID()
     const plan =
       selection.kind === 'catalog'

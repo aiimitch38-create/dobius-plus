@@ -2,12 +2,16 @@ import type { BoardCardBase, BoardState } from '@/store/slices/board'
 
 type Rect = Pick<BoardCardBase, 'x' | 'y' | 'w' | 'h'>
 
-const overlaps = (a: Rect, b: Rect): boolean =>
-  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+// Why center-inside, not overlap: a long stroke that only crosses the image is not a mark on it.
+const centerInside = (a: Rect, b: Rect): boolean => {
+  const cx = a.x + a.w / 2
+  const cy = a.y + a.h / 2
+  return cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h
+}
 
 /** Pen strokes drawn over a card: the marks "Clear marks" removes from an image. */
 export function strokeIdsOver(board: BoardState, target: Rect): string[] {
-  return board.cards.filter((c) => c.kind === 'stroke' && overlaps(c, target)).map((c) => c.id)
+  return board.cards.filter((c) => c.kind === 'stroke' && centerInside(c, target)).map((c) => c.id)
 }
 
 /** CLI-neutral request to run a skill (Claude, Codex and others all accept plain wording). */

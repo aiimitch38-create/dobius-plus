@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useAppStore } from '@/store'
 import { isConsolePaused, onPauseChanged } from '../board-delivery/board-pause'
-import { isShellProcessName, type ConsoleForeground } from './console-card-status'
+import {
+  foregroundWithoutPty,
+  isShellProcessName,
+  type ConsoleForeground
+} from './console-card-status'
 
 const FOREGROUND_POLL_MS = 4_000
 
@@ -23,11 +27,16 @@ export function useConsolePaused(tabId: string): boolean {
 export function useConsoleForeground(tabId: string): ConsoleForeground {
   const ptyId = useAppStore((s) => s.ptyIdsByTabId[tabId]?.[0] ?? null)
   const [foreground, setForeground] = useState<ConsoleForeground>(null)
+  // ponytail: a card mounted after its PTY already exited shows idle, not done;
+  // a persisted per-tab exit flag in the store is the upgrade.
+  // Why keyed by tab: Restart swaps the card to a fresh tab that has no PTY yet.
+  const tabWithPty = useRef<string | null>(null)
   useEffect(() => {
     if (!ptyId) {
-      setForeground(null)
+      setForeground(foregroundWithoutPty(tabWithPty.current === tabId))
       return
     }
+    tabWithPty.current = tabId
     let cancelled = false
     const check = (): void => {
       window.api.pty
@@ -45,6 +54,6 @@ export function useConsoleForeground(tabId: string): ConsoleForeground {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [ptyId])
+  }, [ptyId, tabId])
   return foreground
 }

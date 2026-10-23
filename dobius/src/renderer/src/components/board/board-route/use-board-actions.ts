@@ -14,7 +14,7 @@ import type { BoardInsertKind } from '../board-chrome/board-tools'
 import type { BoardChipId } from '../board-command-bar/board-command-chips'
 import type { BoardStudioId } from '../board-studios/board-studio-ids'
 import { awaitMirroredConsoleTabs } from './board-await-mirrored-tabs'
-import { groupableCardIds } from './board-groupable'
+import { groupBoardCards } from './board-groupable'
 import { boardInsertCard, boardInsertCardSize } from './board-insert-cards'
 import { boardCardsWithClosedTabs } from './board-kill-targets'
 import type { BoardConductor } from './use-board-conductor'
@@ -35,7 +35,8 @@ type BoardActionsInput = {
 }
 
 export type BoardActions = {
-  spawn: (agent: TuiAgent, count: number, center: BoardPoint) => void
+  /** `group`: frame the new consoles as one group (canvas menu "Spawn group"). */
+  spawn: (agent: TuiAgent, count: number, center: BoardPoint, group?: boolean) => void
   onChip: (id: BoardChipId, anchor?: DOMRect) => void
   onInsert: (kind: BoardInsertKind) => void
 }
@@ -49,11 +50,11 @@ export function useBoardActions({
   freeCenter
 }: BoardActionsInput): BoardActions {
   const confirm = useConfirmationDialog()
-  const { worktreeId, board, consoles } = data
+  const { worktreeId, consoles } = data
   const { append } = conductor
 
   const spawn = useCallback(
-    (agent: TuiAgent, count: number, center: BoardPoint) => {
+    (agent: TuiAgent, count: number, center: BoardPoint, group = false) => {
       if (!worktreeId) {
         toast.error(
           translate('board.spawn.noWorkspace', 'Open a workspace before spawning consoles.')
@@ -67,6 +68,7 @@ export function useBoardActions({
       )
       const awaiting: Parameters<typeof awaitMirroredConsoleTabs>[0]['pending'] = []
       let failed = 0
+      const added = new Set<string>()
       boardSpawnPlacements(center, count).forEach((position, index) => {
         const result = launchAgentInNewTab({ agent, worktreeId, launchSource: 'unknown' })
         if (!result) {
@@ -83,7 +85,7 @@ export function useBoardActions({
         // Why: host-backed launches return no tab id yet; the card is placed
         // once the host's mirrored tab arrives (CONSOLE-EMBED "await mirrored tabs").
         if (result.tabId) {
-          useAppStore.getState().addCard(worktreeId, { ...card, tabId: result.tabId })
+          added.add(useAppStore.getState().addCard(worktreeId, { ...card, tabId: result.tabId }))
         } else {
           awaiting.push(card)
         }
@@ -98,6 +100,11 @@ export function useBoardActions({
       }
       if (failed > 0) {
         reportFailed(failed)
+      }
+      // ponytail: host-backed consoles (no tab id yet) join no group; add them when
+      // awaitMirroredConsoleTabs reports the ids it binds.
+      if (group) {
+        groupBoardCards(worktreeId, added)
       }
       if (awaiting.length > 0) {
         awaitMirroredConsoleTabs({
@@ -187,16 +194,10 @@ export function useBoardActions({
   const group = useCallback(() => {
     // Why: a group of one is just a card; frames work for any card kind, so any
     // two or more selected cards group (consoles and notes alike).
-    const ids = groupableCardIds(board.cards, selectedIds)
-    if (!worktreeId || !ids) {
+    if (!worktreeId || !groupBoardCards(worktreeId, selectedIds)) {
       toast.message(translate('board.group.needTwoCards', 'Select at least two cards to group.'))
-      return
     }
-    useAppStore.getState().createGroup(worktreeId, {
-      name: translate('board.group.name', 'Group {{n}}', { n: board.groups.length + 1 }),
-      cardIds: ids
-    })
-  }, [board.cards, board.groups.length, selectedIds, worktreeId])
+  }, [selectedIds, worktreeId])
 
   const onChip = useCallback(
     (id: BoardChipId, anchor?: DOMRect) => {

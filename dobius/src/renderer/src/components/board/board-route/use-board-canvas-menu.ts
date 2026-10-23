@@ -16,6 +16,8 @@ export function useBoardCanvasMenu(args: {
   board: BoardState
   selection: BoardSelection
   spawnAt: (at: MenuPoint, count: number) => void
+  /** Four grouped consoles at a free spot (clear of cards and the Thread). */
+  spawnGroup: (at: MenuPoint) => void
   pickImageAt: (world: BoardPoint) => void
   openMissionMap: () => void
 }): {
@@ -50,10 +52,8 @@ export function useBoardCanvasMenu(args: {
         return selection.removeSelected()
       case 'spawn':
         return args.spawnAt(point, 1)
-      // ponytail: "Spawn group" spawns four consoles at the point; auto-framing them
-      // as a group waits on spawn returning the new card ids.
       case 'spawnGroup':
-        return args.spawnAt(point, 4)
+        return args.spawnGroup(point)
       case 'missionMap':
         return args.openMissionMap()
       case 'image':

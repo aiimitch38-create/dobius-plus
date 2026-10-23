@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { consoleCardStatus, isShellProcessName, resolveConsoleLeafId } from './console-card-status'
+import {
+  consoleCardStatus,
+  foregroundWithoutPty,
+  isShellProcessName,
+  resolveConsoleLeafId
+} from './console-card-status'
 
 const base = {
   tabExists: true,
@@ -53,5 +58,15 @@ describe('resolveConsoleLeafId', () => {
     expect(resolveConsoleLeafId({ activeLeafId: null, root })).toBe('L1')
     expect(resolveConsoleLeafId({ activeLeafId: null, root: null })).toBeNull()
     expect(resolveConsoleLeafId(undefined)).toBeNull()
+  })
+})
+
+describe('foregroundWithoutPty', () => {
+  it('reads a vanished PTY as exited, so the card shows done', () => {
+    expect(foregroundWithoutPty(true)).toBe('exited')
+    expect(consoleCardStatus({ ...base, foreground: foregroundWithoutPty(true) })).toBe('done')
+  })
+  it('stays unknown before the tab ever had a PTY (still launching)', () => {
+    expect(foregroundWithoutPty(false)).toBeNull()
   })
 })

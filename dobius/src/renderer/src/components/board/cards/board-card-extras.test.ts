@@ -16,6 +16,13 @@ describe('strokeIdsOver', () => {
   it('returns only strokes overlapping the rect', () => {
     expect(strokeIdsOver(board, { x: 0, y: 0, w: 100, h: 100 })).toEqual(['s1'])
   })
+  it('keeps a long stroke that only crosses the rect', () => {
+    const crossing = {
+      cards: [{ ...base, id: 'long', kind: 'stroke', points: [], x: -400, y: 40, w: 1000, h: 10 }],
+      groups: []
+    } as unknown as BoardState
+    expect(strokeIdsOver(crossing, { x: 300, y: 0, w: 100, h: 100 })).toEqual([])
+  })
   it('treats touching edges as not overlapping', () => {
     expect(strokeIdsOver(board, { x: 30, y: 30, w: 10, h: 10 })).toEqual([])
   })
