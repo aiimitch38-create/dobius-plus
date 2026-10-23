@@ -3690,26 +3690,26 @@ html.onboarding-tour-start-transition::view-transition-new(root) {
   }
 }
 
-/* Board surface: warm paper canvas, sampled from the reference layout. Scoped so
-   Classic surfaces keep the existing palette. */
+/* Board surface (Carson, 2026-10-23): white canvas, grey dots, black text, blue
+   accent, in both light and dark mode. Scoped so Classic keeps its palette. */
 [data-surface='board'] {
-  --board-canvas: oklch(0.928 0.011 90);
+  --board-canvas: oklch(1 0 0);
   /* Both references fade the canvas lighter toward the bottom (sampled top/bottom). */
-  --board-canvas-bottom: oklch(0.977 0.006 85);
-  --board-dot: oklch(0.855 0.011 90);
-  --board-panel: oklch(0.989 0.006 85);
-  --board-panel-2: oklch(0.968 0.006 85);
-  --board-status-pill: oklch(0.962 0.006 85);
+  --board-canvas-bottom: oklch(1 0 0);
+  --board-dot: oklch(0.8 0 0);
+  --board-panel: oklch(1 0 0);
+  --board-panel-2: oklch(0.965 0 0);
+  --board-status-pill: oklch(0.965 0 0);
   --board-composer: var(--board-panel);
-  --board-panel-border: oklch(0.903 0.014 78);
-  --board-shadow: 0 1px 2px oklch(0.3 0.02 60 / 0.06), 0 12px 32px oklch(0.3 0.02 60 / 0.1);
-  --board-accent: oklch(0.593 0.149 40);
+  --board-panel-border: oklch(0.88 0 0);
+  --board-shadow: 0 1px 2px oklch(0 0 0 / 0.06), 0 12px 32px oklch(0 0 0 / 0.1);
+  --board-accent: oklch(0.55 0.2 260);
   --board-accent-fg: oklch(1 0 0);
-  --board-accent-tint: oklch(0.906 0.029 51);
-  --board-text: oklch(0.223 0.01 53);
-  --board-text-muted: oklch(0.501 0.019 73);
-  --board-chip: oklch(0.945 0.009 78);
-  --board-chip-border: oklch(0.88 0.03 70);
+  --board-accent-tint: oklch(0.93 0.045 260);
+  --board-text: oklch(0.15 0 0);
+  --board-text-muted: oklch(0.45 0 0);
+  --board-chip: oklch(0.97 0 0);
+  --board-chip-border: oklch(0.85 0.04 260);
   --board-chip-border-alt: oklch(0.86 0.04 300);
   /* Command-chip outline rings: a different pastel pair per chip, left to right. */
   --board-chip-ring-1: linear-gradient(90deg, oklch(0.8 0.06 190), oklch(0.74 0.11 25));
@@ -3734,45 +3734,6 @@ html.onboarding-tour-start-transition::view-transition-new(root) {
   color: var(--board-text);
 }
 
-.dark [data-surface='board'],
-[data-surface='board'].dark {
-  /* Dark values sampled from the reference dark screenshot (sym-dark.png), 2026-10-23:
-     modal colors of flat patches; dot/text/borders from their brightest pixels.
-     danger-* derived from the Pause chip edge; live is a green (the reference showed 0 live). */
-  --board-canvas: oklch(0.181 0.006 56);
-  --board-canvas-bottom: oklch(0.198 0.009 75);
-  --board-dot: oklch(0.316 0.006 56);
-  --board-panel: oklch(0.207 0.006 56);
-  --board-panel-2: oklch(0.244 0 90);
-  --board-status-pill: oklch(0.181 0.006 56);
-  --board-composer: oklch(0.3 0 0); /* sampled (43,43,43) composer fill */
-  --board-panel-border: oklch(0.279 0.008 75);
-  --board-shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 12px 32px oklch(0 0 0 / 0.4);
-  --board-accent: oklch(0.693 0.16 39);
-  --board-accent-fg: oklch(1 0 0);
-  --board-accent-tint: oklch(0.303 0.038 42);
-  --board-text: oklch(0.936 0.017 79);
-  --board-text-muted: oklch(0.567 0.005 78);
-  --board-chip: oklch(0.258 0.014 82);
-  --board-chip-border: oklch(0.611 0.052 188);
-  --board-chip-border-alt: oklch(0.536 0.098 309);
-  /* Command-chip outline rings: a different pastel pair per chip, left to right. */
-  --board-chip-ring-1: linear-gradient(90deg, oklch(0.72 0.09 190), oklch(0.66 0.14 25));
-  --board-chip-ring-2: linear-gradient(90deg, oklch(0.75 0.11 135), oklch(0.66 0.13 305));
-  --board-chip-ring-3: linear-gradient(90deg, oklch(0.78 0.11 85), oklch(0.68 0.11 245));
-  --board-chip-ring-4: linear-gradient(90deg, oklch(0.66 0.13 305), oklch(0.78 0.11 85));
-  --board-chip-ring-5: linear-gradient(90deg, oklch(0.68 0.11 245), oklch(0.7 0.13 350));
-  --board-chip-ring-6: linear-gradient(90deg, oklch(0.7 0.13 350), oklch(0.78 0.11 85));
-  --board-chip-ring-7: linear-gradient(90deg, oklch(0.66 0.13 305), oklch(0.78 0.11 85));
-  --board-danger-tint: oklch(0.28 0.044 29);
-  --board-danger-text: oklch(0.711 0.131 30);
-  --board-live: oklch(0.7 0.13 145);
-  --board-swatch-yellow: oklch(0.38 0.06 95);
-  --board-swatch-pink: oklch(0.36 0.06 0);
-  --board-swatch-blue: oklch(0.36 0.06 240);
-  --board-swatch-green: oklch(0.36 0.06 150);
-  --board-swatch-purple: oklch(0.36 0.06 300);
-}
 
 /* Embedded Classic pages inside Board studios (Skills, Loops, Settings...) paint
    with the app palette; remap it to the board panel so the studio reads as one
