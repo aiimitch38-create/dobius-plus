@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BOARD } from './plan-fixtures.test-support'
-import { screenPlan } from './plan-safety'
+import { riskyTextConcerns, screenPlan } from './plan-safety'
 import type { BoardPlan, PlanStep } from './plan-schema'
 
 const plan = (steps: PlanStep[]): BoardPlan => ({
@@ -80,5 +80,22 @@ describe('screenPlan', () => {
         ).toBe(false)
       }
     )
+  })
+})
+
+describe('riskyTextConcerns', () => {
+  it.each([
+    ['sudo rm the cache', 'admin'],
+    ['run claude --dangerously-skip-permissions', 'permissions'],
+    ['restart with --yolo', 'permissions']
+  ])('flags "%s" as %s even when typed by the user', (text, category) => {
+    expect(riskyTextConcerns(text, null)).toEqual([{ kind: 'risky-text', category, text }])
+  })
+  it('lets planner text through when the user said the same thing', () => {
+    expect(riskyTextConcerns('use sudo', 'tell codex 1 to use sudo')).toEqual([])
+    expect(riskyTextConcerns('run the tests', null)).toEqual([])
+  })
+  it('does not match yolo inside other words', () => {
+    expect(riskyTextConcerns('the yolo-mode doc', null)).toEqual([])
   })
 })

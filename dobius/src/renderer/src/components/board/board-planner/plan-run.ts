@@ -1,3 +1,4 @@
+import { planTargetSuggestion, type NameSuggestion } from './plan-did-you-mean'
 import { fallbackParse, type PlannerBreaker } from './plan-fallback'
 import { buildPlannerPrompt, type PlanTurn } from './plan-prompt'
 import type { BoardPlan, PlanBoardSnapshot } from './plan-schema'
@@ -10,6 +11,8 @@ export type PlanOutcome =
   | { kind: 'plan'; plan: BoardPlan; source: 'planner' | 'fallback' }
   /** Planner down and the utterance is a work order the parser cannot write. */
   | { kind: 'needs-planner'; reason: string }
+  /** A step names a near miss of a board name; the app asks before using `suggestion.to`. */
+  | { kind: 'did-you-mean'; suggestion: NameSuggestion; raw: unknown }
   /** Planner answered but both attempts were invalid. */
   | { kind: 'rejected'; reason: string }
 
@@ -63,6 +66,12 @@ export async function runPlanner(input: {
     if (validation.ok) {
       input.breaker.recordSuccess()
       return { kind: 'plan', plan: validation.plan, source: 'planner' }
+    }
+    // Why: a misheard name ("Clade 1") is a user question, not a planner error; retrying would guess.
+    const suggestion = planTargetSuggestion(json, input.board)
+    if (suggestion) {
+      input.breaker.recordSuccess()
+      return { kind: 'did-you-mean', suggestion, raw: json }
     }
     appNote = validation.reason
   }

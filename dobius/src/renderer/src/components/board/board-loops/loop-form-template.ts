@@ -19,8 +19,9 @@ export function loopFormFromTemplate(
     name: template.title,
     instruction: template.instruction,
     targetKey: wantsEveryConsole ? BOARD_TARGET_KEY : firstConsoleKey,
-    // ponytail: "until a command passes" is not supported by the loop engine yet; only the time limit carries over.
-    stopAfterMin: template.stop.timeLimitMinutes ?? 0
+    stopAfterMin: template.stop.timeLimitMinutes ?? 0,
+    stopAfterRuns: template.stop.maxRuns ?? 0,
+    stopCommand: template.stop.untilCommandPasses ?? ''
   }
   switch (trigger.kind) {
     case 'schedule':

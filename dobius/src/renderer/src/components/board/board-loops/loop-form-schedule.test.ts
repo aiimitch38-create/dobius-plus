@@ -5,6 +5,7 @@ import {
   DEFAULT_LOOP_FORM,
   buildLoopTrigger,
   loopStopAfterMs,
+  loopStopFields,
   loopTargetTabIds,
   parseTargetKey
 } from './loop-form'
@@ -68,5 +69,31 @@ describe('schedule loops in the form', () => {
       groups: []
     } as unknown as BoardState
     expect(loopTargetTabIds({ type: 'orchestrator', cardId: 'o1' }, board)).toEqual(['t2'])
+  })
+})
+
+describe('loopStopFields', () => {
+  it('collects every stop rule, ignoring a run cap on goal loops', () => {
+    expect(
+      loopStopFields({
+        kind: 'schedule',
+        stopAfterMin: 30,
+        stopAfterRuns: 4,
+        stopCommand: ' pnpm test '
+      })
+    ).toEqual({
+      ok: true,
+      fields: { stopAfterMs: 30 * 60_000, stopAfterRuns: 4, stopCommand: 'pnpm test' }
+    })
+    expect(
+      loopStopFields({ kind: 'goal', stopAfterMin: 0, stopAfterRuns: 4, stopCommand: '' })
+    ).toEqual({ ok: true, fields: {} })
+  })
+  it('refuses a stop command that is unsafe to run unattended', () => {
+    for (const stopCommand of ['rm -rf dist', 'pnpm test; git push', 'git reset --hard']) {
+      expect(
+        loopStopFields({ kind: 'on-idle', stopAfterMin: 0, stopAfterRuns: 0, stopCommand }).ok
+      ).toBe(false)
+    }
   })
 })

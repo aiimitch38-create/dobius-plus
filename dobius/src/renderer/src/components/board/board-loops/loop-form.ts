@@ -14,6 +14,10 @@ import {
   LOOP_MIN_SCHEDULE_MS,
   validateLoopPattern
 } from '../../../../../shared/automation-loops'
+import {
+  LOOP_STOP_RUNS_LIMIT,
+  stopCommandProblem
+} from '../../../../../shared/automation-loop-stop'
 
 export type LoopKind = AutomationLoopTrigger['kind']
 
@@ -33,6 +37,10 @@ export type LoopFormValues = {
   everyMin: number
   /** Time-limit stop in minutes; 0 = no time limit. */
   stopAfterMin: number
+  /** Run-count stop (schedule, idle, output match); 0 = no cap. */
+  stopAfterRuns: number
+  /** Stop once this command exits 0 in the loop's worktree; '' = none. */
+  stopCommand: string
 }
 
 export const DEFAULT_LOOP_FORM: LoopFormValues = {
@@ -47,7 +55,9 @@ export const DEFAULT_LOOP_FORM: LoopFormValues = {
   checkEverySec: 120,
   maxRuns: 5,
   everyMin: 15,
-  stopAfterMin: 0
+  stopAfterMin: 0,
+  stopAfterRuns: 0,
+  stopCommand: ''
 }
 
 export const BOARD_TARGET_KEY = 'board:all'
@@ -250,4 +260,46 @@ export function describeNextFire(loop: AutomationLoop, enabled: boolean, now: nu
 export function loopStopAfterMs(form: Pick<LoopFormValues, 'stopAfterMin'>): number | undefined {
   const minutes = Math.round(form.stopAfterMin)
   return Number.isFinite(minutes) && minutes > 0 ? Math.max(1, minutes) * 60_000 : undefined
+}
+
+export type LoopStopFields = Pick<AutomationLoop, 'stopAfterMs' | 'stopAfterRuns' | 'stopCommand'>
+
+/** Every stop rule for the saved loop; an error when the stop command is unsafe to run unattended. */
+export function loopStopFields(
+  form: Pick<LoopFormValues, 'kind' | 'stopAfterMin' | 'stopAfterRuns' | 'stopCommand'>
+): { ok: true; fields: LoopStopFields } | { ok: false; error: string } {
+  const stopAfterMs = loopStopAfterMs(form)
+  const runs = Math.round(form.stopAfterRuns)
+  // Goal loops carry their own max runs on the trigger.
+  const stopAfterRuns =
+    form.kind !== 'goal' && Number.isFinite(runs) && runs > 0
+      ? Math.min(LOOP_STOP_RUNS_LIMIT, runs)
+      : undefined
+  const command = form.stopCommand.trim()
+  const problem = command ? stopCommandProblem(command) : null
+  if (problem) {
+    return {
+      ok: false,
+      error:
+        problem === 'too_long'
+          ? translate('board.loops.error.stopLong', 'Stop command is longer than 200 characters.')
+          : problem === 'shell'
+            ? translate(
+                'board.loops.error.stopShell',
+                'Stop command must be one plain command, without ; | & > or $.'
+              )
+            : translate(
+                'board.loops.error.stopDestructive',
+                'That stop command could change or delete files. Use a check such as a build or test command.'
+              )
+    }
+  }
+  return {
+    ok: true,
+    fields: {
+      ...(stopAfterMs ? { stopAfterMs } : {}),
+      ...(stopAfterRuns ? { stopAfterRuns } : {}),
+      ...(command ? { stopCommand: command } : {})
+    }
+  }
 }

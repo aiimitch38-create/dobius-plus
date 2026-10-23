@@ -53,6 +53,9 @@ export type LaunchAgentInNewTabArgs = {
   launchPlatform?: NodeJS.Platform
   /** Called after the prompt is actually delivered to the agent input path. */
   onPromptDelivered?: () => void
+  /** Replaces the agent's base command for this launch only (e.g. a pinned
+   *  account env prefix). It is recorded in launchConfig so resume reuses it. */
+  agentCommandOverride?: string
 }
 
 function removeStaleLocalAgentTabsForWebHostLaunch(worktreeId: string): void {
@@ -103,7 +106,8 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
     launchSource,
     quickCommandLabel,
     launchPlatform,
-    onPromptDelivered
+    onPromptDelivered,
+    agentCommandOverride
   } = args
   const store = useAppStore.getState()
   const worktree = store.allWorktrees?.().find((entry: { id: string }) => entry.id === worktreeId)
@@ -119,7 +123,10 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
   // Why: SSH remotes deploy the CLI shim as plain `dobius`, so the Linux-only
   // `dobius-ide` rename must not be applied for remote launches.
   const isRemote = repo ? repoIsRemote(repo) : false
-  const cmdOverrides = store.settings?.agentCmdOverrides ?? {}
+  const settingsCmdOverrides = store.settings?.agentCmdOverrides ?? {}
+  const cmdOverrides = agentCommandOverride
+    ? { ...settingsCmdOverrides, [agent]: agentCommandOverride }
+    : settingsCmdOverrides
   const effectiveAgentArgs =
     agentArgs !== undefined
       ? agentArgs

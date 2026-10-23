@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { ArrowUp, Crosshair, Pause, Play, RotateCcw, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -17,6 +18,15 @@ import {
   orchestratorRefusalText,
   routeOrchestratorMessage
 } from '../board-links/orchestrator-scope'
+import { missionMapCanPause } from '../board-studios/mission-map-filter'
+import {
+  focusBoardCards,
+  killConsoleConfirmed,
+  restartConsoleConfirmed,
+  setConsolesPausedWithToast
+} from '../console-card/console-actions'
+import { consoleStatusLabel } from '../console-card/console-card-status'
+import { useConsoleCardStatus } from '../console-card/use-console-card-status'
 
 export type OrchestratorMessage = {
   id: string
@@ -77,6 +87,99 @@ function WirePicker({
   )
 }
 
+const ROW_ACTION =
+  'flex size-6 shrink-0 items-center justify-center rounded-full text-[var(--board-text-muted)] hover:bg-[var(--board-panel-2)] hover:text-[var(--board-text)] disabled:opacity-40 disabled:hover:bg-transparent [&_svg]:size-3.5'
+
+function TeamRow({
+  worktreeId,
+  console: c,
+  confirm
+}: {
+  worktreeId: string
+  console: BoardCardOf<'console'>
+  confirm: ReturnType<typeof useConfirmationDialog>
+}): React.JSX.Element {
+  const { status } = useConsoleCardStatus(worktreeId, c.tabId)
+  const paused = status === 'paused'
+  const focusLabel = translate('board.orchestrator.row.focus', 'Focus {{name}}', { name: c.title })
+  const pauseLabel = paused
+    ? translate('board.orchestrator.row.resume', 'Resume {{name}}', { name: c.title })
+    : translate('board.orchestrator.row.pause', 'Pause {{name}}', { name: c.title })
+  const restartLabel = translate('board.orchestrator.row.restart', 'Restart {{name}}', {
+    name: c.title
+  })
+  const killLabel = translate('board.orchestrator.row.kill', 'Kill {{name}}', { name: c.title })
+  return (
+    <li className="flex items-center gap-1 text-[12px]">
+      <span className="min-w-0 flex-1 truncate text-[var(--board-text)]">{c.title}</span>
+      <span className="shrink-0 pr-1 text-[11px] text-[var(--board-text-muted)]">
+        {consoleStatusLabel(status)}
+      </span>
+      <button
+        type="button"
+        aria-label={focusLabel}
+        title={focusLabel}
+        className={ROW_ACTION}
+        onClick={() => focusBoardCards(worktreeId, [c.id])}
+      >
+        <Crosshair />
+      </button>
+      <button
+        type="button"
+        aria-label={pauseLabel}
+        title={pauseLabel}
+        className={ROW_ACTION}
+        disabled={!paused && !missionMapCanPause(status)}
+        onClick={() => void setConsolesPausedWithToast([c], !paused)}
+      >
+        {paused ? <Play /> : <Pause />}
+      </button>
+      <button
+        type="button"
+        aria-label={restartLabel}
+        title={restartLabel}
+        className={ROW_ACTION}
+        onClick={() => restartConsoleConfirmed(worktreeId, c, confirm)}
+      >
+        <RotateCcw />
+      </button>
+      <button
+        type="button"
+        aria-label={killLabel}
+        title={killLabel}
+        className={`${ROW_ACTION} hover:text-[var(--board-danger-text)]`}
+        onClick={() => killConsoleConfirmed(worktreeId, c, confirm)}
+      >
+        <X />
+      </button>
+    </li>
+  )
+}
+
+/** One row per wired console with per-lane controls, so a team is run from its card. */
+function TeamRows({
+  worktreeId,
+  consoles
+}: {
+  worktreeId: string
+  consoles: readonly BoardCardOf<'console'>[]
+}): React.JSX.Element | null {
+  const confirm = useConfirmationDialog()
+  if (consoles.length === 0) {
+    return null
+  }
+  return (
+    <ul
+      aria-label={translate('board.orchestrator.rows', 'Wired consoles')}
+      className="scrollbar-sleek flex max-h-36 shrink-0 flex-col gap-0.5 overflow-y-auto border-b border-[var(--board-panel-border)] px-3 py-1.5"
+    >
+      {consoles.map((c) => (
+        <TeamRow key={c.id} worktreeId={worktreeId} console={c} confirm={confirm} />
+      ))}
+    </ul>
+  )
+}
+
 // Why: relays only to wired consoles and shows their replies; the card never
 // falls back to the focused terminal or a broadcast group.
 export function OrchestratorCard({
@@ -89,6 +192,10 @@ export function OrchestratorCard({
   const { messages, send, note } = useOrchestratorThread(worktreeId, card.id, card.wiredCardIds)
   const boardCards = useAppStore((s) => getBoard(s, worktreeId).cards)
   const wired = card.wiredCardIds.length
+  const wiredIds = new Set(card.wiredCardIds)
+  const wiredConsoles = boardCards.filter(
+    (c): c is BoardCardOf<'console'> => c.kind === 'console' && wiredIds.has(c.id)
+  )
   const submit = async (): Promise<void> => {
     const text = draft.trim()
     if (!text || sending) {
@@ -129,6 +236,7 @@ export function OrchestratorCard({
         onChange={onChange}
         status={<WirePicker worktreeId={worktreeId} card={card} onChange={onChange} />}
       />
+      <TeamRows worktreeId={worktreeId} consoles={wiredConsoles} />
       <div className="scrollbar-sleek flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-3 text-[13px]">
         {messages.length === 0 ? (
           <OrchestratorEmptyState worktreeId={worktreeId} card={card} />

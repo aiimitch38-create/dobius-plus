@@ -18,6 +18,8 @@ export type LoopTerminals = {
    * shell: refused unless a live agent owns the terminal right before each write.
    */
   deliver: (tabId: string, text: string) => Promise<LoopDeliveryStatus>
+  /** True while an agent in the tab reports "working"; stop checks wait for it to finish. */
+  agentWorking?: (tabId: string) => Promise<boolean>
 }
 
 type RuntimeTerminalAccess = {
@@ -104,6 +106,15 @@ export function createRuntimeLoopTerminals(
             ? (read.latestCursor ?? read.nextCursor ?? null)
             : (read.nextCursor ?? read.latestCursor ?? cursor)
       }
+    },
+    agentWorking: async (tabId) => {
+      const runtime = getRuntime()
+      const handle = await handleFor(tabId)
+      if (!runtime || !handle) {
+        return false
+      }
+      const status = await runtime.getTerminalAgentStatus(handle)
+      return status.isRunningAgent && status.status === 'working'
     },
     deliver: async (tabId, text) => {
       const runtime = getRuntime()

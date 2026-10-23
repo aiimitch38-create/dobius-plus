@@ -10,6 +10,7 @@ import { BoardPage } from './BoardPage'
 import { boardFreeSpawnCenter, boardSpawnBlockSize } from './board-canvas/board-spawn-placement'
 import { screenToWorld, type BoardPoint, type BoardViewport } from './board-canvas/board-viewport'
 import { BoardAgentPicker, type BoardAgentPickerRequest } from './board-chrome/BoardAgentPicker'
+import { spawnTeamOnBoard } from './board-chrome/board-team-spawn'
 import type { BoardSideAppId } from './board-chrome/BoardSideApps'
 import { isBoardShortcutBlockedTarget } from './board-chrome/board-tools'
 import { BoardLoopsObserver } from './board-loops/BoardLoopsObserver'
@@ -309,6 +310,9 @@ export default function BoardRoute(): React.JSX.Element {
                 }
               }}
               onClose={() => setPicker(null)}
+              onSpawnTeam={(slots) =>
+                spawnTeamOnBoard(worktreeId, slots, freeCenter(boardSpawnBlockSize(slots.length)))
+              }
             />
             {/* On-idle loops only fire while this observer is mounted (once, with the Board). */}
             {worktreeId ? <BoardLoopsObserver key={worktreeId} worktreeId={worktreeId} /> : null}

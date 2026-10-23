@@ -1,11 +1,15 @@
 import { ipcMain } from 'electron'
 import type { ClaudeAccountAddTarget, ClaudeAccountService } from '../claude-accounts/service'
 import type { ClaudeAccountSelectionTarget } from '../claude-accounts/runtime-selection'
+import type { ConsoleAccountPrepareArgs } from '../../shared/console-account'
 
 export function registerClaudeAccountHandlers(claudeAccounts: ClaudeAccountService): void {
   ipcMain.handle('claudeAccounts:list', () => claudeAccounts.listAccounts())
   ipcMain.handle('claudeAccounts:add', (_event, args?: ClaudeAccountAddTarget) =>
     claudeAccounts.addAccount(args)
+  )
+  ipcMain.handle('consoleAccounts:prepare', (_event, args: ConsoleAccountPrepareArgs) =>
+    claudeAccounts.prepareConsoleLaunch(args)
   )
   ipcMain.handle('claudeAccounts:cancelPendingLogin', () => claudeAccounts.cancelPendingLogin())
   ipcMain.handle('claudeAccounts:reauthenticate', (_event, args: { accountId: string }) =>

@@ -1,17 +1,15 @@
+import { useState } from 'react'
+import { FileText } from 'lucide-react'
 import { AgentStateDot } from '@/components/AgentStateDot'
-import { AgentIcon } from '@/lib/agent-catalog'
-import { useAppStore } from '@/store'
+import { AgentIcon, getAgentLabel } from '@/lib/agent-catalog'
 import { translate } from '@/i18n/i18n'
 import type { BoardCardOf } from '@/store/slices/board'
-import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../../shared/agent-status-types'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
-import {
-  consoleStatusLabel,
-  consoleCardStatus,
-  type ConsoleCardStatus
-} from './console-card-status'
-import { useConsolePane } from './use-console-pane'
-import { useConsoleForeground, useConsolePaused } from './use-console-runtime'
+import { BoardOutputViewer } from '../board-command-bar/BoardOutputViewer'
+import { replyExcerpt } from '../board-delivery/mission-state'
+import { consoleStatusLabel, type ConsoleCardStatus } from './console-card-status'
+import { useConsoleCardStatus } from './use-console-card-status'
+import { ConsoleAccountBadge } from './ConsoleAccountBadge'
 
 type ConsoleCardProps = { worktreeId: string; card: BoardCardOf<'console'> }
 
@@ -26,26 +24,41 @@ export function ConsoleCardTitleAccessory({
   worktreeId,
   card
 }: ConsoleCardProps): React.JSX.Element {
-  const { tabExists, paneKey } = useConsolePane(worktreeId, card.tabId)
-  const entry = useAppStore((s) => (paneKey ? s.agentStatusByPaneKey[paneKey] : undefined))
-  const sleeping = useAppStore((s) =>
-    paneKey ? Boolean(s.sleepingAgentSessionsByPaneKey[paneKey]) : false
-  )
-  const boardPaused = useConsolePaused(card.tabId)
-  const foreground = useConsoleForeground(card.tabId)
-  // Why: subscribing to the epoch re-evaluates staleness when the feed ticks.
-  useAppStore((s) => s.agentStatusEpoch)
-  const status = consoleCardStatus({
-    tabExists,
-    paused: sleeping || boardPaused,
-    foreground,
-    entry,
-    now: Date.now(),
-    staleAfterMs: AGENT_STATUS_STALE_AFTER_MS
-  })
+  const { status, lastReply } = useConsoleCardStatus(worktreeId, card.tabId)
+  const [outputOpen, setOutputOpen] = useState(false)
   const dot = DOT_FOR[status]
+  const seeOutput = translate('board.console.seeOutput', 'See output')
   return (
     <span className="flex shrink-0 items-center gap-2" title={consoleStatusLabel(status)}>
+      {lastReply && (
+        <>
+          <button
+            type="button"
+            data-board-card-control
+            aria-label={seeOutput}
+            title={seeOutput}
+            onClick={() => setOutputOpen(true)}
+            className="flex size-6 items-center justify-center rounded-full text-[var(--board-text-muted)] hover:bg-[var(--board-panel-2)] hover:text-[var(--board-text)]"
+          >
+            <FileText className="size-3.5" />
+          </button>
+          {/* Why: React bubbles portal events up this tree; the dialog must not drag the card. */}
+          <span className="contents" onPointerDown={(e) => e.stopPropagation()}>
+            <BoardOutputViewer
+              report={{
+                agent: isTuiAgent(card.agentKind) ? getAgentLabel(card.agentKind) : card.agentKind,
+                consoleTitle: card.title,
+                excerpt: replyExcerpt(lastReply.text),
+                full: lastReply.text,
+                at: lastReply.at
+              }}
+              open={outputOpen}
+              onOpenChange={setOutputOpen}
+            />
+          </span>
+        </>
+      )}
+      <ConsoleAccountBadge worktreeId={worktreeId} card={card} />
       {card.yolo && (
         <span
           title={translate(

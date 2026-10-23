@@ -1,3 +1,4 @@
+import { normalizeLoopStopFields } from './automation-loop-stop'
 import type {
   AutomationLoop,
   AutomationLoopState,
@@ -107,7 +108,8 @@ export function newLoopState(): AutomationLoopState {
     outputCursor: null,
     retiredAt: null,
     lastResult: null,
-    lastVerdict: null
+    lastVerdict: null,
+    stopCheckSince: null
   }
 }
 
@@ -223,6 +225,7 @@ export function normalizeAutomationLoop(raw: unknown): AutomationLoop | null {
     worktreeId: raw.worktreeId,
     trigger,
     ...(stopAfterMs ? { stopAfterMs } : {}),
+    ...normalizeLoopStopFields(raw),
     state: {
       paused: s.paused === true,
       runCount: Math.round(num(s.runCount, 0, 0)),
@@ -230,7 +233,8 @@ export function normalizeAutomationLoop(raw: unknown): AutomationLoop | null {
       outputCursor: typeof s.outputCursor === 'string' ? s.outputCursor : null,
       retiredAt: typeof s.retiredAt === 'number' ? s.retiredAt : null,
       lastResult: typeof s.lastResult === 'string' ? s.lastResult : null,
-      lastVerdict: s.lastVerdict === 'met' || s.lastVerdict === 'not-met' ? s.lastVerdict : null
+      lastVerdict: s.lastVerdict === 'met' || s.lastVerdict === 'not-met' ? s.lastVerdict : null,
+      stopCheckSince: typeof s.stopCheckSince === 'number' ? s.stopCheckSince : null
     }
   }
 }

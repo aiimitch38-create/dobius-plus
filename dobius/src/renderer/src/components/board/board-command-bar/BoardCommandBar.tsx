@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp, ChevronDown, Mic } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -12,6 +12,12 @@ import {
 } from '../board-chrome/board-surface-classes'
 import { BoardChipRows } from './BoardChipRows'
 import { BOARD_CHIP_ROWS, type BoardChipId } from './board-command-chips'
+import {
+  boardCommandHistory,
+  stepBoardCommandHistory,
+  type BoardCommandHistoryCursor
+} from './board-command-history'
+import { onCommandBarPrefill } from './board-command-prefill'
 import { BoardThread, type BoardThreadMessage } from './BoardThread'
 
 export type BoardCommandBarProps = {
@@ -56,6 +62,49 @@ export function BoardCommandBar({
     }
   }, [messageCount])
   const isMac = navigator.userAgent.includes('Mac')
+  const history = useMemo(() => boardCommandHistory(messages), [messages])
+  const historyCursor = useRef<BoardCommandHistoryCursor>({ index: null, draft: '' })
+  const onDraftChangeRef = useRef(onDraftChange)
+  onDraftChangeRef.current = onDraftChange
+
+  // Reply-to on a console or output viewer pre-fills "@Name " and hands over focus.
+  useEffect(
+    () =>
+      onCommandBarPrefill((prefill) => {
+        historyCursor.current = { index: null, draft: '' }
+        onDraftChangeRef.current(prefill)
+        requestAnimationFrame(() => {
+          const input = inputRef.current
+          input?.focus()
+          input?.setSelectionRange(prefill.length, prefill.length)
+        })
+      }),
+    [inputRef]
+  )
+
+  const recallHistory = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+    direction: 'up' | 'down'
+  ): void => {
+    const input = event.currentTarget
+    const browsing = historyCursor.current.index !== null
+    // Up only recalls from the caret's start (or while already browsing), so
+    // arrow keys keep their normal meaning mid-edit.
+    if (
+      direction === 'up' &&
+      !browsing &&
+      (input.selectionStart ?? 0) + (input.selectionEnd ?? 0) > 0
+    ) {
+      return
+    }
+    const step = stepBoardCommandHistory(history, historyCursor.current, direction, draft)
+    if (step.text === null) {
+      return
+    }
+    event.preventDefault()
+    historyCursor.current = step.cursor
+    onDraftChange(step.text)
+  }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -84,6 +133,7 @@ export function BoardCommandBar({
       return
     }
     onCommand(text)
+    historyCursor.current = { index: null, draft: '' }
     onDraftChange('')
   }
 
@@ -133,10 +183,23 @@ export function BoardCommandBar({
           <input
             ref={inputRef}
             value={draft}
-            onChange={(event) => onDraftChange(event.target.value)}
+            onChange={(event) => {
+              // Editing a recalled command makes it the new draft.
+              historyCursor.current = { index: null, draft: '' }
+              onDraftChange(event.target.value)
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.currentTarget.blur()
+              } else if (
+                (event.key === 'ArrowUp' || event.key === 'ArrowDown') &&
+                !event.nativeEvent.isComposing &&
+                !event.shiftKey &&
+                !event.altKey &&
+                !event.metaKey &&
+                !event.ctrlKey
+              ) {
+                recallHistory(event, event.key === 'ArrowUp' ? 'up' : 'down')
               }
             }}
             aria-label={translate('board.commandBar.inputLabel', 'Command')}

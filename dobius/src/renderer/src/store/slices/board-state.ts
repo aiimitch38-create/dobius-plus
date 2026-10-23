@@ -56,6 +56,8 @@ export type BoardCard = BoardCardBase &
         role?: string | null
         /** Launched with permission prompts skipped; shown as a badge. */
         yolo?: boolean
+        /** Managed account this console is pinned to (Claude/Codex); unset = Settings default. */
+        accountId?: string
       }
     // device: simulated viewport id (board-web/web-tile-devices); unset = fill the tile.
     | { kind: 'web'; url: string; device?: string }

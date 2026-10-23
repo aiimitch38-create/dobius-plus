@@ -1,17 +1,20 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Plus } from 'lucide-react'
+import { Plus, Users } from 'lucide-react'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { BOARD_MENU_CONTENT_CLASS, BOARD_MENU_ROW_CLASS } from './board-surface-classes'
 import type { TuiAgent } from '../../../../../shared/types'
+import { BoardTeamComposer } from './BoardTeamComposer'
+import type { TeamSlot } from './team-composer'
 
 export type BoardAgentOption = { id: TuiAgent; label: string }
 
@@ -28,6 +31,8 @@ type BoardAgentPickerProps = {
   agents: readonly BoardAgentOption[]
   onPick: (agent: TuiAgent) => void
   onClose: () => void
+  /** Multi-spawns (Spawn 4, group) offer a team composer: one role + agent per slot. */
+  onSpawnTeam?: (slots: TeamSlot[]) => void
 }
 
 // Why: one picker serves the Spawn tool (opens where you clicked), "New console"
@@ -36,8 +41,24 @@ export function BoardAgentPicker({
   request,
   agents,
   onPick,
-  onClose
+  onClose,
+  onSpawnTeam
 }: BoardAgentPickerProps): React.JSX.Element | null {
+  // Why: the composer outlives the menu (which closes when it opens), so it keeps its own state.
+  const [teamCount, setTeamCount] = useState<number | null>(null)
+  if (teamCount !== null && onSpawnTeam) {
+    return (
+      <BoardTeamComposer
+        count={teamCount}
+        agents={agents}
+        onClose={() => setTeamCount(null)}
+        onSpawn={(slots) => {
+          setTeamCount(null)
+          onSpawnTeam(slots)
+        }}
+      />
+    )
+  }
   if (!request) {
     return null
   }
@@ -84,6 +105,23 @@ export function BoardAgentPicker({
             </DropdownMenuItem>
           ))
         )}
+        {onSpawnTeam && request.count > 1 && agents.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                setTeamCount(request.count)
+                onClose()
+              }}
+              className={cn(BOARD_MENU_ROW_CLASS, 'h-[34px] gap-2.5 px-1.5')}
+            >
+              <Users className="!size-3.5 !text-[var(--board-accent)]" />
+              <span className="min-w-0 flex-1 truncate font-semibold">
+                {translate('board.agentPicker.composeTeam', 'Compose a team…')}
+              </span>
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )

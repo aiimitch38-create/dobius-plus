@@ -58,7 +58,8 @@ export function sanitizeKindFields(
             tabId: raw.tabId,
             agentKind: raw.agentKind,
             ...(isStr(raw.role) ? { role: raw.role } : {}),
-            ...(raw.yolo === true ? { yolo: true } : {})
+            ...(raw.yolo === true ? { yolo: true } : {}),
+            ...(isStr(raw.accountId) ? { accountId: raw.accountId } : {})
           }
         : null
     case 'web':

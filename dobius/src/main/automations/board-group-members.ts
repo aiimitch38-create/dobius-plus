@@ -1,6 +1,6 @@
 // Reads Board groups straight from the persisted UI payload (boardsByWorktree,
 // written by the renderer's board slice) so main never keeps a second copy.
-import type { AutomationLoopTarget } from '../../shared/automations-types'
+import type { AutomationLoop, AutomationLoopTarget } from '../../shared/automations-types'
 
 type Raw = Record<string, unknown>
 const isObj = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -134,4 +134,11 @@ export function orchestratorWiredTabIds(
       ? [c.tabId]
       : []
   )
+}
+
+/** Every console tab a loop addresses: the watched tab for output match, else its target. */
+export function loopTabIdsFromBoards(boardsByWorktree: unknown, loop: AutomationLoop): string[] {
+  return loop.trigger.kind === 'on-output-match'
+    ? [loop.trigger.tabId]
+    : loopTargetTabIdsFromBoards(boardsByWorktree, loop.trigger.target, loop.worktreeId)
 }

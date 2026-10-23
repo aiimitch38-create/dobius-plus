@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react'
+import { toast } from 'sonner'
 import {
   Brain,
   GitBranch,
@@ -20,6 +21,7 @@ import { useAppStore } from '@/store'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
 import { consoleActions } from '../console-card/console-actions'
+import { duplicateConsole } from '../board-route/board-duplicate'
 import {
   getBoard,
   type BoardCard,
@@ -138,22 +140,28 @@ export const BoardCardRenderer = React.memo(function BoardCardRenderer({
       onSelect: () =>
         useBoardLinkMode.getState().start({ kind: 'arrow', worktreeId, fromCardId: id })
     },
-    // Why: a console card points at one live terminal tab; a copy would share it.
-    ...(card.kind === 'console'
-      ? []
-      : [
-          {
-            label: translate('board.card.duplicate', 'Duplicate'),
-            onSelect: () => {
-              const { id: _id, z: _z, ...rest } = card
-              useAppStore.getState().addCard(worktreeId, {
-                ...rest,
-                x: card.x + DUPLICATE_OFFSET,
-                y: card.y + DUPLICATE_OFFSET
-              } as NewBoardCard)
-            }
+    {
+      label: translate('board.card.duplicate', 'Duplicate'),
+      onSelect: () => {
+        // Why: a console card points at one live terminal tab, so its copy is a new agent, never a shared PTY.
+        if (card.kind === 'console') {
+          if (!duplicateConsole(worktreeId, card)) {
+            toast.error(
+              translate('board.console.duplicateFailed', 'Could not start a copy of {{name}}.', {
+                name: card.title
+              })
+            )
           }
-        ]),
+          return
+        }
+        const { id: _id, z: _z, ...rest } = card
+        useAppStore.getState().addCard(worktreeId, {
+          ...rest,
+          x: card.x + DUPLICATE_OFFSET,
+          y: card.y + DUPLICATE_OFFSET
+        } as NewBoardCard)
+      }
+    },
     ...(card.kind === 'console' ? consoleActions(worktreeId, card, confirm) : []),
     {
       label:

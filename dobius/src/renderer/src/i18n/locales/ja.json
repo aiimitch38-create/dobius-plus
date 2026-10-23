@@ -72,6 +72,9 @@
       "exclusions": "Dependencies, caches, and generated builds are excluded. Remote projects and other personal folders are not included automatically.",
       "bucketExample": "my-dobius-backups",
       "regionExample": "us-east-1"
+    },
+    "accounts": {
+      "claudeSwitchedPinnedNote": "{{value0}} -> {{value1}}. Restart live Claude terminals before continuing old sessions. Board consoles pinned to an account keep it."
     }
   },
   "menu": {
@@ -6992,7 +6995,9 @@
             "agentPermissions": "Agent Permissions",
             "agentPermissionsDescription": "Switch agent permission defaults between Yolo and Manual.",
             "agentRuntime": "Agent のランタイム",
-            "agentRuntimeDescription": "デフォルトで agents を Windows または WSL のどちらで検出および起動するかを選択します。"
+            "agentRuntimeDescription": "デフォルトで agents を Windows または WSL のどちらで検出および起動するかを選択します。",
+            "telegramPersonalAccount": "Telegram personal account",
+            "telegramPersonalAccountDescription": "Connect a personal Telegram account, choose groups, and review reply drafts for Adam."
           }
         },
         "appearance": {
@@ -12792,7 +12797,8 @@
     "agentPicker": {
       "titleMany": "Spawn {{count}} consoles",
       "title": "New console",
-      "none": "No agents are enabled in Settings"
+      "none": "No agents are enabled in Settings",
+      "composeTeam": "Compose a team…"
     },
     "insert": {
       "checklist": "Checklist",
@@ -12911,7 +12917,10 @@
         "checkEvery": "Check every (seconds)",
         "maxRuns": "Max runs",
         "everyMin": "Every (minutes)",
-        "stopAfter": "Stop after (minutes, 0 = never)"
+        "stopAfter": "Stop after (minutes, 0 = never)",
+        "stopAfterRuns": "Stop after runs (0 = never)",
+        "stopCommand": "Stop when this command passes (optional)",
+        "stopCommandHint": "e.g. pnpm run build"
       },
       "create": "Create loop",
       "untitled": "Board loop",
@@ -12930,7 +12939,10 @@
         "patternLong": "Pattern is longer than 200 characters.",
         "pattern": "Enter a valid pattern (regular expression).",
         "goal": "Describe the goal.",
-        "patternUnsafe": "This pattern could freeze the app (repeated groups or backreferences). Simplify it."
+        "patternUnsafe": "This pattern could freeze the app (repeated groups or backreferences). Simplify it.",
+        "stopLong": "Stop command is longer than 200 characters.",
+        "stopShell": "Stop command must be one plain command, without ; | & > or $.",
+        "stopDestructive": "That stop command could change or delete files. Use a check such as a build or test command."
       },
       "next": {
         "retired": "Finished",
@@ -13143,9 +13155,36 @@
         "ungrouped": "UNGROUPED",
         "kind": {
           "group": "Group",
-          "orchestrator": "Orchestrator"
+          "orchestrator": "Orchestrator",
+          "console": "Console"
         },
-        "focus": "Show {{name}} on the board"
+        "focus": "Show {{name}} on the board",
+        "inspector": {
+          "status": "Status",
+          "agent": "Agent",
+          "role": "Role",
+          "none": "None",
+          "group": "Group",
+          "ungrouped": "Ungrouped",
+          "lastReport": "Last report",
+          "noReport": "No finished reply yet.",
+          "focus": "Focus",
+          "resume": "Resume",
+          "pause": "Pause",
+          "consoles": "Consoles ({{count}})",
+          "noConsoles": "No consoles yet.",
+          "label": "Inspector",
+          "close": "Close inspector"
+        },
+        "filter": {
+          "all": "All",
+          "working": "Working",
+          "waiting": "Needs you",
+          "idle": "Idle",
+          "done": "Done"
+        },
+        "filterLabel": "Filter consoles",
+        "inspect": "Inspect {{name}}; double-click to show it on the board"
       },
       "docs": {
         "noWorkspace": "Open a workspace to see its documents.",
@@ -13265,7 +13304,15 @@
       "refuseUndo": "Undo and redo work from the main command bar only.",
       "refuseNothingWired": "No consoles are wired yet. Tap Connect, or spawn one with +.",
       "noneConnected": "No consoles connected",
-      "connected": "{{count}} consoles connected"
+      "connected": "{{count}} consoles connected",
+      "row": {
+        "focus": "Focus {{name}}",
+        "resume": "Resume {{name}}",
+        "pause": "Pause {{name}}",
+        "restart": "Restart {{name}}",
+        "kill": "Kill {{name}}"
+      },
+      "rows": "Wired consoles"
     },
     "text": {
       "label": "Text",
@@ -13314,7 +13361,21 @@
       "restartTitle": "{{verb}} {{name}}?",
       "restartBody": "It is working right now; its current turn will stop.",
       "restart": "Restart",
-      "switchTo": "Relaunch as {{agent}}"
+      "switchTo": "Relaunch as {{agent}}",
+      "seeOutput": "See output",
+      "replyTo": "Reply to {{name}}",
+      "accountRelaunchFailed": "Could not relaunch on that account: {{reason}}",
+      "accountPinned": "Separate account",
+      "accountDefault": "Default account",
+      "relaunch": "Relaunch",
+      "accountFirstSignIn": "First launch on {{email}}: sign in once inside this console. Later launches stay signed in.",
+      "accountMismatch": "This console is signed in as {{actual}}, not {{expected}}. Run /login inside it to switch.",
+      "agentAccountHint": "{{agent}} · {{account}}",
+      "agentSection": "Agent",
+      "accountSection": "Account",
+      "accountDefaultRow": "{{agent}} · Default ({{email}})",
+      "accountSystem": "system login",
+      "duplicateFailed": "Could not start a copy of {{name}}."
     },
     "foundBug": "Found a bug?",
     "sideApps": {
@@ -13365,7 +13426,8 @@
       "saved": "Saved to {{path}}",
       "saveFailed": "Could not save: {{message}}",
       "copy": "Copy",
-      "save": "Save to outputs/"
+      "save": "Save to outputs/",
+      "reply": "Reply to {{name}}"
     },
     "clean": {
       "none": "No ended consoles to close.",
@@ -13523,7 +13585,10 @@
       "unsafe": "Ignored: that looked like instructions hidden inside the text.",
       "confirmTitle": "Go ahead with this?",
       "confirmAction": "Confirm",
-      "notSent": "Nothing was sent."
+      "notSent": "Nothing was sent.",
+      "didYouMeanTitle": "Did you mean {{name}}?",
+      "didYouMeanBody": "Nothing on the board is called “{{from}}”. Use {{name}} instead?",
+      "didYouMeanAction": "Use {{name}}"
     },
     "mission": {
       "settled": "{{count}} agent(s) finished.",
@@ -13685,6 +13750,25 @@
       "copy": "Copy branch name",
       "copied": "Copied {{ref}}",
       "copyFailed": "Could not copy."
+    },
+    "team": {
+      "role": {
+        "general": "General",
+        "frontend": "Frontend",
+        "backend": "Backend",
+        "tests": "Testers",
+        "review": "Reviewers",
+        "design": "Design",
+        "docs": "Docs",
+        "security": "Security"
+      },
+      "title": "Compose a team",
+      "roleLabel": "Role",
+      "agentLabel": "Agent",
+      "removeSlot": "Remove slot {{n}}",
+      "addSlot": "Add slot ({{count}} of {{max}})",
+      "remember": "Remember agents as role defaults",
+      "spawn": "Spawn {{count}} and group"
     }
   },
   "start": "Start",

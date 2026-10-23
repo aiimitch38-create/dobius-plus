@@ -34,6 +34,8 @@ export type AutomationLoopState = {
   lastResult: string | null
   /** Goal loops: the agent's latest DOBIUS_GOAL answer since the last run. */
   lastVerdict: 'met' | 'not-met' | null
+  /** Command-stop loops: when the last delivered run happened and its check is still owed. */
+  stopCheckSince?: number | null
 }
 
 /** Why: a loop is an automation whose run is triggered by board events instead
@@ -44,4 +46,8 @@ export type AutomationLoop = {
   state: AutomationLoopState
   /** Time-limit stop: the loop retires this long after it was created. */
   stopAfterMs?: number
+  /** Run-count stop: the loop retires after this many delivered runs. */
+  stopAfterRuns?: number
+  /** Command stop: run in the loop's worktree after each run; exit 0 retires the loop. */
+  stopCommand?: string
 }

@@ -14,6 +14,9 @@ import type { Store } from '../persistence'
 import type { RateLimitService } from '../rate-limits/service'
 import { resolveClaudeCommand } from '../codex-cli/command'
 import type { ClaudeRuntimeAuthService } from './runtime-auth-service'
+import type { ConsoleAccountLaunch, ConsoleAccountPrepareArgs } from '../../shared/console-account'
+import { prepareConsoleAccountLaunch } from './console-profile'
+import { createConsoleProfileDeps } from './console-profile-deps'
 import {
   getClaudeManagedAccountsRoot,
   readClaudeManagedAuthFile,
@@ -93,6 +96,14 @@ export class ClaudeAccountService {
     private readonly rateLimits: RateLimitService,
     private readonly runtimeAuth: ClaudeRuntimeAuthService
   ) {}
+
+  /** Prepares the per-console profile dir for a pinned Claude/Codex launch. */
+  prepareConsoleLaunch(args: ConsoleAccountPrepareArgs): ConsoleAccountLaunch {
+    return prepareConsoleAccountLaunch(
+      createConsoleProfileDeps(this.store, () => this.runtimeAuth.getRuntimeConfigDir()),
+      args
+    )
+  }
 
   listAccounts(): ClaudeRateLimitAccountsState {
     this.normalizeActiveSelection()

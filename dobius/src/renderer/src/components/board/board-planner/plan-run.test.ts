@@ -95,3 +95,17 @@ describe('planner prompt', () => {
     }
   })
 })
+
+describe('near-miss names', () => {
+  it('returns did-you-mean instead of retrying when a target is a near miss', async () => {
+    const transport = vi.fn(
+      async () => '{"steps":[{"kind":"tell","target":"Codx 1","text":"run the tests"}],"say":""}'
+    )
+    const out = await runPlanner(base(transport, 'tell codx 1 to run the tests'))
+    expect(out).toMatchObject({
+      kind: 'did-you-mean',
+      suggestion: { from: 'Codx 1', to: 'Codex 1' }
+    })
+    expect(transport).toHaveBeenCalledTimes(1)
+  })
+})

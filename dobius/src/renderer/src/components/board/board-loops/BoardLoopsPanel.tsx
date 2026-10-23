@@ -19,7 +19,7 @@ import {
   DEFAULT_LOOP_FORM,
   buildLoopTrigger,
   describeNextFire,
-  loopStopAfterMs,
+  loopStopFields,
   type LoopFormValues
 } from './loop-form'
 
@@ -75,6 +75,11 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
       toast.error(built.error)
       return
     }
+    const stop = loopStopFields(form)
+    if (!stop.ok) {
+      toast.error(stop.error)
+      return
+    }
     const agentKind = targets.find((t) => t.key === form.targetKey)?.agentKind
     setBusy(true)
     try {
@@ -99,7 +104,7 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
             worktreeId,
             trigger: built.trigger,
             state: newLoopState(),
-            ...(loopStopAfterMs(form) ? { stopAfterMs: loopStopAfterMs(form) } : {})
+            ...stop.fields
           },
           enabled: true
         }

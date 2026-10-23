@@ -2018,6 +2018,11 @@ const api = {
     }): Promise<unknown> => ipcRenderer.invoke('codexAccounts:select', args)
   },
 
+  consoleAccounts: {
+    prepare: (args: { agent: 'claude' | 'codex'; accountId: string }): Promise<unknown> =>
+      ipcRenderer.invoke('consoleAccounts:prepare', args)
+  },
+
   claudeAccounts: {
     list: (): Promise<unknown> => ipcRenderer.invoke('claudeAccounts:list'),
     add: (args?: { runtime?: 'host' | 'wsl'; wslDistro?: string | null }): Promise<unknown> =>

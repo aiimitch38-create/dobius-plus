@@ -1,3 +1,4 @@
+import { toast } from 'sonner'
 import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
 import { translate } from '@/i18n/i18n'
 import { getAgentLabel } from '@/lib/agent-catalog'
@@ -9,6 +10,7 @@ import type { TuiAgent } from '../../../../../shared/types'
 import { BOARD_CONSOLE_SIZE, boardSpawnPlacements } from '../board-canvas/board-spawn-placement'
 import type { BoardPoint } from '../board-canvas/board-viewport'
 import { isShellProcessName } from '../console-card/console-card-status'
+import { resolvePinnedAgentCommand } from '../console-card/console-account-launch'
 import { markConsolePaused } from './board-pause'
 
 type Console = BoardCardOf<'console'>
@@ -78,15 +80,55 @@ export function spawnConsoles(input: {
  * resets the agent cleanly even when the old one is wedged, and the card keeps
  * its position, size, group and wiring because its id does not change.
  */
-export function restartConsole(worktreeId: string, card: Console, agent?: TuiAgent): boolean {
+export type ConsoleRelaunchOptions = {
+  /** Base command for this launch (a pinned account's env prefix). */
+  agentCommandOverride?: string
+  /** Account the new launch is pinned to; null clears the pin. */
+  accountId?: string | null
+}
+
+export function restartConsole(
+  worktreeId: string,
+  card: Console,
+  agent?: TuiAgent,
+  launch?: ConsoleRelaunchOptions
+): boolean {
   const next = agent ?? agentOrDefault(card.agentKind)
-  const launched = launchAgentInNewTab({ agent: next, worktreeId, launchSource: 'unknown' })
+  // Why: a plain restart of a pinned console must stay on its account; falling
+  // back to the Settings default would silently switch who the agent runs as.
+  if (!launch && card.accountId && next === card.agentKind) {
+    const accountId = card.accountId
+    void resolvePinnedAgentCommand(worktreeId, next, accountId).then(
+      (pinned) =>
+        restartConsole(worktreeId, card, next, { agentCommandOverride: pinned.command, accountId }),
+      (error: unknown) =>
+        toast.error(
+          translate(
+            'board.console.accountRelaunchFailed',
+            'Could not relaunch on that account: {{reason}}',
+            {
+              reason: error instanceof Error ? error.message : String(error)
+            }
+          )
+        )
+    )
+    return true
+  }
+  const launched = launchAgentInNewTab({
+    agent: next,
+    worktreeId,
+    launchSource: 'unknown',
+    ...(launch?.agentCommandOverride ? { agentCommandOverride: launch.agentCommandOverride } : {})
+  })
   if (!launched?.tabId) {
     return false
   }
   const oldTab = card.tabId
   markConsolePaused(oldTab, false)
-  useAppStore.getState().updateCard(worktreeId, card.id, { tabId: launched.tabId, agentKind: next })
+  const accountId = launch?.agentCommandOverride ? (launch.accountId ?? undefined) : undefined
+  useAppStore
+    .getState()
+    .updateCard(worktreeId, card.id, { tabId: launched.tabId, agentKind: next, accountId })
   closeTerminalTab(oldTab)
   return true
 }

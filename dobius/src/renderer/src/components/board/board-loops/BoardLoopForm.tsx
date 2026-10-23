@@ -192,12 +192,31 @@ export function BoardLoopForm({
         </div>
       )}
       {form.kind !== 'goal' && (
-        <NumberField
-          label={translate('board.loops.field.stopAfter', 'Stop after (minutes, 0 = never)')}
-          value={form.stopAfterMin}
-          onChange={(n) => set('stopAfterMin', n)}
-        />
+        <div className="grid grid-cols-2 gap-2">
+          <NumberField
+            label={translate('board.loops.field.stopAfter', 'Stop after (minutes, 0 = never)')}
+            value={form.stopAfterMin}
+            onChange={(n) => set('stopAfterMin', n)}
+          />
+          <NumberField
+            label={translate('board.loops.field.stopAfterRuns', 'Stop after runs (0 = never)')}
+            value={form.stopAfterRuns}
+            onChange={(n) => set('stopAfterRuns', n)}
+          />
+        </div>
       )}
+      <div className="space-y-1">
+        <Label className="text-[12px]">
+          {translate('board.loops.field.stopCommand', 'Stop when this command passes (optional)')}
+        </Label>
+        <Input
+          value={form.stopCommand}
+          maxLength={200}
+          placeholder={translate('board.loops.field.stopCommandHint', 'e.g. pnpm run build')}
+          onChange={(e) => set('stopCommand', e.target.value)}
+          className="h-8 font-mono"
+        />
+      </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           {translate('board.common.cancel', 'Cancel')}

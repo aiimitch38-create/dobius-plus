@@ -52,6 +52,7 @@ import type { TaskSourceContext } from '../shared/task-source-context'
 import type { ProjectExecutionRuntimeResolution } from '../shared/project-execution-runtime'
 import type { StartupCommandDelivery } from '../shared/codex-startup-delivery'
 import type { SleepingAgentLaunchConfig } from '../shared/agent-session-resume'
+import type { ConsoleAccountLaunch, ConsoleAccountPrepareArgs } from '../shared/console-account'
 import type {
   LocalhostWorktreeLabelResult,
   LocalhostWorktreeLabelRoute
@@ -2157,6 +2158,9 @@ export type PreloadApi = {
       runtime?: 'host' | 'wsl'
       wslDistro?: string | null
     }) => Promise<CodexRateLimitAccountsState>
+  }
+  consoleAccounts: {
+    prepare: (args: ConsoleAccountPrepareArgs) => Promise<ConsoleAccountLaunch>
   }
   claudeAccounts: {
     list: () => Promise<ClaudeRateLimitAccountsState>

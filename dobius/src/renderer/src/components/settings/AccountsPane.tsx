@@ -705,8 +705,8 @@ export function AccountsPane({
           translate('auto.components.settings.AccountsPane.f921d32606', 'Claude account updated.'),
           {
             description: translate(
-              'auto.components.settings.AccountsPane.b15ce90870',
-              '{{value0}} -> {{value1}}. Restart live Claude terminals before continuing old sessions.',
+              'settings.accounts.claudeSwitchedPinnedNote',
+              '{{value0}} -> {{value1}}. Restart live Claude terminals before continuing old sessions. Board consoles pinned to an account keep it.',
               {
                 value0: getClaudeAccountLabel(claudeAccounts, previousActiveAccountId),
                 value1: getClaudeAccountLabel(next, nextActiveAccountId)

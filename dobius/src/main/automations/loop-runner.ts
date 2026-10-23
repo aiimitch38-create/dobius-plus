@@ -16,12 +16,18 @@ import {
   validateLoopPattern
 } from '../../shared/automation-loops'
 import { loopTimeUp, scheduleDue } from '../../shared/automation-loop-schedule'
+import { stopStateAfterRun } from '../../shared/automation-loop-stop'
 import { checkExecutionAdmission } from '../agents/execution-gate'
-import { boardGroupTabIdsByName, loopTargetTabIdsFromBoards } from './board-group-members'
+import {
+  boardGroupTabIdsByName,
+  loopTabIdsFromBoards,
+  loopTargetTabIdsFromBoards
+} from './board-group-members'
 import { setCustomGroupResolver } from '../runtime/orchestration/groups'
 import type { LoopDeliveryStatus, LoopTerminals } from './loop-terminals'
 import { matchLoopPattern } from './loop-pattern-match'
 import { HELD_RESULT, LoopHolds, heldFiredAt, notifyLoopHeldByDefault } from './loop-hold'
+import { LoopStopChecks, type LoopStopChecksOptions, type StopCheckStore } from './loop-stop-check'
 
 // Board loops ride the existing automation records: each fire is an
 // AutomationRun (trigger = loop kind) so history, last result and deletion
@@ -38,21 +44,21 @@ const DELIVERY_ERROR: Record<Exclude<LoopDeliveryStatus, 'sent'>, string> = {
   'not-writable': 'Console did not accept input.'
 }
 
-type LoopStore = Pick<
-  Store,
-  'listAutomations' | 'createAutomationRun' | 'updateAutomationRun' | 'updateAutomation' | 'getUI'
->
+type LoopStore = StopCheckStore & Pick<Store, 'createAutomationRun' | 'updateAutomationRun'>
 
 export class LoopRunner {
   private ticking = false
   private readonly holds: LoopHolds
+  private readonly stopChecks: LoopStopChecks
 
   constructor(
     private readonly store: LoopStore,
     private readonly terminals: LoopTerminals | null,
-    notifyHeld: (loopName: string) => void = notifyLoopHeldByDefault
+    notifyHeld: (loopName: string) => void = notifyLoopHeldByDefault,
+    opts: LoopStopChecksOptions = {}
   ) {
     this.holds = new LoopHolds(notifyHeld)
+    this.stopChecks = new LoopStopChecks(store, opts)
   }
 
   private timer: ReturnType<typeof setInterval> | null = null
@@ -125,6 +131,9 @@ export class LoopRunner {
           continue
         }
         try {
+          if (await this.stopChecks.tick(automation, loop, now, this.terminals)) {
+            continue
+          }
           if (loop.trigger.kind === 'on-output-match') {
             await this.tickOutputMatch(automation, loop, now)
           } else if (loop.trigger.kind === 'goal') {
@@ -253,10 +262,7 @@ export class LoopRunner {
     baseState: AutomationLoopState
   ): Promise<AutomationRun> {
     const run = this.store.createAutomationRun(automation, now, loop.trigger.kind)
-    const tabIds =
-      loop.trigger.kind === 'on-output-match'
-        ? [loop.trigger.tabId]
-        : this.resolveTabIds(loop.trigger.target, loop.worktreeId)
+    const tabIds = loopTabIdsFromBoards(this.store.getUI().boardsByWorktree, loop)
     const admission = checkExecutionAdmission('agent-run')
     const blocked = !admission.allowed
     let error: string | null = null
@@ -301,7 +307,8 @@ export class LoopRunner {
       ...baseState,
       runCount: baseState.runCount + (delivered > 0 ? 1 : 0),
       lastFiredAt: heldFiredAt(loop.trigger, now, heldNow),
-      lastResult
+      lastResult,
+      ...(delivered > 0 ? stopStateAfterRun(loop, baseState.runCount + 1, now, lastResult) : {})
     })
     return this.store.updateAutomationRun({
       runId: run.id,

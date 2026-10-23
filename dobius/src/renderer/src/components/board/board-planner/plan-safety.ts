@@ -22,8 +22,27 @@ const RISKY: { category: string; re: RegExp }[] = [
   { category: 'publish', re: /\b(publish|deploy|release|upload|npm publish|git push)\b/i },
   { category: 'credentials', re: /\b(password|api[_ -]?key|secret|token|credential|\.env)\b/i },
   { category: 'install', re: /\b(install|brew|pip install|npm i\b|curl\s+[^|]*\|\s*(sh|bash))\b/i },
-  { category: 'files', re: /\b(chmod|chown|mv\s|rename (all|every)|move (all|every))\b/i }
+  { category: 'files', re: /\b(chmod|chown|mv\s|rename (all|every)|move (all|every))\b/i },
+  { category: 'admin', re: /\bsudo\b/i },
+  {
+    category: 'permissions',
+    re: /(^|\s)--(yolo|dangerously-skip-permissions|dangerously-bypass-approvals-and-sandbox)\b/i
+  }
 ]
+
+/**
+ * Risky categories in text bound for a terminal. With `utterance`, a category
+ * the user said themselves is not flagged (the planner only echoed them); pass
+ * null for text the user typed straight to a console, which is always flagged.
+ */
+export function riskyTextConcerns(text: string, utterance: string | null): SafetyConcern[] {
+  for (const { category, re } of RISKY) {
+    if (re.test(text) && (utterance === null || !re.test(utterance))) {
+      return [{ kind: 'risky-text', category, text }]
+    }
+  }
+  return []
+}
 
 type DestructiveKind = 'kill' | 'kill_group' | 'restart' | 'clean_board' | 'close_workspace'
 
@@ -97,12 +116,7 @@ export function screenPlan(
   const concerns: SafetyConcern[] = []
   for (const step of plan.steps) {
     for (const text of stepTexts(step)) {
-      for (const { category, re } of RISKY) {
-        if (re.test(text) && !re.test(utterance)) {
-          concerns.push({ kind: 'risky-text', category, text })
-          break
-        }
-      }
+      concerns.push(...riskyTextConcerns(text, utterance))
       for (const url of text.match(URL_RE) ?? []) {
         if (!said.includes(url.toLowerCase())) {
           concerns.push({ kind: 'unsaid-url', url })

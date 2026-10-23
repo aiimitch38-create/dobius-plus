@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Check, Copy, Save } from 'lucide-react'
+import { Check, Copy, Reply, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { BOARD_MONO_CLASS } from '../board-chrome/board-surface-classes'
 import { boardOutputRelativePath } from './board-output-filename'
+import { boardReplyDraft, requestCommandBarPrefill } from './board-command-prefill'
 import type { BoardThreadReport } from './BoardThread'
 
 type BoardOutputViewerProps = {
@@ -106,6 +107,19 @@ export function BoardOutputViewer({
           {report.full}
         </pre>
         <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              onOpenChange(false)
+              requestCommandBarPrefill(boardReplyDraft(report.consoleTitle))
+            }}
+          >
+            <Reply className="size-3.5" />
+            {translate('board.outputViewer.reply', 'Reply to {{name}}', {
+              name: report.consoleTitle
+            })}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => void onCopy()}>
             {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
             {translate('board.outputViewer.copy', 'Copy')}

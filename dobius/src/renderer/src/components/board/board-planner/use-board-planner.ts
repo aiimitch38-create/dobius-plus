@@ -9,12 +9,14 @@ import { missionReport } from './mission-report'
 import { concernText } from './plan-concern-text'
 import { boardEffects, type BoardEffectsContext } from './plan-effects-board'
 import { terminalEffects } from './plan-effects-terminal'
+import { withPlanTarget } from './plan-did-you-mean'
 import { executePlan } from './plan-execute'
 import { PlannerBreaker } from './plan-fallback'
 import { runPlanner } from './plan-run'
 import { screenPlan } from './plan-safety'
 import { buildPlanSnapshot } from './plan-snapshot'
 import { conductorPlannerTransport } from './plan-transport'
+import { validatePlan } from './plan-validate'
 
 /**
  * Board command path: utterance -> typed plan (validated, one retry, fallback
@@ -124,7 +126,41 @@ export function useBoardPlanner(input: {
         })
         return
       }
-      const { plan } = outcome
+      let plan = outcome.kind === 'plan' ? outcome.plan : null
+      // The words the safety screen treats as said; a confirmed correction counts as said.
+      let said = text
+      if (outcome.kind === 'did-you-mean') {
+        const { from, to } = outcome.suggestion
+        const ok = await confirm({
+          title: translate('board.plan.didYouMeanTitle', 'Did you mean {{name}}?', { name: to }),
+          description: translate(
+            'board.plan.didYouMeanBody',
+            'Nothing on the board is called “{{from}}”. Use {{name}} instead?',
+            { from, name: to }
+          ),
+          confirmLabel: translate('board.plan.didYouMeanAction', 'Use {{name}}', { name: to })
+        })
+        if (!ok) {
+          append({ role: 'system', text: translate('board.plan.notSent', 'Nothing was sent.') })
+          return
+        }
+        const fixed = validatePlan(withPlanTarget(outcome.raw, outcome.suggestion), board)
+        if (!fixed.ok) {
+          append({
+            role: 'system',
+            tone: 'error',
+            text: translate('board.plan.rejected', 'I could not make a valid plan: {{reason}}', {
+              reason: fixed.reason
+            })
+          })
+          return
+        }
+        plan = fixed.plan
+        said = `${text} ${to}`
+      }
+      if (!plan) {
+        return
+      }
       if (plan.unsafe) {
         append({
           role: 'system',
@@ -142,7 +178,7 @@ export function useBoardPlanner(input: {
       if (plan.detail) {
         append({ role: 'assistant', text: plan.detail })
       }
-      const concerns = screenPlan(plan, text, board)
+      const concerns = screenPlan(plan, said, board)
       if (concerns.length > 0) {
         const ok = await confirm({
           title: translate('board.plan.confirmTitle', 'Go ahead with this?'),

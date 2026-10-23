@@ -97,16 +97,24 @@ export function targetConsoleNames(target: ResolvedTarget): string[] {
 
 /** Closest console/group name for a near miss ("Reviwer 2" -> "Reviewer 2"), for the app's confirm. */
 export function nearestName(raw: string, board: PlanBoardSnapshot): string | null {
-  const t = normalizeTarget(raw)
   const names = [...board.consoles.map((c) => c.name), ...board.groups.map((g) => g.name)]
-  let best: { name: string; d: number } | null = null
+  return closestName(raw, names)?.name ?? null
+}
+
+/** Closest of `names` within a small edit distance of `raw`, with that distance. */
+export function closestName(
+  raw: string,
+  names: readonly string[]
+): { name: string; distance: number } | null {
+  const t = normalizeTarget(raw)
+  let best: { name: string; distance: number } | null = null
   for (const name of names) {
     const d = editDistance(t, name.toLowerCase())
-    if (d <= Math.max(1, Math.floor(name.length / 4)) && (!best || d < best.d)) {
-      best = { name, d }
+    if (d <= Math.max(1, Math.floor(name.length / 4)) && (!best || d < best.distance)) {
+      best = { name, distance: d }
     }
   }
-  return best?.name ?? null
+  return best
 }
 
 function editDistance(a: string, b: string): number {
