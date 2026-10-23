@@ -1,0 +1,49 @@
+[data-surface='board'] .board-orchestrator-cable {
+  --board-cable-pulse-duration: 3s;
+}
+
+[data-surface='board'] .board-orchestrator-cable[data-working='true'] {
+  --board-cable-pulse-duration: 2.25s;
+}
+
+[data-surface='board'] .board-cable-target-dot {
+  animation: board-cable-dot-pulse var(--board-cable-pulse-duration) ease-in-out infinite;
+}
+
+[data-surface='board'] .board-cable-target-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: board-cable-plug-pulse var(--board-cable-pulse-duration) ease-out infinite;
+}
+
+@keyframes board-cable-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes board-cable-plug-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-surface='board'] .board-cable-target-dot,
+  [data-surface='board'] .board-cable-target-pulse {
+    animation: none;
+  }
+
+  [data-surface='board'] .board-cable-packet {
+    display: none;
+  }
+}

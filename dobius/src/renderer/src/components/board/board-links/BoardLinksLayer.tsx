@@ -19,6 +19,7 @@ import {
   toggleWired
 } from './board-link-geometry'
 import { useBoardLinkMode, type BoardLinkMode } from './board-link-mode'
+import { OrchestratorCables } from './OrchestratorCables'
 
 // Why: above every card (card z grows from 1) so connect-mode clicks never reach a card.
 const TARGET_Z = 1_000_000
@@ -219,30 +220,15 @@ export function BoardLinksLayer({
     return () => window.removeEventListener('keydown', onKey, { capture: true })
   }, [mode])
 
-  const cableColor = 'var(--board-accent)'
   return (
     <>
       <LinkSvg>
-        <defs>
-          <ArrowHead id="board-cable-head" color={cableColor} />
-        </defs>
-        {cables.map((cable) => {
-          const { start, end } = linkEndpoints(cable.from, cable.to)
-          return (
-            <path
-              key={cable.id}
-              d={linkPath(start, end)}
-              fill="none"
-              stroke={cableColor}
-              strokeWidth={2 / zoom}
-              strokeDasharray={`${6 / zoom} ${4 / zoom}`}
-              markerEnd="url(#board-cable-head)"
-              opacity={
-                mode?.kind === 'wire' && mode.orchestratorId === cable.orchestratorId ? 1 : 0.7
-              }
-            />
-          )
-        })}
+        <OrchestratorCables
+          cables={cables}
+          worktreeId={worktreeId}
+          zoom={zoom}
+          emphasizedOrchestratorId={mode?.kind === 'wire' ? mode.orchestratorId : undefined}
+        />
         {arrows.map((arrow) => {
           const style = arrow.connector.style ?? DEFAULT_BOARD_CARD_STYLE
           const color = boardInkCss(style.stroke)

@@ -7,7 +7,13 @@ import { boundsOf, type Rect } from '../cards/card-geometry'
 export const GROUP_FRAME_PADDING = 24
 
 export type BoardPointXY = { x: number; y: number }
-export type BoardCable = { id: string; from: Rect; to: Rect; orchestratorId: string }
+export type BoardCable = {
+  id: string
+  from: Rect
+  to: Rect
+  orchestratorId: string
+  targetTabIds: string[]
+}
 export type BoardArrow = { id: string; from: Rect; to: Rect; connector: BoardConnector }
 
 const center = (r: Rect): BoardPointXY => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })
@@ -77,7 +83,8 @@ export function orchestratorCables(board: Pick<BoardState, 'cards' | 'groups'>):
           id: `${card.id}->group:${group.id}`,
           from: card,
           to: rect,
-          orchestratorId: card.id
+          orchestratorId: card.id,
+          targetTabIds: consoles.flatMap((id) => consoleTabIds(byId.get(id)))
         })
       }
     }
@@ -87,12 +94,17 @@ export function orchestratorCables(board: Pick<BoardState, 'cards' | 'groups'>):
           id: `${card.id}->${id}`,
           from: card,
           to: byId.get(id)!,
-          orchestratorId: card.id
+          orchestratorId: card.id,
+          targetTabIds: consoleTabIds(byId.get(id))
         })
       }
     }
   }
   return cables
+}
+
+function consoleTabIds(card: BoardCard | undefined): string[] {
+  return card?.kind === 'console' ? [card.tabId] : []
 }
 
 export function connectorArrows(board: Pick<BoardState, 'cards' | 'connectors'>): BoardArrow[] {

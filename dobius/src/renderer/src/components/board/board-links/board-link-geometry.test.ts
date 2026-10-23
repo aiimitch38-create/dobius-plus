@@ -58,12 +58,31 @@ describe('orchestratorCables', () => {
     ]
     const cables = orchestratorCables({ cards, groups: [group(['a', 'b'])] })
     expect(cables.map((c) => c.id).sort()).toEqual(['o->c', 'o->group:g'])
+    expect(cables.find((c) => c.id === 'o->group:g')).toMatchObject({
+      to: { x: -24, y: -24, w: 348, h: 148 },
+      targetTabIds: ['t-a', 't-b']
+    })
+    expect(cables.find((c) => c.id === 'o->c')?.targetTabIds).toEqual(['t-c'])
   })
 
   it('falls back to member cables when the group is only partly wired, and skips non-consoles', () => {
     const cards = [orch(['a', 'missing']), consoleCard('a', 0), consoleCard('b', 200)]
-    expect(orchestratorCables({ cards, groups: [group(['a', 'b'])] }).map((c) => c.id)).toEqual([
-      'o->a'
+    const cables = orchestratorCables({ cards, groups: [group(['a', 'b'])] })
+    expect(cables.map((c) => c.id)).toEqual(['o->a'])
+    expect(cables[0].targetTabIds).toEqual(['t-a'])
+  })
+
+  it('keeps each orchestrator scoped to its own live wired consoles', () => {
+    const cards: BoardCard[] = [
+      orch(['a', 'a', 'missing', 'other']),
+      { ...orch(['b']), id: 'other' },
+      consoleCard('a', 0),
+      consoleCard('b', 200)
+    ]
+    const cables = orchestratorCables({ cards, groups: [group(['a', 'b'])] })
+    expect(cables.map((c) => [c.id, c.targetTabIds])).toEqual([
+      ['o->a', ['t-a']],
+      ['other->b', ['t-b']]
     ])
   })
 })
