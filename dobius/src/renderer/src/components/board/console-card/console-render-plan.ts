@@ -5,18 +5,24 @@
 // canvas scales its bitmap (grid still constant; text softer, and mouse
 // selection is only exact at zoom 1).
 
-export const CONSOLE_SETTLE_MS = 150
+import {
+  BOARD_LOD_SETTLE_MS,
+  LOD_ENTER_TEXT_PX,
+  LOD_EXIT_TEXT_PX,
+  nextBoardLod
+} from '../board-canvas/board-lod'
+
+export const CONSOLE_SETTLE_MS = BOARD_LOD_SETTLE_MS
 // Why: below this on-screen glyph size a scaled-down terminal is unreadable,
-// so the card shows a text glance instead. Hysteresis (enter < exit) keeps a
+// so the card shows a miniature instead. Hysteresis (enter < exit) keeps a
 // zoom hovering at the line from thrashing; each switch re-portals the pane.
-export const GLANCE_ENTER_FONT_PX = 6
-export const GLANCE_EXIT_FONT_PX = 6.75
+export const GLANCE_ENTER_FONT_PX = LOD_ENTER_TEXT_PX
+export const GLANCE_EXIT_FONT_PX = LOD_EXIT_TEXT_PX
 /** On-screen body (px) below which even a readable font shows too little terminal. */
 export const GLANCE_ENTER_BODY_PX = { w: 220, h: 120 }
-const GLANCE_EXIT_BODY_FACTOR = 1.1
 const FONT_STEP = 0.5
 
-/** live = the borrowed TerminalPane; glance = status + output tail as plain text. */
+/** live = the borrowed TerminalPane; glance = a static miniature of its screen. */
 export type ConsoleRenderMode = 'live' | 'glance'
 
 export function nextConsoleMode(input: {
@@ -29,28 +35,17 @@ export function nextConsoleMode(input: {
   bodyWidth: number
   bodyHeight: number
 }): ConsoleRenderMode {
-  // Why: never swap mid-gesture; the card just scales visually until it settles.
-  if (input.gesturing) {
-    return input.prev
-  }
-  if (!input.visible) {
-    return 'glance'
-  }
-  const z = input.settledZoom > 0 ? input.settledZoom : 1
-  const leaving = input.prev === 'glance'
-  const minFont = leaving ? GLANCE_EXIT_FONT_PX : GLANCE_ENTER_FONT_PX
-  const bodyFactor = leaving ? GLANCE_EXIT_BODY_FACTOR : 1
-  const tooSmall =
-    input.bodyWidth > 0 &&
-    input.bodyHeight > 0 &&
-    (input.bodyWidth * z < GLANCE_ENTER_BODY_PX.w * bodyFactor ||
-      input.bodyHeight * z < GLANCE_ENTER_BODY_PX.h * bodyFactor)
-  return input.baseFontSize * z < minFont || tooSmall ? 'glance' : 'live'
-}
-
-/** Zoom at which the glance's screen-px text is drawn: counter-scaled, never enlarged past 1:1. */
-export function glanceScale(settledZoom: number): number {
-  return settledZoom > 0 ? Math.min(settledZoom, 1) : 1
+  const lod = nextBoardLod({
+    prev: input.prev === 'live' ? 'full' : 'glance',
+    settledZoom: input.settledZoom,
+    visible: input.visible,
+    gesturing: input.gesturing,
+    textPx: input.baseFontSize,
+    bodyWidth: input.bodyWidth,
+    bodyHeight: input.bodyHeight,
+    minBody: GLANCE_ENTER_BODY_PX
+  })
+  return lod === 'full' ? 'live' : 'glance'
 }
 
 /** Font that keeps the grid constant at this zoom (rounded so tiny zoom steps don't re-raster). */

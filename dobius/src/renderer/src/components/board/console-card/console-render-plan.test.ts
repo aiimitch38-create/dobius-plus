@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   consoleGridPixels,
   consoleHostBox,
-  glanceScale,
   nextConsoleMode,
   shouldRefit,
   zoomedFontSize
@@ -55,14 +54,6 @@ describe('nextConsoleMode', () => {
   it('never switches mid-gesture', () => {
     expect(nextConsoleMode({ ...base, gesturing: true, settledZoom: 0.1 })).toBe('live')
     expect(nextConsoleMode({ ...base, prev: 'glance', gesturing: true })).toBe('glance')
-  })
-})
-
-describe('glanceScale', () => {
-  it('counter-scales the glance to screen px but never enlarges it', () => {
-    expect(glanceScale(0.25)).toBe(0.25)
-    expect(glanceScale(2)).toBe(1)
-    expect(glanceScale(0)).toBe(1)
   })
 })
 

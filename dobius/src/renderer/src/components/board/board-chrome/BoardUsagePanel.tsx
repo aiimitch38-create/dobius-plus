@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react'
+import React, { lazy, Suspense, useEffect } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
@@ -8,7 +8,15 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { Checkbox } from '@/components/ui/checkbox'
 import { BOARD_MENU_CONTENT_CLASS, BOARD_MONO_CLASS } from './board-surface-classes'
+import {
+  detectUsageResets,
+  usageLevel,
+  usageLevelColor,
+  usageWindows,
+  type UsageWindows
+} from './board-usage-levels'
 
 // Why: UsageOverviewPane pulls in the full daily-intensity grid + token-mix
 // model; only the "Tokens" tab needs it, so defer the bundle cost until then.
@@ -21,8 +29,6 @@ type BoardUsagePanelProps = {
   onOpenChange: (open: boolean) => void
   anchor: React.ReactNode
 }
-
-const DANGER_THRESHOLD_PERCENT = 90
 
 // Order fixed so the panel reads the same every time regardless of fetch order.
 const PROVIDER_ORDER: ProviderRateLimits['provider'][] = [
@@ -51,20 +57,27 @@ function RateLimitBar({
   label: string
 }): React.JSX.Element {
   const used = Math.max(0, Math.min(100, rateWindow.usedPercent))
-  const isDanger = used >= DANGER_THRESHOLD_PERCENT
+  const level = usageLevel(used)
+  const color = usageLevelColor(level)
   // Reference usage panel (005-resets…png): bold label + percent, thick bar, mono reset line.
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between text-[13px] font-semibold text-[var(--board-text)]">
         <span>{label}</span>
-        <span className="tabular-nums">{Math.round(used)}%</span>
+        <span
+          className="tabular-nums"
+          data-usage-level={level}
+          style={level === 'normal' ? undefined : { color }}
+        >
+          {Math.round(used)}%
+        </span>
       </div>
       <div className="h-[7px] w-full overflow-hidden rounded-full bg-[var(--board-panel-2)]">
         <div
           className="h-full rounded-full transition-[width]"
           style={{
             width: `${used}%`,
-            backgroundColor: isDanger ? 'var(--board-danger-text)' : 'var(--board-accent)'
+            backgroundColor: color
           }}
         />
       </div>
@@ -123,8 +136,9 @@ function ProviderLimitsBlock({
   )
 }
 
-function LimitsTabContent(): React.JSX.Element {
-  const rateLimits = useAppStore((s) => s.rateLimits)
+type RateLimitsState = ReturnType<typeof useAppStore.getState>['rateLimits']
+
+function providerList(rateLimits: RateLimitsState): ProviderRateLimits[] {
   const byProvider: Record<ProviderRateLimits['provider'], ProviderRateLimits | null> = {
     claude: rateLimits.claude,
     codex: rateLimits.codex,
@@ -133,9 +147,77 @@ function LimitsTabContent(): React.JSX.Element {
     kimi: rateLimits.kimi,
     minimax: rateLimits.minimax
   }
-  const providers = PROVIDER_ORDER.map((p) => byProvider[p]).filter(
-    (p): p is ProviderRateLimits => p !== null
+  return PROVIDER_ORDER.map((p) => byProvider[p]).filter((p): p is ProviderRateLimits => p !== null)
+}
+
+// Why: a short tone in the renderer; the user's notification sound when one is
+// set, otherwise a 0.2 s beep. Nothing leaves the machine.
+function playResetChime(): void {
+  void window.api.notifications
+    .playSound({ force: true })
+    .then((result) => {
+      if (!result.played) {
+        playFallbackBeep()
+      }
+    })
+    .catch(playFallbackBeep)
+}
+
+function playFallbackBeep(): void {
+  try {
+    const audio = new AudioContext()
+    const tone = audio.createOscillator()
+    const gain = audio.createGain()
+    tone.frequency.value = 880
+    gain.gain.setValueAtTime(0.08, audio.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.2)
+    tone.connect(gain).connect(audio.destination)
+    tone.start()
+    tone.stop(audio.currentTime + 0.2)
+    tone.onended = () => void audio.close()
+  } catch (error) {
+    console.warn('[board-usage] reset chime could not play', error)
+  }
+}
+
+/** Chimes once when any provider window resets, if the user turned the chime on. */
+function useUsageResetChime(): void {
+  useEffect(() => {
+    let last: UsageWindows = usageWindows(providerList(useAppStore.getState().rateLimits))
+    return useAppStore.subscribe((state, prev) => {
+      if (state.rateLimits === prev.rateLimits) {
+        return
+      }
+      const next = usageWindows(providerList(state.rateLimits))
+      // Windows missing from this reading (fetching, error) keep their last value.
+      const merged = { ...last, ...next }
+      const resets = detectUsageResets(last, next)
+      last = merged
+      if (resets.length > 0 && state.settings?.boardUsageResetChime === true) {
+        playResetChime()
+      }
+    })
+  }, [])
+}
+
+function ResetChimeToggle(): React.JSX.Element {
+  const enabled = useAppStore((s) => s.settings?.boardUsageResetChime === true)
+  return (
+    <label className="flex items-center gap-2 text-[12px] text-[var(--board-text)]">
+      <Checkbox
+        checked={enabled}
+        onCheckedChange={(checked) => {
+          void useAppStore.getState().updateSettings({ boardUsageResetChime: checked === true })
+        }}
+      />
+      {translate('board.usagePanel.resetChime', 'Chime when a usage window resets')}
+    </label>
   )
+}
+
+function LimitsTabContent(): React.JSX.Element {
+  const rateLimits = useAppStore((s) => s.rateLimits)
+  const providers = providerList(rateLimits)
 
   return (
     <div className="space-y-3 pt-3">
@@ -165,6 +247,7 @@ function LimitsTabContent(): React.JSX.Element {
           ))}
         </div>
       )}
+      <ResetChimeToggle />
       <p className="text-[11px] text-[var(--board-text-muted)]">
         {translate(
           'board.usagePanel.caveat',
@@ -180,6 +263,7 @@ export function BoardUsagePanel({
   onOpenChange,
   anchor
 }: BoardUsagePanelProps): React.JSX.Element {
+  useUsageResetChime()
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{anchor}</PopoverTrigger>

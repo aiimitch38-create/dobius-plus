@@ -2361,6 +2361,8 @@ export type TuiAgent =
   | 'grok' // xAI Grok CLI
   | 'devin' // Devin CLI
   | 'ante' // Ante (Antigma Labs)
+  | 'trae' // Trae Agent CLI
+  | 'prime-agent' // Prime Agent
 
 export type TaskViewPresetId = 'all' | 'issues' | 'review' | 'my-issues' | 'my-prs' | 'prs'
 
@@ -2603,6 +2605,12 @@ export type GlobalSettings = {
    *  paste with Cmd/Ctrl+V without an intervening Cmd/Ctrl+Shift+C. Defaults
    *  to false so existing users keep the explicit-copy behavior. */
   terminalClipboardOnSelect: boolean
+  /** Why: a multi-line paste into a plain shell runs every line. Ask first
+   *  (Paste / Paste as one line / Cancel) unless the terminal uses bracketed
+   *  paste. Optional; undefined means on. */
+  terminalPasteConfirm?: boolean
+  /** Board usage panel: play a short sound when a provider usage window resets. Off when unset. */
+  boardUsageResetChime?: boolean
   /** Why: lets TUIs like tmux, nvim, and fzf copy to the system clipboard via
    *  the OSC 52 escape sequence — essential for SSH-hosted workflows where
    *  the terminal is the only bridge to the local clipboard. Defaults to

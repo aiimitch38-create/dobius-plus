@@ -104,7 +104,6 @@ import {
   updateWebRuntimePaneLayout
 } from '@/runtime/web-runtime-session'
 import { isPrimarySelectionEnabled, readPrimarySelectionText } from '@/lib/primary-selection'
-import { APP_MENU_PASTE_EVENT } from '@/lib/app-menu-paste'
 import { WORKSPACE_FILE_PATH_MIME, WORKSPACE_FILE_PATHS_MIME } from '@/lib/workspace-file-drag'
 import { isTerminalSessionStateSaveFailure } from '../../../../shared/terminal-session-state-save-failure'
 import { isTerminalZeroDimensionsDiagnostic } from '../../../../shared/terminal-zero-dimensions-diagnostic'
@@ -131,6 +130,11 @@ import {
   TerminalQuickCommandDialog
 } from '@/components/terminal-quick-commands/TerminalQuickCommandDialog'
 import { keybindingMatchesAction } from '../../../../shared/keybindings'
+import { confirmTerminalPaste } from './terminal-paste-confirm-host'
+import {
+  installTerminalPanePasteListeners,
+  type TerminalPaneClipboardSource
+} from './terminal-pane-paste-listeners'
 import { pasteTerminalClipboard } from './terminal-clipboard-paste'
 import { scheduleImagePasteWebglAtlasRecovery } from './terminal-webgl-atlas-recovery'
 import { restoreTerminalFitToDesktop, restoreTerminalFitsToDesktop } from './terminal-fit-restore'
@@ -1938,10 +1942,11 @@ export default function TerminalPane({
   // triggers (Edit > Paste menu, programmatic paste, etc.) and also bypasses
   // Chromium's native clipboard pipeline that can cause concurrent clipboard
   // reads by CLI tools (e.g. Codex checking for images) to fail intermittently.
+  //
+  // Not gated on isActive: a Board console card or a visible split pane can
+  // hold keyboard focus while another tab is "active"; without these listeners
+  // its paste bypassed the confirmation entirely.
   useEffect(() => {
-    if (!isActive) {
-      return
-    }
     const container = containerRef.current
     if (!container) {
       return
@@ -1973,9 +1978,20 @@ export default function TerminalPane({
       pane: ManagedPane,
       source: TerminalPasteSource,
       activeElementAtDispatch: Element | null,
-      text: string,
+      rawText: string,
       options?: TerminalPasteTextOptions
-    ): Promise<void> => {
+    ): Promise<boolean> => {
+      const text = await confirmTerminalPaste({
+        text: rawText,
+        source,
+        options,
+        bracketedPasteMode: pane.terminal.modes.bracketedPasteMode,
+        tabId,
+        restoreFocus: activeElementAtDispatch
+      })
+      if (text === null) {
+        return false
+      }
       const connectionId = getConnectionId(worktreeId) ?? null
       const transport = paneTransportsRef.current.get(pane.id)
       const ptyId = transport?.getPtyId() ?? null
@@ -2020,7 +2036,7 @@ export default function TerminalPane({
       })
       if (execution.status !== 'pasted') {
         setTerminalError(formatTerminalPasteExecutionError(execution.reason))
-        return
+        return false
       }
       if (text) {
         recordTerminalUserInputForLeaf(tabId, pane.leafId)
@@ -2028,19 +2044,24 @@ export default function TerminalPane({
       if (options?.recoverImagePasteWebglAtlas) {
         scheduleImagePasteWebglAtlasRecovery()
       }
+      return true
     }
 
     const pasteFromClipboard = (
-      pane: ManagedPane,
-      source: Extract<TerminalPasteSource, 'keyboard' | 'paste-event'>
-    ): void => {
+      source: TerminalPaneClipboardSource,
+      activeElementAtDispatch: Element | null
+    ): Promise<unknown> => {
+      const manager = managerRef.current
+      const pane = manager?.getActivePane() ?? manager?.getPanes()[0]
+      if (!pane) {
+        return Promise.resolve()
+      }
       const connectionId = getConnectionId(worktreeId) ?? null
       const runtimeEnvironmentId = getRuntimeEnvironmentIdForWorktree(
         useAppStore.getState(),
         worktreeId
       )
-      const activeElementAtDispatch = document.activeElement
-      void pasteTerminalClipboard({
+      return pasteTerminalClipboard({
         readClipboardText: window.api.ui.readClipboardText,
         saveClipboardImageAsTempFile: window.api.ui.saveClipboardImageAsTempFile,
         connectionId,
@@ -2056,154 +2077,23 @@ export default function TerminalPane({
       })
     }
 
-    let suppressNextNativePaste = false
-    let pasteSuppressionTimerId: number | null = null
-    const shouldSuppressNativePaste = (e: KeyboardEvent): boolean => {
-      const key = e.key.toLowerCase()
-      return (
-        (isMac && key === 'v' && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) ||
-        (!isMac && key === 'v' && e.ctrlKey && !e.metaKey && !e.altKey) ||
-        (!isMac && e.key === 'Insert' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey)
-      )
-    }
-    const onKeyPaste = (e: KeyboardEvent): void => {
-      const target = e.target
-      if (
-        (target instanceof Element && target.closest('[data-terminal-search-root]')) ||
-        isInsideNativeChatRoot(target)
-      ) {
-        return
-      }
-      const matchesPaste = keybindingMatchesAction(
-        'terminal.paste',
-        e,
-        shortcutPlatform,
-        keybindings,
-        { context: 'terminal' }
-      )
-      if (!matchesPaste) {
-        if (shouldSuppressNativePaste(e)) {
-          // Why: bare Ctrl+V is readline's quote-insert on Windows/Linux. If
-          // Chromium turns it into a native paste event, suppress that follow-up
-          // paste while still letting xterm receive the original keydown.
-          suppressNextNativePaste = true
-          if (pasteSuppressionTimerId !== null) {
-            window.clearTimeout(pasteSuppressionTimerId)
-          }
-          pasteSuppressionTimerId = window.setTimeout(() => {
-            pasteSuppressionTimerId = null
-            suppressNextNativePaste = false
-          }, 0)
-        }
-        return
-      }
-      e.preventDefault()
-      e.stopPropagation()
-      const manager = managerRef.current
-      if (!manager) {
-        return
-      }
-      const pane = manager.getActivePane() ?? manager.getPanes()[0]
-      if (!pane) {
-        return
-      }
-      suppressNextNativePaste = true
-      if (pasteSuppressionTimerId !== null) {
-        window.clearTimeout(pasteSuppressionTimerId)
-      }
-      pasteSuppressionTimerId = window.setTimeout(() => {
-        pasteSuppressionTimerId = null
-        suppressNextNativePaste = false
-      }, 0)
-      pasteFromClipboard(pane, 'keyboard')
-    }
-
-    // Fallback: handle paste events triggered by non-keyboard sources
-    // (Edit > Paste menu, programmatic paste, etc.).
-    const onPaste = (e: ClipboardEvent): void => {
-      const target = e.target
-      if (
-        (target instanceof Element && target.closest('[data-terminal-search-root]')) ||
-        isInsideNativeChatRoot(target)
-      ) {
-        return
-      }
-      if (suppressNextNativePaste) {
-        suppressNextNativePaste = false
-        if (pasteSuppressionTimerId !== null) {
-          window.clearTimeout(pasteSuppressionTimerId)
-          pasteSuppressionTimerId = null
-        }
-        e.preventDefault()
-        e.stopPropagation()
-        return
-      }
-      e.preventDefault()
-      e.stopPropagation()
-      const manager = managerRef.current
-      if (!manager) {
-        return
-      }
-      const pane = manager.getActivePane() ?? manager.getPanes()[0]
-      if (!pane) {
-        return
-      }
-      pasteFromClipboard(pane, 'paste-event')
-    }
-
-    const onAppMenuPaste = (event: Event): void => {
-      const activeElementAtDispatch = document.activeElement
-      if (
-        !(activeElementAtDispatch instanceof Element) ||
-        !container.contains(activeElementAtDispatch) ||
-        activeElementAtDispatch.closest('[data-terminal-search-root]') ||
-        isInsideNativeChatRoot(activeElementAtDispatch)
-      ) {
-        return
-      }
-      event.preventDefault()
-      event.stopPropagation()
-      const manager = managerRef.current
-      if (!manager) {
-        return
-      }
-      const pane = manager.getActivePane() ?? manager.getPanes()[0]
-      if (!pane) {
-        return
-      }
-      const connectionId = getConnectionId(worktreeId) ?? null
-      const runtimeEnvironmentId = getRuntimeEnvironmentIdForWorktree(
-        useAppStore.getState(),
-        worktreeId
-      )
-      void pasteTerminalClipboard({
-        readClipboardText: window.api.ui.readClipboardText,
-        saveClipboardImageAsTempFile: window.api.ui.saveClipboardImageAsTempFile,
-        connectionId,
-        runtimeEnvironmentId,
-        forceBracketedMultilineTextPaste,
-        pasteText: (text, options) =>
-          executePanePasteText(pane, 'app-menu', activeElementAtDispatch, text, options),
-        onTextPasteError: () =>
-          setTerminalError('Paste failed: clipboard text is too large for a safe terminal paste.'),
-        onImagePasteError: (error) => setTerminalError(formatClipboardImagePasteError(error))
-      }).catch(() => {
-        setTerminalError('Paste failed.')
-      })
-    }
-
-    container.addEventListener('keydown', onKeyPaste, { capture: true })
-    container.addEventListener('paste', onPaste, { capture: true })
-    window.addEventListener(APP_MENU_PASTE_EVENT, onAppMenuPaste)
-    return () => {
-      if (pasteSuppressionTimerId !== null) {
-        window.clearTimeout(pasteSuppressionTimerId)
-      }
-      container.removeEventListener('keydown', onKeyPaste, { capture: true })
-      container.removeEventListener('paste', onPaste, { capture: true })
-      window.removeEventListener(APP_MENU_PASTE_EVENT, onAppMenuPaste)
-    }
-  }, [isActive, worktreeId, keybindings, forceBracketedMultilineTextPaste, tabId])
+    return installTerminalPanePasteListeners({
+      container,
+      isMac,
+      matchesPasteChord: (e) =>
+        keybindingMatchesAction('terminal.paste', e, shortcutPlatform, keybindings, {
+          context: 'terminal'
+        }),
+      isForeignTarget: (target) =>
+        (target instanceof Element && target.closest('[data-terminal-search-root]') !== null) ||
+        isInsideNativeChatRoot(target),
+      hasPane: () => {
+        const manager = managerRef.current
+        return Boolean(manager && (manager.getActivePane() ?? manager.getPanes()[0]))
+      },
+      paste: pasteFromClipboard
+    })
+  }, [worktreeId, keybindings, forceBracketedMultilineTextPaste, tabId])
 
   // Why: a click inside the terminal container is a deliberate interaction
   // with the pane — dismiss the attention indicator for this tab and worktree
@@ -2700,8 +2590,18 @@ export default function TerminalPane({
       event.preventDefault()
       event.stopPropagation()
       clickedPane.terminal.focus()
-      void readPrimarySelectionText().then(async (text) => {
-        if (!text) {
+      void readPrimarySelectionText().then(async (selectionText) => {
+        if (!selectionText) {
+          return
+        }
+        const text = await confirmTerminalPaste({
+          text: selectionText,
+          source: 'middle-click',
+          bracketedPasteMode: clickedPane.terminal.modes.bracketedPasteMode,
+          tabId,
+          restoreFocus: clickedPane.terminal.textarea ?? null
+        })
+        if (text === null) {
           return
         }
         const transport = paneTransportsRef.current.get(clickedPane.id)

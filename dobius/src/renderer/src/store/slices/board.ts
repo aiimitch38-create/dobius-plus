@@ -194,7 +194,8 @@ export const createBoardSlice: StateCreator<AppState, [], [], BoardSlice> = (set
               cards: b.cards
                 .filter((c) => !ids.has(c.id))
                 .map((c) =>
-                  c.kind === 'orchestrator' && c.wiredCardIds.some((id) => ids.has(id))
+                  (c.kind === 'orchestrator' || c.kind === 'goal') &&
+                  c.wiredCardIds.some((id) => ids.has(id))
                     ? { ...c, wiredCardIds: c.wiredCardIds.filter((id) => !ids.has(id)) }
                     : c
                 ),

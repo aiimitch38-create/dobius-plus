@@ -1,3 +1,4 @@
+import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
 import type {
   RuntimeFileOpenNotification,
   RuntimeDiffOpenNotification
@@ -465,6 +466,7 @@ import type {
   AutomationPrecheckResult,
   AutomationUpdateInput
 } from '../shared/automations-types'
+import type { GoalDriftJudgeInput, GoalDriftVerdict } from '../shared/board-goal-drift'
 import type {
   Destination,
   DestinationSaveInput,
@@ -715,6 +717,8 @@ export type ExportApi = {
   htmlToPdf: (args: {
     html: string
     title: string
+    pageSize?: 'Letter' | 'A4'
+    pageNumbers?: boolean
   }) => Promise<
     { success: true; filePath: string } | { success: false; cancelled?: boolean; error?: string }
   >
@@ -2279,6 +2283,11 @@ export type PreloadApi = {
     read: (filePath: string) => Promise<KnowledgeReadResult>
     onChanged: (callback: () => void) => () => void
   }
+  boardSnapshots: {
+    list: (args: { worktreeId: string }) => Promise<BoardSnapshotMeta[]>
+    read: (args: { worktreeId: string; id: string }) => Promise<BoardSnapshotFile | null>
+    capture: (args: { worktreeId: string; reason: 'close' | 'manual' }) => Promise<boolean>
+  }
   pet: {
     import: () => Promise<CustomPet | null>
     importPetBundle: () => Promise<CustomPet | null>
@@ -3124,6 +3133,8 @@ export type PreloadApi = {
     snapshotWorkspaceName: (args: { workspaceId: string; displayName: string }) => Promise<number>
     rendererReady: () => Promise<void>
     boardVisible: (args: { worktreeId: string; visible: boolean }) => Promise<void>
+    /** Board goal card drift check through the read-only loop goal judge. */
+    goalDriftJudge: (input: GoalDriftJudgeInput) => Promise<GoalDriftVerdict>
     onDispatchRequested: (callback: (request: AutomationDispatchRequest) => void) => () => void
   }
   destinations: {

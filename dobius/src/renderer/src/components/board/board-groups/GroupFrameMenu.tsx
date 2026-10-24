@@ -11,6 +11,7 @@ import {
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { getBoard, type BoardGroup } from '@/store/slices/board'
+import { focusBoardGroup } from '../board-canvas/board-camera-focus'
 import {
   deleteBoardGroupAndConsoles,
   groupAddress,
@@ -59,6 +60,9 @@ export function GroupFrameMenu({
         <DropdownMenuLabel className="font-mono text-[11px] text-muted-foreground">
           {groupAddress(group.name)}
         </DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => focusBoardGroup(worktreeId, group.id)}>
+          {translate('board.group.focus', 'Focus group')}
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => ungroupBoardGroup(worktreeId, group.id)}>
           {translate('board.group.ungroup', 'Ungroup')}
         </DropdownMenuItem>

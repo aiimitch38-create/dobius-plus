@@ -14,7 +14,11 @@ import {
   type Raw
 } from './board-card-sanitize'
 
-export { BOARD_IMAGE_SRC_MAX_LENGTH, isPersistableImageSrc } from './board-card-sanitize'
+export {
+  BOARD_IMAGE_SRC_MAX_LENGTH,
+  DEFAULT_GOAL_REMINDERS,
+  isPersistableImageSrc
+} from './board-card-sanitize'
 
 export type BoardTool =
   | 'select'
@@ -35,6 +39,15 @@ export type BoardChecklistItem = { id: string; text: string; done: boolean }
 export type BoardKanbanColumn = { id: string; title: string; items: { id: string; text: string }[] }
 // Why: date is a local YYYY-MM-DD key so events don't shift across time zones.
 export type BoardCalendarEvent = { id: string; date: string; title: string }
+// Goal card: the main goal its wired agents are reminded of (board-goal/*).
+export type BoardGoalCriterion = { id: string; text: string; done: boolean; evidence?: string }
+export type BoardGoalDont = { id: string; text: string }
+/** everyTurns: remind after this many completed turns; 0 = off. */
+export type BoardGoalReminders = {
+  afterCompaction: boolean
+  everyTurns: number
+  onNewTask: boolean
+}
 
 export type BoardCardBase = {
   id: string
@@ -84,6 +97,17 @@ export type BoardCard = BoardCardBase &
     | { kind: 'orchestrator'; name: string; wiredCardIds: string[]; teamAgent?: string }
     // Why: wired to console cards and/or group ids; Push sends the repo's active memory to them.
     | { kind: 'memory'; wiredCardIds: string[] }
+    // Why: wired to consoles, orchestrators and/or groups; reminders reach every console behind them.
+    | {
+        kind: 'goal'
+        goal: string
+        criteria: BoardGoalCriterion[]
+        dont: BoardGoalDont[]
+        reminders: BoardGoalReminders
+        /** Ask the read-only goal judge whether each finished report serves the goal. */
+        driftCheck: boolean
+        wiredCardIds: string[]
+      }
     | { kind: 'skill'; skillName: string; args: string }
     | { kind: 'branches' }
   )

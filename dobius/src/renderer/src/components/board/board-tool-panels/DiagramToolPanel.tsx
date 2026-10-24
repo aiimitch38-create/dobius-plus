@@ -3,6 +3,7 @@ import {
   Boxes,
   Download,
   GitFork,
+  ImageDown,
   Layers,
   Loader2,
   RefreshCcw,
@@ -18,12 +19,12 @@ import { getBoard } from '@/store/slices/board'
 import { notePushTargets } from '../cards/note-push'
 import {
   drawStarterDiagram,
-  exportDiagramExcalidraw,
   startDiagramJob,
   stopDiagramJob,
   useDiagramJobs,
   type DiagramJobStatus
 } from '../board-diagrams/diagram-job'
+import { exportDiagramExcalidraw, exportDiagramPng } from '../board-diagrams/diagram-export'
 import {
   DIAGRAM_TEMPLATES,
   diagramTemplateLabel,
@@ -46,6 +47,17 @@ const PROJECT_TEMPLATES = DIAGRAM_TEMPLATES.filter(
   (t): t is Exclude<DiagramTemplateId, 'custom'> => t !== 'custom'
 )
 const EFFORTS: readonly DiagramEffort[] = ['quick', 'balanced', 'thorough']
+
+const EXPORT_BUTTON =
+  'flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-[var(--board-panel-border)] text-[12px] font-medium text-[var(--board-text)] hover:bg-[var(--board-panel-2)]'
+
+function exportErrorToast(error: unknown): void {
+  toast.error(
+    translate('board.diagram.exportFailed', 'Couldn’t export the file: {{error}}', {
+      error: error instanceof Error ? error.message : String(error)
+    })
+  )
+}
 
 const TILE =
   'flex h-9 items-center gap-2 rounded-[10px] bg-[var(--board-panel-2)] px-2.5 text-left text-[12px] text-[var(--board-text)] hover:bg-[var(--board-accent-tint)] disabled:opacity-40'
@@ -100,6 +112,42 @@ function statusText(status: DiagramJobStatus, nodes: number, edges: number): str
   }
 }
 
+/** Export buttons for the board's diagram: the latest drawing (agent or starter), else every shape. */
+function DiagramExportRow({ worktreeId }: { worktreeId: string }): React.JSX.Element {
+  return (
+    <div className="flex gap-1.5">
+      <button
+        type="button"
+        onClick={() =>
+          void exportDiagramExcalidraw(worktreeId).then(
+            (path) =>
+              toast.success(translate('board.diagram.exported', 'Saved {{path}}', { path })),
+            exportErrorToast
+          )
+        }
+        className={EXPORT_BUTTON}
+      >
+        <Download className="size-3.5" />
+        {translate('board.diagram.exportExcalidraw', 'Export as Excalidraw')}
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          void exportDiagramPng(worktreeId).then((path) => {
+            if (path) {
+              toast.success(translate('board.diagram.exported', 'Saved {{path}}', { path }))
+            }
+          }, exportErrorToast)
+        }
+        className={EXPORT_BUTTON}
+      >
+        <ImageDown className="size-3.5" />
+        {translate('board.diagram.exportPng', 'Export as PNG')}
+      </button>
+    </div>
+  )
+}
+
 /** Diagrams tool: an agent in this workspace draws from your project, or drop a starter. */
 export function DiagramToolPanel({ worktreeId }: { worktreeId: string }): React.JSX.Element {
   const targets = notePushTargets(useAppStore((s) => getBoard(s, worktreeId)))
@@ -109,6 +157,9 @@ export function DiagramToolPanel({ worktreeId }: { worktreeId: string }): React.
   const [effort, setEffort] = useState<DiagramEffort>('balanced')
   const [tabId, setTabId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const hasShapes = useAppStore((s) =>
+    getBoard(s, worktreeId).cards.some((c) => c.kind === 'shape')
+  )
   const target = targets.find((t) => t.tabId === tabId) ?? targets[0] ?? null
   const running = job?.status === 'waiting' || job?.status === 'drawing'
   const canGenerate = Boolean(target) && !busy && !running
@@ -247,33 +298,10 @@ export function DiagramToolPanel({ worktreeId }: { worktreeId: string }): React.
               <Square className="size-3.5" />
               {translate('board.diagram.stop', 'Stop (keep what’s drawn)')}
             </button>
-          ) : job.nodeCount > 0 ? (
-            <button
-              type="button"
-              onClick={() =>
-                void exportDiagramExcalidraw().then(
-                  (path) =>
-                    toast.success(translate('board.diagram.exported', 'Saved {{path}}', { path })),
-                  (error: unknown) =>
-                    toast.error(
-                      translate(
-                        'board.diagram.exportFailed',
-                        'Couldn’t export the file: {{error}}',
-                        {
-                          error: error instanceof Error ? error.message : String(error)
-                        }
-                      )
-                    )
-                )
-              }
-              className="flex h-8 items-center justify-center gap-1.5 rounded-full border border-[var(--board-panel-border)] text-[12px] font-medium text-[var(--board-text)] hover:bg-[var(--board-panel-2)]"
-            >
-              <Download className="size-3.5" />
-              {translate('board.diagram.exportExcalidraw', 'Export as Excalidraw')}
-            </button>
           ) : null}
         </div>
       ) : null}
+      {!running && hasShapes ? <DiagramExportRow worktreeId={worktreeId} /> : null}
       <ToolPanelSection title={translate('board.diagram.starters', 'Starter shapes')}>
         <div className="grid grid-cols-2 gap-1.5">
           {DIAGRAM_STARTERS.map((id) => (

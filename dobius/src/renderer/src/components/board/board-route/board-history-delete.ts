@@ -15,7 +15,7 @@ export type BoardRemoval = {
   cards: BoardCard[]
   groups: BoardGroup[]
   connectors: BoardConnector[]
-  /** Orchestrator id -> the wired ids the deletion unwired. */
+  /** Orchestrator or goal card id -> the wired ids the deletion unwired. */
   wiring: Record<string, string[]>
 }
 
@@ -23,7 +23,7 @@ export function boardRemovalOf(before: BoardContent, cardIds: readonly string[])
   const ids = new Set(cardIds)
   const wiring: Record<string, string[]> = {}
   for (const card of before.cards) {
-    if (card.kind === 'orchestrator' && !ids.has(card.id)) {
+    if ((card.kind === 'orchestrator' || card.kind === 'goal') && !ids.has(card.id)) {
       const lost = card.wiredCardIds.filter((id) => ids.has(id))
       if (lost.length > 0) {
         wiring[card.id] = lost
@@ -76,7 +76,7 @@ export function restoreBoardRemoval(worktreeId: string, removal: BoardRemoval): 
     const card = getBoard(useAppStore.getState(), worktreeId).cards.find(
       (c) => c.id === orchestratorId
     )
-    if (card?.kind === 'orchestrator') {
+    if (card?.kind === 'orchestrator' || card?.kind === 'goal') {
       const wired = [...card.wiredCardIds, ...lost.filter((id) => back.has(id))]
       state.updateCard(worktreeId, orchestratorId, { wiredCardIds: [...new Set(wired)] })
     }

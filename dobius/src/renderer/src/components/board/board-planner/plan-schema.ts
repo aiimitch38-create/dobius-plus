@@ -38,7 +38,7 @@ export type PlanTool = (typeof PLAN_TOOLS)[number]
 export const PLAN_THEMES = ['light', 'dark', 'system'] as const
 export type PlanTheme = (typeof PLAN_THEMES)[number]
 
-export const PLAN_GIT = ['push', 'commit', 'pull'] as const
+export const PLAN_GIT = ['push', 'commit', 'commit_push', 'pull'] as const
 export type PlanGit = (typeof PLAN_GIT)[number]
 
 export const PLAN_ROLES = [
@@ -88,7 +88,15 @@ export type PlanStep =
     }
   | { kind: 'handoff'; cli: string; target: string | null }
   | { kind: 'status' | 'report' | 'cancel' }
-  | { kind: 'loop'; text: string; intervalMinutes: number }
+  | {
+      kind: 'loop'
+      text: string
+      intervalMinutes: number
+      /** Console, group or "all"; null = every console on the board. */
+      target: string | null
+      /** Plain check command; the loop stops once it exits 0. */
+      stopCommand: string | null
+    }
   | { kind: 'kill_group' | 'dissolve_group'; target: string }
   | { kind: 'insert_markdown'; path: string }
   | { kind: 'create_group'; target: string; text: string }

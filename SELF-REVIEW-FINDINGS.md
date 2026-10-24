@@ -1,54 +1,10 @@
-# Self-Review Findings — Orchestrator Build
+# Self-Review Findings — round 4 (2.0.14)
 
-**Branch:** `build/orchestrator`
-**Review Date:** 2026-02-23
+Scope: uncommitted diff on top of d06e5e0d (Lanes A–D). External Codex review skipped (account usage limit; user approved skipping).
 
-## Findings
+## Subagent 1: Code Reviewer
+- [x] No high-confidence issues. Verified: git commands only after confirm (structured args, no shell injection), loops never widen target, workspace close always shows Classic delete dialog, paste confirm awaited (no drop/double paste), snapshot ids regex-validated (no traversal) + atomic writes + archive never pruned + restore keeps every live console, skill writes name-validated and create-if-absent, PDF export escaped with default-src 'none' CSP. Verdict: GO.
 
-### 1. [HIGH] Shell injection via user description in claude -p flag
-- **File:** `src/components/Dashboard/Orchestrator/OrchestratorView.jsx` line 123
-- **Issue:** User description passed to `-p` flag with only quote/backtick escaping. Shell metacharacters like `$(cmd)` or `${var}` still evaluate.
-- **Fix:** Write description to temp file, use `cat` to pipe it or use a safer approach.
-- [x] Fixed
-
-### 2. [HIGH] Dead code: empty forEach loop in ProjectView
-- **File:** `src/components/Project/ProjectView.jsx` lines 144-146
-- **Issue:** Empty forEach loop with misleading comment about avoiding extra renders.
-- **Fix:** Remove dead code.
-- [x] Fixed
-
-### 3. [HIGH] Stale state read after updateSubtaskStatus in ProjectView
-- **File:** `src/components/Project/ProjectView.jsx` lines 147-156
-- **Issue:** updateSubtaskStatus is called, then getState() immediately reads activeOrchestration expecting the update to be reflected. Zustand updates may not be visible.
-- **Fix:** Build updated run locally and use setActiveOrchestration once.
-- [x] Fixed
-
-### 4. [HIGH] Terminal exit listener leaks on decomposition timeout
-- **File:** `src/components/Dashboard/Orchestrator/OrchestratorView.jsx` lines 134-142
-- **Issue:** If decomposition times out (60s), the exit listener is never cleaned up.
-- **Fix:** Cleanup in both success and timeout paths.
-- [x] Fixed
-
-### 5. [HIGH] Stale activeOrchestration read after launchSubtask
-- **File:** `src/components/Dashboard/Orchestrator/OrchestratorView.jsx` line 519
-- **Issue:** Reading activeOrchestration after async launch may get stale data.
-- **Fix:** Use fresh getState() call.
-- [x] Fixed
-
-### 6. [MED] onTerminalData listener not cleaned up if early throw in decomposition
-- **File:** `src/components/Dashboard/Orchestrator/OrchestratorView.jsx` lines 116-144
-- **Issue:** If agentsWriteTempPrompt fails after tab creation but before listener cleanup, listener leaks.
-- **Fix:** Use try-catch-finally for cleanup.
-- [x] Fixed
-
-### 7. [MED] Empty agentId passes config validation
-- **File:** `electron/config-manager.js` line 329
-- **Issue:** Empty string passes validation for subtask agentId, causing silent failures on launch.
-- **Fix:** Validate non-empty.
-- [x] Fixed
-
-### 8. [MED] No user notification when orchestrationSave fails
-- **File:** `src/components/Dashboard/Orchestrator/OrchestratorView.jsx` lines 165-170
-- **Issue:** orchestrationSave failures only log to console, user unaware of data loss.
-- **Fix:** Surface error or show notification.
-- [x] Fixed (added error logging — acceptable for internal state)
+## Subagent 2: Architecture Auditor
+- [x] `dobius/src/renderer/src/web/web-preload-api.ts` — no `boardSnapshots` stub for the web runtime; restore dialog would get `undefined`. Fixed: stub returns [] / null / false.
+- [~] `i18n/locales/{es,ja,ko,zh}.json` missing `board.plan.git.*` — false positive: audit read files before the final `sync:localization-catalog`; verified all 5 locales now have 18 git keys.

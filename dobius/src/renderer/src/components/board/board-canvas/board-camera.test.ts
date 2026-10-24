@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   boardCameraEase,
   boardCameraFit,
+  boardFocusCardViewport,
+  boardFocusFramingFor,
+  boardFocusGroupViewport,
   boardFocusMinZoom,
   boardFocusViewport,
   boardRevealBlockViewport,
@@ -104,5 +107,82 @@ describe('boardRevealBlockViewport (new team block)', () => {
     const v = { x: 0, y: 0, zoom: 0.5 }
     const block = { x: 300, y: 200, w: 1000, h: 600 }
     expect(boardRevealBlockViewport(v, block, SCREEN)).toBe(v)
+  })
+
+  describe('focus framing per card kind', () => {
+    const inSafeArea = (rect: typeof CONSOLE, v: { x: number; y: number; zoom: number }) => {
+      const r = screenRect(rect, v)
+      const i = BOARD_CHROME_INSETS
+      return (
+        r.x >= i.left - 0.5 &&
+        r.y >= i.top - 0.5 &&
+        r.x + r.w <= SCREEN.width - i.right + 0.5 &&
+        r.y + r.h <= SCREEN.height - i.bottom + 0.5
+      )
+    }
+
+    it('classifies every kind', () => {
+      expect(boardFocusFramingFor('console')).toBe('console')
+      for (const k of ['web', 'image', 'shape', 'stroke']) {
+        expect(boardFocusFramingFor(k)).toBe('fit')
+      }
+      for (const k of [
+        'note',
+        'text',
+        'checklist',
+        'kanban',
+        'calendar',
+        'markdown',
+        'orchestrator',
+        'memory',
+        'skill',
+        'branches'
+      ]) {
+        expect(boardFocusFramingFor(k)).toBe('text')
+      }
+    })
+
+    it('a console frames exactly as before', () => {
+      expect(boardFocusCardViewport('console', CONSOLE, SCREEN, 14)).toEqual(
+        boardFocusViewport(CONSOLE, SCREEN, 14)
+      )
+    })
+
+    it('a small note fits but never zooms past 200%', () => {
+      const note = { x: 10, y: 10, width: 220, height: 160 }
+      const v = boardFocusCardViewport('note', note, SCREEN, 14)
+      expect(v.zoom).toBe(2)
+      expect(inSafeArea(note, v)).toBe(true)
+    })
+
+    it('a large text-bearing card stays readable (100%) with its title bar on screen', () => {
+      const kanban = { x: 0, y: 0, width: 2400, height: 1600 }
+      const v = boardFocusCardViewport('kanban', kanban, SCREEN, 14)
+      expect(v.zoom).toBe(1)
+      const r = screenRect(kanban, v)
+      expect(r.x).toBeCloseTo(BOARD_CHROME_INSETS.left + 32)
+      expect(r.y).toBeCloseTo(BOARD_CHROME_INSETS.top + 32)
+    })
+
+    it('a large web tile or image zooms out to fit whole', () => {
+      const web = { x: 0, y: 0, width: 2400, height: 1600 }
+      for (const kind of ['web', 'image']) {
+        const v = boardFocusCardViewport(kind, web, SCREEN, 14)
+        expect(v.zoom).toBeLessThan(1)
+        expect(inSafeArea(web, v)).toBe(true)
+      }
+    })
+
+    it('a group fits its frame at no more than 100%, with 48px padding', () => {
+      const frame = { x: -24, y: -24, width: 1400, height: 900 }
+      const v = boardFocusGroupViewport([frame], SCREEN)
+      expect(v.zoom).toBeLessThan(1)
+      const r = screenRect(frame, v)
+      expect(r.y).toBeGreaterThanOrEqual(BOARD_CHROME_INSETS.top + 48 - 0.5)
+      expect(inSafeArea(frame, v)).toBe(true)
+      expect(boardFocusGroupViewport([{ x: 0, y: 0, width: 100, height: 100 }], SCREEN).zoom).toBe(
+        1
+      )
+    })
   })
 })

@@ -39,7 +39,9 @@ export const TUI_AGENT_DISPLAY_NAMES: Record<TuiAgent, string> = {
   hermes: 'Hermes',
   openclaw: 'OpenClaw',
   copilot: 'GitHub Copilot',
-  grok: 'Grok'
+  grok: 'Grok',
+  trae: 'Trae',
+  'prime-agent': 'Prime Agent'
 }
 
 /** Canonical agent id list derived from the exhaustive display-name record,

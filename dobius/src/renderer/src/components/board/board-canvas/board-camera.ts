@@ -38,6 +38,62 @@ export function boardFocusViewport(
   })
 }
 
+/** Ceiling for a focused non-console card: a small note lands readable, not poster-sized. */
+export const BOARD_FOCUS_CARD_MAX_ZOOM = 2
+/** Padding around a focused group frame, matching Mission Map's group fit. */
+export const BOARD_FOCUS_GROUP_PADDING = 48
+
+/** How focus mode frames one kind of card. */
+export type BoardFocusFraming = 'console' | 'text' | 'fit'
+
+/**
+ * Consoles keep readable terminal text; text-bearing cards land at 100% or
+ * more; images, web tiles, shapes and ink always fit whole.
+ */
+export function boardFocusFramingFor(kind: string): BoardFocusFraming {
+  switch (kind) {
+    case 'console':
+      return 'console'
+    case 'web':
+    case 'image':
+    case 'shape':
+    case 'stroke':
+      return 'fit'
+    default:
+      return 'text'
+  }
+}
+
+/** Viewport that frames one card of `kind` in the safe area (click-to-focus). */
+export function boardFocusCardViewport(
+  kind: string,
+  rect: BoardRect,
+  size: BoardSize,
+  terminalFontSize: number,
+  insets: BoardInsets = BOARD_CHROME_INSETS
+): BoardViewport {
+  const framing = boardFocusFramingFor(kind)
+  if (framing === 'console') {
+    return boardFocusViewport(rect, size, terminalFontSize, insets)
+  }
+  return boardCameraFit([rect], size, {
+    insets,
+    padding: BOARD_FOCUS_PADDING,
+    // Why: the cards' body text is ~13px at 100%, so 100% is the readable floor.
+    minZoom: framing === 'text' ? 1 : 0,
+    maxZoom: BOARD_FOCUS_CARD_MAX_ZOOM
+  })
+}
+
+/** Viewport that fits several cards (a group frame, a Mission Map node) at up to 100%. */
+export function boardFocusGroupViewport(
+  rects: readonly BoardRect[],
+  size: BoardSize,
+  insets: BoardInsets = BOARD_CHROME_INSETS
+): BoardViewport {
+  return boardCameraFit(rects, size, { insets, padding: BOARD_FOCUS_GROUP_PADDING, maxZoom: 1 })
+}
+
 /**
  * Shows a just-placed block (world rect) whole inside the safe area: the
  * smallest pan when it fits at the current zoom, otherwise zoomed out just

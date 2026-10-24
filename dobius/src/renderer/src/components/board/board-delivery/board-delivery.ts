@@ -80,7 +80,13 @@ export function onDeliveryHeld(listener: (tabId: string) => void): () => void {
   return () => holdListeners.delete(listener)
 }
 
-export type OrderLaneInput = { tabId: string; name: string; text: string }
+export type OrderLaneInput = {
+  tabId: string
+  name: string
+  text: string
+  /** Typed before `text` (a goal block) but left out of the order log and mission matching. */
+  prefix?: string
+}
 
 /**
  * Records one order and types each lane's text through the gate. Lanes may get
@@ -112,7 +118,11 @@ export async function deliverOrder(input: {
   const g = boardDeliveryGate()
   const outcomes = await Promise.all(
     input.lanes.map(async (lane) => {
-      const outcome = await g.enqueue({ orderId, tabId: lane.tabId, text: lane.text })
+      const outcome = await g.enqueue({
+        orderId,
+        tabId: lane.tabId,
+        text: `${lane.prefix ?? ''}${lane.text}`
+      })
       const at = Date.now()
       updateOrderLane(orderId, lane.tabId, outcome, at)
       if (outcome.kind === 'sent') {

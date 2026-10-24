@@ -190,7 +190,9 @@ const ICONABLE_AGENT_TYPES: Record<TuiAgent, true> = {
   copilot: true,
   grok: true,
   devin: true,
-  ante: true
+  ante: true,
+  trae: true,
+  'prime-agent': true
 }
 
 export function agentTypeToIconAgent(agentType: AgentType | null | undefined): TuiAgent | null {

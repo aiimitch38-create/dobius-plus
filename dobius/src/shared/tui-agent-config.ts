@@ -345,6 +345,23 @@ export const TUI_AGENT_CONFIG: Record<TuiAgent, TuiAgentConfig> = {
     // `followupPrompt` to the PTY as plain input + Enter after startup (not
     // bracketed paste). Use `draftPrompt` / agent-paste-draft for review-before-send.
     promptInjectionMode: 'stdin-after-start'
+  },
+  trae: {
+    // Why: the Trae Agent CLI installs as `traecli`; older bytedance/trae-agent
+    // checkouts expose `trae-cli`, kept as a detection alias only.
+    detectCmd: 'traecli',
+    detectCmdAliases: ['trae-cli'],
+    launchCmd: 'traecli',
+    expectedProcess: 'traecli',
+    // Why: no verified prompt flag that keeps the session interactive, so the
+    // bare TUI starts and Dobius types the prompt after startup.
+    promptInjectionMode: 'stdin-after-start'
+  },
+  'prime-agent': {
+    detectCmd: 'prime-agent',
+    launchCmd: 'prime-agent',
+    expectedProcess: 'prime-agent',
+    promptInjectionMode: 'stdin-after-start'
   }
 }
 

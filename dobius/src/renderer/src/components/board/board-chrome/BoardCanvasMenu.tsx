@@ -7,6 +7,7 @@ import {
   CopyPlus,
   GitBranch,
   Globe,
+  History,
   Image,
   Layers,
   ListChecks,
@@ -15,6 +16,7 @@ import {
   Search,
   Sparkle,
   Sparkles,
+  Target,
   Trash2,
   Users,
   Workflow
@@ -52,12 +54,14 @@ export type BoardCanvasMenuAction =
   | 'calendar'
   | 'shape'
   | 'memory'
+  | 'goal'
   | 'skill'
   | 'branches'
   | 'missionMap'
   | 'selectAll'
   | 'fit'
   | 'zoom100'
+  | 'restoreSnapshot'
 
 type BoardCanvasMenuProps = {
   /** Canvas-local screen point of the right-click, or null when closed. */
@@ -166,6 +170,11 @@ export function BoardCanvasMenu({
       action: 'zoom100',
       icon: <Search />,
       label: translate('board.canvasMenu.zoom100', 'Zoom to 100%')
+    },
+    {
+      action: 'restoreSnapshot',
+      icon: <History />,
+      label: translate('board.canvasMenu.restoreSnapshot', 'Restore a snapshot…')
     }
   ]
 
@@ -212,6 +221,11 @@ export function BoardCanvasMenu({
           action: 'memory',
           icon: <Brain />,
           label: translate('board.canvasMenu.memory', 'Insert memory')
+        })}
+        {row({
+          action: 'goal',
+          icon: <Target />,
+          label: translate('board.canvasMenu.goal', 'Insert goal card')
         })}
         {row({
           action: 'skill',

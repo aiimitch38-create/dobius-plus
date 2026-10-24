@@ -5,6 +5,7 @@ import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { translate } from '@/i18n/i18n'
+import { presetMetaLine } from './preset-meta'
 import { cn } from '@/lib/utils'
 import { getRepoIdFromWorktreeId } from '../../../../../shared/worktree-id'
 import type { BoardPreset } from './board-preset'
@@ -137,13 +138,6 @@ function PresetTile({
   )
 }
 
-function metaLine(consoles: number, groups: number): string {
-  return translate('board.presets.meta', '{{consoles}} consoles · {{groups}} groups', {
-    consoles,
-    groups
-  })
-}
-
 function Section({
   title,
   subtitle,
@@ -253,7 +247,7 @@ export function PresetsStudio({
     <PresetTile
       key={preset.id}
       name={preset.name}
-      meta={metaLine(presetConsoleCount(preset), preset.lanes.length)}
+      meta={presetMetaLine(presetConsoleCount(preset), preset.lanes.length)}
       model={catalogDiagram(preset)}
       selected={selection.kind === 'catalog' && selection.preset.id === preset.id}
       onSelect={() => select({ kind: 'catalog', preset })}
@@ -335,7 +329,7 @@ export function PresetsStudio({
                 <PresetTile
                   key={preset.id}
                   name={preset.name}
-                  meta={metaLine(
+                  meta={presetMetaLine(
                     preset.cards.filter((c) => c.kind === 'console').length,
                     preset.groups.length
                   )}

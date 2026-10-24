@@ -8,6 +8,7 @@ export type BoardInsertKind =
   | 'kanban'
   | 'calendar'
   | 'orchestrator'
+  | 'goal'
   | 'code'
   | 'docs'
   | 'generate-doc'

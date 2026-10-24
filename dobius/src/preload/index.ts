@@ -1,3 +1,4 @@
+import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
 import type {
   RuntimeFileOpenNotification,
   RuntimeDiffOpenNotification
@@ -206,6 +207,7 @@ import type {
   AutomationPrecheckResult,
   AutomationUpdateInput
 } from '../shared/automations-types'
+import type { GoalDriftJudgeInput, GoalDriftVerdict } from '../shared/board-goal-drift'
 import type {
   Destination,
   DestinationSaveInput,
@@ -1268,6 +1270,8 @@ const api = {
     htmlToPdf: (args: {
       html: string
       title: string
+      pageSize?: 'Letter' | 'A4'
+      pageNumbers?: boolean
     }): Promise<
       { success: true; filePath: string } | { success: false; cancelled?: boolean; error?: string }
     > => ipcRenderer.invoke('export:html-to-pdf', args)
@@ -2307,6 +2311,15 @@ const api = {
       return () => ipcRenderer.removeListener('knowledge:changed', listener)
     }
   },
+
+  boardSnapshots: {
+    list: (args: { worktreeId: string }): Promise<BoardSnapshotMeta[]> =>
+      ipcRenderer.invoke('boardSnapshots:list', args),
+    read: (args: { worktreeId: string; id: string }): Promise<BoardSnapshotFile | null> =>
+      ipcRenderer.invoke('boardSnapshots:read', args),
+    capture: (args: { worktreeId: string; reason: 'close' | 'manual' }): Promise<boolean> =>
+      ipcRenderer.invoke('boardSnapshots:capture', args)
+  } satisfies PreloadApi['boardSnapshots'],
 
   pet: {
     import: (): Promise<CustomPet | null> => ipcRenderer.invoke('pet:import'),
@@ -4268,6 +4281,8 @@ const api = {
     rendererReady: (): Promise<void> => ipcRenderer.invoke('automations:rendererReady'),
     boardVisible: (args: { worktreeId: string; visible: boolean }): Promise<void> =>
       ipcRenderer.invoke('automations:boardVisible', args),
+    goalDriftJudge: (input: GoalDriftJudgeInput): Promise<GoalDriftVerdict> =>
+      ipcRenderer.invoke('automations:goalDriftJudge', input),
     onDispatchRequested: (callback: (request: AutomationDispatchRequest) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, request: AutomationDispatchRequest) =>
         callback(request)

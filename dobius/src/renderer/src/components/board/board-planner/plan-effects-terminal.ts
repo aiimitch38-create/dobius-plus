@@ -1,6 +1,7 @@
 import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
+import { getBoard } from '@/store/slices/board'
 import {
   boardDeliveryGate,
   consoleDeliveryState,
@@ -9,24 +10,23 @@ import {
 import { latestOrder } from '../board-delivery/board-orders'
 import { consoleByName, restartConsole } from '../board-delivery/console-lifecycle'
 import { pauseResultText, setConsolesPaused } from '../board-delivery/pause-consoles'
-import type { PlanEffects, StepResult } from './plan-execute'
+import type { PlanConfirm } from './plan-effects-board'
+import type { PlanEffects } from './plan-execute'
+import { createPlannedLoop } from './plan-loop-create'
+import { planLoop, plannedLoopSummary } from './plan-loop'
 import { forwardResults, handoffTask } from '../board-handoff/forward-handoff-effects'
+import { withGoalPrefix } from '../board-goal/goal-reminders'
 
 type TerminalEffects = Pick<
   PlanEffects,
   'deliver' | 'forward' | 'handoff' | 'lifecycle' | 'cancelLatest' | 'report' | 'loop'
 >
 
-const notBuilt = (what: string): StepResult => ({
-  ok: false,
-  text: translate('board.plan.notBuilt', '{{what}} is not available on the Board yet.', { what })
-})
-
 function consolesNamed(worktreeId: string, names: readonly string[]) {
   return names.flatMap((n) => consoleByName(worktreeId, n) ?? [])
 }
 
-export function terminalEffects(worktreeId: string): TerminalEffects {
+export function terminalEffects(worktreeId: string, confirm: PlanConfirm): TerminalEffects {
   return {
     deliver: async (names, text) => {
       const lanes = consolesNamed(worktreeId, names).map((c) => ({
@@ -37,7 +37,8 @@ export function terminalEffects(worktreeId: string): TerminalEffects {
       if (lanes.length === 0) {
         return { ok: false, text: translate('board.delivery.nobody', 'No console to send to.') }
       }
-      const result = await deliverOrder({ worktreeId, summary: text, lanes })
+      // Why: a planner task is a new task, so wired goal cards ride along in front of it.
+      const result = await deliverOrder({ worktreeId, summary: text, lanes: withGoalPrefix(lanes) })
       return { ok: result.ok, text: result.text }
     },
     forward: (input) => forwardResults(worktreeId, input),
@@ -147,6 +148,30 @@ export function terminalEffects(worktreeId: string): TerminalEffects {
             text: consoles.map((c) => `${c.title}: ${consoleDeliveryState(c.tabId)}`).join(' · ')
           }
     },
-    loop: async () => notBuilt(translate('board.plan.loopFromPlanner', 'Creating a loop by voice'))
+    loop: async (input) => {
+      const planned = planLoop(input, getBoard(useAppStore.getState(), worktreeId))
+      if (!planned.ok) {
+        return { ok: false, text: planned.error }
+      }
+      const ok = await confirm({
+        title: translate('board.plan.loop.confirmTitle', 'Create this loop?'),
+        description: plannedLoopSummary(planned.loop),
+        confirmLabel: translate('board.plan.loop.confirm', 'Create loop')
+      })
+      if (!ok) {
+        return { ok: false, text: translate('board.plan.loop.cancelled', 'No loop was created.') }
+      }
+      try {
+        await createPlannedLoop(worktreeId, planned.loop)
+      } catch (error) {
+        return { ok: false, text: error instanceof Error ? error.message : String(error) }
+      }
+      return {
+        ok: true,
+        text: translate('board.plan.loop.created', 'Created a loop: {{summary}}', {
+          summary: plannedLoopSummary(planned.loop).split('\n')[0]
+        })
+      }
+    }
   }
 }

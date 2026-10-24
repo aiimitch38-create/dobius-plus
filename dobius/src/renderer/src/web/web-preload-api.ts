@@ -678,6 +678,12 @@ function createWebPreloadApi(): Partial<PreloadApi> {
         }),
       onWindowFocused: () => () => {}
     },
+    // Why: board snapshots live in the desktop main process; the web runtime has none to list or restore.
+    boardSnapshots: {
+      list: () => Promise.resolve([]),
+      read: () => Promise.resolve(null),
+      capture: () => Promise.resolve(false)
+    },
     preflight: createPreflightApi(),
     notifications: createNotificationsApi(),
     rateLimits: createRateLimitsApi(),

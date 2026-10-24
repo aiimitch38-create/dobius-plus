@@ -7,15 +7,15 @@ import {
   BOARD_PILL_BUTTON_CLASS
 } from '../board-chrome/board-surface-classes'
 
-/** "◀ Overview · Esc": shown top-center while the camera is focused on a console. */
+/** "◀ Overview · Esc": shown top-center while the camera is focused on a card or group. */
 export function BoardFocusPill({ onExit }: { onExit: () => void }): React.JSX.Element {
   return (
     <button
       type="button"
       onClick={onExit}
       title={translate(
-        'board.focus.overviewHint',
-        'Back to the previous view (Esc, or Shift+Esc while typing in a console)'
+        'board.focus.overviewHintAny',
+        'Back to the previous view (Esc, or Shift+Esc while typing)'
       )}
       className={cn(
         BOARD_FLOATING_PANEL_CLASS,

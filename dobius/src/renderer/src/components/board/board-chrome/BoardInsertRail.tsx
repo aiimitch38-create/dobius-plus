@@ -9,7 +9,8 @@ import {
   ListTodo,
   Network,
   NotebookPen,
-  Repeat2
+  Repeat2,
+  Target
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -84,6 +85,7 @@ export function BoardInsertRail({ onInsert }: BoardInsertRailProps): React.JSX.E
         </DropdownMenuContent>
       </DropdownMenu>
       {item('orchestrator', translate('board.insert.orchestrator', 'Orchestrator'), <Network />)}
+      {item('goal', translate('board.insert.goalCard', 'Goal card'), <Target />)}
       <RailDivider />
       {item('code', translate('board.insert.code', 'Browse code'), <FolderOpen />)}
       {item('docs', translate('board.insert.docs', 'Markdown docs'), <FileText />)}

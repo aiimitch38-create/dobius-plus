@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 
 export type BoardLinkMode =
+  // orchestratorId: the card being wired, an orchestrator or a goal card.
   | { kind: 'wire'; worktreeId: string; orchestratorId: string }
   | { kind: 'arrow'; worktreeId: string; fromCardId: string }
 

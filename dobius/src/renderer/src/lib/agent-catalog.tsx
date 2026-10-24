@@ -288,6 +288,20 @@ export const getAgentCatalog = createLocalizedCatalog((): AgentCatalogEntry[] =>
     cmd: 'openclaw',
     faviconDomain: 'openclaw.ai',
     homepageUrl: 'https://github.com/openclaw/openclaw'
+  },
+  {
+    id: 'trae',
+    label: translate('auto.lib.agent.catalog.trae', 'Trae'),
+    cmd: 'traecli',
+    faviconDomain: 'trae.ai',
+    homepageUrl: 'https://www.trae.ai/'
+  },
+  {
+    id: 'prime-agent',
+    label: translate('auto.lib.agent.catalog.primeagent', 'Prime Agent'),
+    // Why: no verified project icon; the catalog falls back to a letter glyph.
+    cmd: 'prime-agent',
+    homepageUrl: 'https://github.com/search?q=prime-agent&type=repositories'
   }
 ])
 

@@ -48,6 +48,8 @@ export function BoardCardsLayer({
           group={group}
           cards={board.cards}
           zoom={zoom}
+          viewportY={board.viewport.y}
+          worktreeId={worktreeId}
           onDragBy={(dx, dy) => useAppStore.getState().moveCards(worktreeId, group.cardIds, dx, dy)}
         />
       ))}

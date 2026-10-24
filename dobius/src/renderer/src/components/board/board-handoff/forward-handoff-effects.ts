@@ -10,6 +10,7 @@ import { useAppStore } from '@/store'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import { BOARD_CONSOLE_SIZE } from '../board-canvas/board-spawn-placement'
 import { deliverOrder } from '../board-delivery/board-delivery'
+import { withGoalPrefix } from '../board-goal/goal-reminders'
 import { latestOrder, onOrdersChanged } from '../board-delivery/board-orders'
 import { consoleByName } from '../board-delivery/console-lifecycle'
 import { orderSettled, type Mission } from '../board-delivery/mission-state'
@@ -123,11 +124,13 @@ function armForward(
         summary: translate('board.forward.summary', 'Forwarded results: {{ask}}', {
           ask: input.text
         }),
-        lanes: texts.map((text, i) => ({
-          tabId: destinations[i].tabId,
-          name: destinations[i].title,
-          text
-        }))
+        lanes: withGoalPrefix(
+          texts.map((text, i) => ({
+            tabId: destinations[i].tabId,
+            name: destinations[i].title,
+            text
+          }))
+        )
       })
       toast[result.ok ? 'success' : 'error'](result.text)
     }
@@ -252,7 +255,7 @@ async function runHandoff(
   const result = await deliverOrder({
     worktreeId,
     summary: translate('board.handoff.briefSummary', 'Handoff brief to {{title}}', { title }),
-    lanes: [{ tabId: launched.tabId, name: title, text: message }]
+    lanes: withGoalPrefix([{ tabId: launched.tabId, name: title, text: message }])
   })
   toast[result.ok ? 'success' : 'error'](result.text)
 }

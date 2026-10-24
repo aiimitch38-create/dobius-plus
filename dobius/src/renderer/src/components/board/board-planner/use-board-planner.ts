@@ -26,7 +26,7 @@ import { validatePlan } from './plan-validate'
 export function useBoardPlanner(input: {
   data: BoardRouteData
   conductor: BoardConductor
-  context: Omit<BoardEffectsContext, 'worktreeId' | 'workspaces'>
+  context: Omit<BoardEffectsContext, 'worktreeId' | 'workspaces' | 'confirm'>
 }): (text: string) => Promise<void> {
   const { data, conductor, context } = input
   const { append, appendReport } = conductor
@@ -192,8 +192,8 @@ export function useBoardPlanner(input: {
         }
       }
       const results = await executePlan(plan, board, {
-        ...boardEffects({ ...context, worktreeId, workspaces: data.workspaces }),
-        ...terminalEffects(worktreeId)
+        ...boardEffects({ ...context, worktreeId, workspaces: data.workspaces, confirm }),
+        ...terminalEffects(worktreeId, confirm)
       })
       for (const r of results) {
         append({ role: 'system', ...(r.ok ? {} : { tone: 'error' as const }), text: r.text })

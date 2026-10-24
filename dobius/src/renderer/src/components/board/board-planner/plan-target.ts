@@ -90,6 +90,28 @@ export function resolveTarget(raw: string, board: PlanBoardSnapshot): ResolvedTa
   return null
 }
 
+/**
+ * "tell Claude 1 to run the tests" -> { target: "Claude 1", text: "run the tests" }.
+ * Splits an addressee off a loop/order instruction so a named console or group
+ * becomes the target instead of being read as part of a message to everyone.
+ * The name is one to four words; null when the text addresses no one.
+ */
+export function splitAddressee(text: string): { target: string; text: string } | null {
+  const m =
+    text.match(
+      /^(?:please\s+)?(?:tell|ask|have|get|make|remind|instruct)\s+((?:\S+\s+){0,3}?\S+?)\s*(?:\s+to\s+|:\s*|,\s*)(\S.*)$/i
+    ) ?? text.match(/^@((?:\S+\s+){0,3}?\S+?)\s*[:,]\s*(\S.*)$/)
+  if (!m) {
+    return null
+  }
+  const target = m[1]
+    .replace(/^the\s+/i, '')
+    .replace(/\s+group$/i, '')
+    .trim()
+  const rest = m[2].trim()
+  return target && rest ? { target, text: rest } : null
+}
+
 /** Console names a resolved target reaches. */
 export function targetConsoleNames(target: ResolvedTarget): string[] {
   return target.kind === 'group' ? target.members : target.names

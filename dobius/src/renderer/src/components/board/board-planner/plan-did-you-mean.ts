@@ -20,7 +20,8 @@ const BOARD_TARGET_KINDS = new Set([
   'create_group',
   'rename',
   'connect_orchestrator',
-  'fit_view'
+  'fit_view',
+  'loop'
 ])
 
 type Raw = Record<string, unknown>

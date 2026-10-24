@@ -113,31 +113,34 @@ export function boardShortcutSheet(isMac: boolean): BoardShortcutSheetSection[] 
       ]
     },
     {
-      title: translate('board.shortcuts.consoles', 'Consoles'),
+      title: translate('board.shortcuts.focusSection', 'Focus'),
       rows: [
         {
           keys: ['F'],
-          label: translate('board.shortcuts.focus', 'Zoom to the selected console (or Enter)')
+          label: translate(
+            'board.shortcuts.focusAny',
+            'Zoom to the selected card or group (or Enter)'
+          )
         },
         {
           keys: [translate('board.shortcuts.click', 'Click title')],
           label: translate(
-            'board.shortcuts.focusClick',
-            'Zoom to a console (or double-click its body)'
+            'board.shortcuts.focusClickAny',
+            'Zoom to any card or group tab (double-click works on consoles, images and lists)'
           )
         },
         {
           keys: ['Esc'],
           label: translate(
-            'board.shortcuts.overview',
-            'Back to overview (Shift+Esc while typing in a console)'
+            'board.shortcuts.overviewAny',
+            'Back to overview (Shift+Esc while typing)'
           )
         },
         {
           keys: ['⌥←', '⌥→'],
           label: translate(
-            'board.shortcuts.step',
-            'Previous / next console (add Shift while typing in one)'
+            'board.shortcuts.stepAny',
+            'Previous / next card (add Shift while typing in a console)'
           )
         },
         { keys: ['N'], label: translate('board.shortcuts.needsYou', 'Next console that needs you') }

@@ -11,6 +11,7 @@ import type { TerminalQuickCommand } from '../../../../shared/types'
 import { isTerminalAgentQuickCommand } from '../../../../shared/terminal-quick-commands'
 import { sendTerminalQuickCommandToPane } from './terminal-quick-command-dispatch'
 import { pasteTerminalText } from './terminal-bracketed-paste'
+import { confirmTerminalPaste } from './terminal-paste-confirm-host'
 import { pasteTerminalClipboard } from './terminal-clipboard-paste'
 import {
   executeTerminalPastePlan,
@@ -207,9 +208,20 @@ export function useTerminalPaneContextMenu({
   const executeMenuPasteText = async (
     pane: ManagedPane,
     source: TerminalPasteSource,
-    text: string,
+    rawText: string,
     options?: TerminalPasteTextOptions
   ): Promise<boolean> => {
+    const text = await confirmTerminalPaste({
+      text: rawText,
+      source,
+      options,
+      bracketedPasteMode: pane.terminal.modes.bracketedPasteMode,
+      tabId,
+      restoreFocus: null
+    })
+    if (text === null) {
+      return false
+    }
     const connectionId = getConnectionId(worktreeId) ?? null
     const transport = paneTransportsRef.current.get(pane.id)
     const ptyId = transport?.getPtyId() ?? null

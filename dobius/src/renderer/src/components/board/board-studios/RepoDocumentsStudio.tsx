@@ -1,7 +1,23 @@
 import React, { useState } from 'react'
-import { FileText, LayoutDashboard, Loader2, Network, RefreshCw, Sparkles } from 'lucide-react'
+import {
+  Download,
+  FileText,
+  LayoutDashboard,
+  Loader2,
+  Network,
+  RefreshCw,
+  Sparkles
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   resolveMarkdownDocLink,
@@ -11,6 +27,11 @@ import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { BOARD_ICON_BUTTON_CLASS } from '../board-chrome/board-surface-classes'
 import { addFileCardToBoard } from './board-file-card'
+import {
+  exportRepoDocument,
+  isExportableDocument,
+  type DocumentExportFormat
+} from './document-generation-export-actions'
 import { GenerateDocumentPanel } from './GenerateDocumentPanel'
 import { MarkdownDocumentEditor } from './MarkdownDocumentEditor'
 import { MarkdownLinkGraphView } from './MarkdownLinkGraphView'
@@ -19,6 +40,51 @@ import { StudioEmptyState } from './StudioEmptyState'
 import { useRepoDocuments, type RepoDocument, type RepoDocumentScope } from './use-repo-documents'
 
 type MainPane = 'document' | 'generate' | 'graph'
+
+function ExportDocumentMenu({
+  onExport
+}: {
+  onExport: (format: DocumentExportFormat) => void
+}): React.JSX.Element {
+  const label = translate('board.studio.docs.export', 'Export')
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={label}
+              className={cn(BOARD_ICON_BUTTON_CLASS, 'size-7')}
+            >
+              <Download className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{label}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" sideOffset={4}>
+        <DropdownMenuLabel className="text-[11px] text-muted-foreground">
+          {translate(
+            'board.studio.docs.exportPdfHint',
+            'PDF with title page, contents and page numbers'
+          )}
+        </DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => onExport({ kind: 'pdf', pageSize: 'Letter' })}>
+          {translate('board.studio.docs.exportPdfLetter', 'PDF, US Letter')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onExport({ kind: 'pdf', pageSize: 'A4' })}>
+          {translate('board.studio.docs.exportPdfA4', 'PDF, A4')}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => onExport({ kind: 'markdown' })}>
+          {translate('board.studio.docs.exportMarkdown', 'Markdown (.md)')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 function HeaderIconButton({
   label,
@@ -155,6 +221,13 @@ export function RepoDocumentsStudio({
             {documents ? ` · ${documents.length}` : ''}
           </span>
           <div className="flex items-center">
+            {selected && isExportableDocument(selected) ? (
+              <ExportDocumentMenu
+                onExport={(format) =>
+                  void exportRepoDocument({ worktreeId, doc: selected, format })
+                }
+              />
+            ) : null}
             {scope === 'documents' ? (
               <HeaderIconButton
                 label={translate('board.studio.docs.generate', 'Generate document')}

@@ -1,26 +1,23 @@
-// Focus mode: the camera flown onto one console, with the exact viewport to
-// return to. Session-only; every entry point (click, Enter/F, ⌥←/→, N, the
-// needs-you pill, Mission Map Focus) goes through these functions.
-import { create } from 'zustand'
+// Focus mode: the camera flown onto one card (any kind) or one group, with the
+// exact viewport to return to. Session-only; every entry point (click, Enter/F,
+// ⌥←/→, N, the needs-you pill, Mission Map Focus) goes through these functions.
 import { useAppStore } from '@/store'
-import { getBoard } from '@/store/slices/board'
-import { animateBoardViewport, boardCameraFit, boardFocusViewport } from './board-camera'
-import { boardReadingOrder, boardStepId } from './board-console-order'
+import { getBoard, type BoardCard } from '@/store/slices/board'
+import { boundsOf } from '../cards/card-geometry'
+import {
+  animateBoardViewport,
+  boardFocusCardViewport,
+  boardFocusGroupViewport
+} from './board-camera'
+import { boardFocusStepOrder, boardStepId } from './board-console-order'
 import { resetAllBoardScroll } from './board-scroll-lock'
+import { useBoardCameraFocus, type BoardCameraFocus } from './board-focus-state'
 import type { BoardSize, BoardViewport } from './board-viewport'
 
-export type BoardCameraFocus = {
-  worktreeId: string
-  cardId: string
-  /** The viewport before focus mode began; Esc/Overview returns here exactly. */
-  previous: BoardViewport
-  /** Bumped when the camera lands, so the card flashes its ring once per arrival. */
-  arrivedAt: number
-}
+export { useBoardCameraFocus, type BoardCameraFocus }
 
-export const useBoardCameraFocus = create<{ focus: BoardCameraFocus | null }>(() => ({
-  focus: null
-}))
+/** Must match GroupFrame's padding so a focused group fits its visible frame. */
+export const BOARD_GROUP_FRAME_PADDING = 24
 
 function screenSize(): BoardSize {
   // The Board canvas is `fixed inset-0`, so its size is normally the window's;
@@ -47,30 +44,86 @@ function flyTo(worktreeId: string, target: BoardViewport, onDone?: () => void): 
   })
 }
 
-/** Flies to one console and enters focus mode. False when the card is not on this board. */
-export function focusBoardConsole(worktreeId: string, cardId: string): boolean {
+/** Enters (or retargets) focus mode on these cards and flies the camera there. */
+function enterFocus(
+  worktreeId: string,
+  target: { cardId: string | null; cards: readonly BoardCard[]; groupId: string | null },
+  viewport: BoardViewport
+): void {
   const state = useAppStore.getState()
-  const board = getBoard(state, worktreeId)
-  const card = board.cards.find((c) => c.id === cardId)
+  const current = useBoardCameraFocus.getState().focus
+  const previous =
+    current?.worktreeId === worktreeId ? current.previous : getBoard(state, worktreeId).viewport
+  const cardIds = target.cards.map((c) => c.id)
+  state.bringToFront(worktreeId, cardIds)
+  const focus: BoardCameraFocus = {
+    worktreeId,
+    cardId: target.cardId,
+    cardIds,
+    groupId: target.groupId,
+    previous,
+    arrivedAt: 0
+  }
+  useBoardCameraFocus.setState({ focus })
+  flyTo(worktreeId, viewport, () => {
+    const now = useBoardCameraFocus.getState().focus
+    if (now && now.cardId === focus.cardId && now.groupId === focus.groupId) {
+      useBoardCameraFocus.setState({ focus: { ...now, arrivedAt: Date.now() } })
+    }
+  })
+}
+
+/** Flies to one card of any kind and enters focus mode. False when it is not on this board. */
+export function focusBoardCard(worktreeId: string, cardId: string): boolean {
+  const state = useAppStore.getState()
+  const card = getBoard(state, worktreeId).cards.find((c) => c.id === cardId)
   if (!card) {
     return false
   }
-  const current = useBoardCameraFocus.getState().focus
-  const previous = current?.worktreeId === worktreeId ? current.previous : board.viewport
-  state.bringToFront(worktreeId, [cardId])
-  useBoardCameraFocus.setState({ focus: { worktreeId, cardId, previous, arrivedAt: 0 } })
-  const target = boardFocusViewport(
+  const target = boardFocusCardViewport(
+    card.kind,
     { x: card.x, y: card.y, width: card.w, height: card.h },
     screenSize(),
     state.settings?.terminalFontSize ?? 14
   )
-  flyTo(worktreeId, target, () => {
-    const focus = useBoardCameraFocus.getState().focus
-    if (focus?.cardId === cardId) {
-      useBoardCameraFocus.setState({ focus: { ...focus, arrivedAt: Date.now() } })
-    }
-  })
+  enterFocus(worktreeId, { cardId, cards: [card], groupId: null }, target)
   return true
+}
+
+/** The console-era name; every card kind focuses the same way now. */
+export const focusBoardConsole = focusBoardCard
+
+/** Flies to several cards (fit at up to 100%) in focus mode; a group fits its frame. */
+function focusBoardCardSet(
+  worktreeId: string,
+  cards: readonly BoardCard[],
+  groupId: string | null
+): boolean {
+  const frame = boundsOf(cards, groupId ? BOARD_GROUP_FRAME_PADDING : 0)
+  if (!frame) {
+    return false
+  }
+  const target = boardFocusGroupViewport(
+    [{ x: frame.x, y: frame.y, width: frame.w, height: frame.h }],
+    screenSize()
+  )
+  enterFocus(worktreeId, { cardId: null, cards, groupId }, target)
+  return true
+}
+
+/** Flies to a group so its whole frame fits, in focus mode. False when it has no cards. */
+export function focusBoardGroup(worktreeId: string, groupId: string): boolean {
+  const board = getBoard(useAppStore.getState(), worktreeId)
+  const group = board.groups.find((g) => g.id === groupId)
+  if (!group) {
+    return false
+  }
+  const members = new Set(group.cardIds)
+  return focusBoardCardSet(
+    worktreeId,
+    board.cards.filter((c) => members.has(c.id)),
+    groupId
+  )
 }
 
 /** Leaves focus mode, flying back to the viewport it started from. False when not focused. */
@@ -91,47 +144,37 @@ export function clearBoardFocus(): void {
   }
 }
 
-/** ⌥←/→: the previous/next console in reading order, from the focused or selected one. */
+/** ⌥←/→: the previous/next card in reading order, from the focused or selected one. */
 export function stepBoardFocus(
   worktreeId: string,
   step: 1 | -1,
   fromCardId: string | null
 ): boolean {
-  const consoles = getBoard(useAppStore.getState(), worktreeId).cards.filter(
-    (c) => c.kind === 'console'
-  )
-  const ordered = boardReadingOrder(consoles).map((c) => c.id)
+  const cards = getBoard(useAppStore.getState(), worktreeId).cards
+  const ordered = boardFocusStepOrder(cards).map((c) => c.id)
   const focus = useBoardCameraFocus.getState().focus
-  const current = focus?.worktreeId === worktreeId ? focus.cardId : fromCardId
+  const current = (focus?.worktreeId === worktreeId ? focus.cardId : null) ?? fromCardId
   const next = boardStepId(ordered, current, step)
-  return next ? focusBoardConsole(worktreeId, next) : false
+  return next ? focusBoardCard(worktreeId, next) : false
 }
 
 /**
- * Frames these cards (Mission Map Focus). One console enters focus mode; a
- * group is fitted inside the safe area at up to 100%. False when none exist.
+ * Focuses these cards (Mission Map Focus, Enter/F on a selected group): one
+ * card frames like a click on it; a whole group fits its frame; any other set
+ * fits together. False when none exist.
  */
 export function frameBoardCards(worktreeId: string, cardIds: readonly string[]): boolean {
-  const state = useAppStore.getState()
+  const board = getBoard(useAppStore.getState(), worktreeId)
   const ids = new Set(cardIds)
-  const cards = getBoard(state, worktreeId).cards.filter((c) => ids.has(c.id))
+  const cards = board.cards.filter((c) => ids.has(c.id))
   if (cards.length === 0) {
     return false
   }
-  if (cards.length === 1 && cards[0].kind === 'console') {
-    return focusBoardConsole(worktreeId, cards[0].id)
+  if (cards.length === 1) {
+    return focusBoardCard(worktreeId, cards[0].id)
   }
-  state.bringToFront(
-    worktreeId,
-    cards.map((c) => c.id)
+  const group = board.groups.find(
+    (g) => g.cardIds.length === cards.length && g.cardIds.every((id) => ids.has(id))
   )
-  flyTo(
-    worktreeId,
-    boardCameraFit(
-      cards.map((c) => ({ x: c.x, y: c.y, width: c.w, height: c.h })),
-      screenSize(),
-      { padding: 48, maxZoom: 1 }
-    )
-  )
-  return true
+  return focusBoardCardSet(worktreeId, cards, group?.id ?? null)
 }

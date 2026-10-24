@@ -16,7 +16,10 @@ vi.mock('@/store', () => ({
 
 import {
   exitBoardFocus,
+  focusBoardCard,
   focusBoardConsole,
+  focusBoardGroup,
+  frameBoardCards,
   stepBoardFocus,
   useBoardCameraFocus
 } from './board-camera-focus'
@@ -153,5 +156,93 @@ describe('board camera focus', () => {
     expect(focusBoardConsole(WT, 'missing')).toBe(false)
     expect(useBoardCameraFocus.getState().focus).toBeNull()
     expect(BOARD_CAMERA_DURATION_MS).toBe(280)
+  })
+
+  describe('every card kind', () => {
+    const at = (kind: string, x: number, y: number, extra: object = {}): NewBoardCard =>
+      ({ kind, title: kind, x, y, w: 300, h: 200, ...extra }) as unknown as NewBoardCard
+    const onScreen = (id: string): boolean => {
+      const { viewport, cards } = getBoard(store.getState(), WT)
+      const c = cards.find((card) => card.id === id)!
+      const safe = boardSafeArea({ width: window.innerWidth, height: window.innerHeight })
+      const left = c.x * viewport.zoom + viewport.x
+      const top = c.y * viewport.zoom + viewport.y
+      return (
+        left >= safe.x - 0.5 &&
+        top >= safe.y - 0.5 &&
+        left + c.w * viewport.zoom <= safe.x + safe.width + 0.5 &&
+        top + c.h * viewport.zoom <= safe.y + safe.height + 0.5
+      )
+    }
+
+    it('focuses a note, raises it, and Esc restores the exact viewport', () => {
+      const s = store.getState()
+      const note = s.addCard(WT, at('note', 3000, 2000, { text: 'hi', color: 'yellow' }))
+      s.addCard(WT, at('web', 3000, 2000, { url: 'https://example.com' }))
+      const before = { x: 11, y: 22, zoom: 0.3 }
+      s.setViewport(WT, before)
+      expect(focusBoardCard(WT, note)).toBe(true)
+      const focus = useBoardCameraFocus.getState().focus
+      expect(focus?.cardId).toBe(note)
+      expect(focus?.cardIds).toEqual([note])
+      expect(focus?.arrivedAt).toBeGreaterThan(0)
+      const board = getBoard(store.getState(), WT)
+      expect(board.cards.find((c) => c.id === note)?.z).toBe(
+        Math.max(...board.cards.map((c) => c.z))
+      )
+      expect(board.viewport.zoom).toBeGreaterThanOrEqual(1)
+      expect(onScreen(note)).toBe(true)
+      expect(exitBoardFocus()).toBe(true)
+      expect(getBoard(store.getState(), WT).viewport).toEqual(before)
+    })
+
+    it('a group focus fits every member inside the safe area and restores on exit', () => {
+      const s = store.getState()
+      const a = s.addCard(WT, consoleCard('A', 0, 0))
+      const b = s.addCard(WT, at('image', 2400, 1600, { src: 'data:,' }))
+      s.addCard(WT, at('note', 9000, 9000, { text: '', color: 'yellow' }))
+      const group = s.createGroup(WT, { name: 'g', cardIds: [a, b] })
+      const before = { x: 0, y: 0, zoom: 1 }
+      s.setViewport(WT, before)
+      expect(focusBoardGroup(WT, group)).toBe(true)
+      const focus = useBoardCameraFocus.getState().focus
+      expect(focus?.groupId).toBe(group)
+      expect(focus?.cardId).toBeNull()
+      expect([...(focus?.cardIds ?? [])].sort()).toEqual([a, b].sort())
+      expect(getBoard(store.getState(), WT).viewport.zoom).toBeLessThanOrEqual(1)
+      expect(onScreen(a)).toBe(true)
+      expect(onScreen(b)).toBe(true)
+      exitBoardFocus()
+      expect(getBoard(store.getState(), WT).viewport).toEqual(before)
+    })
+
+    it('Mission Map Focus on a group enters the same focus mode; one card frames like a click', () => {
+      const s = store.getState()
+      const a = s.addCard(WT, consoleCard('A', 0, 0))
+      const b = s.addCard(WT, consoleCard('B', 700, 0))
+      const group = s.createGroup(WT, { name: 'g', cardIds: [a, b] })
+      expect(frameBoardCards(WT, [a, b])).toBe(true)
+      expect(useBoardCameraFocus.getState().focus?.groupId).toBe(group)
+      const memo = s.addCard(WT, at('memory', 4000, 0, { wiredCardIds: [] }))
+      expect(frameBoardCards(WT, [memo])).toBe(true)
+      expect(useBoardCameraFocus.getState().focus?.cardId).toBe(memo)
+    })
+
+    it('⌥→ steps across mixed kinds in reading order, skipping ink', () => {
+      const s = store.getState()
+      const note = s.addCard(WT, at('note', 0, 0, { text: '', color: 'yellow' }))
+      s.addCard(WT, at('stroke', 350, 0, { points: [] }))
+      const web = s.addCard(WT, at('web', 700, 0, { url: 'https://example.com' }))
+      const con = s.addCard(WT, consoleCard('C', 0, 600))
+      expect(stepBoardFocus(WT, 1, null)).toBe(true)
+      expect(useBoardCameraFocus.getState().focus?.cardId).toBe(note)
+      stepBoardFocus(WT, 1, null)
+      expect(useBoardCameraFocus.getState().focus?.cardId).toBe(web)
+      stepBoardFocus(WT, 1, null)
+      expect(useBoardCameraFocus.getState().focus?.cardId).toBe(con)
+      stepBoardFocus(WT, 1, null)
+      expect(useBoardCameraFocus.getState().focus?.cardId).toBe(note)
+      expect(focusBoardConsole).toBe(focusBoardCard)
+    })
   })
 })

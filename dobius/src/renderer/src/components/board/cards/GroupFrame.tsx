@@ -4,6 +4,8 @@ import { boundsOf, screenDeltaToWorld } from './card-geometry'
 import { swatchEdge, swatchFill } from './card-swatch'
 import { shouldStartCardDrag } from './card-drag-target'
 import { GroupFrameMenu } from '../board-groups/GroupFrameMenu'
+import { groupTabOffset } from '../board-groups/group-tab-placement'
+import { BOARD_CHROME_INSETS } from '../board-canvas/board-reveal'
 
 const GROUP_PADDING = 24
 
@@ -11,7 +13,9 @@ export type GroupFrameProps = {
   group: BoardGroup
   cards: readonly BoardCard[]
   zoom: number
-  /** Enables the Ungroup / Delete group menu on the name tab. */
+  /** Screen y of the world origin; keeps the name tab out from under the top bar. */
+  viewportY?: number
+  /** Enables the Focus / Ungroup / Delete group menu on the name tab. */
   worktreeId?: string
   /** World-space delta to apply to every member card. */
   onDragBy: (dx: number, dy: number) => void
@@ -23,6 +27,7 @@ export function GroupFrame({
   group,
   cards,
   zoom,
+  viewportY,
   worktreeId,
   onDragBy
 }: GroupFrameProps): React.JSX.Element | null {
@@ -36,6 +41,16 @@ export function GroupFrame({
     return null
   }
   const edge = swatchEdge(group.color)
+  const tabTop =
+    viewportY === undefined
+      ? 0
+      : groupTabOffset({
+          frameTop: bounds.y,
+          frameHeight: bounds.h,
+          zoom,
+          viewportY,
+          safeTopPx: BOARD_CHROME_INSETS.top
+        })
   return (
     <div
       className="pointer-events-none absolute rounded-[calc(var(--board-radius-card)+12px)]"
@@ -50,8 +65,9 @@ export function GroupFrame({
       }}
     >
       <div
+        data-board-group-tab={group.id}
         className="pointer-events-auto absolute left-4 flex -translate-y-1/2 cursor-grab items-center gap-1 rounded-full px-3 py-1 text-[12px] font-semibold text-[var(--board-text)] select-none active:cursor-grabbing"
-        style={{ top: 0, background: swatchFill(group.color), border: `1px solid ${edge}` }}
+        style={{ top: tabTop, background: swatchFill(group.color), border: `1px solid ${edge}` }}
         onPointerDown={(e) => {
           if (!shouldStartCardDrag(e.button, e.target as Element, e.currentTarget)) {
             return

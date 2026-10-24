@@ -4,7 +4,14 @@ import {
   sanitizeBoardCardStyle,
   type BoardCardStyle
 } from '@/components/board/board-tool-panels/board-tool-style'
-import type { BoardCard, BoardCardBase, BoardShapeKind, BoardSwatch } from './board-state'
+import type {
+  BoardCard,
+  BoardCardBase,
+  BoardCardOf,
+  BoardGoalReminders,
+  BoardShapeKind,
+  BoardSwatch
+} from './board-state'
 
 // Why: image cards must reference files, not embed them; a data URL past this
 // size would turn every board save into a megabyte rewrite of config.
@@ -160,6 +167,8 @@ export function sanitizeKindFields(
       return isStrArray(raw.wiredCardIds)
         ? { kind: 'memory', wiredCardIds: raw.wiredCardIds }
         : null
+    case 'goal':
+      return sanitizeGoalFields(raw)
     case 'skill':
       return isStr(raw.skillName) && isStr(raw.args)
         ? { kind: 'skill', skillName: raw.skillName, args: raw.args }
@@ -168,5 +177,47 @@ export function sanitizeKindFields(
       return { kind: 'branches' }
     default:
       return null
+  }
+}
+
+export const DEFAULT_GOAL_REMINDERS: BoardGoalReminders = Object.freeze({
+  afterCompaction: true,
+  everyTurns: 5,
+  onNewTask: true
+})
+const MAX_GOAL_EVERY_TURNS = 100
+
+const idTextItems = (v: unknown): Raw[] =>
+  Array.isArray(v) ? v.filter((i): i is Raw => isObj(i) && isStr(i.id) && isStr(i.text)) : []
+
+// Why: reminders/driftCheck were added per field; anything missing falls back to the defaults.
+function sanitizeGoalFields(raw: Raw): Omit<BoardCardOf<'goal'>, keyof BoardCardBase> | null {
+  if (!isStr(raw.goal) || !isStrArray(raw.wiredCardIds)) {
+    return null
+  }
+  const r = isObj(raw.reminders) ? raw.reminders : {}
+  const every = isNum(r.everyTurns)
+    ? Math.min(MAX_GOAL_EVERY_TURNS, Math.max(0, Math.round(r.everyTurns)))
+    : DEFAULT_GOAL_REMINDERS.everyTurns
+  return {
+    kind: 'goal',
+    goal: raw.goal,
+    criteria: idTextItems(raw.criteria).map((i) => ({
+      id: i.id as string,
+      text: i.text as string,
+      done: i.done === true,
+      ...(isStr(i.evidence) && i.evidence ? { evidence: i.evidence } : {})
+    })),
+    dont: idTextItems(raw.dont).map((i) => ({ id: i.id as string, text: i.text as string })),
+    reminders: {
+      afterCompaction:
+        typeof r.afterCompaction === 'boolean'
+          ? r.afterCompaction
+          : DEFAULT_GOAL_REMINDERS.afterCompaction,
+      everyTurns: every,
+      onNewTask: typeof r.onNewTask === 'boolean' ? r.onNewTask : DEFAULT_GOAL_REMINDERS.onNewTask
+    },
+    driftCheck: raw.driftCheck === true,
+    wiredCardIds: raw.wiredCardIds
   }
 }

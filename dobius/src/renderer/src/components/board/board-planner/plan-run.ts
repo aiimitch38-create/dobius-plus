@@ -32,9 +32,15 @@ export async function runPlanner(input: {
 }): Promise<PlanOutcome> {
   const fallback = (reason: string): PlanOutcome => {
     const parsed = fallbackParse(input.utterance)
-    return parsed.kind === 'plan'
-      ? { kind: 'plan', plan: parsed.plan, source: 'fallback' }
-      : { kind: 'needs-planner', reason }
+    if (parsed.kind !== 'plan') {
+      return { kind: 'needs-planner', reason }
+    }
+    // Why: the keyword parser cannot see the board; a misheard name it pulled
+    // out ("tell Clade 1 to ...") gets the same "did you mean" question.
+    const suggestion = planTargetSuggestion(parsed.plan, input.board)
+    return suggestion
+      ? { kind: 'did-you-mean', suggestion, raw: parsed.plan }
+      : { kind: 'plan', plan: parsed.plan, source: 'fallback' }
   }
   if (input.breaker.isOpen(input.now())) {
     return fallback('breaker')

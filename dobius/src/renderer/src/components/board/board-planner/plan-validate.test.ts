@@ -124,3 +124,50 @@ describe('validatePlan', () => {
     ).toMatchObject({ ok: false })
   })
 })
+
+describe('validatePlan loop steps', () => {
+  it('keeps the loop target and stop command, and rejects names not on the board', () => {
+    const v = validatePlan(
+      plan([
+        {
+          kind: 'loop',
+          text: 'run the tests',
+          interval_minutes: 10,
+          target: 'Team A',
+          stop_command: 'pnpm test'
+        }
+      ]),
+      BOARD
+    )
+    expect(v.ok && v.plan.steps[0]).toEqual({
+      kind: 'loop',
+      text: 'run the tests',
+      intervalMinutes: 10,
+      target: 'Team A',
+      stopCommand: 'pnpm test'
+    })
+    expect(
+      reason(plan([{ kind: 'loop', text: 'x', interval_minutes: 5, target: 'Ghost' }]))
+    ).toContain('not on the board')
+  })
+})
+
+describe('validatePlan loop addressee', () => {
+  it('moves a named console out of the loop text into the target', () => {
+    const v = validatePlan(
+      plan([{ kind: 'loop', text: 'tell Claude 1 to run the tests', interval_minutes: 10 }]),
+      BOARD
+    )
+    expect(v.ok && v.plan.steps[0]).toMatchObject({
+      kind: 'loop',
+      text: 'run the tests',
+      target: 'Claude 1'
+    })
+  })
+
+  it('refuses instead of widening to every console when the named console is unknown', () => {
+    expect(
+      reason(plan([{ kind: 'loop', text: 'tell Ghost 9 to run the tests', interval_minutes: 10 }]))
+    ).toContain('"Ghost 9", which is not on the board')
+  })
+})

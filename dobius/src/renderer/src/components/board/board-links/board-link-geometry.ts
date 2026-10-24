@@ -11,6 +11,7 @@ export type BoardCable = {
   id: string
   from: Rect
   to: Rect
+  /** The card the cable starts at: an orchestrator, or a goal card. */
   orchestratorId: string
   targetTabIds: string[]
 }
@@ -101,6 +102,46 @@ export function orchestratorCables(board: Pick<BoardState, 'cards' | 'groups'>):
     }
   }
   return cables
+}
+
+/**
+ * Cables from each goal card to what it is wired to: consoles, orchestrator
+ * cards, and group frames (a goal wires the group itself, so new members get it too).
+ */
+export function goalCables(board: Pick<BoardState, 'cards' | 'groups'>): BoardCable[] {
+  const byId = new Map(board.cards.map((c) => [c.id, c]))
+  const groups = new Map(board.groups.map((g) => [g.id, g]))
+  return board.cards.flatMap((card) =>
+    card.kind !== 'goal'
+      ? []
+      : card.wiredCardIds.flatMap((id): BoardCable[] => {
+          const group = groups.get(id)
+          const rect = group ? groupFrameRect(group, board.cards) : null
+          if (group && rect) {
+            return [
+              {
+                id: `${card.id}->group:${id}`,
+                from: card,
+                to: rect,
+                orchestratorId: card.id,
+                targetTabIds: group.cardIds.flatMap((m) => consoleTabIds(byId.get(m)))
+              }
+            ]
+          }
+          const target = byId.get(id)
+          return target?.kind === 'console' || target?.kind === 'orchestrator'
+            ? [
+                {
+                  id: `${card.id}->${id}`,
+                  from: card,
+                  to: target,
+                  orchestratorId: card.id,
+                  targetTabIds: consoleTabIds(target)
+                }
+              ]
+            : []
+        })
+  )
 }
 
 function consoleTabIds(card: BoardCard | undefined): string[] {

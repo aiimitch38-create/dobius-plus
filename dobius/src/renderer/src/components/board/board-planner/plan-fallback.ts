@@ -1,5 +1,5 @@
 import type { BoardPlan, PlanStep } from './plan-schema'
-import { agentKindFor } from './plan-target'
+import { agentKindFor, splitAddressee } from './plan-target'
 
 // Built-in keyword parser used when the planner is unreachable, rate limited,
 // out of credits or busy. It covers simple board commands only: it cannot write
@@ -30,8 +30,36 @@ const WORD_NUMBERS: Record<string, number> = {
   vier: 4
 }
 
+const unquote = (v: string | undefined): string | null =>
+  v ? v.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '') || null : null
+
 const num = (v: string | undefined): number =>
   v ? Number(v) || WORD_NUMBERS[v.toLowerCase()] || 1 : 1
+
+const INTERVAL = `(?:(\\d+|${Object.keys(WORD_NUMBERS).join('|')})\\s*)?(minutes?|mins?|m|hours?|hrs?|h)`
+const UNTIL = '(?:\\s+until\\s+(.+?)\\s+(?:passes|succeeds|is green))?'
+
+function loopStep(
+  count: string | undefined,
+  unitWord: string,
+  body: string,
+  until: string | undefined
+): PlanStep | null {
+  const minutes = num(count) * (unitWord.toLowerCase().startsWith('h') ? 60 : 1)
+  if (minutes < 1 || minutes > 1440) {
+    return null
+  }
+  // Why: "tell Claude 1 to ..." names the target; it must never be read as a
+  // message to every console. An unknown name is refused when the plan runs.
+  const addressed = splitAddressee(body.trim())
+  return {
+    kind: 'loop',
+    text: addressed?.text ?? body.trim(),
+    intervalMinutes: minutes,
+    target: addressed?.target ?? null,
+    stopCommand: until ? until.replace(/^`|`$/g, '') : null
+  }
+}
 
 const RULES: Rule[] = [
   {
@@ -103,7 +131,27 @@ const RULES: Rule[] = [
       target: m[0].split(/\s+/)[0].toLowerCase() as 'dark' | 'light' | 'system'
     })
   },
-  { re: /^(?:i want to draw|draw|pen)$/i, step: () => ({ kind: 'pick_tool', target: 'pen' }) }
+  { re: /^(?:i want to draw|draw|pen)$/i, step: () => ({ kind: 'pick_tool', target: 'pen' }) },
+  {
+    // "every 10 minutes [tell Claude 1 to] run the tests [until pnpm test passes]".
+    re: new RegExp(`^every\\s+${INTERVAL}\\s*,?\\s+(.+?)${UNTIL}$`, 'i'),
+    step: (m) => loopStep(m[1], m[2], m[3], m[4])
+  },
+  {
+    // "tell Claude 1 to run the tests every 10 minutes [until pnpm test passes]".
+    re: new RegExp(`^(.+?),?\\s+every\\s+${INTERVAL}${UNTIL}$`, 'i'),
+    step: (m) => loopStep(m[2], m[3], m[1], m[4])
+  },
+  {
+    re: /^commit\s+and\s+push(?:\s+(?:with\s+(?:the\s+)?message|saying)\s*:?\s*(.+))?$/i,
+    step: (m) => ({ kind: 'git', target: 'commit_push', text: unquote(m[1]) })
+  },
+  {
+    re: /^commit(?:\s+(?:with\s+(?:the\s+)?message|saying)\s*:?\s*(.+)|\s*:\s*(.+))?$/i,
+    step: (m) => ({ kind: 'git', target: 'commit', text: unquote(m[1] ?? m[2]) })
+  },
+  { re: /^(?:git\s+)?push$/i, step: () => ({ kind: 'git', target: 'push', text: null }) },
+  { re: /^(?:git\s+)?pull$/i, step: () => ({ kind: 'git', target: 'pull', text: null }) }
 ]
 
 export type FallbackResult = { kind: 'plan'; plan: BoardPlan } | { kind: 'work-order' }

@@ -290,6 +290,10 @@ vi.mock('./ui', () => ({
   setTrustedUIRendererWebContentsId: setTrustedUIRendererWebContentsIdMock
 }))
 
+vi.mock('../board-snapshots/register-board-snapshots', () => ({
+  registerBoardSnapshotHandlers: vi.fn()
+}))
+
 vi.mock('./emulator-frame-stream', () => ({
   registerEmulatorFrameStreamHandlers: registerEmulatorFrameStreamHandlersMock
 }))

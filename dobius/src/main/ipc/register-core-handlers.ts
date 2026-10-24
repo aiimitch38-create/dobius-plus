@@ -67,6 +67,7 @@ import { registerBrowserHandlers } from './browser'
 import { registerShellHandlers } from './shell'
 import { registerPetHandlers } from './pet'
 import { registerUIHandlers, setTrustedUIRendererWebContentsId } from './ui'
+import { registerBoardSnapshotHandlers } from '../board-snapshots/register-board-snapshots'
 import { registerEmulatorFrameStreamHandlers } from './emulator-frame-stream'
 import { registerEmulatorVideoStreamHandlers } from './emulator-video-stream'
 import { registerSpeechHandlers } from './speech'
@@ -231,6 +232,7 @@ export function registerCoreHandlers(
   registerPetHandlers()
   registerSessionHandlers(store)
   registerUIHandlers(store)
+  registerBoardSnapshotHandlers(store)
   registerEmulatorFrameStreamHandlers()
   registerEmulatorVideoStreamHandlers()
   registerWorkspaceSpaceHandlers(store)

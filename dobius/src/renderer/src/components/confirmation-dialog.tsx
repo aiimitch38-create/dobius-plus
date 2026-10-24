@@ -15,6 +15,8 @@ import { translate } from '@/i18n/i18n'
 type ConfirmationDialogOptions = {
   title: string
   description?: string
+  /** Shown as a monospace block, one entry per line (commands, paths). */
+  details?: readonly string[]
   confirmLabel?: string
   cancelLabel?: string
   confirmVariant?: 'default' | 'destructive'
@@ -94,9 +96,21 @@ export function ConfirmationDialogProvider({
           <DialogHeader>
             <DialogTitle>{displayedRequest?.options.title}</DialogTitle>
             {displayedRequest?.options.description ? (
-              <DialogDescription>{displayedRequest.options.description}</DialogDescription>
+              <DialogDescription className="whitespace-pre-line">
+                {displayedRequest.options.description}
+              </DialogDescription>
             ) : null}
           </DialogHeader>
+          {displayedRequest?.options.details?.length ? (
+            <pre
+              data-confirmation-details
+              className="max-h-48 overflow-auto rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre text-foreground"
+            >
+              {displayedRequest.options.details.map((line, index) => (
+                <div key={`${index}:${line}`}>{line}</div>
+              ))}
+            </pre>
+          ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => settleActiveRequest(false)}>
               {displayedRequest?.options.cancelLabel ??

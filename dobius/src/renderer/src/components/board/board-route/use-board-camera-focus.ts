@@ -8,93 +8,25 @@ import { getBoard, type BoardTool } from '@/store/slices/board'
 import {
   clearBoardFocus,
   exitBoardFocus,
-  focusBoardConsole,
+  focusBoardCard,
+  focusBoardGroup,
+  frameBoardCards,
   stepBoardFocus,
   useBoardCameraFocus,
   type BoardCameraFocus
 } from '../board-canvas/board-camera-focus'
+import { screenToWorld, type BoardPoint } from '../board-canvas/board-viewport'
 import { CARD_DRAG_THRESHOLD_PX } from '../cards/card-drag-target'
+import {
+  boardArrowStep,
+  boardEscapeExitsFocus,
+  boardFocusClickCardId,
+  boardFocusDoubleClickCardId,
+  boardGroupTabAt,
+  boardKeyTarget,
+  TERMINAL_SELECTOR
+} from './board-focus-targets'
 import type { BoardSelection } from './use-board-selection'
-
-const TERMINAL_SELECTOR = '[data-board-console], .xterm'
-const TEXT_FIELD_SELECTOR =
-  'input, textarea, select, [contenteditable=""], [contenteditable="true"]'
-
-/** Where a key event lands, for the Esc / Shift+Esc and ⌥←/→ split. */
-export type BoardKeyTarget = 'terminal' | 'field' | 'overlay' | 'board'
-
-export function boardKeyTarget(target: EventTarget | null): BoardKeyTarget {
-  if (!(target instanceof Element)) {
-    return 'board'
-  }
-  // Why: xterm's input is a hidden textarea, so check terminals before fields.
-  if (target.closest(TERMINAL_SELECTOR)) {
-    return 'terminal'
-  }
-  if (
-    target.closest(TEXT_FIELD_SELECTOR) ||
-    (target instanceof HTMLElement && target.isContentEditable)
-  ) {
-    return 'field'
-  }
-  if (target.closest('[role="dialog"], [role="menu"], [role="listbox"]')) {
-    return 'overlay'
-  }
-  return 'board'
-}
-
-/**
- * Esc leaves focus mode from the board itself; inside a terminal plain Esc
- * belongs to the app running there (vim, Claude Code), so Shift+Esc is the way out.
- */
-export function boardEscapeExitsFocus(where: BoardKeyTarget, shiftKey: boolean): boolean {
-  if (where === 'overlay') {
-    return false
-  }
-  return where === 'board' || shiftKey
-}
-
-/** ⌥←/→ steps consoles; inside a terminal it needs Shift too (⌥← is word-jump in shells). */
-export function boardArrowStep(
-  event: { key: string; altKey: boolean; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean },
-  where: BoardKeyTarget
-): 1 | -1 | null {
-  if (!event.altKey || event.metaKey || event.ctrlKey) {
-    return null
-  }
-  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
-    return null
-  }
-  if (where === 'field' || where === 'overlay') {
-    return null
-  }
-  if (event.shiftKey !== (where === 'terminal')) {
-    return null
-  }
-  return event.key === 'ArrowRight' ? 1 : -1
-}
-
-function consoleCardIdOf(cardEl: Element): string | null {
-  return (
-    cardEl
-      .querySelector('[data-board-console-card-id]')
-      ?.getAttribute('data-board-console-card-id') ?? null
-  )
-}
-
-/**
- * The console whose title bar or zoomed-out glance (not its live terminal,
- * controls or resize handles) holds `target`.
- */
-function consoleHeaderCardId(target: Element): string | null {
-  const cardEl = target.closest('[data-board-card]')
-  if (!cardEl || target.closest('[data-board-card-control], button, input')) {
-    return null
-  }
-  const header = cardEl.firstElementChild
-  const onGlance = target.closest('[data-board-console-glance]') !== null
-  return (header && header.contains(target)) || onGlance ? consoleCardIdOf(cardEl) : null
-}
 
 /**
  * Drops the word selection a double-click left behind: xterm selects on the
@@ -127,14 +59,22 @@ type CameraFocusOptions = {
   suspended: boolean
 }
 
+/** World point under a client position, through the canvas the board is drawn in. */
+function clientToWorld(worktreeId: string, clientX: number, clientY: number): BoardPoint {
+  const rect = document.querySelector('[data-board-canvas]')?.getBoundingClientRect()
+  const viewport = getBoard(useAppStore.getState(), worktreeId).viewport
+  return screenToWorld({ x: clientX - (rect?.left ?? 0), y: clientY - (rect?.top ?? 0) }, viewport)
+}
+
 /**
- * Click-to-focus wiring: title click, body double-click, Esc / Shift+Esc,
- * ⌥←/→, empty-canvas click back to the overview, and selecting the focused
- * console so its terminal takes the keyboard on arrival.
+ * Click-to-focus wiring for every card kind and group: title click, body
+ * double-click (where the card has no double-click of its own), group name
+ * tab click, Esc / Shift+Esc, ⌥←/→, empty-canvas click back to the overview,
+ * and selecting the focused card on arrival (a console's terminal takes the keyboard).
  */
 export function useBoardFocusMode(options: CameraFocusOptions): {
   focus: BoardCameraFocus | null
-  /** Enter/F: focus the single selected console. False when none is selected. */
+  /** Enter/F: focus the selected card, or the selected group. False when neither. */
   focusSelected: () => boolean
   exit: () => void
 } {
@@ -149,21 +89,42 @@ export function useBoardFocusMode(options: CameraFocusOptions): {
   useEffect(() => () => clearBoardFocus(), [worktreeId])
 
   const focusedCardId = focus?.cardId ?? null
+  const focusedGroupId = focus?.groupId ?? null
   useEffect(() => {
-    if (focusedCardId) {
-      ref.current.selection.selectOnly([focusedCardId])
+    if (!focusedCardId && !focusedGroupId) {
+      return
     }
-  }, [focusedCardId])
+    const o = ref.current
+    const kind = focusedCardId
+      ? getBoard(useAppStore.getState(), o.worktreeId).cards.find((c) => c.id === focusedCardId)
+          ?.kind
+      : undefined
+    // Why: only a console has an input worth handing the keyboard to; anything
+    // else must not leave keys going to a terminal that is now dimmed.
+    if (kind !== 'console') {
+      blurTerminalFocus()
+    }
+    if (focusedCardId) {
+      o.selection.selectOnly([focusedCardId])
+    }
+  }, [focusedCardId, focusedGroupId])
 
-  // A focused card that is deleted ends focus mode.
-  const focusedCardExists = useAppStore((s) =>
-    focusedCardId ? getBoard(s, worktreeId).cards.some((c) => c.id === focusedCardId) : true
-  )
+  // A focused card (or group) that is deleted ends focus mode.
+  const focusTargetExists = useAppStore((s) => {
+    if (!focus) {
+      return true
+    }
+    const board = getBoard(s, worktreeId)
+    return (
+      board.cards.some((c) => focus.cardIds.includes(c.id)) &&
+      (!focus.groupId || board.groups.some((g) => g.id === focus.groupId))
+    )
+  })
   useEffect(() => {
-    if (!focusedCardExists) {
+    if (!focusTargetExists) {
       clearBoardFocus()
     }
-  }, [focusedCardExists])
+  }, [focusTargetExists])
 
   useEffect(() => {
     let down: { x: number; y: number } | null = null
@@ -189,30 +150,60 @@ export function useBoardFocusMode(options: CameraFocusOptions): {
         }
         return
       }
+      // Why: the second click of a double-click on a title is the rename gesture.
+      if (event.detail > 1) {
+        return
+      }
       if (event.shiftKey || event.metaKey || event.ctrlKey || o.tool !== 'select') {
         return
       }
-      const cardId = consoleHeaderCardId(target)
+      const cardId = boardFocusClickCardId(target)
       if (cardId) {
-        focusBoardConsole(o.worktreeId, cardId)
+        focusBoardCard(o.worktreeId, cardId)
+        return
+      }
+      // Why: the tab can slide down inside its frame (top chrome), so the tab
+      // element itself wins over the frame-edge hit test.
+      const tabGroupId = target.closest('button')
+        ? null
+        : target.closest('[data-board-group-tab]')?.getAttribute('data-board-group-tab')
+      if (tabGroupId) {
+        focusBoardGroup(o.worktreeId, tabGroupId)
+        return
+      }
+      // A group's name tab lives in the world layer, outside every card.
+      if (!target.closest('[data-board-card], button') && target.closest('[data-board-world]')) {
+        const board = getBoard(useAppStore.getState(), o.worktreeId)
+        const groupId = boardGroupTabAt(
+          clientToWorld(o.worktreeId, event.clientX, event.clientY),
+          board.groups,
+          board.cards
+        )
+        if (groupId) {
+          focusBoardGroup(o.worktreeId, groupId)
+        }
       }
     }
     const onDoubleClick = (event: MouseEvent): void => {
       const o = ref.current
-      if (!o.worktreeId || o.suspended || !(event.target instanceof Element)) {
+      if (!o.worktreeId || o.suspended || o.tool !== 'select') {
         return
       }
-      const body = event.target.closest('[data-board-console]')
-      const cardEl = body?.closest('[data-board-card]')
-      const cardId = cardEl ? consoleCardIdOf(cardEl) : null
-      // Why: once focused, a double-click is the terminal's word selection again.
-      if (cardId && useBoardCameraFocus.getState().focus?.cardId !== cardId) {
-        if (focusBoardConsole(o.worktreeId, cardId)) {
-          const card = getBoard(useAppStore.getState(), o.worktreeId).cards.find(
-            (c) => c.id === cardId
-          )
-          clearConsoleTextSelection(card?.kind === 'console' ? card.tabId : null)
-        }
+      if (!(event.target instanceof Element)) {
+        return
+      }
+      const cards = getBoard(useAppStore.getState(), o.worktreeId).cards
+      const cardId = boardFocusDoubleClickCardId(
+        event.target,
+        (id) => cards.find((c) => c.id === id)?.kind
+      )
+      // Why: once focused, a double-click is the card's own again (terminal word selection).
+      if (!cardId || useBoardCameraFocus.getState().focus?.cardId === cardId) {
+        return
+      }
+      if (focusBoardCard(o.worktreeId, cardId)) {
+        const card = cards.find((c) => c.id === cardId)
+        clearConsoleTextSelection(card?.kind === 'console' ? card.tabId : null)
       }
     }
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -239,8 +230,8 @@ export function useBoardFocusMode(options: CameraFocusOptions): {
       if (step === null) {
         return
       }
-      const selected = getBoard(useAppStore.getState(), o.worktreeId).cards.find(
-        (c) => c.kind === 'console' && o.selection.selectedIds.has(c.id)
+      const selected = getBoard(useAppStore.getState(), o.worktreeId).cards.find((c) =>
+        o.selection.selectedIds.has(c.id)
       )
       if (stepBoardFocus(o.worktreeId, step, selected?.id ?? null)) {
         event.preventDefault()
@@ -261,13 +252,20 @@ export function useBoardFocusMode(options: CameraFocusOptions): {
 
   const focusSelected = useCallback((): boolean => {
     const o = ref.current
-    if (!o.worktreeId || o.selection.selectedIds.size !== 1) {
+    if (!o.worktreeId || o.selection.selectedIds.size === 0) {
       return false
     }
-    const card = getBoard(useAppStore.getState(), o.worktreeId).cards.find((c) =>
-      o.selection.selectedIds.has(c.id)
+    const board = getBoard(useAppStore.getState(), o.worktreeId)
+    const ids = o.selection.selectedIds
+    if (ids.size === 1) {
+      const [id] = ids
+      return focusBoardCard(o.worktreeId, id)
+    }
+    // Several selected: only a whole group is a focus target (its frame fits).
+    const group = board.groups.find(
+      (g) => g.cardIds.length === ids.size && g.cardIds.every((id) => ids.has(id))
     )
-    return card?.kind === 'console' ? focusBoardConsole(o.worktreeId, card.id) : false
+    return group ? frameBoardCards(o.worktreeId, group.cardIds) : false
   }, [])
 
   const exit = useCallback(() => {

@@ -1,56 +1,41 @@
-// The last lines of a terminal screen as plain text, for a console card's
-// zoomed-out glance. Works on any xterm-shaped buffer (renderer xterm or
+// The terminal screen as plain-text rows, for a console card's zoomed-out
+// miniature. Works on any xterm-shaped buffer (renderer xterm or
 // @xterm/headless), so it is testable without a DOM.
 
 export type TailBufferLine = { translateToString(trimRight?: boolean): string }
 export type TailBuffer = { length: number; getLine(y: number): TailBufferLine | undefined }
 
-export const GLANCE_TAIL_LINES = 12
-/** Longer lines are clipped by the glance anyway; cap so a huge row is not copied around. */
-const MAX_LINE_CHARS = 240
+/** Longer rows are clipped by the miniature anyway; cap so a huge row is not copied around. */
+const MAX_LINE_CHARS = 400
 
-// Why: TUI agents frame their prompt in box-drawing borders; a line made only
-// of borders, blocks and spaces carries nothing a glance reader can use.
-const DECORATIVE_ONLY = /^[\s─-▟⠀-⣿·•…_=-]*$/u
+const clip = (line: string): string =>
+  line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) : line
 
-export function isDecorativeLine(line: string): boolean {
-  return DECORATIVE_ONLY.test(line)
-}
-
-/** Strips the box-drawing frame a TUI draws around a row, keeping its text. */
-export function unframeLine(line: string): string {
-  return line
-    .replace(/^\s*[│┃║|]\s?/u, '')
-    .replace(/\s?[│┃║|]\s*$/u, '')
-    .trimEnd()
-}
-
-/** Newest-last list of up to `maxLines` meaningful lines from the bottom of the buffer. */
-export function consoleTailLines(buffer: TailBuffer, maxLines = GLANCE_TAIL_LINES): string[] {
-  const out: string[] = []
-  for (let y = buffer.length - 1; y >= 0 && out.length < maxLines; y -= 1) {
-    const raw = buffer.getLine(y)?.translateToString(true) ?? ''
-    if (isDecorativeLine(raw)) {
-      continue
-    }
-    const text = unframeLine(raw)
-    if (text.trim().length === 0) {
-      continue
-    }
-    out.push(text.length > MAX_LINE_CHARS ? text.slice(0, MAX_LINE_CHARS) : text)
+/**
+ * Every row of the buffer top to bottom, exactly as the terminal shows it
+ * (box borders, blank rows and all), minus the blank rows under the last
+ * output so a short screen does not read as a gap.
+ */
+export function consoleScreenRows(buffer: TailBuffer): string[] {
+  const rows: string[] = []
+  for (let y = 0; y < buffer.length; y += 1) {
+    rows.push(clip(buffer.getLine(y)?.translateToString(true) ?? ''))
   }
-  return out.toReversed()
+  let end = rows.length
+  while (end > 0 && rows[end - 1].trim().length === 0) {
+    end -= 1
+  }
+  return rows.slice(0, end)
 }
 
-/** Trailing excerpt of a plain-text reply, used when no terminal screen is readable. */
-export function textTailLines(text: string, maxLines = GLANCE_TAIL_LINES): string[] {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim().length > 0)
-  return lines
-    .slice(-maxLines)
-    .map((l) => (l.length > MAX_LINE_CHARS ? l.slice(0, MAX_LINE_CHARS) : l))
+/** Trailing rows of a plain-text reply, used when no terminal screen is readable. */
+export function textTailLines(text: string, maxLines: number): string[] {
+  const lines = text.split(/\r?\n/).map((line) => clip(line.trimEnd()))
+  let end = lines.length
+  while (end > 0 && lines[end - 1].trim().length === 0) {
+    end -= 1
+  }
+  return lines.slice(0, end).slice(maxLines > 0 ? -maxLines : 0)
 }
 
 export function sameLines(a: readonly string[] | null, b: readonly string[] | null): boolean {
@@ -61,4 +46,159 @@ export function sameLines(a: readonly string[] | null, b: readonly string[] | nu
     return false
   }
   return a.every((line, i) => line === b[i])
+}
+
+// ---- Styled screen (colours and attributes) --------------------------------
+
+export type CellColor =
+  | { mode: 'default' }
+  | { mode: 'palette'; index: number }
+  | { mode: 'rgb'; rgb: number }
+
+/** A run of adjacent cells that share colours and attributes. */
+export type MiniRun = {
+  text: string
+  fg: CellColor
+  bg: CellColor
+  bold: boolean
+  dim: boolean
+  italic: boolean
+  underline: boolean
+  inverse: boolean
+  strike: boolean
+  invisible: boolean
+}
+
+/** The subset of xterm's IBufferCell the miniature reads. */
+export type StyledBufferCell = {
+  getChars(): string
+  getWidth(): number
+  getFgColor(): number
+  getBgColor(): number
+  isFgRGB(): boolean
+  isBgRGB(): boolean
+  isFgPalette(): boolean
+  isBgPalette(): boolean
+  isBold(): number
+  isDim(): number
+  isItalic(): number
+  isUnderline(): number
+  isInverse(): number
+  isStrikethrough(): number
+  isInvisible(): number
+}
+export type StyledBufferLine = {
+  getCell(x: number, cell?: StyledBufferCell): StyledBufferCell | undefined
+}
+export type StyledTailBuffer = {
+  length: number
+  getLine(y: number): StyledBufferLine | undefined
+  getNullCell(): StyledBufferCell
+}
+
+/** The visible screen as styled rows, plus the terminal size they were laid out at. */
+export type ConsoleScreen = { cols: number; rows: number; lines: MiniRun[][] }
+
+const DEFAULT: CellColor = { mode: 'default' }
+
+function cellColor(rgb: boolean, palette: boolean, value: number): CellColor {
+  return rgb ? { mode: 'rgb', rgb: value } : palette ? { mode: 'palette', index: value } : DEFAULT
+}
+
+const sameColor = (a: CellColor, b: CellColor): boolean =>
+  a.mode === b.mode &&
+  (a.mode === 'default' ||
+    (a.mode === 'palette' && b.mode === 'palette' && a.index === b.index) ||
+    (a.mode === 'rgb' && b.mode === 'rgb' && a.rgb === b.rgb))
+
+const sameStyle = (a: MiniRun, b: MiniRun): boolean =>
+  sameColor(a.fg, b.fg) &&
+  sameColor(a.bg, b.bg) &&
+  a.bold === b.bold &&
+  a.dim === b.dim &&
+  a.italic === b.italic &&
+  a.underline === b.underline &&
+  a.inverse === b.inverse &&
+  a.strike === b.strike &&
+  a.invisible === b.invisible
+
+const isPlainBlank = (run: MiniRun): boolean =>
+  run.text.trim() === '' &&
+  run.bg.mode === 'default' &&
+  !run.inverse &&
+  !run.underline &&
+  !run.strike
+
+/**
+ * One buffer row as styled runs, cut at `cols` cells and with trailing plain
+ * blanks dropped. Wide glyphs take their own cell; their spacer is skipped.
+ */
+export function styledRow(
+  line: StyledBufferLine | undefined,
+  cols: number,
+  scratch: StyledBufferCell
+): MiniRun[] {
+  const runs: MiniRun[] = []
+  if (!line) {
+    return runs
+  }
+  for (let x = 0; x < cols; x += 1) {
+    const cell = line.getCell(x, scratch)
+    if (!cell) {
+      break
+    }
+    const width = cell.getWidth()
+    if (width === 0) {
+      continue
+    }
+    const run: MiniRun = {
+      text: cell.getChars() || ' ',
+      fg: cellColor(cell.isFgRGB(), cell.isFgPalette(), cell.getFgColor()),
+      bg: cellColor(cell.isBgRGB(), cell.isBgPalette(), cell.getBgColor()),
+      bold: cell.isBold() !== 0,
+      dim: cell.isDim() !== 0,
+      italic: cell.isItalic() !== 0,
+      underline: cell.isUnderline() !== 0,
+      inverse: cell.isInverse() !== 0,
+      strike: cell.isStrikethrough() !== 0,
+      invisible: cell.isInvisible() !== 0
+    }
+    const last = runs.at(-1)
+    if (last && sameStyle(last, run)) {
+      last.text += run.text
+    } else {
+      runs.push(run)
+    }
+  }
+  for (let last = runs.at(-1); last; last = runs.at(-1)) {
+    if (isPlainBlank(last)) {
+      runs.pop()
+      continue
+    }
+    const trimmed = last.text.replace(/ +$/, '')
+    if (trimmed !== last.text && last.bg.mode === 'default' && !last.inverse && !last.underline) {
+      last.text = trimmed
+    }
+    break
+  }
+  return runs
+}
+
+/** Every visible row as styled runs, minus the blank rows under the last output. */
+export function consoleScreenRuns(buffer: StyledTailBuffer, cols: number): MiniRun[][] {
+  const scratch = buffer.getNullCell()
+  const rows: MiniRun[][] = []
+  for (let y = 0; y < buffer.length; y += 1) {
+    rows.push(styledRow(buffer.getLine(y), Math.min(cols, MAX_LINE_CHARS), scratch))
+  }
+  let end = rows.length
+  while (end > 0 && rows[end - 1].length === 0) {
+    end -= 1
+  }
+  return rows.slice(0, end)
+}
+
+/** Cheap change check: the same screen produces the same key. */
+export function screenKey(screen: ConsoleScreen | null): string {
+  return screen ? `${screen.cols}x${screen.rows}:${JSON.stringify(screen.lines)}` : ''
 }

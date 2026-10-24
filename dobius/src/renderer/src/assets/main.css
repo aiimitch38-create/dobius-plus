@@ -3735,6 +3735,8 @@ html.onboarding-tour-start-transition::view-transition-new(root) {
   --board-chip-ring-7: linear-gradient(90deg, oklch(0.74 0.1 305), oklch(0.86 0.08 85));
   --board-danger-tint: oklch(0.904 0.022 39);
   --board-danger-text: oklch(0.55 0.16 30);
+  /* Usage at 75%+ (amber); red (--board-danger-text) takes over at 90%. */
+  --board-warning-text: oklch(0.66 0.15 70);
   --board-live: oklch(0.523 0.088 134);
   --board-radius-panel: 16px;
   --board-radius-card: 14px;

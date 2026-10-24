@@ -108,4 +108,29 @@ describe('near-miss names', () => {
     })
     expect(transport).toHaveBeenCalledTimes(1)
   })
+
+  it('asks "did you mean" when the fallback loop names a near-miss console', async () => {
+    const out = await runPlanner(
+      base(async () => {
+        throw new Error('offline')
+      }, 'every 10 minutes tell Clade 1 to run the tests')
+    )
+    expect(out).toMatchObject({
+      kind: 'did-you-mean',
+      suggestion: { from: 'Clade 1', to: 'Claude 1' }
+    })
+  })
+
+  it('keeps an exactly named fallback loop target', async () => {
+    const out = await runPlanner(
+      base(async () => {
+        throw new Error('offline')
+      }, 'every 10 minutes tell Claude 1 to run the tests')
+    )
+    expect(out).toMatchObject({
+      kind: 'plan',
+      source: 'fallback',
+      plan: { steps: [{ kind: 'loop', target: 'Claude 1', text: 'run the tests' }] }
+    })
+  })
 })

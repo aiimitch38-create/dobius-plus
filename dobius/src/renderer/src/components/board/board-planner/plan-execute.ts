@@ -1,13 +1,15 @@
+import { translate } from '@/i18n/i18n'
 import type {
   BoardPlan,
   PlanBoardSnapshot,
+  PlanGit,
   PlanRole,
   PlanStep,
   PlanStudio,
   PlanTheme,
   PlanTool
 } from './plan-schema'
-import { resolveTarget, targetConsoleNames } from './plan-target'
+import { resolveTarget, targetConsoleNames, type ResolvedTarget } from './plan-target'
 
 // Applies a validated plan. Board actions and terminal actions go through an
 // injected effects object, so this dispatcher stays pure and testable and each
@@ -39,7 +41,13 @@ export type PlanEffects = {
   lifecycle(kind: 'restart' | 'kill' | 'pause' | 'resume', consoles: string[]): Promise<StepResult>
   cancelLatest(): Promise<StepResult>
   report(kind: 'status' | 'report'): Promise<StepResult>
-  loop(text: string, intervalMinutes: number): Promise<StepResult>
+  loop(input: {
+    text: string
+    intervalMinutes: number
+    /** Resolved target; null = every console on the board. */
+    target: ResolvedTarget | null
+    stopCommand: string | null
+  }): Promise<StepResult>
   groupAction(
     kind: 'kill_group' | 'dissolve_group' | 'create_group',
     group: string,
@@ -64,7 +72,7 @@ export type PlanEffects = {
     target: string | null,
     text: string | null
   ): Promise<StepResult>
-  git(action: 'push' | 'commit' | 'pull', message: string | null): Promise<StepResult>
+  git(action: PlanGit, message: string | null): Promise<StepResult>
   figure(
     kind: 'note' | 'text' | 'todo' | 'kanban' | 'calendar',
     text: string | null,
@@ -118,8 +126,26 @@ export async function executeStep(
     case 'status':
     case 'report':
       return fx.report(step.kind)
-    case 'loop':
-      return fx.loop(step.text, step.intervalMinutes)
+    case 'loop': {
+      const target = step.target ? resolveTarget(step.target, board) : null
+      // Why: an unresolved name must never widen to "every console".
+      if (step.target && !target) {
+        return {
+          ok: false,
+          text: translate(
+            'board.plan.loop.noSuchTarget',
+            'Nothing on the board is called “{{name}}”, so no loop was made.',
+            { name: step.target }
+          )
+        }
+      }
+      return fx.loop({
+        text: step.text,
+        intervalMinutes: step.intervalMinutes,
+        target,
+        stopCommand: step.stopCommand
+      })
+    }
     case 'kill_group':
     case 'dissolve_group':
       return fx.groupAction(step.kind, step.target, names(step.target, board))

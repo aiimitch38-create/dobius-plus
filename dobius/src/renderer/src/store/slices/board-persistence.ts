@@ -91,6 +91,20 @@ export function createBoardPersistence(
     schedule(PERSIST_DEBOUNCE_MS)
   })
 
+  // Leaving the Board saves a "close" snapshot once the pending write has landed.
+  api.subscribe((state, prev) => {
+    const worktreeId = prev.activeWorktreeId
+    if (prev.activeView !== 'board' || state.activeView === 'board' || !worktreeId) {
+      return
+    }
+    const wait = persistTimer ? Math.max(0, persistDueAt - Date.now()) + 100 : 0
+    setTimeout(() => {
+      window.api?.boardSnapshots
+        ?.capture({ worktreeId, reason: 'close' })
+        .catch((error: unknown) => console.warn('[board] snapshot on close failed', error))
+    }, wait)
+  })
+
   return {
     schedule,
     isEcho: (raw) => JSON.stringify(raw ?? {}) === lastPersistedJson,
@@ -131,4 +145,49 @@ export function mergeFirstHydration(
     }
   }
   return out
+}
+
+/**
+ * Restores a saved snapshot over the live board without touching terminals.
+ * Snapshot cards come back as saved; a console whose terminal is gone shows as
+ * closed (its card renders "This terminal was closed"). Every console on the
+ * board now that the snapshot lacks is kept, and a snapshot console whose
+ * terminal is already shown by another card is dropped, so restoring never
+ * hides, duplicates or kills a live terminal. Camera and tool stay as they are.
+ */
+export function mergeSnapshotBoard(current: BoardState, snapshot: BoardState): BoardState {
+  const currentTabOwner = new Map<string, string>()
+  for (const card of current.cards) {
+    if (card.kind === 'console') {
+      currentTabOwner.set(card.tabId, card.id)
+    }
+  }
+  const cards = snapshot.cards.filter((card) => {
+    if (card.kind !== 'console') {
+      return true
+    }
+    const owner = currentTabOwner.get(card.tabId)
+    return owner === undefined || owner === card.id
+  })
+  const ids = new Set(cards.map((c) => c.id))
+  for (const card of current.cards) {
+    if (card.kind === 'console' && !ids.has(card.id)) {
+      cards.push(card)
+      ids.add(card.id)
+    }
+  }
+  return {
+    ...current,
+    cards: cards.map((c) =>
+      (c.kind === 'orchestrator' || c.kind === 'goal') && c.wiredCardIds.some((id) => !ids.has(id))
+        ? { ...c, wiredCardIds: c.wiredCardIds.filter((id) => ids.has(id)) }
+        : c
+    ),
+    groups: snapshot.groups
+      .map((g) => ({ ...g, cardIds: g.cardIds.filter((id) => ids.has(id)) }))
+      .filter((g) => g.cardIds.length > 0),
+    connectors: (snapshot.connectors ?? []).filter(
+      (c) => ids.has(c.fromCardId) && ids.has(c.toCardId)
+    )
+  }
 }

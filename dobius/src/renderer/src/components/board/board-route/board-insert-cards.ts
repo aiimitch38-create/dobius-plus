@@ -1,5 +1,5 @@
 import { translate } from '@/i18n/i18n'
-import type { BoardSwatch, NewBoardCard } from '@/store/slices/board'
+import { DEFAULT_GOAL_REMINDERS, type BoardSwatch, type NewBoardCard } from '@/store/slices/board'
 import { getBoardToolStyle } from '../board-tool-panels/board-tool-style-store'
 
 const SWATCHES: readonly string[] = ['yellow', 'pink', 'blue', 'green', 'purple', 'accent']
@@ -16,6 +16,7 @@ export type BoardInsertCardKind =
   | 'screen'
   | 'web'
   | 'memory'
+  | 'goal'
   | 'skill'
   | 'branches'
 
@@ -29,6 +30,7 @@ const SIZES: Record<BoardInsertCardKind, { w: number; h: number }> = {
   screen: { w: 180, h: 140 },
   web: { w: 900, h: 600 },
   memory: { w: 300, h: 180 },
+  goal: { w: 340, h: 520 },
   skill: { w: 320, h: 170 },
   branches: { w: 300, h: 360 }
 }
@@ -116,6 +118,18 @@ export function boardInsertCard(kind: BoardInsertCardKind, center: BoardPoint): 
         ...base,
         kind: 'memory',
         title: translate('board.studio.title.memory', 'Memory'),
+        wiredCardIds: []
+      }
+    case 'goal':
+      return {
+        ...base,
+        kind: 'goal',
+        title: translate('board.insert.goal', 'Goal'),
+        goal: '',
+        criteria: [],
+        dont: [],
+        reminders: { ...DEFAULT_GOAL_REMINDERS },
+        driftCheck: false,
         wiredCardIds: []
       }
     case 'skill':

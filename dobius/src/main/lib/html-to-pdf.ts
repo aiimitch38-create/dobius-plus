@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, type PrintToPDFOptions } from 'electron'
 import { writeFile, unlink } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -30,7 +30,10 @@ new Promise((resolve) => {
 })
 `
 
-export async function htmlToPdf(html: string): Promise<Buffer> {
+export async function htmlToPdf(
+  html: string,
+  printOverrides: PrintToPDFOptions = {}
+): Promise<Buffer> {
   const tempDir = app.getPath('temp')
   const tempPath = path.join(tempDir, `dobius-export-${randomUUID()}.html`)
   await writeFile(tempPath, html, 'utf-8')
@@ -72,7 +75,8 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
           bottom: 0.75,
           left: 0.75,
           right: 0.75
-        }
+        },
+        ...printOverrides
       })
     })()
 

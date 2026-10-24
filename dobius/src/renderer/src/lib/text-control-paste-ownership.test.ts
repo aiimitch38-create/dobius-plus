@@ -41,6 +41,16 @@ describe('text control paste ownership', () => {
     expect(findOwnedTextControlPasteTarget(null)).toBeNull()
   })
 
+  it('never treats the xterm helper textarea as an app-menu paste target', () => {
+    // Why: writing the clipboard into it bypassed the terminal paste
+    // confirmation, so a multi-line paste ran every line as a command.
+    const xtermTextarea = appendTextarea()
+    xtermTextarea.className = 'xterm-helper-textarea'
+    xtermTextarea.focus()
+
+    expect(findOwnedTextControlPasteTarget(xtermTextarea)).toBeNull()
+  })
+
   it('rejects paste-event ownership for terminal helper textareas or stale focus', () => {
     const textarea = appendTextarea()
     const other = appendTextarea()

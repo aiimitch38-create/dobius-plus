@@ -15,6 +15,7 @@ import {
   Shapes,
   StickyNote,
   SquareTerminal,
+  Target,
   Type
 } from 'lucide-react'
 import { useAppStore } from '@/store'
@@ -43,6 +44,7 @@ import { NoteCard } from './NoteCard'
 import { OrchestratorCard } from './OrchestratorCard'
 import { BranchesCard } from './BranchesCard'
 import { MemoryCard } from './MemoryCard'
+import { GoalCard } from './GoalCard'
 import { SkillCard } from './SkillCard'
 import { ShapeCard } from './ShapeCard'
 import { StrokeCard } from './StrokeCard'
@@ -77,6 +79,7 @@ const KIND_ICON: Record<BoardCardKind, React.ReactNode> = {
   markdown: <FileText />,
   orchestrator: <Cable />,
   memory: <Brain />,
+  goal: <Target />,
   skill: <Sparkles />,
   branches: <GitBranch />
 }
@@ -222,7 +225,7 @@ export const BoardCardRenderer = React.memo(function BoardCardRenderer({
       {card.kind === 'console' ? (
         <ConsoleCardBody worktreeId={worktreeId} card={card} zoom={zoom} focused={selected} />
       ) : (
-        renderBody(card, worktreeId, onChange)
+        renderBody(card, worktreeId, onChange, zoom)
       )}
     </BoardCardFrame>
   )
@@ -231,13 +234,14 @@ export const BoardCardRenderer = React.memo(function BoardCardRenderer({
 function renderBody(
   card: BoardCard,
   worktreeId: string,
-  onChange: (patch: BoardCardPatch) => void
+  onChange: (patch: BoardCardPatch) => void,
+  zoom: number
 ): React.ReactNode {
   switch (card.kind) {
     case 'console':
       return null
     case 'web':
-      return <WebTileCard card={card} onChange={onChange} worktreeId={worktreeId} />
+      return <WebTileCard card={card} onChange={onChange} worktreeId={worktreeId} zoom={zoom} />
     case 'note':
       return <NoteCard card={card} onChange={onChange} worktreeId={worktreeId} />
     case 'text':
@@ -260,6 +264,8 @@ function renderBody(
       return <OrchestratorCard worktreeId={worktreeId} card={card} onChange={onChange} />
     case 'memory':
       return <MemoryCard worktreeId={worktreeId} card={card} onChange={onChange} />
+    case 'goal':
+      return <GoalCard worktreeId={worktreeId} card={card} onChange={onChange} />
     case 'skill':
       return <SkillCard worktreeId={worktreeId} card={card} onChange={onChange} />
     case 'branches':

@@ -248,7 +248,8 @@ export function useBoardActions({
         case 'todo':
         case 'kanban':
         case 'calendar':
-        case 'orchestrator': {
+        case 'orchestrator':
+        case 'goal': {
           if (!worktreeId) {
             return
           }

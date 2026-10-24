@@ -322,6 +322,37 @@ export function TerminalInteractionSection({
         </SearchableSetting>
 
         <SearchableSetting
+          title={translate('terminal.pasteConfirm.settingTitle', 'Confirm Multi-Line Paste')}
+          description={translate(
+            'terminal.pasteConfirm.settingDescription',
+            'Ask before pasting several lines or a risky command into a shell, where each line could run. Skipped when the program uses bracketed paste (Claude Code, Codex).'
+          )}
+          keywords={[
+            'paste',
+            'multi-line',
+            'multiline',
+            'confirm',
+            'commands',
+            'safety',
+            'clipboard'
+          ]}
+        >
+          <SettingsSwitchRow
+            label={translate('terminal.pasteConfirm.settingTitle', 'Confirm Multi-Line Paste')}
+            description={translate(
+              'terminal.pasteConfirm.settingDescription',
+              'Ask before pasting several lines or a risky command into a shell, where each line could run. Skipped when the program uses bracketed paste (Claude Code, Codex).'
+            )}
+            checked={settings.terminalPasteConfirm !== false}
+            onChange={() =>
+              updateSettings({
+                terminalPasteConfirm: settings.terminalPasteConfirm === false
+              })
+            }
+          />
+        </SearchableSetting>
+
+        <SearchableSetting
           id={OSC52_CLIPBOARD_SETTING_ID}
           title={translate(
             'auto.components.settings.TerminalPane.3338dcf8c1',

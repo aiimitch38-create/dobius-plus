@@ -16,7 +16,6 @@ import {
   CONSOLE_SETTLE_MS,
   consoleHostBox,
   nextConsoleMode,
-  glanceScale,
   zoomedFontSize,
   shouldRefit,
   type ConsoleRenderMode
@@ -25,6 +24,7 @@ import {
   isBoardConsoleFontOverrideSupported,
   setBoardConsoleFontOverride
 } from './console-font-override'
+import { miniatureWorthDrawing } from '../board-canvas/board-lod'
 import { ConsoleGlanceView } from './ConsoleGlance'
 import { useConsolePane } from './use-console-pane'
 import { useSettledValue } from './use-settled-value'
@@ -189,7 +189,9 @@ export function ConsoleCardBody({
           leafId={leafId}
           title={card.title}
           onScreen={visibleRaw}
-          scale={glanceScale(settledZoom)}
+          drawText={miniatureWorthDrawing(size.h, settledZoom)}
+          bodyHeight={size.h}
+          bodyWidth={size.w}
         />
       )}
       {notice !== undefined && (

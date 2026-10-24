@@ -11,7 +11,7 @@ import {
   type PlanRole,
   type PlanStep
 } from './plan-schema'
-import { resolveTarget } from './plan-target'
+import { resolveTarget, splitAddressee } from './plan-target'
 
 // Parses one raw step from the planner's JSON into a typed PlanStep, or returns
 // the rejection reason. Field-level checks only; plan-level rules live in
@@ -136,7 +136,28 @@ export function parseStep(raw: unknown, board: PlanBoardSnapshot): PlanStep | st
       if (typeof minutes !== 'number' || minutes < 1 || minutes > LOOP_MAX_INTERVAL_MINUTES) {
         return `loop interval_minutes must be 1-${LOOP_MAX_INTERVAL_MINUTES}`
       }
-      return { kind, text, intervalMinutes: Math.round(minutes) }
+      let target = str(raw.target)
+      let instruction = text
+      // Why: "tell Claude 1 to run the tests" with no target would otherwise
+      // loop on every console with the addressee left inside the message.
+      const addressed = target ? null : splitAddressee(text)
+      if (addressed) {
+        if (!resolveTarget(addressed.target, board)) {
+          return `loop text addresses "${addressed.target}", which is not on the board; put the console or group in target`
+        }
+        target = addressed.target
+        instruction = addressed.text
+      }
+      if (target && !resolveTarget(target, board)) {
+        return `target "${target}" is not on the board`
+      }
+      return {
+        kind,
+        text: instruction,
+        intervalMinutes: Math.round(minutes),
+        target,
+        stopCommand: str(raw.stop_command) ?? str(raw.stopCommand)
+      }
     }
     case 'insert_markdown': {
       const path = str(raw.path)

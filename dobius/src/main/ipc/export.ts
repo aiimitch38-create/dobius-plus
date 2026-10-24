@@ -1,10 +1,55 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { writeFile } from 'node:fs/promises'
+import type { PrintToPDFOptions } from 'electron'
+import { buildPrintToPdfOptions } from '../browser/cdp-print-to-pdf'
 import { ExportTimeoutError, htmlToPdf } from '../lib/html-to-pdf'
+
+export type ExportPdfPageSize = 'Letter' | 'A4'
 
 export type ExportHtmlToPdfArgs = {
   html: string
   title: string
+  /** Paper size; omitted keeps the historical A4 default. */
+  pageSize?: ExportPdfPageSize
+  /** Print "n / total" in the page footer. */
+  pageNumbers?: boolean
+}
+
+// Inches, matching CDP Page.printToPDF paperWidth/paperHeight.
+const PAPER_INCHES: Record<ExportPdfPageSize, { paperWidth: number; paperHeight: number }> = {
+  Letter: { paperWidth: 8.5, paperHeight: 11 },
+  A4: { paperWidth: 8.27, paperHeight: 11.69 }
+}
+
+// Why: Chromium renders the footer as its own tiny document with a 0px default
+// font, so the size must be explicit; pageNumber/totalPages are filled in by
+// Chromium itself (no script runs in the template).
+const PAGE_NUMBER_FOOTER =
+  '<div style="width:100%;font-size:9px;color:#6b7280;text-align:center;font-family:-apple-system,Helvetica,Arial,sans-serif;"><span class="pageNumber"></span> / <span class="totalPages"></span></div>'
+
+/** Translates the export args into printToPDF overrides through the shared CDP option sanitizer. */
+export function buildExportPrintOverrides(
+  args: Pick<ExportHtmlToPdfArgs, 'pageSize' | 'pageNumbers'>
+): PrintToPDFOptions {
+  const paper =
+    args.pageSize === 'Letter' || args.pageSize === 'A4' ? PAPER_INCHES[args.pageSize] : null
+  if (!paper && !args.pageNumbers) {
+    return {}
+  }
+  return buildPrintToPdfOptions({
+    ...paper,
+    ...(args.pageNumbers
+      ? {
+          displayHeaderFooter: true,
+          headerTemplate: '<span></span>',
+          footerTemplate: PAGE_NUMBER_FOOTER,
+          marginTop: 0.75,
+          marginBottom: 0.8,
+          marginLeft: 0.75,
+          marginRight: 0.75
+        }
+      : {})
+  })
 }
 
 export type ExportHtmlToPdfResult =
@@ -22,7 +67,7 @@ export function registerExportHandlers(): void {
       }
 
       try {
-        const pdfBuffer = await htmlToPdf(html)
+        const pdfBuffer = await htmlToPdf(html, buildExportPrintOverrides(args))
 
         // Why: sanitize to keep the suggested filename legal on every platform.
         // Windows forbids /\:*?"<>| in filenames; truncate to keep the OS save

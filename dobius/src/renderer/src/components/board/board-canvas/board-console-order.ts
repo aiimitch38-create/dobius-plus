@@ -36,3 +36,18 @@ export function boardStepId(
   }
   return orderedIds[(at + step + orderedIds.length) % orderedIds.length]
 }
+
+type Steppable = Placed & { kind: string; shape?: string }
+
+/**
+ * Cards ⌥←/→ visits: every window on the board in reading order, minus pen
+ * ink and line/arrow connectors (marks on the board, not places to go).
+ */
+export function boardFocusStepOrder<T extends Steppable>(cards: readonly T[]): T[] {
+  return boardReadingOrder(
+    cards.filter(
+      (c) =>
+        c.kind !== 'stroke' && !(c.kind === 'shape' && (c.shape === 'line' || c.shape === 'arrow'))
+    )
+  )
+}

@@ -12,6 +12,7 @@ import { AgentIcon } from '@/lib/agent-catalog'
 import { cn } from '@/lib/utils'
 import { BoardRailButton } from './BoardRailButton'
 import { BoardUsagePanel } from './BoardUsagePanel'
+import { usageLevel, usageLevelColor } from './board-usage-levels'
 import { BoardWorkspaceTabButton, type BoardWorkspaceTab } from './BoardWorkspaceTabButton'
 import {
   BOARD_FLOATING_PANEL_CLASS,
@@ -195,6 +196,12 @@ export function BoardTopBar({
                   BOARD_FLOATING_PANEL_CLASS,
                   'flex h-7 items-center gap-1.5 rounded-full bg-[var(--board-status-pill)] px-2.5 text-[12px] font-medium tabular-nums hover:bg-[var(--board-panel-2)]'
                 )}
+                data-usage-level={usageLevel(usage.usedPercent)}
+                style={
+                  usageLevel(usage.usedPercent) === 'normal'
+                    ? undefined
+                    : { color: usageLevelColor(usageLevel(usage.usedPercent)) }
+                }
               >
                 <Info className="size-3.5 text-[var(--board-text-muted)]" />
                 {usage.provider === 'claude' ||

@@ -99,3 +99,13 @@ describe('riskyTextConcerns', () => {
     expect(riskyTextConcerns('the yolo-mode doc', null)).toEqual([])
   })
 })
+
+describe('git steps', () => {
+  it('treats "commit and push" as said only when the user said both words', () => {
+    const step: PlanStep = { kind: 'git', target: 'commit_push', text: 'fix' }
+    expect(screenPlan(plan([step]), 'commit and push', BOARD)).toEqual([])
+    expect(screenPlan(plan([step]), 'commit this', BOARD).map((c) => c.kind)).toEqual([
+      'unsaid-git'
+    ])
+  })
+})

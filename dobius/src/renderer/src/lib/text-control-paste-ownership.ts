@@ -34,6 +34,12 @@ export function findOwnedTextControlPasteTarget(
   if (!textControl || !isPrimarySelectionTextControl(textControl)) {
     return null
   }
+  // Why: xterm's helper textarea is a terminal, not a text field. Writing the
+  // clipboard into it skips the terminal paste pipeline (and its multi-line
+  // confirmation) and the text runs as commands.
+  if (textControl.classList.contains('xterm-helper-textarea')) {
+    return null
+  }
   if (textControl.disabled || textControl.readOnly) {
     return null
   }

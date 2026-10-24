@@ -1,3 +1,4 @@
+import { openBoardSnapshotRestore } from '../board-snapshots/board-snapshot-restore'
 import { useState } from 'react'
 import { useAppStore } from '@/store'
 import type { BoardState } from '@/store/slices/board'
@@ -64,6 +65,7 @@ export function useBoardCanvasMenu(args: {
       case 'calendar':
       case 'shape':
       case 'memory':
+      case 'goal':
       case 'skill':
       case 'branches':
         store.addCard(worktreeId, boardInsertCard(action, point.world))
@@ -81,6 +83,9 @@ export function useBoardCanvasMenu(args: {
         return
       case 'zoom100':
         window.dispatchEvent(new CustomEvent(BOARD_ZOOM_EVENT, { detail: 'reset' }))
+        return
+      case 'restoreSnapshot':
+        openBoardSnapshotRestore(worktreeId)
     }
   }
 

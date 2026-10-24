@@ -127,7 +127,7 @@ export function screenPlan(
     if (destructive) {
       concerns.push(destructive)
     }
-    if (step.kind === 'git' && !said.includes(step.target)) {
+    if (step.kind === 'git' && !step.target.split('_').every((word) => said.includes(word))) {
       concerns.push({ kind: 'unsaid-git', action: step.target })
     }
   }

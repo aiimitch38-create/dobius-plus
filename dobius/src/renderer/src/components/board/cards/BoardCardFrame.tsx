@@ -27,6 +27,7 @@ import {
 import { translate } from '@/i18n/i18n'
 import { passedCardDragThreshold, shouldStartCardDrag } from './card-drag-target'
 import { focusMovedOutOfMenu } from './card-menu-focus'
+import { BoardCardFocusEdge } from '../board-canvas/BoardCardFocusEdge'
 
 export type BoardCardAction = {
   label: string
@@ -35,7 +36,8 @@ export type BoardCardAction = {
 }
 
 export type BoardCardFrameProps = {
-  rect: Rect
+  /** The renderer passes the card itself; its `id` keys the focus-mode marker. */
+  rect: Rect & { id?: string }
   z: number
   zoom: number
   title: string
@@ -272,6 +274,7 @@ export function BoardCardFrame({
   return (
     <div
       data-board-card
+      data-board-card-id={rect.id}
       className={cn(
         'group/board-card absolute flex flex-col',
         !bare &&
@@ -300,6 +303,7 @@ export function BoardCardFrame({
     >
       {!bare && (
         <div
+          data-board-card-header
           className="flex h-10 shrink-0 cursor-grab items-center gap-2 border-b border-[var(--board-panel-border)] px-3 select-none active:cursor-grabbing"
           {...dragHandlers}
         >
@@ -372,6 +376,7 @@ export function BoardCardFrame({
           )}
         </div>
       )}
+      {rect.id ? <BoardCardFocusEdge cardId={rect.id} /> : null}
       <div
         data-board-wheel="native"
         className={cn(

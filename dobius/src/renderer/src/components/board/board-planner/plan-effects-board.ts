@@ -1,4 +1,5 @@
 import { translate } from '@/i18n/i18n'
+import { runWorktreeBatchDelete } from '@/components/sidebar/delete-worktree-flow'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { useAppStore } from '@/store'
 import { getBoard, type BoardCard } from '@/store/slices/board'
@@ -25,6 +26,18 @@ import type { BoardStudioId } from '../board-studios/board-studio-ids'
 import type { PlanEffects, StepResult } from './plan-execute'
 import type { PlanStudio } from './plan-schema'
 import { cardEffects } from './plan-effects-cards'
+import { gitEffect } from './plan-effects-git'
+import { pickWorkspace } from './plan-workspace'
+import { getRepoIdFromWorktreeId } from '../../../../../shared/worktree-id'
+
+export type PlanConfirm = (options: {
+  title: string
+  description?: string
+  /** Monospace block, one entry per line. */
+  details?: readonly string[]
+  confirmLabel?: string
+  confirmVariant?: 'default' | 'destructive'
+}) => Promise<boolean>
 
 export type BoardEffectsContext = {
   worktreeId: string
@@ -33,6 +46,10 @@ export type BoardEffectsContext = {
   closeStudio: () => void
   /** Center of a free area of the visible board big enough for `block`. */
   freeCenter: (block: { w: number; h: number }) => BoardPoint
+  /** The Board's own undo stack (same as Cmd+Z); false when there is nothing to undo. */
+  history: { undo: () => boolean; redo: () => boolean }
+  /** Asks the user before git and other actions that leave the board. */
+  confirm: PlanConfirm
 }
 
 export type BoardEffects = Omit<
@@ -221,7 +238,21 @@ export function boardEffects(ctx: BoardEffectsContext): BoardEffects {
       ctx.closeStudio()
       return done(translate('board.plan.closed', 'Closed the panel.'))
     },
-    history: async () => notBuilt(translate('board.plan.undo', 'Undo and redo')),
+    history: async (kind) => {
+      const changed = kind === 'undo' ? ctx.history.undo() : ctx.history.redo()
+      if (!changed) {
+        return failed(
+          kind === 'undo'
+            ? translate('board.plan.nothingToUndo', 'Nothing to undo.')
+            : translate('board.plan.nothingToRedo', 'Nothing to redo.')
+        )
+      }
+      return done(
+        kind === 'undo'
+          ? translate('board.plan.undone', 'Undid the last board change.')
+          : translate('board.plan.redone', 'Redid the last board change.')
+      )
+    },
     pickTool: async (tool) => {
       state().setTool(worktreeId, tool)
       return done(translate('board.plan.tool', 'Switched to {{tool}}.', { tool }))
@@ -230,29 +261,46 @@ export function boardEffects(ctx: BoardEffectsContext): BoardEffects {
       await state().updateSettings({ theme })
       return done(translate('board.plan.theme', 'Theme set to {{theme}}.', { theme }))
     },
-    workspace: async (kind, target) => {
-      if (kind !== 'open' || !target) {
-        return notBuilt(translate('board.plan.workspaceAction', 'That workspace action'))
+    workspace: async (kind, target, text) => {
+      if (kind === 'new') {
+        state().openModal('new-workspace-composer', {
+          initialRepoId: getRepoIdFromWorktreeId(worktreeId),
+          telemetrySource: 'sidebar'
+        })
+        return done(translate('board.plan.newWorkspace', 'Opened New workspace.'))
       }
-      const list = ctx.workspaces
-      const index = list.findIndex((w) => w.id === worktreeId)
-      const t = target.toLowerCase()
-      const pick =
-        t === 'next'
-          ? list[(index + 1) % list.length]
-          : t === 'previous'
-            ? list[(index - 1 + list.length) % list.length]
-            : /^\d+$/.test(t)
-              ? list[Number(t) - 1]
-              : list.find((w) => w.name.toLowerCase() === t)
+      const pick = target ? pickWorkspace(ctx.workspaces, worktreeId, target) : undefined
       if (!pick) {
         return failed(
-          translate('board.plan.noWorkspace', 'No workspace {{name}}.', { name: target })
+          translate('board.plan.noWorkspace', 'No workspace {{name}}.', { name: target ?? '' })
+        )
+      }
+      if (kind === 'rename') {
+        const name = text?.trim()
+        if (!name) {
+          return failed(translate('board.plan.renameNeedsName', 'Say the new name.'))
+        }
+        await state().updateWorktreeMeta(pick.id, { displayName: name })
+        return done(
+          translate('board.plan.renamed', 'Renamed {{from}} to {{to}}.', {
+            from: pick.name,
+            to: name
+          })
+        )
+      }
+      if (kind === 'close') {
+        // Why: removing a workspace deletes its folder; always use Classic's own
+        // delete dialog (forced on) so the user confirms with its full warnings.
+        runWorktreeBatchDelete([pick.id], { forceConfirm: true })
+        return done(
+          translate('board.plan.closeAsked', 'Asked to confirm removing {{name}}.', {
+            name: pick.name
+          })
         )
       }
       activateAndRevealWorktree(pick.id, { keepView: true })
       return done(translate('board.plan.switched', 'Switched to {{name}}.', { name: pick.name }))
     },
-    git: async () => notBuilt(translate('board.plan.git', 'GitHub actions'))
+    git: gitEffect(worktreeId, ctx.confirm)
   }
 }

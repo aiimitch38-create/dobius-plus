@@ -7,11 +7,11 @@ import { translate } from '@/i18n/i18n'
 import { getConnectionId } from '@/lib/connection-context'
 import { joinPath } from '@/lib/path'
 import { getSettingsForWorktreeRuntimeOwner } from '@/lib/worktree-runtime-owner'
-import { readRuntimeFileContent, writeRuntimeFile } from '@/runtime/runtime-file-client'
+import { readRuntimeFileContent } from '@/runtime/runtime-file-client'
 import { useAppStore } from '@/store'
 import { getBoard } from '@/store/slices/board'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'
-import { screenToWorld } from '../board-canvas/board-viewport'
+import { diagramPlacement } from './diagram-board-scope'
 import { pushNoteToConsole } from '../cards/note-push'
 import {
   buildDiagramRequest,
@@ -22,7 +22,6 @@ import {
   type DiagramEffort,
   type DiagramTemplateId
 } from './diagram-model'
-import { toExcalidraw } from './diagram-excalidraw'
 import { diagramStarter, type DiagramStarterId } from './diagram-starters'
 
 const POLL_MS = 1_500
@@ -61,15 +60,6 @@ const runtimes = new Map<string, JobRuntime>()
 
 function patchJob(id: string, patch: Partial<DiagramJob>): void {
   useDiagramJobs.setState((s) => (s.job?.id === id ? { job: { ...s.job, ...patch } } : s))
-}
-
-function fileContext(worktreeId: string, worktreePath: string) {
-  return {
-    settings: getSettingsForWorktreeRuntimeOwner(useAppStore.getState(), worktreeId),
-    worktreeId,
-    worktreePath,
-    connectionId: getConnectionId(worktreeId) ?? undefined
-  }
 }
 
 function finish(id: string, status: DiagramJobStatus): void {
@@ -199,12 +189,7 @@ export async function startDiagramJob(args: {
   if (previous) {
     finish(previous.id, 'stopped')
   }
-  const board = getBoard(useAppStore.getState(), args.worktreeId)
-  const size = diagramSize(ESTIMATED_LAYERS, ESTIMATED_ROWS)
-  const center = screenToWorld(
-    { x: window.innerWidth / 2, y: window.innerHeight / 2 },
-    board.viewport
-  )
+  const placed = placeDiagram(args.worktreeId, diagramSize(ESTIMATED_LAYERS, ESTIMATED_ROWS))
   const job: DiagramJob = {
     id,
     worktreeId: args.worktreeId,
@@ -217,7 +202,7 @@ export async function startDiagramJob(args: {
   useDiagramJobs.setState({ job })
   runtimes.set(id, {
     timer: window.setInterval(() => void poll(job), POLL_MS),
-    origin: { x: center.x - size.w / 2, y: center.y - size.h / 2 },
+    origin: placed,
     mode: args.mode,
     filePath: joinPath(worktreePath, relativeFile),
     drawnLayers: new Set(),
@@ -236,44 +221,6 @@ export function stopDiagramJob(): void {
   }
 }
 
-/** Writes the drawn diagram next to its source as `.excalidraw`; returns the path or throws. */
-export async function exportDiagramExcalidraw(): Promise<string> {
-  const job = useDiagramJobs.getState().job
-  const worktreePath = job
-    ? findWorktreeById(useAppStore.getState().worktreesByRepo, job.worktreeId)?.path
-    : null
-  if (!job || !worktreePath) {
-    throw new Error(translate('board.diagram.nothingToExport', 'There is no diagram to export.'))
-  }
-  const board = getBoard(useAppStore.getState(), job.worktreeId)
-  const nodeByCard = new Map(Object.entries(job.cardByNode).map(([node, card]) => [card, node]))
-  const shapes = board.cards.flatMap((c) =>
-    c.kind === 'shape' && nodeByCard.has(c.id)
-      ? [
-          {
-            id: c.id,
-            x: c.x,
-            y: c.y,
-            w: c.w,
-            h: c.h,
-            shape: c.shape === 'ellipse' || c.shape === 'diamond' ? c.shape : ('rect' as const),
-            label: c.label
-          }
-        ]
-      : []
-  )
-  const arrows = (board.connectors ?? [])
-    .filter((k) => nodeByCard.has(k.fromCardId) && nodeByCard.has(k.toCardId))
-    .map((k) => ({ from: k.fromCardId, to: k.toCardId, label: k.label }))
-  const relative = job.relativeFile.replace(/\.jsonl$/, '.excalidraw')
-  await writeRuntimeFile(
-    fileContext(job.worktreeId, worktreePath),
-    joinPath(worktreePath, relative),
-    toExcalidraw(shapes, arrows)
-  )
-  return relative
-}
-
 /** Draws a starter diagram at the centre of the view, no agent involved. */
 export function drawStarterDiagram(
   worktreeId: string,
@@ -282,24 +229,15 @@ export function drawStarterDiagram(
 ): void {
   const diagram = diagramStarter(starter)
   const state = useAppStore.getState()
-  const board = getBoard(state, worktreeId)
   const tallest = Math.max(
     ...diagram.layers.map((l) => diagram.nodes.filter((n) => n.layer === l).length)
   )
-  const size = diagramSize(diagram.layers.length, tallest)
-  const center = screenToWorld(
-    { x: window.innerWidth / 2, y: window.innerHeight / 2 },
-    board.viewport
-  )
-  const layout = layoutDiagram(
-    diagram,
-    { x: center.x - size.w / 2, y: center.y - size.h / 2 },
-    mode,
-    false
-  )
+  const origin = placeDiagram(worktreeId, diagramSize(diagram.layers.length, tallest))
+  const layout = layoutDiagram(diagram, origin, mode, false)
   const cardByNode = new Map(
     layout.nodes.map((p) => [p.nodeId, state.addCard(worktreeId, p.card)] as const)
   )
+  let edgeCount = 0
   for (const edge of diagram.edges) {
     const from = cardByNode.get(edge.from)
     const to = cardByNode.get(edge.to)
@@ -309,6 +247,41 @@ export function drawStarterDiagram(
         toCardId: to,
         ...(edge.label ? { label: edge.label } : {})
       })
+      edgeCount += 1
     }
   }
+  // Why: the starter becomes the panel's current diagram so it exports like an
+  // agent drawing; a drawing that is still streaming keeps the slot.
+  const current = useDiagramJobs.getState().job
+  if (current?.status !== 'waiting' && current?.status !== 'drawing') {
+    const id = crypto.randomUUID().slice(0, 8)
+    useDiagramJobs.setState({
+      job: {
+        id,
+        worktreeId,
+        relativeFile: `.dobius/diagrams/${id}.jsonl`,
+        status: 'done',
+        nodeCount: cardByNode.size,
+        edgeCount,
+        cardByNode: Object.fromEntries(cardByNode)
+      }
+    })
+  }
+}
+
+/** Free top-left for a diagram of `size`, panning so it is on screen. */
+function placeDiagram(
+  worktreeId: string,
+  size: { w: number; h: number }
+): { x: number; y: number } {
+  const state = useAppStore.getState()
+  const board = getBoard(state, worktreeId)
+  const { origin, viewport } = diagramPlacement(board, size, {
+    w: window.innerWidth,
+    h: window.innerHeight
+  })
+  if (viewport !== board.viewport) {
+    state.setViewport(worktreeId, viewport)
+  }
+  return origin
 }

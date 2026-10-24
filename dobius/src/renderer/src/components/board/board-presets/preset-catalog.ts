@@ -42,12 +42,18 @@ export function nextPresetAgent(current: PresetAgent): PresetAgent {
   return FILL_AGENTS[(index + 1) % FILL_AGENTS.length] ?? 'claude'
 }
 
-const lane = (id: string, name: string, color: BoardSwatch, count: number): PresetLane => ({
+const lane = (
+  id: string,
+  name: string,
+  color: BoardSwatch,
+  count: number,
+  agent: PresetAgent = 'claude'
+): PresetLane => ({
   id,
   name,
   color,
   count,
-  agent: 'claude'
+  agent
 })
 
 const PREVIEW_URL = 'http://localhost:3000'
@@ -129,7 +135,125 @@ export function presetCatalog(): PresetDefinition[] {
       ],
       extras: [{ kind: 'kanban' }]
     },
+    ...moreWorkspacePresets(),
     ...plainPresets()
+  ]
+}
+
+// Why: second batch of role-based layouts. Lanes mix agents on purpose so a
+// second model checks the first one's work.
+function moreWorkspacePresets(): PresetDefinition[] {
+  const t = translate
+  return [
+    {
+      id: 'bug-bash',
+      section: 'workspace',
+      name: t('board.presets.catalog.bugBash.name', 'Bug Bash'),
+      description: t(
+        'board.presets.catalog.bugBash.description',
+        'A focused hunt: hunters dig through the code for defects, a verifier confirms each one with a failing test before anything gets fixed.'
+      ),
+      lanes: [
+        lane('hunters', t('board.presets.lane.hunters', 'Hunters'), 'pink', 3),
+        lane('verify', t('board.presets.lane.verify', 'Verify'), 'green', 1, 'codex')
+      ],
+      extras: [{ kind: 'orchestrator' }, { kind: 'kanban' }]
+    },
+    {
+      id: 'review-bench',
+      section: 'workspace',
+      name: t('board.presets.catalog.reviewBench.name', 'Review Bench'),
+      description: t(
+        'board.presets.catalog.reviewBench.description',
+        'Three reviewers on three different models read the same change, so one model does not grade its own work.'
+      ),
+      lanes: [
+        lane('claude-review', t('board.presets.lane.claudeReview', 'Claude review'), 'blue', 1),
+        lane(
+          'codex-review',
+          t('board.presets.lane.codexReview', 'Codex review'),
+          'purple',
+          1,
+          'codex'
+        ),
+        lane(
+          'gemini-review',
+          t('board.presets.lane.geminiReview', 'Gemini review'),
+          'yellow',
+          1,
+          'gemini'
+        )
+      ],
+      extras: [{ kind: 'orchestrator' }]
+    },
+    {
+      id: 'security-sweep',
+      section: 'workspace',
+      name: t('board.presets.catalog.securitySweep.name', 'Security Sweep'),
+      description: t(
+        'board.presets.catalog.securitySweep.description',
+        'Auditors look for leaked secrets, unsafe input handling and risky dependencies; patchers fix the findings one at a time.'
+      ),
+      lanes: [
+        lane('audit', t('board.presets.lane.audit', 'Audit'), 'purple', 2, 'codex'),
+        lane('patch', t('board.presets.lane.patch', 'Patch'), 'green', 2)
+      ],
+      extras: [{ kind: 'orchestrator' }, { kind: 'kanban' }]
+    },
+    {
+      id: 'docs-sprint',
+      section: 'workspace',
+      name: t('board.presets.catalog.docsSprint.name', 'Docs Sprint'),
+      description: t(
+        'board.presets.catalog.docsSprint.description',
+        'Writers bring the README, guides and code comments up to date while an editor checks every claim against the code.'
+      ),
+      lanes: [
+        lane('writers', t('board.presets.lane.writers', 'Writers'), 'blue', 3),
+        lane('editor', t('board.presets.lane.editor', 'Editor'), 'yellow', 1, 'gemini')
+      ],
+      extras: [{ kind: 'kanban' }]
+    },
+    {
+      id: 'build-and-watch',
+      section: 'workspace',
+      name: t('board.presets.catalog.buildAndWatch.name', 'Build and Watch'),
+      description: t(
+        'board.presets.catalog.buildAndWatch.description',
+        'A four-agent crew next to the running app, with no orchestrator: you give orders directly and watch each change land in the preview.'
+      ),
+      lanes: [lane('crew', t('board.presets.lane.crew', 'Crew'), 'green', 4)],
+      extras: [{ kind: 'web', url: PREVIEW_URL }]
+    },
+    {
+      id: 'briefing-room',
+      section: 'workspace',
+      name: t('board.presets.catalog.briefingRoom.name', 'Briefing Room'),
+      description: t(
+        'board.presets.catalog.briefingRoom.description',
+        'One planner writes the brief and the task list first, then a crew of three works through it under the orchestrator.'
+      ),
+      lanes: [
+        lane('planner', t('board.presets.lane.planner', 'Planner'), 'yellow', 1),
+        lane('crew', t('board.presets.lane.crew', 'Crew'), 'blue', 3)
+      ],
+      extras: [{ kind: 'orchestrator' }, { kind: 'kanban' }]
+    },
+    {
+      id: 'feature-crew',
+      section: 'workspace',
+      name: t('board.presets.catalog.featureCrew.name', 'Feature Crew'),
+      description: t(
+        'board.presets.catalog.featureCrew.description',
+        'A full feature end to end: front end, back end and tests each get a pair, coordinated by one orchestrator with the app in preview.'
+      ),
+      lanes: [
+        lane('frontend', t('board.presets.lane.frontend', 'Front end'), 'pink', 2),
+        lane('backend', t('board.presets.lane.backend', 'Back end'), 'purple', 2, 'codex'),
+        lane('tests', t('board.presets.lane.tests', 'Tests'), 'green', 2, 'gemini')
+      ],
+      extras: [{ kind: 'orchestrator' }, { kind: 'web', url: PREVIEW_URL }]
+    }
   ]
 }
 

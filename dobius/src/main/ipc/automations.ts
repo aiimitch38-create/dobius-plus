@@ -22,6 +22,8 @@ import {
   runExternalAutomationAction,
   updateExternalAutomation
 } from '../automations/external-manager'
+import { judgeBoardGoalDrift } from '../automations/board-goal-drift-judge'
+import type { GoalDriftVerdict } from '../../shared/board-goal-drift'
 
 export function registerAutomationHandlers(store: Store, service: AutomationService): void {
   ipcMain.handle('automations:list', (): Automation[] => store.listAutomations())
@@ -96,4 +98,9 @@ export function registerAutomationHandlers(store: Store, service: AutomationServ
   ipcMain.handle('automations:rendererReady', (): void => {
     service.setRendererReady()
   })
+  // Board goal card drift check; the judge is read-only and never touches a console.
+  ipcMain.handle(
+    'automations:goalDriftJudge',
+    (_event, input: unknown): Promise<GoalDriftVerdict> => judgeBoardGoalDrift(input)
+  )
 }

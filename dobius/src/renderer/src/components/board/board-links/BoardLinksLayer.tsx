@@ -12,6 +12,7 @@ import {
 import type { Rect } from '../cards/card-geometry'
 import {
   connectorArrows,
+  goalCables,
   groupFrameRect,
   linkEndpoints,
   linkPath,
@@ -99,16 +100,21 @@ function WireTargets({
   mode: Extract<BoardLinkMode, { kind: 'wire' }>
   zoom: number
 }): React.JSX.Element | null {
-  const orchestrator = board.cards.find((c) => c.id === mode.orchestratorId)
-  if (orchestrator?.kind !== 'orchestrator') {
+  const source = board.cards.find((c) => c.id === mode.orchestratorId)
+  if (source?.kind !== 'orchestrator' && source?.kind !== 'goal') {
     return null
   }
-  const wired = new Set(orchestrator.wiredCardIds)
+  const isGoal = source.kind === 'goal'
+  const wired = new Set(source.wiredCardIds)
   const wire = (targetIds: string[]): void =>
-    useAppStore.getState().updateCard(mode.worktreeId, orchestrator.id, {
-      wiredCardIds: toggleWired(orchestrator.wiredCardIds, targetIds)
+    useAppStore.getState().updateCard(mode.worktreeId, source.id, {
+      wiredCardIds: toggleWired(source.wiredCardIds, targetIds)
     })
   const consoleIds = new Set(board.cards.filter((c) => c.kind === 'console').map((c) => c.id))
+  // Why: a goal also reaches orchestrators, and wires a group by its id so later members get it.
+  const targets = board.cards.filter(
+    (c) => c.kind === 'console' || (isGoal && c.kind === 'orchestrator')
+  )
   return (
     <>
       {board.groups.map((group) => {
@@ -119,7 +125,7 @@ function WireTargets({
         }
         // Why: only the group's name strip is a target; the members below stay clickable one by one.
         const tab = { x: rect.x, y: rect.y - 28 / zoom, w: rect.w, h: 28 / zoom }
-        const all = members.every((id) => wired.has(id))
+        const all = isGoal ? wired.has(group.id) : members.every((id) => wired.has(id))
         return (
           <TargetRect
             key={group.id}
@@ -133,26 +139,24 @@ function WireTargets({
                   })
                 : translate('board.links.wireGroup', 'Wire group {{name}}', { name: group.name })
             }
-            onPick={() => wire(members)}
+            onPick={() => wire(isGoal ? [group.id] : members)}
           />
         )
       })}
-      {board.cards
-        .filter((c) => c.kind === 'console')
-        .map((c) => (
-          <TargetRect
-            key={c.id}
-            rect={c}
-            zoom={zoom}
-            active={wired.has(c.id)}
-            label={
-              wired.has(c.id)
-                ? translate('board.links.unwire', 'Unwire {{name}}', { name: c.title })
-                : translate('board.links.wire', 'Wire {{name}}', { name: c.title })
-            }
-            onPick={() => wire([c.id])}
-          />
-        ))}
+      {targets.map((c) => (
+        <TargetRect
+          key={c.id}
+          rect={c}
+          zoom={zoom}
+          active={wired.has(c.id)}
+          label={
+            wired.has(c.id)
+              ? translate('board.links.unwire', 'Unwire {{name}}', { name: c.title })
+              : translate('board.links.wire', 'Wire {{name}}', { name: c.title })
+          }
+          onPick={() => wire([c.id])}
+        />
+      ))}
     </>
   )
 }
@@ -202,7 +206,7 @@ export function BoardLinksLayer({
   const zoom = board.viewport.zoom
   const rawMode = useBoardLinkMode((s) => s.mode)
   const mode = rawMode?.worktreeId === worktreeId ? rawMode : null
-  const cables = orchestratorCables(board)
+  const cables = [...orchestratorCables(board), ...goalCables(board)]
   const arrows = connectorArrows(board)
 
   // Esc leaves connect mode (capture so the Board's own Esc handlers don't also fire).

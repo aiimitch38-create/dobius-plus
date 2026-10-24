@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Globe, RotateCw } from 'lucide-react'
 import { DOBIUS_BROWSER_GUEST_WEB_PREFERENCES_ATTRIBUTE } from '../../../../../shared/browser-guest-web-preferences'
 import { DOBIUS_BROWSER_PARTITION } from '../../../../../shared/constants'
@@ -11,11 +11,17 @@ import { isLoopbackUrl } from '../board-web/dev-server-url'
 import { deviceFitScale, findWebTileDevice, mobileUserAgent } from '../board-web/web-tile-devices'
 import { WebTileExtras } from '../board-web/WebTileExtras'
 import { WebTileInspectorDock } from '../board-web/WebTileInspectorDock'
+import { captureWebTileThumbnail, WEB_THUMBNAIL_REFRESH_MS } from '../board-web/web-tile-thumbnail'
+import { useCardLod } from './use-card-lod'
 
 // Chromium net error for "connection refused": the dev server is not up yet.
 const ERR_CONNECTION_REFUSED = -102
 const DEV_SERVER_RETRY_MS = 2_500
 const DEV_SERVER_MAX_RETRIES = 48
+
+// Why: typical page body text; below ~6px on screen (zoom < ~0.375) the live
+// page is unreadable and a guest swallows the clicks meant for the card.
+const WEB_TILE_TEXT_PX = 16
 
 const NAV_BUTTON =
   'flex size-7 items-center justify-center rounded-full text-[var(--board-text-muted)] hover:bg-[var(--board-panel-2)] disabled:opacity-40'
@@ -25,8 +31,9 @@ const NAV_BUTTON =
 export function WebTileCard({
   card,
   onChange,
-  worktreeId
-}: CardBodyProps<'web'> & { worktreeId?: string }): React.JSX.Element {
+  worktreeId,
+  zoom = 1
+}: CardBodyProps<'web'> & { worktreeId?: string; zoom?: number }): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
   const [draft, setDraft] = useState(card.url)
@@ -38,7 +45,14 @@ export function WebTileCard({
   // DevTools target, so a detached window is no longer safe for this guest.
   const inspectorEverDocked = useRef(false)
   const [bodySize, setBodySize] = useState({ width: 0, height: 0 })
-  const bodyRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const [bodyEl, setBodyEl] = useState<HTMLDivElement | null>(null)
+  const setBodyRef = useCallback((node: HTMLDivElement | null) => {
+    bodyRef.current = node
+    setBodyEl(node)
+  }, [])
+  const { lod, onScreen } = useCardLod(bodyEl, zoom, WEB_TILE_TEXT_PX)
+  const [thumbnail, setThumbnail] = useState<string | null>(null)
   const defaultUserAgent = useRef(navigator.userAgent)
   const userAgentSwitched = useRef(false)
   const onChangeRef = useRef(onChange)
@@ -168,6 +182,29 @@ export function WebTileCard({
     return () => observer.disconnect()
   }, [])
 
+  // Why: the miniature is a still of the page taken as the tile zooms out (the
+  // guest is still painted then); refreshed slowly while on screen. The
+  // webview itself stays mounted and visible underneath, so nothing reloads.
+  useEffect(() => {
+    if (lod !== 'glance' || !onScreen) {
+      return
+    }
+    let cancelled = false
+    const capture = (): void => {
+      void captureWebTileThumbnail(webviewRef.current).then((still) => {
+        if (!cancelled && still) {
+          setThumbnail(still)
+        }
+      })
+    }
+    capture()
+    const timer = window.setInterval(capture, WEB_THUMBNAIL_REFRESH_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [lod, onScreen])
+
   const device = findWebTileDevice(card.device)
   const scale = device ? deviceFitScale(device, bodySize) : 1
   // Why: the device keeps its real CSS size (so the page lays out as on that screen)
@@ -278,7 +315,7 @@ export function WebTileCard({
       </div>
       <div className="flex min-h-0 flex-1">
         <div
-          ref={bodyRef}
+          ref={setBodyRef}
           className={`relative min-h-0 min-w-0 flex-1 overflow-hidden ${device ? 'bg-[var(--board-panel-2)]' : 'bg-[var(--board-panel)]'}`}
         >
           <div
@@ -290,6 +327,26 @@ export function WebTileCard({
             }
             style={frameStyle}
           />
+          {lod === 'glance' && (
+            // Why: a shield over the guest so a zoomed-out click selects the card
+            // instead of landing in the page; shows the still when one exists,
+            // otherwise the live page shows through.
+            <div
+              data-board-card-glance
+              data-board-web-glance
+              className="absolute cursor-zoom-in overflow-hidden select-none"
+              style={frameStyle}
+            >
+              {thumbnail ? (
+                <img
+                  src={thumbnail}
+                  alt=""
+                  draggable={false}
+                  className="size-full object-cover object-top-left"
+                />
+              ) : null}
+            </div>
+          )}
           {(error || waiting || !card.url) && (
             <div className="absolute inset-0 flex items-center justify-center bg-[var(--board-panel)]/85 p-4 text-center text-[13px] text-[var(--board-text-muted)]">
               {waiting

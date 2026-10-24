@@ -3,6 +3,7 @@ import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner
 import { callRuntimeRpc, type RuntimeClientTarget } from '@/runtime/runtime-rpc-client'
 import { useAppStore } from '@/store'
 import { getBoard } from '@/store/slices/board'
+import { goalTaskPrefix } from '../board-goal/goal-reminders'
 import type { OrchestratorMessage } from './OrchestratorCard'
 import {
   inboxToThread,
@@ -99,7 +100,8 @@ export function useOrchestratorThread(
             to: r.handle,
             from: handle,
             subject: relaySubject(text),
-            body: text,
+            // Why: a task handed out by the orchestrator carries the goals wired to that console.
+            body: `${goalTaskPrefix(r.tabId) ?? ''}${text}`,
             threadId
           })
         )

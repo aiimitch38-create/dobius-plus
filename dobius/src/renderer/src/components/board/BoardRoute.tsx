@@ -111,9 +111,15 @@ export default function BoardRoute(): React.JSX.Element {
     [board.cards, board.viewport]
   )
   const closeStudio = useCallback(() => setStudio(null), [])
+  const history = useBoardHistory(worktreeId)
   const plannerContext = useMemo(
-    () => ({ openStudio: setStudio, closeStudio, freeCenter }),
-    [closeStudio, freeCenter]
+    () => ({
+      openStudio: setStudio,
+      closeStudio,
+      freeCenter,
+      history: { undo: history.undo, redo: history.redo }
+    }),
+    [closeStudio, freeCenter, history.undo, history.redo]
   )
   const planner = useBoardPlanner({ data, conductor, context: plannerContext })
   const onCommand = useBoardCommand(data, conductor, planner)
@@ -154,7 +160,6 @@ export default function BoardRoute(): React.JSX.Element {
     }
   })
   const topBar = useBoardTopBarProps(data, setStudio)
-  const history = useBoardHistory(worktreeId)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const focusMode = useBoardFocusMode({
     worktreeId,

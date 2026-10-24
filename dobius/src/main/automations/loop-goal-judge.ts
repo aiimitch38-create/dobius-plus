@@ -53,76 +53,84 @@ export type ClaudeGoalJudgeDeps = {
   cwd?: string
 }
 
+/** Raw answer of one locked-down judge run: its stdout, or why there is none. */
+export type JudgeRunResult = { output: string | null; error: string | null }
+
 /**
  * The judge is its own child process with no terminal attached: it gets the
- * goal and output on stdin and answers on stdout. It never sees or writes to a
- * board console, and it is killed when it outlives the timeout.
+ * prompt on stdin and answers on stdout. It never sees or writes to a board
+ * console, and it is killed when it outlives the timeout. Shared by loop goal
+ * judging and the Board goal card's drift check.
  */
-export function createClaudeGoalJudge(deps: ClaudeGoalJudgeDeps = {}): LoopGoalJudge {
+export function runLockedDownJudge(
+  prompt: string,
+  deps: ClaudeGoalJudgeDeps = {}
+): Promise<JudgeRunResult> {
   const spawn = deps.spawn ?? nodeSpawn
   const timeoutMs = deps.timeoutMs ?? LOOP_JUDGE_TIMEOUT_MS
-  return ({ goal, transcript }) =>
-    new Promise<GoalJudgeResult>((resolve) => {
-      let settled = false
-      let stdout = ''
-      const finish = (result: GoalJudgeResult): void => {
-        if (!settled) {
-          settled = true
-          clearTimeout(timer)
-          resolve(result)
-        }
+  return new Promise<JudgeRunResult>((resolve) => {
+    let settled = false
+    let stdout = ''
+    const finish = (result: JudgeRunResult): void => {
+      if (!settled) {
+        settled = true
+        clearTimeout(timer)
+        resolve(result)
       }
-      let child: ReturnType<SpawnLike>
-      try {
-        const command = (deps.resolveCommand ?? (() => resolveClaudeCommand()))()
-        child = spawn(command, [...GOAL_JUDGE_ARGS], {
-          cwd: deps.cwd ?? tmpdir(),
-          env: { ...process.env, DOBIUS_LOOP_JUDGE: '1' },
-          stdio: ['pipe', 'pipe', 'ignore'],
-          shell: false,
-          windowsHide: true
-        })
-      } catch (error) {
-        resolve({
-          verdict: null,
-          error: `Judge could not start: ${messageOf(error)}`
-        })
-        return
-      }
-      const timer = setTimeout(() => {
-        child.kill('SIGKILL')
-        finish({
-          verdict: null,
-          error: `Judge timed out after ${Math.round(timeoutMs / 1000)}s.`
-        })
-      }, timeoutMs)
-      child.stdout?.setEncoding('utf8')
-      child.stdout?.on('data', (chunk: string) => {
-        stdout = (stdout + chunk).slice(-MAX_OUTPUT_CHARS)
+    }
+    let child: ReturnType<SpawnLike>
+    try {
+      const command = (deps.resolveCommand ?? (() => resolveClaudeCommand()))()
+      child = spawn(command, [...GOAL_JUDGE_ARGS], {
+        cwd: deps.cwd ?? tmpdir(),
+        env: { ...process.env, DOBIUS_LOOP_JUDGE: '1' },
+        stdio: ['pipe', 'pipe', 'ignore'],
+        shell: false,
+        windowsHide: true
       })
-      child.on('error', (error) =>
-        finish({
-          verdict: null,
-          error: `Judge could not start: ${messageOf(error)}`
-        })
-      )
-      child.on('close', (code) => {
-        if (code !== 0) {
-          finish({ verdict: null, error: `Judge exited with code ${code}.` })
-          return
-        }
-        const verdict = parseJudgeVerdict(stdout)
-        finish(
-          verdict
-            ? { verdict, error: null }
-            : { verdict: null, error: 'Judge gave no clear answer.' }
-        )
+    } catch (error) {
+      resolve({ output: null, error: `Judge could not start: ${messageOf(error)}` })
+      return
+    }
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      finish({
+        output: null,
+        error: `Judge timed out after ${Math.round(timeoutMs / 1000)}s.`
       })
-      child.stdin?.on('error', () => {
-        // The judge exiting early closes stdin; its exit code reports the failure.
-      })
-      child.stdin?.end(buildJudgePrompt(goal, transcript))
+    }, timeoutMs)
+    child.stdout?.setEncoding('utf8')
+    child.stdout?.on('data', (chunk: string) => {
+      stdout = (stdout + chunk).slice(-MAX_OUTPUT_CHARS)
     })
+    child.on('error', (error) =>
+      finish({ output: null, error: `Judge could not start: ${messageOf(error)}` })
+    )
+    child.on('close', (code) => {
+      finish(
+        code === 0
+          ? { output: stdout, error: null }
+          : { output: null, error: `Judge exited with code ${code}.` }
+      )
+    })
+    child.stdin?.on('error', () => {
+      // The judge exiting early closes stdin; its exit code reports the failure.
+    })
+    child.stdin?.end(prompt)
+  })
+}
+
+export function createClaudeGoalJudge(deps: ClaudeGoalJudgeDeps = {}): LoopGoalJudge {
+  return async ({ goal, transcript }) => {
+    const { output, error } = await runLockedDownJudge(buildJudgePrompt(goal, transcript), deps)
+    if (output === null) {
+      return { verdict: null, error }
+    }
+    const verdict = parseJudgeVerdict(output)
+    return verdict
+      ? { verdict, error: null }
+      : { verdict: null, error: 'Judge gave no clear answer.' }
+  }
 }
 
 function messageOf(error: unknown): string {
