@@ -4,10 +4,12 @@ import { boundsOf, screenDeltaToWorld } from './card-geometry'
 import { swatchEdge, swatchFill } from './card-swatch'
 import { shouldStartCardDrag } from './card-drag-target'
 import { GroupFrameMenu } from '../board-groups/GroupFrameMenu'
-import { groupTabOffset } from '../board-groups/group-tab-placement'
+import { groupTabOffset, groupTabZ } from '../board-groups/group-tab-placement'
 import { BOARD_CHROME_INSETS } from '../board-canvas/board-reveal'
 
 const GROUP_PADDING = 24
+/** Matches the old `left-4` offset inside the frame. */
+const GROUP_TAB_INSET = 16
 
 export type GroupFrameProps = {
   group: BoardGroup
@@ -21,8 +23,10 @@ export type GroupFrameProps = {
   onDragBy: (dx: number, dy: number) => void
 }
 
-// Why: drawn below every card (z 0) so the frame never covers a member; only
-// the name tab takes pointer input, which drags the whole group.
+// Why: the frame is drawn below every card (z 0) so it never covers a member.
+// The name tab is a sibling, not a child, so it can stack above the members it
+// overlaps when it slides inside the frame; only the tab takes pointer input,
+// which drags the whole group.
 export function GroupFrame({
   group,
   cards,
@@ -33,10 +37,8 @@ export function GroupFrame({
 }: GroupFrameProps): React.JSX.Element | null {
   const last = useRef<{ id: number; x: number; y: number } | null>(null)
   const members = new Set(group.cardIds)
-  const bounds = boundsOf(
-    cards.filter((c) => members.has(c.id)),
-    GROUP_PADDING
-  )
+  const memberCards = cards.filter((c) => members.has(c.id))
+  const bounds = boundsOf(memberCards, GROUP_PADDING)
   if (!bounds) {
     return null
   }
@@ -52,22 +54,30 @@ export function GroupFrame({
           safeTopPx: BOARD_CHROME_INSETS.top
         })
   return (
-    <div
-      className="pointer-events-none absolute rounded-[calc(var(--board-radius-card)+12px)]"
-      style={{
-        left: bounds.x,
-        top: bounds.y,
-        width: bounds.w,
-        height: bounds.h,
-        zIndex: 0,
-        border: `${2 / (zoom || 1)}px solid ${edge}`,
-        background: `color-mix(in oklch, ${swatchFill(group.color)} 35%, transparent)`
-      }}
-    >
+    <>
+      <div
+        data-board-group-frame={group.id}
+        className="pointer-events-none absolute rounded-[calc(var(--board-radius-card)+12px)]"
+        style={{
+          left: bounds.x,
+          top: bounds.y,
+          width: bounds.w,
+          height: bounds.h,
+          zIndex: 0,
+          border: `${2 / (zoom || 1)}px solid ${edge}`,
+          background: `color-mix(in oklch, ${swatchFill(group.color)} 35%, transparent)`
+        }}
+      />
       <div
         data-board-group-tab={group.id}
-        className="pointer-events-auto absolute left-4 flex -translate-y-1/2 cursor-grab items-center gap-1 rounded-full px-3 py-1 text-[12px] font-semibold text-[var(--board-text)] select-none active:cursor-grabbing"
-        style={{ top: tabTop, background: swatchFill(group.color), border: `1px solid ${edge}` }}
+        className="pointer-events-auto absolute flex -translate-y-1/2 cursor-grab items-center gap-1 rounded-full px-3 py-1 text-[12px] font-semibold text-[var(--board-text)] select-none active:cursor-grabbing"
+        style={{
+          left: bounds.x + GROUP_TAB_INSET,
+          top: bounds.y + tabTop,
+          zIndex: groupTabZ(memberCards.map((c) => c.z)),
+          background: swatchFill(group.color),
+          border: `1px solid ${edge}`
+        }}
         onPointerDown={(e) => {
           if (!shouldStartCardDrag(e.button, e.target as Element, e.currentTarget)) {
             return
@@ -91,6 +101,6 @@ export function GroupFrame({
         {group.name}
         {worktreeId && <GroupFrameMenu worktreeId={worktreeId} group={group} />}
       </div>
-    </div>
+    </>
   )
 }

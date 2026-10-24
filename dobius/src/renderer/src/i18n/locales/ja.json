@@ -14136,7 +14136,6 @@
     "goal": {
       "wireTo": "Keep these on the goal",
       "afterCompaction": "After the agent compacts its context",
-      "compactionGap": "Dobius does not receive a compaction signal from agents yet, so this trigger cannot fire today.",
       "everyTurnsPrefix": "Every",
       "everyTurnsCount": "Turns between reminders",
       "everyTurnsSuffix": "finished turns",
@@ -14157,7 +14156,8 @@
       "criterionText": "Done-means item",
       "addCriterion": "Add a done-means item",
       "dontText": "Out-of-scope item",
-      "addDont": "Add something to stay out of"
+      "addDont": "Add something to stay out of",
+      "compactionHint": "Fires on the compaction hook: PreCompact in Claude Code, PostCompact in Codex."
     }
   },
   "start": "Start",

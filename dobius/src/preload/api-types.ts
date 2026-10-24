@@ -3158,6 +3158,7 @@ export type PreloadApi = {
     onSet: (callback: (data: AgentStatusIpcPayload) => void) => () => void
     /** Listen for main-process pane teardown that evicted a cached hook status. */
     onClear: (callback: (data: { paneKey: string }) => void) => () => void
+    onCompaction?: (callback: (data: { paneKey: string }) => void) => () => void
     /** Return the current main-process hook cache after renderer hydration. */
     getSnapshot: () => Promise<AgentStatusIpcPayload[]>
     inferInterrupt: (request: AgentInterruptInferenceRequest) => Promise<boolean>

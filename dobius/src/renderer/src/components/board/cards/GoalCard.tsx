@@ -134,8 +134,8 @@ function ReminderSettings({
         translate('board.goal.afterCompaction', 'After the agent compacts its context'),
         (v) => set({ afterCompaction: v }),
         translate(
-          'board.goal.compactionGap',
-          'Dobius does not receive a compaction signal from agents yet, so this trigger cannot fire today.'
+          'board.goal.compactionHint',
+          'Fires on the compaction hook: PreCompact in Claude Code, PostCompact in Codex.'
         )
       )}
       <label className="flex items-center gap-2 text-[12px] text-[var(--board-text)]">
@@ -229,56 +229,64 @@ export function GoalCard({ worktreeId, card, onChange }: GoalCardProps): React.J
   }
 
   return (
-    <div className="scrollbar-sleek flex size-full flex-col gap-1.5 overflow-y-auto p-3 text-[var(--board-text)]">
-      <div className="flex items-center gap-1.5">
-        <span className="text-[11px] font-semibold tracking-[0.05em] text-[var(--board-text-muted)] uppercase">
-          {total > 0
-            ? translate('board.checklist.progress', '{{done}}/{{total}} done', { done, total })
-            : translate('board.goal.noCriteria', 'No done-means yet')}
-        </span>
-        <span className="ml-auto flex items-center gap-1">
-          <WirePicker worktreeId={worktreeId} card={card} onChange={onChange} />
-          <ConnectButton worktreeId={worktreeId} cardId={card.id} />
-        </span>
+    <div className="flex size-full flex-col text-[var(--board-text)]">
+      <div className="scrollbar-sleek flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-3 pb-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold tracking-[0.05em] text-[var(--board-text-muted)] uppercase">
+            {total > 0
+              ? translate('board.checklist.progress', '{{done}}/{{total}} done', { done, total })
+              : translate('board.goal.noCriteria', 'No done-means yet')}
+          </span>
+          <span className="ml-auto flex items-center gap-1">
+            <WirePicker worktreeId={worktreeId} card={card} onChange={onChange} />
+            <ConnectButton worktreeId={worktreeId} cardId={card.id} />
+          </span>
+        </div>
+        <textarea
+          value={card.goal}
+          rows={3}
+          placeholder={translate('board.goal.placeholder', 'The main goal, in 1 to 3 sentences')}
+          aria-label={translate('board.goal.goalText', 'Main goal')}
+          onChange={(e) => onChange({ goal: e.target.value })}
+          className="min-h-[60px] resize-none rounded-md border border-[var(--board-panel-border)] bg-transparent px-2 py-1.5 text-[13px] leading-snug text-[var(--board-text)] outline-none placeholder:text-[var(--board-text-muted)] focus:border-[var(--board-accent)]"
+        />
+        <DriftFlags cardId={card.id} />
+        <GoalSectionLabel>{translate('board.goal.doneMeans', 'Done means…')}</GoalSectionLabel>
+        <GoalCriteriaList
+          criteria={card.criteria}
+          onChange={(criteria) => onChange({ criteria })}
+        />
+        <GoalSectionLabel>{translate('board.goal.dont', "Out of scope / don't")}</GoalSectionLabel>
+        <GoalDontList items={card.dont} onChange={(dont) => onChange({ dont })} />
+        <GoalSectionLabel>
+          {translate('board.goal.remindWhen', 'Remind wired agents')}
+        </GoalSectionLabel>
+        <ReminderSettings
+          reminders={card.reminders}
+          driftCheck={card.driftCheck}
+          onChange={onChange}
+        />
+        {targetCount === 0 ? (
+          <p className="text-[12px] text-[var(--board-text-muted)]">
+            {translate(
+              'board.goal.nothingWired',
+              'Nothing wired yet. Connect consoles, orchestrators or groups.'
+            )}
+          </p>
+        ) : null}
       </div>
-      <textarea
-        value={card.goal}
-        rows={3}
-        placeholder={translate('board.goal.placeholder', 'The main goal, in 1 to 3 sentences')}
-        aria-label={translate('board.goal.goalText', 'Main goal')}
-        onChange={(e) => onChange({ goal: e.target.value })}
-        className="min-h-[60px] resize-none rounded-md border border-[var(--board-panel-border)] bg-transparent px-2 py-1.5 text-[13px] leading-snug text-[var(--board-text)] outline-none placeholder:text-[var(--board-text-muted)] focus:border-[var(--board-accent)]"
-      />
-      <DriftFlags cardId={card.id} />
-      <GoalSectionLabel>{translate('board.goal.doneMeans', 'Done means…')}</GoalSectionLabel>
-      <GoalCriteriaList criteria={card.criteria} onChange={(criteria) => onChange({ criteria })} />
-      <GoalSectionLabel>{translate('board.goal.dont', "Out of scope / don't")}</GoalSectionLabel>
-      <GoalDontList items={card.dont} onChange={(dont) => onChange({ dont })} />
-      <GoalSectionLabel>
-        {translate('board.goal.remindWhen', 'Remind wired agents')}
-      </GoalSectionLabel>
-      <ReminderSettings
-        reminders={card.reminders}
-        driftCheck={card.driftCheck}
-        onChange={onChange}
-      />
-      {targetCount === 0 ? (
-        <p className="text-[12px] text-[var(--board-text-muted)]">
-          {translate(
-            'board.goal.nothingWired',
-            'Nothing wired yet. Connect consoles, orchestrators or groups.'
-          )}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        disabled={targetCount === 0 || !card.goal.trim()}
-        onClick={remindNow}
-        className="mt-auto flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[var(--board-accent)] text-[12px] font-semibold text-[var(--board-accent-fg)] disabled:opacity-40"
-      >
-        <BellRing className="size-3.5" />
-        {translate('board.goal.remindNow', 'Remind now')}
-      </button>
+      {/* Why: pinned below the scroll area so Remind now stays visible however long the lists get. */}
+      <div className="shrink-0 px-3 pt-1.5 pb-3">
+        <button
+          type="button"
+          disabled={targetCount === 0 || !card.goal.trim()}
+          onClick={remindNow}
+          className="flex h-8 w-full items-center justify-center gap-1.5 rounded-full bg-[var(--board-accent)] text-[12px] font-semibold text-[var(--board-accent-fg)] disabled:opacity-40"
+        >
+          <BellRing className="size-3.5" />
+          {translate('board.goal.remindNow', 'Remind now')}
+        </button>
+      </div>
     </div>
   )
 }

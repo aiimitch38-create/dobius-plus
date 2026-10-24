@@ -3343,6 +3343,51 @@ export function normalizeHookPayload(
     : null
 }
 
+// ─── Compaction signal ──────────────────────────────────────────────
+
+// Why: compaction carries no status change (normalizers return null for it), so
+// it is read separately and fanned out as its own event. Claude only has
+// PreCompact; Codex fires PostCompact once the compacted context is in place.
+const COMPACTION_HOOK_EVENTS: Partial<Record<AgentHookSource, readonly string[]>> = {
+  claude: ['PreCompact'],
+  codex: ['PostCompact']
+}
+
+/** The paneKey of a hook POST that reports a context compaction, or null. */
+export function readCompactionHookPaneKey(source: AgentHookSource, body: unknown): string | null {
+  const events = COMPACTION_HOOK_EVENTS[source]
+  if (!events || typeof body !== 'object' || body === null) {
+    return null
+  }
+  const record = body as Record<string, unknown>
+  const paneKey = typeof record.paneKey === 'string' ? record.paneKey.trim() : ''
+  const parsedPaneKey = parsePaneKey(paneKey)
+  if (!paneKey || paneKey.length > MAX_PANE_KEY_LEN || !parsedPaneKey) {
+    return null
+  }
+  const tabId = readStringField(record, 'tabId')
+  if (tabId && tabId !== parsedPaneKey.tabId) {
+    return null
+  }
+  let hookPayload: unknown = record.payload
+  if (typeof hookPayload === 'string') {
+    try {
+      hookPayload = JSON.parse(hookPayload)
+    } catch {
+      hookPayload = null
+    }
+  }
+  const hookRecord =
+    typeof hookPayload === 'object' && hookPayload !== null
+      ? (hookPayload as Record<string, unknown>)
+      : {}
+  const eventName =
+    readFirstString(record, ['hook_event_name', 'hookEventName', 'hook_type', 'hookType']) ??
+    hookRecord.hook_event_name ??
+    hookRecord.hookEventName
+  return typeof eventName === 'string' && events.includes(eventName) ? paneKey : null
+}
+
 // ─── URL routing ────────────────────────────────────────────────────
 
 export const HOOK_SOURCE_BY_PATHNAME: Readonly<Record<string, AgentHookSource>> = Object.freeze({

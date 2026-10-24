@@ -56,7 +56,9 @@ const CODEX_EVENTS = [
   'PreToolUse',
   'PermissionRequest',
   'PostToolUse',
-  'Stop'
+  'Stop',
+  // Why: the Board's Goal card re-sends the goal once Codex has compacted.
+  'PostCompact'
 ] as const
 
 function getConfigPath(): string {
@@ -83,7 +85,8 @@ const CODEX_EVENT_LABEL: Record<(typeof CODEX_EVENTS)[number], CodexEventLabel> 
   PreToolUse: 'pre_tool_use',
   PermissionRequest: 'permission_request',
   PostToolUse: 'post_tool_use',
-  Stop: 'stop'
+  Stop: 'stop',
+  PostCompact: 'post_compact'
 }
 
 const CODEX_MANAGED_EVENT_LABELS = new Set<CodexEventLabel>(

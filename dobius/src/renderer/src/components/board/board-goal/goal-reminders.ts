@@ -1,14 +1,10 @@
 // App-wide goal reminder engine wired to the store and the Board delivery gate.
 //
-// Compaction trigger gap: Dobius's managed agent hooks do not subscribe Claude
-// Code's PreCompact event (main/claude/hook-settings.ts CLAUDE_EVENTS) or
-// Codex's PreCompact/PostCompact (main/codex/hook-service.ts CODEX_EVENTS), and
-// the status feed carries no compaction field, so the renderer never learns
-// that an agent compacted. Screen scraping the TUI's "compacted" line is not
-// reliable (only mounted cards have a readable screen, and agent output can
-// contain the same words), so it is not attempted. noteGoalCompaction() is the
-// hook point for when a real signal is added.
+// Compaction trigger: Dobius's managed hooks subscribe Claude Code's PreCompact
+// and Codex's PostCompact (main/claude/hook-settings.ts, main/codex/hook-service.ts);
+// main forwards them as `agentStatus:compaction`, which lands in noteGoalCompaction().
 import { useAppStore } from '@/store'
+import { parsePaneKey } from '../../../../../shared/stable-pane-id'
 import {
   boardDeliveryGate,
   consoleDeliveryState,
@@ -63,6 +59,15 @@ export function ensureGoalReminders(): void {
     }
   })
   setInterval(() => e.sweep(), SWEEP_EVERY_MS)
+  window.api?.agentStatus?.onCompaction?.(({ paneKey }) => noteGoalCompactionForPane(paneKey))
+}
+
+/** Routes a compaction hook event (keyed by pane) to its console tab's goal reminder. */
+export function noteGoalCompactionForPane(paneKey: string): void {
+  const tabId = parsePaneKey(paneKey)?.tabId
+  if (tabId) {
+    noteGoalCompaction(tabId)
+  }
 }
 
 export function remindGoalNow(worktreeId: string, goalCardId: string): RemindNowSummary {

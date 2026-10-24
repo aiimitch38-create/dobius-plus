@@ -4373,6 +4373,13 @@ const api = {
       ipcRenderer.on('agentStatus:clear', listener)
       return () => ipcRenderer.removeListener('agentStatus:clear', listener)
     },
+    /** An agent compacted its context (Claude PreCompact / Codex PostCompact hook). */
+    onCompaction: (callback: (data: { paneKey: string }) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: { paneKey: string }) =>
+        callback(data)
+      ipcRenderer.on('agentStatus:compaction', listener)
+      return () => ipcRenderer.removeListener('agentStatus:compaction', listener)
+    },
     /** Pull the current cached hook statuses after renderer workspace-session
      *  hydration. This avoids losing startup replays before the renderer
      *  knows which tabs exist. */

@@ -31,6 +31,7 @@ import {
   MAX_PANE_KEY_LEN,
   normalizeHookPayload,
   parseFormEncodedBody,
+  readCompactionHookPaneKey,
   readRequestBody,
   resolveHookSource,
   warnOnHookEnvOrVersionMismatch,
@@ -104,6 +105,7 @@ export function enrichAgentStatusIpcPayload(
 
 type StatusChangeListener = (statuses: AgentHookStatusChangeEntry[]) => void
 type PaneStatusClearListener = (paneKey: string) => void
+type CompactionListener = (paneKey: string) => void
 type PaneKeyAliasPersistenceListener = (entries: LegacyPaneKeyAliasEntry[]) => void
 type PaneKeyAliasEntry = {
   stablePaneKey: string
@@ -456,6 +458,7 @@ export class AgentHookServer {
   private env = 'production'
   private onAgentStatus: ((payload: EnrichedAgentHookEventPayload) => void) | null = null
   private onPaneStatusCleared: PaneStatusClearListener | null = null
+  private onCompaction: CompactionListener | null = null
   private statusChangeListeners = new Set<StatusChangeListener>()
   // Why: directory that holds the on-disk endpoint file. Set via start()'s
   // `userDataPath` option so the class has no direct Electron dependency
@@ -519,6 +522,11 @@ export class AgentHookServer {
 
   setPaneStatusClearListener(listener: PaneStatusClearListener | null): void {
     this.onPaneStatusCleared = listener
+  }
+
+  /** Fires when an agent reports a context compaction (Claude PreCompact, Codex PostCompact). */
+  setCompactionListener(listener: CompactionListener | null): void {
+    this.onCompaction = listener
   }
 
   /** Snapshot of the current cached statuses, in the IPC-shaped form the
@@ -1243,6 +1251,10 @@ export class AgentHookServer {
           const enriched = this.applyNormalizedStatus(normalized)
           this.scheduleAssistantMessageRetry(source, aliasedBody, enriched)
         }
+        const compactedPaneKey = readCompactionHookPaneKey(source, aliasedBody)
+        if (compactedPaneKey && !this.shouldSuppressClosedTabStatus(compactedPaneKey)) {
+          this.onCompaction?.(compactedPaneKey)
+        }
 
         res.writeHead(204)
         res.end()
@@ -1293,6 +1305,7 @@ export class AgentHookServer {
     this.env = 'production'
     this.onAgentStatus = null
     this.onPaneStatusCleared = null
+    this.onCompaction = null
     for (const timer of this.assistantMessageRetryTimers.values()) {
       clearTimeout(timer)
     }

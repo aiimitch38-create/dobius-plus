@@ -5281,6 +5281,88 @@ describe('connectPanePty', () => {
     )
   })
 
+  describe('hidden remount (Board console released to its miniature)', () => {
+    const remountWithSnapshot = async (visible: boolean) => {
+      const { connectPanePty } = await import('./pty-connection')
+      const transport = createMockTransport('tab-pty')
+      transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) =>
+        sessionId
+          ? { id: sessionId, snapshot: 'live claude frame', snapshotCols: 78, snapshotRows: 22 }
+          : null
+      )
+      transportFactoryQueue.push(transport)
+      mockStoreState = {
+        ...mockStoreState,
+        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', title: 'claude' }] }
+      } as StoreState
+      // Why: the mock pane cannot be measured, exactly like a display:none host;
+      // its xterm holds a default grid that is not the PTY's live 78x22.
+      const pane = createPane(1)
+      pane.terminal.cols = 80
+      pane.terminal.rows = 24
+      pane.terminal.resize = vi.fn((cols: number, rows: number) => {
+        pane.terminal.cols = cols
+        pane.terminal.rows = rows
+      })
+      const deps = createDeps({
+        isVisibleRef: { current: visible },
+        restoredLeafId: LEAF_1,
+        restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
+      })
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      await flushAsyncTicks(20)
+      return { transport, pane }
+    }
+
+    it('never resizes or SIGWINCHes the PTY when released into a hidden host', async () => {
+      const { transport, pane } = await remountWithSnapshot(false)
+
+      expect(transport.resize).not.toHaveBeenCalled()
+      expect(window.api.pty.signal).not.toHaveBeenCalledWith('tab-pty', 'SIGWINCH')
+      // The hidden xterm adopts the PTY's live grid so the miniature matches it.
+      expect(pane.terminal.resize).toHaveBeenCalledWith(78, 22)
+      expect(pane.terminal.cols).toBe(78)
+      expect(pane.terminal.rows).toBe(22)
+    })
+
+    it('claiming back into a visible body forwards only the unchanged live grid', async () => {
+      const { transport } = await remountWithSnapshot(true)
+
+      for (const [cols, rows] of transport.resize.mock.calls as [number, number][]) {
+        expect([cols, rows]).toEqual([78, 22])
+      }
+    })
+
+    it('adopts a live non-daemon PTY in a hidden host without sending a size', async () => {
+      vi.mocked(getEagerPtyBufferHandle).mockImplementation((ptyId: string) =>
+        ptyId === 'local-pty' ? { flush: () => '', dispose: () => {} } : undefined
+      )
+      const { connectPanePty } = await import('./pty-connection')
+      const transport = createMockTransport()
+      transportFactoryQueue.push(transport)
+      mockStoreState = {
+        ...mockStoreState,
+        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'local-pty' }] },
+        ptyIdsByTabId: { 'tab-1': ['local-pty'] }
+      } as StoreState
+      const deps = createDeps({
+        isVisibleRef: { current: false },
+        restoredLeafId: LEAF_1,
+        restoredPtyIdByLeafId: { [LEAF_1]: 'local-pty' }
+      })
+
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      await flushAsyncTicks()
+
+      expect(transport.attach).toHaveBeenCalledWith(
+        expect.objectContaining({ existingPtyId: 'local-pty' })
+      )
+      const attachOptions = transport.attach.mock.calls[0]?.[0] as Record<string, unknown>
+      expect(attachOptions.cols).toBeUndefined()
+      expect(attachOptions.rows).toBeUndefined()
+    })
+  })
+
   // Why: when a reattach result carries both snapshot and replay (the daemon
   // host serves the snapshot, the relay replay buffer covers the same tail),
   // painting both into xterm doubles the same lines. This is the duplicated-

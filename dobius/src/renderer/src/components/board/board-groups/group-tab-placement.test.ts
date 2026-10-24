@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GROUP_TAB_HEIGHT, groupTabOffset } from './group-tab-placement'
+import { GROUP_TAB_HEIGHT, groupTabOffset, groupTabZ } from './group-tab-placement'
 
 const base = { frameTop: 100, frameHeight: 500, zoom: 1, viewportY: 0, safeTopPx: 72 }
 
@@ -25,5 +25,16 @@ describe('groupTabOffset', () => {
     expect(groupTabOffset({ ...base, frameHeight: 60, viewportY: -1000 })).toBe(
       60 - GROUP_TAB_HEIGHT / 2
     )
+  })
+})
+
+describe('groupTabZ', () => {
+  it('stacks the tab one above its highest member card', () => {
+    expect(groupTabZ([3, 12, 7])).toBe(13)
+  })
+
+  it('stays above the z-0 frame for an empty or invalid member list', () => {
+    expect(groupTabZ([])).toBe(1)
+    expect(groupTabZ([Number.NaN])).toBe(1)
   })
 })

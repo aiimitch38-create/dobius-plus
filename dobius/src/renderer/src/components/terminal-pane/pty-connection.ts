@@ -31,7 +31,7 @@ import {
   type HasPty
 } from './terminal-dead-session-reconcile'
 import type { PtyConnectionDeps } from './pty-connection-types'
-import { safeFit } from '@/lib/pane-manager/pane-tree-ops'
+import { canMeasurePaneForFit, safeFit } from '@/lib/pane-manager/pane-tree-ops'
 import { requestStablePaneFit } from '@/lib/pane-manager/pane-fit-resize-observer'
 import { getFitOverrideForPty, bindPanePtyId } from '@/lib/pane-manager/mobile-fit-overrides'
 import { isPtyLocked } from '@/lib/pane-manager/mobile-driver-state'
@@ -5514,6 +5514,28 @@ export function connectPanePty(
       }
     })
 
+    // Why: the daemon snapshot is serialized at the PTY's grid. While the pane
+    // is unmeasurable xterm sits at its construction default, so replay at the
+    // PTY's own grid instead; this xterm-only resize must not reach the PTY.
+    const adoptSnapshotGridWhileUnmeasurable = (cols?: number, rows?: number): void => {
+      if (
+        !cols ||
+        !rows ||
+        cols <= 0 ||
+        rows <= 0 ||
+        (pane.terminal.cols === cols && pane.terminal.rows === rows) ||
+        canMeasurePaneForFit(pane)
+      ) {
+        return
+      }
+      suppressSnapshotReplayPtyResize = true
+      try {
+        pane.terminal.resize(cols, rows)
+      } finally {
+        suppressSnapshotReplayPtyResize = false
+      }
+    }
+
     const handleReattachResult = (
       result: PtyConnectResult | string | void,
       staleSessionId?: string | null,
@@ -5607,6 +5629,7 @@ export function connectPanePty(
       // and only the freshest source belongs on screen.
       if (connectResult?.snapshot) {
         rememberReattachPayloadAgentSignal(connectResult.snapshot, { fullScreenReplay: true })
+        adoptSnapshotGridWhileUnmeasurable(connectResult.snapshotCols, connectResult.snapshotRows)
         writeReplayData('\x1b[2J\x1b[3J\x1b[H')
         writeReplayData(connectResult.snapshot)
         // Snapshot reattach keeps a live session, so avoid the broader mode
@@ -5696,19 +5719,26 @@ export function connectPanePty(
       }
       // Why: when a mobile-fit override is active, skip sending desktop dims
       // to the PTY — the PTY is already at phone dimensions and must stay there.
+      // A pane remounted into a hidden host (a Board console card handing
+      // its pane back for the zoomed-out miniature, a display:none Classic tab)
+      // cannot be measured, so xterm still holds its 80x24 construction default.
+      // Forwarding that would SIGWINCH the running TUI into a reflow; the PTY
+      // keeps its last live size and the visible-resume path re-asserts on show.
+      const reattachAuthoritative = isRendererPtyResizeAuthoritative()
       const reattachPtyId = transport.getPtyId()
       if (!reattachPtyId || !getFitOverrideForPty(reattachPtyId)) {
         safeFit(pane)
         const reattachCols = pane.terminal.cols
         const reattachRows = pane.terminal.rows
-        if (reattachCols > 0 && reattachRows > 0) {
+        if (reattachAuthoritative && reattachCols > 0 && reattachRows > 0) {
           transport.resize(reattachCols, reattachRows)
         }
       }
       // Why: POSIX only delivers SIGWINCH when terminal dimensions actually
       // change. Sending it explicitly guarantees restored TUIs repaint at
-      // the correct cursor position after snapshot replay.
-      if (!isRemoteRuntimePtyId(ptyId)) {
+      // the correct cursor position after snapshot replay. Hidden panes skip
+      // it: nobody sees the repaint, and it makes Claude/Codex redraw.
+      if (reattachAuthoritative && !isRemoteRuntimePtyId(ptyId)) {
         window.api.pty.signal(ptyId, 'SIGWINCH')
       }
       scheduleReattachIdleAgentCursorReset()
@@ -6220,8 +6250,9 @@ export function connectPanePty(
         clearHiddenOutputRestoreState()
         transport.attach({
           existingPtyId: attachPtyId,
-          cols,
-          rows,
+          // Why: a hidden remount has an unmeasured 80x24 xterm; adopting the
+          // live PTY must not resize it (see reattach note above).
+          ...(isRendererPtyResizeAuthoritative() ? { cols, rows } : {}),
           callbacks: {
             onData: dataCallback,
             onReplayData: replayDataCallback,
@@ -6272,8 +6303,7 @@ export function connectPanePty(
             clearHiddenOutputRestoreState()
             transport.attach({
               existingPtyId: spawnedPtyId,
-              cols,
-              rows,
+              ...(isRendererPtyResizeAuthoritative() ? { cols, rows } : {}),
               callbacks: {
                 onData: dataCallback,
                 onReplayData: replayDataCallback,

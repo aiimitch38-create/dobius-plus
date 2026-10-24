@@ -30,7 +30,8 @@ const SIZES: Record<BoardInsertCardKind, { w: number; h: number }> = {
   screen: { w: 180, h: 140 },
   web: { w: 900, h: 600 },
   memory: { w: 300, h: 180 },
-  goal: { w: 340, h: 520 },
+  // Why: tall enough that a new goal card shows all of its default content.
+  goal: { w: 340, h: 620 },
   skill: { w: 320, h: 170 },
   branches: { w: 300, h: 360 }
 }

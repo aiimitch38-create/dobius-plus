@@ -1504,6 +1504,29 @@ describe('AgentHookServer listener replay', () => {
     ])
   })
 
+  it('forwards a Claude PreCompact hook as a compaction event without touching status', async () => {
+    const server = new AgentHookServer()
+    const compactions: string[] = []
+    server.setCompactionListener((paneKey) => compactions.push(paneKey))
+    await server.start({ env: 'production' })
+    try {
+      const env = server.buildPtyEnv()
+      const response = await fetch(`http://127.0.0.1:${env.DOBIUS_AGENT_HOOK_PORT}/hook/claude`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dobius-Agent-Hook-Token': env.DOBIUS_AGENT_HOOK_TOKEN
+        },
+        body: JSON.stringify(buildBody({ hook_event_name: 'PreCompact', trigger: 'auto' }))
+      })
+      expect(response.status).toBe(204)
+      expect(compactions).toEqual([PANE])
+      expect(server.getStatusSnapshot()).toEqual([])
+    } finally {
+      server.stop()
+    }
+  })
+
   it('suppresses local HTTP hook writes for a recently closed tab', async () => {
     const server = new AgentHookServer()
     await server.start({ env: 'production' })

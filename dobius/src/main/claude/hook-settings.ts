@@ -49,7 +49,10 @@ export const CLAUDE_EVENTS = [
   {
     eventName: 'PermissionRequest',
     definition: { matcher: '*', hooks: [{ type: 'command', command: '' }] }
-  }
+  },
+  // Why: the Board's Goal card re-sends the goal after a compaction; PreCompact
+  // (manual or auto) is Claude Code's only compaction signal.
+  { eventName: 'PreCompact', definition: { hooks: [{ type: 'command', command: '' }] } }
 ] as const
 
 export function getConfigPath(settings = CLAUDE_HOOK_SETTINGS): string {

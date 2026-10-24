@@ -13,6 +13,7 @@ import {
   isShellSafeEndpointValue,
   normalizeHookPayload,
   parseFormEncodedBody,
+  readCompactionHookPaneKey,
   readRequestBody,
   resolveHookSource,
   writeEndpointFile,
@@ -1863,5 +1864,33 @@ describe('shared agent-hook-listener', () => {
       })
       expect(ok).toBe(false)
     })
+  })
+})
+
+describe('readCompactionHookPaneKey', () => {
+  const body = (hookEventName: string, extra: Record<string, unknown> = {}) => ({
+    paneKey: PANE_KEY,
+    tabId: 'tab-1',
+    payload: JSON.stringify({ hook_event_name: hookEventName }),
+    ...extra
+  })
+
+  it('reports Claude PreCompact and Codex PostCompact as compaction', () => {
+    expect(readCompactionHookPaneKey('claude', body('PreCompact'))).toBe(PANE_KEY)
+    expect(readCompactionHookPaneKey('codex', body('PostCompact'))).toBe(PANE_KEY)
+  })
+
+  it('ignores ordinary events, other agents, and mismatched or bad pane keys', () => {
+    expect(readCompactionHookPaneKey('claude', body('Stop'))).toBeNull()
+    expect(readCompactionHookPaneKey('codex', body('PreCompact'))).toBeNull()
+    expect(readCompactionHookPaneKey('gemini', body('PreCompact'))).toBeNull()
+    expect(readCompactionHookPaneKey('claude', body('PreCompact', { tabId: 'tab-2' }))).toBeNull()
+    expect(readCompactionHookPaneKey('claude', body('PreCompact', { paneKey: 'nope' }))).toBeNull()
+    expect(readCompactionHookPaneKey('claude', null)).toBeNull()
+  })
+
+  it('does not turn a compaction into a status change', () => {
+    const state = createHookListenerState()
+    expect(normalizeHookPayload(state, 'claude', body('PreCompact'), 'production')).toBeNull()
   })
 })

@@ -10,7 +10,12 @@ import {
   resolveEffectiveTerminalAppearance
 } from '@/lib/terminal-theme'
 import { buildFontFamily } from './layout-serialization'
-import { captureScrollState, restoreScrollState, safeFit } from '@/lib/pane-manager/pane-tree-ops'
+import {
+  canMeasurePaneForFit,
+  captureScrollState,
+  restoreScrollState,
+  safeFit
+} from '@/lib/pane-manager/pane-tree-ops'
 import {
   normalizeTerminalFastScrollSensitivity,
   normalizeTerminalScrollSensitivity,
@@ -271,7 +276,13 @@ export function applyTerminalAppearance(
     // is already at the correct phone dimensions and must not be resized
     // back to desktop dimensions by an appearance change.
     const appearancePtyId = transport?.getPtyId()
-    if (transport?.isConnected() && (!appearancePtyId || !getFitOverrideForPty(appearancePtyId))) {
+    // Why: an unmeasurable (hidden/remounted) pane still holds xterm's 80x24
+    // default; forwarding it would SIGWINCH the running TUI to a wrong size.
+    if (
+      transport?.isConnected() &&
+      (!appearancePtyId || !getFitOverrideForPty(appearancePtyId)) &&
+      canMeasurePaneForFit(pane)
+    ) {
       transport.resize(pane.terminal.cols, pane.terminal.rows)
       maybePushMode2031Flip(pane.id, appearance.mode, transport, paneMode2031, paneLastThemeMode)
     }

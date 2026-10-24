@@ -120,6 +120,7 @@ function markHookTrustDisabled(toml: string, header: string): string {
 function localManagedCodexEvents(): string[] {
   return [
     'PermissionRequest',
+    'PostCompact',
     'PostToolUse',
     'PreToolUse',
     'SessionStart',
@@ -710,14 +711,19 @@ describe('CodexHookService', () => {
       hooks: Record<string, { hooks?: { command?: string }[] }[]>
     }
     expect(runtimeHooks.hooks.PreCompact?.[0]?.hooks?.[0]?.command).toBe('pre-compact-user')
-    expect(runtimeHooks.hooks.PostCompact?.[0]?.hooks?.[0]?.command).toBe('post-compact-disabled')
+    // Why: Dobius manages PostCompact (Goal card compaction reminder), so its
+    // status hook runs first and the user's hook shifts to group 1, untouched.
+    expect(isCodexManagedCommand(runtimeHooks.hooks.PostCompact?.[0]?.hooks?.[0]?.command)).toBe(
+      true
+    )
+    expect(runtimeHooks.hooks.PostCompact?.[1]?.hooks?.[0]?.command).toBe('post-compact-disabled')
 
     const runtimeToml = readFileSync(join(managedCodexHome, 'config.toml'), 'utf-8')
     expect(runtimeToml).toContain(
       `${hookTrustHeader(`${managedHooksPath}:pre_compact:0:0`)}\nenabled = true`
     )
     expect(runtimeToml).toContain(
-      `${hookTrustHeader(`${managedHooksPath}:post_compact:0:0`)}\nenabled = false`
+      `${hookTrustHeader(`${managedHooksPath}:post_compact:1:0`)}\nenabled = false`
     )
     expect(runtimeToml).not.toContain(hookTrustHeader(`${systemHooksPath}:pre_compact:0:0`))
     expect(runtimeToml).not.toContain(hookTrustHeader(`${systemHooksPath}:post_compact:0:0`))

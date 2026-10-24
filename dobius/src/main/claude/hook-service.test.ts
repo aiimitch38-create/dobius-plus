@@ -130,6 +130,12 @@ describe('ClaudeHookService.install', () => {
             AWS_REGION: 'us-west-2'
           },
           hooks: {
+            PreCompact: [
+              {
+                matcher: 'manual',
+                hooks: [{ type: 'command', command: '/usr/local/bin/pre-compact' }]
+              }
+            ],
             Stop: [
               {
                 hooks: [{ type: 'command', command: '/usr/local/bin/user-hook' }]
@@ -172,6 +178,12 @@ describe('ClaudeHookService.install', () => {
         )
       ).toBe(false)
       expect(isClaudeManagedCommand(legacy.hooks.StopFailure[0].hooks[0].command)).toBe(true)
+      // Why: the Goal card's "after compaction" reminder rides on PreCompact.
+      expect(legacy.hooks.PreCompact[0]).toEqual({
+        matcher: 'manual',
+        hooks: [{ type: 'command', command: '/usr/local/bin/pre-compact' }]
+      })
+      expect(isClaudeManagedCommand(legacy.hooks.PreCompact[1].hooks[0].command)).toBe(true)
       expect(
         readFileSync(join(tmpHome, '.dobius', 'agent-hooks', CLAUDE_SCRIPT_FILE_NAME), 'utf-8')
       ).toContain('DEVIN_PROJECT_DIR')
@@ -381,6 +393,8 @@ describe('OpenClaudeHookService-compatible install', () => {
     const parsed = JSON.parse(fs.files.get('/home/dev/.openclaude/settings.json')!)
     const command = parsed.hooks.StopFailure[0].hooks[0].command as string
     expect(command).toContain('/home/dev/.dobius/agent-hooks/openclaude-hook.sh')
-    expect(fs.files.get('/home/dev/.dobius/agent-hooks/openclaude-hook.sh')).toContain('/hook/claude')
+    expect(fs.files.get('/home/dev/.dobius/agent-hooks/openclaude-hook.sh')).toContain(
+      '/hook/claude'
+    )
   })
 })

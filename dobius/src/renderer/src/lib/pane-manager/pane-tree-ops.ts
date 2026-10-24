@@ -43,7 +43,7 @@ function getProposedDimensions(pane: ManagedPane): { cols: number; rows: number 
   }
 }
 
-function canMeasurePaneForFit(pane: ManagedPane): boolean {
+export function canMeasurePaneForFit(pane: ManagedPane): boolean {
   const measure = pane.container.getBoundingClientRect
   if (typeof measure === 'function') {
     const rect = measure.call(pane.container)

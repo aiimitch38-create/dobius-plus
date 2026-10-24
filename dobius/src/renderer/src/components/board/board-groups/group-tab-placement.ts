@@ -24,3 +24,12 @@ export function groupTabOffset(input: {
   const wanted = (input.safeTopPx - tabTopScreen) / zoom
   return Math.max(0, Math.min(wanted, input.frameHeight - GROUP_TAB_HEIGHT / 2))
 }
+
+/**
+ * Stacking order for the name tab. Why above the members: once the tab slides
+ * inside the frame it overlaps member cards, and a console's xterm would take
+ * its clicks. The frame itself stays at z 0 so it never blocks a card.
+ */
+export function groupTabZ(memberZs: readonly number[]): number {
+  return memberZs.reduce((top, z) => Math.max(top, Number.isFinite(z) ? z : 0), 0) + 1
+}
