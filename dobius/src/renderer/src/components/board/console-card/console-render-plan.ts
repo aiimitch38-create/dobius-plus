@@ -6,29 +6,51 @@
 // selection is only exact at zoom 1).
 
 export const CONSOLE_SETTLE_MS = 150
-// Why: hysteresis so a zoom hovering at the threshold does not thrash between
-// live and snapshot (each switch re-portals the terminal).
-export const SNAPSHOT_ENTER_ZOOM = 0.35
-export const SNAPSHOT_EXIT_ZOOM = 0.4
+// Why: below this on-screen glyph size a scaled-down terminal is unreadable,
+// so the card shows a text glance instead. Hysteresis (enter < exit) keeps a
+// zoom hovering at the line from thrashing; each switch re-portals the pane.
+export const GLANCE_ENTER_FONT_PX = 6
+export const GLANCE_EXIT_FONT_PX = 6.75
+/** On-screen body (px) below which even a readable font shows too little terminal. */
+export const GLANCE_ENTER_BODY_PX = { w: 220, h: 120 }
+const GLANCE_EXIT_BODY_FACTOR = 1.1
 const FONT_STEP = 0.5
 
-export type ConsoleRenderMode = 'live' | 'snapshot'
+/** live = the borrowed TerminalPane; glance = status + output tail as plain text. */
+export type ConsoleRenderMode = 'live' | 'glance'
 
 export function nextConsoleMode(input: {
   prev: ConsoleRenderMode
   settledZoom: number
   visible: boolean
   gesturing: boolean
+  baseFontSize: number
+  /** Card body in world px; 0 while unmeasured (size is then ignored). */
+  bodyWidth: number
+  bodyHeight: number
 }): ConsoleRenderMode {
   // Why: never swap mid-gesture; the card just scales visually until it settles.
   if (input.gesturing) {
     return input.prev
   }
   if (!input.visible) {
-    return 'snapshot'
+    return 'glance'
   }
-  const threshold = input.prev === 'snapshot' ? SNAPSHOT_EXIT_ZOOM : SNAPSHOT_ENTER_ZOOM
-  return input.settledZoom < threshold ? 'snapshot' : 'live'
+  const z = input.settledZoom > 0 ? input.settledZoom : 1
+  const leaving = input.prev === 'glance'
+  const minFont = leaving ? GLANCE_EXIT_FONT_PX : GLANCE_ENTER_FONT_PX
+  const bodyFactor = leaving ? GLANCE_EXIT_BODY_FACTOR : 1
+  const tooSmall =
+    input.bodyWidth > 0 &&
+    input.bodyHeight > 0 &&
+    (input.bodyWidth * z < GLANCE_ENTER_BODY_PX.w * bodyFactor ||
+      input.bodyHeight * z < GLANCE_ENTER_BODY_PX.h * bodyFactor)
+  return input.baseFontSize * z < minFont || tooSmall ? 'glance' : 'live'
+}
+
+/** Zoom at which the glance's screen-px text is drawn: counter-scaled, never enlarged past 1:1. */
+export function glanceScale(settledZoom: number): number {
+  return settledZoom > 0 ? Math.min(settledZoom, 1) : 1
 }
 
 /** Font that keeps the grid constant at this zoom (rounded so tiny zoom steps don't re-raster). */

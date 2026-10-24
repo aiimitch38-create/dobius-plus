@@ -97,6 +97,16 @@ export function consoleCardStatus({
   }
 }
 
+/** AgentStateDot state per console status; statuses without a dot render a plain muted dot. */
+export const CONSOLE_STATUS_DOT: Partial<
+  Record<ConsoleCardStatus, 'working' | 'waiting' | 'done' | 'idle'>
+> = {
+  working: 'working',
+  waiting: 'waiting',
+  done: 'done',
+  idle: 'idle'
+}
+
 export function consoleStatusLabel(status: ConsoleCardStatus): string {
   switch (status) {
     case 'working':

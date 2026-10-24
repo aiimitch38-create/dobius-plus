@@ -9,18 +9,15 @@ import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import { BoardOutputViewer } from '../board-command-bar/BoardOutputViewer'
 import { replyExcerpt } from '../board-delivery/mission-state'
 import { useBoardCameraFocus } from '../board-canvas/board-camera-focus'
-import { consoleStatusLabel, type ConsoleCardStatus } from './console-card-status'
+import {
+  CONSOLE_STATUS_DOT,
+  consoleStatusLabel,
+  type ConsoleCardStatus
+} from './console-card-status'
 import { useConsoleCardStatus } from './use-console-card-status'
 import { ConsoleAccountBadge } from './ConsoleAccountBadge'
 
 type ConsoleCardProps = { worktreeId: string; card: BoardCardOf<'console'> }
-
-const DOT_FOR: Partial<Record<ConsoleCardStatus, 'working' | 'waiting' | 'done' | 'idle'>> = {
-  working: 'working',
-  waiting: 'waiting',
-  done: 'done',
-  idle: 'idle'
-}
 
 const FLASH_MS = 600
 
@@ -79,7 +76,7 @@ export function ConsoleCardTitleAccessory({
 }: ConsoleCardProps): React.JSX.Element {
   const { status, lastReply } = useConsoleCardStatus(worktreeId, card.tabId)
   const [outputOpen, setOutputOpen] = useState(false)
-  const dot = DOT_FOR[status]
+  const dot = CONSOLE_STATUS_DOT[status]
   const seeOutput = translate('board.console.seeOutput', 'See output')
   return (
     <span

@@ -13459,7 +13459,9 @@
       "accountSection": "Account",
       "accountDefaultRow": "{{agent}} · Default ({{email}})",
       "accountSystem": "system login",
-      "duplicateFailed": "Could not start a copy of {{name}}."
+      "duplicateFailed": "Could not start a copy of {{name}}.",
+      "glance": "Latest output from {{title}}",
+      "glanceEmpty": "No output yet"
     },
     "foundBug": "Found a bug?",
     "sideApps": {

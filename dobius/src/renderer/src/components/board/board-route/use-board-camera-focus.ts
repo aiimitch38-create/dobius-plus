@@ -82,14 +82,18 @@ function consoleCardIdOf(cardEl: Element): string | null {
   )
 }
 
-/** The console whose title bar (not its body, controls or resize handles) holds `target`. */
+/**
+ * The console whose title bar or zoomed-out glance (not its live terminal,
+ * controls or resize handles) holds `target`.
+ */
 function consoleHeaderCardId(target: Element): string | null {
   const cardEl = target.closest('[data-board-card]')
   if (!cardEl || target.closest('[data-board-card-control], button, input')) {
     return null
   }
   const header = cardEl.firstElementChild
-  return header && header.contains(target) ? consoleCardIdOf(cardEl) : null
+  const onGlance = target.closest('[data-board-console-glance]') !== null
+  return (header && header.contains(target)) || onGlance ? consoleCardIdOf(cardEl) : null
 }
 
 /**

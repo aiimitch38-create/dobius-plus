@@ -16,15 +16,16 @@ import {
   CONSOLE_SETTLE_MS,
   consoleHostBox,
   nextConsoleMode,
+  glanceScale,
   zoomedFontSize,
   shouldRefit,
   type ConsoleRenderMode
 } from './console-render-plan'
-import { captureTerminalSnapshot } from './console-snapshot'
 import {
   isBoardConsoleFontOverrideSupported,
   setBoardConsoleFontOverride
 } from './console-font-override'
+import { ConsoleGlanceView } from './ConsoleGlance'
 import { useConsolePane } from './use-console-pane'
 import { useSettledValue } from './use-settled-value'
 
@@ -47,12 +48,24 @@ export function ConsoleCardBody({
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [ownerSlot, setOwnerSlot] = useState<string | null>(null)
   const [visibleRaw, setVisibleRaw] = useState(true)
-  const [mode, setMode] = useState<ConsoleRenderMode>('live')
-  const [snapshot, setSnapshot] = useState<string | null>(null)
+  const baseFontSize = useAppStore((s) => s.settings?.terminalFontSize ?? 14)
+  const z = zoom > 0 ? zoom : 1
+  // Why: a Board opened already zoomed out should start as a glance, not
+  // portal every terminal in for one frame and hand it straight back.
+  const [mode, setMode] = useState<ConsoleRenderMode>(() =>
+    nextConsoleMode({
+      prev: 'live',
+      settledZoom: z,
+      visible: true,
+      gesturing: false,
+      baseFontSize,
+      bodyWidth: 0,
+      bodyHeight: 0
+    })
+  )
 
   // Why: a zoom that changed in the last 150ms is an active pinch/zoom; hold
   // layout at the settled zoom so the card only scales visually until it stops.
-  const z = zoom > 0 ? zoom : 1
   const settledZoom = useSettledValue(z, CONSOLE_SETTLE_MS)
   const gesturing = settledZoom !== z
   const visible = useSettledValue(visibleRaw, CONSOLE_SETTLE_MS)
@@ -77,19 +90,22 @@ export function ConsoleCardBody({
   }, [body])
 
   useEffect(() => {
-    const next = nextConsoleMode({ prev: mode, settledZoom, visible, gesturing })
-    if (next === mode) {
-      return
+    const next = nextConsoleMode({
+      prev: mode,
+      settledZoom,
+      visible,
+      gesturing,
+      baseFontSize,
+      bodyWidth: size.w,
+      bodyHeight: size.h
+    })
+    if (next !== mode) {
+      setMode(next)
     }
-    // Capture before the live pane is handed back so the cover shows its last frame.
-    if (next === 'snapshot') {
-      setSnapshot(captureTerminalSnapshot(target))
-    }
-    setMode(next)
-  }, [gesturing, mode, settledZoom, target, visible])
+  }, [baseFontSize, gesturing, mode, settledZoom, size.h, size.w, visible])
 
-  // Why: snapshot mode hands the pane back to its ordinary (hidden) host; the
-  // PTY and emulator keep running, so no output is lost while it's a picture.
+  // Why: glance mode hands the pane back to its ordinary (hidden) host; the
+  // PTY and emulator keep running, so no output is lost while it shows text.
   useLayoutEffect(() => {
     if (mode !== 'live' || !target || !paneKey || !tabExists) {
       return
@@ -118,7 +134,6 @@ export function ConsoleCardBody({
     return () => blurBoardTerminalSlot(card.id)
   }, [card.id, card.tabId, focused, leafId, mode, ownerSlot, paneKey, worktreeId])
 
-  const baseFontSize = useAppStore((s) => s.settings?.terminalFontSize ?? 14)
   // Why: publish the grid-preserving font only for a settled, live pane;
   // during a pinch the card just scales visually.
   useEffect(() => {
@@ -167,21 +182,15 @@ export function ConsoleCardBody({
           visibility: mode === 'live' ? undefined : 'hidden'
         }}
       />
-      {mode === 'snapshot' && notice === undefined && (
-        <div className="absolute inset-0">
-          {snapshot ? (
-            <img
-              src={snapshot}
-              alt=""
-              draggable={false}
-              className="size-full object-fill select-none"
-            />
-          ) : (
-            <div className="flex size-full items-center justify-center p-4 text-center text-[13px] text-[var(--board-text-muted)]">
-              {card.title}
-            </div>
-          )}
-        </div>
+      {mode === 'glance' && notice === undefined && (
+        <ConsoleGlanceView
+          worktreeId={worktreeId}
+          tabId={card.tabId}
+          leafId={leafId}
+          title={card.title}
+          onScreen={visibleRaw}
+          scale={glanceScale(settledZoom)}
+        />
       )}
       {notice !== undefined && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 p-4 text-center text-[13px] text-[var(--board-text-muted)]">
