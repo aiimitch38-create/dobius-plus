@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { dispatchDictationControl } from '@/components/dictation/dictation-control-events'
 import { voiceOrbLevelSource } from '@/components/dictation/voice-orb-live-level'
 import { translate } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 import { BoardPage } from './BoardPage'
 import { boardFreeSpawnCenter, boardSpawnBlockSize } from './board-canvas/board-spawn-placement'
@@ -41,6 +42,10 @@ import { useBoardPushToTalk } from './board-route/use-board-push-to-talk'
 import { useBoardRouteData } from './board-route/use-board-route-data'
 import { useBoardSelection } from './board-route/use-board-selection'
 import { useBoardTopBarProps } from './board-route/use-board-top-bar-props'
+import { useBoardAttentionJump } from './board-route/use-board-attention-jump'
+import { useBoardFocusMode } from './board-route/use-board-camera-focus'
+import { BoardFocusPill } from './board-route/BoardFocusPill'
+import { BoardShortcutSheet } from './board-route/BoardShortcutSheet'
 
 // The expanded thread (560x~602, 28px above the bottom, centered) is treated as
 // occupied even when collapsed, so a card never lands where the thread opens.
@@ -149,6 +154,14 @@ export default function BoardRoute(): React.JSX.Element {
   })
   const topBar = useBoardTopBarProps(data, setStudio)
   const history = useBoardHistory(worktreeId)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const focusMode = useBoardFocusMode({
+    worktreeId,
+    tool: board.tool,
+    selection,
+    suspended: picker !== null || studio !== null || shortcutsOpen
+  })
+  const jumpToNeedsYou = useBoardAttentionJump(worktreeId)
   useBoardShortcuts({
     worktreeId,
     selection,
@@ -156,7 +169,10 @@ export default function BoardRoute(): React.JSX.Element {
     redo: history.redo,
     onChip: actions.onChip,
     openStudio: setStudio,
-    openGitHub: topBar.onOpenGitHub
+    openGitHub: topBar.onOpenGitHub,
+    focusSelected: focusMode.focusSelected,
+    nextNeedsYou: jumpToNeedsYou,
+    showShortcuts: () => setShortcutsOpen(true)
   })
 
   const { toolPanelOpen, setTool } = useBoardToolPanel(worktreeId, board.tool)
@@ -219,8 +235,12 @@ export default function BoardRoute(): React.JSX.Element {
     // screen (a 900x600 web tile clicked near the top sat under the top bar).
     const placed = boardInsertCard(tool, world)
     const v = board.viewport
-    const tl = screenToWorld({ x: 96, y: 72 }, v)
-    const br = screenToWorld({ x: window.innerWidth - 80, y: window.innerHeight - 28 }, v)
+    const inset = BOARD_CHROME_INSETS
+    const tl = screenToWorld({ x: inset.left, y: inset.top }, v)
+    const br = screenToWorld(
+      { x: window.innerWidth - inset.right, y: window.innerHeight - inset.bottom },
+      v
+    )
     useAppStore.getState().addCard(worktreeId, {
       ...placed,
       ...clampRectIntoArea(placed, { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y })
@@ -245,7 +265,14 @@ export default function BoardRoute(): React.JSX.Element {
   const chatTabId = data.consoles.find((c) => selection.selectedIds.has(c.id))?.tabId ?? null
 
   return (
-    <div data-surface="board" className="fixed inset-0 z-40 bg-[var(--board-canvas)]">
+    <div
+      data-surface="board"
+      className={cn(
+        'fixed inset-0 z-40 bg-[var(--board-canvas)] [&_[data-board-card]]:transition-opacity [&_[data-board-card]]:duration-200',
+        // Focus mode: every card but the focused console sits back at 60%.
+        focusMode.focus && '[&_[data-board-card]:not(:has([data-board-focus-target]))]:opacity-60'
+      )}
+    >
       <BoardPage
         viewport={board.viewport}
         onViewportChange={(viewport) =>
@@ -294,6 +321,8 @@ export default function BoardRoute(): React.JSX.Element {
         }}
         overlay={
           <>
+            {focusMode.focus ? <BoardFocusPill onExit={focusMode.exit} /> : null}
+            <BoardShortcutSheet open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
             <BoardCanvasMenu
               at={canvasMenu.at?.screen ?? null}
               hasSelection={selection.selectedIds.size > 0}

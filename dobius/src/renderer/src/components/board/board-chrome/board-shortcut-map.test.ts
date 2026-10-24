@@ -1,6 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
-import { resolveBoardShortcut, type BoardShortcutEvent } from './board-shortcut-map'
+import {
+  boardShortcutSheet,
+  resolveBoardShortcut,
+  type BoardShortcutEvent
+} from './board-shortcut-map'
 
 const noModifiers = {
   metaKey: false,
@@ -86,5 +90,30 @@ describe('resolveBoardShortcut', () => {
       resolveBoardShortcut(event('g', { ...modifier(true), target: textarea }), true)
     ).toBeNull()
     expect(resolveBoardShortcut(event('d', { target: textarea }), false)).toBeNull()
+  })
+})
+
+describe('camera and help shortcuts', () => {
+  it('maps F and Enter to focus, N to needs-you, ? to the sheet', () => {
+    expect(resolveBoardShortcut(event('f'), true)).toBe('focusSelected')
+    expect(resolveBoardShortcut(event('Enter'), true)).toBe('focusSelected')
+    expect(resolveBoardShortcut(event('n'), false)).toBe('nextNeedsYou')
+    expect(resolveBoardShortcut(event('?', { shiftKey: true }), true)).toBe('showShortcuts')
+  })
+
+  it('never fires them while typing in a terminal', () => {
+    const term = document.createElement('div')
+    term.className = 'xterm'
+    const input = document.createElement('textarea')
+    term.appendChild(input)
+    expect(resolveBoardShortcut(event('f', { target: input }), true)).toBeNull()
+    expect(resolveBoardShortcut(event('Enter', { target: input }), true)).toBeNull()
+    expect(resolveBoardShortcut(event('?', { shiftKey: true, target: input }), true)).toBeNull()
+  })
+
+  it('the sheet lists the tool letters the keys actually use', () => {
+    const rows = boardShortcutSheet(true).flatMap((section) => section.rows)
+    expect(rows.find((r) => r.label === 'Text')?.keys).toEqual(['T'])
+    expect(rows.find((r) => r.label === 'Spawn agent')?.keys).toEqual(['A'])
   })
 })

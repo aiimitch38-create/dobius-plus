@@ -44,7 +44,7 @@ describe('missionMapFilterOf', () => {
     expect(missionMapFilterOf('waiting')).toBe('waiting')
     expect(missionMapFilterOf('idle')).toBe('idle')
     expect(missionMapFilterOf('paused')).toBe('idle')
-    expect(missionMapFilterOf('shell')).toBe('done')
+    expect(missionMapFilterOf('shell')).toBe('shell')
     expect(missionMapFilterOf('done')).toBe('done')
     expect(missionMapFilterOf('gone')).toBe('done')
   })
@@ -54,7 +54,18 @@ describe('missionMapFilterCounts', () => {
   it('counts every console under All and its bucket', () => {
     expect(
       missionMapFilterCounts({ a: 'working', b: 'waiting', c: 'paused', d: 'gone', e: 'working' })
-    ).toEqual({ all: 5, working: 2, waiting: 1, idle: 1, done: 1 })
+    ).toEqual({ all: 5, working: 2, waiting: 1, idle: 1, shell: 0, done: 1 })
+  })
+
+  it('never counts a shell that has not run anything as Done', () => {
+    expect(missionMapFilterCounts({ a: 'shell', b: 'shell', c: 'done' })).toEqual({
+      all: 3,
+      working: 0,
+      waiting: 0,
+      idle: 0,
+      shell: 2,
+      done: 1
+    })
   })
 })
 

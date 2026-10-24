@@ -31,8 +31,10 @@ type BoardAgentPickerProps = {
   agents: readonly BoardAgentOption[]
   onPick: (agent: TuiAgent) => void
   onClose: () => void
-  /** Multi-spawns (Spawn 4, group) offer a team composer: one role + agent per slot. */
-  onSpawnTeam?: (slots: TeamSlot[], name: string | null) => void
+  /** Multi-spawns (Spawn 4, group) offer a team composer: one role + agent per slot.
+   *  Returns the new card ids; an empty list keeps the composer open (the spawn
+   *  path has already toasted why). */
+  onSpawnTeam?: (slots: TeamSlot[], name: string | null) => readonly string[] | void
 }
 
 // Why: one picker serves the Spawn tool (opens where you clicked), "New console"
@@ -53,8 +55,12 @@ export function BoardAgentPicker({
         agents={agents}
         onClose={() => setTeamCount(null)}
         onSpawn={(slots, name) => {
-          setTeamCount(null)
-          onSpawnTeam(slots, name)
+          // Why: closing first made a failed spawn look like nothing happened;
+          // the dialog now stays up until at least one console exists.
+          const spawned = onSpawnTeam(slots, name)
+          if (!Array.isArray(spawned) || spawned.length > 0) {
+            setTeamCount(null)
+          }
         }}
       />
     )

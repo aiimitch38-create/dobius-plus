@@ -1,22 +1,24 @@
 // Pure filter logic for the Mission Map chips (All / Working / Needs you /
-// Idle / Done). Statuses come from the same console status feed the card
+// Idle / At its shell / Done). Statuses come from the same console status feed the card
 // header uses; no DOM, no store.
 import type { ConsoleCardStatus } from '../console-card/console-card-status'
 import type { MissionMapEdge, MissionMapNode } from './mission-map-layout'
 
-export type MissionMapFilter = 'all' | 'working' | 'waiting' | 'idle' | 'done'
+export type MissionMapFilter = 'all' | 'working' | 'waiting' | 'idle' | 'shell' | 'done'
 
 export const MISSION_MAP_FILTERS: readonly MissionMapFilter[] = [
   'all',
   'working',
   'waiting',
   'idle',
+  'shell',
   'done'
 ]
 
-// Why: seven live states fold into four triage buckets. Paused is not doing
-// work, so it sits with Idle; an agent back at its shell, an ended process
-// and a closed tab are all "finished" from the triage view.
+// Why: seven live states fold into five triage buckets. Paused is not doing
+// work, so it sits with Idle. A console at its shell has nothing running (it
+// may never have started an agent), so it is NOT "Done" — QA saw fresh shells
+// counted as Done. Done is only an ended process or a closed tab.
 export function missionMapFilterOf(status: ConsoleCardStatus): Exclude<MissionMapFilter, 'all'> {
   switch (status) {
     case 'working':
@@ -27,6 +29,7 @@ export function missionMapFilterOf(status: ConsoleCardStatus): Exclude<MissionMa
     case 'paused':
       return 'idle'
     case 'shell':
+      return 'shell'
     case 'done':
     case 'gone':
       return 'done'
@@ -41,6 +44,7 @@ export function missionMapFilterCounts(
     working: 0,
     waiting: 0,
     idle: 0,
+    shell: 0,
     done: 0
   }
   for (const status of Object.values(statuses)) {

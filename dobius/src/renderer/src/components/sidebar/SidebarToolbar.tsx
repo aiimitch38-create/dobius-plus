@@ -32,9 +32,11 @@ const SidebarToolbar = React.memo(function SidebarToolbar({
   // stays mounted underneath the full-window Board surface, and this tip
   // must not draw over the Board while it's up.
   const activeView = useAppStore((state) => state.activeView)
+  // Why: Home is a full-window layer like the Board; the tip floated over it (QA).
+  const fullWindowSurface = activeView === 'board' || activeView === 'home'
 
   React.useEffect(() => {
-    if (!persistedUIReady || activeView === 'board') {
+    if (!persistedUIReady || fullWindowSurface) {
       return
     }
     // Why: only users who had already opened the old board location should
@@ -59,15 +61,15 @@ const SidebarToolbar = React.memo(function SidebarToolbar({
       setWorkspaceBoardMovedHintOpen(false)
     }, WORKSPACE_BOARD_MOVED_HINT_DURATION_MS)
     return () => window.clearTimeout(timeoutId)
-  }, [activeView, hasUsedWorkspaceBoard, persistedUIReady])
+  }, [fullWindowSurface, hasUsedWorkspaceBoard, persistedUIReady])
 
   React.useEffect(() => {
-    // Why: close an already-open hint the instant the Board surface comes
-    // up, rather than waiting for its auto-dismiss timeout to elapse.
-    if (activeView === 'board') {
+    // Why: close an already-open hint the instant the Board or Home surface
+    // comes up, rather than waiting for its auto-dismiss timeout to elapse.
+    if (fullWindowSurface) {
       setWorkspaceBoardMovedHintOpen(false)
     }
-  }, [activeView])
+  }, [fullWindowSurface])
 
   const handleWorkspaceBoardClick = (): void => {
     setWorkspaceBoardMovedHintOpen(false)

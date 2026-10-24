@@ -1,31 +1,27 @@
 import { getAgentLabel } from '@/lib/agent-catalog'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { useAppStore } from '@/store'
-import { getBoard, type BoardCardOf, type NewBoardCard } from '@/store/slices/board'
+import { getBoard, type BoardCardOf } from '@/store/slices/board'
 import { agentOrDefault } from '../board-delivery/console-lifecycle'
-import { duplicateSpot, nextConsoleTitle } from './board-duplicate-spot'
-
-const DUPLICATE_OFFSET = 24
+import { duplicateCardDraft, duplicateSpot, nextConsoleTitle } from './board-duplicate-spot'
 
 /**
- * Copies the given cards and returns the new ids. Plain cards land 24px
- * down-right; consoles get a fresh agent (see duplicateConsole).
+ * Copies the given cards and returns the new ids. Plain cards land beside their
+ * source on free canvas; consoles get a fresh agent (see duplicateConsole).
  */
 export function duplicateBoardCards(worktreeId: string, cardIds: ReadonlySet<string>): string[] {
-  const store = useAppStore.getState()
-  return getBoard(store, worktreeId)
-    .cards.filter((c) => cardIds.has(c.id))
-    .flatMap((card) => {
-      if (card.kind === 'console') {
-        return duplicateConsole(worktreeId, card) ?? []
-      }
-      const { id: _id, z: _z, ...rest } = card
-      return store.addCard(worktreeId, {
-        ...rest,
-        x: card.x + DUPLICATE_OFFSET,
-        y: card.y + DUPLICATE_OFFSET
-      } as NewBoardCard)
-    })
+  const sources = getBoard(useAppStore.getState(), worktreeId).cards.filter((c) =>
+    cardIds.has(c.id)
+  )
+  return sources.flatMap((card) => {
+    if (card.kind === 'console') {
+      return duplicateConsole(worktreeId, card) ?? []
+    }
+    // Why: read the board fresh so each copy also avoids the copies placed before it.
+    const state = useAppStore.getState()
+    const occupied = getBoard(state, worktreeId).cards
+    return state.addCard(worktreeId, duplicateCardDraft(card, occupied))
+  })
 }
 
 /**

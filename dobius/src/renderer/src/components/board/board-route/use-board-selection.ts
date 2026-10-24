@@ -8,6 +8,8 @@ import {
   type SnapGuide
 } from '../board-canvas/board-snap'
 import type { BoardTool } from '@/store/slices/board'
+import { isErasableCard } from '../board-tool-panels/eraser-target'
+import { removeCardsWithUndo } from './board-history-delete'
 
 export type BoardSelection = {
   selectedIds: ReadonlySet<string>
@@ -44,7 +46,10 @@ export function useBoardSelection(worktreeId: string | null, tool: BoardTool): B
         return
       }
       if (toolRef.current === 'eraser') {
-        useAppStore.getState().removeCards(worktreeId, [cardId])
+        const card = getBoard(useAppStore.getState(), worktreeId).cards.find((c) => c.id === cardId)
+        if (card && isErasableCard(card.kind)) {
+          removeCardsWithUndo(worktreeId, [cardId])
+        }
         return
       }
       setSelectedIds((prev) => {
@@ -127,7 +132,7 @@ export function useBoardSelection(worktreeId: string | null, tool: BoardTool): B
     if (!worktreeId || ids.length === 0) {
       return
     }
-    useAppStore.getState().removeCards(worktreeId, ids)
+    removeCardsWithUndo(worktreeId, ids)
     setSelectedIds(EMPTY)
   }, [worktreeId])
 

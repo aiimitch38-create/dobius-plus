@@ -23,6 +23,7 @@ import type {
   SkillSourceKind
 } from '../../../../shared/skills'
 import { countSkillsBySource, filterSkills, type SkillsFilterState } from './skills-filter'
+import { skillScanErrorMessage, withSkillScanTimeout } from './skills-scan'
 import { translate } from '@/i18n/i18n'
 
 const providerLabels: Record<SkillProvider, string> = {
@@ -207,16 +208,14 @@ export default function SkillsPage(): React.JSX.Element {
   const loadSkills = useCallback(async (): Promise<void> => {
     setLoading(true)
     try {
-      const nextResult = await window.api.skills.discover()
+      const nextResult = await withSkillScanTimeout(window.api.skills.discover())
       if (mountedRef.current) {
         setResult(nextResult)
       }
     } catch (error) {
       console.error('Failed to discover skills:', error)
       if (mountedRef.current) {
-        toast.error(
-          translate('auto.components.skills.SkillsPage.ea72d6185b', 'Could not scan local skills')
-        )
+        toast.error(skillScanErrorMessage(error))
       }
     } finally {
       if (mountedRef.current) {
@@ -297,7 +296,7 @@ export default function SkillsPage(): React.JSX.Element {
             </div>
             <p className="truncate text-xs text-muted-foreground">
               {pluralize(skills.length, 'skill')}{' '}
-              {translate('auto.components.skills.SkillsPage.e46e162e2e', 'from')}
+              {translate('auto.components.skills.SkillsPage.e46e162e2e', 'from')}{' '}
               {pluralize(activeSourceCount, 'source')}
             </p>
           </div>

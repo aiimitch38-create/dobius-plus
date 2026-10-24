@@ -2680,6 +2680,9 @@ export type GlobalSettings = {
   /** What Dobius opens to: the Board ('board', the default when unset) or the
    *  Classic terminal view ('classic'). Both stay one click apart either way. */
   appLook?: 'board' | 'classic'
+  /** The name Home greets the user by. Unset (or blank) falls back to the
+   *  repo's git username. Stored trimmed, at most 40 characters. */
+  displayName?: string
   /** Controls how Ctrl+Tab chooses the next visible tab. Optional for
    *  profiles saved before this setting existed; readers default to MRU. */
   ctrlTabOrderMode?: CtrlTabOrderMode

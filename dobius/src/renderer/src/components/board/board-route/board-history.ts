@@ -56,22 +56,24 @@ export function redoBoardStep(
 }
 
 /**
- * Console cards stand for live terminals, so a restored snapshot is reconciled
- * against the tabs that exist now: a console whose tab is alive is never hidden
- * (kept from `current` if the snapshot lacks it), and one whose tab is gone is
- * never shown. Groups keep only members that survive.
+ * Console cards stand for live terminals, so undo/redo never adds or removes one
+ * on its own. A snapshot's console is restored only if its tab is alive or the
+ * card is on the board now (a closed agent's card the user still sees must not
+ * vanish because an unrelated step is undone). A console on the board now that
+ * the snapshot lacks is always kept. Groups keep only members that survive.
  */
 export function reconcileConsoleCards(
   target: BoardContent,
   current: BoardContent,
   liveTabIds: ReadonlySet<string>
 ): BoardContent {
-  const alive = (card: BoardContent['cards'][number]): boolean =>
-    card.kind !== 'console' || liveTabIds.has(card.tabId)
-  const cards = target.cards.filter(alive)
+  const onBoard = new Set(current.cards.map((c) => c.id))
+  const keep = (card: BoardContent['cards'][number]): boolean =>
+    card.kind !== 'console' || liveTabIds.has(card.tabId) || onBoard.has(card.id)
+  const cards = target.cards.filter(keep)
   const ids = new Set(cards.map((c) => c.id))
   for (const card of current.cards) {
-    if (card.kind === 'console' && liveTabIds.has(card.tabId) && !ids.has(card.id)) {
+    if (card.kind === 'console' && !ids.has(card.id)) {
       cards.push(card)
       ids.add(card.id)
     }

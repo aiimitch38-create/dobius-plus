@@ -85,7 +85,11 @@ export function BoardCanvas({
         event.preventDefault()
         const anchor = localPoint(element, event.clientX, event.clientY)
         onChangeRef.current(
-          zoomViewportBy(viewportRef.current, wheelDeltaToZoomFactor(event.deltaY), anchor)
+          zoomViewportBy(
+            viewportRef.current,
+            wheelDeltaToZoomFactor(event.deltaY, event.deltaMode),
+            anchor
+          )
         )
         return
       }
@@ -178,6 +182,12 @@ export function BoardCanvas({
       return
     }
     if (!middle) {
+      // Why: drags preventDefault, so focus would otherwise stay in the last
+      // clicked terminal and swallow board keys (⌘K, ?, tool letters).
+      const active = document.activeElement
+      if (active instanceof HTMLElement && active !== document.body) {
+        active.blur()
+      }
       const local = localPoint(event.currentTarget, event.clientX, event.clientY)
       onEmptyPointerDown?.(screenToWorld(local, viewportRef.current), event)
       if (!panOnEmptyDrag) {

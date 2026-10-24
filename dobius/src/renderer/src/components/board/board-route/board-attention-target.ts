@@ -18,14 +18,14 @@ export type BoardAttentionTarget = {
 }
 
 /**
- * The console needing attention longest (smallest stateStartedAt among its
- * fresh, unacknowledged waiting/blocked panes). Null when none qualify.
+ * Every console needing the user, longest-waiting first (by the smallest
+ * stateStartedAt among its fresh, unacknowledged waiting/blocked panes).
  */
-export function boardAttentionTarget(
+export function boardAttentionTargets(
   consoles: readonly BoardAttentionConsole[],
   input: BoardActivityInput
-): BoardAttentionTarget | null {
-  let best: (BoardAttentionTarget & { stateStartedAt: number }) | null = null
+): BoardAttentionTarget[] {
+  const found: (BoardAttentionTarget & { stateStartedAt: number })[] = []
 
   for (const console of consoles) {
     const prefix = `${console.tabId}:`
@@ -50,17 +50,24 @@ export function boardAttentionTarget(
       }
     }
 
-    if (earliestStart === null) {
-      continue
-    }
-    if (!best || earliestStart < best.stateStartedAt) {
-      best = {
+    if (earliestStart !== null) {
+      found.push({
         cardId: console.id,
         center: { x: console.x + console.w / 2, y: console.y + console.h / 2 },
         stateStartedAt: earliestStart
-      }
+      })
     }
   }
 
-  return best ? { cardId: best.cardId, center: best.center } : null
+  return found
+    .sort((a, b) => a.stateStartedAt - b.stateStartedAt)
+    .map(({ cardId, center }) => ({ cardId, center }))
+}
+
+/** The console needing attention longest. Null when none qualify. */
+export function boardAttentionTarget(
+  consoles: readonly BoardAttentionConsole[],
+  input: BoardActivityInput
+): BoardAttentionTarget | null {
+  return boardAttentionTargets(consoles, input)[0] ?? null
 }

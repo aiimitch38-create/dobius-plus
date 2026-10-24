@@ -48,6 +48,8 @@ function filterLabel(filter: MissionMapFilter): string {
       return translate('board.studio.missionMap.filter.waiting', 'Needs you')
     case 'idle':
       return translate('board.studio.missionMap.filter.idle', 'Idle')
+    case 'shell':
+      return translate('board.studio.missionMap.filter.shell', 'At its shell')
     case 'done':
       return translate('board.studio.missionMap.filter.done', 'Done')
   }

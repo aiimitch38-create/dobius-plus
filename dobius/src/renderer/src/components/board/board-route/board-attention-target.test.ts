@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentStatusEntry } from '../../../../../shared/agent-status-types'
-import { boardAttentionTarget, type BoardAttentionConsole } from './board-attention-target'
+import {
+  boardAttentionTarget,
+  boardAttentionTargets,
+  type BoardAttentionConsole
+} from './board-attention-target'
+import { nextNeedsYouCardId } from './use-board-attention-jump'
 
 const STALE_AFTER_MS = 30 * 60 * 1000
 const NOW = 1_000_000
@@ -143,5 +148,33 @@ describe('boardAttentionTarget', () => {
       cardId: 'c1',
       center: { x: 250, y: 290 }
     })
+  })
+})
+
+describe('needs-you cycling', () => {
+  const consoles = [console_('c1', 't1'), console_('c2', 't2'), console_('c3', 't3')]
+  const input = {
+    agentStatusByPaneKey: {
+      't1:a': entry({ paneKey: 't1:a', stateStartedAt: NOW - 100 }),
+      't2:a': entry({ paneKey: 't2:a', state: 'working' }),
+      't3:a': entry({ paneKey: 't3:a', state: 'blocked', stateStartedAt: NOW - 500 })
+    },
+    acknowledgedAgentsByPaneKey: {},
+    now: NOW,
+    staleAfterMs: STALE_AFTER_MS
+  }
+
+  it('lists every waiting console, longest-waiting first', () => {
+    expect(boardAttentionTargets(consoles, input).map((t) => t.cardId)).toEqual(['c3', 'c1'])
+  })
+
+  it('N starts at the oldest, then moves to the next and wraps', () => {
+    const ids = boardAttentionTargets(consoles, input).map((t) => t.cardId)
+    expect(nextNeedsYouCardId(ids, null)).toBe('c3')
+    expect(nextNeedsYouCardId(ids, 'c3')).toBe('c1')
+    expect(nextNeedsYouCardId(ids, 'c1')).toBe('c3')
+    // Focused on a console that no longer waits: back to the oldest waiting one.
+    expect(nextNeedsYouCardId(ids, 'c2')).toBe('c3')
+    expect(nextNeedsYouCardId([], null)).toBeNull()
   })
 })

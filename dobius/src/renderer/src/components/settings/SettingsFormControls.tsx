@@ -41,9 +41,13 @@ export function SettingsSwitch({
       aria-labelledby={ariaLabelledBy}
       disabled={disabled}
       onClick={onChange}
+      // Why: the off track alone vanished on the Board's white settings panel
+      // (QA: "white-on-white"); the inset ring keeps its outline visible.
       className={cn(
         'relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50',
-        checked ? 'bg-foreground' : 'bg-muted-foreground/30'
+        checked
+          ? 'bg-foreground'
+          : 'bg-muted-foreground/30 ring-1 ring-inset ring-muted-foreground/70'
       )}
     >
       <span

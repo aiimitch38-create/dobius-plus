@@ -140,4 +140,19 @@ describe('SidebarToolbar moved workspace board hint', () => {
     expect(container.textContent).not.toContain('Workspace board moved to the bottom bar')
     expect(window.localStorage.getItem('dobius.workspaceBoardMovedHintSeen.v1')).toBeNull()
   })
+
+  it('does not show the moved hint over the Home screen either', async () => {
+    mocks.state = {
+      persistedUIReady: true,
+      featureInteractions: {
+        'workspace-board': { firstInteractedAt: 100, interactionCount: 2 }
+      },
+      activeView: 'home'
+    }
+
+    const { container } = await renderToolbar()
+
+    expect(container.textContent).not.toContain('Workspace board moved to the bottom bar')
+    expect(window.localStorage.getItem('dobius.workspaceBoardMovedHintSeen.v1')).toBeNull()
+  })
 })

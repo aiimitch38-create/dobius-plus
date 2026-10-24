@@ -22,6 +22,36 @@ export function moveKanbanItem(
   })
 }
 
+export const KANBAN_COLUMN_ATTR = 'data-kanban-column'
+
+/**
+ * The column a drop landed in, only if it belongs to this kanban (`root`).
+ * Why: the preload's capture-phase `drop` listener stops propagation for every
+ * drag that is not an OS file or an internal file drag, so React's onDrop never
+ * runs; the card listens on document (capture) and resolves the column itself.
+ */
+export function kanbanColumnAt(
+  target: EventTarget | null,
+  root: Pick<Node, 'contains'> | null
+): string | null {
+  if (!root || !target || typeof (target as Element).closest !== 'function') {
+    return null
+  }
+  const column = (target as Element).closest(`[${KANBAN_COLUMN_ATTR}]`)
+  if (!column || !root.contains(column)) {
+    return null
+  }
+  return column.getAttribute(KANBAN_COLUMN_ATTR)
+}
+
+/** Columns an item can move to from its menu: every column but its own. */
+export function kanbanMoveTargets(
+  columns: readonly BoardKanbanColumn[],
+  itemId: string
+): BoardKanbanColumn[] {
+  return columns.filter((c) => !c.items.some((i) => i.id === itemId))
+}
+
 export function defaultKanbanColumns(): BoardKanbanColumn[] {
   return [
     translate('board.kanban.todo', 'To do'),

@@ -96,13 +96,48 @@ describe('board viewport math', () => {
     expect(dotGridSpacing(0.63)).toBeCloseTo(56.7)
   })
 
-  it('fits into the band above the command bar', () => {
+  it('fits into the safe area inside the rails, top bar and command bar', () => {
     const v = fitBoardViewport([{ x: 0, y: 0, width: 100, height: 100 }], {
       width: 1000,
       height: 859
     })
-    // band is 64..689 (859 - 64 - 170 = 625 tall); content centered at y = 64 + 312.5
-    expect(worldToScreen({ x: 50, y: 50 }, v).y).toBeCloseTo(376.5)
-    expect(worldToScreen({ x: 50, y: 50 }, v).x).toBeCloseTo(500)
+    // Safe area x 96..920, y 72..689 (BOARD_CHROME_INSETS); content centered in it at 100%.
+    expect(v.zoom).toBe(1)
+    expect(worldToScreen({ x: 50, y: 50 }, v).x).toBeCloseTo(508)
+    expect(worldToScreen({ x: 50, y: 50 }, v).y).toBeCloseTo(380.5)
+  })
+
+  it('keeps every card of a wide fit clear of the rails and command bar', () => {
+    const rects = [
+      { x: 0, y: 0, width: 640, height: 400 },
+      { x: 672, y: 0, width: 640, height: 400 },
+      { x: 0, y: 432, width: 640, height: 400 }
+    ]
+    const v = fitBoardViewport(rects, { width: 1440, height: 900 })
+    const tl = worldToScreen({ x: 0, y: 0 }, v)
+    const br = worldToScreen({ x: 1312, y: 832 }, v)
+    expect(tl.x).toBeGreaterThanOrEqual(96)
+    expect(tl.y).toBeGreaterThanOrEqual(72)
+    expect(br.x).toBeLessThanOrEqual(1440 - 80)
+    expect(br.y).toBeLessThanOrEqual(900 - 170)
+  })
+
+  it('caps one Ctrl+wheel notch at one zoom-button step, lines and pages included', () => {
+    expect(wheelDeltaToZoomFactor(-100)).toBeCloseTo(1.2)
+    expect(wheelDeltaToZoomFactor(100)).toBeCloseTo(1 / 1.2)
+    expect(wheelDeltaToZoomFactor(-3, 1)).toBeCloseTo(1.2)
+    expect(wheelDeltaToZoomFactor(1, 2)).toBeCloseTo(1 / 1.2)
+    // Small pinch deltas stay proportional (unchanged feel on trackpads).
+    expect(wheelDeltaToZoomFactor(-4)).toBeCloseTo(Math.exp(0.04))
+  })
+
+  it('takes many wheel notches to cross from 300% to 10%', () => {
+    let zoom = 3
+    let notches = 0
+    while (zoom > 0.1 && notches < 100) {
+      zoom *= wheelDeltaToZoomFactor(120)
+      notches++
+    }
+    expect(notches).toBeGreaterThanOrEqual(18)
   })
 })

@@ -24,7 +24,7 @@ import {
   BOARD_MENU_SEPARATOR_CLASS
 } from '../board-chrome/board-surface-classes'
 import { translate } from '@/i18n/i18n'
-import { shouldStartCardDrag } from './card-drag-target'
+import { passedCardDragThreshold, shouldStartCardDrag } from './card-drag-target'
 import { focusMovedOutOfMenu } from './card-menu-focus'
 
 export type BoardCardAction = {
@@ -56,7 +56,15 @@ export type BoardCardFrameProps = {
   children: React.ReactNode
 }
 
-type DragState = { pointerId: number; lastX: number; lastY: number }
+type DragState = {
+  pointerId: number
+  startX: number
+  startY: number
+  lastX: number
+  lastY: number
+  /** False until the press passes the drag threshold (see passedCardDragThreshold). */
+  moving: boolean
+}
 type ResizeState = {
   pointerId: number
   handle: ResizeHandle
@@ -101,12 +109,16 @@ const isAdditive = (e: React.PointerEvent): boolean => e.shiftKey || e.metaKey |
 
 function EditableTitle({
   title,
-  onRename
+  onRename,
+  draft,
+  setDraft
 }: {
   title: string
   onRename?: (title: string) => void
+  /** Owned by the frame so the "Rename" menu item can open the editor too. */
+  draft: string | null
+  setDraft: (draft: string | null) => void
 }): React.JSX.Element {
-  const [draft, setDraft] = useState<string | null>(null)
   if (draft === null || !onRename) {
     return (
       <span
@@ -129,6 +141,7 @@ function EditableTitle({
       autoFocus
       data-board-card-control
       value={draft}
+      onFocus={(e) => e.currentTarget.select()}
       aria-label={translate('board.card.rename', 'Rename')}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -164,6 +177,22 @@ export function BoardCardFrame({
 }: BoardCardFrameProps): React.JSX.Element {
   const dragRef = useRef<DragState | null>(null)
   const resizeRef = useRef<ResizeState | null>(null)
+  const [titleDraft, setTitleDraft] = useState<string | null>(null)
+  // Why: open the title editor only after the menu has closed and restored focus,
+  // otherwise the closing menu pulls focus back and the editor blurs at once.
+  const renamePending = useRef(false)
+  const canRename = Boolean(onRename) && !bare
+  const menuActions: BoardCardAction[] = canRename
+    ? [
+        {
+          label: translate('board.card.rename', 'Rename'),
+          onSelect: () => {
+            renamePending.current = true
+          }
+        },
+        ...actions
+      ]
+    : actions
   // Why: hit areas live in world space, so divide by zoom to keep handles and
   // the ring a constant on-screen size at any zoom level.
   const px = (n: number): number => n / (zoom > 0 ? zoom : 1)
@@ -174,13 +203,31 @@ export function BoardCardFrame({
     }
     e.stopPropagation()
     onSelect(isAdditive(e))
-    e.currentTarget.setPointerCapture(e.pointerId)
-    dragRef.current = { pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY }
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      moving: false
+    }
   }
   const moveDrag = (e: React.PointerEvent<HTMLElement>): void => {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== e.pointerId) {
       return
+    }
+    if (!drag.moving) {
+      // The press ended somewhere we never heard about (no capture yet).
+      if (e.buttons === 0) {
+        dragRef.current = null
+        return
+      }
+      if (!passedCardDragThreshold(e.clientX - drag.startX, e.clientY - drag.startY)) {
+        return
+      }
+      drag.moving = true
+      e.currentTarget.setPointerCapture(e.pointerId)
     }
     const { dx, dy } = screenDeltaToWorld(e.clientX - drag.lastX, e.clientY - drag.lastY, zoom)
     drag.lastX = e.clientX
@@ -188,9 +235,12 @@ export function BoardCardFrame({
     onDragBy(dx, dy)
   }
   const endDrag = (e: React.PointerEvent<HTMLElement>): void => {
-    if (dragRef.current?.pointerId === e.pointerId) {
+    const drag = dragRef.current
+    if (drag?.pointerId === e.pointerId) {
       dragRef.current = null
-      onDragEnd?.()
+      if (drag.moving) {
+        onDragEnd?.()
+      }
     }
   }
 
@@ -266,9 +316,14 @@ export function BoardCardFrame({
           <span className="flex size-4 shrink-0 items-center justify-center text-[var(--board-text-muted)] [&_svg]:size-4">
             {icon}
           </span>
-          <EditableTitle title={title} onRename={onRename} />
+          <EditableTitle
+            title={title}
+            onRename={onRename}
+            draft={titleDraft}
+            setDraft={setTitleDraft}
+          />
           {titleAccessory}
-          {actions.length > 0 && (
+          {menuActions.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -287,6 +342,12 @@ export function BoardCardFrame({
                 data-surface="board"
                 className={BOARD_MENU_CONTENT_CLASS}
                 onCloseAutoFocus={(e) => {
+                  if (renamePending.current) {
+                    renamePending.current = false
+                    e.preventDefault()
+                    setTitleDraft(title)
+                    return
+                  }
                   if (
                     focusMovedOutOfMenu(
                       document.activeElement,
@@ -298,7 +359,7 @@ export function BoardCardFrame({
                   }
                 }}
               >
-                {actions.map((action, i) => (
+                {menuActions.map((action, i) => (
                   <React.Fragment key={action.label}>
                     {action.destructive && i > 0 && (
                       <DropdownMenuSeparator className={BOARD_MENU_SEPARATOR_CLASS} />

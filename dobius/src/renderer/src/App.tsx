@@ -512,6 +512,11 @@ function App(): React.JSX.Element {
       <Toaster
         closeButton
         position={activeView === 'board' || activeView === 'home' ? 'top-center' : undefined}
+        // Why: the Board top bar (Back to home, workspace pills, Close) sits in
+        // the top ~64px; a top-center toast at sonner's default offset covered it.
+        {...(activeView === 'board' || activeView === 'home'
+          ? { offset: { top: 72 }, mobileOffset: { top: 72 } }
+          : {})}
         toastOptions={{ className: 'font-sans text-sm' }}
       />
       <PinnedTabCloseDialog />

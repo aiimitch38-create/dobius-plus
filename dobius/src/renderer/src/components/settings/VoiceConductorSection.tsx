@@ -30,9 +30,13 @@ export function VoiceConductorSection({
           role="switch"
           aria-checked={voiceSettings.conductorEnabled}
           aria-label={translate('auto.components.settings.VoiceConductor.title', 'Voice Conductor')}
-          onClick={() => onUpdateVoiceSettings({ conductorEnabled: !voiceSettings.conductorEnabled })}
+          onClick={() =>
+            onUpdateVoiceSettings({ conductorEnabled: !voiceSettings.conductorEnabled })
+          }
           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors ${
-            voiceSettings.conductorEnabled ? 'bg-foreground' : 'bg-muted-foreground/30'
+            voiceSettings.conductorEnabled
+              ? 'bg-foreground'
+              : 'bg-muted-foreground/30 ring-1 ring-inset ring-muted-foreground/70'
           }`}
         >
           <span

@@ -17,3 +17,15 @@ export function shouldStartCardDrag(
   }
   return !target.closest(BOARD_CARD_CONTROL_SELECTOR)
 }
+
+// Screen pixels the pointer must travel before a press becomes a card drag.
+export const CARD_DRAG_THRESHOLD_PX = 3
+
+/**
+ * Why: capturing the pointer on press retargets click/dblclick to the capturing
+ * element, so a double-click on a title or a shape never reached the element that
+ * handles it. Capture starts only once the press has really moved.
+ */
+export function passedCardDragThreshold(dx: number, dy: number): boolean {
+  return Math.hypot(dx, dy) >= CARD_DRAG_THRESHOLD_PX
+}

@@ -1,5 +1,7 @@
 import { boardBoxIsFree, boardFreeSpawnCenter } from '../board-canvas/board-spawn-placement'
 import type { BoardPoint } from '../board-canvas/board-viewport'
+import { translate } from '@/i18n/i18n'
+import type { BoardCard, NewBoardCard } from '@/store/slices/board'
 
 type Box = { x: number; y: number; w: number; h: number }
 
@@ -48,4 +50,16 @@ export function nextConsoleTitle(label: string, taken: readonly string[]): strin
     n += 1
   }
   return `${label} ${n}`
+}
+
+/**
+ * A plain (non-console) card's copy: same content, placed beside the source on
+ * free canvas (never stacked on it), titled "<title> copy".
+ */
+export function duplicateCardDraft(card: BoardCard, occupied: readonly Box[]): NewBoardCard {
+  const { id: _id, z: _z, ...rest } = card
+  const title = card.title
+    ? translate('board.card.copyTitle', '{{title}} copy', { title: card.title })
+    : card.title
+  return { ...rest, ...duplicateSpot(card, occupied), title } as NewBoardCard
 }

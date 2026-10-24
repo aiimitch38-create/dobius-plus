@@ -1,5 +1,5 @@
 // SVG nodes and shared drawing rules for the Mission Map studio.
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { translate } from '@/i18n/i18n'
 import { swatchEdge, swatchFill } from '../cards/card-swatch'
 import { consoleStatusLabel, type ConsoleCardStatus } from '../console-card/console-card-status'
@@ -13,6 +13,8 @@ import {
 
 const LABEL_MAX_CHARS = 20
 export const DIMMED_OPACITY = 0.25
+/** How long a click waits for a second click before it opens the inspector. */
+export const MISSION_MAP_DOUBLE_CLICK_MS = 250
 
 // Why: the map is read at a glance, so each live state gets one Board token.
 export function statusColor(status: ConsoleCardStatus): string {
@@ -75,6 +77,32 @@ function NodeFrame({
   label: string
   children?: React.ReactNode
 }): React.JSX.Element {
+  // Why: opening the inspector on the first click shrinks the graph, so the
+  // node slid out from under the second click and double-click never fired.
+  // The first click now waits briefly; a second click jumps instead.
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (clickTimer.current) {
+        clearTimeout(clickTimer.current)
+      }
+    },
+    []
+  )
+  const handleClick = (event: React.MouseEvent): void => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+    }
+    if (event.detail >= 2) {
+      onFocus(node)
+      return
+    }
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null
+      onSelect(node)
+    }, MISSION_MAP_DOUBLE_CLICK_MS)
+  }
   return (
     <g
       transform={`translate(${node.x} ${node.y})`}
@@ -88,8 +116,7 @@ function NodeFrame({
       )}
       opacity={dimmed ? DIMMED_OPACITY : 1}
       className="cursor-pointer outline-none [&:focus-visible>rect]:stroke-[var(--board-accent)] [&:hover>rect]:opacity-90"
-      onClick={() => onSelect(node)}
-      onDoubleClick={() => onFocus(node)}
+      onClick={handleClick}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()

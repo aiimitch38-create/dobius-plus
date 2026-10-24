@@ -14,7 +14,9 @@ import {
 } from '@comms/shared/api/dobiusCommunications'
 import { useAppStore } from '@/store'
 import { resolveDocumentTheme } from '@/lib/document-theme'
+import { translate } from '@/i18n/i18n'
 import { CommunicationsErrorBoundary } from './CommunicationsErrorBoundary'
+import { identityErrorView } from './communications-identity-error'
 import '@comms/shared/styles/globals.css'
 // Imported after globals.css so its viewport-height corrections land last.
 import './communications-embed.css'
@@ -100,10 +102,31 @@ export function CommunicationsPage(): React.JSX.Element {
     // Surfaced rather than swallowed: without an identity every relay call in
     // the client fails, and a silent loading state is indistinguishable from a
     // hang — which is exactly how the missing identity first presented.
+    // The raw error (IPC prefix, class name, file path) is behind "Show
+    // details"; the headline says what to do in plain words.
+    const view = identityErrorView(identityState)
     return (
-      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-2 p-6 text-center">
-        <p className="text-sm font-medium">Communications could not load your identity.</p>
-        <p className="text-muted-foreground max-w-md text-xs">{identityState}</p>
+      <div
+        role="alert"
+        className="flex h-full min-h-0 flex-col items-center justify-center gap-2 p-6 text-center"
+      >
+        <p className="max-w-md text-sm font-medium">
+          {view.unlockFailed
+            ? translate(
+                'communications.identity.unlockFailed',
+                "Communications can't unlock your identity here. Open the installed Dobius+, or restore Keychain access."
+              )
+            : translate(
+                'communications.identity.loadFailed',
+                'Communications could not load your identity.'
+              )}
+        </p>
+        <details className="text-muted-foreground max-w-md text-xs">
+          <summary className="cursor-pointer select-none">
+            {translate('communications.identity.showDetails', 'Show details')}
+          </summary>
+          <p className="mt-2 text-left font-mono break-words">{view.details}</p>
+        </details>
       </div>
     )
   }
@@ -112,19 +135,19 @@ export function CommunicationsPage(): React.JSX.Element {
     <div className="dobius-comms-embed">
       <CommunicationsErrorBoundary>
         <CommunitiesProvider>
-        <CommunityOnboardingProvider>
-          <ThemeProvider>
-            <DobiusThemeSync />
-            <TooltipProvider delayDuration={300}>
-              <EmojiBurstProvider>
-                <PoofBurstProvider>
-                  <UpdaterProvider>
-                    <App />
-                  </UpdaterProvider>
-                </PoofBurstProvider>
-              </EmojiBurstProvider>
-            </TooltipProvider>
-          </ThemeProvider>
+          <CommunityOnboardingProvider>
+            <ThemeProvider>
+              <DobiusThemeSync />
+              <TooltipProvider delayDuration={300}>
+                <EmojiBurstProvider>
+                  <PoofBurstProvider>
+                    <UpdaterProvider>
+                      <App />
+                    </UpdaterProvider>
+                  </PoofBurstProvider>
+                </EmojiBurstProvider>
+              </TooltipProvider>
+            </ThemeProvider>
           </CommunityOnboardingProvider>
         </CommunitiesProvider>
       </CommunicationsErrorBoundary>

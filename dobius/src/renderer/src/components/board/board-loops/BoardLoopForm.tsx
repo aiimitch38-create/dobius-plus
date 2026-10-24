@@ -12,7 +12,7 @@ import {
 import { translate } from '@/i18n/i18n'
 import { Checkbox } from '@/components/ui/checkbox'
 import type { LoopFormValues, LoopKind } from './loop-form'
-import { describePromptsPerHour, estimatePromptsPerHour } from './loop-form-estimate'
+import { loopEstimateLine } from './loop-form-estimate'
 
 type Target = { key: string; label: string }
 
@@ -139,7 +139,7 @@ export function BoardLoopForm({
   const [form, setForm] = useState(initial)
   const set = <K extends keyof LoopFormValues>(key: K, value: LoopFormValues[K]): void =>
     setForm((f) => ({ ...f, [key]: value }))
-  const estimate = estimatePromptsPerHour(form, consoleCountFor(form.targetKey))
+  const estimate = loopEstimateLine(form, consoleCountFor(form.targetKey))
 
   return (
     <form
@@ -301,11 +301,7 @@ export function BoardLoopForm({
           </span>
         </span>
       </label>
-      {estimate && (
-        <p className="font-mono text-[11px] text-[var(--board-text-muted)]">
-          {describePromptsPerHour(estimate)}
-        </p>
-      )}
+      <p className="font-mono text-[11px] text-[var(--board-text-muted)]">{estimate}</p>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           {translate('board.common.cancel', 'Cancel')}

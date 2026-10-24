@@ -13,19 +13,18 @@ export type BoardInsertKind =
   | 'generate-doc'
   | 'loops'
 
-const TOOL_KEYS: Readonly<Record<string, BoardTool>> = {
-  v: 'select',
-  t: 'spawn',
-  p: 'pen',
-  e: 'eraser'
-}
-
+// Why: T is Text (every canvas app agrees); spawn agent gets A for "agent".
 export const BOARD_TOOL_SHORTCUTS: Readonly<Partial<Record<BoardTool, string>>> = {
   select: 'V',
-  spawn: 'T',
+  spawn: 'A',
+  text: 'T',
   pen: 'P',
   eraser: 'E'
 }
+
+const TOOL_KEYS: Readonly<Record<string, BoardTool>> = Object.fromEntries(
+  Object.entries(BOARD_TOOL_SHORTCUTS).map(([tool, key]) => [key.toLowerCase(), tool as BoardTool])
+)
 
 /** Bare single-letter tool keys; any modifier means the key belongs to someone else. */
 export function boardToolForKey(event: {

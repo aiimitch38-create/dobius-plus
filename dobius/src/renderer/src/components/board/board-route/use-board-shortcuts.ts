@@ -23,6 +23,11 @@ type BoardShortcutHandlers = {
   onChip: (id: BoardChipId) => void
   openStudio: (studio: BoardStudioId) => void
   openGitHub: () => void
+  /** Enter/F: zoom to the selected console. False when no single console is selected. */
+  focusSelected: () => boolean
+  /** N: zoom to the next console that needs the user. */
+  nextNeedsYou: () => boolean
+  showShortcuts: () => void
 }
 
 /**
@@ -44,7 +49,32 @@ export function useBoardShortcuts(handlers: BoardShortcutHandlers): void {
       if (!action || action === 'resetZoom') {
         return
       }
+      // Why: Enter on a focused button or link must keep activating it.
+      if (
+        event.key === 'Enter' &&
+        event.target instanceof Element &&
+        event.target.closest('button, a, [role="button"], [role="tab"]')
+      ) {
+        return
+      }
       const h = ref.current
+      if (action === 'showShortcuts') {
+        event.preventDefault()
+        h.showShortcuts()
+        return
+      }
+      if (action === 'focusSelected') {
+        if (h.focusSelected()) {
+          event.preventDefault()
+        }
+        return
+      }
+      if (action === 'nextNeedsYou') {
+        if (h.nextNeedsYou()) {
+          event.preventDefault()
+        }
+        return
+      }
       const studio = STUDIO_FOR[action]
       if (studio) {
         event.preventDefault()

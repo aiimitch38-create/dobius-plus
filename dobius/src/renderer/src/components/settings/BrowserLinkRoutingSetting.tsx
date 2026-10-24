@@ -49,7 +49,9 @@ export function BrowserLinkRoutingSetting({
           })
         }
         className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors ${
-          settings.openLinksInApp ? 'bg-foreground' : 'bg-muted-foreground/30'
+          settings.openLinksInApp
+            ? 'bg-foreground'
+            : 'bg-muted-foreground/30 ring-1 ring-inset ring-muted-foreground/70'
         }`}
       >
         <span

@@ -12,6 +12,7 @@ import {
   getGeneralEditorSearchEntries,
   getGeneralNavigationSearchEntries,
   getGeneralPaneSearchEntries,
+  getGeneralProfileSearchEntries,
   getGeneralSupportSearchEntries,
   getGeneralUpdateSearchEntries,
   getGeneralWorkspaceSearchEntries
@@ -23,6 +24,7 @@ import { SearchableSetting } from './SearchableSetting'
 import { SettingsSubsectionHeader, SettingsSwitchRow } from './SettingsFormControls'
 import { translate } from '@/i18n/i18n'
 import { DefaultWindowsProjectRuntimeSetting } from './DefaultWindowsProjectRuntimeSetting'
+import { DisplayNameSetting } from './DisplayNameSetting'
 
 export {
   createAutoSaveDelayDraftState,
@@ -100,7 +102,16 @@ export function GeneralPane({
     ? getGeneralProjectRuntimeSearchEntries()
     : []
 
+  const profileSearchEntries = getGeneralProfileSearchEntries()
   const visibleSections = [
+    matchesSettingsSearch(searchQuery, profileSearchEntries) ? (
+      <section key="profile" className="space-y-4">
+        <SettingsSubsectionHeader title={translate('settings.general.profile.title', 'Profile')} />
+        <SearchableSetting {...profileSearchEntries[0]}>
+          <DisplayNameSetting displayName={settings.displayName} updateSettings={updateSettings} />
+        </SearchableSetting>
+      </section>
+    ) : null,
     matchesSettingsSearch(searchQuery, generalNavigationSearchEntries) ? (
       <section key="navigation" className="space-y-4">
         <SettingsSubsectionHeader

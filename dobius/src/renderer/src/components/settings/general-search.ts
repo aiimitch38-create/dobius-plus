@@ -9,6 +9,17 @@ import { getGeneralSupportSearchEntries } from './general-support-search'
 export { getGeneralEditorSearchEntries } from './general-editor-search'
 export { getGeneralSupportSearchEntries } from './general-support-search'
 
+export const getGeneralProfileSearchEntries = createLocalizedCatalog(() => [
+  {
+    title: translate('settings.general.displayName.label', 'Your name'),
+    description: translate(
+      'settings.general.displayName.hint',
+      'Used to greet you on the Home screen.'
+    ),
+    keywords: ['name', 'your name', 'greeting', 'home', 'profile']
+  }
+])
+
 export const getGeneralWorkspaceSearchEntries = createLocalizedCatalog(() => [
   {
     title: translate('auto.components.settings.general.search.4c95d08fa2', 'Workspace Directory'),
@@ -230,6 +241,7 @@ export function getGeneralPaneSearchEntries(
   options: GeneralPaneSearchOptions = {}
 ): SettingsSearchEntry[] {
   return [
+    ...getGeneralProfileSearchEntries(),
     ...getGeneralWorkspaceSearchEntries(),
     ...getGeneralNavigationSearchEntries(),
     ...(options.includeProjectRuntime === false ? [] : getGeneralProjectRuntimeSearchEntries()),

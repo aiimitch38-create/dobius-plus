@@ -21,13 +21,13 @@ import { useAppStore } from '@/store'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
 import { consoleActions } from '../console-card/console-actions'
-import { duplicateConsole } from '../board-route/board-duplicate'
+import { duplicateBoardCards, duplicateConsole } from '../board-route/board-duplicate'
+import { removeCardsWithUndo } from '../board-route/board-history-delete'
 import {
   getBoard,
   type BoardCard,
   type BoardCardKind,
-  type BoardCardPatch,
-  type NewBoardCard
+  type BoardCardPatch
 } from '@/store/slices/board'
 import { BoardCardFrame, type BoardCardAction } from './BoardCardFrame'
 import { useBoardLinkMode } from '../board-links/board-link-mode'
@@ -83,7 +83,6 @@ const KIND_ICON: Record<BoardCardKind, React.ReactNode> = {
 
 const BARE_KINDS: ReadonlySet<BoardCardKind> = new Set(['text', 'shape', 'stroke', 'image'])
 const BARE_MIN: MinSize = { w: 24, h: 24 }
-const DUPLICATE_OFFSET = 24
 
 export const BoardCardRenderer = React.memo(function BoardCardRenderer({
   worktreeId,
@@ -154,12 +153,7 @@ export const BoardCardRenderer = React.memo(function BoardCardRenderer({
           }
           return
         }
-        const { id: _id, z: _z, ...rest } = card
-        useAppStore.getState().addCard(worktreeId, {
-          ...rest,
-          x: card.x + DUPLICATE_OFFSET,
-          y: card.y + DUPLICATE_OFFSET
-        } as NewBoardCard)
+        duplicateBoardCards(worktreeId, new Set([id]))
       }
     },
     ...(card.kind === 'console' ? consoleActions(worktreeId, card, confirm) : []),
@@ -171,7 +165,7 @@ export const BoardCardRenderer = React.memo(function BoardCardRenderer({
       destructive: true,
       onSelect: () => {
         if (card.kind !== 'console') {
-          useAppStore.getState().removeCards(worktreeId, [id])
+          removeCardsWithUndo(worktreeId, [id])
           return
         }
         void confirm({
@@ -215,7 +209,11 @@ export const BoardCardRenderer = React.memo(function BoardCardRenderer({
       actions={actions}
       onSelect={(additive) => {
         onSelect(id, additive)
-        useAppStore.getState().bringToFront(worktreeId, [id])
+        // Why: re-lifting the top card wrote a z change (and an undo step) per click.
+        const others = getBoard(useAppStore.getState(), worktreeId).cards
+        if (others.some((c) => c.id !== id && c.z >= card.z)) {
+          useAppStore.getState().bringToFront(worktreeId, [id])
+        }
       }}
       onDragBy={(dx, dy) => onDragBy(id, dx, dy)}
       onDragEnd={onDragEnd ? () => onDragEnd(id) : undefined}
@@ -251,7 +249,7 @@ function renderBody(
     case 'calendar':
       return <CalendarCard card={card} onChange={onChange} />
     case 'shape':
-      return <ShapeCard card={card} />
+      return <ShapeCard card={card} onChange={onChange} />
     case 'stroke':
       return <StrokeCard card={card} />
     case 'image':

@@ -95,7 +95,6 @@ const statusNames: Record<TaskStatus, string> = {
   done: 'Done'
 }
 
-
 /* Why these three views are derived, not decorative: Timeline used to position
  * every bar with `left: (index % 5) * 12%`, Calendar bucketed a task onto a day
  * with `taskIndex % 30 === index`, and Activity picked its verb with
@@ -531,12 +530,22 @@ function SecondaryView({
   return <ActivityView tasks={tasks} onOpen={onOpen} />
 }
 
-const missingTaskAuthority = async (): Promise<never> => { throw new Error('Vertex task authority is unavailable') }
-const unavailableTaskSource: TaskSource = { list: missingTaskAuthority, create: missingTaskAuthority,
-  update: missingTaskAuthority, move: missingTaskAuthority, remove: missingTaskAuthority }
+const missingTaskAuthority = async (): Promise<never> => {
+  throw new Error('Vertex task authority is unavailable')
+}
+const unavailableTaskSource: TaskSource = {
+  list: missingTaskAuthority,
+  create: missingTaskAuthority,
+  update: missingTaskAuthority,
+  move: missingTaskAuthority,
+  remove: missingTaskAuthority
+}
 
 export default function KanbanBoard({ source }: { source?: TaskSource }): React.JSX.Element {
-  const taskSource = useMemo(() => source ?? getKanbanIpcSource() ?? unavailableTaskSource, [source])
+  const taskSource = useMemo(
+    () => source ?? getKanbanIpcSource() ?? unavailableTaskSource,
+    [source]
+  )
   const [jobsOpen, setJobsOpen] = useState(false)
   const [tasks, setTasks] = useState<Task[]>([])
   const [activeView, setActiveView] = useState<(typeof views)[number]['id']>('board')
@@ -690,7 +699,9 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
     }
     setTasks((current) =>
       moveTasksOptimistically(
-        current.map((task) => (task.id === taskId && proofPatch ? { ...task, ...proofPatch } : task)),
+        current.map((task) =>
+          task.id === taskId && proofPatch ? { ...task, ...proofPatch } : task
+        ),
         taskId,
         status,
         index
@@ -746,7 +757,11 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
     setNewTaskAssigneeId('')
     setNewTaskOpen(false)
   }
-  const createChildTask = async (parent: Task, title: string, assigneeId: string): Promise<void> => {
+  const createChildTask = async (
+    parent: Task,
+    title: string,
+    assigneeId: string
+  ): Promise<void> => {
     const trimmed = title.trim()
     if (!trimmed) {
       return
@@ -777,9 +792,16 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
   }
 
   if (jobsOpen) {
-    return <main className="flex h-full min-h-0 flex-1 flex-col"><div className="border-b border-border p-2">
-      <Button variant="ghost" size="sm" onClick={() => setJobsOpen(false)}>Back to tasks</Button>
-    </div><KanbanJobLanes /></main>
+    return (
+      <main className="flex h-full min-h-0 flex-1 flex-col">
+        <div className="border-b border-border p-2">
+          <Button variant="ghost" size="sm" onClick={() => setJobsOpen(false)}>
+            Back to tasks
+          </Button>
+        </div>
+        <KanbanJobLanes />
+      </main>
+    )
   }
   return (
     <TooltipProvider>
@@ -790,14 +812,16 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
               Visualize work. Assign agents. Ship faster.
             </p>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setJobsOpen(true)}>Jobs</Button>
+              <Button variant="outline" onClick={() => setJobsOpen(true)}>
+                Jobs
+              </Button>
               <Button
                 variant={filterHigh ? 'secondary' : 'outline'}
                 className="h-9 border-kanban-border bg-kanban-control text-xs"
                 onClick={() => setFilterHigh((value) => !value)}
               >
                 <Filter />
-              High priority
+                High priority
               </Button>
               {searchOpen ? (
                 <Input
@@ -833,9 +857,11 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
                 Refresh
               </Button>
               <div className="flex">
+                {/* Why: --board-accent exists only inside the Board surface, so the
+                    button takes the Board blue there and keeps the Kanban purple elsewhere. */}
                 <Button
                   onClick={() => createTask('todo')}
-                  className="h-9 rounded-r-none bg-kanban-accent text-xs text-kanban-accent-foreground hover:bg-kanban-accent-hover"
+                  className="h-9 rounded-r-none bg-[var(--board-accent,var(--kanban-accent))] text-xs text-[var(--board-accent-fg,var(--kanban-accent-foreground))] hover:bg-[var(--board-accent,var(--kanban-accent-hover))] hover:opacity-90"
                 >
                   <Plus />
                   New Task
@@ -843,7 +869,7 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
-                      className="h-9 rounded-l-none border-l border-kanban-accent-border bg-kanban-accent px-2 text-kanban-accent-foreground hover:bg-kanban-accent-hover"
+                      className="h-9 rounded-l-none border-l border-[color:var(--board-accent-tint,var(--kanban-accent-border))] bg-[var(--board-accent,var(--kanban-accent))] px-2 text-[var(--board-accent-fg,var(--kanban-accent-foreground))] hover:bg-[var(--board-accent,var(--kanban-accent-hover))] hover:opacity-90"
                       aria-label="New task options"
                     >
                       <ChevronDown />

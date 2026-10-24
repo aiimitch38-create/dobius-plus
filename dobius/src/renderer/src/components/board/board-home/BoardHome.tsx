@@ -25,13 +25,14 @@ import {
 import { listBoardPresets } from '../board-presets/board-preset-store'
 import type { BoardPreset } from '../board-presets/board-preset'
 import { presetCatalog } from '../board-presets/preset-catalog'
-import { pickHomeGreeting } from './home-greeting'
+import { homeGreetingName, pickHomeGreeting } from './home-greeting'
 import { moveHomeSelection, reconcileHomeSelection, resolveHomeKey } from './home-keyboard'
 import { openWorkspaceOnBoard, type HomePresetChoice } from './home-open'
 import { buildHomeRepoRows, homeAgentSummary, type HomeRepoRow } from './home-repo-rows'
 import { HomeLauncherBar } from './HomeLauncherBar'
 import { HomeRepoList, type HomeRepoRowActions } from './HomeRepoList'
 import { HomeTopPills, homeStatusText } from './HomeTopPills'
+import { electronVersionFromUserAgent, homeVersionLabel } from './home-version'
 
 const isMac = navigator.userAgent.includes('Mac')
 const MOD = isMac ? '⌘' : 'Ctrl'
@@ -62,21 +63,29 @@ function useMinuteClock(): Date {
 }
 
 function useAppVersion(): string | null {
-  const [version, setVersion] = useState<string | null>(null)
+  const buildVersion = import.meta.env.VITE_DOBIUS_APP_VERSION as string | undefined
+  const [version, setVersion] = useState<string | null>(() =>
+    homeVersionLabel(buildVersion, null, null)
+  )
   useEffect(() => {
+    if (buildVersion) {
+      return
+    }
     let alive = true
     window.api.updater
       .getVersion()
       .then((v) => {
         if (alive) {
-          setVersion(v)
+          setVersion(
+            homeVersionLabel(buildVersion, v, electronVersionFromUserAgent(navigator.userAgent))
+          )
         }
       })
       .catch((e: unknown) => console.warn('[board-home] app version unavailable', e))
     return () => {
       alive = false
     }
-  }, [])
+  }, [buildVersion])
   return version
 }
 
@@ -128,11 +137,12 @@ export default function BoardHome(): React.JSX.Element {
   )
   const selected = rows.find((r) => r.repoId === selectedRepoId) ?? null
 
-  // Name: Dobius has no profile name, so this uses the git/GitHub username
-  // the Board avatar already shows (current repo first); none means no name.
+  // Name: Settings > General "Your name" wins; otherwise the git/GitHub
+  // username the Board avatar already shows (current repo first).
   const userName = useAppStore((s) => {
     const current = s.repos.find((r) => r.id === s.activeRepoId)?.gitUsername
-    return current || s.repos.find((r) => r.gitUsername)?.gitUsername || null
+    const git = current || s.repos.find((r) => r.gitUsername)?.gitUsername || null
+    return homeGreetingName(s.settings?.displayName, git)
   })
   const greeting = pickHomeGreeting(now, userName)
 

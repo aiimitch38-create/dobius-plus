@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React from 'react'
 import { useAppStore } from '@/store'
 import type { BoardState } from '@/store/slices/board'
 import { BoardCardRenderer } from '../cards/BoardCardRenderer'
@@ -32,7 +32,10 @@ export function BoardCardsLayer({
   penPoints
 }: BoardCardsLayerProps): React.JSX.Element {
   const zoom = board.viewport.zoom
-  const cards = useMemo(() => [...board.cards].sort((a, b) => a.z - b.z), [board.cards])
+  // Why: stacking comes from each card's zIndex, never DOM order. Re-sorting by z
+  // moved the pressed card's node on every bring-to-front, which cancels the click
+  // (checkbox, "Add" input) and drops pointer capture mid-press.
+  const cards = board.cards
 
   return (
     <>

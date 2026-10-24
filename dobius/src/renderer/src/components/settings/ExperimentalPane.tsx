@@ -93,7 +93,9 @@ export function ExperimentalPane({
                 updateSettings({ experimentalPet: !settings.experimentalPet })
               }}
               className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors ${
-                settings.experimentalPet ? 'bg-foreground' : 'bg-muted-foreground/30'
+                settings.experimentalPet
+                  ? 'bg-foreground'
+                  : 'bg-muted-foreground/30 ring-1 ring-inset ring-muted-foreground/70'
               }`}
             >
               <span
@@ -138,7 +140,9 @@ export function ExperimentalPane({
                 })
               }
               className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors ${
-                settings.experimentalActivity ? 'bg-foreground' : 'bg-muted-foreground/30'
+                settings.experimentalActivity
+                  ? 'bg-foreground'
+                  : 'bg-muted-foreground/30 ring-1 ring-inset ring-muted-foreground/70'
               }`}
             >
               <span
@@ -193,7 +197,9 @@ export function ExperimentalPane({
                 })
               }
               className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors ${
-                settings.experimentalTerminalAttention ? 'bg-foreground' : 'bg-muted-foreground/30'
+                settings.experimentalTerminalAttention
+                  ? 'bg-foreground'
+                  : 'bg-muted-foreground/30 ring-1 ring-inset ring-muted-foreground/70'
               }`}
             >
               <span
@@ -360,7 +366,9 @@ export function ExperimentalPane({
                 })
               }
               className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors ${
-                settings.experimentalWorktreeSymlinks ? 'bg-foreground' : 'bg-muted-foreground/30'
+                settings.experimentalWorktreeSymlinks
+                  ? 'bg-foreground'
+                  : 'bg-muted-foreground/30 ring-1 ring-inset ring-muted-foreground/70'
               }`}
             >
               <span

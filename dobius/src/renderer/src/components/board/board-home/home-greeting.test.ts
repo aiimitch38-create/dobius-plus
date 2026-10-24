@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { homeTimeBucket, pickHomeGreeting } from './home-greeting'
+import {
+  homeGreetingName,
+  homeTimeBucket,
+  normalizeDisplayName,
+  pickHomeGreeting
+} from './home-greeting'
 
 const at = (hour: number, day = 10): Date => new Date(2026, 9, day, hour, 30)
 
@@ -50,5 +55,32 @@ describe('pickHomeGreeting', () => {
     for (const hour of [3, 9, 14, 20]) {
       expect(pickHomeGreeting(at(hour), null).tagline.length).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('homeGreetingName', () => {
+  it('prefers the chosen display name over the git username', () => {
+    expect(homeGreetingName('Carson', 'aiimitch38')).toBe('Carson')
+  })
+
+  it('falls back to the git username when no display name is set', () => {
+    expect(homeGreetingName(undefined, 'aiimitch38')).toBe('aiimitch38')
+    expect(homeGreetingName('   ', 'aiimitch38')).toBe('aiimitch38')
+  })
+
+  it('has no name when neither exists', () => {
+    expect(homeGreetingName(undefined, null)).toBeNull()
+  })
+})
+
+describe('normalizeDisplayName', () => {
+  it('trims, collapses spaces and caps at 40 characters', () => {
+    expect(normalizeDisplayName('  Carson   R  ')).toBe('Carson R')
+    expect(normalizeDisplayName('x'.repeat(50))).toHaveLength(40)
+  })
+
+  it('treats blank as unset', () => {
+    expect(normalizeDisplayName('  ')).toBeUndefined()
+    expect(normalizeDisplayName(undefined)).toBeUndefined()
   })
 })

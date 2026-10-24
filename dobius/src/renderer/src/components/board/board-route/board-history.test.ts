@@ -86,4 +86,33 @@ describe('reconcileConsoleCards', () => {
     const now = { cards: [card('n1', 'note')], groups: [], connectors: [] } as BoardContent
     expect(reconcileConsoleCards(target, now, new Set()).cards.map((c) => c.id)).toEqual(['n2'])
   })
+
+  it('keeps a closed console the user still sees when an unrelated delete is undone', () => {
+    // Before: kanban + Codex 2 (whose tab has since closed). Now: kanban erased.
+    const before = {
+      cards: [card('k1', 'kanban'), card('c2', 'console', 'dead')],
+      groups: [],
+      connectors: []
+    } as BoardContent
+    const now = {
+      cards: [card('c2', 'console', 'dead')],
+      groups: [],
+      connectors: []
+    } as BoardContent
+    const out = reconcileConsoleCards(before, now, new Set())
+    expect(out.cards.map((c) => c.id)).toEqual(['k1', 'c2'])
+  })
+
+  it('does not drop a closed console that the snapshot lacks (undo of an earlier add)', () => {
+    const before = { cards: [card('n1', 'note')], groups: [], connectors: [] } as BoardContent
+    const now = {
+      cards: [card('n1', 'note'), card('c1', 'console', 'dead')],
+      groups: [],
+      connectors: []
+    } as BoardContent
+    expect(reconcileConsoleCards(before, now, new Set()).cards.map((c) => c.id)).toEqual([
+      'n1',
+      'c1'
+    ])
+  })
 })

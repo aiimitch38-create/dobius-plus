@@ -4,9 +4,10 @@ import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
 import { translate } from '@/i18n/i18n'
 import { getAgentLabel } from '@/lib/agent-catalog'
 import { useAppStore } from '@/store'
-import { getBoard, type BoardCardOf } from '@/store/slices/board'
+import type { BoardCardOf } from '@/store/slices/board'
+import { filterEnabledTuiAgents } from '../../../../../shared/tui-agent-selection'
 import type { TuiAgent } from '../../../../../shared/types'
-import { fitViewportToRects } from '../board-canvas/board-viewport'
+import { frameBoardCards } from '../board-canvas/board-camera-focus'
 import {
   boardReplyDraft,
   requestCommandBarPrefill
@@ -16,7 +17,27 @@ import { restartConsole } from '../board-delivery/console-lifecycle'
 import { pauseResultText, setConsolesPaused } from '../board-delivery/pause-consoles'
 import type { BoardCardAction } from '../cards/BoardCardFrame'
 
-const SWITCH_AGENTS: readonly TuiAgent[] = ['claude', 'codex', 'gemini', 'opencode', 'grok']
+type AgentListState = {
+  detectedAgentIds: readonly TuiAgent[] | null
+  remoteDetectedAgentIds: Readonly<Record<string, readonly TuiAgent[] | null>>
+  settings: { disabledTuiAgents?: readonly unknown[] | null } | null
+  repos: readonly { id: string; connectionId?: string | null }[]
+  getKnownWorktreeById: (worktreeId: string) => { repoId: string } | undefined
+}
+
+/**
+ * Agents a console can be relaunched as: the same detected-and-enabled list
+ * the spawn picker and team composer offer (see use-board-route-data), so the
+ * card menu never offers an agent the composer hides.
+ */
+export function boardSwitchAgents(state: AgentListState, worktreeId: string): TuiAgent[] {
+  const repoId = state.getKnownWorktreeById(worktreeId)?.repoId
+  const connectionId = state.repos.find((r) => r.id === repoId)?.connectionId ?? null
+  const detected = connectionId
+    ? state.remoteDetectedAgentIds[connectionId]
+    : state.detectedAgentIds
+  return filterEnabledTuiAgents(detected ?? [], state.settings?.disabledTuiAgents)
+}
 
 type Confirm = ReturnType<typeof useConfirmationDialog>
 
@@ -47,24 +68,7 @@ async function confirmIfRunning(
 
 /** Frames these cards on the Board and raises them; false when none are on it. */
 export function focusBoardCards(worktreeId: string, cardIds: readonly string[]): boolean {
-  const state = useAppStore.getState()
-  const ids = new Set(cardIds)
-  const cards = getBoard(state, worktreeId).cards.filter((c) => ids.has(c.id))
-  if (cards.length === 0) {
-    return false
-  }
-  state.bringToFront(
-    worktreeId,
-    cards.map((c) => c.id)
-  )
-  state.setViewport(
-    worktreeId,
-    fitViewportToRects(
-      cards.map((c) => ({ x: c.x, y: c.y, width: c.w, height: c.h })),
-      { width: window.innerWidth, height: window.innerHeight }
-    )
-  )
-  return true
+  return frameBoardCards(worktreeId, cardIds)
 }
 
 /** Pause or resume these consoles' agents, reporting the outcome as a toast. */
@@ -136,18 +140,20 @@ export function consoleActions(
       label: translate('board.console.restart', 'Restart'),
       onSelect: () => restartConsoleConfirmed(worktreeId, card, confirm)
     },
-    ...SWITCH_AGENTS.filter((a) => a !== card.agentKind).map((agent) => {
-      const label = translate('board.console.switchTo', 'Relaunch as {{agent}}', {
-        agent: getAgentLabel(agent)
-      })
-      return {
-        label,
-        onSelect: () => {
-          void confirmIfRunning(confirm, card, label).then(
-            (ok) => ok && restartConsole(worktreeId, card, agent)
-          )
+    ...boardSwitchAgents(useAppStore.getState(), worktreeId)
+      .filter((a) => a !== card.agentKind)
+      .map((agent) => {
+        const label = translate('board.console.switchTo', 'Relaunch as {{agent}}', {
+          agent: getAgentLabel(agent)
+        })
+        return {
+          label,
+          onSelect: () => {
+            void confirmIfRunning(confirm, card, label).then(
+              (ok) => ok && restartConsole(worktreeId, card, agent)
+            )
+          }
         }
-      }
-    })
+      })
   ]
 }

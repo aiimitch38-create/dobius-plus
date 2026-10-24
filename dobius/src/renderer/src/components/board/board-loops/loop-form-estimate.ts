@@ -53,3 +53,34 @@ export function describePromptsPerHour(estimate: PromptsPerHour): string {
         values
       )
 }
+
+/**
+ * The line under the loop form, for every trigger. Why: the estimate used to
+ * render only when a number existed, so the default "When it goes idle"
+ * trigger (and an empty target) showed nothing and QA found no estimate.
+ */
+export function loopEstimateLine(
+  form: Pick<LoopFormValues, 'kind' | 'everyMin' | 'checkEverySec' | 'maxRuns' | 'cooldownSec'>,
+  consoles: number
+): string {
+  if (consoles <= 0) {
+    return translate(
+      'board.loops.estimate.noConsoles',
+      'No consoles match this target yet, so it sends nothing until one does.'
+    )
+  }
+  const estimate = estimatePromptsPerHour(form, consoles)
+  if (estimate) {
+    return describePromptsPerHour(estimate)
+  }
+  return consoles === 1
+    ? translate(
+        'board.loops.estimate.onIdleOne',
+        'One prompt each time the console goes idle; the rate depends on how fast the agent finishes.'
+      )
+    : translate(
+        'board.loops.estimate.onIdleMany',
+        'One prompt each time one of {{count}} consoles goes idle; the rate depends on how fast the agents finish.',
+        { count: consoles }
+      )
+}

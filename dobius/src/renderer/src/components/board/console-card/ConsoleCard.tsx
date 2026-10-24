@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { AgentStateDot } from '@/components/AgentStateDot'
 import { AgentIcon, getAgentLabel } from '@/lib/agent-catalog'
 import { translate } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
 import type { BoardCardOf } from '@/store/slices/board'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import { BoardOutputViewer } from '../board-command-bar/BoardOutputViewer'
 import { replyExcerpt } from '../board-delivery/mission-state'
+import { useBoardCameraFocus } from '../board-canvas/board-camera-focus'
 import { consoleStatusLabel, type ConsoleCardStatus } from './console-card-status'
 import { useConsoleCardStatus } from './use-console-card-status'
 import { ConsoleAccountBadge } from './ConsoleAccountBadge'
@@ -20,6 +22,57 @@ const DOT_FOR: Partial<Record<ConsoleCardStatus, 'working' | 'waiting' | 'done' 
   idle: 'idle'
 }
 
+const FLASH_MS = 600
+
+/** Card-edge ring classes per state: needs-you = accent, working = soft pulsing accent, else none. */
+export function consoleStatusRingClass(status: ConsoleCardStatus): string | null {
+  if (status === 'waiting') {
+    return 'border-2 border-[var(--board-accent)]'
+  }
+  if (status === 'working') {
+    return 'border-2 border-[var(--board-accent)]/40 motion-safe:animate-pulse'
+  }
+  return null
+}
+
+/**
+ * State border + focus-mode markers. Rendered from the title bar, but absolutely
+ * positioned against the card frame (the nearest positioned ancestor), so it
+ * draws over the card edge without the frame knowing about console state.
+ */
+function ConsoleCardEdge({
+  cardId,
+  status
+}: {
+  cardId: string
+  status: ConsoleCardStatus
+}): React.JSX.Element | null {
+  const focused = useBoardCameraFocus((s) => s.focus?.cardId === cardId)
+  const arrivedAt = useBoardCameraFocus((s) => (s.focus?.cardId === cardId ? s.focus.arrivedAt : 0))
+  const [flashing, setFlashing] = useState(false)
+  useEffect(() => {
+    if (!arrivedAt) {
+      return
+    }
+    setFlashing(true)
+    const timer = window.setTimeout(() => setFlashing(false), FLASH_MS)
+    return () => window.clearTimeout(timer)
+  }, [arrivedAt])
+  const ring = flashing
+    ? 'border-2 border-[var(--board-accent)] shadow-[0_0_0_4px_var(--board-accent-tint)]'
+    : consoleStatusRingClass(status)
+  return (
+    <span
+      aria-hidden
+      data-board-focus-target={focused ? '' : undefined}
+      className={cn(
+        'pointer-events-none absolute inset-0 z-10 rounded-(--board-radius-card) transition-[border-color,box-shadow] duration-200',
+        ring ?? 'hidden'
+      )}
+    />
+  )
+}
+
 export function ConsoleCardTitleAccessory({
   worktreeId,
   card
@@ -29,7 +82,12 @@ export function ConsoleCardTitleAccessory({
   const dot = DOT_FOR[status]
   const seeOutput = translate('board.console.seeOutput', 'See output')
   return (
-    <span className="flex shrink-0 items-center gap-2" title={consoleStatusLabel(status)}>
+    <span
+      className="flex shrink-0 items-center gap-2"
+      title={consoleStatusLabel(status)}
+      data-board-console-card-id={card.id}
+    >
+      <ConsoleCardEdge cardId={card.id} status={status} />
       {lastReply && (
         <>
           <button

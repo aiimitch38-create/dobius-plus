@@ -1,5 +1,21 @@
 import { translate } from '@/i18n/i18n'
 
+export const DISPLAY_NAME_MAX_CHARS = 40
+
+/** A typed display name, trimmed and capped; undefined when blank (unset). */
+export function normalizeDisplayName(raw: string | null | undefined): string | undefined {
+  const name = (raw ?? '').replace(/\s+/g, ' ').trim().slice(0, DISPLAY_NAME_MAX_CHARS).trim()
+  return name.length > 0 ? name : undefined
+}
+
+/** Home's name: the chosen display name, else the git username, else none. */
+export function homeGreetingName(
+  displayName: string | null | undefined,
+  gitUsername: string | null | undefined
+): string | null {
+  return normalizeDisplayName(displayName) ?? normalizeDisplayName(gitUsername) ?? null
+}
+
 export type HomeTimeBucket = 'morning' | 'afternoon' | 'evening' | 'lateNight'
 
 export type HomeGreeting = {

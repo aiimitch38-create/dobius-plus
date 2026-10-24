@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { duplicateSpot, nextConsoleTitle } from './board-duplicate-spot'
+import { duplicateCardDraft, duplicateSpot, nextConsoleTitle } from './board-duplicate-spot'
 
 const SOURCE = { x: 0, y: 0, w: 640, h: 400 }
 
@@ -52,5 +52,26 @@ describe('nextConsoleTitle', () => {
   it('picks the first free number', () => {
     expect(nextConsoleTitle('Claude', [])).toBe('Claude 1')
     expect(nextConsoleTitle('Claude', ['Claude 1', 'claude 3'])).toBe('Claude 2')
+  })
+})
+
+describe('duplicateCardDraft', () => {
+  it('places a plain copy beside the source, not 24px on top of it, and names it a copy', () => {
+    const web = {
+      id: 'w1',
+      z: 3,
+      kind: 'web',
+      url: 'x',
+      title: 'Web tile',
+      x: 0,
+      y: 0,
+      w: 900,
+      h: 600
+    }
+    const draft = duplicateCardDraft(web as never, [web])
+    expect(draft).toMatchObject({ kind: 'web', url: 'x', x: 932, y: 0, w: 900, h: 600 })
+    expect(draft.title).toBe('Web tile copy')
+    expect('id' in draft).toBe(false)
+    expect('z' in draft).toBe(false)
   })
 })

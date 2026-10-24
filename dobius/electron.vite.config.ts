@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
@@ -232,6 +233,15 @@ export default defineConfig({
     }
   },
   renderer: {
+    // Why: app.getVersion() reports Electron's own version (e.g. 42.4.1) when
+    // the app runs unpackaged from out/, so dev/test copies showed a wrong
+    // version on Home. The renderer gets package.json's version at build time.
+    define: {
+      'import.meta.env.VITE_DOBIUS_APP_VERSION': JSON.stringify(
+        (JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as { version?: string })
+          .version ?? ''
+      )
+    },
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),

@@ -81,6 +81,16 @@
     },
     "accounts": {
       "claudeSwitchedPinnedNote": "{{value0}} -> {{value1}}. Restart live Claude terminals before continuing old sessions. Board consoles pinned to an account keep it."
+    },
+    "general": {
+      "displayName": {
+        "label": "Your name",
+        "hint": "Used to greet you on the Home screen.",
+        "placeholder": "Your name"
+      },
+      "profile": {
+        "title": "Profile"
+      }
     }
   },
   "menu": {
@@ -12980,7 +12990,10 @@
         "upToOne": "up to ≈ {{rate}} prompts/h to 1 console",
         "one": "≈ {{rate}} prompts/h across 1 console",
         "upToMany": "up to ≈ {{rate}} prompts/h across {{count}} consoles",
-        "many": "≈ {{rate}} prompts/h across {{count}} consoles"
+        "many": "≈ {{rate}} prompts/h across {{count}} consoles",
+        "noConsoles": "No consoles match this target yet, so it sends nothing until one does.",
+        "onIdleOne": "One prompt each time the console goes idle; the rate depends on how fast the agent finishes.",
+        "onIdleMany": "One prompt each time one of {{count}} consoles goes idle; the rate depends on how fast the agents finish."
       }
     },
     "common": {
@@ -12990,7 +13003,9 @@
       "todo": "To do",
       "doing": "Doing",
       "done": "Done",
-      "add": "Add a card"
+      "add": "Add a card",
+      "itemActions": "{{name}} actions",
+      "moveTo": "Move to {{column}}"
     },
     "spawn": {
       "noWorkspace": "Open a workspace before spawning consoles.",
@@ -13229,7 +13244,8 @@
           "working": "Working",
           "waiting": "Needs you",
           "idle": "Idle",
-          "done": "Done"
+          "done": "Done",
+          "shell": "At its shell"
         },
         "filterLabel": "Filter consoles",
         "inspect": "Inspect {{name}}; double-click to show it on the board",
@@ -13313,7 +13329,11 @@
       "removeItem": "Remove {{name}}",
       "rename": "Rename",
       "sendToBack": "Send to back",
-      "turnDirection": "Turn direction"
+      "turnDirection": "Turn direction",
+      "copyTitle": "{{title}} copy",
+      "deleted": "Deleted {{name}}",
+      "deletedMany": "Deleted {{count}} cards",
+      "undo": "Undo"
     },
     "calendar": {
       "previousMonth": "Previous month",
@@ -13854,7 +13874,17 @@
       "fillAllWith": "Set every slot to {{agent}}",
       "countLabel": "Team size",
       "fewer": "One fewer console",
-      "more": "One more console (up to {{max}})"
+      "more": "One more console (up to {{max}})",
+      "reason": {
+        "noLaunch": "{{agent}} could not be launched. Check that it is installed and its command in Settings > Agents.",
+        "unknown": "Unknown error."
+      },
+      "failedAll": "The team did not start: {{reason}}",
+      "failedSome": "{{failed}} of {{count}} consoles did not start: {{reason}}",
+      "started": "Started {{name}}: {{count}} consoles.",
+      "startedUnnamed": "Started a team of {{count}} consoles.",
+      "earlyExit": "{{name}} closed right after it started. Check the {{agent}} command in Settings > Agents, then restart it from the card menu.",
+      "groupFailed": "The consoles started but could not be grouped: {{reason}}"
     },
     "resume": {
       "promptDetail": "{{count}} consoles can pick up their last chat",
@@ -13930,6 +13960,46 @@
         "lateNight": "The agents do not sleep. Neither, it seems, do you."
       },
       "openFailed": "That workspace could not be opened."
+    },
+    "shortcuts": {
+      "tools": "Tools",
+      "spacePan": "Hold to pan (or talk)",
+      "consoles": "Consoles",
+      "focus": "Zoom to the selected console (or Enter)",
+      "click": "Click title",
+      "focusClick": "Zoom to a console (or double-click its body)",
+      "overview": "Back to overview (Shift+Esc while typing in a console)",
+      "step": "Previous / next console (add Shift while typing in one)",
+      "needsYou": "Next console that needs you",
+      "view": "View",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomReset": "Zoom to 100%",
+      "commandBar": "Focus the command bar",
+      "sheet": "Show this sheet",
+      "cards": "Cards",
+      "selectAll": "Select all",
+      "duplicate": "Duplicate",
+      "group": "Group",
+      "undo": "Undo",
+      "redo": "Redo",
+      "delete": "Delete the selection",
+      "open": "Open",
+      "missionMap": "Mission Map",
+      "loops": "Loops",
+      "docs": "Docs",
+      "skills": "Skills",
+      "memory": "Memory",
+      "github": "GitHub",
+      "title": "Board shortcuts"
+    },
+    "focus": {
+      "overviewHint": "Back to the previous view (Esc, or Shift+Esc while typing in a console)",
+      "overview": "Overview",
+      "escKey": "Esc"
+    },
+    "shape": {
+      "label": "Shape text"
     }
   },
   "start": "Start",
@@ -13944,5 +14014,15 @@
   "common": {
     "cancel": "Cancel",
     "retry": "Retry"
+  },
+  "skills": {
+    "scanTimedOut": "The skill scan took too long and was stopped. Try Refresh."
+  },
+  "communications": {
+    "identity": {
+      "unlockFailed": "Communications can't unlock your identity here. Open the installed Dobius+, or restore Keychain access.",
+      "loadFailed": "Communications could not load your identity.",
+      "showDetails": "Show details"
+    }
   }
 }

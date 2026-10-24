@@ -119,7 +119,9 @@ export function JarvisSettingsSection({
     }
     setTesting(true)
     try {
-      const outcome = await window.api.jarvis.speak('Jarvis voice check. This is the voice ADAM will reply in.')
+      const outcome = await window.api.jarvis.speak(
+        'Jarvis voice check. This is the voice ADAM will reply in.'
+      )
       if (outcome.played) {
         toast.success('Spoke the test line')
       } else {
@@ -150,7 +152,9 @@ export function JarvisSettingsSection({
           disabled={permissionPending}
           onClick={() => void onToggleJarvis()}
           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors ${
-            voiceSettings.jarvisEnabled ? 'bg-foreground' : 'bg-muted-foreground/30'
+            voiceSettings.jarvisEnabled
+              ? 'bg-foreground'
+              : 'bg-muted-foreground/30 ring-1 ring-inset ring-muted-foreground/70'
           } ${permissionPending ? 'cursor-wait opacity-70' : ''}`}
         >
           <span
@@ -177,7 +181,9 @@ export function JarvisSettingsSection({
             onUpdateVoiceSettings({ jarvisWakeWord: !(voiceSettings.jarvisWakeWord === true) })
           }
           className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors ${
-            voiceSettings.jarvisWakeWord ? 'bg-foreground' : 'bg-muted-foreground/30'
+            voiceSettings.jarvisWakeWord
+              ? 'bg-foreground'
+              : 'bg-muted-foreground/30 ring-1 ring-inset ring-muted-foreground/70'
           } ${!voiceSettings.jarvisEnabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
         >
           <span
@@ -225,8 +231,8 @@ export function JarvisSettingsSection({
           onChange={(event) => setAgentDraft(event.target.value)}
         />
         <p className="text-xs text-muted-foreground">
-          With an agent ID set, ⌘T opens a live conversation you can interrupt, instead of
-          one question at a time. Needs a key with the Conversational AI permission.
+          With an agent ID set, ⌘T opens a live conversation you can interrupt, instead of one
+          question at a time. Needs a key with the Conversational AI permission.
         </p>
         <div className="flex items-center gap-2 pt-0.5">
           <Button size="sm" onClick={() => void saveElevenLabs()} disabled={!dirty}>
@@ -248,15 +254,13 @@ export function JarvisSettingsSection({
         </div>
         {voiceSettings.jarvisEnabled === true && shortcutActive === false ? (
           <p className="text-xs text-destructive">
-            Cmd+T could not be claimed — another app is holding it, so the shortcut will do
-            nothing. Click the orb instead, or quit whatever owns Cmd+T and toggle Jarvis off
-            and on.
+            Cmd+T could not be claimed — another app is holding it, so the shortcut will do nothing.
+            Click the orb instead, or quit whatever owns Cmd+T and toggle Jarvis off and on.
           </p>
         ) : null}
         {voiceSettings.elevenlabsAgentId?.trim() ? (
           <p className="text-xs text-muted-foreground">
-            Live mode is on, so the orb stays on screen. Click it to start or end a
-            conversation.
+            Live mode is on, so the orb stays on screen. Click it to start or end a conversation.
           </p>
         ) : null}
       </div>

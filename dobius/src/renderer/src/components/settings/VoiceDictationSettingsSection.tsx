@@ -45,7 +45,9 @@ export function VoiceDictationSettingsSection({
           disabled={permissionPending}
           onClick={() => void onToggleVoiceDictation()}
           className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors ${
-            voiceSettings.enabled ? 'bg-foreground' : 'bg-muted-foreground/30'
+            voiceSettings.enabled
+              ? 'bg-foreground'
+              : 'bg-muted-foreground/30 ring-1 ring-inset ring-muted-foreground/70'
           } ${permissionPending ? 'cursor-wait opacity-70' : ''}`}
         >
           <span
