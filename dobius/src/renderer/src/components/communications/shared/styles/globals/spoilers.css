@@ -86,7 +86,7 @@
 .buzz-spoiler:hover,
 .buzz-spoiler:focus-visible {
   animation: none;
-  background: hsl(var(--muted) / 0.5);
+  background: hsl(var(--comms-muted) / 0.5);
   color: inherit;
   text-decoration-color: currentColor;
 }

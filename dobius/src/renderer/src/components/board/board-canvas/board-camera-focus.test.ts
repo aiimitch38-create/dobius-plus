@@ -21,6 +21,8 @@ import {
   useBoardCameraFocus
 } from './board-camera-focus'
 import { BOARD_CAMERA_DURATION_MS } from './board-camera'
+import { boardSafeArea } from './board-viewport'
+import { installBoardScrollLock } from './board-scroll-lock'
 
 const WT = 'wt-1'
 const consoleCard = (title: string, x: number, y: number): NewBoardCard =>
@@ -81,6 +83,70 @@ describe('board camera focus', () => {
     expect(useBoardCameraFocus.getState().focus?.cardId).toBe(a)
     exitBoardFocus()
     expect(getBoard(store.getState(), WT).viewport).toEqual(before)
+  })
+
+  it('centres the rendered card even when the browser had scrolled the canvas', () => {
+    // Real DOM: a canvas the size of the window holding the transformed world.
+    const canvas = document.createElement('div')
+    canvas.setAttribute('data-board-canvas', '')
+    document.body.appendChild(canvas)
+    try {
+      const s = store.getState()
+      // A console off to the lower right of a zoomed-out, panned overview.
+      const id = s.addCard(WT, { ...consoleCard('A', 1800, 1400), w: 560, h: 340 } as NewBoardCard)
+      s.setViewport(WT, { x: -310, y: 120, zoom: 0.35 })
+      // The terminal took focus mid-flight and the browser revealed its textarea
+      // by scrolling the (overflow:hidden) canvas. This offset is what pushed the
+      // focused console to the top-left corner in the installed build.
+      canvas.scrollLeft = 420
+      canvas.scrollTop = 260
+
+      focusBoardConsole(WT, id)
+
+      const { viewport, cards } = getBoard(store.getState(), WT)
+      const card = cards.find((c) => c.id === id)!
+      // Where the card actually renders: model transform minus the canvas scroll.
+      const renderedCenter = {
+        x: (card.x + card.w / 2) * viewport.zoom + viewport.x - canvas.scrollLeft,
+        y: (card.y + card.h / 2) * viewport.zoom + viewport.y - canvas.scrollTop
+      }
+      const safe = boardSafeArea({ width: window.innerWidth, height: window.innerHeight })
+      expect(renderedCenter.x).toBeCloseTo(safe.x + safe.width / 2, 5)
+      expect(renderedCenter.y).toBeCloseTo(safe.y + safe.height / 2, 5)
+      // Fully visible inside the safe area.
+      const left = card.x * viewport.zoom + viewport.x - canvas.scrollLeft
+      const top = card.y * viewport.zoom + viewport.y - canvas.scrollTop
+      expect(left).toBeGreaterThanOrEqual(safe.x)
+      expect(top).toBeGreaterThanOrEqual(safe.y)
+      expect(left + card.w * viewport.zoom).toBeLessThanOrEqual(safe.x + safe.width)
+      expect(top + card.h * viewport.zoom).toBeLessThanOrEqual(safe.y + safe.height)
+    } finally {
+      canvas.remove()
+    }
+  })
+
+  it('the scroll lock undoes a browser reveal-scroll of the canvas as it happens', () => {
+    const root = document.createElement('div')
+    root.setAttribute('data-board-scroll-lock', '')
+    const canvas = document.createElement('div')
+    canvas.setAttribute('data-board-canvas', '')
+    const xtermViewport = document.createElement('div')
+    root.appendChild(canvas)
+    canvas.appendChild(xtermViewport)
+    document.body.appendChild(root)
+    const uninstall = installBoardScrollLock(root)
+    try {
+      canvas.scrollTop = 300
+      canvas.dispatchEvent(new Event('scroll'))
+      expect(canvas.scrollTop).toBe(0)
+      // A terminal's own scrollback is not a Board container and keeps scrolling.
+      xtermViewport.scrollTop = 120
+      xtermViewport.dispatchEvent(new Event('scroll'))
+      expect(xtermViewport.scrollTop).toBe(120)
+    } finally {
+      uninstall()
+      root.remove()
+    }
   })
 
   it('ignores cards that are not on the board', () => {

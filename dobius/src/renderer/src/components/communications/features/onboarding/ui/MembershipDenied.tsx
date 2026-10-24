@@ -98,7 +98,7 @@ export function MembershipDenied({
 
   return (
     <div
-      className="flex min-h-dvh items-center justify-center bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.14),transparent_48%),linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.55))] px-4 py-8"
+      className="flex min-h-dvh items-center justify-center bg-[radial-gradient(circle_at_top,hsl(var(--comms-primary)/0.14),transparent_48%),linear-gradient(180deg,hsl(var(--comms-background)),hsl(var(--comms-muted)/0.55))] px-4 py-8"
       data-testid="membership-denied"
     >
       <StartupWindowDragRegion />

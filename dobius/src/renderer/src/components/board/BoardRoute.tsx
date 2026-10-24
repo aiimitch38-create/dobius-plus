@@ -30,7 +30,8 @@ import { BoardCardStyleInspector } from './board-tool-panels/BoardCardStyleInspe
 import { useCardStyleEditor } from './board-tool-panels/card-style-editor'
 import type { BoardStudioId } from './board-studios/board-studio-ids'
 import { BoardCardsLayer } from './board-route/BoardCardsLayer'
-import { boardInsertCard } from './board-route/board-insert-cards'
+import { boardInsertCard, type BoardInsertCardKind } from './board-route/board-insert-cards'
+import { useBoardShapeDraw } from './board-route/use-board-shape-draw'
 import { clampRectIntoArea } from './cards/card-geometry'
 import { useBoardActions } from './board-route/use-board-actions'
 import { useBoardCommand } from './board-route/use-board-command'
@@ -207,6 +208,40 @@ export default function BoardRoute(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [picker])
 
+  // Why: a card placed at the click point must still keep its title bar on
+  // screen (a 900x600 web tile clicked near the top sat under the top bar).
+  const placeInsertCard = (tool: BoardInsertCardKind, world: BoardPoint): void => {
+    if (!worktreeId) {
+      return
+    }
+    const placed = boardInsertCard(tool, world)
+    const v = board.viewport
+    const inset = BOARD_CHROME_INSETS
+    const tl = screenToWorld({ x: inset.left, y: inset.top }, v)
+    const br = screenToWorld(
+      { x: window.innerWidth - inset.right, y: window.innerHeight - inset.bottom },
+      v
+    )
+    useAppStore.getState().addCard(worktreeId, {
+      ...placed,
+      ...clampRectIntoArea(placed, { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y })
+    })
+    setTool('select')
+  }
+
+  // A shape-tool drag draws the shape at the dragged size; a click drops the default.
+  const shapeDraw = useBoardShapeDraw(board.viewport, (origin, rect) => {
+    if (!worktreeId) {
+      return
+    }
+    if (!rect) {
+      placeInsertCard('shape', origin)
+      return
+    }
+    useAppStore.getState().addCard(worktreeId, { ...boardInsertCard('shape', origin), ...rect })
+    setTool('select')
+  })
+
   const onEmptyPointerDown = (world: BoardPoint, event: React.PointerEvent): void => {
     if (!worktreeId) {
       return
@@ -231,21 +266,11 @@ export default function BoardRoute(): React.JSX.Element {
       images.pickAt(world)
       return
     }
-    // Why: a card placed at the click point must still keep its title bar on
-    // screen (a 900x600 web tile clicked near the top sat under the top bar).
-    const placed = boardInsertCard(tool, world)
-    const v = board.viewport
-    const inset = BOARD_CHROME_INSETS
-    const tl = screenToWorld({ x: inset.left, y: inset.top }, v)
-    const br = screenToWorld(
-      { x: window.innerWidth - inset.right, y: window.innerHeight - inset.bottom },
-      v
-    )
-    useAppStore.getState().addCard(worktreeId, {
-      ...placed,
-      ...clampRectIntoArea(placed, { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y })
-    })
-    setTool('select')
+    if (tool === 'shape') {
+      shapeDraw.start(world)
+      return
+    }
+    placeInsertCard(tool, world)
   }
 
   // Delete removes the selection, unless the key is meant for a console or field.
@@ -385,6 +410,7 @@ export default function BoardRoute(): React.JSX.Element {
             onDragEnd={selection.onDragEnd}
             guides={selection.guides}
             penPoints={pen.points}
+            shapeDraft={shapeDraw.draft}
           />
         ) : null}
       </BoardPage>

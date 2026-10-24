@@ -5,7 +5,7 @@
 .buzz-sidebar-scrollbar:hover {
   scrollbar-color: var(
       --buzz-sidebar-scrollbar-thumb,
-      hsl(var(--sidebar-border) / 0.8)
+      hsl(var(--comms-sidebar-border) / 0.8)
     )
     transparent;
 }
@@ -29,7 +29,7 @@
 .buzz-sidebar-scrollbar:hover::-webkit-scrollbar-thumb {
   background-color: var(
     --buzz-sidebar-scrollbar-thumb,
-    hsl(var(--sidebar-border) / 0.8)
+    hsl(var(--comms-sidebar-border) / 0.8)
   );
 }
 
@@ -74,5 +74,5 @@
  * these DO update dynamically — keep the thumb visible under the pointer. */
 .buzz-content-scrollbar::-webkit-scrollbar-thumb:hover,
 .buzz-content-scrollbar::-webkit-scrollbar-thumb:active {
-  background-color: hsl(var(--border) / 0.9);
+  background-color: hsl(var(--comms-border) / 0.9);
 }

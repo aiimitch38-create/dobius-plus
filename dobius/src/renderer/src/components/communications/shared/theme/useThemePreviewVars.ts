@@ -100,13 +100,13 @@ export function withAccentPreviewVars(
   if (accentColor === NEUTRAL_ACCENT) {
     return {
       ...vars,
-      "--primary": vars["--foreground"],
-      "--primary-foreground": vars["--background"],
+      "--comms-primary": vars["--comms-foreground"],
+      "--comms-primary-foreground": vars["--comms-background"],
     };
   }
 
   return {
     ...vars,
-    "--primary": hexToHsl(accentColor),
+    "--comms-primary": hexToHsl(accentColor),
   };
 }

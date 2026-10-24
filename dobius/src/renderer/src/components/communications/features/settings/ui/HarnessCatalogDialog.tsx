@@ -227,7 +227,7 @@ export function HarnessCatalogDialog({
           </div>
 
           {/* Right: detail pane */}
-          <div className="relative z-10 ml-px flex min-h-0 flex-1 flex-col overflow-hidden rounded-tl-xl bg-background shadow-[-1px_0_0_0_hsl(var(--sidebar-border)/0.45)]">
+          <div className="relative z-10 ml-px flex min-h-0 flex-1 flex-col overflow-hidden rounded-tl-xl bg-background shadow-[-1px_0_0_0_hsl(var(--comms-sidebar-border)/0.45)]">
             <div
               className="flex min-h-0 flex-1 flex-col overflow-hidden"
               data-testid="harness-catalog-detail-pane"

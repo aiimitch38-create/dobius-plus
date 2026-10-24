@@ -4,6 +4,7 @@ import {
   boardCameraFit,
   boardFocusMinZoom,
   boardFocusViewport,
+  boardRevealBlockViewport,
   boardSafeArea,
   interpolateViewport
 } from './board-camera'
@@ -64,5 +65,44 @@ describe('board camera', () => {
     expect(boardCameraEase(0)).toBe(0)
     expect(boardCameraEase(1)).toBe(1)
     expect(boardCameraEase(0.5)).toBeGreaterThan(0.5)
+  })
+})
+
+describe('boardRevealBlockViewport (new team block)', () => {
+  const safe = boardSafeArea(SCREEN)
+  const inSafe = (
+    r: { x: number; y: number; w: number; h: number },
+    v: { x: number; y: number; zoom: number }
+  ) => {
+    const tl = worldToScreen({ x: r.x, y: r.y }, v)
+    return (
+      tl.x >= safe.x - 1e-6 &&
+      tl.y >= safe.y - 1e-6 &&
+      tl.x + r.w * v.zoom <= safe.x + safe.width + 1e-6 &&
+      tl.y + r.h * v.zoom <= safe.y + safe.height + 1e-6
+    )
+  }
+
+  it('pans a block that fits but landed under the right rail', () => {
+    const v = { x: 0, y: 0, zoom: 0.5 }
+    const block = { x: 2400, y: 300, w: 1312, h: 832 } // 2x2 team, off to the right
+    expect(inSafe(block, v)).toBe(false)
+    const next = boardRevealBlockViewport(v, block, SCREEN)
+    expect(next.zoom).toBe(0.5)
+    expect(inSafe(block, next)).toBe(true)
+  })
+
+  it('zooms out (never in) when the block is bigger than the safe area', () => {
+    const v = { x: 0, y: 0, zoom: 1 }
+    const block = { x: 2400, y: 300, w: 1312, h: 832 }
+    const next = boardRevealBlockViewport(v, block, SCREEN)
+    expect(next.zoom).toBeLessThan(1)
+    expect(inSafe(block, next)).toBe(true)
+  })
+
+  it('leaves a visible block alone', () => {
+    const v = { x: 0, y: 0, zoom: 0.5 }
+    const block = { x: 300, y: 200, w: 1000, h: 600 }
+    expect(boardRevealBlockViewport(v, block, SCREEN)).toBe(v)
   })
 })

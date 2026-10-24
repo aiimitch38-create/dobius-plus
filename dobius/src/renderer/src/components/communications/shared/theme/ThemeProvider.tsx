@@ -22,7 +22,9 @@ import {
 } from "./theme-loader";
 
 export const THEME_STORAGE_KEY = "buzz-theme";
-const CACHE_KEY = "buzz-theme-cache";
+// v2: the cached vars were renamed to the --comms-* namespace; an old cache would
+// write the pre-rename names onto <html> and repaint the whole app.
+const CACHE_KEY = "buzz-theme-cache-v2";
 export const ACCENT_STORAGE_KEY = "buzz-accent-color";
 export const NEUTRAL_ACCENT = "neutral";
 const FOLLOW_SYSTEM_KEY = "buzz-follow-system";
@@ -184,8 +186,8 @@ function applyAccentColor(value: string) {
   const root = document.documentElement;
   if (value === NEUTRAL_ACCENT) {
     const styles = window.getComputedStyle(root);
-    const foreground = styles.getPropertyValue("--foreground").trim();
-    const background = styles.getPropertyValue("--background").trim();
+    const foreground = styles.getPropertyValue("--comms-foreground").trim();
+    const background = styles.getPropertyValue("--comms-background").trim();
     root.style.setProperty("--buzz-selected-accent", foreground);
     root.style.setProperty(
       "--buzz-video-review-accent",
@@ -195,10 +197,10 @@ function applyAccentColor(value: string) {
       "--buzz-video-review-accent-foreground",
       VIDEO_REVIEW_NEUTRAL_ACCENT,
     );
-    root.style.setProperty("--primary", foreground);
-    root.style.setProperty("--primary-foreground", background);
-    root.style.setProperty("--sidebar-primary", foreground);
-    root.style.setProperty("--sidebar-primary-foreground", background);
+    root.style.setProperty("--comms-primary", foreground);
+    root.style.setProperty("--comms-primary-foreground", background);
+    root.style.setProperty("--comms-sidebar-primary", foreground);
+    root.style.setProperty("--comms-sidebar-primary-foreground", background);
     root.style.setProperty("--sidebar-active", foreground);
     root.style.setProperty("--sidebar-active-foreground", background);
     return;
@@ -213,10 +215,10 @@ function applyAccentColor(value: string) {
     "--buzz-video-review-accent-foreground",
     getReviewAccentForeground(hex),
   );
-  root.style.setProperty("--primary", accentHsl);
-  root.style.setProperty("--primary-foreground", fgHsl);
-  root.style.setProperty("--sidebar-primary", accentHsl);
-  root.style.setProperty("--sidebar-primary-foreground", fgHsl);
+  root.style.setProperty("--comms-primary", accentHsl);
+  root.style.setProperty("--comms-primary-foreground", fgHsl);
+  root.style.setProperty("--comms-sidebar-primary", accentHsl);
+  root.style.setProperty("--comms-sidebar-primary-foreground", fgHsl);
   root.style.setProperty("--sidebar-active", accentHsl);
   root.style.setProperty("--sidebar-active-foreground", fgHsl);
 }

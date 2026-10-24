@@ -589,12 +589,12 @@ export function useEmojiMartThemeVars() {
   React.useEffect(() => {
     const updateThemeVars = () => {
       const styles = window.getComputedStyle(document.documentElement);
-      const muted = hslToRgbString(styles.getPropertyValue("--muted"));
+      const muted = hslToRgbString(styles.getPropertyValue("--comms-muted"));
       const foreground = hslToRgbString(
-        styles.getPropertyValue("--foreground"),
+        styles.getPropertyValue("--comms-foreground"),
       );
       const background = hslToRgbString(
-        styles.getPropertyValue("--background"),
+        styles.getPropertyValue("--comms-background"),
       );
 
       setThemeVars({

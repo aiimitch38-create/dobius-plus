@@ -19,6 +19,8 @@ type BoardCardsLayerProps = {
   guides: readonly SnapGuide[]
   /** In-progress pen stroke (world coords), drawn until the card is created. */
   penPoints: readonly BoardPoint[]
+  /** Live outline of a shape being drawn with the shape tool (world rect). */
+  shapeDraft?: { x: number; y: number; w: number; h: number } | null
 }
 
 export function BoardCardsLayer({
@@ -29,7 +31,8 @@ export function BoardCardsLayer({
   onDragBy,
   onDragEnd,
   guides,
-  penPoints
+  penPoints,
+  shapeDraft = null
 }: BoardCardsLayerProps): React.JSX.Element {
   const zoom = board.viewport.zoom
   // Why: stacking comes from each card's zIndex, never DOM order. Re-sorting by z
@@ -92,6 +95,19 @@ export function BoardCardsLayer({
             )
           )}
         </svg>
+      ) : null}
+      {shapeDraft ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute rounded-[2px] border-dashed border-[var(--board-accent)] bg-[var(--board-accent-tint)]/40"
+          style={{
+            left: shapeDraft.x,
+            top: shapeDraft.y,
+            width: shapeDraft.w,
+            height: shapeDraft.h,
+            borderWidth: 1.5 / zoom
+          }}
+        />
       ) : null}
       {penPoints.length > 0 ? (
         <svg

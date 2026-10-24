@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 
 export const POPOVER_SURFACE_CLASS =
-  "border border-border/60 bg-[color-mix(in_srgb,hsl(var(--background))_80%,hsl(var(--muted))_20%)] text-popover-foreground";
+  "border border-border/60 bg-[color-mix(in_srgb,hsl(var(--comms-background))_80%,hsl(var(--comms-muted))_20%)] text-popover-foreground";
 
 export const POPOVER_RADIX_MOTION_CLASS =
   "duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] data-[state=closed]:duration-100 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 motion-reduce:animate-none";

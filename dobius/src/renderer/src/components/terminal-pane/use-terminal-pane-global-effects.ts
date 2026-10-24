@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react'
 import {
+  CLEAR_TERMINAL_SELECTION_EVENT,
   FOCUS_TERMINAL_PANE_EVENT,
   PASTE_TERMINAL_TEXT_EVENT,
   TOGGLE_TERMINAL_PANE_EXPAND_EVENT,
+  type ClearTerminalSelectionDetail,
   type FocusTerminalPaneDetail,
   type PasteTerminalTextDetail
 } from '@/constants/terminal'
@@ -215,6 +217,20 @@ export function useTerminalPaneGlobalEffects({
     window.addEventListener(FOCUS_TERMINAL_PANE_EVENT, onFocusPane)
     return () => window.removeEventListener(FOCUS_TERMINAL_PANE_EVENT, onFocusPane)
   }, [tabId, managerRef, scheduleFollowOutputIfNeeded])
+
+  useEffect(() => {
+    const onClearSelection = (event: Event): void => {
+      const detail = (event as CustomEvent<ClearTerminalSelectionDetail | undefined>).detail
+      if (detail?.tabId !== tabId) {
+        return
+      }
+      for (const pane of managerRef.current?.getPanes() ?? []) {
+        pane.terminal.clearSelection()
+      }
+    }
+    window.addEventListener(CLEAR_TERMINAL_SELECTION_EVENT, onClearSelection)
+    return () => window.removeEventListener(CLEAR_TERMINAL_SELECTION_EVENT, onClearSelection)
+  }, [tabId, managerRef])
 
   useEffect(() => {
     const onPasteText = (event: Event): void => {

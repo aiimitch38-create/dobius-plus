@@ -3,6 +3,9 @@ import {
   boundsOf,
   clampRectIntoArea,
   handleCursor,
+  RESIZE_HANDLE_MAX_INSET,
+  RESIZE_HANDLES,
+  resizeHandleBox,
   resizeRect,
   screenDeltaToWorld
 } from './card-geometry'
@@ -95,5 +98,40 @@ describe('clampRectIntoArea', () => {
   it('leaves a card that already fits alone', () => {
     const r = { x: 10, y: 200, w: 100, h: 100 }
     expect(clampRectIntoArea(r, area)).toEqual(r)
+  })
+})
+
+describe('resizeHandleBox', () => {
+  // The title text starts ~13 world px below the card's top edge.
+  const TITLE_TEXT_TOP = 13
+
+  it('keeps a constant 10px on-screen thickness at every zoom', () => {
+    for (const zoom of [0.1, 0.23, 0.5, 1, 2.5]) {
+      expect(resizeHandleBox('n', zoom).height! * zoom).toBeCloseTo(10)
+      expect(resizeHandleBox('e', zoom).width! * zoom).toBeCloseTo(10)
+      expect(resizeHandleBox('se', zoom).width! * zoom).toBeCloseTo(10)
+    }
+  })
+
+  it('is centred on the edge at 100%, as before', () => {
+    expect(resizeHandleBox('n', 1)).toEqual({ left: 8, right: 8, top: -5, height: 10 })
+    expect(resizeHandleBox('nw', 1)).toEqual({ left: -5, top: -5, width: 10, height: 10 })
+  })
+
+  it('never reaches the title text, even at 23% zoom', () => {
+    for (const zoom of [0.1, 0.23, 0.4]) {
+      for (const handle of RESIZE_HANDLES) {
+        const box = resizeHandleBox(handle, zoom)
+        const thickness = (box.height ?? box.width)!
+        // The edge the zone straddles is the side with the negative offset.
+        const offset = Math.min(
+          ...[box.top, box.bottom, box.left, box.right].filter((v) => v !== undefined)
+        )
+        const inward = thickness + offset
+        expect(inward).toBeLessThanOrEqual(RESIZE_HANDLE_MAX_INSET + 1e-9)
+      }
+      const n = resizeHandleBox('n', zoom)
+      expect(n.top! + n.height!).toBeLessThan(TITLE_TEXT_TOP)
+    }
   })
 })

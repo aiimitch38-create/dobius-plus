@@ -130,7 +130,7 @@
 .buzz-emoji-mart em-emoji-picker {
   --border-radius: 12px;
   --category-icon-size: 24px;
-  --color-border: transparent;
+  --comms-color-border: transparent;
   --color-border-over: rgb(255 255 255 / 0.1);
   --font-family: inherit;
   --font-size: 14px;
@@ -191,8 +191,8 @@
   --buzz-shimmer-band: 250%;
   --buzz-shimmer-highlight: color-mix(
     in srgb,
-    hsl(var(--background)) 60%,
-    hsl(var(--muted-foreground)) 40%
+    hsl(var(--comms-background)) 60%,
+    hsl(var(--comms-muted-foreground)) 40%
   );
   --buzz-shimmer-spread: 2rem;
 
@@ -205,7 +205,7 @@
       var(--buzz-shimmer-highlight) 50%,
       transparent calc(50% + var(--buzz-shimmer-spread))
     ),
-    linear-gradient(hsl(var(--muted-foreground)), hsl(var(--muted-foreground)));
+    linear-gradient(hsl(var(--comms-muted-foreground)), hsl(var(--comms-muted-foreground)));
   background-position:
     100% 0,
     0 0;
@@ -237,7 +237,7 @@
   .buzz-shimmer {
     animation: none;
     background: none;
-    color: hsl(var(--muted-foreground));
+    color: hsl(var(--comms-muted-foreground));
     -webkit-text-fill-color: currentcolor;
   }
 }
@@ -443,21 +443,21 @@
   background-color: color-mix(
     in srgb,
     var(--status-added) 12%,
-    hsl(var(--background)) 88%
+    hsl(var(--comms-background)) 88%
   );
   border-color: color-mix(
     in srgb,
     var(--status-added) 34%,
-    hsl(var(--border)) 66%
+    hsl(var(--comms-border)) 66%
   );
-  color: hsl(var(--foreground));
+  color: hsl(var(--comms-foreground));
 }
 
 .buzz-sidebar-action-card--success:hover {
   background-color: color-mix(
     in srgb,
     var(--status-added) 16%,
-    hsl(var(--background)) 84%
+    hsl(var(--comms-background)) 84%
   );
 }
 
@@ -465,12 +465,12 @@
   background-color: color-mix(
     in srgb,
     var(--status-added) 15%,
-    hsl(var(--background)) 85%
+    hsl(var(--comms-background)) 85%
   );
   border-color: color-mix(
     in srgb,
     var(--status-added) 42%,
-    hsl(var(--border)) 58%
+    hsl(var(--comms-border)) 58%
   );
 }
 
@@ -478,7 +478,7 @@
   background-color: color-mix(
     in srgb,
     var(--status-added) 19%,
-    hsl(var(--background)) 81%
+    hsl(var(--comms-background)) 81%
   );
 }
 
@@ -698,23 +698,23 @@
   --buzz-grainient-alpha-medium: 0.34;
   --buzz-grainient-alpha-soft: 0.24;
   --buzz-grainient-color-0: hsl(
-    var(--chart-5) /
+    var(--comms-chart-5) /
     var(--buzz-grainient-alpha-strong)
   );
   --buzz-grainient-color-1: hsl(
-    var(--chart-3) /
+    var(--comms-chart-3) /
     var(--buzz-grainient-alpha-strong)
   );
   --buzz-grainient-color-2: hsl(
-    var(--primary) /
+    var(--comms-primary) /
     var(--buzz-grainient-alpha-medium)
   );
   --buzz-grainient-color-3: hsl(
-    var(--chart-2) /
+    var(--comms-chart-2) /
     var(--buzz-grainient-alpha-strong)
   );
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background-color: hsl(var(--comms-background));
+  color: hsl(var(--comms-foreground));
   isolation: isolate;
   position: relative;
 }
@@ -757,7 +757,7 @@
   --buzz-grainient-x-3: 24%;
   --buzz-grainient-y-3: 7%;
   animation: buzz-grainient-orbit 10s linear infinite alternate;
-  background-color: hsl(var(--background));
+  background-color: hsl(var(--comms-background));
   background-image:
     radial-gradient(
       circle at var(--buzz-grainient-x-0) var(--buzz-grainient-y-0),
@@ -791,13 +791,13 @@
     radial-gradient(
       ellipse 74% 54% at 50% 52%,
       transparent 0%,
-      hsl(var(--background) / 0.04) 72%,
-      hsl(var(--background) / 0.16) 100%
+      hsl(var(--comms-background) / 0.04) 72%,
+      hsl(var(--comms-background) / 0.16) 100%
     ),
     linear-gradient(
       180deg,
-      hsl(var(--background) / 0.04),
-      hsl(var(--background) / 0.12)
+      hsl(var(--comms-background) / 0.04),
+      hsl(var(--comms-background) / 0.12)
     );
 }
 

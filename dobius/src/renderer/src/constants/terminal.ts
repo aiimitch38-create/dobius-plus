@@ -7,6 +7,13 @@ export const SPLIT_TERMINAL_PANE_EVENT = 'dobius-split-terminal-pane'
 export const REQUEST_ACTIVE_TERMINAL_PANE_SPLIT_EVENT = 'dobius-request-active-terminal-pane-split'
 export const CLOSE_TERMINAL_PANE_EVENT = 'dobius-close-terminal-pane'
 export const BACKGROUND_MOUNT_TERMINAL_WORKTREE_EVENT = 'dobius-background-mount-terminal-worktree'
+// Why: a gesture outside the terminal (the Board's double-click-to-focus) can
+// consume a double-click that xterm already turned into a word selection.
+export const CLEAR_TERMINAL_SELECTION_EVENT = 'dobius-clear-terminal-selection'
+
+export type ClearTerminalSelectionDetail = {
+  tabId: string
+}
 
 // Why: sidebar open/close is an instantaneous width change. If we wait for
 // the ResizeObserver rAF (and the 150ms debounced global fit) to catch up,

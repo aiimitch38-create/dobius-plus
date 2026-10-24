@@ -558,7 +558,7 @@ function ThemeSettingsCard() {
           className="pointer-events-none absolute inset-x-0 top-0 z-10 h-3"
           style={{
             background:
-              "linear-gradient(to bottom, hsl(var(--background)), hsl(var(--background) / 0))",
+              "linear-gradient(to bottom, hsl(var(--comms-background)), hsl(var(--comms-background) / 0))",
           }}
         />
         {/* Bottom fade — hidden while the accent picker is visible so its
@@ -570,7 +570,7 @@ function ThemeSettingsCard() {
             className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3"
             style={{
               background:
-                "linear-gradient(to top, hsl(var(--background)), hsl(var(--background) / 0))",
+                "linear-gradient(to top, hsl(var(--comms-background)), hsl(var(--comms-background) / 0))",
             }}
           />
         ) : null}
@@ -752,7 +752,7 @@ function AccentPickerContent({
         {ACCENT_COLORS.map((color) => {
           const isNeutral = color.value === NEUTRAL_ACCENT;
           const swatchColor = isNeutral
-            ? "hsl(var(--foreground))"
+            ? "hsl(var(--comms-foreground))"
             : color.value;
           const checkClassName =
             isNeutral && isDark ? "text-black" : "text-white";

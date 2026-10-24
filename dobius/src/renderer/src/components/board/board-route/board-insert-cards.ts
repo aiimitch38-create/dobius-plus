@@ -134,3 +134,32 @@ export function boardInsertCard(kind: BoardInsertCardKind, center: BoardPoint): 
       }
   }
 }
+
+/** Below this on-screen drag distance a shape-tool press is a click (default size). */
+export const SHAPE_DRAG_THRESHOLD_PX = 4
+/** Smallest side (world px) a dragged shape may have. */
+export const SHAPE_MIN_SIDE = 24
+
+/**
+ * The world rect a shape-tool drag from `start` to `end` describes, normalised
+ * for any drag direction; null when the press barely moved (a click), so the
+ * caller drops the default-size shape instead.
+ */
+export function boardDraggedShapeRect(
+  start: BoardPoint,
+  end: BoardPoint,
+  zoom: number
+): { x: number; y: number; w: number; h: number } | null {
+  const scale = zoom > 0 ? zoom : 1
+  const w = Math.abs(end.x - start.x)
+  const h = Math.abs(end.y - start.y)
+  if (Math.max(w, h) * scale < SHAPE_DRAG_THRESHOLD_PX) {
+    return null
+  }
+  return {
+    x: Math.min(start.x, end.x),
+    y: Math.min(start.y, end.y),
+    w: Math.max(SHAPE_MIN_SIDE, w),
+    h: Math.max(SHAPE_MIN_SIDE, h)
+  }
+}

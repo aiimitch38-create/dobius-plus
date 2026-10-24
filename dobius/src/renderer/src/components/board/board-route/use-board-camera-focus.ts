@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useAppStore } from '@/store'
+import {
+  CLEAR_TERMINAL_SELECTION_EVENT,
+  type ClearTerminalSelectionDetail
+} from '@/constants/terminal'
 import { getBoard, type BoardTool } from '@/store/slices/board'
 import {
   clearBoardFocus,
@@ -86,6 +90,22 @@ function consoleHeaderCardId(target: Element): string | null {
   }
   const header = cardEl.firstElementChild
   return header && header.contains(target) ? consoleCardIdOf(cardEl) : null
+}
+
+/**
+ * Drops the word selection a double-click left behind: xterm selects on the
+ * second mousedown, before the dblclick that focus mode consumes, and the
+ * band would otherwise stay stuck on the terminal.
+ */
+export function clearConsoleTextSelection(tabId: string | null): void {
+  window.getSelection()?.removeAllRanges()
+  if (tabId) {
+    window.dispatchEvent(
+      new CustomEvent<ClearTerminalSelectionDetail>(CLEAR_TERMINAL_SELECTION_EVENT, {
+        detail: { tabId }
+      })
+    )
+  }
 }
 
 function blurTerminalFocus(): void {
@@ -183,7 +203,12 @@ export function useBoardFocusMode(options: CameraFocusOptions): {
       const cardId = cardEl ? consoleCardIdOf(cardEl) : null
       // Why: once focused, a double-click is the terminal's word selection again.
       if (cardId && useBoardCameraFocus.getState().focus?.cardId !== cardId) {
-        focusBoardConsole(o.worktreeId, cardId)
+        if (focusBoardConsole(o.worktreeId, cardId)) {
+          const card = getBoard(useAppStore.getState(), o.worktreeId).cards.find(
+            (c) => c.id === cardId
+          )
+          clearConsoleTextSelection(card?.kind === 'console' ? card.tabId : null)
+        }
       }
     }
     const onKeyDown = (event: KeyboardEvent): void => {

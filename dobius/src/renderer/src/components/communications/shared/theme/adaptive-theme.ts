@@ -245,12 +245,12 @@ export function createThemeVars(
     isDark,
     vars: {
       // Backgrounds
-      "--background": hexToHsl(primaryBg),
-      "--card": hexToHsl(primaryBg),
-      "--popover": hexToHsl(elevate(0.08)),
-      "--muted": hexToHsl(hoverBg),
-      "--accent": hexToHsl(hoverBg),
-      "--secondary": hexToHsl(hoverBg),
+      "--comms-background": hexToHsl(primaryBg),
+      "--comms-card": hexToHsl(primaryBg),
+      "--comms-popover": hexToHsl(elevate(0.08)),
+      "--comms-muted": hexToHsl(hoverBg),
+      "--comms-accent": hexToHsl(hoverBg),
+      "--comms-secondary": hexToHsl(hoverBg),
       "--huddle-drawer-surface": isDark ? hexToHsl(hoverBg) : "0 0% 0%",
       "--huddle-control-surface": hexToHsl(huddleControlBg),
       "--huddle-control-hover-surface": hexToHsl(huddleControlHoverBg),
@@ -263,29 +263,29 @@ export function createThemeVars(
       "--huddle-tooltip-foreground": huddleControlFg,
 
       // Foregrounds
-      "--foreground": textFg,
-      "--card-foreground": textFg,
-      "--popover-foreground": textFg,
-      "--muted-foreground": hexToHsl(syntaxComment),
-      "--accent-foreground": textFg,
-      "--secondary-foreground": textFg,
+      "--comms-foreground": textFg,
+      "--comms-card-foreground": textFg,
+      "--comms-popover-foreground": textFg,
+      "--comms-muted-foreground": hexToHsl(syntaxComment),
+      "--comms-accent-foreground": textFg,
+      "--comms-secondary-foreground": textFg,
 
       // Destructive
-      "--destructive": hexToHsl(accentRed),
-      "--destructive-foreground": primaryFg,
+      "--comms-destructive": hexToHsl(accentRed),
+      "--comms-destructive-foreground": primaryFg,
 
       // Borders
-      "--border": hexToHsl(borderColor),
-      "--input": hexToHsl(borderColor),
-      "--ring": textFg,
+      "--comms-border": hexToHsl(borderColor),
+      "--comms-input": hexToHsl(borderColor),
+      "--comms-ring": textFg,
 
       // Sidebar
       "--sidebar-background": hexToHsl(chromeColor),
-      "--sidebar-foreground": textFg,
-      "--sidebar-accent": hexToHsl(primaryBg),
-      "--sidebar-accent-foreground": textFg,
-      "--sidebar-border": hexToHsl(borderColor),
-      "--sidebar-ring": hexToHsl(borderColor),
+      "--comms-sidebar-foreground": textFg,
+      "--comms-sidebar-accent": hexToHsl(primaryBg),
+      "--comms-sidebar-accent-foreground": textFg,
+      "--comms-sidebar-border": hexToHsl(borderColor),
+      "--comms-sidebar-ring": hexToHsl(borderColor),
 
       // Status colors (hex — used directly via var())
       "--status-added": accentGreen,

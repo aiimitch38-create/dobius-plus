@@ -33,8 +33,8 @@ describe('floating terminal trigger position', () => {
       offsetY: 72
     })
     expect(getDefaultFloatingTerminalTriggerPosition()).toEqual({
-      left: 1140,
-      top: 692
+      left: 856,
+      top: 674
     })
   })
 
@@ -56,14 +56,14 @@ describe('floating terminal trigger position', () => {
         offsetX: 24,
         offsetY: 72
       })
-    ).toEqual({ left: 1140, top: 692 })
+    ).toEqual({ left: 856, top: 674 })
   })
 
   it('clamps parked positions into the viewport', () => {
     stubViewport(640, 480)
 
     expect(clampFloatingTerminalTriggerPosition({ left: 900, top: -20 })).toEqual({
-      left: 596,
+      left: 312,
       top: 36
     })
   })
@@ -75,16 +75,17 @@ describe('floating terminal trigger position', () => {
     stubViewport(1200, 800)
 
     expect(resolveFloatingTerminalTriggerPosition(initialPosition, 'default')).toEqual({
-      left: 1140,
-      top: 692
+      left: 856,
+      top: 674
     })
   })
 
   it('clamps user-placed positions instead of re-anchoring them on resize', () => {
     stubViewport(1200, 800)
 
+    // The 320px-wide pill must end 8px inside the right edge: 1200 - 320 - 8.
     expect(resolveFloatingTerminalTriggerPosition({ left: 900, top: 500 }, 'user')).toEqual({
-      left: 900,
+      left: 872,
       top: 500
     })
   })
@@ -98,14 +99,14 @@ describe('floating terminal trigger position', () => {
     }
     stubViewport(260, 220)
     expect(resolveFloatingTerminalTriggerPosition(committed, 'user')).toEqual({
-      left: 176,
-      top: 104
+      left: 8,
+      top: 86
     })
 
     stubViewport(1200, 800)
     expect(resolveFloatingTerminalTriggerPosition(committed, 'user')).toEqual({
-      left: 1116,
-      top: 684
+      left: 832,
+      top: 666
     })
   })
 
@@ -233,5 +234,13 @@ describe('floating terminal trigger position', () => {
       FLOATING_TERMINAL_TRIGGER_POSITION_STORAGE_KEY,
       '{"anchorX":"right","anchorY":"bottom","offsetX":24,"offsetY":72}'
     )
+  })
+
+  it('keeps the whole dock pill inside the window at its default spot', () => {
+    stubViewport(1440, 900)
+    const { left, top } = getDefaultFloatingTerminalTriggerPosition()
+    // The pill is w-80 (320px) by 54px; it used to be placed as if it were 36px.
+    expect(left + 320).toBeLessThanOrEqual(1440)
+    expect(top + 54).toBeLessThanOrEqual(900)
   })
 })

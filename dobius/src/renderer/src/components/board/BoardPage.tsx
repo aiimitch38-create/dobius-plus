@@ -1,5 +1,6 @@
-import React, { useRef } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { BoardCanvas } from './board-canvas/BoardCanvas'
+import { installBoardScrollLock } from './board-canvas/board-scroll-lock'
 import {
   BOARD_ZOOM_STEP,
   fitBoardViewport,
@@ -79,6 +80,12 @@ export function BoardPage({
   children
 }: BoardPageProps): React.JSX.Element {
   const canvasRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const root = rootRef.current
+    return root ? installBoardScrollLock(root) : undefined
+  }, [])
 
   const fitView = (): void => {
     const canvas = canvasRef.current
@@ -97,7 +104,12 @@ export function BoardPage({
   }
 
   return (
-    <div data-surface="board" className="relative h-full w-full overflow-hidden">
+    <div
+      ref={rootRef}
+      data-surface="board"
+      data-board-scroll-lock=""
+      className="relative h-full w-full overflow-hidden"
+    >
       <BoardCanvas
         viewport={viewport}
         onViewportChange={onViewportChange}

@@ -1,4 +1,26 @@
-@import "tailwindcss";
+/*
+ * Embedded in Dobius+, this sheet shares the document with the app's own
+ * Tailwind build, so it must not restyle anything outside Communications:
+ *
+ * - Everything lands in the `comms` cascade layer, which assets/main.css orders
+ *   after the app's `base` and before its `components`/`utilities`. App
+ *   utilities therefore win over same-named ones from here (e.g. `.bg-primary`
+ *   written as `hsl(var(…))`, which is invalid against the app's colour tokens);
+ *   communications-embed.css points those tokens at this palette inside the
+ *   Communications subtree.
+ * - No base reset: the app already ships the identical one, and a second copy
+ *   loaded later reset every app border to `currentColor` (`border: 0 solid`).
+ * - `source(none)` + `@source`: utilities are generated only for classes this
+ *   tree uses, not for every class in the app.
+ * - This tree's colour tokens live under `--comms-*` so its ThemeProvider never
+ *   overwrites the app's colour tokens on <html>.
+ *
+ * communications-css-isolation.test.ts guards these rules.
+ */
+@layer comms.theme, comms.base, comms.components, comms.utilities;
+@import "tailwindcss/theme.css" layer(comms.theme);
+@import "tailwindcss/utilities.css" layer(comms.utilities) source(none);
+@source "../..";
 @import "tw-animate-css";
 
 @import "./globals/scrollbars.css";

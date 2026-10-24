@@ -1,3 +1,9 @@
+/* Cascade-layer order for the whole document. `comms` holds the lazily loaded
+   Communications stylesheet (components/communications/shared/styles/
+   globals.css): above the app's base so its own utilities still beat the base
+   rules, below the app's components/utilities so a same-named Communications
+   utility can never restyle the rest of the app. Must stay the first rule. */
+@layer properties, theme, base, comms, components, utilities;
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import '@xterm/xterm/css/xterm.css';

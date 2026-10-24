@@ -23,25 +23,25 @@ export const BUZZ_GRADIENT_STOPS: Record<
 };
 
 export const LIGHT_PREVIEW_VARS: ThemePreviewVars = {
-  "--background": "0 0% 100%",
-  "--border": "0 0% 89.8%",
-  "--foreground": "0 0% 9%",
-  "--muted": "0 0% 96.1%",
-  "--muted-foreground": "0 0% 45.1%",
-  "--primary": "0 0% 9%",
+  "--comms-background": "0 0% 100%",
+  "--comms-border": "0 0% 89.8%",
+  "--comms-foreground": "0 0% 9%",
+  "--comms-muted": "0 0% 96.1%",
+  "--comms-muted-foreground": "0 0% 45.1%",
+  "--comms-primary": "0 0% 9%",
   "--sidebar-background": "0 0% 98%",
-  "--sidebar-foreground": "0 0% 9%",
+  "--comms-sidebar-foreground": "0 0% 9%",
 };
 
 export const DARK_PREVIEW_VARS: ThemePreviewVars = {
-  "--background": "0 0% 3.9%",
-  "--border": "0 0% 14.9%",
-  "--foreground": "0 0% 98%",
-  "--muted": "0 0% 14.9%",
-  "--muted-foreground": "0 0% 63.9%",
-  "--primary": "0 0% 98%",
+  "--comms-background": "0 0% 3.9%",
+  "--comms-border": "0 0% 14.9%",
+  "--comms-foreground": "0 0% 98%",
+  "--comms-muted": "0 0% 14.9%",
+  "--comms-muted-foreground": "0 0% 63.9%",
+  "--comms-primary": "0 0% 98%",
   "--sidebar-background": "0 0% 0%",
-  "--sidebar-foreground": "0 0% 98%",
+  "--comms-sidebar-foreground": "0 0% 98%",
 };
 
 function hsl(vars: ThemePreviewVars | null, key: string) {
@@ -61,14 +61,14 @@ function ThemePreviewSvg({
 }) {
   const clipId = React.useId().replace(/:/g, "");
   const gradientId = `${clipId}-buzz`;
-  const background = hsl(vars, "--background");
-  const border = hsl(vars, "--border");
-  const foreground = hsl(vars, "--foreground");
-  const mutedForeground = hsl(vars, "--muted-foreground");
-  const primary = hsl(vars, "--primary");
-  const primarySoft = hslAlpha(vars, "--primary", 0.68);
+  const background = hsl(vars, "--comms-background");
+  const border = hsl(vars, "--comms-border");
+  const foreground = hsl(vars, "--comms-foreground");
+  const mutedForeground = hsl(vars, "--comms-muted-foreground");
+  const primary = hsl(vars, "--comms-primary");
+  const primarySoft = hslAlpha(vars, "--comms-primary", 0.68);
   const sidebar = hsl(vars, "--sidebar-background");
-  const sidebarForeground = hslAlpha(vars, "--sidebar-foreground", 0.58);
+  const sidebarForeground = hslAlpha(vars, "--comms-sidebar-foreground", 0.58);
 
   return (
     <svg
@@ -262,20 +262,20 @@ function SystemPreferencePreviewSvg({
   const darkGradientId = `${clipBase}-buzz-dark`;
 
   // Dark half colors
-  const darkBg = hsl(darkVars, "--background");
+  const darkBg = hsl(darkVars, "--comms-background");
   const darkSidebar = hsl(darkVars, "--sidebar-background");
-  const darkSidebarFg = hslAlpha(darkVars, "--sidebar-foreground", 0.58);
-  const darkMutedFg = hsl(darkVars, "--muted-foreground");
+  const darkSidebarFg = hslAlpha(darkVars, "--comms-sidebar-foreground", 0.58);
+  const darkMutedFg = hsl(darkVars, "--comms-muted-foreground");
 
   // Light half colors
-  const lightBg = hsl(lightVars, "--background");
-  const lightBorder = hsl(lightVars, "--border");
-  const lightForeground = hsl(lightVars, "--foreground");
-  const lightPrimary = hsl(lightVars, "--primary");
-  const lightPrimarySoft = hslAlpha(lightVars, "--primary", 0.68);
+  const lightBg = hsl(lightVars, "--comms-background");
+  const lightBorder = hsl(lightVars, "--comms-border");
+  const lightForeground = hsl(lightVars, "--comms-foreground");
+  const lightPrimary = hsl(lightVars, "--comms-primary");
+  const lightPrimarySoft = hslAlpha(lightVars, "--comms-primary", 0.68);
   const lightSidebar = hsl(lightVars, "--sidebar-background");
-  const lightSidebarFg = hslAlpha(lightVars, "--sidebar-foreground", 0.58);
-  const lightMutedFg = hsl(lightVars, "--muted-foreground");
+  const lightSidebarFg = hslAlpha(lightVars, "--comms-sidebar-foreground", 0.58);
+  const lightMutedFg = hsl(lightVars, "--comms-muted-foreground");
 
   return (
     <svg
@@ -582,8 +582,8 @@ export function ThemePreviewFrame({
         className,
       )}
       style={{
-        backgroundColor: hsl(vars, "--muted"),
-        borderColor: hsl(vars, "--border"),
+        backgroundColor: hsl(vars, "--comms-muted"),
+        borderColor: hsl(vars, "--comms-border"),
       }}
     >
       <div className="absolute -bottom-1 -right-1 h-[90%] w-[90%]">
@@ -617,7 +617,7 @@ export function SystemPreferencePreviewFrame({
         className,
       )}
       style={{
-        backgroundColor: "hsl(var(--muted))",
+        backgroundColor: "hsl(var(--comms-muted))",
       }}
     >
       <div className="absolute -bottom-1 -right-1 h-[90%] w-[90%]">

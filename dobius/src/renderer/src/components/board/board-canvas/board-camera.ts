@@ -1,4 +1,4 @@
-import { BOARD_CHROME_INSETS, type BoardInsets } from './board-reveal'
+import { BOARD_CHROME_INSETS, revealRectViewport, type BoardInsets } from './board-reveal'
 import {
   BOARD_MAX_ZOOM,
   boardCameraFit,
@@ -35,6 +35,29 @@ export function boardFocusViewport(
     padding: BOARD_FOCUS_PADDING,
     minZoom: boardFocusMinZoom(terminalFontSize),
     maxZoom: BOARD_MAX_ZOOM
+  })
+}
+
+/**
+ * Shows a just-placed block (world rect) whole inside the safe area: the
+ * smallest pan when it fits at the current zoom, otherwise zoomed out just
+ * enough to fit. Never zooms in. Returns `viewport` itself when nothing moves.
+ */
+export function boardRevealBlockViewport(
+  viewport: BoardViewport,
+  rect: { x: number; y: number; w: number; h: number },
+  screen: BoardSize,
+  insets: BoardInsets = BOARD_CHROME_INSETS
+): BoardViewport {
+  const safeW = screen.width - insets.left - insets.right
+  const safeH = screen.height - insets.top - insets.bottom
+  if (rect.w * viewport.zoom <= safeW && rect.h * viewport.zoom <= safeH) {
+    return revealRectViewport(viewport, rect, { w: screen.width, h: screen.height }, insets)
+  }
+  return boardCameraFit([{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }], screen, {
+    insets,
+    padding: 0,
+    maxZoom: viewport.zoom
   })
 }
 

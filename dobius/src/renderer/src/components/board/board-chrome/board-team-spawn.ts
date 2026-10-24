@@ -4,6 +4,7 @@ import { getAgentLabel } from '@/lib/agent-catalog'
 import { useAppStore } from '@/store'
 import { getBoard } from '@/store/slices/board'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
+import { animateBoardViewport, boardRevealBlockViewport } from '../board-canvas/board-camera'
 import { BOARD_CONSOLE_SIZE, boardSpawnPlacements } from '../board-canvas/board-spawn-placement'
 import type { BoardPoint } from '../board-canvas/board-viewport'
 import { spawnConsoles } from '../board-delivery/console-lifecycle'
@@ -195,8 +196,40 @@ export function spawnTeamOnBoard(
       )
     )
   }
+  revealTeam(worktreeId, outcome.cardIds)
   watchEarlyExits(worktreeId, outcome.cardIds)
   return outcome.cardIds
+}
+
+/** Room kept around the block for its group frame and title. */
+const REVEAL_MARGIN = 48
+
+/**
+ * Brings the new block fully into the safe area (inside rails, top bar and
+ * command bar). Why: when the view is full the free-spot scan falls back to
+ * the right of the rightmost card, which landed the team under the right rail.
+ */
+export function revealTeam(worktreeId: string, cardIds: readonly string[]): void {
+  const state = useAppStore.getState()
+  const board = getBoard(state, worktreeId)
+  const ids = new Set(cardIds)
+  const cards = board.cards.filter((c) => ids.has(c.id))
+  if (cards.length === 0) {
+    return
+  }
+  const minX = Math.min(...cards.map((c) => c.x)) - REVEAL_MARGIN
+  const minY = Math.min(...cards.map((c) => c.y)) - REVEAL_MARGIN
+  const maxX = Math.max(...cards.map((c) => c.x + c.w)) + REVEAL_MARGIN
+  const maxY = Math.max(...cards.map((c) => c.y + c.h)) + REVEAL_MARGIN
+  const size = { width: window.innerWidth, height: window.innerHeight }
+  const target = boardRevealBlockViewport(
+    board.viewport,
+    { x: minX, y: minY, w: maxX - minX, h: maxY - minY },
+    size
+  )
+  if (target !== board.viewport) {
+    animateBoardViewport(board.viewport, target, (v) => state.setViewport(worktreeId, v), { size })
+  }
 }
 
 function groupTeam(worktreeId: string, cardIds: readonly string[], name: string | null): void {

@@ -6,6 +6,7 @@ import { useAppStore } from '@/store'
 import { getBoard } from '@/store/slices/board'
 import { animateBoardViewport, boardCameraFit, boardFocusViewport } from './board-camera'
 import { boardReadingOrder, boardStepId } from './board-console-order'
+import { resetAllBoardScroll } from './board-scroll-lock'
 import type { BoardSize, BoardViewport } from './board-viewport'
 
 export type BoardCameraFocus = {
@@ -22,15 +23,27 @@ export const useBoardCameraFocus = create<{ focus: BoardCameraFocus | null }>(()
 }))
 
 function screenSize(): BoardSize {
-  // The Board canvas is `fixed inset-0`, so its size is the window's.
+  // The Board canvas is `fixed inset-0`, so its size is normally the window's;
+  // measure the canvas itself when it is mounted so the two can never disagree.
+  const canvas = document.querySelector('[data-board-canvas]')
+  if (canvas && canvas.clientWidth > 0 && canvas.clientHeight > 0) {
+    return { width: canvas.clientWidth, height: canvas.clientHeight }
+  }
   return { width: window.innerWidth, height: window.innerHeight }
 }
 
 function flyTo(worktreeId: string, target: BoardViewport, onDone?: () => void): void {
+  // Why: a scroll offset on the canvas shifts what is rendered away from the
+  // viewport model, so the camera would frame a card that shows off-centre.
+  resetAllBoardScroll()
   const from = getBoard(useAppStore.getState(), worktreeId).viewport
   animateBoardViewport(from, target, (v) => useAppStore.getState().setViewport(worktreeId, v), {
     size: screenSize(),
-    onDone
+    onDone: () => {
+      // The focused terminal takes the keyboard mid-flight; undo any reveal scroll it caused.
+      resetAllBoardScroll()
+      onDone?.()
+    }
   })
 }
 

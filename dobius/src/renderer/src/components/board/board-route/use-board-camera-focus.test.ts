@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
-import { boardArrowStep, boardEscapeExitsFocus, boardKeyTarget } from './use-board-camera-focus'
+import { describe, expect, it, vi } from 'vitest'
+import { CLEAR_TERMINAL_SELECTION_EVENT } from '@/constants/terminal'
+import {
+  boardArrowStep,
+  boardEscapeExitsFocus,
+  boardKeyTarget,
+  clearConsoleTextSelection
+} from './use-board-camera-focus'
 
 function inTerminal(): HTMLElement {
   const host = document.createElement('div')
@@ -53,5 +59,27 @@ describe('focus-mode keys', () => {
     expect(boardArrowStep(arrow('ArrowLeft', { altKey: true }), 'field')).toBeNull()
     expect(boardArrowStep(arrow('ArrowLeft'), 'board')).toBeNull()
     expect(boardArrowStep(arrow('ArrowUp', { altKey: true }), 'board')).toBeNull()
+  })
+})
+
+describe('double-click focus clears the selection it consumed', () => {
+  it('drops the DOM selection and asks that terminal to clear its own', () => {
+    const p = document.createElement('p')
+    p.textContent = 'some words here'
+    document.body.appendChild(p)
+    const range = document.createRange()
+    range.selectNodeContents(p)
+    window.getSelection()?.addRange(range)
+    expect(window.getSelection()?.rangeCount).toBe(1)
+
+    const heard = vi.fn()
+    window.addEventListener(CLEAR_TERMINAL_SELECTION_EVENT, heard)
+    clearConsoleTextSelection('tab-7')
+    window.removeEventListener(CLEAR_TERMINAL_SELECTION_EVENT, heard)
+
+    expect(window.getSelection()?.rangeCount).toBe(0)
+    expect(heard).toHaveBeenCalledTimes(1)
+    expect((heard.mock.calls[0][0] as CustomEvent).detail).toEqual({ tabId: 'tab-7' })
+    p.remove()
   })
 })

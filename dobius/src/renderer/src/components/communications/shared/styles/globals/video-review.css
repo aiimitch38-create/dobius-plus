@@ -3,23 +3,23 @@
    the app theme. Applied together with `.dark` on the portal root; this
    block is intentionally unlayered so it overrides the layered theme vars. */
 .video-review-theme {
-  --background: 0 0% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 0 0% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 0 0% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 0 0% 9%;
-  --secondary: 0 0% 14.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 0 0% 14.9%;
-  --muted-foreground: 0 0% 63.9%;
-  --accent: 0 0% 14.9%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 14.9%;
-  --input: 0 0% 14.9%;
-  --ring: 0 0% 83.1%;
+  --comms-background: 0 0% 3.9%;
+  --comms-foreground: 0 0% 98%;
+  --comms-card: 0 0% 3.9%;
+  --comms-card-foreground: 0 0% 98%;
+  --comms-popover: 0 0% 3.9%;
+  --comms-popover-foreground: 0 0% 98%;
+  --comms-primary: 0 0% 98%;
+  --comms-primary-foreground: 0 0% 9%;
+  --comms-secondary: 0 0% 14.9%;
+  --comms-secondary-foreground: 0 0% 98%;
+  --comms-muted: 0 0% 14.9%;
+  --comms-muted-foreground: 0 0% 63.9%;
+  --comms-accent: 0 0% 14.9%;
+  --comms-accent-foreground: 0 0% 98%;
+  --comms-destructive: 0 62.8% 30.6%;
+  --comms-destructive-foreground: 0 0% 98%;
+  --comms-border: 0 0% 14.9%;
+  --comms-input: 0 0% 14.9%;
+  --comms-ring: 0 0% 83.1%;
 }

@@ -17,7 +17,7 @@ export default {
         "nsec-key": ["2.25rem", { lineHeight: "1.3" }],
       },
       boxShadow: {
-        "content-edge": "-1px -1px 0 0 hsl(var(--sidebar-border) / 0.45)",
+        "content-edge": "-1px -1px 0 0 hsl(var(--comms-sidebar-border) / 0.45)",
         // Edge + elevation for a surface anchored to the right of the content
         // area, whose only exposed edge faces left. Tailwind's stock shadows are
         // all y-offset, so they cast almost nothing sideways — `shadow-xl` on a
@@ -27,12 +27,12 @@ export default {
         // soft layer carries the lift. A left-only `border` can't do this job —
         // it tapers out at each corner instead of turning it.
         "panel-left":
-          "-1px 0 0 0 hsl(var(--border) / 0.8), -16px 0 32px -12px rgb(0 0 0 / 0.18)",
+          "-1px 0 0 0 hsl(var(--comms-border) / 0.8), -16px 0 32px -12px rgb(0 0 0 / 0.18)",
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "var(--comms-radius)",
+        md: "calc(var(--comms-radius) - 2px)",
+        sm: "calc(var(--comms-radius) - 4px)",
       },
       spacing: {
         4.5: "1.125rem",
@@ -47,50 +47,50 @@ export default {
         ],
       },
       colors: {
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        background: "hsl(var(--comms-background))",
+        foreground: "hsl(var(--comms-foreground))",
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "hsl(var(--comms-card))",
+          foreground: "hsl(var(--comms-card-foreground))",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+          DEFAULT: "hsl(var(--comms-popover))",
+          foreground: "hsl(var(--comms-popover-foreground))",
         },
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: "hsl(var(--comms-primary))",
+          foreground: "hsl(var(--comms-primary-foreground))",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          DEFAULT: "hsl(var(--comms-secondary))",
+          foreground: "hsl(var(--comms-secondary-foreground))",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "hsl(var(--comms-muted))",
+          foreground: "hsl(var(--comms-muted-foreground))",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: "hsl(var(--comms-accent))",
+          foreground: "hsl(var(--comms-accent-foreground))",
         },
         destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT: "hsl(var(--comms-destructive))",
+          foreground: "hsl(var(--comms-destructive-foreground))",
         },
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
+        border: "hsl(var(--comms-border))",
+        input: "hsl(var(--comms-input))",
+        ring: "hsl(var(--comms-ring))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
-          foreground: "hsl(var(--sidebar-foreground))",
-          primary: "hsl(var(--sidebar-primary))",
-          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
+          foreground: "hsl(var(--comms-sidebar-foreground))",
+          primary: "hsl(var(--comms-sidebar-primary))",
+          "primary-foreground": "hsl(var(--comms-sidebar-primary-foreground))",
           active: "hsl(var(--sidebar-active))",
           "active-foreground": "hsl(var(--sidebar-active-foreground))",
-          accent: "hsl(var(--sidebar-accent))",
-          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
-          border: "hsl(var(--sidebar-border))",
-          ring: "hsl(var(--sidebar-ring))",
+          accent: "hsl(var(--comms-sidebar-accent))",
+          "accent-foreground": "hsl(var(--comms-sidebar-accent-foreground))",
+          border: "hsl(var(--comms-sidebar-border))",
+          ring: "hsl(var(--comms-sidebar-ring))",
         },
         status: {
           added: "var(--status-added)",

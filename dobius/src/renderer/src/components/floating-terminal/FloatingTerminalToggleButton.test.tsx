@@ -200,13 +200,13 @@ describe('FloatingTerminalToggleButton positioning', () => {
     setViewport(260, 220)
 
     let element = await renderToggle()
-    expect(getToggleStylePosition(element)).toEqual({ left: 176, top: 104 })
+    expect(getToggleStylePosition(element)).toEqual({ left: 8, top: 86 })
 
     setViewport(1200, 800)
     runEffects()
     element = await renderToggle()
 
-    expect(getToggleStylePosition(element)).toEqual({ left: 1116, top: 684 })
+    expect(getToggleStylePosition(element)).toEqual({ left: 832, top: 666 })
     expect(getMockedLocalStorage().setItem).not.toHaveBeenCalled()
   })
 
@@ -228,7 +228,7 @@ describe('FloatingTerminalToggleButton positioning', () => {
     })
 
     element = await renderToggle()
-    expect(getToggleStylePosition(element)).toEqual({ left: 1040, top: 592 })
+    expect(getToggleStylePosition(element)).toEqual({ left: 756, top: 574 })
     expect(getMockedLocalStorage().setItem).not.toHaveBeenCalled()
 
     const movedButton = getToggleButton(element)

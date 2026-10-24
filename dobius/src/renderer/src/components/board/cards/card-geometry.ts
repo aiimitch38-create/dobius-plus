@@ -80,3 +80,53 @@ export function clampRectIntoArea(rect: Rect, area: Rect): Rect {
   const y = Math.max(area.y, Math.min(rect.y, area.y + area.h - rect.h))
   return { ...rect, x, y }
 }
+
+/** On-screen thickness (px) of a resize hit zone, at every zoom. */
+export const RESIZE_HANDLE_SCREEN_PX = 10
+/**
+ * Most a hit zone may reach into the card, in world px. The title text starts
+ * ~13px below the top edge (40px bar, centred 14px text), so a top-edge zone
+ * capped here never sits over it however far the board is zoomed out.
+ */
+export const RESIZE_HANDLE_MAX_INSET = 8
+/** Edge strips stop this far (world px) short of the corners. */
+const EDGE_STRIP_INSET = 8
+
+export type ResizeHandleBox = {
+  left?: number
+  right?: number
+  top?: number
+  bottom?: number
+  width?: number
+  height?: number
+}
+
+/**
+ * Card-relative box (world px) of one resize hit zone: a constant
+ * RESIZE_HANDLE_SCREEN_PX on screen, centred on the edge while that reaches no
+ * more than RESIZE_HANDLE_MAX_INSET into the card, pushed outward once it would.
+ * At low zoom a centred zone grew past the title bar, so a title click resized.
+ */
+export function resizeHandleBox(handle: ResizeHandle, zoom: number): ResizeHandleBox {
+  const size = RESIZE_HANDLE_SCREEN_PX / (zoom > 0 ? zoom : 1)
+  const inward = Math.min(size / 2, RESIZE_HANDLE_MAX_INSET)
+  const outside = -(size - inward)
+  switch (handle) {
+    case 'n':
+      return { left: EDGE_STRIP_INSET, right: EDGE_STRIP_INSET, top: outside, height: size }
+    case 's':
+      return { left: EDGE_STRIP_INSET, right: EDGE_STRIP_INSET, bottom: outside, height: size }
+    case 'e':
+      return { top: EDGE_STRIP_INSET, bottom: EDGE_STRIP_INSET, right: outside, width: size }
+    case 'w':
+      return { top: EDGE_STRIP_INSET, bottom: EDGE_STRIP_INSET, left: outside, width: size }
+    case 'ne':
+      return { right: outside, top: outside, width: size, height: size }
+    case 'nw':
+      return { left: outside, top: outside, width: size, height: size }
+    case 'se':
+      return { right: outside, bottom: outside, width: size, height: size }
+    case 'sw':
+      return { left: outside, bottom: outside, width: size, height: size }
+  }
+}

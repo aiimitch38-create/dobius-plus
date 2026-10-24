@@ -69,3 +69,43 @@
 .dobius-comms-embed * {
   -webkit-app-region: no-drag !important;
 }
+
+/* The app's own utilities outrank this client's (see the `comms` layer note in
+   shared/styles/globals.css), so a class both trees use — `bg-background`,
+   `text-muted-foreground`, `border-border`, `font-sans` — resolves through the
+   app's tokens. Inside the Communications subtree those tokens are pointed at
+   this client's palette (`--comms-*`, HSL channels), so it keeps its look.
+   Every element re-resolves them, so a local `--comms-*` override in a
+   descendant still wins. Portaled menus/dialogs live outside this subtree and
+   fall back to the app palette for those shared classes. */
+:where(.dobius-comms-embed, .dobius-comms-embed *) {
+  --background: hsl(var(--comms-background));
+  --foreground: hsl(var(--comms-foreground));
+  --card: hsl(var(--comms-card));
+  --card-foreground: hsl(var(--comms-card-foreground));
+  --popover: hsl(var(--comms-popover));
+  --popover-foreground: hsl(var(--comms-popover-foreground));
+  --primary: hsl(var(--comms-primary));
+  --primary-foreground: hsl(var(--comms-primary-foreground));
+  --secondary: hsl(var(--comms-secondary));
+  --secondary-foreground: hsl(var(--comms-secondary-foreground));
+  --muted: hsl(var(--comms-muted));
+  --muted-foreground: hsl(var(--comms-muted-foreground));
+  --accent: hsl(var(--comms-accent));
+  --accent-foreground: hsl(var(--comms-accent-foreground));
+  --destructive: hsl(var(--comms-destructive));
+  --destructive-foreground: hsl(var(--comms-destructive-foreground));
+  --border: hsl(var(--comms-border));
+  --input: hsl(var(--comms-input));
+  --ring: hsl(var(--comms-ring));
+  --sidebar: hsl(var(--sidebar-background));
+  --sidebar-foreground: hsl(var(--comms-sidebar-foreground));
+  --sidebar-primary: hsl(var(--comms-sidebar-primary));
+  --sidebar-primary-foreground: hsl(var(--comms-sidebar-primary-foreground));
+  --sidebar-accent: hsl(var(--comms-sidebar-accent));
+  --sidebar-accent-foreground: hsl(var(--comms-sidebar-accent-foreground));
+  --sidebar-border: hsl(var(--comms-sidebar-border));
+  --sidebar-ring: hsl(var(--comms-sidebar-ring));
+  --radius: var(--comms-radius);
+  --font-sans: "Inter Variable", Inter, "Avenir Next", "Segoe UI", sans-serif;
+}

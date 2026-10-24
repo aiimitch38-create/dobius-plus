@@ -1,4 +1,11 @@
-const TRIGGER_SIZE = 36
+// Smallest the trigger can be; decides whether a viewport can host it at all.
+const TRIGGER_MIN_SIZE = 36
+// The trigger is the dock pill (`w-80 max-w-[calc(100vw-2rem)]`, a 36px orb row
+// with p-2 and a 1px border). Position math must use its real box: the old
+// 36px icon size let a right-anchored pill run ~284px off the window.
+const TRIGGER_PILL_WIDTH = 320
+const TRIGGER_PILL_HEIGHT = 54
+const TRIGGER_PILL_VIEWPORT_GUTTER = 32
 const DEFAULT_RIGHT_GAP = 24
 const DEFAULT_BOTTOM_GAP = 72
 const DRAG_MARGIN = 8
@@ -32,6 +39,19 @@ function getViewport(): { width: number; height: number } {
   return {
     width: typeof window === 'undefined' ? 1200 : window.innerWidth,
     height: typeof window === 'undefined' ? 800 : window.innerHeight
+  }
+}
+
+function getTriggerSize(viewport: { width: number; height: number }): {
+  width: number
+  height: number
+} {
+  return {
+    width: Math.min(
+      TRIGGER_PILL_WIDTH,
+      Math.max(TRIGGER_MIN_SIZE, viewport.width - TRIGGER_PILL_VIEWPORT_GUTTER)
+    ),
+    height: TRIGGER_PILL_HEIGHT
   }
 }
 
@@ -80,8 +100,9 @@ export function clampFloatingTerminalTriggerPosition(
   position: FloatingTerminalTriggerPosition
 ): FloatingTerminalTriggerPosition {
   const viewport = getViewport()
-  const maxLeft = Math.max(DRAG_MARGIN, viewport.width - TRIGGER_SIZE - DRAG_MARGIN)
-  const maxTop = Math.max(TITLEBAR_SAFE_TOP, viewport.height - TRIGGER_SIZE - DRAG_MARGIN)
+  const size = getTriggerSize(viewport)
+  const maxLeft = Math.max(DRAG_MARGIN, viewport.width - size.width - DRAG_MARGIN)
+  const maxTop = Math.max(TITLEBAR_SAFE_TOP, viewport.height - size.height - DRAG_MARGIN)
   return {
     left: Math.min(Math.max(DRAG_MARGIN, position.left), maxLeft),
     top: Math.min(Math.max(TITLEBAR_SAFE_TOP, position.top), maxTop)
@@ -91,8 +112,8 @@ export function clampFloatingTerminalTriggerPosition(
 export function hasUsableFloatingTerminalTriggerViewport(): boolean {
   const viewport = getViewport()
   return (
-    viewport.width >= TRIGGER_SIZE + DRAG_MARGIN * 2 &&
-    viewport.height >= TRIGGER_SIZE + TITLEBAR_SAFE_TOP + DRAG_MARGIN
+    viewport.width >= TRIGGER_MIN_SIZE + DRAG_MARGIN * 2 &&
+    viewport.height >= TRIGGER_MIN_SIZE + TITLEBAR_SAFE_TOP + DRAG_MARGIN
   )
 }
 
@@ -103,15 +124,16 @@ export function resolveFloatingTerminalTriggerCommittedPosition(
     return position
   }
   const viewport = getViewport()
+  const size = getTriggerSize(viewport)
   return {
     left:
       position.anchorX === 'left'
         ? position.offsetX
-        : viewport.width - TRIGGER_SIZE - position.offsetX,
+        : viewport.width - size.width - position.offsetX,
     top:
       position.anchorY === 'top'
         ? position.offsetY
-        : viewport.height - TRIGGER_SIZE - position.offsetY
+        : viewport.height - size.height - position.offsetY
   }
 }
 
@@ -122,15 +144,16 @@ export function anchorFloatingTerminalTriggerPosition(
     return null
   }
   const viewport = getViewport()
+  const size = getTriggerSize(viewport)
   const anchorX: FloatingTerminalAnchorX =
-    position.left + TRIGGER_SIZE / 2 <= viewport.width / 2 ? 'left' : 'right'
+    position.left + size.width / 2 <= viewport.width / 2 ? 'left' : 'right'
   const anchorY: FloatingTerminalAnchorY =
-    position.top + TRIGGER_SIZE / 2 <= viewport.height / 2 ? 'top' : 'bottom'
+    position.top + size.height / 2 <= viewport.height / 2 ? 'top' : 'bottom'
   return {
     anchorX,
     anchorY,
-    offsetX: anchorX === 'left' ? position.left : viewport.width - position.left - TRIGGER_SIZE,
-    offsetY: anchorY === 'top' ? position.top : viewport.height - position.top - TRIGGER_SIZE
+    offsetX: anchorX === 'left' ? position.left : viewport.width - position.left - size.width,
+    offsetY: anchorY === 'top' ? position.top : viewport.height - position.top - size.height
   }
 }
 

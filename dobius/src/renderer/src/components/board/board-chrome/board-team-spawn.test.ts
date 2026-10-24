@@ -5,12 +5,14 @@ const toastError = vi.fn()
 const toastSuccess = vi.fn()
 const groupBoardCards = vi.fn()
 const createGroup = vi.fn()
+const setViewport = vi.fn()
 
 type Listener = (state: StoreState, prev: StoreState) => void
 type StoreState = {
   tabsByWorktree: Record<string, { id: string }[]>
   boardsByWorktree: Record<string, unknown>
   createGroup: typeof createGroup
+  setViewport: typeof setViewport
 }
 let storeState: StoreState
 const listeners = new Set<Listener>()
@@ -21,7 +23,9 @@ const setStore = (next: Partial<StoreState>): void => {
     l(storeState, prev)
   }
 }
-let boardCards: { id: string; kind: string; tabId: string; title: string; agentKind: string }[]
+type TestCard = { id: string; kind: string; tabId: string; title: string; agentKind: string }
+let boardCards: (TestCard & { x?: number; y?: number; w?: number; h?: number })[]
+let boardViewport = { x: 0, y: 0, zoom: 1 }
 
 vi.mock('sonner', () => ({ toast: { error: toastError, success: toastSuccess } }))
 vi.mock('@/i18n/i18n', () => ({
@@ -38,7 +42,13 @@ vi.mock('@/store', () => ({
     }
   }
 }))
-vi.mock('@/store/slices/board', () => ({ getBoard: () => ({ cards: boardCards, groups: [] }) }))
+vi.mock('@/store/slices/board', () => ({
+  getBoard: () => ({
+    cards: boardCards.map((c) => ({ x: 0, y: 0, w: 10, h: 10, ...c })),
+    groups: [],
+    viewport: boardViewport
+  })
+}))
 vi.mock('../board-canvas/board-spawn-placement', () => ({
   BOARD_CONSOLE_SIZE: { w: 10, h: 10 },
   boardSpawnPlacements: (_c: unknown, n: number) =>
@@ -50,7 +60,15 @@ vi.mock('../board-route/board-groupable', () => ({
   groupableCardIds: (_cards: unknown, ids: Set<string>) => [...ids]
 }))
 
+// Reduced motion: the reveal pan applies synchronously.
+vi.stubGlobal('window', {
+  innerWidth: 1440,
+  innerHeight: 900,
+  matchMedia: () => ({ matches: true })
+})
+
 const { spawnTeamOnBoard, EARLY_EXIT_WINDOW_MS } = await import('./board-team-spawn')
+const { BOARD_CHROME_INSETS } = await import('../board-canvas/board-reveal')
 
 const slots = [
   { role: 'general' as const, agent: 'codex' as const },
@@ -62,7 +80,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   listeners.clear()
   boardCards = []
-  storeState = { tabsByWorktree: { wt: [] }, boardsByWorktree: {}, createGroup }
+  boardViewport = { x: 0, y: 0, zoom: 1 }
+  storeState = { tabsByWorktree: { wt: [] }, boardsByWorktree: {}, createGroup, setViewport }
 })
 
 describe('spawnTeamOnBoard never fails silently', () => {
@@ -125,5 +144,53 @@ describe('spawnTeamOnBoard never fails silently', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('pans so a team that landed under the right rail is fully in the safe area', () => {
+    spawnConsoles
+      .mockReturnValueOnce({ cardIds: ['c1'], failed: 0 })
+      .mockReturnValueOnce({ cardIds: ['c2'], failed: 0 })
+    const card = (id: string, x: number, y: number) => ({
+      id,
+      kind: 'console',
+      tabId: `t-${id}`,
+      title: id,
+      agentKind: 'codex',
+      x,
+      y,
+      w: 640,
+      h: 400
+    })
+    // Two consoles side by side, starting past the right edge at 50%.
+    boardViewport = { x: 0, y: 0, zoom: 0.5 }
+    boardCards = [card('c1', 2600, 200), card('c2', 3272, 200)]
+    spawnTeamOnBoard('wt', slots.slice(0, 2), { x: 0, y: 0 })
+    expect(setViewport).toHaveBeenCalled()
+    const v = setViewport.mock.calls.at(-1)![1] as { x: number; y: number; zoom: number }
+    const left = 2600 * v.zoom + v.x
+    const right = (3272 + 640) * v.zoom + v.x
+    expect(left).toBeGreaterThanOrEqual(BOARD_CHROME_INSETS.left)
+    expect(right).toBeLessThanOrEqual(1440 - BOARD_CHROME_INSETS.right)
+    expect(200 * v.zoom + v.y).toBeGreaterThanOrEqual(BOARD_CHROME_INSETS.top)
+    expect(600 * v.zoom + v.y).toBeLessThanOrEqual(900 - BOARD_CHROME_INSETS.bottom)
+  })
+
+  it('leaves the camera alone when the team is already visible', () => {
+    spawnConsoles.mockReturnValueOnce({ cardIds: ['c1'], failed: 0 })
+    boardCards = [
+      {
+        id: 'c1',
+        kind: 'console',
+        tabId: 't1',
+        title: 'c1',
+        agentKind: 'codex',
+        x: 300,
+        y: 200,
+        w: 640,
+        h: 400
+      }
+    ]
+    spawnTeamOnBoard('wt', slots.slice(0, 1), { x: 0, y: 0 })
+    expect(setViewport).not.toHaveBeenCalled()
   })
 })

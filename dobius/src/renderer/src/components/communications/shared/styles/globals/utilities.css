@@ -1,4 +1,4 @@
-@layer utilities {
+@layer comms.utilities {
   /*
    * Skips rendering (layout, paint) for offscreen rows while keeping them in
    * the DOM — unlike windowing, in-DOM state (open `<details>`, drag-and-drop,
@@ -38,16 +38,16 @@
   }
 
   .buzz-huddle-tooltip {
-    --primary: var(
+    --comms-primary: var(
       --huddle-tooltip-surface,
       var(--huddle-control-surface, 0 0% 20%)
     );
-    --primary-foreground: var(
+    --comms-primary-foreground: var(
       --huddle-tooltip-foreground,
       var(--huddle-control-foreground, 0 0% 98%)
     );
 
-    background: hsl(var(--primary));
+    background: hsl(var(--comms-primary));
     border: 1px solid
       hsl(
         var(
@@ -57,12 +57,12 @@
         0.72
       );
     box-shadow: 0 10px 22px rgb(0 0 0 / 35%);
-    color: hsl(var(--primary-foreground));
+    color: hsl(var(--comms-primary-foreground));
   }
 
   .buzz-huddle-drawer .buzz-huddle-control-button,
   .buzz-huddle-drawer .buzz-huddle-split-main {
-    background: hsl(var(--huddle-control-surface, var(--secondary)));
+    background: hsl(var(--huddle-control-surface, var(--comms-secondary)));
   }
 
   .buzz-huddle-drawer .buzz-huddle-control-button:hover,
@@ -70,20 +70,20 @@
     background: hsl(
       var(
         --huddle-control-hover-surface,
-        var(--huddle-control-surface, var(--secondary))
+        var(--huddle-control-surface, var(--comms-secondary))
       )
     );
   }
 
   .buzz-huddle-drawer .buzz-huddle-split-chevron {
-    background: hsl(var(--huddle-control-chevron-surface, var(--secondary)));
+    background: hsl(var(--huddle-control-chevron-surface, var(--comms-secondary)));
   }
 
   .buzz-huddle-drawer .buzz-huddle-split-chevron:hover {
     background: hsl(
       var(
         --huddle-control-chevron-hover-surface,
-        var(--huddle-control-chevron-surface, var(--secondary))
+        var(--huddle-control-chevron-surface, var(--comms-secondary))
       )
     );
   }

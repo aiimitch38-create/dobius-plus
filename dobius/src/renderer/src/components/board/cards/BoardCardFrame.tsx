@@ -12,6 +12,7 @@ import {
   DEFAULT_MIN_SIZE,
   RESIZE_HANDLES,
   handleCursor,
+  resizeHandleBox,
   resizeRect,
   screenDeltaToWorld,
   type MinSize,
@@ -73,30 +74,19 @@ type ResizeState = {
   start: Rect
 }
 
-const HANDLE_POSITION: Record<ResizeHandle, string> = {
-  n: 'left-2 right-2 top-0 -translate-y-1/2',
-  s: 'left-2 right-2 bottom-0 translate-y-1/2',
-  e: 'top-2 bottom-2 right-0 translate-x-1/2',
-  w: 'top-2 bottom-2 left-0 -translate-x-1/2',
-  ne: 'right-0 top-0 translate-x-1/2 -translate-y-1/2',
-  nw: 'left-0 top-0 -translate-x-1/2 -translate-y-1/2',
-  se: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2',
-  sw: 'left-0 bottom-0 -translate-x-1/2 translate-y-1/2'
-}
-
 // Edge handles are invisible hit strips; corner handles are visible squares.
-function handleStyle(handle: ResizeHandle, px: (n: number) => number): React.CSSProperties {
-  const cursor = handleCursor(handle)
-  if (handle === 'n' || handle === 's') {
-    return { cursor, height: px(10) }
-  }
-  if (handle === 'e' || handle === 'w') {
-    return { cursor, width: px(10) }
+// Sized in screen px and kept off the title text at any zoom (resizeHandleBox).
+function handleStyle(
+  handle: ResizeHandle,
+  zoom: number,
+  px: (n: number) => number
+): React.CSSProperties {
+  const box = { cursor: handleCursor(handle), ...resizeHandleBox(handle, zoom) }
+  if (handle.length === 1) {
+    return box
   }
   return {
-    cursor,
-    width: px(10),
-    height: px(10),
+    ...box,
     background: 'var(--board-panel)',
     border: `${px(2)}px solid var(--board-accent)`,
     borderRadius: '50%'
@@ -396,8 +386,8 @@ export function BoardCardFrame({
           <div
             key={handle}
             aria-hidden
-            className={cn('absolute', HANDLE_POSITION[handle])}
-            style={handleStyle(handle, px)}
+            className="absolute"
+            style={handleStyle(handle, zoom, px)}
             onPointerDown={startResize(handle)}
             onPointerMove={moveResize}
             onPointerUp={endResize}

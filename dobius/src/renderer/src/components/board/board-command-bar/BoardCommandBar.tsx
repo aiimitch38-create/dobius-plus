@@ -161,7 +161,9 @@ export function BoardCommandBar({
         className={cn(
           BOARD_FLOATING_PANEL_CLASS,
           // The dark reference lifts the composer to a lighter neutral than the rails.
-          'pointer-events-auto relative flex w-full flex-col rounded-[20px] bg-[var(--board-composer)]'
+          'pointer-events-auto relative flex w-full flex-col rounded-[20px] bg-[var(--board-composer)]',
+          // ⌘K and clicks focus the borderless input; ring the whole composer so focus is visible.
+          'outline-offset-0 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-[var(--board-accent)]'
         )}
       >
         <BoardVoiceCaption draft={draft} />
