@@ -39,6 +39,12 @@
         "sshToggleDescription": "Muestra hosts SSH configurados y hosts remotos de Dobius+ cuando haya alguno disponible.",
         "resourceUsageToggleDescription": "Muestra el Administrador de recursos. Haz clic para ver CPU, memoria, sesiones, controles del servicio en segundo plano y análisis de disco de los espacios de trabajo.",
         "portsToggleDescription": "Muestra los puertos activos de los espacios de trabajo. Haz clic para ver los puertos de cada espacio de trabajo y los puertos externos."
+      },
+      "appLook": {
+        "title": "App look",
+        "board": "New look (Board)",
+        "classic": "Classic look",
+        "description": "Choose what Dobius opens to. You can switch anytime with Back to home / Open Board."
       }
     },
     "aws": {
@@ -12779,9 +12785,6 @@
       }
     }
   },
-  "commandCenter": {
-    "navigation": "Command Center"
-  },
   "board": {
     "image": {
       "readFailed": "Could not read that image.",
@@ -13144,7 +13147,25 @@
       "code": {
         "noWorkspace": "Open a workspace to browse its code.",
         "inactiveWorkspace": "The code browser follows the active workspace. Switch to this board’s workspace to browse its files.",
-        "pickFile": "Pick a file to open it here."
+        "pickFile": "Pick a file to open it here.",
+        "files": "Project files",
+        "newFile": "New file",
+        "newFolder": "New folder",
+        "name": "Name",
+        "create": "Create",
+        "empty": "No files yet. Create a file to get started.",
+        "saveFailed": "Could not save this file.",
+        "saving": "Saving…",
+        "save": "Save",
+        "saved": "Saved",
+        "editor": "File editor",
+        "toggleFiles": "Toggle project files",
+        "chooseFile": "Choose a file",
+        "lineCount": "{{count}} lines",
+        "addFolder": "Add folder",
+        "insert": "Insert",
+        "pickFileDetail": "Browse your project on the left, or create a new file.",
+        "invalidName": "Enter a name without path separators."
       },
       "memory": {
         "saveFailed": "Could not save memory",
@@ -13378,7 +13399,8 @@
       "closeInspector": "Close the Web Inspector",
       "inspectorHint": "Web Inspector · Shift-click to open it in its own window",
       "inspectorTitle": "Inspector",
-      "inspectorUnavailable": "Load a page before opening the Web Inspector."
+      "inspectorUnavailable": "Load a page before opening the Web Inspector.",
+      "siteNotFound": "Could not find this site. Check the full address, such as google.com, then press Enter."
     },
     "console": {
       "closed": "This terminal was closed.",
@@ -13839,6 +13861,75 @@
       "no": "No",
       "yes": "Yes",
       "promptTitle": "Resume all conversations?"
+    },
+    "home": {
+      "meta": {
+        "repoOne": "1 repo",
+        "repos": "{{count}} repos"
+      },
+      "backToClassic": "Back to Classic",
+      "classicLook": "Classic look",
+      "hint": {
+        "open": "open",
+        "openFolder": "open folder",
+        "switch": "switch"
+      },
+      "version": "v{{version}}",
+      "noPreset": "No preset",
+      "resume": "Resume",
+      "openBoard": "Open board",
+      "noRepos": "No repos yet",
+      "presetsCatalog": "Presets",
+      "presetsSaved": "Saved boards",
+      "row": {
+        "working": "working",
+        "needsYou": "needs you",
+        "idle": "idle",
+        "idleFor": "idle · {{age}}",
+        "justNow": "active just now",
+        "active": "active",
+        "board": "Board",
+        "more": "More actions for {{name}}",
+        "openClassic": "Open in Classic",
+        "reveal": "Reveal in {{app}}",
+        "remove": "Remove from list"
+      },
+      "repos": "Repos",
+      "addRepo": "Add a repo",
+      "addRepoHint": "Pick a folder and it shows up here.",
+      "status": {
+        "working": "{{count}} working",
+        "allIdle": "All idle"
+      },
+      "theme": {
+        "light": "Switch to light theme",
+        "dark": "Switch to dark theme"
+      },
+      "greeting": {
+        "morning1": "Good morning",
+        "morning2": "Morning",
+        "morning3": "Fresh start",
+        "morning4": "Rise and build",
+        "afternoon1": "Good afternoon",
+        "afternoon2": "Afternoon",
+        "afternoon3": "Back at it",
+        "afternoon4": "Keep it rolling",
+        "evening1": "Good evening",
+        "evening2": "Evening",
+        "evening3": "One more push",
+        "evening4": "Golden hour",
+        "late1": "Still up",
+        "late2": "Night shift",
+        "late3": "Quiet hours",
+        "late4": "Midnight oil"
+      },
+      "tagline": {
+        "morning": "Pick a project and set your agents loose.",
+        "afternoon": "Your boards are where you left them.",
+        "evening": "Check in on your agents, or start one more.",
+        "lateNight": "The agents do not sleep. Neither, it seems, do you."
+      },
+      "openFailed": "That workspace could not be opened."
     }
   },
   "start": "Start",
@@ -13849,5 +13940,9 @@
   "no": "No path",
   "yesEdge": "yes",
   "noEdge": "no",
-  "idea": "Central idea"
+  "idea": "Central idea",
+  "common": {
+    "cancel": "Cancel",
+    "retry": "Retry"
+  }
 }

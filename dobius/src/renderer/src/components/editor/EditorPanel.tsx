@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { getConnectionId } from '@/lib/connection-context'
 import { detectLanguage } from '@/lib/language-detect'
@@ -18,6 +18,7 @@ import { useEditorPanelContentState } from './useEditorPanelContentState'
 import { useMarkdownPreviewShortcut } from './useMarkdownPreviewShortcut'
 import { useUntitledFileRename } from './useUntitledFileRename'
 import { extractFrontMatter } from './markdown-frontmatter'
+import { useEditorSurface } from './editor-surface-context'
 
 function EditorPanelInner({
   activeFileId: activeFileIdProp,
@@ -33,6 +34,7 @@ function EditorPanelInner({
   const activeFileId = activeFileIdProp ?? globalActiveFileId
   const activeViewStateId = activeViewStateIdProp ?? activeFileId
   const activeFile = openFiles.find((f) => f.id === activeFileId) ?? null
+  const surface = useEditorSurface()
   const markFileDirty = useAppStore((s) => s.markFileDirty)
   const pendingEditorReveal = useAppStore((s) => s.pendingEditorReveal)
   const gitStatusByWorktree = useAppStore((s) => s.gitStatusByWorktree)
@@ -99,6 +101,11 @@ function EditorPanelInner({
     gitStatusByWorktree,
     editorViewMode
   })
+  useEffect(() => {
+    if (activeFileId) {
+      surface?.onContentReady(activeFileId, fileContents[activeFileId])
+    }
+  }, [activeFileId, fileContents, surface])
   const isChangesMode =
     requestedChangesMode &&
     !!activeFile &&

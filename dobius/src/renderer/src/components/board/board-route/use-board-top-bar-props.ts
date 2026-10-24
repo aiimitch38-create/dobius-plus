@@ -62,6 +62,7 @@ export function useBoardTopBarProps(
           ...(repoId ? { initialRepoId: repoId } : {}),
           telemetrySource: 'sidebar'
         }),
+      onBackToHome: () => useAppStore.getState().setActiveView('home'),
       onExitToClassic: () => useAppStore.getState().setActiveView('terminal'),
       liveCount: live,
       needsYouCount: needsYou,

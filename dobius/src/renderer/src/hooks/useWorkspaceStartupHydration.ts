@@ -14,6 +14,7 @@ import {
   timeRendererStartupSyncStep
 } from '@/startup/startup-diagnostics'
 import { translate } from '@/i18n/i18n'
+import { resolveStartupActiveView } from '@/components/board/board-effective-view'
 import type { OnboardingState } from '../../../shared/types'
 
 type StartupHydrationActions = Pick<
@@ -88,6 +89,16 @@ export function useWorkspaceStartupHydration({
         // Load settings first so a persisted remote runtime does not boot against
         // the local filesystem and then hydrate stale local workspace state.
         await timeRendererStartupStep('fetch-settings', () => actions.fetchSettings())
+        // Why: honor Settings > Appearance > "App look" once per window launch.
+        // Doing it here (not in fetchSettings) keeps later settings refreshes
+        // from dragging a user who clicked "Open Board" back to Classic.
+        if (!cancelled) {
+          const { activeView, settings, setActiveView } = useAppStore.getState()
+          const startupView = resolveStartupActiveView(activeView, settings)
+          if (startupView !== activeView) {
+            setActiveView(startupView)
+          }
+        }
         // Why: these three reads are main-side store/file reads with no
         // dependency on anything fetched below, so start them now and await
         // them at their original positions — the round-trips overlap the

@@ -11,6 +11,8 @@ import { useAppStore } from '@/store'
 import { scrollTopCache, cursorPositionCache, setWithLRU } from '@/lib/scroll-cache'
 import '@/lib/monaco-setup'
 import { computeEditorFontSize } from '@/lib/editor-font-zoom'
+import { useEditorSurface } from './editor-surface-context'
+import { boardCodeTheme, useBoardCodeTheme } from './use-board-code-theme'
 import { registerFileSearchSelectedTextProvider } from '@/lib/file-search-selection'
 
 import { useContextualCopySetup } from './useContextualCopySetup'
@@ -146,6 +148,10 @@ export default function MonacoEditor({
     settings?.terminalFontSize ?? 13,
     editorFontZoomLevel
   )
+  const boardFontSize = computeEditorFontSize(
+    Math.max(settings?.terminalFontSize ?? 13, 15),
+    editorFontZoomLevel
+  )
   const estimatedAutoHeight = useMemo(() => {
     if (!autoHeight) {
       return null
@@ -189,6 +195,8 @@ export default function MonacoEditor({
   const isDark =
     settings?.theme === 'dark' ||
     (settings?.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const boardCode = useEditorSurface()?.kind === 'board-code'
+  const beforeMount = useBoardCodeTheme(editorContainerRef, boardCode, isDark)
 
   const updateMarkdownCompletionDocuments = useCallback((): void => {
     const modelKey = editorRef.current?.getModel()?.uri.toString() ?? null
@@ -822,9 +830,10 @@ export default function MonacoEditor({
       ) : null}
       <Editor
         height={renderedEditorHeight === null ? '100%' : `${renderedEditorHeight}px`}
-        language={language}
+        language={boardCode && /(^|[\\/])\.env(?:\.|$)/.test(filePath) ? 'ini' : language}
         value={content}
-        theme={isDark ? 'vs-dark' : 'vs'}
+        theme={boardCode ? boardCodeTheme : isDark ? 'vs-dark' : 'vs'}
+        beforeMount={beforeMount}
         onChange={handleChange}
         onMount={handleMount}
         options={{
@@ -834,8 +843,10 @@ export default function MonacoEditor({
           // setting into DiffViewer/DiffSectionItem would have no effect.
           minimap: { enabled: settings?.editorMinimapEnabled ?? false },
           scrollBeyondLastLine: false,
-          wordWrap: 'on',
-          fontSize: editorFontSize,
+          wordWrap: boardCode ? 'off' : 'on',
+          fontWeight: boardCode ? '500' : 'normal',
+          fontSize: boardCode ? boardFontSize : editorFontSize,
+          lineHeight: boardCode ? Math.ceil(boardFontSize * 1.13) : undefined,
           fontFamily: settings?.terminalFontFamily || 'monospace',
           lineNumbers: 'on',
           renderLineHighlight: 'line',
@@ -850,7 +861,7 @@ export default function MonacoEditor({
             : undefined,
           smoothScrolling: true,
           cursorSmoothCaretAnimation: 'off',
-          padding: { top: 0 },
+          padding: { top: boardCode ? 10 : 0, bottom: boardCode ? 10 : 0 },
           find: {
             addExtraSpaceOnTop: false,
             autoFindInSelection: 'never',

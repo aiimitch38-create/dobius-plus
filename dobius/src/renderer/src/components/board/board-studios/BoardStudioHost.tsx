@@ -126,7 +126,6 @@ function StudioBody({
       // Why: the full Kanban page owns its task source, unlike the Classic
       // WorkspaceKanbanDrawer, which needs sidebar-only drawer state.
       return <KanbanPage />
-
   }
 }
 
@@ -199,45 +198,50 @@ export function BoardStudioHost({
         }}
         className={cn(
           BOARD_FLOATING_PANEL_CLASS,
-          'flex h-[min(760px,86vh)] w-[min(1100px,92vw)] max-w-none flex-col gap-0 overflow-hidden rounded-[var(--board-radius-panel)] p-0 backdrop-blur-none sm:max-w-none dark:border-[var(--board-panel-border)] dark:bg-[var(--board-panel)] dark:shadow-(--board-shadow)'
+          'flex h-[min(760px,86vh)] w-[min(1100px,92vw)] max-w-none flex-col gap-0 overflow-hidden rounded-[var(--board-radius-panel)] p-0 backdrop-blur-none sm:max-w-none dark:border-[var(--board-panel-border)] dark:bg-[var(--board-panel)] dark:shadow-(--board-shadow)',
+          studio === 'code' && 'h-[calc(100vh-20px)] w-[calc(100vw-40px)] rounded-[24px]'
         )}
       >
         <StudioEscapeGuard onClose={onClose} />
         {/* Reference studio chrome (sym-presets-studio.png): 34px tile, 19px title, 13px subtitle. */}
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--board-panel-border)] py-4 pr-4 pl-5">
-          <div className="flex min-w-0 items-center gap-3.5">
-            <span
-              aria-hidden
-              className="flex size-[34px] shrink-0 items-center justify-center rounded-[10px] bg-[var(--board-accent-tint)] text-[var(--board-accent)]"
-            >
-              <StudioIcon className="size-[18px]" />
-            </span>
-            <div className="min-w-0">
-              <DialogTitle className="text-[19px] leading-tight font-bold tracking-[-0.01em] text-[var(--board-text)]">
-                {boardStudioTitle(studio)}
-              </DialogTitle>
-              {subtitle ? (
-                <p className="mt-0.5 truncate text-[13px] text-[var(--board-text-muted)]">
-                  {subtitle}
-                </p>
-              ) : null}
-            </div>
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={closeLabel}
-                className={cn(BOARD_ICON_BUTTON_CLASS, 'size-8 bg-[var(--board-panel-2)]')}
-                onClick={onClose}
+        {studio === 'code' ? (
+          <DialogTitle className="sr-only">{boardStudioTitle(studio)}</DialogTitle>
+        ) : (
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--board-panel-border)] py-4 pr-4 pl-5">
+            <div className="flex min-w-0 items-center gap-3.5">
+              <span
+                aria-hidden
+                className="flex size-[34px] shrink-0 items-center justify-center rounded-[10px] bg-[var(--board-accent-tint)] text-[var(--board-accent)]"
               >
-                <X className="size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{closeLabel}</TooltipContent>
-          </Tooltip>
-        </header>
+                <StudioIcon className="size-[18px]" />
+              </span>
+              <div className="min-w-0">
+                <DialogTitle className="text-[19px] leading-tight font-bold tracking-[-0.01em] text-[var(--board-text)]">
+                  {boardStudioTitle(studio)}
+                </DialogTitle>
+                {subtitle ? (
+                  <p className="mt-0.5 truncate text-[13px] text-[var(--board-text-muted)]">
+                    {subtitle}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={closeLabel}
+                  className={cn(BOARD_ICON_BUTTON_CLASS, 'size-8 bg-[var(--board-panel-2)]')}
+                  onClick={onClose}
+                >
+                  <X className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{closeLabel}</TooltipContent>
+            </Tooltip>
+          </header>
+        )}
         <div
           ref={bodyRef}
           tabIndex={-1}

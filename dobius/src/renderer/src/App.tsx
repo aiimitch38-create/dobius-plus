@@ -10,7 +10,7 @@ import { resolveLeftTitlebarChromeLayout } from '@/lib/titlebar-left-chrome'
 import { shouldShowWorktreeCreationSurface } from '@/lib/worktree-creation-surface'
 import { Toaster } from '@/components/ui/sonner'
 import { BoardDispatchGate } from './components/kanban/BoardDispatchGate'
-import { BoardRoute } from './app-lazy-pages'
+import { BoardHome, BoardRoute } from './app-lazy-pages'
 import { resolveEffectiveActiveView } from './components/board/board-effective-view'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useIpcEvents } from './hooks/useIpcEvents'
@@ -500,13 +500,18 @@ function App(): React.JSX.Element {
                 <BoardRoute />
               </Suspense>
             ) : null}
+            {activeView === 'home' ? (
+              <Suspense fallback={null}>
+                <BoardHome />
+              </Suspense>
+            ) : null}
           </LinkRoutingPreferenceDialogProvider>
         </ConfirmationDialogProvider>
       </TooltipProvider>
       <BoardDispatchGate enabled={settings?.vertexAutoModeEnabled === true} />
       <Toaster
         closeButton
-        position={activeView === 'board' ? 'top-center' : undefined}
+        position={activeView === 'board' || activeView === 'home' ? 'top-center' : undefined}
         toastOptions={{ className: 'font-sans text-sm' }}
       />
       <PinnedTabCloseDialog />

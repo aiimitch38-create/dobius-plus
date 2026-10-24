@@ -5,6 +5,8 @@ import { DOBIUS_BROWSER_PARTITION } from '../../../../../shared/constants'
 import { normalizeBrowserNavigationUrl } from '../../../../../shared/browser-url'
 import type { CardBodyProps } from './card-body-props'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
+import { webTileAddressUrl } from '../board-web/web-tile-navigation'
 import { isLoopbackUrl } from '../board-web/dev-server-url'
 import { deviceFitScale, findWebTileDevice, mobileUserAgent } from '../board-web/web-tile-devices'
 import { WebTileExtras } from '../board-web/WebTileExtras'
@@ -17,13 +19,6 @@ const DEV_SERVER_MAX_RETRIES = 48
 
 const NAV_BUTTON =
   'flex size-7 items-center justify-center rounded-full text-[var(--board-text-muted)] hover:bg-[var(--board-panel-2)] disabled:opacity-40'
-
-function toNavigableUrl(input: string): string | null {
-  const trimmed = input.trim()
-  return (
-    normalizeBrowserNavigationUrl(trimmed) ?? normalizeBrowserNavigationUrl(`https://${trimmed}`)
-  )
-}
 
 // ponytail: a standalone guest on the shared browser partition. BrowserPane
 // needs a tab-strip browser tab, which would leak board tiles into Classic tabs.
@@ -102,10 +97,15 @@ export function WebTileCard({
       setWaiting(false)
       if (detail.isMainFrame !== false) {
         setError(
-          detail.errorDescription ||
-            translate('board.web.loadFailed', 'Could not load {{url}}.', {
-              url: detail.validatedURL || 'page'
-            })
+          code === -105
+            ? translate(
+                'board.web.siteNotFound',
+                'Could not find this site. Check the full address, such as google.com, then press Enter.'
+              )
+            : detail.errorDescription ||
+                translate('board.web.loadFailed', 'Could not load {{url}}.', {
+                  url: detail.validatedURL || 'page'
+                })
         )
       }
     }
@@ -124,7 +124,7 @@ export function WebTileCard({
 
   useEffect(() => {
     const webview = webviewRef.current
-    const target = card.url ? toNavigableUrl(card.url) : null
+    const target = card.url ? normalizeBrowserNavigationUrl(card.url) : null
     if (webview && target && webview.getAttribute('src') !== target) {
       webview.setAttribute('src', target)
     }
@@ -201,7 +201,10 @@ export function WebTileCard({
   }
 
   const navigate = (): void => {
-    const target = toNavigableUrl(draft)
+    const state = useAppStore.getState()
+    const target = webTileAddressUrl(draft, state.browserDefaultSearchEngine, {
+      kagiSessionLink: state.browserKagiSessionLink
+    })
     if (target) {
       onChange({ url: target })
     } else {

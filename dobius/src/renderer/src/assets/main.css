@@ -3699,6 +3699,14 @@ html.onboarding-tour-start-transition::view-transition-new(root) {
   --board-dot: oklch(0.8 0 0);
   --board-panel: oklch(1 0 0);
   --board-panel-2: oklch(0.965 0 0);
+  --board-code-surface: oklch(0.98 0.003 85);
+  --board-code-editor-bg: #171413;
+  --board-code-editor-text: #d5d0c5;
+  --board-code-editor-gutter: #8a857b;
+  --board-code-editor-border: #38352f;
+  --board-code-editor-key: #e2c685;
+  --board-code-editor-comment: #dbab74;
+  --board-code-editor-number: #cba2e8;
   --board-status-pill: oklch(0.965 0 0);
   --board-composer: var(--board-panel);
   --board-panel-border: oklch(0.88 0 0);
@@ -3733,7 +3741,6 @@ html.onboarding-tour-start-transition::view-transition-new(root) {
   font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
   color: var(--board-text);
 }
-
 
 /* Embedded Classic pages inside Board studios (Skills, Loops, Settings...) paint
    with the app palette; remap it to the board panel so the studio reads as one

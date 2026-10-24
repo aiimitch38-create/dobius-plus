@@ -55,12 +55,15 @@ export function BoardCommandBar({
   busy = false
 }: BoardCommandBarProps): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(true)
-  // A new message (reply, error, relay result) opens the thread so it is seen.
   const messageCount = messages.length
+  const previousMessageCount = useRef(messageCount)
+  // Why: restored history is already read; only messages arriving after mount
+  // should open the thread when returning to the Board.
   useEffect(() => {
-    if (messageCount > 0) {
+    if (messageCount > previousMessageCount.current) {
       setCollapsed(false)
     }
+    previousMessageCount.current = messageCount
   }, [messageCount])
   const isMac = navigator.userAgent.includes('Mac')
   const history = useMemo(() => boardCommandHistory(messages), [messages])

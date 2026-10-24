@@ -2677,6 +2677,9 @@ export type GlobalSettings = {
   /** When the app reopens, Board consoles resume their last chat automatically
    *  ('auto', the default when unset) or wait for a "Resume all?" answer ('ask'). */
   boardResumeMode?: 'auto' | 'ask'
+  /** What Dobius opens to: the Board ('board', the default when unset) or the
+   *  Classic terminal view ('classic'). Both stay one click apart either way. */
+  appLook?: 'board' | 'classic'
   /** Controls how Ctrl+Tab chooses the next visible tab. Optional for
    *  profiles saved before this setting existed; readers default to MRU. */
   ctrlTabOrderMode?: CtrlTabOrderMode

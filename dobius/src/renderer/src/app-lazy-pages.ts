@@ -4,8 +4,8 @@
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 
 export const Landing = lazy(() => import('./components/Landing'))
-export const CommandCenterPage = lazy(() => import('./components/command-center/CommandCenterPage'))
 export const BoardRoute = lazy(() => import('./components/board/BoardRoute'))
+export const BoardHome = lazy(() => import('./components/board/board-home/BoardHome'))
 export const HomePage = lazy(() => import('./components/home/HomePage'))
 export const WorktreeCreationPanel = lazy(
   () => import('./components/worktree-creation/WorktreeCreationPanel')

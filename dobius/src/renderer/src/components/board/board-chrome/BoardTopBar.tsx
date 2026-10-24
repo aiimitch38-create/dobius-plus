@@ -36,6 +36,9 @@ export type BoardTopBarProps = {
   onSelectWorkspace: (id: string) => void
   onRenameWorkspace: (id: string, name: string) => void
   onAddWorkspace: () => void
+  /** "Back to home": the Board-look Home screen. */
+  onBackToHome: () => void
+  /** "Close": straight to Classic. */
   onExitToClassic: () => void
   liveCount: number
   needsYouCount: number
@@ -62,6 +65,7 @@ export function BoardTopBar({
   onSelectWorkspace,
   onRenameWorkspace,
   onAddWorkspace,
+  onBackToHome,
   onExitToClassic,
   liveCount,
   needsYouCount,
@@ -89,7 +93,7 @@ export function BoardTopBar({
           isMac ? 'left-[86px]' : 'left-4'
         )}
       >
-        <Button variant="ghost" className={pill} onClick={onExitToClassic}>
+        <Button variant="ghost" className={pill} onClick={onBackToHome}>
           <ArrowLeft />
           {translate('board.topBar.backToHome', 'Back to home')}
         </Button>

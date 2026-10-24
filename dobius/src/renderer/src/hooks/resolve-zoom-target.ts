@@ -5,6 +5,7 @@
 export function resolveZoomTarget(args: {
   activeView:
     | 'board'
+    | 'home'
     | 'terminal'
     | 'settings'
     | 'tasks'
@@ -15,7 +16,6 @@ export function resolveZoomTarget(args: {
     | 'agents'
     | 'knowledge'
     | 'dashboard'
-    | 'manager'
     | 'dobius'
     | 'buzz'
     | 'mobile'

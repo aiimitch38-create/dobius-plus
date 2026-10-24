@@ -1,5 +1,5 @@
 import React from 'react'
-import { Bot, CalendarClock, Home, LayoutDashboard, Search, Smartphone, Sparkles } from 'lucide-react'
+import { Bot, CalendarClock, Home, Search, Smartphone, Sparkles } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import type { GlobalSettings } from '../../../../shared/types'
@@ -79,20 +79,6 @@ const SidebarNav = React.memo(function SidebarNav() {
       >
         <Home className="size-4 shrink-0" />
         {translate('auto.components.sidebar.SidebarNav.dobiusHome', 'Dobius')}
-      </button>
-      <button
-        type="button"
-        onClick={() => setActiveView('manager')}
-        aria-current={activeView === 'manager' ? 'page' : undefined}
-        className={cn(
-          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium tracking-tight transition-colors',
-          activeView === 'manager'
-            ? 'bg-worktree-sidebar-accent text-worktree-sidebar-accent-foreground'
-            : 'text-worktree-sidebar-foreground/60 hover:bg-worktree-sidebar-foreground/8'
-        )}
-      >
-        <LayoutDashboard className="size-4 shrink-0" />
-        {translate('commandCenter.navigation', 'Command Center')}
       </button>
       {showAutomationsButton ? (
         <ContextMenu>

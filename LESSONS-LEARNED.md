@@ -413,3 +413,8 @@ that is one plain command and passes every time.
 - Failed because: the newest CocoaPods dependency chain no longer supports Ruby 2.6, and rubygems 3.0 doesn't resolve by Ruby version.
 - Works instead: pinned user install — ffi 1.16.3, zeitwerk 2.6.18, i18n 1.14.7, concurrent-ruby 1.3.4, activesupport 6.1.7.10, cocoapods 1.15.2; uninstall concurrent-ruby 1.3.8; run Expo with `PATH="$HOME/.gem/ruby/2.6.0/bin:$PATH" LANG=en_US.UTF-8`. Captured in skill `learned-cocoapods-system-ruby`.
 - Side note: `pnpm install` in dobius/mobile reorders pnpm-lock.yaml with no real change — revert it with `git checkout -- dobius/mobile/pnpm-lock.yaml`.
+
+## 2026-10-24 — Isolated Dobius test copy left orphaned / unstable
+- Tried: subagents launching a separate Electron copy of the worktree build for QA/UX screenshots.
+- Failed because: the session ended mid-run and the copy (pid 97704 + 9 shells) kept running unattended; later launches exited silently while another agent ran vitest in the same worktree; the copy still read the real ~/.dobius communications identity and collided with ports 8421/3300.
+- Works instead: follow skill `learned-dobius-isolated-test-copy` — short /tmp DOBIUS_E2E_USER_DATA_DIR, record every PID and kill only those (trap on exit), no tests in the same worktree during the run, and check for orphaned worktree Electron processes after any interrupted test agent.
