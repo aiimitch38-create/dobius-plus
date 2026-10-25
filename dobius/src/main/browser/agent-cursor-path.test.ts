@@ -8,17 +8,17 @@ import {
 } from './agent-cursor-path'
 
 describe('cursor path', () => {
-  it('clamps travel duration to [150, 450] ms with 120 + 0.6*d in between', () => {
+  it('clamps travel duration to [100, 300] ms with 80 + 0.4*d in between', () => {
     expect(cursorTravelDurationMs(0)).toBe(CURSOR_TRAVEL_MIN_MS)
     expect(cursorTravelDurationMs(10)).toBe(CURSOR_TRAVEL_MIN_MS)
-    expect(cursorTravelDurationMs(300)).toBe(300)
+    expect(cursorTravelDurationMs(300)).toBe(200)
     expect(cursorTravelDurationMs(5000)).toBe(CURSOR_TRAVEL_MAX_MS)
   })
 
   it('samples ~16 ms steps, ends exactly on the target, and stays monotonic in time', () => {
     const path = cursorPath({ x: 0, y: 0 }, { x: 300, y: 400 }, { seed: 7 })
-    expect(path.at(-1)).toEqual({ x: 300, y: 400, at: 420 })
-    expect(path.length).toBe(Math.ceil(420 / CURSOR_STEP_MS))
+    expect(path.at(-1)).toEqual({ x: 300, y: 400, at: 280 })
+    expect(path.length).toBe(Math.ceil(280 / CURSOR_STEP_MS))
     for (let i = 1; i < path.length; i++) {
       expect(path[i].at).toBeGreaterThan(path[i - 1].at)
     }

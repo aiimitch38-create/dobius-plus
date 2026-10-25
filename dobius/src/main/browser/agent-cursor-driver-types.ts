@@ -66,8 +66,8 @@ export type AgentCursorDriverOptions = {
   log?: (message: string) => void
 }
 
-export const AGENT_ACTION_PACE_MS = 350
-export const AGENT_HOVER_DWELL_MS = 250
+export const AGENT_ACTION_PACE_MS = 200
+export const AGENT_HOVER_DWELL_MS = 150
 export const AGENT_GATED_DWELL_MS = 600
 export const AGENT_MOVE_EMIT_INTERVAL_MS = 33
 export const AGENT_HOVER_FALLBACK_BOX_PX = 24

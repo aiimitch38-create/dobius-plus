@@ -5,12 +5,12 @@
 export type CursorPoint = { x: number; y: number }
 export type CursorPathStep = CursorPoint & { /** ms offset from the start of travel. */ at: number }
 
-export const CURSOR_TRAVEL_MIN_MS = 150
-export const CURSOR_TRAVEL_MAX_MS = 450
+export const CURSOR_TRAVEL_MIN_MS = 100
+export const CURSOR_TRAVEL_MAX_MS = 300
 export const CURSOR_STEP_MS = 16
 
 export function cursorTravelDurationMs(distancePx: number): number {
-  const raw = 120 + 0.6 * distancePx
+  const raw = 80 + 0.4 * distancePx
   return Math.min(CURSOR_TRAVEL_MAX_MS, Math.max(CURSOR_TRAVEL_MIN_MS, raw))
 }
 
