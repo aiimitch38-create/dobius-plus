@@ -14,3 +14,16 @@ export const AgentsPage = lazy(() => import('@/components/agents/AgentsPage'))
 export const BuzzPage = lazy(() => import('@/components/communications/CommunicationsPage'))
 // Same Vertex Kanban the Classic Tasks page lazily mounts (TaskPage.tsx VertexBoard).
 export const KanbanPage = lazy(() => import('@/components/kanban/KanbanBoard'))
+// Right-sidebar panels, hosted as studios (same chunks the Classic sidebar lazy-loads).
+export const SourceControl = lazy(() => import('@/components/right-sidebar/SourceControl'))
+export const ChecksPanel = lazy(() => import('@/components/right-sidebar/ChecksPanel'))
+export const FolderWorkspacePrChecksPanel = lazy(
+  () => import('@/components/right-sidebar/FolderWorkspacePrChecksPanel')
+)
+export const PortsPanel = lazy(() => import('@/components/right-sidebar/PortsPanel'))
+export const PromptsPanel = lazy(() => import('@/components/right-sidebar/PromptsPanel'))
+export const AiVaultPanel = lazy(() => import('@/components/right-sidebar/AiVaultPanel'))
+export const AsanaTasksPanel = lazy(() => import('@/components/right-sidebar/TasksPanel'))
+// Classic full pages that no longer have a shell to render in.
+export const TaskPage = lazy(() => import('@/components/TaskPage'))
+export const MobilePage = lazy(() => import('@/components/mobile/MobilePage'))

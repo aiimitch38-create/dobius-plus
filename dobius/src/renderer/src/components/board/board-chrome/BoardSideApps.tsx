@@ -1,12 +1,40 @@
 import React from 'react'
-import { Bot, CalendarClock, Hexagon, Kanban, Settings, Sparkles } from 'lucide-react'
+import {
+  Bot,
+  CalendarClock,
+  GitBranch,
+  Hexagon,
+  History,
+  Kanban,
+  LayoutPanelLeft,
+  ListChecks,
+  ListTodo,
+  MessageSquareText,
+  Plug,
+  Settings,
+  Smartphone,
+  Sparkles,
+  SquareKanban
+} from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { useActivityUnreadCount } from '@/components/activity/useActivityUnreadCount'
 import { shouldShowAgentsButton } from '@/components/sidebar/SidebarNav'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { BoardRailButton } from './BoardRailButton'
-import { BOARD_FLOATING_PANEL_CLASS } from './board-surface-classes'
+import {
+  BOARD_FLOATING_PANEL_CLASS,
+  BOARD_MENU_CONTENT_CLASS,
+  BOARD_MENU_ROW_CLASS,
+  BOARD_MENU_SEPARATOR_CLASS
+} from './board-surface-classes'
 
 export type BoardSideAppId =
   | 'agents'
@@ -15,6 +43,29 @@ export type BoardSideAppId =
   | 'kanban'
   | 'communications'
   | 'settings'
+  // "Panels" menu: the Classic right-sidebar panels and full pages, so nothing
+  // is lost now that the Classic shell is retired.
+  | 'source-control'
+  | 'checks'
+  | 'ports'
+  | 'prompts'
+  | 'vault'
+  | 'asana-tasks'
+  | 'tasks-page'
+  | 'scheduled'
+  | 'mobile'
+
+const PANEL_APPS: readonly BoardSideAppId[] = [
+  'source-control',
+  'checks',
+  'ports',
+  'prompts',
+  'vault',
+  'asana-tasks',
+  'tasks-page',
+  'scheduled',
+  'mobile'
+]
 
 export type BoardSideAppsProps = {
   onOpen: (app: BoardSideAppId) => void
@@ -82,6 +133,68 @@ export function BoardSideApps({
     </div>
   )
 
+  const panelEntries: SideAppEntry[] = [
+    {
+      app: 'source-control',
+      label: translate('auto.components.right.sidebar.index.0314901467', 'Source Control'),
+      icon: <GitBranch />
+    },
+    {
+      app: 'checks',
+      label: translate('auto.components.right.sidebar.index.83a10e3c44', 'Checks'),
+      icon: <ListChecks />
+    },
+    {
+      app: 'ports',
+      label: translate('auto.components.right.sidebar.index.441733b630', 'Ports'),
+      icon: <Plug />
+    },
+    {
+      app: 'prompts',
+      label: translate('auto.components.right.sidebar.index.dobiusPrompts', 'Prompts'),
+      icon: <MessageSquareText />
+    },
+    {
+      app: 'vault',
+      label: translate('auto.components.right.sidebar.index.aiVaultSessionHistory', 'Sessions'),
+      icon: <History />
+    },
+    {
+      app: 'asana-tasks',
+      label: translate('board.studio.title.asanaTasks', 'Asana Tasks'),
+      icon: <ListTodo />
+    }
+  ]
+  const pageEntries: SideAppEntry[] = [
+    {
+      app: 'tasks-page',
+      label: translate('board.studio.title.tasksPage', 'Tasks'),
+      icon: <SquareKanban />
+    },
+    {
+      app: 'scheduled',
+      label: translate('board.sideApps.scheduledAutomations', 'Scheduled automations'),
+      icon: <CalendarClock />
+    },
+    {
+      app: 'mobile',
+      label: translate('board.studio.title.mobile', 'Mobile'),
+      icon: <Smartphone />
+    }
+  ]
+  const renderMenuItem = (entry: SideAppEntry): React.JSX.Element => (
+    <DropdownMenuItem
+      key={entry.app}
+      className={BOARD_MENU_ROW_CLASS}
+      data-active={activeApp === entry.app || undefined}
+      onSelect={() => onOpen(entry.app)}
+    >
+      {entry.icon}
+      {entry.label}
+    </DropdownMenuItem>
+  )
+  const panelsLabel = translate('board.sideApps.panels', 'Panels')
+
   return (
     <div
       role="toolbar"
@@ -109,6 +222,30 @@ export function BoardSideApps({
         label: translate('board.studio.title.settings', 'Settings'),
         icon: <Settings className="size-4" />
       })}
+      <SideAppDivider />
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <BoardRailButton
+            label={panelsLabel}
+            tooltipSide="top"
+            active={activeApp !== null && PANEL_APPS.includes(activeApp)}
+            className="size-8"
+          >
+            <LayoutPanelLeft className="size-4" />
+          </BoardRailButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          data-surface="board"
+          side="top"
+          align="end"
+          sideOffset={8}
+          className={cn(BOARD_MENU_CONTENT_CLASS, 'min-w-[220px]')}
+        >
+          {panelEntries.map(renderMenuItem)}
+          <DropdownMenuSeparator className={BOARD_MENU_SEPARATOR_CLASS} />
+          {pageEntries.map(renderMenuItem)}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }

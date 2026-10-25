@@ -1,21 +1,38 @@
 import React, { useState } from 'react'
-import { ArrowLeft, Briefcase, ChevronDown, Folder, Info, Plus, Settings, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  Briefcase,
+  ChevronDown,
+  Folder,
+  Info,
+  Plus,
+  Settings,
+  UserRound
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
+import { HelpMenuItems } from '@/components/sidebar/HelpMenuItems'
+import { SidebarFeedbackDialog } from '@/components/sidebar/SidebarFeedbackDialog'
+import WorktreeContextMenu from '@/components/sidebar/WorktreeContextMenu'
 import { translate } from '@/i18n/i18n'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { cn } from '@/lib/utils'
+import { useWorktreeMap } from '@/store/selectors'
 import { BoardRailButton } from './BoardRailButton'
 import { BoardUsagePanel } from './BoardUsagePanel'
 import { usageLevel, usageLevelColor } from './board-usage-levels'
 import { BoardWorkspaceTabButton, type BoardWorkspaceTab } from './BoardWorkspaceTabButton'
 import {
   BOARD_FLOATING_PANEL_CLASS,
+  BOARD_MENU_CONTENT_CLASS,
+  BOARD_MENU_ROW_CLASS,
+  BOARD_MENU_SEPARATOR_CLASS,
   BOARD_MONO_CLASS,
   BOARD_PILL_BUTTON_CLASS
 } from './board-surface-classes'
@@ -39,8 +56,6 @@ export type BoardTopBarProps = {
   onAddWorkspace: () => void
   /** "Back to home": the Board-look Home screen. */
   onBackToHome: () => void
-  /** "Close": straight to Classic. */
-  onExitToClassic: () => void
   liveCount: number
   needsYouCount: number
   /** Most-used provider rate-limit window; hidden when no provider reports usage. */
@@ -67,7 +82,6 @@ export function BoardTopBar({
   onRenameWorkspace,
   onAddWorkspace,
   onBackToHome,
-  onExitToClassic,
   liveCount,
   needsYouCount,
   usage,
@@ -78,6 +92,11 @@ export function BoardTopBar({
   onJumpToAttention
 }: BoardTopBarProps): React.JSX.Element {
   const [usageOpen, setUsageOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [showAdminOptions, setShowAdminOptions] = useState(false)
+  // Why: the workspace tabs get the sidebar's right-click menu (pin, mark read,
+  // sleep, delete…), which needs the full Worktree record, not the tab model.
+  const worktreeMap = useWorktreeMap()
   // Why: the Board covers the whole window, so on mac the cluster must clear the
   // traffic lights (the reference starts it at x=86).
   const isMac = navigator.userAgent.includes('Mac')
@@ -129,15 +148,27 @@ export function BoardTopBar({
             aria-label={translate('board.topBar.workspaces', 'Workspaces')}
             className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]"
           >
-            {workspaces.map((workspace) => (
-              <BoardWorkspaceTabButton
-                key={workspace.id}
-                workspace={workspace}
-                active={workspace.id === activeWorkspaceId}
-                onSelect={onSelectWorkspace}
-                onRename={onRenameWorkspace}
-              />
-            ))}
+            {workspaces.map((workspace) => {
+              const tab = (
+                <BoardWorkspaceTabButton
+                  key={workspace.id}
+                  workspace={workspace}
+                  active={workspace.id === activeWorkspaceId}
+                  onSelect={onSelectWorkspace}
+                  onRename={onRenameWorkspace}
+                />
+              )
+              const worktree = worktreeMap.get(workspace.id)
+              return worktree ? (
+                // Why: the menu's wrapper div is the flex item; without shrink-0 the
+                // pills squash instead of the strip scrolling.
+                <div key={workspace.id} className="shrink-0">
+                  <WorktreeContextMenu worktree={worktree}>{tab}</WorktreeContextMenu>
+                </div>
+              ) : (
+                tab
+              )
+            })}
           </div>
           <BoardRailButton
             label={translate('board.topBar.addWorkspace', 'New workspace')}
@@ -148,10 +179,6 @@ export function BoardTopBar({
             <Plus />
           </BoardRailButton>
         </div>
-        <Button variant="ghost" className={pill} onClick={onExitToClassic}>
-          <X />
-          {translate('board.topBar.close', 'Close')}
-        </Button>
       </div>
 
       <div className="pointer-events-auto absolute top-[17px] right-[18px] flex items-center gap-[9px]">
@@ -241,18 +268,49 @@ export function BoardTopBar({
         >
           <Settings />
         </BoardRailButton>
-        <BoardRailButton
-          label={translate('board.topBar.accounts', 'Accounts')}
-          tooltipSide="bottom"
-          className={cn(
-            ROUND_CLASS,
-            'bg-[var(--board-accent)] text-[14px] font-semibold text-[var(--board-accent-fg)] hover:bg-[var(--board-accent)] hover:text-[var(--board-accent-fg)]'
-          )}
-          onClick={onOpenAccounts}
+        <DropdownMenu
+          modal={false}
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowAdminOptions(false)
+            }
+          }}
         >
-          {avatarLabel.slice(0, 1).toUpperCase()}
-        </BoardRailButton>
+          <DropdownMenuTrigger asChild>
+            <BoardRailButton
+              label={translate('board.topBar.accountMenu', 'Account and help')}
+              tooltipSide="bottom"
+              className={cn(
+                ROUND_CLASS,
+                'bg-[var(--board-accent)] text-[14px] font-semibold text-[var(--board-accent-fg)] hover:bg-[var(--board-accent)] hover:text-[var(--board-accent-fg)]'
+              )}
+              // Why: same Option/Alt affordance as the sidebar Help menu for the admin rows.
+              onPointerDown={(event) => setShowAdminOptions(event.altKey)}
+            >
+              {avatarLabel.slice(0, 1).toUpperCase()}
+            </BoardRailButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            data-surface="board"
+            align="end"
+            sideOffset={8}
+            className={cn(BOARD_MENU_CONTENT_CLASS, 'min-w-[220px]')}
+          >
+            <DropdownMenuItem className={BOARD_MENU_ROW_CLASS} onSelect={onOpenAccounts}>
+              <UserRound />
+              {translate('board.topBar.accounts', 'Accounts')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className={BOARD_MENU_SEPARATOR_CLASS} />
+            <HelpMenuItems
+              showAdminOptions={showAdminOptions}
+              onSendFeedback={() => setFeedbackOpen(true)}
+              itemClassName={BOARD_MENU_ROW_CLASS}
+              separatorClassName={BOARD_MENU_SEPARATOR_CLASS}
+            />
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+      <SidebarFeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </>
   )
 }

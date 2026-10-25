@@ -8,10 +8,12 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { useWorktreeActivityStatus } from '@/components/sidebar/use-worktree-activity-status'
+import WorktreeContextMenu from '@/components/sidebar/WorktreeContextMenu'
 import { translate } from '@/i18n/i18n'
 import { getLocalFileManagerLabel } from '@/lib/local-file-manager-label'
 import { cn } from '@/lib/utils'
 import type { WorktreeStatus } from '@/lib/worktree-status'
+import { useWorktreeById } from '@/store/selectors'
 import {
   BOARD_FLOATING_PANEL_CLASS,
   BOARD_MENU_CONTENT_CLASS,
@@ -24,7 +26,6 @@ import { formatIdleAge, type HomeRepoRow } from './home-repo-rows'
 export type HomeRepoRowActions = {
   onSelect: (repoId: string) => void
   onOpen: (row: HomeRepoRow) => void
-  onOpenClassic: (row: HomeRepoRow) => void
   onReveal: (row: HomeRepoRow) => void
   onRemove: (row: HomeRepoRow) => void
 }
@@ -67,8 +68,11 @@ function HomeRepoRowView({
   // Same status-dot semantics as the sidebar workspace cards.
   const status = useWorktreeActivityStatus(row.worktreeId ?? '')
   const fileManager = getLocalFileManagerLabel()
+  // Why: right-click gets the sidebar's workspace menu (pin, mark read, copy
+  // path, sleep, delete, move to group) for the row's landing workspace.
+  const landingWorktree = useWorktreeById(row.worktreeId)
 
-  return (
+  const rowView = (
     <div
       id={`home-repo-${row.repoId}`}
       role="option"
@@ -149,13 +153,6 @@ function HomeRepoRowView({
           >
             <DropdownMenuItem
               className={BOARD_MENU_ROW_CLASS}
-              disabled={!row.worktreeId}
-              onSelect={() => actions.onOpenClassic(row)}
-            >
-              {translate('board.home.row.openClassic', 'Open in Classic')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className={BOARD_MENU_ROW_CLASS}
               onSelect={() => actions.onReveal(row)}
             >
               {translate('board.home.row.reveal', 'Reveal in {{app}}', { app: fileManager })}
@@ -171,6 +168,11 @@ function HomeRepoRowView({
         </DropdownMenu>
       </div>
     </div>
+  )
+  return landingWorktree ? (
+    <WorktreeContextMenu worktree={landingWorktree}>{rowView}</WorktreeContextMenu>
+  ) : (
+    rowView
   )
 }
 

@@ -1,8 +1,8 @@
-import { Check, Paperclip } from 'lucide-react'
+import { Check, Image as ImageIcon, Paperclip } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { AvatarStack } from './AvatarStack'
-import { PriorityChip, TypeChip } from './kanban-chips'
+import { ClaimedChip, BlockedChip, PriorityChip, TypeChip } from './kanban-chips'
 import type { Task } from './kanban-types'
 
 export function KanbanCard({
@@ -47,6 +47,10 @@ export function KanbanCard({
             <div className="mt-2 flex flex-wrap gap-1.5">
               <TypeChip type={task.type} />
               <PriorityChip priority={task.priority} />
+              {task.lease ? <ClaimedChip lease={task.lease} /> : null}
+              {task.status === 'blocked' && task.blockedReason ? (
+                <BlockedChip reason={task.blockedReason} />
+              ) : null}
             </div>
             {task.coverImageUrl ? (
               <img
@@ -97,6 +101,15 @@ export function KanbanCard({
                 <Paperclip className="size-3.5" />
                 {task.files.length}
               </span>
+              {task.attachments?.length ? (
+                <span
+                  className="flex items-center gap-1"
+                  title={`${task.attachments.length} screenshot(s)`}
+                >
+                  <ImageIcon className="size-3.5" />
+                  {task.attachments.length}
+                </span>
+              ) : null}
               <div className="ml-auto">
                 <AvatarStack people={task.collaborators} />
               </div>

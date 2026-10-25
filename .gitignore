@@ -25,7 +25,11 @@ playwright-report/
 test-results/
 coverage/
 dobius/output/
-.dobius/
+# Why: per-machine Dobius state stays local, but a project's lead instructions are shared in git (Carson, 2026-10-24).
+.dobius/*
+!.dobius/ORCHESTRATOR.md
+!.dobius/lead.json
+__pycache__/
 
 # Parallel git worktrees / sibling clones that live inside the repo dir
 dobius-plus-fix-main/

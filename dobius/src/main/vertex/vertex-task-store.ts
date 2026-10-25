@@ -22,12 +22,14 @@ import {
   type VertexTask,
   type VertexTaskInput,
   type VertexTaskPatch,
-  type VertexTaskSource,
   type VertexTaskStatus,
+  type VertexWorkBoard,
 } from '../../shared/vertex-task-types'
-import { listAgents } from '../agents/agents-store'
 import { SafeJsonFile } from '../storage/safe-json-file'
 import { readReleasingOrphanedClaims, stampClaimOwner } from './vertex-dispatch-recovery'
+import { normalizeAgentPerson } from './vertex-task-normalize'
+import { removeVertexTaskAttachmentDir } from './vertex-attachment-paths'
+import { createWorkBoard } from './vertex-work-board'
 import { getUserDataRoot } from '../storage/user-data-root'
 
 const FILE_NAME = 'vertex-tasks.json'
@@ -73,38 +75,6 @@ function readAll(): VertexTask[] {
   return tasks
 }
 
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) {
-    return '??'
-  }
-  const first = parts[0][0] ?? ''
-  const second = parts.length > 1 ? (parts.at(-1)?.[0] ?? '') : (parts[0][1] ?? '')
-  return `${first}${second}`.toUpperCase()
-}
-
-function normalizedKey(value: string): string {
-  return value.trim().toLowerCase()
-}
-
-function normalizeAgentPerson(person: VertexTask['assignee']): VertexTask['assignee'] {
-  if (person?.kind !== 'agent') {
-    return person
-  }
-  const agents = listAgents()
-  if (agents.some((agent) => agent.id === person.id)) {
-    return person
-  }
-  const wanted = normalizedKey(person.name || person.id)
-  const agent = agents.find(
-    (candidate) =>
-      normalizedKey(candidate.name) === wanted || normalizedKey(candidate.id) === wanted,
-  )
-  return agent
-    ? { kind: 'agent', id: agent.id, name: agent.name, initials: initialsOf(agent.name) }
-    : person
-}
-
 function normalizePersistedTask(task: VertexTask): VertexTask {
   const assignee = normalizeAgentPerson(task.assignee)
   const collaborators = Array.isArray(task.collaborators)
@@ -138,6 +108,7 @@ export function reloadVertexTasksFromDisk(): VertexTask[] {
   file.invalidate()
   return readReleasingOrphanedClaims(readAll, persist, ORDER_GAP)
 }
+
 
 /** Drop rows that would crash a renderer rather than trusting the file. */
 function isUsableTask(value: unknown): value is VertexTask {
@@ -186,7 +157,9 @@ function normalizeInput(input: VertexTaskInput): VertexTask {
     order: 0,
     assignee: input.assignee,
     collaborators: [],
-    labels: [],
+    labels: Array.isArray(input.labels)
+      ? input.labels.filter((label): label is string => typeof label === 'string' && !!label.trim())
+      : [],
     related: [],
     dependencies: [],
     parentTaskId: input.parentTaskId,
@@ -201,17 +174,29 @@ function normalizeInput(input: VertexTaskInput): VertexTask {
       : undefined,
     missionId: input.missionId,
     projectId: input.projectId,
+    sourceQuote: input.sourceQuote,
+    createdBy: input.createdBy,
     createdAt: now,
     updatedAt: now,
   }
 }
 
-export const vertexTaskStore: VertexTaskSource = {
+// Why a factory: the work-board methods live in their own module (file size),
+// and handing them the store's primitives avoids a circular import.
+const workBoard = createWorkBoard({
+  readAll,
+  readRecovered: () => readReleasingOrphanedClaims(readAll, persist, ORDER_GAP),
+  persist,
+  columnOf,
+  orderGap: ORDER_GAP,
+})
+
+export const vertexTaskStore: VertexWorkBoard = {
+  ...workBoard,
+
   list(): VertexTask[] {
     // Sorted so every caller sees the same order without re-sorting.
-    return [...readReleasingOrphanedClaims(readAll, persist, ORDER_GAP)].sort(
-      (a, b) => a.order - b.order,
-    )
+    return [...workBoard.readReaping()].sort((a, b) => a.order - b.order)
   },
 
   create(input: VertexTaskInput): VertexTask {
@@ -261,6 +246,18 @@ export const vertexTaskStore: VertexTaskSource = {
     if (patch.parentTaskId === task.id) {
       delete patch.parentTaskId
     }
+    // Why: the reason belongs to the Blocked column; the operator moving the
+    // card on is the unblock, and a stale reason would still show on the chip.
+    if (patch.status && patch.status !== 'blocked' && task.blockedReason) {
+      delete task.blockedReason
+    }
+    // Why: a lease belongs to In Progress; a card the operator drags out of
+    // that column is no longer held, or claim() would refuse it as held-by.
+    if (patch.status && patch.status !== 'in-progress' && task.lease) {
+      delete task.lease
+    }
+    // Why: only claim()/heartbeat() may set a lease; a plain patch must not re-add one.
+    delete patch.lease
     stampClaimOwner(patch)
     const oldParentId = task.parentTaskId
     Object.assign(task, patch, { updatedAt: Date.now() })
@@ -299,6 +296,12 @@ export const vertexTaskStore: VertexTaskSource = {
     }
 
     task.status = to
+    if (to !== 'blocked') {
+      delete task.blockedReason
+    }
+    if (to !== 'in-progress') {
+      delete task.lease
+    }
     const column = columnOf(tasks, to).filter((t) => t.id !== taskId)
     const index = Math.max(0, Math.min(toIndex, column.length))
     const before = column[index - 1]
@@ -354,6 +357,7 @@ export const vertexTaskStore: VertexTaskSource = {
         }
       })
     persist(next)
+    removeVertexTaskAttachmentDir(taskId)
     return true
   },
 }

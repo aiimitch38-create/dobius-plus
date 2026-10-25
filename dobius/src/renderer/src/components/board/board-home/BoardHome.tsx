@@ -3,25 +3,17 @@ import '@fontsource-variable/inter/wght.css'
 import '@fontsource-variable/jetbrains-mono/wght.css'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { PanelLeft } from 'lucide-react'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { VoiceOrb } from '@/components/dictation/VoiceOrb'
 import { voiceOrbLevelSource } from '@/components/dictation/voice-orb-live-level'
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import { openWorktreePath } from '@/components/sidebar/WorktreeOpenInMenu'
-import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
-import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../../shared/agent-status-types'
 import { isBoardShortcutBlockedTarget } from '../board-chrome/board-tools'
-import { resolveAppLook } from '../board-effective-view'
-import {
-  BOARD_FLOATING_PANEL_CLASS,
-  BOARD_MONO_CLASS,
-  BOARD_PILL_BUTTON_CLASS
-} from '../board-chrome/board-surface-classes'
+import { BOARD_MONO_CLASS } from '../board-chrome/board-surface-classes'
 import { listBoardPresets } from '../board-presets/board-preset-store'
 import type { BoardPreset } from '../board-presets/board-preset'
 import { presetCatalog } from '../board-presets/preset-catalog'
@@ -117,7 +109,6 @@ export default function BoardHome(): React.JSX.Element {
   const version = useAppVersion()
   const confirm = useConfirmationDialog()
   const rows = useHomeRows()
-  const appLook = useAppStore((s) => resolveAppLook(s.settings))
   const tabsByWorktree = useAppStore((s) => s.tabsByWorktree)
   const agentStatusByPaneKey = useAppStore((s) => s.agentStatusByPaneKey)
   const acknowledgedAgentsByPaneKey = useAppStore((s) => s.acknowledgedAgentsByPaneKey)
@@ -197,11 +188,6 @@ export default function BoardHome(): React.JSX.Element {
       onSelect: setPickedRepoId,
       // The row's own button opens plainly; the launcher's preset applies to the launcher button.
       onOpen: (row) => void openRow(row, null),
-      onOpenClassic: (row) => {
-        if (row.worktreeId) {
-          activateAndRevealWorktree(row.worktreeId)
-        }
-      },
       onReveal: (row) =>
         void openWorktreePath({
           target: 'file-manager',
@@ -292,12 +278,6 @@ export default function BoardHome(): React.JSX.Element {
     rows.length === 1
       ? translate('board.home.meta.repoOne', '1 repo')
       : translate('board.home.meta.repos', '{{count}} repos', { count: rows.length })
-  const pill = cn(BOARD_FLOATING_PANEL_CLASS, BOARD_PILL_BUTTON_CLASS)
-  // Why: users whose App look is Classic came here from the Board; name the way back.
-  const classicLabel =
-    appLook === 'classic'
-      ? translate('board.home.backToClassic', 'Back to Classic')
-      : translate('board.home.classicLook', 'Classic look')
 
   return (
     <div
@@ -309,21 +289,6 @@ export default function BoardHome(): React.JSX.Element {
         backgroundSize: '24px 24px, 100% 100%'
       }}
     >
-      <div
-        className={cn(
-          'pointer-events-auto absolute top-[17px] flex items-center gap-[9px]',
-          isMac ? 'left-[86px]' : 'left-4'
-        )}
-      >
-        <Button
-          variant="ghost"
-          className={pill}
-          onClick={() => useAppStore.getState().setActiveView('terminal')}
-        >
-          <PanelLeft />
-          {classicLabel}
-        </Button>
-      </div>
       <HomeTopPills summary={summary} now={now} />
 
       <main className="mx-auto flex min-h-full w-full max-w-[720px] flex-col items-center px-6 pt-[88px] pb-24">

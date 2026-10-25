@@ -15,6 +15,17 @@ import { boardStudioIcon, boardStudioSubtitle } from './board-studio-header'
 import { listenStudioEscape } from './studio-escape-guard'
 import { AgentsPage, BuzzPage, KanbanPage } from './board-studio-lazy-pages'
 import { ChatStudio } from './ChatStudio'
+import {
+  AsanaTasksStudio,
+  AutomationsStudio,
+  ChecksStudio,
+  MobileStudio,
+  PortsStudio,
+  PromptsStudio,
+  SourceControlStudio,
+  TasksPageStudio,
+  VaultStudio
+} from './HostedPanelStudios'
 import { CodeStudio } from './CodeStudio'
 import { MemoryStudio } from './MemoryStudio'
 import { MissionMapStudio } from './MissionMapStudio'
@@ -65,10 +76,29 @@ export function boardStudioTitle(studio: BoardStudioId): string {
       return translate('board.sideApps.communications', 'Communications')
     case 'presets':
       return translate('board.studio.title.presets', 'Presets')
+    case 'source-control':
+      return translate('board.studio.title.sourceControl', 'Source Control')
+    case 'checks':
+      return translate('board.studio.title.checks', 'Checks')
+    case 'ports':
+      return translate('board.studio.title.ports', 'Ports')
+    case 'prompts':
+      return translate('board.studio.title.prompts', 'Prompts')
+    case 'vault':
+      return translate('board.studio.title.vault', 'Sessions')
+    case 'asana-tasks':
+      return translate('board.studio.title.asanaTasks', 'Asana Tasks')
+    case 'automations':
+      return translate('auto.components.sidebar.SidebarNav.f323383e9a', 'Automations')
+    case 'tasks-page':
+      return translate('board.studio.title.tasksPage', 'Tasks')
+    case 'mobile':
+      return translate('board.studio.title.mobile', 'Mobile')
   }
 }
 
-function StudioBody({
+// Exported for tests: the body without the Dialog/Tooltip chrome.
+export function StudioBody({
   studio,
   worktreeId,
   chatTabId,
@@ -87,7 +117,7 @@ function StudioBody({
     case 'settings':
       return <SettingsStudio onClose={onClose} />
     case 'loops':
-      return <LoopsStudio worktreeId={worktreeId} onClose={onClose} />
+      return <LoopsStudio worktreeId={worktreeId} />
     case 'memory':
       return <MemoryStudio worktreeId={worktreeId} />
     case 'code':
@@ -126,6 +156,24 @@ function StudioBody({
       // Why: the full Kanban page owns its task source, unlike the Classic
       // WorkspaceKanbanDrawer, which needs sidebar-only drawer state.
       return <KanbanPage />
+    case 'source-control':
+      return <SourceControlStudio worktreeId={worktreeId} />
+    case 'checks':
+      return <ChecksStudio worktreeId={worktreeId} />
+    case 'ports':
+      return <PortsStudio />
+    case 'prompts':
+      return <PromptsStudio />
+    case 'vault':
+      return <VaultStudio />
+    case 'asana-tasks':
+      return <AsanaTasksStudio />
+    case 'automations':
+      return <AutomationsStudio onClose={onClose} />
+    case 'tasks-page':
+      return <TasksPageStudio onClose={onClose} />
+    case 'mobile':
+      return <MobileStudio onClose={onClose} />
   }
 }
 

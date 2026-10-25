@@ -1,4 +1,5 @@
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
+import type { RuntimeBoardSpawnConsoleEvent } from '../shared/runtime-client-events'
 import type {
   RuntimeFileOpenNotification,
   RuntimeDiffOpenNotification
@@ -408,7 +409,10 @@ import type {
 import type { GhAuthDiagnostic } from '../shared/github-auth-types'
 import type {
   VertexTask,
+  VertexTaskAttachment,
+  VertexTaskAttachmentInput,
   VertexTaskInput,
+  VertexTaskOpResult,
   VertexTaskPatch,
   VertexTaskStatus
 } from '../shared/vertex-task-types'
@@ -2218,6 +2222,41 @@ export type PreloadApi = {
     releaseInterruptedClaims: (args: { activeTaskIds: string[] }) => Promise<void>
     move: (taskId: string, to: VertexTaskStatus, toIndex: number) => Promise<VertexTask | null>
     remove: (taskId: string) => Promise<boolean>
+    /** Work-board operations; null means the arguments were malformed. */
+    claim: (args: {
+      taskId: string
+      by: string
+      kind: 'lead' | 'worker'
+      leaseMs?: number
+    }) => Promise<VertexTaskOpResult | null>
+    heartbeat: (args: {
+      taskId: string
+      by: string
+      note?: string
+    }) => Promise<VertexTaskOpResult | null>
+    complete: (args: {
+      taskId: string
+      by: string
+      resultNote: string
+      metadata?: Record<string, unknown>
+      force?: boolean
+    }) => Promise<VertexTaskOpResult | null>
+    block: (args: {
+      taskId: string
+      by: string
+      reason: string
+    }) => Promise<VertexTaskOpResult | null>
+    release: (args: { taskId: string; by: string }) => Promise<VertexTaskOpResult | null>
+    comment: (args: { taskId: string; author: string; body: string }) => Promise<VertexTask | null>
+    /** Stores an image under userData for the card; null when refused (type, size, count). */
+    addAttachment: (
+      taskId: string,
+      input: VertexTaskAttachmentInput
+    ) => Promise<VertexTaskAttachment | null>
+    /** The stored image as a data URL for thumbnails. */
+    readAttachment: (taskId: string, attachmentId: string) => Promise<string | null>
+    /** PNG (base64) of this window's current frame. */
+    captureWindow: () => Promise<string | null>
   }
   agentTrust: {
     markTrusted: (args: {
@@ -2850,6 +2889,8 @@ export type PreloadApi = {
         defaultTabs?: WorktreeDefaultTabsLaunch
       }) => void
     ) => () => void
+    /** Lead loop: main asks this window to put a console card on a Board. */
+    onBoardSpawnConsole: (callback: (event: RuntimeBoardSpawnConsoleEvent) => void) => () => void
     onCreateTerminal: (
       callback: (data: {
         requestId?: string

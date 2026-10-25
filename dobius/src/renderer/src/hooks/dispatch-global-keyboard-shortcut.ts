@@ -330,6 +330,35 @@ export function dispatchGlobalKeyboardShortcut(
     return
   }
 
+  // Why: the Board shows no right sidebar; its panel shortcuts open the
+  // matching Board studio instead of a hidden sidebar tab.
+  if (activeView === 'board') {
+    const boardStudio = matchShortcut('sidebar.sourceControl.toggle')
+      ? ('source-control' as const)
+      : matchShortcut('sidebar.checks.toggle')
+        ? ('checks' as const)
+        : matchShortcut('sidebar.ports.toggle')
+          ? ('ports' as const)
+          : null
+    if (!boardStudio) {
+      return
+    }
+    // Same guard as below: Cmd+Shift+G is "find previous" while terminal search is open.
+    if (boardStudio === 'source-control' && document.querySelector('[data-terminal-search-root]')) {
+      return
+    }
+    input.preventDefault()
+    notifyTerminalCapture(
+      boardStudio === 'source-control'
+        ? 'sidebar.sourceControl.toggle'
+        : boardStudio === 'checks'
+          ? 'sidebar.checks.toggle'
+          : 'sidebar.ports.toggle'
+    )
+    useAppStore.getState().setBoardStudio(boardStudio)
+    return
+  }
+
   if (!canRevealRightSidebar) {
     return
   }

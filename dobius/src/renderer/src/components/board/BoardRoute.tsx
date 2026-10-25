@@ -64,7 +64,16 @@ const SIDE_APP_STUDIO: Record<BoardSideAppId, BoardStudioId> = {
   skills: 'skills',
   kanban: 'kanban',
   communications: 'communications',
-  settings: 'settings'
+  settings: 'settings',
+  'source-control': 'source-control',
+  checks: 'checks',
+  ports: 'ports',
+  prompts: 'prompts',
+  vault: 'vault',
+  'asana-tasks': 'asana-tasks',
+  'tasks-page': 'tasks-page',
+  scheduled: 'automations',
+  mobile: 'mobile'
 }
 
 // Why: the Board renders as a full-window layer over the Classic shell so the
@@ -72,7 +81,14 @@ const SIDE_APP_STUDIO: Record<BoardSideAppId, BoardStudioId> = {
 export default function BoardRoute(): React.JSX.Element {
   const data = useBoardRouteData()
   const { worktreeId, board } = data
-  const [studio, setStudio] = useState<BoardStudioId | null>(null)
+  // Why: the open studio lives in the store so page actions (Tasks, Automations,
+  // Mobile, Settings) and shortcuts can open one from outside the Board tree.
+  const studio = useAppStore((s) => s.boardStudio)
+  const setStudio = useCallback(
+    (next: BoardStudioId | null) => useAppStore.getState().setBoardStudio(next),
+    []
+  )
+  useEffect(() => () => useAppStore.getState().setBoardStudio(null), [])
   const [picker, setPicker] = useState<PickerState | null>(null)
   const [draft, setDraft] = useState('')
   const draftRef = useRef(draft)

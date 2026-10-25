@@ -11,6 +11,7 @@ export function getKanbanIpcSource(): TaskSource | null {
     create: (input) => api.create(input),
     update: (taskId, patch) => api.update(taskId, patch),
     move: (taskId, to, toIndex) => api.move(taskId, to, toIndex),
-    remove: (taskId) => api.remove(taskId)
+    remove: (taskId) => api.remove(taskId),
+    comment: (taskId, author, body) => api.comment({ taskId, author, body })
   }
 }

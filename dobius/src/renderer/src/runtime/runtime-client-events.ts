@@ -54,6 +54,7 @@ function isRuntimeClientEvent(
     message.type === 'reposChanged' ||
     message.type === 'worktreesChanged' ||
     message.type === 'linearLinkedIssueUpdated' ||
-    message.type === 'activateWorktree'
+    message.type === 'activateWorktree' ||
+    message.type === 'boardSpawnConsole'
   )
 }

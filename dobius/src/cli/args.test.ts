@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   REPEATED_FLAG_SEPARATOR,
+  isCommandGroup,
   normalizeCommandPositionals,
   parseArgs,
   supportsBrowserPageFlag,
@@ -91,6 +92,15 @@ describe('parseArgs', () => {
     const parsed = parseArgs(['linear', 'list', '--workspace', 'old', '--workspace', 'new'])
 
     expect(parsed.flags.get('workspace')).toBe('new')
+  })
+})
+
+describe('isCommandGroup', () => {
+  it('treats the lead-loop groups as groups so `dobius lead` prints their help', () => {
+    for (const group of ['tasks', 'board', 'lead']) {
+      expect(isCommandGroup([group])).toBe(true)
+    }
+    expect(isCommandGroup(['lead', 'init'])).toBe(false)
   })
 })
 

@@ -1,3 +1,4 @@
+import type { VertexTaskLease } from '../../../../shared/vertex-task-types'
 import type { TaskPriority, TaskType } from './kanban-types'
 
 const typeLabels: Record<TaskType, string> = {
@@ -30,4 +31,24 @@ export function PriorityChip({ priority }: { priority: TaskPriority }): React.JS
 export function LabelChip({ label }: { label: string }): React.JSX.Element {
   const tone = label === 'Canvas' ? 'violet' : label === 'High Priority' ? 'red' : 'blue'
   return <span className={`kanban-chip kanban-label-${tone}`}>{label}</span>
+}
+
+/** Who holds the card's lease (a lead or a worker console). */
+export function ClaimedChip({ lease }: { lease: VertexTaskLease }): React.JSX.Element {
+  return (
+    <span
+      className="kanban-chip kanban-label-violet"
+      title={`${lease.kind}, lease until ${new Date(lease.leaseUntil).toLocaleTimeString()}`}
+    >
+      {lease.claimedBy}
+    </span>
+  )
+}
+
+export function BlockedChip({ reason }: { reason: string }): React.JSX.Element {
+  return (
+    <span className="kanban-chip kanban-label-red" title={reason}>
+      Blocked
+    </span>
+  )
 }

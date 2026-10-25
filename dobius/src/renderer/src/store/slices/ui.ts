@@ -101,6 +101,11 @@ import {
   getNextVisibleContextualTourStepIndex,
   getPreviousVisibleContextualTourStepIndex
 } from '../../components/contextual-tours/contextual-tour-gate'
+import {
+  isBoardSurfaceActive,
+  resolveRequestedActiveView
+} from '../../components/board/board-effective-view'
+import type { BoardStudioId } from '../../components/board/board-studios/board-studio-ids'
 import { agentKindForAgentType, formatAgentTypeLabel } from '../../lib/agent-status'
 import {
   deriveRunningAgentSendTargets,
@@ -686,6 +691,9 @@ export type UISlice = {
     | 'dobius'
     | 'buzz'
   setActiveView: (view: UISlice['activeView']) => void
+  /** Studio open over the Board (null when none). Page actions route here while the Board is up. */
+  boardStudio: BoardStudioId | null
+  setBoardStudio: (studio: BoardStudioId | null) => void
   taskPageData: {
     preselectedRepoId?: string
     prefilledName?: string
@@ -1209,15 +1217,19 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
 
   // Why: the Board is the default Dobius+ surface; Classic stays one click away.
   activeView: 'board',
-  previousViewBeforeTasks: 'terminal',
-  previousViewBeforeSettings: 'terminal',
-  previousViewBeforeActivity: 'terminal',
-  previousViewBeforeAutomations: 'terminal',
-  previousViewBeforeSpace: 'terminal',
-  previousViewBeforeSkills: 'terminal',
-  previousViewBeforeKnowledge: 'terminal',
-  previousViewBeforeMobile: 'terminal',
-  setActiveView: (view) => set({ activeView: view }),
+  // Why: 'board', not 'terminal': a close without a matching open must never
+  // land on the retired Classic shell.
+  previousViewBeforeTasks: 'board',
+  previousViewBeforeSettings: 'board',
+  previousViewBeforeActivity: 'board',
+  previousViewBeforeAutomations: 'board',
+  previousViewBeforeSpace: 'board',
+  previousViewBeforeSkills: 'board',
+  previousViewBeforeKnowledge: 'board',
+  previousViewBeforeMobile: 'board',
+  setActiveView: (view) => set({ activeView: resolveRequestedActiveView(view) }),
+  boardStudio: null,
+  setBoardStudio: (studio) => set({ boardStudio: studio }),
   taskPageData: {},
   taskResumeState: undefined,
   githubTaskDrawerWorkItem: null,
@@ -1244,6 +1256,12 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
     }
     if (data.openJiraIssue) {
       get().recordFeatureInteraction?.('jira-tasks')
+    }
+    // Why: on the Board, Tasks is a studio; it never enters the Classic
+    // back/forward history, so Back can never land on the retired shell.
+    if (isBoardSurfaceActive(get())) {
+      set({ taskPageData: data, boardStudio: 'tasks-page' })
+      return
     }
     // Why: record a Tasks visit in the shared back/forward history so the
     // titlebar Back/Forward buttons can return to Tasks. All task-source
@@ -1414,7 +1432,7 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
         }
       }
       return {
-        activeView: state.previousViewBeforeTasks,
+        activeView: resolveRequestedActiveView(state.previousViewBeforeTasks),
         taskPageData: {},
         githubTaskDrawerWorkItem: null,
         worktreeNavHistoryIndex: nextHistoryIndex
@@ -1432,7 +1450,7 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
   },
   closeActivityPage: () =>
     set((state) => ({
-      activeView: state.previousViewBeforeActivity
+      activeView: resolveRequestedActiveView(state.previousViewBeforeActivity)
     })),
   selectedAutomationId: null,
   setSelectedAutomationId: (id) => set({ selectedAutomationId: id }),
@@ -1440,6 +1458,10 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
   setPendingAutomationRunNavigation: (navigation) =>
     set({ pendingAutomationRunNavigation: navigation }),
   openAutomationsPage: () => {
+    if (isBoardSurfaceActive(get())) {
+      set({ boardStudio: 'automations' })
+      return
+    }
     get().recordViewVisit('automations')
     set((state) => ({
       activeView: 'automations',
@@ -1458,7 +1480,7 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
         }
       }
       return {
-        activeView: state.previousViewBeforeAutomations,
+        activeView: resolveRequestedActiveView(state.previousViewBeforeAutomations),
         worktreeNavHistoryIndex: nextHistoryIndex
       }
     }),
@@ -1472,17 +1494,22 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
   },
   closeSpacePage: () =>
     set((state) => ({
-      activeView: state.previousViewBeforeSpace
+      activeView: resolveRequestedActiveView(state.previousViewBeforeSpace)
     })),
-  openSkillsPage: () =>
+  openSkillsPage: () => {
+    if (isBoardSurfaceActive(get())) {
+      set({ boardStudio: 'skills' })
+      return
+    }
     set((state) => ({
       activeView: 'skills',
       previousViewBeforeSkills:
         state.activeView === 'skills' ? state.previousViewBeforeSkills : state.activeView
-    })),
+    }))
+  },
   closeSkillsPage: () =>
     set((state) => ({
-      activeView: state.previousViewBeforeSkills
+      activeView: resolveRequestedActiveView(state.previousViewBeforeSkills)
     })),
   openKnowledgePage: () =>
     set((state) => ({
@@ -1492,17 +1519,22 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
     })),
   closeKnowledgePage: () =>
     set((state) => ({
-      activeView: state.previousViewBeforeKnowledge
+      activeView: resolveRequestedActiveView(state.previousViewBeforeKnowledge)
     })),
-  openMobilePage: () =>
+  openMobilePage: () => {
+    if (isBoardSurfaceActive(get())) {
+      set({ boardStudio: 'mobile' })
+      return
+    }
     set((state) => ({
       activeView: 'mobile',
       previousViewBeforeMobile:
         state.activeView === 'mobile' ? state.previousViewBeforeMobile : state.activeView
-    })),
+    }))
+  },
   closeMobilePage: () =>
     set((state) => ({
-      activeView: state.previousViewBeforeMobile
+      activeView: resolveRequestedActiveView(state.previousViewBeforeMobile)
     })),
   setNewWorkspaceDraft: (draft) => set({ newWorkspaceDraft: draft }),
   clearNewWorkspaceDraft: () => set({ newWorkspaceDraft: null }),
@@ -1510,6 +1542,10 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
     // Why: settings search is a transient page filter; opening Settings
     // should never inherit hidden sections from the previous visit.
     get().setSettingsSearchQuery('')
+    if (isBoardSurfaceActive(get())) {
+      set({ boardStudio: 'settings' })
+      return
+    }
     set((state) => ({
       activeView: 'settings',
       // Why: Settings is a temporary detour from either terminal or the
@@ -1525,9 +1561,9 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
       const previousView =
         state.previousViewBeforeSettings === 'activity' &&
         state.settings?.experimentalActivity !== true
-          ? 'terminal'
+          ? 'board'
           : state.previousViewBeforeSettings
-      return { activeView: previousView }
+      return { activeView: resolveRequestedActiveView(previousView) }
     }),
   settingsNavigationTarget: null,
   openSettingsTarget: (target) => set({ settingsNavigationTarget: target }),

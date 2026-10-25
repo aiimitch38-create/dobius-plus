@@ -1,6 +1,7 @@
 import { openMobileResourceInStore } from './mobile-resource-open'
 /* oxlint-disable max-lines -- Why: this App-level IPC bridge intentionally keeps the renderer's main-process event contract in one place so shortcut, runtime, updater, and agent-status wiring do not drift across files. */
 import { BOARD_ZOOM_EVENT } from '@/components/board/board-zoom-event'
+import { handleBoardSpawnConsoleEvent } from '@/components/board/board-links/board-spawn-console-event'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
 import { useAppStore } from '../store'
@@ -18,7 +19,11 @@ import {
 } from '@/constants/terminal'
 import type { SplitTerminalPaneDetail, CloseTerminalPaneDetail } from '@/constants/terminal'
 import { getVisibleWorktreeIds } from '@/components/sidebar/visible-worktrees'
-import { activateTabNumberShortcut } from '@/lib/tab-number-shortcuts'
+import {
+  activateTabNumberShortcut,
+  resolveBoardConsoleShortcutTarget
+} from '@/lib/tab-number-shortcuts'
+import { frameBoardCards } from '@/components/board/board-canvas/board-camera-focus'
 import { nextEditorFontZoomLevel, computeEditorFontSize } from '@/lib/editor-font-zoom'
 import type {
   TerminalLayoutSnapshot,
@@ -983,6 +988,10 @@ export function useIpcEvents(): void {
           })
         return
       }
+      if (event.type === 'boardSpawnConsole') {
+        handleBoardSpawnConsoleEvent(event)
+        return
+      }
       void ensureRuntimeEventRepoKnown(environmentId, event.repoId)
         .then(() => activateNotifiedWorktree(event, { allowRuntimeEnvironment: true }))
         .catch((error) => {
@@ -1299,6 +1308,12 @@ export function useIpcEvents(): void {
 
     unsubs.push(
       window.api.ui.onJumpToTabIndex((index) => {
+        // Why: on the Board, Cmd+N frames the Nth console card instead of a Classic tab.
+        const boardTarget = resolveBoardConsoleShortcutTarget(useAppStore.getState(), index)
+        if (boardTarget) {
+          frameBoardCards(boardTarget.worktreeId, [boardTarget.cardId])
+          return
+        }
         activateTabNumberShortcut(index)
       })
     )
@@ -1343,6 +1358,15 @@ export function useIpcEvents(): void {
         ).catch((error) => {
           console.error('Failed to activate CLI-created worktree:', error)
         })
+      })
+    )
+
+    // Why: the local desktop does not subscribe to runtime client events, so a
+    // lead-loop spawn arrives over window IPC; the handler dedupes by requestId
+    // when both paths deliver.
+    unsubs.push(
+      window.api.ui.onBoardSpawnConsole((event) => {
+        handleBoardSpawnConsoleEvent(event)
       })
     )
 

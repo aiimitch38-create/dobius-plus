@@ -14,3 +14,14 @@ export type BoardStudioId =
   | 'kanban'
   | 'communications'
   | 'presets'
+  // Right-sidebar panels and Classic full pages, hosted so nothing is lost
+  // now that the Classic shell is retired.
+  | 'source-control'
+  | 'checks'
+  | 'ports'
+  | 'prompts'
+  | 'vault'
+  | 'asana-tasks'
+  | 'automations'
+  | 'tasks-page'
+  | 'mobile'

@@ -16,6 +16,9 @@ import { TELEGRAM_COMMAND_SPECS } from './telegram'
 import { EMULATOR_COMMAND_SPECS } from './emulator'
 import { LINEAR_COMMAND_SPECS } from './linear'
 import { VM_COMMAND_SPECS } from './vm'
+import { TASK_COMMAND_SPECS } from './tasks'
+import { BOARD_COMMAND_SPECS } from './board'
+import { LEAD_COMMAND_SPECS } from './lead'
 
 export const COMMAND_SPECS: CommandSpec[] = [
   ...CORE_COMMAND_SPECS,
@@ -34,5 +37,8 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...ENVIRONMENT_COMMAND_SPECS,
   ...LINEAR_COMMAND_SPECS,
   ...VM_COMMAND_SPECS,
-  ...EMULATOR_COMMAND_SPECS
+  ...EMULATOR_COMMAND_SPECS,
+  ...TASK_COMMAND_SPECS,
+  ...BOARD_COMMAND_SPECS,
+  ...LEAD_COMMAND_SPECS
 ]

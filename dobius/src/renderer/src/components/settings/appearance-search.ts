@@ -26,23 +26,6 @@ export const getThemeEntries = createLocalizedCatalog((): SettingsSearchEntry[] 
   }
 ])
 
-export const getAppLookEntries = createLocalizedCatalog((): SettingsSearchEntry[] => [
-  {
-    title: translate('settings.appearance.appLook.title', 'App look'),
-    description: translate(
-      'settings.appearance.appLook.description',
-      'Choose what Dobius opens to. You can switch anytime with Back to home / Open Board.'
-    ),
-    keywords: [
-      ...translateSearchKeyword('settings.appearance.appLook.board', 'New look (Board)'),
-      ...translateSearchKeyword('settings.appearance.appLook.classic', 'Classic look'),
-      ...translateSearchKeyword('settings.appearance.appLook.keyword.board', 'board'),
-      ...translateSearchKeyword('settings.appearance.appLook.keyword.classic', 'classic'),
-      ...translateSearchKeyword('settings.appearance.appLook.keyword.startup', 'startup')
-    ]
-  }
-])
-
 export const getLanguageEntries = createLocalizedCatalog((): SettingsSearchEntry[] => [
   {
     title: translate('settings.appearance.language.title', 'Language'),
@@ -292,7 +275,6 @@ function buildAppearancePaneSearchEntries(
   return [
     ...getAppearanceSectionEntries(),
     ...getThemeEntries(),
-    ...getAppLookEntries(),
     ...(SHOW_UI_LANGUAGE_SETTING ? getLanguageEntries() : []),
     ...getTypographyEntries(),
     ...getZoomEntries(),

@@ -792,7 +792,8 @@ export function clearRemoteActionErrorsForCompletedConflictOperations({
   return next ?? remoteActionErrors
 }
 
-function SourceControlInner(): React.JSX.Element {
+// Why: `isVisible` lets a Board studio host this panel without the right sidebar being open.
+function SourceControlInner({ isVisible = false }: { isVisible?: boolean }): React.JSX.Element {
   const sourceControlRef = useRef<HTMLDivElement | null>(null)
   const isMac = useMemo(() => navigator.userAgent.includes('Mac'), [])
   const pendingCommentEditorRevealFrameIdsRef = useRef<number[]>([])
@@ -1224,7 +1225,7 @@ function SourceControlInner(): React.JSX.Element {
   // The sidebar now stays mounted when closed (for performance), so without
   // this guard the branchCompare interval and PR fetch would keep running
   // with no visible consumer, wasting git process spawns and API calls.
-  const isBranchVisible = rightSidebarTab === 'source-control' && rightSidebarOpen
+  const isBranchVisible = isVisible || (rightSidebarTab === 'source-control' && rightSidebarOpen)
 
   const refreshActiveGitStatus = useCallback(async (): Promise<void> => {
     if (!activeWorktreeId || !worktreePath || isFolder) {

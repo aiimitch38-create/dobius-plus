@@ -1,4 +1,5 @@
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
+import type { RuntimeBoardSpawnConsoleEvent } from '../shared/runtime-client-events'
 import type {
   RuntimeFileOpenNotification,
   RuntimeDiffOpenNotification
@@ -260,7 +261,10 @@ import type {
 import type { PreloadApi } from './api-types'
 import type {
   VertexTask,
+  VertexTaskAttachment,
+  VertexTaskAttachmentInput,
   VertexTaskInput,
+  VertexTaskOpResult,
   VertexTaskPatch,
   VertexTaskStatus
 } from '../shared/vertex-task-types'
@@ -2095,7 +2099,42 @@ const api = {
       ipcRenderer.invoke('vertexTasks:releaseInterruptedClaims', args),
     move: (taskId: string, to: VertexTaskStatus, toIndex: number): Promise<VertexTask | null> =>
       ipcRenderer.invoke('vertexTasks:move', { taskId, to, toIndex }),
-    remove: (taskId: string): Promise<boolean> => ipcRenderer.invoke('vertexTasks:remove', taskId)
+    remove: (taskId: string): Promise<boolean> => ipcRenderer.invoke('vertexTasks:remove', taskId),
+    claim: (args: {
+      taskId: string
+      by: string
+      kind: 'lead' | 'worker'
+      leaseMs?: number
+    }): Promise<VertexTaskOpResult | null> => ipcRenderer.invoke('vertexTasks:claim', args),
+    heartbeat: (args: {
+      taskId: string
+      by: string
+      note?: string
+    }): Promise<VertexTaskOpResult | null> => ipcRenderer.invoke('vertexTasks:heartbeat', args),
+    complete: (args: {
+      taskId: string
+      by: string
+      resultNote: string
+      metadata?: Record<string, unknown>
+      force?: boolean
+    }): Promise<VertexTaskOpResult | null> => ipcRenderer.invoke('vertexTasks:complete', args),
+    block: (args: {
+      taskId: string
+      by: string
+      reason: string
+    }): Promise<VertexTaskOpResult | null> => ipcRenderer.invoke('vertexTasks:block', args),
+    release: (args: { taskId: string; by: string }): Promise<VertexTaskOpResult | null> =>
+      ipcRenderer.invoke('vertexTasks:release', args),
+    comment: (args: { taskId: string; author: string; body: string }): Promise<VertexTask | null> =>
+      ipcRenderer.invoke('vertexTasks:comment', args),
+    addAttachment: (
+      taskId: string,
+      input: VertexTaskAttachmentInput
+    ): Promise<VertexTaskAttachment | null> =>
+      ipcRenderer.invoke('vertexTasks:addAttachment', { taskId, input }),
+    readAttachment: (taskId: string, attachmentId: string): Promise<string | null> =>
+      ipcRenderer.invoke('vertexTasks:readAttachment', { taskId, attachmentId }),
+    captureWindow: (): Promise<string | null> => ipcRenderer.invoke('vertexTasks:captureWindow')
   },
   agentTrust: {
     markTrusted: (args: {
@@ -3540,6 +3579,14 @@ const api = {
       ) => callback(data)
       ipcRenderer.on('ui:activateWorktree', listener)
       return () => ipcRenderer.removeListener('ui:activateWorktree', listener)
+    },
+    onBoardSpawnConsole: (
+      callback: (event: RuntimeBoardSpawnConsoleEvent) => void
+    ): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: RuntimeBoardSpawnConsoleEvent) =>
+        callback(data)
+      ipcRenderer.on('ui:boardSpawnConsole', listener)
+      return () => ipcRenderer.removeListener('ui:boardSpawnConsole', listener)
     },
     onCreateTerminal: (
       callback: (data: {

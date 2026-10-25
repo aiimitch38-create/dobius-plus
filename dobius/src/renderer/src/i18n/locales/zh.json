@@ -39,12 +39,6 @@
         "sshToggleDescription": "当有可用的 SSH 和远程 Dobius+ 主机时显示它们。",
         "resourceUsageToggleDescription": "显示资源管理器。点击可查看 CPU、内存、会话、守护进程控制和工作区磁盘扫描。",
         "portsToggleDescription": "显示实时工作区端口。单击它可获取工作区范围的端口和外部侦听器。"
-      },
-      "appLook": {
-        "title": "App look",
-        "board": "New look (Board)",
-        "classic": "Classic look",
-        "description": "Choose what Dobius opens to. You can switch anytime with Back to home / Open Board."
       }
     },
     "aws": {
@@ -12854,7 +12848,6 @@
       "backToHome": "Back to home",
       "workspaces": "Workspaces",
       "addWorkspace": "New workspace",
-      "close": "Close",
       "needsYou": "{{count}} need you",
       "live": "{{count}} live",
       "missionMap": "Mission Map",
@@ -12869,7 +12862,8 @@
       "usage": "{{percent}}% used",
       "resets": "resets",
       "needsYouHint": "Show the console that needs you",
-      "accounts": "Accounts"
+      "accounts": "Accounts",
+      "accountMenu": "Account and help"
     },
     "zoom": {
       "out": "Zoom out",
@@ -13198,8 +13192,17 @@
         "loops": "Loops",
         "missionMap": "Mission Map",
         "kanban": "Kanban",
-        "presets": "Presets"
+        "presets": "Presets",
+        "sourceControl": "Source Control",
+        "checks": "Checks",
+        "ports": "Ports",
+        "prompts": "Prompts",
+        "vault": "Sessions",
+        "asanaTasks": "Asana Tasks",
+        "tasksPage": "Tasks",
+        "mobile": "Mobile"
       },
+      "noWorkspace": "Open a workspace to use this panel.",
       "loading": "Loading…",
       "close": "Close",
       "crashed": "This studio hit an error.",
@@ -13374,6 +13377,15 @@
         "memory": "Durable facts per repo. They reach an agent only when a memory card pushes them.",
         "skills": "Installed skills from home, repo, bundled and plugin folders.",
         "settings": "Dobius settings, without leaving the board.",
+        "sourceControl": "Changes, commits, branches and pull requests for this workspace.",
+        "checks": "CI checks and review comments on the pull request for this branch.",
+        "ports": "Ports your dev servers listen on, with forwarding for remote workspaces.",
+        "prompts": "Saved prompts, ready to send to a console.",
+        "vault": "Past agent sessions for this workspace, searchable and resumable.",
+        "asanaTasks": "Asana tasks synced into Dobius.",
+        "automations": "Scheduled repo automations: cron-style runs and their history.",
+        "tasksPage": "Issues and pull requests from GitHub, GitLab, Linear and Jira.",
+        "mobile": "Pair your phone with Dobius and follow your consoles from anywhere.",
         "missionMapInspect": "Who directs whom on this board. Click a node to inspect it, double-click to jump to it."
       },
       "agentPicker": {
@@ -13523,8 +13535,40 @@
       "glanceEmpty": "No output yet"
     },
     "foundBug": "Found a bug?",
+    "report": {
+      "tooltip": "Report a bug or request a change",
+      "title": "Report a bug or request a change",
+      "description": "This becomes a card on the Kanban for the Dobius lead to pick up.",
+      "kindLabel": "Type",
+      "kindBug": "Bug",
+      "kindChange": "Change request",
+      "titleLabel": "Title",
+      "titlePlaceholder": "One line: what happened?",
+      "detailsLabel": "Details (optional)",
+      "detailsPlaceholder": "What were you doing, where in the app, and what did you expect instead?",
+      "sendFeedbackInstead": "Send feedback to the Dobius team instead",
+      "cancel": "Cancel",
+      "submit": "Add to Kanban",
+      "adding": "Adding…",
+      "added": "Added to Kanban",
+      "openKanban": "Open Kanban",
+      "failed": "Could not add this to the Kanban. Your text is kept.",
+      "attachmentsLabel": "Screenshots (optional)",
+      "attachHint": "Paste, drop or add up to {{max}} images. PNG, JPG, WebP or GIF, {{mb}} MB each.",
+      "addImage": "Add image…",
+      "captureWindow": "Capture app window",
+      "capturing": "Capturing…",
+      "removeImage": "Remove {{name}}",
+      "attachTypeError": "Only PNG, JPG, WebP or GIF images can be attached.",
+      "attachSizeError": "{{name}} is larger than {{mb}} MB.",
+      "attachCountError": "A card holds at most {{max}} images.",
+      "attachFailed": "{{failed}} of {{total}} images could not be attached. The card was still created.",
+      "captureFailed": "Could not capture the app window."
+    },
     "sideApps": {
       "railLabel": "Side apps",
+      "panels": "Panels",
+      "scheduledAutomations": "Scheduled automations",
       "kanban": "Kanban",
       "communications": "Communications"
     },
@@ -14001,8 +14045,6 @@
         "repoOne": "1 repo",
         "repos": "{{count}} repos"
       },
-      "backToClassic": "Back to Classic",
-      "classicLook": "Classic look",
       "hint": {
         "open": "open",
         "openFolder": "open folder",
@@ -14024,7 +14066,6 @@
         "active": "active",
         "board": "Board",
         "more": "More actions for {{name}}",
-        "openClassic": "Open in Classic",
         "reveal": "Reveal in {{app}}",
         "remove": "Remove from list"
       },

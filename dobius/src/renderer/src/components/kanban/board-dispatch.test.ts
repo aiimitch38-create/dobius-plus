@@ -62,6 +62,26 @@ describe('what gets dispatched', () => {
   it('does NOT dispatch an unassigned task', () => {
     expect(isReady(task())).toBe(false)
   })
+
+  it('does NOT dispatch a card assigned to a Hermes lead or a worker console', () => {
+    // Why: those assignees claim through `dobius tasks claim`; a paid run here
+    // would do the same work twice.
+    const lead = { kind: 'hermes-profile' as const, id: 'lead-acme', name: 'lead-acme', initials: 'LA' }
+    const console = { kind: 'console' as const, id: 'w1', name: 'W1', initials: 'W1' }
+    expect(isReady(task({ assignee: lead }))).toBe(false)
+    expect(isReady(task({ assignee: console }))).toBe(false)
+  })
+
+  it('does NOT dispatch a card that someone holds a lease on', () => {
+    const lease = {
+      claimedBy: 'w1',
+      kind: 'worker' as const,
+      claimedAt: 0,
+      heartbeatAt: 0,
+      leaseUntil: Number.MAX_SAFE_INTEGER
+    }
+    expect(isReady(task({ assignee: agent, lease }))).toBe(false)
+  })
 })
 
 describe('idempotency', () => {

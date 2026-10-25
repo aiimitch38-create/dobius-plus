@@ -1,5 +1,5 @@
 // Why: the Board needs a workspace. With none active (fresh install, every
-// workspace closed) Classic renders as the terminal view so Landing and
+// workspace closed) the terminal view renders Landing so Landing and
 // onboarding stay reachable; the Board returns once a workspace is active.
 export function resolveEffectiveActiveView<V extends string>(
   view: V,
@@ -10,45 +10,31 @@ export function resolveEffectiveActiveView<V extends string>(
 
 export type AppLook = 'board' | 'classic'
 
-// Why: Settings > Appearance > "App look". Unset (and anything unrecognized)
-// reads as the Board, so nobody who never touched the setting sees a change.
-export function resolveAppLook(settings: { appLook?: AppLook } | null | undefined): AppLook {
-  return settings?.appLook === 'classic' ? 'classic' : 'board'
+// Why: the Classic look is retired. Profiles saved with appLook 'classic' (the
+// old Settings > Appearance > "App look") must keep opening on the Board, so
+// the saved value is accepted but never honored.
+export function resolveAppLook(_settings: { appLook?: AppLook } | null | undefined): 'board' {
+  return 'board'
 }
 
-export function appLookView(look: AppLook): 'board' | 'terminal' {
-  return look === 'classic' ? 'terminal' : 'board'
+// Why: the Classic terminal view is no longer a destination. Flows that navigate
+// "to the workspace" (notifications, links, activation, creation) still ask for
+// 'terminal'; the store lands them on the Board, which
+// resolveEffectiveActiveView renders as Landing while no workspace is active.
+// Routing it here keeps those callers untouched.
+export function resolveRequestedActiveView<V extends string>(
+  view: V
+): Exclude<V, 'terminal'> | 'board' {
+  return view === 'terminal' ? 'board' : (view as Exclude<V, 'terminal'>)
 }
 
-// Why: the store boots on the Board. Only that untouched default is swapped for
-// Classic; any other view already chosen this launch (Tasks, Settings, ...) wins.
-export function resolveStartupActiveView<V extends string>(
-  view: V,
-  settings: { appLook?: AppLook } | null | undefined
-): V | 'terminal' {
-  return view === 'board' && resolveAppLook(settings) === 'classic' ? 'terminal' : view
-}
-
-// Why: a live change moves the current window to the chosen look. The control
-// lives on the Settings page, so when Settings is open the look underneath it
-// (what closing Settings returns to) is switched instead of yanking the user
-// out of Settings. Other full-page views are left alone.
-export function appLookViewUpdate(
-  state: { activeView: string; previousViewBeforeSettings: string },
-  look: AppLook
-):
-  | { activeView: 'board' | 'terminal' }
-  | { previousViewBeforeSettings: 'board' | 'terminal' }
-  | null {
-  const target = appLookView(look)
-  const isLookView = (view: string): boolean => view === 'board' || view === 'terminal'
-  if (isLookView(state.activeView)) {
-    return state.activeView === target ? null : { activeView: target }
-  }
-  if (state.activeView === 'settings' && isLookView(state.previousViewBeforeSettings)) {
-    return state.previousViewBeforeSettings === target
-      ? null
-      : { previousViewBeforeSettings: target }
-  }
-  return null
+// Why: page actions (Tasks, Automations, Mobile, Settings, Skills) open as Board
+// studios while the Board is on screen. With no active workspace the Board
+// renders as Landing (see resolveEffectiveActiveView), so there is no studio
+// host and the Classic page is still the right destination.
+export function isBoardSurfaceActive(state: {
+  activeView: string
+  activeWorktreeId: string | null | undefined
+}): boolean {
+  return state.activeView === 'board' && typeof state.activeWorktreeId === 'string'
 }

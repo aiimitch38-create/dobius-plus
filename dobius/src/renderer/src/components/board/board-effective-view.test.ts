@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  appLookViewUpdate,
   resolveAppLook,
   resolveEffectiveActiveView,
-  resolveStartupActiveView,
+  resolveRequestedActiveView,
   type AppLook
 } from './board-effective-view'
 
@@ -19,7 +18,7 @@ describe('resolveEffectiveActiveView', () => {
 })
 
 describe('resolveAppLook', () => {
-  it('defaults to the Board when the setting is unset or unrecognized', () => {
+  it('is the Board when the setting is unset or unrecognized', () => {
     expect(resolveAppLook(undefined)).toBe('board')
     expect(resolveAppLook(null)).toBe('board')
     expect(resolveAppLook({})).toBe('board')
@@ -27,68 +26,25 @@ describe('resolveAppLook', () => {
     expect(resolveAppLook({ appLook: 'bogus' as unknown as AppLook })).toBe('board')
   })
 
-  it('reads Classic only when explicitly chosen', () => {
-    expect(resolveAppLook({ appLook: 'classic' })).toBe('classic')
+  it('ignores a saved Classic look: the retired look still opens on the Board at startup', () => {
+    const saved = { appLook: 'classic' as const }
+    expect(resolveAppLook(saved)).toBe('board')
+    // The store boots on 'board'; with the look ignored, a workspace renders the Board...
+    expect(resolveEffectiveActiveView('board', 'wt-1')).toBe('board')
+    // ...and no workspace still renders Landing.
+    expect(resolveEffectiveActiveView('board', null)).toBe('terminal')
   })
 })
 
-describe('resolveStartupActiveView', () => {
-  it('opens to the Board when the setting is unset or board', () => {
-    expect(resolveStartupActiveView('board', null)).toBe('board')
-    expect(resolveStartupActiveView('board', {})).toBe('board')
-    expect(resolveStartupActiveView('board', { appLook: 'board' })).toBe('board')
+describe('resolveRequestedActiveView', () => {
+  it('lands requests for the retired Classic terminal view on the Board', () => {
+    expect(resolveRequestedActiveView('terminal')).toBe('board')
   })
 
-  it('opens to the Classic terminal view when the setting is classic', () => {
-    expect(resolveStartupActiveView('board', { appLook: 'classic' })).toBe('terminal')
-  })
-
-  it('leaves any other already-chosen view alone', () => {
-    expect(resolveStartupActiveView('tasks', { appLook: 'classic' })).toBe('tasks')
-    expect(resolveStartupActiveView('settings', { appLook: 'classic' })).toBe('settings')
-    expect(resolveStartupActiveView('automations', { appLook: 'board' })).toBe('automations')
-  })
-
-  it('renders Classic with no active workspace whatever the setting', () => {
-    for (const settings of [null, { appLook: 'board' as const }, { appLook: 'classic' as const }]) {
-      expect(resolveEffectiveActiveView(resolveStartupActiveView('board', settings), null)).toBe(
-        'terminal'
-      )
-    }
-    expect(resolveEffectiveActiveView(resolveStartupActiveView('board', null), 'wt-1')).toBe(
-      'board'
-    )
-  })
-})
-
-describe('appLookViewUpdate', () => {
-  it('switches the current look view immediately', () => {
-    expect(
-      appLookViewUpdate({ activeView: 'board', previousViewBeforeSettings: 'terminal' }, 'classic')
-    ).toEqual({ activeView: 'terminal' })
-    expect(
-      appLookViewUpdate({ activeView: 'terminal', previousViewBeforeSettings: 'terminal' }, 'board')
-    ).toEqual({ activeView: 'board' })
-  })
-
-  it('switches the look under Settings instead of leaving Settings', () => {
-    expect(
-      appLookViewUpdate({ activeView: 'settings', previousViewBeforeSettings: 'board' }, 'classic')
-    ).toEqual({ previousViewBeforeSettings: 'terminal' })
-    expect(
-      appLookViewUpdate({ activeView: 'settings', previousViewBeforeSettings: 'terminal' }, 'board')
-    ).toEqual({ previousViewBeforeSettings: 'board' })
-  })
-
-  it('does nothing when already on the chosen look or on another page', () => {
-    expect(
-      appLookViewUpdate({ activeView: 'board', previousViewBeforeSettings: 'terminal' }, 'board')
-    ).toBeNull()
-    expect(
-      appLookViewUpdate({ activeView: 'settings', previousViewBeforeSettings: 'tasks' }, 'classic')
-    ).toBeNull()
-    expect(
-      appLookViewUpdate({ activeView: 'tasks', previousViewBeforeSettings: 'board' }, 'classic')
-    ).toBeNull()
+  it('passes every other view through', () => {
+    expect(resolveRequestedActiveView('board')).toBe('board')
+    expect(resolveRequestedActiveView('home')).toBe('home')
+    expect(resolveRequestedActiveView('settings')).toBe('settings')
+    expect(resolveRequestedActiveView('tasks')).toBe('tasks')
   })
 })

@@ -143,6 +143,7 @@ import { ClaudeRuntimeAuthService } from './claude-accounts/runtime-auth-service
 import { StarNagService } from './star-nag/service'
 import { startImessageBridge, stopImessageBridge } from './imessage-bridge/bridge-service'
 import { startDobiusCli, stopDobiusCli } from './dobius-cli/dispatch-server'
+import { bootLeadsFromAutostart } from './runtime/rpc/methods/leads'
 import { syncVoiceConductorFromSettings } from './voice-conductor/service'
 import { registerPromptsHandlers } from './ipc/prompts'
 import { agentHookServer } from './agent-hooks/server'
@@ -2300,6 +2301,14 @@ app.whenReady().then(async () => {
       console.error('[runtime] Failed to start local RPC transport:', error)
     })
   ])
+
+  // Why: leads started before the last quit come back on their own. Deferred so
+  // it never delays the window; bootLeadsFromAutostart logs and skips bad entries.
+  setImmediate(() => {
+    void bootLeadsFromAutostart(runtimeService).catch((error) => {
+      console.warn('[lead-autostart] boot failed:', error)
+    })
+  })
 
   // Why: the macOS notification permission dialog must fire after the window
   // is visible and focused. If it fires before the window exists, the system

@@ -3,6 +3,7 @@ import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { dedupeTabOrder } from '@/store/slices/tab-group-state'
+import { getBoard } from '@/store/slices/board'
 import type { Tab } from '../../../shared/types'
 import {
   activateWebRuntimeSessionTab,
@@ -102,4 +103,21 @@ export function activateTabNumberShortcut(index: number): boolean {
   store.setActiveFile(target.entityId)
   store.setActiveTabType('editor')
   return true
+}
+
+/**
+ * Cmd/Ctrl+N on the Board: the Nth console card in board order. Null when the
+ * Board is not the active view, so the Classic tab lookup runs instead.
+ */
+export function resolveBoardConsoleShortcutTarget(
+  state: Pick<AppState, 'activeView' | 'activeWorktreeId' | 'boardsByWorktree'>,
+  index: number
+): { worktreeId: string; cardId: string } | null {
+  if (state.activeView !== 'board' || state.activeWorktreeId === null || index < 0) {
+    return null
+  }
+  const worktreeId = state.activeWorktreeId
+  const consoles = getBoard(state, worktreeId).cards.filter((card) => card.kind === 'console')
+  const card = consoles[index]
+  return card ? { worktreeId, cardId: card.id } : null
 }

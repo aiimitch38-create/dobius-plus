@@ -1,13 +1,19 @@
 import { useLayoutEffect } from 'react'
 import { useAppStore } from '@/store'
+import type { AppState } from '@/store/types'
 
-type CloseAction = 'closeSettingsPage' | 'closeSkillsPage'
+type CloseAction =
+  | 'closeSettingsPage'
+  | 'closeSkillsPage'
+  | 'closeAutomationsPage'
+  | 'closeTaskPage'
+  | 'closeMobilePage'
 
-function patch(action: CloseAction, fn: () => void) {
-  return action === 'closeSettingsPage' ? { closeSettingsPage: fn } : { closeSkillsPage: fn }
+function patch(action: CloseAction, fn: () => void): Partial<Pick<AppState, CloseAction>> {
+  return { [action]: fn }
 }
 
-// Why: embedded Classic pages (Settings, Skills) close themselves through a store
+// Why: embedded Classic pages (Settings, Skills, Automations, Tasks, Mobile) close themselves through a store
 // action that sets activeView to the page's previous view, dropping the user out
 // of the Board. While the studio is mounted, that action closes the studio
 // instead; the original is restored on unmount.

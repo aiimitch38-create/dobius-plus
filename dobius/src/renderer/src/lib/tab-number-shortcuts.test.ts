@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Tab, TabGroup } from '../../../shared/types'
 import type { AppState } from '@/store/types'
-import { resolveTabNumberShortcutTarget } from './tab-number-shortcuts'
+import {
+  resolveBoardConsoleShortcutTarget,
+  resolveTabNumberShortcutTarget
+} from './tab-number-shortcuts'
 
 function tab(overrides: Partial<Tab> & Pick<Tab, 'id' | 'groupId'>): Tab {
   return {
@@ -131,5 +134,39 @@ describe('resolveTabNumberShortcutTarget', () => {
     expect(resolveTabNumberShortcutTarget({ ...base, activeView: 'settings' }, 0)).toBeNull()
     expect(resolveTabNumberShortcutTarget({ ...base, activeWorktreeId: null }, 0)).toBeNull()
     expect(resolveTabNumberShortcutTarget(base, -1)).toBeNull()
+  })
+})
+
+describe('resolveBoardConsoleShortcutTarget', () => {
+  const boards = {
+    'wt-1': {
+      cards: [
+        { id: 'note-1', kind: 'note' },
+        { id: 'console-a', kind: 'console' },
+        { id: 'console-b', kind: 'console' }
+      ]
+    }
+  } as unknown as AppState['boardsByWorktree']
+
+  it('maps Cmd+N to the Nth console card in board order, skipping other cards', () => {
+    const state = { activeView: 'board' as const, activeWorktreeId: 'wt-1', boardsByWorktree: boards }
+    expect(resolveBoardConsoleShortcutTarget(state, 0)).toEqual({
+      worktreeId: 'wt-1',
+      cardId: 'console-a'
+    })
+    expect(resolveBoardConsoleShortcutTarget(state, 1)).toEqual({
+      worktreeId: 'wt-1',
+      cardId: 'console-b'
+    })
+    expect(resolveBoardConsoleShortcutTarget(state, 2)).toBeNull()
+  })
+
+  it('defers to the Classic tab lookup off the Board', () => {
+    expect(
+      resolveBoardConsoleShortcutTarget(
+        { activeView: 'terminal', activeWorktreeId: 'wt-1', boardsByWorktree: boards },
+        0
+      )
+    ).toBeNull()
   })
 })

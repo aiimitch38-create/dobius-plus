@@ -44,6 +44,9 @@ import { EMULATOR_METHODS } from './emulator'
 import { VOICE_CONDUCTOR_METHODS } from './voice-conductor'
 import { CHANNEL_TEMPLATE_METHODS } from './channel-templates'
 import { SAVE_SUBSCRIPTION_METHODS } from './save-subscriptions'
+import { TASK_METHODS } from './tasks'
+import { BOARD_CONSOLE_METHODS } from './board-consoles'
+import { LEAD_METHODS } from './leads'
 // Communications-specific method groups. Not part of ALL_RPC_METHODS by
 // default until this pass — each backs a family of vendor/buzz-desktop
 // dispatch cases in dobiusCommunications.ts (see COMMUNICATIONS_RUNTIME_METHODS
@@ -112,6 +115,9 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...VOICE_CONDUCTOR_METHODS,
   ...CHANNEL_TEMPLATE_METHODS,
   ...SAVE_SUBSCRIPTION_METHODS,
+  ...TASK_METHODS,
+  ...BOARD_CONSOLE_METHODS,
+  ...LEAD_METHODS,
   ...COMMUNICATIONS_AGENT_METHODS,
   ...IDENTITY_RPC_METHODS,
   ...HUDDLE_METHODS,

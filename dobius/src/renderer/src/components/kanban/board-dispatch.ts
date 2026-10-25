@@ -82,10 +82,15 @@ function buildPrompt(task: VertexTask): string {
 }
 
 function isReady(task: VertexTask): boolean {
+  // Only 'agent' assignees: a hermes-profile lead or a worker console picks
+  // its cards up through `dobius tasks claim`, never through a paid run here.
   if (task.assignee?.kind !== 'agent') {
     return false
   }
   if (task.status !== 'todo') {
+    return false
+  }
+  if (task.lease) {
     return false
   }
   const dispatch = task.dispatch

@@ -66,9 +66,13 @@ export const VERTEX_TASK_TYPES: readonly VertexTaskType[] = [
 
 /** Who a task is on. `agentId` points at a Dobius custom agent (agents-store);
  * `personId` is a human. Exactly one is expected, but neither is required —
- * an unassigned task is normal. */
+ * an unassigned task is normal.
+ *
+ * 'hermes-profile' is a Hermes lead (`lead-<slug>`) and 'console' a Board
+ * worker console: both pick cards up through the `dobius tasks` CLI, never
+ * through the board's auto-dispatch, which only fires for 'agent'. */
 export type VertexAssignee = {
-  kind: 'agent' | 'human'
+  kind: 'agent' | 'human' | 'hermes-profile' | 'console'
   id: string
   name: string
   /** Two-letter fallback the UI renders when there is no avatar. */
@@ -87,6 +91,44 @@ export type VertexTaskFile = {
   name: string
   /** Local path or remote URL. Never a credential-bearing URL. */
   url?: string
+}
+
+/** An image the operator attached to a card (a screenshot from the Board's
+ * report dialog). Only the main process writes these: the file lives under
+ * `<userData>/vertex-attachments/<taskId>/<id>.<ext>` and `path` is the
+ * absolute location agents read it from. */
+export type VertexTaskAttachment = {
+  id: string
+  name: string
+  path: string
+  mime: VertexTaskAttachmentMime
+  bytes: number
+  createdAt: number
+}
+
+export const VERTEX_TASK_ATTACHMENT_EXT = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+} as const
+
+export type VertexTaskAttachmentMime = keyof typeof VERTEX_TASK_ATTACHMENT_EXT
+
+export const VERTEX_TASK_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+export const VERTEX_TASK_ATTACHMENTS_MAX = 10
+
+export function isVertexTaskAttachmentMime(value: unknown): value is VertexTaskAttachmentMime {
+  // Why: `in` would accept inherited keys like 'constructor'.
+  return typeof value === 'string' && Object.hasOwn(VERTEX_TASK_ATTACHMENT_EXT, value)
+}
+
+/** What the renderer hands main to attach an image; main picks the id, the
+ * extension and the path itself. */
+export type VertexTaskAttachmentInput = {
+  name: string
+  mime: string
+  dataBase64: string
 }
 
 /** Attempts a task gets before the dispatcher dead-letters it. Shared so the
@@ -128,6 +170,49 @@ export type VertexTaskLink = {
   id: string
   label: string
 }
+
+/** How long a claim stays valid without a heartbeat before it is reaped. */
+export const DEFAULT_LEASE_MS = 15 * 60 * 1000
+
+/** A live claim on a card by a lead or worker. Set only by the store's
+ * claim(); a card with a lease is never auto-dispatched. */
+export type VertexTaskLease = {
+  claimedBy: string
+  kind: 'lead' | 'worker'
+  claimedAt: number
+  heartbeatAt: number
+  leaseUntil: number
+  note?: string
+}
+
+/** Free text by a person, lead or worker. UNTRUSTED: rendered as plain text,
+ * never as markdown or HTML, never interpolated into a prompt. */
+export type VertexTaskComment = {
+  id: string
+  author: string
+  body: string
+  createdAt: number
+}
+
+export type VertexTaskSourceOrigin = 'telegram' | 'gmail' | 'imessage' | 'asana' | 'manual'
+
+/** The original message a card was made from, verbatim. UNTRUSTED DATA: it is
+ * quoted to the operator and never followed as instructions. */
+export type VertexTaskSourceQuote = {
+  origin: VertexTaskSourceOrigin
+  sender?: string
+  receivedAt?: number
+  text: string
+}
+
+export type VertexTaskRefusal = 'not-found' | 'not-ready' | `held-by:${string}`
+
+/** Outcome of a work-board operation (claim, heartbeat, complete, block,
+ * release). A refusal is a normal result, not an error: two agents racing
+ * for a card is expected, and exactly one of them gets `ok: true`. */
+export type VertexTaskOpResult =
+  | { ok: true; task: VertexTask }
+  | { ok: false; reason: VertexTaskRefusal }
 
 export type VertexTaskOrigin = {
   kind: 'user' | 'agent' | 'manual'
@@ -175,6 +260,19 @@ export type VertexTask = {
   missionId?: string
   /** Which Vertex project owns this task. */
   projectId?: string
+  /** Live claim by a lead or worker; absent when nobody holds the card. */
+  lease?: VertexTaskLease
+  /** Why a lead parked the card for the operator. Cleared when it leaves Blocked. */
+  blockedReason?: string
+  comments?: VertexTaskComment[]
+  /** Verbatim original message. Untrusted; see VertexTaskSourceQuote. */
+  sourceQuote?: VertexTaskSourceQuote
+  /** Free-form id of whoever created the card (e.g. 'adam', a CLI user). */
+  createdBy?: string
+  /** Structured data a worker attaches on complete (PR url, files, ...). */
+  resultMetadata?: Record<string, unknown>
+  /** Images written by main through vertexTasks:addAttachment; absent when none. */
+  attachments?: VertexTaskAttachment[]
   createdAt: number
   updatedAt: number
 }
@@ -191,6 +289,31 @@ export type VertexTaskInput = {
   origin?: Omit<VertexTaskOrigin, 'createdAt'> & { createdAt?: number }
   projectId?: string
   missionId?: string
+  labels?: string[]
+  sourceQuote?: VertexTaskSourceQuote
+  createdBy?: string
+}
+
+export type VertexTaskClaimInput = {
+  by: string
+  kind: VertexTaskLease['kind']
+  leaseMs?: number
+}
+
+export type VertexTaskCompleteInput = {
+  by: string
+  resultNote: string
+  metadata?: Record<string, unknown>
+  /** Complete a card someone else holds (or nobody holds). Operator use. */
+  force?: boolean
+}
+
+export type VertexTaskListFilter = {
+  status?: VertexTaskStatus
+  assigneeId?: string
+  projectId?: string
+  parentTaskId?: string
+  claimedBy?: string
 }
 
 /** Every field a caller may change. `id`, `createdAt` and `order` are excluded:
@@ -215,6 +338,20 @@ export type VertexTaskSource = {
   /** Move a task to `to`, inserted at `toIndex` among that column's tasks. */
   move(taskId: string, to: VertexTaskStatus, toIndex: number): VertexTask | null
   remove(taskId: string): boolean
+}
+
+/** The store as the work board leads and workers drive through the CLI.
+ * A superset of VertexTaskSource so the Kanban UI keeps its narrow seam. */
+export type VertexWorkBoard = VertexTaskSource & {
+  /** Compare-and-set: succeeds only for a To Do card with no live lease. */
+  claim(taskId: string, input: VertexTaskClaimInput): VertexTaskOpResult
+  heartbeat(taskId: string, by: string, note?: string): VertexTaskOpResult
+  complete(taskId: string, input: VertexTaskCompleteInput): VertexTaskOpResult
+  block(taskId: string, by: string, reason: string): VertexTaskOpResult
+  release(taskId: string, by: string): VertexTaskOpResult
+  comment(taskId: string, author: string, body: string): VertexTask | null
+  /** Filtered list; expired leases are reaped first, same as list(). */
+  listFiltered(filter: VertexTaskListFilter): VertexTask[]
 }
 
 export function isVertexTaskStatus(value: unknown): value is VertexTaskStatus {

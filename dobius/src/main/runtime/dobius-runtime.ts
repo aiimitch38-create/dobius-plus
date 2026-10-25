@@ -124,7 +124,10 @@ import type {
   DirEntry
 } from '../../shared/types'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
-import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
+import type {
+  RuntimeBoardSpawnConsoleEvent,
+  RuntimeClientEvent
+} from '../../shared/runtime-client-events'
 import { toRuntimeActivateWorktreeEvent } from '../../shared/runtime-client-events'
 import type {
   LinearCurrentIssueContextHints,
@@ -1218,6 +1221,7 @@ type RuntimeNotifier = {
     startup?: WorktreeStartupLaunch,
     defaultTabs?: CreateWorktreeResult['defaultTabs']
   ): void
+  boardSpawnConsole?(event: RuntimeBoardSpawnConsoleEvent): void
   createTerminal(
     worktreeId: string,
     opts: {
@@ -2768,7 +2772,7 @@ export class DobiusRuntimeService {
     }
   }
 
-  private emitClientEvent(event: RuntimeClientEvent): void {
+  emitClientEvent(event: RuntimeClientEvent): void {
     for (const listener of this.clientEventListeners) {
       listener(event)
     }
@@ -2795,6 +2799,21 @@ export class DobiusRuntimeService {
     this.emitClientEvent(
       toRuntimeActivateWorktreeEvent(repoId, worktreeId, setup, startup, defaultTabs)
     )
+  }
+
+  /**
+   * Lead loop: hands a Board console spawn to the renderer. Mirrors
+   * notifyActivateWorktree: the window IPC path serves the local desktop (the
+   * renderer only subscribes to runtime client events for remote environments)
+   * and the client-event path serves paired web/remote clients. `delivered` is
+   * false when neither has a receiver, so the caller can retry later instead of
+   * assuming a console is on its way.
+   */
+  notifyBoardSpawnConsole(event: RuntimeBoardSpawnConsoleEvent): { delivered: boolean } {
+    const notifier = this.notifier?.boardSpawnConsole ? this.notifier : null
+    notifier?.boardSpawnConsole?.(event)
+    this.emitClientEvent(event)
+    return { delivered: notifier !== null || this.clientEventListeners.size > 0 }
   }
 
   setAgentBrowserBridge(bridge: AgentBrowserBridge | null): void {

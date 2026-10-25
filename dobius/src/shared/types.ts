@@ -2685,8 +2685,8 @@ export type GlobalSettings = {
   /** When the app reopens, Board consoles resume their last chat automatically
    *  ('auto', the default when unset) or wait for a "Resume all?" answer ('ask'). */
   boardResumeMode?: 'auto' | 'ask'
-  /** What Dobius opens to: the Board ('board', the default when unset) or the
-   *  Classic terminal view ('classic'). Both stay one click apart either way. */
+  /** @deprecated The Classic look is retired; Dobius always opens on the Board.
+   *  Kept so profiles saved with 'classic' still parse; the value is ignored. */
   appLook?: 'board' | 'classic'
   /** The name Home greets the user by. Unset (or blank) falls back to the
    *  repo's git username. Stored trimmed, at most 40 characters. */

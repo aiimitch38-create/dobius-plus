@@ -2,16 +2,25 @@
 // Partial on purpose: a studio without an entry gets the generic icon, no subtitle.
 import {
   Bot,
+  CalendarClock,
   Code2,
   FileText,
+  GitBranch,
+  History,
   Layers,
+  ListChecks,
+  ListTodo,
   Map as MapIcon,
   MessageSquare,
+  MessageSquareText,
   NotebookPen,
   PanelsTopLeft,
+  Plug,
   Repeat,
   Settings,
+  Smartphone,
   Sparkles,
+  SquareKanban,
   Brain,
   type LucideIcon
 } from 'lucide-react'
@@ -30,7 +39,16 @@ const ICONS: Partial<Record<BoardStudioId, LucideIcon>> = {
   chat: MessageSquare,
   loops: Repeat,
   agents: Bot,
-  presets: Layers
+  presets: Layers,
+  'source-control': GitBranch,
+  checks: ListChecks,
+  ports: Plug,
+  prompts: MessageSquareText,
+  vault: History,
+  'asana-tasks': ListTodo,
+  automations: CalendarClock,
+  'tasks-page': SquareKanban,
+  mobile: Smartphone
 }
 
 export function boardStudioIcon(studio: BoardStudioId): LucideIcon {
@@ -88,6 +106,45 @@ export function boardStudioSubtitle(studio: BoardStudioId): string | null {
       return translate(
         'board.studio.subtitle.settings',
         'Dobius settings, without leaving the board.'
+      )
+    case 'source-control':
+      return translate(
+        'board.studio.subtitle.sourceControl',
+        'Changes, commits, branches and pull requests for this workspace.'
+      )
+    case 'checks':
+      return translate(
+        'board.studio.subtitle.checks',
+        'CI checks and review comments on the pull request for this branch.'
+      )
+    case 'ports':
+      return translate(
+        'board.studio.subtitle.ports',
+        'Ports your dev servers listen on, with forwarding for remote workspaces.'
+      )
+    case 'prompts':
+      return translate('board.studio.subtitle.prompts', 'Saved prompts, ready to send to a console.')
+    case 'vault':
+      return translate(
+        'board.studio.subtitle.vault',
+        'Past agent sessions for this workspace, searchable and resumable.'
+      )
+    case 'asana-tasks':
+      return translate('board.studio.subtitle.asanaTasks', 'Asana tasks synced into Dobius.')
+    case 'automations':
+      return translate(
+        'board.studio.subtitle.automations',
+        'Scheduled repo automations: cron-style runs and their history.'
+      )
+    case 'tasks-page':
+      return translate(
+        'board.studio.subtitle.tasksPage',
+        'Issues and pull requests from GitHub, GitLab, Linear and Jira.'
+      )
+    case 'mobile':
+      return translate(
+        'board.studio.subtitle.mobile',
+        'Pair your phone with Dobius and follow your consoles from anywhere.'
       )
     default:
       return null

@@ -16,7 +16,6 @@ import {
 } from './SettingsFormControls'
 import { DEFAULT_APP_FONT_FAMILY } from '../../../../shared/constants'
 import {
-  getAppLookEntries,
   getLanguageEntries,
   getSystemTrayEntries,
   getThemeEntries,
@@ -32,7 +31,6 @@ import {
 import { translate } from '@/i18n/i18n'
 import type { UiLanguage } from '../../../../shared/ui-language'
 import { matchesSettingsSearch, normalizeSettingsSearchQuery } from './settings-search'
-import { appLookViewUpdate, resolveAppLook, type AppLook } from '../board/board-effective-view'
 import { APP_SKIN_BUZZ, APP_SKIN_NAMES, APP_SKIN_NONE } from '../../lib/app-skin'
 
 type AppearanceInterfaceSectionProps = {
@@ -59,8 +57,6 @@ export function AppearanceInterfaceSection({
   const languageEntry = getLanguageEntries()[0]
   const systemTrayEntry = getSystemTrayEntries({ showSystemTray: true })[0]
   const themeEntry = getThemeEntries()[0]
-  const appLookEntry = getAppLookEntries()[0]
-  const appLookLabel = translate('settings.appearance.appLook.title', 'App look')
   const themeLabel = translate('auto.components.settings.AppearancePane.932ff1fbff', 'Theme')
   const titlebarEntry = getTitlebarEntries()[0]
   const typographyEntry = getTypographyEntries()[0]
@@ -102,39 +98,6 @@ export function AppearanceInterfaceSection({
                 {
                   value: 'light',
                   label: translate('auto.components.settings.AppearancePane.fd89b5487c', 'Light')
-                }
-              ]}
-            />
-          }
-        />
-      </SearchableSetting>
-
-      <SearchableSetting
-        title={appLookLabel}
-        description={appLookEntry?.description}
-        keywords={appLookEntry?.keywords ?? ['board', 'classic', 'startup']}
-        forceVisible={forceVisiblePrimary}
-      >
-        <SettingsRow
-          label={appLookLabel}
-          description={appLookEntry?.description}
-          control={
-            <SettingsSegmentedControl
-              size="sm"
-              ariaLabel={appLookLabel}
-              value={resolveAppLook(settings)}
-              onChange={(appLook: AppLook) => {
-                updateSettings({ appLook })
-                useAppStore.setState((state) => appLookViewUpdate(state, appLook) ?? {})
-              }}
-              options={[
-                {
-                  value: 'board',
-                  label: translate('settings.appearance.appLook.board', 'New look (Board)')
-                },
-                {
-                  value: 'classic',
-                  label: translate('settings.appearance.appLook.classic', 'Classic look')
                 }
               ]}
             />

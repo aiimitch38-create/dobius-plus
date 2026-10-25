@@ -45,7 +45,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { KanbanJobLanes } from './KanbanJobLanes'
 import { getKanbanIpcSource } from './kanban-ipc-source'
-import { useAssignablePeople } from './kanban-people'
+import { OPERATOR, useAssignablePeople } from './kanban-people'
 import { DAY_MS, parseDueDate, startOfDay } from './kanban-dates'
 import { moveTasksOptimistically } from './kanban-ordering'
 import { KanbanColumn } from './KanbanColumn'
@@ -948,6 +948,26 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
             allTasks={tasks}
             onClose={() => setSelectedTaskId(null)}
             onUpdate={(patch) => updateTask(selectedTask.id, patch)}
+            onComment={
+              taskSource.comment
+                ? (body) => {
+                    busy.current += 1
+                    void taskSource
+                      .comment?.(selectedTask.id, OPERATOR.id, body)
+                      .then((updated) => {
+                        if (updated) {
+                          setTasks((current) =>
+                            current.map((task) => (task.id === updated.id ? updated : task))
+                          )
+                        }
+                      })
+                      .catch(() => toast.error('Failed to add comment'))
+                      .finally(() => {
+                        busy.current -= 1
+                      })
+                  }
+                : undefined
+            }
             onCreateChild={(title, assigneeId) => createChildTask(selectedTask, title, assigneeId)}
             onDelete={() => {
               const previous = tasks

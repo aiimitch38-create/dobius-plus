@@ -1856,7 +1856,7 @@ describe('createUISlice page navigation history', () => {
     expect(store.getState().worktreeNavHistoryIndex).toBe(1)
 
     store.getState().closeTaskPage()
-    expect(store.getState().activeView).toBe('terminal')
+    expect(store.getState().activeView).toBe('board')
     expect(store.getState().worktreeNavHistoryIndex).toBe(0)
   })
 
@@ -1881,7 +1881,7 @@ describe('createUISlice page navigation history', () => {
     expect(store.getState().worktreeNavHistoryIndex).toBe(2)
 
     store.getState().closeTaskPage()
-    expect(store.getState().activeView).toBe('terminal')
+    expect(store.getState().activeView).toBe('board')
     expect(store.getState().taskPageData).toEqual({})
     expect(store.getState().githubTaskDrawerWorkItem).toBeNull()
     expect(store.getState().worktreeNavHistoryIndex).toBe(0)
@@ -2066,7 +2066,7 @@ describe('createUISlice page navigation history', () => {
     ])
 
     store.getState().closeTaskPage()
-    expect(store.getState().activeView).toBe('terminal')
+    expect(store.getState().activeView).toBe('board')
     expect(store.getState().worktreeNavHistoryIndex).toBe(0)
   })
 
@@ -2080,7 +2080,7 @@ describe('createUISlice page navigation history', () => {
     expect(store.getState().worktreeNavHistoryIndex).toBe(1)
 
     store.getState().closeAutomationsPage()
-    expect(store.getState().activeView).toBe('terminal')
+    expect(store.getState().activeView).toBe('board')
     expect(store.getState().worktreeNavHistoryIndex).toBe(0)
   })
 
@@ -2105,7 +2105,7 @@ describe('createUISlice page navigation history', () => {
     expect(store.getState().worktreeNavHistoryIndex).toBe(0)
 
     store.getState().closeAutomationsPage()
-    expect(store.getState().activeView).toBe('terminal')
+    expect(store.getState().activeView).toBe('board')
     expect(store.getState().worktreeNavHistoryIndex).toBe(0)
   })
 
@@ -2120,7 +2120,7 @@ describe('createUISlice page navigation history', () => {
     })
 
     store.getState().closeAutomationsPage()
-    expect(store.getState().activeView).toBe('terminal')
+    expect(store.getState().activeView).toBe('board')
     expect(store.getState().worktreeNavHistoryIndex).toBe(0)
   })
 })
@@ -3072,5 +3072,98 @@ describe('createUISlice space navigation', () => {
     store.getState().closeSpacePage()
 
     expect(store.getState().activeView).toBe('tasks')
+  })
+})
+
+describe('createUISlice board studio routing', () => {
+  function createBoardUIStore(): StoreApi<AppState> {
+    const store = createUIStore()
+    store.setState({ activeView: 'board', activeWorktreeId: 'wt-1' } as Partial<AppState>)
+    return store
+  }
+
+  it('opens page actions as Board studios while a workspace is active on the Board', () => {
+    const store = createBoardUIStore()
+
+    store.getState().openAutomationsPage()
+    expect(store.getState().activeView).toBe('board')
+    expect(store.getState().boardStudio).toBe('automations')
+    expect(store.getState().worktreeNavHistory).toEqual([])
+
+    store.getState().openTaskPage({ preselectedRepoId: 'repo-1' })
+    expect(store.getState().activeView).toBe('board')
+    expect(store.getState().boardStudio).toBe('tasks-page')
+    expect(store.getState().taskPageData).toEqual({ preselectedRepoId: 'repo-1' })
+    expect(store.getState().worktreeNavHistory).toEqual([])
+
+    store.getState().openMobilePage()
+    expect(store.getState().boardStudio).toBe('mobile')
+
+    store.getState().openSettingsPage()
+    expect(store.getState().boardStudio).toBe('settings')
+
+    store.getState().openSkillsPage()
+    expect(store.getState().boardStudio).toBe('skills')
+    expect(store.getState().activeView).toBe('board')
+  })
+
+  it('still opens the Classic page while no workspace is active (Landing)', () => {
+    const store = createUIStore()
+    store.setState({ activeView: 'board', activeWorktreeId: null } as Partial<AppState>)
+
+    store.getState().openAutomationsPage()
+    expect(store.getState().activeView).toBe('automations')
+    expect(store.getState().boardStudio).toBeNull()
+
+    store.getState().closeAutomationsPage()
+    expect(store.getState().activeView).toBe('board')
+  })
+
+  it('never lands on the retired Classic shell when a page closes without an open', () => {
+    const store = createUIStore()
+
+    store.getState().closeSettingsPage()
+    expect(store.getState().activeView).toBe('board')
+    store.getState().closeTaskPage()
+    expect(store.getState().activeView).toBe('board')
+    store.getState().closeMobilePage()
+    expect(store.getState().activeView).toBe('board')
+    store.getState().closeSkillsPage()
+    expect(store.getState().activeView).toBe('board')
+    store.getState().closeActivityPage()
+    expect(store.getState().activeView).toBe('board')
+    store.getState().closeSpacePage()
+    expect(store.getState().activeView).toBe('board')
+    store.getState().closeKnowledgePage()
+    expect(store.getState().activeView).toBe('board')
+
+    // A stale persisted 'terminal' return target is remapped on close too.
+    store.setState({
+      activeView: 'settings',
+      previousViewBeforeSettings: 'terminal'
+    } as Partial<AppState>)
+    store.getState().closeSettingsPage()
+    expect(store.getState().activeView).toBe('board')
+  })
+})
+
+describe('createUISlice setActiveView', () => {
+  it('lands requests for the retired Classic terminal view on the Board', () => {
+    const store = createUIStore()
+    store.setState({ activeView: 'settings' } as Partial<AppState>)
+
+    store.getState().setActiveView('terminal')
+
+    expect(store.getState().activeView).toBe('board')
+  })
+
+  it('still navigates to every other view', () => {
+    const store = createUIStore()
+
+    store.getState().setActiveView('home')
+    expect(store.getState().activeView).toBe('home')
+
+    store.getState().setActiveView('settings')
+    expect(store.getState().activeView).toBe('settings')
   })
 })

@@ -370,13 +370,18 @@ async function resolveGitLabMRDiscussionForChecks(args: {
   })
 }
 
-export default function ChecksPanel(): React.JSX.Element {
+// Why: `isVisible` lets a Board studio host this panel without the right sidebar being open.
+export default function ChecksPanel({
+  isVisible = false
+}: {
+  isVisible?: boolean
+} = {}): React.JSX.Element {
   // Why: the sidebar stays mounted when closed (for performance). Gate
   // polling on visibility so we don't fetch checks/comments — or poll the
   // terminal cwd — in the background when the panel isn't visible.
   const rightSidebarOpen = useAppStore((s) => s.rightSidebarOpen)
   const rightSidebarTab = useAppStore((s) => s.rightSidebarTab)
-  const isPanelVisible = rightSidebarOpen && rightSidebarTab === 'checks'
+  const isPanelVisible = isVisible || (rightSidebarOpen && rightSidebarTab === 'checks')
 
   // Follow the active terminal's cwd so linked-PR/checks state tracks the
   // worktree the terminal is actually operating in (e.g. across a stack),

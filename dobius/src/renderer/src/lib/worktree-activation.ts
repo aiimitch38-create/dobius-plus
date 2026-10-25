@@ -310,7 +310,7 @@ export function activateAndRevealWorktree(
     !hasActivationWork &&
     state.activeRepoId === wt.repoId &&
     state.activeWorktreeId === worktreeId &&
-    (state.activeView === 'terminal' || opts?.keepView === true)
+    (state.activeView === 'terminal' || state.activeView === 'board' || opts?.keepView === true)
 
   // 1. Set activeRepoId if crossing repos
   if (wt.repoId !== state.activeRepoId) {

@@ -26,6 +26,9 @@ import { TELEGRAM_HANDLERS } from './handlers/telegram'
 import { EMULATOR_HANDLERS } from './handlers/emulator'
 import { LINEAR_HANDLERS } from './handlers/linear'
 import { VM_HANDLERS } from './handlers/vm'
+import { TASK_HANDLERS } from './handlers/tasks'
+import { BOARD_HANDLERS } from './handlers/board'
+import { LEAD_HANDLERS } from './handlers/lead'
 
 export type HandlerContext = {
   flags: Map<string, string | boolean>
@@ -65,7 +68,10 @@ function buildHandlers(): Map<string, CommandHandler> {
     TELEGRAM_HANDLERS,
     ENVIRONMENT_HANDLERS,
     LINEAR_HANDLERS,
-    VM_HANDLERS
+    VM_HANDLERS,
+    TASK_HANDLERS,
+    BOARD_HANDLERS,
+    LEAD_HANDLERS
   ]
   for (const group of groups) {
     for (const [key, handler] of Object.entries(group)) {

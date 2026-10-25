@@ -12,7 +12,6 @@ import { matchesSettingsSearch, normalizeSettingsSearchQuery } from './settings-
 import { useAppStore } from '../../store'
 import {
   getAppIconEntries,
-  getAppLookEntries,
   getAppearancePaneSearchEntries,
   getLanguageEntries,
   getLayoutEntries,
@@ -104,7 +103,6 @@ export function AppearancePane({
   const interfaceSearchEntries = [
     { title: interfaceTitle },
     ...getThemeEntries(),
-    ...getAppLookEntries(),
     ...getZoomEntries(),
     ...getTypographyEntries(),
     ...(SHOW_UI_LANGUAGE_SETTING ? getLanguageEntries() : []),

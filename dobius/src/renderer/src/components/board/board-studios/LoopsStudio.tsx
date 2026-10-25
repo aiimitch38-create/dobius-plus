@@ -7,15 +7,9 @@ import { BoardLoopsPanel } from '../board-loops/BoardLoopsPanel'
 import { StudioEmptyState } from './StudioEmptyState'
 
 // Board loops (instructions fired into this board's consoles). Scheduled repo
-// automations stay on the Classic Automations page, reachable from the link.
-export function LoopsStudio({
-  worktreeId,
-  onClose
-}: {
-  worktreeId: string | null
-  onClose: () => void
-}): React.JSX.Element {
-  const openAutomationsPage = useAppStore((s) => s.openAutomationsPage)
+// automations live in the Automations studio, reachable from the link.
+export function LoopsStudio({ worktreeId }: { worktreeId: string | null }): React.JSX.Element {
+  const setBoardStudio = useAppStore((s) => s.setBoardStudio)
   if (!worktreeId) {
     return (
       <StudioEmptyState
@@ -37,10 +31,7 @@ export function LoopsStudio({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => {
-            onClose()
-            openAutomationsPage()
-          }}
+          onClick={() => setBoardStudio('automations')}
         >
           <CalendarClock className="size-3.5" />
           {translate('board.studio.loops.openAutomations', 'Open Automations')}

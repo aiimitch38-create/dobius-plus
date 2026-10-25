@@ -24,4 +24,6 @@ export type TaskSource = {
   update(taskId: string, patch: VertexTaskPatch): Promise<VertexTask | null>
   create(input: VertexTaskInput): Promise<VertexTask | null>
   remove(taskId: string): Promise<boolean>
+  /** Optional: the standalone preview has no comments. */
+  comment?(taskId: string, author: string, body: string): Promise<VertexTask | null>
 }

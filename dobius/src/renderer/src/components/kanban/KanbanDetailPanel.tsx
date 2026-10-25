@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AvatarStack } from './AvatarStack'
+import { KanbanAttachmentThumb } from './KanbanAttachmentThumb'
 import { LabelChip } from './kanban-chips'
 import { useAssignablePeople } from './kanban-people'
 import type {
@@ -73,6 +74,7 @@ export function KanbanDetailPanel({
   allTasks,
   onClose,
   onUpdate,
+  onComment,
   onCreateChild,
   onDelete
 }: {
@@ -82,10 +84,13 @@ export function KanbanDetailPanel({
   allTasks: Task[]
   onClose: () => void
   onUpdate: (patch: Parameters<TaskSource['update']>[1]) => void
+  /** Absent when the source cannot store comments (the standalone preview). */
+  onComment?: (body: string) => void
   onCreateChild: (title: string, assigneeId: string) => void
   onDelete: () => void
 }): React.JSX.Element {
   const [subtaskTitle, setSubtaskTitle] = useState('')
+  const [commentBody, setCommentBody] = useState('')
   const [childTaskTitle, setChildTaskTitle] = useState('')
   const [childAssigneeId, setChildAssigneeId] = useState('')
   const [newLabel, setNewLabel] = useState('')
@@ -255,6 +260,22 @@ export function KanbanDetailPanel({
                 />
               ))}
           </div>
+          {task.attachments?.length ? (
+            <div className="mt-4">
+              <p className="mb-2 text-[11px] text-kanban-muted-foreground">
+                Screenshots ({task.attachments.length})
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {task.attachments.map((attachment) => (
+                  <KanbanAttachmentThumb
+                    key={attachment.id}
+                    taskId={task.id}
+                    attachment={attachment}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="mt-4 space-y-1">
             <Field label="Assignee">
               <Popover open={assigneeOpen} onOpenChange={setAssigneeOpen}>
@@ -659,8 +680,40 @@ export function KanbanDetailPanel({
             piece of evidence a run produces was unreadable. */}
         <TabsContent
           value="activity"
-          className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto p-4"
+          className="scrollbar-sleek min-h-0 flex-1 space-y-4 overflow-y-auto p-4"
         >
+          {task.sourceQuote ? (
+            <section>
+              <h3 className="text-[11px] font-semibold">Original message (quoted, untrusted)</h3>
+              <p className="text-[10px] text-kanban-muted-foreground">
+                {task.sourceQuote.origin}
+                {task.sourceQuote.sender ? ` · from ${task.sourceQuote.sender}` : ''}
+                {task.sourceQuote.receivedAt
+                  ? ` · ${new Date(task.sourceQuote.receivedAt).toLocaleString()}`
+                  : ''}
+              </p>
+              {/* Plain text on purpose: this is whatever someone sent, never
+                  markdown or HTML, and never something to act on. */}
+              <pre className="mt-1 font-sans whitespace-pre-wrap break-words rounded-md border border-kanban-border bg-kanban-column p-3 text-[11px] leading-[1.55]">
+                {task.sourceQuote.text}
+              </pre>
+            </section>
+          ) : null}
+
+          {task.lease ? (
+            <p className="text-[11px] text-kanban-muted-foreground">
+              Held by <span className="font-medium text-kanban-foreground">{task.lease.claimedBy}</span>{' '}
+              ({task.lease.kind}) since {new Date(task.lease.claimedAt).toLocaleString()}; lease
+              until {new Date(task.lease.leaseUntil).toLocaleTimeString()}.
+              {task.lease.note ? ` Last note: ${task.lease.note}` : ''}
+            </p>
+          ) : null}
+          {task.blockedReason ? (
+            <p className="rounded-md border border-kanban-border bg-kanban-column p-3 text-[11px] leading-[1.55] text-kanban-red">
+              Blocked: {task.blockedReason}
+            </p>
+          ) : null}
+
           {task.dispatch ? (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-[11px]">
@@ -704,11 +757,58 @@ export function KanbanDetailPanel({
                 </p>
               )}
             </div>
-          ) : (
-            <p className="grid h-full place-items-center text-center text-sm text-kanban-muted-foreground">
+          ) : !task.lease && !task.comments?.length ? (
+            <p className="text-[11px] text-kanban-muted-foreground">
               No agent has run this task yet.
             </p>
-          )}
+          ) : null}
+
+          <section>
+            <h3 className="mb-1 text-[11px] font-semibold">Comments</h3>
+            {task.comments?.length ? (
+              <ul className="space-y-2">
+                {task.comments.map((comment) => (
+                  <li
+                    key={comment.id}
+                    className="rounded-md border border-kanban-border bg-kanban-column p-2 text-[11px] leading-[1.5]"
+                  >
+                    <div className="flex gap-2 text-[10px] text-kanban-muted-foreground">
+                      <span className="font-medium text-kanban-foreground">{comment.author}</span>
+                      <span>{new Date(comment.createdAt).toLocaleString()}</span>
+                    </div>
+                    <p className="mt-0.5 whitespace-pre-wrap break-words">{comment.body}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[11px] text-kanban-muted-foreground">No comments yet.</p>
+            )}
+            {onComment ? (
+              <form
+                className="mt-2 flex gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  const body = commentBody.trim()
+                  if (!body) {
+                    return
+                  }
+                  onComment(body)
+                  setCommentBody('')
+                }}
+              >
+                <Input
+                  value={commentBody}
+                  onChange={(event) => setCommentBody(event.target.value)}
+                  placeholder="Add a comment"
+                  aria-label="New comment"
+                  className="h-8 text-[11px]"
+                />
+                <Button type="submit" variant="secondary" size="sm" disabled={!commentBody.trim()}>
+                  Add
+                </Button>
+              </form>
+            ) : null}
+          </section>
         </TabsContent>
       </Tabs>
       <footer className="grid shrink-0 grid-cols-3 gap-2 border-t border-kanban-border bg-kanban-panel px-4 py-3">

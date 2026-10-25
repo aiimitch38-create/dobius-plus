@@ -301,6 +301,7 @@ function registerRuntimeWindowLifecycle(
         ...(defaultTabs ? { defaultTabs } : {})
       })
     },
+    boardSpawnConsole: (event) => send('ui:boardSpawnConsole', event),
     createTerminal: (worktreeId, opts) =>
       send('ui:createTerminal', {
         worktreeId,
