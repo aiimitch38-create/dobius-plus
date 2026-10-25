@@ -98,3 +98,9 @@
 - 2.1.2: Settings/Automations/Tasks/Skills/Mobile open as studios from Home.
 - 2.1.3: web tiles (allowpopups + popup → sibling tile, rate-limited; private dobius-web-tile session by default; overflow-clip; focus-fly fixed), consoles (glance kept until live paint; agent exit → Ended + Restart; lead watcher two-poll rule), perf (glance tail backoff/seq skip; renderer idle CPU ~170% → ~9% with 6 consoles).
 - Lessons: settled-state screenshots miss transition flashes (frame bursts added to the test-copy skill); in Electron 42 a webview's getWebContentsId() throws until dom-ready; a test-copy agent that dies with the session leaves an orphan Electron (check pgrep after interruptions); a missing `allowpopups` silently drops window.open before main's handler.
+
+## 2026-10-25 — 2.1.4 (installed, build 50, 1396dd0c)
+- Agent cursors / co-presence: named per-agent pointers (Adam blue) in web tiles; pause/stop/take-over/follow strip; human input yields the tile; approvals for login/purchase/send/publish/delete/download/unverified; gates fail closed in a CDP isolated world (shadow DOM, iframe, overlay checks); approvals, resume and takeover are renderer-only; agents limited to private tiles; eval/exec/upload/raw mouse/screencast refused; ~2 actions/s.
+- Kanban proof: `dobius tasks attach|complete --proof|review --proof`; magic-byte checks, O_NOFOLLOW, local-only file paths; proof thumbnails on Review/Done cards; Add screenshot in the panel; leads require proof.
+- Reviews: 3 security rounds (critical self-approval, resume, script bypass, fail-open gates fixed); e2e 9/9 pass.
+- Lessons: session restarts orphan test copies and kill agents mid-run (checkpoint commits help); e2e build doesn't rebuild the CLI; raw electron launch needs node_modules/.bin on PATH.
