@@ -92,3 +92,9 @@
 - Built: Board as default view (Classic one click away), canvas + rails + side-apps dock + command bar (VoiceOrb), live console cards (portal, fixed columns on zoom), typed planner + delivery gate + mission reports, pause/resume agents, cards (15 kinds), studios (9), presets, loops (schedule/idle/output/goal/templates), undo/redo, shortcuts, context menu, styles. Details: dobius/docs/board/MORNING-SUMMARY.md.
 - Verified: typecheck web clean; 6,328 tests pass; the 24 failing tests fail identically on 1c5c9e07 (pre-existing); hook checks run by hand (hook not installed in worktree).
 - Lessons: long `dobius terminal send` messages lose their start — send briefs as files; `--wait --json` output needs heartbeat filtering (learned skill); UI crawlers on a real app must deny-list spawn/add/copy/settings and never use Cmd+Z off the canvas; swap can eat 1 GB+ disk under many agents — watch `df`.
+
+## 2026-10-25 — 2.1.1 → 2.1.3 (installed 2.1.3, build 49, 5c94e879)
+- 2.1.1: no Classic flash (Board cover until hydration, Suspense cover, prefetch, no-workspace → Home).
+- 2.1.2: Settings/Automations/Tasks/Skills/Mobile open as studios from Home.
+- 2.1.3: web tiles (allowpopups + popup → sibling tile, rate-limited; private dobius-web-tile session by default; overflow-clip; focus-fly fixed), consoles (glance kept until live paint; agent exit → Ended + Restart; lead watcher two-poll rule), perf (glance tail backoff/seq skip; renderer idle CPU ~170% → ~9% with 6 consoles).
+- Lessons: settled-state screenshots miss transition flashes (frame bursts added to the test-copy skill); in Electron 42 a webview's getWebContentsId() throws until dom-ready; a test-copy agent that dies with the session leaves an orphan Electron (check pgrep after interruptions); a missing `allowpopups` silently drops window.open before main's handler.
