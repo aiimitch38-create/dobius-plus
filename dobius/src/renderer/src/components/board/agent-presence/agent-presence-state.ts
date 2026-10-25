@@ -54,12 +54,37 @@ export type AgentPresence = {
 type AgentPresenceStore = {
   agents: Record<string, AgentPresence>
   followAgentId: string | null
+  /** Follow the first agent that starts acting on a tile (toggle in the presence strip). */
+  autoFollowEnabled: boolean
+}
+
+/** A web tile stays live (no glance still) this long after an agent's last action on it. */
+export const AGENT_TILE_LIVE_MS = 10_000
+/** No auto-follow this soon after the user moved the camera themselves. */
+export const AUTO_FOLLOW_USER_GRACE_MS = 5_000
+/** After the user stops following an agent, that agent is not auto-followed again for this long. */
+export const AUTO_FOLLOW_SUPPRESS_MS = 30_000
+const AUTO_FOLLOW_STORAGE_KEY = 'dobius.board.autoFollowAgents'
+
+function readAutoFollowSetting(): boolean {
+  try {
+    return window.localStorage.getItem(AUTO_FOLLOW_STORAGE_KEY) !== 'off'
+  } catch (error) {
+    console.debug('[agent-presence] auto-follow setting unreadable', error)
+    return true
+  }
 }
 
 export const useAgentPresence = create<AgentPresenceStore>(() => ({
   agents: {},
-  followAgentId: null
+  followAgentId: null,
+  autoFollowEnabled: typeof window === 'undefined' ? true : readAutoFollowSetting()
 }))
+
+const autoFollow = {
+  lastUserCameraAt: Number.NEGATIVE_INFINITY,
+  suppressedUntil: new Map<string, number>()
+}
 
 const ACTION_KINDS: ReadonlySet<AgentCursorKind> = new Set([
   'move',
@@ -228,8 +253,61 @@ export function applyAgentCursorEvent(event: AgentCursorEvent, now = Date.now())
   } else if (alreadyApplied(event.agentId, event.seq)) {
     return false
   }
-  useAgentPresence.setState({ agents: { ...agents, [event.agentId]: reduce(prev, event, now) } })
+  const next = reduce(prev, event, now)
+  useAgentPresence.setState({ agents: { ...agents, [event.agentId]: next } })
+  if (ACTION_KINDS.has(event.kind) && isTileTarget(event.target)) {
+    maybeAutoFollow(event.agentId, now)
+  }
   return true
+}
+
+/** Starts following `agentId` when nobody is followed, auto-follow is on, and the user is not mid-camera. */
+export function maybeAutoFollow(agentId: string, now = Date.now()): boolean {
+  const { followAgentId, autoFollowEnabled, agents } = useAgentPresence.getState()
+  if (!autoFollowEnabled || followAgentId !== null || !agents[agentId]) {
+    return false
+  }
+  if (now - autoFollow.lastUserCameraAt < AUTO_FOLLOW_USER_GRACE_MS) {
+    return false
+  }
+  if ((autoFollow.suppressedUntil.get(agentId) ?? 0) > now) {
+    return false
+  }
+  useAgentPresence.setState({ followAgentId: agentId })
+  return true
+}
+
+/** The user panned/zoomed/dragged the canvas; auto-follow waits before taking the camera. */
+export function noteUserCameraInteraction(now = Date.now()): void {
+  autoFollow.lastUserCameraAt = now
+}
+
+/** The user ended follow mode (Stop, Unfollow, pan away); that agent is not auto-followed again for 30 s. */
+export function stopFollowingByUser(now = Date.now()): void {
+  const { followAgentId } = useAgentPresence.getState()
+  if (followAgentId) {
+    autoFollow.suppressedUntil.set(followAgentId, now + AUTO_FOLLOW_SUPPRESS_MS)
+  }
+  useAgentPresence.setState({ followAgentId: null })
+}
+
+export function setAutoFollowEnabled(enabled: boolean): void {
+  useAgentPresence.setState({ autoFollowEnabled: enabled })
+  try {
+    window.localStorage.setItem(AUTO_FOLLOW_STORAGE_KEY, enabled ? 'on' : 'off')
+  } catch (error) {
+    console.debug('[agent-presence] auto-follow setting not persisted', error)
+  }
+}
+
+/** True while some agent claims the tile or acted on it within AGENT_TILE_LIVE_MS. */
+export function agentLiveOnTile(tileId: string, now = Date.now()): boolean {
+  return Object.values(useAgentPresence.getState().agents).some(
+    (a) =>
+      a.claimedTileId === tileId &&
+      !a.stopped &&
+      (claimActive(a, now) || now - a.lastActionAt < AGENT_TILE_LIVE_MS)
+  )
 }
 
 function stateFor(sinceMs: number): AgentUserState {
@@ -364,5 +442,7 @@ export function startAgentPresence(): () => void {
 
 export function resetAgentPresenceForTest(): void {
   appliedSeqs.clear()
-  useAgentPresence.setState({ agents: {}, followAgentId: null })
+  autoFollow.lastUserCameraAt = Number.NEGATIVE_INFINITY
+  autoFollow.suppressedUntil.clear()
+  useAgentPresence.setState({ agents: {}, followAgentId: null, autoFollowEnabled: true })
 }

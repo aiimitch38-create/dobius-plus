@@ -29,6 +29,7 @@ import { useCardLod } from './use-card-lod'
 import { WEB_TILE_ID_ATTRIBUTE } from '../agent-presence/agent-cursor-mapping'
 import { attachWebTileYield } from '../agent-presence/web-tile-yield'
 import { WebTileClaimChip } from '../agent-presence/WebTileClaimChip'
+import { useAgentTileLive } from '../agent-presence/use-agent-tile-live'
 
 // Chromium net error for "connection refused": the dev server is not up yet.
 const ERR_CONNECTION_REFUSED = -102
@@ -125,6 +126,10 @@ export function WebTileCard({
     setBodyEl(node)
   }, [])
   const { lod, onScreen, settledZoom } = useCardLod(bodyEl, zoom, WEB_TILE_TEXT_PX)
+  // Why: while an agent works in the tile the user must see the real page (and
+  // the agent's screenshots need a painted guest), so no glance still even zoomed out.
+  const agentLive = useAgentTileLive(card.id)
+  const glance = lod === 'glance' && !agentLive
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   // Bumped on every navigation, so the glance re-captures only when the page changed.
   const [navSeq, setNavSeq] = useState(0)
@@ -403,7 +408,7 @@ export function WebTileCard({
   // capture, which cost CPU on every glance tile. The webview itself stays
   // mounted and visible underneath, so nothing reloads.
   useEffect(() => {
-    if (lod !== 'glance' || !onScreen || thumbnailSeq.current === navSeq) {
+    if (!glance || !onScreen || thumbnailSeq.current === navSeq) {
       return
     }
     let cancelled = false
@@ -416,7 +421,7 @@ export function WebTileCard({
     return () => {
       cancelled = true
     }
-  }, [lod, onScreen, navSeq, loadSeq])
+  }, [glance, onScreen, navSeq, loadSeq])
 
   const device = findWebTileDevice(card.device)
   const scale = device ? deviceFitScale(device, bodySize) : 1
@@ -544,7 +549,7 @@ export function WebTileCard({
             }
             style={frameStyle}
           />
-          {lod === 'glance' && (
+          {glance && (
             // Why: a shield over the guest so a zoomed-out click selects the card
             // instead of landing in the page; shows the still when one exists,
             // otherwise the live page shows through.

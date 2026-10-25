@@ -12,8 +12,11 @@ import { focusBoardCard } from '../board-canvas/board-camera-focus'
 import { BOARD_FLOATING_PANEL_CLASS } from '../board-chrome/board-surface-classes'
 import { agentControl } from './agent-control-api'
 import {
+  noteUserCameraInteraction,
   removeAgent,
+  setAutoFollowEnabled,
   setFollowedAgent,
+  stopFollowingByUser,
   useAgentPresence,
   type AgentPresence
 } from './agent-presence-state'
@@ -207,7 +210,7 @@ function AgentRow({
           aria-pressed={following}
           className={cn(ROW_BUTTON, following && 'bg-[var(--board-panel-2)]')}
           disabled={agent.stopped}
-          onClick={() => setFollowedAgent(following ? null : agent.id)}
+          onClick={() => (following ? stopFollowingByUser() : setFollowedAgent(agent.id))}
         >
           {following
             ? translate('board.agents.unfollow', 'Unfollow')
@@ -228,25 +231,29 @@ function useFollowCamera(followed: AgentPresence | null, worktreeId: string | nu
       focusBoardCard(worktreeId, tileId)
     }
   }, [followId, worktreeId, tileId])
+  // Why: the listener stays on so auto-follow knows when the user last moved
+  // the camera; while following, the same input also ends follow mode.
   useEffect(() => {
-    if (!followId) {
-      return
-    }
     const canvas = document.querySelector('[data-board-canvas]')
     if (!canvas) {
       return
     }
-    const stop = (): void => setFollowedAgent(null)
-    const onPointerDown = (event: Event): void => {
-      // Why: a click on a card is not a pan; only empty-canvas presses end follow mode.
-      if (!(event.target instanceof Element) || !event.target.closest('[data-board-card]')) {
-        stop()
+    const userMovedCamera = (): void => {
+      noteUserCameraInteraction()
+      if (useAgentPresence.getState().followAgentId) {
+        stopFollowingByUser()
       }
     }
-    canvas.addEventListener('wheel', stop, { capture: true, passive: true })
+    const onPointerDown = (event: Event): void => {
+      // Why: a click on a card is not a pan; only empty-canvas presses count.
+      if (!(event.target instanceof Element) || !event.target.closest('[data-board-card]')) {
+        userMovedCamera()
+      }
+    }
+    canvas.addEventListener('wheel', userMovedCamera, { capture: true, passive: true })
     canvas.addEventListener('pointerdown', onPointerDown, true)
     return () => {
-      canvas.removeEventListener('wheel', stop, { capture: true })
+      canvas.removeEventListener('wheel', userMovedCamera, { capture: true })
       canvas.removeEventListener('pointerdown', onPointerDown, true)
     }
   }, [followId])
@@ -255,6 +262,7 @@ function useFollowCamera(followed: AgentPresence | null, worktreeId: string | nu
 export function AgentPresenceStrip({ className }: { className?: string }): React.JSX.Element | null {
   const agents = useAgentPresence((s) => s.agents)
   const followId = useAgentPresence((s) => s.followAgentId)
+  const autoFollowEnabled = useAgentPresence((s) => s.autoFollowEnabled)
   const worktreeId = useAppStore((s) => s.activeWorktreeId)
   const followed = followId ? (agents[followId] ?? null) : null
   useFollowCamera(followed, worktreeId)
@@ -262,6 +270,17 @@ export function AgentPresenceStrip({ className }: { className?: string }): React
   if (list.length === 0) {
     return null
   }
+  const autoFollowToggle = (
+    <label className="flex h-7 items-center gap-2 text-[12px] text-[var(--board-text-muted)] select-none">
+      <input
+        type="checkbox"
+        checked={autoFollowEnabled}
+        onChange={(e) => setAutoFollowEnabled(e.target.checked)}
+        className="size-3.5 accent-[var(--board-accent)]"
+      />
+      {translate('board.agents.autoFollow', 'Auto-follow agents')}
+    </label>
+  )
   return (
     <>
       {followed ? (
@@ -279,7 +298,7 @@ export function AgentPresenceStrip({ className }: { className?: string }): React
             <button
               type="button"
               className="underline underline-offset-2"
-              onClick={() => setFollowedAgent(null)}
+              onClick={() => stopFollowingByUser()}
             >
               {translate('board.agents.stopFollowing', 'Stop')}
             </button>
@@ -302,6 +321,7 @@ export function AgentPresenceStrip({ className }: { className?: string }): React
             worktreeId={worktreeId}
           />
         ))}
+        {autoFollowToggle}
       </div>
     </>
   )

@@ -14231,6 +14231,7 @@
       "approve": "Approve",
       "deny": "Deny",
       "dismiss": "Dismiss",
+      "autoFollow": "Auto-follow agents",
       "resume": "Resume",
       "pause": "Pause",
       "stop": "Stop",

@@ -14241,6 +14241,7 @@
       "stopFollowing": "Stop",
       "tookOverResume": "You took over — resume {{name}}?",
       "waitingForYouNamed": "{{name}} is waiting for you",
+      "autoFollow": "Auto-follow agents",
       "workingHere": "{{name}} is working here"
     }
   },

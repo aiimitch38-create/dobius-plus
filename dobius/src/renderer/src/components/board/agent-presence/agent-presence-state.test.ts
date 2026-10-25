@@ -3,13 +3,20 @@ import type { AgentCursorEvent } from '../../../../../shared/agent-cursor'
 import {
   AGENT_CLAIM_TTL_MS,
   AGENT_IDLE_AFTER_MS,
+  AGENT_TILE_LIVE_MS,
+  AUTO_FOLLOW_SUPPRESS_MS,
+  AUTO_FOLLOW_USER_GRACE_MS,
+  agentLiveOnTile,
   applyAgentCursorEvent,
   claimActive,
   claimantOfTile,
   markAgentControl,
   markTileYield,
+  noteUserCameraInteraction,
   removeAgent,
   resetAgentPresenceForTest,
+  setAutoFollowEnabled,
+  stopFollowingByUser,
   tickAgentPresence,
   useAgentPresence
 } from './agent-presence-state'
@@ -115,6 +122,61 @@ describe('presence lifecycle', () => {
     const adam = useAgentPresence.getState().agents.adam
     expect(claimActive(adam, 10_000 + AGENT_CLAIM_TTL_MS - 1)).toBe(true)
     expect(claimActive(adam, 10_000 + AGENT_CLAIM_TTL_MS)).toBe(false)
+  })
+})
+
+describe('auto-follow', () => {
+  it('follows the first agent that acts on a tile, and only when nobody is followed', () => {
+    expect(useAgentPresence.getState().followAgentId).toBeNull()
+    applyAgentCursorEvent(event({ seq: 1, kind: 'click' }), 1_000)
+    expect(useAgentPresence.getState().followAgentId).toBe('adam')
+    applyAgentCursorEvent(
+      event({
+        seq: 1,
+        agentId: 'eve',
+        name: 'Eve',
+        kind: 'click',
+        target: { tileId: 'tile-2', x: 0, y: 0 }
+      }),
+      2_000
+    )
+    expect(useAgentPresence.getState().followAgentId).toBe('adam')
+  })
+
+  it('does not start within 5 s of the user moving the camera', () => {
+    noteUserCameraInteraction(10_000)
+    applyAgentCursorEvent(event({ seq: 1, kind: 'click' }), 10_000 + AUTO_FOLLOW_USER_GRACE_MS - 1)
+    expect(useAgentPresence.getState().followAgentId).toBeNull()
+    applyAgentCursorEvent(event({ seq: 2, kind: 'click' }), 10_000 + AUTO_FOLLOW_USER_GRACE_MS)
+    expect(useAgentPresence.getState().followAgentId).toBe('adam')
+  })
+
+  it('does not re-follow the same agent for 30 s after the user stopped following', () => {
+    applyAgentCursorEvent(event({ seq: 1, kind: 'click' }), 1_000)
+    stopFollowingByUser(2_000)
+    expect(useAgentPresence.getState().followAgentId).toBeNull()
+    applyAgentCursorEvent(event({ seq: 2, kind: 'click' }), 2_000 + AUTO_FOLLOW_SUPPRESS_MS - 1)
+    expect(useAgentPresence.getState().followAgentId).toBeNull()
+    applyAgentCursorEvent(event({ seq: 3, kind: 'click' }), 2_000 + AUTO_FOLLOW_SUPPRESS_MS)
+    expect(useAgentPresence.getState().followAgentId).toBe('adam')
+  })
+
+  it('is disabled by the toggle and ignores non-tile actions', () => {
+    setAutoFollowEnabled(false)
+    applyAgentCursorEvent(event({ seq: 1, kind: 'click' }), 1_000)
+    expect(useAgentPresence.getState().followAgentId).toBeNull()
+    setAutoFollowEnabled(true)
+    applyAgentCursorEvent(event({ seq: 2, kind: 'thinking', target: undefined }), 1_500)
+    expect(useAgentPresence.getState().followAgentId).toBeNull()
+    applyAgentCursorEvent(event({ seq: 3, kind: 'scroll' }), 2_000)
+    expect(useAgentPresence.getState().followAgentId).toBe('adam')
+  })
+
+  it('keeps a web tile live for 10 s after the last action', () => {
+    applyAgentCursorEvent(event({ seq: 1, kind: 'scroll' }), 50_000)
+    expect(agentLiveOnTile('tile-1', 50_000 + AGENT_TILE_LIVE_MS - 1)).toBe(true)
+    expect(agentLiveOnTile('tile-1', 50_000 + AGENT_TILE_LIVE_MS)).toBe(false)
+    expect(agentLiveOnTile('tile-2', 50_000)).toBe(false)
   })
 })
 
