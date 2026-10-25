@@ -198,8 +198,10 @@ type AgentLocatedElement = { box: AgentTargetBox | null; text: string | null }
 type AgentDispatchGuard = <R>(run: () => Promise<R>) => Promise<R>
 type AgentDescribedTarget = AgentTargetDescriptor & { rect?: AgentTargetBox }
 
+// Why: ANY line break submits a single-line field (or sends in a composer), not only a
+// trailing one, so every newline counts as a submit for gating.
 function endsWithNewline(text: string): boolean {
-  return /\r?\n\s*$/.test(text)
+  return /[\r\n]/.test(text)
 }
 
 type AgentActionDone = {
