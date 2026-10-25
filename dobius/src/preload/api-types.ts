@@ -1,5 +1,18 @@
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
-import type { RuntimeBoardSpawnConsoleEvent } from '../shared/runtime-client-events'
+import type {
+  RuntimeBoardOpenWebTileEvent,
+  RuntimeBoardSpawnConsoleEvent
+} from '../shared/runtime-client-events'
+import type { AgentControlAction, AgentCursorEvent } from '../shared/agent-cursor'
+
+/** Result of `window.api.agents.control` (main/agents/agent-presence-registry.ts). */
+export type AgentControlResult = {
+  ok: boolean
+  agentId: string
+  action: AgentControlAction
+  state: { paused: boolean; stopped: boolean; takenOverUntil: number }
+  gateResolved?: boolean
+}
 import type { BoardWebTilePopupEvent } from '../shared/board-web-tile-popup'
 import type {
   RuntimeFileOpenNotification,
@@ -1385,6 +1398,12 @@ export type PreloadApi = {
     onTasksUpdated: (callback: (snapshot: AsanaTasksSnapshot) => void) => () => void
   }
   agents: {
+    control: (input: {
+      agentId: string
+      action: AgentControlAction
+      requestId?: string
+    }) => Promise<AgentControlResult>
+    yield: (input: { cardId: string }) => Promise<{ tileId: string; until: number }>
     list: () => Promise<CustomAgent[]>
     create: (input: CustomAgentInput) => Promise<CustomAgent[]>
     update: (id: string, updates: CustomAgentUpdate) => Promise<CustomAgent[]>
@@ -2894,6 +2913,11 @@ export type PreloadApi = {
     onBoardSpawnConsole: (callback: (event: RuntimeBoardSpawnConsoleEvent) => void) => () => void
     /** A Board web tile's page opened a popup; the owning tile adds a sibling tile. */
     onBoardWebTilePopup: (callback: (event: BoardWebTilePopupEvent) => void) => () => void
+    /** `dobius board open-tile`: main asks this window to add a web tile card; reply with the card id. */
+    onBoardOpenWebTile: (callback: (event: RuntimeBoardOpenWebTileEvent) => void) => () => void
+    replyBoardOpenWebTile: (reply: { requestId: string; cardId?: string; error?: string }) => void
+    /** Agent cursor / co-presence stream (shared/agent-cursor.ts). */
+    onAgentCursor: (callback: (event: AgentCursorEvent) => void) => () => void
     onCreateTerminal: (
       callback: (data: {
         requestId?: string

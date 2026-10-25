@@ -13491,7 +13491,11 @@
       "inspectorHint": "Web Inspector · Shift-click to open it in its own window",
       "inspectorTitle": "Inspector",
       "inspectorUnavailable": "Load a page before opening the Web Inspector.",
-      "siteNotFound": "Could not find this site. Check the full address, such as google.com, then press Enter."
+      "siteNotFound": "Could not find this site. Check the full address, such as google.com, then press Enter.",
+      "usePrivateSession": "Use private session",
+      "useSharedSession": "Use signed-in browser session",
+      "popupCap": "{{title}} opened too many popups. Close some to allow more.",
+      "popupTitle": "Popup"
     },
     "console": {
       "closed": "This terminal was closed.",
@@ -14199,6 +14203,45 @@
       "dontText": "Out-of-scope item",
       "addDont": "Add something to stay out of",
       "compactionHint": "Fires on the compaction hook: PreCompact in Claude Code, PostCompact in Codex."
+    },
+    "agents": {
+      "youTookOver": "You took over",
+      "paused": "Paused",
+      "waitingForYou": "Waiting for you",
+      "gate": {
+        "login": "sign in",
+        "purchase": "make a purchase",
+        "send": "send a message",
+        "publish": "publish",
+        "delete": "delete",
+        "download": "download a file",
+        "unverified": "click something it could not verify"
+      },
+      "status": {
+        "stopped": "Stopped",
+        "needsOk": "Waiting for your OK",
+        "thinking": "Thinking",
+        "typing": "Typing",
+        "away": "Away",
+        "idle": "Idle",
+        "working": "Working"
+      },
+      "thisTile": "this tile",
+      "wantsTo": "{{name}} wants to {{action}} on {{site}}",
+      "approve": "Approve",
+      "deny": "Deny",
+      "dismiss": "Dismiss",
+      "resume": "Resume",
+      "pause": "Pause",
+      "stop": "Stop",
+      "takeOver": "Take over",
+      "unfollow": "Unfollow",
+      "follow": "Follow",
+      "following": "Following {{name}}",
+      "stopFollowing": "Stop",
+      "tookOverResume": "You took over — resume {{name}}?",
+      "waitingForYouNamed": "{{name}} is waiting for you",
+      "workingHere": "{{name}} is working here"
     }
   },
   "start": "Start",
@@ -14289,6 +14332,20 @@
       "cancel": "Cancel",
       "oneLine": "Paste as one line",
       "paste": "Paste"
+    }
+  },
+  "kanban": {
+    "proof": {
+      "cardTitle": "Proof from {{by}}",
+      "cardScreenshot": "Screenshot",
+      "label": "Proof · {{by}} · {{when}}",
+      "screenshotLabel": "Screenshot · {{by}} · {{when}}",
+      "unavailable": "Screenshots need the desktop app.",
+      "failed": "Could not add the screenshot.",
+      "heading": "Screenshots ({{count}})",
+      "adding": "Adding…",
+      "add": "Add screenshot",
+      "empty": "None yet. Paste or drop an image here, or add one."
     }
   }
 }

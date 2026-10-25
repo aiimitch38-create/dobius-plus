@@ -1,10 +1,16 @@
 import { z } from 'zod'
 import {
+  VERTEX_TASK_ATTACHMENT_KINDS,
+  VERTEX_TASK_ATTACHMENT_MAX_BYTES,
   VERTEX_TASK_PRIORITIES,
   VERTEX_TASK_STATUSES,
   type VertexTask,
   type VertexTaskOpResult
 } from '../../../../shared/vertex-task-types'
+import {
+  addVertexTaskAttachmentFromBytes,
+  addVertexTaskAttachmentFromFile
+} from '../../../vertex/vertex-task-attachments'
 import { initialsOf } from '../../../vertex/vertex-task-normalize'
 import { vertexTaskStore } from '../../../vertex/vertex-task-store'
 import { defineMethod, type RpcMethod } from '../core'
@@ -90,6 +96,29 @@ const TaskBlock = z.object({
 
 const TaskRelease = z.object({ id: TaskId, by: By })
 
+// Why: base64 inflates by 4/3; bounding the string keeps a remote caller from
+// shipping a payload that the attachment store would refuse anyway.
+const MAX_IMAGE_BASE64 = Math.ceil(VERTEX_TASK_ATTACHMENT_MAX_BYTES / 3) * 4 + 4
+
+const TaskAttach = z
+  .object({
+    id: TaskId,
+    file: OptionalString,
+    dataBase64: z.string().min(1).max(MAX_IMAGE_BASE64).optional(),
+    name: OptionalString,
+    kind: z.enum(VERTEX_TASK_ATTACHMENT_KINDS).optional(),
+    addedBy: OptionalString
+  })
+  .refine((value) => Boolean(value.file) !== Boolean(value.dataBase64), {
+    message: 'Pass file (local) or dataBase64 (remote), not both'
+  })
+
+const TaskReview = z.object({
+  id: TaskId,
+  by: By,
+  note: z.string().trim().max(4000).optional()
+})
+
 const TaskComment = z.object({
   id: TaskId,
   author: requiredString('Missing comment author'),
@@ -111,6 +140,13 @@ type TaskOpView = { ok: true; task: TaskView } | { ok: false; reason: string }
 
 function presentResult(result: VertexTaskOpResult): TaskOpView {
   return result.ok ? { ok: true, task: presentTask(result.task) } : result
+}
+
+/** Who holds an unexpired lease on the card, or null. */
+function liveLeaseOf(id: string): string | null {
+  const task = vertexTaskStore.list().find((candidate) => candidate.id === id)
+  const lease = task?.lease
+  return lease && lease.leaseUntil > Date.now() ? lease.claimedBy : null
 }
 
 function showTask(id: string): TaskView {
@@ -198,6 +234,70 @@ export const TASK_METHODS: RpcMethod[] = [
     name: 'tasks.release',
     params: TaskRelease,
     handler: (params) => presentResult(vertexTaskStore.release(params.id, params.by))
+  }),
+  defineMethod({
+    name: 'tasks.attach',
+    params: TaskAttach,
+    handler: (params, ctx) => {
+      // Why: a paired device must never make this desktop read one of its own
+      // paths; only the local socket/IPC transport may name a file.
+      if (params.file && ctx.authenticatedLocal !== true) {
+        throw new Error('file is local-only; send dataBase64')
+      }
+      // Why: agents attach to the card they are working on, so the caller must
+      // hold its lease (the detail panel's IPC path is separate and unrestricted).
+      const holder = liveLeaseOf(params.id)
+      const addedBy = params.addedBy?.trim()
+      if (!addedBy || holder !== addedBy) {
+        throw new Error(
+          holder
+            ? `Refused: held-by:${holder} (attach with --by ${holder})`
+            : 'Refused: not-ready (claim the card first; attach needs a live lease held by --by)'
+        )
+      }
+      const input = { name: params.name, kind: params.kind, addedBy }
+      const attachment = params.dataBase64
+        ? addVertexTaskAttachmentFromBytes(
+            params.id,
+            Buffer.from(params.dataBase64, 'base64'),
+            input
+          )
+        : addVertexTaskAttachmentFromFile(params.id, params.file ?? '', input)
+      return { attachment, task: showTask(params.id) }
+    }
+  }),
+  // Why a store move and not a work-board op: Review is the operator's column.
+  // Same ownership rule as complete(): only the live lease holder of an
+  // in-progress card may hand it over; the lease is dropped on the way in.
+  defineMethod({
+    name: 'tasks.review',
+    params: TaskReview,
+    handler: (params): TaskOpView => {
+      const by = params.by.trim()
+      const current = vertexTaskStore.list().find((candidate) => candidate.id === params.id)
+      if (!current) {
+        return { ok: false, reason: 'not-found' }
+      }
+      const holder = liveLeaseOf(params.id)
+      if (!holder || current.status !== 'in-progress') {
+        return { ok: false, reason: 'not-ready' }
+      }
+      if (holder !== by) {
+        return { ok: false, reason: `held-by:${holder}` }
+      }
+      const moved = vertexTaskStore.move(params.id, 'review', Number.MAX_SAFE_INTEGER)
+      if (!moved) {
+        return { ok: false, reason: 'not-ready' }
+      }
+      const note = params.note?.trim()
+      const task =
+        vertexTaskStore.comment(
+          params.id,
+          by,
+          note ? `Ready for review: ${note}` : 'Ready for review.'
+        ) ?? moved
+      return { ok: true, task: presentTask(task) }
+    }
   }),
   defineMethod({
     name: 'tasks.comment',

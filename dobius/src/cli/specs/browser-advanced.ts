@@ -100,8 +100,8 @@ export const BROWSER_ADVANCED_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['dblclick'],
     summary: 'Double-click element by ref',
-    usage: 'dobius dblclick --element <ref> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree']
+    usage: 'dobius dblclick --element <ref> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree', 'as', 'fast']
   },
   {
     path: ['forward'],
@@ -131,15 +131,15 @@ export const BROWSER_ADVANCED_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['inserttext'],
     summary: 'Insert text without key events',
-    usage: 'dobius inserttext --text <text> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'text', 'worktree']
+    usage: 'dobius inserttext --text <text> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'text', 'worktree', 'as', 'fast']
   },
   // ── Mouse commands ──
   {
     path: ['mouse', 'move'],
     summary: 'Move mouse to x,y coordinates',
-    usage: 'dobius mouse move --x <n> --y <n> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'x', 'y', 'worktree']
+    usage: 'dobius mouse move --x <n> --y <n> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'x', 'y', 'worktree', 'as', 'fast']
   },
   {
     path: ['mouse', 'down'],
@@ -156,8 +156,8 @@ export const BROWSER_ADVANCED_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['mouse', 'wheel'],
     summary: 'Scroll wheel',
-    usage: 'dobius mouse wheel --dy <n> [--dx <n>] [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'dy', 'dx', 'worktree']
+    usage: 'dobius mouse wheel --dy <n> [--dx <n>] [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'dy', 'dx', 'worktree', 'as', 'fast']
   },
   // ── Find (semantic locators) ──
   {

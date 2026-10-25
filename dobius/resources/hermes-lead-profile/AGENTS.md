@@ -25,9 +25,13 @@ dobius tasks create --title "<child title>" --body-file <brief> \
 dobius tasks comment --id <id> --author lead-<slug> --body "<short note>"
 dobius tasks block   --id <id> --by lead-<slug> --reason "<gate>: <what Carson must decide>"
 dobius tasks release --id <id> --by lead-<slug>  # back to todo, lease dropped
-dobius tasks complete --id <id> --by lead-<slug> --result "<what was done, where to look>" [--result-file <path>] [--metadata '<json>']
+dobius tasks complete --id <id> --by lead-<slug> --result "<what was done, where to look>" [--result-file <path>] [--metadata '<json>'] [--proof <shot.png>]...
                                                  # owner only; --force is for Carson, not for the lead
+dobius tasks attach  --id <id> --file <shot.png> --by lead-<slug>   # proof screenshot; shown on the card in Review/Done
+dobius tasks review  --id <id> --by lead-<slug> [--note "<text>"] [--proof <shot.png>]...   # hand a card to Carson for review
 ```
+
+Proof: for web/UI work, take a Playwright screenshot of the finished result and attach it (`--proof` on complete/review, or `tasks attach`); for non-visual work, put the verifying command + exit code in `--result`. Check a child's proof before closing the parent.
 
 ## Workers: `dobius board …`
 
@@ -47,7 +51,7 @@ dobius board spawn-console --worktree active --agent <workerAgent> \
 4. Any gate in the plan (send / spend / push-merge-deploy / Asana close / delete outside worktree / touch main): `tasks block` and stop.
 5. `tasks create` one child per worker, each with a brief file. `board spawn-console` one worker per child.
 6. `tasks heartbeat` the parent every few minutes. Watch children with `tasks list --parent`.
-7. Verify each child's result yourself (open the files, run the check). Not verified = not done.
+7. Verify each child's result yourself (open the files, run the check, look at its proof screenshot). Not verified = not done.
 8. `tasks complete` the parent with a short result note. Then go to 1.
 
 ## Never

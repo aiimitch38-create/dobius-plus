@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import type { VertexTask } from '../../shared/vertex-task-types'
+import { basename, resolve } from 'node:path'
+import {
+  VERTEX_TASK_PROOF_MAX,
+  type VertexTask,
+  type VertexTaskAttachment
+} from '../../shared/vertex-task-types'
 import type { CommandHandler, HandlerContext } from '../dispatch'
 import {
   getOptionalPositiveIntegerFlag,
@@ -9,7 +13,7 @@ import {
   getRequiredStringFlag
 } from '../flags'
 import { printResult } from '../format'
-import { RuntimeClientError } from '../runtime-client'
+import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime-client'
 
 /** The wire shape of a card: the stored task with the original message under
  *  a name that says what it is (see rpc/methods/tasks.ts). */
@@ -83,6 +87,63 @@ function getMetadataFlag(
     throw new RuntimeClientError('invalid_argument', '--metadata must be a JSON object')
   }
   return parsed as Record<string, unknown>
+}
+
+const ATTACHMENT_KINDS = ['proof', 'screenshot'] as const
+
+function defaultAttachedBy(flags: Map<string, string | boolean>): string {
+  return getOptionalStringFlag(flags, 'by') ?? process.env.DOBIUS_AGENT_ID?.trim() ?? 'agent'
+}
+
+/** Send one image to the board. Locally main reads the file itself; a paired
+ *  remote runtime cannot see this machine, so the bytes go as base64. */
+type AttachResult = { attachment: VertexTaskAttachment; task: TaskView }
+
+async function attachImage(
+  ctx: HandlerContext,
+  params: { id: string; file: string; name?: string; kind?: 'proof' | 'screenshot'; by: string }
+): Promise<RuntimeRpcSuccess<AttachResult>> {
+  const file = resolve(ctx.cwd, params.file)
+  let dataBase64: string | undefined
+  if (ctx.client.isRemote) {
+    try {
+      dataBase64 = readFileSync(file).toString('base64')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new RuntimeClientError('invalid_argument', `Could not read ${params.file}: ${message}`)
+    }
+  }
+  return ctx.client.call<AttachResult>('tasks.attach', {
+    id: params.id,
+    file: dataBase64 ? undefined : file,
+    dataBase64,
+    name: params.name ?? basename(file),
+    kind: params.kind ?? 'proof',
+    addedBy: params.by
+  })
+}
+
+/** `--proof` images go on the card before the move; one failure stops the
+ *  whole command so a card never reaches Done without the proof it claims. */
+async function attachProofs(ctx: HandlerContext, id: string, by: string): Promise<void> {
+  const proofs = getRepeatedStringFlag(ctx.flags, 'proof')
+  if (proofs.length > VERTEX_TASK_PROOF_MAX) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      `--proof may be given at most ${VERTEX_TASK_PROOF_MAX} times`
+    )
+  }
+  for (const proof of proofs) {
+    try {
+      await attachImage(ctx, { id, file: proof, kind: 'proof', by })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new RuntimeClientError(
+        'invalid_argument',
+        `Proof ${proof} was not attached, so the card was not moved: ${message}`
+      )
+    }
+  }
 }
 
 function holder(task: TaskView): string {
@@ -271,12 +332,15 @@ export const TASK_HANDLERS: Record<string, CommandHandler> = {
     if (!resultNote?.trim()) {
       throw new RuntimeClientError('invalid_argument', 'Pass --result or --result-file')
     }
+    const id = getRequiredStringFlag(ctx.flags, 'id')
+    const by = getRequiredStringFlag(ctx.flags, 'by')
+    await attachProofs(ctx, id, by)
     await runOp(
       ctx,
       'tasks.complete',
       {
-        id: getRequiredStringFlag(ctx.flags, 'id'),
-        by: getRequiredStringFlag(ctx.flags, 'by'),
+        id,
+        by,
         resultNote,
         metadata: getMetadataFlag(ctx.flags),
         force: ctx.flags.get('force') === true
@@ -284,17 +348,39 @@ export const TASK_HANDLERS: Record<string, CommandHandler> = {
       'Completed'
     )
   },
-  'tasks block': async (ctx) =>
-    runOp(
+  'tasks block': async (ctx) => {
+    const id = getRequiredStringFlag(ctx.flags, 'id')
+    const by = getRequiredStringFlag(ctx.flags, 'by')
+    const reason = getRequiredStringFlag(ctx.flags, 'reason')
+    await attachProofs(ctx, id, by)
+    await runOp(ctx, 'tasks.block', { id, by, reason }, 'Blocked')
+  },
+  'tasks review': async (ctx) => {
+    const id = getRequiredStringFlag(ctx.flags, 'id')
+    const by = getRequiredStringFlag(ctx.flags, 'by')
+    await attachProofs(ctx, id, by)
+    await runOp(
       ctx,
-      'tasks.block',
-      {
-        id: getRequiredStringFlag(ctx.flags, 'id'),
-        by: getRequiredStringFlag(ctx.flags, 'by'),
-        reason: getRequiredStringFlag(ctx.flags, 'reason')
-      },
-      'Blocked'
-    ),
+      'tasks.review',
+      { id, by, note: getOptionalStringFlag(ctx.flags, 'note') },
+      'In review'
+    )
+  },
+  'tasks attach': async (ctx) => {
+    const response = await attachImage(ctx, {
+      id: getRequiredStringFlag(ctx.flags, 'id'),
+      file: getRequiredStringFlag(ctx.flags, 'file'),
+      name: getOptionalStringFlag(ctx.flags, 'name'),
+      kind: getEnumFlag(ctx.flags, 'kind', ATTACHMENT_KINDS),
+      by: defaultAttachedBy(ctx.flags)
+    })
+    printResult(
+      response,
+      ctx.json,
+      ({ attachment, task }) =>
+        `Attached ${attachment.kind ?? 'screenshot'} ${attachment.id} (${attachment.mime}, ${attachment.bytes} bytes) to ${task.id}`
+    )
+  },
   'tasks release': async (ctx) =>
     runOp(
       ctx,

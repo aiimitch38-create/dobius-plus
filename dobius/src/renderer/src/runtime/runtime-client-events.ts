@@ -55,6 +55,8 @@ function isRuntimeClientEvent(
     message.type === 'worktreesChanged' ||
     message.type === 'linearLinkedIssueUpdated' ||
     message.type === 'activateWorktree' ||
-    message.type === 'boardSpawnConsole'
+    message.type === 'boardSpawnConsole' ||
+    message.type === 'boardOpenWebTile' ||
+    message.type === 'agentCursor'
   )
 }

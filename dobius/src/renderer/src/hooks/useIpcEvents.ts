@@ -2,6 +2,8 @@ import { openMobileResourceInStore } from './mobile-resource-open'
 /* oxlint-disable max-lines -- Why: this App-level IPC bridge intentionally keeps the renderer's main-process event contract in one place so shortcut, runtime, updater, and agent-status wiring do not drift across files. */
 import { BOARD_ZOOM_EVENT } from '@/components/board/board-zoom-event'
 import { handleBoardSpawnConsoleEvent } from '@/components/board/board-links/board-spawn-console-event'
+import { handleBoardOpenWebTileEvent } from '@/components/board/board-links/board-open-web-tile-event'
+import { handleAgentCursorEvent } from '@/components/board/agent-presence/agent-cursor-inbox'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
 import { useAppStore } from '../store'
@@ -992,6 +994,16 @@ export function useIpcEvents(): void {
         handleBoardSpawnConsoleEvent(event)
         return
       }
+      if (event.type === 'boardOpenWebTile') {
+        // Why: remote clients have no reply channel; main learns the card id only
+        // through the window path, so this just keeps the Boards in sync.
+        handleBoardOpenWebTileEvent(event)
+        return
+      }
+      if (event.type === 'agentCursor') {
+        handleAgentCursorEvent(event.event)
+        return
+      }
       void ensureRuntimeEventRepoKnown(environmentId, event.repoId)
         .then(() => activateNotifiedWorktree(event, { allowRuntimeEnvironment: true }))
         .catch((error) => {
@@ -1369,6 +1381,19 @@ export function useIpcEvents(): void {
         handleBoardSpawnConsoleEvent(event)
       })
     )
+
+    unsubs.push(
+      window.api.ui.onBoardOpenWebTile((event) => {
+        const result = handleBoardOpenWebTileEvent(event)
+        window.api.ui.replyBoardOpenWebTile(
+          result.cardId
+            ? { requestId: event.requestId, cardId: result.cardId }
+            : { requestId: event.requestId, error: `open-tile ${result.outcome}` }
+        )
+      })
+    )
+
+    unsubs.push(window.api.ui.onAgentCursor(handleAgentCursorEvent))
 
     unsubs.push(
       window.api.ui.onCreateTerminal(

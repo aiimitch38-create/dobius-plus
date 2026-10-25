@@ -1,12 +1,14 @@
 import { z } from 'zod'
 import { defineMethod, defineStreamingMethod, type RpcAnyMethod } from '../core'
+import { AgentIdentityParams } from '../schemas'
 import { Screencast } from './browser-schemas'
+import { withAgentIdentity } from './browser-agent-policy'
 
-const ScreencastUnsubscribe = z.object({
+const ScreencastUnsubscribe = AgentIdentityParams.extend({
   subscriptionId: z.string().min(1, 'Missing required --subscription-id')
 })
 
-export const BROWSER_SCREENCAST_METHODS: RpcAnyMethod[] = [
+const BROWSER_SCREENCAST_METHOD_DEFINITIONS: RpcAnyMethod[] = [
   defineStreamingMethod({
     name: 'browser.screencast',
     params: Screencast,
@@ -22,3 +24,6 @@ export const BROWSER_SCREENCAST_METHODS: RpcAnyMethod[] = [
     }
   })
 ]
+
+export const BROWSER_SCREENCAST_METHODS: RpcAnyMethod[] =
+  BROWSER_SCREENCAST_METHOD_DEFINITIONS.map(withAgentIdentity)

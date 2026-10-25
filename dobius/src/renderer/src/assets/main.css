@@ -3746,8 +3746,102 @@ html.onboarding-tour-start-transition::view-transition-new(root) {
   --board-swatch-blue: oklch(0.93 0.04 240);
   --board-swatch-green: oklch(0.94 0.05 150);
   --board-swatch-purple: oklch(0.93 0.05 300);
+  /* Agent co-presence palette (AGENT-CURSORS-RESEARCH §6.1): six OKLCH hues at
+     equal lightness/chroma; slot 1 is Adam. Pill text, arrow outlines and the
+     grey "paused" pill come from the same block so components never hardcode. */
+  --agent-1: oklch(0.56 0.17 255);
+  --agent-2: oklch(0.56 0.17 150);
+  --agent-3: oklch(0.56 0.17 30);
+  --agent-4: oklch(0.56 0.17 310);
+  --agent-5: oklch(0.56 0.17 75);
+  --agent-6: oklch(0.56 0.17 195);
+  --agent-fg: oklch(1 0 0);
+  --agent-outline: oklch(0.2 0 0);
+  --agent-outline-inner: oklch(1 0 0);
+  --agent-muted: oklch(0.6 0 0);
   font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
   color: var(--board-text);
+}
+
+.dark [data-surface='board'] {
+  --agent-1: oklch(0.7 0.15 255);
+  --agent-2: oklch(0.7 0.15 150);
+  --agent-3: oklch(0.7 0.15 30);
+  --agent-4: oklch(0.7 0.15 310);
+  --agent-5: oklch(0.7 0.15 75);
+  --agent-6: oklch(0.7 0.15 195);
+  --agent-fg: oklch(0.15 0 0);
+  --agent-outline: oklch(0.1 0 0);
+  --agent-outline-inner: oklch(0.96 0 0);
+  --agent-muted: oklch(0.55 0 0);
+}
+
+/* Agent cursor overlay motion. Reduced motion keeps only a short opacity flash. */
+@keyframes board-agent-ripple {
+  from {
+    transform: scale(0.64);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes board-agent-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes board-agent-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes board-agent-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+[data-agent-ripple] {
+  animation: board-agent-ripple 400ms ease-out forwards;
+}
+
+[data-agent-dot] {
+  animation: board-agent-dot 1.2s ease-in-out infinite;
+}
+
+[data-agent-thinking] {
+  animation: board-agent-pulse 1.6s ease-in-out infinite;
+}
+
+[data-agent-cursor] {
+  animation: board-agent-fade-in 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-agent-ripple] {
+    animation: board-agent-fade-in 200ms ease-out reverse forwards;
+  }
+  [data-agent-dot],
+  [data-agent-thinking] {
+    animation: none;
+  }
 }
 
 /* Embedded Classic pages inside Board studios (Skills, Loops, Settings...) paint

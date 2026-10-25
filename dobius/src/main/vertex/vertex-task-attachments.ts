@@ -7,16 +7,28 @@
  * that does not stay under the attachments root. */
 
 import { randomBytes } from 'node:crypto'
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  closeSync,
+  constants as fsConstants,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import path from 'node:path'
 
 import {
   isVertexTaskAttachmentMime,
+  sniffVertexTaskAttachmentMime,
   VERTEX_TASK_ATTACHMENT_EXT,
   VERTEX_TASK_ATTACHMENT_MAX_BYTES,
   VERTEX_TASK_ATTACHMENTS_MAX,
   type VertexTaskAttachment,
   type VertexTaskAttachmentInput,
+  type VertexTaskAttachmentKind,
 } from '../../shared/vertex-task-types'
 import {
   isInsideAttachmentsRoot,
@@ -26,6 +38,7 @@ import {
 import { vertexTaskStore } from './vertex-task-store'
 
 const NAME_MAX = 120
+const ADDED_BY_MAX = 80
 
 // Why: base64 inflates by 4/3; refusing on string length avoids decoding a
 // payload that is going to be rejected anyway.
@@ -73,6 +86,11 @@ export function addVertexTaskAttachment(
     mime: input.mime,
     bytes: data.byteLength,
     createdAt: Date.now(),
+    kind: input.kind === 'proof' ? 'proof' : 'screenshot',
+  }
+  const addedBy = cleanName(input.addedBy, '').slice(0, ADDED_BY_MAX)
+  if (addedBy) {
+    attachment.addedBy = addedBy
   }
   const updated = vertexTaskStore.update(taskId, { attachments: [...existing, attachment] })
   if (!updated) {
@@ -80,6 +98,78 @@ export function addVertexTaskAttachment(
     throw new Error('Could not record the image on the card')
   }
   return attachment
+}
+
+export type VertexTaskProofInput = {
+  name?: string
+  kind?: VertexTaskAttachmentKind
+  addedBy?: string
+}
+
+/** Attach raw image bytes an agent sent. The format comes from the magic
+ * bytes, never from a name or a declared mime. */
+export function addVertexTaskAttachmentFromBytes(
+  taskId: string,
+  data: Buffer,
+  input: VertexTaskProofInput,
+): VertexTaskAttachment {
+  if (data.byteLength > VERTEX_TASK_ATTACHMENT_MAX_BYTES) {
+    throw new Error(`Image is larger than ${VERTEX_TASK_ATTACHMENT_MAX_BYTES} bytes`)
+  }
+  const mime = sniffVertexTaskAttachmentMime(data)
+  if (!mime) {
+    throw new Error('Not a PNG, JPEG, WebP or GIF image (checked the file bytes, not the name)')
+  }
+  return addVertexTaskAttachment(taskId, {
+    name: input.name ?? `${input.kind ?? 'screenshot'}.${VERTEX_TASK_ATTACHMENT_EXT[mime]}`,
+    mime,
+    dataBase64: data.toString('base64'),
+    kind: input.kind,
+    addedBy: input.addedBy,
+  })
+}
+
+/** Attach an image file on this machine (the local `dobius tasks attach`).
+ * The path must be absolute. The file is opened with O_NOFOLLOW and checked
+ * through its descriptor, so a symlink or a swap between check and read cannot
+ * point main at a file the caller could not read itself. */
+export function addVertexTaskAttachmentFromFile(
+  taskId: string,
+  file: string,
+  input: VertexTaskProofInput,
+): VertexTaskAttachment {
+  if (typeof file !== 'string' || !path.isAbsolute(file)) {
+    throw new Error('Image path must be absolute')
+  }
+  let fd: number
+  try {
+    // Why O_NONBLOCK: opening a FIFO read-only would otherwise hang main.
+    fd = openSync(file, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'ELOOP') {
+      throw new Error(`Image path is a symlink, refused: ${file}`)
+    }
+    if (code === 'ENOENT') {
+      throw new Error(`Image not found: ${file}`)
+    }
+    throw new Error(`Could not open image ${file}: ${code ?? String(err)}`)
+  }
+  try {
+    const stat = fstatSync(fd)
+    if (!stat.isFile()) {
+      throw new Error(`Not a regular file: ${file}`)
+    }
+    if (stat.size > VERTEX_TASK_ATTACHMENT_MAX_BYTES) {
+      throw new Error(`Image is larger than ${VERTEX_TASK_ATTACHMENT_MAX_BYTES} bytes`)
+    }
+    return addVertexTaskAttachmentFromBytes(taskId, readFileSync(fd), {
+      ...input,
+      name: input.name ?? path.basename(file),
+    })
+  } finally {
+    closeSync(fd)
+  }
 }
 
 /** The stored image as a data URL for thumbnails, or null when it is gone. */

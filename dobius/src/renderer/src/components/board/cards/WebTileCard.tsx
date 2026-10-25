@@ -26,6 +26,9 @@ import { WebTileExtras } from '../board-web/WebTileExtras'
 import { WebTileInspectorDock } from '../board-web/WebTileInspectorDock'
 import { captureWebTileThumbnail } from '../board-web/web-tile-thumbnail'
 import { useCardLod } from './use-card-lod'
+import { WEB_TILE_ID_ATTRIBUTE } from '../agent-presence/agent-cursor-mapping'
+import { attachWebTileYield } from '../agent-presence/web-tile-yield'
+import { WebTileClaimChip } from '../agent-presence/WebTileClaimChip'
 
 // Chromium net error for "connection refused": the dev server is not up yet.
 const ERR_CONNECTION_REFUSED = -102
@@ -104,6 +107,7 @@ export function WebTileCard({
   zoom = 1
 }: CardBodyProps<'web'> & { worktreeId?: string; zoom?: number }): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
   const [draft, setDraft] = useState(card.url)
   const [nav, setNav] = useState({ back: false, forward: false })
@@ -306,7 +310,10 @@ export function WebTileCard({
     webview.addEventListener('focus', focused)
     window.addEventListener('pointerup', pressEnd, true)
     window.addEventListener('mouseup', pressEnd, true)
+    // Why: Carson acting inside a tile an agent claims makes the agent yield (human always wins).
+    const detachYield = attachWebTileYield(cardRef.current.id, webview, rootRef.current)
     return () => {
+      detachYield()
       webview.removeEventListener('did-navigate', sync)
       webview.removeEventListener('did-navigate-in-page', sync)
       webview.removeEventListener('did-fail-load', fail)
@@ -456,7 +463,8 @@ export function WebTileCard({
   }
 
   return (
-    <div className="flex size-full flex-col">
+    <div ref={rootRef} className="relative flex size-full flex-col">
+      <WebTileClaimChip cardId={card.id} />
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-[var(--board-panel-border)] px-2">
         <button
           type="button"
@@ -527,6 +535,8 @@ export function WebTileCard({
         >
           <div
             ref={containerRef}
+            // Why: the cursor overlay finds this tile's webview by card id to map guest px to the screen.
+            {...{ [WEB_TILE_ID_ATTRIBUTE]: card.id }}
             className={
               device
                 ? 'absolute overflow-clip bg-[var(--board-panel)] shadow-(--board-shadow)'

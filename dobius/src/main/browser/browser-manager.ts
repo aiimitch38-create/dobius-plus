@@ -52,6 +52,7 @@ import {
   takeWebTilePopupToken,
   webTilePopupUrl
 } from '../../shared/board-web-tile-popup'
+import { attachWebTileHumanInput } from '../agents/web-tile-human-input'
 
 const AUTOMATION_VISIBILITY_ACQUIRE_TIMEOUT_MS = 2_000
 
@@ -200,6 +201,7 @@ export class BrowserManager {
   // setDeviceMetricsOverride), leaving emulation in an unexpected state.
   private readonly viewportOpsByTabId = new Map<string, Promise<unknown>>()
   private readonly contextMenuCleanupByTabId = new Map<string, () => void>()
+  private readonly humanInputCleanupByTabId = new Map<string, () => void>()
   private readonly grabShortcutCleanupByTabId = new Map<string, () => void>()
   private readonly shortcutForwardingCleanupByTabId = new Map<string, () => void>()
   private readonly mouseWheelZoomCleanupByTabId = new Map<string, () => void>()
@@ -795,6 +797,10 @@ export class BrowserManager {
     this.setupGrabShortcut(browserTabId, guest)
     this.setupShortcutForwarding(browserTabId, guest)
     this.setupMouseWheelZoomForwarding(browserTabId, guest)
+    // Why: human input inside a web tile must pause its agents (co-presence);
+    // the renderer cannot see guest input, so main listens on the guest.
+    this.humanInputCleanupByTabId.get(browserTabId)?.()
+    this.humanInputCleanupByTabId.set(browserTabId, attachWebTileHumanInput(guest, browserTabId))
     this.flushPendingLoadFailure(browserTabId, webContentsId)
     this.flushPendingPermissionEvents(browserTabId, webContentsId)
     this.flushPendingPopupEvents(browserTabId, webContentsId)
@@ -820,6 +826,8 @@ export class BrowserManager {
       cleanup()
       this.contextMenuCleanupByTabId.delete(browserTabId)
     }
+    this.humanInputCleanupByTabId.get(browserTabId)?.()
+    this.humanInputCleanupByTabId.delete(browserTabId)
     const shortcutCleanup = this.grabShortcutCleanupByTabId.get(browserTabId)
     if (shortcutCleanup) {
       shortcutCleanup()

@@ -22,6 +22,8 @@ import {
   type BoardTool
 } from './board-chrome/board-tools'
 import { BoardCommandBar, type BoardCommandBarProps } from './board-command-bar/BoardCommandBar'
+import { AgentCursorLayer } from './agent-presence/AgentCursorLayer'
+import { AgentPresenceStrip } from './agent-presence/AgentPresenceStrip'
 
 export type { BoardPoint, BoardRect, BoardViewport } from './board-canvas/board-viewport'
 export type { BoardInsertKind, BoardTool } from './board-chrome/board-tools'
@@ -123,10 +125,13 @@ export function BoardPage({
       >
         {children}
       </BoardCanvas>
+      {/* Agent pointers: one pointer-events-none layer above the cards, below the chrome. */}
+      <AgentCursorLayer />
       {/* Chrome floats above the canvas; the overlay ignores pointers so empty
           space between panels still pans the board. */}
       <div className="pointer-events-none absolute inset-0">
         <BoardTopBar {...topBar} />
+        <AgentPresenceStrip className="top-[60px] right-5" />
         <BoardToolRail
           tool={tool}
           onToolChange={onToolChange}

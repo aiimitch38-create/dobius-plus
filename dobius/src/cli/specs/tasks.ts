@@ -7,6 +7,9 @@ const UNTRUSTED_NOTE =
 const EXIT_3_NOTE =
   'Exits 3 (with the refusal in the output) when the card is not ready or is held by someone else; 1 on any other error.'
 
+const PROOF_NOTE =
+  '--proof <file> (up to 3, repeatable) attaches each PNG/JPEG/WebP/GIF as proof first; if any attach fails the card is NOT moved and the CLI exits 1 with the reason.'
+
 export const TASK_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['tasks', 'list'],
@@ -97,26 +100,65 @@ export const TASK_COMMAND_SPECS: CommandSpec[] = [
     path: ['tasks', 'complete'],
     summary: 'Complete a card you hold: it moves to done with a result note',
     usage:
-      'dobius tasks complete --id <task-id> --by <id> (--result <text> | --result-file <path>) [--metadata <json-object>] [--force] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'id', 'by', 'result', 'result-file', 'metadata', 'force'],
+      'dobius tasks complete --id <task-id> --by <id> (--result <text> | --result-file <path>) [--proof <image>]... [--metadata <json-object>] [--force] [--json]',
+    allowedFlags: [
+      ...GLOBAL_FLAGS,
+      'id',
+      'by',
+      'result',
+      'result-file',
+      'proof',
+      'metadata',
+      'force'
+    ],
     positionalArgs: ['id'],
     notes: [
       'Owner only unless --force (operator use: completes a card someone else holds, or nobody holds).',
+      PROOF_NOTE,
       EXIT_3_NOTE
     ],
     examples: [
-      'dobius tasks complete --id 3f1c... --by console-w1 --result-file ./result.md --metadata \'{"pr":"https://..."}\' --json'
+      'dobius tasks complete --id 3f1c... --by console-w1 --result-file ./result.md --metadata \'{"pr":"https://..."}\' --json',
+      'dobius tasks complete --id 3f1c... --by console-w1 --result "Login page fixed; see shot" --proof ./shot.png'
+    ]
+  },
+  {
+    path: ['tasks', 'attach'],
+    summary: 'Attach a screenshot (PNG, JPEG, WebP or GIF) to a card as proof of the work',
+    usage:
+      'dobius tasks attach --id <task-id> --file <image> [--name <text>] [--kind <proof|screenshot>] [--by <id>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'file', 'name', 'kind', 'by'],
+    positionalArgs: ['id'],
+    notes: [
+      'The file is checked by its bytes, not its extension; a renamed text file is refused. 10 MB max, 10 images per card.',
+      '--kind defaults to proof. --by defaults to DOBIUS_AGENT_ID, else "agent".',
+      'The Kanban shows the newest proof on cards in Review and Done.'
+    ],
+    examples: ['dobius tasks attach --id 3f1c... --file ./playwright/after.png --by console-w1']
+  },
+  {
+    path: ['tasks', 'review'],
+    summary: 'Move a card you hold to Review for the operator, optionally with proof',
+    usage:
+      'dobius tasks review --id <task-id> --by <id> [--note <text>] [--proof <image>]... [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'by', 'note', 'proof'],
+    positionalArgs: ['id'],
+    notes: ['The lease is dropped; the operator moving the card on is the answer.', PROOF_NOTE, EXIT_3_NOTE],
+    examples: [
+      'dobius tasks review --id 3f1c... --by console-w1 --note "Ready; see screenshot" --proof ./shot.png'
     ]
   },
   {
     path: ['tasks', 'block'],
     summary: 'Park a card in blocked for the operator, with the reason',
-    usage: 'dobius tasks block --id <task-id> --by <id> --reason <text> [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'id', 'by', 'reason'],
+    usage:
+      'dobius tasks block --id <task-id> --by <id> --reason <text> [--proof <image>]... [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'by', 'reason', 'proof'],
     positionalArgs: ['id'],
     notes: [
       'Use this for anything gated: sending, spending, push/merge/deploy, closing Asana, deleting outside the worktree, touching main.',
       'The lease is dropped; the operator moving the card on is the unblock.',
+      PROOF_NOTE,
       EXIT_3_NOTE
     ],
     examples: [

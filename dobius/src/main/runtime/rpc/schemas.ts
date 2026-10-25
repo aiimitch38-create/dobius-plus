@@ -63,7 +63,16 @@ export const TriStateLinkedIssue = z
 // passthrough (empty string preserved) but `page` as non-empty-string. The
 // browser bridge uses worktree-as-empty-string to mean "any worktree", so
 // keep that asymmetry intact to avoid widening scope unexpectedly.
-export const BrowserTarget = z.object({
+// Why: agent co-presence identity (`--as <agentId>` / DOBIUS_AGENT_ID). Absent
+// for the human. Every browser method schema must include it, or the RPC-level
+// agent policy could never see who is calling (the identity test enforces this).
+export const AgentIdentityParams = z.object({
+  agent: OptionalString,
+  agentName: OptionalString,
+  fast: OptionalBoolean
+})
+
+export const BrowserTarget = AgentIdentityParams.extend({
   worktree: OptionalPlainString,
   page: OptionalString
 })

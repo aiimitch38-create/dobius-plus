@@ -1,7 +1,9 @@
 import { Check, Image as ImageIcon, Paperclip } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { translate } from '@/i18n/i18n'
 import { AvatarStack } from './AvatarStack'
+import { KanbanAttachmentThumb, pickProofAttachment } from './KanbanAttachmentThumb'
 import { ClaimedChip, BlockedChip, PriorityChip, TypeChip } from './kanban-chips'
 import type { Task } from './kanban-types'
 
@@ -18,6 +20,10 @@ export function KanbanCard({
   onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void
   onDragEnd: () => void
 }): React.JSX.Element {
+  // Why only Review and Done: that is where the operator asks "show me", and
+  // the proof is what an agent attached when it finished.
+  const proof =
+    task.status === 'review' || task.status === 'done' ? pickProofAttachment(task.attachments) : null
   return (
     <Card
       className={cn(
@@ -117,6 +123,22 @@ export function KanbanCard({
           </>
         ) : null}
       </button>
+      {proof ? (
+        <div className="px-3 pb-3" data-testid="kanban-card-proof">
+          <KanbanAttachmentThumb
+            taskId={task.id}
+            attachment={proof}
+            className="w-full"
+            title={
+              proof.kind === 'proof'
+                ? translate('kanban.proof.cardTitle', 'Proof from {{by}}', {
+                    by: proof.addedBy ?? 'agent'
+                  })
+                : translate('kanban.proof.cardScreenshot', 'Screenshot')
+            }
+          />
+        </div>
+      ) : null}
     </Card>
   )
 }

@@ -5,6 +5,7 @@ import type {
   WorktreeSetupLaunch,
   WorktreeStartupLaunch
 } from './types'
+import type { AgentCursorEvent } from './agent-cursor'
 
 /**
  * Main asks the renderer to launch an agent console card on a worktree's Board
@@ -31,8 +32,31 @@ export type RuntimeBoardSpawnConsoleEvent = {
   replaceStaleCardIds?: string[]
 }
 
+/** Main asks the renderer to open a web tile card on a worktree's Board (`dobius board open-tile`). */
+export type RuntimeBoardOpenWebTileEvent = {
+  type: 'boardOpenWebTile'
+  requestId: string
+  worktreeId: string
+  /** http(s) only; validated in main. */
+  url: string
+  title?: string
+  /** Agent that asked for the tile; the card is created in the private session. */
+  agentId?: string
+}
+
+/** Client-event copy of an agent cursor event: the gate requestId is never relayed (approval is window-only). */
+export type RuntimeAgentCursorClientEventPayload = AgentCursorEvent
+
+/** An agent cursor event relayed to paired web/remote clients (window IPC `ui:agentCursor` carries the full event). */
+export type RuntimeAgentCursorClientEvent = {
+  type: 'agentCursor'
+  event: RuntimeAgentCursorClientEventPayload
+}
+
 export type RuntimeClientEvent =
   | RuntimeBoardSpawnConsoleEvent
+  | RuntimeBoardOpenWebTileEvent
+  | RuntimeAgentCursorClientEvent
   | { type: 'reposChanged' }
   | { type: 'worktreesChanged'; repoId: string }
   | {

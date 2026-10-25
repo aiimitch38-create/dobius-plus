@@ -17,6 +17,8 @@ import { registerDaemonManagementHandlers } from '../ipc/pty-management'
 import { registerSshHandlers } from '../ipc/ssh'
 import { registerRemoteWorkspaceHandlers } from '../ipc/remote-workspace'
 import { browserManager } from '../browser/browser-manager'
+import { agentPresenceRegistry } from '../agents/agent-presence-registry'
+import { assertBoardWindowSender } from './board-ipc-sender-guard'
 import { hasSystemMediaAccess, requestSystemMediaAccess } from '../browser/browser-media-access'
 import type { DobiusRuntimeService } from '../runtime/dobius-runtime'
 import {
@@ -270,6 +272,22 @@ function registerRuntimeWindowLifecycle(
 ): void {
   const notifierToken = ++runtimeNotifierTokenCounter
   activeRuntimeNotifierToken = notifierToken
+  // Why: the Board's presence controls (pause / stop / take over / approve) and
+  // human-input yields reach the registry directly; the CLI uses the RPC twins.
+  ipcMain.removeHandler('agents:control')
+  ipcMain.handle('agents:control', (event, input: unknown) => {
+    // Why: approve / resume / take-over are human-only; only the main window's
+    // top frame (never a web tile guest or a paired client) counts as the human.
+    assertBoardWindowSender(event, mainWindow, 'agents:control')
+    return agentPresenceRegistry.control(agentPresenceRegistry.parseControl(input), 'renderer')
+  })
+  ipcMain.removeHandler('agents:yield')
+  ipcMain.handle('agents:yield', (event, input: unknown) => {
+    // Why: a yield pauses every agent on the tile for seconds; only the Board
+    // window's top frame may claim "the human is working here".
+    assertBoardWindowSender(event, mainWindow, 'agents:yield')
+    return agentPresenceRegistry.yieldTile(agentPresenceRegistry.parseYield(input).cardId)
+  })
   runtime.attachWindow(mainWindow.id)
   const send = (channel: string, ...args: unknown[]): void => {
     if (!mainWindow.isDestroyed()) {
@@ -302,6 +320,32 @@ function registerRuntimeWindowLifecycle(
       })
     },
     boardSpawnConsole: (event) => send('ui:boardSpawnConsole', event),
+    agentCursor: (event) => send('ui:agentCursor', event),
+    boardOpenWebTile: (event) =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          ipcMain.removeListener('board:openWebTileReply', handler)
+          reject(new Error('Board web tile open timed out'))
+        }, 10_000)
+        const handler = (
+          ipcEvent: Electron.IpcMainEvent,
+          reply: { requestId: string; cardId?: string; error?: string }
+        ): void => {
+          // Why: only the targeted main window may answer for this requestId.
+          if (ipcEvent.sender !== mainWindow.webContents || reply.requestId !== event.requestId) {
+            return
+          }
+          clearTimeout(timer)
+          ipcMain.removeListener('board:openWebTileReply', handler)
+          if (reply.error || !reply.cardId) {
+            reject(new Error(reply.error || 'Board did not add the web tile'))
+            return
+          }
+          resolve({ cardId: reply.cardId })
+        }
+        ipcMain.on('board:openWebTileReply', handler)
+        send('ui:boardOpenWebTile', event)
+      }),
     createTerminal: (worktreeId, opts) =>
       send('ui:createTerminal', {
         worktreeId,

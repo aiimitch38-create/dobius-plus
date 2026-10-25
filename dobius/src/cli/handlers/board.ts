@@ -11,6 +11,14 @@ import {
 
 type SpawnConsoleResult = { requestId: string; worktreeId: string; role: string }
 type BoardConsole = { tabId: string; title: string; role: string | null }
+type OpenTileResult = { requestId: string; worktreeId: string; cardId: string; browserPageId: string }
+type AgentControlResult = {
+  ok: boolean
+  agentId: string
+  action: string
+  state: { paused: boolean; stopped: boolean; takenOverUntil: number }
+  gateResolved?: boolean
+}
 
 function formatConsoles(consoles: BoardConsole[]): string {
   if (consoles.length === 0) {
@@ -55,5 +63,39 @@ export const BOARD_HANDLERS: Record<string, CommandHandler> = {
       (await resolveCurrentWorktreeSelector(cwd, client))
     const result = await client.call<BoardConsole[]>('board.listConsoles', { worktree })
     printResult(result, json, formatConsoles)
+  },
+  'board open-tile': async ({ client, flags, cwd, json }) => {
+    const worktree =
+      (await getOptionalWorktreeSelector(flags, 'worktree', cwd, client)) ??
+      (await resolveCurrentWorktreeSelector(cwd, client))
+    const agentId = getOptionalStringFlag(flags, 'as') ?? process.env.DOBIUS_AGENT_ID
+    const result = await client.call<OpenTileResult>('board.openWebTile', {
+      worktree,
+      url: getRequiredStringFlag(flags, 'url'),
+      title: getOptionalStringFlag(flags, 'title'),
+      ...(agentId ? { agentId } : {})
+    })
+    printResult(
+      result,
+      json,
+      (value) => `Web tile ${value.cardId} is open on worktree ${value.worktreeId}; drive it with --page ${value.browserPageId}.`
+    )
+  },
+  'board agent-control': async ({ client, flags, json }) => {
+    const result = await client.call<AgentControlResult>('board.agentControl', {
+      agentId: getRequiredStringFlag(flags, 'agent'),
+      action: getRequiredStringFlag(flags, 'action')
+    })
+    printResult(result, json, (value) => {
+      const flagsText = [
+        value.state.paused ? 'paused' : null,
+        value.state.stopped ? 'stopped' : null,
+        value.state.takenOverUntil > Date.now() ? 'taken over' : null
+      ]
+        .filter((v): v is string => v !== null)
+        .join(', ')
+      const status = value.ok ? 'applied' : 'not applied'
+      return `${value.action} for ${value.agentId}: ${status}. State: ${flagsText || 'running'}.`
+    })
   }
 }

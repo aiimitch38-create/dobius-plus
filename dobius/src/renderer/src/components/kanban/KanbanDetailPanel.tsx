@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CalendarDays,
   ChevronDown,
+  ImagePlus,
   Paperclip,
   Link2,
   Plus,
@@ -21,6 +22,14 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useMountedRef } from '@/hooks/useMountedRef'
+import { translate } from '@/i18n/i18n'
+import {
+  isVertexTaskAttachmentMime,
+  VERTEX_TASK_ATTACHMENT_MAX_BYTES,
+  VERTEX_TASK_ATTACHMENTS_MAX,
+  type VertexTaskAttachment
+} from '../../../../shared/vertex-task-types'
 import { AvatarStack } from './AvatarStack'
 import { KanbanAttachmentThumb } from './KanbanAttachmentThumb'
 import { LabelChip } from './kanban-chips'
@@ -54,6 +63,33 @@ const statusLabel: Record<TaskStatus, string> = {
   testing: 'Testing',
   done: 'Done'
 }
+const SCREENSHOT_ADDED_BY = 'carson'
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'))
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      resolve(result.slice(result.indexOf(',') + 1))
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function attachmentLabel(attachment: VertexTaskAttachment): string {
+  const when = new Date(attachment.createdAt).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+  const by = attachment.addedBy ?? 'agent'
+  return attachment.kind === 'proof'
+    ? translate('kanban.proof.label', 'Proof · {{by}} · {{when}}', { by, when })
+    : translate('kanban.proof.screenshotLabel', 'Screenshot · {{by}} · {{when}}', { by, when })
+}
+
 function Field({
   label,
   children
@@ -76,7 +112,8 @@ export function KanbanDetailPanel({
   onUpdate,
   onComment,
   onCreateChild,
-  onDelete
+  onDelete,
+  onAttachmentAdded
 }: {
   task: Task
   /** Every task on the board: labels and dependencies are drawn from real
@@ -88,7 +125,80 @@ export function KanbanDetailPanel({
   onComment?: (body: string) => void
   onCreateChild: (title: string, assigneeId: string) => void
   onDelete: () => void
+  /** Called after main stored a screenshot, so the board can show it at once. */
+  onAttachmentAdded?: (attachment: VertexTaskAttachment) => void
 }): React.JSX.Element {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const mountedRef = useMountedRef()
+  const [uploading, setUploading] = useState(false)
+  const attachmentsNewestFirst = useMemo(
+    () => [...(task.attachments ?? [])].sort((a, b) => b.createdAt - a.createdAt),
+    [task.attachments]
+  )
+  const addScreenshots = async (files: Iterable<File>): Promise<void> => {
+    const api = window.api?.vertexTasks
+    if (!api?.addAttachment) {
+      toast.error(translate('kanban.proof.unavailable', 'Screenshots need the desktop app.'))
+      return
+    }
+    setUploading(true)
+    let count = task.attachments?.length ?? 0
+    try {
+      for (const file of files) {
+        if (count >= VERTEX_TASK_ATTACHMENTS_MAX) {
+          toast.error(
+            translate('board.report.attachCountError', 'A card holds at most {{max}} images.', {
+              max: VERTEX_TASK_ATTACHMENTS_MAX
+            })
+          )
+          break
+        }
+        if (!isVertexTaskAttachmentMime(file.type)) {
+          toast.error(
+            translate(
+              'board.report.attachTypeError',
+              'Only PNG, JPG, WebP or GIF images can be attached.'
+            )
+          )
+          continue
+        }
+        if (file.size > VERTEX_TASK_ATTACHMENT_MAX_BYTES) {
+          toast.error(
+            translate('board.report.attachSizeError', '{{name}} is larger than {{mb}} MB.', {
+              name: file.name,
+              mb: Math.floor(VERTEX_TASK_ATTACHMENT_MAX_BYTES / (1024 * 1024))
+            })
+          )
+          continue
+        }
+        const added = await api.addAttachment(task.id, {
+          name: file.name || `screenshot.${file.type.split('/')[1]}`,
+          mime: file.type,
+          dataBase64: await readFileAsBase64(file),
+          kind: 'screenshot',
+          addedBy: SCREENSHOT_ADDED_BY
+        })
+        if (!mountedRef.current) {
+          return
+        }
+        if (!added) {
+          toast.error(translate('kanban.proof.failed', 'Could not add the screenshot.'))
+          continue
+        }
+        count += 1
+        onAttachmentAdded?.(added)
+      }
+    } catch (err) {
+      console.error('Failed to add screenshot:', err)
+      if (mountedRef.current) {
+        toast.error(translate('kanban.proof.failed', 'Could not add the screenshot.'))
+      }
+    } finally {
+      if (mountedRef.current) {
+        setUploading(false)
+      }
+    }
+  }
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [commentBody, setCommentBody] = useState('')
   const [childTaskTitle, setChildTaskTitle] = useState('')
@@ -134,6 +244,28 @@ export function KanbanDetailPanel({
     <aside
       className="absolute inset-y-2 right-2 z-40 flex w-[420px] max-w-[calc(100%-16px)] animate-in slide-in-from-right-8 flex-col overflow-hidden rounded-xl border border-kanban-border-strong bg-kanban-panel shadow-kanban-panel"
       aria-label={`Task details for ${task.title}`}
+      onPaste={(event) => {
+        // Why: only the paste event's own payload is read; the clipboard is never polled.
+        const files = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+          file.type.startsWith('image/')
+        )
+        if (files.length) {
+          event.preventDefault()
+          void addScreenshots(files)
+        }
+      }}
+      onDragOver={(event) => {
+        if (Array.from(event.dataTransfer?.types ?? []).includes('Files')) {
+          event.preventDefault()
+        }
+      }}
+      onDrop={(event) => {
+        const files = Array.from(event.dataTransfer?.files ?? [])
+        if (files.length) {
+          event.preventDefault()
+          void addScreenshots(files)
+        }
+      }}
     >
       <header className="flex shrink-0 items-center gap-3 border-b border-kanban-border px-4 py-3">
         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-kanban-accent text-kanban-accent-foreground">
@@ -260,22 +392,67 @@ export function KanbanDetailPanel({
                 />
               ))}
           </div>
-          {task.attachments?.length ? (
-            <div className="mt-4">
-              <p className="mb-2 text-[11px] text-kanban-muted-foreground">
-                Screenshots ({task.attachments.length})
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[11px] text-kanban-muted-foreground">
+                {translate('kanban.proof.heading', 'Screenshots ({{count}})', {
+                  count: attachmentsNewestFirst.length
+                })}
               </p>
-              <div className="grid grid-cols-3 gap-2">
-                {task.attachments.map((attachment) => (
-                  <KanbanAttachmentThumb
-                    key={attachment.id}
-                    taskId={task.id}
-                    attachment={attachment}
-                  />
-                ))}
-              </div>
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlus />
+                {uploading
+                  ? translate('kanban.proof.adding', 'Adding…')
+                  : translate('kanban.proof.add', 'Add screenshot')}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                multiple
+                className="hidden"
+                data-testid="kanban-screenshot-input"
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? [])
+                  event.target.value = ''
+                  if (files.length) {
+                    void addScreenshots(files)
+                  }
+                }}
+              />
             </div>
-          ) : null}
+            {attachmentsNewestFirst.length ? (
+              <ul className="grid grid-cols-3 gap-2">
+                {attachmentsNewestFirst.map((attachment) => (
+                  <li key={attachment.id} className="min-w-0">
+                    <KanbanAttachmentThumb
+                      taskId={task.id}
+                      attachment={attachment}
+                      className="w-full"
+                    />
+                    <p
+                      className="mt-1 truncate text-[10px] text-kanban-muted-foreground"
+                      title={attachmentLabel(attachment)}
+                    >
+                      {attachmentLabel(attachment)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[11px] text-kanban-muted-foreground">
+                {translate(
+                  'kanban.proof.empty',
+                  'None yet. Paste or drop an image here, or add one.'
+                )}
+              </p>
+            )}
+          </div>
           <div className="mt-4 space-y-1">
             <Field label="Assignee">
               <Popover open={assigneeOpen} onOpenChange={setAssigneeOpen}>

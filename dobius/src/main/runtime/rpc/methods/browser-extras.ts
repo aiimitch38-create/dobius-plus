@@ -22,6 +22,7 @@ import {
   StorageKeyValue,
   Viewport
 } from './browser-schemas'
+import { withAgentIdentity } from './browser-agent-policy'
 
 const MouseModifiers = z
   .unknown()
@@ -34,7 +35,7 @@ const MouseClick = MouseXY.merge(MouseButton).extend({
   modifiers: MouseModifiers
 })
 
-export const BROWSER_EXTRA_METHODS: RpcMethod[] = [
+const BROWSER_EXTRA_METHOD_DEFINITIONS: RpcMethod[] = [
   defineMethod({
     name: 'browser.cookie.get',
     params: CookieGet,
@@ -179,3 +180,6 @@ export const BROWSER_EXTRA_METHODS: RpcMethod[] = [
     handler: async (params, { runtime }) => runtime.browserStorageSessionClear(params)
   })
 ]
+
+export const BROWSER_EXTRA_METHODS: RpcMethod[] =
+  BROWSER_EXTRA_METHOD_DEFINITIONS.map(withAgentIdentity)

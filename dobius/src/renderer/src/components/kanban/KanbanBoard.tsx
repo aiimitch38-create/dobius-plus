@@ -978,6 +978,15 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
                 : undefined
             }
             onCreateChild={(title, assigneeId) => createChildTask(selectedTask, title, assigneeId)}
+            onAttachmentAdded={(attachment) =>
+              setTasks((current) =>
+                current.map((task) =>
+                  task.id === selectedTask.id
+                    ? { ...task, attachments: [...(task.attachments ?? []), attachment] }
+                    : task
+                )
+              )
+            }
             onDelete={() => {
               const previous = tasks
               setTasks((current) => current.filter((task) => task.id !== selectedTask.id))

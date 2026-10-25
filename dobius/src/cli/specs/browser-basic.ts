@@ -5,50 +5,50 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['snapshot'],
     summary: 'Capture an accessibility snapshot of the active browser tab',
-    usage: 'dobius snapshot [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'worktree']
+    usage: 'dobius snapshot [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'as', 'fast']
   },
   {
     path: ['screenshot'],
     summary: 'Capture a viewport screenshot of the active browser tab',
-    usage: 'dobius screenshot [--format <png|jpeg>] [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'format', 'worktree']
+    usage: 'dobius screenshot [--format <png|jpeg>] [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'format', 'worktree', 'as', 'fast']
   },
   {
     path: ['click'],
     summary: 'Click a browser element by ref',
-    usage: 'dobius click --element <ref> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree']
+    usage: 'dobius click --element <ref> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree', 'as', 'fast']
   },
   {
     path: ['fill'],
     summary: 'Clear and fill a browser input by ref',
-    usage: 'dobius fill --element <ref> --value <text> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'element', 'value', 'worktree']
+    usage: 'dobius fill --element <ref> --value <text> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'element', 'value', 'worktree', 'as', 'fast']
   },
   {
     path: ['type'],
     summary: 'Type text at the current browser focus',
-    usage: 'dobius type --input <text> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'input', 'worktree']
+    usage: 'dobius type --input <text> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'input', 'worktree', 'as', 'fast']
   },
   {
     path: ['select'],
     summary: 'Select a dropdown option by ref',
-    usage: 'dobius select --element <ref> --value <value> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'element', 'value', 'worktree']
+    usage: 'dobius select --element <ref> --value <value> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'element', 'value', 'worktree', 'as', 'fast']
   },
   {
     path: ['scroll'],
     summary: 'Scroll the browser viewport',
-    usage: 'dobius scroll --direction <up|down> [--amount <pixels>] [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'direction', 'amount', 'worktree']
+    usage: 'dobius scroll --direction <up|down> [--amount <pixels>] [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'direction', 'amount', 'worktree', 'as', 'fast']
   },
   {
     path: ['goto'],
     summary: 'Navigate the active browser tab to a URL',
-    usage: 'dobius goto --url <url> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'url', 'worktree']
+    usage: 'dobius goto --url <url> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'url', 'worktree', 'as', 'fast']
   },
   {
     path: ['back'],
@@ -72,7 +72,7 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
     path: ['wait'],
     summary: 'Wait for element, text, URL, load state, JS condition, or timeout',
     usage:
-      'dobius wait [--selector <sel>] [--timeout <ms>] [--text <text>] [--url <pattern>] [--load <state>] [--fn <js>] [--state <hidden|visible>] [--worktree <selector>] [--json]',
+      'dobius wait [--selector <sel>] [--timeout <ms>] [--text <text>] [--url <pattern>] [--load <state>] [--fn <js>] [--state <hidden|visible>] [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'selector',
@@ -82,44 +82,44 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
       'load',
       'fn',
       'state',
-      'worktree'
+      'worktree', 'as', 'fast'
     ]
   },
   {
     path: ['check'],
     summary: 'Check a checkbox/radio by ref',
-    usage: 'dobius check --element <ref> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree']
+    usage: 'dobius check --element <ref> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree', 'as', 'fast']
   },
   {
     path: ['uncheck'],
     summary: 'Uncheck a checkbox/radio by ref',
-    usage: 'dobius uncheck --element <ref> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree']
+    usage: 'dobius uncheck --element <ref> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree', 'as', 'fast']
   },
   {
     path: ['focus'],
     summary: 'Focus a browser element by ref',
-    usage: 'dobius focus --element <ref> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree']
+    usage: 'dobius focus --element <ref> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree', 'as', 'fast']
   },
   {
     path: ['clear'],
     summary: 'Clear an input element by ref',
-    usage: 'dobius clear --element <ref> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree']
+    usage: 'dobius clear --element <ref> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree', 'as', 'fast']
   },
   {
     path: ['select-all'],
     summary: 'Select all text in an input by ref',
-    usage: 'dobius select-all --element <ref> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree']
+    usage: 'dobius select-all --element <ref> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree', 'as', 'fast']
   },
   {
     path: ['keypress'],
     summary: 'Press a key (Enter, Tab, Escape, ArrowDown, etc.)',
-    usage: 'dobius keypress --key <name> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'key', 'worktree']
+    usage: 'dobius keypress --key <name> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'key', 'worktree', 'as', 'fast']
   },
   {
     path: ['pdf'],
@@ -136,14 +136,14 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['hover'],
     summary: 'Hover over a browser element by ref',
-    usage: 'dobius hover --element <ref> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree']
+    usage: 'dobius hover --element <ref> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'element', 'worktree', 'as', 'fast']
   },
   {
     path: ['drag'],
     summary: 'Drag from one element to another',
-    usage: 'dobius drag --from <ref> --to <ref> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'from', 'to', 'worktree']
+    usage: 'dobius drag --from <ref> --to <ref> [--worktree <selector>] [--as <agentId>] [--fast] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'from', 'to', 'worktree', 'as', 'fast']
   },
   {
     path: ['upload'],

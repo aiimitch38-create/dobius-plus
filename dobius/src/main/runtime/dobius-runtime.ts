@@ -125,9 +125,11 @@ import type {
 } from '../../shared/types'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
 import type {
+  RuntimeBoardOpenWebTileEvent,
   RuntimeBoardSpawnConsoleEvent,
   RuntimeClientEvent
 } from '../../shared/runtime-client-events'
+import type { AgentCursorEvent } from '../../shared/agent-cursor'
 import { toRuntimeActivateWorktreeEvent } from '../../shared/runtime-client-events'
 import type {
   LinearCurrentIssueContextHints,
@@ -1226,6 +1228,9 @@ type RuntimeNotifier = {
     defaultTabs?: CreateWorktreeResult['defaultTabs']
   ): void
   boardSpawnConsole?(event: RuntimeBoardSpawnConsoleEvent): void
+  /** Resolves with the new card id once the renderer added the web tile card. */
+  boardOpenWebTile?(event: RuntimeBoardOpenWebTileEvent): Promise<{ cardId: string }>
+  agentCursor?(event: AgentCursorEvent): void
   createTerminal(
     worktreeId: string,
     opts: {
@@ -2818,6 +2823,39 @@ export class DobiusRuntimeService {
     notifier?.boardSpawnConsole?.(event)
     this.emitClientEvent(event)
     return { delivered: notifier !== null || this.clientEventListeners.size > 0 }
+  }
+
+  /**
+   * Agent cursor / co-presence: same two-path delivery as notifyBoardSpawnConsole.
+   * Only the window path (the human's Board) gets the full event; the
+   * client-event copy drops `gated` and skips `waiting_human`, so no RPC client
+   * can learn the token needed to approve a gate.
+   */
+  notifyAgentCursor(event: AgentCursorEvent): { delivered: boolean } {
+    const notifier = this.notifier?.agentCursor ? this.notifier : null
+    notifier?.agentCursor?.(event)
+    if (event.kind !== 'waiting_human') {
+      const { gated: _gated, ...relayed } = event
+      this.emitClientEvent({ type: 'agentCursor', event: relayed })
+    }
+    return { delivered: notifier !== null || this.clientEventListeners.size > 0 }
+  }
+
+  /**
+   * `dobius board open-tile`: the window path replies with the card id; paired
+   * remote clients only receive the event (no reply channel), so `cardId` is
+   * null when no window is attached.
+   */
+  async notifyBoardOpenWebTile(
+    event: RuntimeBoardOpenWebTileEvent
+  ): Promise<{ cardId: string | null; delivered: boolean }> {
+    const notifier = this.notifier?.boardOpenWebTile ? this.notifier : null
+    this.emitClientEvent(event)
+    if (!notifier?.boardOpenWebTile) {
+      return { cardId: null, delivered: this.clientEventListeners.size > 0 }
+    }
+    const { cardId } = await notifier.boardOpenWebTile(event)
+    return { cardId, delivered: true }
   }
 
   setAgentBrowserBridge(bridge: AgentBrowserBridge | null): void {

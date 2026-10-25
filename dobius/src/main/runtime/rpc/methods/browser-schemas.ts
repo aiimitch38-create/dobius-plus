@@ -4,13 +4,14 @@
 // handler file focused on dispatch wiring.
 import { z } from 'zod'
 import {
+  AgentIdentityParams,
   BrowserTarget,
   OptionalBoolean,
   OptionalFiniteNumber,
   OptionalPlainString,
   OptionalString,
-  requiredStringAllowingEmpty,
-  requiredString
+  requiredString,
+  requiredStringAllowingEmpty
 } from '../schemas'
 
 export const Element = BrowserTarget.extend({
@@ -85,7 +86,7 @@ export const Eval = BrowserTarget.extend({
   expression: requiredString('Missing required --expression')
 })
 
-export const TabList = z.object({ worktree: OptionalString })
+export const TabList = AgentIdentityParams.extend({ worktree: OptionalString })
 
 // Why: --index xor --page must be present. The refine guards that invariant
 // so the dispatcher surfaces a single legible error instead of either shape
@@ -113,7 +114,7 @@ export const TabSwitch = BrowserTarget.extend({
   { message: 'Missing required --index (non-negative integer) or --page' }
 )
 
-export const TabCreate = z.object({
+export const TabCreate = AgentIdentityParams.extend({
   url: OptionalString,
   worktree: OptionalString,
   profileId: OptionalString,
@@ -125,14 +126,14 @@ export const TabCreate = z.object({
   targetGroupId: OptionalString
 })
 
-export const TabShow = z.object({
+export const TabShow = AgentIdentityParams.extend({
   page: requiredString('Missing required --page'),
   worktree: OptionalString
 })
 
-export const TabCurrent = z.object({ worktree: OptionalString })
+export const TabCurrent = AgentIdentityParams.extend({ worktree: OptionalString })
 
-export const TabClose = z.object({
+export const TabClose = AgentIdentityParams.extend({
   index: z
     .unknown()
     .transform((v) => (typeof v === 'number' ? v : undefined))
@@ -150,16 +151,16 @@ export const TabProfileClone = BrowserTarget.extend({
   profileId: requiredString('Missing required --profile')
 })
 
-export const ProfileCreate = z.object({
+export const ProfileCreate = AgentIdentityParams.extend({
   label: requiredString('Missing required --label'),
   // Strict enum so unknown scope values surface validation errors instead of being
   // silently coerced to 'isolated' (pr-bug-scan finding from #1397).
   scope: z.enum(['isolated', 'imported'])
 })
 
-export const ProfileDelete = z.object({ profileId: requiredString('Missing required --profile') })
+export const ProfileDelete = AgentIdentityParams.extend({ profileId: requiredString('Missing required --profile') })
 
-export const ProfileImportFromBrowser = z.object({
+export const ProfileImportFromBrowser = AgentIdentityParams.extend({
   profileId: requiredString('Missing required --profile'),
   browserFamily: requiredString('Missing required --browser-family'),
   browserProfile: OptionalString

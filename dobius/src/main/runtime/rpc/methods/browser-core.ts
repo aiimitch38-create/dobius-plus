@@ -1,5 +1,5 @@
 import { defineMethod, type RpcMethod } from '../core'
-import { BrowserTarget } from '../schemas'
+import { AgentIdentityParams, BrowserTarget } from '../schemas'
 import {
   Check,
   Drag,
@@ -33,8 +33,9 @@ import {
   Wait
 } from './browser-schemas'
 import { BROWSER_TEXT_METHODS } from './browser-text-rpc-methods'
+import { withAgentIdentity } from './browser-agent-policy'
 
-export const BROWSER_CORE_METHODS: RpcMethod[] = [
+const BROWSER_CORE_METHOD_DEFINITIONS: RpcMethod[] = [
   defineMethod({
     name: 'browser.snapshot',
     params: BrowserTarget,
@@ -128,7 +129,7 @@ export const BROWSER_CORE_METHODS: RpcMethod[] = [
   }),
   defineMethod({
     name: 'browser.profileList',
-    params: null,
+    params: AgentIdentityParams,
     handler: async (_params, { runtime }) => runtime.browserProfileList()
   }),
   defineMethod({
@@ -143,7 +144,7 @@ export const BROWSER_CORE_METHODS: RpcMethod[] = [
   }),
   defineMethod({
     name: 'browser.profileDetectBrowsers',
-    params: null,
+    params: AgentIdentityParams,
     handler: async (_params, { runtime }) => runtime.browserProfileDetectBrowsers()
   }),
   defineMethod({
@@ -153,7 +154,7 @@ export const BROWSER_CORE_METHODS: RpcMethod[] = [
   }),
   defineMethod({
     name: 'browser.profileClearDefaultCookies',
-    params: null,
+    params: AgentIdentityParams,
     handler: async (_params, { runtime }) => runtime.browserProfileClearDefaultCookies()
   }),
   defineMethod({
@@ -277,3 +278,6 @@ export const BROWSER_CORE_METHODS: RpcMethod[] = [
     handler: async (params, { runtime }) => runtime.browserHighlight(params)
   })
 ]
+
+export const BROWSER_CORE_METHODS: RpcMethod[] =
+  BROWSER_CORE_METHOD_DEFINITIONS.map(withAgentIdentity)

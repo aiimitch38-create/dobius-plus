@@ -88,6 +88,14 @@ describe('parseArgs', () => {
     expect(parsed.flags.get('label')).toBe(`Bug${REPEATED_FLAG_SEPARATOR}Regression`)
   })
 
+  it('keeps every --proof on tasks complete', () => {
+    const parsed = parseArgs([
+      'tasks', 'complete', '--id', 't1', '--proof', 'a.png', '--proof=b.png', '--result', 'x'
+    ])
+
+    expect(parsed.flags.get('proof')).toBe(`a.png${REPEATED_FLAG_SEPARATOR}b.png`)
+  })
+
   it('does not apply repeated flag encoding to ordinary string flags', () => {
     const parsed = parseArgs(['linear', 'list', '--workspace', 'old', '--workspace', 'new'])
 

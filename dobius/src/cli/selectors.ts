@@ -8,10 +8,57 @@ import { isPathInsideOrEqual } from '../shared/cross-platform-path'
 import type { RuntimeClient } from './runtime-client'
 import { RuntimeClientError } from './runtime-client'
 import { getOptionalStringFlag, getRequiredStringFlag } from './flags'
+import {
+  AGENT_ID_FLAG_PATTERN,
+  isReservedAgentName,
+  isValidAgentDisplayName
+} from '../shared/agent-identity-names'
 
 export type BrowserCliTarget = {
   worktree?: string
   page?: string
+  /** Agent co-presence identity from `--as <agentId>` or DOBIUS_AGENT_ID. */
+  agent?: string
+  agentName?: string
+  /** `--fast`: collapse cursor travel; dwell only before gated actions. */
+  fast?: boolean
+}
+
+/**
+ * Reads the agent identity for a browser command. `--as` wins over the
+ * DOBIUS_AGENT_ID environment (set for agents Dobius launches); DOBIUS_AGENT_NAME
+ * supplies the display name. Nothing is added when no identity is present, so
+ * human-driven commands send exactly the params they always did.
+ */
+export function getAgentIdentityTarget(
+  flags: Map<string, string | boolean>,
+  env: NodeJS.ProcessEnv = process.env
+): Pick<BrowserCliTarget, 'agent' | 'agentName' | 'fast'> {
+  const explicit = getOptionalStringFlag(flags, 'as')
+  const agent = (explicit ?? env.DOBIUS_AGENT_ID ?? '').trim().toLowerCase()
+  if (!agent) {
+    return {}
+  }
+  if (!AGENT_ID_FLAG_PATTERN.test(agent)) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      `Invalid agent id "${agent}" (--as / DOBIUS_AGENT_ID): use 1-64 lowercase letters, digits, "_" or "-"`
+    )
+  }
+  const agentName = env.DOBIUS_AGENT_NAME?.trim()
+  if (agentName && !isValidAgentDisplayName(agentName)) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      isReservedAgentName(agentName)
+        ? `Agent name "${agentName}" (DOBIUS_AGENT_NAME) is reserved for the human and the app`
+        : `Invalid agent name "${agentName}" (DOBIUS_AGENT_NAME): use 1-32 letters, digits, spaces, ".", "_" or "-"`
+    )
+  }
+  return {
+    agent,
+    ...(agentName ? { agentName } : {}),
+    ...(flags.get('fast') === true ? { fast: true } : {})
+  }
 }
 
 export type ComputerCliTarget = {
@@ -169,27 +216,31 @@ export async function getBrowserCommandTarget(
   cwd: string,
   client: RuntimeClient
 ): Promise<BrowserCliTarget> {
+  const identity = getAgentIdentityTarget(flags)
   const page = getOptionalStringFlag(flags, 'page')
   if (!page) {
     return {
-      worktree: await getBrowserWorktreeSelector(flags, cwd, client)
+      worktree: await getBrowserWorktreeSelector(flags, cwd, client),
+      ...identity
     }
   }
 
   const explicitWorktree = getOptionalStringFlag(flags, 'worktree')
   if (!explicitWorktree || explicitWorktree === 'all') {
-    return { page }
+    return { page, ...identity }
   }
   if (explicitWorktree === 'active' || explicitWorktree === 'current') {
     assertLocalCwdWorktreeSelector(explicitWorktree, client)
     return {
       page,
-      worktree: await resolveCurrentWorktreeSelector(cwd, client)
+      worktree: await resolveCurrentWorktreeSelector(cwd, client),
+      ...identity
     }
   }
   return {
     page,
-    worktree: normalizeWorktreeSelector(explicitWorktree, cwd)
+    worktree: normalizeWorktreeSelector(explicitWorktree, cwd),
+    ...identity
   }
 }
 

@@ -83,6 +83,7 @@ To see the card from the terminal: `dobius tasks show --id <id>`.
   dobius tasks list --status blocked --project <slug> --json
   ```
 - **Comments**: every claim, heartbeat note, block, and completion leaves a comment on the card. Open the card's detail panel to read them.
+- **Proof screenshots**: for web/UI work a worker attaches a Playwright screenshot of the finished result (`dobius tasks complete … --proof shot.png`, or `dobius tasks attach --id <id> --file shot.png --by <who>`); for non-visual work the verifying command + exit code goes in `--result`. Cards in Review and Done show the newest proof as a thumbnail; click it to open full size. The detail panel lists every image as "Proof · who · when", newest first, and has an "Add screenshot" button (paste, drop or pick a file) for your own shots. Files are checked by their bytes (PNG/JPEG/WebP/GIF only, 10 MB, 10 per card); a `--proof` that fails to attach stops the complete.
 
 ## Stopping it
 
@@ -181,6 +182,7 @@ Gate
 
 Finish
 - [ ] Workers complete children; lead verifies and completes the parent with a result note
+- [ ] A child completed with `--proof shot.png` shows the thumbnail on its Done card; `--proof notes.txt` renamed to `.png` is refused and the card stays put
 - [ ] Parent shows Done on the Kanban
 - [ ] `dobius tasks complete --id <child> --by someone-else --result x` is refused without `--force`
 - [ ] Kill the lead console mid-card; after 15 minutes the card is back in todo (the store reaps the expired lease on the next list)

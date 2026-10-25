@@ -161,6 +161,7 @@ import {
   registerHeadlessPtyRuntime
 } from './ipc/pty'
 import { AgentBrowserBridge } from './browser/agent-browser-bridge'
+import { createAgentCursorHooks } from './browser/agent-cursor-hooks'
 import { EmulatorBridge } from './emulator/emulator-bridge'
 import { serveSimStateWatcher } from './emulator/serve-sim-state-watcher'
 import { browserManager } from './browser/browser-manager'
@@ -1983,7 +1984,8 @@ app.whenReady().then(async () => {
   registerPromptsHandlers(runtimeService)
   runtimeService.setAgentBrowserBridge(
     new AgentBrowserBridge(browserManager, {
-      onTabsChanged: (worktreeId) => runtimeService.notifyMobileSessionTabsChanged(worktreeId)
+      onTabsChanged: (worktreeId) => runtimeService.notifyMobileSessionTabsChanged(worktreeId),
+      agentCursor: createAgentCursorHooks((event) => runtimeService.notifyAgentCursor(event))
     })
   )
 

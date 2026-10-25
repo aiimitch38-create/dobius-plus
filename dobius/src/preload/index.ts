@@ -1,5 +1,10 @@
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
-import type { RuntimeBoardSpawnConsoleEvent } from '../shared/runtime-client-events'
+import type {
+  RuntimeBoardOpenWebTileEvent,
+  RuntimeBoardSpawnConsoleEvent
+} from '../shared/runtime-client-events'
+import type { AgentControlAction, AgentCursorEvent } from '../shared/agent-cursor'
+import type { AgentControlResult } from './api-types'
 import type { BoardWebTilePopupEvent } from '../shared/board-web-tile-popup'
 import type {
   RuntimeFileOpenNotification,
@@ -1143,6 +1148,15 @@ const api = {
   } satisfies PreloadApi['communications'],
 
   agents: {
+    /** Co-presence: pause / resume / stop / takeOver / approve / deny an agent driving Board tiles. */
+    control: (input: {
+      agentId: string
+      action: AgentControlAction
+      requestId?: string
+    }): Promise<AgentControlResult> => ipcRenderer.invoke('agents:control', input),
+    /** Carson touched a web tile: its agents hold off for a few seconds. */
+    yield: (input: { cardId: string }): Promise<{ tileId: string; until: number }> =>
+      ipcRenderer.invoke('agents:yield', input),
     list: (): Promise<CustomAgent[]> => ipcRenderer.invoke('agents:list'),
     create: (input: CustomAgentInput): Promise<CustomAgent[]> =>
       ipcRenderer.invoke('agents:create', input),
@@ -3594,6 +3608,23 @@ const api = {
         callback(data)
       ipcRenderer.on('ui:boardWebTilePopup', listener)
       return () => ipcRenderer.removeListener('ui:boardWebTilePopup', listener)
+    },
+    onBoardOpenWebTile: (
+      callback: (event: RuntimeBoardOpenWebTileEvent) => void
+    ): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: RuntimeBoardOpenWebTileEvent) =>
+        callback(data)
+      ipcRenderer.on('ui:boardOpenWebTile', listener)
+      return () => ipcRenderer.removeListener('ui:boardOpenWebTile', listener)
+    },
+    replyBoardOpenWebTile: (reply: { requestId: string; cardId?: string; error?: string }): void => {
+      ipcRenderer.send('board:openWebTileReply', reply)
+    },
+    onAgentCursor: (callback: (event: AgentCursorEvent) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: AgentCursorEvent) =>
+        callback(data)
+      ipcRenderer.on('ui:agentCursor', listener)
+      return () => ipcRenderer.removeListener('ui:agentCursor', listener)
     },
     onCreateTerminal: (
       callback: (data: {
