@@ -1,5 +1,6 @@
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
 import type { RuntimeBoardSpawnConsoleEvent } from '../shared/runtime-client-events'
+import type { BoardWebTilePopupEvent } from '../shared/board-web-tile-popup'
 import type {
   RuntimeFileOpenNotification,
   RuntimeDiffOpenNotification
@@ -3587,6 +3588,12 @@ const api = {
         callback(data)
       ipcRenderer.on('ui:boardSpawnConsole', listener)
       return () => ipcRenderer.removeListener('ui:boardSpawnConsole', listener)
+    },
+    onBoardWebTilePopup: (callback: (event: BoardWebTilePopupEvent) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: BoardWebTilePopupEvent) =>
+        callback(data)
+      ipcRenderer.on('ui:boardWebTilePopup', listener)
+      return () => ipcRenderer.removeListener('ui:boardWebTilePopup', listener)
     },
     onCreateTerminal: (
       callback: (data: {

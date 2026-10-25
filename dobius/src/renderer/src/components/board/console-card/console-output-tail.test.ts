@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   consoleScreenRows,
   consoleScreenRuns,
+  glanceBackoffMs,
+  glancePollSkipReason,
+  sameConsoleSnapshot,
   sameLines,
   textTailLines,
   type TailBuffer
@@ -102,5 +105,39 @@ describe('consoleScreenRuns', () => {
     const rows = consoleScreenRuns(term.buffer.active, term.cols)
     expect(rows.map((r) => r.map((run) => run.text).join(''))).toEqual(['abcdefghij', 'KLM'])
     term.dispose()
+  })
+})
+
+describe('glance polling policy', () => {
+  it('backs off per unchanged snapshot and holds at the slowest step', () => {
+    expect([0, 1, 2, 3, 4, 9].map((n) => glanceBackoffMs(n))).toEqual([
+      1000, 2000, 5000, 10_000, 10_000, 10_000
+    ])
+  })
+
+  it('treats an equal seq at the same size as the same screen', () => {
+    const a = { data: 'x', cols: 80, rows: 24, seq: 10 }
+    expect(sameConsoleSnapshot(null, a)).toBe(false)
+    expect(sameConsoleSnapshot(a, { ...a })).toBe(true)
+    expect(sameConsoleSnapshot(a, { ...a, seq: 11, data: 'y' })).toBe(false)
+    expect(sameConsoleSnapshot(a, { ...a, cols: 100 })).toBe(false)
+    // No seq (renderer-sourced): the raw string decides.
+    expect(sameConsoleSnapshot({ data: 'x', cols: 80, rows: 24 }, { data: 'x', cols: 80, rows: 24 })).toBe(
+      true
+    )
+    expect(sameConsoleSnapshot({ data: 'x', cols: 80, rows: 24 }, { data: 'z', cols: 80, rows: 24 })).toBe(
+      false
+    )
+  })
+
+  it('skips for hidden, idle-unfocused and moving boards, in that order', () => {
+    const base = { hidden: false, focused: true, unchangedStreak: 0, sinceMotionMs: 10_000 }
+    expect(glancePollSkipReason(base, 300)).toBeNull()
+    expect(glancePollSkipReason({ ...base, hidden: true }, 300)).toBe('hidden')
+    expect(glancePollSkipReason({ ...base, focused: false }, 300)).toBeNull()
+    expect(glancePollSkipReason({ ...base, focused: false, unchangedStreak: 3 }, 300)).toBe(
+      'unfocused-idle'
+    )
+    expect(glancePollSkipReason({ ...base, sinceMotionMs: 100 }, 300)).toBe('moving')
   })
 })

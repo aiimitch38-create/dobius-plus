@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { activateTabAndFocusPane } from '@/lib/activate-tab-and-focus-pane'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import type { BoardCardOf } from '@/store/slices/board'
 import {
+  BOARD_GLANCE_FADE_MS,
+  BOARD_PAINT_FALLBACK_MS,
   blurBoardTerminalSlot,
   claimBoardTerminalSlot,
   focusBoardTerminalSlot,
+  onBoardTerminalSlotPainted,
   onBoardTerminalSlotReleased,
   releaseBoardTerminalSlot,
   requestBoardTerminalFit
@@ -35,6 +38,13 @@ type ConsoleCardBodyProps = {
   zoom: number
   focused: boolean
 }
+
+/**
+ * Glance -> live handoff. 'waiting': the live pane is portaled in but has not
+ * painted yet, so the glance stays on top. 'fading': it painted; the glance
+ * fades out over BOARD_GLANCE_FADE_MS and then unmounts.
+ */
+type GlanceHandoff = 'none' | 'waiting' | 'fading'
 
 export function ConsoleCardBody({
   worktreeId,
@@ -144,13 +154,64 @@ export function ConsoleCardBody({
     return () => setBoardConsoleFontOverride(paneKey, null)
   }, [baseFontSize, mode, paneKey, settledZoom])
 
-  // Why: refit once per settled size/zoom/mode, never per animation frame.
+  // Why: entering live mode portals the pane, and TerminalPane's isolation
+  // effect fits it once on arrival (then reports the paint). A second,
+  // debounced fit from here would resize the PTY twice; only later settled
+  // size/zoom changes refit, never per animation frame or mid-gesture.
+  const enteredLiveRef = useRef(true)
+  useEffect(() => {
+    if (mode === 'live') {
+      enteredLiveRef.current = true
+    }
+  }, [mode])
   useEffect(() => {
     if (!target || size.w === 0 || !shouldRefit({ mode, gesturing, changed: true })) {
       return
     }
+    if (enteredLiveRef.current) {
+      enteredLiveRef.current = false
+      return
+    }
     requestBoardTerminalFit()
   }, [gesturing, mode, settledZoom, size.w, size.h, target])
+
+  const [handoff, setHandoff] = useState<GlanceHandoff>('none')
+  const prevModeRef = useRef<ConsoleRenderMode | null>(null)
+  useEffect(() => {
+    const prev = prevModeRef.current
+    prevModeRef.current = mode
+    if (mode === 'glance') {
+      setHandoff('none')
+      return
+    }
+    if (prev === 'glance') {
+      setHandoff('waiting')
+    }
+  }, [mode])
+  useEffect(() => {
+    if (handoff !== 'waiting') {
+      return
+    }
+    // Why: with no live pane of its own to wait for, the card shows its notice.
+    if (!paneKey || ownerSlot || !tabExists) {
+      setHandoff('none')
+      return
+    }
+    const reveal = (): void => setHandoff('fading')
+    const unsubscribe = onBoardTerminalSlotPainted(paneKey, reveal)
+    const fallback = window.setTimeout(reveal, BOARD_PAINT_FALLBACK_MS)
+    return () => {
+      unsubscribe()
+      window.clearTimeout(fallback)
+    }
+  }, [handoff, ownerSlot, paneKey, tabExists])
+  useEffect(() => {
+    if (handoff !== 'fading') {
+      return
+    }
+    const timer = window.setTimeout(() => setHandoff('none'), BOARD_GLANCE_FADE_MS)
+    return () => window.clearTimeout(timer)
+  }, [handoff])
 
   const setTargetRef = useCallback((node: HTMLDivElement | null) => setTarget(node), [])
   const fontOverride = isBoardConsoleFontOverrideSupported()
@@ -182,17 +243,29 @@ export function ConsoleCardBody({
           visibility: mode === 'live' ? undefined : 'hidden'
         }}
       />
-      {mode === 'glance' && notice === undefined && (
-        <ConsoleGlanceView
-          worktreeId={worktreeId}
-          tabId={card.tabId}
-          leafId={leafId}
-          title={card.title}
-          onScreen={visibleRaw}
-          drawText={miniatureWorthDrawing(size.h, settledZoom)}
-          bodyHeight={size.h}
-          bodyWidth={size.w}
-        />
+      {(mode === 'glance' || handoff !== 'none') && notice === undefined && (
+        // Why: during the handoff the glance sits over the live pane so no
+        // blank frame shows; it is inert then so clicks reach the terminal.
+        <div
+          className="absolute inset-0"
+          data-board-glance-handoff={handoff === 'none' ? undefined : handoff}
+          style={{
+            opacity: handoff === 'fading' ? 0 : 1,
+            transition: `opacity ${BOARD_GLANCE_FADE_MS}ms ease-out`,
+            pointerEvents: mode === 'live' ? 'none' : undefined
+          }}
+        >
+          <ConsoleGlanceView
+            worktreeId={worktreeId}
+            tabId={card.tabId}
+            leafId={leafId}
+            title={card.title}
+            onScreen={visibleRaw}
+            drawText={miniatureWorthDrawing(size.h, settledZoom)}
+            bodyHeight={size.h}
+            bodyWidth={size.w}
+          />
+        </div>
       )}
       {notice !== undefined && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 p-4 text-center text-[13px] text-[var(--board-text-muted)]">

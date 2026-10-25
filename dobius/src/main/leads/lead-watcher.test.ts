@@ -66,15 +66,21 @@ afterEach(() => {
 })
 
 function build(store: ReturnType<typeof fakeStore>, list: LeadConsoleProbe[] = []) {
-  const consoles = { list }
-  const spawn = vi.fn(async () => ({ delivered: true }))
+  // Why: `stale` / `recent` default empty so the older tests describe a Board
+  // with nothing to replace; the stale-confirmation tests set them explicitly.
+  const consoles = { list, stale: [] as string[], recent: [] as string[] }
+  const spawn = vi.fn(async (_input: { replaceStaleCardIds: string[] }) => ({ delivered: true }))
   const send = vi.fn(async () => {})
   const logs: string[] = []
   const watcher = new LeadWatcher({
     profile: PROFILE,
     projectId: PROJECT,
     store,
-    listLeadConsoles: async () => consoles.list,
+    listLeadConsoles: async () => ({
+      consoles: consoles.list,
+      staleCardIds: consoles.stale,
+      recentInputCardIds: consoles.recent
+    }),
     spawnLeadConsole: spawn,
     sendText: send,
     homeDir: home,
@@ -429,5 +435,73 @@ describe('classifyAgentStatus', () => {
     expect(classifyAgentStatus({ isRunningAgent: true, status: 'permission' })).toBe('busy')
     expect(classifyAgentStatus({ isRunningAgent: true, status: 'idle' })).toBe('idle')
     expect(classifyAgentStatus({ isRunningAgent: true, status: null })).toBe('idle')
+  })
+})
+
+describe('LeadWatcher stale confirmation', () => {
+  it('replaces a stale card only after two consecutive polls agree', async () => {
+    const store = fakeStore([card('c1')])
+    const { watcher, spawn, send, consoles } = build(store, [SHELL])
+    consoles.stale = ['lead-card']
+
+    const first = await watcher.poll()
+    expect(first).toMatchObject({ readyIds: ['c1'], spawned: false, deferred: true })
+    expect(spawn).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+
+    now += 30_000
+    const second = await watcher.poll()
+    expect(second).toMatchObject({ readyIds: ['c1'], spawned: true, deferred: false })
+    expect(spawn).toHaveBeenCalledTimes(1)
+    expect(spawn).toHaveBeenCalledWith({ replaceStaleCardIds: ['lead-card'] })
+  })
+
+  it('a card that looks healthy again between polls starts its stale count over', async () => {
+    const store = fakeStore([card('c1')])
+    const { watcher, spawn, consoles } = build(store, [SHELL])
+    consoles.stale = ['lead-card']
+    await watcher.poll()
+    expect(spawn).not.toHaveBeenCalled()
+
+    // Reconnected and busy: no spawn, no nudge, streak cleared.
+    consoles.list = [BUSY]
+    consoles.stale = []
+    now += 30_000
+    expect((await watcher.poll()).deferred).toBe(true)
+
+    consoles.list = [SHELL]
+    consoles.stale = ['lead-card']
+    now += 30_000
+    expect((await watcher.poll()).spawned).toBe(false)
+    expect(spawn).not.toHaveBeenCalled()
+
+    now += 30_000
+    expect((await watcher.poll()).spawned).toBe(true)
+    expect(spawn).toHaveBeenCalledWith({ replaceStaleCardIds: ['lead-card'] })
+  })
+
+  it('never replaces a card someone typed into in the last minute', async () => {
+    const store = fakeStore([card('c1')])
+    const { watcher, spawn, consoles } = build(store, [SHELL])
+    consoles.stale = ['lead-card']
+    consoles.recent = ['lead-card']
+
+    for (let i = 0; i < 3; i += 1) {
+      expect(await watcher.poll()).toMatchObject({ spawned: false, deferred: true })
+      now += 30_000
+    }
+    expect(spawn).not.toHaveBeenCalled()
+
+    // Typing stopped: the streak is long past two, so the next poll replaces it.
+    consoles.recent = []
+    expect((await watcher.poll()).spawned).toBe(true)
+    expect(spawn).toHaveBeenCalledWith({ replaceStaleCardIds: ['lead-card'] })
+  })
+
+  it('a missing lead card with no stale ids still spawns right away (nothing to replace)', async () => {
+    const store = fakeStore([card('c1')])
+    const { watcher, spawn } = build(store)
+    expect((await watcher.poll()).spawned).toBe(true)
+    expect(spawn).toHaveBeenCalledWith({ replaceStaleCardIds: [] })
   })
 })

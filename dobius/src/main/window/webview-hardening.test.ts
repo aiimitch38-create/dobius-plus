@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 const { attachGuestPoliciesMock, isAllowedPartitionMock } = vi.hoisted(() => ({
   attachGuestPoliciesMock: vi.fn(),
-  isAllowedPartitionMock: vi.fn(() => false)
+  isAllowedPartitionMock: vi.fn((_partition: string) => false)
 }))
 
 vi.mock('../browser/browser-manager', () => ({
@@ -12,6 +12,8 @@ vi.mock('../browser/browser-manager', () => ({
 vi.mock('../browser/browser-session-registry', () => ({
   browserSessionRegistry: { isAllowedPartition: isAllowedPartitionMock }
 }))
+
+import { DOBIUS_WEB_TILE_PARTITION } from '../../shared/constants'
 
 vi.mock('../../shared/browser-url', () => ({
   normalizeBrowserNavigationUrl: vi.fn((src: string) => src)
@@ -40,6 +42,40 @@ describe('Communications webview hardening', () => {
 
     expect(event.preventDefault).toHaveBeenCalledOnce()
     expect((preferences as { preload?: string }).preload).toBeUndefined()
+  })
+
+  it('admits the Board web tile partition exactly and still rejects a look-alike', () => {
+    // The allowlist is exact names: 'dobius-web-tile' is in-memory and allowed;
+    // 'persist:evil' never is, whatever the registry mock was primed with before.
+    isAllowedPartitionMock.mockImplementation(
+      (partition: string) => partition === DOBIUS_WEB_TILE_PARTITION
+    )
+    const handlers = new Map<string, (...args: never[]) => void>()
+    const host = {
+      on: vi.fn((event: string, handler: (...args: never[]) => void) => handlers.set(event, handler))
+    }
+    attachWebviewHardening(host as never)
+
+    const allowed = { preventDefault: vi.fn() }
+    const tilePrefs = { partition: DOBIUS_WEB_TILE_PARTITION, preload: '/evil.js' }
+    handlers.get('will-attach-webview')?.(
+      allowed as never,
+      tilePrefs as never,
+      { src: 'https://example.com/' } as never
+    )
+    expect(allowed.preventDefault).not.toHaveBeenCalled()
+    expect(tilePrefs.partition).toBe('dobius-web-tile')
+    expect((tilePrefs as { preload?: string }).preload).toBeUndefined()
+
+    const denied = { preventDefault: vi.fn() }
+    handlers.get('will-attach-webview')?.(
+      denied as never,
+      { partition: 'persist:evil' } as never,
+      { src: 'https://example.com/' } as never
+    )
+    expect(denied.preventDefault).toHaveBeenCalledOnce()
+    isAllowedPartitionMock.mockReset()
+    isAllowedPartitionMock.mockReturnValue(false)
   })
 
   it('strips any renderer-provided preload from an allowed guest webview', () => {

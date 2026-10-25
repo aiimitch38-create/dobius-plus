@@ -27,7 +27,12 @@ export function useBoardLoops(worktreeId: string | null): {
   }, [worktreeId])
   useEffect(() => {
     refresh()
-    const timer = window.setInterval(refresh, REFRESH_MS)
+    // Why: a hidden window has nobody reading loop state; change events still refresh at once.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'hidden') {
+        refresh()
+      }
+    }, REFRESH_MS)
     window.addEventListener(AUTOMATIONS_CHANGED_EVENT, refresh)
     return () => {
       window.clearInterval(timer)

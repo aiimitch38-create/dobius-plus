@@ -79,8 +79,11 @@ function cardIdOf(cardEl: Element): string | null {
 const CARD_OWN_INPUT_SELECTOR =
   '[data-board-card-control], button, a, input, textarea, select, [contenteditable], [role="button"], [role="checkbox"], webview, iframe'
 
+/** Any card's zoomed-out glance (`data-board-card-glance`); consoles also carry their older attribute. */
+const CARD_GLANCE_SELECTOR = '[data-board-card-glance], [data-board-console-glance]'
+
 /**
- * The card whose title bar (or a console's zoomed-out glance) holds `target`:
+ * The card whose title bar (or a card's zoomed-out glance) holds `target`:
  * a single click there focuses it. Never its body, controls or resize handles.
  */
 export function boardFocusClickCardId(target: Element): string | null {
@@ -90,7 +93,7 @@ export function boardFocusClickCardId(target: Element): string | null {
   }
   const header = target.closest('[data-board-card-header]')
   const onHeader = header !== null && cardEl.contains(header)
-  const onGlance = target.closest('[data-board-console-glance]') !== null
+  const onGlance = target.closest(CARD_GLANCE_SELECTOR) !== null
   return onHeader || onGlance ? cardIdOf(cardEl) : null
 }
 

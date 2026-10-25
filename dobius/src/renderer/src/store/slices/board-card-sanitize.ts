@@ -71,7 +71,13 @@ export function sanitizeKindFields(
         : null
     case 'web':
       return isStr(raw.url)
-        ? { kind: 'web', url: raw.url, ...(isStr(raw.device) ? { device: raw.device } : {}) }
+        ? {
+            kind: 'web',
+            url: raw.url,
+            ...(isStr(raw.device) ? { device: raw.device } : {}),
+            ...(raw.session === 'shared' ? { session: 'shared' as const } : {}),
+            ...(isStr(raw.popupOf) ? { popupOf: raw.popupOf } : {})
+          }
         : null
     case 'note':
       return isStr(raw.text) && oneOf(SWATCHES, raw.color)

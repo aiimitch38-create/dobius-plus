@@ -134,6 +134,17 @@ describe('what triggers focus', () => {
     expect(boardFocusClickCardId(glance)).toBe('con-1')
   })
 
+  it("any card's zoomed-out glance (data-board-card-glance) focuses on a single click", () => {
+    const card = cardDom('web-1')
+    const glance = document.createElement('div')
+    glance.setAttribute('data-board-card-glance', '')
+    glance.setAttribute('data-board-web-glance', '')
+    const still = document.createElement('img')
+    glance.appendChild(still)
+    card.body.appendChild(glance)
+    expect(boardFocusClickCardId(still)).toBe('web-1')
+  })
+
   it('body double-click focuses only kinds with no double-click of their own', () => {
     for (const k of [
       'console',

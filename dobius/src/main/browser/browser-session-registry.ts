@@ -7,7 +7,7 @@ import type { Session } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { DOBIUS_BROWSER_PARTITION } from '../../shared/constants'
+import { DOBIUS_BROWSER_PARTITION, DOBIUS_WEB_TILE_PARTITION } from '../../shared/constants'
 import type { BrowserSessionProfile, BrowserSessionProfileScope } from '../../shared/types'
 import {
   keepUnreadableCopy,
@@ -252,6 +252,9 @@ class BrowserSessionRegistry {
     // targets it. Without this, clipboard permissions and other guest policies
     // are denied by default in the default browser partition.
     this.setupSessionPolicies(DOBIUS_BROWSER_PARTITION)
+    // Why: Board web tiles share the browser's permission/download/UA policy
+    // but live in their own in-memory session; nothing of it is persisted.
+    this.setupSessionPolicies(DOBIUS_WEB_TILE_PARTITION)
 
     const partitions = new Set([
       DOBIUS_BROWSER_PARTITION,
@@ -396,7 +399,8 @@ class BrowserSessionRegistry {
   }
 
   isAllowedPartition(partition: string): boolean {
-    if (partition === DOBIUS_BROWSER_PARTITION) {
+    // Why: exact names only — this allowlist is the guest privilege boundary.
+    if (partition === DOBIUS_BROWSER_PARTITION || partition === DOBIUS_WEB_TILE_PARTITION) {
       return true
     }
     return [...this.profiles.values()].some((p) => p.partition === partition)

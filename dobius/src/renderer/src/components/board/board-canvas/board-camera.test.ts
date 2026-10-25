@@ -123,7 +123,8 @@ describe('boardRevealBlockViewport (new team block)', () => {
 
     it('classifies every kind', () => {
       expect(boardFocusFramingFor('console')).toBe('console')
-      for (const k of ['web', 'image', 'shape', 'stroke']) {
+      expect(boardFocusFramingFor('web')).toBe('page')
+      for (const k of ['image', 'shape', 'stroke']) {
         expect(boardFocusFramingFor(k)).toBe('fit')
       }
       for (const k of [
@@ -164,12 +165,23 @@ describe('boardRevealBlockViewport (new team block)', () => {
       expect(r.y).toBeCloseTo(BOARD_CHROME_INSETS.top + 32)
     })
 
-    it('a large web tile or image zooms out to fit whole', () => {
-      const web = { x: 0, y: 0, width: 2400, height: 1600 }
-      for (const kind of ['web', 'image']) {
-        const v = boardFocusCardViewport(kind, web, SCREEN, 14)
-        expect(v.zoom).toBeLessThan(1)
-        expect(inSafeArea(web, v)).toBe(true)
+    it('a large image zooms out to fit whole', () => {
+      const image = { x: 0, y: 0, width: 2400, height: 1600 }
+      const v = boardFocusCardViewport('image', image, SCREEN, 14)
+      expect(v.zoom).toBeLessThan(1)
+      expect(inSafeArea(image, v)).toBe(true)
+    })
+
+    it('a web tile lands at exactly 100% with its top-left pinned, whatever its size', () => {
+      for (const web of [
+        { x: 300, y: 200, width: 640, height: 400 },
+        { x: 0, y: 0, width: 2400, height: 1600 }
+      ]) {
+        const v = boardFocusCardViewport('web', web, SCREEN, 14)
+        expect(v.zoom).toBe(1)
+        const r = screenRect(web, v)
+        expect(r.x).toBeCloseTo(BOARD_CHROME_INSETS.left + 32)
+        expect(r.y).toBeCloseTo(BOARD_CHROME_INSETS.top + 32)
       }
     })
 

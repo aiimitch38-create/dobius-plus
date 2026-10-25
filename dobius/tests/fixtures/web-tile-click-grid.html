@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Web tile click grid</title>
+<style>
+  :root { color-scheme: light dark; font: 14px/1.4 system-ui, sans-serif; }
+  body { margin: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; max-width: 720px; }
+  .grid button { height: 44px; font: inherit; }
+  .grid button[data-hit="1"] { outline: 3px solid currentColor; }
+  .row { display: flex; gap: 12px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
+  #log { height: 220px; overflow: auto; border: 1px solid currentColor; padding: 8px; font: 12px/1.5 ui-monospace, monospace; white-space: pre; }
+  #status { font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Web tile click grid</h1>
+<p id="status">focus: ? · pointer events logged below</p>
+<div class="grid" id="grid"></div>
+<div class="row">
+  <button type="button" id="open-blank">window.open('about:blank')</button>
+  <button type="button" id="open-https">window.open('https://example.com')</button>
+  <a href="https://example.com/" target="_blank" rel="noreferrer" id="blank-link">target=_blank link</a>
+  <label>select
+    <select id="select">
+      <option>alpha</option><option>beta</option><option>gamma</option><option>delta</option>
+    </select>
+  </label>
+  <button type="button" id="clear">clear log</button>
+</div>
+<div id="log" aria-live="polite"></div>
+<script>
+  var log = document.getElementById('log');
+  var status = document.getElementById('status');
+  function line(text) {
+    var stamp = new Date().toISOString().slice(11, 23);
+    log.textContent = stamp + ' ' + text + '\n' + log.textContent;
+  }
+  function describe(type, event, label) {
+    line(type + ' ' + label + ' @' + Math.round(event.clientX) + ',' + Math.round(event.clientY) +
+      ' hasFocus=' + document.hasFocus() + ' button=' + event.button);
+  }
+  var grid = document.getElementById('grid');
+  for (var r = 0; r < 4; r++) {
+    for (var c = 0; c < 6; c++) {
+      (function (label) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.dataset.cell = label;
+        ['pointerdown', 'pointerup', 'click'].forEach(function (type) {
+          b.addEventListener(type, function (event) {
+            describe(type, event, label);
+            if (type === 'click') {
+              b.dataset.hit = b.dataset.hit === '1' ? '0' : '1';
+            }
+          });
+        });
+        grid.appendChild(b);
+      })('r' + (r + 1) + 'c' + (c + 1));
+    }
+  }
+  document.getElementById('open-blank').addEventListener('click', function () {
+    var w = window.open('about:blank');
+    line('window.open(about:blank) -> ' + (w ? 'handle' : 'null'));
+  });
+  document.getElementById('open-https').addEventListener('click', function () {
+    var w = window.open('https://example.com');
+    line('window.open(https) -> ' + (w ? 'handle' : 'null'));
+  });
+  document.getElementById('blank-link').addEventListener('click', function () {
+    line('target=_blank link clicked');
+  });
+  document.getElementById('select').addEventListener('change', function (event) {
+    line('select -> ' + event.target.value);
+  });
+  document.getElementById('clear').addEventListener('click', function () {
+    log.textContent = '';
+  });
+  function focusState() {
+    status.textContent = 'focus: ' + (document.hasFocus() ? 'yes' : 'no') + ' · pointer events logged below';
+  }
+  window.addEventListener('focus', function () { line('window focus'); focusState(); });
+  window.addEventListener('blur', function () { line('window blur'); focusState(); });
+  focusState();
+</script>
+</body>
+</html>

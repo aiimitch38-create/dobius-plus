@@ -1,17 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Globe, RotateCw } from 'lucide-react'
 import { DOBIUS_BROWSER_GUEST_WEB_PREFERENCES_ATTRIBUTE } from '../../../../../shared/browser-guest-web-preferences'
-import { DOBIUS_BROWSER_PARTITION } from '../../../../../shared/constants'
+import {
+  DOBIUS_BROWSER_PARTITION,
+  DOBIUS_WEB_TILE_PARTITION
+} from '../../../../../shared/constants'
+import {
+  type BoardWebTilePopupEvent,
+  WEB_TILE_POPUP_SIBLING_CAP,
+  webTileBrowserPageId
+} from '../../../../../shared/board-web-tile-popup'
+import { toast } from 'sonner'
 import { normalizeBrowserNavigationUrl } from '../../../../../shared/browser-url'
 import type { CardBodyProps } from './card-body-props'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
+import { getBoard, type BoardCardOf } from '@/store/slices/board'
+import { focusBoardCard, useBoardCameraFocus } from '../board-canvas/board-camera-focus'
+import { duplicateSpot } from '../board-route/board-duplicate-spot'
+import { webTileFullyVisible } from '../board-web/web-tile-focus'
 import { webTileAddressUrl } from '../board-web/web-tile-navigation'
 import { isLoopbackUrl } from '../board-web/dev-server-url'
 import { deviceFitScale, findWebTileDevice, mobileUserAgent } from '../board-web/web-tile-devices'
 import { WebTileExtras } from '../board-web/WebTileExtras'
 import { WebTileInspectorDock } from '../board-web/WebTileInspectorDock'
-import { captureWebTileThumbnail, WEB_THUMBNAIL_REFRESH_MS } from '../board-web/web-tile-thumbnail'
+import { captureWebTileThumbnail } from '../board-web/web-tile-thumbnail'
 import { useCardLod } from './use-card-lod'
 
 // Chromium net error for "connection refused": the dev server is not up yet.
@@ -23,11 +36,67 @@ const DEV_SERVER_MAX_RETRIES = 48
 // page is unreadable and a guest swallows the clicks meant for the card.
 const WEB_TILE_TEXT_PX = 16
 
+// Why: a click inside the page focuses the guest at once; the camera waits so it
+// never moves under a pressed button (pointerdown → focus → pointerup → click).
+const FOCUS_FLY_DELAY_MS = 250
+
+/** Where a tile's page browses: the private in-memory session unless the card opted into the signed-in one. */
+export function webTilePartition(session: BoardCardOf<'web'>['session']): string {
+  return session === 'shared' ? DOBIUS_BROWSER_PARTITION : DOBIUS_WEB_TILE_PARTITION
+}
+
+/**
+ * A sibling tile for a popup the page opened: same size, device and session,
+ * placed beside the source. Returns the new card id, or null when the source
+ * already has WEB_TILE_POPUP_SIBLING_CAP popup tiles (a toast says so).
+ */
+export function openWebTilePopupSibling(
+  worktreeId: string,
+  source: BoardCardOf<'web'>,
+  event: Pick<BoardWebTilePopupEvent, 'url'>
+): string | null {
+  const state = useAppStore.getState()
+  const cards = getBoard(state, worktreeId).cards
+  const siblings = cards.filter((c) => c.kind === 'web' && c.popupOf === source.id).length
+  if (siblings >= WEB_TILE_POPUP_SIBLING_CAP) {
+    toast.warning(
+      translate('board.web.popupCap', '{{title}} opened too many popups. Close some to allow more.', {
+        title: source.title
+      })
+    )
+    return null
+  }
+  const spot = duplicateSpot(
+    source,
+    cards.map(({ x, y, w, h }) => ({ x, y, w, h }))
+  )
+  return state.addCard(worktreeId, {
+    kind: 'web',
+    title: translate('board.web.popupTitle', 'Popup'),
+    url: event.url,
+    popupOf: source.id,
+    x: spot.x,
+    y: spot.y,
+    w: source.w,
+    h: source.h,
+    ...(source.device ? { device: source.device } : {}),
+    ...(source.session ? { session: source.session } : {})
+  })
+}
+
+function boardScreenSize(): { width: number; height: number } {
+  const canvas = document.querySelector('[data-board-canvas]')
+  if (canvas && canvas.clientWidth > 0 && canvas.clientHeight > 0) {
+    return { width: canvas.clientWidth, height: canvas.clientHeight }
+  }
+  return { width: window.innerWidth, height: window.innerHeight }
+}
+
 const NAV_BUTTON =
   'flex size-7 items-center justify-center rounded-full text-[var(--board-text-muted)] hover:bg-[var(--board-panel-2)] disabled:opacity-40'
 
-// ponytail: a standalone guest on the shared browser partition. BrowserPane
-// needs a tab-strip browser tab, which would leak board tiles into Classic tabs.
+// ponytail: a standalone guest on its own partition. BrowserPane needs a
+// tab-strip browser tab, which would leak board tiles into Classic tabs.
 export function WebTileCard({
   card,
   onChange,
@@ -51,22 +120,36 @@ export function WebTileCard({
     bodyRef.current = node
     setBodyEl(node)
   }, [])
-  const { lod, onScreen } = useCardLod(bodyEl, zoom, WEB_TILE_TEXT_PX)
+  const { lod, onScreen, settledZoom } = useCardLod(bodyEl, zoom, WEB_TILE_TEXT_PX)
   const [thumbnail, setThumbnail] = useState<string | null>(null)
+  // Bumped on every navigation, so the glance re-captures only when the page changed.
+  const [navSeq, setNavSeq] = useState(0)
+  // Bumped when a load finishes, so a capture that found no frame yet tries again.
+  const [loadSeq, setLoadSeq] = useState(0)
+  const thumbnailSeq = useRef(-1)
   const defaultUserAgent = useRef(navigator.userAgent)
   const userAgentSwitched = useRef(false)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const cardRef = useRef(card)
+  cardRef.current = card
+  const guestWebContentsId = useRef<number | null>(null)
+  // Why: the camera may not fly while the zoom is still settling (a pinch in flight).
+  const gesturing = settledZoom !== (zoom > 0 ? zoom : 1)
+  const gesturingRef = useRef(gesturing)
+  gesturingRef.current = gesturing
+  const partition = webTilePartition(card.session)
 
   useEffect(() => setDraft(card.url), [card.url])
 
+  // Why: switching sessions recreates the guest — a webview's partition is fixed once attached.
   useEffect(() => {
     const container = containerRef.current
     if (!container) {
       return
     }
     const webview = document.createElement('webview') as Electron.WebviewTag
-    webview.setAttribute('partition', DOBIUS_BROWSER_PARTITION)
+    webview.setAttribute('partition', partition)
     webview.setAttribute('webpreferences', DOBIUS_BROWSER_GUEST_WEB_PREFERENCES_ATTRIBUTE)
     webview.style.width = '100%'
     webview.style.height = '100%'
@@ -74,10 +157,14 @@ export function WebTileCard({
     webviewRef.current = webview
     let retries = 0
     let retryTimer: number | undefined
+    let focusTimer: number | undefined
+    let registeredPageId: string | null = null
+    const incognito = partition === DOBIUS_WEB_TILE_PARTITION
     const sync = (): void => {
       setError(null)
       setWaiting(false)
       retries = 0
+      setNavSeq((n) => n + 1)
       const url = webview.getURL()
       if (url) {
         onChangeRef.current({ url })
@@ -123,18 +210,109 @@ export function WebTileCard({
         )
       }
     }
+    const loaded = (): void => setLoadSeq((n) => n + 1)
+    // Why: on did-attach (not dom-ready) so a popup fired during the first load
+    // already finds the guest registered, and never falls to the browser path.
+    const attached = (): void => {
+      let webContentsId: number
+      try {
+        webContentsId = webview.getWebContentsId()
+      } catch (error) {
+        console.debug('[board-web] guest not addressable yet', error)
+        return
+      }
+      guestWebContentsId.current = webContentsId
+      // Why: registered under `web-tile:<cardId>` so the agent browser bridge
+      // can address the tile like a browser page; a renderer swap re-registers.
+      if (worktreeId) {
+        const browserPageId = webTileBrowserPageId(cardRef.current.id)
+        registeredPageId = browserPageId
+        void window.api?.browser
+          ?.registerGuest({
+            browserPageId,
+            workspaceId: browserPageId,
+            worktreeId,
+            webContentsId
+          })
+          .catch((error: unknown) => console.debug('[board-web] guest registration failed', error))
+      }
+    }
+    const ready = (): void => {
+      // Why: guest CSS px must map 1:1 onto the tile's rect for agent cursors.
+      // Zoom factors are per origin per session, so only the private session
+      // is touched: the shared one would reset the user's Browser-pane zoom.
+      if (!incognito) {
+        return
+      }
+      try {
+        if (webview.getZoomFactor() !== 1) {
+          webview.setZoomFactor(1)
+        }
+      } catch (error) {
+        console.debug('[board-web] zoom factor not applied', error)
+      }
+    }
+    // Why: the host never sees a pointerup that happens inside the guest, so a
+    // tile already fully on screen at a readable zoom never flies (the user is
+    // working in it, maybe mid-press); only a tile partly off screen or too
+    // small flies, and then after the delay, or as soon as the host saw the
+    // press end.
+    const tryFly = (): void => {
+      window.clearTimeout(focusTimer)
+      focusTimer = undefined
+      const { id, x, y, w, h } = cardRef.current
+      const focus = useBoardCameraFocus.getState().focus
+      if (!worktreeId || gesturingRef.current || focus?.cardId === id) {
+        return
+      }
+      const viewport = getBoard(useAppStore.getState(), worktreeId).viewport
+      if (webTileFullyVisible({ x, y, w, h }, viewport, boardScreenSize())) {
+        return
+      }
+      focusBoardCard(worktreeId, id)
+    }
+    const pressEnd = (): void => {
+      if (focusTimer !== undefined) {
+        tryFly()
+      }
+    }
+    const focused = (): void => {
+      window.clearTimeout(focusTimer)
+      focusTimer = window.setTimeout(tryFly, FOCUS_FLY_DELAY_MS)
+    }
     webview.addEventListener('did-navigate', sync)
     webview.addEventListener('did-navigate-in-page', sync)
     webview.addEventListener('did-fail-load', fail)
+    webview.addEventListener('did-stop-loading', loaded)
+    webview.addEventListener('did-finish-load', loaded)
+    webview.addEventListener('did-attach', attached)
+    webview.addEventListener('dom-ready', ready)
+    webview.addEventListener('focus', focused)
+    window.addEventListener('pointerup', pressEnd, true)
+    window.addEventListener('mouseup', pressEnd, true)
     return () => {
       webview.removeEventListener('did-navigate', sync)
       webview.removeEventListener('did-navigate-in-page', sync)
       webview.removeEventListener('did-fail-load', fail)
+      webview.removeEventListener('did-stop-loading', loaded)
+      webview.removeEventListener('did-finish-load', loaded)
+      webview.removeEventListener('did-attach', attached)
+      webview.removeEventListener('dom-ready', ready)
+      webview.removeEventListener('focus', focused)
+      window.removeEventListener('pointerup', pressEnd, true)
+      window.removeEventListener('mouseup', pressEnd, true)
       window.clearTimeout(retryTimer)
+      window.clearTimeout(focusTimer)
+      if (registeredPageId) {
+        void window.api?.browser
+          ?.unregisterGuest({ browserPageId: registeredPageId })
+          .catch((error: unknown) => console.debug('[board-web] guest unregister failed', error))
+      }
+      guestWebContentsId.current = null
       webviewRef.current = null
       webview.remove()
     }
-  }, [])
+  }, [partition, worktreeId])
 
   useEffect(() => {
     const webview = webviewRef.current
@@ -142,7 +320,20 @@ export function WebTileCard({
     if (webview && target && webview.getAttribute('src') !== target) {
       webview.setAttribute('src', target)
     }
-  }, [card.url])
+  }, [card.url, partition])
+
+  // Why: the page's popups (OAuth, target=_blank, window.open) arrive from main
+  // as an event for this guest; they open as a sibling tile, never a native window.
+  useEffect(() => {
+    if (!worktreeId) {
+      return
+    }
+    return window.api?.ui?.onBoardWebTilePopup((event) => {
+      if (event.guestWebContentsId === guestWebContentsId.current) {
+        openWebTilePopupSibling(worktreeId, cardRef.current, event)
+      }
+    })
+  }, [worktreeId])
 
   // Why: a phone viewport also needs a phone user agent, or sites serve desktop markup.
   const mobile = findWebTileDevice(card.device)?.mobile ?? false
@@ -168,7 +359,8 @@ export function WebTileCard({
       }
       console.debug('[board-web] user agent switch deferred', error)
     }
-  }, [mobile])
+    // Why: `partition` is a dependency because a session switch recreates the guest.
+  }, [mobile, partition])
 
   useEffect(() => {
     const body = bodyRef.current
@@ -183,27 +375,25 @@ export function WebTileCard({
   }, [])
 
   // Why: the miniature is a still of the page taken as the tile zooms out (the
-  // guest is still painted then); refreshed slowly while on screen. The
-  // webview itself stays mounted and visible underneath, so nothing reloads.
+  // guest is still painted then), and again only after the page navigates or a
+  // load finishes (when an earlier capture found no frame yet); no periodic
+  // capture, which cost CPU on every glance tile. The webview itself stays
+  // mounted and visible underneath, so nothing reloads.
   useEffect(() => {
-    if (lod !== 'glance' || !onScreen) {
+    if (lod !== 'glance' || !onScreen || thumbnailSeq.current === navSeq) {
       return
     }
     let cancelled = false
-    const capture = (): void => {
-      void captureWebTileThumbnail(webviewRef.current).then((still) => {
-        if (!cancelled && still) {
-          setThumbnail(still)
-        }
-      })
-    }
-    capture()
-    const timer = window.setInterval(capture, WEB_THUMBNAIL_REFRESH_MS)
+    void captureWebTileThumbnail(webviewRef.current).then((still) => {
+      if (!cancelled && still) {
+        thumbnailSeq.current = navSeq
+        setThumbnail(still)
+      }
+    })
     return () => {
       cancelled = true
-      window.clearInterval(timer)
     }
-  }, [lod, onScreen])
+  }, [lod, onScreen, navSeq, loadSeq])
 
   const device = findWebTileDevice(card.device)
   const scale = device ? deviceFitScale(device, bodySize) : 1
@@ -316,13 +506,14 @@ export function WebTileCard({
       <div className="flex min-h-0 flex-1">
         <div
           ref={setBodyRef}
-          className={`relative min-h-0 min-w-0 flex-1 overflow-hidden ${device ? 'bg-[var(--board-panel-2)]' : 'bg-[var(--board-panel)]'}`}
+          // Why: clip, not hidden: a hidden box can still be scrolled by focus reveal, moving the page under a click.
+          className={`relative min-h-0 min-w-0 flex-1 overflow-clip ${device ? 'bg-[var(--board-panel-2)]' : 'bg-[var(--board-panel)]'}`}
         >
           <div
             ref={containerRef}
             className={
               device
-                ? 'absolute overflow-hidden bg-[var(--board-panel)] shadow-(--board-shadow)'
+                ? 'absolute overflow-clip bg-[var(--board-panel)] shadow-(--board-shadow)'
                 : 'absolute'
             }
             style={frameStyle}
@@ -334,7 +525,7 @@ export function WebTileCard({
             <div
               data-board-card-glance
               data-board-web-glance
-              className="absolute cursor-zoom-in overflow-hidden select-none"
+              className="absolute cursor-zoom-in overflow-clip select-none"
               style={frameStyle}
             >
               {thumbnail ? (

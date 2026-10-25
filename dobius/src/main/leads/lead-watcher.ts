@@ -10,6 +10,10 @@ export const LEAD_SPAWN_GRACE_MS = 2 * 60_000
 /** Consecutive launches that never became a running agent before the watcher stops spawning. */
 export const LEAD_MAX_LAUNCH_FAILURES = 3
 export const LEAD_WATCHER_AUTHOR = 'dobius-lead-watcher'
+/** A card is replaced only after this many consecutive listings called it stale. */
+export const LEAD_STALE_CONFIRM_POLLS = 2
+/** A card someone typed into this recently is never replaced. */
+export const LEAD_RECENT_INPUT_MS = 60_000
 export const SEEN_FILE_NAME = 'seen.json'
 const SEEN_CAP = 1000
 
@@ -24,6 +28,15 @@ export type LeadWatcherStore = Pick<VertexWorkBoard, 'listFiltered'> &
 export type LeadConsoleAgentState = 'idle' | 'busy' | 'shell'
 
 export type LeadConsoleProbe = { handle: string; agent: LeadConsoleAgentState }
+
+export type LeadConsoleListing = {
+  /** Lead cards whose terminal is connected, each with its agent state (shell included). */
+  consoles: LeadConsoleProbe[]
+  /** Lead cards whose terminal is missing, disconnected, or back at a bare shell. */
+  staleCardIds: string[]
+  /** The subset of stale cards whose terminal had user input in the last LEAD_RECENT_INPUT_MS. */
+  recentInputCardIds: string[]
+}
 
 /** Maps the runtime's per-terminal agent status onto the delivery states above. */
 export function classifyAgentStatus(status: {
@@ -45,14 +58,15 @@ export type LeadWatcherDeps = {
   profile: string
   projectId: string
   store: LeadWatcherStore
-  /** Connected consoles with role `lead:<profile>`, each with its agent state (shell included). */
-  listLeadConsoles: () => Promise<LeadConsoleProbe[]>
+  /** Consoles with role `lead:<profile>` plus the cards that look stale right now. */
+  listLeadConsoles: () => Promise<LeadConsoleListing>
   /**
-   * Ask the Board to open the lead console. `delivered: false` means no window
-   * or client was attached to receive the request; the watcher asks again on
-   * the next poll instead of waiting out the spawn grace period.
+   * Ask the Board to open the lead console, replacing the named (confirmed
+   * stale) cards. `delivered: false` means no window or client was attached to
+   * receive the request; the watcher asks again on the next poll instead of
+   * waiting out the spawn grace period.
    */
-  spawnLeadConsole: () => Promise<{ delivered: boolean }>
+  spawnLeadConsole: (input: { replaceStaleCardIds: string[] }) => Promise<{ delivered: boolean }>
   /** Type one line into the console and press Enter. */
   sendText: (handle: string, text: string) => Promise<void>
   homeDir?: string
@@ -65,7 +79,11 @@ export type LeadPollResult = {
   readyIds: string[]
   spawned: boolean
   nudged: boolean
-  /** The lead agent was busy or on a dialog; ids stay unseen for the next poll. */
+  /**
+   * Nothing was typed or spawned this poll; ids stay unseen for the next one.
+   * Either the lead agent was busy or on a dialog, or a stale-looking card is
+   * not yet confirmed (one poll so far, or someone typed into it recently).
+   */
   deferred: boolean
   /** Spawning is suspended after repeated failed launches; see status().lastError. */
   halted: boolean
@@ -151,6 +169,8 @@ export class LeadWatcher {
   private lastError: string | null = null
   private readonly seenPath: string
   private state: SeenState
+  /** Consecutive listings that called each card stale; cleared when a card looks healthy again. */
+  private readonly staleStreak = new Map<string, number>()
 
   constructor(private readonly deps: LeadWatcherDeps) {
     const dir = leadStateDir(deps.profile, deps.homeDir)
@@ -240,7 +260,9 @@ export class LeadWatcher {
       return result
     }
 
-    const probes = await this.deps.listLeadConsoles()
+    const listing = await this.deps.listLeadConsoles()
+    const probes = listing.consoles
+    this.noteStale(listing.staleCardIds)
     // Why: a lead card at a bare shell is not a lead; typing into it would run
     // "Cards ready: …" as a command. Such cards are replaced by the spawn path.
     const agents = probes.filter((c) => c.agent !== 'shell')
@@ -272,10 +294,19 @@ export class LeadWatcher {
       return result
     }
 
+    // Why: one poll can misread a card (a reconnecting terminal, a status probe
+    // racing the user's keystrokes). Replace only what two consecutive polls
+    // agree is stale and nobody typed into for a minute; otherwise wait.
+    const replaceStaleCardIds = this.confirmedStaleCardIds(listing)
+    if (listing.staleCardIds.some((id) => !replaceStaleCardIds.includes(id))) {
+      result.deferred = true
+      return result
+    }
+
     const recentlyRequested =
       this.spawnRequestedAt !== null && now - this.spawnRequestedAt < LEAD_SPAWN_GRACE_MS
     if (!recentlyRequested) {
-      const { delivered } = await this.deps.spawnLeadConsole()
+      const { delivered } = await this.deps.spawnLeadConsole({ replaceStaleCardIds })
       // Why: an undelivered request (no window yet) must not arm the grace
       // period, or the lead would sit idle for two minutes after the window opens.
       this.spawnRequestedAt = delivered ? now : null
@@ -285,6 +316,25 @@ export class LeadWatcher {
     // Why: the console appears asynchronously; the nudge goes out on a later poll,
     // once there is a terminal to type into. The ids stay unseen until then.
     return result
+  }
+
+  private noteStale(staleCardIds: readonly string[]): void {
+    const stale = new Set(staleCardIds)
+    for (const id of [...this.staleStreak.keys()]) {
+      if (!stale.has(id)) {
+        this.staleStreak.delete(id)
+      }
+    }
+    for (const id of stale) {
+      this.staleStreak.set(id, (this.staleStreak.get(id) ?? 0) + 1)
+    }
+  }
+
+  private confirmedStaleCardIds(listing: LeadConsoleListing): string[] {
+    const typed = new Set(listing.recentInputCardIds)
+    return listing.staleCardIds.filter(
+      (id) => !typed.has(id) && (this.staleStreak.get(id) ?? 0) >= LEAD_STALE_CONFIRM_POLLS
+    )
   }
 
   /** One delivered launch counts as one failure when it ends at a shell or times out. */

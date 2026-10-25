@@ -27,7 +27,7 @@ vi.mock('./browser-manager', () => ({
 
 import { browserSessionRegistry } from './browser-session-registry'
 import { setupClientHintsOverride } from './browser-session-ua'
-import { DOBIUS_BROWSER_PARTITION } from '../../shared/constants'
+import { DOBIUS_BROWSER_PARTITION, DOBIUS_WEB_TILE_PARTITION } from '../../shared/constants'
 
 describe('BrowserSessionRegistry', () => {
   beforeEach(() => {
@@ -57,6 +57,13 @@ describe('BrowserSessionRegistry', () => {
 
   it('allows the default partition', () => {
     expect(browserSessionRegistry.isAllowedPartition(DOBIUS_BROWSER_PARTITION)).toBe(true)
+  })
+
+  it('allows the in-memory web tile partition by exact name only', () => {
+    expect(browserSessionRegistry.isAllowedPartition(DOBIUS_WEB_TILE_PARTITION)).toBe(true)
+    expect(browserSessionRegistry.isAllowedPartition('persist:dobius-web-tile')).toBe(false)
+    expect(browserSessionRegistry.isAllowedPartition('dobius-web-tile-x')).toBe(false)
+    expect(browserSessionRegistry.isAllowedPartition('persist:evil')).toBe(false)
   })
 
   it('rejects unknown partitions', () => {

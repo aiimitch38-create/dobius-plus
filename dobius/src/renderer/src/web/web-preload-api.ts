@@ -2270,6 +2270,7 @@ function createWebUiApi(): NonNullable<Partial<PreloadApi>['ui']> {
     onDictationKeyDown: () => noopUnsubscribe,
     onActivateWorktree: () => noopUnsubscribe,
     onBoardSpawnConsole: () => noopUnsubscribe,
+    onBoardWebTilePopup: () => noopUnsubscribe,
     onCreateTerminal: () => noopUnsubscribe,
     onRequestTerminalCreate: () => noopUnsubscribe,
     replyTerminalCreate: () => {},

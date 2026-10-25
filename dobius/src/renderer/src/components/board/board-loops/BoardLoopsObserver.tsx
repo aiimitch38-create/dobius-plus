@@ -48,6 +48,9 @@ export function BoardLoopsObserver({ worktreeId }: { worktreeId: string }): null
 
   useEffect(() => {
     const idleLoops = loops.filter((l) => l.enabled && l.loop?.trigger.kind === 'on-idle')
+    if (idleLoops.length === 0) {
+      return
+    }
     const timer = window.setInterval(() => {
       const now = Date.now()
       const state = useAppStore.getState()

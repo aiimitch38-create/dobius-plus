@@ -34,7 +34,8 @@ export function SystemMonitorCard({
     let pending = false
     const localClocks = (): MonitorLocalClocks => ({ monotonicMs: clock(), wallMs: wallClock() })
     const updateDisplay = () => {
-      if (disposed) {
+      // Why: the one-second elapsed tick is display-only; a hidden window catches up on visibilitychange.
+      if (disposed || document.visibilityState === 'hidden') {
         return
       }
       const now = localClocks()

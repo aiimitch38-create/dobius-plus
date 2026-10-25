@@ -60,6 +60,12 @@ export const ONBOARDING_FINAL_STEP = 5
 export const ONBOARDING_FLOW_VERSION = 4
 
 export const DOBIUS_BROWSER_PARTITION = 'persist:dobius-browser'
+// Why: Board web tiles browse in a private, in-memory session (no `persist:`
+// prefix) so agents can drive them without touching the signed-in browser
+// profile; it is emptied when the app quits.
+export const DOBIUS_WEB_TILE_PARTITION = 'dobius-web-tile'
+/** browserPageId prefix a Board web tile registers its guest under: `web-tile:<cardId>`. */
+export const DOBIUS_WEB_TILE_PAGE_ID_PREFIX = 'web-tile:'
 // Why: blank browser tabs must start from an inert guest URL that does not
 // navigate the privileged main window to about:blank. Renderer and main both
 // need the exact same value so the attach policy can allow only this one safe

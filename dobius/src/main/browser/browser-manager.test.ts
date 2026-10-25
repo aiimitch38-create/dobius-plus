@@ -129,6 +129,132 @@ describe('browserManager', () => {
     expect(shellOpenExternalMock).toHaveBeenCalledWith('http://localhost:3000/')
   })
 
+  it('keeps the legacy external/queued path for an unregistered hosted guest (browser pane, floating phone)', () => {
+    const hostSendMock = vi.fn()
+    const host = { isDestroyed: vi.fn(() => false), send: hostSendMock }
+    const guest = {
+      id: 301,
+      hostWebContents: host,
+      isDestroyed: vi.fn(() => false),
+      getType: vi.fn(() => 'webview'),
+      setBackgroundThrottling: guestSetBackgroundThrottlingMock,
+      setWindowOpenHandler: guestSetWindowOpenHandlerMock,
+      on: guestOnMock,
+      off: guestOffMock,
+      openDevTools: guestOpenDevToolsMock
+    }
+    webContentsFromIdMock.mockReturnValue(guest)
+    browserManager.attachGuestPolicies(guest as never)
+    const handler = guestSetWindowOpenHandlerMock.mock.calls[0][0] as (details: {
+      url: string
+      disposition: string
+    }) => { action: 'deny' }
+
+    expect(handler({ url: 'https://example.com/login', disposition: 'foreground-tab' })).toEqual({
+      action: 'deny'
+    })
+    expect(handler({ url: 'about:blank', disposition: 'new-window' })).toEqual({ action: 'deny' })
+
+    expect(hostSendMock).not.toHaveBeenCalled()
+    expect(shellOpenExternalMock).toHaveBeenCalledTimes(1)
+    expect(shellOpenExternalMock).toHaveBeenCalledWith('https://example.com/login')
+  })
+
+  it('drops a web tile popup storm past 3 in 10 s, and drops unsafe schemes', () => {
+    const hostSendMock = vi.fn()
+    const host = { isDestroyed: vi.fn(() => false), send: hostSendMock }
+    const guest = {
+      id: 303,
+      hostWebContents: host,
+      isDestroyed: vi.fn(() => false),
+      getType: vi.fn(() => 'webview'),
+      setBackgroundThrottling: guestSetBackgroundThrottlingMock,
+      setWindowOpenHandler: guestSetWindowOpenHandlerMock,
+      on: guestOnMock,
+      off: guestOffMock,
+      openDevTools: guestOpenDevToolsMock
+    }
+    webContentsFromIdMock.mockImplementation((id: number) => (id === guest.id ? guest : null))
+    browserManager.attachGuestPolicies(guest as never)
+    browserManager.registerGuest({
+      browserPageId: 'web-tile:card-3',
+      webContentsId: guest.id,
+      rendererWebContentsId
+    })
+    const handler = guestSetWindowOpenHandlerMock.mock.calls[0][0] as (details: {
+      url: string
+      disposition: string
+    }) => { action: 'deny' }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(handler({ url: 'javascript:alert(1)', disposition: 'new-window' })).toEqual({
+      action: 'deny'
+    })
+    expect(handler({ url: 'file:///etc/passwd', disposition: 'new-window' })).toEqual({
+      action: 'deny'
+    })
+    expect(hostSendMock).not.toHaveBeenCalled()
+    for (let i = 0; i < 5; i += 1) {
+      expect(handler({ url: `https://example.com/${i}`, disposition: 'new-window' })).toEqual({
+        action: 'deny'
+      })
+    }
+    expect(hostSendMock).toHaveBeenCalledTimes(3)
+    expect(hostSendMock).toHaveBeenLastCalledWith('ui:boardWebTilePopup', {
+      guestWebContentsId: 303,
+      url: 'https://example.com/2',
+      disposition: 'new-window'
+    })
+    expect(warn).toHaveBeenCalledTimes(2)
+    expect(shellOpenExternalMock).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('keeps routing popups of a registered web-tile guest to its host, not a browser tab', () => {
+    const hostSendMock = vi.fn()
+    const rendererSendMock = vi.fn()
+    const host = { isDestroyed: vi.fn(() => false), send: hostSendMock }
+    const guest = {
+      id: 302,
+      hostWebContents: host,
+      isDestroyed: vi.fn(() => false),
+      getType: vi.fn(() => 'webview'),
+      setBackgroundThrottling: guestSetBackgroundThrottlingMock,
+      setWindowOpenHandler: guestSetWindowOpenHandlerMock,
+      on: guestOnMock,
+      off: guestOffMock,
+      openDevTools: guestOpenDevToolsMock
+    }
+    webContentsFromIdMock.mockImplementation((id: number) => {
+      if (id === guest.id) {
+        return guest
+      }
+      if (id === rendererWebContentsId) {
+        return { isDestroyed: vi.fn(() => false), send: rendererSendMock }
+      }
+      return null
+    })
+    browserManager.attachGuestPolicies(guest as never)
+    browserManager.registerGuest({
+      browserPageId: 'web-tile:card-1',
+      webContentsId: guest.id,
+      rendererWebContentsId
+    })
+    const handler = guestSetWindowOpenHandlerMock.mock.calls[0][0] as (details: {
+      url: string
+      disposition: string
+    }) => { action: 'deny' }
+    expect(handler({ url: 'https://example.com/', disposition: 'new-window' })).toEqual({
+      action: 'deny'
+    })
+    expect(hostSendMock).toHaveBeenCalledWith('ui:boardWebTilePopup', {
+      guestWebContentsId: 302,
+      url: 'https://example.com/',
+      disposition: 'new-window'
+    })
+    expect(rendererSendMock).not.toHaveBeenCalled()
+    expect(shellOpenExternalMock).not.toHaveBeenCalled()
+  })
+
   it('routes safe popup URLs into a new Dobius browser tab for the owning renderer', () => {
     const rendererSendMock = vi.fn()
     const guest = {

@@ -9,6 +9,8 @@ const {
   blurBoardTerminalSlot,
   claimBoardTerminalSlot,
   focusBoardTerminalSlot,
+  markBoardTerminalSlotPainted,
+  onBoardTerminalSlotPainted,
   onBoardTerminalSlotReleased,
   releaseBoardTerminalSlot,
   requestBoardTerminalFit,
@@ -102,5 +104,39 @@ describe('board terminal slots', () => {
     vi.runAllTimers()
     expect(dispatch).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
+  })
+})
+
+describe('board terminal slot painted signal', () => {
+  beforeEach(() => {
+    resetBoardTerminalSlotsForTest()
+  })
+
+  it('notifies only the listeners of the painted token, and stops after unsubscribe', () => {
+    const a = vi.fn()
+    const b = vi.fn()
+    const off = onBoardTerminalSlotPainted('tab-a:leaf', a)
+    onBoardTerminalSlotPainted('tab-b:leaf', b)
+
+    markBoardTerminalSlotPainted('tab-a:leaf')
+    expect(a).toHaveBeenCalledTimes(1)
+    expect(b).not.toHaveBeenCalled()
+
+    off()
+    markBoardTerminalSlotPainted('tab-a:leaf')
+    expect(a).toHaveBeenCalledTimes(1)
+    // An unknown token is a no-op (TerminalPane may paint before any card waits).
+    expect(() => markBoardTerminalSlotPainted('nobody')).not.toThrow()
+  })
+
+  it('a listener that unsubscribes while being notified does not break the others', () => {
+    const calls: string[] = []
+    const off = onBoardTerminalSlotPainted('t', () => {
+      calls.push('first')
+      off()
+    })
+    onBoardTerminalSlotPainted('t', () => calls.push('second'))
+    markBoardTerminalSlotPainted('t')
+    expect(calls).toEqual(['first', 'second'])
   })
 })

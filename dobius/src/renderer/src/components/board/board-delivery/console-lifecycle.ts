@@ -9,6 +9,7 @@ import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../../shared/types'
 import { BOARD_CONSOLE_SIZE, boardSpawnPlacements } from '../board-canvas/board-spawn-placement'
 import type { BoardPoint } from '../board-canvas/board-viewport'
+import { clearBoardConsoleEnded, isBoardConsoleEnded } from '../console-card/board-console-exit'
 import { isShellProcessName } from '../console-card/console-card-status'
 import { resolvePinnedAgentCommand } from '../console-card/console-account-launch'
 import { markConsolePaused } from './board-pause'
@@ -142,10 +143,11 @@ export async function isConsoleEnded(card: Console): Promise<boolean> {
   if (!tabExists) {
     return true
   }
-  // Why: a live tab with no PTY yet is still spawning (or sleeping); treating it as ended let clean_board close it.
+  // Why: a live tab with no PTY is still spawning (or sleeping) unless its PTY
+  // exited under the card (kept mounted as "Ended"); only that one is ended.
   const ptyId = state.ptyIdsByTabId[card.tabId]?.[0]
   if (!ptyId) {
-    return false
+    return isBoardConsoleEnded(card.tabId)
   }
   try {
     return isShellProcessName(await window.api.pty.getForegroundProcess(ptyId))
@@ -167,6 +169,7 @@ export async function cleanDeadLanes(worktreeId: string): Promise<string[]> {
   }
   for (const c of ended) {
     closeTerminalTab(c.tabId)
+    clearBoardConsoleEnded(c.tabId)
   }
   useAppStore.getState().removeCards(
     worktreeId,

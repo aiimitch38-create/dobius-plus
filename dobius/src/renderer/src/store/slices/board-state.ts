@@ -49,6 +49,8 @@ export type BoardGoalReminders = {
   onNewTask: boolean
 }
 
+export type BoardWebSession = 'incognito' | 'shared'
+
 export type BoardCardBase = {
   id: string
   x: number
@@ -73,7 +75,9 @@ export type BoardCard = BoardCardBase &
         accountId?: string
       }
     // device: simulated viewport id (board-web/web-tile-devices); unset = fill the tile.
-    | { kind: 'web'; url: string; device?: string }
+    // session: 'shared' browses with the signed-in browser profile; unset = private (incognito).
+    // popupOf: id of the tile whose page opened this one as a popup (caps siblings per source).
+    | { kind: 'web'; url: string; device?: string; session?: BoardWebSession; popupOf?: string }
     | { kind: 'note'; text: string; color: BoardSwatch }
     | { kind: 'text'; text: string; style?: BoardCardStyle }
     | { kind: 'checklist'; items: BoardChecklistItem[] }

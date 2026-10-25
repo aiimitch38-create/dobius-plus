@@ -45,6 +45,12 @@ import {
   buildBrowserAnnotationViewportBridgeScript
 } from '../../shared/browser-annotation-viewport-bridge'
 import type { KeybindingOverrides } from '../../shared/keybindings'
+import {
+  type BoardWebTilePopupEvent,
+  isWebTileBrowserPageId,
+  takeWebTilePopupToken,
+  webTilePopupUrl
+} from '../../shared/board-web-tile-popup'
 
 const AUTOMATION_VISIBILITY_ACQUIRE_TIMEOUT_MS = 2_000
 
@@ -211,6 +217,8 @@ export class BrowserManager {
   }
   private readonly pendingPermissionEventsByGuestId = new Map<number, PendingPermissionEvent[]>()
   private readonly pendingPopupEventsByGuestId = new Map<number, PendingPopupEvent[]>()
+  /** Recent popup timestamps per tile guest (token bucket against popup storms). */
+  private readonly webTilePopupTimesByGuestId = new Map<number, number[]>()
   private readonly pendingDownloadIdsByGuestId = new Map<number, string[]>()
   private readonly downloadsById = new Map<string, ActiveDownload>()
   private readonly grabSessionController = new BrowserGrabSessionController()
@@ -575,8 +583,17 @@ export class BrowserManager {
     // Dobius window is not the focused foreground app. With throttling enabled,
     // the compositor stops producing frames and capturePage() returns empty.
     guest.setBackgroundThrottling(false)
-    guest.setWindowOpenHandler(({ url }) => {
+    guest.setWindowOpenHandler(({ url, disposition }) => {
       const browserTabId = this.resolveBrowserTabIdForGuestWebContentsId(guest.id)
+      // Why: a Board web tile has no browser tab to open into, and the system
+      // browser opens behind the app, so its popups (OAuth, target=_blank,
+      // window.open) become a sibling tile instead. Only guests the tile
+      // registered (on did-attach) take this path; every other guest keeps the
+      // browser-tab / external / queued behaviour.
+      if (isWebTileBrowserPageId(browserTabId)) {
+        this.sendWebTilePopup(guest, url, disposition)
+        return { action: 'deny' }
+      }
       const browserUrl = normalizeBrowserNavigationUrl(url)
       const externalUrl = normalizeExternalBrowserUrl(url)
 
@@ -701,6 +718,7 @@ export class BrowserManager {
     this.pendingLoadFailuresByGuestId.delete(guestWebContentsId)
     this.pendingPermissionEventsByGuestId.delete(guestWebContentsId)
     this.pendingPopupEventsByGuestId.delete(guestWebContentsId)
+    this.webTilePopupTimesByGuestId.delete(guestWebContentsId)
     this.cancelPendingDownloadsForGuest(guestWebContentsId)
   }
 
@@ -1518,6 +1536,25 @@ export class BrowserManager {
       browserPageId: browserTabId,
       ...event
     } satisfies BrowserPermissionDeniedEvent)
+  }
+
+  private sendWebTilePopup(guest: Electron.WebContents, rawUrl: string, disposition: string): void {
+    const host = guest.hostWebContents
+    const url = webTilePopupUrl(rawUrl)
+    if (!host || host.isDestroyed() || url === null) {
+      return
+    }
+    const recent = this.webTilePopupTimesByGuestId.get(guest.id) ?? []
+    this.webTilePopupTimesByGuestId.set(guest.id, recent)
+    if (!takeWebTilePopupToken(recent, Date.now())) {
+      console.warn(`[board-web] popup dropped for guest ${guest.id}: too many popups in a short time`)
+      return
+    }
+    host.send('ui:boardWebTilePopup', {
+      guestWebContentsId: guest.id,
+      url,
+      disposition
+    } satisfies BoardWebTilePopupEvent)
   }
 
   private forwardOrQueuePopupEvent(guestWebContentsId: number, event: PendingPopupEvent): void {

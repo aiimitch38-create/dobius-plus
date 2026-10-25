@@ -243,3 +243,36 @@ describe('KanbanBoard Jobs entry', () => {
     expect(await screen.findByText('Ship the login fix')).toBeTruthy()
   })
 })
+
+describe('KanbanBoard refresh poll visibility gate', () => {
+  it('stops polling while the document is hidden and reloads when visible again', async () => {
+    vi.useFakeTimers()
+    let visibility: 'visible' | 'hidden' = 'visible'
+    Object.defineProperty(document, 'visibilityState', {
+      get: () => visibility,
+      configurable: true
+    })
+    const source = memorySource([])
+    const list = vi.fn(source.list)
+    render(<KanbanBoard source={{ ...source, list } as TaskSource} />)
+    try {
+      await vi.advanceTimersByTimeAsync(0)
+      const initial = list.mock.calls.length
+      expect(initial).toBeGreaterThan(0)
+      await vi.advanceTimersByTimeAsync(4_000)
+      const afterOneTick = list.mock.calls.length
+      expect(afterOneTick).toBeGreaterThan(initial)
+
+      visibility = 'hidden'
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(list.mock.calls.length).toBe(afterOneTick)
+
+      visibility = 'visible'
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(list.mock.calls.length).toBeGreaterThan(afterOneTick)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

@@ -266,7 +266,9 @@ export function BoardCanvas({
       ref={containerRef}
       data-board-canvas=""
       className={cn(
-        'absolute inset-0 touch-none overflow-hidden bg-[var(--board-canvas)] select-none',
+        // Why: `overflow-clip`, not hidden — a hidden box still scrolls programmatically
+        // (focus reveal), which would shift a web tile under a pressed button.
+        'absolute inset-0 touch-none overflow-clip bg-[var(--board-canvas)] select-none',
         spaceHeld
           ? 'cursor-grab active:cursor-grabbing'
           : panOnEmptyDrag

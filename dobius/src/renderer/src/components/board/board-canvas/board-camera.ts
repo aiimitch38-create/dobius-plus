@@ -2,6 +2,8 @@ import { BOARD_CHROME_INSETS, revealRectViewport, type BoardInsets } from './boa
 import {
   BOARD_MAX_ZOOM,
   boardCameraFit,
+  boardSafeArea,
+  clampZoom,
   type BoardRect,
   type BoardSize,
   type BoardViewport
@@ -44,17 +46,19 @@ export const BOARD_FOCUS_CARD_MAX_ZOOM = 2
 export const BOARD_FOCUS_GROUP_PADDING = 48
 
 /** How focus mode frames one kind of card. */
-export type BoardFocusFraming = 'console' | 'text' | 'fit'
+export type BoardFocusFraming = 'console' | 'text' | 'fit' | 'page'
 
 /**
  * Consoles keep readable terminal text; text-bearing cards land at 100% or
- * more; images, web tiles, shapes and ink always fit whole.
+ * more; a web tile lands at exactly 100% (its page is live, so it must not be
+ * scaled) with its address bar at the top-left; images, shapes and ink fit whole.
  */
 export function boardFocusFramingFor(kind: string): BoardFocusFraming {
   switch (kind) {
     case 'console':
       return 'console'
     case 'web':
+      return 'page'
     case 'image':
     case 'shape':
     case 'stroke':
@@ -76,6 +80,9 @@ export function boardFocusCardViewport(
   if (framing === 'console') {
     return boardFocusViewport(rect, size, terminalFontSize, insets)
   }
+  if (framing === 'page') {
+    return boardFocusPageViewport(rect, size, insets)
+  }
   return boardCameraFit([rect], size, {
     insets,
     padding: BOARD_FOCUS_PADDING,
@@ -83,6 +90,22 @@ export function boardFocusCardViewport(
     minZoom: framing === 'text' ? 1 : 0,
     maxZoom: BOARD_FOCUS_CARD_MAX_ZOOM
   })
+}
+
+/**
+ * Viewport for a live page (web tile): zoom 1 (within the Board's min/max),
+ * the tile's top-left pinned at the safe area's padded corner. Always a visible
+ * fly, even for a tile larger than the screen, and the page is never scaled.
+ */
+export function boardFocusPageViewport(
+  rect: BoardRect,
+  size: BoardSize,
+  insets: BoardInsets = BOARD_CHROME_INSETS
+): BoardViewport {
+  const safe = boardSafeArea(size, insets)
+  const pad = Math.min(BOARD_FOCUS_PADDING, safe.width / 4, safe.height / 4)
+  const zoom = clampZoom(1)
+  return { zoom, x: safe.x + pad - rect.x * zoom, y: safe.y + pad - rect.y * zoom }
 }
 
 /** Viewport that fits several cards (a group frame, a Mission Map node) at up to 100%. */

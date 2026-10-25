@@ -153,6 +153,10 @@ import {
 import { CLIENT_PLATFORM } from '@/lib/new-workspace'
 import { buildAgentResumeStartupPlan, buildAgentStartupPlan } from '@/lib/tui-agent-startup'
 import { shouldDeferBoardConsoleResume } from '@/components/board/board-resume/board-resume-gate'
+import {
+  boardConsolePtyExitOutcome,
+  markBoardConsoleEnded
+} from '@/components/board/console-card/board-console-exit'
 import { resolveAgentStatusTerminalTitle } from '@/lib/agent-status-terminal-title'
 import {
   resolveTuiAgentLaunchArgs,
@@ -2077,6 +2081,18 @@ export function connectPanePty(
       // into, so a reattached-dead session or an explicit `exit` still tears
       // down as before.
       if (spawnedFreshPtyId === ptyId && !Number.isFinite(lastTerminalInputAt)) {
+        return
+      }
+      // Why: a Board console keeps its dead pane (scrollback, "Ended" status,
+      // Restart in place) instead of closing the tab under the card. The
+      // frozen TUI frame still has mouse-tracking/bracketed-paste armed, so
+      // disarm those modes or the dead pane silently eats clicks and copies.
+      if (
+        boardConsolePtyExitOutcome(useAppStore.getState(), deps.worktreeId, deps.tabId) ===
+        'keep-pane'
+      ) {
+        markBoardConsoleEnded(deps.tabId)
+        replayIntoTerminal(pane, deps.replayingPanesRef, POST_REPLAY_MODE_RESET)
         return
       }
       deps.onPtyExitRef.current(ptyId)

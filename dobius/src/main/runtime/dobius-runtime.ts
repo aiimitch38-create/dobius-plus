@@ -675,6 +675,7 @@ import { invalidateAuthorizedRootsCache } from '../ipc/filesystem-auth'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import { closeLocalWatcherForWorktreePath } from '../ipc/filesystem-watcher'
 import { HeadlessEmulator, type HeadlessEmulatorOptions } from '../daemon/headless-emulator'
+import type { TerminalSnapshot } from '../daemon/types'
 import { killAllProcessesForWorktree } from './worktree-teardown'
 import { MOBILE_SUBSCRIBE_SCROLLBACK_ROWS } from './scrollback-limits'
 import type { IFilesystemProvider, IPtyProvider, PtyProcessInfo } from '../providers/types'
@@ -1099,6 +1100,9 @@ type RuntimeHeadlessTerminal = {
   // the seq actually painted into this emulator, not the latest PTY seq.
   outputSequence: number
   writeChain: Promise<void>
+  // Why: glance cards poll the snapshot every few seconds per console; serializing
+  // the whole screen again for an unchanged emulator is pure waste.
+  snapshotCache?: { key: string; snapshot: TerminalSnapshot; data: string }
 }
 
 type HeadlessSeedMetadata = {
@@ -5882,6 +5886,8 @@ export class DobiusRuntimeService {
         // Hydration is best-effort. Live writes continue via the same
         // writeChain that this catch-arm leaves intact.
       } finally {
+        // Why: the seed write and resizes above change the screen without moving outputSequence.
+        state.snapshotCache = undefined
         this.headlessHydrationState.set(ptyId, 'done')
       }
     })
@@ -5956,6 +5962,7 @@ export class DobiusRuntimeService {
     state.writeChain = state.writeChain
       .then(() => {
         state.emulator.resize(cols, rows)
+        state.snapshotCache = undefined
       })
       .catch(() => {
         // Best-effort mirror tracking; live PTY streaming must continue even
@@ -5986,7 +5993,10 @@ export class DobiusRuntimeService {
     // Why: headless writes are queued to preserve xterm parser order. Clear
     // must join that same chain or an earlier PTY chunk can finish after the
     // clear request and repopulate mobile scrollback.
-    state.writeChain = state.writeChain.then(() => state.emulator.clearScrollback())
+    state.writeChain = state.writeChain.then(() => {
+      state.emulator.clearScrollback()
+      state.snapshotCache = undefined
+    })
     await state.writeChain
   }
 
@@ -6136,8 +6146,17 @@ export class DobiusRuntimeService {
     const requested = opts.scrollbackRows ?? 0
     const isAlternateScreen = state.emulator.isAlternateScreen
     const scrollbackRows = isAlternateScreen ? 0 : requested
-    const snapshot = state.emulator.getSnapshot({ scrollbackRows })
-    const data = snapshot.rehydrateSequences + snapshot.snapshotAnsi
+    // Why the screen mode in the key: an alt-screen switch repaints without
+    // moving the output sequence. Resizes, clears and seed writes drop the
+    // cache at their call sites for the same reason.
+    const cacheKey = `${state.outputSequence}:${scrollbackRows}:${isAlternateScreen ? 'alt' : 'main'}`
+    let cached = state.snapshotCache
+    if (!cached || cached.key !== cacheKey) {
+      const snapshot = state.emulator.getSnapshot({ scrollbackRows })
+      cached = { key: cacheKey, snapshot, data: snapshot.rehydrateSequences + snapshot.snapshotAnsi }
+      state.snapshotCache = cached
+    }
+    const { snapshot, data } = cached
     return data.length > 0 || opts.includeEmpty === true
       ? {
           data,

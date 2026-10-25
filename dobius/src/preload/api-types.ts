@@ -1,5 +1,6 @@
 import type { BoardSnapshotFile, BoardSnapshotMeta } from '../shared/board-snapshot-types'
 import type { RuntimeBoardSpawnConsoleEvent } from '../shared/runtime-client-events'
+import type { BoardWebTilePopupEvent } from '../shared/board-web-tile-popup'
 import type {
   RuntimeFileOpenNotification,
   RuntimeDiffOpenNotification
@@ -2891,6 +2892,8 @@ export type PreloadApi = {
     ) => () => void
     /** Lead loop: main asks this window to put a console card on a Board. */
     onBoardSpawnConsole: (callback: (event: RuntimeBoardSpawnConsoleEvent) => void) => () => void
+    /** A Board web tile's page opened a popup; the owning tile adds a sibling tile. */
+    onBoardWebTilePopup: (callback: (event: BoardWebTilePopupEvent) => void) => () => void
     onCreateTerminal: (
       callback: (data: {
         requestId?: string

@@ -202,3 +202,71 @@ export function consoleScreenRuns(buffer: StyledTailBuffer, cols: number): MiniR
 export function screenKey(screen: ConsoleScreen | null): string {
   return screen ? `${screen.cols}x${screen.rows}:${JSON.stringify(screen.lines)}` : ''
 }
+
+// ---- Glance polling policy (pure; the hook applies it) ----------------------
+
+/** Poll delay after N consecutive unchanged snapshots; the last entry repeats. */
+export const GLANCE_BACKOFF_MS: readonly number[] = [1000, 2000, 5000, 10_000]
+
+export function glanceBackoffMs(
+  unchangedStreak: number,
+  backoff: readonly number[] = GLANCE_BACKOFF_MS
+): number {
+  return backoff[Math.min(Math.max(0, unchangedStreak), backoff.length - 1)]
+}
+
+export type GlanceSnapshotIdentity = { data: string; cols: number; rows: number; seq?: number }
+
+/**
+ * True when a new snapshot cannot draw differently from the last one, so the
+ * ANSI parse can be skipped. Main's `seq` counts PTY bytes painted into its
+ * emulator; an equal seq at the same size is the same screen. Without a seq
+ * (renderer-sourced snapshots) the raw string decides.
+ */
+export function sameConsoleSnapshot(
+  prev: GlanceSnapshotIdentity | null,
+  next: GlanceSnapshotIdentity
+): boolean {
+  if (!prev || prev.cols !== next.cols || prev.rows !== next.rows) {
+    return false
+  }
+  if (typeof prev.seq === 'number' && typeof next.seq === 'number' && prev.seq !== next.seq) {
+    return false
+  }
+  return prev.data === next.data
+}
+
+export type GlancePollGate = {
+  /** document.visibilityState === 'hidden' */
+  hidden: boolean
+  /** document.hasFocus() */
+  focused: boolean
+  unchangedStreak: number
+  /** Milliseconds since the board camera last moved. */
+  sinceMotionMs: number
+}
+
+export type GlancePollSkip = 'hidden' | 'unfocused-idle' | 'moving' | null
+
+/**
+ * Why a card may not poll right now. 'moving' is transient (retry after the
+ * quiet window); the other two sleep until a focus, visibility or output
+ * event wakes the card. Unfocused windows still poll until the screen has
+ * been unchanged long enough to reach the slowest backoff step.
+ */
+export function glancePollSkipReason(
+  gate: GlancePollGate,
+  quietMs: number,
+  backoff: readonly number[] = GLANCE_BACKOFF_MS
+): GlancePollSkip {
+  if (gate.hidden) {
+    return 'hidden'
+  }
+  if (!gate.focused && gate.unchangedStreak >= backoff.length - 1) {
+    return 'unfocused-idle'
+  }
+  if (gate.sinceMotionMs < quietMs) {
+    return 'moving'
+  }
+  return null
+}

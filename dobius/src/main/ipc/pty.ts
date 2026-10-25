@@ -50,6 +50,7 @@ import type { StartupCommandDelivery } from '../../shared/codex-startup-delivery
 import { SSH_SESSION_EXPIRED_ERROR, isSshPtyNotFoundError } from '../providers/ssh-pty-provider'
 import { parseAppSshPtyId, toAppSshPtyId, toRelaySshPtyId } from '../providers/ssh-pty-id'
 import { createPtySpawnTiming } from './pty-spawn-timing'
+import { lastInputAtByPty } from './pty-input-activity'
 import { mintPtySessionId, isSafePtySessionId } from '../daemon/pty-session-id'
 import { addNodePtyRecoveryHint } from '../daemon/node-pty-error-hints'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
@@ -139,9 +140,9 @@ const ptyOwnership = new Map<string, string | null>()
 // cannot provide an xterm snapshot yet, such as immediately after tab creation.
 const ptySizes = new Map<string, { cols: number; rows: number }>()
 // Why: PTY data batching is window-bound, but the "recent user input" signal
-// is PTY-scoped and must be cleared by every teardown path, including SSH and
-// daemon shutdowns that do not flow through the local provider exit listener.
-const lastInputAtByPty = new Map<string, number>()
+// (lastInputAtByPty, shared via ./pty-input-activity) is PTY-scoped and must
+// be cleared by every teardown path, including SSH and daemon shutdowns that
+// do not flow through the local provider exit listener.
 const interactiveOutputCharsByPty = new Map<string, number>()
 const activeRendererPtys = new Set<string>()
 const visibleRendererPtys = new Set<string>()

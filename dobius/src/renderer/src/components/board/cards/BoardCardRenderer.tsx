@@ -129,6 +129,22 @@ export const BoardCardRenderer = React.memo(function BoardCardRenderer({
           }
         ]
       : []),
+    ...(card.kind === 'web'
+      ? [
+          card.session === 'shared'
+            ? {
+                label: translate('board.web.usePrivateSession', 'Use private session'),
+                onSelect: () => onChange({ session: 'incognito' })
+              }
+            : {
+                label: translate(
+                  'board.web.useSharedSession',
+                  'Use signed-in browser session'
+                ),
+                onSelect: () => onChange({ session: 'shared' })
+              }
+        ]
+      : []),
     ...(card.kind === 'shape' || card.kind === 'stroke' || card.kind === 'text'
       ? [
           {

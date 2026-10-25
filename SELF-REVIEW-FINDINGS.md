@@ -47,6 +47,17 @@ Scope: branch aiimitch38-create/dobius-2.1-leads on top of 688f4d87 (Lanes A–H
 - [~] `vertex-work-board.ts` self-asserted `--by` / `force` — MEDIUM: known Phase 1 limit. The same-user runtime socket already exposes terminal.create/send, so nothing new is exposed. Identity binding is Phase 3 (Action Gate).
 - [~] `orchestrator-instructions.ts` repo layer as prompt input — MEDIUM: Carson chose ORCHESTRATOR.md in git. The repo layer cannot loosen Untrusted/Gates/Never. Hash-pin and re-confirm on change is a follow-up.
 
+## 2.1.3 review (web tiles, console stability, perf)
+- [x] `browser-manager.ts` tile popups unlimited — HIGH DoS: per-guest token bucket (3 per 10 s) plus a 5-sibling cap per tile.
+- [x] Unregistered hosted webviews captured as tiles — HIGH regression: routing now applies only to guests registered under `web-tile:` (registered on did-attach); FloatingPhone, Inspector and BrowserPane keep the legacy path.
+- [x] Focus-fly mid-press — MEDIUM: no fly for a fully visible tile at zoom ≥ 0.75; host pointerup shortcut.
+- [x] setZoomFactor on the shared session — MEDIUM: incognito only, and only when needed.
+- [x] Early popup id, thumbnail retry, counter pruning — LOW: fixed.
+- [x] clean_board skipped Ended consoles — MEDIUM: ended-tab marker read by isConsoleEnded.
+- [~] Keep-pane also applies if the same tab is shown in the Classic view — LOW: the Classic look is retired.
+- [~] Focus-fly for a partly off-screen tile still uses the 250 ms proxy for press end — the host cannot see guest pointerup.
+Tests: typecheck node/cli/web clean; 182 files / 1415 tests pass across board, browser, leads, kanban.
+
 ## Tests
 - typecheck node/cli/web: clean.
 - 19 build-touched test files: 562/564 pass. The 2 failures (`useIpcEvents.test.ts`) fail identically on 688f4d87.

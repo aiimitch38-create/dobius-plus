@@ -15,9 +15,49 @@ const slots = new Map<string, BoardTerminalSlot>()
 let focusedSlotId: string | null = null
 let published: ActivityTerminalPortalTarget[] = []
 const releaseListeners = new Set<() => void>()
+const paintedListeners = new Map<string, Set<() => void>>()
 let fitTimer: ReturnType<typeof setTimeout> | null = null
 
 const BOARD_FIT_DEBOUNCE_MS = 150
+/** How long a card keeps its glance over a live pane that never reports a paint. */
+export const BOARD_PAINT_FALLBACK_MS = 350
+/** Glance fade-out once the live pane has painted. */
+export const BOARD_GLANCE_FADE_MS = 120
+
+/**
+ * TerminalPane calls this once the pane portaled into a Board slot has been
+ * fitted and xterm has rendered a frame. The token is the pane key the portal
+ * carried (ActivityTerminalPortalTarget.paneKey), so the card that owns the
+ * slot can drop its glance without a blank frame in between.
+ */
+export function markBoardTerminalSlotPainted(token: string): void {
+  const listeners = paintedListeners.get(token)
+  if (!listeners) {
+    return
+  }
+  for (const listener of [...listeners]) {
+    listener()
+  }
+}
+
+export function onBoardTerminalSlotPainted(token: string, listener: () => void): () => void {
+  let listeners = paintedListeners.get(token)
+  if (!listeners) {
+    listeners = new Set()
+    paintedListeners.set(token, listeners)
+  }
+  listeners.add(listener)
+  return () => {
+    const current = paintedListeners.get(token)
+    if (!current) {
+      return
+    }
+    current.delete(listener)
+    if (current.size === 0) {
+      paintedListeners.delete(token)
+    }
+  }
+}
 
 /**
  * Why: every SYNC_FIT_PANES_EVENT refits every pane in the app, so N console
@@ -114,6 +154,7 @@ export function resetBoardTerminalSlotsForTest(): void {
   focusedSlotId = null
   published = []
   releaseListeners.clear()
+  paintedListeners.clear()
   if (fitTimer) {
     clearTimeout(fitTimer)
     fitTimer = null

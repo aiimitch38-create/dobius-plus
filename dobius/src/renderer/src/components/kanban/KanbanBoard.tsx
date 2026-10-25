@@ -614,14 +614,23 @@ export default function KanbanBoard({ source }: { source?: TaskSource }): React.
       )
     }
     load()
+    // Why visibility-gated: a hidden window (or a board under another surface)
+    // has nobody to show the refresh to; the next visible tick catches up.
     const timer = setInterval(() => {
-      if (busy.current === 0) {
+      if (busy.current === 0 && document.visibilityState !== 'hidden') {
         load()
       }
     }, REFRESH_MS)
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible' && busy.current === 0) {
+        load()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       cancelled = true
       clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
       toast.dismiss(LOAD_ERROR_TOAST_ID)
     }
   }, [loadTasks])

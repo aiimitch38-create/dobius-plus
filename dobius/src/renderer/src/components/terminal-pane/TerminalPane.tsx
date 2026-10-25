@@ -92,6 +92,7 @@ import { canToggleNativeChat } from '../native-chat/native-chat-availability'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import { resolvePaneKeyForManager } from '@/lib/pane-manager/pane-key-resolution'
 import { safeFit } from '@/lib/pane-manager/pane-tree-ops'
+import { markBoardTerminalSlotPainted } from '@/components/board/console-card/board-terminal-slots'
 import { captureTerminalShutdownLayout } from './terminal-shutdown-layout-capture'
 import { getOverrideAffectedPanes, getPanesNeedingOverrideFit } from './override-affected-panes'
 import {
@@ -1559,8 +1560,8 @@ export default function TerminalPane({
     // xterm sized for the isolated single-pane geometry, so the workspace
     // view (or staging slot) renders at the wrong cols/rows until some
     // unrelated event triggers another fit.
-    const scheduleRefit = (): number =>
-      requestAnimationFrame(() => {
+    const scheduleRefit = (paintedToken: string | null = null): (() => void) => {
+      let frame = requestAnimationFrame(() => {
         const manager = managerRef.current
         if (!manager) {
           return
@@ -1568,13 +1569,19 @@ export default function TerminalPane({
         for (const pane of manager.getPanes()) {
           safeFit(pane)
         }
+        if (paintedToken === null) {
+          return
+        }
+        // Why: a Board console keeps its miniature over this pane until the
+        // pane has really painted. The fit above schedules xterm's render, so
+        // the frame after it is the first one that is safe to reveal.
+        frame = requestAnimationFrame(() => markBoardTerminalSlotPainted(paintedToken))
       })
+      return () => cancelAnimationFrame(frame)
+    }
     if (isolatedPaneKey === null) {
       restoreExpandedLayoutFrom(snapshots)
-      const frame = scheduleRefit()
-      return () => {
-        cancelAnimationFrame(frame)
-      }
+      return scheduleRefit()
     }
     const manager = managerRef.current
     const resolution = resolvePaneKeyForManager(tabId, isolatedPaneKey, manager)
@@ -1596,15 +1603,9 @@ export default function TerminalPane({
         snapshots.set(root, { display: root.style.display, flex: root.style.flex })
         root.style.display = 'none'
       }
-      const frame = scheduleRefit()
-      return () => {
-        cancelAnimationFrame(frame)
-      }
+      return scheduleRefit()
     }
-    const frame = scheduleRefit()
-    return () => {
-      cancelAnimationFrame(frame)
-    }
+    return scheduleRefit(isolatedPaneKey)
   }, [isolatedPaneKey, paneCount, tabId])
 
   // Why: belt-and-suspenders unmount cleanup. If the component unmounts

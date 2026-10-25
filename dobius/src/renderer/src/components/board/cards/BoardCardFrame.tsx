@@ -381,7 +381,8 @@ export function BoardCardFrame({
         data-board-wheel="native"
         className={cn(
           'relative min-h-0 flex-1',
-          !bare && 'overflow-hidden rounded-b-(--board-radius-card)'
+          // Why: clip, not hidden: a hidden box can still be scrolled by focus reveal.
+          !bare && 'overflow-clip rounded-b-(--board-radius-card)'
         )}
       >
         {children}

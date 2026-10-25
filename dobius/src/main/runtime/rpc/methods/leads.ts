@@ -23,9 +23,12 @@ import {
 } from '../../../leads/lead-config'
 import { findGitIgnoredLeadFiles, gitIgnoreWarning } from '../../../leads/lead-gitignore'
 import { writeLeadSeed } from '../../../leads/lead-seed'
+import { ptyLastInputAt } from '../../../ipc/pty-input-activity'
 import {
+  LEAD_RECENT_INPUT_MS,
   LeadWatcher,
   classifyAgentStatus,
+  type LeadConsoleListing,
   type LeadConsoleProbe,
   type LeadWatcherStatus
 } from '../../../leads/lead-watcher'
@@ -90,39 +93,62 @@ function statusOf(worktreeId: string, entry: LeadWatcherEntry): LeadStatusEntry 
   }
 }
 
-type LeadConsoles = {
-  /** Lead cards whose terminal is connected and running the agent (idle or busy). */
-  consoles: LeadConsoleProbe[]
-  /** Lead cards whose terminal is missing, disconnected, or back at a bare shell. */
-  staleCardIds: string[]
-}
-
 type LeadConsoleRuntime = Pick<
   DobiusRuntimeService,
   'getUIState' | 'listTerminals' | 'getTerminalAgentStatus'
 >
 
+/** Where "someone typed into this terminal recently" comes from; injectable for tests. */
+export type LeadInputClock = {
+  now: () => number
+  /** performance.now() of the last user write to this PTY, or undefined when none. */
+  lastInputAt: (ptyId: string) => number | undefined
+}
+
+const DEFAULT_INPUT_CLOCK: LeadInputClock = {
+  now: () => performance.now(),
+  lastInputAt: ptyLastInputAt
+}
+
 /** Exported for tests. */
 export async function leadConsoles(
   runtime: LeadConsoleRuntime,
   worktreeId: string,
-  profile: string
-): Promise<LeadConsoles> {
+  profile: string,
+  clock: LeadInputClock = DEFAULT_INPUT_CLOCK
+): Promise<LeadConsoleListing> {
   const role = leadConsoleRole('lead', profile)
   const cards = listBoardConsoleCards(runtime.getUIState().boardsByWorktree, worktreeId).filter(
     (card) => card.role === role
   )
   if (cards.length === 0) {
-    return { consoles: [], staleCardIds: [] }
+    return { consoles: [], staleCardIds: [], recentInputCardIds: [] }
   }
   const { terminals } = await runtime.listTerminals(`id:${worktreeId}`)
   const live = new Map(terminals.filter((t) => t.connected).map((t) => [t.tabId, t.handle]))
+  const ptyByTab = new Map(terminals.map((t) => [t.tabId, t.ptyId ?? null]))
+  const now = clock.now()
+  const typedRecently = (tabId: string): boolean => {
+    const ptyId = ptyByTab.get(tabId)
+    const at = ptyId ? clock.lastInputAt(ptyId) : undefined
+    return at !== undefined && now - at <= LEAD_RECENT_INPUT_MS
+  }
   const consoles: LeadConsoleProbe[] = []
   const staleCardIds: string[] = []
+  const recentInputCardIds: string[] = []
+  // Why: a stale-looking card someone typed into in the last minute is being
+  // handled by hand (restarting the agent, reading output); the watcher must
+  // not replace it under them. It stays listed as stale so the watcher waits.
+  const markStale = (card: { id: string; tabId: string }): void => {
+    staleCardIds.push(card.id)
+    if (typedRecently(card.tabId)) {
+      recentInputCardIds.push(card.id)
+    }
+  }
   for (const card of cards) {
     const handle = live.get(card.tabId)
     if (!handle) {
-      staleCardIds.push(card.id)
+      markStale(card)
       continue
     }
     // Why: the same signal as the card's status chip ("At its shell"). A card
@@ -132,10 +158,10 @@ export async function leadConsoles(
     // died; the card itself is still listed as stale for replacement.
     consoles.push({ handle, agent })
     if (agent === 'shell') {
-      staleCardIds.push(card.id)
+      markStale(card)
     }
   }
-  return { consoles, staleCardIds }
+  return { consoles, staleCardIds, recentInputCardIds }
 }
 
 async function startLead(runtime: DobiusRuntimeService, selector: string): Promise<LeadStatusEntry> {
@@ -156,11 +182,11 @@ async function startLead(runtime: DobiusRuntimeService, selector: string): Promi
     profile: config.profile,
     projectId: config.projectId,
     store: vertexTaskStore,
-    listLeadConsoles: async () => (await leadConsoles(runtime, worktreeId, config.profile)).consoles,
-    spawnLeadConsole: async () => {
-      // Why: a lead card whose terminal died or dropped to a bare shell must be
-      // replaced, not joined by a second card on every poll.
-      const { staleCardIds } = await leadConsoles(runtime, worktreeId, config.profile)
+    listLeadConsoles: () => leadConsoles(runtime, worktreeId, config.profile),
+    // Why: a lead card whose terminal died or dropped to a bare shell must be
+    // replaced, not joined by a second card on every poll. The watcher decides
+    // which cards are confirmed stale (two polls, no recent typing).
+    spawnLeadConsole: async ({ replaceStaleCardIds }) => {
       const { delivered } = await spawnBoardConsole(runtime, {
         worktree: `id:${worktreeId}`,
         agent: 'hermes',
@@ -168,7 +194,7 @@ async function startLead(runtime: DobiusRuntimeService, selector: string): Promi
         role: 'lead',
         leadId: config.profile,
         commandOverride: seed.command,
-        ...(staleCardIds.length > 0 ? { replaceStaleCardIds: staleCardIds } : {})
+        ...(replaceStaleCardIds.length > 0 ? { replaceStaleCardIds } : {})
       })
       return { delivered }
     },

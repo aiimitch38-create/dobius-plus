@@ -18,7 +18,7 @@ type AgentStatus = {
 
 function runtimeWith(
   cards: unknown[],
-  terminals: { tabId: string; handle: string; connected: boolean }[],
+  terminals: { tabId: string; handle: string; connected: boolean; ptyId?: string }[],
   agentStatus: Record<string, AgentStatus> = {}
 ) {
   const listTerminals = vi.fn(async () => ({ terminals }))
@@ -56,7 +56,8 @@ describe('leadConsoles', () => {
     )
     expect(await leadConsoles(runtime, WT, 'lead-acme')).toEqual({
       consoles: [{ handle: 'terminal:live', agent: 'idle' }],
-      staleCardIds: ['dead', 'gone']
+      staleCardIds: ['dead', 'gone'],
+      recentInputCardIds: []
     })
   })
 
@@ -88,14 +89,46 @@ describe('leadConsoles', () => {
         { handle: 'terminal:dialog', agent: 'busy' },
         { handle: 'terminal:idle', agent: 'idle' }
       ],
-      staleCardIds: ['shell']
+      staleCardIds: ['shell'],
+      recentInputCardIds: []
     })
     expect(getTerminalAgentStatus).toHaveBeenCalledTimes(4)
   })
 
+  it('flags stale cards whose terminal had user input in the last 60 s', async () => {
+    const { runtime } = runtimeWith(
+      [
+        card('typed-shell', 'tab-a', 'lead:lead-acme'),
+        card('typed-dead', 'tab-b', 'lead:lead-acme'),
+        card('quiet-shell', 'tab-c', 'lead:lead-acme')
+      ],
+      [
+        { tabId: 'tab-a', handle: 'terminal:a', connected: true, ptyId: 'pty-a' },
+        { tabId: 'tab-b', handle: 'terminal:b', connected: false, ptyId: 'pty-b' },
+        { tabId: 'tab-c', handle: 'terminal:c', connected: true, ptyId: 'pty-c' }
+      ],
+      {
+        'terminal:a': { isRunningAgent: false, status: null },
+        'terminal:c': { isRunningAgent: false, status: null }
+      }
+    )
+    const inputs: Record<string, number> = { 'pty-a': 100_000 - 5_000, 'pty-c': 100_000 - 61_000 }
+    inputs['pty-b'] = 100_000 - 59_999
+    const listing = await leadConsoles(runtime, WT, 'lead-acme', {
+      now: () => 100_000,
+      lastInputAt: (ptyId) => inputs[ptyId]
+    })
+    expect(listing.staleCardIds).toEqual(['typed-shell', 'typed-dead', 'quiet-shell'])
+    expect(listing.recentInputCardIds).toEqual(['typed-shell', 'typed-dead'])
+  })
+
   it('does not list terminals when the Board has no lead card', async () => {
     const { runtime, listTerminals } = runtimeWith([card('w', 'tab-w', 'worker:lead-acme')], [])
-    expect(await leadConsoles(runtime, WT, 'lead-acme')).toEqual({ consoles: [], staleCardIds: [] })
+    expect(await leadConsoles(runtime, WT, 'lead-acme')).toEqual({
+      consoles: [],
+      staleCardIds: [],
+      recentInputCardIds: []
+    })
     expect(listTerminals).not.toHaveBeenCalled()
   })
 })
