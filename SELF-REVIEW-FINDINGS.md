@@ -41,6 +41,12 @@ Scope: branch aiimitch38-create/dobius-2.1-leads on top of 688f4d87 (Lanes A–H
 ## E2E finding (test copy screenshot review)
 - [x] Lead nudge was typed into a bare zsh when Hermes wasn't running. Added a bare-shell guard via `getTerminalAgentStatus`: shell means replace, busy means defer, idle means nudge. Also a launch backoff: after 3 failed starts the lead halts with an error and one comment per waiting card (Lane C).
 
+## Automated commit security review (057b1865)
+- [x] `board-consoles.ts` replaceStaleCardIds on the external RPC — MEDIUM: now stripped from RPC callers; only the in-process lead watcher can name stale cards.
+- [x] `board-consoles.ts` uncapped lead consoles — MEDIUM: one lead console per lead, unless the existing card is named for replacement.
+- [~] `vertex-work-board.ts` self-asserted `--by` / `force` — MEDIUM: known Phase 1 limit. The same-user runtime socket already exposes terminal.create/send, so nothing new is exposed. Identity binding is Phase 3 (Action Gate).
+- [~] `orchestrator-instructions.ts` repo layer as prompt input — MEDIUM: Carson chose ORCHESTRATOR.md in git. The repo layer cannot loosen Untrusted/Gates/Never. Hash-pin and re-confirm on change is a follow-up.
+
 ## Tests
 - typecheck node/cli/web: clean.
 - 19 build-touched test files: 562/564 pass. The 2 failures (`useIpcEvents.test.ts`) fail identically on 688f4d87.

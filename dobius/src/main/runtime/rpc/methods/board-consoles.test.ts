@@ -137,6 +137,38 @@ describe('board.spawnConsole', () => {
     expect(emitClientEvent.mock.calls[0][0]).not.toHaveProperty('prompt')
   })
 
+  it('allows one lead console per lead; only a card named for replacement may be superseded', async () => {
+    const leadSpawn = { role: 'lead', agent: 'hermes', prompt: undefined }
+    const second = await spawn([consoleCard(1, 'lead:lead-acme')], leadSpawn)
+    expect(second.response.ok).toBe(false)
+    expect(JSON.stringify(second.response)).toContain('lead_console_exists')
+    expect(second.emitClientEvent).not.toHaveBeenCalled()
+
+    const { runtime } = makeRuntime([consoleCard(1, 'lead:lead-acme')])
+    await expect(
+      spawnBoardConsole(runtime, {
+        ...baseSpawn,
+        agent: 'hermes',
+        role: 'lead',
+        prompt: undefined,
+        replaceStaleCardIds: ['c1']
+      })
+    ).resolves.toMatchObject({ role: 'lead:lead-acme' })
+  })
+
+  it('drops replaceStaleCardIds from external RPC callers', async () => {
+    const { response, emitClientEvent } = await spawn([consoleCard(1, 'lead:lead-acme')], {
+      role: 'lead',
+      agent: 'hermes',
+      prompt: undefined,
+      replaceStaleCardIds: ['c1']
+    })
+    expect(response.ok).toBe(false)
+    expect(emitClientEvent).not.toHaveBeenCalled()
+    const worker = await spawn([], { replaceStaleCardIds: ['c9'] })
+    expect(worker.emitClientEvent.mock.calls[0][0]).not.toHaveProperty('replaceStaleCardIds')
+  })
+
   it('refuses an unknown agent, a bad role, and a bad lead id', async () => {
     for (const bad of [
       { agent: 'bash' },

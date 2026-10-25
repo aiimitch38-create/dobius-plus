@@ -148,8 +148,15 @@ export async function spawnBoardConsole(
   const worktree = await runtime.showManagedWorktree(params.worktree)
   const worktreeId = worktree.id
   const role = leadConsoleRole(params.role, params.leadId)
+  const existing = listBoardConsoleCards(runtime.getUIState().boardsByWorktree, worktreeId)
+  if (params.role === 'lead') {
+    // Why: one live lead console per lead; only cards named for replacement may be superseded.
+    const replacing = new Set(params.replaceStaleCardIds ?? [])
+    if (existing.some((c) => c.role === role && !replacing.has(c.id))) {
+      throw new Error(`lead_console_exists: ${params.leadId} already has a lead console`)
+    }
+  }
   if (params.role === 'worker') {
-    const existing = listBoardConsoleCards(runtime.getUIState().boardsByWorktree, worktreeId)
     const check = checkWorkerCaps(
       existing.map((c) => c.role),
       params.leadId
@@ -183,7 +190,12 @@ export const BOARD_CONSOLE_METHODS: RpcMethod[] = [
   defineMethod({
     name: 'board.spawnConsole',
     params: SpawnBoardConsoleParams,
-    handler: (params, { runtime }) => spawnBoardConsole(runtime, params)
+    // Why: stale-card replacement is decided in main by the lead watcher; external
+    // callers must not be able to name cards for removal.
+    handler: (params, { runtime }) => {
+      const { replaceStaleCardIds: _ignored, ...external } = params
+      return spawnBoardConsole(runtime, external)
+    }
   }),
   defineMethod({
     name: 'board.listConsoles',
