@@ -33,6 +33,7 @@ export function useAppShellStoreState() {
   )
   const floatingVisibleTabCount = useAppStore(selectFloatingVisibleTabCount)
   const workspaceSessionReady = useAppStore((s) => s.workspaceSessionReady)
+  const workspaceSessionHydrated = useAppStore((s) => s.workspaceSessionHydrated)
   const keybindings = useAppStore((s) => s.keybindings)
   const updateStatus = useAppStore((s) => s.updateStatus)
   const activeContextualTourId = useAppStore((s) => s.activeContextualTourId)
@@ -82,6 +83,7 @@ export function useAppShellStoreState() {
     activePendingCreationExists,
     floatingVisibleTabCount,
     workspaceSessionReady,
+    workspaceSessionHydrated,
     keybindings,
     updateStatus,
     activeContextualTourId,

@@ -2545,7 +2545,7 @@ export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, 
           // 'settings', which renders an empty settings pane instead of Landing.
           // Also clear activeWorktreeId so App renders Landing (it checks
           // !activeWorktreeId). Without this, the terminal surface shows instead.
-          // 'board' with no workspace renders Landing (resolveEffectiveActiveView).
+          // 'board' with no workspace renders Home (resolveEffectiveActiveView).
           ...(nextRepos.length === 0
             ? {
                 activeView: 'board' as const,

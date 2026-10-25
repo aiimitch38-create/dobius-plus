@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { SYNC_FIT_PANES_EVENT, TOGGLE_TERMINAL_PANE_EXPAND_EVENT } from '@/constants/terminal'
 import { resolveLeftSidebarStyleVariables } from '@/lib/left-sidebar-appearance'
 import { canShowRightSidebarForView } from '@/lib/right-sidebar-visibility'
@@ -10,8 +10,12 @@ import { resolveLeftTitlebarChromeLayout } from '@/lib/titlebar-left-chrome'
 import { shouldShowWorktreeCreationSurface } from '@/lib/worktree-creation-surface'
 import { Toaster } from '@/components/ui/sonner'
 import { BoardDispatchGate } from './components/kanban/BoardDispatchGate'
-import { BoardHome, BoardRoute } from './app-lazy-pages'
-import { resolveEffectiveActiveView } from './components/board/board-effective-view'
+import { BoardHome, BoardRoute, prefetchBoardSurfaces } from './app-lazy-pages'
+import {
+  resolveEffectiveActiveView,
+  shouldShowBoardStartupCover
+} from './components/board/board-effective-view'
+import { BoardSurfaceCover } from './components/board/BoardSurfaceCover'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useIpcEvents } from './hooks/useIpcEvents'
 import { useAutomationDispatchEvents } from './hooks/useAutomationDispatchEvents'
@@ -92,6 +96,7 @@ function App(): React.JSX.Element {
     activePendingCreationExists,
     floatingVisibleTabCount,
     workspaceSessionReady,
+    workspaceSessionHydrated,
     keybindings,
     updateStatus,
     activeContextualTourId,
@@ -125,6 +130,14 @@ function App(): React.JSX.Element {
     canGoForwardWorktree
   } = useAppShellStoreState()
   const activeView = resolveEffectiveActiveView(storedActiveView, activeWorktreeId)
+  const showBoardStartupCover = shouldShowBoardStartupCover({
+    view: storedActiveView,
+    workspaceSessionHydrated,
+    workspaceSessionReady
+  })
+  useEffect(() => {
+    prefetchBoardSurfaces()
+  }, [])
   // Why: App swaps the sidebar between workspace and landing layouts when the
   // active workspace is slept/deleted. Keep virtualized scroll memory above
   // that remount so the left workspace list doesn't restart at scrollTop 0.
@@ -495,13 +508,17 @@ function App(): React.JSX.Element {
               shouldMountDictationController={shouldMountDictationController}
               showFloatingTerminalButton={showFloatingTerminalButton}
             />
-            {activeView === 'board' ? (
-              <Suspense fallback={null}>
+            {/* Why: the Board/Home layers sit over the Classic shell; an opaque
+            Board-colored cover (not null) fills their Suspense gap and the
+            startup window before the session hydrates, so Classic never paints. */}
+            {showBoardStartupCover ? (
+              <BoardSurfaceCover />
+            ) : activeView === 'board' ? (
+              <Suspense fallback={<BoardSurfaceCover />}>
                 <BoardRoute />
               </Suspense>
-            ) : null}
-            {activeView === 'home' ? (
-              <Suspense fallback={null}>
+            ) : activeView === 'home' ? (
+              <Suspense fallback={<BoardSurfaceCover />}>
                 <BoardHome />
               </Suspense>
             ) : null}

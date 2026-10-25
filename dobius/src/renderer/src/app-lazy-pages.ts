@@ -6,6 +6,18 @@ import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 export const Landing = lazy(() => import('./components/Landing'))
 export const BoardRoute = lazy(() => import('./components/board/BoardRoute'))
 export const BoardHome = lazy(() => import('./components/board/board-home/BoardHome'))
+// Why: the Board and Home are the only surfaces the user sees under the Board
+// look; fetching their chunks at app start keeps the Suspense cover to a frame.
+// Vite dedupes these specifiers with the lazy() ones above, and a failure here
+// is harmless: the lazy() retry path still owns real load errors.
+export function prefetchBoardSurfaces(): void {
+  void import('./components/board/BoardRoute').catch((error: unknown) =>
+    console.warn('[board] BoardRoute prefetch failed', error)
+  )
+  void import('./components/board/board-home/BoardHome').catch((error: unknown) =>
+    console.warn('[board] BoardHome prefetch failed', error)
+  )
+}
 export const HomePage = lazy(() => import('./components/home/HomePage'))
 export const WorktreeCreationPanel = lazy(
   () => import('./components/worktree-creation/WorktreeCreationPanel')

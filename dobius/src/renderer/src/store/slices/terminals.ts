@@ -415,6 +415,11 @@ export type TerminalSlice = {
   pendingIssueCommandSplitByTabId: Record<string, { command: string; env?: Record<string, string> }>
   tabBarOrderByWorktree: Record<string, string[]>
   workspaceSessionReady: boolean
+  /** True once hydrateWorkspaceSession has applied the persisted session
+   *  (activeWorktreeId included). Flips before terminal reconnect, which can
+   *  wait on SSH, so the startup Board cover lifts as soon as the restored
+   *  workspace is known. */
+  workspaceSessionHydrated: boolean
   defaultTerminalTabsAppliedByWorktreeId: Record<string, true>
   markDefaultTerminalTabsApplied: (worktreeId: string) => void
   /** True only after hydrateWorkspaceSession ran from a real load of
@@ -645,6 +650,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
   nativeChatLaunchPromptByTabId: {},
   tabBarOrderByWorktree: {},
   workspaceSessionReady: false,
+  workspaceSessionHydrated: false,
   defaultTerminalTabsAppliedByWorktreeId: {},
   markDefaultTerminalTabsApplied: (worktreeId) =>
     set((s) => {
@@ -3031,6 +3037,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         pendingReconnectWorktreeIds,
         pendingReconnectTabByWorktree,
         pendingReconnectPtyIdByTabId,
+        workspaceSessionHydrated: true,
         everActivatedWorktreeIds: nextEverActivated,
         // Why: seed worktree nav history with the hydrated active worktree so
         // the first user-driven activation (e.g. a sidebar click to a different
