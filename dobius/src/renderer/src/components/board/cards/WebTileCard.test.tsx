@@ -7,6 +7,11 @@ import { useAppStore } from '@/store'
 const { toastWarningMock } = vi.hoisted(() => ({ toastWarningMock: vi.fn() }))
 vi.mock('sonner', () => ({ toast: { warning: toastWarningMock } }))
 import { getBoard, type BoardCardOf } from '@/store/slices/board'
+import {
+  boardCardFocusViewport,
+  focusBoardCard,
+  useBoardCameraFocus
+} from '../board-canvas/board-camera-focus'
 import { WebTileCard } from './WebTileCard'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -138,19 +143,27 @@ describe('WebTileCard sessions and popups', () => {
     return live
   }
 
+  // Why: like Electron 42, the id is unavailable on did-attach and only resolves once dom-ready fired.
   function fakeAttach(webContentsId: number, zoomFactor = 1): ReturnType<typeof vi.fn> {
     const webview = container.querySelector('webview')
     if (!webview) {
       throw new Error('no webview')
     }
     const setZoomFactor = vi.fn()
+    let domReady = false
     Object.assign(webview, {
-      getWebContentsId: () => webContentsId,
+      getWebContentsId: () => {
+        if (!domReady) {
+          throw new Error('The WebView must be attached to the DOM and the dom-ready event emitted')
+        }
+        return webContentsId
+      },
       getZoomFactor: () => zoomFactor,
       setZoomFactor
     })
     act(() => {
       webview.dispatchEvent(new Event('did-attach'))
+      domReady = true
       webview.dispatchEvent(new Event('dom-ready'))
     })
     return setZoomFactor
@@ -177,15 +190,19 @@ describe('WebTileCard sessions and popups', () => {
     expect(mountOnBoard('shared') && fakeAttach(53, 1.25)).not.toHaveBeenCalled()
   })
 
-  it('registers its guest as web-tile:<cardId> on did-attach and unregisters on unmount', () => {
+  it('registers its guest as web-tile:<cardId> once the id resolves (dom-ready), once per id, and unregisters on unmount', () => {
     const live = mountOnBoard()
     fakeAttach(41)
+    expect(registerGuest).toHaveBeenCalledTimes(1)
     expect(registerGuest).toHaveBeenCalledWith({
       browserPageId: `web-tile:${live.id}`,
       workspaceId: `web-tile:${live.id}`,
       worktreeId: WT,
       webContentsId: 41
     })
+    // A later navigation fires dom-ready again for the same guest: no second registration.
+    act(() => container.querySelector('webview')?.dispatchEvent(new Event('dom-ready')))
+    expect(registerGuest).toHaveBeenCalledTimes(1)
     act(() => root.unmount())
     root = createRoot(container)
     expect(unregisterGuest).toHaveBeenCalledWith({ browserPageId: `web-tile:${live.id}` })
@@ -229,5 +246,80 @@ describe('WebTileCard sessions and popups', () => {
     // Source + 5 siblings; the 6th and 7th were refused.
     expect(getBoard(useAppStore.getState(), WT).cards).toHaveLength(6)
     expect(toastWarningMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('WebTileCard focus fly', () => {
+  const WT = 'wt-fly'
+  const screen = { w: window.innerWidth, h: window.innerHeight }
+
+  beforeEach(() => {
+    // Reduced motion: a fly lands synchronously, so the viewport can be asserted at once.
+    window.matchMedia = vi.fn(() => ({ matches: true }) as unknown as MediaQueryList)
+    useBoardCameraFocus.setState({ focus: null })
+    useAppStore.setState((s) => {
+      const next = { ...s.boardsByWorktree }
+      delete next[WT]
+      return { boardsByWorktree: next }
+    })
+  })
+
+  function mountTile(size: { w: number; h: number }): string {
+    const id = useAppStore.getState().addCard(WT, { ...card, ...size, id: undefined } as never)
+    const live = getBoard(useAppStore.getState(), WT).cards.find((c) => c.id === id)
+    if (!live || live.kind !== 'web') {
+      throw new Error('card missing')
+    }
+    act(() => root.render(<WebTileCard card={live} onChange={() => {}} worktreeId={WT} zoom={1} />))
+    return id
+  }
+
+  function guestFocused(): void {
+    act(() => {
+      container.querySelector('webview')?.dispatchEvent(new Event('focus'))
+      vi.advanceTimersByTime(300)
+    })
+  }
+
+  const viewport = (): { x: number; y: number; zoom: number } =>
+    getBoard(useAppStore.getState(), WT).viewport
+
+  it('flies to a tile panned mostly off screen even while focus mode still names it', () => {
+    const id = mountTile({ w: 640, h: 400 })
+    // An earlier click flew here; focus mode stays on the tile after the user pans away.
+    expect(focusBoardCard(WT, id)).toBe(true)
+    const framed = viewport()
+    const pannedAway = { x: screen.w - 150, y: 60, zoom: 1 }
+    act(() => useAppStore.getState().setViewport(WT, pannedAway))
+    expect(useBoardCameraFocus.getState().focus?.cardId).toBe(id)
+
+    guestFocused()
+
+    expect(viewport()).toEqual(framed)
+    expect(viewport()).not.toEqual(pannedAway)
+  })
+
+  it('never moves the camera for a tile already wholly on screen', () => {
+    mountTile({ w: 640, h: 400 })
+    act(() => useAppStore.getState().setViewport(WT, { x: 10, y: 10, zoom: 1 }))
+
+    guestFocused()
+
+    expect(viewport()).toEqual({ x: 10, y: 10, zoom: 1 })
+    expect(useBoardCameraFocus.getState().focus).toBeNull()
+  })
+
+  it('does not re-fly a tile wider than the screen when the camera is already at its framing', () => {
+    const id = mountTile({ w: screen.w + 400, h: 400 })
+    const framed = boardCardFocusViewport(WT, id)
+    if (!framed) {
+      throw new Error('no framing')
+    }
+    act(() => useAppStore.getState().setViewport(WT, framed))
+
+    guestFocused()
+
+    expect(viewport()).toEqual(framed)
+    expect(useBoardCameraFocus.getState().focus).toBeNull()
   })
 })

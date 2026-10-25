@@ -12,7 +12,8 @@ const {
   guestSetWindowOpenHandlerMock,
   guestOpenDevToolsMock,
   webContentsFromIdMock,
-  screenGetCursorScreenPointMock
+  screenGetCursorScreenPointMock,
+  webTileSession
 } = vi.hoisted(() => ({
   appGetPathMock: vi.fn(() => '/downloads'),
   shellOpenExternalMock: vi.fn(),
@@ -24,7 +25,8 @@ const {
   guestSetWindowOpenHandlerMock: vi.fn(),
   guestOpenDevToolsMock: vi.fn(),
   webContentsFromIdMock: vi.fn(),
-  screenGetCursorScreenPointMock: vi.fn(() => ({ x: 0, y: 0 }))
+  screenGetCursorScreenPointMock: vi.fn(() => ({ x: 0, y: 0 })),
+  webTileSession: { partition: 'dobius-web-tile' }
 }))
 
 vi.mock('electron', () => ({
@@ -35,6 +37,7 @@ vi.mock('electron', () => ({
     fromWebContents: browserWindowFromWebContentsMock
   },
   clipboard: { writeText: vi.fn() },
+  session: { fromPartition: () => webTileSession },
   shell: { openExternal: shellOpenExternalMock },
   Menu: {
     buildFromTemplate: menuBuildFromTemplateMock
@@ -348,6 +351,30 @@ describe('browserManager', () => {
     expect(handler({ url: 'https://example.com/login' })).toEqual({ action: 'deny' })
 
     expect(shellOpenExternalMock).toHaveBeenCalledWith('https://example.com/login')
+  })
+
+  it('drops a popup from an unregistered private web tile instead of opening it externally', () => {
+    const guest = {
+      id: 106,
+      session: webTileSession,
+      isDestroyed: vi.fn(() => false),
+      getType: vi.fn(() => 'webview'),
+      setBackgroundThrottling: guestSetBackgroundThrottlingMock,
+      setWindowOpenHandler: guestSetWindowOpenHandlerMock,
+      on: guestOnMock,
+      off: guestOffMock,
+      openDevTools: guestOpenDevToolsMock
+    }
+    webContentsFromIdMock.mockReturnValue(guest)
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    browserManager.attachGuestPolicies(guest as never)
+
+    const handler = guestSetWindowOpenHandlerMock.mock.calls.at(-1)?.[0] as (details: {
+      url: string
+    }) => { action: 'deny' }
+    expect(handler({ url: 'https://example.com/login' })).toEqual({ action: 'deny' })
+    expect(shellOpenExternalMock).not.toHaveBeenCalled()
   })
 
   it('activates the owning browser workspace when ensuring a page-backed guest is visible', async () => {

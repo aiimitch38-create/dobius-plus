@@ -73,19 +73,28 @@ function enterFocus(
   })
 }
 
-/** Flies to one card of any kind and enters focus mode. False when it is not on this board. */
-export function focusBoardCard(worktreeId: string, cardId: string): boolean {
+/** The viewport focus mode frames this card with; null when it is not on this board. */
+export function boardCardFocusViewport(worktreeId: string, cardId: string): BoardViewport | null {
   const state = useAppStore.getState()
   const card = getBoard(state, worktreeId).cards.find((c) => c.id === cardId)
   if (!card) {
-    return false
+    return null
   }
-  const target = boardFocusCardViewport(
+  return boardFocusCardViewport(
     card.kind,
     { x: card.x, y: card.y, width: card.w, height: card.h },
     screenSize(),
     state.settings?.terminalFontSize ?? 14
   )
+}
+
+/** Flies to one card of any kind and enters focus mode. False when it is not on this board. */
+export function focusBoardCard(worktreeId: string, cardId: string): boolean {
+  const card = getBoard(useAppStore.getState(), worktreeId).cards.find((c) => c.id === cardId)
+  const target = card ? boardCardFocusViewport(worktreeId, cardId) : null
+  if (!card || !target) {
+    return false
+  }
   enterFocus(worktreeId, { cardId, cards: [card], groupId: null }, target)
   return true
 }

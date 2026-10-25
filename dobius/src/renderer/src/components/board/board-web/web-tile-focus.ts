@@ -24,3 +24,8 @@ export function webTileFullyVisible(
   const bottom = top + rect.h * viewport.zoom
   return left >= 0 && top >= 0 && right <= screen.width && bottom <= screen.height
 }
+
+/** True when the camera is already where a fly would take it (sub-pixel, same zoom). */
+export function viewportsMatch(a: BoardViewport, b: BoardViewport): boolean {
+  return Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.zoom - b.zoom) < 0.001
+}

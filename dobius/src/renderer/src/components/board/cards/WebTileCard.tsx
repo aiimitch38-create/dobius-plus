@@ -16,9 +16,9 @@ import type { CardBodyProps } from './card-body-props'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { getBoard, type BoardCardOf } from '@/store/slices/board'
-import { focusBoardCard, useBoardCameraFocus } from '../board-canvas/board-camera-focus'
+import { boardCardFocusViewport, focusBoardCard } from '../board-canvas/board-camera-focus'
 import { duplicateSpot } from '../board-route/board-duplicate-spot'
-import { webTileFullyVisible } from '../board-web/web-tile-focus'
+import { viewportsMatch, webTileFullyVisible } from '../board-web/web-tile-focus'
 import { webTileAddressUrl } from '../board-web/web-tile-navigation'
 import { isLoopbackUrl } from '../board-web/dev-server-url'
 import { deviceFitScale, findWebTileDevice, mobileUserAgent } from '../board-web/web-tile-devices'
@@ -150,6 +150,9 @@ export function WebTileCard({
     }
     const webview = document.createElement('webview') as Electron.WebviewTag
     webview.setAttribute('partition', partition)
+    // Why: without it Chromium drops window.open/target=_blank in the guest before
+    // main's window-open handler (which turns popups into sibling tiles) ever runs.
+    webview.setAttribute('allowpopups', '')
     webview.setAttribute('webpreferences', DOBIUS_BROWSER_GUEST_WEB_PREFERENCES_ATTRIBUTE)
     webview.style.width = '100%'
     webview.style.height = '100%'
@@ -211,14 +214,19 @@ export function WebTileCard({
       }
     }
     const loaded = (): void => setLoadSeq((n) => n + 1)
-    // Why: on did-attach (not dom-ready) so a popup fired during the first load
-    // already finds the guest registered, and never falls to the browser path.
-    const attached = (): void => {
+    // Why: tried on did-attach so a popup fired during the first load can find
+    // the guest registered, but Electron only hands out the id once dom-ready
+    // has fired (did-attach usually comes first and throws), so dom-ready
+    // retries; the same id is never registered twice.
+    const register = (): void => {
       let webContentsId: number
       try {
         webContentsId = webview.getWebContentsId()
       } catch (error) {
         console.debug('[board-web] guest not addressable yet', error)
+        return
+      }
+      if (guestWebContentsId.current === webContentsId) {
         return
       }
       guestWebContentsId.current = webContentsId
@@ -238,6 +246,7 @@ export function WebTileCard({
       }
     }
     const ready = (): void => {
+      register()
       // Why: guest CSS px must map 1:1 onto the tile's rect for agent cursors.
       // Zoom factors are per origin per session, so only the private session
       // is touched: the shared one would reset the user's Browser-pane zoom.
@@ -261,12 +270,19 @@ export function WebTileCard({
       window.clearTimeout(focusTimer)
       focusTimer = undefined
       const { id, x, y, w, h } = cardRef.current
-      const focus = useBoardCameraFocus.getState().focus
-      if (!worktreeId || gesturingRef.current || focus?.cardId === id) {
+      if (!worktreeId || gesturingRef.current) {
         return
       }
       const viewport = getBoard(useAppStore.getState(), worktreeId).viewport
       if (webTileFullyVisible({ x, y, w, h }, viewport, boardScreenSize())) {
+        return
+      }
+      // Why: focus mode outlives a pan (only Esc, a canvas click or another
+      // focus click ends it), so "this tile is the focus target" does not mean
+      // the camera is on it. Only a camera already at the tile's framing (a
+      // tile larger than the screen) has nowhere to fly.
+      const target = boardCardFocusViewport(worktreeId, id)
+      if (target && viewportsMatch(viewport, target)) {
         return
       }
       focusBoardCard(worktreeId, id)
@@ -285,7 +301,7 @@ export function WebTileCard({
     webview.addEventListener('did-fail-load', fail)
     webview.addEventListener('did-stop-loading', loaded)
     webview.addEventListener('did-finish-load', loaded)
-    webview.addEventListener('did-attach', attached)
+    webview.addEventListener('did-attach', register)
     webview.addEventListener('dom-ready', ready)
     webview.addEventListener('focus', focused)
     window.addEventListener('pointerup', pressEnd, true)
@@ -296,7 +312,7 @@ export function WebTileCard({
       webview.removeEventListener('did-fail-load', fail)
       webview.removeEventListener('did-stop-loading', loaded)
       webview.removeEventListener('did-finish-load', loaded)
-      webview.removeEventListener('did-attach', attached)
+      webview.removeEventListener('did-attach', register)
       webview.removeEventListener('dom-ready', ready)
       webview.removeEventListener('focus', focused)
       window.removeEventListener('pointerup', pressEnd, true)

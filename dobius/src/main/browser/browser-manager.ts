@@ -4,7 +4,8 @@ cleanup even after extracting the grab/session helpers. Keeping that ownership
 in one file avoids scattering the browser security boundary across modules. */
 import { randomUUID } from 'node:crypto'
 
-import { shell, webContents } from 'electron'
+import { session, shell, webContents } from 'electron'
+import { DOBIUS_WEB_TILE_PARTITION } from '../../shared/constants'
 import {
   normalizeBrowserNavigationUrl,
   normalizeExternalBrowserUrl,
@@ -592,6 +593,13 @@ export class BrowserManager {
       // browser-tab / external / queued behaviour.
       if (isWebTileBrowserPageId(browserTabId)) {
         this.sendWebTilePopup(guest, url, disposition)
+        return { action: 'deny' }
+      }
+      // Why: a private tile's guest can raise a popup before the tile registers
+      // it (attach -> dom-ready gap). Its session is private, so it must never
+      // reach the system browser; drop it instead.
+      if (guest.session === session.fromPartition(DOBIUS_WEB_TILE_PARTITION)) {
+        console.warn('[browser] dropped a popup from an unregistered private web tile')
         return { action: 'deny' }
       }
       const browserUrl = normalizeBrowserNavigationUrl(url)
