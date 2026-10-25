@@ -127,6 +127,32 @@ describe('StudioBody hosted studios', () => {
     expect(container.textContent).not.toContain('stub:')
   })
 
+  it.each([
+    ['automations', 'AutomationsPage'],
+    ['settings', 'SettingsStudio'],
+    ['tasks-page', 'TaskPage'],
+    ['mobile', 'MobilePage'],
+    ['skills', 'SkillsStudio']
+  ] as Array<[BoardStudioId, string]>)(
+    '%s renders without a workspace (opened from Home)',
+    (studio, child) => {
+      act(() =>
+        root.render(
+          <Suspense fallback={null}>
+            <StudioBody
+              studio={studio}
+              worktreeId={null}
+              chatTabId={null}
+              freeCenter={freeCenter}
+              onClose={() => {}}
+            />
+          </Suspense>
+        )
+      )
+      expect(container.textContent).toContain(`stub:${child}`)
+    }
+  )
+
   it('a hosted panel navigating the sidebar tab switches the studio', () => {
     renderStudio('source-control')
     act(() => storeMock.store!.setState({ rightSidebarTab: 'checks' }))

@@ -1257,10 +1257,98 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
     if (data.openJiraIssue) {
       get().recordFeatureInteraction?.('jira-tasks')
     }
+    // Why: the Tasks studio hosts the same TaskPage, so it gets the same warm cache.
+    const prefetchTaskPage = (): void => {
+      // Why: prefetch the GitHub work-item list in parallel with React's first
+      // render of the TaskPage — by the time the page's own effect runs, the SWR
+      // cache is either already populated or the request is in-flight and will
+      // be deduped. This removes ~300–800ms of perceived latency on initial
+      // page load.
+      const state = get()
+      const preferredVisibleTaskProviders = normalizeVisibleTaskProviders(
+        state.settings?.visibleTaskProviders
+      )
+      const visibleTaskProviders = restoreAvailableDefaultTaskProvider(
+        preferredVisibleTaskProviders,
+        {
+          gitlabInstalled: state.preflightStatus?.glab?.installed === true,
+          linearConnected: state.linearStatus?.connected === true
+        },
+        state.settings?.defaultTaskSource
+      )
+      const resolvedSource = resolveVisibleTaskProvider(
+        data.taskSource ?? state.settings?.defaultTaskSource,
+        visibleTaskProviders
+      )
+      const resolvedMode = state.taskResumeState?.githubMode ?? 'items'
+      if (resolvedSource === 'github' && resolvedMode === 'items') {
+        const eligibleRepos = state.repos.filter((repo) => isGitRepoKind(repo) && repo.path)
+        const selectedRepos = (() => {
+          const preferred = data.preselectedRepoId
+          if (preferred) {
+            const repo = eligibleRepos.find((r) => r.id === preferred)
+            return repo ? [repo] : []
+          }
+          const persisted = state.settings?.defaultRepoSelection
+          if (Array.isArray(persisted)) {
+            const selected = eligibleRepos.filter((repo) => persisted.includes(repo.id))
+            if (selected.length > 0) {
+              return selected
+            }
+          }
+          return eligibleRepos
+        })()
+
+        const resume = state.taskResumeState
+        const defaultPreset = state.settings?.defaultTaskViewPreset ?? 'all'
+        // Why: must match the exact query TaskPage's resume effect mounts with,
+        // otherwise the warm cache key (e.g. 'is:issue is:open') misses the
+        // page's actual fetch key and the prefetch is wasted. When the user has
+        // an explicit custom search (preset === null), preserve it so both sides
+        // agree.
+        const query =
+          resume?.githubItemsPreset === null
+            ? (resume.githubItemsQuery ?? '').trim()
+            : presetToQuery(resume?.githubItemsPreset ?? defaultPreset)
+        for (const repo of selectedRepos) {
+          state.prefetchWorkItems(repo.id, repo.path, PER_REPO_FETCH_LIMIT, query, {
+            sourceContext:
+              data.openGitHubSourceContext?.provider === 'github' &&
+              data.openGitHubSourceContext.repoId === repo.id
+                ? data.openGitHubSourceContext
+                : null
+          })
+        }
+      }
+      if (resolvedSource === 'linear' && typeof state.prefetchLinearIssues === 'function') {
+        const resume = state.taskResumeState
+        const query = (resume?.linearQuery ?? '').trim()
+        const sourceContext =
+          data.openLinearSourceContext?.provider === 'linear' ? data.openLinearSourceContext : null
+        if (query) {
+          state.prefetchLinearIssues(
+            { kind: 'search', query, limit: LINEAR_TASK_PREFETCH_LIMIT },
+            { sourceContext }
+          )
+        } else {
+          // Why: TaskPage no longer exposes Linear preset filters; keep warm
+          // prefetch aligned with the default unsearched issue list.
+          state.prefetchLinearIssues(
+            {
+              kind: 'list',
+              filter: 'all',
+              limit: LINEAR_TASK_PREFETCH_LIMIT
+            },
+            { sourceContext }
+          )
+        }
+      }
+    }
     // Why: on the Board, Tasks is a studio; it never enters the Classic
     // back/forward history, so Back can never land on the retired shell.
     if (isBoardSurfaceActive(get())) {
       set({ taskPageData: data, boardStudio: 'tasks-page' })
+      prefetchTaskPage()
       return
     }
     // Why: record a Tasks visit in the shared back/forward history so the
@@ -1315,90 +1403,7 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
         state.activeView === 'tasks' ? state.previousViewBeforeTasks : state.activeView,
       taskPageData: data
     }))
-    // Why: prefetch the GitHub work-item list in parallel with React's first
-    // render of the TaskPage — by the time the page's own effect runs, the SWR
-    // cache is either already populated or the request is in-flight and will
-    // be deduped. This removes ~300–800ms of perceived latency on initial
-    // page load.
-    const state = get()
-    const preferredVisibleTaskProviders = normalizeVisibleTaskProviders(
-      state.settings?.visibleTaskProviders
-    )
-    const visibleTaskProviders = restoreAvailableDefaultTaskProvider(
-      preferredVisibleTaskProviders,
-      {
-        gitlabInstalled: state.preflightStatus?.glab?.installed === true,
-        linearConnected: state.linearStatus?.connected === true
-      },
-      state.settings?.defaultTaskSource
-    )
-    const resolvedSource = resolveVisibleTaskProvider(
-      data.taskSource ?? state.settings?.defaultTaskSource,
-      visibleTaskProviders
-    )
-    const resolvedMode = state.taskResumeState?.githubMode ?? 'items'
-    if (resolvedSource === 'github' && resolvedMode === 'items') {
-      const eligibleRepos = state.repos.filter((repo) => isGitRepoKind(repo) && repo.path)
-      const selectedRepos = (() => {
-        const preferred = data.preselectedRepoId
-        if (preferred) {
-          const repo = eligibleRepos.find((r) => r.id === preferred)
-          return repo ? [repo] : []
-        }
-        const persisted = state.settings?.defaultRepoSelection
-        if (Array.isArray(persisted)) {
-          const selected = eligibleRepos.filter((repo) => persisted.includes(repo.id))
-          if (selected.length > 0) {
-            return selected
-          }
-        }
-        return eligibleRepos
-      })()
-
-      const resume = state.taskResumeState
-      const defaultPreset = state.settings?.defaultTaskViewPreset ?? 'all'
-      // Why: must match the exact query TaskPage's resume effect mounts with,
-      // otherwise the warm cache key (e.g. 'is:issue is:open') misses the
-      // page's actual fetch key and the prefetch is wasted. When the user has
-      // an explicit custom search (preset === null), preserve it so both sides
-      // agree.
-      const query =
-        resume?.githubItemsPreset === null
-          ? (resume.githubItemsQuery ?? '').trim()
-          : presetToQuery(resume?.githubItemsPreset ?? defaultPreset)
-      for (const repo of selectedRepos) {
-        state.prefetchWorkItems(repo.id, repo.path, PER_REPO_FETCH_LIMIT, query, {
-          sourceContext:
-            data.openGitHubSourceContext?.provider === 'github' &&
-            data.openGitHubSourceContext.repoId === repo.id
-              ? data.openGitHubSourceContext
-              : null
-        })
-      }
-    }
-    if (resolvedSource === 'linear' && typeof state.prefetchLinearIssues === 'function') {
-      const resume = state.taskResumeState
-      const query = (resume?.linearQuery ?? '').trim()
-      const sourceContext =
-        data.openLinearSourceContext?.provider === 'linear' ? data.openLinearSourceContext : null
-      if (query) {
-        state.prefetchLinearIssues(
-          { kind: 'search', query, limit: LINEAR_TASK_PREFETCH_LIMIT },
-          { sourceContext }
-        )
-      } else {
-        // Why: TaskPage no longer exposes Linear preset filters; keep warm
-        // prefetch aligned with the default unsearched issue list.
-        state.prefetchLinearIssues(
-          {
-            kind: 'list',
-            filter: 'all',
-            limit: LINEAR_TASK_PREFETCH_LIMIT
-          },
-          { sourceContext }
-        )
-      }
-    }
+    prefetchTaskPage()
   },
   setTaskResumeState: (updates) =>
     set((s) => {

@@ -1739,6 +1739,8 @@ describe('createUISlice settings navigation', () => {
 
   it('returns to the tasks page after visiting settings from an in-progress draft', () => {
     const store = createUIStore()
+    // Classic-page navigation: only reachable from a Classic view now.
+    store.setState({ activeView: 'automations' } as Partial<AppState>)
 
     store.getState().openTaskPage({ preselectedRepoId: 'repo-1' })
     store.getState().openSettingsPage()
@@ -1753,6 +1755,8 @@ describe('createUISlice settings navigation', () => {
 
   it('keeps the original return target when settings is reopened while already visible', () => {
     const store = createUIStore()
+    // Classic-page navigation: only reachable from a Classic view now.
+    store.setState({ activeView: 'automations' } as Partial<AppState>)
 
     store.getState().openTaskPage()
     store.getState().openSettingsPage()
@@ -1767,6 +1771,8 @@ describe('createUISlice settings navigation', () => {
 
   it('clears transient settings search when opening settings', () => {
     const store = createUIStore()
+    // Classic-page navigation: only reachable from a Classic view now.
+    store.setState({ activeView: 'automations' } as Partial<AppState>)
 
     store.setState({ settingsSearchInputQuery: 'terminal', settingsSearchQuery: 'terminal' })
     store.getState().openSettingsPage()
@@ -3048,6 +3054,8 @@ describe('createUISlice space navigation', () => {
 
   it('returns to the tasks page after opening Space from an in-progress draft', () => {
     const store = createUIStore()
+    // Classic-page navigation: only reachable from a Classic view now.
+    store.setState({ activeView: 'automations' } as Partial<AppState>)
 
     store.getState().openTaskPage({ preselectedRepoId: 'repo-1' })
     store.getState().openSpacePage()
@@ -3062,6 +3070,8 @@ describe('createUISlice space navigation', () => {
 
   it('keeps the original return target when Space is reopened while already visible', () => {
     const store = createUIStore()
+    // Classic-page navigation: only reachable from a Classic view now.
+    store.setState({ activeView: 'automations' } as Partial<AppState>)
 
     store.getState().openTaskPage()
     store.getState().openSpacePage()
@@ -3107,16 +3117,44 @@ describe('createUISlice board studio routing', () => {
     expect(store.getState().activeView).toBe('board')
   })
 
-  it('still opens the Classic page while no workspace is active (Landing)', () => {
+  it.each([
+    ['board with no workspace (renders as Home)', 'board'],
+    ['home', 'home']
+  ] as const)('opens page actions as studios over Home: %s', (_label, activeView) => {
     const store = createUIStore()
-    store.setState({ activeView: 'board', activeWorktreeId: null } as Partial<AppState>)
+    store.setState({ activeView, activeWorktreeId: null } as Partial<AppState>)
+
+    store.getState().openAutomationsPage()
+    expect(store.getState().activeView).toBe(activeView)
+    expect(store.getState().boardStudio).toBe('automations')
+    expect(store.getState().worktreeNavHistory).toEqual([])
+
+    store.getState().openSettingsPage()
+    expect(store.getState().activeView).toBe(activeView)
+    expect(store.getState().boardStudio).toBe('settings')
+
+    store.getState().openTaskPage({ preselectedRepoId: 'repo-1' })
+    expect(store.getState().activeView).toBe(activeView)
+    expect(store.getState().boardStudio).toBe('tasks-page')
+
+    store.getState().openSkillsPage()
+    expect(store.getState().boardStudio).toBe('skills')
+    store.getState().openMobilePage()
+    expect(store.getState().boardStudio).toBe('mobile')
+    expect(store.getState().activeView).toBe(activeView)
+
+    // Closing the studio returns to Home: the view never moved.
+    store.getState().setBoardStudio(null)
+    expect(store.getState().activeView).toBe(activeView)
+  })
+
+  it('still opens the Classic page only from a Classic view', () => {
+    const store = createUIStore()
+    store.setState({ activeView: 'settings', activeWorktreeId: null } as Partial<AppState>)
 
     store.getState().openAutomationsPage()
     expect(store.getState().activeView).toBe('automations')
     expect(store.getState().boardStudio).toBeNull()
-
-    store.getState().closeAutomationsPage()
-    expect(store.getState().activeView).toBe('board')
   })
 
   it('never lands on the retired Classic shell when a page closes without an open', () => {

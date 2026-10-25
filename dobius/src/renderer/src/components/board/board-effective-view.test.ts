@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isBoardSurfaceActive,
   resolveAppLook,
   resolveEffectiveActiveView,
   resolveRequestedActiveView,
@@ -95,5 +96,21 @@ describe('resolveRequestedActiveView', () => {
     expect(resolveRequestedActiveView('home')).toBe('home')
     expect(resolveRequestedActiveView('settings')).toBe('settings')
     expect(resolveRequestedActiveView('tasks')).toBe('tasks')
+  })
+})
+
+describe('isBoardSurfaceActive', () => {
+  it('is true on the Board and on Home (with or without a workspace), so page actions open studios', () => {
+    expect(isBoardSurfaceActive({ activeView: 'board' })).toBe(true)
+    expect(isBoardSurfaceActive({ activeView: 'home' })).toBe(true)
+    // 'board' with no workspace renders as Home, which hosts studios too.
+    expect(isBoardSurfaceActive({ activeView: resolveEffectiveActiveView('board', null) })).toBe(
+      true
+    )
+  })
+
+  it('is false only on a Classic view', () => {
+    expect(isBoardSurfaceActive({ activeView: 'settings' })).toBe(false)
+    expect(isBoardSurfaceActive({ activeView: 'tasks' })).toBe(false)
   })
 })

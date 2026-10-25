@@ -46,12 +46,11 @@ export function resolveRequestedActiveView<V extends string>(
 }
 
 // Why: page actions (Tasks, Automations, Mobile, Settings, Skills) open as Board
-// studios while the Board is on screen. With no active workspace the Board
-// renders as Home (see resolveEffectiveActiveView), so there is no studio
-// host and the Classic page is still the right destination.
-export function isBoardSurfaceActive(state: {
-  activeView: string
-  activeWorktreeId: string | null | undefined
-}): boolean {
-  return state.activeView === 'board' && typeof state.activeWorktreeId === 'string'
+// studios while the Board look is on screen: the Board with a workspace, or
+// Home (activeView 'home', or 'board' with no workspace, which
+// resolveEffectiveActiveView renders as Home). Both mount a studio host, so a
+// Classic page is only the destination from a Classic view, which the store no
+// longer lands on.
+export function isBoardSurfaceActive(state: { activeView: string }): boolean {
+  return state.activeView === 'board' || state.activeView === 'home'
 }

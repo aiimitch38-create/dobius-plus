@@ -17,6 +17,7 @@ import { BOARD_MONO_CLASS } from '../board-chrome/board-surface-classes'
 import { listBoardPresets } from '../board-presets/board-preset-store'
 import type { BoardPreset } from '../board-presets/board-preset'
 import { presetCatalog } from '../board-presets/preset-catalog'
+import { BoardStudioHost } from '../board-studios/BoardStudioHost'
 import { homeGreetingName, pickHomeGreeting } from './home-greeting'
 import { moveHomeSelection, reconcileHomeSelection, resolveHomeKey } from './home-keyboard'
 import { openWorkspaceOnBoard, type HomePresetChoice } from './home-open'
@@ -120,6 +121,16 @@ export default function BoardHome(): React.JSX.Element {
     now: Date.now(),
     staleAfterMs: AGENT_STATUS_STALE_AFTER_MS
   })
+
+  // Why: page actions (Settings, Automations, Tasks, Skills, Mobile) open as
+  // studios here too, so the retired Classic pages never show over Home. The
+  // host reads the same store slot BoardRoute does; the two surfaces are
+  // mutually exclusive in App, so only one host is mounted at a time.
+  const studio = useAppStore((s) => s.boardStudio)
+  const closeStudio = useCallback(() => useAppStore.getState().setBoardStudio(null), [])
+  useEffect(() => () => useAppStore.getState().setBoardStudio(null), [])
+  // Presets deploy needs a workspace; without one the studio shows its empty state.
+  const freeCenter = useCallback(() => ({ x: 0, y: 0 }), [])
 
   const [pickedRepoId, setPickedRepoId] = useState<string | null>(null)
   const selectedRepoId = reconcileHomeSelection(
@@ -364,6 +375,13 @@ export default function BoardHome(): React.JSX.Element {
           {translate('board.home.version', 'v{{version}}', { version })}
         </div>
       ) : null}
+
+      <BoardStudioHost
+        studio={studio}
+        worktreeId={null}
+        freeCenter={freeCenter}
+        onClose={closeStudio}
+      />
     </div>
   )
 }
