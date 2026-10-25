@@ -295,6 +295,20 @@ describe('AgentBrowserBridge agent co-presence', () => {
     })
   })
 
+  it('lets agents navigate a tile only to http(s) URLs', async () => {
+    const calls = respondByCommand()
+    const { hooks } = makeHooks()
+    const bridge = new AgentBrowserBridge(mockBrowserManager(tabs), { agentCursor: hooks })
+
+    for (const url of ['javascript:alert(1)', 'file:///etc/passwd', 'data:text/html,hi']) {
+      await expect(
+        runWithAgentIdentity(adam, () => bridge.goto(url, undefined, 'web-tile:card-1')),
+        url
+      ).rejects.toMatchObject({ code: 'agent_action_forbidden' })
+    }
+    expect(commandNames(calls)).not.toContain('goto')
+  })
+
   it('refuses agent commands against a regular browser tab, dispatching nothing', async () => {
     const calls = respondByCommand()
     const { hooks, events } = makeHooks()
@@ -622,7 +636,9 @@ describe('AgentBrowserBridge agent co-presence', () => {
       'browser.profileDelete',
       'browser.profileDetectBrowsers',
       'browser.profileImportFromBrowser',
-      'browser.profileClearDefaultCookies'
+      'browser.profileClearDefaultCookies',
+      // Screencast streams through the runtime, not the bridge; the RPC deny covers it.
+      'browser.screencast'
     ])
     const denyEntries = Object.entries(AGENT_BROWSER_METHOD_POLICY)
       .filter(([, policy]) => policy === 'deny')

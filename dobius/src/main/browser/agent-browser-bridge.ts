@@ -81,12 +81,14 @@ import { assertAgentMayUseMethod } from './agent-browser-method-policy'
 
 /** Isolated world the gate descriptor runs in; page scripts cannot reach it. */
 const AGENT_GATE_WORLD_NAME = 'dobius-gate'
-/** Errors after which the agent no longer holds the tile; focus emulation is dropped. */
-const AGENT_HANDOFF_ERROR_CODES: ReadonlySet<string> = new Set([
-  'agent_stopped',
-  'agent_paused',
-  'human_has_control'
-])
+
+function safeUrlProtocol(url: string): string {
+  try {
+    return new URL(url).protocol
+  } catch {
+    return ''
+  }
+}
 
 /**
  * Attached to page-derived results handed to an identified agent: everything
@@ -880,18 +882,11 @@ export class AgentBrowserBridge {
       const result = await act(stage, guard)
       const emitted = done?.(stage, result) ?? { kind: action as AgentCursorKind }
       driver.emitAction(agent, tileId, emitted.kind, emitted.extra)
-      // Why: emulated focus lasts exactly one action; between actions the page
-      // sees the human's real focus state again.
-      await this.setFocusEmulation(wc, cdp, false)
       return result
-    } catch (error) {
-      // Why: once the human holds the tile (pause, take-over, stop) the page must
-      // stop pretending it is focused by the agent.
-      if (error instanceof BrowserError && AGENT_HANDOFF_ERROR_CODES.has(error.code)) {
-        await this.setFocusEmulation(wc, cdp, false)
-      }
-      throw error
     } finally {
+      // Why: emulated focus lasts exactly one action on every path (success, gate
+      // denied, handoff, errors); between actions the page sees the human's real focus.
+      await this.setFocusEmulation(wc, cdp, false)
       lease.release()
     }
   }
@@ -1173,6 +1168,11 @@ export class AgentBrowserBridge {
       throw new BrowserError('invalid_argument', 'URL must not start with "-"')
     }
     return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName, target, agent) => {
+      // Why: agents navigate only to web pages; javascript:/file:/data: would run
+      // script or read local files outside every gate.
+      if (agent && !/^https?:$/i.test(safeUrlProtocol(url))) {
+        throw new BrowserError('agent_action_forbidden', 'Agents may only open http(s) URLs.')
+      }
       return this.withAgentAction(
         agent,
         sessionName,
@@ -1437,7 +1437,8 @@ export class AgentBrowserBridge {
           cdpButton === 'right' ? 'rightclick' : 'click',
           { point: { x, y } },
           (_stage, guard) =>
-            guard(() => this.dispatchMouseClick(target, x, y, cdpButton, radius, modifiers, agent))
+            // Why: a radius snap would activate a control the gate never described.
+            guard(() => this.dispatchMouseClick(target, x, y, cdpButton, agent ? 0 : radius, modifiers, agent))
         )
       },
       { rpcMethod: 'browser.mouseClick', ensureSession: false }
@@ -2173,10 +2174,9 @@ export class AgentBrowserBridge {
         target,
         'type',
         { element },
-        async () => {
+        async (_stage, guard) =>
           // Why: agent-browser has no clear command — use fill with empty string
-          return (await this.execAgentBrowser(sessionName, ['fill', element, ''])) as BrowserClearResult
-        },
+          (await guard(() => this.execAgentBrowser(sessionName, ['fill', element, '']))) as BrowserClearResult,
         () => ({ kind: 'type', extra: { textLength: 0 } })
       )
     }, { rpcMethod: 'browser.clear' })
@@ -2542,10 +2542,12 @@ export class AgentBrowserBridge {
     // the RPC call that enqueued it, not whatever runs the queue later.
     const agent = this.effectiveAgentIdentity(target.browserPageId)
     if (agent) {
+      // Why: rpcMethod is null only for non-page commands (tab switch), which act on
+      // the tab strip, not inside the tile, so the tile target policy does not apply.
       if (options.rpcMethod) {
         assertAgentMayUseMethod(agent.name, options.rpcMethod)
+        this.assertAgentTarget(agent, target, worktreeId)
       }
-      this.assertAgentTarget(agent, target, worktreeId)
     }
 
     if (options.ensureSession !== false) {

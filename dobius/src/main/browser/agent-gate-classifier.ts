@@ -183,7 +183,17 @@ export function classifyAgentGate(
     if (isSecretField(desc)) {
       return 'login'
     }
-    return intent.textEndsWithNewline && isComposer(desc) ? 'send' : null
+    if (!intent.textEndsWithNewline) {
+      return null
+    }
+    // Why: a trailing newline submits the form just like Enter or its button.
+    if (desc.form?.hasPassword || desc.form?.hasOtp || isAuthUrl(url)) {
+      return 'login'
+    }
+    if (isPurchaseUrl(url)) {
+      return 'purchase'
+    }
+    return isComposer(desc) ? 'send' : null
   }
   if (action === 'key') {
     // Why: Enter inside a credential form submits it just like the button would.
@@ -193,6 +203,9 @@ export function classifyAgentGate(
     if (intent.key && SUBMIT_KEY_PATTERN.test(intent.key)) {
       if (isAuthUrl(url)) {
         return 'login'
+      }
+      if (isPurchaseUrl(url)) {
+        return 'purchase'
       }
       if (isComposer(desc)) {
         return 'send'
@@ -279,7 +292,7 @@ export function agentTargetDescriptorExpression(point?: { x: number; y: number }
     let el = ${pick};
     ${descend}
     if (!el || el === document.body || el === document.documentElement) return null;
-    const closedShadow = el.tagName.includes('-') && !el.shadowRoot && el.childElementCount === 0;
+    const closedShadow = el.tagName.includes('-') && !el.shadowRoot;
     const ctl = el.closest('button, a, input, select, textarea, summary, iframe, frame, object, embed, [role=button], [role=link], [role=menuitem], [contenteditable]') || el;
     const attr = (n) => ctl.getAttribute(n);
     const form = ctl.closest('form');

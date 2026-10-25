@@ -68,7 +68,7 @@ export const AGENT_BROWSER_METHOD_POLICY: Readonly<Record<string, AgentBrowserMe
   'browser.download': 'deny',
   'browser.highlight': 'staged',
   // screencast
-  'browser.screencast': 'read',
+  'browser.screencast': 'deny',
   'browser.screencast.unsubscribe': 'read',
   // extras
   'browser.cookie.get': 'read',
