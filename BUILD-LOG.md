@@ -112,3 +112,10 @@
 - Verified: 119 agent-presence/card tests, typecheck:web. Live demo on the installed app: 20 agent actions all ok, "Following Adam" pill shown, 2 screenshots captured, RAG card completed with proof.
 - Lesson: `--worktree active` resolved to a different board than the one on screen, so the tile never registered (timeout). Pass `--worktree path:<project>` explicitly for demos.
 - Skipped the sealed test copy this round (renderer-only change, covered by unit tests plus the live demo).
+
+## 2.1.6 — 2026-10-26 (build 52, commit 80ce9000)
+- Six parallel builder lanes: workspace purpose labels + grouped top bar + grouped Source Control (GitHub button) + Commit/Push/Pull; placement ghosts; usage popover redesign (loading/donut/heatmap/raw/accounts); Loops matched to Symvibe reference + engine (picked consoles, any-target output match, Goal-card stop); empty-board start panel; connect console to web tile + Verify with main-side tile binding. Onboarding purple -> Dobius blue.
+- Review (code-reviewer): no criticals; fixed binding sync lifecycle, honest handoff text, deferred handoff while busy, tabs target scoping, purpose length cap.
+- Known gap (follow-up): tile binding keys off self-asserted `--as console-<id>`; needs main-side caller identity (PTY -> console card).
+- Verify: typecheck web/node/cli 0; 8685 tests pass, 10 failures all pre-existing at HEAD (cloud-jobs store, selectors, repos slices, titlebar drag regions, attach-main-window-services suite). Test copy: empty board, ghost on-screen, web tile placement (no zoom change), GitHub triad, Loops screens.
+- Lessons: take-turns test gating must match only real node/tsgo processes (pgrep -f self-matched builders' shell wait loops -> 10 min deadlocks). Load-average gates don't work with 5+ builders.
