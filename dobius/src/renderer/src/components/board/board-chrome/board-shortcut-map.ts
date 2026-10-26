@@ -109,7 +109,18 @@ export function boardShortcutSheet(isMac: boolean): BoardShortcutSheetSection[] 
         { keys: tool('text'), label: translate('board.tools.text', 'Text') },
         { keys: tool('pen'), label: translate('board.tools.pen', 'Pen') },
         { keys: tool('eraser'), label: translate('board.tools.eraser', 'Eraser') },
-        { keys: ['Space'], label: translate('board.shortcuts.spacePan', 'Hold to pan (or talk)') }
+        { keys: ['Space'], label: translate('board.shortcuts.spacePan', 'Hold to pan (or talk)') },
+        {
+          keys: [translate('board.shortcuts.drag', 'Drag')],
+          label: translate(
+            'board.shortcuts.dragSelect',
+            'Drag on empty space to select cards (Shift adds to the selection)'
+          )
+        },
+        {
+          keys: ['Space', translate('board.shortcuts.drag', 'Drag')],
+          label: translate('board.shortcuts.spaceDragPan', 'Pan the board (or middle-button drag)')
+        }
       ]
     },
     {

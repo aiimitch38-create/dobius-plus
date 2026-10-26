@@ -1,23 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { getBoard } from '@/store/slices/board'
-import {
-  boundsOfBoxes,
-  snapBoardBox,
-  type SnapBox,
-  type SnapGuide
-} from '../board-canvas/board-snap'
+import { boundsOfBoxes, snapBoardBox, type SnapBox } from '../board-canvas/board-snap'
 import type { BoardTool } from '@/store/slices/board'
 import { isErasableCard } from '../board-tool-panels/eraser-target'
 import { removeCardsWithUndo } from './board-history-delete'
+import { NO_GUIDES, setBoardSnapGuides } from './board-snap-guides'
 
 export type BoardSelection = {
   selectedIds: ReadonlySet<string>
   onSelect: (cardId: string, additive: boolean) => void
   onDragBy: (cardId: string, dx: number, dy: number) => void
   onDragEnd: () => void
-  /** Alignment guides for the drag in progress (world coords). */
-  guides: readonly SnapGuide[]
   clear: () => void
   removeSelected: () => void
   /** Replace the selection (select all, marquee). */
@@ -25,7 +19,6 @@ export type BoardSelection = {
 }
 
 const EMPTY: ReadonlySet<string> = new Set()
-const NO_GUIDES: readonly SnapGuide[] = []
 // Screen pixels within which a dragged block snaps to another card's edge or center.
 const SNAP_SCREEN_PX = 6
 
@@ -79,7 +72,8 @@ export function useBoardSelection(worktreeId: string | null, tool: BoardTool): B
     raw: { x: number; y: number }
     applied: { x: number; y: number }
   } | null>(null)
-  const [guides, setGuides] = useState<readonly SnapGuide[]>(NO_GUIDES)
+  // Alignment guides live in their own store (board-snap-guides.ts) so a drag
+  // frame never re-renders the Board route; the cards layer reads them.
 
   const onDragBy = useCallback(
     (cardId: string, dx: number, dy: number) => {
@@ -111,14 +105,14 @@ export function useBoardSelection(worktreeId: string | null, tool: BoardTool): B
       const target = { x: d.raw.x + snap.dx, y: d.raw.y + snap.dy }
       state.moveCards(worktreeId, d.ids, target.x - d.applied.x, target.y - d.applied.y)
       d.applied = target
-      setGuides(snap.guides.length ? snap.guides : NO_GUIDES)
+      setBoardSnapGuides(snap.guides.length ? snap.guides : NO_GUIDES)
     },
     [worktreeId]
   )
 
   const onDragEnd = useCallback(() => {
     drag.current = null
-    setGuides(NO_GUIDES)
+    setBoardSnapGuides(NO_GUIDES)
   }, [])
 
   const clear = useCallback(() => setSelectedIds(EMPTY), [])
@@ -142,11 +136,10 @@ export function useBoardSelection(worktreeId: string | null, tool: BoardTool): B
       onSelect,
       onDragBy,
       onDragEnd,
-      guides,
       clear,
       removeSelected,
       selectOnly
     }),
-    [clear, guides, onDragBy, onDragEnd, onSelect, removeSelected, selectOnly, selectedIds]
+    [clear, onDragBy, onDragEnd, onSelect, removeSelected, selectOnly, selectedIds]
   )
 }

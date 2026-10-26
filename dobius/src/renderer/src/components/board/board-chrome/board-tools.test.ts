@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boardToolForKey, boardToolPansOnEmptyDrag } from './board-tools'
+import { boardToolForKey, boardToolSelectsOnEmptyDrag } from './board-tools'
 
 const bare = { metaKey: false, ctrlKey: false, altKey: false }
 
@@ -20,7 +20,7 @@ describe('board tool keys', () => {
   })
 
   it('pans on empty drag only with the select tool', () => {
-    expect(boardToolPansOnEmptyDrag('select')).toBe(true)
-    expect(boardToolPansOnEmptyDrag('pen')).toBe(false)
+    expect(boardToolSelectsOnEmptyDrag('select')).toBe(true)
+    expect(boardToolSelectsOnEmptyDrag('pen')).toBe(false)
   })
 })

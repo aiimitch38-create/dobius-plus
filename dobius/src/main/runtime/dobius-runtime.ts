@@ -1105,6 +1105,10 @@ type RuntimeHeadlessTerminal = {
   // Why: glance cards poll the snapshot every few seconds per console; serializing
   // the whole screen again for an unchanged emulator is pure waste.
   snapshotCache?: { key: string; snapshot: TerminalSnapshot; data: string }
+  // Why: a state lazily created by the first live byte (before the renderer
+  // registered its serializer) holds only output since then. It must still be
+  // seeded from the renderer once that registers, or the snapshot stays blank.
+  awaitingRendererHydration?: boolean
 }
 
 type HeadlessSeedMetadata = {
@@ -5866,7 +5870,8 @@ export class DobiusRuntimeService {
     if (this.headlessHydrationState.has(ptyId)) {
       return
     }
-    if (this.headlessTerminals.has(ptyId)) {
+    const lazy = this.headlessTerminals.get(ptyId)
+    if (lazy && !lazy.awaitingRendererHydration) {
       // Daemon-snapshot seed already populated the emulator — skip hydration.
       this.headlessHydrationState.set(ptyId, 'done')
       return
@@ -5877,17 +5882,19 @@ export class DobiusRuntimeService {
     }
     if (!controller.hasRendererSerializer(ptyId)) {
       // Renderer hasn't registered yet (or never will). Live writes lazy-
-      // create the state via trackHeadlessTerminalData on this same tick.
+      // create the state via trackHeadlessTerminalData on this same tick;
+      // that state stays flagged so a later byte or snapshot read retries.
       return
     }
 
     this.headlessHydrationState.set(ptyId, 'pending')
     const dims = this.getTerminalSize(ptyId) ?? { cols: 80, rows: 24 }
-    const state: RuntimeHeadlessTerminal = {
+    const state: RuntimeHeadlessTerminal = lazy ?? {
       emulator: this.createHeadlessEmulator(ptyId, { cols: dims.cols, rows: dims.rows }),
       outputSequence: 0,
       writeChain: Promise.resolve()
     }
+    state.awaitingRendererHydration = false
     this.headlessTerminals.set(ptyId, state)
 
     // Why: append the seed work to writeChain so live writes queued by
@@ -5906,10 +5913,19 @@ export class DobiusRuntimeService {
         }
         this.recordOsc7MetadataForPty(ptyId, rendered.data)
         this.recordRecentPtyOutputForPathProvenance(ptyId, rendered.data)
-        // Resize to renderer's dims so the seed reflows correctly into the
-        // emulator's grid, then resize back to PTY dims (if known) so live
-        // writes use the correct cell layout.
-        if (rendered.cols !== dims.cols || rendered.rows !== dims.rows) {
+        if (lazy) {
+          // Why: the lazily created emulator already painted the bytes the
+          // renderer buffer also holds; seeding on top would double them.
+          // Swapping inside writeChain keeps later live bytes landing on top.
+          state.emulator.dispose()
+          state.emulator = this.createHeadlessEmulator(ptyId, {
+            cols: rendered.cols,
+            rows: rendered.rows
+          })
+        } else if (rendered.cols !== dims.cols || rendered.rows !== dims.rows) {
+          // Resize to renderer's dims so the seed reflows correctly into the
+          // emulator's grid, then resize back to PTY dims (if known) so live
+          // writes use the correct cell layout.
           state.emulator.resize(rendered.cols, rendered.rows)
         }
         await state.emulator.write(rendered.data)
@@ -5984,7 +6000,8 @@ export class DobiusRuntimeService {
     const state: RuntimeHeadlessTerminal = {
       emulator: this.createHeadlessEmulator(ptyId, { cols: size.cols, rows: size.rows }),
       outputSequence: 0,
-      writeChain: Promise.resolve()
+      writeChain: Promise.resolve(),
+      awaitingRendererHydration: true
     }
     this.headlessTerminals.set(ptyId, state)
     return state
@@ -6173,6 +6190,11 @@ export class DobiusRuntimeService {
     const state = this.headlessTerminals.get(ptyId)
     if (!state) {
       return null
+    }
+    // Why: an idle TUI may emit nothing after its first post-attach byte, so no
+    // later live byte would ever retry the renderer seed; the read itself does.
+    if (state.awaitingRendererHydration) {
+      this.maybeHydrateHeadlessFromRenderer(ptyId)
     }
     await state.writeChain
     // Why: when an alternate-screen TUI (Claude Code, vim, etc.) is currently

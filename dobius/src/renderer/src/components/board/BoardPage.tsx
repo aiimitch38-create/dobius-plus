@@ -17,7 +17,7 @@ import { BoardToolRail } from './board-chrome/BoardToolRail'
 import { BoardZoomControl } from './board-chrome/BoardZoomControl'
 import { BoardTopBar, type BoardTopBarProps } from './board-chrome/BoardTopBar'
 import {
-  boardToolPansOnEmptyDrag,
+  boardToolSelectsOnEmptyDrag,
   type BoardInsertKind,
   type BoardTool
 } from './board-chrome/board-tools'
@@ -37,8 +37,8 @@ export type BoardPageProps = {
   onViewportChange: (viewport: BoardViewport) => void
   tool: BoardTool
   onToolChange: (tool: BoardTool) => void
-  /** World-space rects of every card; used by Fit view. */
-  contentRects: readonly BoardRect[]
+  /** World-space rects of every card, read when Fit view runs (positions change every drag frame). */
+  getContentRects: () => readonly BoardRect[]
   /** Primary pointer-down on empty canvas (world coords); drawing tools start here. */
   onEmptyPointerDown?: (world: BoardPoint, event: React.PointerEvent<HTMLDivElement>) => void
   /** Pointer hovering empty canvas (null when it leaves); placing tools ghost here. */
@@ -48,7 +48,8 @@ export type BoardPageProps = {
   onInsertPreview?: (kind: BoardInsertKind | null) => void
   spaceHeld?: boolean
   onSpacePanStart?: () => void
-  onMarquee?: (rect: { x: number; y: number; w: number; h: number }) => void
+  /** Drag on empty canvas (select tool); `additive` for Shift+drag. */
+  onMarquee?: (rect: { x: number; y: number; w: number; h: number }, additive: boolean) => void
   onEmptyContextMenu?: (screen: BoardPoint, world: BoardPoint) => void
   /** Floating UI above the chrome (agent picker, studios, dialogs). */
   overlay?: React.ReactNode
@@ -70,7 +71,7 @@ export function BoardPage({
   onViewportChange,
   tool,
   onToolChange,
-  contentRects,
+  getContentRects,
   onEmptyPointerDown,
   onEmptyPointerMove,
   onToolPreview,
@@ -101,7 +102,10 @@ export function BoardPage({
     const canvas = canvasRef.current
     if (canvas) {
       onViewportChange(
-        fitBoardViewport(contentRects, { width: canvas.clientWidth, height: canvas.clientHeight })
+        fitBoardViewport(getContentRects(), {
+          width: canvas.clientWidth,
+          height: canvas.clientHeight
+        })
       )
     }
   }
@@ -124,7 +128,7 @@ export function BoardPage({
         viewport={viewport}
         onViewportChange={onViewportChange}
         containerRef={canvasRef}
-        panOnEmptyDrag={boardToolPansOnEmptyDrag(tool)}
+        selectOnEmptyDrag={boardToolSelectsOnEmptyDrag(tool)}
         onEmptyPointerDown={onEmptyPointerDown}
         onEmptyPointerMove={onEmptyPointerMove}
         spaceHeld={spaceHeld}

@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 import { getBoard } from '@/store/slices/board'
 import { focusBoardCard } from '../board-canvas/board-camera-focus'
+import { BOARD_USER_PAN_EVENT } from '../board-canvas/board-pan-event'
 import { BOARD_FLOATING_PANEL_CLASS } from '../board-chrome/board-surface-classes'
 import { agentControl } from './agent-control-api'
 import {
@@ -244,17 +245,13 @@ function useFollowCamera(followed: AgentPresence | null, worktreeId: string | nu
         stopFollowingByUser()
       }
     }
-    const onPointerDown = (event: Event): void => {
-      // Why: a click on a card is not a pan; only empty-canvas presses count.
-      if (!(event.target instanceof Element) || !event.target.closest('[data-board-card]')) {
-        userMovedCamera()
-      }
-    }
+    // Why: a plain empty-canvas drag selects (marquee), not pans, so the canvas
+    // reports pointer pans (Space+drag, middle-drag) through its own event.
     canvas.addEventListener('wheel', userMovedCamera, { capture: true, passive: true })
-    canvas.addEventListener('pointerdown', onPointerDown, true)
+    canvas.addEventListener(BOARD_USER_PAN_EVENT, userMovedCamera)
     return () => {
       canvas.removeEventListener('wheel', userMovedCamera, { capture: true })
-      canvas.removeEventListener('pointerdown', onPointerDown, true)
+      canvas.removeEventListener(BOARD_USER_PAN_EVENT, userMovedCamera)
     }
   }, [followId])
 }

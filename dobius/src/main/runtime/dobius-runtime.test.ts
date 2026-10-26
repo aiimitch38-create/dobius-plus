@@ -5967,6 +5967,115 @@ describe('DobiusRuntimeService', () => {
     })
   })
 
+  // Why these tests: the renderer settles its serializer only after attach
+  // resolves, so the first live bytes usually land first and lazily create an
+  // empty headless emulator. Board glance cards and hidden-output restores read
+  // that emulator, so it must still be seeded from the renderer afterwards.
+  it('seeds a lazily created headless terminal from the renderer when a snapshot is read', async () => {
+    let rendererRegistered = false
+    const serializeBuffer = vi.fn().mockResolvedValue({
+      data: 'restored scrollback\r\nagent reply\r\n',
+      cols: 80,
+      rows: 24
+    })
+    const runtime = createRuntime()
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null,
+      serializeBuffer,
+      hasRendererSerializer: () => rendererRegistered,
+      getSize: () => ({ cols: 80, rows: 24 })
+    })
+    syncSinglePty(runtime, 'pty-1')
+
+    // First byte arrives before the renderer registered: lazy, empty emulator.
+    runtime.onPtyData('pty-1', '\x1b]0;Claude\x07', 100)
+    expect(serializeBuffer).not.toHaveBeenCalled()
+    rendererRegistered = true
+
+    const snapshot = await runtime.serializeHiddenOutputRecoveryBuffer('pty-1', {
+      scrollbackRows: 0
+    })
+    expect(snapshot).toMatchObject({ source: 'headless', cols: 80, rows: 24 })
+    expect(serializeBuffer).toHaveBeenCalledTimes(1)
+    expect(serializeBuffer).toHaveBeenCalledWith('pty-1', {
+      scrollbackRows: expect.any(Number),
+      altScreenForcesZeroRows: true
+    })
+    await expect(
+      parseHeadlessSnapshotLines(snapshot!, { cols: 80, rows: 24 })
+    ).resolves.toEqual(['restored scrollback', 'agent reply'])
+
+    // Later live output lands on top of the seed, and the seed runs only once.
+    runtime.onPtyData('pty-1', 'more output\r\n', 200)
+    const after = await runtime.serializeHiddenOutputRecoveryBuffer('pty-1', { scrollbackRows: 0 })
+    await expect(parseHeadlessSnapshotLines(after!, { cols: 80, rows: 24 })).resolves.toEqual([
+      'restored scrollback',
+      'agent reply',
+      'more output'
+    ])
+    expect(serializeBuffer).toHaveBeenCalledTimes(1)
+  })
+
+  it('seeds a lazily created headless terminal on the next live byte after the renderer registers', async () => {
+    let rendererRegistered = false
+    const serializeBuffer = vi.fn().mockResolvedValue({
+      data: 'restored scrollback\r\n',
+      cols: 80,
+      rows: 24
+    })
+    const runtime = createRuntime()
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null,
+      serializeBuffer,
+      hasRendererSerializer: () => rendererRegistered,
+      getSize: () => ({ cols: 80, rows: 24 })
+    })
+    syncSinglePty(runtime, 'pty-1')
+
+    runtime.onPtyData('pty-1', 'early byte\r\n', 100)
+    rendererRegistered = true
+    runtime.onPtyData('pty-1', 'live byte\r\n', 200)
+
+    const snapshot = await runtime.serializeHiddenOutputRecoveryBuffer('pty-1', {
+      scrollbackRows: 0
+    })
+    expect(serializeBuffer).toHaveBeenCalledTimes(1)
+    await expect(parseHeadlessSnapshotLines(snapshot!, { cols: 80, rows: 24 })).resolves.toEqual([
+      'restored scrollback',
+      'live byte'
+    ])
+  })
+
+  it('does not re-seed a daemon-seeded headless terminal from the renderer', async () => {
+    const serializeBuffer = vi.fn().mockResolvedValue({ data: 'renderer\r\n', cols: 80, rows: 24 })
+    const runtime = createRuntime()
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null,
+      serializeBuffer,
+      hasRendererSerializer: () => true,
+      getSize: () => ({ cols: 80, rows: 24 })
+    })
+    syncSinglePty(runtime, 'pty-1')
+
+    runtime.seedHeadlessTerminal('pty-1', 'daemon seed\r\n', { cols: 80, rows: 24 })
+    runtime.onPtyData('pty-1', 'live\r\n', 100)
+
+    const snapshot = await runtime.serializeHiddenOutputRecoveryBuffer('pty-1', {
+      scrollbackRows: 0
+    })
+    expect(serializeBuffer).not.toHaveBeenCalled()
+    await expect(parseHeadlessSnapshotLines(snapshot!, { cols: 80, rows: 24 })).resolves.toEqual([
+      'daemon seed',
+      'live'
+    ])
+  })
+
   it('keeps an empty headless snapshot authoritative for hidden-output recovery', async () => {
     const serializeBuffer = vi.fn().mockResolvedValue({
       data: 'stale renderer content\r\n',

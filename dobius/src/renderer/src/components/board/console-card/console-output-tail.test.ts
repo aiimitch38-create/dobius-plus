@@ -106,6 +106,25 @@ describe('consoleScreenRuns', () => {
     expect(rows.map((r) => r.map((run) => run.text).join(''))).toEqual(['abcdefghij', 'KLM'])
     term.dispose()
   })
+
+  it('yields no rows only for a truly empty screen', async () => {
+    const term = new Terminal({ cols: 20, rows: 5, allowProposedApi: true })
+    expect(consoleScreenRuns(term.buffer.active, term.cols)).toEqual([])
+    // Cursor-only control bytes (what an idle TUI may emit) still leave the screen empty.
+    await writeAll(term, '\x1b[?25l\x1b[H')
+    expect(consoleScreenRuns(term.buffer.active, term.cols)).toEqual([])
+    await writeAll(term, '$ ')
+    expect(consoleScreenRuns(term.buffer.active, term.cols)).toHaveLength(1)
+    term.dispose()
+  })
+
+  it('reads an alternate-screen TUI frame as the rows the user sees', async () => {
+    const term = new Terminal({ cols: 20, rows: 4, allowProposedApi: true })
+    await writeAll(term, 'shell prompt\r\n\x1b[?1049h\x1b[H\x1b[2J╭ Claude ╮\r\n│ Done   │')
+    const rows = consoleScreenRuns(term.buffer.active, term.cols)
+    expect(rows.map((r) => r.map((run) => run.text).join(''))).toEqual(['╭ Claude ╮', '│ Done   │'])
+    term.dispose()
+  })
 })
 
 describe('glance polling policy', () => {

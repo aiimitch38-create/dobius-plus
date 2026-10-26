@@ -236,6 +236,7 @@ type StoreState = {
   getAgentLaunchConfigForStatusMetadata: ReturnType<typeof vi.fn>
   clearSleepingAgentSession: ReturnType<typeof vi.fn>
   registerAgentLaunchConfig: ReturnType<typeof vi.fn>
+  queueTabStartupCommand: ReturnType<typeof vi.fn>
   clearAgentLaunchConfig: ReturnType<typeof vi.fn>
   markWorktreeUnread: ReturnType<typeof vi.fn>
   observeTerminalGitHubPullRequestLink: ReturnType<typeof vi.fn>
@@ -815,6 +816,7 @@ describe('connectPanePty', () => {
         delete mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]
       }),
       registerAgentLaunchConfig: vi.fn(),
+      queueTabStartupCommand: vi.fn(),
       clearAgentLaunchConfig: vi.fn(),
       markWorktreeUnread: vi.fn(),
       observeTerminalGitHubPullRequestLink: vi.fn(),
@@ -15510,6 +15512,128 @@ describe('connectPanePty', () => {
       expect(getSize).toHaveBeenCalledTimes(1)
       resolveSize({ cols: 120, rows: 40 })
       await flushAsyncTicks()
+    })
+  })
+
+  describe('startup command survives a pre-spawn remount', () => {
+    function holdAnimationFrames(): void {
+      // Why: a Board console slot re-home remounts the pane while the startup
+      // grid never settles; queued-but-never-run frames model that window.
+      globalThis.requestAnimationFrame = vi.fn(() => 1)
+    }
+
+    it('hands the startup command back to the queue when disposed before spawning', async () => {
+      holdAnimationFrames()
+      const { connectPanePty } = await import('./pty-connection')
+      const transport = createMockTransport('pty-never')
+      transportFactoryQueue.push(transport)
+      mockStoreState = {
+        ...mockStoreState,
+        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null, launchAgent: 'claude' }] },
+        repos: [{ id: 'repo1', connectionId: null }]
+      }
+      const startup = {
+        command: "claude '--dangerously-skip-permissions'",
+        launchAgent: 'claude',
+        launchConfig: { agentCommand: 'claude', agentArgs: null, agentEnv: {} },
+        waitForSetupSplitDirection: 'vertical'
+      }
+
+      const binding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ startup }) as never
+      )
+      expect(transport.connect).not.toHaveBeenCalled()
+
+      binding.dispose()
+
+      expect(mockStoreState.queueTabStartupCommand).toHaveBeenCalledTimes(1)
+      const [tabId, requeued] = mockStoreState.queueTabStartupCommand.mock.calls[0]
+      expect(tabId).toBe('tab-1')
+      expect(requeued).toMatchObject({
+        command: "claude '--dangerously-skip-permissions'",
+        launchAgent: 'claude',
+        launchToken: expect.any(String)
+      })
+      expect(requeued).not.toHaveProperty('waitForSetupSplitDirection')
+    })
+
+    it('does not requeue once the spawn resolved to a PTY', async () => {
+      const { connectPanePty } = await import('./pty-connection')
+      const transport = createMockTransport('pty-spawned')
+      transportFactoryQueue.push(transport)
+      mockStoreState = {
+        ...mockStoreState,
+        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
+        repos: [{ id: 'repo1', connectionId: null }]
+      }
+
+      const binding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ startup: { command: 'codex' } }) as never
+      )
+      await flushAsyncTicks()
+      expect(transport.connect).toHaveBeenCalledTimes(1)
+
+      binding.dispose()
+
+      expect(mockStoreState.queueTabStartupCommand).not.toHaveBeenCalled()
+    })
+
+    it('requeues when the spawn was issued but torn down before a PTY resolved', async () => {
+      const { connectPanePty } = await import('./pty-connection')
+      const transport = createMockTransport('pty-late')
+      const spawnResolvers: Array<(value: string | null) => void> = []
+      transport.connect.mockImplementation(
+        () => new Promise<string | null>((resolve) => spawnResolvers.push(resolve))
+      )
+      transportFactoryQueue.push(transport)
+      mockStoreState = {
+        ...mockStoreState,
+        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
+        repos: [{ id: 'repo1', connectionId: null }]
+      }
+
+      const binding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ startup: { command: 'hermes' } }) as never
+      )
+      await flushAsyncTicks()
+      expect(transport.connect).toHaveBeenCalledTimes(1)
+
+      binding.dispose()
+      spawnResolvers[0]?.(null)
+      await flushAsyncTicks()
+
+      expect(mockStoreState.queueTabStartupCommand).toHaveBeenCalledWith(
+        'tab-1',
+        expect.objectContaining({ command: 'hermes' })
+      )
+    })
+
+    it('does not requeue when the tab was closed', async () => {
+      holdAnimationFrames()
+      const { connectPanePty } = await import('./pty-connection')
+      transportFactoryQueue.push(createMockTransport('pty-closed'))
+      mockStoreState = {
+        ...mockStoreState,
+        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
+        repos: [{ id: 'repo1', connectionId: null }]
+      }
+
+      const binding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ startup: { command: 'codex' } }) as never
+      )
+      mockStoreState = { ...mockStoreState, tabsByWorktree: { 'wt-1': [] } }
+
+      binding.dispose()
+
+      expect(mockStoreState.queueTabStartupCommand).not.toHaveBeenCalled()
     })
   })
 })

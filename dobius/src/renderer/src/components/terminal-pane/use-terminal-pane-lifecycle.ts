@@ -646,7 +646,14 @@ export function useTerminalPaneLifecycle({
     )
     queuedInitialCwdRef.current = initialCwdResolution.queuedInitialCwd
     const startupCwd = initialCwdResolution.startupCwd
-    const terminalHomePath = resolveTerminalHomePathFromEnv(startup?.env)
+    // Why: TerminalPane captures the queued startup on its first render only.
+    // A pane remounted before its first connect spawned (Board console slot
+    // re-home) has no `startup` prop, but the disposed connect handed the
+    // command back to the queue, so take it from there. Always consume so a
+    // stale queue entry cannot launch the agent a second time later.
+    const queuedStartup = useAppStore.getState().consumeTabStartupCommand(tabId)
+    const effectiveStartup = startup ?? queuedStartup ?? null
+    const terminalHomePath = resolveTerminalHomePathFromEnv(effectiveStartup?.env)
     const getPaneLinkCwd = (paneId: number): string =>
       resolvePaneLinkCwd(paneCwdRef.current, paneId, startupCwd)
     // Why: existence probes can cross SSH/runtime boundaries. This cache is
@@ -715,9 +722,9 @@ export function useTerminalPaneLifecycle({
     }
     let shouldPersistLayout = false
     const startupWithSetupSplitWait =
-      startup && setupSplit
-        ? { ...startup, waitForSetupSplitDirection: setupSplit.direction }
-        : startup
+      effectiveStartup && setupSplit
+        ? { ...effectiveStartup, waitForSetupSplitDirection: setupSplit.direction }
+        : effectiveStartup
     const ptyDeps = {
       tabId,
       worktreeId,

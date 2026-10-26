@@ -31,6 +31,7 @@ import {
   type HasPty
 } from './terminal-dead-session-reconcile'
 import type { PtyConnectionDeps } from './pty-connection-types'
+import { shouldRequeueStartupOnDispose, startupToRequeue } from './terminal-startup-requeue'
 import { canMeasurePaneForFit, safeFit } from '@/lib/pane-manager/pane-tree-ops'
 import { requestStablePaneFit } from '@/lib/pane-manager/pane-fit-resize-observer'
 import { getFitOverrideForPty, bindPanePtyId } from '@/lib/pane-manager/mobile-fit-overrides'
@@ -1070,6 +1071,9 @@ export function connectPanePty(
   let startupGridSettleHandle: TerminalStartupGridSettleHandle | null = null
   let startupGridSettledForConnect = false
   let connectStarted = false
+  // Why: true once a fresh spawn carrying the pane's startup command resolved
+  // to a PTY; dispose() hands the command back to the store until then.
+  let startupSpawnBound = false
   let unregisterBacklogRecovery: (() => void) | null = null
   let unregisterDocumentVisibilityRecovery: (() => void) | null = null
   let cleanupHiddenOutputRestoreDeferredRetry = (): void => {}
@@ -3906,6 +3910,13 @@ export function connectPanePty(
             })
           }
           if (resolvedPtyId) {
+            // Why: the transport carries paneStartup's command in its spawn
+            // options; a PTY id means the daemon now owns delivering it. A
+            // spawn torn down before this point resolves without an id and the
+            // remount's retry spawns bare, so only a bound PTY ends the requeue.
+            startupSpawnBound = true
+          }
+          if (resolvedPtyId) {
             if (coldRestoreOverride?.hasSleepingRecord) {
               showSessionRestoredBanner()
             }
@@ -6444,6 +6455,22 @@ export function connectPanePty(
     reconcileIfSessionMissing,
     dispose() {
       disposed = true
+      // Why: a pane remounted before this connect spawned (Board console slot
+      // re-home while waiting for a stable startup grid) reads the startup
+      // queue on its next mount, so put the un-spawned command back there.
+      if (
+        shouldRequeueStartupOnDispose({
+          startup: paneStartup,
+          spawnBound: startupSpawnBound,
+          tabStillOpen: (useAppStore.getState().tabsByWorktree[deps.worktreeId] ?? []).some(
+            (tab) => tab.id === deps.tabId
+          )
+        })
+      ) {
+        useAppStore
+          .getState()
+          .queueTabStartupCommand(deps.tabId, startupToRequeue(paneStartup!, launchToken))
+      }
       if (activeReattachOutputGate) {
         activeReattachOutputGate.discard()
         activeReattachOutputGate = null

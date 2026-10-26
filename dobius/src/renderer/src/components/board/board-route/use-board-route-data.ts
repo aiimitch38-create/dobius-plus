@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
 import { useWorktreesForRepo } from '@/store/selectors'
-import { getBoard, type BoardCardOf, type BoardState } from '@/store/slices/board'
+import type { BoardCardOf, BoardState } from '@/store/slices/board'
 import { useDetectedAgents } from '@/hooks/useDetectedAgents'
 import { getAgentLabel } from '@/lib/agent-catalog'
 import { filterEnabledTuiAgents } from '../../../../../shared/tui-agent-selection'
@@ -9,6 +10,7 @@ import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../../shared/agent-status-
 import type { BoardAgentOption } from '../board-chrome/BoardAgentPicker'
 import type { BoardProjectOption, BoardWorkspaceTab } from '../board-chrome/BoardTopBar'
 import { boardConsoleActivity } from './board-console-activity'
+import { boardShapeSelector, consoleCountsByWorktree } from './board-shape'
 import { boardUsageSummary, type BoardUsageSummary } from './board-usage-summary'
 import { boardWorkspaceTabs } from './board-workspace-tabs'
 
@@ -35,7 +37,11 @@ export function useBoardRouteData(): BoardRouteData {
       s.activeRepoId
   )
   const repos = useAppStore((s) => s.repos)
-  const boardsByWorktree = useAppStore((s) => s.boardsByWorktree)
+  // Why: both selectors hold their value across position-only card changes, so
+  // a card drag (a store write per pointer move) never re-renders the route.
+  const selectBoard = useMemo(() => boardShapeSelector(worktreeId), [worktreeId])
+  const board = useAppStore(selectBoard)
+  const consoleCounts = useAppStore(useShallow((s) => consoleCountsByWorktree(s.boardsByWorktree)))
   const worktrees = useWorktreesForRepo(repoId)
   const agentStatusByPaneKey = useAppStore((s) => s.agentStatusByPaneKey)
   const acknowledgedAgentsByPaneKey = useAppStore((s) => s.acknowledgedAgentsByPaneKey)
@@ -67,19 +73,15 @@ export function useBoardRouteData(): BoardRouteData {
     [rateLimits]
   )
 
-  const board = getBoard({ boardsByWorktree }, worktreeId)
   const consoles = useMemo(
     () => board.cards.filter((c): c is BoardCardOf<'console'> => c.kind === 'console'),
     [board.cards]
   )
 
-  const workspaces = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const [id, b] of Object.entries(boardsByWorktree)) {
-      counts[id] = b.cards.filter((c) => c.kind === 'console').length
-    }
-    return boardWorkspaceTabs(worktrees, counts)
-  }, [boardsByWorktree, worktrees])
+  const workspaces = useMemo(
+    () => boardWorkspaceTabs(worktrees, consoleCounts),
+    [consoleCounts, worktrees]
+  )
 
   // Computed per render (cheap): subscribing to statusEpoch re-renders as entries go stale.
   const { live, needsYou } = boardConsoleActivity(

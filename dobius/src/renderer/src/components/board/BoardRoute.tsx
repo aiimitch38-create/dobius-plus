@@ -8,9 +8,8 @@ import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 import { BoardPage } from './BoardPage'
-import { boardFreeSpawnCenter, boardSpawnBlockSize } from './board-canvas/board-spawn-placement'
-import { screenToWorld, type BoardPoint, type BoardViewport } from './board-canvas/board-viewport'
-import { boardSafeWorldArea } from './board-canvas/board-reveal'
+import { boardSpawnBlockSize } from './board-canvas/board-spawn-placement'
+import type { BoardPoint } from './board-canvas/board-viewport'
 import { boardGhostOf, pushBoardGhosts } from './board-canvas/board-ghost-store'
 import { BoardAgentPicker, type BoardAgentPickerRequest } from './board-chrome/BoardAgentPicker'
 import { spawnTeamOnBoard } from './board-chrome/board-team-spawn'
@@ -30,7 +29,8 @@ import { BoardToolOptionsPanel } from './board-tool-panels/BoardToolOptionsPanel
 import { BoardCardStyleInspector } from './board-tool-panels/BoardCardStyleInspector'
 import { useCardStyleEditor } from './board-tool-panels/card-style-editor'
 import type { BoardStudioId } from './board-studios/board-studio-ids'
-import { BoardCardsLayer } from './board-route/BoardCardsLayer'
+import { BoardLiveCardsLayer } from './board-route/BoardLiveCardsLayer'
+import { useBoardLiveGeometry } from './board-route/use-board-live-geometry'
 import { boardInsertCard, type BoardInsertCardKind } from './board-route/board-insert-cards'
 import { useBoardShapeDraw } from './board-route/use-board-shape-draw'
 import { useBoardPlacementPreview } from './board-route/use-board-placement-preview'
@@ -50,14 +50,6 @@ import { BoardFocusPill } from './board-route/BoardFocusPill'
 import { BoardShortcutSheet } from './board-route/BoardShortcutSheet'
 import { BoardEmptyStart } from './board-empty/BoardEmptyStart'
 import { useBoardEmptyStart } from './board-empty/use-board-empty-start'
-
-// The expanded thread (560x~602, 28px above the bottom, centered) is treated as
-// occupied even when collapsed, so a card never lands where the thread opens.
-function threadWorldRect(v: BoardViewport): { x: number; y: number; w: number; h: number } {
-  const tl = screenToWorld({ x: window.innerWidth / 2 - 280, y: window.innerHeight - 630 }, v)
-  const br = screenToWorld({ x: window.innerWidth / 2 + 280, y: window.innerHeight - 28 }, v)
-  return { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y }
-}
 
 type PickerState = { request: BoardAgentPickerRequest; world: BoardPoint; group?: boolean }
 
@@ -105,19 +97,9 @@ export default function BoardRoute(): React.JSX.Element {
   const conductor = useBoardConductor(openSettings, data.repoId)
   const selection = useBoardSelection(worktreeId, board.tool)
   const pen = useBoardPen(worktreeId, board.viewport)
-  // Chrome insets (rails, top bar, collapsed command bar) bound the visible area
-  // new consoles may use, so they never land hidden under the composer.
-  const freeCenter = useCallback(
-    (block: { w: number; h: number }): BoardPoint => {
-      const v = board.viewport
-      return boardFreeSpawnCenter(
-        boardSafeWorldArea(v, { w: window.innerWidth, h: window.innerHeight }),
-        block,
-        [...board.cards, threadWorldRect(v)]
-      )
-    },
-    [board.cards, board.viewport]
-  )
+  // Why: `board` above ignores card geometry (board-shape.ts) so a drag never
+  // re-renders the chrome; placement and Fit view read live positions here.
+  const { freeCenter, getContentRects } = useBoardLiveGeometry(worktreeId)
   const pickerSpot = useMemo(
     () => (picker ? { world: picker.world, count: picker.request.count } : null),
     [picker]
@@ -205,7 +187,6 @@ export default function BoardRoute(): React.JSX.Element {
   const images = useBoardImageInsert(worktreeId, () => setTool('select'))
   const canvasMenu = useBoardCanvasMenu({
     worktreeId,
-    board,
     selection,
     spawnAt: (at, count) => setPicker({ request: { count, screen: at.screen }, world: at.world }),
     spawnGroup: (at) =>
@@ -328,7 +309,7 @@ export default function BoardRoute(): React.JSX.Element {
         }
         tool={board.tool}
         onToolChange={setTool}
-        contentRects={board.cards.map((c) => ({ x: c.x, y: c.y, width: c.w, height: c.h }))}
+        getContentRects={getContentRects}
         onEmptyPointerDown={onEmptyPointerDown}
         onEmptyPointerMove={preview.onEmptyPointerMove}
         onToolPreview={preview.onToolPreview}
@@ -428,14 +409,12 @@ export default function BoardRoute(): React.JSX.Element {
         }
       >
         {worktreeId ? (
-          <BoardCardsLayer
+          <BoardLiveCardsLayer
             worktreeId={worktreeId}
-            board={board}
             selectedIds={selection.selectedIds}
             onSelect={selection.onSelect}
             onDragBy={selection.onDragBy}
             onDragEnd={selection.onDragEnd}
-            guides={selection.guides}
             penPoints={pen.points}
             shapeDraft={shapeDraw.draft}
           />

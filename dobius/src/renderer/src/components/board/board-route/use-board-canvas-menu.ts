@@ -1,7 +1,7 @@
 import { openBoardSnapshotRestore } from '../board-snapshots/board-snapshot-restore'
 import { useState } from 'react'
 import { useAppStore } from '@/store'
-import type { BoardState } from '@/store/slices/board'
+import { getBoard } from '@/store/slices/board'
 import { fitBoardViewport, type BoardPoint } from '../board-canvas/board-viewport'
 import type { BoardCanvasMenuAction } from '../board-chrome/BoardCanvasMenu'
 import { BOARD_ZOOM_EVENT } from '../board-zoom-event'
@@ -11,10 +11,9 @@ import type { BoardSelection } from './use-board-selection'
 
 type MenuPoint = { screen: BoardPoint; world: BoardPoint }
 
-/** Right-click canvas menu and Shift+drag marquee selection. */
+/** Right-click canvas menu and drag-to-select marquee (Shift+drag adds). */
 export function useBoardCanvasMenu(args: {
   worktreeId: string | null
-  board: BoardState
   selection: BoardSelection
   spawnAt: (at: MenuPoint, count: number) => void
   /** Four grouped consoles at a free spot (clear of cards and the Thread). */
@@ -26,9 +25,9 @@ export function useBoardCanvasMenu(args: {
   open: (screen: BoardPoint, world: BoardPoint) => void
   close: () => void
   onAction: (action: BoardCanvasMenuAction) => void
-  onMarquee: (rect: { x: number; y: number; w: number; h: number }) => void
+  onMarquee: (rect: { x: number; y: number; w: number; h: number }, additive?: boolean) => void
 } {
-  const { worktreeId, board, selection } = args
+  const { worktreeId, selection } = args
   const [at, setAt] = useState<MenuPoint | null>(null)
 
   const onAction = (action: BoardCanvasMenuAction): void => {
@@ -71,12 +70,18 @@ export function useBoardCanvasMenu(args: {
         store.addCard(worktreeId, boardInsertCard(action, point.world))
         return
       case 'selectAll':
-        return selection.selectOnly(board.cards.map((c) => c.id))
+        return selection.selectOnly(getBoard(store, worktreeId).cards.map((c) => c.id))
       case 'fit':
+        // Why: live positions; the route's own board ignores card geometry (board-shape.ts).
         store.setViewport(
           worktreeId,
           fitBoardViewport(
-            board.cards.map((c) => ({ x: c.x, y: c.y, width: c.w, height: c.h })),
+            getBoard(store, worktreeId).cards.map((c) => ({
+              x: c.x,
+              y: c.y,
+              width: c.w,
+              height: c.h
+            })),
             { width: window.innerWidth, height: window.innerHeight }
           )
         )
@@ -89,12 +94,17 @@ export function useBoardCanvasMenu(args: {
     }
   }
 
-  const onMarquee = (rect: { x: number; y: number; w: number; h: number }): void => {
-    const hits = board.cards.filter(
+  // Finder-style: a plain drag replaces the selection, Shift+drag adds to it.
+  const onMarquee = (
+    rect: { x: number; y: number; w: number; h: number },
+    additive = false
+  ): void => {
+    const hits = getBoard(useAppStore.getState(), worktreeId).cards.filter(
       (c) =>
         c.x < rect.x + rect.w && c.x + c.w > rect.x && c.y < rect.y + rect.h && c.y + c.h > rect.y
     )
-    selection.selectOnly(hits.map((c) => c.id))
+    const ids = hits.map((c) => c.id)
+    selection.selectOnly(additive ? [...new Set([...selection.selectedIds, ...ids])] : ids)
   }
 
   return {

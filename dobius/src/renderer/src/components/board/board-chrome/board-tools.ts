@@ -59,7 +59,7 @@ export function isBoardShortcutBlockedTarget(target: EventTarget | null): boolea
   )
 }
 
-/** Only the select tool drags the canvas; drawing tools claim empty-space drags. */
-export function boardToolPansOnEmptyDrag(tool: BoardTool): boolean {
+/** Only the select tool draws a selection box on an empty-space drag; drawing tools claim those drags. */
+export function boardToolSelectsOnEmptyDrag(tool: BoardTool): boolean {
   return tool === 'select'
 }

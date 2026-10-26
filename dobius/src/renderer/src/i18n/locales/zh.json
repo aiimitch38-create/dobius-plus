@@ -14297,6 +14297,9 @@
     "shortcuts": {
       "tools": "Tools",
       "spacePan": "Hold to pan (or talk)",
+      "drag": "Drag",
+      "dragSelect": "Drag on empty space to select cards (Shift adds to the selection)",
+      "spaceDragPan": "Pan the board (or middle-button drag)",
       "consoles": "Consoles",
       "focus": "Zoom to the selected console (or Enter)",
       "click": "Click title",

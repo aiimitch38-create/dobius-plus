@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import {
   BOARD_ZOOM_STEP,
@@ -12,6 +12,7 @@ import {
   type BoardViewport
 } from './board-viewport'
 import { BOARD_ZOOM_EVENT } from '../board-zoom-event'
+import { BOARD_USER_PAN_EVENT } from './board-pan-event'
 import { isBoardShortcutBlockedTarget } from '../board-chrome/board-tools'
 
 type BoardZoomDirection = 'in' | 'out' | 'reset'
@@ -23,14 +24,17 @@ const KEY_ZOOM_DIRECTIONS: Readonly<Record<string, BoardZoomDirection>> = {
   '0': 'reset'
 }
 
+export type BoardMarqueeRect = { x: number; y: number; w: number; h: number }
+
 export type BoardCanvasProps = {
   viewport: BoardViewport
   onViewportChange: (viewport: BoardViewport) => void
   /** Owned by the parent so it can measure the canvas (fit view, centered zoom). */
   containerRef: React.RefObject<HTMLDivElement | null>
-  /** When false, a primary-button drag on empty space is reported instead of panning
-   *  (pen, shapes…). Middle-button drag always pans. */
-  panOnEmptyDrag?: boolean
+  /** Select tool: a primary-button drag on empty space draws the selection box.
+   *  When false (pen, shapes…), the press is only reported via onEmptyPointerDown.
+   *  Panning is Space+drag or a middle-button drag in every tool. */
+  selectOnEmptyDrag?: boolean
   /** Primary pointer-down on empty canvas, in world coordinates. */
   onEmptyPointerDown?: (world: BoardPoint, event: React.PointerEvent<HTMLDivElement>) => void
   /** Pointer hovering (not dragging) over the canvas: world point on empty space,
@@ -40,8 +44,9 @@ export type BoardCanvasProps = {
   spaceHeld?: boolean
   /** Fired when a Space-drag pan starts, so hold-Space push-to-talk can stand down. */
   onSpacePanStart?: () => void
-  /** Shift+drag on empty canvas (select tool): the dragged box in world coords. */
-  onMarquee?: (rect: { x: number; y: number; w: number; h: number }) => void
+  /** Drag on empty canvas (select tool): the dragged box in world coords.
+   *  `additive` is true for Shift+drag (add to the current selection). */
+  onMarquee?: (rect: BoardMarqueeRect, additive: boolean) => void
   /** Right-click on empty canvas, in screen (canvas-local) and world coords. */
   onEmptyContextMenu?: (screen: BoardPoint, world: BoardPoint) => void
   /** World-space content (cards). Elements marked `data-board-wheel="native"` keep
@@ -55,11 +60,20 @@ function localPoint(element: HTMLElement, clientX: number, clientY: number): Boa
   return { x: clientX - rect.left, y: clientY - rect.top }
 }
 
+function marqueeBox(a: BoardPoint, b: BoardPoint): BoardMarqueeRect {
+  return {
+    x: Math.min(a.x, b.x),
+    y: Math.min(a.y, b.y),
+    w: Math.abs(a.x - b.x),
+    h: Math.abs(a.y - b.y)
+  }
+}
+
 export function BoardCanvas({
   viewport,
   onViewportChange,
   containerRef,
-  panOnEmptyDrag = true,
+  selectOnEmptyDrag = true,
   onEmptyPointerDown,
   onEmptyPointerMove,
   spaceHeld = false,
@@ -158,10 +172,14 @@ export function BoardCanvas({
   const isEmptyTarget = (target: EventTarget): boolean =>
     target === containerRef.current || target === worldRef.current
 
-  const startDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
+  // Why: Space+drag and middle-drag are the pans (Figma). The container flags
+  // itself for the grabbing cursor and tells auto-follow the human moved the camera.
+  const startPan = (event: React.PointerEvent<HTMLDivElement>): void => {
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     dragRef.current = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY }
+    event.currentTarget.setAttribute('data-board-panning', '')
+    event.currentTarget.dispatchEvent(new CustomEvent(BOARD_USER_PAN_EVENT, { bubbles: true }))
   }
 
   // Capture phase so the Space-pan wins over the card under the pointer.
@@ -171,57 +189,60 @@ export function BoardCanvas({
     }
     event.stopPropagation()
     onSpacePanStart?.()
-    startDrag(event)
+    startPan(event)
   }
 
-  // Why: a plain empty-space drag pans (spec), so the selection box is Shift+drag.
-  const marqueeRef = useRef<{ pointerId: number; start: BoardPoint } | null>(null)
-  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(
+  // Why: the selection box is drawn straight into its node (no React state), so
+  // a marquee drag never re-renders the canvas or the cards under it.
+  const marqueeRef = useRef<{ pointerId: number; start: BoardPoint; additive: boolean } | null>(
     null
   )
-
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
-    const middle = event.button === 1
-    if (!middle && (event.button !== 0 || !isEmptyTarget(event.target))) {
+  const marqueeElRef = useRef<HTMLDivElement>(null)
+  const paintMarquee = (box: BoardMarqueeRect | null): void => {
+    const el = marqueeElRef.current
+    if (!el) {
       return
     }
-    if (!middle) {
-      // Why: drags preventDefault, so focus would otherwise stay in the last
-      // clicked terminal and swallow board keys (⌘K, ?, tool letters).
-      const active = document.activeElement
-      if (active instanceof HTMLElement && active !== document.body) {
-        active.blur()
-      }
-      const local = localPoint(event.currentTarget, event.clientX, event.clientY)
-      onEmptyPointerDown?.(screenToWorld(local, viewportRef.current), event)
-      if (!panOnEmptyDrag) {
-        return
-      }
-      if (event.shiftKey && onMarquee) {
-        event.preventDefault()
-        event.currentTarget.setPointerCapture(event.pointerId)
-        marqueeRef.current = { pointerId: event.pointerId, start: local }
-        setMarquee({ x: local.x, y: local.y, w: 0, h: 0 })
-        return
-      }
+    if (!box) {
+      el.style.display = 'none'
+      return
     }
-    startDrag(event)
+    el.style.display = 'block'
+    el.style.left = `${box.x}px`
+    el.style.top = `${box.y}px`
+    el.style.width = `${box.w}px`
+    el.style.height = `${box.h}px`
   }
 
-  const marqueeBox = (
-    a: BoardPoint,
-    b: BoardPoint
-  ): { x: number; y: number; w: number; h: number } => ({
-    x: Math.min(a.x, b.x),
-    y: Math.min(a.y, b.y),
-    w: Math.abs(a.x - b.x),
-    h: Math.abs(a.y - b.y)
-  })
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (event.button === 1) {
+      startPan(event)
+      return
+    }
+    if (event.button !== 0 || !isEmptyTarget(event.target)) {
+      return
+    }
+    // Why: drags preventDefault, so focus would otherwise stay in the last
+    // clicked terminal and swallow board keys (⌘K, ?, tool letters).
+    const active = document.activeElement
+    if (active instanceof HTMLElement && active !== document.body) {
+      active.blur()
+    }
+    const local = localPoint(event.currentTarget, event.clientX, event.clientY)
+    onEmptyPointerDown?.(screenToWorld(local, viewportRef.current), event)
+    if (!selectOnEmptyDrag || !onMarquee) {
+      return
+    }
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    marqueeRef.current = { pointerId: event.pointerId, start: local, additive: event.shiftKey }
+    paintMarquee({ x: local.x, y: local.y, w: 0, h: 0 })
+  }
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
     const box = marqueeRef.current
     if (box && box.pointerId === event.pointerId) {
-      setMarquee(
+      paintMarquee(
         marqueeBox(box.start, localPoint(event.currentTarget, event.clientX, event.clientY))
       )
       return
@@ -252,16 +273,24 @@ export function BoardCanvas({
     const box = marqueeRef.current
     if (box && box.pointerId === event.pointerId) {
       marqueeRef.current = null
-      setMarquee(null)
+      paintMarquee(null)
       const local = localPoint(event.currentTarget, event.clientX, event.clientY)
       const screen = marqueeBox(box.start, local)
+      // A plain click (no box) only clears/keeps the selection via onEmptyPointerDown.
+      if (screen.w === 0 && screen.h === 0) {
+        return
+      }
       const v = viewportRef.current
       const topLeft = screenToWorld({ x: screen.x, y: screen.y }, v)
-      onMarquee?.({ x: topLeft.x, y: topLeft.y, w: screen.w / v.zoom, h: screen.h / v.zoom })
+      onMarquee?.(
+        { x: topLeft.x, y: topLeft.y, w: screen.w / v.zoom, h: screen.h / v.zoom },
+        box.additive
+      )
       return
     }
     if (dragRef.current?.pointerId === event.pointerId) {
       dragRef.current = null
+      event.currentTarget.removeAttribute('data-board-panning')
     }
   }
 
@@ -284,11 +313,8 @@ export function BoardCanvas({
         // Why: `overflow-clip`, not hidden — a hidden box still scrolls programmatically
         // (focus reveal), which would shift a web tile under a pressed button.
         'absolute inset-0 touch-none overflow-clip bg-[var(--board-canvas)] select-none',
-        spaceHeld
-          ? 'cursor-grab active:cursor-grabbing'
-          : panOnEmptyDrag
-            ? 'cursor-default active:cursor-grabbing'
-            : 'cursor-crosshair',
+        'data-[board-panning]:cursor-grabbing',
+        spaceHeld ? 'cursor-grab' : selectOnEmptyDrag ? 'cursor-default' : 'cursor-crosshair',
         className
       )}
       style={{
@@ -316,13 +342,14 @@ export function BoardCanvas({
       >
         {children}
       </div>
-      {marquee ? (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute rounded-[2px] border border-[var(--board-accent)] bg-[var(--board-accent-tint)]/40"
-          style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }}
-        />
-      ) : null}
+      {/* Selection box (Finder/Figma marquee); positioned imperatively while dragging. */}
+      <div
+        ref={marqueeElRef}
+        aria-hidden
+        data-board-marquee=""
+        className="pointer-events-none absolute rounded-[2px] border border-[var(--board-accent)] bg-[var(--board-accent-tint)]/40"
+        style={{ display: 'none' }}
+      />
     </div>
   )
 }
