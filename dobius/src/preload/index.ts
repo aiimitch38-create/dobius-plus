@@ -135,7 +135,8 @@ import type {
 import type {
   CodexRateLimitResetResult,
   RateLimitRuntimeTarget,
-  RateLimitState
+  RateLimitState,
+  UsageProbeProgress
 } from '../shared/rate-limit-types'
 import type { WorkspaceSpaceScanProgress } from '../shared/workspace-space-types'
 import type { WorkspaceCleanupScanProgress } from '../shared/workspace-cleanup'
@@ -1157,6 +1158,10 @@ const api = {
     /** Carson touched a web tile: its agents hold off for a few seconds. */
     yield: (input: { cardId: string }): Promise<{ tileId: string; until: number }> =>
       ipcRenderer.invoke('agents:yield', input),
+    /** Board → main: the full set of console ↔ web tile driver links (a console may only act in its tile). */
+    syncConsoleTiles: (input: {
+      bindings: { agentId: string; tileId: string }[]
+    }): Promise<{ ok: true }> => ipcRenderer.invoke('agents:syncConsoleTiles', input),
     list: (): Promise<CustomAgent[]> => ipcRenderer.invoke('agents:list'),
     create: (input: CustomAgentInput): Promise<CustomAgent[]> =>
       ipcRenderer.invoke('agents:create', input),
@@ -4183,6 +4188,12 @@ const api = {
       const listener = (_event: Electron.IpcRendererEvent, state: RateLimitState) => callback(state)
       ipcRenderer.on('rateLimits:update', listener)
       return () => ipcRenderer.removeListener('rateLimits:update', listener)
+    },
+    onProgress: (callback: (progress: UsageProbeProgress) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, progress: UsageProbeProgress) =>
+        callback(progress)
+      ipcRenderer.on('rateLimits:progress', listener)
+      return () => ipcRenderer.removeListener('rateLimits:progress', listener)
     }
   },
 

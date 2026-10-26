@@ -22,4 +22,25 @@ describe('boardWorkspaceTabs', () => {
       { id: 'b', name: 'feature/x', count: 0 }
     ])
   })
+
+  it('carries the purpose label through for top-bar grouping', () => {
+    const tabs = boardWorkspaceTabs(
+      [
+        {
+          id: 'a',
+          displayName: 'API',
+          branch: 'api',
+          isArchived: false,
+          sortOrder: 1,
+          purpose: 'Backend'
+        },
+        { id: 'b', displayName: 'Misc', branch: 'misc', isArchived: false, sortOrder: 2 }
+      ],
+      {}
+    )
+    expect(tabs).toEqual([
+      { id: 'a', name: 'API', count: 0, purpose: 'Backend' },
+      { id: 'b', name: 'Misc', count: 0 }
+    ])
+  })
 })

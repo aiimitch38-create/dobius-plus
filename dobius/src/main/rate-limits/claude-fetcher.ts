@@ -11,7 +11,8 @@ import type {
   RateLimitWindow,
   UsageRateLimitFailureKind,
   UsageRateLimitMetadata,
-  UsageRateLimitSource
+  UsageRateLimitSource,
+  UsageProbeStage
 } from '../../shared/rate-limit-types'
 import { parseWslUncPath } from '../../shared/wsl-paths'
 import type { NetworkProxySettings } from '../../shared/network-proxy'
@@ -310,6 +311,9 @@ type OAuthUsageResponse = {
 
 type ClaudeUsageAttemptState = {
   attemptedSources: UsageRateLimitSource[]
+  // Why: every CLI attempt (fallback, repair, supplement) shares this record, so
+  // the Board's loading-stage callback rides along instead of threading six calls.
+  onProgress?: (stage: UsageProbeStage) => void
 }
 
 function abortedClaudeRateLimitResult(): ProviderRateLimits {
@@ -543,7 +547,8 @@ async function fetchClaudeUsageViaCli(input: {
   const limits = await fetchViaPty({
     authPreparation: input.authPreparation,
     networkProxySettings: input.networkProxySettings,
-    signal: input.signal
+    signal: input.signal,
+    onProgress: input.attempts.onProgress
   })
   return withClaudeUsageMetadata(
     limits,
@@ -588,7 +593,8 @@ function mergeClaudeUsageWindows(
     ...primary,
     session: primary.session ?? supplement.session,
     weekly: primary.weekly ?? supplement.weekly,
-    fableWeekly: primary.fableWeekly ?? supplement.fableWeekly ?? null
+    fableWeekly: primary.fableWeekly ?? supplement.fableWeekly ?? null,
+    cliOutput: primary.cliOutput ?? supplement.cliOutput
   }
 }
 
@@ -733,6 +739,8 @@ export type FetchClaudeRateLimitsOptions = {
   allowUsagePanelSupplement?: boolean
   networkProxySettings?: NetworkProxySettings
   signal?: AbortSignal
+  /** Fetch milestones for the Board's loading view; never awaited. */
+  onProgress?: (stage: UsageProbeStage) => void
 }
 
 export type FetchManagedAccountUsageOptions = {
@@ -747,7 +755,10 @@ export async function fetchClaudeRateLimits(
   if (options?.signal?.aborted) {
     return abortedClaudeRateLimitResult()
   }
-  const attempts: ClaudeUsageAttemptState = { attemptedSources: [] }
+  const attempts: ClaudeUsageAttemptState = {
+    attemptedSources: [],
+    onProgress: options?.onProgress
+  }
   const allowCliFallback = options?.allowPtyFallback !== false
   const plan = resolveClaudeUsageRefreshPlan({
     authPreparation: options?.authPreparation,
@@ -775,6 +786,7 @@ export async function fetchClaudeRateLimits(
 
   if (plan.steps.some((step) => step.source === 'oauth') && oauthCredentials.token) {
     recordAttempt(attempts, 'oauth')
+    options?.onProgress?.('oauth')
     try {
       const oauthLimits = await fetchViaOAuth(oauthCredentials.token, options?.signal)
       if (options?.signal?.aborted) {

@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
-import { buildGitHubRepoUrl } from '@/lib/github-links'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { useAppStore } from '@/store'
 import type { BoardTopBarProps } from '../board-chrome/BoardTopBar'
@@ -18,19 +17,9 @@ export function useBoardTopBarProps(
   const projectName = repo?.displayName ?? translate('board.topBar.noProject', 'No project')
   const jumpToAttention = useBoardAttentionJump(worktreeId)
 
-  const onOpenGitHub = useCallback(async () => {
-    // ponytail: GitHub remotes only; GitLab/other hosts and SSH repos get a toast.
-    const slug =
-      repo && !repo.connectionId
-        ? await window.api.gh.repoSlug({ repoPath: repo.path, repoId: repo.id }).catch(() => null)
-        : null
-    const url = buildGitHubRepoUrl(slug)
-    if (!url) {
-      toast.message(translate('board.github.none', 'This project has no GitHub remote.'))
-      return
-    }
-    await window.api.shell.openUrl(url)
-  }, [repo])
+  // Why: the owner asked for the GitHub button to open the panel grouped by
+  // workspace; github.com itself is one click further, inside that panel.
+  const onOpenGitHub = useCallback(() => openStudio('source-control'), [openStudio])
 
   const props = useMemo<BoardTopBarProps>(
     () => ({
@@ -92,5 +81,5 @@ export function useBoardTopBarProps(
     ]
   )
 
-  return { props, projectName, onOpenGitHub: () => void onOpenGitHub() }
+  return { props, projectName, onOpenGitHub }
 }

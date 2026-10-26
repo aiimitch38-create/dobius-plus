@@ -12,6 +12,7 @@ const testState = { dir: '', allowed: true }
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
+  Notification: undefined,
   safeStorage: {
     isEncryptionAvailable: () => true,
     encryptString: (plaintext: string) => Buffer.from(`encrypted:${plaintext}`, 'utf-8'),
@@ -145,7 +146,7 @@ describe('LoopRunner', () => {
   it('on-output-match: baseline first, fires once per output range, rearms after cooldown', async () => {
     const { runner, loopOf, output, sent } = await setupLoop({
       kind: 'on-output-match',
-      tabId: 'tab-a',
+      target: { type: 'tab', tabId: 'tab-a' },
       pattern: 'FAIL',
       cooldownMs: 10_000
     })
@@ -167,7 +168,124 @@ describe('LoopRunner', () => {
     output['tab-a'].push('FAIL after cooldown')
     await runner.tick(20_000)
     expect(sent).toHaveLength(2)
-    expect(loopOf().loop?.state.outputCursor).toBe('4')
+    expect(loopOf().loop?.state.outputCursors).toEqual({ 'tab-a': '4' })
+  })
+
+  it('on-output-match: a loop saved with a single tabId still loads and keeps its cursor', async () => {
+    const { store, runner, loopOf, output, sent } = await setupLoop({
+      kind: 'on-idle',
+      target: { type: 'tab', tabId: 'tab-a' },
+      debounceMs: 1_000
+    })
+    store.updateAutomation(loopOf().id, {
+      loop: {
+        worktreeId: 'wt1',
+        trigger: { kind: 'on-output-match', tabId: 'tab-a', pattern: 'FAIL', cooldownMs: 1_000 },
+        state: { ...newLoopState(), outputCursor: '1' }
+      } as never
+    })
+    output['tab-a'] = ['old FAIL (already judged)', 'new FAIL']
+    await runner.tick(5_000)
+    expect(sent.map((s) => s.tabId)).toEqual(['tab-a'])
+    expect(loopOf().loop?.state.outputCursors).toEqual({ 'tab-a': '2' })
+  })
+
+  it('on-output-match on every console: only the console that printed the match is told, each with its own cooldown', async () => {
+    const { store, runner, loopOf, output, sent } = await setupLoop({
+      kind: 'on-output-match',
+      target: { type: 'board' },
+      pattern: 'FAILED',
+      cooldownMs: 10_000
+    })
+    store.updateUI({
+      boardsByWorktree: {
+        wt1: {
+          cards: [
+            { id: 'c1', kind: 'console', tabId: 'tab-1' },
+            { id: 'c2', kind: 'console', tabId: 'tab-2' }
+          ],
+          groups: []
+        }
+      }
+    })
+    output['tab-1'] = []
+    output['tab-2'] = []
+    await runner.tick(1_000)
+    output['tab-1'].push('build FAILED')
+    await runner.tick(2_000)
+    expect(sent.map((s) => s.tabId)).toEqual(['tab-1'])
+    // Console 2 fails inside console 1's cooldown: it is still told.
+    output['tab-2'].push('tests FAILED')
+    await runner.tick(3_000)
+    expect(sent.map((s) => s.tabId)).toEqual(['tab-1', 'tab-2'])
+    // Console 1 fails again inside its own cooldown: dropped.
+    output['tab-1'].push('FAILED again')
+    await runner.tick(4_000)
+    expect(sent).toHaveLength(2)
+    expect(loopOf().loop?.state.firedAtByTab).toEqual({ 'tab-1': 2_000, 'tab-2': 3_000 })
+    expect(loopOf().loop?.state.outputCursors).toEqual({ 'tab-1': '2', 'tab-2': '1' })
+  })
+
+  it('picked consoles ("tabs" target) receive the instruction; a tab no longer on the board is skipped', async () => {
+    const { store, runner, loopOf, sent } = await setupLoop({
+      kind: 'on-idle',
+      target: { type: 'tabs', tabIds: ['tab-2', 'tab-3', 'tab-removed'] },
+      debounceMs: 1_000
+    })
+    store.updateUI({
+      boardsByWorktree: {
+        wt1: {
+          cards: [
+            { id: 'c1', kind: 'console', tabId: 'tab-1' },
+            { id: 'c2', kind: 'console', tabId: 'tab-2' },
+            { id: 'c3', kind: 'console', tabId: 'tab-3' }
+          ],
+          groups: []
+        },
+        wt2: { cards: [{ id: 'x', kind: 'console', tabId: 'tab-removed' }], groups: [] }
+      }
+    })
+    await runner.fireFromRequest(loopOf(), 1)
+    expect(sent.map((s) => s.tabId)).toEqual(['tab-2', 'tab-3'])
+  })
+
+  it('goal-card stop: retires once every criterion on the card is checked, not before', async () => {
+    const { store, runner, loopOf, sent } = await setupLoop({
+      kind: 'schedule',
+      target: { type: 'tab', tabId: 'tab-a' },
+      everyMs: 60_000
+    })
+    store.updateAutomation(loopOf().id, { loop: { ...loopOf().loop!, stopGoalCardId: 'goal-1' } })
+    const boards = (done: boolean[]) => ({
+      boardsByWorktree: {
+        wt1: {
+          cards: [
+            { id: 'c1', kind: 'console', tabId: 'tab-a' },
+            {
+              id: 'goal-1',
+              kind: 'goal',
+              goal: 'Ship it',
+              criteria: done.map((d, i) => ({ id: String(i), text: 't', done: d })),
+              wiredCardIds: []
+            }
+          ],
+          groups: []
+        }
+      }
+    })
+    const createdAt = loopOf().createdAt
+    store.updateUI(boards([true, false]))
+    await runner.tick(createdAt + 60_000)
+    expect(sent).toHaveLength(1)
+    expect(loopOf().loop?.state.retiredAt).toBeNull()
+    store.updateUI(boards([true, true]))
+    await runner.tick(createdAt + 120_000)
+    expect(sent).toHaveLength(1)
+    expect(loopOf().loop?.state).toMatchObject({
+      retiredAt: createdAt + 120_000,
+      lastResult: 'Goal card complete; loop finished.'
+    })
+    expect(await runner.fireFromRequest(loopOf(), createdAt + 130_000)).toBeNull()
   })
 
   it('goal: fires, waits for a verdict, refires on NOT_MET, retires on MET', async () => {
@@ -215,14 +333,14 @@ describe('LoopRunner', () => {
   it('paused and disabled loops never tick', async () => {
     const { store, runner, loopOf, output, sent } = await setupLoop({
       kind: 'on-output-match',
-      tabId: 'tab-a',
+      target: { type: 'tab', tabId: 'tab-a' },
       pattern: 'x',
       cooldownMs: 5_000
     })
     store.updateAutomation(loopOf().id, { enabled: false })
     output['tab-a'] = ['x']
     await runner.tick(1)
-    expect(loopOf().loop?.state.outputCursor).toBeNull()
+    expect(loopOf().loop?.state.outputCursors).toBeUndefined()
     expect(sent).toHaveLength(0)
   })
 })
@@ -299,7 +417,7 @@ describe('AutomationService with loops', () => {
   it('output-match never sends output text, even when every new line matches', async () => {
     const { runner, output, sent } = await setupLoop({
       kind: 'on-output-match',
-      tabId: 'tab-a',
+      target: { type: 'tab', tabId: 'tab-a' },
       pattern: '.',
       cooldownMs: 5_000
     })

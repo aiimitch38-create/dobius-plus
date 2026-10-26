@@ -9,9 +9,14 @@ import { pauseResultText, setConsolesPaused } from '../board-delivery/pause-cons
 import { useAppStore } from '@/store'
 import { getBoard } from '@/store/slices/board'
 import type { TuiAgent } from '../../../../../shared/types'
-import { boardSpawnPlacements, BOARD_CONSOLE_SIZE } from '../board-canvas/board-spawn-placement'
+import { boardSpawnRects } from '../board-canvas/board-spawn-placement'
 import type { BoardPoint } from '../board-canvas/board-viewport'
 import { revealRectViewport } from '../board-canvas/board-reveal'
+import {
+  boardGhostOf,
+  pushBoardGhosts,
+  type BoardGhostSpec
+} from '../board-canvas/board-ghost-store'
 import type { BoardInsertKind } from '../board-chrome/board-tools'
 import type { BoardChipId } from '../board-command-bar/board-command-chips'
 import type { BoardStudioId } from '../board-studios/board-studio-ids'
@@ -71,7 +76,8 @@ export function useBoardActions({
       const awaiting: Parameters<typeof awaitMirroredConsoleTabs>[0]['pending'] = []
       let failed = 0
       const added = new Set<string>()
-      boardSpawnPlacements(center, count).forEach((position, index) => {
+      const ghosts: BoardGhostSpec[] = []
+      boardSpawnRects(center, count).forEach((rect, index) => {
         const result = launchAgentInNewTab({ agent, worktreeId, launchSource: 'unknown' })
         if (!result) {
           failed += 1
@@ -79,19 +85,22 @@ export function useBoardActions({
         }
         const card = {
           kind: 'console' as const,
-          ...position,
-          ...BOARD_CONSOLE_SIZE,
+          ...rect,
           title: `${label} ${existing + index + 1}`,
           agentKind: agent
         }
         // Why: host-backed launches return no tab id yet; the card is placed
         // once the host's mirrored tab arrives (CONSOLE-EMBED "await mirrored tabs").
         if (result.tabId) {
-          added.add(useAppStore.getState().addCard(worktreeId, { ...card, tabId: result.tabId }))
+          const id = useAppStore.getState().addCard(worktreeId, { ...card, tabId: result.tabId })
+          added.add(id)
+          ghosts.push(boardGhostOf(card, id))
         } else {
           awaiting.push(card)
+          ghosts.push(boardGhostOf(card))
         }
       })
+      pushBoardGhosts(ghosts)
       const reportFailed = (n: number): void => {
         toast.error(
           translate('board.spawn.partial', '{{failed}} of {{count}} consoles did not start.', {
@@ -255,7 +264,7 @@ export function useBoardActions({
           }
           const card = boardInsertCard(kind, freeCenter(boardInsertCardSize(kind)))
           const state = useAppStore.getState()
-          state.addCard(worktreeId, card)
+          pushBoardGhosts([boardGhostOf(card, state.addCard(worktreeId, card))])
           // Why: when the view is full the free-spot scan falls back past the
           // rightmost card; pan so the new card is never left off-screen.
           const viewport = getBoard(state, worktreeId).viewport

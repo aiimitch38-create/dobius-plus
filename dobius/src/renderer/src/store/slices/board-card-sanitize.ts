@@ -76,7 +76,8 @@ export function sanitizeKindFields(
             url: raw.url,
             ...(isStr(raw.device) ? { device: raw.device } : {}),
             ...(raw.session === 'shared' ? { session: 'shared' as const } : {}),
-            ...(isStr(raw.popupOf) ? { popupOf: raw.popupOf } : {})
+            ...(isStr(raw.popupOf) ? { popupOf: raw.popupOf } : {}),
+            ...(isStr(raw.driverCardId) ? { driverCardId: raw.driverCardId } : {})
           }
         : null
     case 'note':

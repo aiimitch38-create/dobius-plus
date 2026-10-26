@@ -1,10 +1,21 @@
-import type { BoardViewport } from './board-viewport'
+import { screenToWorld, type BoardViewport } from './board-viewport'
 
 type Box = { x: number; y: number; w: number; h: number }
 export type BoardInsets = { left: number; top: number; right: number; bottom: number }
 
 /** Screen px the rails, top bar and collapsed command bar cover. */
 export const BOARD_CHROME_INSETS: BoardInsets = { left: 96, top: 72, right: 80, bottom: 170 }
+
+/** The visible world area not covered by board chrome: where new cards may land. */
+export function boardSafeWorldArea(
+  viewport: BoardViewport,
+  screen: { w: number; h: number },
+  insets: BoardInsets = BOARD_CHROME_INSETS
+): Box {
+  const tl = screenToWorld({ x: insets.left, y: insets.top }, viewport)
+  const br = screenToWorld({ x: screen.w - insets.right, y: screen.h - insets.bottom }, viewport)
+  return { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y }
+}
 
 function shiftInto(start: number, size: number, min: number, max: number): number {
   if (start < min || size > max - min) {

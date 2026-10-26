@@ -24,6 +24,7 @@ import {
   Pin,
   PinOff,
   Kanban,
+  Tag,
   Trash2,
   Unlink,
   Workflow,
@@ -43,6 +44,11 @@ import { tabHasLivePty } from '@/lib/tab-has-live-pty'
 import { VIRTUALIZED_SCROLL_ANCHOR_RECORD_EVENT } from '@/hooks/useVirtualizedScrollAnchor'
 import { getLineageRenderInfo } from './worktree-list-groups'
 import { getWorkspaceStatus, getWorkspaceStatusVisualMeta } from './workspace-status'
+import {
+  listWorkspacePurposeOptions,
+  normalizeWorkspacePurpose,
+  workspacePurposeKey
+} from '../../../../shared/workspace-purpose'
 import { WorktreeOpenInSubMenu } from './WorktreeOpenInMenu'
 import { ProjectGroupNameDialog } from './ProjectGroupNameDialog'
 import { WorktreeParentPickerPopover } from './WorktreeParentPickerPopover'
@@ -359,6 +365,18 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({
       ? status
       : ''
   }, [activeContextWorktrees, workspaceStatuses])
+  const purposeOptions = useMemo(
+    () => (menuOpen ? listWorkspacePurposeOptions(allWorktrees) : []),
+    [allWorktrees, menuOpen]
+  )
+  const contextWorkspacePurpose = useMemo(() => {
+    const [first, ...rest] = activeContextWorktrees
+    if (!first) {
+      return ''
+    }
+    const key = workspacePurposeKey(first.purpose)
+    return rest.every((item) => workspacePurposeKey(item.purpose) === key) ? key : ''
+  }, [activeContextWorktrees])
   const batchDeleteWorktrees = useMemo(
     () =>
       activeContextWorktrees.filter((item) => {
@@ -485,6 +503,22 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({
       )
     },
     [activeContextWorktrees, setMenuOpenState, updateWorktreeMeta, workspaceStatuses]
+  )
+
+  const handleAssignPurpose = useCallback(
+    (purpose: string) => {
+      setMenuOpenState(false)
+      // Why: '' clears the label (back to Other); the store/persistence treat it as absent.
+      const next = normalizeWorkspacePurpose(purpose) ?? ''
+      void Promise.all(
+        activeContextWorktrees.map((item) =>
+          workspacePurposeKey(item.purpose) === workspacePurposeKey(next)
+            ? Promise.resolve()
+            : updateWorktreeMeta(item.id, { purpose: next })
+        )
+      )
+    },
+    [activeContextWorktrees, setMenuOpenState, updateWorktreeMeta]
   )
 
   const handleRename = useCallback(() => {
@@ -728,6 +762,32 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({
                     </DropdownMenuRadioItem>
                   )
                 })}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={deletingContext}>
+              <Tag className="size-3.5" />
+              {translate('board.workspaces.purposeMenu', 'Workspace Purpose')}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-44">
+              <DropdownMenuRadioGroup value={contextWorkspacePurpose}>
+                {purposeOptions.map((purpose) => (
+                  <DropdownMenuRadioItem
+                    key={purpose}
+                    value={workspacePurposeKey(purpose)}
+                    onSelect={() => handleAssignPurpose(purpose)}
+                  >
+                    {purpose}
+                  </DropdownMenuRadioItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioItem
+                  value={workspacePurposeKey('')}
+                  onSelect={() => handleAssignPurpose('')}
+                >
+                  {translate('board.workspaces.purposeNone', 'None (Other)')}
+                </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

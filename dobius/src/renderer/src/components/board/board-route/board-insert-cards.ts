@@ -1,6 +1,7 @@
 import { translate } from '@/i18n/i18n'
 import { DEFAULT_GOAL_REMINDERS, type BoardSwatch, type NewBoardCard } from '@/store/slices/board'
 import { getBoardToolStyle } from '../board-tool-panels/board-tool-style-store'
+import { clampRectIntoArea } from '../cards/card-geometry'
 
 const SWATCHES: readonly string[] = ['yellow', 'pink', 'blue', 'green', 'purple', 'accent']
 const isBoardSwatch = (fill: string): fill is BoardSwatch => SWATCHES.includes(fill)
@@ -38,6 +39,22 @@ const SIZES: Record<BoardInsertCardKind, { w: number; h: number }> = {
 
 export function boardInsertCardSize(kind: BoardInsertCardKind): { w: number; h: number } {
   return SIZES[kind]
+}
+
+type Rect = { x: number; y: number; w: number; h: number }
+
+/**
+ * The card `boardInsertCard` builds for a canvas click at `world`, kept inside
+ * `area` (the visible world minus board chrome) so its title bar stays on screen.
+ * The hover ghost and the click both come from here, so they always agree.
+ */
+export function boardInsertCardAt(
+  kind: BoardInsertCardKind,
+  world: BoardPoint,
+  area: Rect
+): NewBoardCard {
+  const placed = boardInsertCard(kind, world)
+  return { ...placed, ...clampRectIntoArea(placed, area) }
 }
 
 /** A new default card of `kind`, centered on `center` (world coords). */

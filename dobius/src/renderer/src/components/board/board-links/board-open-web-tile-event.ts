@@ -5,7 +5,8 @@ import { useAppStore } from '@/store'
 import { getBoard, type BoardState } from '@/store/slices/board'
 import type { RuntimeBoardOpenWebTileEvent } from '../../../../../shared/runtime-client-events'
 import { BOARD_CHROME_INSETS } from '../board-canvas/board-reveal'
-import { boardFreeSpawnCenter, boardSpawnPlacements } from '../board-canvas/board-spawn-placement'
+import { boardGhostOf, pushBoardGhosts } from '../board-canvas/board-ghost-store'
+import { boardFreeSpawnCenter, boardSpawnRects } from '../board-canvas/board-spawn-placement'
 import { screenToWorld, type BoardPoint } from '../board-canvas/board-viewport'
 
 export const BOARD_WEB_TILE_SIZE = { w: 900, h: 600 }
@@ -67,14 +68,15 @@ export function handleBoardOpenWebTileEvent(
   }
   const state = useAppStore.getState()
   const board = getBoard(state, event.worktreeId)
-  const [position] = boardSpawnPlacements(freeCenter(board), 1, BOARD_WEB_TILE_SIZE)
-  const cardId = state.addCard(event.worktreeId, {
-    kind: 'web',
+  const [rect] = boardSpawnRects(freeCenter(board), 1, BOARD_WEB_TILE_SIZE)
+  const card = {
+    kind: 'web' as const,
     title: event.title ?? url.hostname,
     url: url.toString(),
-    ...position,
-    ...BOARD_WEB_TILE_SIZE
-  })
+    ...rect
+  }
+  const cardId = state.addCard(event.worktreeId, card)
+  pushBoardGhosts([boardGhostOf(card, cardId)])
   remember(event.requestId, cardId)
   return { outcome: 'opened', cardId }
 }

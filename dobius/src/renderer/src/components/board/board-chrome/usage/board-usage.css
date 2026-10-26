@@ -1,0 +1,69 @@
+/* Board usage popover: loading orbit (a dot circling a pale ring) and the
+   refresh button's "recording" pulse. Both colors come from the Board accent. */
+
+@keyframes board-usage-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes board-usage-record {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.board-usage-orbit {
+  position: absolute;
+  inset: 0;
+  animation: board-usage-orbit 1.4s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+/* Trail: three fading dots behind the lead dot, placed by rotating the same ring. */
+.board-usage-orbit[data-trail='1'] {
+  animation-delay: -0.08s;
+  opacity: 0.55;
+}
+.board-usage-orbit[data-trail='2'] {
+  animation-delay: -0.16s;
+  opacity: 0.3;
+}
+.board-usage-orbit[data-trail='3'] {
+  animation-delay: -0.24s;
+  opacity: 0.12;
+}
+
+.board-usage-orbit-dot {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 9999px;
+  background: var(--board-accent);
+}
+
+.board-usage-record {
+  animation: board-usage-record 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-usage-orbit {
+    animation: none;
+  }
+  .board-usage-orbit[data-trail] {
+    display: none;
+  }
+  .board-usage-record {
+    animation: none;
+  }
+}

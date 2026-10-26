@@ -62,6 +62,7 @@ import {
   type DropdownEntry
 } from './source-control-dropdown-items'
 import { isCommitMessageFieldDisabled } from './source-control-commit-eligibility'
+import { resolveTriadActions, triadSlotForRemoteOp } from './source-control-triad-actions'
 import { BulkActionBar } from './BulkActionBar'
 import { useSourceControlSelection, type FlatEntry } from './useSourceControlSelection'
 import {
@@ -5772,6 +5773,7 @@ function SourceControlInner({ isVisible = false }: { isVisible?: boolean }): Rea
                 onFixCommitFailureWithAI={handleFixCommitFailureWithAI}
                 onPrimaryAction={handlePrimaryClick}
                 onDropdownAction={handleActionInvoke}
+                actionLayout={isVisible ? 'triad' : 'split'}
               />
             ))}
 
@@ -6537,6 +6539,8 @@ type CommitAreaProps = {
   onFixCommitFailureWithAI: (promptOverride?: string) => Promise<boolean> | boolean
   onPrimaryAction: () => void
   onDropdownAction: (kind: DropdownActionKind) => void
+  /** 'triad' = three equal Commit / Push / Pull buttons + "…" overflow (Board studio). */
+  actionLayout?: 'split' | 'triad'
 }
 
 export function CommitArea({
@@ -6575,7 +6579,8 @@ export function CommitArea({
   onOpenSourceControlAiSettings,
   onFixCommitFailureWithAI,
   onPrimaryAction,
-  onDropdownAction
+  onDropdownAction,
+  actionLayout = 'split'
 }: CommitAreaProps): React.JSX.Element {
   // Why: cap at 12 rows so a pasted multi-page commit message doesn't push
   // the Commit button off-screen. The textarea keeps `resize-none` (matching
@@ -6718,6 +6723,55 @@ export function CommitArea({
     'auto.components.right.sidebar.SourceControl.cc199ccc5f',
     'More commit and remote actions'
   )
+  const triad = useMemo(
+    () => resolveTriadActions(dropdownItems, primaryAction),
+    [dropdownItems, primaryAction]
+  )
+  const triadSpinnerSlot = isRemoteOperationActive ? triadSlotForRemoteOp(inFlightRemoteOpKind) : null
+  const renderTriadButton = (
+    slot: 'commit' | 'push' | 'pull',
+    icon: React.ReactNode,
+    spinning: boolean
+  ): React.JSX.Element => {
+    const action = triad[slot]
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex min-w-0 flex-1">
+            <Button
+              type="button"
+              variant={slot === 'commit' ? 'default' : 'outline'}
+              size="xs"
+              disabled={action.disabled}
+              aria-label={action.label}
+              title={action.title}
+              data-triad-action={slot}
+              onClick={() => {
+                // Why: Commit goes through the primary handler (commit-area
+                // resolver); remote slots dispatch the same kind the "…" menu would.
+                if (slot === 'commit' && primaryAction.kind === 'commit') {
+                  onPrimaryAction()
+                } else {
+                  onDropdownAction(action.kind)
+                }
+              }}
+              className={cn(
+                'w-full min-w-0 px-2 text-[11px]',
+                slot === 'commit' &&
+                  'bg-[var(--board-accent)] text-[var(--board-accent-fg)] hover:bg-[var(--board-accent)] hover:brightness-95'
+              )}
+            >
+              {spinning ? <Loader2 className="size-3.5 animate-spin" /> : icon}
+              <span className="truncate">{action.label}</span>
+            </Button>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={6} className="max-w-72">
+          {action.title}
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
   const moreActionsLabel = translate(
     'auto.components.right.sidebar.SourceControl.4d6e1fd7f3',
     'More actions'
@@ -6762,6 +6816,54 @@ export function CommitArea({
         )
       )}
     </DropdownMenuContent>
+  )
+  // Why: the owner's spec for the Board GitHub panel is three plain, always-
+  // visible actions (Commit, Push, Pull); everything else stays one "…" away.
+  const triadRow = (
+    <div
+      className={cn(showComposer ? 'mt-1 flex items-stretch gap-1' : 'flex items-stretch gap-1')}
+      data-testid="source-control-triad"
+    >
+      {renderTriadButton('commit', <Check className="size-3.5" aria-hidden="true" />, isCommitting)}
+      {renderTriadButton(
+        'push',
+        <ArrowUp className="size-3.5" aria-hidden="true" />,
+        triadSpinnerSlot === 'push'
+      )}
+      {renderTriadButton(
+        'pull',
+        <ArrowDownUp className="size-3.5" aria-hidden="true" />,
+        triadSpinnerSlot === 'pull'
+      )}
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex shrink-0">
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  className="shrink-0 px-1.5"
+                  aria-label={moreCommitAndRemoteActionsLabel}
+                  title={moreActionsLabel}
+                >
+                  {isRemoteOperationActive && triadSpinnerSlot === null ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <MoreHorizontal className="size-3.5" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={6}>
+            {moreCommitAndRemoteActionsLabel}
+          </TooltipContent>
+        </Tooltip>
+        {dropdownMenuContent}
+      </DropdownMenu>
+    </div>
   )
 
   return (
@@ -6867,10 +6969,13 @@ export function CommitArea({
             ))}
         </div>
       ) : null}
-      {/* Why: the current manual action + chevron sit together as a visual
+      {actionLayout === 'triad' ? (
+        triadRow
+      ) : (
+      /* Why: the current manual action + chevron sit together as a visual
           split button so the edit → commit → push loop stays in a single
           vertical band. The chevron exposes the full action surface without
-          forcing morphing labels to carry every possible intent. */}
+          forcing morphing labels to carry every possible intent. */
       <div
         className={cn(showComposer ? 'mt-1 flex items-stretch gap-1' : 'flex items-stretch gap-1')}
       >
@@ -6941,6 +7046,7 @@ export function CommitArea({
           </DropdownMenu>
         </div>
       </div>
+      )}
       {commitError && (
         // Why: role="alert" + aria-live="polite" lets screen readers announce
         // commit failures; the id ties the message to the textarea via

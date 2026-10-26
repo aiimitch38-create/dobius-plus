@@ -7,6 +7,7 @@ import { BoardLinksLayer } from '../board-links/BoardLinksLayer'
 import { strokePathData } from '../cards/stroke-path'
 import type { BoardPoint } from '../board-canvas/board-viewport'
 import type { SnapGuide } from '../board-canvas/board-snap'
+import { BoardGhostLayer } from './BoardGhostLayer'
 
 type BoardCardsLayerProps = {
   worktreeId: string
@@ -111,6 +112,7 @@ export function BoardCardsLayer({
           }}
         />
       ) : null}
+      <BoardGhostLayer zoom={zoom} />
       {penPoints.length > 0 ? (
         <svg
           className="pointer-events-none absolute top-0 left-0 overflow-visible"

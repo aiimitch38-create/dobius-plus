@@ -110,7 +110,34 @@ export function loopTargetTabIdsFromBoards(
       return boardConsoleTabIds(boardsByWorktree, worktreeId)
     case 'orchestrator':
       return orchestratorWiredTabIds(boardsByWorktree, target.cardId, worktreeId)
+    case 'tabs': {
+      // Why: picked tabs are resolved against this board at fire time like every
+      // other target, so a console removed or moved to another board is skipped.
+      const onBoard = new Set(boardConsoleTabIds(boardsByWorktree, worktreeId))
+      return target.tabIds.filter((tabId) => onBoard.has(tabId))
+    }
   }
+}
+
+/**
+ * True once every criterion on that Board goal card is checked. A missing card
+ * or an empty checklist is "not complete", so a deleted card never stops a loop
+ * behind the user's back.
+ */
+export function goalCardComplete(
+  boardsByWorktree: unknown,
+  goalCardId: string,
+  worktreeId: string
+): boolean {
+  const board = isObj(boardsByWorktree) ? boardsByWorktree[worktreeId] : undefined
+  if (!isObj(board) || !Array.isArray(board.cards)) {
+    return false
+  }
+  const card = board.cards.find((c) => isObj(c) && c.kind === 'goal' && c.id === goalCardId)
+  if (!isObj(card) || !Array.isArray(card.criteria) || card.criteria.length === 0) {
+    return false
+  }
+  return card.criteria.every((c) => isObj(c) && c.done === true)
 }
 
 /** Console tabs wired to one orchestrator card on that worktree's board. */
@@ -136,9 +163,7 @@ export function orchestratorWiredTabIds(
   )
 }
 
-/** Every console tab a loop addresses: the watched tab for output match, else its target. */
+/** Every console tab a loop addresses right now. */
 export function loopTabIdsFromBoards(boardsByWorktree: unknown, loop: AutomationLoop): string[] {
-  return loop.trigger.kind === 'on-output-match'
-    ? [loop.trigger.tabId]
-    : loopTargetTabIdsFromBoards(boardsByWorktree, loop.trigger.target, loop.worktreeId)
+  return loopTargetTabIdsFromBoards(boardsByWorktree, loop.trigger.target, loop.worktreeId)
 }

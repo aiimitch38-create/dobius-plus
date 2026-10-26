@@ -1485,6 +1485,7 @@ function mergeRuntimeFolderWorkspace(repo: Repo, worktreeId: string, meta: Workt
       : {}),
     ...(meta.priorWorktreeIds !== undefined ? { priorWorktreeIds: meta.priorWorktreeIds } : {}),
     workspaceStatus: meta.workspaceStatus ?? DEFAULT_WORKSPACE_STATUS_ID,
+    ...(meta.purpose ? { purpose: meta.purpose } : {}),
     diffComments: meta.diffComments,
     mobileDiffReview: meta.mobileDiffReview
   }
@@ -9969,6 +9970,7 @@ export class DobiusRuntimeService {
         | 'sortOrder'
         | 'manualOrder'
         | 'workspaceStatus'
+        | 'purpose'
         | 'createdWithAgent'
         | 'pendingFirstAgentMessageRename'
         | 'firstAgentMessageRenameError'

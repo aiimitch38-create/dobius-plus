@@ -1,23 +1,5 @@
 import React, { useCallback } from 'react'
 import { toast } from 'sonner'
-import {
-  Brain,
-  GitBranch,
-  Sparkles,
-  Calendar,
-  Cable,
-  FileText,
-  Globe,
-  Image as ImageIcon,
-  KanbanSquare,
-  ListChecks,
-  PenLine,
-  Shapes,
-  StickyNote,
-  SquareTerminal,
-  Target,
-  Type
-} from 'lucide-react'
 import { useAppStore } from '@/store'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
@@ -31,6 +13,7 @@ import {
   type BoardCardPatch
 } from '@/store/slices/board'
 import { BoardCardFrame, type BoardCardAction } from './BoardCardFrame'
+import { BOARD_CARD_KIND_ICON } from './board-card-kind-icon'
 import { useBoardLinkMode } from '../board-links/board-link-mode'
 import { useCardStyleEditor } from '../board-tool-panels/card-style-editor'
 import { nextLineDirection } from './shape-geometry'
@@ -65,24 +48,6 @@ export type BoardCardRendererProps = {
   onDragEnd?: (cardId: string) => void
 }
 
-const KIND_ICON: Record<BoardCardKind, React.ReactNode> = {
-  console: <SquareTerminal />,
-  web: <Globe />,
-  note: <StickyNote />,
-  text: <Type />,
-  checklist: <ListChecks />,
-  kanban: <KanbanSquare />,
-  calendar: <Calendar />,
-  shape: <Shapes />,
-  stroke: <PenLine />,
-  image: <ImageIcon />,
-  markdown: <FileText />,
-  orchestrator: <Cable />,
-  memory: <Brain />,
-  goal: <Target />,
-  skill: <Sparkles />,
-  branches: <GitBranch />
-}
 
 const BARE_KINDS: ReadonlySet<BoardCardKind> = new Set(['text', 'shape', 'stroke', 'image'])
 const BARE_MIN: MinSize = { w: 24, h: 24 }
@@ -216,7 +181,7 @@ export const BoardCardRenderer = React.memo(function BoardCardRenderer({
         card.title ||
         (card.kind === 'markdown' ? (card.path.split(/[\\/]/).at(-1) ?? card.path) : '')
       }
-      icon={KIND_ICON[card.kind]}
+      icon={BOARD_CARD_KIND_ICON[card.kind]}
       selected={selected}
       titleAccessory={
         card.kind === 'console' ? (

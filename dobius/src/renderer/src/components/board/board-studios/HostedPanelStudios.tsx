@@ -18,6 +18,7 @@ import {
   SourceControl,
   TaskPage
 } from './board-studio-lazy-pages'
+import { SourceControlWorkspacesView } from './SourceControlWorkspacesView'
 import { StudioEmptyState } from './StudioEmptyState'
 import { useStudioCloseOverride } from './use-studio-close-override'
 
@@ -74,7 +75,9 @@ export function SourceControlStudio({
   }
   return (
     <PanelFrame>
-      <SourceControl isVisible />
+      <SourceControlWorkspacesView worktreeId={worktreeId}>
+        <SourceControl isVisible />
+      </SourceControlWorkspacesView>
     </PanelFrame>
   )
 }

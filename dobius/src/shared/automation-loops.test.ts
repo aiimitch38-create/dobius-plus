@@ -86,6 +86,35 @@ describe('normalizeAutomationLoop (migration)', () => {
     ).toBeNull()
     expect(normalizeAutomationLoop({ worktreeId: 'wt', trigger: { kind: 'cron' } })).toBeNull()
   })
+  it('migrates a single-tab output match, keeps picked consoles and the goal-card stop', () => {
+    expect(
+      normalizeAutomationLoop({
+        worktreeId: 'wt',
+        trigger: { kind: 'on-output-match', tabId: 't', pattern: 'FAIL' },
+        stopGoalCardId: ' g1 '
+      })
+    ).toMatchObject({
+      trigger: { kind: 'on-output-match', target: { type: 'tab', tabId: 't' }, pattern: 'FAIL' },
+      stopGoalCardId: 'g1'
+    })
+    const picked = normalizeAutomationLoop({
+      worktreeId: 'wt',
+      trigger: {
+        kind: 'on-output-match',
+        target: { type: 'tabs', tabIds: ['a', 'a', 7, 'b'] },
+        pattern: 'FAIL'
+      },
+      state: { outputCursors: { a: '3', b: 4 }, firedAtByTab: { a: 10, b: 'x' } }
+    })
+    expect(picked?.trigger).toMatchObject({ target: { type: 'tabs', tabIds: ['a', 'b'] } })
+    expect(picked?.state).toMatchObject({ outputCursors: { a: '3' }, firedAtByTab: { a: 10 } })
+    expect(
+      normalizeAutomationLoop({
+        worktreeId: 'wt',
+        trigger: { kind: 'on-idle', target: { type: 'tabs', tabIds: [] }, debounceMs: 1 }
+      })
+    ).toBeNull()
+  })
 })
 
 describe('admitLoopFire', () => {

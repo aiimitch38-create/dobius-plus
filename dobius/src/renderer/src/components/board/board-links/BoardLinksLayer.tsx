@@ -21,6 +21,11 @@ import {
 } from './board-link-geometry'
 import { useBoardLinkMode, type BoardLinkMode } from './board-link-mode'
 import { OrchestratorCables } from './OrchestratorCables'
+import { browserLinkCables } from '../board-browser-link/browser-link'
+import {
+  connectBrowserLink,
+  disconnectBrowserLink
+} from '../board-browser-link/browser-link-delivery'
 
 // Why: above every card (card z grows from 1) so connect-mode clicks never reach a card.
 const TARGET_Z = 1_000_000
@@ -161,6 +166,91 @@ function WireTargets({
   )
 }
 
+/**
+ * Console ↔ web tile driver link. From a tile: click the console that will
+ * drive it (clicking its current driver disconnects). From a console: click
+ * each tile it should drive (a driven tile toggles off).
+ */
+function BrowserTargets({
+  board,
+  mode,
+  zoom
+}: {
+  board: BoardState
+  mode: Extract<BoardLinkMode, { kind: 'browser' }>
+  zoom: number
+}): React.JSX.Element | null {
+  const source = board.cards.find((c) => c.id === mode.sourceCardId)
+  if (source?.kind !== mode.sourceKind) {
+    return null
+  }
+  if (source.kind === 'web') {
+    return (
+      <>
+        {board.cards
+          .filter((c) => c.kind === 'console')
+          .map((c) => {
+            const active = source.driverCardId === c.id
+            return (
+              <TargetRect
+                key={c.id}
+                rect={c}
+                zoom={zoom}
+                active={active}
+                label={
+                  active
+                    ? translate('board.browserLink.unlinkConsole', 'Disconnect {{name}}', {
+                        name: c.title
+                      })
+                    : translate('board.browserLink.linkConsole', 'Let {{name}} drive this tile', {
+                        name: c.title
+                      })
+                }
+                onPick={() => {
+                  if (active) {
+                    disconnectBrowserLink(mode.worktreeId, source.id)
+                  } else {
+                    connectBrowserLink(mode.worktreeId, source, c.id)
+                  }
+                  useBoardLinkMode.getState().stop()
+                }}
+              />
+            )
+          })}
+      </>
+    )
+  }
+  return (
+    <>
+      {board.cards
+        .filter((c): c is Extract<BoardState['cards'][number], { kind: 'web' }> => c.kind === 'web')
+        .map((tile) => {
+          const active = tile.driverCardId === source.id
+          return (
+            <TargetRect
+              key={tile.id}
+              rect={tile}
+              zoom={zoom}
+              active={active}
+              label={
+                active
+                  ? translate('board.browserLink.unlinkTile', 'Stop driving {{name}}', {
+                      name: tile.title
+                    })
+                  : translate('board.browserLink.linkTile', 'Drive {{name}}', { name: tile.title })
+              }
+              onPick={() =>
+                active
+                  ? disconnectBrowserLink(mode.worktreeId, tile.id)
+                  : connectBrowserLink(mode.worktreeId, tile, source.id)
+              }
+            />
+          )
+        })}
+    </>
+  )
+}
+
 function ArrowTargets({
   board,
   mode,
@@ -206,7 +296,7 @@ export function BoardLinksLayer({
   const zoom = board.viewport.zoom
   const rawMode = useBoardLinkMode((s) => s.mode)
   const mode = rawMode?.worktreeId === worktreeId ? rawMode : null
-  const cables = [...orchestratorCables(board), ...goalCables(board)]
+  const cables = [...orchestratorCables(board), ...goalCables(board), ...browserLinkCables(board)]
   const arrows = connectorArrows(board)
 
   // Esc leaves connect mode (capture so the Board's own Esc handlers don't also fire).
@@ -231,7 +321,13 @@ export function BoardLinksLayer({
           cables={cables}
           worktreeId={worktreeId}
           zoom={zoom}
-          emphasizedOrchestratorId={mode?.kind === 'wire' ? mode.orchestratorId : undefined}
+          emphasizedOrchestratorId={
+            mode?.kind === 'wire'
+              ? mode.orchestratorId
+              : mode?.kind === 'browser'
+                ? mode.sourceCardId
+                : undefined
+          }
         />
         {arrows.map((arrow) => {
           const style = arrow.connector.style ?? DEFAULT_BOARD_CARD_STYLE
@@ -294,6 +390,7 @@ export function BoardLinksLayer({
       })}
       {mode?.kind === 'wire' ? <WireTargets board={board} mode={mode} zoom={zoom} /> : null}
       {mode?.kind === 'arrow' ? <ArrowTargets board={board} mode={mode} zoom={zoom} /> : null}
+      {mode?.kind === 'browser' ? <BrowserTargets board={board} mode={mode} zoom={zoom} /> : null}
     </>
   )
 }

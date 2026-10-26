@@ -226,7 +226,7 @@ export function ThemeStep({ theme, onThemeChange, settings, updateSettings }: Th
               className={cn(
                 'group overflow-hidden rounded-xl border p-3 text-left transition-all',
                 selected
-                  ? 'border-violet-500/60 bg-violet-500/10 ring-2 ring-violet-500/30'
+                  ? 'border-ops-blue/60 bg-ops-blue/10 ring-2 ring-ops-blue/30'
                   : 'border-border bg-muted/30 hover:bg-muted/60'
               )}
               onClick={() => applyOnboardingThemeSelection(id, onThemeChange, updateSettings)}
@@ -234,7 +234,7 @@ export function ThemeStep({ theme, onThemeChange, settings, updateSettings }: Th
               <div className="relative mb-3 h-24 overflow-hidden rounded-lg border border-border">
                 <ChromePreview variant={id} />
                 {selected && (
-                  <div className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-violet-500 text-white shadow-sm">
+                  <div className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-ops-blue text-white shadow-sm">
                     <Check className="size-3" strokeWidth={3} />
                   </div>
                 )}

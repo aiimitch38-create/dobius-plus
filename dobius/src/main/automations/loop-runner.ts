@@ -5,23 +5,23 @@ import type {
   AutomationLoopState,
   AutomationRun
 } from '../../shared/automations-types'
-import {
-  admitLoopFire,
-  admitOutputMatch,
-  normalizeAutomationLoop,
-  validateLoopPattern
-} from '../../shared/automation-loops'
+import { admitLoopFire, normalizeAutomationLoop } from '../../shared/automation-loops'
 import { loopTimeUp, scheduleDue } from '../../shared/automation-loop-schedule'
 import { stopStateAfterRun } from '../../shared/automation-loop-stop'
 import { checkExecutionAdmission } from '../agents/execution-gate'
-import { boardGroupTabIdsByName, loopTabIdsFromBoards } from './board-group-members'
+import {
+  boardGroupTabIdsByName,
+  goalCardComplete,
+  loopTabIdsFromBoards
+} from './board-group-members'
 import { setCustomGroupResolver } from '../runtime/orchestration/groups'
 import type { LoopDeliveryStatus, LoopTerminals } from './loop-terminals'
-import { matchLoopPattern } from './loop-pattern-match'
+import { tickOutputMatch, type OutputMatchHost } from './loop-output-match'
 import { HELD_RESULT, LoopHolds, heldFiredAt, notifyLoopHeldByDefault } from './loop-hold'
 import {
   LoopStopChecks,
   anyWorking,
+  notifyLoopFinishedByDefault,
   type LoopStopChecksOptions,
   type StopCheckStore
 } from './loop-stop-check'
@@ -53,6 +53,14 @@ export class LoopRunner {
   private readonly stopChecks: LoopStopChecks
   private readonly goals: LoopGoalJudging
   private readonly visibility = new LoopBoardVisibility()
+  private readonly notifyFinished: (loopName: string, body: string) => void
+  private readonly outputMatchHost: OutputMatchHost = {
+    fire: (...args) => this.fire(...args),
+    saveState: (...args) => this.saveState(...args),
+    resolveTabIds: (loop) => loopTabIdsFromBoards(this.store.getUI().boardsByWorktree, loop),
+    pause: (automation, loop, state) =>
+      this.store.updateAutomation(automation.id, { enabled: false, loop: { ...loop, state } })
+  }
 
   constructor(
     private readonly store: LoopStore,
@@ -62,6 +70,7 @@ export class LoopRunner {
   ) {
     this.holds = new LoopHolds(notifyHeld)
     this.stopChecks = new LoopStopChecks(store, opts)
+    this.notifyFinished = opts.notifyFinished ?? notifyLoopFinishedByDefault
     this.goals = new LoopGoalJudging(
       store,
       {
@@ -114,7 +123,10 @@ export class LoopRunner {
     if (!loop) {
       return null
     }
-    if (loopTimeUp(loop, automation.createdAt, now)) {
+    if (
+      loopTimeUp(loop, automation.createdAt, now) ||
+      this.retireIfGoalCardDone(automation, loop, now)
+    ) {
       return null
     }
     const minGap = loop.trigger.kind === 'on-idle' ? loop.trigger.debounceMs : 0
@@ -146,6 +158,9 @@ export class LoopRunner {
           })
           continue
         }
+        if (this.retireIfGoalCardDone(automation, loop, now)) {
+          continue
+        }
         const visible = this.visibility.isVisible(loop.worktreeId, now)
         try {
           if (await this.stopChecks.tick(automation, loop, now, this.terminals)) {
@@ -156,7 +171,7 @@ export class LoopRunner {
             continue
           }
           if (loop.trigger.kind === 'on-output-match') {
-            await this.tickOutputMatch(automation, loop, now)
+            await tickOutputMatch(this.outputMatchHost, this.terminals, automation, loop, now)
           } else if (loop.trigger.kind === 'goal') {
             await this.goals.tick(automation, loop, now, this.terminals)
           } else if (loop.trigger.kind === 'on-idle') {
@@ -176,59 +191,25 @@ export class LoopRunner {
     }
   }
 
-  private async tickOutputMatch(
-    automation: Automation,
-    loop: AutomationLoop,
-    now: number
-  ): Promise<void> {
-    if (loop.trigger.kind !== 'on-output-match') {
-      return
+  /** Goal-card stop: retires the loop once every criterion on its goal card is checked. */
+  private retireIfGoalCardDone(automation: Automation, loop: AutomationLoop, now: number): boolean {
+    const cardId = loop.stopGoalCardId
+    if (
+      !cardId ||
+      !goalCardComplete(this.store.getUI().boardsByWorktree, cardId, loop.worktreeId)
+    ) {
+      return false
     }
-    const { pattern } = loop.trigger
-    const read = validateLoopPattern(pattern).ok
-      ? await this.terminals!.read(loop.trigger.tabId, loop.state.outputCursor)
-      : null
-    if (!read) {
-      return
-    }
-    const hadCursor = loop.state.outputCursor !== null
-    const match = hadCursor ? matchLoopPattern(pattern, read.lines) : ({ kind: 'none' } as const)
-    // Why: the cursor always moves past what was just judged, fire or not, so
-    // the same output range can never fire twice.
-    const advanced: AutomationLoopState = {
+    this.saveState(automation, loop, {
       ...loop.state,
-      outputCursor: read.cursor
-    }
-    if (match.kind === 'timeout') {
-      // A pattern that blew its time budget would do it again every tick: stop the loop.
-      this.store.updateAutomation(automation.id, {
-        enabled: false,
-        loop: {
-          ...loop,
-          state: {
-            ...advanced,
-            lastResult: 'Pattern took too long to match; loop paused.'
-          }
-        }
-      })
-      return
-    }
-    const decision = admitOutputMatch({
-      state: loop.state,
-      hadCursor,
-      matched: match.kind === 'match',
-      now,
-      cooldownMs: loop.trigger.cooldownMs
+      retiredAt: now,
+      lastResult: 'Goal card complete; loop finished.'
     })
-    if (!decision.fire) {
-      if (read.cursor !== loop.state.outputCursor) {
-        this.saveState(automation, loop, advanced)
-      }
-      return
-    }
-    // Why: never echo terminal output back into a terminal; only the user's own
-    // instruction is delivered.
-    await this.fire(automation, loop, now, automation.prompt, advanced)
+    this.notifyFinished(
+      automation.name,
+      'Every criterion on its goal card is checked, so the loop stopped.'
+    )
+    return true
   }
 
   /** On-idle while the Board is hidden (the renderer observer covers it when visible). */
@@ -258,10 +239,12 @@ export class LoopRunner {
     loop: AutomationLoop,
     now: number,
     instruction: string,
-    baseState: AutomationLoopState
+    baseState: AutomationLoopState,
+    /** Output match: only the consoles that matched, not the whole target. */
+    onlyTabIds?: readonly string[]
   ): Promise<AutomationRun> {
     const run = this.store.createAutomationRun(automation, now, loop.trigger.kind)
-    const tabIds = loopTabIdsFromBoards(this.store.getUI().boardsByWorktree, loop)
+    const tabIds = onlyTabIds ?? loopTabIdsFromBoards(this.store.getUI().boardsByWorktree, loop)
     const admission = checkExecutionAdmission('agent-run')
     const blocked = !admission.allowed
     let error: string | null = null

@@ -4,6 +4,7 @@ import {
   EMPTY_BOARD,
   clampZoom,
   sanitizeBoardsByWorktree,
+  withoutDriver,
   type BoardCard,
   type BoardCardPatch,
   type BoardConnector,
@@ -197,7 +198,9 @@ export const createBoardSlice: StateCreator<AppState, [], [], BoardSlice> = (set
                   (c.kind === 'orchestrator' || c.kind === 'goal') &&
                   c.wiredCardIds.some((id) => ids.has(id))
                     ? { ...c, wiredCardIds: c.wiredCardIds.filter((id) => !ids.has(id)) }
-                    : c
+                    : c.kind === 'web' && c.driverCardId && ids.has(c.driverCardId)
+                      ? withoutDriver(c)
+                      : c
                 ),
               groups: withoutCards(b.groups, ids),
               connectors: b.connectors?.filter(

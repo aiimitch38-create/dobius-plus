@@ -1,7 +1,6 @@
 import { translate } from '@/i18n/i18n'
 import type { BoardState } from '@/store/slices/board'
 import type {
-  AutomationLoop,
   AutomationLoopTarget,
   AutomationLoopTrigger
 } from '../../../../../shared/automations-types'
@@ -14,19 +13,22 @@ import {
   LOOP_MIN_SCHEDULE_MS,
   validateLoopPattern
 } from '../../../../../shared/automation-loops'
-import {
-  LOOP_STOP_RUNS_LIMIT,
-  stopCommandProblem
-} from '../../../../../shared/automation-loop-stop'
 
 export type LoopKind = AutomationLoopTrigger['kind']
+
+/** How the "When a goal is met" stop decides: a Board goal card's checklist, a
+ *  command that passes, or a separate read-only agent judging a written goal. */
+export type LoopStopGoalMode = 'card' | 'command' | 'judge'
 
 export type LoopFormValues = {
   name: string
   instruction: string
   kind: LoopKind
-  /** `tab:<tabId>`, `group:<groupId>`, or BOARD_TARGET_KEY for every console */
+  /** `tab:<tabId>`, `group:<groupId>`, `orchestrator:<cardId>`, BOARD_TARGET_KEY
+   *  for every console, or PICKED_TARGET_KEY for the consoles in `pickedTabIds`. */
   targetKey: string
+  /** "Pick consoles": the chosen console tab ids. */
+  pickedTabIds: string[]
   debounceSec: number
   pattern: string
   cooldownSec: number
@@ -45,6 +47,11 @@ export type LoopFormValues = {
   judge: 'agent' | 'self'
   /** Keep firing while the Board is not the visible view. */
   background: boolean
+  /** "When a goal is met" stop toggle and which of its modes is in use. */
+  stopGoalOn: boolean
+  stopGoalMode: LoopStopGoalMode
+  /** Board goal card whose completed checklist retires the loop; '' = none. */
+  stopGoalCardId: string
 }
 
 export const DEFAULT_LOOP_FORM: LoopFormValues = {
@@ -52,6 +59,7 @@ export const DEFAULT_LOOP_FORM: LoopFormValues = {
   instruction: '',
   kind: 'on-idle',
   targetKey: '',
+  pickedTabIds: [],
   debounceSec: 5,
   pattern: '',
   cooldownSec: 60,
@@ -63,10 +71,16 @@ export const DEFAULT_LOOP_FORM: LoopFormValues = {
   stopAfterRuns: 0,
   stopCommand: '',
   judge: 'agent',
-  background: true
+  background: true,
+  stopGoalOn: false,
+  stopGoalMode: 'card',
+  stopGoalCardId: ''
 }
 
 export const BOARD_TARGET_KEY = 'board:all'
+export const PICKED_TARGET_KEY = 'tabs:picked'
+/** Run cap used when an agent-judged goal has no explicit "after N runs" stop. */
+export const JUDGED_GOAL_DEFAULT_MAX_RUNS = LOOP_MAX_RUNS_LIMIT
 
 export function parseTargetKey(key: string): AutomationLoopTarget | null {
   if (key === BOARD_TARGET_KEY) {
@@ -86,14 +100,70 @@ export function parseTargetKey(key: string): AutomationLoopTarget | null {
         : null
 }
 
+/** The form's target: picked consoles collapse to one `tab` when only one is chosen. */
+export function formTarget(
+  form: Pick<LoopFormValues, 'targetKey' | 'pickedTabIds'>
+): AutomationLoopTarget | null {
+  if (form.targetKey !== PICKED_TARGET_KEY) {
+    return parseTargetKey(form.targetKey)
+  }
+  const tabIds = [...new Set(form.pickedTabIds)]
+  if (tabIds.length === 0) {
+    return null
+  }
+  return tabIds.length === 1 ? { type: 'tab', tabId: tabIds[0] } : { type: 'tabs', tabIds }
+}
+
+/** True when the form saves as an agent-judged goal loop (schedule + "an agent judges"). */
+export function isJudgedGoalForm(
+  form: Pick<LoopFormValues, 'kind' | 'stopGoalOn' | 'stopGoalMode'>
+): boolean {
+  return form.kind === 'schedule' && form.stopGoalOn && form.stopGoalMode === 'judge'
+}
+
 export type LoopFormResult =
   | { ok: true; trigger: AutomationLoopTrigger }
   | { ok: false; error: string }
 
 export function buildLoopTrigger(form: LoopFormValues): LoopFormResult {
-  const target = parseTargetKey(form.targetKey)
+  const target = formTarget(form)
   if (!target) {
-    return { ok: false, error: translate('board.loops.error.target', 'Pick a console or group.') }
+    return {
+      ok: false,
+      error:
+        form.targetKey === PICKED_TARGET_KEY
+          ? translate('board.loops.error.pickOne', 'Pick at least one console.')
+          : translate('board.loops.error.target', 'Pick a console or group.')
+    }
+  }
+  if (form.stopGoalOn && form.stopGoalMode === 'judge') {
+    if (form.kind !== 'schedule') {
+      return {
+        ok: false,
+        error: translate(
+          'board.loops.error.judgeNeedsSchedule',
+          'An agent-judged goal needs "On a schedule": the judge checks after each run.'
+        )
+      }
+    }
+    if (!form.goal.trim()) {
+      return { ok: false, error: translate('board.loops.error.goal', 'Describe the goal.') }
+    }
+    const runs = Math.round(form.stopAfterRuns)
+    return {
+      ok: true,
+      trigger: {
+        kind: 'goal',
+        target,
+        goal: form.goal.trim(),
+        checkEveryMs: Math.max(LOOP_MIN_CHECK_EVERY_MS, Math.round(form.everyMin) * 60_000),
+        maxRuns: Math.min(
+          LOOP_MAX_RUNS_LIMIT,
+          Number.isFinite(runs) && runs > 0 ? runs : JUDGED_GOAL_DEFAULT_MAX_RUNS
+        ),
+        judge: 'agent'
+      }
+    }
   }
   if (form.kind === 'on-idle') {
     if (!form.instruction.trim()) {
@@ -131,12 +201,6 @@ export function buildLoopTrigger(form: LoopFormValues): LoopFormResult {
     }
   }
   if (form.kind === 'on-output-match') {
-    if (target.type !== 'tab') {
-      return {
-        ok: false,
-        error: translate('board.loops.error.matchTab', 'Output match watches one console.')
-      }
-    }
     if (!form.instruction.trim()) {
       return {
         ok: false,
@@ -165,7 +229,7 @@ export function buildLoopTrigger(form: LoopFormValues): LoopFormResult {
       ok: true,
       trigger: {
         kind: 'on-output-match',
-        tabId: target.tabId,
+        target,
         pattern: form.pattern,
         cooldownMs: Math.max(LOOP_MIN_COOLDOWN_MS, form.cooldownSec * 1000)
       }
@@ -191,6 +255,10 @@ export function buildLoopTrigger(form: LoopFormValues): LoopFormResult {
 export function loopTargetTabIds(target: AutomationLoopTarget, board: BoardState): string[] {
   if (target.type === 'tab') {
     return [target.tabId]
+  }
+  if (target.type === 'tabs') {
+    const onBoard = new Set(board.cards.flatMap((c) => (c.kind === 'console' ? [c.tabId] : [])))
+    return target.tabIds.filter((tabId) => onBoard.has(tabId))
   }
   if (target.type === 'board') {
     return board.cards.flatMap((c) => (c.kind === 'console' ? [c.tabId] : []))
@@ -221,92 +289,5 @@ export function targetIsWorking(
   )
 }
 
-/** One line for the panel: when the loop fires next, or why it won't. */
-export function describeNextFire(loop: AutomationLoop, enabled: boolean, now: number): string {
-  const { state, trigger } = loop
-  if (state.retiredAt !== null) {
-    return translate('board.loops.next.retired', 'Finished')
-  }
-  if (state.paused || !enabled) {
-    return translate('board.loops.next.paused', 'Paused')
-  }
-  if (trigger.kind === 'on-idle') {
-    return translate('board.loops.next.idle', 'When the target goes idle')
-  }
-  if (trigger.kind === 'on-output-match') {
-    return translate('board.loops.next.match', 'When output matches /{{pattern}}/', {
-      pattern: trigger.pattern
-    })
-  }
-  if (trigger.kind === 'schedule') {
-    const minutes = Math.max(
-      0,
-      Math.ceil(((state.lastFiredAt ?? now) + trigger.everyMs - now) / 60_000)
-    )
-    return state.lastFiredAt === null
-      ? translate('board.loops.next.scheduleStart', 'Every {{every}} min', {
-          every: Math.round(trigger.everyMs / 60_000)
-        })
-      : translate('board.loops.next.schedule', 'Next run in {{minutes}} min', { minutes })
-  }
-  if (state.runCount === 0) {
-    return translate('board.loops.next.goalStart', 'Starts on the next check')
-  }
-  const dueIn = Math.max(
-    0,
-    Math.round(((state.lastFiredAt ?? now) + trigger.checkEveryMs - now) / 1000)
-  )
-  return translate('board.loops.next.goal', 'Check in {{seconds}}s · run {{runs}} of {{max}}', {
-    seconds: dueIn,
-    runs: state.runCount,
-    max: trigger.maxRuns
-  })
-}
-
-/** Time-limit stop for the saved loop, or undefined for "no limit". */
-export function loopStopAfterMs(form: Pick<LoopFormValues, 'stopAfterMin'>): number | undefined {
-  const minutes = Math.round(form.stopAfterMin)
-  return Number.isFinite(minutes) && minutes > 0 ? Math.max(1, minutes) * 60_000 : undefined
-}
-
-export type LoopStopFields = Pick<AutomationLoop, 'stopAfterMs' | 'stopAfterRuns' | 'stopCommand'>
-
-/** Every stop rule for the saved loop; an error when the stop command is unsafe to run unattended. */
-export function loopStopFields(
-  form: Pick<LoopFormValues, 'kind' | 'stopAfterMin' | 'stopAfterRuns' | 'stopCommand'>
-): { ok: true; fields: LoopStopFields } | { ok: false; error: string } {
-  const stopAfterMs = loopStopAfterMs(form)
-  const runs = Math.round(form.stopAfterRuns)
-  // Goal loops carry their own max runs on the trigger.
-  const stopAfterRuns =
-    form.kind !== 'goal' && Number.isFinite(runs) && runs > 0
-      ? Math.min(LOOP_STOP_RUNS_LIMIT, runs)
-      : undefined
-  const command = form.stopCommand.trim()
-  const problem = command ? stopCommandProblem(command) : null
-  if (problem) {
-    return {
-      ok: false,
-      error:
-        problem === 'too_long'
-          ? translate('board.loops.error.stopLong', 'Stop command is longer than 200 characters.')
-          : problem === 'shell'
-            ? translate(
-                'board.loops.error.stopShellPlain',
-                'Use one plain command — no quotes, wildcards, ~, pipes, ; & > or $'
-              )
-            : translate(
-                'board.loops.error.stopDestructive',
-                'That stop command could change or delete files. Use a check such as a build or test command.'
-              )
-    }
-  }
-  return {
-    ok: true,
-    fields: {
-      ...(stopAfterMs ? { stopAfterMs } : {}),
-      ...(stopAfterRuns ? { stopAfterRuns } : {}),
-      ...(command ? { stopCommand: command } : {})
-    }
-  }
-}
+export { describeNextFire } from './loop-next-fire'
+export { loopStopAfterMs, loopStopFields, type LoopStopFields } from './loop-form-stop'

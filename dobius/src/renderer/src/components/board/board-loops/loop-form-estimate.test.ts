@@ -21,7 +21,7 @@ describe('estimatePromptsPerHour', () => {
     expect(estimatePromptsPerHour(goal, 2)).toEqual({ perHour: 60, consoles: 2, upTo: true })
     expect(estimatePromptsPerHour({ ...goal, maxRuns: 5 }, 2)?.perHour).toBe(10)
     const match = { ...DEFAULT_LOOP_FORM, kind: 'on-output-match' as const, cooldownSec: 60 }
-    expect(estimatePromptsPerHour(match, 4)).toEqual({ perHour: 60, consoles: 1, upTo: true })
+    expect(estimatePromptsPerHour(match, 4)).toEqual({ perHour: 240, consoles: 4, upTo: true })
     expect(describePromptsPerHour({ perHour: 60, consoles: 2, upTo: true })).toBe(
       'up to ≈ 60.0 prompts/h across 2 consoles'
     )
@@ -43,6 +43,9 @@ describe('loopEstimateLine (always visible)', () => {
     ).toBe('up to ≈ 60.0 prompts/h across 2 consoles')
     expect(
       loopEstimateLine({ ...DEFAULT_LOOP_FORM, kind: 'on-output-match', cooldownSec: 60 }, 3)
+    ).toBe('up to ≈ 180.0 prompts/h across 3 consoles')
+    expect(
+      loopEstimateLine({ ...DEFAULT_LOOP_FORM, kind: 'on-output-match', cooldownSec: 60 }, 1)
     ).toBe('up to ≈ 60.0 prompts/h to 1 console')
   })
 

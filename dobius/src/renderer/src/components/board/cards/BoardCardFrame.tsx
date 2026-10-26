@@ -28,6 +28,7 @@ import { translate } from '@/i18n/i18n'
 import { passedCardDragThreshold, shouldStartCardDrag } from './card-drag-target'
 import { focusMovedOutOfMenu } from './card-menu-focus'
 import { BoardCardFocusEdge } from '../board-canvas/BoardCardFocusEdge'
+import { useBoardGhostHidden } from '../board-canvas/board-ghost-store'
 
 export type BoardCardAction = {
   label: string
@@ -271,6 +272,10 @@ export function BoardCardFrame({
     onPointerCancel: endDrag
   }
 
+  // Why: a just-spawned card stays invisible while its placement ghost holds the
+  // spot, then the Board's opacity transition fades it in over the outline.
+  const ghosted = useBoardGhostHidden(rect.id)
+
   return (
     <div
       data-board-card
@@ -278,7 +283,8 @@ export function BoardCardFrame({
       className={cn(
         'group/board-card absolute flex flex-col',
         !bare &&
-          'overflow-visible rounded-(--board-radius-card) border border-[var(--board-panel-border)] bg-[var(--board-panel)] text-[var(--board-text)] shadow-(--board-shadow)'
+          'overflow-visible rounded-(--board-radius-card) border border-[var(--board-panel-border)] bg-[var(--board-panel)] text-[var(--board-text)] shadow-(--board-shadow)',
+        ghosted && 'opacity-0'
       )}
       style={{
         left: rect.x,

@@ -7,12 +7,9 @@ import type { AgentCursorTarget } from '../../../../../shared/agent-cursor'
 import { prefersReducedMotion } from '../board-canvas/board-camera'
 import { AgentCursor, AgentEdgeHint } from './AgentCursor'
 import { clampToEdge, projectAgentTarget } from './agent-cursor-mapping'
-import {
-  startAgentPresence,
-  useAgentPresence,
-  type AgentPresence
-} from './agent-presence-state'
+import { startAgentPresence, useAgentPresence, type AgentPresence } from './agent-presence-state'
 import { CursorInterpolator } from './cursor-interpolator'
+import { installConsoleDriverNames } from '../board-browser-link/console-driver-names'
 
 const RIPPLE_SIZE_PX = 44
 const HOVER_OUTLINE_OFFSET_PX = 2
@@ -74,6 +71,7 @@ export function AgentCursorLayer(): React.JSX.Element {
   }
 
   useEffect(() => startAgentPresence(), [])
+  useEffect(() => installConsoleDriverNames(), [])
 
   // Why: the frame loop costs a getBoundingClientRect per frame, so it runs only
   // while some agent has a pointer to draw and stops itself when none is left.

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import type { AutomationLoopTarget } from '../../shared/automations-types'
 import type { RuntimeTerminalSummary } from '../../shared/runtime-types'
 import {
   resolveBoardGroupInWorktree,
@@ -130,5 +131,16 @@ describe('loop targets: orchestrator-wired consoles', () => {
       []
     )
     expect(loopTargetTabIdsFromBoards(boards, { type: 'board' }, 'wt')).toEqual(['t1', 't2'])
+  })
+
+  it('picked tabs only reach consoles still on that worktree board', async () => {
+    const { loopTargetTabIdsFromBoards } = await import('./board-group-members')
+    const boards = {
+      wt: { cards: [{ kind: 'console', id: 'a', tabId: 't1' }], groups: [] },
+      other: { cards: [{ kind: 'console', id: 'b', tabId: 't2' }], groups: [] }
+    }
+    const picked: AutomationLoopTarget = { type: 'tabs', tabIds: ['t1', 't2', 'gone'] }
+    expect(loopTargetTabIdsFromBoards(boards, picked, 'wt')).toEqual(['t1'])
+    expect(loopTargetTabIdsFromBoards(boards, picked, 'missing')).toEqual([])
   })
 })

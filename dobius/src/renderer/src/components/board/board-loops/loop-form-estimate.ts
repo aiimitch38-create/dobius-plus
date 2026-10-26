@@ -29,7 +29,8 @@ export function estimatePromptsPerHour(
     return { perHour: perConsole * consoles, consoles, upTo: true }
   }
   if (form.kind === 'on-output-match') {
-    return { perHour: 3600 / Math.max(5, form.cooldownSec), consoles: 1, upTo: true }
+    // Each watched console has its own cooldown, so the ceiling scales with them.
+    return { perHour: (3600 / Math.max(5, form.cooldownSec)) * consoles, consoles, upTo: true }
   }
   return null
 }

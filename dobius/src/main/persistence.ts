@@ -36,6 +36,7 @@ import {
 import { getAutomationLegacyRepoId } from '../shared/automation-run-identity'
 import { normalizeAutomationPrecheck } from '../shared/automation-precheck'
 import { normalizeAutomationNotification } from '../shared/automation-notification'
+import { normalizeWorkspacePurpose } from '../shared/workspace-purpose'
 import type {
   PersistedState,
   Project,
@@ -4228,6 +4229,7 @@ export class Store {
         | 'sortOrder'
         | 'manualOrder'
         | 'workspaceStatus'
+        | 'purpose'
         | 'createdWithAgent'
         | 'pendingFirstAgentMessageRename'
         | 'firstAgentMessageRenameError'
@@ -4272,6 +4274,15 @@ export class Store {
     }
     if (updates.workspaceStatus !== undefined) {
       workspace.workspaceStatus = updates.workspaceStatus
+    }
+    if (updates.purpose !== undefined) {
+      // Why: an empty string is the "clear purpose" signal (moves it back to Other).
+      const purpose = normalizeWorkspacePurpose(updates.purpose)
+      if (purpose) {
+        workspace.purpose = purpose
+      } else {
+        delete workspace.purpose
+      }
     }
     if (updates.createdWithAgent !== undefined) {
       workspace.createdWithAgent = updates.createdWithAgent
@@ -4964,6 +4975,16 @@ export class Store {
   setWorktreeMeta(worktreeId: string, meta: Partial<WorktreeMeta>): WorktreeMeta {
     const existing = this.state.worktreeMeta[worktreeId] || getDefaultWorktreeMeta()
     const updated = { ...existing, ...meta }
+    if (meta.purpose !== undefined) {
+      // Why: purpose is free text from the UI/CLI; trim + cap once here so every
+      // write path (IPC, runtime RPC) persists the same bounded value. '' clears.
+      const purpose = normalizeWorkspacePurpose(meta.purpose)
+      if (purpose) {
+        updated.purpose = purpose
+      } else {
+        delete updated.purpose
+      }
+    }
     if (!updated.instanceId) {
       updated.instanceId = randomUUID()
     }

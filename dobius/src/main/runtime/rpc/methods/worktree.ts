@@ -177,6 +177,7 @@ export const WORKTREE_METHODS: RpcMethod[] = [
         sparsePresetId: params.sparsePresetId,
         baseRef: params.baseRef,
         workspaceStatus: params.workspaceStatus,
+        purpose: params.purpose,
         pushTarget: params.pushTarget,
         diffComments: params.diffComments,
         mobileDiffReview: params.mobileDiffReview,

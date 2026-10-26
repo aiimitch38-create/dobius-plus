@@ -2,7 +2,13 @@ import React, { useState } from 'react'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 
-export type BoardWorkspaceTab = { id: string; name: string; count?: number }
+export type BoardWorkspaceTab = {
+  id: string
+  name: string
+  count?: number
+  /** Purpose label (Features / Backend / …); absent → the "Other" group. */
+  purpose?: string
+}
 
 type BoardWorkspaceTabButtonProps = {
   workspace: BoardWorkspaceTab

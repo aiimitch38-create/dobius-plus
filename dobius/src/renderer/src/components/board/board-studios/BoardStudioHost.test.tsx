@@ -41,7 +41,7 @@ vi.mock('./LoopsStudio', () => ({ LoopsStudio: stub('LoopsStudio') }))
 vi.mock('./SettingsStudio', () => ({ SettingsStudio: stub('SettingsStudio') }))
 vi.mock('./SkillsStudio', () => ({ SkillsStudio: stub('SkillsStudio') }))
 vi.mock('../board-presets/PresetsStudio', () => ({ PresetsStudio: stub('PresetsStudio') }))
-vi.mock('@/store/selectors', () => ({ useRepoById: () => null }))
+vi.mock('@/store/selectors', () => ({ useRepoById: () => null, useWorktreesForRepo: () => [] }))
 
 const storeMock = vi.hoisted(() => ({ store: null as null | import('zustand').StoreApi<any> }))
 vi.mock('@/store', async () => {

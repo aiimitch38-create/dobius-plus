@@ -27,6 +27,18 @@ export function boardSpawnPlacements(
 
 type Box = { x: number; y: number; w: number; h: number }
 
+/**
+ * `boardSpawnPlacements` as full rects: the one list a spawn path ghosts first
+ * and then creates cards from, so the ghost and the card never disagree.
+ */
+export function boardSpawnRects(
+  center: BoardPoint,
+  count: number,
+  size: { w: number; h: number } = BOARD_CONSOLE_SIZE
+): Box[] {
+  return boardSpawnPlacements(center, count, size).map((p) => ({ ...p, ...size }))
+}
+
 const SCAN_STEP = 40
 const CLEARANCE = 24
 

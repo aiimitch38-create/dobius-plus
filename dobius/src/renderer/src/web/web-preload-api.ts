@@ -2546,7 +2546,8 @@ function createRateLimitsApi(): NonNullable<Partial<PreloadApi>['rateLimits']> {
     fetchInactiveClaudeAccounts: () => Promise.resolve(),
     fetchInactiveCodexAccounts: () => Promise.resolve(),
     refreshMiniMax: () => Promise.resolve(empty),
-    onUpdate: () => noopUnsubscribe
+    onUpdate: () => noopUnsubscribe,
+    onProgress: () => noopUnsubscribe
   }
 }
 

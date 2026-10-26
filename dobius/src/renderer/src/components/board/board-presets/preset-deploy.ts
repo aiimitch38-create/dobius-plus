@@ -1,6 +1,7 @@
 import { createNewTerminalTab } from '@/components/terminal/terminal-tab-actions'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { useAppStore } from '@/store'
+import { boardGhostOf, pushBoardGhosts } from '../board-canvas/board-ghost-store'
 import { fitViewportToRects } from '../board-canvas/board-viewport'
 import { awaitMirroredConsoleTabs } from '../board-route/board-await-mirrored-tabs'
 import type { DeployPlan, PlanConsole } from './preset-deploy-plan'
@@ -40,7 +41,7 @@ function spawnConsole(
     if (!tabId) {
       return 'failed'
     }
-    state.addCard(worktreeId, { ...card, tabId })
+    pushBoardGhosts([boardGhostOf(card, state.addCard(worktreeId, { ...card, tabId }))])
     return 'placed'
   }
   const result = launchAgentInNewTab({ agent: c.agent, worktreeId, launchSource: 'unknown' })
@@ -48,7 +49,9 @@ function spawnConsole(
     return 'failed'
   }
   if (result.tabId) {
-    state.addCard(worktreeId, { ...card, tabId: result.tabId })
+    pushBoardGhosts([
+      boardGhostOf(card, state.addCard(worktreeId, { ...card, tabId: result.tabId }))
+    ])
     return 'placed'
   }
   // Host-backed launch: the card appears once the mirrored tab arrives.

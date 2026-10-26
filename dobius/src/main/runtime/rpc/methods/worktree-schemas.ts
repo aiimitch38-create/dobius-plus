@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../shared/types'
 import { workspaceSourceSchema } from '../../../../shared/telemetry-events'
+import { MAX_WORKSPACE_PURPOSE_LENGTH } from '../../../../shared/workspace-purpose'
 import { sleepingAgentLaunchConfigSchema } from '../../../../shared/workspace-session-sleeping-agents'
 import {
   OptionalBoolean,
@@ -201,6 +202,7 @@ export const WorktreeSet = WorktreeSelector.extend({
   sparsePresetId: OptionalString,
   baseRef: OptionalString,
   workspaceStatus: OptionalString,
+  purpose: z.string().trim().max(MAX_WORKSPACE_PURPOSE_LENGTH).optional(),
   pushTarget: z
     .object({
       remoteName: z.string(),

@@ -269,6 +269,8 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       ...linearIssueLink,
       comment: getOptionalStringFlag(flags, 'comment'),
       workspaceStatus: getOptionalStringFlag(flags, 'workspace-status'),
+      // Why: --purpose "" is the documented way to clear the label (back to Other).
+      purpose: getPresentStringFlag(flags, 'purpose', { allowEmpty: true }),
       parentWorktree: await getOptionalWorktreeSelector(flags, 'parent-worktree', cwd, client),
       noParent: flags.get('no-parent') === true
     })

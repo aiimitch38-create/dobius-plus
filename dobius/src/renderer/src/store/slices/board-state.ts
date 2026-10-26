@@ -77,7 +77,15 @@ export type BoardCard = BoardCardBase &
     // device: simulated viewport id (board-web/web-tile-devices); unset = fill the tile.
     // session: 'shared' browses with the signed-in browser profile; unset = private (incognito).
     // popupOf: id of the tile whose page opened this one as a popup (caps siblings per source).
-    | { kind: 'web'; url: string; device?: string; session?: BoardWebSession; popupOf?: string }
+    // driverCardId: console card wired to drive this tile (board-browser-link/*); pruned with the console.
+    | {
+        kind: 'web'
+        url: string
+        device?: string
+        session?: BoardWebSession
+        popupOf?: string
+        driverCardId?: string
+      }
     | { kind: 'note'; text: string; color: BoardSwatch }
     | { kind: 'text'; text: string; style?: BoardCardStyle }
     | { kind: 'checklist'; items: BoardChecklistItem[] }
@@ -117,6 +125,12 @@ export type BoardCard = BoardCardBase &
   )
 
 export type BoardCardKind = BoardCard['kind']
+
+/** The web tile without its console driver link (the console was removed or is not on the board). */
+export function withoutDriver(card: BoardCardOf<'web'>): BoardCardOf<'web'> {
+  const { driverCardId: _dropped, ...rest } = card
+  return rest
+}
 export type BoardCardOf<K extends BoardCardKind> = Extract<BoardCard, { kind: K }>
 
 export type NewBoardCard = DistributiveOmit<BoardCard, 'id' | 'z'> & { id?: string }

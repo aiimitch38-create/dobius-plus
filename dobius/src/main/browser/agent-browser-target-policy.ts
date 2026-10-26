@@ -1,6 +1,7 @@
 import { session, type WebContents } from 'electron'
 import { DOBIUS_WEB_TILE_PAGE_ID_PREFIX, DOBIUS_WEB_TILE_PARTITION } from '../../shared/constants'
 import { BrowserError } from './cdp-bridge'
+import { consoleTileBindings } from '../agents/console-tile-bindings'
 
 export type AgentTargetGuest = {
   /** Board card id the guest belongs to (browserPageId minus the `web-tile:` prefix). */
@@ -43,4 +44,15 @@ export function assertAgentMayTargetGuest(
     )
   }
   return { tileId }
+}
+
+/**
+ * A connected console (`console-<id>`) may only act in the tile the Board
+ * linked it to; unlinked, it may drive nothing. Other identities pass through.
+ */
+export function assertConsoleDriverMayTargetTile(agentId: string, tileId: string): void {
+  const refusal = consoleTileBindings.refusal(agentId, tileId)
+  if (refusal) {
+    throw new BrowserError('agent_not_connected_to_tile', refusal)
+  }
 }

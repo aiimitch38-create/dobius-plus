@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { defineMethod, type RpcMethod } from '../core'
 import { OptionalFiniteNumber, OptionalString, requiredString } from '../schemas'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
+import { MAX_WORKSPACE_PURPOSE_LENGTH } from '../../../../shared/workspace-purpose'
 
 const FolderWorkspaceLinkedTask = z
   .object({
@@ -39,6 +40,7 @@ const FolderWorkspaceUpdate = z.object({
     sortOrder: OptionalFiniteNumber,
     manualOrder: OptionalFiniteNumber,
     workspaceStatus: OptionalString,
+    purpose: z.string().trim().max(MAX_WORKSPACE_PURPOSE_LENGTH).optional(),
     createdWithAgent: z.string().refine(isTuiAgent).optional(),
     pendingFirstAgentMessageRename: z.boolean().optional(),
     firstAgentMessageRenameError: z.string().nullable().optional(),

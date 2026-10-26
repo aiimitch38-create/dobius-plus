@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Pause, Play, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { LOOP_PLACEHOLDER_RRULE, newLoopState } from '../../../../../shared/auto
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import { getRepoIdFromWorktreeId } from '../../../../../shared/worktree-id'
 import { notifyAutomationsChanged, useBoardLoops } from './board-loop-list'
+import type { BoardLoopTemplate } from './board-loop-templates'
 import { BoardLoopForm } from './BoardLoopForm'
 import { BoardLoopTemplatesGrid } from './BoardLoopTemplatesGrid'
 import { loopFormFromTemplate } from './loop-form-template'
@@ -19,57 +20,30 @@ import {
   DEFAULT_LOOP_FORM,
   buildLoopTrigger,
   describeNextFire,
+  formTarget,
   loopStopFields,
   loopTargetTabIds,
-  parseTargetKey,
   type LoopFormValues
 } from './loop-form'
+
+type Draft = { form: LoopFormValues; templateId: string | null }
 
 export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.JSX.Element {
   const { loops, refresh } = useBoardLoops(worktreeId)
   const board = useAppStore((s) => getBoard(s, worktreeId))
-  const [creating, setCreating] = useState<LoopFormValues | null>(null)
+  const [draft, setDraft] = useState<Draft | null>(null)
   const [busy, setBusy] = useState(false)
-  const consoleCount = board.cards.filter((c) => c.kind === 'console').length
-  const targets = useMemo(
-    () => [
-      {
-        key: BOARD_TARGET_KEY,
-        label: translate('board.loops.target.board', 'Every console (and new ones)'),
-        agentKind: null
-      },
-      ...board.cards.flatMap((c) =>
-        c.kind === 'console'
-          ? [{ key: `tab:${c.tabId}`, label: c.title, agentKind: c.agentKind }]
-          : []
-      ),
-      ...board.groups.map((g) => ({ key: `group:${g.id}`, label: `@${g.name}`, agentKind: null })),
-      ...board.cards.flatMap((c) =>
-        c.kind === 'orchestrator'
-          ? [
-              {
-                key: `orchestrator:${c.id}`,
-                label: translate('board.loops.target.orchestrator', 'Wired to {{name}}', {
-                  name: c.name
-                }),
-                agentKind: null
-              }
-            ]
-          : []
-      )
-    ],
-    [board]
-  )
+  const consoles = board.cards.flatMap((c) => (c.kind === 'console' ? [c] : []))
+  const consoleCount = consoles.length
 
-  const consoleCountFor = (key: string): number => {
-    const target = parseTargetKey(key)
-    return target ? loopTargetTabIds(target, board).length : 0
-  }
-
-  const firstConsoleKey =
-    targets.find((t) => t.key.startsWith('tab:'))?.key ?? targets[0]?.key ?? ''
+  const firstConsoleKey = consoles[0] ? `tab:${consoles[0].tabId}` : BOARD_TARGET_KEY
   const startFromScratch = (): void =>
-    setCreating({ ...DEFAULT_LOOP_FORM, targetKey: targets[0]?.key ?? '' })
+    setDraft({
+      form: { ...DEFAULT_LOOP_FORM, kind: 'schedule', targetKey: BOARD_TARGET_KEY },
+      templateId: null
+    })
+  const startFromTemplate = (template: BoardLoopTemplate): void =>
+    setDraft({ form: loopFormFromTemplate(template, firstConsoleKey), templateId: template.id })
 
   const after = (): void => {
     notifyAutomationsChanged()
@@ -87,7 +61,10 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
       toast.error(stop.error)
       return
     }
-    const agentKind = targets.find((t) => t.key === form.targetKey)?.agentKind
+    // The automation's agent follows the first targeted console (TUI agents keep their own).
+    const target = formTarget(form)
+    const [firstTabId] = target ? loopTargetTabIds(target, board) : []
+    const agentKind = consoles.find((c) => c.tabId === firstTabId)?.agentKind
     setBusy(true)
     try {
       // Why: created disabled, then given its loop, so no scheduler tick can see
@@ -95,8 +72,8 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
       const created = await window.api.automations.create({
         name: form.name.trim() || translate('board.loops.untitled', 'Board loop'),
         prompt:
-          form.kind === 'goal'
-            ? (form.judge === 'agent' && form.instruction.trim()) || form.goal.trim()
+          built.trigger.kind === 'goal'
+            ? form.instruction.trim() || form.goal.trim()
             : form.instruction.trim(),
         agentId: agentKind && isTuiAgent(agentKind) ? agentKind : 'claude',
         projectId: getRepoIdFromWorktreeId(worktreeId),
@@ -120,7 +97,7 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
           enabled: true
         }
       })
-      setCreating(null)
+      setDraft(null)
       after()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -148,14 +125,30 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
   }
 
   const now = Date.now()
+  if (draft) {
+    return (
+      <BoardLoopForm
+        // Why: a new template or "from scratch" replaces the whole draft; remount so
+        // the form's local state starts from the new values.
+        key={draft.templateId ?? 'scratch'}
+        initial={draft.form}
+        board={board}
+        templateId={draft.templateId}
+        onPickTemplate={startFromTemplate}
+        busy={busy}
+        onCancel={() => setDraft(null)}
+        onSubmit={(form) => void create(form)}
+      />
+    )
+  }
   return (
-    <div className="flex flex-col gap-3 text-[var(--board-text)]">
+    <div className="flex flex-col gap-5 text-[var(--board-text)]">
       <div className="flex items-center justify-between">
         {/* The studio header already says Loops; keep this heading for screen readers only until a loop exists. */}
         <h2 className={cn('text-[15px] font-semibold', loops.length === 0 && 'sr-only')}>
           {translate('board.loops.title', 'Loops')}
         </h2>
-        {!creating && loops.length > 0 && (
+        {loops.length > 0 && (
           <Button
             size="sm"
             variant="outline"
@@ -172,36 +165,21 @@ export function BoardLoopsPanel({ worktreeId }: { worktreeId: string }): React.J
           {translate('board.loops.needConsole', 'Add a console to the board to loop on it.')}
         </p>
       )}
-      {creating && (
-        <BoardLoopForm
-          initial={creating}
-          targets={targets}
-          consoleCountFor={consoleCountFor}
-          busy={busy}
-          onCancel={() => setCreating(null)}
-          onSubmit={(form) => void create(form)}
-        />
-      )}
-      {!creating && loops.length === 0 && (
-        <div className="mx-auto max-w-2xl pt-3 pb-2 text-center">
-          <h3 className="text-[20px] font-bold tracking-[-0.01em]">
-            {translate('board.loops.heroTitle', 'Keep your agents working on their own')}
+      {loops.length === 0 && (
+        <div className="mx-auto max-w-2xl pt-3 pb-1 text-center">
+          <h3 className="text-[22px] font-bold tracking-[-0.01em]">
+            {translate('board.loops.heroTitle', 'Put your agents on autopilot')}
           </h3>
           <p className="mt-2 text-[14px] leading-relaxed text-[var(--board-text-muted)]">
             {translate(
               'board.loops.empty',
-              'A loop sends one instruction to your consoles on a schedule, when an agent finishes and goes idle, or when a console prints something you care about. Give it a goal or a time limit and it stops by itself.'
+              'A loop sends one instruction to your consoles at a fixed interval, whenever an agent finishes and goes idle, or the moment a console prints something you care about. Give it a goal and it retires itself the instant the job is actually done.'
             )}
           </p>
         </div>
       )}
-      {!creating && (
-        <BoardLoopTemplatesGrid
-          disabled={consoleCount === 0}
-          onPick={(template) => setCreating(loopFormFromTemplate(template, firstConsoleKey))}
-        />
-      )}
-      {!creating && loops.length === 0 && (
+      <BoardLoopTemplatesGrid disabled={consoleCount === 0} onPick={startFromTemplate} />
+      {loops.length === 0 && (
         <div className="flex justify-center">
           <Button
             variant="outline"

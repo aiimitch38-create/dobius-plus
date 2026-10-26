@@ -41,6 +41,11 @@ export type BoardPageProps = {
   contentRects: readonly BoardRect[]
   /** Primary pointer-down on empty canvas (world coords); drawing tools start here. */
   onEmptyPointerDown?: (world: BoardPoint, event: React.PointerEvent<HTMLDivElement>) => void
+  /** Pointer hovering empty canvas (null when it leaves); placing tools ghost here. */
+  onEmptyPointerMove?: (world: BoardPoint | null) => void
+  /** Rail item hovered/focused (null on leave): shows where that card would land. */
+  onToolPreview?: (tool: BoardTool | null) => void
+  onInsertPreview?: (kind: BoardInsertKind | null) => void
   spaceHeld?: boolean
   onSpacePanStart?: () => void
   onMarquee?: (rect: { x: number; y: number; w: number; h: number }) => void
@@ -67,6 +72,9 @@ export function BoardPage({
   onToolChange,
   contentRects,
   onEmptyPointerDown,
+  onEmptyPointerMove,
+  onToolPreview,
+  onInsertPreview,
   spaceHeld,
   onSpacePanStart,
   onMarquee,
@@ -118,6 +126,7 @@ export function BoardPage({
         containerRef={canvasRef}
         panOnEmptyDrag={boardToolPansOnEmptyDrag(tool)}
         onEmptyPointerDown={onEmptyPointerDown}
+        onEmptyPointerMove={onEmptyPointerMove}
         spaceHeld={spaceHeld}
         onSpacePanStart={onSpacePanStart}
         onMarquee={onMarquee}
@@ -135,6 +144,7 @@ export function BoardPage({
         <BoardToolRail
           tool={tool}
           onToolChange={onToolChange}
+          onPreview={onToolPreview}
           onFitView={fitView}
           onOpenGitHub={onOpenGitHub}
         />
@@ -143,7 +153,7 @@ export function BoardPage({
             {toolOptions}
           </div>
         ) : null}
-        <BoardInsertRail onInsert={onInsert} />
+        <BoardInsertRail onInsert={onInsert} onPreview={onInsertPreview} />
         {/* Why: a vertical dock between the tool rail and GitHub doesn't fit at the
             reference 859px height without moving the rail, so it sits beside GitHub. */}
         <BoardSideApps

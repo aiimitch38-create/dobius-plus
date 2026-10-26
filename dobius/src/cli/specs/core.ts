@@ -134,7 +134,7 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
     path: ['worktree', 'set'],
     summary: 'Update Dobius+ metadata for a worktree',
     usage:
-      'dobius worktree set --worktree <selector> [--display-name <name>] [--issue <number|null>] [--linear-issue <identifier-or-url|null>] [--comment <text>] [--workspace-status <id>] [--parent-worktree <selector>|--no-parent] [--json]',
+      'dobius worktree set --worktree <selector> [--display-name <name>] [--issue <number|null>] [--linear-issue <identifier-or-url|null>] [--comment <text>] [--workspace-status <id>] [--purpose <name>] [--parent-worktree <selector>|--no-parent] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'worktree',
@@ -143,11 +143,13 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
       'linear-issue',
       'comment',
       'workspace-status',
+      'purpose',
       'parent-worktree',
       'no-parent'
     ],
     notes: [
       'Workspace status ids match the board columns (defaults: todo, in-progress, in-review, completed); custom statuses use their configured id.',
+      'Purpose is a grouping label for the Board top bar and Source Control workspace view (defaults: Features, Backend, Research; any name works). Pass --purpose "" to move the worktree back to Other.',
       'Pass --linear-issue null to clear the Linear issue link.'
     ],
     examples: [

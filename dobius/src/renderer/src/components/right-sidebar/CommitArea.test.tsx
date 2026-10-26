@@ -92,6 +92,59 @@ function hasDisabledAttribute(markup: string): boolean {
   return markup.includes(' disabled=""')
 }
 
+describe('CommitArea triad layout', () => {
+  function triadButtons(markup: string): Record<string, string> {
+    const buttons = markup.match(/<button\b[\s\S]*?<\/button>/g) ?? []
+    const out: Record<string, string> = {}
+    for (const button of buttons) {
+      const slot = button.match(/data-triad-action="(commit|push|pull)"/)?.[1]
+      if (slot) {
+        out[slot] = button
+      }
+    }
+    return out
+  }
+
+  it('renders Commit, Push and Pull with the dropdown reasons when nothing is pending', () => {
+    const markup = renderCommitArea({ ...baseProps(), actionLayout: 'triad' })
+    const buttons = triadButtons(markup)
+    expect(Object.keys(buttons).sort()).toEqual(['commit', 'pull', 'push'])
+    expect(hasDisabledAttribute(buttons.commit)).toBe(false)
+    expect(buttons.push).toContain('title="Nothing to push"')
+    expect(buttons.pull).toContain('title="Nothing to pull"')
+    expect(markup).toContain('aria-label="More commit and remote actions"')
+  })
+
+  it('offers Publish Branch in the push slot when the branch has no upstream', () => {
+    const markup = renderCommitArea({
+      ...baseProps({ upstreamStatus: { hasUpstream: false, ahead: 0, behind: 0 } }),
+      actionLayout: 'triad'
+    })
+    const buttons = triadButtons(markup)
+    expect(buttons.push).toContain('Publish Branch')
+    expect(hasDisabledAttribute(buttons.push)).toBe(false)
+    expect(hasDisabledAttribute(buttons.pull)).toBe(true)
+  })
+
+  it('disables Commit with the stage reason and keeps Push live when commits are ahead', () => {
+    const markup = renderCommitArea({
+      ...baseProps({
+        stagedCount: 0,
+        upstreamStatus: { hasUpstream: true, ahead: 2, behind: 0 }
+      }),
+      actionLayout: 'triad'
+    })
+    const buttons = triadButtons(markup)
+    expect(hasDisabledAttribute(buttons.commit)).toBe(true)
+    expect(hasDisabledAttribute(buttons.push)).toBe(false)
+    expect(buttons.push).toContain('Push 2 commits')
+  })
+
+  it('keeps the split layout by default', () => {
+    expect(renderCommitArea(baseProps())).not.toContain('data-triad-action')
+  })
+})
+
 describe('CommitArea', () => {
   it('disables the primary button when no staged files', () => {
     expect(hasDisabledAttribute(firstButton(renderCommitArea(baseProps({ stagedCount: 0 }))))).toBe(

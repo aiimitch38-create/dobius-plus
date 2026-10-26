@@ -3,17 +3,13 @@
 import type { BoardLoopTemplate } from './board-loop-templates'
 import { BOARD_TARGET_KEY, DEFAULT_LOOP_FORM, type LoopFormValues } from './loop-form'
 
-/**
- * `firstConsoleKey` is used where the template needs one console: "selected"
- * targets, and output-match (the engine watches one console's output).
- */
+/** `firstConsoleKey` is used where the template wants one console ("selected" targets). */
 export function loopFormFromTemplate(
   template: BoardLoopTemplate,
   firstConsoleKey: string
 ): LoopFormValues {
   const { trigger } = template
-  const wantsEveryConsole =
-    template.target === 'every-console' && trigger.kind !== 'on-output-match'
+  const wantsEveryConsole = template.target === 'every-console'
   const base: LoopFormValues = {
     ...DEFAULT_LOOP_FORM,
     name: template.title,
@@ -21,7 +17,9 @@ export function loopFormFromTemplate(
     targetKey: wantsEveryConsole ? BOARD_TARGET_KEY : firstConsoleKey,
     stopAfterMin: template.stop.timeLimitMinutes ?? 0,
     stopAfterRuns: template.stop.maxRuns ?? 0,
-    stopCommand: template.stop.untilCommandPasses ?? ''
+    stopCommand: template.stop.untilCommandPasses ?? '',
+    stopGoalOn: template.stop.untilCommandPasses !== undefined,
+    stopGoalMode: 'command'
   }
   switch (trigger.kind) {
     case 'schedule':

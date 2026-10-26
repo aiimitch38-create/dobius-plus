@@ -10,6 +10,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
 import { BOARD_LOOP_TEMPLATES, type BoardLoopTemplate } from './board-loop-templates'
 
 const ICONS: Record<BoardLoopTemplate['icon'], LucideIcon> = {
@@ -62,5 +63,40 @@ export function BoardLoopTemplatesGrid({
         })}
       </div>
     </section>
+  )
+}
+
+/** The same templates as a scrollable pill row at the top of the form (selected = solid accent). */
+export function BoardLoopTemplatePills({
+  selectedId,
+  onPick
+}: {
+  selectedId: string | null
+  onPick: (template: BoardLoopTemplate) => void
+}): React.JSX.Element {
+  return (
+    <div className="scrollbar-sleek -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+      {BOARD_LOOP_TEMPLATES.map((template) => {
+        const Icon = ICONS[template.icon]
+        const selected = template.id === selectedId
+        return (
+          <button
+            key={template.id}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onPick(template)}
+            className={cn(
+              'flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-medium whitespace-nowrap transition-colors',
+              selected
+                ? 'border-[var(--board-accent)] bg-[var(--board-accent)] text-[var(--board-accent-fg)]'
+                : 'border-[var(--board-panel-border)] bg-[var(--board-panel)] text-[var(--board-text)] hover:border-[var(--board-text-muted)]'
+            )}
+          >
+            <Icon aria-hidden className="size-3.5" />
+            {template.title}
+          </button>
+        )
+      })}
+    </div>
   )
 }

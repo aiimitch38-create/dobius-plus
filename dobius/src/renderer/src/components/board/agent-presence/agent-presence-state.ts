@@ -119,10 +119,28 @@ export function agentColorVar(agentId: string): string {
   return `var(--${agentPaletteEntry(agentId).slot})`
 }
 
+/** Optional override of an agent's display name (e.g. a console driver shows its card title). */
+export type AgentDisplayResolver = (agentId: string) => string | null
+let displayResolver: AgentDisplayResolver | null = null
+
+/** Installs the resolver; returns the uninstall. Only one is active at a time. */
+export function setAgentDisplayResolver(resolver: AgentDisplayResolver | null): () => void {
+  displayResolver = resolver
+  return () => {
+    if (displayResolver === resolver) {
+      displayResolver = null
+    }
+  }
+}
+
+function displayName(event: AgentCursorEvent): string {
+  return displayResolver?.(event.agentId) ?? event.name
+}
+
 function freshPresence(event: AgentCursorEvent, now: number): AgentPresence {
   return {
     id: event.agentId,
-    name: event.name,
+    name: displayName(event),
     color: agentColorVar(event.agentId),
     pointer: null,
     hover: null,
@@ -145,10 +163,9 @@ function freshPresence(event: AgentCursorEvent, now: number): AgentPresence {
   }
 }
 
-function isTileTarget(target: AgentCursorTarget | undefined): target is Extract<
-  AgentCursorTarget,
-  { tileId: string }
-> {
+function isTileTarget(
+  target: AgentCursorTarget | undefined
+): target is Extract<AgentCursorTarget, { tileId: string }> {
   return !!target && 'tileId' in target
 }
 
@@ -160,7 +177,7 @@ function reduce(prev: AgentPresence, event: AgentCursorEvent, now: number): Agen
   const target = event.target
   const next: AgentPresence = {
     ...prev,
-    name: event.name,
+    name: displayName(event),
     lastKind: event.kind,
     lastSeq: Math.max(prev.lastSeq, event.seq),
     lastEventAt: now,
@@ -442,6 +459,7 @@ export function startAgentPresence(): () => void {
 
 export function resetAgentPresenceForTest(): void {
   appliedSeqs.clear()
+  displayResolver = null
   autoFollow.lastUserCameraAt = Number.NEGATIVE_INFINITY
   autoFollow.suppressedUntil.clear()
   useAgentPresence.setState({ agents: {}, followAgentId: null, autoFollowEnabled: true })

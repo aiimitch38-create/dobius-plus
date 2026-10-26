@@ -6,6 +6,7 @@ export type BoardWorkspaceSource = {
   branch: string
   isArchived: boolean
   sortOrder: number
+  purpose?: string
 }
 
 function branchLabel(branch: string): string {
@@ -23,6 +24,7 @@ export function boardWorkspaceTabs(
     .map((w) => ({
       id: w.id,
       name: w.displayName.trim() || branchLabel(w.branch) || w.id,
-      count: consoleCountByWorktree[w.id] ?? 0
+      count: consoleCountByWorktree[w.id] ?? 0,
+      ...(w.purpose ? { purpose: w.purpose } : {})
     }))
 }

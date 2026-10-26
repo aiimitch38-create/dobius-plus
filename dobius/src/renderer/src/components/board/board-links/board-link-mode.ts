@@ -6,6 +6,8 @@ export type BoardLinkMode =
   // orchestratorId: the card being wired, an orchestrator or a goal card.
   | { kind: 'wire'; worktreeId: string; orchestratorId: string }
   | { kind: 'arrow'; worktreeId: string; fromCardId: string }
+  // Console ↔ web tile driver link (board-browser-link/*), started from either end.
+  | { kind: 'browser'; worktreeId: string; sourceCardId: string; sourceKind: 'web' | 'console' }
 
 export const useBoardLinkMode = create<{
   mode: BoardLinkMode | null

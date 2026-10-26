@@ -16,15 +16,18 @@ export const LOOP_STOP_RUNS_LIMIT = 500
 export function normalizeLoopStopFields(raw: Record<string, unknown>): {
   stopAfterRuns?: number
   stopCommand?: string
+  stopGoalCardId?: string
 } {
   const runs =
     typeof raw.stopAfterRuns === 'number' && Number.isFinite(raw.stopAfterRuns)
       ? Math.min(LOOP_STOP_RUNS_LIMIT, Math.round(raw.stopAfterRuns))
       : 0
   const command = typeof raw.stopCommand === 'string' ? raw.stopCommand.trim() : ''
+  const goalCardId = typeof raw.stopGoalCardId === 'string' ? raw.stopGoalCardId.trim() : ''
   return {
     ...(runs > 0 ? { stopAfterRuns: runs } : {}),
-    ...(command && command.length <= LOOP_STOP_COMMAND_MAX_LENGTH ? { stopCommand: command } : {})
+    ...(command && command.length <= LOOP_STOP_COMMAND_MAX_LENGTH ? { stopCommand: command } : {}),
+    ...(goalCardId ? { stopGoalCardId: goalCardId } : {})
   }
 }
 

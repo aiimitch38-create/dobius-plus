@@ -33,6 +33,9 @@ export type BoardCanvasProps = {
   panOnEmptyDrag?: boolean
   /** Primary pointer-down on empty canvas, in world coordinates. */
   onEmptyPointerDown?: (world: BoardPoint, event: React.PointerEvent<HTMLDivElement>) => void
+  /** Pointer hovering (not dragging) over the canvas: world point on empty space,
+   *  null over a card or once the pointer leaves. Placing tools preview here. */
+  onEmptyPointerMove?: (world: BoardPoint | null) => void
   /** While Space is held, a primary drag pans from anywhere (even over cards), in every tool. */
   spaceHeld?: boolean
   /** Fired when a Space-drag pan starts, so hold-Space push-to-talk can stand down. */
@@ -58,6 +61,7 @@ export function BoardCanvas({
   containerRef,
   panOnEmptyDrag = true,
   onEmptyPointerDown,
+  onEmptyPointerMove,
   spaceHeld = false,
   onSpacePanStart,
   onMarquee,
@@ -224,6 +228,17 @@ export function BoardCanvas({
     }
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) {
+      // Hover only: a pressed button means a shape/pen drag, which draws its own outline.
+      if (onEmptyPointerMove && event.buttons === 0) {
+        onEmptyPointerMove(
+          isEmptyTarget(event.target)
+            ? screenToWorld(
+                localPoint(event.currentTarget, event.clientX, event.clientY),
+                viewportRef.current
+              )
+            : null
+        )
+      }
       return
     }
     const dx = event.clientX - drag.lastX
@@ -288,6 +303,7 @@ export function BoardCanvas({
       onPointerMove={handlePointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
+      onPointerLeave={onEmptyPointerMove ? () => onEmptyPointerMove(null) : undefined}
       onContextMenu={handleContextMenu}
     >
       <div

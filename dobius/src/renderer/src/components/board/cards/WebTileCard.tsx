@@ -30,6 +30,9 @@ import { WEB_TILE_ID_ATTRIBUTE } from '../agent-presence/agent-cursor-mapping'
 import { attachWebTileYield } from '../agent-presence/web-tile-yield'
 import { WebTileClaimChip } from '../agent-presence/WebTileClaimChip'
 import { useAgentTileLive } from '../agent-presence/use-agent-tile-live'
+import { WebTileLinkControls } from '../board-browser-link/BrowserLinkControls'
+import { consoleDriverAgentId } from '../board-browser-link/browser-link'
+import { resyncConsoleTiles } from '../board-browser-link/console-tile-sync'
 
 // Chromium net error for "connection refused": the dev server is not up yet.
 const ERR_CONNECTION_REFUSED = -102
@@ -64,9 +67,13 @@ export function openWebTilePopupSibling(
   const siblings = cards.filter((c) => c.kind === 'web' && c.popupOf === source.id).length
   if (siblings >= WEB_TILE_POPUP_SIBLING_CAP) {
     toast.warning(
-      translate('board.web.popupCap', '{{title}} opened too many popups. Close some to allow more.', {
-        title: source.title
-      })
+      translate(
+        'board.web.popupCap',
+        '{{title}} opened too many popups. Close some to allow more.',
+        {
+          title: source.title
+        }
+      )
     )
     return null
   }
@@ -251,6 +258,8 @@ export function WebTileCard({
             worktreeId,
             webContentsId
           })
+          // Why: main forgot this tile's console binding when the previous guest unregistered.
+          .then(() => resyncConsoleTiles())
           .catch((error: unknown) => console.debug('[board-web] guest registration failed', error))
       }
     }
@@ -469,7 +478,10 @@ export function WebTileCard({
 
   return (
     <div ref={rootRef} className="relative flex size-full flex-col">
-      <WebTileClaimChip cardId={card.id} />
+      <WebTileClaimChip
+        cardId={card.id}
+        driverAgentId={card.driverCardId ? consoleDriverAgentId(card.driverCardId) : null}
+      />
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-[var(--board-panel-border)] px-2">
         <button
           type="button"
@@ -520,6 +532,7 @@ export function WebTileCard({
             className="min-w-0 flex-1 border-0 bg-transparent font-mono text-[12px] text-[var(--board-text)] outline-none placeholder:text-[var(--board-text-muted)]"
           />
         </label>
+        {worktreeId ? <WebTileLinkControls worktreeId={worktreeId} tile={card} /> : null}
         {worktreeId ? (
           <WebTileExtras
             worktreeId={worktreeId}

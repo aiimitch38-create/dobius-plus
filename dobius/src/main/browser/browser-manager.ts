@@ -5,7 +5,7 @@ in one file avoids scattering the browser security boundary across modules. */
 import { randomUUID } from 'node:crypto'
 
 import { session, shell, webContents } from 'electron'
-import { DOBIUS_WEB_TILE_PARTITION } from '../../shared/constants'
+import { DOBIUS_WEB_TILE_PAGE_ID_PREFIX, DOBIUS_WEB_TILE_PARTITION } from '../../shared/constants'
 import {
   normalizeBrowserNavigationUrl,
   normalizeExternalBrowserUrl,
@@ -52,6 +52,7 @@ import {
   takeWebTilePopupToken,
   webTilePopupUrl
 } from '../../shared/board-web-tile-popup'
+import { consoleTileBindings } from '../agents/console-tile-bindings'
 import { attachWebTileHumanInput } from '../agents/web-tile-human-input'
 
 const AUTOMATION_VISIBILITY_ACQUIRE_TIMEOUT_MS = 2_000
@@ -855,6 +856,11 @@ export class BrowserManager {
       this.tabIdByWebContentsId.delete(wcId)
     }
     this.webContentsIdByTabId.delete(browserTabId)
+    // Why: a web tile whose guest is gone has nothing to drive; the Board re-syncs
+    // the binding when the tile registers a guest again.
+    if (isWebTileBrowserPageId(browserTabId)) {
+      consoleTileBindings.dropTile(browserTabId.slice(DOBIUS_WEB_TILE_PAGE_ID_PREFIX.length))
+    }
     this.rendererWebContentsIdByTabId.delete(browserTabId)
     this.workspaceIdByPageId.delete(browserTabId)
     this.sessionProfileIdByPageId.delete(browserTabId)
@@ -1563,7 +1569,9 @@ export class BrowserManager {
     const recent = this.webTilePopupTimesByGuestId.get(guest.id) ?? []
     this.webTilePopupTimesByGuestId.set(guest.id, recent)
     if (!takeWebTilePopupToken(recent, Date.now())) {
-      console.warn(`[board-web] popup dropped for guest ${guest.id}: too many popups in a short time`)
+      console.warn(
+        `[board-web] popup dropped for guest ${guest.id}: too many popups in a short time`
+      )
       return
     }
     host.send('ui:boardWebTilePopup', {

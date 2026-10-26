@@ -1052,6 +1052,39 @@ describe('dobius cli worktree awareness', () => {
     })
   })
 
+  it('passes --purpose through worktree.set and allows an empty value to clear it', async () => {
+    queueFixtures(
+      callMock,
+      okFixture('req_set_purpose', {
+        worktree: { ...buildWorktree('/tmp/repo/child', 'feature/child'), purpose: 'Backend' }
+      }),
+      okFixture('req_clear_purpose', {
+        worktree: buildWorktree('/tmp/repo/child', 'feature/child')
+      })
+    )
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await main(
+      ['worktree', 'set', '--worktree', 'id:repo::/tmp/repo/child', '--purpose', 'Backend', '--json'],
+      '/tmp/repo'
+    )
+    await main(
+      ['worktree', 'set', '--worktree', 'id:repo::/tmp/repo/child', '--purpose', '', '--json'],
+      '/tmp/repo'
+    )
+
+    expect(callMock).toHaveBeenNthCalledWith(
+      1,
+      'worktree.set',
+      expect.objectContaining({ worktree: 'id:repo::/tmp/repo/child', purpose: 'Backend' })
+    )
+    expect(callMock).toHaveBeenNthCalledWith(
+      2,
+      'worktree.set',
+      expect.objectContaining({ worktree: 'id:repo::/tmp/repo/child', purpose: '' })
+    )
+  })
+
   it('passes Linear issue metadata through worktree.create', async () => {
     queueFixtures(
       callMock,

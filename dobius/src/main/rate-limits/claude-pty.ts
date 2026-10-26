@@ -1,7 +1,11 @@
 /* eslint-disable max-lines -- Why: Claude PTY usage scraping keeps prompt
 driving, parser, timers, and teardown in one state machine; splitting it would
 make the lifecycle harder to audit. */
-import type { ProviderRateLimits, RateLimitWindow } from '../../shared/rate-limit-types'
+import type {
+  ProviderRateLimits,
+  RateLimitWindow,
+  UsageProbeStage
+} from '../../shared/rate-limit-types'
 import { buildConfiguredProxyEnv, type NetworkProxySettings } from '../../shared/network-proxy'
 import { resolveClaudeCommand } from '../codex-cli/command'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
@@ -16,6 +20,13 @@ import {
 
 const PTY_TIMEOUT_MS = 25_000
 const MAX_OUTPUT_LENGTH = 100_000 // 100KB buffer limit
+// Why: the Board's terminal view shows what the probe read; the panel itself is
+// a few KB, so keep only the tail and never ship the whole scrollback over IPC.
+const CLI_OUTPUT_KEEP_CHARS = 16_000
+
+function keepCliOutput(clean: string): string {
+  return clean.length > CLI_OUTPUT_KEEP_CHARS ? clean.slice(-CLI_OUTPUT_KEEP_CHARS) : clean
+}
 
 // ---------------------------------------------------------------------------
 // PTY fallback — spawn interactive `claude`, send `/usage`, parse the TUI
@@ -216,6 +227,8 @@ export async function fetchViaPty(options?: {
   authPreparation?: ClaudeRuntimeAuthPreparation
   networkProxySettings?: NetworkProxySettings
   signal?: AbortSignal
+  /** Milestones for the Board's loading view; never awaited. */
+  onProgress?: (stage: UsageProbeStage) => void
 }): Promise<ProviderRateLimits> {
   if (options?.signal?.aborted) {
     return abortedClaudeUsageResult()
@@ -295,6 +308,7 @@ export async function fetchViaPty(options?: {
       env: spawnEnv
     })
     const termDisposables: { dispose: () => void }[] = [registerHiddenRateLimitPty(term)]
+    options?.onProgress?.('cli-start')
     let enterInterval: ReturnType<typeof setInterval> | null = null
     let timeout: ReturnType<typeof setTimeout> | null = null
 
@@ -358,7 +372,8 @@ export async function fetchViaPty(options?: {
             fableWeekly,
             updatedAt: Date.now(),
             error: null,
-            status: 'ok'
+            status: 'ok',
+            cliOutput: keepCliOutput(clean)
           })
         } else {
           resolve({
@@ -372,7 +387,8 @@ export async function fetchViaPty(options?: {
                 : 'PTY timeout — /usage panel did not render',
               clean
             ),
-            status: 'error'
+            status: 'error',
+            cliOutput: keepCliOutput(clean)
           })
         }
       }
@@ -413,7 +429,8 @@ export async function fetchViaPty(options?: {
           weekly: null,
           updatedAt: Date.now(),
           error: withMacTailscaleDnsHint(describeClaudeUsageFailure(clean), clean),
-          status: 'error'
+          status: 'error',
+          cliOutput: keepCliOutput(clean)
         })
       } else {
         resolve({
@@ -423,7 +440,8 @@ export async function fetchViaPty(options?: {
           fableWeekly,
           updatedAt: Date.now(),
           error: null,
-          status: 'ok'
+          status: 'ok',
+          cliOutput: keepCliOutput(clean)
         })
       }
     }
@@ -437,6 +455,7 @@ export async function fetchViaPty(options?: {
       }
       sentUsage = true
       term.write('/usage\r')
+      options?.onProgress?.('cli-usage')
       startEnterPresses()
     }, STARTUP_DELAY_MS)
 
@@ -483,6 +502,7 @@ export async function fetchViaPty(options?: {
         for (const sub of STOP_SUBSTRINGS) {
           if (clean.includes(sub)) {
             stopDetected = true
+            options?.onProgress?.('cli-read')
             // Why: 2.0s settle time after detecting the stop substring
             // allows the full panel to finish rendering.
             stopSettleTimer = setTimeout(finalize, SETTLE_AFTER_STOP_MS)
@@ -516,7 +536,8 @@ export async function fetchViaPty(options?: {
             session || weekly || fableWeekly
               ? null
               : withMacTailscaleDnsHint('CLI exited before /usage rendered', clean),
-          status: session || weekly || fableWeekly ? 'ok' : 'error'
+          status: session || weekly || fableWeekly ? 'ok' : 'error',
+          cliOutput: keepCliOutput(clean)
         })
       }
     })

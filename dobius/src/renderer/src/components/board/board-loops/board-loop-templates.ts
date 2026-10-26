@@ -16,90 +16,91 @@ export type BoardLoopTemplate = {
   }
 }
 
+// Copy mirrors the reference studio (sym-loops-*.png); the stops keep every
+// schedule template from running forever when the user forgets about it.
 export const BOARD_LOOP_TEMPLATES: readonly BoardLoopTemplate[] = [
   {
-    id: 'progress-checkin',
-    title: 'Progress check-in',
-    description: 'Ask every running agent for a short status summary on a fixed schedule.',
+    id: 'progress-check',
+    title: 'Progress check',
+    description:
+      'Every 15 min, each agent reports what it finished, what’s next, and anything blocking it.',
     icon: 'activity',
     trigger: { kind: 'schedule', everyMinutes: 15 },
     target: 'every-console',
     instruction:
-      'Summarize in two sentences what you completed since the last check-in and what you are working on next. Do not start new work.',
-    stop: { timeLimitMinutes: 120 }
+      'Give a one-line status update: what you just finished, what you are doing next, and anything blocking you.',
+    stop: { timeLimitMinutes: 240 }
   },
   {
-    id: 'idle-nudge',
-    title: 'Idle nudge',
-    description: 'Nudge an agent that has gone quiet, so long-running tasks keep moving.',
+    id: 'keep-moving',
+    title: 'Keep them moving',
+    description:
+      'Whenever an agent goes idle, it’s told to pick up the next task so the swarm never stalls.',
     icon: 'zap',
+    // Why: an idle loop fires once its whole target has settled, so it targets one
+    // console by default; pick more and it waits for all of them to go idle.
     trigger: { kind: 'on-idle', debounceMs: 120000 },
     target: 'selected',
     instruction:
-      'If you have unfinished work, continue it now. If you are finished or blocked, reply with your final status. Keep the reply under three sentences.',
-    stop: { maxRuns: 10 }
+      'You are idle. Pick up the next most valuable task from your plan or the task board and start on it now. If nothing is left, reply with your final status in one line.',
+    stop: { maxRuns: 20 }
   },
   {
     id: 'build-rescue',
     title: 'Build rescue',
-    description: 'When a build error appears in the output, ask the agent to fix the cause.',
+    description:
+      'The moment a console prints FAILED, that agent is told to stop and fix the failure first.',
     icon: 'life-buoy',
-    trigger: {
-      kind: 'on-output-match',
-      pattern: 'error TS\\d{4}:|Build failed|Module not found',
-      cooldownMs: 180000
-    },
+    trigger: { kind: 'on-output-match', pattern: 'FAILED', cooldownMs: 180000 },
     target: 'every-console',
     instruction:
-      'The build just failed. Read the newest compiler or bundler error, fix its root cause, and rerun the build to confirm it passes. Do not touch unrelated files.',
-    stop: { untilCommandPasses: 'pnpm run build' }
+      'Your console just printed FAILED. Stop what you are doing, read the failure above, fix its root cause, and rerun to confirm it passes before continuing. Do not touch unrelated files.',
+    stop: {}
   },
   {
-    id: 'test-watch',
-    title: 'Test watcher',
-    description: 'React to failing test output by sending a targeted fix request.',
+    id: 'test-watchdog',
+    title: 'Test watchdog',
+    description: 'Every 30 min, the test suite runs and failures are fixed on the spot.',
     icon: 'flask-conical',
-    trigger: {
-      kind: 'on-output-match',
-      pattern: '\\b\\d+ failed\\b|Tests:\\s*\\d+ failed|FAIL\\b',
-      cooldownMs: 180000
-    },
+    trigger: { kind: 'schedule', everyMinutes: 30 },
     target: 'every-console',
     instruction:
-      'Tests just failed. Pick the first failing test, fix the smallest possible cause, then rerun that test to confirm it turns green.',
-    stop: { untilCommandPasses: 'pnpm exec vitest run' }
+      'Run the test suite now. If anything fails, fix the smallest cause and rerun until it is green. Report the pass/fail counts in one line.',
+    stop: { timeLimitMinutes: 480 }
   },
   {
     id: 'commit-checkpoint',
     title: 'Commit checkpoint',
-    description: 'Periodically commit staged progress so work is never lost.',
+    description:
+      'Every 20 min, working changes are committed with a clear message so progress is never lost.',
     icon: 'git-commit',
-    trigger: { kind: 'schedule', everyMinutes: 30 },
+    trigger: { kind: 'schedule', everyMinutes: 20 },
     target: 'every-console',
     instruction:
-      'Review your uncommitted changes. If they form a coherent unit, stage exactly the files you changed and create one commit with a concise message describing the why. Do not commit or push anything else.',
-    stop: { maxRuns: 16 }
+      'Review your uncommitted changes. If they form a coherent unit, stage exactly the files you changed and create one commit with a clear message describing the why. Do not push.',
+    stop: { maxRuns: 24 }
   },
   {
     id: 'review-sweep',
     title: 'Review sweep',
-    description: 'A slow loop that asks for a lightweight self review on a schedule.',
+    description:
+      'Every 30 min, recent changes are reviewed for bugs and dead code, and anything found is fixed.',
     icon: 'eye',
-    trigger: { kind: 'schedule', everyMinutes: 45 },
-    target: 'group',
+    trigger: { kind: 'schedule', everyMinutes: 30 },
+    target: 'every-console',
     instruction:
-      'Reread the files you changed in this session. List at most three concrete problems worth fixing, ranked by severity. Fix only the top item, then stop.',
+      'Reread the files you changed in the last 30 minutes. Look for bugs and dead code, fix what you find, and list what you changed in one line each.',
     stop: { timeLimitMinutes: 240 }
   },
   {
-    id: 'standup-summary',
-    title: 'Standup summary',
-    description: 'Collect an hourly written standup from every console on the board.',
+    id: 'hourly-standup',
+    title: 'Hourly standup',
+    description: 'Once an hour, every agent writes a short standup: done, doing, blocked.',
     icon: 'clock',
     trigger: { kind: 'schedule', everyMinutes: 60 },
     target: 'every-console',
     instruction:
-      'Write a standup entry with three short lines: done, doing, and blockers. Include file names for anything you touched. Do not run commands.',
+      'Write a standup entry with three short lines: done, doing, and blocked. Include file names for anything you touched. Do not run commands.',
     stop: { timeLimitMinutes: 480 }
   }
 ]

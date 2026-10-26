@@ -28,16 +28,27 @@ import type { BoardInsertKind } from './board-tools'
 
 export type BoardInsertRailProps = {
   onInsert: (kind: BoardInsertKind) => void
+  /** Hover/focus on an item (null on leave): the Board ghosts where its card would land. */
+  onPreview?: (kind: BoardInsertKind | null) => void
 }
 
 function RailDivider(): React.JSX.Element {
   return <div className="mx-auto my-[0.5px] h-px w-6 bg-[var(--board-panel-border)]" />
 }
 
-export function BoardInsertRail({ onInsert }: BoardInsertRailProps): React.JSX.Element {
+export function BoardInsertRail({ onInsert, onPreview }: BoardInsertRailProps): React.JSX.Element {
   const checklistLabel = translate('board.insert.checklist', 'Checklist')
   const item = (kind: BoardInsertKind, label: string, icon: React.ReactNode): React.JSX.Element => (
-    <BoardRailButton key={kind} label={label} tooltipSide="left" onClick={() => onInsert(kind)}>
+    <BoardRailButton
+      key={kind}
+      label={label}
+      tooltipSide="left"
+      onClick={() => onInsert(kind)}
+      onPointerEnter={() => onPreview?.(kind)}
+      onPointerLeave={() => onPreview?.(null)}
+      onFocus={() => onPreview?.(kind)}
+      onBlur={() => onPreview?.(null)}
+    >
       {icon}
     </BoardRailButton>
   )

@@ -655,6 +655,7 @@ function getFolderWorkspaceMetaUpdates(
     | 'manualOrder'
     | 'lastActivityAt'
     | 'workspaceStatus'
+    | 'purpose'
     | 'createdWithAgent'
     | 'pendingFirstAgentMessageRename'
     | 'firstAgentMessageRenameError'
@@ -672,6 +673,7 @@ function getFolderWorkspaceMetaUpdates(
       | 'manualOrder'
       | 'lastActivityAt'
       | 'workspaceStatus'
+      | 'purpose'
       | 'createdWithAgent'
       | 'pendingFirstAgentMessageRename'
       | 'firstAgentMessageRenameError'
@@ -706,6 +708,9 @@ function getFolderWorkspaceMetaUpdates(
   }
   if (updates.workspaceStatus !== undefined) {
     next.workspaceStatus = updates.workspaceStatus
+  }
+  if (updates.purpose !== undefined) {
+    next.purpose = updates.purpose
   }
   if (updates.createdWithAgent !== undefined) {
     next.createdWithAgent = updates.createdWithAgent

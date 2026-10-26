@@ -18,6 +18,7 @@ import {
 import { BoardSurfaceCover } from './components/board/BoardSurfaceCover'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useIpcEvents } from './hooks/useIpcEvents'
+import { useConsoleTileSync } from './components/board/board-browser-link/console-tile-sync'
 import { useAutomationDispatchEvents } from './hooks/useAutomationDispatchEvents'
 import RetainedAgentsSyncGate from './components/dashboard/RetainedAgentsSyncGate'
 import { AgentHibernationGate } from './components/AgentHibernationGate'
@@ -238,6 +239,9 @@ function App(): React.JSX.Element {
   // Subscribe to IPC push events
   useIpcEvents()
   useAutomationDispatchEvents()
+  // Why: main drops a tile's console binding when its guest unregisters; the
+  // App-level mirror keeps the set true while the Board is open or closed.
+  useConsoleTileSync()
   // Why: retention must run at App level so the inline per-card agents list
   // always sees retained entries. If retention ran inside the sidebar-card
   // subtree, "done" agents would vanish any time the user collapsed a card's

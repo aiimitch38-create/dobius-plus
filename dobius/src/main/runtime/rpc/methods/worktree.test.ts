@@ -689,6 +689,39 @@ describe('worktree RPC methods', () => {
     )
   })
 
+  it('forwards the purpose label through worktree.set', async () => {
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      updateManagedWorktreeMeta: vi.fn().mockResolvedValue({ id: 'wt-1' })
+    } as unknown as DobiusRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('worktree.set', { worktree: 'id:wt-1', purpose: 'Research' })
+    )
+
+    expect(response).toMatchObject({ ok: true })
+    expect(runtime.updateManagedWorktreeMeta).toHaveBeenCalledWith(
+      'id:wt-1',
+      expect.objectContaining({ purpose: 'Research' })
+    )
+  })
+
+  it('rejects a purpose label longer than the cap on worktree.set', async () => {
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      updateManagedWorktreeMeta: vi.fn().mockResolvedValue({ id: 'wt-1' })
+    } as unknown as DobiusRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('worktree.set', { worktree: 'id:wt-1', purpose: 'p'.repeat(41) })
+    )
+
+    expect(response).toMatchObject({ ok: false })
+    expect(runtime.updateManagedWorktreeMeta).not.toHaveBeenCalled()
+  })
+
   it('forwards push target clears through worktree.set', async () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',

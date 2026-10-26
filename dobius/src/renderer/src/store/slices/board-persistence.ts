@@ -1,6 +1,6 @@
 import type { StoreApi } from 'zustand'
 import type { AppState } from '../types'
-import { isPersistableImageSrc, type BoardState } from './board-state'
+import { isPersistableImageSrc, withoutDriver, type BoardState } from './board-state'
 
 export const PERSIST_DEBOUNCE_MS = 300
 // Why: pan/zoom changes only the camera; wait until the gesture has clearly
@@ -181,7 +181,9 @@ export function mergeSnapshotBoard(current: BoardState, snapshot: BoardState): B
     cards: cards.map((c) =>
       (c.kind === 'orchestrator' || c.kind === 'goal') && c.wiredCardIds.some((id) => !ids.has(id))
         ? { ...c, wiredCardIds: c.wiredCardIds.filter((id) => ids.has(id)) }
-        : c
+        : c.kind === 'web' && c.driverCardId && !ids.has(c.driverCardId)
+          ? withoutDriver(c)
+          : c
     ),
     groups: snapshot.groups
       .map((g) => ({ ...g, cardIds: g.cardIds.filter((id) => ids.has(id)) }))

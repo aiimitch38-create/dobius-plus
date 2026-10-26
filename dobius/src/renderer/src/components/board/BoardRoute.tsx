@@ -10,7 +10,8 @@ import { useAppStore } from '@/store'
 import { BoardPage } from './BoardPage'
 import { boardFreeSpawnCenter, boardSpawnBlockSize } from './board-canvas/board-spawn-placement'
 import { screenToWorld, type BoardPoint, type BoardViewport } from './board-canvas/board-viewport'
-import { BOARD_CHROME_INSETS } from './board-canvas/board-reveal'
+import { boardSafeWorldArea } from './board-canvas/board-reveal'
+import { boardGhostOf, pushBoardGhosts } from './board-canvas/board-ghost-store'
 import { BoardAgentPicker, type BoardAgentPickerRequest } from './board-chrome/BoardAgentPicker'
 import { spawnTeamOnBoard } from './board-chrome/board-team-spawn'
 import { BoardResumePrompt } from './board-resume/BoardResumePrompt'
@@ -32,7 +33,7 @@ import type { BoardStudioId } from './board-studios/board-studio-ids'
 import { BoardCardsLayer } from './board-route/BoardCardsLayer'
 import { boardInsertCard, type BoardInsertCardKind } from './board-route/board-insert-cards'
 import { useBoardShapeDraw } from './board-route/use-board-shape-draw'
-import { clampRectIntoArea } from './cards/card-geometry'
+import { useBoardPlacementPreview } from './board-route/use-board-placement-preview'
 import { useBoardActions } from './board-route/use-board-actions'
 import { useBoardCommand } from './board-route/use-board-command'
 import { useBoardPlanner } from './board-planner/use-board-planner'
@@ -47,6 +48,8 @@ import { useBoardAttentionJump } from './board-route/use-board-attention-jump'
 import { useBoardFocusMode } from './board-route/use-board-camera-focus'
 import { BoardFocusPill } from './board-route/BoardFocusPill'
 import { BoardShortcutSheet } from './board-route/BoardShortcutSheet'
+import { BoardEmptyStart } from './board-empty/BoardEmptyStart'
+import { useBoardEmptyStart } from './board-empty/use-board-empty-start'
 
 // The expanded thread (560x~602, 28px above the bottom, centered) is treated as
 // occupied even when collapsed, so a card never lands where the thread opens.
@@ -107,25 +110,25 @@ export default function BoardRoute(): React.JSX.Element {
   const freeCenter = useCallback(
     (block: { w: number; h: number }): BoardPoint => {
       const v = board.viewport
-      const inset = BOARD_CHROME_INSETS
-      const topLeft = screenToWorld({ x: inset.left, y: inset.top }, v)
-      const bottomRight = screenToWorld(
-        { x: window.innerWidth - inset.right, y: window.innerHeight - inset.bottom },
-        v
-      )
       return boardFreeSpawnCenter(
-        {
-          x: topLeft.x,
-          y: topLeft.y,
-          w: bottomRight.x - topLeft.x,
-          h: bottomRight.y - topLeft.y
-        },
+        boardSafeWorldArea(v, { w: window.innerWidth, h: window.innerHeight }),
         block,
         [...board.cards, threadWorldRect(v)]
       )
     },
     [board.cards, board.viewport]
   )
+  const pickerSpot = useMemo(
+    () => (picker ? { world: picker.world, count: picker.request.count } : null),
+    [picker]
+  )
+  const preview = useBoardPlacementPreview({
+    viewport: board.viewport,
+    tool: board.tool,
+    freeCenter,
+    defaultAgent: data.agents[0]?.id,
+    picker: pickerSpot
+  })
   const closeStudio = useCallback(() => setStudio(null), [])
   const history = useBoardHistory(worktreeId)
   const plannerContext = useMemo(
@@ -235,18 +238,9 @@ export default function BoardRoute(): React.JSX.Element {
     if (!worktreeId) {
       return
     }
-    const placed = boardInsertCard(tool, world)
-    const v = board.viewport
-    const inset = BOARD_CHROME_INSETS
-    const tl = screenToWorld({ x: inset.left, y: inset.top }, v)
-    const br = screenToWorld(
-      { x: window.innerWidth - inset.right, y: window.innerHeight - inset.bottom },
-      v
-    )
-    useAppStore.getState().addCard(worktreeId, {
-      ...placed,
-      ...clampRectIntoArea(placed, { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y })
-    })
+    const placed = preview.insertCardAt(tool, world)
+    const cardId = useAppStore.getState().addCard(worktreeId, placed)
+    pushBoardGhosts([boardGhostOf(placed, cardId)])
     setTool('select')
   }
 
@@ -310,6 +304,14 @@ export default function BoardRoute(): React.JSX.Element {
 
   const chatTabId = data.consoles.find((c) => selection.selectedIds.has(c.id))?.tabId ?? null
 
+  const emptyStart = useBoardEmptyStart({
+    data,
+    spawn: actions.spawn,
+    freeCenter,
+    openStudio: setStudio,
+    suspended: picker !== null || studio !== null || shortcutsOpen
+  })
+
   return (
     <div
       data-surface="board"
@@ -328,6 +330,9 @@ export default function BoardRoute(): React.JSX.Element {
         onToolChange={setTool}
         contentRects={board.cards.map((c) => ({ x: c.x, y: c.y, width: c.w, height: c.h }))}
         onEmptyPointerDown={onEmptyPointerDown}
+        onEmptyPointerMove={preview.onEmptyPointerMove}
+        onToolPreview={preview.onToolPreview}
+        onInsertPreview={preview.onInsertPreview}
         onMarquee={canvasMenu.onMarquee}
         onEmptyContextMenu={canvasMenu.open}
         toolOptions={
@@ -368,6 +373,7 @@ export default function BoardRoute(): React.JSX.Element {
         overlay={
           <>
             {focusMode.focus ? <BoardFocusPill onExit={focusMode.exit} /> : null}
+            {emptyStart ? <BoardEmptyStart {...emptyStart} /> : null}
             <BoardShortcutSheet open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
             <BoardCanvasMenu
               at={canvasMenu.at?.screen ?? null}

@@ -219,7 +219,7 @@ Common Commands:
   dobius worktree create --name <name> [--repo <selector>|--project <id> [--host <host-id>]|--project-host-setup <id>] [--agent <id>] [--prompt <text>] [--setup run|skip|inherit] [--base-branch <ref>] [--issue <number>] [--linear-issue <identifier-or-url>] [--comment <text>] [--parent-worktree <selector>] [--no-parent] [--run-hooks] [--activate] [--json]
   dobius worktree show --worktree <selector> [--json]
   dobius worktree current [--json]
-  dobius worktree set --worktree <selector> [--display-name <name>] [--issue <number|null>] [--linear-issue <identifier-or-url|null>] [--comment <text>] [--workspace-status <id>] [--parent-worktree <selector>|--no-parent] [--json]
+  dobius worktree set --worktree <selector> [--display-name <name>] [--issue <number|null>] [--linear-issue <identifier-or-url|null>] [--comment <text>] [--workspace-status <id>] [--purpose <name>] [--parent-worktree <selector>|--no-parent] [--json]
   dobius worktree rm --worktree <selector> [--force] [--run-hooks] [--json]
   dobius worktree ps [--limit <n>] [--json]
   dobius file open <path> [--worktree <selector>] [--json]
@@ -559,6 +559,8 @@ export function formatFlagHelp(flag: string): string {
     workspace: '--workspace <selector> Existing worktree selector for automation runs',
     'workspace-status':
       '--workspace-status <id> Board status id (defaults: todo, in-progress, in-review, completed)',
+    purpose:
+      '--purpose <name>       Workspace purpose label for Board grouping (defaults: Features, Backend, Research; "" clears)',
     staged: '--staged               Open staged source-control changes',
     provider: '--provider <agent>     Agent id such as codex, claude, or gemini',
     'source-context':

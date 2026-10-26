@@ -1,10 +1,9 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   ArrowLeft,
   Briefcase,
   ChevronDown,
   Folder,
-  Info,
   Plus,
   Settings,
   UserRound
@@ -21,19 +20,18 @@ import { HelpMenuItems } from '@/components/sidebar/HelpMenuItems'
 import { SidebarFeedbackDialog } from '@/components/sidebar/SidebarFeedbackDialog'
 import WorktreeContextMenu from '@/components/sidebar/WorktreeContextMenu'
 import { translate } from '@/i18n/i18n'
-import { AgentIcon } from '@/lib/agent-catalog'
 import { cn } from '@/lib/utils'
 import { useWorktreeMap } from '@/store/selectors'
+import { groupByWorkspacePurpose } from '../../../../../shared/workspace-purpose'
 import { BoardRailButton } from './BoardRailButton'
 import { BoardUsagePanel } from './BoardUsagePanel'
-import { usageLevel, usageLevelColor } from './board-usage-levels'
+import { BoardUsagePill as UsagePillButton } from './BoardUsagePill'
 import { BoardWorkspaceTabButton, type BoardWorkspaceTab } from './BoardWorkspaceTabButton'
 import {
   BOARD_FLOATING_PANEL_CLASS,
   BOARD_MENU_CONTENT_CLASS,
   BOARD_MENU_ROW_CLASS,
   BOARD_MENU_SEPARATOR_CLASS,
-  BOARD_MONO_CLASS,
   BOARD_PILL_BUTTON_CLASS
 } from './board-surface-classes'
 
@@ -94,6 +92,21 @@ export function BoardTopBar({
   const [usageOpen, setUsageOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [showAdminOptions, setShowAdminOptions] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set())
+  const groups = useMemo(() => groupByWorkspacePurpose(workspaces), [workspaces])
+  // Why: the strip stays flat (today's look) until a workspace carries a purpose;
+  // a lone "Other" header would be noise.
+  const grouped = groups.some((group) => group.purpose !== null)
+  const toggleGroup = (key: string): void =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
   // Why: the workspace tabs get the sidebar's right-click menu (pin, mark read,
   // sleep, delete…), which needs the full Worktree record, not the tab model.
   const worktreeMap = useWorktreeMap()
@@ -104,6 +117,28 @@ export function BoardTopBar({
     projects.find((p) => p.id === activeProjectId)?.name ??
     translate('board.topBar.noProject', 'No project')
   const pill = cn(BOARD_FLOATING_PANEL_CLASS, BOARD_PILL_BUTTON_CLASS)
+
+  const renderTab = (workspace: BoardWorkspaceTab): React.JSX.Element => {
+    const tab = (
+      <BoardWorkspaceTabButton
+        key={workspace.id}
+        workspace={workspace}
+        active={workspace.id === activeWorkspaceId}
+        onSelect={onSelectWorkspace}
+        onRename={onRenameWorkspace}
+      />
+    )
+    const worktree = worktreeMap.get(workspace.id)
+    return worktree ? (
+      // Why: the menu's wrapper div is the flex item; without shrink-0 the
+      // pills squash instead of the strip scrolling.
+      <div key={workspace.id} className="shrink-0">
+        <WorktreeContextMenu worktree={worktree}>{tab}</WorktreeContextMenu>
+      </div>
+    ) : (
+      tab
+    )
+  }
 
   return (
     <>
@@ -148,27 +183,55 @@ export function BoardTopBar({
             aria-label={translate('board.topBar.workspaces', 'Workspaces')}
             className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]"
           >
-            {workspaces.map((workspace) => {
-              const tab = (
-                <BoardWorkspaceTabButton
-                  key={workspace.id}
-                  workspace={workspace}
-                  active={workspace.id === activeWorkspaceId}
-                  onSelect={onSelectWorkspace}
-                  onRename={onRenameWorkspace}
-                />
-              )
-              const worktree = worktreeMap.get(workspace.id)
-              return worktree ? (
-                // Why: the menu's wrapper div is the flex item; without shrink-0 the
-                // pills squash instead of the strip scrolling.
-                <div key={workspace.id} className="shrink-0">
-                  <WorktreeContextMenu worktree={worktree}>{tab}</WorktreeContextMenu>
-                </div>
-              ) : (
-                tab
-              )
-            })}
+            {grouped
+              ? groups.map((group, index) => {
+                  const collapsed = collapsedGroups.has(group.key)
+                  const label =
+                    group.purpose ?? translate('board.topBar.purposeOther', 'Other')
+                  const containsActive = group.items.some((w) => w.id === activeWorkspaceId)
+                  return (
+                    <React.Fragment key={group.key}>
+                      {index > 0 ? (
+                        <span
+                          aria-hidden
+                          className="mx-0.5 h-4 w-px shrink-0 bg-[var(--board-panel-border)]"
+                        />
+                      ) : null}
+                      <button
+                        type="button"
+                        aria-expanded={!collapsed}
+                        title={
+                          collapsed
+                            ? translate('board.topBar.expandGroup', 'Show {{group}} workspaces', {
+                                group: label
+                              })
+                            : translate('board.topBar.collapseGroup', 'Hide {{group}} workspaces', {
+                                group: label
+                              })
+                        }
+                        onClick={() => toggleGroup(group.key)}
+                        className={cn(
+                          'flex h-[25px] shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-semibold tracking-[0.04em] uppercase transition-colors',
+                          collapsed && containsActive
+                            ? 'bg-[var(--board-accent-tint)] text-[var(--board-accent)]'
+                            : 'text-[var(--board-text-muted)] hover:bg-[var(--board-panel-2)] hover:text-[var(--board-text)]'
+                        )}
+                      >
+                        <span className="max-w-24 truncate">{label}</span>
+                        {collapsed ? (
+                          <span className="min-w-[17px] rounded-full bg-[var(--board-panel-2)] px-1 text-center text-[11px] leading-[17px] tabular-nums">
+                            {group.items.length}
+                          </span>
+                        ) : null}
+                        <ChevronDown
+                          className={cn('size-3 transition-transform', collapsed && '-rotate-90')}
+                        />
+                      </button>
+                      {collapsed ? null : group.items.map(renderTab)}
+                    </React.Fragment>
+                  )
+                })
+              : workspaces.map(renderTab)}
           </div>
           <BoardRailButton
             label={translate('board.topBar.addWorkspace', 'New workspace')}
@@ -209,47 +272,7 @@ export function BoardTopBar({
           <BoardUsagePanel
             open={usageOpen}
             onOpenChange={setUsageOpen}
-            anchor={
-              <button
-                type="button"
-                title={translate(
-                  'board.topBar.usageHint',
-                  '{{percent}}% of the limit used. Click for details.',
-                  {
-                    percent: usage.usedPercent
-                  }
-                )}
-                className={cn(
-                  BOARD_FLOATING_PANEL_CLASS,
-                  'flex h-7 items-center gap-1.5 rounded-full bg-[var(--board-status-pill)] px-2.5 text-[12px] font-medium tabular-nums hover:bg-[var(--board-panel-2)]'
-                )}
-                data-usage-level={usageLevel(usage.usedPercent)}
-                style={
-                  usageLevel(usage.usedPercent) === 'normal'
-                    ? undefined
-                    : { color: usageLevelColor(usageLevel(usage.usedPercent)) }
-                }
-              >
-                <Info className="size-3.5 text-[var(--board-text-muted)]" />
-                {usage.provider === 'claude' ||
-                usage.provider === 'codex' ||
-                usage.provider === 'gemini' ? (
-                  <AgentIcon agent={usage.provider} size={13} />
-                ) : null}
-                {usage.resetDescription ? (
-                  <>
-                    <span className="text-[var(--board-text-muted)]">
-                      {translate('board.topBar.resets', 'resets')}
-                    </span>
-                    <span className={BOARD_MONO_CLASS}>{usage.resetDescription}</span>
-                  </>
-                ) : (
-                  translate('board.topBar.usage', '{{percent}}% used', {
-                    percent: usage.usedPercent
-                  })
-                )}
-              </button>
-            }
+            anchor={<UsagePillButton usage={usage} />}
           />
         ) : null}
         <BoardRailButton

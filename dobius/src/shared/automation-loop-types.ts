@@ -10,12 +10,15 @@ export type AutomationLoopTarget =
   | { type: 'board' }
   /** The consoles wired to one orchestrator card, resolved at fire time. */
   | { type: 'orchestrator'; cardId: string }
+  /** A hand-picked set of console tabs ("Pick consoles"). */
+  | { type: 'tabs'; tabIds: string[] }
 
 export type AutomationLoopTrigger =
   | { kind: 'on-idle'; target: AutomationLoopTarget; debounceMs: number }
+  /** Watches every console of `target`; only the console whose output matched is told. */
   | {
       kind: 'on-output-match'
-      tabId: string
+      target: AutomationLoopTarget
       pattern: string
       cooldownMs: number
     }
@@ -36,8 +39,11 @@ export type AutomationLoopState = {
   paused: boolean
   runCount: number
   lastFiredAt: number | null
-  /** Terminal read cursor (output-match / goal); output before it was already judged. */
+  /** Terminal read cursor (goal, legacy single-tab output-match); output before it was already judged. */
   outputCursor: string | null
+  /** Output-match: one read cursor and last fire per watched tab, so consoles never share a cooldown. */
+  outputCursors?: Record<string, string>
+  firedAtByTab?: Record<string, number>
   retiredAt: number | null
   lastResult: string | null
   /** Goal loops: the agent's latest DOBIUS_GOAL answer since the last run. */
@@ -60,6 +66,8 @@ export type AutomationLoop = {
   stopAfterRuns?: number
   /** Command stop: run in the loop's worktree after each run; exit 0 retires the loop. */
   stopCommand?: string
+  /** Goal-card stop: the loop retires once every criterion on this Board goal card is checked. */
+  stopGoalCardId?: string
   /** Keep firing while the Board is not the visible view. Absent = legacy
    *  behavior (on-idle pauses with the Board, every other kind keeps running). */
   background?: boolean

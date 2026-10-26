@@ -396,7 +396,8 @@ import type {
 import type {
   CodexRateLimitResetResult,
   RateLimitRuntimeTarget,
-  RateLimitState
+  RateLimitState,
+  UsageProbeProgress
 } from '../shared/rate-limit-types'
 import type {
   ElevenLabsKeyStatus,
@@ -1143,6 +1144,7 @@ export type PreloadApi = {
           | 'sortOrder'
           | 'manualOrder'
           | 'workspaceStatus'
+          | 'purpose'
           | 'createdWithAgent'
           | 'pendingFirstAgentMessageRename'
           | 'firstAgentMessageRenameError'
@@ -1404,6 +1406,9 @@ export type PreloadApi = {
       requestId?: string
     }) => Promise<AgentControlResult>
     yield: (input: { cardId: string }) => Promise<{ tileId: string; until: number }>
+    syncConsoleTiles: (input: {
+      bindings: { agentId: string; tileId: string }[]
+    }) => Promise<{ ok: true }>
     list: () => Promise<CustomAgent[]>
     create: (input: CustomAgentInput) => Promise<CustomAgent[]>
     update: (id: string, updates: CustomAgentUpdate) => Promise<CustomAgent[]>
@@ -3115,6 +3120,8 @@ export type PreloadApi = {
     fetchInactiveCodexAccounts: () => Promise<void>
     refreshMiniMax: () => Promise<RateLimitState>
     onUpdate: (callback: (state: RateLimitState) => void) => () => void
+    /** Fetch milestones (OAuth call, CLI spawned, /usage sent, panel read) for loading views. */
+    onProgress: (callback: (progress: UsageProbeProgress) => void) => () => void
   }
   minimaxCredentials: {
     getStatus: () => Promise<{ configured: boolean }>

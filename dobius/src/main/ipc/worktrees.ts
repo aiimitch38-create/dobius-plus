@@ -778,6 +778,7 @@ function mergeFolderWorkspace(repo: Repo, worktreeId: string, meta: WorktreeMeta
       : {}),
     ...(meta.priorWorktreeIds !== undefined ? { priorWorktreeIds: meta.priorWorktreeIds } : {}),
     workspaceStatus: meta.workspaceStatus ?? DEFAULT_WORKSPACE_STATUS_ID,
+    ...(meta.purpose ? { purpose: meta.purpose } : {}),
     diffComments: meta.diffComments,
     mobileDiffReview: meta.mobileDiffReview
   }

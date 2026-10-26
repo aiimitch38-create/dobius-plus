@@ -1,8 +1,8 @@
 import { withLoopExtras } from './automation-loop-extras'
+import { normalizeLoopTarget as normalizeTarget } from './automation-loop-target'
 import type {
   AutomationLoop,
   AutomationLoopState,
-  AutomationLoopTarget,
   AutomationLoopTrigger
 } from './automations-types'
 
@@ -138,25 +138,6 @@ const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 const num = (v: unknown, min: number, fallback: number): number =>
   typeof v === 'number' && Number.isFinite(v) ? Math.max(min, v) : fallback
 
-function normalizeTarget(raw: unknown): AutomationLoopTarget | null {
-  if (!isObj(raw)) {
-    return null
-  }
-  if (raw.type === 'tab' && isStr(raw.tabId)) {
-    return { type: 'tab', tabId: raw.tabId }
-  }
-  if (raw.type === 'group' && isStr(raw.groupId)) {
-    return { type: 'group', groupId: raw.groupId }
-  }
-  if (raw.type === 'board') {
-    return { type: 'board' }
-  }
-  if (raw.type === 'orchestrator' && isStr(raw.cardId)) {
-    return { type: 'orchestrator', cardId: raw.cardId }
-  }
-  return null
-}
-
 function normalizeTrigger(raw: unknown): AutomationLoopTrigger | null {
   if (!isObj(raw)) {
     return null
@@ -172,12 +153,14 @@ function normalizeTrigger(raw: unknown): AutomationLoopTrigger | null {
       : null
   }
   if (raw.kind === 'on-output-match') {
-    return isStr(raw.tabId) &&
-      typeof raw.pattern === 'string' &&
-      validateLoopPattern(raw.pattern).ok
+    // Loops saved before multi-console output match carry a single `tabId`.
+    const target =
+      normalizeTarget(raw.target) ??
+      (isStr(raw.tabId) ? { type: 'tab' as const, tabId: raw.tabId } : null)
+    return target && typeof raw.pattern === 'string' && validateLoopPattern(raw.pattern).ok
       ? {
           kind: 'on-output-match',
-          tabId: raw.tabId,
+          target,
           pattern: raw.pattern,
           cooldownMs: num(raw.cooldownMs, LOOP_MIN_COOLDOWN_MS, 60_000)
         }

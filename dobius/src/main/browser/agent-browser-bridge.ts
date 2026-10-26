@@ -63,6 +63,7 @@ import {
 import type { CursorPoint } from './agent-cursor-path'
 import {
   assertAgentMayTargetGuest,
+  assertConsoleDriverMayTargetTile,
   webTileIdFromBrowserPageId
 } from './agent-browser-target-policy'
 import {
@@ -658,6 +659,8 @@ export class AgentBrowserBridge {
       )
     }
     const { tileId } = assertAgentMayTargetGuest(agent.name, target.browserPageId, wc)
+    // Why: a console wired to one tile stays in that tile; the binding lives in main.
+    assertConsoleDriverMayTargetTile(agent.agentId, tileId)
     return { tileId, webContents: wc }
   }
 

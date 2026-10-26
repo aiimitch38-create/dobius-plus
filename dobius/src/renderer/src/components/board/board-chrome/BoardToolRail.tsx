@@ -25,6 +25,8 @@ import {
 export type BoardToolRailProps = {
   tool: BoardTool
   onToolChange: (tool: BoardTool) => void
+  /** Hover/focus on a tool (null on leave): the Board ghosts where its card would land. */
+  onPreview?: (tool: BoardTool | null) => void
   onFitView: () => void
   onOpenGitHub: () => void
 }
@@ -38,6 +40,7 @@ function RailDivider(): React.JSX.Element {
 export function BoardToolRail({
   tool,
   onToolChange,
+  onPreview,
   onFitView,
   onOpenGitHub
 }: BoardToolRailProps): React.JSX.Element {
@@ -105,6 +108,10 @@ export function BoardToolRail({
       active={tool === entry.tool}
       tooltipSide="right"
       onClick={() => onToolChange(entry.tool)}
+      onPointerEnter={() => onPreview?.(entry.tool)}
+      onPointerLeave={() => onPreview?.(null)}
+      onFocus={() => onPreview?.(entry.tool)}
+      onBlur={() => onPreview?.(null)}
     >
       {entry.icon}
     </BoardRailButton>

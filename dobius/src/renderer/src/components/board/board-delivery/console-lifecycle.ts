@@ -7,8 +7,13 @@ import { useAppStore } from '@/store'
 import { getBoard, type BoardCardOf } from '@/store/slices/board'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../../shared/types'
-import { BOARD_CONSOLE_SIZE, boardSpawnPlacements } from '../board-canvas/board-spawn-placement'
+import { boardSpawnRects } from '../board-canvas/board-spawn-placement'
 import type { BoardPoint } from '../board-canvas/board-viewport'
+import {
+  boardGhostOf,
+  pushBoardGhosts,
+  type BoardGhostSpec
+} from '../board-canvas/board-ghost-store'
 import { clearBoardConsoleEnded, isBoardConsoleEnded } from '../console-card/board-console-exit'
 import { isShellProcessName } from '../console-card/console-card-status'
 import { resolvePinnedAgentCommand } from '../console-card/console-account-launch'
@@ -48,8 +53,9 @@ export function spawnConsoles(input: {
     (c) => c.kind === 'console' && c.agentKind === input.agent
   ).length
   const cardIds: string[] = []
+  const ghosts: BoardGhostSpec[] = []
   let failed = 0
-  boardSpawnPlacements(input.center, input.count).forEach((position, i) => {
+  boardSpawnRects(input.center, input.count).forEach((rect, i) => {
     const launched = launchAgentInNewTab({
       agent: input.agent,
       worktreeId: input.worktreeId,
@@ -60,18 +66,19 @@ export function spawnConsoles(input: {
       failed += 1
       return
     }
-    cardIds.push(
-      state.addCard(input.worktreeId, {
-        kind: 'console',
-        ...position,
-        ...BOARD_CONSOLE_SIZE,
-        title: `${label} ${existing + i + 1}`,
-        tabId: launched.tabId,
-        agentKind: input.agent,
-        ...(input.role ? { role: input.role } : {})
-      })
-    )
+    const card = {
+      kind: 'console' as const,
+      ...rect,
+      title: `${label} ${existing + i + 1}`,
+      tabId: launched.tabId,
+      agentKind: input.agent,
+      ...(input.role ? { role: input.role } : {})
+    }
+    const cardId = state.addCard(input.worktreeId, card)
+    cardIds.push(cardId)
+    ghosts.push(boardGhostOf(card, cardId))
   })
+  pushBoardGhosts(ghosts)
   return { cardIds, failed }
 }
 

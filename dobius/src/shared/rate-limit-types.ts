@@ -74,6 +74,21 @@ export type ProviderRateLimits = {
   error: string | null
   status: ProviderRateLimitStatus
   usageMetadata?: UsageRateLimitMetadata
+  /**
+   * Cleaned text of the `/usage` panel the hidden Claude CLI probe read, when
+   * that probe ran (tail-capped). Shown as-is in the Board usage terminal view.
+   */
+  cliOutput?: string | null
+}
+
+/** Milestones of one provider's usage fetch, for the Board's loading view. */
+export type UsageProbeStage = 'oauth' | 'cli-start' | 'cli-usage' | 'cli-read'
+
+export type UsageProbeProgress = {
+  provider: ProviderRateLimits['provider']
+  stage: UsageProbeStage
+  /** Unix ms when the stage began. */
+  at: number
 }
 
 export type CodexRateLimitResetOutcome = 'reset' | 'nothingToReset' | 'noCredit' | 'alreadyRedeemed'

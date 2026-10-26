@@ -7,7 +7,9 @@ import type {
   CodexRateLimitResetResult,
   RateLimitState,
   ProviderRateLimits,
-  InactiveAccountUsage
+  InactiveAccountUsage,
+  UsageProbeProgress,
+  UsageProbeStage
 } from '../../shared/rate-limit-types'
 import { fetchClaudeRateLimits, fetchManagedAccountUsage } from './claude-fetcher'
 import type { InactiveClaudeAccountInfo } from './claude-fetcher'
@@ -1110,7 +1112,8 @@ export class RateLimitService {
           allowPtyFallback: this.shouldAllowClaudePtyFallback(claudeAuthPreparation),
           allowUsagePanelSupplement: this.shouldAllowClaudeUsagePanelSupplement(),
           networkProxySettings: this.networkProxySettingsResolver?.(),
-          signal
+          signal,
+          onProgress: (stage) => this.pushProgress('claude', stage)
         }),
         missingWslCodexHome ??
           fetchCodexRateLimits({
@@ -1338,7 +1341,8 @@ export class RateLimitService {
       allowPtyFallback: this.shouldAllowClaudePtyFallback(claudeAuthPreparation),
       allowUsagePanelSupplement: this.shouldAllowClaudeUsagePanelSupplement(),
       networkProxySettings: this.networkProxySettingsResolver?.(),
-      signal
+      signal,
+      onProgress: (stage) => this.pushProgress('claude', stage)
     }).catch(
       (err): ProviderRateLimits => ({
         provider: 'claude',
@@ -1478,5 +1482,15 @@ export class RateLimitService {
       return
     }
     this.mainWindow.webContents.send('rateLimits:update', state)
+  }
+
+  // Why: the Board's loading view names the step the probe is on ("Asking the
+  // CLI for /usage"); these are fire-and-forget hints, not state.
+  private pushProgress(provider: ProviderRateLimits['provider'], stage: UsageProbeStage): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) {
+      return
+    }
+    const progress: UsageProbeProgress = { provider, stage, at: Date.now() }
+    this.mainWindow.webContents.send('rateLimits:progress', progress)
   }
 }

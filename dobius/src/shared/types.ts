@@ -328,6 +328,8 @@ export type FolderWorkspace = {
   /** User-authored sidebar ordering. Higher values render earlier in Manual sort. */
   manualOrder?: number
   workspaceStatus?: WorkspaceStatus
+  /** User-assigned purpose label (e.g. Features, Backend, Research) for Board grouping. */
+  purpose?: string
   createdWithAgent?: TuiAgent
   pendingFirstAgentMessageRename?: boolean
   firstAgentMessageRenameError?: string | null
@@ -507,6 +509,8 @@ export type Worktree = {
   /** Path-derived worktree ids this worktree had before folder renames. */
   priorWorktreeIds?: string[]
   workspaceStatus?: WorkspaceStatus
+  /** See {@link WorktreeMeta.purpose}. */
+  purpose?: string
   diffComments?: DiffComment[]
   mobileDiffReview?: MobileDiffReviewState
   automationProvenance?: AutomationWorkspaceProvenance
@@ -612,6 +616,10 @@ export type WorktreeMeta = {
   dobiusCreationWorkspaceLayout?: DobiusWorkspaceLayout
   /** User-assigned workspace board status for manual sidebar organization. */
   workspaceStatus?: WorkspaceStatus
+  /** User-assigned purpose label (Features / Backend / Research / custom). Groups
+   *  the Board top bar and the Source Control workspace view; unlike
+   *  workspaceStatus it is not a progress state. Empty/absent means "Other". */
+  purpose?: string
   diffComments?: DiffComment[]
   /** Path-derived worktree ids this worktree had before its folder was renamed
    *  on disk (the id embeds the path). Lets the daemon's session GC and registry

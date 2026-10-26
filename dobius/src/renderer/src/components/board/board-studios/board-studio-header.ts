@@ -90,7 +90,7 @@ export function boardStudioSubtitle(studio: BoardStudioId): string | null {
     case 'loops':
       return translate(
         'board.studio.subtitle.loops',
-        'Recurring instructions for your consoles: on idle, on matching output, or until a goal is met.'
+        'Recurring instructions for your agents: on a schedule, when they go idle, or when their output says so. Loops can stop themselves when a goal is met.'
       )
     case 'memory':
       return translate(
@@ -123,7 +123,10 @@ export function boardStudioSubtitle(studio: BoardStudioId): string | null {
         'Ports your dev servers listen on, with forwarding for remote workspaces.'
       )
     case 'prompts':
-      return translate('board.studio.subtitle.prompts', 'Saved prompts, ready to send to a console.')
+      return translate(
+        'board.studio.subtitle.prompts',
+        'Saved prompts, ready to send to a console.'
+      )
     case 'vault':
       return translate(
         'board.studio.subtitle.vault',

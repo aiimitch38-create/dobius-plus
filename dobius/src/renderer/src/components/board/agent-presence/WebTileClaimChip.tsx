@@ -52,7 +52,14 @@ function useChipState(agent: AgentPresence | null): ChipState {
   return agent ? chipState(agent, now) : null
 }
 
-export function WebTileClaimChip({ cardId }: { cardId: string }): React.JSX.Element | null {
+export function WebTileClaimChip({
+  cardId,
+  driverAgentId = null
+}: {
+  cardId: string
+  /** Agent id of the console wired to drive this tile; its claim reads "is driving". */
+  driverAgentId?: string | null
+}): React.JSX.Element | null {
   const agent = useAgentPresence(
     (s) => Object.values(s.agents).find((a) => a.claimedTileId === cardId && !a.stopped) ?? null
   )
@@ -94,6 +101,8 @@ export function WebTileClaimChip({ cardId }: { cardId: string }): React.JSX.Elem
           translate('board.agents.waitingForYouNamed', '{{name}} is waiting for you', {
             name: agent.name
           })
+        ) : driverAgentId !== null && agent.id === driverAgentId ? (
+          translate('board.agents.driving', '{{name}} is driving', { name: agent.name })
         ) : (
           translate('board.agents.workingHere', '{{name}} is working here', { name: agent.name })
         )}

@@ -18,6 +18,7 @@ import { registerSshHandlers } from '../ipc/ssh'
 import { registerRemoteWorkspaceHandlers } from '../ipc/remote-workspace'
 import { browserManager } from '../browser/browser-manager'
 import { agentPresenceRegistry } from '../agents/agent-presence-registry'
+import { consoleTileBindings } from '../agents/console-tile-bindings'
 import { assertBoardWindowSender } from './board-ipc-sender-guard'
 import { hasSystemMediaAccess, requestSystemMediaAccess } from '../browser/browser-media-access'
 import type { DobiusRuntimeService } from '../runtime/dobius-runtime'
@@ -287,6 +288,14 @@ function registerRuntimeWindowLifecycle(
     // window's top frame may claim "the human is working here".
     assertBoardWindowSender(event, mainWindow, 'agents:yield')
     return agentPresenceRegistry.yieldTile(agentPresenceRegistry.parseYield(input).cardId)
+  })
+  ipcMain.removeHandler('agents:syncConsoleTiles')
+  ipcMain.handle('agents:syncConsoleTiles', (event, input: unknown) => {
+    // Why: the set decides which tile a console agent may act in; only the
+    // Board window's top frame may declare it.
+    assertBoardWindowSender(event, mainWindow, 'agents:syncConsoleTiles')
+    consoleTileBindings.replaceAll(consoleTileBindings.parse(input))
+    return { ok: true as const }
   })
   runtime.attachWindow(mainWindow.id)
   const send = (channel: string, ...args: unknown[]): void => {
