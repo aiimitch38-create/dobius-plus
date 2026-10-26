@@ -104,3 +104,11 @@
 - Kanban proof: `dobius tasks attach|complete --proof|review --proof`; magic-byte checks, O_NOFOLLOW, local-only file paths; proof thumbnails on Review/Done cards; Add screenshot in the panel; leads require proof.
 - Reviews: 3 security rounds (critical self-approval, resume, script bypass, fail-open gates fixed); e2e 9/9 pass.
 - Lessons: session restarts orphan test copies and kill agents mid-run (checkpoint commits help); e2e build doesn't rebuild the CLI; raw electron launch needs node_modules/.bin on PATH.
+
+## 2.1.5 — 2026-10-25 16:10 (build 51, commit 5522763e)
+- Agent-worked web tiles skip the glance still for 10 s after the agent's last action (`useAgentTileLive`), so scrolling is visible at any zoom and agent screenshots work.
+- Auto-follow: the camera follows the first agent acting on a tile; waits 5 s after user camera input; 30 s cooldown after a manual stop; "Auto-follow agents" toggle (default on, localStorage).
+- Review fix: canvas listener effect re-runs on followId so it can't miss a late-mounted canvas.
+- Verified: 119 agent-presence/card tests, typecheck:web. Live demo on the installed app: 20 agent actions all ok, "Following Adam" pill shown, 2 screenshots captured, RAG card completed with proof.
+- Lesson: `--worktree active` resolved to a different board than the one on screen, so the tile never registered (timeout). Pass `--worktree path:<project>` explicitly for demos.
+- Skipped the sealed test copy this round (renderer-only change, covered by unit tests plus the live demo).
