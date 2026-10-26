@@ -119,3 +119,11 @@
 - Known gap (follow-up): tile binding keys off self-asserted `--as console-<id>`; needs main-side caller identity (PTY -> console card).
 - Verify: typecheck web/node/cli 0; 8685 tests pass, 10 failures all pre-existing at HEAD (cloud-jobs store, selectors, repos slices, titlebar drag regions, attach-main-window-services suite). Test copy: empty board, ghost on-screen, web tile placement (no zoom change), GitHub triad, Loops screens.
 - Lessons: take-turns test gating must match only real node/tsgo processes (pgrep -f self-matched builders' shell wait loops -> 10 min deadlocks). Load-average gates don't work with 5+ builders.
+
+## 2.1.7 — 2026-10-26 (commit 919a3173)
+- Board spawns launch the agent on the first try (startup requeued when the pane re-homes/remounts before a PTY owns it, incl. the spawn-issued-then-torn-down case). Live: claude/codex/hermes first-attempt from rail, Spawn 4, New console, empty board; hermes 3x; no double launches.
+- Drag perf: geometry-insensitive board selector + live cards layer; ~13 ms -> ~4 ms JS per drag move.
+- Finder-style marquee by default; Space+drag / middle-drag pan. Live-checked in test copy (box + 4/4 selected, Space-pan moved viewport).
+- Overview "No output yet" / zoom-in reset: main headless snapshot seeded from renderer when lazily created before serializer registration.
+- Verify: typecheck web/node/cli 0; 4975 pass, 21 fail all pre-existing at HEAD.
+- Lessons: session restarts kill in-session builders — builders now write progress notes to scratchpad so replacements resume; one test copy at a time.
