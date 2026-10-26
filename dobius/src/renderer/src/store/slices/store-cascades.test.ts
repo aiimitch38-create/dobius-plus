@@ -2858,7 +2858,12 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
       'Codex',
       { updatedAt: 2000, stateStartedAt: 1000 },
       { tabId: 'tab-1', worktreeId: wt },
-      { providerSession: { key: 'session_id', id: 'target-session' } }
+      {
+        providerSession: { key: 'session_id', id: 'target-session' },
+        launchToken: 'launch-1',
+        ptyId: 'pty-agent',
+        connectionId: null
+      }
     )
     store
       .getState()
@@ -2978,6 +2983,58 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
     expect(state.agentStatusByPaneKey[targetPaneKey]).toBeDefined()
   })
 
+  it('aborts pane hibernation when the captured record has no resume owner', async () => {
+    // Prod: switching workspaces killed agents whose sleep records lacked
+    // resumeOwner (no launch token), so they came back as dead/plain shells.
+    const store = createTestStore()
+    const wt = 'repo1::/path/wt1'
+    const targetLeaf = '11111111-1111-4111-8111-111111111111'
+    const targetPaneKey = `tab-1:${targetLeaf}`
+
+    seedStore(store, {
+      worktreesByRepo: {
+        repo1: [makeWorktree({ id: wt, repoId: 'repo1', path: '/path/wt1' })]
+      },
+      tabsByWorktree: {
+        [wt]: [makeTab({ id: 'tab-1', worktreeId: wt, title: 'Claude', ptyId: 'pty-agent' })]
+      },
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: { type: 'leaf', leafId: targetLeaf },
+          activeLeafId: targetLeaf,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [targetLeaf]: 'pty-agent' }
+        }
+      },
+      ptyIdsByTabId: { 'tab-1': ['pty-agent'] }
+    })
+    // Provider session present (so a record is captured) but no launch token.
+    store
+      .getState()
+      .setAgentStatus(
+        targetPaneKey,
+        { state: 'done', prompt: 'resume target', agentType: 'claude' },
+        'Claude',
+        { updatedAt: 2000, stateStartedAt: 1000 },
+        { tabId: 'tab-1', worktreeId: wt },
+        { providerSession: { key: 'session_id', id: 'no-owner-session' } }
+      )
+
+    await expect(
+      store.getState().shutdownCompletedAgentPaneForHibernation(wt, {
+        paneKey: targetPaneKey,
+        tabId: 'tab-1',
+        leafId: targetLeaf,
+        ptyId: 'pty-agent'
+      })
+    ).rejects.toThrow('agent_hibernation_capture_unresumable')
+
+    const state = store.getState()
+    expect(mockApi.pty.kill).not.toHaveBeenCalled()
+    expect(state.sleepingAgentSessionsByPaneKey[targetPaneKey]).toBeUndefined()
+    expect(state.ptyIdsByTabId['tab-1']).toEqual(['pty-agent'])
+  })
+
   it('rolls back the sleeping record and suppression when the hibernation kill fails', async () => {
     // The sleeping record must be visible to the pane's exit handler BEFORE the
     // kill (pty:exit can beat the kill promise back to the renderer), so it is
@@ -3005,16 +3062,19 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
       },
       ptyIdsByTabId: { 'tab-1': ['pty-agent'] }
     })
-    store
-      .getState()
-      .setAgentStatus(
-        targetPaneKey,
-        { state: 'done', prompt: 'resume target', agentType: 'claude' },
-        'Claude',
-        { updatedAt: 2000, stateStartedAt: 1000 },
-        { tabId: 'tab-1', worktreeId: wt },
-        { providerSession: { key: 'session_id', id: 'sess-rollback-1' } }
-      )
+    store.getState().setAgentStatus(
+      targetPaneKey,
+      { state: 'done', prompt: 'resume target', agentType: 'claude' },
+      'Claude',
+      { updatedAt: 2000, stateStartedAt: 1000 },
+      { tabId: 'tab-1', worktreeId: wt },
+      {
+        providerSession: { key: 'session_id', id: 'sess-rollback-1' },
+        launchToken: 'launch-1',
+        ptyId: 'pty-agent',
+        connectionId: null
+      }
+    )
     mockApi.pty.kill.mockRejectedValueOnce(new Error('kill_failed'))
 
     await expect(
@@ -3060,16 +3120,19 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
       },
       ptyIdsByTabId: { 'tab-1': ['pty-agent'] }
     })
-    store
-      .getState()
-      .setAgentStatus(
-        targetPaneKey,
-        { state: 'done', prompt: 'resume target', agentType: 'claude' },
-        'Claude',
-        { updatedAt: 2000, stateStartedAt: 1000 },
-        { tabId: 'tab-1', worktreeId: wt },
-        { providerSession: { key: 'session_id', id: 'sess-ordering-1' } }
-      )
+    store.getState().setAgentStatus(
+      targetPaneKey,
+      { state: 'done', prompt: 'resume target', agentType: 'claude' },
+      'Claude',
+      { updatedAt: 2000, stateStartedAt: 1000 },
+      { tabId: 'tab-1', worktreeId: wt },
+      {
+        providerSession: { key: 'session_id', id: 'sess-ordering-1' },
+        launchToken: 'launch-1',
+        ptyId: 'pty-agent',
+        connectionId: null
+      }
+    )
     let recordAtKillTime: unknown = null
     let suppressionAtKillTime: boolean | undefined
     mockApi.pty.kill.mockImplementationOnce(async () => {
@@ -3150,16 +3213,19 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
       },
       ptyIdsByTabId: { 'tab-1': ['pty-agent', 'pty-shell'] }
     })
-    store
-      .getState()
-      .setAgentStatus(
-        targetPaneKey,
-        { state: 'done', prompt: 'resume target', agentType: 'codex' },
-        'Codex',
-        { updatedAt: 2000, stateStartedAt: 1000 },
-        { tabId: 'tab-1', worktreeId: wt },
-        { providerSession: { key: 'session_id', id: 'target-session' } }
-      )
+    store.getState().setAgentStatus(
+      targetPaneKey,
+      { state: 'done', prompt: 'resume target', agentType: 'codex' },
+      'Codex',
+      { updatedAt: 2000, stateStartedAt: 1000 },
+      { tabId: 'tab-1', worktreeId: wt },
+      {
+        providerSession: { key: 'session_id', id: 'target-session' },
+        launchToken: 'launch-1',
+        ptyId: 'pty-agent',
+        connectionId: null
+      }
+    )
 
     await expect(
       store.getState().shutdownCompletedAgentPaneForHibernation(wt, {
@@ -3231,16 +3297,19 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
         'tab-1': ['remote:env-1@@terminal-1', 'remote:env-1@@terminal-2']
       }
     })
-    store
-      .getState()
-      .setAgentStatus(
-        targetPaneKey,
-        { state: 'done', prompt: 'resume target', agentType: 'codex' },
-        'Codex',
-        { updatedAt: 2000, stateStartedAt: 1000 },
-        { tabId: 'tab-1', worktreeId: wt },
-        { providerSession: { key: 'session_id', id: 'target-session' } }
-      )
+    store.getState().setAgentStatus(
+      targetPaneKey,
+      { state: 'done', prompt: 'resume target', agentType: 'codex' },
+      'Codex',
+      { updatedAt: 2000, stateStartedAt: 1000 },
+      { tabId: 'tab-1', worktreeId: wt },
+      {
+        providerSession: { key: 'session_id', id: 'target-session' },
+        launchToken: 'launch-1',
+        ptyId: 'remote:env-1@@terminal-1',
+        connectionId: null
+      }
+    )
 
     await store.getState().shutdownCompletedAgentPaneForHibernation(wt, {
       paneKey: targetPaneKey,
@@ -3299,16 +3368,19 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
       ptyIdsByTabId: { 'tab-1': ['ssh:ssh-1@@pty-agent'] },
       lastKnownRelayPtyIdByTabId: { 'tab-1': 'ssh:ssh-1@@pty-agent' }
     })
-    store
-      .getState()
-      .setAgentStatus(
-        targetPaneKey,
-        { state: 'done', prompt: 'resume target', agentType: 'codex' },
-        'Codex',
-        { updatedAt: 2000, stateStartedAt: 1000 },
-        { tabId: 'tab-1', worktreeId: wt },
-        { providerSession: { key: 'session_id', id: 'target-session' } }
-      )
+    store.getState().setAgentStatus(
+      targetPaneKey,
+      { state: 'done', prompt: 'resume target', agentType: 'codex' },
+      'Codex',
+      { updatedAt: 2000, stateStartedAt: 1000 },
+      { tabId: 'tab-1', worktreeId: wt },
+      {
+        providerSession: { key: 'session_id', id: 'target-session' },
+        launchToken: 'launch-1',
+        ptyId: 'ssh:ssh-1@@pty-agent',
+        connectionId: 'ssh-1'
+      }
+    )
 
     await store.getState().shutdownCompletedAgentPaneForHibernation(wt, {
       paneKey: targetPaneKey,
@@ -3328,16 +3400,19 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
     const targetPaneKey = `tab-1:${targetLeaf}`
 
     mockApi.pty.kill.mockImplementationOnce(async () => {
-      store
-        .getState()
-        .setAgentStatus(
-          targetPaneKey,
-          { state: 'working', prompt: 'still running', agentType: 'codex' },
-          'Codex',
-          { updatedAt: 3000, stateStartedAt: 3000 },
-          { tabId: 'tab-1', worktreeId: wt },
-          { providerSession: { key: 'session_id', id: 'target-session' } }
-        )
+      store.getState().setAgentStatus(
+        targetPaneKey,
+        { state: 'working', prompt: 'still running', agentType: 'codex' },
+        'Codex',
+        { updatedAt: 3000, stateStartedAt: 3000 },
+        { tabId: 'tab-1', worktreeId: wt },
+        {
+          providerSession: { key: 'session_id', id: 'target-session' },
+          launchToken: 'launch-1',
+          ptyId: 'pty-agent',
+          connectionId: null
+        }
+      )
     })
     seedStore(store, {
       worktreesByRepo: {
@@ -3367,7 +3442,12 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
       'Codex',
       { updatedAt: 2000, stateStartedAt: 1000 },
       { tabId: 'tab-1', worktreeId: wt },
-      { providerSession: { key: 'session_id', id: 'target-session' } }
+      {
+        providerSession: { key: 'session_id', id: 'target-session' },
+        launchToken: 'launch-1',
+        ptyId: 'pty-agent',
+        connectionId: null
+      }
     )
 
     await store.getState().shutdownCompletedAgentPaneForHibernation(wt, {
@@ -3435,16 +3515,19 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
         'tab-1': ['remote:env-1@@terminal-1', 'remote:env-1@@terminal-2']
       }
     })
-    store
-      .getState()
-      .setAgentStatus(
-        targetPaneKey,
-        { state: 'done', prompt: 'resume target', agentType: 'codex' },
-        'Codex',
-        { updatedAt: 2000, stateStartedAt: 1000 },
-        { tabId: 'tab-1', worktreeId: wt },
-        { providerSession: { key: 'session_id', id: 'target-session' } }
-      )
+    store.getState().setAgentStatus(
+      targetPaneKey,
+      { state: 'done', prompt: 'resume target', agentType: 'codex' },
+      'Codex',
+      { updatedAt: 2000, stateStartedAt: 1000 },
+      { tabId: 'tab-1', worktreeId: wt },
+      {
+        providerSession: { key: 'session_id', id: 'target-session' },
+        launchToken: 'launch-1',
+        ptyId: 'remote:env-1@@terminal-1',
+        connectionId: null
+      }
+    )
 
     await expect(
       store.getState().shutdownCompletedAgentPaneForHibernation(wt, {

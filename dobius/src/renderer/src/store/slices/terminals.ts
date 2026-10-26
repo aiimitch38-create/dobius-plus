@@ -1932,6 +1932,11 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       // between ticks; abort this round instead of hibernating unrecoverably.
       throw new Error('agent_hibernation_capture_missing')
     }
+    if (!sleepingAgentSessionRecords[opts.paneKey].resumeOwner) {
+      // Why: wake (buildColdRestoreAgentResumeStartup) returns null without a
+      // resumeOwner, so a record lacking one strands the pane just the same.
+      throw new Error('agent_hibernation_capture_unresumable')
+    }
 
     const capture = shutdownBufferCaptures.get(opts.tabId)
     if (capture) {
