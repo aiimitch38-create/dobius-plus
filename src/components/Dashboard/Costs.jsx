@@ -74,7 +74,7 @@ export default function Costs() {
     if (sortBy === 'cost') return b.estimatedCostUsd - a.estimatedCostUsd;
     if (sortBy === 'tokens') return (b.inputTokens + b.outputTokens) - (a.inputTokens + a.outputTokens);
     if (sortBy === 'sessions') return b.sessions - a.sessions;
-    return a.projectName.localeCompare(b.projectName);
+    return (a.projectName || '').localeCompare(b.projectName || '');
   });
 
   const totalCost = rows.reduce((s, r) => s + r.estimatedCostUsd, 0);

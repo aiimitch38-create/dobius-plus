@@ -13,8 +13,13 @@ let ghAvailableCache = null;
  */
 function validateDir(dir) {
   if (!dir || typeof dir !== 'string') return null;
+  // Every caller passes an absolute path (project roots come from
+  // isKnownProject-gated IPC). Compare resolve() to itself, not to a bare
+  // normalize(dir) — for a relative dir that pair diverges silently instead
+  // of resolving it, so assert absolute instead of leaving that trap open.
+  if (!path.isAbsolute(dir)) return null;
   const resolved = path.resolve(dir);
-  if (resolved !== path.normalize(dir)) return null;
+  if (resolved !== path.normalize(resolved)) return null;
   return resolved;
 }
 
