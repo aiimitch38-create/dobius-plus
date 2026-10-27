@@ -2720,7 +2720,7 @@ export function registerPtyHandlers(
   ipcMain.handle(
     'pty:spawn',
     async (
-      _event,
+      event,
       args: {
         cols: number
         rows: number
@@ -2762,6 +2762,12 @@ export function registerPtyHandlers(
         }
       }
     ) => {
+      // Why: unlike most of this file's IPC surface, pty:spawn had no sender
+      // check — any caller could spawn an arbitrary process with arbitrary
+      // cwd/env/command. Same first-party-window gate as writePtyInput.
+      if (!isRegisteredRendererWebContents(event.sender)) {
+        throw new Error('Unauthorized pty IPC sender')
+      }
       const resumeClaim = readAgentResumeSpawnClaim(args.env)
       const spawnTiming = createPtySpawnTiming()
       const startupPromise = getLocalPtyStartupPromise(args.connectionId)

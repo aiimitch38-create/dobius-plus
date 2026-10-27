@@ -8,6 +8,7 @@ import type { ChildProcess } from 'node:child_process'
 import { gitExecFileAsync, wslAwareSpawn } from '../git/runner'
 import { parseWslPath, toWindowsWslPath } from '../wsl'
 import { tryDeleteWslUncPath } from '../wsl-unc-delete'
+import { isRegisteredRendererWebContents } from '../window/renderer-window-registry'
 import type { Store } from '../persistence'
 import type {
   DirEntry,
@@ -856,7 +857,13 @@ export function registerFilesystemHandlers(
 
   registerFilesystemMutationHandlers(store)
 
-  ipcMain.handle('fs:authorizeExternalPath', (_event, args: { targetPath: string }): void => {
+  ipcMain.handle('fs:authorizeExternalPath', (event, args: { targetPath: string }): void => {
+    // Why: one call from any untrusted context would otherwise permanently
+    // widen the filesystem sandbox to an arbitrary directory. Same
+    // first-party-window gate used for pty:spawn.
+    if (!isRegisteredRendererWebContents(event.sender)) {
+      throw new Error('Unauthorized filesystem IPC sender')
+    }
     authorizeExternalPath(args.targetPath)
   })
 

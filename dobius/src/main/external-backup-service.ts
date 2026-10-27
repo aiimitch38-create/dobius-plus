@@ -73,9 +73,19 @@ export function buildRsyncArgs(source: string, destinationDir: string): string[]
   ]
 }
 
+/** Strip path separators and leading dots so a crafted label (e.g.
+ *  "../../Desktop") can't escape the backup root once it's join()'d into
+ *  the rsync destination — `join` only treats "/" as a separator, so once
+ *  none remain the result is always a single literal path segment. */
+function sanitizeBackupSegment(name: string): string {
+  const cleaned = name.replace(/[\\/]/g, '-').replace(/^\.+/, '')
+  return cleaned.length > 0 ? cleaned : '_'
+}
+
 export function backupFolderNameFor(source: ExternalBackupSource): string {
   const label = source.label?.trim()
-  return label && label.length > 0 ? label : basename(source.path)
+  const name = label && label.length > 0 ? label : basename(source.path)
+  return sanitizeBackupSegment(name)
 }
 
 export class ExternalBackupService {
