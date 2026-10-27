@@ -671,8 +671,8 @@ function setupFileWatcherHandlers() {
     watchProjectDir(projectPath, event.sender);
   });
 
-  ipcMain.handle('filewatcher:unwatch', (event, projectPath) => {
-    if (!projectPath) return;
+  ipcMain.handle('filewatcher:unwatch', async (event, projectPath) => {
+    if (!(await isKnownProject(projectPath))) return;
     // Pass the sender so unwatchProjectDir can release ONLY this window's
     // subscriber. Without it, in multi-window setups one window's Stop /
     // unmount tears down the shared watcher subscriber set and leaves the
@@ -680,8 +680,8 @@ function setupFileWatcherHandlers() {
     unwatchProjectDir(projectPath, event.sender);
   });
 
-  ipcMain.handle('filewatcher:getEvents', (_event, projectPath) => {
-    if (!projectPath) return [];
+  ipcMain.handle('filewatcher:getEvents', async (_event, projectPath) => {
+    if (!(await isKnownProject(projectPath))) return [];
     return getProjectEvents(projectPath);
   });
 }
@@ -692,6 +692,7 @@ function setupCheckpointHandlers() {
   // bulk of an 11MB config that got rewritten on every debounced save.
   ipcMain.handle('checkpoint:save', async (_event, projectPath, checkpoint) => {
     if (!projectPath || !checkpoint) return null;
+    if (!(await isKnownProject(projectPath))) return null;
     const checkpoints = await getCheckpoints(projectPath);
     const id = `cp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const entry = {
@@ -708,19 +709,21 @@ function setupCheckpointHandlers() {
     return entry;
   });
 
-  ipcMain.handle('checkpoint:list', (_event, projectPath) => {
-    if (!projectPath) return [];
+  ipcMain.handle('checkpoint:list', async (_event, projectPath) => {
+    if (!projectPath || !(await isKnownProject(projectPath))) return [];
     return getCheckpoints(projectPath);
   });
 
   ipcMain.handle('checkpoint:delete', async (_event, projectPath, checkpointId) => {
     if (!projectPath || !checkpointId) return;
+    if (!(await isKnownProject(projectPath))) return;
     const checkpoints = await getCheckpoints(projectPath);
     await saveCheckpoints(projectPath, checkpoints.filter((c) => c.id !== checkpointId));
   });
 
   ipcMain.handle('checkpoint:rename', async (_event, projectPath, checkpointId, newLabel) => {
     if (!projectPath || !checkpointId || !newLabel) return;
+    if (!(await isKnownProject(projectPath))) return;
     const checkpoints = await getCheckpoints(projectPath);
     const cp = checkpoints.find((c) => c.id === checkpointId);
     if (cp) {
