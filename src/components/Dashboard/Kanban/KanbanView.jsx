@@ -10,38 +10,11 @@ import { STAGES, STAGE_META, LANE_COLORS, groupByStage } from '../../../lib/stag
  * changes — whether moved by a human (drag) or by the system (dobius-stage CLI,
  * arriving via the tasks:updated broadcast).
  *
- * Source of truth is the Zustand store (Session A). When those pipeline actions
- * are not yet merged onto this branch, the component falls back to a contained
- * in-memory preview so it still builds and demos; the live path takes over the
- * moment the real store actions exist.
+ * Source of truth is the Zustand store.
  */
 
 // Columns are the 7 flow stages in order; Blocked is rendered separately.
 const FLOW_STAGES = STAGES.filter((s) => s !== 'blocked');
-
-// Preview-only fallback (replaced by the store on merge). Linear legality:
-// a card may move to the immediately adjacent flow stage, or to/from Blocked.
-const PREVIEW_SEED = [
-  { id: 'demo-1', title: 'Fix homepage hero spacing', source: 'asana', lane: 'build', stage: 'intake',
-    events: [{ kind: 'created', at: Date.now() - 5_400_000 }], runs: [] },
-  { id: 'demo-2', title: 'Wire checkout error toast', source: 'asana', lane: 'build', stage: 'building',
-    events: [{ kind: 'staged', from: 'queued', to: 'building', at: Date.now() - 1_800_000 }], runs: [{ pass: true, at: Date.now() - 1_700_000 }] },
-  { id: 'demo-3', title: 'Review Sam: affiliate dashboard', source: 'asana', lane: 'review', stage: 'review',
-    events: [{ kind: 'staged', from: 'building', to: 'review', at: Date.now() - 900_000 }], runs: [] },
-  { id: 'demo-4', title: 'Ship-test pricing page', source: 'asana', lane: 'build', stage: 'shiptest',
-    events: [{ kind: 'staged', from: 'review', to: 'shiptest', at: Date.now() - 600_000 }], runs: [{ pass: false, at: Date.now() - 500_000 }] },
-  { id: 'demo-5', title: 'Legacy: import scent CSV', source: 'manual', lane: 'build', stage: 'done', done: true,
-    events: [{ kind: 'created', at: Date.now() - 86_400_000 }], runs: [] },
-  { id: 'demo-6', title: 'Blocked: needs Stripe key', source: 'asana', lane: 'build', stage: 'blocked', blockedFrom: 'building',
-    events: [{ kind: 'blocked', from: 'building', to: 'blocked', at: Date.now() - 300_000, note: 'waiting on key' }], runs: [] },
-];
-
-function previewLegal(from, to) {
-  if (to === 'blocked' || from === 'blocked') return true;
-  const i = FLOW_STAGES.indexOf(from);
-  const j = FLOW_STAGES.indexOf(to);
-  return i >= 0 && j >= 0 && Math.abs(i - j) === 1;
-}
 
 function relativeTime(ts) {
   if (!ts) return '';
@@ -64,25 +37,33 @@ export default function KanbanView() {
   const setActiveView      = useStore((s) => s.setActiveView);
   const setActiveTab       = useStore((s) => s.setActiveTab);
 
-  // "Live" once Session A's store actions exist; otherwise contained preview.
-  const live = typeof loadTasks === 'function';
-
-  const [previewTasks, setPreviewTasks] = useState(() => (live ? [] : PREVIEW_SEED));
   const [error, setError] = useState('');
   const [dragId, setDragId] = useState(null);
   const [dragOver, setDragOver] = useState(null);
   const draggedTask = useRef(null);
   const errorTimer = useRef(null);
 
-  const tasks = live ? (liveTasks || []) : previewTasks;
+  const tasks = liveTasks || [];
 
   // Load + subscribe to live updates so system-driven stage changes animate in.
   useEffect(() => {
-    if (!live || !currentProjectPath) return;
+    if (!currentProjectPath) return;
     loadTasks(currentProjectPath);
     const off = window.electronAPI?.onTasksUpdated?.(() => loadTasks(currentProjectPath));
     return () => { if (typeof off === 'function') off(); };
-  }, [live, currentProjectPath, loadTasks]);
+  }, [currentProjectPath, loadTasks]);
+
+  // A card dragged off the window and released outside any column never
+  // fires that column's dragleave/drop, leaving its highlight stuck lit.
+  useEffect(() => {
+    const clear = () => setDragOver(null);
+    window.addEventListener('dragend', clear);
+    window.addEventListener('drop', clear);
+    return () => {
+      window.removeEventListener('dragend', clear);
+      window.removeEventListener('drop', clear);
+    };
+  }, []);
 
   useEffect(() => () => clearTimeout(errorTimer.current), []);
 
@@ -103,40 +84,24 @@ export default function KanbanView() {
     if (toStage === 'blocked') {
       const reason = window.prompt(`Block "${task.title}" — reason?`);
       if (reason == null) return; // cancelled
-      if (live) {
-        const res = storeBlock ? await storeBlock(currentProjectPath, task.id, reason) : { ok: false, error: 'blockTask unavailable' };
-        if (res && res.ok === false) flash(res.error || 'Could not block');
-      } else {
-        setPreviewTasks((ts) => ts.map((t) => t.id === task.id ? { ...t, stage: 'blocked', blockedFrom: task.stage } : t));
-      }
+      const res = storeBlock ? await storeBlock(currentProjectPath, task.id, reason) : { ok: false, error: 'blockTask unavailable' };
+      if (res && res.ok === false) flash(res.error || 'Could not block');
       return;
     }
 
     // Out of Blocked: unblock (store restores it to where it was blocked from).
     if (task.stage === 'blocked') {
-      if (live) {
-        const res = storeUnblock ? await storeUnblock(currentProjectPath, task.id) : { ok: false, error: 'unblockTask unavailable' };
-        if (res && res.ok === false) flash(res.error || 'Could not unblock');
-      } else {
-        setPreviewTasks((ts) => ts.map((t) => t.id === task.id ? { ...t, stage: t.blockedFrom || 'intake', blockedFrom: undefined } : t));
-      }
+      const res = storeUnblock ? await storeUnblock(currentProjectPath, task.id) : { ok: false, error: 'unblockTask unavailable' };
+      if (res && res.ok === false) flash(res.error || 'Could not unblock');
       return;
     }
 
     // Normal flow move (human actor).
-    if (live) {
-      const res = storeSetStage
-        ? await storeSetStage(currentProjectPath, task.id, toStage, { actor: 'human' })
-        : { ok: false, error: 'setTaskStage unavailable' };
-      if (res && res.ok === false) flash(res.error || `Can't move to ${STAGE_META[toStage]?.label || toStage}`);
-    } else {
-      if (!previewLegal(task.stage, toStage)) {
-        flash(`Illegal move: ${STAGE_META[task.stage]?.label} → ${STAGE_META[toStage]?.label}`);
-        return; // card stays — snaps back
-      }
-      setPreviewTasks((ts) => ts.map((t) => t.id === task.id ? { ...t, stage: toStage } : t));
-    }
-  }, [live, currentProjectPath, storeSetStage, storeBlock, storeUnblock, flash]);
+    const res = storeSetStage
+      ? await storeSetStage(currentProjectPath, task.id, toStage, { actor: 'human' })
+      : { ok: false, error: 'setTaskStage unavailable' };
+    if (res && res.ok === false) flash(res.error || `Can't move to ${STAGE_META[toStage]?.label || toStage}`);
+  }, [currentProjectPath, storeSetStage, storeBlock, storeUnblock, flash]);
 
   const onDrop = useCallback((toStage) => {
     setDragOver(null);
@@ -166,12 +131,6 @@ export default function KanbanView() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {!live && (
-        <div className="mx-4 mt-3 text-xs shrink-0" style={{ color: 'var(--dim)', fontFamily: "'SF Mono', monospace" }}>
-          preview data — pipeline store not yet merged
-        </div>
-      )}
 
       {/* Board */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden p-4">
