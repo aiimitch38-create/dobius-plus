@@ -74,7 +74,10 @@ export default function TasksDropdown() {
     // stay consistent. Never patch `done` out of band.
     if (done) {
       if (!window.electronAPI?.tasksComplete) return;
-      setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, done: true } : t));
+      // Set stage:'done' locally too, not just done:true — otherwise an
+      // uncheck before the tasks:updated broadcast lands reads the stale
+      // pre-complete stage and takes the wrong (non-reopen) path below.
+      setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, done: true, stage: 'done' } : t));
       window.electronAPI.tasksComplete(currentProjectPath, taskId);
       return;
     }

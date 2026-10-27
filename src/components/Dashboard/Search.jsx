@@ -34,6 +34,9 @@ export default function Search() {
   const [error, setError] = useState('');
   const debounceRef = useRef(null);
   const inputRef = useRef(null);
+  // Tags each search call; a response is applied only if it's still the
+  // latest request, so a slow earlier search can't overwrite a newer one.
+  const requestIdRef = useRef(0);
 
   const doSearch = useCallback(async (q) => {
     if (!q || q.trim().length < 2) {
@@ -41,15 +44,18 @@ export default function Search() {
       return;
     }
     if (!window.electronAPI?.dataSearchTranscripts) return;
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError('');
     try {
       const res = await window.electronAPI.dataSearchTranscripts(q.trim());
+      if (requestId !== requestIdRef.current) return;
       setResults(res);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError('Search failed.');
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, []);
 
