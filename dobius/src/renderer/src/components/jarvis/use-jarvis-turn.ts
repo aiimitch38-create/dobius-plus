@@ -11,7 +11,10 @@ import { createStoppedSessionTracker } from './jarvis-stopped-sessions-tracker'
 import { useJarvisVoiceSettings } from './use-jarvis-voice-settings'
 import { useJarvisSpeechEvents } from './use-jarvis-speech-events'
 import { startJarvisTurnSession } from './start-jarvis-turn-session'
-import { startJarvisAmbientSession, type JarvisAmbientSessionHandle } from './start-jarvis-ambient-session'
+import {
+  startJarvisAmbientSession,
+  type JarvisAmbientSessionHandle
+} from './start-jarvis-ambient-session'
 
 export type OrbHudState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error'
 
@@ -136,6 +139,9 @@ export function useJarvisTurn(): JarvisTurn {
       setPhase('thinking')
       try {
         const result = await window.api.jarvis.ask(utterance)
+        if (result.kind === 'cancelled') {
+          return
+        }
         // Why only errors: main's ask() already speaks answer/job replies
         // internally (jarvis-service.ts), so speaking those again here would
         // duplicate the audio. Error results are never spoken by main.

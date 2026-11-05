@@ -1,0 +1,35 @@
+{
+  "status": "CANDIDATE_NOT_APPLIED",
+  "supersedes_aggregate_sha256": "8ce805b730d1e32ad38fb9cdd2e5098418cd1378c32a87744fd60ecdb168b16d",
+  "hash_algorithm": "SHA-256",
+  "aggregate_algorithm": "sorted candidate-relative UTF8 path NUL exact bytes NUL",
+  "aggregate_sha256": "b22197fdad3e6fa51ad8679790235b50cea39245a86705ad66f3d7f2a12235b6",
+  "source_line_limit": 300,
+  "files": [
+    {
+      "candidate_path": "plans/adam-child-submit-candidate/service/src/dobius-cloud/child-submit-contract.ts",
+      "destination_path": "service/src/dobius-cloud/child-submit-contract.ts",
+      "bytes": 3721,
+      "sha256": "00200dfefdfa30fb9a5264cdb3b04fe3dd818f3061fb14c0f00ac2731287e066"
+    },
+    {
+      "candidate_path": "plans/adam-child-submit-candidate/service/src/dobius-cloud/child-submit-process.ts",
+      "destination_path": "service/src/dobius-cloud/child-submit-process.ts",
+      "bytes": 6927,
+      "sha256": "7d0187d71b964863408b1b75cba458ec34472f5fa643861b719058549857df9c"
+    },
+    {
+      "candidate_path": "plans/adam-child-submit-candidate/service/src/dobius-cloud/child-submit.ts",
+      "destination_path": "service/src/dobius-cloud/child-submit.ts",
+      "bytes": 3993,
+      "sha256": "c1a5408fba3d5dbed7e7187f0764631586f4afd8301dbe260b22d1adfdf57546"
+    },
+    {
+      "candidate_path": "plans/adam-child-submit-candidate/service/tests/dobius-cloud-child-submit.test.ts",
+      "destination_path": "service/tests/dobius-cloud-child-submit.test.ts",
+      "bytes": 21722,
+      "sha256": "b20888478a27214c18873aa4c36b96570c123e8a32d33293e03ce0ce43768014"
+    }
+  ],
+  "historical_prior_aggregate_sha256": "85143895fab83b8407c32b25bb27e6ee77ce9283b6b30eaa8c478b92c0c386ca"
+}

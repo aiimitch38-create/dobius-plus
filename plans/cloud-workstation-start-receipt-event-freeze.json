@@ -1,0 +1,28 @@
+{
+  "status": "source_frozen_for_independent_review",
+  "aggregate_sha256": "a0d2e2522c6ae78a3eaf994c14a7a64382b080f28020ae2780f7a06cc4933dc4",
+  "algorithm": "sorted repo relative UTF8 path NUL bytes NUL",
+  "files": [
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-queue-port.test.ts",
+      "bytes": 20454,
+      "sha256": "dcdc98e1075a9b99248e643ff96c7895c2808bb696830620a7a94572d1a09fc7"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/cloud-worker-start-ledger.ts",
+      "bytes": 9016,
+      "sha256": "d9b6b45f68a58c1400a607df96eb077768a10fec06a6a53ff3f757641ba1e5bb"
+    },
+    {
+      "path": "dobius/src/main/automations/cloud-jobs/store.test.ts",
+      "bytes": 24265,
+      "sha256": "6bdffb086ca06fb54b3f3633883c645cce9a1b9ef1fff520d66d1d5b5e331f20"
+    }
+  ],
+  "tests": "43 passed across queue port, store and actual synthetic two-process host; no Hermes/provider",
+  "node_typecheck": "nonpass in BUILD1-owned Laya test-support.ts:28; producer correction assigned",
+  "limits": [
+    "New process-start event commits after durable start row in same transaction; exact acknowledgement replay emits no new event",
+    "No outbox migration/catalog hooks or live activation yet"
+  ]
+}

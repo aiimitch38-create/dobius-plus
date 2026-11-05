@@ -1,0 +1,3778 @@
+--- a/service/src/db/migrations.ts
++++ b/service/src/db/migrations.ts
+@@ -664,5 +664,40 @@
+   },
+   { version: 18, sql: CLOUD_RECEIPT_MIGRATION },
+   { version: 19, sql: ADAM_CLOUD_INTENT_MIGRATION },
+-  { version: 20, sql: ADAM_CLOUD_APPROVED_PAYLOAD_MIGRATION }
++  { version: 20, sql: ADAM_CLOUD_APPROVED_PAYLOAD_MIGRATION },
++  {
++    version: 21,
++    sql: `
++      CREATE TABLE dobius_cloud_approved_decisions (
++        decision_id TEXT PRIMARY KEY,
++        source_record_json TEXT NOT NULL,
++        actor_source_json TEXT NOT NULL,
++        authority_generation INTEGER NOT NULL CHECK(authority_generation > 0),
++        source_binding TEXT NOT NULL,
++        parent_objective_id TEXT NOT NULL,
++        parent_objective_version INTEGER NOT NULL CHECK(parent_objective_version > 0),
++        project_id TEXT NOT NULL,
++        context_digest TEXT NOT NULL,
++        approved_payload_json TEXT NOT NULL,
++        approved_payload_digest TEXT NOT NULL,
++        intent_id TEXT NOT NULL UNIQUE,
++        intent_request_json TEXT NOT NULL,
++        decision_expires_at_ms INTEGER NOT NULL CHECK(decision_expires_at_ms >= 0),
++        intent_expires_at_ms INTEGER NOT NULL CHECK(intent_expires_at_ms >= 0),
++        staged_identity_json TEXT,
++        staged_sealed_envelope TEXT,
++        staged_capability_hash TEXT,
++        intent_published INTEGER NOT NULL DEFAULT 0 CHECK(intent_published IN (0,1)),
++        lease_token TEXT,
++        lease_until_ms INTEGER,
++        child_json TEXT,
++        created_at_ms INTEGER NOT NULL CHECK(created_at_ms >= 0),
++        updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= created_at_ms),
++        CHECK ((staged_identity_json IS NULL AND staged_sealed_envelope IS NULL AND staged_capability_hash IS NULL) OR
++          (staged_identity_json IS NOT NULL AND staged_sealed_envelope IS NOT NULL AND staged_capability_hash IS NOT NULL))
++      );
++      CREATE INDEX dobius_cloud_approved_decisions_recovery_idx
++        ON dobius_cloud_approved_decisions(intent_published, lease_until_ms, decision_expires_at_ms);
++    `
++  }
+ ] as const
+--- /dev/null
++++ b/service/src/dobius-cloud/approved-decision-contract.ts
+@@ -0,0 +1,89 @@
++import { z } from "zod";
++import {
++  canonicalCloudJobAdamJson,
++  CLOUD_JOB_ADAM_MAX_CANONICAL_BYTES,
++} from "./receipt-contract.js";
++import { parseCanonicalApprovedJobPayload } from "./approved-job-payload.js";
++
++const CloudId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/);
++const Sha256 = z.string().regex(/^[a-f0-9]{64}$/);
++const SafeTime = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
++
++export const TrustedApprovedCloudDecision = z
++  .object({
++    schemaVersion: z.literal(1),
++    decisionId: z.string().uuid(),
++    actorId: CloudId,
++    actorSourceId: CloudId,
++    sourceEventId: CloudId,
++    actorEvidenceDigest: Sha256,
++    sourceBinding: Sha256,
++    authorityGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
++    parentObjectiveId: CloudId,
++    parentObjectiveVersion: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
++    projectId: CloudId,
++    contextDigest: Sha256,
++    expiresAtMs: SafeTime,
++    approvedPayloadJson: z.string().max(CLOUD_JOB_ADAM_MAX_CANONICAL_BYTES),
++  })
++  .strict();
++
++export type TrustedApprovedCloudDecision = z.infer<typeof TrustedApprovedCloudDecision>;
++
++export type ApprovedDecisionResolutionContext = Readonly<{
++  signal: AbortSignal;
++  deadlineAtMs: number;
++  generation: number;
++}>;
++
++/** This provider is a trusted bootstrap dependency, never a request-body adapter. */
++export interface ApprovedCloudDecisionAuthority {
++  resolveExactDecisionJson(
++    decisionId: string,
++    context: ApprovedDecisionResolutionContext,
++  ): Promise<unknown | null>;
++  /** Synchronous revocation/generation fence checked after each external await. */
++  isCurrent(
++    decision: TrustedApprovedCloudDecision,
++    context?: ApprovedDecisionResolutionContext,
++  ): boolean;
++}
++
++export function parseTrustedApprovedCloudDecision(
++  raw: unknown,
++  requestedDecisionId: string,
++): TrustedApprovedCloudDecision {
++  if (
++    typeof raw !== "string" ||
++    Buffer.byteLength(raw, "utf8") > 2 * CLOUD_JOB_ADAM_MAX_CANONICAL_BYTES ||
++    Buffer.from(raw, "utf8").toString("utf8") !== raw
++  )
++    throw new TypeError("invalid approved decision");
++  let decoded: unknown;
++  try {
++    decoded = JSON.parse(raw);
++  } catch {
++    throw new TypeError("invalid approved decision");
++  }
++  const parsed = TrustedApprovedCloudDecision.safeParse(decoded);
++  if (
++    !parsed.success ||
++    parsed.data.decisionId !== requestedDecisionId ||
++    canonicalCloudJobAdamJson(parsed.data) !== raw
++  )
++    throw new TypeError("invalid approved decision");
++  const payload = parseCanonicalApprovedJobPayload(parsed.data.approvedPayloadJson);
++  if (payload.projectId !== parsed.data.projectId) throw new TypeError("invalid approved decision");
++  return parsed.data;
++}
++
++export function actorSourceEvidence(decision: TrustedApprovedCloudDecision): string {
++  return canonicalCloudJobAdamJson({
++    actorId: decision.actorId,
++    actorSourceId: decision.actorSourceId,
++    sourceEventId: decision.sourceEventId,
++    actorEvidenceDigest: decision.actorEvidenceDigest,
++    sourceBinding: decision.sourceBinding,
++    authorityGeneration: decision.authorityGeneration,
++  });
++}
+--- /dev/null
++++ b/service/src/dobius-cloud/approved-decision-operation.ts
+@@ -0,0 +1,122 @@
++import { performance } from "node:perf_hooks";
++import type { ApprovedDecisionResolutionContext } from "./approved-decision-contract.js";
++
++export const APPROVED_DECISION_OPERATION_LIMIT_MS = 45_000;
++
++export type ApprovedDecisionOperation = ApprovedDecisionResolutionContext & {
++  deadline: number;
++  controller: AbortController;
++  done: Promise<void>;
++  finish: () => void;
++};
++
++/** Owns cancellation and drain accounting for every decision-provider/CLI await. */
++export class ApprovedDecisionOperationRunner {
++  private generation = 1;
++  private stopping = false;
++  private readonly active = new Set<ApprovedDecisionOperation>();
++  private readonly unsettled = new Set<Promise<void>>();
++
++  begin(): ApprovedDecisionOperation {
++    if (this.stopping) throw new Error("approved decision unavailable");
++    const controller = new AbortController();
++    let finish!: () => void;
++    const done = new Promise<void>((resolve) => {
++      finish = resolve;
++    });
++    const operation: ApprovedDecisionOperation = {
++      signal: controller.signal,
++      generation: this.generation,
++      deadline: performance.now() + APPROVED_DECISION_OPERATION_LIMIT_MS,
++      deadlineAtMs: Date.now() + APPROVED_DECISION_OPERATION_LIMIT_MS,
++      controller,
++      done,
++      finish,
++    };
++    this.active.add(operation);
++    return operation;
++  }
++
++  assert(operation: ApprovedDecisionOperation): void {
++    if (
++      this.stopping ||
++      operation.generation !== this.generation ||
++      operation.signal.aborted ||
++      performance.now() >= operation.deadline
++    ) {
++      operation.controller.abort();
++      throw new Error("approved decision unavailable");
++    }
++  }
++
++  assertNotStopping(): void {
++    if (this.stopping) throw new Error("approved decision unavailable");
++  }
++
++  async wait<T>(
++    operation: ApprovedDecisionOperation,
++    action: (context: ApprovedDecisionResolutionContext) => Promise<T>,
++  ): Promise<T> {
++    this.assert(operation);
++    const remaining = Math.max(1, Math.ceil(operation.deadline - performance.now()));
++    const context: ApprovedDecisionResolutionContext = {
++      signal: operation.signal,
++      generation: operation.generation,
++      deadlineAtMs: Math.min(operation.deadlineAtMs, Date.now() + remaining),
++    };
++    const pending = Promise.resolve().then(() => {
++      this.assert(operation);
++      return action(context);
++    });
++    const settled = pending.then(
++      () => undefined,
++      () => undefined,
++    );
++    this.unsettled.add(settled);
++    void settled.then(() => this.unsettled.delete(settled));
++    let onAbort!: () => void;
++    const aborted = new Promise<never>((_, reject) => {
++      onAbort = () => reject(new Error("approved decision unavailable"));
++      operation.signal.addEventListener("abort", onAbort, { once: true });
++    });
++    const timer = setTimeout(() => operation.controller.abort(), remaining);
++    timer.unref();
++    try {
++      const value = await Promise.race([pending, aborted]);
++      this.assert(operation);
++      return value;
++    } catch {
++      throw new Error("approved decision unavailable");
++    } finally {
++      clearTimeout(timer);
++      operation.signal.removeEventListener("abort", onAbort);
++    }
++  }
++
++  end(operation: ApprovedDecisionOperation): void {
++    if (!this.active.delete(operation)) return;
++    operation.finish();
++  }
++
++  async stop(timeoutMs: number): Promise<boolean> {
++    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 60_000) return false;
++    this.stopping = true;
++    this.generation += 1;
++    for (const operation of this.active) operation.controller.abort();
++    const drain = Promise.all([
++      ...Array.from(this.active, (operation) => operation.done),
++      ...this.unsettled,
++    ]).then(() => true);
++    if (timeoutMs === 0) return this.active.size === 0 && this.unsettled.size === 0;
++    let timer: NodeJS.Timeout | undefined;
++    const result = await Promise.race([
++      drain,
++      new Promise<boolean>((resolve) => {
++        timer = setTimeout(() => resolve(false), timeoutMs);
++        timer.unref();
++      }),
++    ]);
++    if (timer) clearTimeout(timer);
++    return result;
++  }
++}
+--- /dev/null
++++ b/service/src/dobius-cloud/approved-decision-publisher.ts
+@@ -0,0 +1,474 @@
++import { z } from "zod";
++import type { AdamDatabase } from "../db/database.js";
++import { ApprovedDecisionStore, type ApprovedDecisionRow } from "./approved-decision-store.js";
++import {
++  ApprovedCloudDecisionAuthority,
++  actorSourceEvidence,
++  parseTrustedApprovedCloudDecision,
++  type TrustedApprovedCloudDecision as Decision,
++} from "./approved-decision-contract.js";
++import { DobiusCloudReceiptStore } from "./receipt-store.js";
++import {
++  ApprovedJobIntentRequest,
++  parseCanonicalApprovedJobPayload,
++} from "./approved-job-payload.js";
++import { canonicalCloudJobAdamJson } from "./receipt-contract.js";
++import {
++  DobiusApprovedIntentCli,
++  type IntentBridgeCall,
++  type IntentBridgeCredentialAuthority,
++  type ApprovedIntentChild,
++} from "./intent-bridge-cli.js";
++import { submitAdamApprovedIntent } from "./child-submit.js";
++import {
++  ApprovedDecisionOperationRunner,
++  type ApprovedDecisionOperation,
++} from "./approved-decision-operation.js";
++
++const DecisionId = z.string().uuid();
++const REQUEST_LIMIT = 1;
++const RECOVERY_INTERVAL_MS = 15_000;
++
++export type ApprovedDecisionPublisherOptions = {
++  enabled: boolean;
++  database: AdamDatabase;
++  receipts: DobiusCloudReceiptStore;
++  decisionAuthority: ApprovedCloudDecisionAuthority;
++  credentialAuthority: IntentBridgeCredentialAuthority;
++  dobiusExecutablePath?: string;
++  invoke?: IntentBridgeCall;
++  now?: () => number;
++};
++
++export type ApprovedDecisionDispatch = {
++  decisionId: string;
++  intentId: string;
++  child: ApprovedIntentChild;
++};
++
++/** Production boundary: exact decision IDs only; all authority comes from injected main-owned providers. */
++export function createApprovedDecisionPublisher(
++  options?: ApprovedDecisionPublisherOptions,
++): ApprovedDecisionPublisher | undefined {
++  if (
++    !options?.enabled ||
++    !options.database ||
++    !options.receipts ||
++    !options.decisionAuthority ||
++    !options.credentialAuthority ||
++    !options.dobiusExecutablePath
++  )
++    return undefined;
++  try {
++    return new ApprovedDecisionPublisher(options);
++  } catch {
++    return undefined;
++  }
++}
++
++export class ApprovedDecisionPublisher {
++  private readonly store: ApprovedDecisionStore;
++  private readonly bridge: DobiusApprovedIntentCli;
++  private readonly now: () => number;
++  private readonly operations = new ApprovedDecisionOperationRunner();
++  private readonly inflight = new Map<string, Promise<ApprovedDecisionDispatch>>();
++  private recovery: Promise<{ attempted: number; failed: number }> | undefined;
++
++  constructor(private readonly options: ApprovedDecisionPublisherOptions) {
++    if (options.enabled !== true) throw new Error("unavailable");
++    this.store = new ApprovedDecisionStore(options.database);
++    this.bridge = new DobiusApprovedIntentCli(
++      options.dobiusExecutablePath!,
++      options.credentialAuthority,
++      options.invoke,
++    );
++    this.now = options.now ?? Date.now;
++  }
++
++  dispatch(rawDecisionId: unknown): Promise<ApprovedDecisionDispatch> {
++    const parsed = DecisionId.safeParse(rawDecisionId);
++    if (!parsed.success) return Promise.reject(new Error("approved decision unavailable"));
++    const id = parsed.data;
++    const existing = this.inflight.get(id);
++    if (existing) return existing;
++    let operation: ApprovedDecisionOperation;
++    try {
++      operation = this.operations.begin();
++    } catch {
++      return Promise.reject(new Error("approved decision unavailable"));
++    }
++    const pending = this.dispatchOne(id, operation).finally(() => {
++      this.operations.end(operation);
++      if (this.inflight.get(id) === pending) this.inflight.delete(id);
++    });
++    this.inflight.set(id, pending);
++    return pending;
++  }
++
++  recover(): Promise<{ attempted: number; failed: number }> {
++    if (this.recovery) return this.recovery;
++    try {
++      this.operations.assertNotStopping();
++    } catch {
++      return Promise.resolve({ attempted: 0, failed: 0 });
++    }
++    this.recovery = this.recoverRows().finally(() => {
++      this.recovery = undefined;
++    });
++    return this.recovery;
++  }
++
++  stop(timeoutMs = 20_000): Promise<boolean> {
++    return this.operations.stop(timeoutMs);
++  }
++
++  private async recoverRows(): Promise<{ attempted: number; failed: number }> {
++    let rows: ApprovedDecisionRow[];
++    try {
++      rows = this.store.listRecoverable(this.readNow(), REQUEST_LIMIT);
++    } catch {
++      return { attempted: 0, failed: 1 };
++    }
++    let attempted = 0;
++    let failed = 0;
++    for (const row of rows) {
++      try {
++        this.operations.assertNotStopping();
++      } catch {
++        break;
++      }
++      attempted += 1;
++      try {
++        await this.dispatch(row.decision_id);
++      } catch {
++        failed += 1;
++      }
++    }
++    return { attempted, failed };
++  }
++
++  private async dispatchOne(
++    decisionId: string,
++    operation: ApprovedDecisionOperation,
++  ): Promise<ApprovedDecisionDispatch> {
++    this.operations.assert(operation);
++    let row = this.store.get(decisionId);
++    if (row?.child_json !== null && row?.child_json !== undefined) return this.completed(row);
++    if (row?.intent_published === 1) return this.reconcilePublished(row, operation);
++
++    const decision = await this.loadCurrentDecision(decisionId, operation);
++    this.operations.assert(operation);
++    row = this.store.persistAuthorizedDecision(decision, this.readNow());
++    this.assertRowMatches(row, decision);
++    if (row.child_json !== null) return this.completed(row);
++    if (row.intent_published === 1) return this.reconcilePublished(row, operation);
++
++    const lease = this.store.claim(decisionId, this.readNow());
++    if (lease.row.intent_published === 1)
++      return this.reconcileClaimed(lease.row, lease.token, operation);
++    return this.publishAndSubmit(decision, lease.row, lease.token, operation);
++  }
++
++  /** A published intent is queried before decision authority so revoked approvals can reconcile an ACK loss. */
++  private async reconcilePublished(
++    row: ApprovedDecisionRow,
++    operation: ApprovedDecisionOperation,
++  ): Promise<ApprovedDecisionDispatch> {
++    const lease = this.store.claim(row.decision_id, this.readNow());
++    return this.reconcileClaimed(lease.row, lease.token, operation);
++  }
++
++  private async reconcileClaimed(
++    row: ApprovedDecisionRow,
++    token: string,
++    operation: ApprovedDecisionOperation,
++  ): Promise<ApprovedDecisionDispatch> {
++    let published = true;
++    try {
++      this.operations.assert(operation);
++      const dto = this.options.receipts.findApprovedIntentForSubmission(row.intent_id);
++      if (!dto) throw new Error("approved decision unavailable");
++      this.assertDtoMatchesRow(dto, row);
++      const observed = await this.operations.wait(operation, ({ signal }) =>
++        this.bridge.lookup(dto, signal),
++      );
++      this.operations.assert(operation);
++      if (observed) {
++        this.store.markChildSubmitted(row.decision_id, token, observed, this.readNow());
++        return { decisionId: row.decision_id, intentId: row.intent_id, child: observed };
++      }
++
++      const decision = await this.loadCurrentDecision(row.decision_id, operation);
++      this.assertRowMatches(row, decision);
++      if (
++        row.decision_expires_at_ms <= this.readNow() ||
++        row.intent_expires_at_ms <= this.readNow()
++      ) {
++        throw new Error("approved decision unavailable");
++      }
++      this.assertCurrent(decision, operation);
++      const child = await this.operations.wait(operation, ({ signal }) =>
++        this.bridge.submit(dto, decision, () => this.assertCurrent(decision, operation), signal),
++      );
++      this.assertCurrent(decision, operation);
++      this.store.markChildSubmitted(row.decision_id, token, child, this.readNow());
++      return { decisionId: row.decision_id, intentId: row.intent_id, child };
++    } catch (error) {
++      if (published && !operation.signal.aborted)
++        this.releasePublishedAttempt(row.decision_id, token);
++      throw error;
++    }
++  }
++
++  private async publishAndSubmit(
++    decision: Decision,
++    initialRow: ApprovedDecisionRow,
++    token: string,
++    operation: ApprovedDecisionOperation,
++  ): Promise<ApprovedDecisionDispatch> {
++    let row = initialRow;
++    let published = false;
++    try {
++      this.operations.assert(operation);
++      let dto = this.options.receipts.findApprovedIntentForSubmission(row.intent_id);
++      if (!dto) {
++        if (
++          row.decision_expires_at_ms <= this.readNow() ||
++          row.intent_expires_at_ms <= this.readNow()
++        ) {
++          throw new Error("approved decision unavailable");
++        }
++        const requestJson = this.store.prepareIntentRequest(row.decision_id, token, this.readNow());
++        row = this.store.get(row.decision_id) ?? row;
++        const request = ApprovedJobIntentRequest.parse(JSON.parse(requestJson));
++        if (canonicalCloudJobAdamJson(request) !== requestJson)
++          throw new Error("approved decision unavailable");
++        const payload = parseCanonicalApprovedJobPayload(row.approved_payload_json);
++        if (
++          payload.projectId !== row.project_id ||
++          payload.digest !== row.approved_payload_digest
++        ) {
++          throw new Error("approved decision unavailable");
++        }
++        this.assertCurrent(decision, operation);
++        const staged = this.store.readStagedIntent(row.decision_id, token);
++        if (staged) {
++          this.options.receipts.publishStagedApprovedJobGrantWithIntent(
++            canonicalCloudJobAdamJson(request),
++            staged,
++            () => this.assertCurrent(decision, operation),
++          );
++        } else {
++          await this.options.receipts.issueApprovedJobGrantWithIntent(
++            canonicalCloudJobAdamJson(request),
++            async (envelope) => {
++              const sealed = await this.operations.wait(operation, ({ signal }) =>
++                this.bridge.seal(
++                  envelope,
++                  decision,
++                  () => this.assertCurrent(decision, operation),
++                  signal,
++                ),
++              );
++              this.assertCurrent(decision, operation);
++              this.store.stageSealedIntent(
++                row.decision_id,
++                token,
++                envelope,
++                sealed,
++                this.readNow(),
++              );
++              return sealed;
++            },
++            () => this.assertCurrent(decision, operation),
++            row.intent_expires_at_ms,
++          );
++        }
++        this.operations.assert(operation);
++        this.assertCurrent(decision, operation);
++        dto = this.options.receipts.findApprovedIntentForSubmission(row.intent_id);
++        if (!dto) throw new Error("approved decision unavailable");
++      }
++      this.assertDtoMatchesDecision(dto, row, decision);
++      this.assertCurrent(decision, operation);
++      this.store.markIntentPublished(row.decision_id, token, this.readNow());
++      published = true;
++      const child = await this.operations.wait(operation, ({ signal }) =>
++        submitAdamApprovedIntent(
++          dto!,
++          decision,
++          this.bridge,
++          () => this.assertCurrent(decision, operation),
++          signal,
++        ),
++      );
++      this.assertCurrent(decision, operation);
++      this.store.markChildSubmitted(row.decision_id, token, child, this.readNow());
++      return { decisionId: row.decision_id, intentId: row.intent_id, child };
++    } catch (error) {
++      if (published && !operation.signal.aborted)
++        this.releasePublishedAttempt(row.decision_id, token);
++      throw error;
++    }
++  }
++
++  private async loadCurrentDecision(
++    decisionId: string,
++    operation: ApprovedDecisionOperation,
++  ): Promise<Decision> {
++    const raw = await this.operations.wait(operation, (context) =>
++      this.options.decisionAuthority.resolveExactDecisionJson(decisionId, context),
++    );
++    this.operations.assert(operation);
++    let decision: Decision;
++    try {
++      decision = parseTrustedApprovedCloudDecision(raw, decisionId);
++    } catch {
++      throw new Error("approved decision unavailable");
++    }
++    this.assertCurrent(decision, operation);
++    const existing = this.store.get(decisionId);
++    if (
++      existing &&
++      (existing.source_record_json !== canonicalCloudJobAdamJson(decision) ||
++        existing.actor_source_json !== actorSourceEvidence(decision) ||
++        existing.authority_generation !== decision.authorityGeneration ||
++        existing.source_binding !== decision.sourceBinding)
++    ) {
++      throw new Error("approved decision unavailable");
++    }
++    return decision;
++  }
++
++  private assertRowMatches(row: ApprovedDecisionRow, decision: Decision): void {
++    if (
++      row.source_record_json !== canonicalCloudJobAdamJson(decision) ||
++      row.actor_source_json !== actorSourceEvidence(decision) ||
++      row.decision_id !== decision.decisionId ||
++      row.project_id !== decision.projectId ||
++      row.parent_objective_id !== decision.parentObjectiveId ||
++      row.parent_objective_version !== decision.parentObjectiveVersion ||
++      row.context_digest !== decision.contextDigest ||
++      row.authority_generation !== decision.authorityGeneration ||
++      row.source_binding !== decision.sourceBinding
++    ) {
++      throw new Error("approved decision unavailable");
++    }
++  }
++
++  private assertDtoMatchesRow(
++    dto: NonNullable<ReturnType<DobiusCloudReceiptStore["findApprovedIntentForSubmission"]>>,
++    row: ApprovedDecisionRow,
++  ): void {
++    if (
++      dto.intentId !== row.intent_id ||
++      dto.identity.projectId !== row.project_id ||
++      dto.identity.parentObjectiveId !== row.parent_objective_id ||
++      dto.identity.parentObjectiveVersion !== row.parent_objective_version ||
++      dto.identity.contextDigest !== row.context_digest ||
++      dto.identity.adamInstanceId !== this.options.receipts.instanceId ||
++      dto.approvedJob.projectId !== row.project_id ||
++      canonicalCloudJobAdamJson(dto.approvedJob) !== row.approved_payload_json ||
++      dto.identity.requestFingerprint !== row.approved_payload_digest ||
++      dto.identity.expiresAtMs !== row.intent_expires_at_ms ||
++      dto.identity.expiresAtMs > row.decision_expires_at_ms
++    )
++      throw new Error("approved decision unavailable");
++  }
++
++  private assertDtoMatchesDecision(
++    dto: NonNullable<ReturnType<DobiusCloudReceiptStore["findApprovedIntentForSubmission"]>>,
++    row: ApprovedDecisionRow,
++    decision: Decision,
++  ): void {
++    this.assertDtoMatchesRow(dto, row);
++    if (
++      decision.projectId !== row.project_id ||
++      decision.parentObjectiveId !== row.parent_objective_id ||
++      decision.parentObjectiveVersion !== row.parent_objective_version ||
++      decision.contextDigest !== row.context_digest
++    ) {
++      throw new Error("approved decision unavailable");
++    }
++  }
++
++  private assertCurrent(decision: Decision, operation: ApprovedDecisionOperation): void {
++    this.operations.assert(operation);
++    try {
++      if (!this.options.decisionAuthority.isCurrent(decision, operation)) throw new Error("stale");
++    } catch {
++      throw new Error("approved decision unavailable");
++    }
++  }
++
++  private releasePublishedAttempt(decisionId: string, token: string): void {
++    try {
++      this.store.releasePublishedAttempt(decisionId, token, this.readNow());
++    } catch {
++      /* lease expires safely */
++    }
++  }
++
++  private completed(row: ApprovedDecisionRow): ApprovedDecisionDispatch {
++    if (row.child_json === null) throw new Error("approved decision unavailable");
++    return {
++      decisionId: row.decision_id,
++      intentId: row.intent_id,
++      child: parseStoredChild(row.child_json, row),
++    };
++  }
++
++  private readNow(): number {
++    const value = this.now();
++    if (!Number.isSafeInteger(value) || value < 0) throw new Error("approved decision unavailable");
++    return value;
++  }
++}
++
++function parseStoredChild(json: string, row: ApprovedDecisionRow): ApprovedIntentChild {
++  let value: unknown;
++  try {
++    value = JSON.parse(json);
++  } catch {
++    throw new Error("approved decision unavailable");
++  }
++  const child = z
++    .object({
++      id: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/),
++      state: z.enum([
++        "queued",
++        "waiting_for_worker",
++        "running",
++        "needs_review",
++        "completed",
++        "failed",
++        "cancelled",
++        "interrupted",
++      ]),
++      projectId: z.string(),
++      requestKey: z.string(),
++      taskId: z.string(),
++      workspaceId: z.string(),
++      sourceRevision: z.string(),
++      targetDeviceId: z.string(),
++      recipeId: z.string(),
++    })
++    .strict()
++    .safeParse(value);
++  if (!child.success || child.data.projectId !== row.project_id)
++    throw new Error("approved decision unavailable");
++  const payload = parseCanonicalApprovedJobPayload(row.approved_payload_json).approvedJob;
++  if (
++    child.data.requestKey !== payload.requestKey ||
++    child.data.taskId !== payload.taskId ||
++    child.data.workspaceId !== payload.workspaceId ||
++    child.data.sourceRevision !== payload.sourceRevision ||
++    child.data.targetDeviceId !== payload.targetDeviceId ||
++    child.data.recipeId !== payload.recipeId
++  ) {
++    throw new Error("approved decision unavailable");
++  }
++  return child.data;
++}
++
++export const APPROVED_DECISION_RECOVERY_INTERVAL_MS = RECOVERY_INTERVAL_MS;
+--- /dev/null
++++ b/service/src/dobius-cloud/approved-decision-store.ts
+@@ -0,0 +1,258 @@
++import { createHash, randomUUID } from 'node:crypto'
++import type { AdamDatabase } from '../db/database.js'
++import { canonicalCloudJobAdamJson } from './receipt-contract.js'
++import { ApprovedJobIntentRequest, parseCanonicalApprovedJobPayload } from './approved-job-payload.js'
++import { actorSourceEvidence, type TrustedApprovedCloudDecision } from './approved-decision-contract.js'
++import { AdamCloudIntentEnvelope, AdamCloudSealedEnvelope } from './intent-contract.js'
++import { CloudJobAdamBindingIdentity } from './receipt-contract.js'
++
++const MAX_INTENT_TTL_MS = 300_000
++const DISPATCH_LEASE_MS = 30_000
++
++export class ApprovedDecisionStoreError extends Error {
++  constructor(readonly code: 'invalid' | 'expired' | 'conflict' | 'busy' | 'missing') { super(code) }
++}
++
++export type ApprovedDecisionRow = {
++  decision_id: string
++  source_record_json: string
++  actor_source_json: string
++  authority_generation: number
++  source_binding: string
++  parent_objective_id: string
++  parent_objective_version: number
++  project_id: string
++  context_digest: string
++  approved_payload_json: string
++  approved_payload_digest: string
++  intent_id: string
++  intent_request_json: string
++  decision_expires_at_ms: number
++  intent_expires_at_ms: number
++  staged_identity_json: string | null
++  staged_sealed_envelope: string | null
++  staged_capability_hash: string | null
++  intent_published: number
++  lease_token: string | null
++  lease_until_ms: number | null
++  child_json: string | null
++  created_at_ms: number
++  updated_at_ms: number
++}
++
++export class ApprovedDecisionStore {
++  constructor(private readonly db: AdamDatabase) {}
++
++  persistAuthorizedDecision(decision: TrustedApprovedCloudDecision, now: number): ApprovedDecisionRow {
++    assertTime(now)
++    const payload = parseCanonicalApprovedJobPayload(decision.approvedPayloadJson)
++    if (payload.projectId !== decision.projectId) throw new ApprovedDecisionStoreError('conflict')
++    const sourceRecordJson = canonicalCloudJobAdamJson(decision)
++    const existing = this.get(decision.decisionId)
++    if (existing) {
++      if (existing.source_record_json !== sourceRecordJson ||
++          existing.approved_payload_json !== payload.json || existing.approved_payload_digest !== payload.digest ||
++          existing.project_id !== decision.projectId || existing.source_binding !== decision.sourceBinding ||
++          existing.authority_generation !== decision.authorityGeneration) {
++        throw new ApprovedDecisionStoreError('conflict')
++      }
++      return existing
++    }
++    if (decision.expiresAtMs - now < 1000) throw new ApprovedDecisionStoreError('expired')
++    const ttlMs = Math.min(MAX_INTENT_TTL_MS, decision.expiresAtMs - now)
++    if (ttlMs < 1000) throw new ApprovedDecisionStoreError('expired')
++    const intentExpiresAtMs = now + ttlMs
++    if (!Number.isSafeInteger(intentExpiresAtMs)) throw new ApprovedDecisionStoreError('invalid')
++    const intentId = randomUUID()
++    const request = ApprovedJobIntentRequest.parse({
++      intentId,
++      parentObjectiveId: decision.parentObjectiveId,
++      parentObjectiveVersion: decision.parentObjectiveVersion,
++      projectId: decision.projectId,
++      contextDigest: decision.contextDigest,
++      requestFingerprint: payload.digest,
++      ttlMs,
++      approvedJob: payload.approvedJob
++    })
++    return this.transaction(() => {
++      const raced = this.get(decision.decisionId)
++      if (raced) {
++        if (raced.source_record_json !== sourceRecordJson || raced.approved_payload_digest !== payload.digest) {
++          throw new ApprovedDecisionStoreError('conflict')
++        }
++        return raced
++      }
++      const parent = this.db.prepare(`SELECT j.project_id,j.state,r.revision
++        FROM jobs j JOIN dobius_parent_revisions r ON r.job_id=j.id WHERE j.id=?`)
++        .get(decision.parentObjectiveId) as { project_id: string | null; state: string; revision: number } | undefined
++      if (!parent || parent.project_id !== decision.projectId || parent.revision !== decision.parentObjectiveVersion ||
++          ['completed', 'reported', 'failed', 'cancelled'].includes(parent.state)) {
++        throw new ApprovedDecisionStoreError('conflict')
++      }
++      this.db.prepare(`INSERT INTO dobius_cloud_approved_decisions
++        (decision_id,source_record_json,actor_source_json,authority_generation,source_binding,
++         parent_objective_id,parent_objective_version,project_id,context_digest,approved_payload_json,
++         approved_payload_digest,intent_id,intent_request_json,decision_expires_at_ms,intent_expires_at_ms,intent_published,
++         created_at_ms,updated_at_ms)
++        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`).run(
++        decision.decisionId, sourceRecordJson, actorSourceEvidence(decision), decision.authorityGeneration,
++        decision.sourceBinding, decision.parentObjectiveId, decision.parentObjectiveVersion, decision.projectId,
++        decision.contextDigest, payload.json, payload.digest, intentId, canonicalCloudJobAdamJson(request),
++        decision.expiresAtMs, intentExpiresAtMs, now, now
++      )
++      const inserted = this.get(decision.decisionId)
++      if (!inserted) throw new ApprovedDecisionStoreError('conflict')
++      return inserted
++    })
++  }
++
++  get(decisionId: string): ApprovedDecisionRow | undefined {
++    return this.db.prepare('SELECT * FROM dobius_cloud_approved_decisions WHERE decision_id=?').get(decisionId) as
++      ApprovedDecisionRow | undefined
++  }
++
++  listRecoverable(now: number, limit = 1): ApprovedDecisionRow[] {
++    assertTime(now)
++    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 128) throw new ApprovedDecisionStoreError('invalid')
++    return this.db.prepare(`SELECT * FROM dobius_cloud_approved_decisions
++      WHERE child_json IS NULL AND (intent_published=1 OR decision_expires_at_ms>?)
++        AND (lease_until_ms IS NULL OR lease_until_ms<=?) ORDER BY created_at_ms,decision_id LIMIT ?`)
++      .all(now, now, limit) as unknown as ApprovedDecisionRow[]
++  }
++
++  claim(decisionId: string, now: number): { token: string; row: ApprovedDecisionRow } {
++    assertTime(now)
++    return this.transaction(() => {
++      const row = this.get(decisionId)
++      if (!row) throw new ApprovedDecisionStoreError('missing')
++      if (row.child_json !== null) throw new ApprovedDecisionStoreError('conflict')
++      if (!row.intent_published && row.decision_expires_at_ms <= now) throw new ApprovedDecisionStoreError('expired')
++      if (row.lease_until_ms !== null && row.lease_until_ms > now) throw new ApprovedDecisionStoreError('busy')
++      const token = randomUUID()
++      const until = now + DISPATCH_LEASE_MS
++      if (!Number.isSafeInteger(until)) throw new ApprovedDecisionStoreError('invalid')
++      const changed = this.db.prepare(`UPDATE dobius_cloud_approved_decisions SET lease_token=?,lease_until_ms=?,updated_at_ms=?
++        WHERE decision_id=? AND child_json IS NULL AND (lease_until_ms IS NULL OR lease_until_ms<=?)`)
++        .run(token, until, now, decisionId, now)
++      if (Number(changed.changes) !== 1) throw new ApprovedDecisionStoreError('busy')
++      return { token, row: { ...row, lease_token: token, lease_until_ms: until } }
++    })
++  }
++
++  prepareIntentRequest(decisionId: string, token: string, now: number): string {
++    assertTime(now)
++    return this.transaction(() => {
++      const row = this.get(decisionId)
++      if (!row || row.lease_token !== token || row.intent_published || row.child_json !== null) {
++        throw new ApprovedDecisionStoreError('conflict')
++      }
++      const ttlMs = row.intent_expires_at_ms - now
++      if (!Number.isSafeInteger(ttlMs) || ttlMs < 1000) throw new ApprovedDecisionStoreError('expired')
++      let prior: unknown
++      try { prior = JSON.parse(row.intent_request_json) } catch { throw new ApprovedDecisionStoreError('conflict') }
++      const request = ApprovedJobIntentRequest.safeParse({ ...prior as object, ttlMs })
++      if (!request.success || request.data.intentId !== row.intent_id ||
++          request.data.projectId !== row.project_id || request.data.requestFingerprint !== row.approved_payload_digest) {
++        throw new ApprovedDecisionStoreError('conflict')
++      }
++      const json = canonicalCloudJobAdamJson(request.data)
++      const result = this.db.prepare(`UPDATE dobius_cloud_approved_decisions SET intent_request_json=?,updated_at_ms=?
++        WHERE decision_id=? AND lease_token=? AND intent_published=0 AND child_json IS NULL`)
++        .run(json, now, decisionId, token)
++      if (Number(result.changes) !== 1) throw new ApprovedDecisionStoreError('conflict')
++      return json
++    })
++  }
++
++  stageSealedIntent(decisionId: string, token: string, rawEnvelope: unknown, rawSealed: unknown, now: number): void {
++    assertTime(now)
++    let envelope: ReturnType<typeof AdamCloudIntentEnvelope.parse>
++    let sealedEnvelope: string
++    try {
++      envelope = AdamCloudIntentEnvelope.parse(rawEnvelope)
++      sealedEnvelope = AdamCloudSealedEnvelope.parse(rawSealed)
++      if (sealedEnvelope.includes(envelope.capability)) throw new Error('plaintext')
++    } catch { throw new ApprovedDecisionStoreError('invalid') }
++    const row = this.get(decisionId)
++    if (!row || row.lease_token !== token || row.intent_published || row.child_json !== null ||
++        row.intent_id !== envelope.intentId) throw new ApprovedDecisionStoreError('conflict')
++    const identity = CloudJobAdamBindingIdentity.parse(envelope.identity)
++    const request = ApprovedJobIntentRequest.safeParse(JSON.parse(row.intent_request_json))
++    if (!request.success || identity.projectId !== row.project_id ||
++        identity.parentObjectiveId !== row.parent_objective_id ||
++        identity.parentObjectiveVersion !== row.parent_objective_version || identity.contextDigest !== row.context_digest ||
++        identity.requestFingerprint !== row.approved_payload_digest || identity.expiresAtMs !== row.intent_expires_at_ms ||
++        request.data.intentId !== row.intent_id || request.data.requestFingerprint !== row.approved_payload_digest) {
++      throw new ApprovedDecisionStoreError('conflict')
++    }
++    const identityJson = canonicalCloudJobAdamJson(identity)
++    const capabilityHash = createHash('sha256').update(envelope.capability).digest('hex')
++    if (row.staged_identity_json !== null || row.staged_sealed_envelope !== null || row.staged_capability_hash !== null) {
++      if (row.staged_identity_json !== identityJson || row.staged_sealed_envelope !== sealedEnvelope ||
++          row.staged_capability_hash !== capabilityHash) throw new ApprovedDecisionStoreError('conflict')
++      return
++    }
++    const result = this.db.prepare(`UPDATE dobius_cloud_approved_decisions
++      SET staged_identity_json=?,staged_sealed_envelope=?,staged_capability_hash=?,updated_at_ms=?
++      WHERE decision_id=? AND lease_token=? AND intent_published=0 AND child_json IS NULL
++        AND staged_identity_json IS NULL AND staged_sealed_envelope IS NULL AND staged_capability_hash IS NULL`)
++      .run(identityJson, sealedEnvelope, capabilityHash, now, decisionId, token)
++    if (Number(result.changes) !== 1) throw new ApprovedDecisionStoreError('conflict')
++  }
++
++  readStagedIntent(decisionId: string, token: string): {
++    identity: ReturnType<typeof CloudJobAdamBindingIdentity.parse>
++    sealedEnvelope: string
++    capabilityHash: string
++  } | null {
++    const row = this.get(decisionId)
++    if (!row || row.lease_token !== token) throw new ApprovedDecisionStoreError('conflict')
++    const parts = [row.staged_identity_json, row.staged_sealed_envelope, row.staged_capability_hash]
++    if (parts.every((part) => part === null)) return null
++    try {
++      if (parts.some((part) => part === null)) throw new Error('partial stage')
++      const identity = CloudJobAdamBindingIdentity.parse(JSON.parse(row.staged_identity_json!))
++      if (canonicalCloudJobAdamJson(identity) !== row.staged_identity_json ||
++          !/^[a-f0-9]{64}$/.test(row.staged_capability_hash!) ||
++          !AdamCloudSealedEnvelope.safeParse(row.staged_sealed_envelope).success ||
++          identity.projectId !== row.project_id || identity.parentObjectiveId !== row.parent_objective_id ||
++          identity.parentObjectiveVersion !== row.parent_objective_version || identity.contextDigest !== row.context_digest ||
++          identity.requestFingerprint !== row.approved_payload_digest || identity.expiresAtMs !== row.intent_expires_at_ms ||
++          identity.adamInstanceId.length === 0) throw new Error('invalid stage')
++      return { identity, sealedEnvelope: row.staged_sealed_envelope!, capabilityHash: row.staged_capability_hash! }
++    } catch { throw new ApprovedDecisionStoreError('conflict') }
++  }
++
++  markIntentPublished(decisionId: string, token: string, now: number): void {
++    assertTime(now)
++    const result = this.db.prepare(`UPDATE dobius_cloud_approved_decisions SET intent_published=1,updated_at_ms=?
++      WHERE decision_id=? AND lease_token=? AND child_json IS NULL`).run(now, decisionId, token)
++    if (Number(result.changes) !== 1) throw new ApprovedDecisionStoreError('conflict')
++  }
++
++  markChildSubmitted(decisionId: string, token: string, child: unknown, now: number): void {
++    const childJson = canonicalCloudJobAdamJson(child)
++    assertTime(now)
++    const result = this.db.prepare(`UPDATE dobius_cloud_approved_decisions SET intent_published=1,child_json=?,
++      lease_token=NULL,lease_until_ms=NULL,updated_at_ms=? WHERE decision_id=? AND lease_token=? AND child_json IS NULL`)
++      .run(childJson, now, decisionId, token)
++    if (Number(result.changes) !== 1) throw new ApprovedDecisionStoreError('conflict')
++  }
++
++  releasePublishedAttempt(decisionId: string, token: string, now: number): void {
++    assertTime(now)
++    const result = this.db.prepare(`UPDATE dobius_cloud_approved_decisions SET lease_token=NULL,lease_until_ms=NULL,updated_at_ms=?
++      WHERE decision_id=? AND lease_token=? AND intent_published=1 AND child_json IS NULL`).run(now, decisionId, token)
++    if (Number(result.changes) !== 1) throw new ApprovedDecisionStoreError('conflict')
++  }
++
++  private transaction<T>(action: () => T): T {
++    this.db.exec('BEGIN IMMEDIATE')
++    try { const value = action(); this.db.exec('COMMIT'); return value }
++    catch (error) { this.db.exec('ROLLBACK'); throw error }
++  }
++}
++
++function assertTime(value: number): void {
++  if (!Number.isSafeInteger(value) || value < 0) throw new ApprovedDecisionStoreError('invalid')
++}
+--- a/service/src/dobius-cloud/approved-job-payload.ts
++++ b/service/src/dobius-cloud/approved-job-payload.ts
+@@ -36,7 +36,12 @@
+   approvedPayloadDigest: string
+ }
+ 
+-export function parseCanonicalApprovedJobPayload(raw: unknown): { json: string; digest: string; projectId: string } {
++export function parseCanonicalApprovedJobPayload(raw: unknown): {
++  json: string
++  digest: string
++  projectId: string
++  approvedJob: ApprovedJobPayload
++} {
+   if (typeof raw !== 'string' || Buffer.byteLength(raw, 'utf8') > CLOUD_JOB_ADAM_MAX_CANONICAL_BYTES ||
+       Buffer.from(raw, 'utf8').toString('utf8') !== raw) {
+     throw new TypeError('invalid approved payload')
+@@ -52,7 +57,7 @@
+   const json = canonicalCloudJobAdamJson(parsed.data)
+   const digest = canonicalCloudJobAdamSha256(parsed.data)
+   if (json !== raw) throw new TypeError('invalid approved payload')
+-  return { json, digest, projectId: parsed.data.projectId }
++  return { json, digest, projectId: parsed.data.projectId, approvedJob: parsed.data }
+ }
+ 
+ /** String input prevents object accessors/proxies and canonical equality rejects duplicate keys. */
+--- a/service/src/dobius-cloud/child-submit.ts
++++ b/service/src/dobius-cloud/child-submit.ts
+@@ -10,6 +10,20 @@
+   type AdamCloudSubmissionProof
+ } from './child-submit-contract.js'
+ import { remainingSubmitMs, runLocalChildSubmit } from './child-submit-process.js'
++import type { DurableApprovedIntentSubmission } from './receipt-store.js'
++import type { TrustedApprovedCloudDecision } from './approved-decision-contract.js'
++import type { DobiusApprovedIntentCli, ApprovedIntentChild } from './intent-bridge-cli.js'
++
++/** Production approved path submits only the persisted sealed DTO over the strict v1 stdin contract. */
++export function submitAdamApprovedIntent(
++  dto: DurableApprovedIntentSubmission,
++  decision: TrustedApprovedCloudDecision,
++  bridge: Pick<DobiusApprovedIntentCli, 'submit'>,
++  assertDecisionCurrent: () => void,
++  signal?: AbortSignal
++): Promise<ApprovedIntentChild> {
++  return bridge.submit(dto, decision, assertDecisionCurrent, signal)
++}
+ 
+ export type AdamCloudChildSubmitOptions = {
+   executablePath: string
+--- /dev/null
++++ b/service/src/dobius-cloud/intent-bridge-cli.ts
+@@ -0,0 +1,448 @@
++import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
++import { isAbsolute } from "node:path";
++import { performance } from "node:perf_hooks";
++import { z } from "zod";
++import { AdamCloudIntentEnvelope, AdamCloudSealedEnvelope } from "./intent-contract.js";
++import { ApprovedJobPayload } from "./approved-job-payload.js";
++import {
++  canonicalCloudJobAdamJson,
++  canonicalCloudJobAdamSha256,
++  CloudJobAdamBindingIdentity,
++} from "./receipt-contract.js";
++import type { TrustedApprovedCloudDecision } from "./approved-decision-contract.js";
++import type { DurableApprovedIntentSubmission } from "./receipt-store.js";
++
++const Uuid = z.string().uuid();
++const CloudId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/);
++const MAX_INPUT_BYTES = 128 * 1024;
++const MAX_OUTPUT_BYTES = 64 * 1024;
++const MAX_CALL_MS = 15_000;
++const MAX_AUTHORITY_WAIT_MS = 5_000;
++const REMOTE_SELECTORS = ["DOBIUS_PAIRING_CODE", "DOBIUS_REMOTE_PAIRING", "DOBIUS_ENVIRONMENT"];
++const ChildStates = new Set(
++  "queued waiting_for_worker running needs_review completed failed cancelled interrupted".split(
++    " ",
++  ),
++);
++
++export const IntentBridgeCredential = z
++  .object({
++    schemaVersion: z.literal(1),
++    audienceRuntimeId: Uuid,
++    credential: z
++      .string()
++      .regex(/^[A-Za-z0-9_-]{43}$/)
++      .refine((value) => {
++        const bytes = Buffer.from(value, "base64url");
++        return bytes.byteLength === 32 && bytes.toString("base64url") === value;
++      }),
++    runtimeUserDataPath: z.string().min(1).max(4096),
++    authorizationGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
++  })
++  .strict();
++export type IntentBridgeCredential = z.infer<typeof IntentBridgeCredential>;
++
++export interface IntentBridgeCredentialAuthority {
++  acquire(signal: AbortSignal): Promise<unknown | null>;
++  isCurrent(credential: IntentBridgeCredential): boolean;
++}
++
++export type ApprovedIntentChild = {
++  id: string;
++  state: string;
++  projectId: string;
++  requestKey: string;
++  taskId: string;
++  workspaceId: string;
++  sourceRevision: string;
++  targetDeviceId: string;
++  recipeId: string;
++};
++
++export type IntentBridgeCall = (
++  executablePath: string,
++  args: string[],
++  body: string,
++  credential: IntentBridgeCredential,
++  signal: AbortSignal,
++) => Promise<unknown>;
++
++export class DobiusApprovedIntentCli {
++  constructor(
++    private readonly executablePath: string,
++    private readonly authority: IntentBridgeCredentialAuthority,
++    private readonly invoke: IntentBridgeCall = runBoundedCli,
++  ) {
++    if (!isAbsolute(executablePath) || executablePath.length > 4096)
++      throw new Error("intent bridge unavailable");
++  }
++
++  async seal(
++    envelopeRaw: unknown,
++    decision: TrustedApprovedCloudDecision,
++    assertDecisionCurrent: () => void = () => undefined,
++    signal: AbortSignal = new AbortController().signal,
++  ): Promise<string> {
++    const envelope = AdamCloudIntentEnvelope.parse(envelopeRaw);
++    if (
++      envelope.identity.projectId !== decision.projectId ||
++      envelope.identity.parentObjectiveId !== decision.parentObjectiveId ||
++      envelope.identity.parentObjectiveVersion !== decision.parentObjectiveVersion ||
++      envelope.identity.contextDigest !== decision.contextDigest ||
++      envelope.identity.expiresAtMs > decision.expiresAtMs
++    )
++      throw new Error("intent bridge unavailable");
++    const session = await this.acquire(signal);
++    if (signal.aborted) throw new Error("intent bridge unavailable");
++    assertDecisionCurrent();
++    assertCurrent(this.authority, session);
++    const body = JSON.stringify({
++      schemaVersion: 1,
++      audienceRuntimeId: session.audienceRuntimeId,
++      credential: session.credential,
++      envelope,
++    });
++    const response = await this.invoke(
++      this.executablePath,
++      ["seal-adam-intent", "--request-stdin", "--json"],
++      body,
++      session,
++      signal,
++    );
++    if (signal.aborted) throw new Error("intent bridge unavailable");
++    assertDecisionCurrent();
++    assertCurrent(this.authority, session);
++    const result = z
++      .object({
++        schemaVersion: z.literal(1),
++        audienceRuntimeId: Uuid,
++        intentId: Uuid,
++        identity: CloudJobAdamBindingIdentity,
++        sealedEnvelope: AdamCloudSealedEnvelope,
++      })
++      .strict()
++      .safeParse(parseCliResult(response, session.audienceRuntimeId));
++    if (
++      !result.success ||
++      result.data.audienceRuntimeId !== session.audienceRuntimeId ||
++      result.data.intentId !== envelope.intentId ||
++      canonicalCloudJobAdamJson(result.data.identity) !==
++        canonicalCloudJobAdamJson(envelope.identity)
++    ) {
++      throw new Error("intent bridge unavailable");
++    }
++    return result.data.sealedEnvelope;
++  }
++
++  async submit(
++    dto: DurableApprovedIntentSubmission,
++    decision: TrustedApprovedCloudDecision,
++    assertDecisionCurrent: () => void = () => undefined,
++    signal: AbortSignal = new AbortController().signal,
++  ): Promise<ApprovedIntentChild> {
++    const identity = CloudJobAdamBindingIdentity.parse(dto.identity);
++    const approvedJob = ApprovedJobPayload.parse(dto.approvedJob);
++    if (
++      dto.schemaVersion !== 1 ||
++      !Uuid.safeParse(dto.intentId).success ||
++      identity.projectId !== decision.projectId ||
++      identity.parentObjectiveId !== decision.parentObjectiveId ||
++      identity.parentObjectiveVersion !== decision.parentObjectiveVersion ||
++      identity.contextDigest !== decision.contextDigest ||
++      approvedJob.projectId !== identity.projectId ||
++      identity.requestFingerprint !== canonicalCloudJobAdamSha256(approvedJob)
++    ) {
++      throw new Error("intent bridge unavailable");
++    }
++    const session = await this.acquire(signal);
++    if (signal.aborted) throw new Error("intent bridge unavailable");
++    assertDecisionCurrent();
++    assertCurrent(this.authority, session);
++    const request = {
++      schemaVersion: 1,
++      audienceRuntimeId: session.audienceRuntimeId,
++      credential: session.credential,
++      intentId: dto.intentId,
++      identity,
++      sealedEnvelope: AdamCloudSealedEnvelope.parse(dto.sealedEnvelope),
++      approvedJob,
++    };
++    const response = await this.invoke(
++      this.executablePath,
++      ["submit-adam-child", "--request-stdin", "--json"],
++      JSON.stringify(request),
++      session,
++      signal,
++    );
++    if (signal.aborted) throw new Error("intent bridge unavailable");
++    assertDecisionCurrent();
++    assertCurrent(this.authority, session);
++    const result = z
++      .object({
++        schemaVersion: z.literal(1),
++        audienceRuntimeId: Uuid,
++        intentId: Uuid,
++        identity: CloudJobAdamBindingIdentity,
++        job: z.unknown(),
++      })
++      .strict()
++      .safeParse(parseCliResult(response, session.audienceRuntimeId));
++    if (
++      !result.success ||
++      result.data.intentId !== dto.intentId ||
++      result.data.audienceRuntimeId !== session.audienceRuntimeId ||
++      canonicalCloudJobAdamJson(result.data.identity) !== canonicalCloudJobAdamJson(identity)
++    ) {
++      throw new Error("intent bridge unavailable");
++    }
++    return parseChild(result.data.job, approvedJob);
++  }
++
++  async lookup(
++    dto: DurableApprovedIntentSubmission,
++    signal: AbortSignal,
++  ): Promise<ApprovedIntentChild | null> {
++    const identity = CloudJobAdamBindingIdentity.parse(dto.identity);
++    const approvedJob = ApprovedJobPayload.parse(dto.approvedJob);
++    if (
++      dto.schemaVersion !== 1 ||
++      !Uuid.safeParse(dto.intentId).success ||
++      identity.projectId !== approvedJob.projectId ||
++      identity.requestFingerprint !== canonicalCloudJobAdamSha256(approvedJob)
++    ) {
++      throw new Error("intent bridge unavailable");
++    }
++    const session = await this.acquire(signal);
++    if (signal.aborted) throw new Error("intent bridge unavailable");
++    assertCurrent(this.authority, session);
++    const request = {
++      schemaVersion: 1,
++      audienceRuntimeId: session.audienceRuntimeId,
++      credential: session.credential,
++      intentId: dto.intentId,
++      identity,
++      sealedEnvelope: AdamCloudSealedEnvelope.parse(dto.sealedEnvelope),
++      approvedJob,
++    };
++    const response = await this.invoke(
++      this.executablePath,
++      ["lookup-adam-child", "--request-stdin", "--json"],
++      JSON.stringify(request),
++      session,
++      signal,
++    );
++    if (signal.aborted) throw new Error("intent bridge unavailable");
++    assertCurrent(this.authority, session);
++    const result = z
++      .object({
++        schemaVersion: z.literal(1),
++        audienceRuntimeId: Uuid,
++        intentId: Uuid,
++        identity: CloudJobAdamBindingIdentity,
++        job: z.unknown().nullable(),
++      })
++      .strict()
++      .safeParse(parseCliResult(response, session.audienceRuntimeId));
++    if (
++      !result.success ||
++      result.data.intentId !== dto.intentId ||
++      result.data.audienceRuntimeId !== session.audienceRuntimeId ||
++      canonicalCloudJobAdamJson(result.data.identity) !== canonicalCloudJobAdamJson(identity)
++    ) {
++      throw new Error("intent bridge unavailable");
++    }
++    return result.data.job === null ? null : parseChild(result.data.job, approvedJob);
++  }
++
++  private async acquire(parentSignal: AbortSignal): Promise<IntentBridgeCredential> {
++    const abort = new AbortController();
++    const onAbort = () => abort.abort();
++    let onParentAbort: (() => void) | undefined;
++    if (parentSignal.aborted) throw new Error("intent bridge unavailable");
++    parentSignal.addEventListener("abort", onAbort, { once: true });
++    try {
++      let timeout: NodeJS.Timeout | undefined;
++      const cancelled = new Promise<never>((_, reject) => {
++        onParentAbort = () => reject(new Error("cancelled"));
++        parentSignal.addEventListener("abort", onParentAbort, { once: true });
++      });
++      const raw = await Promise.race([
++        Promise.resolve().then(() => this.authority.acquire(abort.signal)),
++        cancelled,
++        new Promise<never>((_, reject) => {
++          timeout = setTimeout(() => {
++            abort.abort();
++            reject(new Error("deadline"));
++          }, MAX_AUTHORITY_WAIT_MS);
++          timeout.unref();
++        }),
++      ]).finally(() => {
++        if (timeout) clearTimeout(timeout);
++      });
++      const parsed = IntentBridgeCredential.safeParse(raw);
++      if (!parsed.success || !isAbsolute(parsed.data.runtimeUserDataPath))
++        throw new Error("unavailable");
++      return parsed.data;
++    } catch {
++      throw new Error("intent bridge unavailable");
++    } finally {
++      parentSignal.removeEventListener("abort", onAbort);
++      if (onParentAbort) parentSignal.removeEventListener("abort", onParentAbort);
++    }
++  }
++}
++
++function assertCurrent(
++  authority: IntentBridgeCredentialAuthority,
++  credential: IntentBridgeCredential,
++): void {
++  try {
++    if (!authority.isCurrent(credential)) throw new Error("stale");
++  } catch {
++    throw new Error("intent bridge unavailable");
++  }
++}
++
++function parseCliResult(raw: unknown, runtimeId: string): Record<string, unknown> {
++  const response = z
++    .object({
++      ok: z.literal(true),
++      _meta: z.object({ runtimeId: Uuid }).strict(),
++      result: z.record(z.string(), z.unknown()),
++    })
++    .strict()
++    .safeParse(raw);
++  if (!response.success || response.data._meta.runtimeId !== runtimeId)
++    throw new Error("intent bridge unavailable");
++  return response.data.result;
++}
++
++function parseChild(
++  raw: unknown,
++  expected: z.infer<typeof ApprovedJobPayload>,
++): ApprovedIntentChild {
++  if (!raw || typeof raw !== "object" || Array.isArray(raw))
++    throw new Error("intent bridge unavailable");
++  const job = raw as Record<string, unknown>;
++  const id = CloudId.safeParse(job.id);
++  if (
++    !id.success ||
++    typeof job.state !== "string" ||
++    !ChildStates.has(job.state) ||
++    job.projectId !== expected.projectId ||
++    job.requestKey !== expected.requestKey ||
++    job.taskId !== expected.taskId ||
++    job.workspaceId !== expected.workspaceId ||
++    job.sourceRevision !== expected.sourceRevision ||
++    job.targetDeviceId !== expected.targetDeviceId ||
++    job.recipeId !== expected.recipeId
++  ) {
++    throw new Error("intent bridge unavailable");
++  }
++  return {
++    id: id.data,
++    state: job.state,
++    projectId: expected.projectId,
++    requestKey: expected.requestKey,
++    taskId: expected.taskId,
++    workspaceId: expected.workspaceId,
++    sourceRevision: expected.sourceRevision,
++    targetDeviceId: expected.targetDeviceId,
++    recipeId: expected.recipeId,
++  };
++}
++
++function runBoundedCli(
++  executablePath: string,
++  args: string[],
++  body: string,
++  credential: IntentBridgeCredential,
++  signal: AbortSignal,
++): Promise<unknown> {
++  const input = Buffer.from(body, "utf8");
++  if (!isAbsolute(executablePath) || input.length > MAX_INPUT_BYTES)
++    return Promise.reject(new Error("intent bridge unavailable"));
++  return new Promise((resolve, reject) => {
++    let child: ChildProcessWithoutNullStreams;
++    try {
++      const env: NodeJS.ProcessEnv = {
++        PATH: process.env.PATH,
++        SystemRoot: process.env.SystemRoot,
++        WINDIR: process.env.WINDIR,
++        TEMP: process.env.TEMP,
++        TMP: process.env.TMP,
++        LANG: process.env.LANG,
++        DOBIUS_USER_DATA_PATH: credential.runtimeUserDataPath,
++      };
++      for (const name of REMOTE_SELECTORS) delete env[name];
++      child = spawn(executablePath, args, {
++        cwd: credential.runtimeUserDataPath,
++        env,
++        shell: false,
++        windowsHide: true,
++        stdio: ["pipe", "pipe", "pipe"],
++      }) as ChildProcessWithoutNullStreams;
++    } catch {
++      reject(new Error("intent bridge unavailable"));
++      return;
++    }
++    const output: Buffer[] = [];
++    let bytes = 0;
++    let settled = false;
++    let closed = false;
++    const deadline = performance.now() + MAX_CALL_MS;
++    const finish = (error?: Error, value?: unknown) => {
++      if (settled) return;
++      settled = true;
++      clearTimeout(timer);
++      if (error) reject(new Error("intent bridge unavailable"));
++      else resolve(value);
++    };
++    const stop = () => {
++      try {
++        child.kill("SIGKILL");
++      } catch {}
++      finish(new Error("intent bridge unavailable"));
++    };
++    const timer = setTimeout(stop, MAX_CALL_MS);
++    const onData = (chunk: Buffer | string) => {
++      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
++      bytes += buffer.length;
++      if (bytes > MAX_OUTPUT_BYTES) {
++        stop();
++        return;
++      }
++      output.push(buffer);
++    };
++    const onClose = (code: number | null) => {
++      closed = true;
++      clearTimeout(timer);
++      signal.removeEventListener("abort", stop);
++      if (settled) return;
++      if (code !== 0 || performance.now() >= deadline) {
++        finish(new Error("failed"));
++        return;
++      }
++      try {
++        finish(
++          undefined,
++          JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(output))),
++        );
++      } catch {
++        finish(new Error("invalid response"));
++      }
++    };
++    signal.addEventListener("abort", stop, { once: true });
++    child.stdout.on("data", onData);
++    child.stderr.on("data", (chunk) => {
++      bytes += Buffer.byteLength(chunk);
++      if (bytes > MAX_OUTPUT_BYTES) stop();
++    });
++    child.on("error", () => finish(new Error("spawn failed")));
++    child.on("close", onClose);
++    child.stdin.on("error", () => {
++      if (!closed) stop();
++    });
++    child.stdin.end(input);
++  });
++}
+--- a/service/src/dobius-cloud/intent-contract.ts
++++ b/service/src/dobius-cloud/intent-contract.ts
+@@ -28,5 +28,6 @@
+ export type AdamCloudIntentResult =
+   | { status: 'issued'; grant: import('./receipt-contract.js').CloudJobAdamBindingGrant }
+   | { status: 'existing'; intentId: string; bindingId: string; expiresAtMs: number }
++  | { status: 'published'; intentId: string; bindingId: string; expiresAtMs: number }
+ 
+ export type AdamCloudIntentSealer = (envelope: AdamCloudIntentEnvelope) => Promise<unknown>
+--- a/service/src/dobius-cloud/intent-publication.ts
++++ b/service/src/dobius-cloud/intent-publication.ts
+@@ -14,6 +14,7 @@
+   parent: (id: string) => Record<string, unknown>
+   readIntent: (intentId: string) => IntentRow | undefined
+   fail: (code: 'invalid' | 'expired' | 'conflict' | 'missing') => never
++  beforePublish?: () => void
+   publish: (input: {
+     request: AdamCloudIntentRequest
+     requestJson: string
+@@ -21,7 +22,7 @@
+     identity: CloudJobAdamBindingIdentity
+     identityJson: string
+     identityDigest: string
+-    capability: string
++    capability?: string
+     capabilityHash: string
+     sealedEnvelope: string
+     issuedAtMs: number
+@@ -48,7 +49,8 @@
+ export async function issueApprovedJobGrantWithIntent(
+   context: IntentPublicationContext,
+   rawApprovedRequest: unknown,
+-  sealer: AdamCloudIntentSealer
++  sealer: AdamCloudIntentSealer,
++  fixedExpiresAtMs?: number
+ ): Promise<AdamCloudIntentResult> {
+   if (typeof sealer !== 'function') context.fail('invalid')
+   let approved
+@@ -63,7 +65,8 @@
+     approved.requestJson,
+     approved.requestDigest,
+     sealer,
+-    { approvedPayloadJson: approved.approvedPayloadJson, approvedPayloadDigest: approved.approvedPayloadDigest }
++    { approvedPayloadJson: approved.approvedPayloadJson, approvedPayloadDigest: approved.approvedPayloadDigest },
++    fixedExpiresAtMs
+   )
+ }
+ 
+@@ -73,7 +76,8 @@
+   requestJson: string,
+   requestDigest: string,
+   sealer: AdamCloudIntentSealer,
+-  approvedPayload?: { approvedPayloadJson: string; approvedPayloadDigest: string }
++  approvedPayload?: { approvedPayloadJson: string; approvedPayloadDigest: string },
++  fixedExpiresAtMs?: number
+ ): Promise<AdamCloudIntentResult> {
+   const existing = context.readIntent(request.intentId)
+   if (existing) {
+@@ -84,8 +88,10 @@
+ 
+   const issuedAtMs = context.now()
+   if (!Number.isSafeInteger(issuedAtMs) || issuedAtMs < 0) context.fail('invalid')
+-  const expiresAtMs = issuedAtMs + request.ttlMs
+-  if (!Number.isSafeInteger(expiresAtMs)) context.fail('invalid')
++  const maximumExpiresAtMs = issuedAtMs + request.ttlMs
++  const expiresAtMs = fixedExpiresAtMs ?? maximumExpiresAtMs
++  if (!Number.isSafeInteger(maximumExpiresAtMs) || !Number.isSafeInteger(expiresAtMs) ||
++      expiresAtMs <= issuedAtMs || expiresAtMs > maximumExpiresAtMs) context.fail('invalid')
+   const parent = context.parent(request.parentObjectiveId)
+   assertParent(request, parent, context.fail)
+   const identity = Object.freeze(CloudJobAdamBindingIdentity.parse({
+@@ -111,6 +117,7 @@
+   }
+   const identityJson = canonicalCloudJobAdamJson(identity)
+   const identityDigest = canonicalCloudJobAdamSha256(identity)
++  context.beforePublish?.()
+   return context.publish({
+     request, requestJson, requestDigest, identity, identityJson, identityDigest, capability,
+     capabilityHash: createHash('sha256').update(capability).digest('hex'), sealedEnvelope: sealedResult.data, issuedAtMs,
+--- a/service/src/dobius-cloud/receipt-store.ts
++++ b/service/src/dobius-cloud/receipt-store.ts
+@@ -9,7 +9,8 @@
+   type IntentRow
+ } from './intent-publication.js'
+ import type { AdamCloudIntentResult, AdamCloudIntentSealer } from './intent-contract.js'
+-import { parseCanonicalApprovedJobPayload } from './approved-job-payload.js'
++import { AdamCloudIntentRequest, AdamCloudSealedEnvelope } from './intent-contract.js'
++import { parseApprovedJobIntent, parseCanonicalApprovedJobPayload } from './approved-job-payload.js'
+ import {
+   CloudJobAdamBindingIdentity, CloudJobAdamBindingConsumeRequest,
+   CloudJobAdamReceiptRequest, CloudJobAdamBindingResponse, CloudJobAdamReceiptAck,
+@@ -18,6 +19,14 @@
+ 
+ export class CloudReceiptError extends Error {
+   constructor(readonly code: 'invalid' | 'expired' | 'conflict' | 'missing') { super(code) }
++}
++
++export type DurableApprovedIntentSubmission = {
++  schemaVersion: 1
++  intentId: string
++  identity: ReturnType<typeof CloudJobAdamBindingIdentity.parse>
++  sealedEnvelope: string
++  approvedJob: ReturnType<typeof parseCanonicalApprovedJobPayload>['approvedJob']
+ }
+ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
+ 
+@@ -63,22 +72,112 @@
+   issueGrantWithIntent(input: {
+     intentId: string; parentObjectiveId: string; parentObjectiveVersion: number; projectId: string;
+     contextDigest: string; requestFingerprint: string; ttlMs: number
+-  }, sealEnvelope: AdamCloudIntentSealer): Promise<AdamCloudIntentResult> {
+-    return publishGrantWithIntent(this.publicationContext(), input, sealEnvelope)
++  }, sealEnvelope: AdamCloudIntentSealer, beforePublish?: () => void): Promise<AdamCloudIntentResult> {
++    return publishGrantWithIntent(this.publicationContext(beforePublish), input, sealEnvelope)
+   }
+ 
+   /** Canonical JSON input keeps untrusted object accessors outside the approval parser. */
+-  issueApprovedJobGrantWithIntent(rawApprovedRequest: unknown, sealEnvelope: AdamCloudIntentSealer): Promise<AdamCloudIntentResult> {
+-    return publishApprovedJobGrantWithIntent(this.publicationContext(), rawApprovedRequest, sealEnvelope)
+-  }
+-
+-  private publicationContext(): IntentPublicationContext {
++  issueApprovedJobGrantWithIntent(
++    rawApprovedRequest: unknown,
++    sealEnvelope: AdamCloudIntentSealer,
++    beforePublish?: () => void,
++    fixedExpiresAtMs?: number
++  ): Promise<AdamCloudIntentResult> {
++    return publishApprovedJobGrantWithIntent(this.publicationContext(beforePublish), rawApprovedRequest, sealEnvelope,
++      fixedExpiresAtMs)
++  }
++
++  /** Commit a previously sealed exact intent after a crash between sealing and the atomic binding write. */
++  publishStagedApprovedJobGrantWithIntent(
++    rawApprovedRequest: unknown,
++    stage: { identity: unknown; sealedEnvelope: unknown; capabilityHash: unknown },
++    beforePublish?: () => void
++  ): AdamCloudIntentResult {
++    let approved: ReturnType<typeof parseApprovedJobIntent>
++    let identity: ReturnType<typeof CloudJobAdamBindingIdentity.parse>
++    let sealedEnvelope: string
++    try {
++      approved = parseApprovedJobIntent(rawApprovedRequest)
++      identity = CloudJobAdamBindingIdentity.parse(stage.identity)
++      sealedEnvelope = AdamCloudSealedEnvelope.parse(stage.sealedEnvelope)
++    } catch { throw new CloudReceiptError('invalid') }
++    const capabilityHash = stage.capabilityHash
++    const at = this.now()
++    const expiresAtMs = identity.expiresAtMs
++    if (typeof capabilityHash !== 'string' || !/^[a-f0-9]{64}$/.test(capabilityHash) ||
++        !Number.isSafeInteger(at) || at < 0 || expiresAtMs <= at ||
++        expiresAtMs > at + approved.request.ttlMs || identity.adamInstanceId !== this.instanceId ||
++        identity.parentObjectiveId !== approved.request.parentObjectiveId ||
++        identity.parentObjectiveVersion !== approved.request.parentObjectiveVersion ||
++        identity.projectId !== approved.request.projectId || identity.contextDigest !== approved.request.contextDigest ||
++        identity.requestFingerprint !== approved.request.requestFingerprint) throw new CloudReceiptError('conflict')
++    const identityJson = canonicalCloudJobAdamJson(identity)
++    const identityDigest = canonicalCloudJobAdamSha256(identity)
++    return this.publicationContext(beforePublish).publish({
++      request: approved.request,
++      requestJson: approved.requestJson,
++      requestDigest: approved.requestDigest,
++      identity,
++      identityJson,
++      identityDigest,
++      capabilityHash,
++      sealedEnvelope,
++      issuedAtMs: at,
++      approvedPayloadJson: approved.approvedPayloadJson,
++      approvedPayloadDigest: approved.approvedPayloadDigest
++    })
++  }
++
++  /** Read only the durable sealed material needed for same-intent retry; capability is never returned. */
++  readApprovedIntentForSubmission(intentId: string): DurableApprovedIntentSubmission {
++    const row = this.findIntentRow(intentId)
++    try {
++      if (!row || row.state !== 'pending' || typeof row.intent_id !== 'string' || row.intent_id !== intentId) {
++        throw new Error('missing intent')
++      }
++      const identity = CloudJobAdamBindingIdentity.parse(JSON.parse(String(row.intent_identity_json)))
++      const bindingIdentity = CloudJobAdamBindingIdentity.parse(JSON.parse(String(row.binding_identity_json)))
++      const payload = parseCanonicalApprovedJobPayload(row.approved_payload_json)
++      const parsedRequest = AdamCloudIntentRequest.parse(JSON.parse(String(row.request_identity_json)))
++      if (canonicalCloudJobAdamJson(identity) !== row.intent_identity_json ||
++          canonicalCloudJobAdamJson(bindingIdentity) !== row.binding_identity_json ||
++          canonicalCloudJobAdamJson(identity) !== canonicalCloudJobAdamJson(bindingIdentity) ||
++          row.persisted_instance_id !== this.instanceId || identity.adamInstanceId !== this.instanceId ||
++          identity.projectId !== payload.projectId || parsedRequest.projectId !== identity.projectId ||
++          parsedRequest.requestFingerprint !== identity.requestFingerprint ||
++          payload.digest !== identity.requestFingerprint || payload.digest !== row.approved_payload_digest ||
++          row.request_identity_digest !== canonicalCloudJobAdamSha256(parsedRequest) ||
++          identity.parentObjectiveId !== parsedRequest.parentObjectiveId ||
++          identity.parentObjectiveVersion !== parsedRequest.parentObjectiveVersion ||
++          identity.contextDigest !== parsedRequest.contextDigest ||
++          identity.expiresAtMs !== Number(row.expires_at_ms) ||
++          row.binding_expires_at_ms !== row.expires_at_ms ||
++          row.binding_id !== identity.bindingId || row.identity_digest !== row.binding_identity_digest) {
++        throw new Error('mismatched intent')
++      }
++      const sealedEnvelope = AdamCloudSealedEnvelope.parse(row.sealed_envelope)
++      return { schemaVersion: 1, intentId, identity, sealedEnvelope, approvedJob: payload.approvedJob }
++    } catch {
++      throw new CloudReceiptError('conflict')
++    }
++  }
++
++  /** A missing intent is distinct from a corrupt durable intent during recovery. */
++  findApprovedIntentForSubmission(intentId: string): DurableApprovedIntentSubmission | null {
++    if (typeof intentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(intentId)) throw new CloudReceiptError('invalid')
++    const row = this.findIntentRow(intentId)
++    if (!row) return null
++    return this.readApprovedIntentForSubmission(intentId)
++  }
++
++  private publicationContext(beforePublish?: () => void): IntentPublicationContext {
+     return {
+       instanceId: this.instanceId,
+       now: this.now,
+       parent: (id) => this.parent(id),
+       readIntent: (intentId) => this.readIntentRow(intentId),
+       fail: (code) => { throw new CloudReceiptError(code) },
++      ...(beforePublish ? { beforePublish } : {}),
+       publish: (publication) => {
+         try { return this.transaction(() => {
+         const existing = this.readIntentRow(publication.request.intentId)
+@@ -115,7 +214,10 @@
+             publication.requestJson, publication.requestDigest, publication.identityJson, publication.identityDigest,
+             publication.sealedEnvelope, at, publication.identity.expiresAtMs,
+             publication.approvedPayloadJson ?? null, publication.approvedPayloadDigest ?? null)
+-        return { status: 'issued', grant: { ...publication.identity, capability: publication.capability } }
++        return publication.capability === undefined
++          ? { status: 'published', intentId: publication.request.intentId,
++              bindingId: publication.identity.bindingId, expiresAtMs: publication.identity.expiresAtMs }
++          : { status: 'issued', grant: { ...publication.identity, capability: publication.capability } }
+         }) } catch (error) {
+           if (error instanceof CloudReceiptError) throw error
+           throw new CloudReceiptError('invalid')
+@@ -223,6 +325,10 @@
+       WHERE i.intent_id=?`).get(intentId) as IntentRow | undefined
+   }
+ 
++  private findIntentRow(intentId: string): IntentRow | undefined {
++    return this.readIntentRow(intentId)
++  }
++
+   private transaction<T>(action: () => T): T {
+     this.db.exec('BEGIN IMMEDIATE')
+     try { const value = action(); this.db.exec('COMMIT'); return value }
+--- a/service/src/main.ts
++++ b/service/src/main.ts
+@@ -1,53 +1,92 @@
+-import { dirname, join, resolve } from 'node:path'
+-import { fileURLToPath } from 'node:url'
+-import { AdamService } from './runtime/service.js'
++import { dirname, join, resolve } from "node:path";
++import { fileURLToPath } from "node:url";
++import { AdamService } from "./runtime/service.js";
++import {
++  drainUntilStopped,
++  runProcessLifecycle,
++  type EntrypointMode,
++  type ShutdownSignal,
++} from "./runtime/process-lifecycle.js";
+ 
+-const stamp = (): string => new Date().toISOString()
++const stamp = (): string => new Date().toISOString();
+ 
+-const here = dirname(fileURLToPath(import.meta.url))
+-const projectRoot = resolve(here, '../..')
+-const dataDir = process.env.ADAM_DATA_DIR || join(projectRoot, 'service', 'data')
+-const port = Number(process.env.ADAM_PORT || 8791)
++const here = dirname(fileURLToPath(import.meta.url));
++const projectRoot = resolve(here, "../..");
++const dataDir = process.env.ADAM_DATA_DIR || join(projectRoot, "service", "data");
++const port = Number(process.env.ADAM_PORT || 8791);
+ const service = new AdamService({
+   dataDir,
+   port,
+-  commitmentsPath: join(projectRoot, 'COMMITMENTS.md'),
+-  promptProfilesPath: join(projectRoot, 'config', 'prompt-profiles.yaml'),
+-  modelRoutingPath: join(projectRoot, 'config', 'model-routing.yaml')
+-})
++  commitmentsPath: join(projectRoot, "COMMITMENTS.md"),
++  promptProfilesPath: join(projectRoot, "config", "prompt-profiles.yaml"),
++  modelRoutingPath: join(projectRoot, "config", "model-routing.yaml"),
++});
++
++function modeFromArgs(args: readonly string[]): EntrypointMode {
++  if (args.includes("--once")) return "once";
++  if (args.includes("--prepare-tomorrow")) return "prepare";
++  return "service";
++}
++
++async function operationFor(mode: EntrypointMode): Promise<unknown> {
++  if (mode === "once") return service.reconcile();
++  if (mode === "prepare") {
++    return service.supervisor.prepareTomorrow({
++      channel: "cli",
++      senderId: "carson",
++      dedupeKey: `cli:${new Date().toISOString().slice(0, 10)}`,
++    });
++  }
++  return undefined;
++}
+ 
+ async function main(): Promise<void> {
+-  // The --once / --prepare-tomorrow branches emit machine-read JSON on stdout;
+-  // never prefix those with stamp() — only lifecycle log lines get a timestamp.
+-  if (process.argv.includes('--once')) {
+-    const result = await service.reconcile()
+-    process.stdout.write(`${JSON.stringify({ ok: true, result }, null, 2)}\n`)
+-    await service.stop()
+-    return
+-  }
+-  if (process.argv.includes('--prepare-tomorrow')) {
+-    const result = await service.supervisor.prepareTomorrow({
+-      channel: 'cli',
+-      senderId: 'carson',
+-      dedupeKey: `cli:${new Date().toISOString().slice(0, 10)}`
+-    })
+-    process.stdout.write(`${JSON.stringify({ ok: true, result }, null, 2)}\n`)
+-    await service.stop()
+-    return
+-  }
+-  await service.start()
+-  process.stdout.write(`${stamp()} ADAM service listening on 127.0.0.1:${port}\n`)
+-  const shutdown = async (): Promise<void> => {
+-    process.stdout.write(`${stamp()} ADAM service stopping\n`)
+-    await service.stop()
+-    process.exit(0)
+-  }
+-  process.on('SIGTERM', () => void shutdown())
+-  process.on('SIGINT', () => void shutdown())
++  const mode = modeFromArgs(process.argv);
++  let stoppingLogged = false;
++  await runProcessLifecycle({
++    mode,
++    start: () => service.start(),
++    execute: () => operationFor(mode),
++    stop: (timeoutMs) => service.stop(timeoutMs),
++    onSignal: (signal: ShutdownSignal, handler) => {
++      const listener = (): void => handler();
++      process.on(signal, listener);
++      return () => process.off(signal, listener);
++    },
++    stdout: (text) => process.stdout.write(text),
++    stderr: (text) => process.stderr.write(text),
++    setExitCode: (code) => {
++      process.exitCode = code;
++    },
++    onReady: () => process.stdout.write(`${stamp()} ADAM service listening on 127.0.0.1:${port}\n`),
++    onStopping: () => {
++      if (stoppingLogged) return;
++      stoppingLogged = true;
++      process.stderr.write(`${stamp()} ADAM service stopping\n`);
++    },
++    onError: (error) =>
++      process.stderr.write(`${stamp()} ${error instanceof Error ? error.stack : String(error)}\n`),
++  });
+ }
+ 
+-main().catch(async (error) => {
+-  process.stderr.write(`${stamp()} ${error instanceof Error ? error.stack : String(error)}\n`)
+-  await service.stop().catch(() => undefined)
+-  process.exit(1)
+-})
++void main().catch((error: unknown) => {
++  try {
++    process.stderr.write(
++      `${stamp()} lifecycle setup failed: ${error instanceof Error ? error.stack : String(error)}\n`,
++    );
++  } catch {
++    // Preserve shutdown ownership even if stderr is unavailable.
++  }
++  void drainUntilStopped(
++    (timeoutMs) => service.stop(timeoutMs),
++    (text) => {
++      try {
++        process.stderr.write(text);
++      } catch {
++        // Retry remains active even if diagnostics cannot be written.
++      }
++    },
++  ).then(() => {
++    process.exitCode = 1;
++  });
++});
+--- /dev/null
++++ b/service/src/runtime/process-lifecycle.ts
+@@ -0,0 +1,259 @@
++import { retainProcessLifetime } from "./process-lifecycle-hold.js";
++
++export type EntrypointMode = "once" | "prepare" | "service";
++export type ShutdownSignal = "SIGINT" | "SIGTERM";
++export type ProcessLifecycleOptions = {
++  mode: EntrypointMode;
++  start: () => Promise<void>;
++  execute?: () => Promise<unknown>;
++  stop: (timeoutMs: number) => Promise<boolean>;
++  onSignal: (signal: ShutdownSignal, handler: () => void) => () => void;
++  stdout: (text: string) => void;
++  stderr: (text: string) => void;
++  setExitCode: (code: number) => void;
++  onReady?: () => void;
++  onStopping?: (signal: ShutdownSignal) => void;
++  onError?: (error: unknown) => void;
++  waitForRetry?: (milliseconds: number) => Promise<void>;
++  stopTimeoutMs?: number;
++  retryBaseMs?: number;
++  retryMaxMs?: number;
++};
++
++type StartupOutcome = { state: "started" } | { state: "failed"; error: unknown };
++
++const DEFAULT_STOP_TIMEOUT_MS = 20_000;
++const DEFAULT_RETRY_BASE_MS = 1_000;
++const DEFAULT_RETRY_MAX_MS = 10_000;
++const STARTUP_KEEPALIVE_REPORT_MS = 15_000;
++
++function defaultWait(milliseconds: number): Promise<void> {
++  // This referenced timer keeps the process alive while an incomplete drain retries.
++  return new Promise((resolve) => setTimeout(resolve, milliseconds));
++}
++
++function describeError(error: unknown): string {
++  return error instanceof Error ? (error.stack ?? error.message) : String(error);
++}
++
++function safeDiagnostic(write: (text: string) => void, text: string): void {
++  try {
++    write(text);
++  } catch {
++    // A broken diagnostic stream must not release process/database ownership.
++  }
++}
++
++function boundedInteger(value: number | undefined, fallback: number): number {
++  return Number.isSafeInteger(value) && (value as number) > 0 ? (value as number) : fallback;
++}
++
++/**
++ * Owns service lifetime until stop confirms that no callback can use the DB.
++ * False/rejected drains retry serially with referenced backoff timers.
++ */
++async function runProcessLifecycleOwned(
++  options: ProcessLifecycleOptions,
++  onDrained: () => void,
++): Promise<void> {
++  const removeSignalHandlers: Array<() => void> = [];
++  let requestedSignal: ShutdownSignal | undefined;
++  let primaryFailed = false;
++  let resolveSignal!: () => void;
++  const signalRequested = new Promise<void>((resolve) => {
++    resolveSignal = resolve;
++  });
++  const requestShutdown = (signal: ShutdownSignal): void => {
++    if (requestedSignal) return;
++    requestedSignal = signal;
++    resolveSignal();
++  };
++  const reportError = (error: unknown): void => {
++    try {
++      options.onError?.(error);
++    } catch (diagnosticError) {
++      safeDiagnostic(
++        options.stderr,
++        `ADAM error reporting failed: ${describeError(diagnosticError)}\n`,
++      );
++    }
++  };
++
++  // Install before startup so a signal cannot bypass ownership while start runs.
++  try {
++    removeSignalHandlers.push(options.onSignal("SIGTERM", () => requestShutdown("SIGTERM")));
++    removeSignalHandlers.push(options.onSignal("SIGINT", () => requestShutdown("SIGINT")));
++  } catch (error) {
++    primaryFailed = true;
++    reportError(error);
++  }
++  let result: unknown;
++  let operationSucceeded = false;
++  if (primaryFailed) {
++    // Signal ownership could not be installed; do not start more work.
++  } else if (options.mode === "service") {
++    const startup = Promise.resolve()
++      .then(options.start)
++      .then<StartupOutcome>(() => ({ state: "started" }))
++      .catch((error: unknown): StartupOutcome => ({ state: "failed", error }));
++    const first = await Promise.race([
++      startup,
++      signalRequested.then((): { state: "signal" } => ({ state: "signal" })),
++    ]);
++    let outcome: StartupOutcome;
++    if (first.state === "signal") {
++      // A promise alone cannot keep Node alive; retain a referenced timer until startup settles.
++      const keepAlive = setInterval(
++        () =>
++          safeDiagnostic(
++            options.stderr,
++            "ADAM startup still owns resources while shutdown waits\n",
++          ),
++        STARTUP_KEEPALIVE_REPORT_MS,
++      );
++      try {
++        outcome = await startup;
++      } finally {
++        clearInterval(keepAlive);
++      }
++    } else {
++      outcome = first;
++    }
++    if (outcome.state === "failed") {
++      primaryFailed = true;
++      reportError(outcome.error);
++    } else if (!requestedSignal) {
++      try {
++        options.onReady?.();
++      } catch (error) {
++        primaryFailed = true;
++        reportError(error);
++      }
++    }
++    if (!primaryFailed && !requestedSignal) await signalRequested;
++  } else {
++    try {
++      if (!options.execute) throw new Error("entrypoint operation is unavailable");
++      result = await options.execute();
++      operationSucceeded = true;
++    } catch (error) {
++      primaryFailed = true;
++      reportError(error);
++    }
++  }
++
++  if (requestedSignal) {
++    try {
++      options.onStopping?.(requestedSignal);
++    } catch (error) {
++      safeDiagnostic(options.stderr, `ADAM shutdown logging failed: ${describeError(error)}\n`);
++    }
++  }
++  await drainUntilStopped(options.stop, options.stderr, {
++    stopTimeoutMs: options.stopTimeoutMs,
++    retryBaseMs: options.retryBaseMs,
++    retryMaxMs: options.retryMaxMs,
++    waitForRetry: options.waitForRetry,
++  });
++  onDrained();
++
++  for (const remove of removeSignalHandlers) {
++    try {
++      remove();
++    } catch (error) {
++      safeDiagnostic(
++        options.stderr,
++        `ADAM signal handler cleanup failed: ${describeError(error)}\n`,
++      );
++    }
++  }
++  if (primaryFailed) {
++    options.setExitCode(1);
++    return;
++  }
++  if (options.mode === "service") {
++    options.setExitCode(0);
++    return;
++  }
++  if (!operationSucceeded) {
++    options.setExitCode(1);
++    return;
++  }
++  options.stdout(`${JSON.stringify({ ok: true, result }, null, 2)}\n`);
++  options.setExitCode(0);
++}
++
++export async function runProcessLifecycle(options: ProcessLifecycleOptions): Promise<void> {
++  const releaseHold = retainProcessLifetime();
++  let drained = false;
++  try {
++    await runProcessLifecycleOwned(options, () => {
++      drained = true;
++    });
++  } catch (error) {
++    safeDiagnostic(
++      options.stderr,
++      `ADAM lifecycle failed; process and database remain owned through drain: ${describeError(error)}\n`,
++    );
++    if (!drained) {
++      await drainUntilStopped(options.stop, options.stderr, {
++        stopTimeoutMs: options.stopTimeoutMs,
++        retryBaseMs: options.retryBaseMs,
++        retryMaxMs: options.retryMaxMs,
++        waitForRetry: options.waitForRetry,
++      });
++    }
++    options.setExitCode(1);
++  } finally {
++    releaseHold();
++  }
++}
++
++/** Direct callers keep process ownership until a stop attempt confirms true. */
++export async function drainUntilStopped(
++  stop: (timeoutMs: number) => Promise<boolean>,
++  stderr: (text: string) => void,
++  settings: Pick<
++    ProcessLifecycleOptions,
++    "stopTimeoutMs" | "retryBaseMs" | "retryMaxMs" | "waitForRetry"
++  > = {},
++): Promise<void> {
++  const releaseHold = retainProcessLifetime();
++  const stopTimeoutMs = boundedInteger(settings.stopTimeoutMs, DEFAULT_STOP_TIMEOUT_MS);
++  const retryBaseMs = boundedInteger(settings.retryBaseMs, DEFAULT_RETRY_BASE_MS);
++  const retryMaxMs = Math.max(
++    retryBaseMs,
++    boundedInteger(settings.retryMaxMs, DEFAULT_RETRY_MAX_MS),
++  );
++  const wait = settings.waitForRetry ?? defaultWait;
++  let retryDelayMs = retryBaseMs;
++  for (;;) {
++    let drained = false;
++    try {
++      drained = await stop(stopTimeoutMs);
++    } catch (error) {
++      safeDiagnostic(
++        stderr,
++        `ADAM shutdown attempt failed; process and database remain owned: ${describeError(error)}\n`,
++      );
++    }
++    if (drained) {
++      releaseHold();
++      return;
++    }
++    safeDiagnostic(
++      stderr,
++      `ADAM shutdown incomplete; process and database remain owned; retrying in ${retryDelayMs}ms\n`,
++    );
++    try {
++      await wait(retryDelayMs);
++    } catch (error) {
++      safeDiagnostic(
++        stderr,
++        `ADAM retry wait failed; retaining process ownership: ${describeError(error)}\n`,
++      );
++      await defaultWait(retryDelayMs);
++    }
++    retryDelayMs = Math.min(retryMaxMs, Math.max(retryBaseMs, retryDelayMs * 2));
++  }
++}
+--- a/service/src/runtime/service.ts
++++ b/service/src/runtime/service.ts
+@@ -1,6 +1,6 @@
+ import { randomBytes } from 'node:crypto'
+ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
++import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+ import { join } from 'node:path'
+ import { DobiusClient } from '../adapters/dobius.js'
+ import { CapabilityRegistry, type CapabilityCheck, type ReadinessLevel } from '../capabilities/registry.js'
+@@ -22,7 +22,7 @@
+ import { OmniRouteModelRouter } from '../models/router.js'
+ import { CloudReceiptError, DobiusCloudReceiptStore } from '../dobius-cloud/receipt-store.js'
+ import { IMessageCommandGateway } from '../imessage/gateway.js'
+-import { AuthoritativeOrchestrationSupervisor, loadOrchestrationAlertsConfig } from '../orchestration/supervisor.js'
++import { AuthoritativeOrchestrationSupervisor, loadOrchestrationAlertsConfig, type OrchestrationAlertsConfig } from '../orchestration/supervisor.js'
+ import { handleUtterance } from '../converse/converse.js'
+ import { ChannelHeartbeat } from '../health/channel-heartbeat.js'
+ import { OrchestrationJobRequestSchema } from '../orchestration/contract.js'
+@@ -30,6 +30,12 @@
+ import { IMessageModelClassifier } from '../models/imessage-classifier.js'
+ import { IMessageConversationFrameManager } from '../imessage/frame.js'
+ import { DobiusEventSchema, ingestDobiusEvent } from '../events/ingest.js'
++import {
++  APPROVED_DECISION_RECOVERY_INTERVAL_MS, createApprovedDecisionPublisher,
++  type ApprovedDecisionPublisher
++} from '../dobius-cloud/approved-decision-publisher.js'
++import type { ApprovedCloudDecisionAuthority } from '../dobius-cloud/approved-decision-contract.js'
++import type { IntentBridgeCredentialAuthority, IntentBridgeCall } from '../dobius-cloud/intent-bridge-cli.js'
+ 
+ const MAX_BODY_BYTES = 64 * 1024
+ 
+@@ -42,6 +48,42 @@
+   modelRoutingPath?: string
+   heartbeatFilePath?: string
+   maxBudgetUsd?: number
++  /** Missing providers intentionally keep approved child dispatch unavailable. */
++  approvedDecisionDispatchEnabled?: boolean
++  approvedDecisionAuthority?: ApprovedCloudDecisionAuthority
++  approvedIntentCredentialAuthority?: IntentBridgeCredentialAuthority
++  approvedIntentDobiusExecutablePath?: string
++  approvedIntentInvoke?: IntentBridgeCall
++  /** Constructor-only synthetic seams; production main does not provide these values. */
++  dobiusClient?: ServiceDobiusClient
++  projectRegistry?: ProjectRegistry
++  orchestrationAlerts?: OrchestrationAlertsConfig
++  /** Synthetic lifecycle tests can capture a handler without opening a socket. */
++  testServer?: {
++    create: (handler: (request: IncomingMessage, response: ServerResponse) => void) => Server
++    listen: (server: Server, port: number) => Promise<void>
++  }
++}
++
++export type ServiceDobiusClient = Pick<DobiusClient,
++  'status' | 'worktreePs' | 'terminalList' | 'terminalShow' | 'terminalRead' | 'terminalSend' | 'terminalClose' |
++  'terminalWait' | 'repoShow' | 'repoSearchRefs' | 'worktreeList' | 'worktreeCreate' | 'terminalCreate'>
++
++async function closeServerBounded(server: Server, timeoutMs: number): Promise<boolean> {
++  if (!server.listening) return true
++  let finish!: (closed: boolean) => void
++  const closed = new Promise<boolean>((resolve) => { finish = resolve })
++  try { server.close((error) => finish(!error)) } catch { return false }
++  let timer: NodeJS.Timeout | undefined
++  const result = await Promise.race([
++    closed,
++    new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); timer.unref() })
++  ])
++  if (timer) clearTimeout(timer)
++  if (result) return true
++  // Stop shares one deadline across provider drain, HTTP close, and handlers.
++  server.closeAllConnections()
++  return false
+ }
+ 
+ // Agent types a worker_launch measurement applies to. Keyed by adapter so
+@@ -123,6 +165,7 @@
+   readonly modelRouter: OmniRouteModelRouter | undefined
+   readonly jobs: JobStore
+   readonly cloudReceipts: DobiusCloudReceiptStore
++  readonly approvedDecisionPublisher: ApprovedDecisionPublisher | undefined
+   readonly heartbeat: ChannelHeartbeat
+   readonly imessageModelClassifier: IMessageModelClassifier
+   readonly imessageConversationFrames: IMessageConversationFrameManager
+@@ -130,10 +173,15 @@
+   private timer: NodeJS.Timeout | undefined
+   private orchestrationTimer: NodeJS.Timeout | undefined
+   private heartbeatTimer: NodeJS.Timeout | undefined
++  private approvedDecisionTimer: NodeJS.Timeout | undefined
++  private approvedDecisionStartupRecovery: Promise<unknown> | undefined
+   private server: ReturnType<typeof createServer> | undefined
++  private stopping = false
++  private databaseClosed = false
+   private lastAwareness: { at: string; result?: unknown; error?: string } | null = null
+   private reconcilePromise: Promise<unknown> | undefined
+-  private readonly dobius: DobiusClient
++  private readonly activeCallbacks = new Set<Promise<unknown>>()
++  private readonly dobius: ServiceDobiusClient
+   private readonly promptProfiles: Record<string, PromptProfile>
+   private readonly alertRecipient: string
+   // The canonical project registry, loaded once. Authoritative for the context
+@@ -143,16 +191,25 @@
+   constructor(private readonly options: ServiceOptions) {
+     // Fail loud before any side effect: without a recipient, monitors and
+     // heartbeat outbox messages would silently have nowhere to go.
+-    this.alertRecipient = loadOrchestrationAlertsConfig().recipient
++    this.alertRecipient = (options.orchestrationAlerts ?? loadOrchestrationAlertsConfig()).recipient
+     mkdirSync(options.dataDir, { recursive: true })
+     this.db = openDatabase(join(options.dataDir, 'adam.sqlite'))
+     this.jobs = new JobStore(this.db)
+     this.cloudReceipts = new DobiusCloudReceiptStore(this.db)
++    this.approvedDecisionPublisher = createApprovedDecisionPublisher({
++      enabled: options.approvedDecisionDispatchEnabled === true,
++      database: this.db,
++      receipts: this.cloudReceipts,
++      decisionAuthority: options.approvedDecisionAuthority!,
++      credentialAuthority: options.approvedIntentCredentialAuthority!,
++      dobiusExecutablePath: options.approvedIntentDobiusExecutablePath,
++      invoke: options.approvedIntentInvoke
++    })
+     this.imessageModelClassifier = new IMessageModelClassifier(this.db)
+     this.imessageConversationFrames = new IMessageConversationFrameManager(this.db)
+     this.token = tokenFor(options.dataDir)
+-    this.dobius = new DobiusClient()
+-    this.projectRegistry = loadProjectRegistry()
++    this.dobius = options.dobiusClient ?? new DobiusClient()
++    this.projectRegistry = options.projectRegistry ?? loadProjectRegistry()
+     this.promptProfiles = options.promptProfilesPath ? loadPromptProfiles(options.promptProfilesPath) : {}
+     this.awareness = new SessionAwareness(this.db, this.dobius)
+     this.sessionMonitor = new SessionMonitor(this.db, this.dobius)
+@@ -165,7 +222,7 @@
+     this.workerLauncher = new WorkerLauncher(this.db, this.dobius, this.terminalDispatcher)
+     this.orchestrator = new AuthoritativeOrchestrationSupervisor(
+       this.db, this.workerPreflight, this.workerLauncher, this.dobius,
+-      undefined,
++      options.orchestrationAlerts ?? loadOrchestrationAlertsConfig(),
+       options.maxBudgetUsd !== undefined ? { maxBudgetUsd: options.maxBudgetUsd } : {},
+       this.projectRegistry
+     )
+@@ -202,19 +259,30 @@
+   }
+ 
+   async start(): Promise<void> {
++    if (this.stopping) throw new Error('service is stopping')
+     // Availability must not depend on a slow external adapter. Open the local
+     // authenticated control plane first, then reconcile Dobius asynchronously.
+-    this.server = createServer((req, res) => void this.handle(req, res))
+-    await new Promise<void>((resolve, reject) => {
+-      this.server!.once('error', reject)
+-      this.server!.listen(this.options.port, '127.0.0.1', resolve)
++    const serverFactory = this.options.testServer?.create ?? createServer
++    this.server = serverFactory((req, res) => {
++      void this.trackCallback(this.handle(req, res)).catch(() => undefined)
+     })
+-    void this.doctorCapabilities().catch(() => undefined)
+-    void this.reconcile().catch(() => undefined)
++    this.server.requestTimeout = 10_000
++    this.server.headersTimeout = 10_000
++    this.server.keepAliveTimeout = 1_000
++    if (this.options.testServer) {
++      await this.options.testServer.listen(this.server, this.options.port)
++    } else {
++      await new Promise<void>((resolve, reject) => {
++        this.server!.once('error', reject)
++        this.server!.listen(this.options.port, '127.0.0.1', resolve)
++      })
++    }
++    void this.trackCallback(this.doctorCapabilities()).catch(() => undefined)
++    void this.trackCallback(this.reconcile()).catch(() => undefined)
+     const interval = this.options.awarenessIntervalMs ?? 60_000
+-    this.timer = setInterval(() => void this.reconcile().catch(() => undefined), interval)
++    this.timer = setInterval(() => void this.trackCallback(this.reconcile()).catch(() => undefined), interval)
+     this.timer.unref()
+-    this.orchestrationTimer = setInterval(() => void this.orchestrator.tickAll().catch(() => undefined), 5_000)
++    this.orchestrationTimer = setInterval(() => void this.trackCallback(this.orchestrator.tickAll()).catch(() => undefined), 5_000)
+     this.orchestrationTimer.unref()
+     this.heartbeatTimer = setInterval(() => {
+       try {
+@@ -224,16 +292,70 @@
+       }
+     }, 15 * 60_000)
+     this.heartbeatTimer.unref()
+-  }
+-
+-  async stop(): Promise<void> {
++    if (this.approvedDecisionPublisher) {
++      this.approvedDecisionStartupRecovery = this.approvedDecisionPublisher.recover()
++      void this.approvedDecisionStartupRecovery.catch(() => undefined)
++      this.approvedDecisionTimer = setInterval(() => void this.approvedDecisionPublisher!.recover().catch(() => undefined),
++        APPROVED_DECISION_RECOVERY_INTERVAL_MS)
++      this.approvedDecisionTimer.unref()
++    }
++  }
++
++  get boundPort(): number | undefined {
++    const address = this.server?.address()
++    return address && typeof address === 'object' ? address.port : undefined
++  }
++
++  async stop(timeoutMs = 20_000): Promise<boolean> {
++    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 60_000) return false
++    this.stopping = true
+     if (this.timer) clearInterval(this.timer)
+     if (this.orchestrationTimer) clearInterval(this.orchestrationTimer)
+     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+-    if (this.server) {
+-      await new Promise<void>((resolve) => this.server!.close(() => resolve()))
++    if (this.approvedDecisionTimer) clearInterval(this.approvedDecisionTimer)
++    // Publisher cancellation begins before waiting on HTTP close; handlers then unwind.
++    const approvedDrain = this.approvedDecisionPublisher?.stop(timeoutMs) ?? Promise.resolve(true)
++    const httpDrain = this.server ? closeServerBounded(this.server, timeoutMs) : Promise.resolve(true)
++    const callbackDrain = this.drainCallbacks(timeoutMs)
++    let deadlineTimer: NodeJS.Timeout | undefined
++    const drained = await Promise.race([
++      Promise.all([approvedDrain, httpDrain, callbackDrain]).then((results) => results.every(Boolean)),
++      new Promise<boolean>((resolve) => { deadlineTimer = setTimeout(() => resolve(false), timeoutMs); deadlineTimer.unref() })
++    ])
++    if (deadlineTimer) clearTimeout(deadlineTimer)
++    if (drained && !this.databaseClosed) {
++      this.db.close()
++      this.databaseClosed = true
++    } else if (!drained) {
++      process.stderr.write('ADAM shutdown incomplete; shared database retained while approved work or HTTP handlers remain unsettled\n')
+     }
+-    this.db.close()
++    return drained
++  }
++
++  private trackCallback<T>(callback: Promise<T>): Promise<T> {
++    this.activeCallbacks.add(callback)
++    void callback.then(
++      () => this.activeCallbacks.delete(callback),
++      () => this.activeCallbacks.delete(callback)
++    )
++    return callback
++  }
++
++  private async drainCallbacks(timeoutMs: number): Promise<boolean> {
++    const deadline = Date.now() + timeoutMs
++    while (this.activeCallbacks.size > 0) {
++      const remaining = deadline - Date.now()
++      if (remaining <= 0) return false
++      const settled = Promise.allSettled(this.activeCallbacks).then(() => true)
++      let timer: NodeJS.Timeout | undefined
++      const drained = await Promise.race([
++        settled,
++        new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), remaining); timer.unref() })
++      ])
++      if (timer) clearTimeout(timer)
++      if (!drained) return false
++    }
++    return true
+   }
+ 
+   // Resolve the context pack for a write path, or send a 403 and return
+@@ -267,6 +389,10 @@
+         send(res, 401, { ok: false, error: 'unauthorized' })
+         return
+       }
++      if (this.stopping && req.method !== 'GET') {
++        send(res, 503, { ok: false, error: 'service is stopping' })
++        return
++      }
+       if (req.method === 'POST' && (url.pathname === '/v1/dobius/cloud-job-bindings/consume' ||
+           url.pathname === '/v1/dobius/cloud-job-receipts')) {
+         try {
+@@ -281,6 +407,34 @@
+           }
+           const status = error.code === 'invalid' ? 400 : error.code === 'missing' ? 404 : 409
+           send(res, status, { ok: false, error: error.code })
++        }
++        return
++      }
++      if (req.method === 'POST' && url.pathname === '/v1/internal/dobius/approved-decisions/dispatch') {
++        if (!this.approvedDecisionPublisher) {
++          send(res, 503, { ok: false, error: 'approved decision dispatch unavailable' })
++          return
++        }
++        const body = await readJson(req, 2048)
++        if (!body || typeof body !== 'object' || Array.isArray(body) ||
++            Object.keys(body).length !== 1 || typeof (body as Record<string, unknown>).decisionId !== 'string') {
++          send(res, 400, { ok: false, error: 'invalid approved decision dispatch request' })
++          return
++        }
++        if (this.stopping) {
++          send(res, 503, { ok: false, error: 'approved decision dispatch unavailable' })
++          return
++        }
++        await this.approvedDecisionStartupRecovery?.catch(() => undefined)
++        if (this.stopping) {
++          send(res, 503, { ok: false, error: 'approved decision dispatch unavailable' })
++          return
++        }
++        try {
++          const result = await this.approvedDecisionPublisher.dispatch((body as { decisionId: string }).decisionId)
++          send(res, 200, { ok: true, result })
++        } catch {
++          send(res, 409, { ok: false, error: 'approved decision unavailable' })
+         }
+         return
+       }
+--- /dev/null
++++ b/service/tests/dobius-cloud-approved-decision-publisher.test.ts
+@@ -0,0 +1,541 @@
++import assert from "node:assert/strict";
++import { mkdtempSync, rmSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, describe, it } from "node:test";
++import { openDatabase, type AdamDatabase } from "../src/db/database.js";
++import { JobStore } from "../src/jobs/store.js";
++import { DobiusCloudReceiptStore } from "../src/dobius-cloud/receipt-store.js";
++import { createApprovedDecisionPublisher } from "../src/dobius-cloud/approved-decision-publisher.js";
++import type {
++  IntentBridgeCall,
++  IntentBridgeCredential,
++} from "../src/dobius-cloud/intent-bridge-cli.js";
++import { canonicalCloudJobAdamJson } from "../src/dobius-cloud/receipt-contract.js";
++
++const cleanup: (() => void)[] = [];
++afterEach(() => {
++  for (const action of cleanup.splice(0)) action();
++});
++
++const runtimeId = "6f97e464-420a-4c7c-8d40-ff69ab0e6b9b";
++const decisionId = "8f084f3e-e22e-4413-bc7e-b271cb5626b5";
++const childId = "job-child-001";
++const serviceCredential = Buffer.alloc(32, 0x44).toString("base64url");
++const payload = {
++  requestKey: "approval-001",
++  taskId: "task-001",
++  projectId: "project-a",
++  workspaceId: "workspace-a",
++  targetDeviceId: "device-a",
++  recipeId: "recipe-a",
++  title: "Approved synthetic job",
++  sourceRevision: "a".repeat(40),
++  estimatedBytes: 1024,
++  dependencies: [] as string[],
++};
++
++function fixture(
++  options: {
++    enabled?: boolean;
++    failFirstSubmit?: boolean;
++    revokeAfterSeal?: boolean;
++    revokeAtDecisionCheck?: number;
++    revokeOnSubmit?: boolean;
++    wrongChild?: boolean;
++    commitThenDropFirstAck?: boolean;
++    lookupMissing?: boolean;
++    wrongLookupIdentity?: boolean;
++    revokedCredential?: boolean;
++  } = {},
++) {
++  let now = 100_000;
++  let current = true;
++  let decisionChecks = 0;
++  let decisionResolutions = 0;
++  const base = mkdtempSync(join(tmpdir(), "adam-approved-decision-"));
++  const dbPath = join(base, "adam.sqlite");
++  let db: AdamDatabase = openDatabase(dbPath);
++  const parentId = new JobStore(db).createJob({
++    objective: "Synthetic parent",
++    projectId: payload.projectId,
++  });
++  let receipts = new DobiusCloudReceiptStore(db, () => now);
++  const decision = {
++    schemaVersion: 1,
++    decisionId,
++    actorId: "actor-test",
++    actorSourceId: "imessage-test",
++    sourceEventId: "event-test-1",
++    actorEvidenceDigest: "b".repeat(64),
++    sourceBinding: "c".repeat(64),
++    authorityGeneration: 1,
++    parentObjectiveId: parentId,
++    parentObjectiveVersion: 1,
++    projectId: payload.projectId,
++    contextDigest: "d".repeat(64),
++    expiresAtMs: 200_000,
++    approvedPayloadJson: canonicalCloudJobAdamJson(payload),
++  };
++  const decisionAuthority = {
++    resolveExactDecisionJson: async (id: string) => {
++      decisionResolutions += 1;
++      return id === decisionId ? canonicalCloudJobAdamJson(decision) : null;
++    },
++    isCurrent: () => {
++      decisionChecks += 1;
++      if (options.revokeAtDecisionCheck === decisionChecks) current = false;
++      return current;
++    },
++  };
++  const credential: IntentBridgeCredential = {
++    schemaVersion: 1,
++    audienceRuntimeId: runtimeId,
++    credential: serviceCredential,
++    runtimeUserDataPath: "/synthetic/runtime",
++    authorizationGeneration: 1,
++  };
++  const credentialAuthority = {
++    acquire: async () => credential,
++    isCurrent: () => !options.revokedCredential,
++  };
++  let seals = 0;
++  let submits = 0;
++  let lookups = 0;
++  let revokedSubmit = false;
++  const seenSubmit: Record<string, unknown>[] = [];
++  const committedChildren = new Map<string, Record<string, unknown>>();
++  const committedBindings = new Set<string>();
++  const invoke: IntentBridgeCall = async (_executable, args, body) => {
++    const request = JSON.parse(body) as Record<string, unknown>;
++    if (args[0] === "seal-adam-intent") {
++      seals += 1;
++      const envelope = request.envelope as { intentId: string; identity: unknown };
++      const response = {
++        ok: true,
++        _meta: { runtimeId },
++        result: {
++          schemaVersion: 1,
++          audienceRuntimeId: runtimeId,
++          intentId: envelope.intentId,
++          identity: envelope.identity,
++          sealedEnvelope: `sealed:${envelope.intentId}`,
++        },
++      };
++      if (options.revokeAfterSeal) current = false;
++      return response;
++    }
++    if (args[0] === "lookup-adam-child") {
++      lookups += 1;
++      assert.deepEqual(args, ["lookup-adam-child", "--request-stdin", "--json"]);
++      const intentId = request.intentId as string;
++      const job = options.lookupMissing ? null : (committedChildren.get(intentId) ?? null);
++      return {
++        ok: true,
++        _meta: { runtimeId },
++        result: {
++          schemaVersion: 1,
++          audienceRuntimeId: runtimeId,
++          intentId,
++          identity: options.wrongLookupIdentity
++            ? { ...(request.identity as object), projectId: "other-project" }
++            : request.identity,
++          job,
++        },
++      };
++    }
++    assert.deepEqual(args, ["submit-adam-child", "--request-stdin", "--json"]);
++    assert.equal(JSON.stringify(args).includes(serviceCredential), false);
++    assert.equal("grant" in request || "capability" in request, false);
++    seenSubmit.push(request);
++    submits += 1;
++    if (options.failFirstSubmit && submits === 1) throw new Error("synthetic lost acknowledgement");
++    const submitRequest = request as {
++      intentId: string;
++      identity: unknown;
++      approvedJob: typeof payload;
++    };
++    const job = {
++      ...submitRequest.approvedJob,
++      ...(options.wrongChild ? { projectId: "other-project" } : {}),
++      id: childId,
++      state: "queued",
++    };
++    committedBindings.add(submitRequest.intentId);
++    committedChildren.set(submitRequest.intentId, job);
++    if (options.commitThenDropFirstAck && submits === 1) {
++      current = false;
++      throw new Error("synthetic post-commit acknowledgement loss");
++    }
++    if (options.revokeOnSubmit && !revokedSubmit) {
++      current = false;
++      revokedSubmit = true;
++    }
++    return {
++      ok: true,
++      _meta: { runtimeId },
++      result: {
++        schemaVersion: 1,
++        audienceRuntimeId: runtimeId,
++        intentId: submitRequest.intentId,
++        identity: submitRequest.identity,
++        job,
++      },
++    };
++  };
++  const make = (enabled = options.enabled ?? true) =>
++    createApprovedDecisionPublisher({
++      enabled,
++      database: db,
++      receipts,
++      decisionAuthority,
++      credentialAuthority,
++      dobiusExecutablePath: "/synthetic/dobius",
++      invoke,
++      now: () => now,
++    });
++  cleanup.push(() => {
++    try {
++      db.close();
++    } catch {}
++    rmSync(base, { recursive: true, force: true });
++  });
++  return {
++    get db() {
++      return db;
++    },
++    get receipts() {
++      return receipts;
++    },
++    decision,
++    decisionAuthority,
++    make,
++    counts: () => ({
++      decisions: Number(
++        db.prepare("SELECT count(*) n FROM dobius_cloud_approved_decisions").get()?.n,
++      ),
++      bindings: Number(db.prepare("SELECT count(*) n FROM dobius_cloud_bindings").get()?.n),
++      intents: Number(db.prepare("SELECT count(*) n FROM dobius_cloud_intents").get()?.n),
++    }),
++    parentState: () => db.prepare("SELECT state FROM jobs WHERE id=?").get(parentId)?.state,
++    setCurrent: (value: boolean) => {
++      current = value;
++    },
++    setNow: (value: number) => {
++      now = value;
++    },
++    metrics: () => ({
++      seals,
++      submits,
++      lookups,
++      seenSubmit,
++      decisionChecks,
++      decisionResolutions,
++      committedChildren: committedChildren.size,
++      committedBindings: committedBindings.size,
++    }),
++    reopen: () => {
++      db.close();
++      db = openDatabase(dbPath);
++      receipts = new DobiusCloudReceiptStore(db, () => now);
++    },
++  };
++}
++
++describe("ADAM approved-decision production composition candidate", () => {
++  it("is unavailable by default and rejects request objects before consulting authority", async () => {
++    const f = fixture({ enabled: false });
++    assert.equal(f.make(), undefined);
++    const enabled = f.make(true)!;
++    await assert.rejects(
++      enabled.dispatch({ decisionId, senderId: "carson", approvedJob: payload }),
++    );
++    assert.deepEqual(f.counts(), { decisions: 0, bindings: 0, intents: 0 });
++  });
++
++  it("refuses absent trusted exact decision without binding, intent or sealer side effects", async () => {
++    const f = fixture();
++    f.decisionAuthority.resolveExactDecisionJson = async () => null;
++    await assert.rejects(f.make()!.dispatch(decisionId));
++    assert.deepEqual(f.counts(), { decisions: 0, bindings: 0, intents: 0 });
++    assert.equal(f.metrics().seals, 0);
++  });
++
++  it("publishes exact approved payload then submits only the durable sealed DTO without changing parent", async () => {
++    const f = fixture();
++    const result = await f.make()!.dispatch(decisionId);
++    assert.equal(result.child.id, childId);
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 1, intents: 1 });
++    assert.equal(f.metrics().seals, 1);
++    assert.equal(f.metrics().submits, 1);
++    assert.equal(f.parentState(), "received");
++    assert.equal(f.metrics().seenSubmit[0]?.credential, serviceCredential);
++    assert.equal(JSON.stringify(f.metrics().seenSubmit[0]).includes("capability"), false);
++  });
++
++  it("retries lost child acknowledgement after reopen with the same intent and no reseal or expiry renewal", async () => {
++    const f = fixture({ failFirstSubmit: true });
++    const publisher = f.make()!;
++    await assert.rejects(publisher.dispatch(decisionId));
++    const intentBefore = f.db
++      .prepare("SELECT intent_id,expires_at_ms FROM dobius_cloud_intents")
++      .get() as { intent_id: string; expires_at_ms: number };
++    assert.equal(f.metrics().seals, 1);
++    const priorRequest = f.metrics().seenSubmit[0];
++    f.reopen();
++    await f.make()!.recover();
++    const intentAfter = f.db
++      .prepare("SELECT intent_id,expires_at_ms FROM dobius_cloud_intents")
++      .get() as { intent_id: string; expires_at_ms: number };
++    assert.deepEqual(intentAfter, intentBefore);
++    assert.equal(f.metrics().seals, 1);
++    assert.equal(f.metrics().seenSubmit[1]?.intentId, priorRequest?.intentId);
++    assert.equal(
++      f.metrics().seenSubmit[1]?.identity &&
++        canonicalCloudJobAdamJson(f.metrics().seenSubmit[1]?.identity),
++      canonicalCloudJobAdamJson(priorRequest?.identity),
++    );
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 1, intents: 1 });
++  });
++
++  it("recovers a post-commit lost ACK after permanent decision revocation through lookup only", async () => {
++    const f = fixture({ commitThenDropFirstAck: true });
++    await assert.rejects(f.make()!.dispatch(decisionId));
++    const before = f.db.prepare("SELECT intent_id,expires_at_ms FROM dobius_cloud_intents").get();
++    assert.equal(f.metrics().committedBindings, 1);
++    assert.equal(f.metrics().committedChildren, 1);
++    assert.equal(f.metrics().seals, 1);
++    assert.equal(f.metrics().submits, 1);
++    f.setNow(300_000);
++    f.reopen();
++    const result = await f.make()!.recover();
++    const after = f.db.prepare("SELECT intent_id,expires_at_ms FROM dobius_cloud_intents").get();
++    assert.deepEqual(after, before);
++    assert.equal(result.failed, 0);
++    assert.equal(
++      f.metrics().decisionResolutions,
++      1,
++      "recovery must not re-resolve the revoked approval",
++    );
++    assert.equal(f.metrics().lookups, 1);
++    assert.equal(f.metrics().submits, 1);
++    assert.equal(f.metrics().seals, 1);
++    assert.equal(
++      f.db
++        .prepare(
++          "SELECT json_extract(child_json, '$.id') AS id FROM dobius_cloud_approved_decisions",
++        )
++        .get()?.id,
++      childId,
++    );
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 1, intents: 1 });
++  });
++
++  it("does not submit after a revoked decision returns an absent exact lookup", async () => {
++    const f = fixture({ failFirstSubmit: true, lookupMissing: true });
++    await assert.rejects(f.make()!.dispatch(decisionId));
++    f.setCurrent(false);
++    f.reopen();
++    const recovery = await f.make()!.recover();
++    assert.equal(recovery.failed, 1);
++    assert.equal(f.metrics().lookups, 1);
++    assert.equal(f.metrics().submits, 1);
++    assert.equal(f.metrics().seals, 1);
++    assert.equal(
++      f.db.prepare("SELECT child_json FROM dobius_cloud_approved_decisions").get()?.child_json,
++      null,
++    );
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 1, intents: 1 });
++  });
++
++  it("requires current service credentials and exact lookup identity for reconciliation", async () => {
++    const f = fixture({ commitThenDropFirstAck: true });
++    await assert.rejects(f.make()!.dispatch(decisionId));
++    f.reopen();
++    const unavailable = createApprovedDecisionPublisher({
++      enabled: true,
++      database: f.db,
++      receipts: f.receipts,
++      decisionAuthority: f.decisionAuthority,
++      credentialAuthority: {
++        acquire: async () => ({
++          schemaVersion: 1,
++          audienceRuntimeId: runtimeId,
++          credential: serviceCredential,
++          runtimeUserDataPath: "/synthetic/runtime",
++          authorizationGeneration: 1,
++        }),
++        isCurrent: () => false,
++      },
++      dobiusExecutablePath: "/synthetic/dobius",
++      invoke: async () => assert.fail("revoked credentials must not call lookup"),
++      now: () => 300_000,
++    })!;
++    assert.equal((await unavailable.recover()).failed, 1);
++    assert.equal(f.metrics().lookups, 0);
++    assert.equal(f.metrics().submits, 1);
++    const wrong = fixture({ commitThenDropFirstAck: true, wrongLookupIdentity: true });
++    await assert.rejects(wrong.make()!.dispatch(decisionId));
++    wrong.reopen();
++    const recovered = wrong.make()!;
++    wrong.setNow(300_000);
++    const result = await recovered.recover();
++    assert.equal(result.failed, 1);
++    assert.equal(wrong.metrics().lookups, 1);
++    assert.equal(
++      wrong.db.prepare("SELECT child_json FROM dobius_cloud_approved_decisions").get()?.child_json,
++      null,
++    );
++  });
++
++  it("reuses a sealed staged intent after publication transaction rollback without resealing", async () => {
++    const f = fixture();
++    const publisher = f.make()!;
++    f.db.exec(`CREATE TRIGGER reject_intent BEFORE INSERT ON dobius_cloud_intents
++      BEGIN SELECT RAISE(ABORT, 'synthetic rollback'); END`);
++    await assert.rejects(publisher.dispatch(decisionId));
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 0, intents: 0 });
++    assert.equal(f.metrics().seals, 1);
++    const staged = f.db
++      .prepare(`SELECT staged_identity_json,staged_sealed_envelope,staged_capability_hash
++      FROM dobius_cloud_approved_decisions WHERE decision_id=?`)
++      .get(decisionId) as Record<string, unknown>;
++    assert.equal(typeof staged.staged_identity_json, "string");
++    assert.equal(typeof staged.staged_sealed_envelope, "string");
++    assert.equal(typeof staged.staged_capability_hash, "string");
++    f.db.exec("DROP TRIGGER reject_intent");
++    f.setNow(131_000);
++    await publisher.recover();
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 1, intents: 1 });
++    assert.equal(f.metrics().seals, 1);
++    assert.equal(f.metrics().submits, 1);
++    assert.equal(
++      Number(f.db.prepare("SELECT expires_at_ms FROM dobius_cloud_intents").get()?.expires_at_ms),
++      200_000,
++    );
++  });
++
++  it("fences revocation after the awaited seal before publishing a binding", async () => {
++    const f = fixture({ revokeAfterSeal: true });
++    await assert.rejects(f.make()!.dispatch(decisionId));
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 0, intents: 0 });
++    assert.equal(f.metrics().submits, 0);
++  });
++
++  it("rechecks decision authority synchronously at the binding publication boundary", async () => {
++    const f = fixture({ revokeAtDecisionCheck: 6 });
++    await assert.rejects(f.make()!.dispatch(decisionId));
++    assert.equal(f.metrics().decisionChecks, 6);
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 0, intents: 0 });
++  });
++
++  it("recovers a committed child by lookup when authority revokes during child submission", async () => {
++    const f = fixture({ revokeOnSubmit: true });
++    const publisher = f.make()!;
++    await assert.rejects(publisher.dispatch(decisionId));
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 1, intents: 1 });
++    assert.equal(
++      f.db.prepare("SELECT child_json FROM dobius_cloud_approved_decisions").get()?.child_json,
++      null,
++    );
++    f.setCurrent(true);
++    await publisher.recover();
++    assert.equal(f.metrics().seals, 1);
++    assert.equal(f.metrics().submits, 1);
++    assert.equal(f.metrics().lookups, 1);
++    assert.equal(
++      f.db
++        .prepare(
++          "SELECT json_extract(child_json, '$.id') AS id FROM dobius_cloud_approved_decisions",
++        )
++        .get()?.id,
++      childId,
++    );
++  });
++
++  it("rejects a mismatched wire runtime response without durable publication", async () => {
++    const f = fixture();
++    const base = f.make()!;
++    const badInvoke: IntentBridgeCall = async (_path, args, body) => {
++      const request = JSON.parse(body) as Record<string, unknown>;
++      if (args[0] !== "seal-adam-intent") return assert.fail("must refuse before submit");
++      const envelope = request.envelope as { intentId: string; identity: unknown };
++      return {
++        ok: true,
++        _meta: { runtimeId: "00000000-0000-4000-8000-000000000001" },
++        result: {
++          schemaVersion: 1,
++          audienceRuntimeId: runtimeId,
++          intentId: envelope.intentId,
++          identity: envelope.identity,
++          sealedEnvelope: "sealed",
++        },
++      };
++    };
++    const publisher = createApprovedDecisionPublisher({
++      enabled: true,
++      database: f.db,
++      receipts: f.receipts,
++      decisionAuthority: f.decisionAuthority,
++      credentialAuthority: {
++        acquire: async () => ({
++          schemaVersion: 1,
++          audienceRuntimeId: runtimeId,
++          credential: serviceCredential,
++          runtimeUserDataPath: "/synthetic/runtime",
++          authorizationGeneration: 1,
++        }),
++        isCurrent: () => true,
++      },
++      dobiusExecutablePath: "/synthetic/dobius",
++      invoke: badInvoke,
++      now: () => 100_000,
++    });
++    assert.ok(base && publisher);
++    await assert.rejects(publisher.dispatch(decisionId));
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 0, intents: 0 });
++  });
++
++  it("refuses and does not acknowledge a child response for another project", async () => {
++    const f = fixture({ wrongChild: true });
++    await assert.rejects(f.make()!.dispatch(decisionId));
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 1, intents: 1 });
++    assert.equal(
++      f.db.prepare("SELECT child_json FROM dobius_cloud_approved_decisions").get()?.child_json,
++      null,
++    );
++  });
++
++  it("coalesces overlapping dispatch calls and observes a published child after approval revocation", async () => {
++    const f = fixture();
++    const publisher = f.make()!;
++    const [left, right] = await Promise.all([
++      publisher.dispatch(decisionId),
++      publisher.dispatch(decisionId),
++    ]);
++    assert.equal(left.child.id, right.child.id);
++    assert.equal(f.metrics().seals, 1);
++    assert.equal(f.metrics().submits, 1);
++    f.setNow(300_000);
++    assert.equal((await publisher.dispatch(decisionId)).child.id, childId);
++    assert.equal(f.metrics().seals, 1);
++    f.setCurrent(false);
++    const observation = await publisher.dispatch(decisionId);
++    assert.equal(observation.child.id, childId);
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 1, intents: 1 });
++  });
++
++  it("uses the durable lease CAS across two publisher instances", async () => {
++    const f = fixture();
++    const first = f.make()!;
++    const second = f.make()!;
++    const results = await Promise.allSettled([
++      first.dispatch(decisionId),
++      second.dispatch(decisionId),
++    ]);
++    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
++    assert.equal(f.metrics().seals, 1);
++    assert.equal(f.metrics().submits, 1);
++    assert.deepEqual(f.counts(), { decisions: 1, bindings: 1, intents: 1 });
++  });
++});
+--- /dev/null
++++ b/service/tests/dobius-cloud-approved-decision-shutdown.test.ts
+@@ -0,0 +1,246 @@
++import assert from "node:assert/strict";
++import { mkdtempSync, rmSync } from "node:fs";
++import type { IncomingMessage, Server, ServerResponse } from "node:http";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { Readable } from "node:stream";
++import { afterEach, it } from "node:test";
++import { openDatabase } from "../src/db/database.js";
++import { JobStore } from "../src/jobs/store.js";
++import { ApprovedDecisionStore } from "../src/dobius-cloud/approved-decision-store.js";
++import { canonicalCloudJobAdamJson } from "../src/dobius-cloud/receipt-contract.js";
++import { ProjectRegistrySchema } from "../src/projects/registry.js";
++import { AdamService, type ServiceDobiusClient } from "../src/runtime/service.js";
++
++const temporaryDirectories: string[] = [];
++afterEach(() => {
++  for (const directory of temporaryDirectories.splice(0))
++    rmSync(directory, { recursive: true, force: true });
++});
++
++const runtimeId = "6f97e464-420a-4c7c-8d40-ff69ab0e6b9b";
++const decisionId = "8f084f3e-e22e-4413-bc7e-b271cb5626b5";
++const payload = {
++  requestKey: "shutdown-test",
++  taskId: "task-shutdown",
++  projectId: "project-a",
++  workspaceId: "workspace-a",
++  targetDeviceId: "device-a",
++  recipeId: "recipe-a",
++  title: "Synthetic shutdown",
++  sourceRevision: "a".repeat(40),
++  estimatedBytes: 16,
++  dependencies: [],
++};
++const projectRegistry = ProjectRegistrySchema.parse({
++  version: 1,
++  authority: {
++    registryId: "adam-project-registry",
++    sourceOfTruth: "ADAM config/project-registry.yaml",
++    reconciledAt: "2026-10-15T12:00:00.000Z",
++    dobiusPlus: {
++      canonicalCheckout: "/synthetic/dobius",
++      sourcePath: "/synthetic/dobius/src",
++      compiledOutputPath: "/synthetic/dobius/out",
++      runtimeEntryPath: "/synthetic/dobius/main.js",
++      packagedOutputPath: "/synthetic/dobius/dist",
++      installedAppPath: "/synthetic/Dobius+.app",
++      activation: "disabled",
++    },
++    adam: {
++      canonicalCheckout: "/synthetic/adam",
++      sourcePath: "/synthetic/adam/src",
++      distPath: "/synthetic/adam/dist",
++      runtimeEntryPath: "/synthetic/adam/main.js",
++      activation: "disabled",
++    },
++  },
++  projects: [
++    {
++      id: "project-a",
++      name: "Synthetic",
++      aliases: ["synthetic"],
++      owner: "test",
++      classification: "maintenance",
++      status: "active",
++      riskTier: "low",
++      dataSensitivity: "internal",
++      locations: [{ path: "registry-only:fixture", role: "missing", verified: false }],
++      execution: { mode: "disabled" },
++      purpose: "bounded service test",
++      notes: [],
++    },
++  ],
++});
++
++function deferred<T>() {
++  let resolve!: (value: T) => void;
++  const promise = new Promise<T>((done) => {
++    resolve = done;
++  });
++  return { promise, resolve };
++}
++
++async function waitFor(predicate: () => boolean): Promise<void> {
++  const deadline = Date.now() + 2_000;
++  while (!predicate()) {
++    if (Date.now() >= deadline) throw new Error("synthetic service did not reach expected state");
++    await new Promise((resolve) => setTimeout(resolve, 5));
++  }
++}
++
++it("bounds shutdown around startup recovery and an authenticated request, retaining DB until an ignored provider settles", async () => {
++  const directory = mkdtempSync(join(tmpdir(), "adam-approved-shutdown-"));
++  temporaryDirectories.push(directory);
++  const databasePath = join(directory, "adam.sqlite");
++  const seed = openDatabase(databasePath);
++  const parentId = new JobStore(seed).createJob({
++    objective: "Synthetic parent",
++    projectId: payload.projectId,
++  });
++  const decision = {
++    schemaVersion: 1 as const,
++    decisionId,
++    actorId: "actor-test",
++    actorSourceId: "source-test",
++    sourceEventId: "event-test",
++    actorEvidenceDigest: "b".repeat(64),
++    sourceBinding: "c".repeat(64),
++    authorityGeneration: 1,
++    parentObjectiveId: parentId,
++    parentObjectiveVersion: 1,
++    projectId: payload.projectId,
++    contextDigest: "d".repeat(64),
++    expiresAtMs: Date.now() + 60_000,
++    approvedPayloadJson: canonicalCloudJobAdamJson(payload),
++  };
++  new ApprovedDecisionStore(seed).persistAuthorizedDecision(decision, Date.now());
++  seed.close();
++
++  const source = deferred<unknown | null>();
++  const started = deferred<void>();
++  let dispatchHandler: ((request: IncomingMessage, response: ServerResponse) => void) | undefined;
++  let forcedServerClose = false;
++  let syntheticServerListening = true;
++  const syntheticServer = {
++    get listening() {
++      return syntheticServerListening;
++    },
++    requestTimeout: 0,
++    headersTimeout: 0,
++    keepAliveTimeout: 0,
++    address: () => null,
++    once: () => syntheticServer,
++    close: () => syntheticServer,
++    closeAllConnections: () => {
++      forcedServerClose = true;
++      syntheticServerListening = false;
++    },
++  } as unknown as Server;
++  let providerCalls = 0;
++  let bridgeCalls = 0;
++  const credential = {
++    schemaVersion: 1 as const,
++    audienceRuntimeId: runtimeId,
++    credential: Buffer.alloc(32, 0x44).toString("base64url"),
++    runtimeUserDataPath: "/synthetic/runtime",
++    authorizationGeneration: 1,
++  };
++  const service = new AdamService({
++    dataDir: directory,
++    port: 0,
++    approvedDecisionDispatchEnabled: true,
++    approvedDecisionAuthority: {
++      resolveExactDecisionJson: () => {
++        providerCalls += 1;
++        started.resolve();
++        return source.promise;
++      },
++      isCurrent: () => true,
++    },
++    approvedIntentCredentialAuthority: { acquire: async () => credential, isCurrent: () => true },
++    approvedIntentDobiusExecutablePath: "/synthetic/dobius",
++    approvedIntentInvoke: async () => {
++      bridgeCalls += 1;
++      throw new Error("must not reach CLI");
++    },
++    projectRegistry,
++    orchestrationAlerts: { recipient: "+15555550123" },
++    testServer: {
++      create: (handler) => {
++        dispatchHandler = handler;
++        return syntheticServer;
++      },
++      listen: async () => undefined,
++    },
++    dobiusClient: {
++      status: async () => ({ ok: true }),
++      worktreePs: async () => ({ worktrees: [], runtimeId }),
++      terminalList: async () => ({ terminals: [], runtimeId }),
++      terminalShow: async () => ({ terminal: {} }),
++      terminalRead: async () => ({ terminal: {} }),
++      terminalSend: async () => ({ terminal: {} }),
++      terminalClose: async () => ({ terminal: {} }),
++      terminalWait: async () => ({ terminal: {} }),
++      repoShow: async () => ({}),
++      repoSearchRefs: async () => ({}),
++      worktreeList: async () => ({ worktrees: [] }),
++      worktreeCreate: async () => ({}) as never,
++      terminalCreate: async () => ({ terminal: { handle: "synthetic" } }),
++    } as unknown as ServiceDobiusClient,
++  });
++  await service.start();
++  await started.promise;
++  assert.ok(dispatchHandler);
++  const responseReceived = deferred<{ status: number; body: string }>();
++  const request = Readable.from([JSON.stringify({ decisionId })]) as Readable &
++    Partial<IncomingMessage>;
++  Object.assign(request, {
++    method: "POST",
++    url: "/v1/internal/dobius/approved-decisions/dispatch",
++    headers: { authorization: `Bearer ${service.token}`, "content-type": "application/json" },
++  });
++  let responseStatus = 0;
++  const response = {
++    writeHead(status: number) {
++      responseStatus = status;
++      return this;
++    },
++    end(body: string) {
++      responseReceived.resolve({ status: responseStatus, body });
++    },
++  } as unknown as ServerResponse;
++  dispatchHandler(request as IncomingMessage, response);
++  await waitFor(() => providerCalls === 1);
++  const beforeStop = Date.now();
++  const drained = await service.stop(60);
++  const elapsedMs = Date.now() - beforeStop;
++  assert.equal(drained, false);
++  assert.ok(elapsedMs < 180, `bounded stop exceeded its 60ms deadline allowance: ${elapsedMs}ms`);
++  assert.equal(forcedServerClose, true);
++  const responseResult = await responseReceived.promise;
++  assert.equal(responseResult.status, 503);
++  assert.equal(bridgeCalls, 0);
++  assert.equal(
++    Number(service.db.prepare("SELECT count(*) AS n FROM dobius_cloud_bindings").get()?.n),
++    0,
++  );
++  assert.equal(
++    Number(service.db.prepare("SELECT count(*) AS n FROM dobius_cloud_intents").get()?.n),
++    0,
++  );
++
++  source.resolve(canonicalCloudJobAdamJson(decision));
++  await new Promise((resolve) => setTimeout(resolve, 15));
++  assert.equal(bridgeCalls, 0);
++  assert.equal(
++    Number(service.db.prepare("SELECT count(*) AS n FROM dobius_cloud_bindings").get()?.n),
++    0,
++  );
++  assert.equal(
++    Number(service.db.prepare("SELECT count(*) AS n FROM dobius_cloud_intents").get()?.n),
++    0,
++  );
++  assert.equal(await service.stop(500), true);
++  assert.throws(() => service.db.prepare("SELECT 1"), /closed|not open/i);
++});
+--- a/service/tests/dobius-cloud-receipt-recovery.test.ts
++++ b/service/tests/dobius-cloud-receipt-recovery.test.ts
+@@ -25,7 +25,7 @@
+     const before = oldJobs.getJob(parent)
+     db.close()
+     db = openDatabase(file)
+-    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 18)
++    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 21)
+     assert.deepEqual(new JobStore(db).getJob(parent), before)
+     const store = new DobiusCloudReceiptStore(db, () => 100_000)
+     const { capability, ...binding } = store.issueGrant({ parentObjectiveId: parent,
+--- /dev/null
++++ b/service/tests/process-lifecycle.test.ts
+@@ -0,0 +1,304 @@
++import assert from "node:assert/strict";
++import { it } from "node:test";
++import {
++  runProcessLifecycle,
++  type EntrypointMode,
++  type ProcessLifecycleOptions,
++  type ShutdownSignal,
++} from "../src/runtime/process-lifecycle.js";
++
++function deferred<T>() {
++  let resolve!: (value: T) => void;
++  const promise = new Promise<T>((done) => {
++    resolve = done;
++  });
++  return { promise, resolve };
++}
++
++async function waitFor(predicate: () => boolean): Promise<void> {
++  const deadline = Date.now() + 2_000;
++  while (!predicate()) {
++    if (Date.now() >= deadline) throw new Error("lifecycle did not reach expected state");
++    await new Promise<void>((resolve) => setTimeout(resolve, 1));
++  }
++}
++
++function fixture(mode: EntrypointMode) {
++  const handlers = new Map<ShutdownSignal, () => void>();
++  const retryWaiters: Array<() => void> = [];
++  const stdout: string[] = [];
++  const stderr: string[] = [];
++  const exitCodes: number[] = [];
++  const options = (overrides: Partial<ProcessLifecycleOptions> = {}): ProcessLifecycleOptions => ({
++    mode,
++    start: async () => undefined,
++    stop: async () => true,
++    onSignal: (signal, handler) => {
++      handlers.set(signal, handler);
++      return () => handlers.delete(signal);
++    },
++    stdout: (text) => stdout.push(text),
++    stderr: (text) => stderr.push(text),
++    setExitCode: (code) => exitCodes.push(code),
++    waitForRetry: async () => new Promise<void>((resolve) => retryWaiters.push(resolve)),
++    retryBaseMs: 1,
++    retryMaxMs: 4,
++    ...overrides,
++  });
++  return {
++    options,
++    stdout,
++    stderr,
++    exitCodes,
++    retryWaiters,
++    handlerCount: () => handlers.size,
++    signal: (signal: ShutdownSignal) => handlers.get(signal)?.(),
++    releaseRetry: async () => {
++      await waitFor(() => retryWaiters.length > 0);
++      retryWaiters.shift()?.();
++    },
++  };
++}
++
++it("holds one-shot JSON and success exit until a false drain later succeeds", async () => {
++  const f = fixture("once");
++  let stopCalls = 0;
++  const run = runProcessLifecycle(
++    f.options({
++      execute: async () => ({ count: 2 }),
++      stop: async () => ++stopCalls > 1,
++    }),
++  );
++  await waitFor(() => stopCalls === 1);
++  assert.deepEqual(f.stdout, []);
++  assert.deepEqual(f.exitCodes, []);
++  await f.releaseRetry();
++  await run;
++  assert.equal(f.stdout.length, 1);
++  assert.match(f.stdout[0], /"ok": true/);
++  assert.deepEqual(f.exitCodes, [0]);
++});
++
++it("emits prepare-tomorrow result only after the shutdown contract is true", async () => {
++  const f = fixture("prepare");
++  let stopCalls = 0;
++  const run = runProcessLifecycle(
++    f.options({
++      execute: async () => ({ scheduled: false, reason: "no work" }),
++      stop: async () => ++stopCalls > 1,
++    }),
++  );
++  await waitFor(() => stopCalls === 1);
++  assert.deepEqual(f.stdout, []);
++  await f.releaseRetry();
++  await run;
++  assert.match(f.stdout[0], /"reason": "no work"/);
++  assert.deepEqual(f.exitCodes, [0]);
++});
++
++it("preserves one-shot operation errors and emits no JSON before/after draining", async () => {
++  const f = fixture("once");
++  let stopCalls = 0;
++  const run = runProcessLifecycle(
++    f.options({
++      execute: async () => {
++        throw new Error("reconcile failed");
++      },
++      stop: async () => ++stopCalls > 1,
++      onError: (error) => f.stderr.push(`${String(error)}\n`),
++    }),
++  );
++  await waitFor(() => stopCalls === 1);
++  assert.deepEqual(f.stdout, []);
++  assert.deepEqual(f.exitCodes, []);
++  await f.releaseRetry();
++  await run;
++  assert.match(f.stderr.join(""), /reconcile failed/);
++  assert.deepEqual(f.stdout, []);
++  assert.deepEqual(f.exitCodes, [1]);
++});
++
++it("keeps retrying persistent false without success output or exit", async () => {
++  const f = fixture("prepare");
++  let allowDrain = false;
++  let stopCalls = 0;
++  const run = runProcessLifecycle(
++    f.options({
++      execute: async () => ({ prepared: true }),
++      stop: async () => {
++        stopCalls += 1;
++        return allowDrain;
++      },
++    }),
++  );
++  for (let expected = 1; expected <= 4; expected += 1) {
++    await waitFor(() => stopCalls === expected);
++    assert.deepEqual(f.stdout, []);
++    assert.deepEqual(f.exitCodes, []);
++    if (expected < 4) await f.releaseRetry();
++  }
++  allowDrain = true;
++  await f.releaseRetry();
++  await run;
++  assert.match(f.stdout[0], /"prepared": true/);
++  assert.deepEqual(f.exitCodes, [0]);
++});
++
++it("recovers a rejected stop serially and reports the attempt", async () => {
++  const f = fixture("once");
++  let calls = 0;
++  const run = runProcessLifecycle(
++    f.options({
++      execute: async () => "ok",
++      stop: async () => {
++        calls += 1;
++        if (calls === 1) throw new Error("temporary close failure");
++        return true;
++      },
++    }),
++  );
++  await waitFor(() => calls === 1);
++  assert.deepEqual(f.stdout, []);
++  await f.releaseRetry();
++  await run;
++  assert.match(f.stderr.join(""), /temporary close failure/);
++  assert.deepEqual(f.exitCodes, [0]);
++});
++
++it("coalesces duplicate signals during startup and drains only after startup settles", async () => {
++  const f = fixture("service");
++  const startup = deferred<void>();
++  let startCalled = false;
++  let stopCalls = 0;
++  let activeStops = 0;
++  let maxActiveStops = 0;
++  let readyCalls = 0;
++  let stoppingCalls = 0;
++  const run = runProcessLifecycle(
++    f.options({
++      start: () => {
++        startCalled = true;
++        assert.equal(f.handlerCount(), 2);
++        return startup.promise;
++      },
++      stop: async () => {
++        activeStops += 1;
++        maxActiveStops = Math.max(maxActiveStops, activeStops);
++        stopCalls += 1;
++        await Promise.resolve();
++        activeStops -= 1;
++        return stopCalls > 1;
++      },
++      onReady: () => {
++        readyCalls += 1;
++      },
++      onStopping: () => {
++        stoppingCalls += 1;
++      },
++    }),
++  );
++  await waitFor(() => startCalled);
++  f.signal("SIGTERM");
++  f.signal("SIGINT");
++  assert.equal(stopCalls, 0);
++  startup.resolve();
++  await waitFor(() => stopCalls === 1);
++  assert.equal(readyCalls, 0);
++  assert.equal(stoppingCalls, 1);
++  await f.releaseRetry();
++  await run;
++  assert.equal(maxActiveStops, 1);
++  assert.equal(stoppingCalls, 1);
++  assert.deepEqual(f.exitCodes, [0]);
++});
++
++it("keeps a normal service alive after duplicate signals until its retry drains", async () => {
++  const f = fixture("service");
++  let stopCalls = 0;
++  let readyCalls = 0;
++  let stoppingCalls = 0;
++  const run = runProcessLifecycle(
++    f.options({
++      stop: async () => ++stopCalls > 1,
++      onReady: () => {
++        readyCalls += 1;
++      },
++      onStopping: () => {
++        stoppingCalls += 1;
++      },
++    }),
++  );
++  await waitFor(() => readyCalls === 1);
++  f.signal("SIGINT");
++  f.signal("SIGTERM");
++  await waitFor(() => stopCalls === 1);
++  assert.deepEqual(f.exitCodes, []);
++  await f.releaseRetry();
++  await run;
++  assert.equal(stoppingCalls, 1);
++  assert.deepEqual(f.exitCodes, [0]);
++});
++
++it("preserves startup failure and nonzero exit through an incomplete drain", async () => {
++  const f = fixture("service");
++  const failure = new Error("startup failed");
++  let stopCalls = 0;
++  const run = runProcessLifecycle(
++    f.options({
++      start: async () => {
++        throw failure;
++      },
++      stop: async () => ++stopCalls > 1,
++      onError: (error) => f.stderr.push(`startup: ${String(error)}\n`),
++    }),
++  );
++  await waitFor(() => stopCalls === 1);
++  assert.deepEqual(f.exitCodes, []);
++  assert.deepEqual(f.stdout, []);
++  await f.releaseRetry();
++  await run;
++  assert.match(f.stderr.join(""), /startup failed/);
++  assert.deepEqual(f.exitCodes, [1]);
++});
++
++it("does not publish prepare success when the operation failed", async () => {
++  const f = fixture("prepare");
++  const failure = new Error("prepare failed");
++  const run = runProcessLifecycle(
++    f.options({
++      execute: async () => {
++        throw failure;
++      },
++      onError: (error) => f.stderr.push(`${String(error)}\n`),
++    }),
++  );
++  await run;
++  assert.deepEqual(f.stdout, []);
++  assert.match(f.stderr.join(""), /prepare failed/);
++  assert.deepEqual(f.exitCodes, [1]);
++});
++
++it("installs signal ownership before startup and reports startup errors only after final safe exit", async () => {
++  const f = fixture("service");
++  let stopCalls = 0;
++  let firstError: unknown;
++  const run = runProcessLifecycle(
++    f.options({
++      start: async () => {
++        assert.equal(f.handlerCount(), 2);
++        throw new Error("early startup error");
++      },
++      stop: async () => ++stopCalls > 1,
++      onError: (error) => {
++        firstError = error;
++      },
++    }),
++  );
++  assert.equal(typeof f.signal, "function");
++  await waitFor(() => stopCalls === 1);
++  assert.match(String(firstError), /early startup error/);
++  assert.deepEqual(f.exitCodes, []);
++  await f.releaseRetry();
++  await run;
++  assert.deepEqual(f.exitCodes, [1]);
++});
+--- /dev/null
++++ b/service/src/runtime/process-lifecycle-hold.ts
+@@ -0,0 +1,12 @@
++const HOLD_TICK_MS = 15_000;
++
++/** A referenced handle protects promise-only work and unref'd shutdown deadlines. */
++export function retainProcessLifetime(): () => void {
++  const hold = setInterval(() => undefined, HOLD_TICK_MS);
++  let released = false;
++  return () => {
++    if (released) return;
++    released = true;
++    clearInterval(hold);
++  };
++}
+--- /dev/null
++++ b/service/tests/process-lifecycle-child.test.ts
+@@ -0,0 +1,105 @@
++import assert from "node:assert/strict";
++import { spawn } from "node:child_process";
++import { fileURLToPath } from "node:url";
++import { it } from "node:test";
++
++const fixturePath = fileURLToPath(new URL("./process-lifecycle-child-fixture.js", import.meta.url));
++
++type ChildResult = {
++  code: number | null;
++  signal: NodeJS.Signals | null;
++  stdout: string;
++  stderr: string;
++};
++
++function runChild(scenario: string): Promise<ChildResult> {
++  return new Promise((resolve, reject) => {
++    const child = spawn(process.execPath, [fixturePath, scenario], {
++      stdio: ["ignore", "pipe", "pipe"],
++    });
++    let stdout = "";
++    let stderr = "";
++    let timedOut = false;
++    child.stdout.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
++    child.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
++    const watchdog = setTimeout(() => {
++      timedOut = true;
++      child.kill("SIGKILL");
++    }, 2_000);
++    child.once("error", (error) => {
++      clearTimeout(watchdog);
++      reject(error);
++    });
++    child.once("close", (code, signal) => {
++      clearTimeout(watchdog);
++      if (timedOut) {
++        reject(new Error(`test-owned child failed to exit after safe drain: ${scenario}`));
++        return;
++      }
++      resolve({ code, signal, stdout, stderr });
++    });
++  });
++}
++
++function assertNaturalExit(result: ChildResult, code: number): void {
++  assert.equal(result.signal, null, "fixture must exit naturally, not by watchdog signal");
++  assert.equal(result.code, code);
++}
++
++function indexOf(text: string, marker: string): number {
++  const index = text.indexOf(marker);
++  assert.notEqual(index, -1, `missing child marker: ${marker}\n${text}`);
++  return index;
++}
++
++it("retains first unref'd false stop through retry and coalesces signals", async () => {
++  const result = await runChild("stop-false");
++  assertNaturalExit(result, 0);
++  assert.ok(indexOf(result.stdout, "STOP_1_PENDING") < indexOf(result.stdout, "STOP_FALSE"));
++  assert.ok(indexOf(result.stdout, "STOP_FALSE") < indexOf(result.stdout, "STOP_2_PENDING"));
++  assert.ok(indexOf(result.stdout, "STOP_2_PENDING") < indexOf(result.stdout, "STOP_TRUE"));
++  assert.equal(result.stdout.match(/STOPPING_/g)?.length, 1);
++  assert.equal(result.stdout.includes('"ok": true'), false);
++});
++
++it("retains a rejected first unref'd stop and naturally exits after retry", async () => {
++  const result = await runChild("stop-rejected");
++  assertNaturalExit(result, 0);
++  assert.ok(indexOf(result.stdout, "STOP_REJECTED") < indexOf(result.stdout, "STOP_2_PENDING"));
++  assert.ok(indexOf(result.stdout, "STOP_2_PENDING") < indexOf(result.stdout, "STOP_TRUE"));
++  assert.match(result.stderr, /synthetic first stop rejection/);
++});
++
++it("gives direct drain helper callers referenced ownership through false and true", async () => {
++  const result = await runChild("direct-drain");
++  assertNaturalExit(result, 0);
++  assert.ok(indexOf(result.stdout, "STOP_1_PENDING") < indexOf(result.stdout, "STOP_FALSE"));
++  assert.ok(indexOf(result.stdout, "STOP_FALSE") < indexOf(result.stdout, "STOP_2_PENDING"));
++  assert.ok(indexOf(result.stdout, "STOP_2_PENDING") < indexOf(result.stdout, "STOP_TRUE"));
++});
++
++it("retains signaled once and prepare successes through execute and safe drain", async () => {
++  for (const scenario of ["once-success", "prepare-success"]) {
++    const result = await runChild(scenario);
++    assertNaturalExit(result, 0);
++    assert.ok(
++      indexOf(result.stdout, "EXECUTE_PENDING") < indexOf(result.stdout, "EXECUTE_SETTLED"),
++    );
++    assert.ok(indexOf(result.stdout, "EXECUTE_SETTLED") < indexOf(result.stdout, "STOP_1_PENDING"));
++    assert.ok(indexOf(result.stdout, "STOP_TRUE") < indexOf(result.stdout, '"ok": true'));
++  }
++});
++
++it("keeps late once and prepare failures owned, reports failure after drain, and emits no JSON", async () => {
++  for (const scenario of ["once-failure", "prepare-failure"]) {
++    const result = await runChild(scenario);
++    assertNaturalExit(result, 1);
++    assert.ok(
++      indexOf(result.stdout, "EXECUTE_PENDING") < indexOf(result.stdout, "EXECUTE_SETTLED"),
++    );
++    assert.ok(indexOf(result.stdout, "EXECUTE_SETTLED") < indexOf(result.stdout, "STOP_1_PENDING"));
++    indexOf(result.stdout, "STOP_TRUE");
++    assert.match(result.stderr, /synthetic late operation failure/);
++    assert.equal(result.stdout.includes('"ok": true'), false);
++  }
++});
+--- /dev/null
++++ b/service/tests/process-lifecycle-child-fixture.ts
+@@ -0,0 +1,93 @@
++import {
++  drainUntilStopped,
++  runProcessLifecycle,
++  type EntrypointMode,
++  type ShutdownSignal,
++} from "../src/runtime/process-lifecycle.js";
++
++const scenario = process.argv[2] ?? "";
++const handlers = new Map<ShutdownSignal, () => void>();
++const emit = (text: string): void => {
++  process.stdout.write(`${text}\n`);
++};
++const delayWithoutKeepingAlive = (milliseconds: number): Promise<void> =>
++  new Promise((resolve) => {
++    const timer = setTimeout(resolve, milliseconds);
++    timer.unref();
++  });
++
++function modeFor(value: string): EntrypointMode {
++  return value.startsWith("once-") ? "once" : value.startsWith("prepare-") ? "prepare" : "service";
++}
++
++function signal(signalName: ShutdownSignal): void {
++  handlers.get(signalName)?.();
++}
++
++async function stopFor(value: string, call: number): Promise<boolean> {
++  emit(`STOP_${call}_PENDING`);
++  await delayWithoutKeepingAlive(value === "stop-false" || value === "stop-rejected" ? 120 : 30);
++  if (value === "stop-false" && call === 1) {
++    emit("STOP_FALSE");
++    return false;
++  }
++  if (value === "stop-rejected" && call === 1) {
++    emit("STOP_REJECTED");
++    throw new Error("synthetic first stop rejection");
++  }
++  emit("STOP_TRUE");
++  return true;
++}
++
++async function executeFor(value: string): Promise<unknown> {
++  emit("EXECUTE_PENDING");
++  signal("SIGTERM");
++  signal("SIGINT");
++  await delayWithoutKeepingAlive(120);
++  emit("EXECUTE_SETTLED");
++  if (value.endsWith("failure")) throw new Error("synthetic late operation failure");
++  return value.startsWith("prepare-") ? { prepared: true } : { reconciled: true };
++}
++
++async function main(): Promise<void> {
++  let stopCalls = 0;
++  let stoppingCalls = 0;
++  if (scenario === "direct-drain") {
++    await drainUntilStopped(
++      () => stopFor("stop-false", ++stopCalls),
++      (text) => process.stderr.write(text),
++      { retryBaseMs: 10, retryMaxMs: 10 },
++    );
++    return;
++  }
++  const mode = modeFor(scenario);
++  await runProcessLifecycle({
++    mode,
++    start: async () => undefined,
++    execute: () => executeFor(scenario),
++    stop: async () => stopFor(scenario, ++stopCalls),
++    onSignal: (name, handler) => {
++      handlers.set(name, handler);
++      return () => handlers.delete(name);
++    },
++    stdout: emit,
++    stderr: (text) => process.stderr.write(text),
++    setExitCode: (code) => {
++      process.exitCode = code;
++    },
++    onReady: () => {
++      emit("READY");
++      signal("SIGTERM");
++      signal("SIGINT");
++    },
++    onStopping: () => emit(`STOPPING_${++stoppingCalls}`),
++    onError: (error) => process.stderr.write(`OPERATION_ERROR ${String(error)}\n`),
++    retryBaseMs: 10,
++    retryMaxMs: 10,
++  });
++}
++
++void main().catch((error: unknown) => {
++  process.stderr.write(`FIXTURE_ERROR ${String(error)}\n`);
++  process.exitCode = 99;
++});

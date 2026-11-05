@@ -49,13 +49,16 @@ The output path above is for an Apple-silicon Mac (it is the path the retired sc
 
 1. checks that `python3` and its helpers (`scripts/semver-compare.py`, `scripts/source-state.py`,
    `scripts/bundle-manifest.py`, its sibling `scripts/bundle-resource-contract.py`, and
-   `scripts/install-record.py`) are present;
+   `scripts/install-record.py`, plus `scripts/install-source-history.py`) are present;
 2. takes the lock `~/.dobius-install.lock` (waits up to 300 s for another install; a stale lock
    is reported, never broken);
 3. refuses a build from another branch than the installed one unless `--take-over`;
 4. refuses a build whose version is not valid SemVer, and one that is OLDER than the installed
    app (SemVer precedence: `2.0.0-rc.1` is older than `2.0.0`) unless `--allow-downgrade`;
-5. copies the build to a stage beside the app, prepares the install record, and validates the
+5. checks that the candidate commit includes the installed release's commit. A higher version
+   and `--take-over` do not bypass this check. Integrate the installed release branch before
+   rebuilding. An identity-verified rollback from the retained rollback path remains supported;
+6. copies the build to a stage beside the app, prepares the install record, and validates the
    stage (Info.plist, executable, arch, `app.asar`, and every artifact in
    `scripts/bundle-manifest.py`). The manifest inspects the bounded `out/main` JavaScript graph
    for the catalog RPC methods `data.catalog.roots` and `data.catalog.page`, including packed
@@ -72,13 +75,13 @@ The output path above is for an Apple-silicon Mac (it is the path the retired sc
    manifest, and its maintained patch. Legacy bundles without that feature remain eligible.
    Nothing is written into the bundle, so its code
    signature stays intact;
-6. only then requests app quit (the terminal daemon and its shells keep running), applies the
+7. only then requests app quit (the terminal daemon and its shells keep running), applies the
    existing scoped main/Chromium quit signals, and verifies the main process has exited before
    swapping. If the main app survives, it refuses before the swap and keeps the installed bundle
    and rollback state; otherwise it swaps the stage in with one atomic rename, writes the install
    record, keeps ONE rollback copy (with its record), removes the `dobius/dist` build copy,
    re-registers the app with LaunchServices and relaunches it;
-7. logs the install to `~/.dobius-install-history.log`.
+8. logs the install to `~/.dobius-install-history.log`.
 
 Any failure before the swap leaves the installed app untouched and running.
 
@@ -88,9 +91,10 @@ Any failure before the swap leaves the installed app untouched and running.
 |---|---|
 | `--take-over` | The installed app was built from another branch and you mean to replace it. Tell that lane. |
 | `--allow-downgrade` | You really mean to install an older version, or the installed app has no valid version. |
+| `--allow-history-divergence` | You explicitly reviewed and accept replacing the installed release with source that omits its history. Never add this automatically to overcome a failed gate. |
 
 `--take-over` never bypasses the version guard, and `--allow-downgrade` never bypasses the branch
-check. Any other option is refused.
+check. Neither bypasses source ancestry. Any other option is refused.
 
 ### Installer exit codes
 
@@ -104,6 +108,7 @@ check. Any other option is refused.
 | 7 | The staged copy is not a runnable, complete build (lists the missing artifacts) | untouched, never quit |
 | 8 | The atomic swap failed | untouched, relaunched |
 | 9 | `python3` or an installer helper is missing, or the installed app's record cannot be looked up, so the guards cannot run | untouched |
+| 11 | Candidate source omits the installed commit, or the ancestry cannot be verified | untouched; never quit |
 | 10 | The main app is still running or its exit could not be verified after the scoped quit attempt | untouched; staged copy removed and unchanged app reopened |
 | 130 | Interrupted (Ctrl-C or TERM); a partial stage is removed. A signal that lands between the quit and the rollback move waits until the swap, the install record and the rollback copy are done | relaunched if it was quit |
 
@@ -225,3 +230,15 @@ Development, `Dobius Local Signing`. With none of these they are signed ad-hoc, 
 treats each build as a new app (permission grants for microphone, accessibility and screen
 recording are dropped). A self-signed `Dobius Local Signing` certificate keeps one identity
 across builds.
+
+## Preventing UI regressions during local installs
+
+A version bump orders packages; it does not bring newer UI commits into an older checkout.
+Before building, read the installed provenance and integrate its source branch into an isolated
+worktree. Keep the existing checkouts intact. Use a committed source checkpoint for the release,
+and verify the actual Board/Home interface and changed voice placements in a running app before
+reporting completion. CLI reachability alone is not visual acceptance.
+
+The source-history gate rejects an older/divergent source line even when its package version is
+higher and `--take-over` is present. `--allow-history-divergence` is a separate explicit exception;
+it is not part of the everyday build/install command or the documented rollback command.

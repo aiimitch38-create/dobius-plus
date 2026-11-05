@@ -1,0 +1,32 @@
+{
+  "status": "STARTUP_AND_NATIVE_CHATGPT_AUTH_VERIFIED",
+  "model": "gpt-6.1-sol",
+  "provider": "openai-codex",
+  "default_profile": "adam",
+  "profiles": [
+    "adam",
+    "friday"
+  ],
+  "real_inference_verified": true,
+  "launcher_regression_tests": {
+    "passed": 8,
+    "failed": 0
+  },
+  "sessions_recovered": {
+    "adam": "20261014_135102_157d0a",
+    "friday": "20261014_135702_7dfb85"
+  },
+  "existing_tabs_reopened_and_profile_env_verified": true,
+  "dobius_codex_account_picker_selects_hermes_oauth": false,
+  "credentials_copied": false,
+  "hermes_upstream_modified": true,
+  "aws": "deferred",
+  "historical_storage_queue": "paused",
+  "keyboard_input": "FIXED_LIVE_COMMAND_INPUT_VERIFIED",
+  "keyboard_tests_passed": 75,
+  "hermes_source_modification_scope": [
+    "hermes_cli/mcp_startup.py",
+    "tools/mcp_oauth.py",
+    "tests/tools/test_mcp_oauth_agent_input.py"
+  ]
+}

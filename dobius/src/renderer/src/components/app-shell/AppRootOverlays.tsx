@@ -57,7 +57,6 @@ export type AppRootOverlaysProps = {
   setOnboarding: Dispatch<SetStateAction<OnboardingState | null>>
   beginOnboardingSettingsDetour: () => void
   shouldMountDictationController: boolean
-  showFloatingTerminalButton: boolean
 }
 
 // Why: the root-level overlay/modal stack (floating workspace panel, status
@@ -87,8 +86,7 @@ export function AppRootOverlays({
   onboardingSettingsDetourActive,
   setOnboarding,
   beginOnboardingSettingsDetour,
-  shouldMountDictationController,
-  showFloatingTerminalButton
+  shouldMountDictationController
 }: AppRootOverlaysProps): React.JSX.Element {
   return (
     <>
@@ -390,7 +388,7 @@ export function AppRootOverlays({
             resetKey={activeView}
             compact
           >
-            <DictationController hideOwnOrb={showFloatingTerminalButton} />
+            <DictationController />
           </RecoverableRenderErrorBoundary>
         </Suspense>
       ) : null}

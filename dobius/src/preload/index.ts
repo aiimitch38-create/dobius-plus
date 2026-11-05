@@ -4633,6 +4633,7 @@ const api = {
       ipcRenderer.invoke('jarvis:saveElevenLabsKey', apiKey),
     clearElevenLabsKey: (): Promise<ElevenLabsKeyStatus> =>
       ipcRenderer.invoke('jarvis:clearElevenLabsKey'),
+    cancelAsk: (): Promise<{ ok: true }> => ipcRenderer.invoke('jarvis:cancelAsk'),
     askAdamText: (utterance: string): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:askAdamText', utterance),
     onState: (callback: (event: JarvisStateEvent) => void): (() => void) => {

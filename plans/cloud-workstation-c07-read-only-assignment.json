@@ -1,0 +1,50 @@
+{
+  "package": "C07 read-only registered data catalog",
+  "owner": "FIXER",
+  "after": "Current local build sealed and installed; then verify actual idle terminal and assign",
+  "canonical_repository": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+  "source_ownership": [
+    "dobius/src/main/storage/data-catalog/README.md",
+    "dobius/src/main/storage/data-catalog/types.ts",
+    "dobius/src/main/storage/data-catalog/registered-roots.ts",
+    "dobius/src/main/storage/data-catalog/registered-roots.test.ts",
+    "dobius/src/main/storage/data-catalog/metadata-scanner.ts",
+    "dobius/src/main/storage/data-catalog/metadata-scanner.test.ts",
+    "dobius/src/main/storage/data-catalog/catalog-service.ts",
+    "dobius/src/main/storage/data-catalog/catalog-service.test.ts",
+    "plans/cloud-workstation-reports-20261012/fixer.json"
+  ],
+  "contract": [
+    "Use the existing root authority via injected explicit registered-root provider; no arbitrary absolute path input or job/monitor grant substituted for browse permission",
+    "Metadata only, original Markdown authoritative; no note bytes, frontmatter edits or shadow writable vault",
+    "Opaque principal/root-identity/cursor-bound bounded scans; reauthorize across awaits and page continuations; expire sessions and expose partial/unavailable/denied",
+    "Relative path IDs stable by root+normalized relative path; filenames and paths only returned to explicitly authorized root callers",
+    "Canonical realpath plus directory device/inode checked; symlinks/mount escapes denied; bounded frontier, entries, bytes, elapsed work and cancellation",
+    "No second writable task/job database; project/job/attempt/artifact references do not confer filesystem authority",
+    "Backup coverage explicitly unverified; content digest unknown until bounded hashing separately authorized; no reclaimable or archive-ready inference",
+    "Tests use temporary fixture roots only, preserve all source bytes and Git state; include revocation, root replacement, symlink/FIFO races, cursor replay, deep/wide bounds, duplicate basenames and non-ASCII names",
+    "No uploads, deletes, hydration, eviction, network/provider requests, production root registration, deployments or Git mutations",
+    "Freeze exact source and test receipts, send questions to ROOT, reviewer BUILD2 after actual idle/source lock transfer"
+  ],
+  "root_integration": "Later ROOT wires existing Settings/Knowledge and runtime IPC/RPC; no parallel user-facing catalog application",
+  "native_incarnation_extension": {
+    "RESEARCH": [
+      "dobius/config/scripts/data-catalog/native-root-identity.py",
+      "dobius/config/scripts/data-catalog/test_native_root_identity.py",
+      "dobius/docs/reference/DATA-CATALOG-DESCRIPTOR-BRIDGE.md"
+    ],
+    "FIXER": [
+      "dobius/src/main/storage/data-catalog/metadata-scanner.ts"
+    ],
+    "ROOT": [
+      "dobius/src/main/storage/data-catalog/application-catalog.ts",
+      "dobius/src/main/storage/data-catalog/root-enrollment-store.ts",
+      "dobius/src/main/storage/data-catalog/root-enrollment-identity.test.ts",
+      "dobius/src/main/storage/data-catalog/root-enrollment-store.test.ts",
+      "dobius/src/main/storage/data-catalog/application-catalog-factory.test.ts",
+      "dobius/src/main/runtime/rpc/methods/data-catalog.test.ts",
+      "dobius/config/electron-builder.config.cjs"
+    ],
+    "contract": "Exact provider/scope/token captured and checked on same no-follow FD; preserve original bytes and unrelated edits."
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "verified_at": 1791920869.80322,
+  "state": "running_reviewed_identifier_validation",
+  "review_manifest": "8d1715efc1eac689dcc2549ac2a4d51fa72cf70df7a9800e62b1d0d3b5f8da9e",
+  "process_receipt": [
+    "pid = 49150",
+    "last exit code = (never exited)"
+  ],
+  "deployed_hashes": {
+    "storage_policy.py": "2c789cfd35c3ac08626220613a240d36a9957ec2953f282a76e93be6a99a98a0",
+    "root_inventory.py": "14b37dd76d9441eda51f20b050e44f3ab002c2f4f65f4a56ce5d95574db3a144",
+    "monitor_state.py": "6679f170c84717399a07fc030c477d2628323fccfa33d640bd4f2334f9a4d439",
+    "storage_monitor.py": "b3d65254056a13b8bc1bfc9c7d8162e45e8cdbc23e43e80a8a6fd10f87ad4e2c"
+  },
+  "config_preserved": true,
+  "cleanup_enabled": false,
+  "cloud_publishing_enabled": false,
+  "sampled_at": 1791920839.147629,
+  "health": "critical",
+  "free_gib": [
+    7.233348846435547
+  ],
+  "rollout_note": "First immediate bootstrap after bootout returned5 while label removal completed; subsequent bootstrap exited0; actual running state/fresh new sample verified."
+}

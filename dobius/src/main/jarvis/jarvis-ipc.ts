@@ -1,11 +1,11 @@
-import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import type { Store } from '../persistence'
 import { getSpeechSttService } from '../speech/speech-runtime-service'
 import { adamProjectDirectory } from '../adam-connection'
-import { askAdam } from './adam-client'
+import { AdamHermesVoice } from './adam-hermes-voice'
 import { buildAgentContext, buildOpeningLine, runDobiusCommand } from './agent-context'
 import { SelfEditStore, selfEditRoots } from './self-edit'
 import { resolveSelfEditRepoRoot } from './self-edit-repo-root'
@@ -20,10 +20,7 @@ import {
   saveElevenLabsApiKey,
   type ElevenLabsApiKeyStatus
 } from './elevenlabs-key-store'
-import {
-  fetchRecentConversationSummaries,
-  formatConversationMemory
-} from './conversation-memory'
+import { fetchRecentConversationSummaries, formatConversationMemory } from './conversation-memory'
 import { pickJarvisTargetWindow } from './jarvis-target-window'
 import {
   JARVIS_SHORTCUT_ACCELERATOR,
@@ -59,11 +56,40 @@ function createBroadcastPort(): JarvisBroadcastPort {
   }
 }
 
+let adamVoice: AdamHermesVoice | null = null
+
+function getAdamVoice(): AdamHermesVoice {
+  if (!adamVoice) {
+    adamVoice = new AdamHermesVoice({
+      sessionFile: join(getUserDataRoot(), 'adam-voice-session.json'),
+      approve: async (command, description) => {
+        app.focus({ steal: true })
+        const { response } = await dialog.showMessageBox({
+          type: 'question',
+          title: 'Adam voice — allow command?',
+          message: description || 'Adam is requesting permission to run a command.',
+          detail: command,
+          buttons: ['Cancel', 'Allow once'],
+          defaultId: 0,
+          cancelId: 0
+        })
+        return response === 1
+      }
+    })
+    app.once('will-quit', () => {
+      void adamVoice?.close()
+    })
+  }
+  return adamVoice
+}
+
 function createJarvisDeps(store: Store): JarvisServiceDeps {
   return {
     store,
     broadcast: createBroadcastPort(),
-    shortcut: createGlobalShortcutPort()
+    shortcut: createGlobalShortcutPort(),
+    askAgent: (utterance) => getAdamVoice().ask(utterance),
+    cancelAgent: () => adamVoice?.cancel()
   }
 }
 
@@ -135,6 +161,12 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.removeHandler('jarvis:ask')
   ipcMain.handle('jarvis:ask', (_event, utterance: string) => service.ask(utterance))
 
+  ipcMain.removeHandler('jarvis:cancelAsk')
+  ipcMain.handle('jarvis:cancelAsk', () => {
+    service.cancelAsk()
+    return { ok: true }
+  })
+
   ipcMain.removeHandler('jarvis:speak')
   ipcMain.handle('jarvis:speak', (_event, text: string) => service.speak(text))
 
@@ -180,7 +212,11 @@ function registerHandlers(store: Store, service: JarvisService): void {
   ipcMain.handle(
     'jarvis:proposeSelfEdit',
     (_event, path: string, content: string, description: string) => {
-      const result = selfEdits.propose(String(path ?? ''), String(content ?? ''), String(description ?? ''))
+      const result = selfEdits.propose(
+        String(path ?? ''),
+        String(content ?? ''),
+        String(description ?? '')
+      )
       if (!result.ok) {
         return result
       }
@@ -200,9 +236,7 @@ function registerHandlers(store: Store, service: JarvisService): void {
 
   // Why no window: undo is asked for by voice after the review window closed.
   ipcMain.removeHandler('jarvis:undoSelfEdit')
-  ipcMain.handle('jarvis:undoSelfEdit', (_event, id: string) =>
-    selfEdits.undo(String(id ?? ''))
-  )
+  ipcMain.handle('jarvis:undoSelfEdit', (_event, id: string) => selfEdits.undo(String(id ?? '')))
 
   ipcMain.removeHandler('jarvis:discardSelfEdit')
   ipcMain.handle('jarvis:discardSelfEdit', (_event, id: string) => {
@@ -248,13 +282,9 @@ function registerHandlers(store: Store, service: JarvisService): void {
   // Why a text-only ask: during a live conversation the AGENT speaks, so
   // service.ask() would talk over it with a second voice.
   ipcMain.removeHandler('jarvis:askAdamText')
-  ipcMain.handle('jarvis:askAdamText', async (_event, utterance: string) => {
-    const result = await askAdam({
-      settingsEndpoint: store.getSettings().voice?.adamEndpoint,
-      utterance: typeof utterance === 'string' ? utterance : ''
-    })
-    return result
-  })
+  ipcMain.handle('jarvis:askAdamText', (_event, utterance: string) =>
+    getAdamVoice().ask(typeof utterance === 'string' ? utterance : '')
+  )
 }
 
 function wireWakeWordObservation(store: Store, service: JarvisService): void {

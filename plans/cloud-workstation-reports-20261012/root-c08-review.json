@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-13T20:31:23.944245+00:00",
+  "verdict": "PASS_OFFLINE_HARNESS",
+  "aggregate_sha256": "687c1d601ca99253236252aa8811359a063d729e94dca48e57525c4bdd8aa7e2",
+  "matched": {
+    "dobius/config/scripts/laya-evaluation/README.md": true,
+    "dobius/config/scripts/laya-evaluation/decision_corpus.py": true,
+    "dobius/config/scripts/laya-evaluation/decision_evaluate.py": true,
+    "dobius/config/scripts/laya-evaluation/decision_metrics.py": true,
+    "dobius/config/scripts/laya-evaluation/source-preflight.json": true,
+    "dobius/config/scripts/laya-evaluation/test_decision_evaluate.py": true
+  },
+  "root_tests": {
+    "passed": 16,
+    "exit_code": 0
+  },
+  "limits": [
+    "Synthetic corpus; no live inference or deployment promotion",
+    "Remote source receipt is historical; no present remote verification claimed",
+    "VPS backend runtime and real heldout evaluation await access and measured acceptance"
+  ]
+}

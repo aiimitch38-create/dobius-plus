@@ -1,0 +1,27 @@
+{
+  "task_id": "task_870200e6587d",
+  "dispatch_id": "ctx_65f0283a235a",
+  "status": "CANDIDATE_V4_FROZEN_PENDING_INDEPENDENT_REVIEW",
+  "coordinator_handle": "term_02e778a4-11ae-4292-ba0f-49e2473a2ad9",
+  "runtime_id": "f3546568-4e43-479f-bdf2-f53faba443f1",
+  "full_brief": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/BUILD2-adam-process-liveness-v4-dispatch.txt",
+  "required_report": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/BUILD2-adam-production-composition-candidate-v4.md",
+  "required_report_key": "adam-production-composition-candidate-v4-20261015",
+  "v3_review_sha256": "8b5fdfb583701b039e1070a99f470a0840bd3d8f8cbaeb440e93f17d579e7049",
+  "v3_manifest_sha256": "8ce0583a2f24ca3a3d61d97767c95b3e24676a44522741d3408fcb009555567c",
+  "current_review_sha256": "8b5fdfb583701b039e1070a99f470a0840bd3d8f8cbaeb440e93f17d579e7049",
+  "v3_natural_exit_probe": {
+    "probe_sha256": "c6691277f266bad2d9ffdec27fc70cddcaf897e5b832f211d9c6daf8a4687c14",
+    "command": "/Users/bayou/homebrew/opt/node@24/bin/node /private/tmp/adam-prod-v3-review-tests-20261015/main-signal-adapter-gap-probe.mjs",
+    "result": [
+      "stop child exit 0; stdout READY, STOP_CALLED; no RETRY",
+      "once child exit 0; stdout EXECUTE_PENDING; no STOP_CALLED"
+    ],
+    "review_sha256": "8b5fdfb583701b039e1070a99f470a0840bd3d8f8cbaeb440e93f17d579e7049"
+  },
+  "candidate_v4_manifest_sha256": "ddb8bc73f8521af2563cf32cf1d67c1ae20c77fc3db7e65dfe7b22b24d38a96e",
+  "candidate_v4_patch_sha256": "ff3ffd0ff9d138e04de3f58ecccc279c962c123755dd2fe831cf1e3d3c93db2d",
+  "candidate_v4_report": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/BUILD2-adam-production-composition-candidate-v4.md",
+  "candidate_v4_report_sha256": "76eec5c0270d0466d01fb96690920cb53a18be72f0cff725c51b5871244eac7f",
+  "candidate_v4_focused_result": "Node24 70/70 focused tests, strict NodeNext typecheck PASS, scoped lint/format PASS, disposable patch check/application byte-identical 21/21."
+}

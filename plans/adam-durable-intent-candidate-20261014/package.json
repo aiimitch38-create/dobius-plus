@@ -1,0 +1,26 @@
+{
+  "name": "adam-operating-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "npm run typecheck && npm test && npm run build",
+    "reconcile:inventory": "tsx service/scripts/reconcile-inventory.ts",
+    "imessage:backfill": "tsx service/src/imessage/backfill.ts",
+    "replay": "tsx service/scripts/replay-command.ts",
+    "adam": "tsx service/scripts/adam-submit.ts",
+    "start": "node service/dist/main.js --serve",
+    "test": "tsx --test service/tests/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  }
+}

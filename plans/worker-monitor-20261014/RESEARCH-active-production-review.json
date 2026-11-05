@@ -1,0 +1,13 @@
+{
+  "task_id": "task_1788a470460e",
+  "dispatch_id": "ctx_6a8b09d9bacb",
+  "status": "ACTIVE_V4_REVIEW",
+  "coordinator_handle": "term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54",
+  "runtime_id": "6627a505-a9ea-4b59-90e7-d051eb153516",
+  "worker_handle": "term_d892e988-92d2-4eeb-9694-89e5853a18f9",
+  "full_brief": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/RESEARCH-adam-production-v4-review-dispatch.txt",
+  "required_report": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/RESEARCH-adam-production-composition-v4-review.md",
+  "required_report_key": "adam-production-composition-candidate-v4-independent-review-20261016",
+  "frozen_author_report_sha256": "76eec5c0270d0466d01fb96690920cb53a18be72f0cff725c51b5871244eac7f",
+  "frozen_manifest_sha256": "ddb8bc73f8521af2563cf32cf1d67c1ae20c77fc3db7e65dfe7b22b24d38a96e"
+}

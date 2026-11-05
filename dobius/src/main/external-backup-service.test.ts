@@ -63,6 +63,17 @@ describe('backupFolderNameFor', () => {
     expect(backupFolderNameFor({ path: '/repos/alpha' })).toBe('alpha')
     expect(backupFolderNameFor({ path: '/repos/alpha', label: '  ' })).toBe('alpha')
   })
+
+  it('strips path separators so a crafted label cannot escape the backup root', () => {
+    expect(backupFolderNameFor({ path: '/repos/alpha', label: '../../Desktop' })).not.toContain(
+      '/'
+    )
+    expect(backupFolderNameFor({ path: '/repos/alpha', label: '../../Desktop' })).toBe(
+      '-..-Desktop'
+    )
+    expect(backupFolderNameFor({ path: '/repos/alpha', label: '..' })).toBe('_')
+    expect(backupFolderNameFor({ path: '/repos/alpha', label: '.' })).toBe('_')
+  })
 })
 
 describe('ExternalBackupService.runOnce', () => {

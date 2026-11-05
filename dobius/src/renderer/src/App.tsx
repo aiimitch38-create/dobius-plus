@@ -510,7 +510,6 @@ function App(): React.JSX.Element {
               setOnboarding={setOnboarding}
               beginOnboardingSettingsDetour={beginOnboardingSettingsDetour}
               shouldMountDictationController={shouldMountDictationController}
-              showFloatingTerminalButton={showFloatingTerminalButton}
             />
             {/* Why: the Board/Home layers sit over the Classic shell; an opaque
             Board-colored cover (not null) fills their Suspense gap and the

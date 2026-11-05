@@ -18,7 +18,8 @@ export type VoiceAgent = {
   /** True while a live conversation is open. */
   active: boolean
   toggle: () => void
-  getAudioLevel: () => number
+  getInputLevel: () => number
+  getOutputLevel: () => number
 }
 
 type LiveConversation = Awaited<ReturnType<typeof Conversation.startSession>>
@@ -38,6 +39,7 @@ export function useVoiceAgent(): VoiceAgent {
   // Why a ref guard: ⌘T can fire again while startSession is still awaiting,
   // and two sessions would each hold the microphone.
   const startingRef = useRef(false)
+  const adamRequestsRef = useRef(0)
   // Why a generation: stop() can land while start() is still awaiting the
   // signed URL or the SDK connect. Each start owns one generation; stop bumps
   // it, so a start that resumes afterwards knows it was canceled and must
@@ -56,6 +58,9 @@ export function useVoiceAgent(): VoiceAgent {
     generationRef.current += 1
     startingRef.current = false
     clearIdleTimer()
+    if (adamRequestsRef.current > 0) {
+      void window.api.jarvis.cancelAsk().catch(() => undefined)
+    }
     const conversation = conversationRef.current
     conversationRef.current = null
     setState('idle')
@@ -108,8 +113,16 @@ export function useVoiceAgent(): VoiceAgent {
           // ADAM runs on this machine, so ElevenLabs' servers cannot reach it.
           // The agent asks, we answer locally, the agent speaks the answer.
           ask_adam: async (parameters: { request?: unknown }) => {
-            const result = await window.api.jarvis.askAdamText(String(parameters?.request ?? ''))
-            return result.text
+            if (!isCurrent()) {
+              return 'Conversation ended.'
+            }
+            adamRequestsRef.current += 1
+            try {
+              const result = await window.api.jarvis.askAdamText(String(parameters?.request ?? ''))
+              return result.text
+            } finally {
+              adamRequestsRef.current -= 1
+            }
           },
           // Eyes: what the user is working on right now.
           get_context: async () => window.api.jarvis.agentContext(),
@@ -133,12 +146,18 @@ export function useVoiceAgent(): VoiceAgent {
               : `Could not propose that change: ${result.error}`
           },
           apply_code_change: async (parameters: { proposal_id?: unknown }) => {
-            const result = await window.api.jarvis.applySelfEdit(String(parameters?.proposal_id ?? ''))
+            const result = await window.api.jarvis.applySelfEdit(
+              String(parameters?.proposal_id ?? '')
+            )
             return result.ok ? `Applied to ${result.displayPath}.` : `Not applied: ${result.error}`
           },
           undo_code_change: async (parameters: { proposal_id?: unknown }) => {
-            const result = await window.api.jarvis.undoSelfEdit(String(parameters?.proposal_id ?? ''))
-            return result.ok ? `Undid the change to ${result.displayPath}.` : `Not undone: ${result.error}`
+            const result = await window.api.jarvis.undoSelfEdit(
+              String(parameters?.proposal_id ?? '')
+            )
+            return result.ok
+              ? `Undid the change to ${result.displayPath}.`
+              : `Not undone: ${result.error}`
           }
         },
         onModeChange: ({ mode }) => {
@@ -215,14 +234,14 @@ export function useVoiceAgent(): VoiceAgent {
 
   useEffect(() => () => void stop(), [stop])
 
-  const getAudioLevel = useCallback((): number => {
+  const getInputLevel = useCallback((): number => {
     const conversation = conversationRef.current
-    if (!conversation) {
-      return 0
-    }
-    // Show whichever side is making sound, so the orb pulses for both halves
-    // of the conversation instead of going flat while the agent talks.
-    return Math.max(conversation.getInputVolume(), conversation.getOutputVolume())
+    return conversation ? conversation.getInputVolume() : 0
+  }, [])
+
+  const getOutputLevel = useCallback((): number => {
+    const conversation = conversationRef.current
+    return conversation ? conversation.getOutputVolume() : 0
   }, [])
 
   return {
@@ -230,6 +249,7 @@ export function useVoiceAgent(): VoiceAgent {
     errorText,
     active: state !== 'idle' && state !== 'error',
     toggle,
-    getAudioLevel
+    getInputLevel,
+    getOutputLevel
   }
 }

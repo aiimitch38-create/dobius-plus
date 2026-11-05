@@ -1,0 +1,19 @@
+{
+  "at": "2026-10-14T07:41:55.235284+00:00",
+  "files": [
+    {
+      "path": "dobius/src/main/adam-authorization-epoch.test.ts",
+      "bytes": 3091,
+      "sha256": "98cad19ce95ea814dbeaa5726957108eb9ff1c2845d8cd4f01139cd634bba45b"
+    },
+    {
+      "path": "dobius/src/main/adam-authorization-epoch.ts",
+      "bytes": 3126,
+      "sha256": "eb7d8e30a78976db99107bd43312572f81417af08d13a3921db3e61b909ab981"
+    }
+  ],
+  "aggregate_sha256": "8cabc9c413a7286c298cdd7bf5325921e7fe819546b35e31928fe75e7d38d9dc",
+  "recipe": "sorted path NUL exactbytes NUL",
+  "tests": "3epoch+10legacyconnection testsPASS",
+  "scope": "Synchronous main-only opaque HMAC endpoint/credential epoch; no token values exposed. Credential/private file and environment precedence matches existing resolver."
+}

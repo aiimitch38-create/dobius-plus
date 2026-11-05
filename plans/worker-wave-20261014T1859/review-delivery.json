@@ -1,0 +1,146 @@
+[
+  {
+    "role": "RESEARCH",
+    "handle": "term_1fb64b2c-672b-436b-81e2-cc441db54653",
+    "brief": "plans/worker-wave-20261014T1859/RESEARCH-independent-review.md",
+    "response": {
+      "id": "c8d4a374-240b-46aa-bfcb-98b0194c4dd3",
+      "ok": true,
+      "result": {
+        "send": {
+          "handle": "term_1fb64b2c-672b-436b-81e2-cc441db54653",
+          "accepted": false,
+          "bytesWritten": 0
+        }
+      },
+      "_meta": {
+        "runtimeId": "61aee79c-aed9-475c-af6d-43d79a0d23cb"
+      }
+    },
+    "paste_response": {
+      "id": "1c67a5a9-ef29-4b59-abbe-04b93142d67f",
+      "ok": true,
+      "result": {
+        "send": {
+          "handle": "term_1fb64b2c-672b-436b-81e2-cc441db54653",
+          "accepted": true,
+          "bytesWritten": 1524
+        }
+      },
+      "_meta": {
+        "runtimeId": "61aee79c-aed9-475c-af6d-43d79a0d23cb"
+      }
+    },
+    "submit_response": {
+      "id": "1a1434b8-856d-4aa5-b62a-8e755580b498",
+      "ok": true,
+      "result": {
+        "send": {
+          "handle": "term_1fb64b2c-672b-436b-81e2-cc441db54653",
+          "accepted": true,
+          "bytesWritten": 1
+        }
+      },
+      "_meta": {
+        "runtimeId": "61aee79c-aed9-475c-af6d-43d79a0d23cb"
+      }
+    },
+    "delivery_checked_tail": "withfindings; no polling loop.Revew BUILD1 epoch-codinator-20261014packet from buil1.json: layaauthority-epoch-coordinator.ts nd its. Check crntexact hashesmutation nsting, missed revisions, reentrant reaes, permanent failures, stal-provider publication, adcallercontract. Keep independent-prcess/writer covrage unavailable; evalute bounded internal foudation separaely from the livecomposition blockers you already reported. Appendepoch-coordinator-indepedent-review-20261014 t research.json. \u2022 I\u2019ll review the exact BUILD1 coordinator freeze against its report and source, then append an independent verdict to myresearch.jsonentryonly.I\u2019llkeepindependent-processcoverageexplicitlyunavailableandwon\u2019treruntestsunlesssource  inspection revals a gap in the ecordedocusd evdence.\u2022Working (5s \u2022 esc to interrupt)43;39Hindependent-processcoverageexplicitlyunavailableandwon\u2019treruntestsunlesssource  inspection revals a gap in the ecordedocusd evdence.\u2022Working (5s \u2022 esc to interrupt)\u2022\u2022\u2022\u2022WWWWWWWo6Wo6WoWo"
+  },
+  {
+    "role": "BUILD2",
+    "handle": "term_0cd06599-a46a-4b05-bc37-cdc9b88e1e7e",
+    "brief": "plans/worker-wave-20261014T1859/BUILD2-independent-review.md",
+    "response": {
+      "id": "23f33f5f-4391-40cd-b77f-2b350e166782",
+      "ok": true,
+      "result": {
+        "send": {
+          "handle": "term_0cd06599-a46a-4b05-bc37-cdc9b88e1e7e",
+          "accepted": false,
+          "bytesWritten": 0
+        }
+      },
+      "_meta": {
+        "runtimeId": "61aee79c-aed9-475c-af6d-43d79a0d23cb"
+      }
+    },
+    "paste_response": {
+      "id": "3b396b0d-7130-4224-9662-6ddd0b86c673",
+      "ok": true,
+      "result": {
+        "send": {
+          "handle": "term_0cd06599-a46a-4b05-bc37-cdc9b88e1e7e",
+          "accepted": true,
+          "bytesWritten": 1684
+        }
+      },
+      "_meta": {
+        "runtimeId": "61aee79c-aed9-475c-af6d-43d79a0d23cb"
+      }
+    },
+    "submit_response": {
+      "id": "92b0c7cb-0b58-4177-897d-ecd24dc67236",
+      "ok": true,
+      "result": {
+        "send": {
+          "handle": "term_0cd06599-a46a-4b05-bc37-cdc9b88e1e7e",
+          "accepted": true,
+          "bytesWritten": 1
+        }
+      },
+      "_meta": {
+        "runtimeId": "61aee79c-aed9-475c-af6d-43d79a0d23cb"
+      }
+    },
+    "delivery_checked_tail": "lobal binding mismatch refusal, expiredbinding/reopen recovery, exceptionsandzr side ffects. Earlir stlroot-local helper status is nt aompeting new assgnment; ROOT confirms FIXER atalogdeliverycompleted, independent reviwpnding, rume/RPC activatio not auhorized. Appnd catalog-adam-recovey-independent-review-20261014 to build2.json. \u2022 I\u2019ll review FIXER\u2019s catalog recovery facade against the previously reviewed child-lookup helper, focusing on request-key scoping,bindingownership,expiry/reopenbehavior,andwhetherthepathstaysread-only.I\u2019llrecordonlytheverdictandevidenceinmy  BUILD2 report; I won\u2019t modify surceor run new est suite.\u2022Working (3s \u2022 esc to interrupt)onlytheverdictandevidenceinmy  BUILD2 report; I won\u2019t modify surceor run new est suite.\u2022Working (3s \u2022 esc to interrupt)44WWWWWoWoWoWoWoWoWorWorWorWorWorkWorkWorkWorkWorkiWorkiWorkiWorkiWokinWokin\u2022Workin\u2022WorkinWorkingWorkingorkingorking\u2022orking\u2022orkingrkingrkingrkingrking\u2022king\u2022kingkingkingkingking\u2022ing\u2022inginging\u2022ng\u2022ngng5ng5gg\u2022g\u2022g\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+  },
+  {
+    "role": "FIXER",
+    "handle": "term_92538186-324d-4dcf-825a-471cc20cbb8f",
+    "brief": "plans/worker-wave-20261014T1859/FIXER-independent-review.md",
+    "response": {
+      "id": "50b35b29-feaf-41b2-843c-dfaee4e4bbe2",
+      "ok": true,
+      "result": {
+        "send": {
+          "handle": "term_92538186-324d-4dcf-825a-471cc20cbb8f",
+          "accepted": false,
+          "bytesWritten": 0
+        }
+      },
+      "_meta": {
+        "runtimeId": "61aee79c-aed9-475c-af6d-43d79a0d23cb"
+      }
+    },
+    "paste_response": {
+      "id": "18efdcad-1d42-4a21-8ae1-d1f6a35429e3",
+      "ok": true,
+      "result": {
+        "send": {
+          "handle": "term_92538186-324d-4dcf-825a-471cc20cbb8f",
+          "accepted": true,
+          "bytesWritten": 1784
+        }
+      },
+      "_meta": {
+        "runtimeId": "61aee79c-aed9-475c-af6d-43d79a0d23cb"
+      }
+    },
+    "submit_response": {
+      "id": "dd110a29-4a1a-4927-9a50-fd0dd87b114a",
+      "ok": true,
+      "result": {
+        "send": {
+          "handle": "term_92538186-324d-4dcf-825a-471cc20cbb8f",
+          "accepted": true,
+          "bytesWritten": 1
+        }
+      },
+      "_meta": {
+        "runtimeId": "61aee79c-aed9-475c-af6d-43d79a0d23cb"
+      }
+    },
+    "delivery_checked_tail": "recorded focusedevidence,thenappendonlytheindependentreviewentrytofixer.json.I\u2019llkeepthiafe integer toals and exhaustion, nd explicitlyunavailabl snapshot. This foundationdoes not laim cverage or serialize claim/start; eparate those known composition prerequisites from defs within its boundedcotact. Your priorsource catalog task is complete; seroot-local helper implementation sttus isnot a conflicting ewassigment, and no furthecatalog dits are uhorized. Append exteral-ledger-idepndent-review-20261014 to fixer.json. \u2022 I\u2019ll verify the BUILD2 packet\u2019s frozen hashes, inspect the migration and external reservation contract against its recorded focusedevidence,thenappendonlytheindependentreviewentrytofixer.json.I\u2019llkeepthisread-onlyapartfromthatreportupdate. \u2022Working (3s \u2022 esc to interrupt)sread-onlyapartfromthatreportupdate. \u2022Working (3s \u2022 esc to interrupt)\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u202244\u2022\u2022\u2022\u2022\u2022W\u2022WWWWoWo\u2022Wo\u2022WoWorWorWorWor\u2022Wor\u2022WorWorkWork\u2022Work\u2022WorkWorkiWorkiWorkiWorkiWorkinWorkinWorkinWorkinWoringorkingWoringorking"
+  }
+]

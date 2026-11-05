@@ -1,0 +1,51 @@
+{
+  "status": "CORRECTED_FROZEN_FOR_REVIEW; actual emitted preload smoke pending",
+  "files": [
+    {
+      "path": "dobius/config/sandbox-preload-bundle.ts",
+      "bytes": 2788,
+      "sha256": "aa0df14256f453af4022b864690c0be9d44fb26e3bc54bf0c1409037a6c3da54"
+    },
+    {
+      "path": "dobius/config/tsconfig.node.json",
+      "bytes": 860,
+      "sha256": "1223e4ca0119beeccad0121a9de10fcfbd7134a9a5f6675693245938e5fdb0e4"
+    },
+    {
+      "path": "dobius/electron.vite.config.ts",
+      "bytes": 10201,
+      "sha256": "303c29d2bf47c914bf30de1dbb520c301c27767a8ae9640e0b0dafdef9b5a33a"
+    },
+    {
+      "path": "dobius/package.json",
+      "bytes": 16452,
+      "sha256": "521ecbf26ff90945e62bb77d6a88f2fe0c4ed600c95fa5c21c3b3f94631a06f1"
+    },
+    {
+      "path": "dobius/src/main/startup/sandbox-preload-bundle.test.ts",
+      "bytes": 1948,
+      "sha256": "939d67b567bf820b51a18b44cba5e59df7ce48989b922f6d12ed432c99ca074c"
+    }
+  ],
+  "algorithm": "sorted repository-relative UTF8 path NUL bytes NUL",
+  "aggregate_sha256": "7d6ac7e077f79627239b54bddecea4d8774871323528cd9335f4019c9082a634",
+  "verification": {
+    "tests": "14PASS including aliases, membercalls, dynamicimports, exactoldzodheader, inertstrings",
+    "fresh_Node_typecheck": "PASS --composite false --incremental false",
+    "fresh_web_typecheck": "NONPASS two existing missing web API fields; BUILD1assigned; prior cachedPASS superseded",
+    "scoped_lint_format": "PASS"
+  },
+  "reason": "Build18 packaged preload required zod externally and Electron sandbox rejected it, leaving window.dobius absent; observed in isolated actual signed artifact",
+  "correction": "Inlinezod; ASTgate refuses alias references/member moduleloaders/directunsupported/dynamicrequires; freshbuildtypechecks cannotreuse incremental success",
+  "limits": [
+    "No successful packagedUI acceptance yet",
+    "Installed build17 restored graphready all5PTYs preserved",
+    "No VPS deployment of knownbad18snapshot"
+  ],
+  "previous_freeze": [
+    {
+      "aggregate": "4147f2c679e008f8c1723175aaebe15f2f5203338643cb832e7bf316696de4ff",
+      "review": "research.json:c07_preload_sandbox_independent_review CHANGES_REQUIRED alias/member-loader gap"
+    }
+  ]
+}

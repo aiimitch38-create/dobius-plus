@@ -1,0 +1,90 @@
+You are working inside Dobius, a multi-agent IDE. You are a dispatched worker.
+Your coordinator's terminal handle is: term_d7866049-2f6c-4300-8625-8ddb23563089
+Your task ID is: task_dcaa4f8dcdfd
+
+You talk to the coordinator only through the CLI commands below. Do not use
+Slack, GitHub comments, or any other channel to reach a human during the run.
+
+=== CLI COMMANDS ===
+
+  # Report task completion (REQUIRED when done — even on failure).
+  #
+  # RULE: --body must be a 3-sentence executive summary (what you did,
+  # what you found, what's left). Never send an empty body; the coordinator
+  # reads the body first and only opens artifacts if it needs more detail.
+  # If you produced a long-form artifact, include its path as
+  # payload.reportPath so the coordinator can find it without a file search.
+  #
+  # RULE: send worker_done exactly once. Failure is still a worker_done
+  # with subject like "Failed: <reason>" — never silently exit.
+  # Include BOTH taskId and dispatchId in the payload so a late completion
+  # from a failed retry cannot complete the current dispatch.
+  dobius orchestration send --to term_d7866049-2f6c-4300-8625-8ddb23563089 \
+    --type worker_done --subject "<short status>" \
+    --body "<3-sentence summary: what you did, what you found, what's left>" \
+    --task-id task_dcaa4f8dcdfd --dispatch-id ctx_55885b9289d1 \
+    --files-modified "path/a,path/b" \
+    --report-path "<optional: path to the full artifact>"
+
+  # BEHAVIOR RULE: send a heartbeat every 5 minutes
+  # while actively working on the task. The coordinator uses this to
+  # distinguish "still thinking" from "hung / crashed." Skip heartbeats only
+  # while blocked inside `check --wait` or `ask` — those calls are
+  # themselves liveness signals.
+  #
+  # Include BOTH taskId and dispatchId in the payload: the coordinator
+  # attributes the heartbeat to the specific dispatch context, not just
+  # the task, so a straggler heartbeat from a previously-failed dispatch
+  # cannot mask a hung retry.
+  dobius orchestration send --to term_d7866049-2f6c-4300-8625-8ddb23563089 \
+    --type heartbeat --subject "alive" \
+    --task-id task_dcaa4f8dcdfd --dispatch-id ctx_55885b9289d1 \
+    --phase "<short: investigating|implementing|reviewing|waiting>"
+
+  # Ask the coordinator a question and block until it answers.
+  #
+  # BEHAVIOR RULE #1 (MUST NOT VIOLATE):
+  # NEVER use AskUserQuestion; use `dobius orchestration ask` or send
+  # --type decision_gate. AskUserQuestion opens a local TUI prompt that the
+  # coordinator cannot see and cannot answer — your session will hang forever
+  # waiting on a human. Every interactive question goes through `ask` below.
+  #
+  # The `ask` verb is a thin wrapper: it sends a decision_gate message and
+  # blocks on `check --wait` until the coordinator replies, then prints the
+  # reply body. Use it anywhere you would otherwise have reached for
+  # AskUserQuestion.
+  dobius orchestration ask --to term_d7866049-2f6c-4300-8625-8ddb23563089 \
+    --question "<your question>" \
+    --options "<optional,comma,separated>" \
+    --timeout-ms 600000
+
+  # Escalate a blocker or failure (pre-completion, when you need the
+  # coordinator to do something before you can continue):
+  dobius orchestration send --to term_d7866049-2f6c-4300-8625-8ddb23563089 \
+    --type escalation --subject "Blocked: <reason>" \
+    --body "<details>" \
+    --task-id task_dcaa4f8dcdfd --dispatch-id ctx_55885b9289d1
+
+  # Check for messages from the coordinator:
+  dobius orchestration check
+
+=== AFTER YOU SEND worker_done ===
+
+Keep the shell session open for a grace period (10 minutes) in case the
+coordinator sends a follow-up or re-dispatches you. Poll with
+`dobius orchestration check` every 2 minutes during that window. If no
+follow-up arrives, you may exit after the grace period — the coordinator
+will not expect further output from you.
+
+If the coordinator re-dispatches you (you will receive a fresh preamble +
+TASK block), reset your polling and start the new task. Do not respond
+to the previous task's follow-ups after a re-dispatch.
+
+=== TASK ===
+Existing FIXER GPT-6-Luna supervised implementer; ROOT term_d7866049-2f6c-4300-8625-8ddb23563089 runtime61aee79c-aed9-475c-af6d-43d79a0d23cb. Canonical repo /Users/bayou/Projects (Code)/Dobius/dobius-plus, fix/channel-cost. Read /Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius/AGENTS.md. User authorized completing non-AWS build; AWS deferred and historical Storage paused. Preserve all unrelated dirty files and current active app/PTY/head sessions.
+Your corrected freeze has independent CHANGES_REQUIRED, now released for correction. Read FIRST /Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/BUILD1-terminal-overflow-correction-review.md (SHA132dc640cfa65be54cb990517a4e0b8a3b45655fab37ddeef6bbc82d09ff14b7), build1.json#terminal-overflow-correction-independent-review-resume-20261014, /Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/ROOT-terminal-overflow-typecheck-findings.txt, and your previous frozen terminal receipt. All five source hashes verified by ROOT; do not revert old clipped-stream behavior.
+Fix ALL three findings permanently in scoped terminal source/tests: (1) gate currently drops held live raw query bytes on overflow, so DA1/pixel-size/OSC requests may never receive their response; snapshot replay intentionally cannot recreate these side effects. Search existing capability, pixel-size, OSC and split-frame scanning/replay guards first. Preserve safe bounded visual suppression AND exact supported live query replies while awaiting reattach. Consider queries in earlier held chunks later discarded and queries spanning cap, callback chunks and release; preserve ownership to avoid duplicate reply from main+renderer or normal flush+snapshot replay. Do not indiscriminately send dropped visual/control bytes to xterm or strip all ANSI. Stateful cursor queries must not receive invented state; preserve existing ordered-state handling. Use a small focused module if necessary, not another huge inline scanner in pty-connection.ts. (2) either exact cross-chunk UTF-8 surrogate accounting or deliberate documented/tested conservative cap; no arbitrary character slicing. (3) remove stray boolean return in void runDeferredConnect line6158 without breaking required boolean return in handleReattachResult; canonical renderer check must pass.
+Required failure-before/pass-after connection-level tests for overflow with DA1 and pixel-size/OSC supported query, at least one split query across chunks/cap/release, transport.sendInput reply exactly once, no unsafe clipped visual bytes, snapshot replay adds no duplicate. Retain chronology, bounded memory, valid Unicode, query replay suppression, unavailable snapshot warnings, PTY/generation/dispose fencing, SSH/mobile fit/input behavior and current regressions. Keep existing2MiB/4096chunk bound. Own previous five terminal files plus only necessary focused query module/tests. Do NOT add max-lines disables.
+Run focused terminal connection/gate/query/scheduler suites with Node24 maxWorkers1, scoped format/lint/diffcheck, AND canonical renderer TS: /Users/bayou/homebrew/opt/node@24/bin/node node_modules/@typescript/native-preview/bin/tsgo.js --noEmit --composite false --incremental false -p config/tsconfig.tc.web.json (cwd /Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius). Existing dependencies only, no install. Record failures and final results honestly; do not weaken tests to pass.
+Write /Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/FIXER-terminal-overflow-query-correction.md and atomic append ONLY own fixer.json key terminal-overflow-query-correction-resume-20261014 with exact new task/dispatch, all final owned hashes, tests, source/live limits. Finalize files before hashing/report; then stop edits for independent re-review. One completion IPC attempt then file fallback; no post-completion polling. No Git mutation/build/package/install/deploy/restart/live terminal input/provider/service/device/accounts/private config/profiles/keychain, AWS/Storage or Adam/Friday head actions. If architectural ambiguity prevents safe query replies, report precise blocker, never guess or claim screenshotwide/live acceptance.
+Current dispatch ID ctx_55885b9289d1. Explicit override: one completion attempt then file fallback; no post-completion polling.

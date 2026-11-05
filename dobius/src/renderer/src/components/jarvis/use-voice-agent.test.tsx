@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useVoiceAgent, type VoiceAgent } from './use-voice-agent'
 
 type SessionOptions = {
+  clientTools: { ask_adam: (parameters: { request: string }) => Promise<string> }
   onStatusChange: (event: { status: string }) => void
   onModeChange: (event: { mode: string }) => void
   onMessage: () => void
@@ -56,7 +57,8 @@ beforeEach(async () => {
       agentSignedUrl: vi.fn(() => signedUrl.promise),
       agentOpening: vi.fn(async () => ''),
       agentContext: vi.fn(async () => 'context'),
-      conversationMemory: vi.fn(async () => '')
+      conversationMemory: vi.fn(async () => ''),
+      cancelAsk: vi.fn(async () => ({ ok: true }))
     }
   }
   container = document.createElement('div')
@@ -135,7 +137,8 @@ describe('useVoiceAgent stop during connect (#83)', () => {
     expect(conversation.endSession).toHaveBeenCalledTimes(1)
     expect(latest?.state).toBe('idle')
     expect(latest?.active).toBe(false)
-    expect(latest?.getAudioLevel()).toBe(0)
+    expect(latest?.getInputLevel()).toBe(0)
+    expect(latest?.getOutputLevel()).toBe(0)
 
     // Late SDK callbacks from the orphaned session change nothing and arm no
     // idle-hangup timer.
@@ -203,4 +206,60 @@ describe('useVoiceAgent stop during connect (#83)', () => {
     expect(fresh.endSession).toHaveBeenCalledTimes(1)
     expect(latest?.state).toBe('idle')
   })
+})
+
+describe('useVoiceAgent audio levels', () => {
+  it('reads the SDK input and output meters independently and releases them on stop', async () => {
+    const conversation = fakeConversation()
+    conversation.getInputVolume = vi.fn(() => 0.25)
+    conversation.getOutputVolume = vi.fn(() => 0.75)
+    let options: SessionOptions | undefined
+    startSession.mockImplementation((opts: SessionOptions) => {
+      options = opts
+      return Promise.resolve(conversation)
+    })
+    expect(latest?.getInputLevel()).toBe(0)
+    expect(latest?.getOutputLevel()).toBe(0)
+    await act(async () => {
+      latest?.toggle()
+      signedUrl.resolve({ ok: true, url: 'wss://signed' })
+    })
+    await act(async () => options?.onModeChange({ mode: 'listening' }))
+    expect(latest?.state).toBe('listening')
+    expect(latest?.getInputLevel()).toBe(0.25)
+    expect(conversation.getOutputVolume).not.toHaveBeenCalled()
+    await act(async () => options?.onModeChange({ mode: 'speaking' }))
+    expect(latest?.state).toBe('speaking')
+    expect(latest?.getOutputLevel()).toBe(0.75)
+    expect(conversation.getInputVolume).toHaveBeenCalledTimes(1)
+    await act(async () => latest?.toggle())
+    expect(latest?.getInputLevel()).toBe(0)
+    expect(latest?.getOutputLevel()).toBe(0)
+    expect(conversation.endSession).toHaveBeenCalledTimes(1)
+    expect(startSession).toHaveBeenCalledTimes(1)
+  })
+})
+
+it('cancels a pending Hermes tool when the live conversation ends', async () => {
+  const answer = deferred<{ kind: 'answer'; text: string }>()
+  let options: SessionOptions | undefined
+  startSession.mockImplementation((opts: SessionOptions) => {
+    options = opts
+    return Promise.resolve(fakeConversation())
+  })
+  window.api.jarvis.askAdamText = vi.fn(() => answer.promise)
+  await act(async () => {
+    latest?.toggle()
+    signedUrl.resolve({ ok: true, url: 'wss://signed' })
+  })
+  const pending = options!.clientTools.ask_adam({ request: 'hello Adam' })
+  expect(window.api.jarvis.askAdamText).toHaveBeenCalledWith('hello Adam')
+  await act(async () => latest?.toggle())
+  expect(window.api.jarvis.cancelAsk).toHaveBeenCalledTimes(1)
+  answer.resolve({ kind: 'answer', text: 'late reply' })
+  await pending
+  await expect(options!.clientTools.ask_adam({ request: 'stale tool' })).resolves.toBe(
+    'Conversation ended.'
+  )
+  expect(window.api.jarvis.askAdamText).toHaveBeenCalledTimes(1)
 })

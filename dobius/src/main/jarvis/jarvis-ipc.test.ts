@@ -1,6 +1,6 @@
+import { join } from 'node:path'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Store } from '../persistence'
@@ -15,11 +15,35 @@ const electron = vi.hoisted(() => ({
   userData: ''
 }))
 
+const adam = vi.hoisted(() => ({
+  ask: vi.fn(async () => ({ kind: 'answer', text: 'Adam Hermes reply' })),
+  cancel: vi.fn(),
+  close: vi.fn(async () => undefined),
+  speak: vi.fn(async () => ({ played: true })),
+  created: vi.fn()
+}))
+vi.mock('./adam-hermes-voice', () => ({
+  AdamHermesVoice: class {
+    constructor(options: unknown) {
+      adam.created(options)
+    }
+    ask = adam.ask
+    cancel = adam.cancel
+    close = adam.close
+  }
+}))
+vi.mock('../communications/huddles/huddle-speech-synthesis', () => ({
+  getHuddleSpeechQueue: () => adam.speak
+}))
+
 vi.mock('electron', () => ({
   app: {
     isPackaged: false,
+    once: vi.fn(),
+    focus: vi.fn(),
     getPath: () => electron.userData
   },
+  dialog: { showMessageBox: vi.fn(async () => ({ response: 0 })) },
   BrowserWindow: { getFocusedWindow: () => electron.focused },
   globalShortcut: {
     register: (_accelerator: string, handler: () => void) => {
@@ -62,7 +86,10 @@ function fakeWindow(): FakeWindow {
   return { isDestroyed: () => false, webContents: { send: vi.fn() } }
 }
 
-function fakeStore(jarvisEnabled: boolean): { store: Store; updateSettings: ReturnType<typeof vi.fn> } {
+function fakeStore(jarvisEnabled: boolean): {
+  store: Store
+  updateSettings: ReturnType<typeof vi.fn>
+} {
   const updateSettings = vi.fn()
   const store = {
     getSettings: () => ({ voice: { jarvisEnabled } }),
@@ -83,6 +110,7 @@ async function status(): Promise<{ shortcutActive: boolean }> {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks()
   electron.handlers.clear()
   electron.shortcutHandler = null
   electron.registerResult = true
@@ -133,5 +161,36 @@ describe('⌘T routing (#89)', () => {
       'jarvis:ptt-pressed',
       expect.objectContaining({ at: expect.any(Number) })
     )
+  })
+})
+
+describe('Adam Hermes voice routing', () => {
+  it('uses one Hermes client for direct Jarvis turns and live-agent text tools', async () => {
+    const { store } = fakeStore(true)
+    const main = fakeWindow()
+    await register(store, main)
+    main.webContents.send.mockClear()
+    await expect(electron.handlers.get('jarvis:ask')?.({}, 'hello Adam')).resolves.toEqual({
+      kind: 'answer',
+      text: 'Adam Hermes reply'
+    })
+    expect(adam.ask).toHaveBeenLastCalledWith('hello Adam')
+    expect(adam.speak).toHaveBeenCalledExactlyOnceWith('Adam Hermes reply')
+    expect(
+      main.webContents.send.mock.calls
+        .filter(([channel]) => channel === 'jarvis:state')
+        .map(([, data]) => data.state)
+    ).toEqual(['thinking', 'speaking', 'idle'])
+    await electron.handlers.get('jarvis:askAdamText')?.({}, 'live tool question')
+    expect(adam.ask).toHaveBeenLastCalledWith('live tool question')
+    expect(adam.speak).toHaveBeenCalledTimes(1)
+    expect(adam.created).toHaveBeenCalledTimes(1)
+    expect(adam.created).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionFile: join(electron.userData, 'adam-voice-session.json')
+      })
+    )
+    await electron.handlers.get('jarvis:cancelAsk')?.()
+    expect(adam.cancel).toHaveBeenCalledTimes(1)
   })
 })

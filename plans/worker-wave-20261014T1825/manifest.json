@@ -1,0 +1,99 @@
+{
+  "wave": "worker-wave-20261014T1825",
+  "created_at": "2026-10-14T18:25:44.595747+00:00",
+  "runtime_id": "61aee79c-aed9-475c-af6d-43d79a0d23cb",
+  "coordinator": "term_d7866049-2f6c-4300-8625-8ddb23563089",
+  "aws": "deferred",
+  "historical_storage_queue": "paused",
+  "workers": {
+    "FIXER": {
+      "handle": "term_447e9d91-9776-4547-9d1a-007f08eb0161",
+      "model": "gpt-6-luna",
+      "brief": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-wave-20261014T1825/FIXER.md",
+      "task_id": "task_bd6e0f6b3bc8",
+      "title": "Repair ADAM child lookup collisions",
+      "status": "completed",
+      "dispatch": {
+        "id": "ctx_ec8a975b8f4a",
+        "task_id": "task_bd6e0f6b3bc8",
+        "assignee_handle": "term_447e9d91-9776-4547-9d1a-007f08eb0161",
+        "status": "dispatched",
+        "failure_count": 0,
+        "last_failure": null,
+        "dispatched_at": "2026-10-14 18:26:45",
+        "completed_at": null,
+        "created_at": "2026-10-14 18:26:45",
+        "last_heartbeat_at": null
+      },
+      "injected": true,
+      "completion_transport": "report_fallback"
+    },
+    "BUILD1": {
+      "handle": "term_2ba42907-3fdb-425e-bda0-79f5c8fc8e8c",
+      "model": "gpt-6-luna",
+      "brief": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-wave-20261014T1825/BUILD1.md",
+      "task_id": "task_970d7bb5a7d5",
+      "title": "Verify desktop and phone preview behavior",
+      "status": "completed",
+      "dispatch": {
+        "id": "ctx_0dcb2b371b9b",
+        "task_id": "task_970d7bb5a7d5",
+        "assignee_handle": "term_2ba42907-3fdb-425e-bda0-79f5c8fc8e8c",
+        "status": "dispatched",
+        "failure_count": 0,
+        "last_failure": null,
+        "dispatched_at": "2026-10-14 18:26:48",
+        "completed_at": null,
+        "created_at": "2026-10-14 18:26:48",
+        "last_heartbeat_at": null
+      },
+      "injected": true,
+      "completion_transport": "report_fallback"
+    },
+    "BUILD2": {
+      "handle": "term_0cd06599-a46a-4b05-bc37-cdc9b88e1e7e",
+      "model": "gpt-6-luna",
+      "brief": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-wave-20261014T1825/BUILD2.md",
+      "task_id": "task_8edf799f5c7b",
+      "title": "Prepare the two-Hermes worker connection",
+      "status": "completed",
+      "dispatch": {
+        "id": "ctx_5e842841e410",
+        "task_id": "task_8edf799f5c7b",
+        "assignee_handle": "term_0cd06599-a46a-4b05-bc37-cdc9b88e1e7e",
+        "status": "dispatched",
+        "failure_count": 0,
+        "last_failure": null,
+        "dispatched_at": "2026-10-14 18:26:51",
+        "completed_at": null,
+        "created_at": "2026-10-14 18:26:51",
+        "last_heartbeat_at": null
+      },
+      "injected": true,
+      "completion_transport": "report_fallback"
+    },
+    "RESEARCH": {
+      "handle": "term_1fb64b2c-672b-436b-81e2-cc441db54653",
+      "model": "gpt-6-luna",
+      "brief": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-wave-20261014T1825/RESEARCH.md",
+      "task_id": "task_c61d1a24de47",
+      "title": "Audit Hermes Codex account and resume wiring",
+      "status": "completed",
+      "dispatch": {
+        "id": "ctx_6cab48eb0ff7",
+        "task_id": "task_c61d1a24de47",
+        "assignee_handle": "term_1fb64b2c-672b-436b-81e2-cc441db54653",
+        "status": "dispatched",
+        "failure_count": 0,
+        "last_failure": null,
+        "dispatched_at": "2026-10-14 18:26:54",
+        "completed_at": null,
+        "created_at": "2026-10-14 18:26:54",
+        "last_heartbeat_at": null
+      },
+      "injected": true,
+      "completion_transport": "report_fallback"
+    }
+  },
+  "head_agent_constraint": "Exactly Adam and Friday; exclusive profile ownership required for future unattended work; no additional Hermes agents authorized."
+}

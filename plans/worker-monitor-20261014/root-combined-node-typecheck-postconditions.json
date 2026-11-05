@@ -1,0 +1,9 @@
+{
+  "command": "pnpm --dir dobius exec tsgo --noEmit --composite false --incremental false -p config/tsconfig.node.json",
+  "exit_code": 0,
+  "stdout": "",
+  "stderr": "",
+  "at": "2026-10-14T21:23:25.572452+00:00",
+  "registry_aggregate": "dacd4ea36ea1a19d4fcb9c03c4d0d6d7a58d5941524fcddc0b1ea453fc7df1c3",
+  "orchestration_db_sha256": "72b9431a60557038c79e5a72548a91b8a80c2b08523e39485867d776feb0c8e5"
+}

@@ -124,9 +124,9 @@ describe.runIf(process.platform === 'darwin')(
       writeFileSync(
         path.join(v3, 'Contents', 'Resources', 'BUILD-PROVENANCE.json'),
         JSON.stringify({
-          repo: '/build/lane-3',
+          repo,
           branch: 'lane-3',
-          commit: 'abc1234',
+          commit,
           dirty: false,
           diffDigest: null,
           tag: null,

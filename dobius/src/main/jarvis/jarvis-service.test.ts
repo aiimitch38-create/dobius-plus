@@ -230,9 +230,7 @@ describe('JarvisService.speak serialization', () => {
     await vi.waitFor(() => expect(timeline).toEqual(['enter:first utterance']))
 
     const second = h.service.speak('second utterance')
-    await vi.waitFor(() =>
-      expect(timeline).toEqual(['enter:first utterance'])
-    )
+    await vi.waitFor(() => expect(timeline).toEqual(['enter:first utterance']))
 
     release()
     await Promise.all([first, second])
@@ -329,5 +327,64 @@ describe('tapSttFinalTranscripts', () => {
 
     expect(seen).toEqual(['first:once'])
     untapFirst()
+  })
+})
+
+describe('Hermes request cancellation', () => {
+  it('cancels inference on the second talk press and never speaks a late answer', async () => {
+    let resolve!: (value: { kind: 'answer'; text: string }) => void
+    const askAgent = vi.fn(
+      () =>
+        new Promise<{ kind: 'answer'; text: string }>((done) => {
+          resolve = done
+        })
+    )
+    const cancelAgent = vi.fn()
+    const broadcast = vi.fn()
+    const speakQueue = vi.fn(async () => ({ played: true as const, engine: 'test' }))
+    const service = new JarvisService({
+      store: { getSettings: () => ({ voice: BASE_VOICE }) },
+      shortcut: { register: () => true, unregister: () => undefined },
+      broadcast,
+      askAgent,
+      cancelAgent,
+      speakQueue
+    })
+    const pending = service.ask('hello Adam')
+    expect(service.getPhase()).toBe('thinking')
+    service.pressPtt()
+    expect(cancelAgent).toHaveBeenCalledTimes(1)
+    expect(service.getPhase()).toBe('idle')
+    expect(broadcast.mock.calls.some(([channel]) => channel === JARVIS_PTT_PRESSED_CHANNEL)).toBe(
+      false
+    )
+    resolve({ kind: 'answer', text: 'too late' })
+    await expect(pending).resolves.toEqual({ kind: 'cancelled', text: '' })
+    expect(speakQueue).not.toHaveBeenCalled()
+    expect(statesOf(broadcast)).toEqual(['thinking', 'idle'])
+  })
+  it('keeps an in-flight Hermes turn when another ask arrives', async () => {
+    let resolve!: (value: { kind: 'answer'; text: string }) => void
+    const askAgent = vi.fn(
+      () =>
+        new Promise<{ kind: 'answer'; text: string }>((done) => {
+          resolve = done
+        })
+    )
+    const speakQueue = vi.fn(async () => ({ played: true as const, engine: 'test' }))
+    const service = new JarvisService({
+      store: { getSettings: () => ({ voice: BASE_VOICE }) },
+      shortcut: { register: () => true, unregister: () => undefined },
+      broadcast: vi.fn(),
+      askAgent,
+      speakQueue
+    })
+    const first = service.ask('first')
+    await expect(service.ask('second')).resolves.toMatchObject({ kind: 'error' })
+    expect(askAgent).toHaveBeenCalledTimes(1)
+    expect(service.getPhase()).toBe('thinking')
+    resolve({ kind: 'answer', text: 'the first answer' })
+    await expect(first).resolves.toEqual({ kind: 'answer', text: 'the first answer' })
+    expect(speakQueue).toHaveBeenCalledWith('the first answer')
   })
 })

@@ -6,7 +6,13 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { BoardCommandBar, type BoardCommandBarProps } from './BoardCommandBar'
 import type { BoardThreadMessage } from './BoardThread'
 
-vi.mock('@/components/dictation/VoiceOrb', () => ({ VoiceOrb: () => null }))
+const character = vi.hoisted(() => ({ render: vi.fn() }))
+vi.mock('@/components/dictation/VoiceOrb', () => ({
+  VoiceOrb: (props: { size: number; getLevel: () => number }) => {
+    character.render(props)
+    return <div data-composer-character />
+  }
+}))
 vi.mock('./BoardVoiceCaption', () => ({ BoardVoiceCaption: () => null }))
 vi.mock('./BoardThread', () => ({
   BoardThread: () => <section aria-label="Thread" />
@@ -65,6 +71,15 @@ function toggle(label: 'Show thread' | 'Hide thread'): void {
 const thread = (): Element | null => container.querySelector('section[aria-label="Thread"]')
 
 describe('BoardCommandBar thread visibility', () => {
+  it('keeps one composer character on the supplied shared voice meter', () => {
+    render([])
+    expect(character.render.mock.lastCall![0]).toMatchObject({
+      size: 36,
+      getLevel: props.getVoiceLevel
+    })
+    expect(container.querySelectorAll('[data-composer-character]')).toHaveLength(1)
+  })
+
   it('starts collapsed with restored errors and still allows opening history manually', () => {
     render(saved)
     expect(thread()).toBeNull()

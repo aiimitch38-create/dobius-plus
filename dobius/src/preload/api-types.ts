@@ -3360,6 +3360,7 @@ export type PreloadApi = {
     saveElevenLabsKey: (apiKey: string) => Promise<ElevenLabsKeyStatus>
     clearElevenLabsKey: () => Promise<ElevenLabsKeyStatus>
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
+    cancelAsk: () => Promise<{ ok: true }>
     askAdamText: (utterance: string) => Promise<JarvisAskResult>
     onState: (callback: (event: JarvisStateEvent) => void) => () => void
     onPttPressed: (callback: (data: { at: number }) => void) => () => void

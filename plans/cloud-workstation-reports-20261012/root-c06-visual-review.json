@@ -1,0 +1,37 @@
+{
+  "verdict": "PASS_CURRENT_SOURCE_SLICE",
+  "source": "Actual C06 React components served by Vite; disposable SQLite CloudJobService and real SystemMonitorService",
+  "desktop_evidence": "output/playwright/jobs-final-compact-detail.png",
+  "tested": [
+    "Real job identity and queued lifecycle read from service",
+    "Dispatch paused notice",
+    "Real fresh critical local storage status, fractional timestamps accepted",
+    "Compact metadata spacing and source revision wraps in detail"
+  ],
+  "limits": [
+    "Browser fixture is not installed desktop acceptance",
+    "Phone native 0.0.22/build2 acceptance remains open",
+    "No user job dispatched or queue/task cutover",
+    "Final frozen manifest and peer review required"
+  ],
+  "runtime_fixture": "127.0.0.1:5187 and read-only 127.0.0.1:5191",
+  "final_source_tests": {
+    "manifest": "8fbf4a2aaf1f47e0b9e6bc40ec03efdf8dfb7123ae74f661a3d5ea66eb6d8a28",
+    "files": 29,
+    "hash_mismatches": [],
+    "runtime": "Node24",
+    "desktop_shared": {
+      "files": 8,
+      "passed": 50,
+      "exit_code": 0
+    },
+    "phone": {
+      "files": 4,
+      "passed": 10,
+      "exit_code": 0
+    },
+    "verdict": "PASS_SOURCE",
+    "peer": "PASS_EXACT_CURRENT_FREEZE"
+  },
+  "accepted_at": "2026-10-13T20:36:20.533278+00:00"
+}

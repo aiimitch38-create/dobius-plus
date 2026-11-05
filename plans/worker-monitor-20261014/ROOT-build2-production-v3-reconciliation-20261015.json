@@ -1,0 +1,13 @@
+{
+  "verdict": "V3_CANDIDATE_DELIVERED_PENDING_INDEPENDENT_REVIEW",
+  "dispatch_id": "ctx_117be2210cfa",
+  "report": "/Users/bayou/Projects (Code)/Dobius/dobius-plus/plans/worker-monitor-20261014/BUILD2-adam-production-composition-candidate-v3.md",
+  "report_sha256": "345432ba7f3f34f4914c121531b5ee296cfdab26144c9f4d1c2b29f3b1cf75ca",
+  "manifest_sha256": "8ce0583a2f24ca3a3d61d97767c95b3e24676a44522741d3408fcb009555567c",
+  "candidate_files_verified": 81,
+  "baselines_verified": 18,
+  "recorded_tests": "Author65/65in8suites; strictTS/scopedlintformat/patch PASS, not rerun byROOT",
+  "source_accepted": false,
+  "actual_adam_applied": false,
+  "live_installed": false
+}

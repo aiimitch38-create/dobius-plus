@@ -1,0 +1,13 @@
+{
+  "verdict": "CHANGES_REQUIRED",
+  "dispatch_id": "ctx_27fe61f4d61c",
+  "report": "plans/worker-monitor-20261014/RESEARCH-adam-production-composition-v2-review.md",
+  "report_sha256": "a15b52416b8973d4bb5d815f20b4893ae29b9669e1cd1f2d81ea4fa5e1202e48",
+  "reviewed_manifest_sha256": "7fc192a3c8311f5b2d07b662a7cb506276b445741f15ebba9b82c94254c060d4",
+  "freeze_files_verified": 79,
+  "baselines_verified": 15,
+  "finding": "Production main callers ignore stop false; process exit contradicts incomplete drain and retained DB. Pre-enablement blocker, not currently enabled dispatch.",
+  "recovery_source_review": "Committed-child recovery after permanent human revocation source-corrected; no independent tests run in review.",
+  "source_accepted": false,
+  "live_installed": false
+}

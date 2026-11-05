@@ -302,10 +302,8 @@ export function FloatingTerminalToggleButton({
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation()
-                // Why pressPtt, not openOrb: the app's one canonical voice orb
-                // lives in DictationIndicator (mounted app-wide) and already
-                // reacts to this same broadcast for ⌘T — opening the separate
-                // floating-orb-window here would show a second, different orb.
+                // The app-wide coordinator owns this shortcut and capture;
+                // opening a separate orb window would create a second character.
                 void window.api.jarvis.pressPtt()
               }}
             >

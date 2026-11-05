@@ -1,0 +1,19 @@
+{
+  "id": "085c052e-c8f5-4f3e-a83e-7680e59349d5",
+  "ok": true,
+  "result": {
+    "gate": {
+      "id": "gate_4784951b8be2",
+      "task_id": "task_be6b5cbaf243",
+      "question": "ROOT must verify Telegram exact source freeze, independent tests and IPC/UI/client composition; task completion alone cannot release oversight. If live Telegram needs external registration/sign-in/groups/consent/send rules, obtain Carson sequencing decision before advancing.",
+      "options": "[\"Verified source gates and explicit sequencing satisfied\",\"Hold\"]",
+      "status": "pending",
+      "resolution": null,
+      "created_at": "2026-10-16 17:43:46",
+      "resolved_at": null
+    }
+  },
+  "_meta": {
+    "runtimeId": "6627a505-a9ea-4b59-90e7-d051eb153516"
+  }
+}

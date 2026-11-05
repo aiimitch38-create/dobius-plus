@@ -90,6 +90,9 @@ def _catalog_helper_status(bundle, relative_path):
 
 
 def _missing_adam_gateway_resources(bundle, header, data_offset, archive_size, descriptor, identity):
+    # The required-entry check already rejects a missing main bundle; avoid a second diagnostic.
+    if asar_entry(header, "out/main/index.js") is None:
+        return []
     enabled, error = resource_contract.adam_gateway_capability(
         bundle, header, data_offset, archive_size, descriptor, identity
     )

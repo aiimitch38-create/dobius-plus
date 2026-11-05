@@ -1,0 +1,71 @@
+{
+  "coordinator": "term_d7866049-2f6c-4300-8625-8ddb23563089",
+  "runtime": "61aee79c-aed9-475c-af6d-43d79a0d23cb",
+  "workers": [
+    {
+      "role": "RESEARCH",
+      "handle": "term_1fb64b2c-672b-436b-81e2-cc441db54653",
+      "task_id": "task_f71e50c1aa4d",
+      "title": "Review Laya and capacity integration contracts",
+      "model": "gpt-6-luna",
+      "brief": "plans/worker-wave-20261014T1859/RESEARCH-next.md",
+      "status": "completed",
+      "dispatch_id": "ctx_051508ca9fa6",
+      "last_output_cursor": "2",
+      "delivery_verified": "Exact report and source/artifact hashes read and verified by ROOT.",
+      "previous_task_id": "task_a265092a9741",
+      "activity_verified": true,
+      "acceptance": "Architecture review delivered: changes required before live composition."
+    },
+    {
+      "role": "FIXER",
+      "handle": "term_92538186-324d-4dcf-825a-471cc20cbb8f",
+      "task_id": "task_f8c6a74f5394",
+      "title": "Integrate ADAM recovery lookup into catalog",
+      "model": "gpt-6-luna",
+      "brief": "plans/worker-wave-20261014T1859/FIXER.md",
+      "status": "completed",
+      "dispatch_id": "ctx_724ae2245538",
+      "last_output_cursor": "2",
+      "delivery_verified": "New task prompt and subsequent activity observed; FIXER received separate Enter for pasted dispatch.",
+      "replaced_stuck_terminal": "term_447e9d91-9776-4547-9d1a-007f08eb0161",
+      "tab_id": "3743be3d-e240-4cbd-ba3e-8e9857fae92d",
+      "recovery": "One-for-one terminal replacement after old Codex CLI stopped accepting bound input; reports and source preserved, fresh GPT-6-Luna high CLI reached native tui-idle.",
+      "activity_verified": true,
+      "acceptance": "Source packet delivered; hashes verified by ROOT; independent review pending; no live acceptance."
+    },
+    {
+      "role": "BUILD2",
+      "handle": "term_0cd06599-a46a-4b05-bc37-cdc9b88e1e7e",
+      "task_id": "task_a0541c245738",
+      "title": "Implement shared external reservation ledger foundation",
+      "model": "gpt-6-luna",
+      "brief": "plans/worker-wave-20261014T1859/BUILD2-next.md",
+      "status": "completed",
+      "dispatch_id": "ctx_eb0586d061f5",
+      "last_output_cursor": "2",
+      "delivery_verified": "New task prompt and subsequent activity observed; FIXER received separate Enter for pasted dispatch.",
+      "previous_task_id": "task_a02e7fd32214",
+      "activity_verified": true,
+      "acceptance": "Source packet delivered; hashes verified by ROOT; independent review pending; no live acceptance."
+    },
+    {
+      "role": "BUILD1",
+      "handle": "term_2ba42907-3fdb-425e-bda0-79f5c8fc8e8c",
+      "task_id": "task_4c6cd0320f8c",
+      "title": "Implement fail-closed Laya epoch coordinator",
+      "model": "gpt-6-luna",
+      "brief": "plans/worker-wave-20261014T1859/BUILD1-next.md",
+      "status": "completed",
+      "dispatch_id": "ctx_0bb81ada3ff9",
+      "last_output_cursor": "2",
+      "delivery_verified": "Exact report and source/artifact hashes read and verified by ROOT.",
+      "previous_task_id": "task_71f9efe45c40",
+      "activity_verified": true,
+      "acceptance": "Source packet delivered; hashes verified by ROOT; independent review pending; no live acceptance."
+    }
+  ],
+  "aws": "deferred",
+  "historical_storage_queue": "paused",
+  "head_agents": "Adam and Friday left running; no head input/config changed by this wave."
+}

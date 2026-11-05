@@ -1,0 +1,5 @@
+name: dobius
+kind: model-provider
+version: 1.0.0
+description: Use selected Dobius accounts for inference while Hermes owns the agent loop.
+author: Dobius

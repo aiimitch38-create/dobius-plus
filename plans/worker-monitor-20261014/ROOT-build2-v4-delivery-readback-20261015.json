@@ -1,0 +1,10 @@
+{
+  "task_id": "task_870200e6587d",
+  "dispatch_id": "ctx_65f0283a235a",
+  "user_prompt_verified": true,
+  "submitted_at": "2026-10-15T18:18:33.905Z",
+  "tool_calls_after_prompt": 0,
+  "active_record_read": false,
+  "readback_verdict": "Exact request is a submitted user turn, not a draft. Worker TUI processing it. No resend or restart.",
+  "verified_at": 1792088420.268756
+}

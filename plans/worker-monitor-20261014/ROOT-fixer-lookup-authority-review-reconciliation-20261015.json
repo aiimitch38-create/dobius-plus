@@ -1,0 +1,17 @@
+{
+  "verdict": "CHANGES_REQUIRED",
+  "dispatch_id": "ctx_15ac1fd30bd2",
+  "report": "plans/worker-monitor-20261014/FIXER-adam-main-lookup-authority-correction-review.md",
+  "report_sha256": "8666f313836bc626592b38a11e41ee3ec44dcc2c648c197a828af57dac00463d",
+  "source_hashes_verified": 26,
+  "verified_aggregate": "161e35a3e607c3016af1fb08dfd18015cd9d5b823436eacf58543128e9ed983c",
+  "independent_tests": "PASS 144/144 in 13 suites, Node24 maxWorkers1",
+  "remaining_finding": "Dynamic cloud authorityAvailable is not rechecked across unseal or before lookup/reply.",
+  "closed_findings": [
+    "independent UUIDs",
+    "service/store/project authority and ABA",
+    "catalog clock"
+  ],
+  "source_accepted": false,
+  "live_installed": false
+}

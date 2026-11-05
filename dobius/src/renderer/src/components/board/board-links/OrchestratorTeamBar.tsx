@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
-import { Cable, Check, Plus, Users } from 'lucide-react'
-import { VoiceOrb } from '@/components/dictation/VoiceOrb'
+import { Bot, Cable, Check, Plus, Users } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -179,8 +178,6 @@ export function OrchestratorTeamBar({
   )
 }
 
-const silentLevel = (): number => 0
-
 /** Empty thread: our orb, what to do next, and a direct "Spawn agent". */
 export function OrchestratorEmptyState({
   worktreeId,
@@ -213,8 +210,7 @@ export function OrchestratorEmptyState({
         )
   return (
     <div className="m-auto flex max-w-72 flex-col items-center gap-2 text-center">
-      {/* Why: blend rule; Dobius's VoiceOrb stands in for the reference's orb. Idle level. */}
-      <VoiceOrb size={36} getLevel={silentLevel} />
+      <Bot aria-hidden="true" className="size-9 shrink-0 text-[var(--board-accent)]" />
       <div className="text-[13px] font-semibold text-[var(--board-text)]">{title}</div>
       <div className="text-[12px] text-[var(--board-text-muted)]">{help}</div>
       {!connecting && teamSize === 0 ? (

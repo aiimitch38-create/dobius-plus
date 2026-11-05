@@ -33,6 +33,8 @@ export type JarvisServiceDeps = {
   store: JarvisSettingsStore
   broadcast: JarvisBroadcastPort
   shortcut: JarvisShortcutPort
+  askAgent?: (utterance: string) => Promise<JarvisAskResult>
+  cancelAgent?: () => void
   fetchFn?: typeof fetch
   speakQueue?: (text: string) => Promise<SpeakOutcome>
   now?: () => number
@@ -47,6 +49,7 @@ export type JarvisServiceDeps = {
 export class JarvisService {
   private phase: JarvisConversationPhase = 'idle'
   private shortcutActive = false
+  private askGeneration = 0
   private pttReleaseTimer: NodeJS.Timeout | null = null
   private readonly deps: JarvisServiceDeps
   private readonly wakeMatcher: WakeWordMatcher
@@ -89,6 +92,7 @@ export class JarvisService {
       this.deps.shortcut.unregister()
       this.shortcutActive = false
     }
+    this.cancelAsk()
     this.clearPttReleaseTimer()
     this.wakeMatcher.reset()
     this.transition({ type: 'mode-off' })
@@ -101,18 +105,27 @@ export class JarvisService {
     if (!utterance) {
       return { kind: 'error', text: 'No speech detected' }
     }
+    if (this.phase === 'thinking') {
+      return { kind: 'error', text: 'Adam is already handling a voice request.' }
+    }
+    const generation = ++this.askGeneration
     this.transition({ type: 'ask-started' })
     let result: JarvisAskResult
     try {
-      result = await askAdam({
-        settingsEndpoint: this.deps.store.getSettings().voice?.adamEndpoint,
-        utterance,
-        fetchFn: this.deps.fetchFn
-      })
+      result = this.deps.askAgent
+        ? await this.deps.askAgent(utterance)
+        : await askAdam({
+            settingsEndpoint: this.deps.store.getSettings().voice?.adamEndpoint,
+            utterance,
+            fetchFn: this.deps.fetchFn
+          })
     } catch {
       result = { kind: 'error', text: ADAM_UNREACHABLE_TEXT }
     }
-    if (result.kind === 'error') {
+    if (generation !== this.askGeneration) {
+      return { kind: 'cancelled', text: '' }
+    }
+    if (result.kind === 'error' || result.kind === 'cancelled') {
       this.transition({ type: 'turn-finished' })
       return result
     }
@@ -166,11 +179,20 @@ export class JarvisService {
     }
   }
 
+  cancelAsk(): void {
+    this.askGeneration += 1
+    this.deps.cancelAgent?.()
+    if (this.phase === 'thinking') {
+      this.transition({ type: 'turn-finished' })
+    }
+  }
+
   dispose(): void {
     if (this.shortcutActive) {
       this.deps.shortcut.unregister()
       this.shortcutActive = false
     }
+    this.cancelAsk()
     this.clearPttReleaseTimer()
     this.wakeMatcher.reset()
   }
@@ -183,6 +205,11 @@ export class JarvisService {
    * trigger a turn without opening a second, separate orb surface.
    */
   pressPtt(): void {
+    // A second press cancels inference instead of opening another microphone turn.
+    if (this.phase === 'thinking') {
+      this.cancelAsk()
+      return
+    }
     // globalShortcut cannot distinguish press from release; emit pressed now
     // and a synthetic released shortly after so renderer listeners stay simple.
     this.deps.broadcast(JARVIS_PTT_PRESSED_CHANNEL, { at: Date.now() })

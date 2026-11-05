@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-13T00:00:00-04:00",
+  "coordinator": "term_f4a4221f-4226-4419-aa87-dc2489beb812",
+  "role": "OVERNIGHT",
+  "current_session_handle": "term_b41fe8b1-4141-463e-a405-ce06124b6ae4",
+  "session_handle_verification": "Handle supplied in ROOT instruction; orchestration runtime identity was not queried.",
+  "status": "IDLE; preflight complete; awaiting ROOT explicit source scope",
+  "working_directory": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+  "canonical_repository": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+  "branch": "fix/channel-cost",
+  "head": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+  "git_status": "Pre-existing unrelated modified and untracked files remain. No files were changed by this preflight other than this designated report.",
+  "assignment_conflict": "The previous conversation history carried a BUILD2 C02 corrective assignment. ROOT's October 13 instruction supersedes that work in this tab and explicitly forbids C02/C04 edits. The current assignment is read-only preflight only; no implementation ownership is accepted until ROOT provides explicit source scope.",
+  "manifest_readback": {
+    "coordinator": "term_f4a4221f-4226-4419-aa87-dc2489beb812",
+    "historical_build2_status": "corrective assignment delivered; awaiting acknowledgment",
+    "historical_overnight_status": "new handle/session preflight required; no source assignment"
+  },
+  "readiness": "Ready for a bounded October 13 assignment after ROOT provides explicit ownership.",
+  "constraints_acknowledged": [
+    "AWS setup and historical external-drive work remain deferred/stopped.",
+    "No C02 or C04 source edits.",
+    "No source, Git history/index, service, deployment, install, or agent mutations."
+  ]
+}

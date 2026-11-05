@@ -1,0 +1,9 @@
+{
+  "profile": "adam",
+  "provider": "openai-codex",
+  "auth_mode": "chatgpt",
+  "model": "gpt-6.1-sol",
+  "real_inference": "PASS",
+  "reply": "ADAM_CODEX_VERIFIED",
+  "checked_at": 1792002419.950502
+}

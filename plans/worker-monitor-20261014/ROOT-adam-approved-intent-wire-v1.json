@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "status": "SOURCE_COMPOSITION_CONTRACT_DEFAULT_DISABLED",
+  "methods": {
+    "seal": {
+      "rpc": "adam.sealApprovedIntent",
+      "cli": [
+        "seal-adam-intent",
+        "--request-stdin",
+        "--json"
+      ],
+      "params": {
+        "schemaVersion": 1,
+        "audienceRuntimeId": "canonical runtime UUID",
+        "credential": "ephemeral per-instance canonical base64url 32 bytes; not persisted in intent",
+        "envelope": "existing strict AdamIntentEnvelope: schemaVersion,intentId,identity,capability"
+      },
+      "result": {
+        "schemaVersion": 1,
+        "audienceRuntimeId": "same current runtime",
+        "intentId": "same intent UUID",
+        "identity": "same full binding identity",
+        "sealedEnvelope": "existing main sealer ciphertext string"
+      }
+    },
+    "submit": {
+      "rpc": "adam.submitApprovedIntent",
+      "cli": [
+        "submit-adam-child",
+        "--request-stdin",
+        "--json"
+      ],
+      "params": {
+        "schemaVersion": 1,
+        "audienceRuntimeId": "canonical runtime UUID",
+        "credential": "ephemeral per-instance service credential",
+        "intentId": "stable persisted intent UUID",
+        "identity": "existing strict CloudJobAdamBindingIdentity",
+        "sealedEnvelope": "exact stored ciphertext",
+        "approvedJob": "existing strict canonical CloudJobInput, dependencies unique sorted"
+      },
+      "result": {
+        "schemaVersion": 1,
+        "audienceRuntimeId": "same current runtime",
+        "intentId": "same stable intent",
+        "identity": "same full binding identity",
+        "job": "existing CloudJob DTO; ADAM validates child id/state and input identity fields"
+      }
+    }
+  },
+  "strict_outer_objects": true,
+  "max_json_stdin_bytes": 131072,
+  "identity_authorization": {
+    "trusted_peer": "Non-serializable evidence produced by privileged transport adapter only; unavailable by default. No request body peer/process/proof object trusted.",
+    "registry": "Existing AdamServicePrincipalRegistry.verify credential+trustedpeer; authorize proof against runtime audience, exact RPC method, projectId and resourceId=intentId.",
+    "instance": "proof.identity.serviceId must equal adam; proof.identity.instanceId must exactly equal envelope/DTO identity.adamInstanceId; generation from trusted registry and peer, not user claim.",
+    "final_fence": "Reauthorize immutable proof and current project/queue after every awaited crypto/consume step and synchronously adjacent to atomic child write.",
+    "fresh_submission": "Expired unconsumed refuses; exact previously consumed recovery may return existing child but never mint fresh child after expiry.",
+    "legacy": "Generic local/paired/mobile/shared runtime bearer + literal planner string + plaintext grant cannot access new methods. Old plaintext RPC/CLI submission is refused."
+  },
+  "durable_DTO": {
+    "schemaVersion": 1,
+    "intentId": "stable UUID",
+    "identity": "full existing identity",
+    "sealedEnvelope": "sealed string",
+    "approvedJob": "canonical complete approved payload"
+  },
+  "constraints": [
+    "No raw capability or credential in durable retry DTO, logs, argv, error strings or reports. Seal uses transient capability over bounded stdin only.",
+    "Authoritative approved decision is durably bound to exact decision ID, actor/source proof, parent revision/project, full payload digest, stable intent ID and original expiry. Caller supplied senderId or approve-oldest is insufficient.",
+    "ADAM production bootstrap owns publisher/recovery caller; Dobius production bootstrap owns registry/crypto/ingress. No independent helper-only acceptance.",
+    "Actual trusted approval provider, process proof and persistent protected service enrollment are unavailable by default; no source-only test adapter enables installed bridge.",
+    "No competing Hermes process or head session changes; one Kanban store; ADAM independent lifetime.",
+    "Both implementation owners must use exact RPC names/packet fields above; report necessary contract changes to ROOT before diverging."
+  ]
+}

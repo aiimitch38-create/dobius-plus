@@ -1,0 +1,28 @@
+{
+  "reviewer": "ROOT",
+  "at": "2026-10-13T22:03:42.734991+00:00",
+  "verdict": "CHANGES_REQUIRED",
+  "reviewed_report": "build1.json:c07_ui_implementation",
+  "findings": [
+    {
+      "id": "UI-01",
+      "issue": "Core unavailable expired/invalid_cursor responses have rootId:null, but parser root mismatch check removes the expiry reason before handling it.",
+      "reproduced": "Node24 esbuild bundled current pure desktop parser: valid unavailable expired/null-root became unavailable reason:null different-root message.",
+      "phone": "Same ordering inspected in mobile parser."
+    },
+    {
+      "id": "UI-02",
+      "issue": "A denied continuation appends previousEntries, retaining rows after authorization revoked.",
+      "reproduced": "Real desktop parser with valid denied/access_denied/null-root and prior entry returned phase:denied with that prior entry.",
+      "phone": "Same append inspected in mobile parser."
+    },
+    {
+      "id": "UI-03",
+      "issue": "Silent 1000-row slice can retain complete state and cursor; concurrent same-render loadMore can submit same single-use cursor twice.",
+      "evidence": "Source trace; requested owner regressions and corrected capped state."
+    }
+  ],
+  "source_mutations": false,
+  "owner_corrective_assignment": "BUILD1 existing17paths",
+  "acceptance": "pending"
+}

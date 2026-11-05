@@ -109,8 +109,9 @@ export type JarvisStateEvent = {
   reason?: string
 }
 
-/** Result of asking ADAM a spoken utterance via POST /v1/converse. */
+/** Result of asking Adam through the selected voice backend. */
 export type JarvisAskResult =
+  | { kind: 'cancelled'; text: '' }
   | { kind: 'answer'; text: string }
   | { kind: 'job'; text: string; jobId?: string }
   | { kind: 'error'; text: string }

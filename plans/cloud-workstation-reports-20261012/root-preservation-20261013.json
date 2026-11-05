@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-13T18:45:55.416159+00:00",
+  "original_runtime_preservation_directory": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/runtime-before-c03",
+  "files": {
+    "dobius/src/main/runtime/dobius-runtime.ts": {
+      "sha256": "b677e392f57c2ec19d2f6a061942ec32148f743ed3ae44c29d30c7172038413d",
+      "bytes": 891423
+    },
+    "dobius/src/main/runtime/dobius-runtime.test.ts": {
+      "sha256": "e4e260f26808dfc24e40783fa6cec8aafb7be310bcc7705adc0b5cf8ba975012",
+      "bytes": 872986
+    },
+    "dobius/src/main/runtime/dobius-runtime-files.ts": {
+      "sha256": "49b9f3544d4d3c3f026db9dbed13efb232a1901f45763581b582b1d48d50f4cf",
+      "bytes": 64695
+    },
+    "dobius/src/main/window/attach-main-window-services.ts": {
+      "sha256": "1123397945686b0578fb8bf6527403cc55fbbf1d043cd3fd6cc9d079d1d8a53f",
+      "bytes": 20770
+    },
+    "dobius/src/main/runtime/rpc/methods/files.ts": {
+      "sha256": "eb7d98b7a3fea3c08b2fd6e540ea5bde9ef13d7c17d07749ad8afbf27345686a",
+      "bytes": 14954
+    },
+    "dobius/src/renderer/src/hooks/useIpcEvents.ts": {
+      "sha256": "5878fc212d4a005041e5578219c1bcde4691e1f8cba47ec59f449b96f257d14f",
+      "bytes": 132726
+    }
+  },
+  "count": 6,
+  "note": "Files are nested under canonical source-relative folders; an empty top-level file listing does not mean absent preservation. These are pre-C03 source copies, not a real S3 backup or complete recovery of missing external drive work."
+}

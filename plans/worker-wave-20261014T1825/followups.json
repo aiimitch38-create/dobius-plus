@@ -1,0 +1,27 @@
+[
+  {
+    "brief": "plans/worker-wave-20261014T1825/BUILD2-lookup-review.md",
+    "result": {
+      "task_id": "task_fb3bea12b429",
+      "deps": [
+        "task_bd6e0f6b3bc8",
+        "task_8edf799f5c7b"
+      ]
+    },
+    "role": "BUILD2",
+    "status": "dispatched_actual_worker_activity_verified",
+    "dispatch_id": "ctx_6350ec8230e8"
+  },
+  {
+    "brief": "plans/worker-wave-20261014T1825/BUILD1-entry-transition.md",
+    "result": {
+      "task_id": "task_43ccbdf84922",
+      "deps": [
+        "task_970d7bb5a7d5"
+      ]
+    },
+    "role": "BUILD1",
+    "status": "dispatched_actual_worker_activity_verified",
+    "dispatch_id": "ctx_dc56b2428280"
+  }
+]

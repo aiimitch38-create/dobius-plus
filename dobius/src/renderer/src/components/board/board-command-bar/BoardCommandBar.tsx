@@ -186,7 +186,7 @@ export function BoardCommandBar({
             submit()
           }}
         >
-          <VoiceOrb size={27} getLevel={getVoiceLevel} className="shrink-0" />
+          <VoiceOrb size={36} getLevel={getVoiceLevel} className="shrink-0" />
           <input
             ref={inputRef}
             value={draft}

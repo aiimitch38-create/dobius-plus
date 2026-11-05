@@ -1,0 +1,495 @@
+{
+  "repository": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+  "runtime_id": "6627a505-a9ea-4b59-90e7-d051eb153516",
+  "manager_handle": "term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54",
+  "workers": [
+    {
+      "role": "BUILD2",
+      "handle": "term_cb1517bc-4e25-4549-9526-1eb3ef4f45c0",
+      "report": "plans/cloud-workstation-reports-20261012/build2.json",
+      "previous_task_id": "task_870200e6587d",
+      "assigned_at": 1792173884.651814,
+      "task_id": "task_6cc363ed9354",
+      "dispatch": {
+        "dispatch": {
+          "id": "ctx_65f0283a235a",
+          "task_id": "task_870200e6587d",
+          "assignee_handle": "term_1abbd404-c40c-4beb-8e5c-8da5b7238ece",
+          "status": "dispatched",
+          "failure_count": 0,
+          "last_failure": null,
+          "dispatched_at": "2026-10-15 18:18:02",
+          "completed_at": null,
+          "created_at": "2026-10-15 18:18:02",
+          "last_heartbeat_at": null
+        },
+        "injected": false,
+        "preamble": "You are working inside Dobius, a multi-agent IDE. You are a dispatched worker.\nYour coordinator's terminal handle is: term_02e778a4-11ae-4292-ba0f-49e2473a2ad9\nYour task ID is: task_870200e6587d\n\nYou talk to the coordinator only through the CLI commands below. Do not use\nSlack, GitHub comments, or any other channel to reach a human during the run.\n\n=== CLI COMMANDS ===\n\n  # Report task completion (REQUIRED when done \u2014 even on failure).\n  #\n  # RULE: --body must be a 3-sentence executive summary (what you did,\n  # what you found, what's left). Never send an empty body; the coordinator\n  # reads the body first and only opens artifacts if it needs more detail.\n  # If you produced a long-form artifact, include its path as\n  # payload.reportPath so the coordinator can find it without a file search.\n  #\n  # RULE: send worker_done exactly once. Failure is still a worker_done\n  # with subject like \"Failed: <reason>\" \u2014 never silently exit.\n  # Include BOTH taskId and dispatchId in the payload so a late completion\n  # from a failed retry cannot complete the current dispatch.\n  dobius orchestration send --to term_02e778a4-11ae-4292-ba0f-49e2473a2ad9 \\\n    --type worker_done --subject \"<short status>\" \\\n    --body \"<3-sentence summary: what you did, what you found, what's left>\" \\\n    --task-id task_870200e6587d --dispatch-id ctx_65f0283a235a \\\n    --files-modified \"path/a,path/b\" \\\n    --report-path \"<optional: path to the full artifact>\"\n\n  # BEHAVIOR RULE: send a heartbeat every 5 minutes\n  # while actively working on the task. The coordinator uses this to\n  # distinguish \"still thinking\" from \"hung / crashed.\" Skip heartbeats only\n  # while blocked inside `check --wait` or `ask` \u2014 those calls are\n  # themselves liveness signals.\n  #\n  # Include BOTH taskId and dispatchId in the payload: the coordinator\n  # attributes the heartbeat to the specific dispatch context, not just\n  # the task, so a straggler heartbeat from a previously-failed dispatch\n  # cannot mask a hung retry.\n  dobius orchestration send --to term_02e778a4-11ae-4292-ba0f-49e2473a2ad9 \\\n    --type heartbeat --subject \"alive\" \\\n    --task-id task_870200e6587d --dispatch-id ctx_65f0283a235a \\\n    --phase \"<short: investigating|implementing|reviewing|waiting>\"\n\n  # Ask the coordinator a question and block until it answers.\n  #\n  # BEHAVIOR RULE #1 (MUST NOT VIOLATE):\n  # NEVER use AskUserQuestion; use `dobius orchestration ask` or send\n  # --type decision_gate. AskUserQuestion opens a local TUI prompt that the\n  # coordinator cannot see and cannot answer \u2014 your session will hang forever\n  # waiting on a human. Every interactive question goes through `ask` below.\n  #\n  # The `ask` verb is a thin wrapper: it sends a decision_gate message and\n  # blocks on `check --wait` until the coordinator replies, then prints the\n  # reply body. Use it anywhere you would otherwise have reached for\n  # AskUserQuestion.\n  dobius orchestration ask --to term_02e778a4-11ae-4292-ba0f-49e2473a2ad9 \\\n    --question \"<your question>\" \\\n    --options \"<optional,comma,separated>\" \\\n    --timeout-ms 600000\n\n  # Escalate a blocker or failure (pre-completion, when you need the\n  # coordinator to do something before you can continue):\n  dobius orchestration send --to term_02e778a4-11ae-4292-ba0f-49e2473a2ad9 \\\n    --type escalation --subject \"Blocked: <reason>\" \\\n    --body \"<details>\" \\\n    --task-id task_870200e6587d --dispatch-id ctx_65f0283a235a\n\n  # Check for messages from the coordinator:\n  dobius orchestration check\n\n=== AFTER YOU SEND worker_done ===\n\nKeep the shell session open for a grace period (10 minutes) in case the\ncoordinator sends a follow-up or re-dispatches you. Poll with\n`dobius orchestration check` every 2 minutes during that window. If no\nfollow-up arrives, you may exit after the grace period \u2014 the coordinator\nwill not expect further output from you.\n\nIf the coordinator re-dispatches you (you will receive a fresh preamble +\nTASK block), reset your polling and start the new task. Do not respond\nto the previous task's follow-ups after a re-dispatch.\n\n=== TASK ===\nCorrect ADAM process ownership across first drain and pending one-shot work in V4.\nExisting BUILD2 GPT-6-Luna in /Users/bayou/Projects (Code)/Dobius/dobius-plus. ROOT term_02e778a4-11ae-4292-ba0f-49e2473a2ad9 runtime f3546568-4e43-479f-bdf2-f53faba443f1. Read dobius/AGENTS.md and BUILD2-active-production-task.json after compaction and before completion. AWS deferred; historical Storage paused; exactly two Hermes heads/profiles/accounts remain unchanged. Preserve active app/PTYs and unrelated source. No Git mutation, package/build/install/deploy/restart/downloads, live endpoint/provider/account/keychain/head/device/user-process signal actions. Existing deps, bounded disposable synthetic SQLite and isolated test child processes only. Actual /Users/bayou/dobius/projects/ADAM is READ-ONLY. Accepted Dobius main source is frozen, do not edit it.\nFIRST read plans/worker-monitor-20261014/RESEARCH-adam-production-composition-v3-review.md; exact final review SHA is in active JSON. Review CHANGES_REQUIRED; 65/65 independently passed but two additional isolated Node24 probes reproduced natural exit before safe drain. ROOT independently reran both and confirmed status0 with only EXECUTE_PENDING, or READY/STOP_CALLED and no retry. Probe source /private/tmp/adam-prod-v3-review-tests-20261015/shutdown-unref-gap-probe.mjs is read-only reference if present; report describes complete reproductions if temporary files are gone. These are synthetic processes, no real ADAM services or signals.\nPreserve immutable V1, V2 and V3 candidates and all files. V3 manifest8ce0583a2f24ca3a3d61d97767c95b3e24676a44522741d3408fcb009555567c; V2manifest7fc192a3c8311f5b2d07b662a7cb506276b445741f15ebba9b82c94254c060d4; V1manifest31d705aed3d657f9436ed0d065c57625f8a5a1ece9d20466fe88499753a25a98. Make NEW plans/worker-monitor-20261014/adam-production-composition-candidate-v4 from regular V3 files only; no node_modules/private/live copies or candidate links. Both ROOT base and lookup recovery wire contracts remain immutable. V3 actual entrypoint and lifecycle source must be corrected, not merely documented.\nFix both process-liveness gaps. Promise-only work and process.on(signal) listeners do not keep Node alive. V3 service.stop, publisher drain and callback timers are unref'd, so a referenced retry delay installed AFTER stop returns false cannot protect the first pending stop. V3 once/prepare awaits execute directly, with no lifecycle hold; a signal only sets requestedSignal and the process can naturally exit while execute is unresolved. Establish a genuine referenced lifecycle owner synchronously before the first relevant await, covering startup, active/pending one-shot and prepare work, signal receipt, every first/subsequent stop attempt and rejected/false-drain handling, until all owned work settles and stop confirms true. At minimum acquire synchronously on shutdown signal receipt, but a single correctly scoped hold from lifecycle entry through safe completion may be simpler. Direct exported drain helper callers must also have an explicit ownership contract and equivalent coverage. Release handles exactly once only after safe terminal ownership, so successful paths naturally exit without leaks. Preserve no concurrent stops, coalesced repeated signals, bounded per-attempt retry/backoff, current error status, one machine JSON only after safe drain, no false success/early exit, and production main actually using corrected helper. Diagnostic errors must not release live resources. Never weaken stop to always true, force-close pending DB or force-exit the real process. No default provider/enrollment enablement.\nFor pending execute, choose and document explicit policy: let operation finish while process+DB are retained, then drain, or supported cancellation with inert late completion. Do not stop/close its DB underneath executing work. Preserve late operation failure code and no output before drain; late startup completion cannot restart work/listening after shutdown. An indefinite unresolved operation may safely retain ownership with limited diagnostics, never silently disappear or spin. Cover real production-used coordinator in isolated Node24 child processes WITHOUT test-runner open handles, IPC, stdin or referenced test timers that mask natural-exit bugs. Fake signal callbacks are enough; no real user process signals. Use unref'd fixture timers to resolve operation/false stop/rejected stop/true stop after markers, and assert intermediate retention plus final natural exit and exactly ordered output. Parent watchdogs may terminate ONLY the test-owned child on timeout, never user processes. Required child regressions: first stop with unref deadline false then true; rejected stop then true; once and prepare signal during unresolved execute then late success and late failure; repeated signals; holds released after clean drain so child naturally exits. Preserve permanent-false safety coverage. Add failing-before evidence against disposable V3 source; don't mutate frozen V3. Test real service false seam where practical, not only fake boolean helpers.\nRun original65 tests plus new isolated-child regressions under existing Node24, strict recursive NodeNext main/lifecycle and focused tests, scoped lint/format, exact patch dry-run and disposable byte-identical application. No install. Freeze V4 full regular-file hashes/bytes, complete changed/new list and exact ACTUAL ADAM baselines/absence, patch and true counts; V1/V2/V3 all files unchanged. Write BUILD2-adam-production-composition-candidate-v4.md under plans/worker-monitor-20261014 and atomic append own plans/cloud-workstation-reports-20261012/build2.json key adam-production-composition-candidate-v4-20261015 with NEW task/dispatch, failing-before/pass-after evidence and limits. Actual ADAM remains unapplied/default-disabled. Stop edits for independent review. One worker_done from currenthandle term_1abbd404-c40c-4beb-8e5c-8da5b7238ece toROOT exacttask/dispatch, report fallback if refused, no post-completion polling. Read current active JSON after compaction and before completion.\n"
+      },
+      "status": "completed",
+      "paste": {
+        "send": {
+          "handle": "term_0cd06599-a46a-4b05-bc37-cdc9b88e1e7e",
+          "accepted": true,
+          "bytesWritten": 7714
+        }
+      },
+      "submit": {
+        "handle": "term_0cd06599-a46a-4b05-bc37-cdc9b88e1e7e",
+        "accepted": true,
+        "bytesWritten": 1
+      },
+      "tabId": "58ca9531-fea7-4b24-b83a-cb15df7fff95",
+      "leafId": "f4fb641d-b500-47f7-8cc1-3118a8f4a9a8",
+      "activity_verified": true,
+      "delivery_followup": "Exact prompt still drafted on bounded terminal readback, saved transcript had no new user turn; submitted one separate bound Enter without repaste.",
+      "delivery_verified": true,
+      "delivery_evidence": "Exact new correction task prompt received and compact current task record read in subsequent native worker tool call.",
+      "continuation_reason": "Final manifest digest differs from author receipt; same-task final evidence correction requested before review.",
+      "active_task_file": "plans/worker-monitor-20261014/BUILD2-active-production-task.json",
+      "context_recovery_at": "2026-10-15T04:44:21.693581+00:00",
+      "restored_at": 1792085509.4909928,
+      "previous_runtime_handle": "term_0cd06599-a46a-4b05-bc37-cdc9b88e1e7e",
+      "session_restored": true,
+      "dispatch_id": "ctx_766a77e4ca86",
+      "delivery_proof": {
+        "task_id": "task_6cc363ed9354",
+        "dispatch_id": "ctx_766a77e4ca86",
+        "verification": "Native saved transcript 2026-10-16T18:05:13.318Z exec reads exact correction brief and desktop wrapper source",
+        "checked_at": 1792173925.1772218
+      },
+      "work_phase": "telegram_active_tools",
+      "runtime_rebound_at": 1792169418.413109,
+      "brief_path": "plans/worker-monitor-20261014/BUILD2-telegram-paused-revoke-brief.txt",
+      "active_record": "plans/worker-monitor-20261014/BUILD2-active-telegram-task.json",
+      "hold_reason": "All Telegram source/review/packaging correction work verified;57path source package freeze held for full build. No new task or live activation."
+    },
+    {
+      "role": "BUILD1",
+      "handle": "term_7127bcf7-89b5-4a5b-9c99-9b185d6662cc",
+      "brief": "CURRENT EXECUTION AUTHORITY: the original queued job's V3 review dependency was rejected; ROOT verified corrected V4 PASS task_1788a470460e today, which replaces the obsolete V3 PASS requirement. Both source gates are resolved in ROOT-research-production-v4-reconciliation-20261016.json and ROOT-fixer-dynamic-authority-review-reconciliation-20261015.json. This new active JSON and execution brief supersede stale queue-only instructions and all old runtime/terminal handles. Same joint task_d0a255e2f646, no duplicate job.\nOwner BUILD1, existing GPT-6-Luna resumed session. Canonical repo /Users/bayou/Projects (Code)/Dobius/dobius-plus. Current ROOT/worker/runtime/task/dispatch in BUILD1-active-production-task.json. Read dobius/AGENTS.md. AWS deferred, historical Storage paused. Own new test/runner/fixture/report artifacts only under plans/worker-monitor-20261014/joint-integration (or another focused clearly new harness path there) plus build1.json receipt. Accepted Dobius main source and V4 candidate are frozen/read-only. No production source changes, actual ADAM application, provider enrollment, package/install/deploy/restart/Git/download/live endpoint/account/keychain/head/device/user-process-signal actions. Actual ADAM remains read-only. Existing dependencies, temporary SQLite, synthetic transport/trust and bounded isolated test fixtures only. If production code defect blocks integration, report a failing reproduction and escalate to ROOT, do not silently invalidate source acceptance.\nSource pair: actual /Users/bayou/Projects (Code)/Dobius/dobius-plus/dobius main bridge/store source, 26file aggregate d0bde5b35d036aa6cbcb69d85a13d7482f09baa6de8385f43a728c17bd1deddd; FIXER source review b59821ee55e8c16c01f0c756a72845ebde2540c4a98109f24ab7083e04dc05df, independent148tests. ADAM producer uses reviewed immutable plans/worker-monitor-20261014/adam-production-composition-candidate-v4/service, manifest ddb8bc73f8521af2563cf32cf1d67c1ae20c77fc3db7e65dfe7b22b24d38a96e; Research V4 review hash in activeJSON, independent70tests. Both ROOT base and recovery wire JSON are unchanged. Verify source freezes before and after harness execution; no actual ADAM apply until joint evidence accepted. Parameterize source roots in runner rather than production hardcoding. Do not copy a toy implementation or reimplement protocol logic; import/bundle actual reviewed modules. Node24 SQLite and existing dependencies available; temporary dependency links permitted outside candidate. Main crypto and OS peer/service credentials remain explicitly synthetic test seams.\nExercise actual ADAM approved-decision publisher/store + actual CLI request-stdin adapter packet construction against actual Dobius AdamCloudIntentBridge registry/service/store, separate real temporary ADAM and Dobius databases, and actual ADAM binding-consumption logic at the trusted client seam. Fake invocation transports the actual strict serialized packets into real reviewed handlers; it is not real CLI IPC. Keep synthetic current service proof distinct from human decision authority. Assert database rows/action counts and linkage, not only mock calls. Required composed cases are approved publication into same actual Dobius Kanban store; duplicate/concurrent recovery creates exactly one child and no parent completion; consumed binding+child COMMIT before dropped reply; permanently revoke human decision, close/reopen ADAM DB and advance beyond expiry, recover exact same child by lookup with no second submit/consume/seal/renew/newID; null lookup under revoked/expired approval cannot fresh submit; current service proof or dynamic cloud authority revocation while unseal awaits refuses with no writes or leaked grant; mismatched runtime/project/full identity/payload/response refuses; lease/CAS/stale-generation semantics retained. Distinct intent/binding IDs remain compatible even if normal producer picks equality. Default unconfigured path remains disabled.\nKeep scope practical and coherent: first establish the actual happy-path and committed lost-ACK/reopen cross-system loop, then add meaningful negative/race cases through the same composition. Do not substitute independent unit-suite totals for joint evidence. Runner must be reproducible using existing dependencies, bounded temporary state and no access to user databases/providers. Persist small harness, invocation instructions and exact final source hashes; tests must be useful for future reproduction, not mirror private implementation. Existing native suites need reruns only if new evidence or source drift warrants; avoid broad builds/repeated unchanged tests. V4 lifecycle natural-exit proof is already independently covered; do not duplicate unrelated lifecycle review.\nDeliver BUILD1-adam-dobius-joint-integration.md under plans/worker-monitor-20261014 and atomic append own plans/cloud-workstation-reports-20261012/build1.json key adam-dobius-joint-integration-20261016 with exact current task/dispatch, all harness hashes, commands/results and source freeze hashes, PASS or CHANGES_REQUIRED and concrete defects. Synthetic cross-system PASS still does not establish real OS authentication/enrollment/custody, installed runtime, phone/VPS, or live bridge acceptance. One worker_done from current workerhandle to current ROOThandle with exact task/dispatch; report fallback on denied/unavailable IPC, no restart/retry or post-completion polling. Read activeJSON after compaction and before completion.\n",
+      "report": "plans/cloud-workstation-reports-20261012/build1.json",
+      "previous_task_id": "task_d0a255e2f646",
+      "assigned_at": 1792173975.082736,
+      "task_id": "task_5252d2f2d37f",
+      "dispatch": {
+        "dispatch": {
+          "id": "ctx_a5ff3ffc2d3f",
+          "task_id": "task_d0a255e2f646",
+          "assignee_handle": "term_7127bcf7-89b5-4a5b-9c99-9b185d6662cc",
+          "status": "dispatched",
+          "failure_count": 0,
+          "last_failure": null,
+          "dispatched_at": "2026-10-16 16:56:55",
+          "completed_at": null,
+          "created_at": "2026-10-16 16:56:55",
+          "last_heartbeat_at": null
+        },
+        "injected": false,
+        "preamble": "You are working inside Dobius, a multi-agent IDE. You are a dispatched worker.\nYour coordinator's terminal handle is: term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54\nYour task ID is: task_d0a255e2f646\n\nYou talk to the coordinator only through the CLI commands below. Do not use\nSlack, GitHub comments, or any other channel to reach a human during the run.\n\n=== CLI COMMANDS ===\n\n  # Report task completion (REQUIRED when done \u2014 even on failure).\n  #\n  # RULE: --body must be a 3-sentence executive summary (what you did,\n  # what you found, what's left). Never send an empty body; the coordinator\n  # reads the body first and only opens artifacts if it needs more detail.\n  # If you produced a long-form artifact, include its path as\n  # payload.reportPath so the coordinator can find it without a file search.\n  #\n  # RULE: send worker_done exactly once. Failure is still a worker_done\n  # with subject like \"Failed: <reason>\" \u2014 never silently exit.\n  # Include BOTH taskId and dispatchId in the payload so a late completion\n  # from a failed retry cannot complete the current dispatch.\n  dobius orchestration send --to term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54 \\\n    --type worker_done --subject \"<short status>\" \\\n    --body \"<3-sentence summary: what you did, what you found, what's left>\" \\\n    --task-id task_d0a255e2f646 --dispatch-id ctx_a5ff3ffc2d3f \\\n    --files-modified \"path/a,path/b\" \\\n    --report-path \"<optional: path to the full artifact>\"\n\n  # BEHAVIOR RULE: send a heartbeat every 5 minutes\n  # while actively working on the task. The coordinator uses this to\n  # distinguish \"still thinking\" from \"hung / crashed.\" Skip heartbeats only\n  # while blocked inside `check --wait` or `ask` \u2014 those calls are\n  # themselves liveness signals.\n  #\n  # Include BOTH taskId and dispatchId in the payload: the coordinator\n  # attributes the heartbeat to the specific dispatch context, not just\n  # the task, so a straggler heartbeat from a previously-failed dispatch\n  # cannot mask a hung retry.\n  dobius orchestration send --to term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54 \\\n    --type heartbeat --subject \"alive\" \\\n    --task-id task_d0a255e2f646 --dispatch-id ctx_a5ff3ffc2d3f \\\n    --phase \"<short: investigating|implementing|reviewing|waiting>\"\n\n  # Ask the coordinator a question and block until it answers.\n  #\n  # BEHAVIOR RULE #1 (MUST NOT VIOLATE):\n  # NEVER use AskUserQuestion; use `dobius orchestration ask` or send\n  # --type decision_gate. AskUserQuestion opens a local TUI prompt that the\n  # coordinator cannot see and cannot answer \u2014 your session will hang forever\n  # waiting on a human. Every interactive question goes through `ask` below.\n  #\n  # The `ask` verb is a thin wrapper: it sends a decision_gate message and\n  # blocks on `check --wait` until the coordinator replies, then prints the\n  # reply body. Use it anywhere you would otherwise have reached for\n  # AskUserQuestion.\n  dobius orchestration ask --to term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54 \\\n    --question \"<your question>\" \\\n    --options \"<optional,comma,separated>\" \\\n    --timeout-ms 600000\n\n  # Escalate a blocker or failure (pre-completion, when you need the\n  # coordinator to do something before you can continue):\n  dobius orchestration send --to term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54 \\\n    --type escalation --subject \"Blocked: <reason>\" \\\n    --body \"<details>\" \\\n    --task-id task_d0a255e2f646 --dispatch-id ctx_a5ff3ffc2d3f\n\n  # Check for messages from the coordinator:\n  dobius orchestration check\n\n=== AFTER YOU SEND worker_done ===\n\nKeep the shell session open for a grace period (10 minutes) in case the\ncoordinator sends a follow-up or re-dispatches you. Poll with\n`dobius orchestration check` every 2 minutes during that window. If no\nfollow-up arrives, you may exit after the grace period \u2014 the coordinator\nwill not expect further output from you.\n\nIf the coordinator re-dispatches you (you will receive a fresh preamble +\nTASK block), reset your polling and start the new task. Do not respond\nto the previous task's follow-ups after a re-dispatch.\n\n=== TASK ===\nJoint synthetic ADAM producer and Dobius main bridge integration verification.\nQUEUE ONLY until ROOT has checked BOTH exact independent PASS verdicts: FIXER task_4050055d577b and RESEARCH task_1ba68ddda87e. Task completion alone is not source acceptance. If V3 review requires changes, remain waiting for corrected independently reviewed freeze. ROOT will provide a live dispatch and active record before work; no worker owns this job yet. Existing authorized build, AWS deferred and historical Storage paused. Canonical repo /Users/bayou/Projects (Code)/Dobius/dobius-plus, actual ADAM /Users/bayou/dobius/projects/ADAM. Exactly two Hermes heads stay untouched. No package/install/deploy/restart/provider/credential/account/device/private-config/head/Git or live endpoint actions. Existing deps and synthetic temporary SQLite only.\nAfter both passes, build a bounded reproducible interop harness that exercises the actual reviewed ADAM producer modules and actual reviewed Dobius main bridge/store modules together. Select the exact approved ADAM source root at dispatch (reviewed immutable candidate or ROOT-applied reviewed source), parameterize roots rather than hardcoding private paths into production modules. Own new test/runner artifacts and report only; keep accepted production source and candidate freezes unchanged. Prefer a small standalone verification runner under plans/worker-monitor-20261014 with source roots as explicit inputs; no copied toy implementation or protocol reimplementation. Production code defects go back to the existing owner with a failing reproduction, not silent edits invalidating review.\nUse two distinct real temporary databases. Run actual ADAM approved-decision publication/CLI request-stdin adapter and Dobius AdamCloudIntentBridge with actual service-principal registry and CloudJobService/CloudJobStore. Inject synthetic OS peer/credentials/main crypto and transport runner only at supported trust boundaries, explicitly labeled synthetic. No real CLI IPC, account, keychain, socket or provider. Route the actual strict serialized requests emitted by the actual ADAM bridge through the actual Dobius methods, validating runtime/identity/resource/full payload and canonical fingerprint. Use actual ADAM binding consume/store logic at the main submit client seam. Keep fake human decision authority separate from service/cloud authorization.\nRequired composed cases: approved exact intent seals/submits one child in the same Dobius Kanban store with durable parent/intents linkage; duplicate/concurrent dispatch creates one child and no parent completion. Commit consumed binding and child BEFORE dropping response, then permanently revoke human decision, reopen ADAM database, and recover exactly the same child via authenticated read-only lookup, no second submit/consume/seal/expiry renewal/new intent. Absent lookup plus revoked/expired human authority never creates child. Revoked current service proof or cloud authority refuses lookup, including revocation while unseal is suspended, with no writes/secret leakage. Preserve distinct intent/binding IDs as wire-compatible even if normal producer chooses equality. Reject wrong runtime/project/full identity/canonical payload/malformed response; maintain stale lease/generation fences. Defaults remain disabled without configured authorities. Verify actual V3 process lifecycle false-drain behavior remains covered by native tests rather than treating interop success as lifecycle proof.\nAssertions must inspect both databases and action counts, parent state and canonical job/linkage rather than only mocked calls. Record exact source hashes for both sides, meaningful failing defects if found, synthetic-vs-live limits, test commands and PASS/CHANGES_REQUIRED. Run appropriate existing focused regression suites only as necessary to confirm final source hashes and integration; no broad build or repeated unchanged checks. Write a new joint integration report and own role receipt using the task/dispatch given at execution, freeze harness/artifact hashes. Real OS authentication/enrollment/custody, production secrets, application deployment, phone/VPS and installed live bridge remain separate gates; do not claim them from this harness.\n"
+      },
+      "status": "completed",
+      "paste": {
+        "send": {
+          "handle": "term_2ba42907-3fdb-425e-bda0-79f5c8fc8e8c",
+          "accepted": true,
+          "bytesWritten": 9348
+        }
+      },
+      "submit": {
+        "handle": "term_2ba42907-3fdb-425e-bda0-79f5c8fc8e8c",
+        "accepted": true,
+        "bytesWritten": 1
+      },
+      "tabId": "4c293cce-77ca-4832-8269-e8f6119a0cf0",
+      "leafId": "619f351b-7c0c-4360-adbe-33474f971a12",
+      "activity_verified": true,
+      "delivery_verified": true,
+      "delivery_followup": "Exact new prompt read back still drafted; separate bound Enter submitted without re-paste.",
+      "delivery_evidence": "Exact current correction prompt received and compact active task record read by subsequent native worker tool call.",
+      "active_task_file": "plans/worker-monitor-20261014/BUILD1-active-production-task.json",
+      "context_recovery_at": "2026-10-15T04:44:21.693219+00:00",
+      "restored_at": 1792085509.490995,
+      "previous_runtime_handle": "term_2ba42907-3fdb-425e-bda0-79f5c8fc8e8c",
+      "session_restored": true,
+      "dispatch_id": "ctx_185a6b044b01",
+      "delivery_proof": {
+        "task_id": "task_5252d2f2d37f",
+        "dispatch_id": "ctx_185a6b044b01",
+        "verification": "Native transcript 2026-10-16T18:07:09.586Z reads installed Hermes gateway and tool configuration source for exact assigned research",
+        "checked_at": 1792174045.3532748
+      },
+      "runtime_rebound_at": 1792169418.413121,
+      "work_phase": "telegram_existing_adam_gateway_route_research",
+      "brief_path": "plans/worker-monitor-20261014/BUILD1-telegram-gateway-research-brief.txt",
+      "active_record": "plans/worker-monitor-20261014/BUILD1-active-telegram-gateway-research.json",
+      "hold_reason": "All Telegram source/review/packaging correction work verified;57path source package freeze held for full build. No new task or live activation."
+    },
+    {
+      "role": "RESEARCH",
+      "handle": "term_d892e988-92d2-4eeb-9694-89e5853a18f9",
+      "report": "plans/cloud-workstation-reports-20261012/research.json",
+      "previous_task_id": "task_f5dda6b02206",
+      "assigned_at": 1792174684.243457,
+      "task_id": "task_68fec1bfafe8",
+      "dispatch": {
+        "dispatch": {
+          "id": "ctx_6a8b09d9bacb",
+          "task_id": "task_1788a470460e",
+          "assignee_handle": "term_d892e988-92d2-4eeb-9694-89e5853a18f9",
+          "status": "dispatched",
+          "failure_count": 0,
+          "last_failure": null,
+          "dispatched_at": "2026-10-16 16:50:18",
+          "completed_at": null,
+          "created_at": "2026-10-16 16:50:18",
+          "last_heartbeat_at": null
+        },
+        "injected": false,
+        "preamble": "You are working inside Dobius, a multi-agent IDE. You are a dispatched worker.\nYour coordinator's terminal handle is: term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54\nYour task ID is: task_1788a470460e\n\nYou talk to the coordinator only through the CLI commands below. Do not use\nSlack, GitHub comments, or any other channel to reach a human during the run.\n\n=== CLI COMMANDS ===\n\n  # Report task completion (REQUIRED when done \u2014 even on failure).\n  #\n  # RULE: --body must be a 3-sentence executive summary (what you did,\n  # what you found, what's left). Never send an empty body; the coordinator\n  # reads the body first and only opens artifacts if it needs more detail.\n  # If you produced a long-form artifact, include its path as\n  # payload.reportPath so the coordinator can find it without a file search.\n  #\n  # RULE: send worker_done exactly once. Failure is still a worker_done\n  # with subject like \"Failed: <reason>\" \u2014 never silently exit.\n  # Include BOTH taskId and dispatchId in the payload so a late completion\n  # from a failed retry cannot complete the current dispatch.\n  dobius orchestration send --to term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54 \\\n    --type worker_done --subject \"<short status>\" \\\n    --body \"<3-sentence summary: what you did, what you found, what's left>\" \\\n    --task-id task_1788a470460e --dispatch-id ctx_6a8b09d9bacb \\\n    --files-modified \"path/a,path/b\" \\\n    --report-path \"<optional: path to the full artifact>\"\n\n  # BEHAVIOR RULE: send a heartbeat every 5 minutes\n  # while actively working on the task. The coordinator uses this to\n  # distinguish \"still thinking\" from \"hung / crashed.\" Skip heartbeats only\n  # while blocked inside `check --wait` or `ask` \u2014 those calls are\n  # themselves liveness signals.\n  #\n  # Include BOTH taskId and dispatchId in the payload: the coordinator\n  # attributes the heartbeat to the specific dispatch context, not just\n  # the task, so a straggler heartbeat from a previously-failed dispatch\n  # cannot mask a hung retry.\n  dobius orchestration send --to term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54 \\\n    --type heartbeat --subject \"alive\" \\\n    --task-id task_1788a470460e --dispatch-id ctx_6a8b09d9bacb \\\n    --phase \"<short: investigating|implementing|reviewing|waiting>\"\n\n  # Ask the coordinator a question and block until it answers.\n  #\n  # BEHAVIOR RULE #1 (MUST NOT VIOLATE):\n  # NEVER use AskUserQuestion; use `dobius orchestration ask` or send\n  # --type decision_gate. AskUserQuestion opens a local TUI prompt that the\n  # coordinator cannot see and cannot answer \u2014 your session will hang forever\n  # waiting on a human. Every interactive question goes through `ask` below.\n  #\n  # The `ask` verb is a thin wrapper: it sends a decision_gate message and\n  # blocks on `check --wait` until the coordinator replies, then prints the\n  # reply body. Use it anywhere you would otherwise have reached for\n  # AskUserQuestion.\n  dobius orchestration ask --to term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54 \\\n    --question \"<your question>\" \\\n    --options \"<optional,comma,separated>\" \\\n    --timeout-ms 600000\n\n  # Escalate a blocker or failure (pre-completion, when you need the\n  # coordinator to do something before you can continue):\n  dobius orchestration send --to term_2958d5fd-ff36-4ae7-9f23-6ed32a748f54 \\\n    --type escalation --subject \"Blocked: <reason>\" \\\n    --body \"<details>\" \\\n    --task-id task_1788a470460e --dispatch-id ctx_6a8b09d9bacb\n\n  # Check for messages from the coordinator:\n  dobius orchestration check\n\n=== AFTER YOU SEND worker_done ===\n\nKeep the shell session open for a grace period (10 minutes) in case the\ncoordinator sends a follow-up or re-dispatches you. Poll with\n`dobius orchestration check` every 2 minutes during that window. If no\nfollow-up arrives, you may exit after the grace period \u2014 the coordinator\nwill not expect further output from you.\n\nIf the coordinator re-dispatches you (you will receive a fresh preamble +\nTASK block), reset your polling and start the new task. Do not respond\nto the previous task's follow-ups after a re-dispatch.\n\n=== TASK ===\nIndependent review of ADAM V4 referenced lifecycle ownership and isolated child regressions.\nExisting resumed RESEARCH GPT-6-Luna worker, canonical /Users/bayou/Projects (Code)/Dobius/dobius-plus. Read dobius/AGENTS.md and RESEARCH-active-production-review.json; current coordinator/runtime/dispatch in active JSON replace all stale terminal handles from yesterday. AWS deferred, historical Storage paused. Preserve app/PTYs, exactly two Hermes heads, accounts/profiles and unrelated source. Source/candidate/actual ADAM are read-only; own review artifact and research.json only. No package/build/install/deploy/restart/downloads/Git mutations, live endpoints/services/providers/user signals/private config/keychain/head/device actions. Existing dependencies, bounded temporary SQLite and test-owned isolated child processes allowed.\nRead plans/worker-monitor-20261014/BUILD2-adam-production-composition-candidate-v4.md SHA76eec5c0270d0466d01fb96690920cb53a18be72f0cff725c51b5871244eac7f and build2.json key adam-production-composition-candidate-v4-20261015, author task_870200e6587d / ctx_65f0283a235a. Manifest ddb8bc73f8521af2563cf32cf1d67c1ae20c77fc3db7e65dfe7b22b24d38a96e under adam-production-composition-candidate-v4. Verify84 regular files (81source/tests+3support), hashes/bytes/no symlinks/extras,21changed/new actual ADAM baseline hashes or declared absence against READ-ONLY /Users/bayou/dobius/projects/ADAM. Verify patch ff3ffd0ff9d138e04de3f58ecccc279c962c123755dd2fe831cf1e3d3c93db2d, both ROOT wire contracts and V1/V2/V3 preserved full contents/manifests. V3 manifest8ce0583a2f24ca3a3d61d97767c95b3e24676a44522741d3408fcb009555567c; prior V3 review SHA8b5fdfb583701b039e1070a99f470a0840bd3d8f8cbaeb440e93f17d579e7049. ROOT verified84hashes/21baselines/contracts/report/patch today; author reports70tests/types/lint/format/patch pass. No independent V4 test runs yet.\nYour V3 review found two reproduced gaps despite65tests passing: unref first-stop deadline permits natural exit before retry, and signal during pending once/prepare allows natural exit before execute settles or stop runs. V4 adds process-lifecycle-hold.ts and holds from lifecycle entry through safe terminal drain, plus direct drain-helper ownership. Review actual main.ts wiring and helper, not only mocks. Ownership acquired synchronously before any await, across startup and pending one-shot/prepare, signal receipt, first and subsequent false/rejected stop, bounded serialized backoff and late settlement; release exactly once only after safe drain and status/output. Ensure no force exit, premature release, forgotten handles, concurrent stops, late work after shutdown, early success JSON or changed failure code. Successful paths must naturally exit without leaked referenced handles; permanent unresolved work must remain safely owned with bounded diagnostics. Check thrown diagnostics, onReady/onStopping/output/setExitCode and signal-handler cleanup do not strand unsafe work or mask failure. Current operation policy lets execute settle before closing its DB; verify late success/failure and no parent transition.\nIndependently rerun all9 focused suites per V4manifest/receipt (70tests) using existing Node24/esbuild into fresh bounded temporary output; link existing /Users/bayou/dobius/projects/ADAM/node_modules there if external YAML needs it. No install or candidate links/edits. Isolated child fixtures must not mask liveness through test-runner handles, IPC, stdin or referenced fixture timers. Fake signal callbacks plus unref fixture timers should prove the process survives first stop false/rejection, pending once/prepare and late failure, then exits naturally only after true. Inspect test assertions and run concrete extra disposable probes if a gap is suspected. Parent watchdog may terminate only test-owned children on timeout; never user processes. Reproduce prior V3 failures from frozen source if useful; V3 probes may have been cleaned overnight, reconstruct safely from report/source if needed. Distinguish your checks from author-recorded types/lint/format/patch; run strict scoped checks if helpful.\nRetain all V2/V3 recovery guarantees: exact published intent and current service proof, commit binding+child BEFORE lostACK, permanent human revocation/expired intent/ADAM DB reopen recovers same child via lookup with zero second submit/seal/renew, null without current authority refuses fresh write, current service revocation rejects observation, lease/CAS/stale generations and late callbacks fenced. Production remains default-disabled and actual ADAM unapplied; no real OS peer enrollment/custody or live bridge proof. Accepted Dobius main26file/148test source is separately frozen, do not edit or duplicate that review.\nRecheck exact frozen hashes before completion. Write plans/worker-monitor-20261014/RESEARCH-adam-production-composition-v4-review.md with PASS or CHANGES_REQUIRED, exactfile/line scenario and required regression, test commands/results and source/live limits. Atomic append own plans/cloud-workstation-reports-20261012/research.json key adam-production-composition-candidate-v4-independent-review-20261016 with exact NEWtask/dispatch, artifact SHA and freeze hashes. One worker_done from your CURRENT handle to current ROOT using exact currenttask/dispatch; file fallback if refused, no post-completion polling. Read active JSON after compaction and before completion. Joint integration remains blocked until ROOT verifies this exact successor PASS; task completion alone never unlocks it.\n"
+      },
+      "status": "completed",
+      "paste": {
+        "send": {
+          "handle": "term_1fb64b2c-672b-436b-81e2-cc441db54653",
+          "accepted": true,
+          "bytesWritten": 6886
+        }
+      },
+      "submit": {
+        "accepted": true,
+        "single_bound_enter": true
+      },
+      "tabId": "d1595346-1b4b-4be7-96a7-92762f47c49b",
+      "leafId": "6f253c92-d4b7-48d3-9139-9ee307862545",
+      "activity_verified": true,
+      "delivery_verified": true,
+      "delivery_followup": "Exact new prompt read back still drafted; separate bound Enter submitted without re-paste.",
+      "delivery_evidence": "Exact current review received in native session at 04:47:59Z; subsequent tool call at 04:48:03Z reads active review record.",
+      "restored_at": 1792085509.490997,
+      "previous_runtime_handle": "term_1fb64b2c-672b-436b-81e2-cc441db54653",
+      "session_restored": true,
+      "dispatch_id": "ctx_cda37221d01e",
+      "delivery_proof": {
+        "task_id": "task_68fec1bfafe8",
+        "dispatch_id": "ctx_cda37221d01e",
+        "verification": "Saved native transcript2026-10-16T18:20:28.479Z runs correction-review-v2 probe configuration;18:20:42.216Z reads actual MTProto revoke/disconnect source. Current review tool activity verified.",
+        "checked_at": 1792174867.2425559
+      },
+      "runtime_rebound_at": 1792169418.413126,
+      "work_phase": "telegram_final_independent_review",
+      "brief_path": "plans/worker-monitor-20261014/RESEARCH-telegram-account-correction-review-brief.txt",
+      "active_record": "plans/worker-monitor-20261014/RESEARCH-active-telegram-task.json",
+      "hold_reason": "All Telegram source/review/packaging correction work verified;57path source package freeze held for full build. No new task or live activation."
+    },
+    {
+      "role": "FIXER",
+      "handle": "term_358c3b7b-bd76-446b-9220-5ad5dfdc9127",
+      "report": "plans/cloud-workstation-reports-20261012/fixer.json",
+      "previous_task_id": "task_0f1c842369f2",
+      "assigned_at": 1792175343.408237,
+      "task_id": "task_905a2e437da3",
+      "dispatch": {
+        "dispatch": {
+          "id": "ctx_4eeb2a9a49ae",
+          "task_id": "task_4050055d577b",
+          "assignee_handle": "term_95347d9d-c45f-445e-8b70-d0e463c8ddbb",
+          "status": "dispatched",
+          "failure_count": 0,
+          "last_failure": null,
+          "dispatched_at": "2026-10-15 18:02:33",
+          "completed_at": null,
+          "created_at": "2026-10-15 18:02:33",
+          "last_heartbeat_at": null
+        },
+        "injected": false,
+        "preamble": "You are working inside Dobius, a multi-agent IDE. You are a dispatched worker.\nYour coordinator's terminal handle is: term_02e778a4-11ae-4292-ba0f-49e2473a2ad9\nYour task ID is: task_4050055d577b\n\nYou talk to the coordinator only through the CLI commands below. Do not use\nSlack, GitHub comments, or any other channel to reach a human during the run.\n\n=== CLI COMMANDS ===\n\n  # Report task completion (REQUIRED when done \u2014 even on failure).\n  #\n  # RULE: --body must be a 3-sentence executive summary (what you did,\n  # what you found, what's left). Never send an empty body; the coordinator\n  # reads the body first and only opens artifacts if it needs more detail.\n  # If you produced a long-form artifact, include its path as\n  # payload.reportPath so the coordinator can find it without a file search.\n  #\n  # RULE: send worker_done exactly once. Failure is still a worker_done\n  # with subject like \"Failed: <reason>\" \u2014 never silently exit.\n  # Include BOTH taskId and dispatchId in the payload so a late completion\n  # from a failed retry cannot complete the current dispatch.\n  dobius orchestration send --to term_02e778a4-11ae-4292-ba0f-49e2473a2ad9 \\\n    --type worker_done --subject \"<short status>\" \\\n    --body \"<3-sentence summary: what you did, what you found, what's left>\" \\\n    --task-id task_4050055d577b --dispatch-id ctx_4eeb2a9a49ae \\\n    --files-modified \"path/a,path/b\" \\\n    --report-path \"<optional: path to the full artifact>\"\n\n  # BEHAVIOR RULE: send a heartbeat every 5 minutes\n  # while actively working on the task. The coordinator uses this to\n  # distinguish \"still thinking\" from \"hung / crashed.\" Skip heartbeats only\n  # while blocked inside `check --wait` or `ask` \u2014 those calls are\n  # themselves liveness signals.\n  #\n  # Include BOTH taskId and dispatchId in the payload: the coordinator\n  # attributes the heartbeat to the specific dispatch context, not just\n  # the task, so a straggler heartbeat from a previously-failed dispatch\n  # cannot mask a hung retry.\n  dobius orchestration send --to term_02e778a4-11ae-4292-ba0f-49e2473a2ad9 \\\n    --type heartbeat --subject \"alive\" \\\n    --task-id task_4050055d577b --dispatch-id ctx_4eeb2a9a49ae \\\n    --phase \"<short: investigating|implementing|reviewing|waiting>\"\n\n  # Ask the coordinator a question and block until it answers.\n  #\n  # BEHAVIOR RULE #1 (MUST NOT VIOLATE):\n  # NEVER use AskUserQuestion; use `dobius orchestration ask` or send\n  # --type decision_gate. AskUserQuestion opens a local TUI prompt that the\n  # coordinator cannot see and cannot answer \u2014 your session will hang forever\n  # waiting on a human. Every interactive question goes through `ask` below.\n  #\n  # The `ask` verb is a thin wrapper: it sends a decision_gate message and\n  # blocks on `check --wait` until the coordinator replies, then prints the\n  # reply body. Use it anywhere you would otherwise have reached for\n  # AskUserQuestion.\n  dobius orchestration ask --to term_02e778a4-11ae-4292-ba0f-49e2473a2ad9 \\\n    --question \"<your question>\" \\\n    --options \"<optional,comma,separated>\" \\\n    --timeout-ms 600000\n\n  # Escalate a blocker or failure (pre-completion, when you need the\n  # coordinator to do something before you can continue):\n  dobius orchestration send --to term_02e778a4-11ae-4292-ba0f-49e2473a2ad9 \\\n    --type escalation --subject \"Blocked: <reason>\" \\\n    --body \"<details>\" \\\n    --task-id task_4050055d577b --dispatch-id ctx_4eeb2a9a49ae\n\n  # Check for messages from the coordinator:\n  dobius orchestration check\n\n=== AFTER YOU SEND worker_done ===\n\nKeep the shell session open for a grace period (10 minutes) in case the\ncoordinator sends a follow-up or re-dispatches you. Poll with\n`dobius orchestration check` every 2 minutes during that window. If no\nfollow-up arrives, you may exit after the grace period \u2014 the coordinator\nwill not expect further output from you.\n\nIf the coordinator re-dispatches you (you will receive a fresh preamble +\nTASK block), reset your polling and start the new task. Do not respond\nto the previous task's follow-ups after a re-dispatch.\n\n=== TASK ===\nIndependent final re-review of dynamic cloud authority ADAM lookup correction. Existing FIXER GPT-6-Luna in /Users/bayou/Projects (Code)/Dobius/dobius-plus. ROOT term_02e778a4-11ae-4292-ba0f-49e2473a2ad9 runtime f3546568-4e43-479f-bdf2-f53faba443f1. Read dobius/AGENTS.md and FIXER-active-production-review.json. AWS deferred, historical Storage paused. Preserve app/PTYs/heads/accounts/all unrelated source. Own review artifact and own fixer.json receipt only. Source/candidates/actualADAM READ-ONLY. No Git mutation/build/install/deploy/restart/download/live services/endpoints/providers/device/privateconfig/profile/keychain/head/terminal input. Existing dependencies and bounded temporary synthetic tests only.\nRead author plans/worker-monitor-20261014/BUILD1-adam-main-dynamic-authority-correction.md SHA2955c8adfd34ef20a5e2aaec5ac31a679a8bf9dbd57cacf1cc70d3aae8db32df and build1.json key adam-main-dynamic-authority-correction-20261015 task_eafb9d07bfff / ctx_aa6ca03bdc4d. Verify26source/testhashes, compact sortedmap aggregate d0bde5b35d036aa6cbcb69d85a13d7482f09baa6de8385f43a728c17bd1deddd, authorreport and both immutablewirecontracts basef31b56bec89ac9841afed587eea76e6f5ba085c800f0a26e7760ba60a7e26e6f/recovery75d3cc984bd37cc2279ddcd3793c08c3b3554812c065250af06bf4b268ffb0ac beforeandafterreview. Priorreview FIXER-adam-main-lookup-authority-correction-review.md SHA8666f313836bc626592b38a11e41ee3ec44dcc2c648c197a828af57dac00463d had one dynamicavailability finding; prior independentUUID/service-store-projectABA/clock findings closed. This re-reviewtargetsactualnewsource, not oldtaskreconfirmation.\nInspect minimal correction in CloudJobService.prepareAdamBoundChildLookup: dynamic authorityAvailable callback now partof reader currentness callback, must runafterawait andadjacentto synchronouslookup/reply. False or callbackthrow must fail closed/redacted, absent callbackpreservesexplicitserviceoptional semantics; no asynchronousgap or permissivefallback. Verify actualproductioncallback definition/callsites and readerbridge flow. Review new realtemporarySQLite deferred-unseal tests: toggletrue->false while same proof/store/project/generation; callbackthrow redacted; initialfalse beforeunseal; finalcurrentnesscheckfalse refuses before childreturned; no consume/submit/writes/outbox/events/renewal, unchangedDBsnapshots. Validate normalcurrentauthority succeeds, allpreviousUUID/store/service/projectABA/proofrevocation/disposal/expiry/clock/readonlylookup semantics intact. Historicalhumanrevocation observation is independentofcurrentservice/cloud authority. No new enrollment/defaultprovider/serviceenablement.\nRun focused meaningful tests with existingNode24Vitest maxWorkers1, exact13suitecommand in authorreport, expected148 baseline. Scope additionaledgeprobe only to concrete remaining concern, disposablefixtures no frozen edits. Clearly separate your reruns from authorrecorded stricttypes/lintformat/diff. Author claimed148tests/types/lintformat PASS; ROOT verifiedhashes only. No source/liveacceptance from testsalone. Recheck allfrozenhashes beforecompletion; if drift stopandreportinstead ofassuming.\nWrite plans/worker-monitor-20261014/FIXER-adam-main-dynamic-authority-correction-review.md with PASS or CHANGES_REQUIRED and exactfindings/filelines, verificationcommands/results, source/live limits. Atomicappend own plans/cloud-workstation-reports-20261012/fixer.json key adam-main-dynamic-authority-correction-independent-review-20261015 using NEWcurrenttask/dispatch/reportSHA+freezehashes. No BUILD2 V3 duplication; it remainsactiveotherlane. One worker_done from current FIXERhandle term_95347d9d-c45f-445e-8b70-d0e463c8ddbb toROOT exactcurrenttask/dispatch; filefallback ifrefused, nopostcompletionpolling. Read activeJSON aftercompaction andbeforecompletion."
+      },
+      "status": "completed",
+      "paste": {
+        "send": {
+          "handle": "term_92538186-324d-4dcf-825a-471cc20cbb8f",
+          "accepted": true,
+          "bytesWritten": 6225
+        }
+      },
+      "submit": {
+        "accepted": true,
+        "single_bound_enter": true
+      },
+      "tabId": "2b262216-84cb-4a54-b912-a7ce549d5eab",
+      "leafId": "07961d4c-1f52-4317-89d0-bb250c9652e7",
+      "activity_verified": true,
+      "delivery_followup": "Bounded readback showed exact new dispatch prompt still drafted after accepted initial Enter; separate bound Enter sent, without re-pasting.",
+      "delivery_verified": true,
+      "delivery_evidence": "Exact current review received with subsequent active review recovery record read by worker.",
+      "continuation_reason": "Independent chronology review rejected unsafe overflow; same-task feedback queued with Tab during verified tool activity; prior frozen files released for correction.",
+      "restored_at": 1792085509.490997,
+      "previous_runtime_handle": "term_92538186-324d-4dcf-825a-471cc20cbb8f",
+      "session_restored": true,
+      "dispatch_id": "ctx_549ca304bfa0",
+      "delivery_proof": {
+        "task_id": "task_905a2e437da3",
+        "dispatch_id": "ctx_549ca304bfa0",
+        "verification": "Saved native transcript2026-10-16T19:13:44.766Z and19:13:51.001Z patches only assigned runtime packaging config/test",
+        "checked_at": 1792178056.808554
+      },
+      "runtime_rebound_at": 1792169418.4131331,
+      "work_phase": "telegram_runtime_dependency_packaging_correction",
+      "brief_path": "plans/worker-monitor-20261014/FIXER-telegram-runtime-packaging-brief.txt",
+      "active_record": "plans/worker-monitor-20261014/FIXER-active-telegram-packaging-task.json",
+      "hold_reason": "All Telegram source/review/packaging correction work verified;57path source package freeze held for full build. No new task or live activation."
+    }
+  ],
+  "aws": "deferred",
+  "historical_storage_queue": "paused",
+  "queued_reviews": [
+    {
+      "task_id": "task_55862c68c398",
+      "reviewer": "FIXER",
+      "deps": [
+        "task_aceecc33ad7c",
+        "task_084c674e3bd6"
+      ],
+      "stage": "completed"
+    },
+    {
+      "task_id": "task_8ad92ba45a2a",
+      "reviewer": "BUILD1",
+      "deps": [
+        "task_e83af6e17d4e",
+        "task_ff7efe0d3adb"
+      ],
+      "stage": "completed"
+    },
+    {
+      "task_id": "task_96d2437b0c75",
+      "reviewer": "BUILD1",
+      "author": "BUILD2",
+      "deps": [
+        "task_7127bdae5af6"
+      ],
+      "stage": "completed"
+    },
+    {
+      "task_id": "task_b5f2eac895c0",
+      "reviewer": "RESEARCH",
+      "author": "FIXER",
+      "deps": [
+        "task_d8e9877efd38"
+      ],
+      "stage": "completed"
+    },
+    {
+      "task_id": "task_32d4d0e05aa2",
+      "reviewer": "BUILD1",
+      "author": "FIXER",
+      "deps": [
+        "task_831144618693"
+      ],
+      "stage": "completed",
+      "reviewer_change_reason": "RESEARCH owns separate corrected submit candidate; BUILD1 verified idle independent reviewer.",
+      "verdict": "CHANGES_REQUIRED"
+    },
+    {
+      "task_id": "task_127d2376449d",
+      "owner": "FIXER",
+      "kind": "implementation_correction",
+      "deps": [
+        "task_4dd3dbe94fa0"
+      ],
+      "stage": "completed",
+      "brief": "plans/worker-monitor-20261014/FIXER-adam-intent-instance-replay-correction.md"
+    },
+    {
+      "task_id": "task_fbe4d2531d62",
+      "reviewer": "BUILD1",
+      "author": "FIXER",
+      "deps": [
+        "task_127d2376449d"
+      ],
+      "stage": "completed",
+      "verdict": "PASS_BOUNDED_SOURCE"
+    },
+    {
+      "task_id": "task_bc3ed03be810",
+      "reviewer": "RESEARCH",
+      "author": "BUILD2",
+      "deps": [
+        "task_34cfe451c5fb"
+      ],
+      "stage": "completed",
+      "verdict": "PASS_BOUNDED_SOURCE"
+    },
+    {
+      "task_id": "task_0b4ccc6caf04",
+      "reviewer": "FIXER",
+      "author": "BUILD1",
+      "deps": [
+        "task_e356060bf93b"
+      ],
+      "stage": "completed_changes_required",
+      "dispatch_id": "ctx_31e46c7a7e31"
+    },
+    {
+      "task_id": "task_597f98995100",
+      "reviewer": "RESEARCH",
+      "author": "BUILD2",
+      "deps": [
+        "task_b9dbfe8edc15"
+      ],
+      "stage": "completed",
+      "dispatch_id": "ctx_98c0564a12fd"
+    },
+    {
+      "task_id": "task_fac3baa06943",
+      "reviewer": "FIXER",
+      "author": "BUILD1",
+      "deps": [
+        "task_42d4bf7eabfe"
+      ],
+      "stage": "completed",
+      "dispatch_id": "ctx_4fb1ebc85d2d"
+    },
+    {
+      "task_id": "task_b107b13c4c4c",
+      "reviewer": "FIXER",
+      "author": "BUILD1",
+      "deps": [
+        "task_43f9388a61f5"
+      ],
+      "stage": "completed",
+      "dispatch_id": "ctx_66ce89786472"
+    },
+    {
+      "task_id": "task_c82d8f56568e",
+      "reviewer": "RESEARCH",
+      "author": "BUILD2",
+      "deps": [
+        "task_0b5e494e5532"
+      ],
+      "stage": "completed_independent_review_required",
+      "dispatch_id": "ctx_6a1156abf01e"
+    },
+    {
+      "task_id": "task_e878760f70d5",
+      "reviewer": "BUILD1",
+      "author": "ROOT / RESEARCH",
+      "deps": [],
+      "stage": "completed",
+      "dispatch_id": "ctx_573a19bf24c3",
+      "verdict": "PASS_RESEARCH_RECOMMENDATION"
+    },
+    {
+      "task_id": "task_53202f4b2b63",
+      "reviewer": "RESEARCH",
+      "author": "BUILD1",
+      "deps": [
+        "task_6272605624be"
+      ],
+      "stage": "completed",
+      "dispatch_id": "ctx_62d46313c08c",
+      "verdict": "PASS_BOUNDED_SOURCE"
+    },
+    {
+      "task_id": "task_fd930da7b5f4",
+      "reviewer": "RESEARCH",
+      "author": "BUILD2",
+      "deps": [
+        "task_6ad060f67b64"
+      ],
+      "stage": "completed",
+      "dispatch_id": "ctx_139a7d7868db",
+      "verdict": "CHANGES_REQUIRED"
+    },
+    {
+      "task_id": "task_c02a299323c1",
+      "reviewer": "BUILD1",
+      "author": "FIXER",
+      "deps": [
+        "task_0a6cd6c049b9"
+      ],
+      "stage": "completed",
+      "dispatch_id": "ctx_1d5ba0bb0bea",
+      "verdict": "CHANGES_REQUIRED"
+    },
+    {
+      "task_id": "task_b7c711b49a88",
+      "reviewer": "RESEARCH",
+      "author": "BUILD2",
+      "deps": [
+        "task_4a82d5909af6"
+      ],
+      "stage": "completed",
+      "dispatch_id": "ctx_5503e6b8d61e",
+      "verdict": "PASS_BOUNDED_CANDIDATE_SOURCE"
+    },
+    {
+      "task_id": "task_ea7db05a7279",
+      "reviewer": "BUILD1",
+      "author": "FIXER",
+      "deps": [
+        "task_25f1dc2c0ca3"
+      ],
+      "stage": "completed",
+      "dispatch_id": "ctx_116c372e4279",
+      "verdict": "CHANGES_REQUIRED"
+    },
+    {
+      "task_id": "task_5c1893cc3671",
+      "dispatch_id": "ctx_23f661efe79f",
+      "reviewer": "BUILD1",
+      "author": "FIXER",
+      "deps": [
+        "task_dcaa4f8dcdfd"
+      ],
+      "stage": "completed",
+      "verdict": "CHANGES_REQUIRED"
+    },
+    {
+      "task_id": "task_a4be87144be5",
+      "dispatch_id": "ctx_c1edc08f2ea2",
+      "reviewer": "BUILD1",
+      "author": "FIXER",
+      "deps": [
+        "task_e1707fc26dcf"
+      ],
+      "stage": "completed",
+      "verdict": "PASS_BOUNDED_SOURCE"
+    },
+    {
+      "task_id": "task_40a039c44372",
+      "dispatch_id": "ctx_f6cb293d8b6b",
+      "reviewer": "RESEARCH",
+      "author": "BUILD2",
+      "deps": [
+        "task_bec00b4864cc"
+      ],
+      "stage": "completed",
+      "verdict": "CHANGES_REQUIRED"
+    },
+    {
+      "task_id": "task_5f3608c866a2",
+      "dispatch_id": "ctx_df21d59f99ed",
+      "reviewer": "FIXER",
+      "author": "BUILD1",
+      "deps": [
+        "task_2de8559c7700"
+      ],
+      "stage": "completed",
+      "verdict": "CHANGES_REQUIRED"
+    },
+    {
+      "task_id": "task_dbc825623b16",
+      "dispatch_id": "ctx_0e4e52e72d02",
+      "reviewer": "FIXER",
+      "author": "BUILD1",
+      "deps": [
+        "task_3bca6e58b215"
+      ],
+      "stage": "completed",
+      "verdict": "CHANGES_REQUIRED"
+    }
+  ],
+  "telegram_package_evidence_path": "/Users/bayou/Library/Application Support/Dobius Build Monitor/telegram-package-ready-20261016.json"
+}

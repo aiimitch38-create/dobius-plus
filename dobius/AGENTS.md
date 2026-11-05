@@ -20,6 +20,17 @@ Dobius+ repo: `~/Projects (Code)/Dobius/dobius-plus`.
 - Before installing, verify with `git rev-parse --show-toplevel` that you are
   in that repo (or one of its worktrees).
 
+## Installed Release Baseline
+
+Before a local release, read the installed app's provenance and preserve its UI/release
+commit in the candidate's ancestry. Work in an integration worktree when branches diverge;
+do not overwrite existing dirty work. Commit the integrated release before building so
+the installer can verify its history. A version bump and `--take-over` are insufficient.
+Never automatically add `--allow-history-divergence` to overcome the source-history gate.
+
+Verify the actual running Home and Board interfaces before declaring an install complete,
+including both voice character placements. CLI health checks alone cannot detect a UI regression.
+
 ## Design System
 
 All UI work — layout, color, typography, spacing, component selection, UX behavior — must follow [`docs/STYLEGUIDE.md`](./docs/STYLEGUIDE.md). Use the tokens defined in `src/renderer/src/assets/main.css` (the canonical source) and the shadcn primitives in `src/renderer/src/components/ui/`. Don't invent new color values, font sizes, or shadow tiers when a documented one already covers the role. When STYLEGUIDE.md is silent, follow the resolution order in its final section.

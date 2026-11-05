@@ -15,7 +15,13 @@ const { stub } = vi.hoisted(() => ({
 vi.mock('./HomeTopPills', () => ({ HomeTopPills: stub('HomeTopPills'), homeStatusText: () => '' }))
 vi.mock('./HomeLauncherBar', () => ({ HomeLauncherBar: stub('HomeLauncherBar') }))
 vi.mock('./HomeRepoList', () => ({ HomeRepoList: stub('HomeRepoList') }))
-vi.mock('@/components/dictation/VoiceOrb', () => ({ VoiceOrb: stub('VoiceOrb') }))
+const character = vi.hoisted(() => ({ render: vi.fn() }))
+vi.mock('@/components/dictation/VoiceOrb', () => ({
+  VoiceOrb: (props: { size: number; getLevel: () => number }) => {
+    character.render(props)
+    return <div data-home-stub="VoiceOrb" />
+  }
+}))
 vi.mock('@/components/dictation/voice-orb-live-level', () => ({
   voiceOrbLevelSource: { current: () => 0 }
 }))
@@ -101,6 +107,14 @@ function renderHome(): void {
 }
 
 describe('BoardHome studio host', () => {
+  it('keeps the greeting character on the shared voice meter', () => {
+    renderHome()
+    const props = character.render.mock.lastCall![0]
+    expect(props.size).toBe(112)
+    expect(props.getLevel()).toBe(0)
+    expect(container.querySelectorAll('[data-home-stub="VoiceOrb"]')).toHaveLength(1)
+  })
+
   it('renders Home with no studio host until one is opened', () => {
     renderHome()
     expect(container.textContent).toContain('stub:HomeLauncherBar')

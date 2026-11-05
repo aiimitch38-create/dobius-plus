@@ -1,0 +1,2405 @@
+{
+  "at": "2026-10-14T01:31:28.324106+00:00",
+  "desktop": {
+    "path": "/Applications/Dobius+.app",
+    "version": "2.0.0",
+    "build": "17",
+    "provenance": {
+      "repo": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+      "branch": "fix/channel-cost",
+      "commit": "a8d6be50",
+      "dirty": true,
+      "diffDigest": "sha256:43037826b2f6daef6a64f354350afb503381d6b617f7b648cd67bc867b79897c",
+      "tag": null,
+      "capturedAt": "2026-10-14T01:22:41.030Z",
+      "buildNumber": 17,
+      "builtAt": "2026-10-14T01:26:16.548Z"
+    }
+  },
+  "runtime_id": "993d5ed8-6063-41c1-9007-04ad74b81cc4",
+  "build_exit": 0,
+  "bundle_manifest_exit": 0,
+  "signature_verification_exit": 0,
+  "api_smoke": {
+    "system.monitor.status": {
+      "configured": true,
+      "availability": "available",
+      "health": "critical",
+      "freshness": "fresh",
+      "reason": null,
+      "cleanupEnabled": false
+    },
+    "jobs.status": {
+      "configured": false,
+      "dispatchEnabled": false,
+      "liveDispatchReady": false
+    },
+    "data.catalog.roots": {
+      "state": "ready",
+      "root_count": 0
+    },
+    "unregistered_root": {
+      "state": "denied",
+      "reason": "access_denied",
+      "scannedEntries": 0
+    }
+  },
+  "restore": {
+    "manifest": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/checkpoint-1791924074.json",
+    "files_compared": 175,
+    "mismatches": [],
+    "head_match": true,
+    "restored_tests_passed": 25,
+    "off_device_protection": false
+  },
+  "worker_tabs": [
+    {
+      "handle": "term_6317b499-8fd3-4426-b0cd-da3a843b3d57",
+      "ptyId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1@@00889aa5",
+      "tabId": "483bca0d-1cc0-4a81-8ace-d2c2570af953",
+      "leafId": "583d4256-f0bf-403c-9983-540ede87dced",
+      "connected": true,
+      "writable": true
+    },
+    {
+      "handle": "term_2bb507d2-4bd0-44e8-92ea-c974f4187ed7",
+      "ptyId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1@@4f7f16e5",
+      "tabId": "71b7896c-506e-4077-aaa4-9c68297ca65b",
+      "leafId": "9219d3d0-a92a-4b27-b0da-c6730f015402",
+      "connected": true,
+      "writable": true
+    },
+    {
+      "handle": "term_e002db4d-635e-46aa-b147-1fff33b13f68",
+      "ptyId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1@@0f0adb78",
+      "tabId": "fcd4421d-1961-4e42-98de-20f4663a2632",
+      "leafId": "7f091590-2f46-4336-a3c4-6489a907a81a",
+      "connected": true,
+      "writable": true
+    },
+    {
+      "handle": "term_1c0e93b0-7839-4952-bff4-42dc2dd206e9",
+      "ptyId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1@@cdfcfcdb",
+      "tabId": "27cf461c-5199-4034-be40-015b46c9fc67",
+      "leafId": "68b4b1a1-6cab-4321-a279-530829fade94",
+      "connected": true,
+      "writable": true
+    },
+    {
+      "handle": "term_28213146-c465-438d-b4d3-c404daeea17b",
+      "ptyId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1@@bb6ee687",
+      "tabId": "829fd563-f698-4451-bdbb-2b95a139f7b5",
+      "leafId": "8218d135-e259-4052-bab1-787d3e426e6d",
+      "connected": true,
+      "writable": true
+    }
+  ],
+  "acceptance_open": [
+    "VPS complete artifact build/deploy blocked by RAM; speech-pause approval still pending",
+    "Phone physical version/UI/focus acceptance blocked by missing developer disk image device variant",
+    "Live cloud queue/QueuePort/Hermes enrollment and dispatch not activated",
+    "Production Laya epoch adapter, provider and quality evaluation missing",
+    "C07 original-content preview contract/implementation pending",
+    "ADAM new workstation bridge audit delivered; implementation/live acceptance pending"
+  ],
+  "standalone_observer": {
+    "status": "RESEARCH exact two-file peer PASS; launchd running; actual bound notification accepted",
+    "files_sha256": {
+      "scripts/worker_report_watch.py": "684cfd176cbe577e4f5b280bb5a0d77ef68dbbbe1071eadb2701dbaa2bd76420",
+      "scripts/test_worker_report_watch.py": "903702c84cfb39cfaff89adf05708eb29ed5a88cb9638f1cdaacf9585019e878"
+    },
+    "compiled_app_change": false,
+    "launchd_label": "com.verlosolutions.dobius.workstation-reports",
+    "pid": 24195,
+    "last_delivery": {
+      "state": "accepted",
+      "reports": [
+        "build2.json"
+      ],
+      "at": 1791925728.051739
+    }
+  },
+  "bound_transport_smoke": {
+    "accepted": false,
+    "bytesWritten": 0
+  },
+  "vps_access": {
+    "state": "verified",
+    "at": "2026-10-13T21:18:08.792541+00:00",
+    "evidence": "Tailscale SSH checked; node --version v22.23.2; read-only deployment preflight follows"
+  },
+  "vps_recovery_checkpoint": {
+    "verified_at": "2026-10-13T21:24:54.294062+00:00",
+    "head": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+    "branch": "fix/channel-cost",
+    "transferred_components_verified": {
+      "repository-history.bundle": "5d48c9fa081285ad5242a2d31f0d998e7eb67aab033ddffa1ac0c7e1080177dc",
+      "working-changes-1791924074.patch": "f74609d9e2eb90e3ce55aade88910127f850bfb2f3283c574ab2bac50e764801",
+      "untracked-source-1791924074.tgz": "661d287df8a2a03d9af7e391df92c05056ee1f159826260bfec2b4ddc09c731c",
+      "checkpoint-1791924074.json": "aaf4f32afcceb3e69688abfd5ce5f088dac7cd4fe10801e9c350e0e8db3a4cee"
+    },
+    "restored_project": "/srv/dobius/recovery/cloud-workstation-20261013-build16/restored-project",
+    "files_compared": 175,
+    "mismatches": [],
+    "tests": [
+      {
+        "folder": "scripts",
+        "pattern": "test_worker_report_watch.py",
+        "exit_code": 0,
+        "summary": ".........\n----------------------------------------------------------------------\nRan 9 tests in 1.436s\n\nOK\n"
+      },
+      {
+        "folder": "dobius/config/scripts/laya-evaluation",
+        "pattern": "test_decision_evaluate.py",
+        "exit_code": 0,
+        "summary": "................\n----------------------------------------------------------------------\nRan 16 tests in 0.040s\n\nOK\n"
+      }
+    ],
+    "off_device_checkpoint": true,
+    "aws_used": false,
+    "limitations": [
+      "One private VPS checkpoint; no S3, scheduled protection, or storage-at-rest encryption claim",
+      "Covers build16 source snapshot; later catalog/resume/observer changes require another checkpoint",
+      "Does not cover app state, personal Obsidian contents, credentials, or native/dependency artifacts",
+      "No production source, Metro, serve service, dispatcher, or original laptop files changed"
+    ]
+  },
+  "vps_preflight": {
+    "os": "Ubuntu24.04.4",
+    "arch": "x86_64",
+    "libc": "glibc2.39",
+    "node": "22.23.2",
+    "canonical_source_head": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+    "canonical_dirty": false,
+    "services": [
+      "dobius-serve active/enabled",
+      "dobius-metro active/enabled"
+    ],
+    "free_bytes_before_checkpoint": 83512541184,
+    "memory_available_MiB": 2770,
+    "swap_MiB": 0,
+    "build_status": "Both isolated full-graph attempts stopped at memory guard. Serial compiler passed node+CLI; renderer exceeded guard. No artifacts, no deployment; existing services/source preserved.",
+    "serial_checker_receipt": {
+      "finished_at": "2026-10-13T22:02:03.502988+00:00",
+      "source_head": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+      "commands": [
+        {
+          "command": [
+            "node_modules/@typescript/native-preview/bin/tsgo.js",
+            "--checkers",
+            "1",
+            "--noEmit",
+            "-p",
+            "config/tsconfig.node.json"
+          ],
+          "exit_code": 0,
+          "abort_reason": null
+        },
+        {
+          "command": [
+            "node_modules/@typescript/native-preview/bin/tsgo.js",
+            "--checkers",
+            "1",
+            "--noEmit",
+            "-p",
+            "config/tsconfig.tc.cli.json"
+          ],
+          "exit_code": 0,
+          "abort_reason": null
+        },
+        {
+          "command": [
+            "node_modules/@typescript/native-preview/bin/tsgo.js",
+            "--checkers",
+            "1",
+            "--noEmit",
+            "-p",
+            "config/tsconfig.tc.web.json"
+          ],
+          "exit_code": -15,
+          "abort_reason": "memory_guard"
+        }
+      ],
+      "elapsed_seconds": 170.48,
+      "minimum_available_memory_bytes": 676003840,
+      "artifacts": [],
+      "resource_configuration": {
+        "typecheck_checkers": 1,
+        "go_memory_limit": "384MiB",
+        "go_gc_percent": 20,
+        "full_desktop_graph_preserved": true
+      },
+      "deployed": false,
+      "services_changed": false,
+      "production_source_changed": false
+    }
+  },
+  "phone_launcher_current": {
+    "verifiedAt": "2026-10-13T21:25:48.758968+00:00",
+    "url": "http://100.98.24.1:8081",
+    "version": "0.0.22",
+    "deepLink": "exp+dobius-mobile://expo-development-client/?url=http%3A%2F%2F100.98.24.1%3A8081",
+    "bundleBytes": 21585143,
+    "bundleSha256": "b3fc49e36e232150c2df1234155cc91e2abb9f39e5a32cec410bcff70ac0f5e2",
+    "bundleSeconds": 5.26,
+    "iconSha256": "a95d69078334ff0e899bf05f72e56ffee1b1a679f90415f47cffab81da1841b2",
+    "javascriptSyntax": "passed"
+  },
+  "current_source_integration": {
+    "catalog_registration": "Reopened by actual Linux inode ABA; ROOT birthtimeNs + grant-reset correction active",
+    "catalog_rpc": "15-filec70ee27d FIXERpeerPASS,9ROOT+peer fixturetests; current full Node checkPASS; packaged/live verification pending",
+    "catalog_core": "fe9 source peer PASS superseded by Linux failure; FIXER stronger native incarnation correction active",
+    "catalog_descriptor": "ba888720 exact bridge kernel fixtures PASS Mac/Linux; outbound root identity projection correction requested",
+    "catalog_ui": "17-fileaaace1c1 RESEARCHpeerPASS;12desktop/9phone tests; iOSHermescandidate exportPASS after rootMetro dependencywatch fix, no deployment",
+    "session_restore": "BUILD2 full C11 frozen-manifest completion requested; Overnight stays stopped",
+    "installed": "Build16 remains installed; these additions are not installed"
+  },
+  "linux_catalog_bridge": {
+    "at": "2026-10-13T22:04:57.063431+00:00",
+    "platform": "Linux",
+    "source_aggregate_sha256": "ba88872000aead5d8969d7092518d13ab24bc78be82a751fcdf8bbe6493be3e2",
+    "eight_file_hashes_match_before_and_after": true,
+    "commands": [
+      {
+        "command": [
+          "/usr/bin/python3",
+          "-B",
+          "-m",
+          "unittest",
+          "-v",
+          "config/scripts/data-catalog/test_descriptor_directory_bridge.py"
+        ],
+        "exit_code": 0,
+        "abort_reason": null
+      },
+      {
+        "command": [
+          "/srv/dobius/recovery/cloud-workstation-20261013-build16/tools/node-v24.18.0-linux-x64/bin/node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "--config",
+          "vitest.fixture.config.mts",
+          "src/main/storage/data-catalog/descriptor-directory-bridge.test.ts",
+          "src/main/storage/data-catalog/descriptor-directory-transport.test.ts",
+          "--maxWorkers=1"
+        ],
+        "exit_code": 0,
+        "abort_reason": null
+      }
+    ],
+    "minimum_available_memory_bytes": 2920812544,
+    "production_source_changed": false,
+    "services_changed": false,
+    "production_roots_scanned": false,
+    "fixture_directory": "/srv/dobius/recovery/cloud-workstation-20261013-build16/catalog-verification-ba888720",
+    "checks": {
+      "python": 8,
+      "node": 13,
+      "result": "PASS exact eight-file corrected lifecycle freeze, temporary fixtures only"
+    }
+  },
+  "linux_catalog_integrated_attempt": {
+    "at": "2026-10-13T22:10:53.730779+00:00",
+    "platform": "Linux",
+    "source_aggregate_sha256": "bcd8134e4c1735f61dd776b3c86257edacfe9404e414875df67a680ad9a52717",
+    "all_fixture_file_hashes_match_before_and_after": true,
+    "commands": [
+      {
+        "command": [
+          "/usr/bin/python3",
+          "-B",
+          "-m",
+          "unittest",
+          "-v",
+          "config/scripts/data-catalog/test_descriptor_directory_bridge.py"
+        ],
+        "exit_code": 0,
+        "abort_reason": null
+      },
+      {
+        "command": [
+          "/srv/dobius/recovery/cloud-workstation-20261013-build16/tools/node-v24.18.0-linux-x64/bin/node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "--config",
+          "vitest.fixture.config.mts",
+          "src/main/storage/data-catalog/descriptor-directory-bridge.test.ts",
+          "src/main/storage/data-catalog/descriptor-directory-transport.test.ts",
+          "src/main/storage/data-catalog/registered-roots.test.ts",
+          "src/main/storage/data-catalog/metadata-scanner.test.ts",
+          "src/main/storage/data-catalog/catalog-service.test.ts",
+          "src/main/storage/data-catalog/root-enrollment-store.test.ts",
+          "src/main/storage/data-catalog/root-enrollment-identity.test.ts",
+          "src/main/storage/data-catalog/application-catalog-factory.test.ts",
+          "--maxWorkers=1"
+        ],
+        "exit_code": 1,
+        "abort_reason": null
+      }
+    ],
+    "minimum_available_memory_bytes": 2919612416,
+    "production_source_changed": false,
+    "services_changed": false,
+    "production_roots_scanned": false,
+    "fixture_directory": "/srv/dobius/recovery/cloud-workstation-20261013-build16/catalog-integrated-verification-bcd8134e",
+    "test_counts": {
+      "python_passed": 8,
+      "node_passed": 59,
+      "node_failed": 1
+    },
+    "finding": "Actual root delete/recreate reused same dev/ino; authorization retained. Strong native incarnation correction active; prior source acceptance reopened."
+  },
+  "phone_candidate_export": {
+    "result": "PASS Expo iOS export exit0 with relocated dependency watch root",
+    "phone_version": "0.0.22 native unchanged",
+    "deployed": false,
+    "source_metro_sha256": "2634eb16d0fa4c3eca0fa44ef4592d3edde6c15b12db3ec3e1c229bb5069b30f",
+    "files": [
+      {
+        "path": "metadata.json",
+        "bytes": 1653,
+        "sha256": "05410d9b04d3f6a863168cc1f789c9813cd125da694bd4cc8a7a868478a260a6"
+      },
+      {
+        "path": "_expo/static/js/ios/entry-1e070b3cac8e1e675653433fb820e6ca.hbc",
+        "bytes": 10990876,
+        "sha256": "eec5adf8e09b5250e18aabb9d5505bfd96b10617e8dd87fec0d57c243085bf74"
+      }
+    ],
+    "limitations": "Hermes candidate compilation, not physical/native/new-served-JS acceptance",
+    "metro_peer_review": {
+      "report": "build1.json:metro_config_review",
+      "verdict": "PASS_READ_ONLY_REVIEW",
+      "sha256": "2634eb16d0fa4c3eca0fa44ef4592d3edde6c15b12db3ec3e1c229bb5069b30f",
+      "lint_format_exit": 0
+    }
+  },
+  "catalog_root_incarnation_reopened": {
+    "recorded_at": "2026-10-13T22:30:20.227508+00:00",
+    "state": "CHANGES_REQUIRED_NATIVE_PROOF",
+    "birth_only_stress": {
+      "trials": 100,
+      "inode_reused": 100,
+      "same_inode_and_birth": 13
+    },
+    "linux_native_generation_stress": {
+      "trials": 1000,
+      "inode_reused": 1000,
+      "same_inode_and_generation": 0,
+      "generation_zero": 0
+    },
+    "linux_probe": "read-only FS_IOC_GETVERSION on owned temporary directories, runuser dobius; all fixtures removed",
+    "receipt": "~/Documents/Dobius Recovery/cloud-workstation-20261013/linux-root-generation-stress.json",
+    "platform_contract": "RESEARCH read-only native incarnation preflight; no source acceptance until Mac and Linux contract independently verified",
+    "production_scan": false,
+    "installation": false
+  },
+  "c11_broad_verification": {
+    "recorded_at": "2026-10-13T22:32:04.114547+00:00",
+    "freeze": "96b6f85ffe0df4dd4b37a4a1172f83617f4aff2663fac6df8f2fe2302bcf09e4",
+    "state": "SOURCE_ACCEPTED_ROOT_767_TESTS_AND_EXACT_PEER_PASS_NOT_INSTALLED",
+    "passed": 767,
+    "failed": 0,
+    "suites": [
+      "src/main/ipc/pty.test.ts",
+      "src/renderer/src/components/terminal-pane/pty-connection.test.ts",
+      "src/main/agent-hooks/server.test.ts"
+    ],
+    "blockers": [
+      "sshSpawn undefined in new authority test, wrong scope unused binding",
+      "33 PTY data/exit/write failures require triage",
+      "hidden backlog write callback assertion failure"
+    ],
+    "owner": "BUILD2",
+    "peer": {
+      "report": "build1.json:c11_independent_review_corrected_0afab497",
+      "verdict": "PASS_EXACT_FROZEN_SOURCE",
+      "package_sha256": "0afab497d9189882d83638b6fcd7e827caa19df0b08ca269e3ce6195e9072739",
+      "scope": "31files, source only; installed runtime acceptance open"
+    },
+    "log": "~/Documents/Dobius Recovery/cloud-workstation-20261013/root-c11-broad-verification-38a692d7.log",
+    "tested_source_freeze": "38a692d7751ed4cf862453fcb492ac4c98656d3b65af4660d295ccffe90dd5ca",
+    "current_package_freeze": "0afab497d9189882d83638b6fcd7e827caa19df0b08ca269e3ce6195e9072739",
+    "current_package_files": 31,
+    "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/pty.test.ts src/renderer/src/components/terminal-pane/pty-connection.test.ts src/main/agent-hooks/server.test.ts --maxWorkers=1",
+    "exit_code": 0,
+    "source_delta_since_run": "Adds existing replay test and byte-identical durable doc; full tested PTY/hook sources unchanged"
+  },
+  "latest_vps_source_checkpoint": {
+    "verified_at": "2026-10-14T01:22:44.840980+00:00",
+    "source_files_verified": 285,
+    "mismatches": [],
+    "head": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+    "branch": "fix/channel-cost",
+    "restored_project": "/srv/dobius/recovery/source-checkpoint-1791940919/restored-project",
+    "tests": [
+      {
+        "command": [
+          "python3",
+          "-B",
+          "-m",
+          "unittest",
+          "scripts.test_bundle_manifest",
+          "-v"
+        ],
+        "exit_code": 0,
+        "summary": "(scripts.test_bundle_manifest.BundleManifestCatalogResourceTests.test_oversized_asar_header_is_rejected_before_reading_it) ... ok\ntest_symlinked_unpacked_main_parent_fails_closed (scripts.test_bundle_manifest.BundleManifestCatalogResourceTests.test_symlinked_unpacked_main_parent_fails_closed) ... ok\n\n----------------------------------------------------------------------\nRan 17 tests in 0.114s\n\nOK\n"
+      },
+      {
+        "command": [
+          "python3",
+          "-B",
+          "scripts/bundle-resource-contract-test.py",
+          "-v"
+        ],
+        "exit_code": 0,
+        "summary": ".. ok\ntest_parent_swap_after_directory_open_reads_pinned_original_directory (__main__.BundleResourceContractTests.test_parent_swap_after_directory_open_reads_pinned_original_directory) ... ok\ntest_parent_symlink_is_rejected (__main__.BundleResourceContractTests.test_parent_symlink_is_rejected) ... ok\n\n----------------------------------------------------------------------\nRan 7 tests in 0.120s\n\nOK\n"
+      }
+    ],
+    "aws_used": false,
+    "production_services_changed": false,
+    "scope": "Canonical Dobius source/plan recovery only; no personal vault, secrets, app state, native artifacts, dependency trees, other-project work, AWS or deployment acceptance.",
+    "remote_checkpoint": "/srv/dobius/recovery/source-checkpoint-1791940919",
+    "off_device_checkpoint": true
+  },
+  "latest_vps_health": {
+    "checked_at": "2026-10-13T22:44:56.386686+00:00",
+    "dobius_metro": "active",
+    "dobius_serve": "active",
+    "dobius_stt": "active",
+    "available_ram_mib": 2884,
+    "available_disk_gib": 73,
+    "services_modified": false
+  },
+  "phone_device_availability": {
+    "at": "2026-10-14T01:31:28.324106+00:00",
+    "one_device": "unavailable",
+    "second_device": "available_paired",
+    "installed_app_query": "NONPASS: developer disk image missing requested device variant; CoreDevice12040/0xe800010f",
+    "native_version_changed": false,
+    "actual_current_version_not_independently_confirmed": true,
+    "evidence": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/phone-installed-version-1791940919.json"
+  },
+  "native_catalog_root_registration": {
+    "at": "2026-10-13T22:47:20.427049+00:00",
+    "manifest": "root-catalog-registration.json",
+    "aggregate_sha256": "527e7a8eddeaf705f1decdb12d28f95522d616286b5ff78bbe750b4e9905d8f4",
+    "source_files": 7,
+    "tests_passed": 21,
+    "peer": "build1.json:c07_native_registration_peer_review PASS",
+    "real_filesystem": "Mac native APFS temporary roots only",
+    "integration": "Linux and installed runtime gates open"
+  },
+  "native_catalog_application": {
+    "manifest": "root-catalog-application.json",
+    "aggregate_sha256": "67632b6aa6ef0c9bb8edd1d779fa83a558b844eb5ed110bd6eaa144feec513d2",
+    "source_files": 16,
+    "tests_passed": 10,
+    "peer": "fixer.json:c07_application_native_wiring_independent_review PASS",
+    "packaged_fixture": "descriptor and sibling native identity modules staged together; real temporary metadata reads",
+    "installation": false
+  },
+  "native_catalog_core": {
+    "manifest": "fixer.json:c07_native_incarnation_contract_correction.frozen_scope",
+    "aggregate_sha256": "3a70c3edc2b45fb53134f9f251999f55221694e5ccadbb5dfd2054c096e32bba",
+    "source_files": 11,
+    "peer": "build1.json:c07_native_incarnation_peer_review PASS",
+    "tests_passed": 36,
+    "native_provider_gate": "Separate RESEARCH bridge and Linux integrated evidence required"
+  },
+  "linux_native_python_attempt": {
+    "receipt": "~/Documents/Dobius Recovery/cloud-workstation-20261013/linux-native-python-verification-1791931874.json",
+    "fixture": "/srv/dobius/recovery/catalog-native-python-1791931874",
+    "python_tests_run": 17,
+    "passed": 16,
+    "errors": 1,
+    "finding": "Explicit filesystem root / does not provide nonzero supported incarnation on actual Linux; test incorrectly assumed all roots usable. Production zero/unsupported refusal stays in force. Native temp-root provider/recreation checks passed.",
+    "correction_owner": "RESEARCH",
+    "state": "CHANGES_REQUIRED_TEST_CAPABILITY_EXPECTATION",
+    "services_changed": false
+  },
+  "linux_catalog_native_integrated": {
+    "at": "2026-10-13T22:54:50.747850+00:00",
+    "platform": "Linux",
+    "source_aggregate_sha256": "99f77e2289330442698f860529ec721e265eabb713a22df8ce3adcb9450ee959",
+    "all_fixture_file_hashes_match_before_and_after": true,
+    "commands": [
+      {
+        "command": [
+          "/usr/bin/python3",
+          "-B",
+          "-m",
+          "unittest",
+          "-v",
+          "config/scripts/data-catalog/test_descriptor_directory_bridge.py",
+          "config/scripts/data-catalog/test_native_root_identity.py"
+        ],
+        "exit_code": 0,
+        "abort_reason": null
+      },
+      {
+        "command": [
+          "/srv/dobius/recovery/cloud-workstation-20261013-build16/tools/node-v24.18.0-linux-x64/bin/node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "--config",
+          "vitest.fixture.config.mts",
+          "src/main/storage/data-catalog/descriptor-directory-bridge.test.ts",
+          "src/main/storage/data-catalog/descriptor-directory-transport.test.ts",
+          "src/main/storage/data-catalog/registered-roots.test.ts",
+          "src/main/storage/data-catalog/metadata-scanner.test.ts",
+          "src/main/storage/data-catalog/catalog-service.test.ts",
+          "src/main/storage/data-catalog/root-enrollment-store.test.ts",
+          "src/main/storage/data-catalog/root-enrollment-identity.test.ts",
+          "src/main/storage/data-catalog/application-catalog-factory.test.ts",
+          "--maxWorkers=1"
+        ],
+        "exit_code": 0,
+        "abort_reason": null
+      }
+    ],
+    "minimum_available_memory_bytes": 2904600576,
+    "production_source_changed": false,
+    "services_changed": false,
+    "production_roots_scanned": false,
+    "fixture_directory": "/srv/dobius/recovery/cloud-workstation-20261013-build16/catalog-native-verification-99f77e228933",
+    "node_tests_passed": 82,
+    "python_tests_passed": 17,
+    "local_receipt": "~/Documents/Dobius Recovery/cloud-workstation-20261013/catalog-native-99f77e228933-verification.json",
+    "production_acceptance": "Temporary fixtures only; final native bridge peer and full package/runtime still pending"
+  },
+  "native_catalog_bridge": {
+    "source_manifest": "research.json:descriptor_bridge_native_provider_freeze",
+    "source_files": 10,
+    "owner_aggregate_sha256": "3a3510eaa41f159852198f9e70199f2e156531f0349f339515567d365db63728",
+    "peer": "fixer.json:c07_native_provider_bridge_independent_review PASS",
+    "linux_integration": "99f77e228933, all29files stable,82Node17PythonPASS",
+    "state": "SOURCE_ACCEPTED_NATIVE_MAC_LINUX_NOT_INSTALLED"
+  },
+  "release_source_typecheck": {
+    "at": "2026-10-13T23:02:13.151863+00:00",
+    "runtime": "Node24.18.0",
+    "command": "pnpm run typecheck",
+    "exit_code": 0,
+    "scope": "Node,CLI,renderer whole-project typechecks",
+    "source": "Before C09 review corrections; later changes require final build/typecheck",
+    "log": "~/Documents/Dobius Recovery/cloud-workstation-20261013/root-final-native-advisory-typecheck.log"
+  },
+  "c09_root_review": {
+    "freeze": "1e18f8111af9cc850bfbc01dc43ce3e138c25f36b3aba144110c6194826b300f",
+    "state": "CHANGES_REQUIRED",
+    "findings": [
+      "Whole-request deadline/capacity missing around initial and post-inference authority/gate reads",
+      "Abort-ignoring inference can outlive released execution permit",
+      "Cache/dedup omit complete evaluated gate identity and thresholds",
+      "Relative journal path can loop forever walking parents",
+      "Multi-process verify/append lacks exclusive writer lock"
+    ],
+    "owner": "BUILD2",
+    "independent_reviewer": "RESEARCH",
+    "immutable_source": "~/Documents/Dobius Recovery/cloud-workstation-20261013/advisory-review-1e18f811",
+    "deployment": false
+  },
+  "accepted_native_resume_recovery_candidate": {
+    "at": "2026-10-13T23:09:43.448905+00:00",
+    "candidate": "/srv/dobius/recovery/native-resume-candidate-a88425ac4fa7",
+    "accepted_overlay_files": 93,
+    "restored_source_files": 281,
+    "overlay_sha256": "a88425ac4fa7f1822d81b46f4679944de7b89afc3508abbfbd045715e2b63fa9",
+    "source_hash_verification": "PASS before and after accepted overlay",
+    "c09_unaccepted_source_excluded": true,
+    "build": "NONPASS: renderer type check stopped by memory guard; Node and CLI type checks passed; no artifact",
+    "deployed": false,
+    "build_result": {
+      "finished_at": "2026-10-13T23:13:52.823303+00:00",
+      "source_head": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+      "source_files_verified": 281,
+      "source_hashes_unchanged": true,
+      "commands": [
+        {
+          "command": [
+            "config/scripts/check-node-toolchain.mjs"
+          ],
+          "exit_code": 0,
+          "abort_reason": null
+        },
+        {
+          "command": [
+            "config/scripts/electron-builder-with-build-number.mjs",
+            "--snapshot-source"
+          ],
+          "exit_code": 0,
+          "abort_reason": null
+        },
+        {
+          "command": [
+            "node_modules/@typescript/native-preview/bin/tsgo.js",
+            "--checkers",
+            "1",
+            "--noEmit",
+            "-p",
+            "config/tsconfig.node.json"
+          ],
+          "exit_code": 0,
+          "abort_reason": null
+        },
+        {
+          "command": [
+            "node_modules/@typescript/native-preview/bin/tsgo.js",
+            "--checkers",
+            "1",
+            "--noEmit",
+            "-p",
+            "config/tsconfig.tc.cli.json"
+          ],
+          "exit_code": 0,
+          "abort_reason": null
+        },
+        {
+          "command": [
+            "node_modules/@typescript/native-preview/bin/tsgo.js",
+            "--checkers",
+            "1",
+            "--noEmit",
+            "-p",
+            "config/tsconfig.tc.web.json"
+          ],
+          "exit_code": -15,
+          "abort_reason": "memory_guard"
+        }
+      ],
+      "elapsed_seconds": 152.48,
+      "minimum_available_memory_bytes": 668815360,
+      "artifacts": [],
+      "resource_configuration": {
+        "typecheck_checkers": 1,
+        "go_memory_limit": "384MiB",
+        "go_gc_percent": 20,
+        "full_desktop_graph_preserved": true
+      },
+      "deployed": false,
+      "services_changed": false,
+      "production_source_changed": false
+    },
+    "supported_typescript_attempt": {
+      "at": "2026-10-13T23:22:51.671251+00:00",
+      "reason": "Native Go checker exceeds available VPS memory at renderer; try repository installed JavaScript TypeScript compiler with same Node/CLI/renderer project configs and1536MiB heap",
+      "validation_bypassed": false,
+      "full_graph_preserved": true,
+      "source_hashes_guarded": 281,
+      "minimum_available_memory_guard_mib": 650,
+      "services_changed": false,
+      "production_deployment": false,
+      "result": "NONPASS; completed",
+      "completed_result": {
+        "finished_at": "2026-10-13T23:23:44.692537+00:00",
+        "source_head": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+        "source_files_verified": 281,
+        "source_hashes_unchanged": true,
+        "commands": [
+          {
+            "command": [
+              "config/scripts/check-node-toolchain.mjs"
+            ],
+            "exit_code": 0,
+            "abort_reason": null
+          },
+          {
+            "command": [
+              "config/scripts/electron-builder-with-build-number.mjs",
+              "--snapshot-source"
+            ],
+            "exit_code": 0,
+            "abort_reason": null
+          },
+          {
+            "command": [
+              "node_modules/typescript/bin/tsc",
+              "--noEmit",
+              "--composite",
+              "false",
+              "--incremental",
+              "false",
+              "-p",
+              "config/tsconfig.node.json"
+            ],
+            "exit_code": -6,
+            "abort_reason": null
+          }
+        ],
+        "elapsed_seconds": 54.06,
+        "minimum_available_memory_bytes": 1272270848,
+        "artifacts": [],
+        "resource_configuration": {
+          "typechecker": "installed TypeScript JS compiler; same three configs, noEmit",
+          "node_heap_limit_mib": 1536,
+          "full_desktop_graph_preserved": true
+        },
+        "deployed": false,
+        "services_changed": false,
+        "production_source_changed": false
+      },
+      "local_evidence": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/linux-build-typescript-full-graph-result.json"
+    },
+    "typescript_2048_attempt": {
+      "result": "NONPASS; completed",
+      "completed_result": {
+        "finished_at": "2026-10-14T00:52:09.958546+00:00",
+        "source_head": "a8d6be50e7527b545b969f338d76dc7c41c36f56",
+        "source_files_verified": 281,
+        "source_hashes_unchanged": true,
+        "commands": [
+          {
+            "command": [
+              "config/scripts/check-node-toolchain.mjs"
+            ],
+            "exit_code": 0,
+            "abort_reason": null
+          },
+          {
+            "command": [
+              "config/scripts/electron-builder-with-build-number.mjs",
+              "--snapshot-source"
+            ],
+            "exit_code": 0,
+            "abort_reason": null
+          },
+          {
+            "command": [
+              "node_modules/typescript/bin/tsc",
+              "--noEmit",
+              "--composite",
+              "false",
+              "--incremental",
+              "false",
+              "-p",
+              "config/tsconfig.node.json"
+            ],
+            "exit_code": -15,
+            "abort_reason": "memory_guard"
+          }
+        ],
+        "elapsed_seconds": 76.43,
+        "minimum_available_memory_bytes": 671096832,
+        "artifacts": [],
+        "resource_configuration": {
+          "typechecker": "installed TypeScript JS compiler; same three configs, noEmit",
+          "node_heap_limit_mib": 2048,
+          "full_desktop_graph_preserved": true
+        },
+        "deployed": false,
+        "services_changed": false,
+        "production_source_changed": false
+      },
+      "local_evidence": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/linux-build-typescript-2048-full-graph-result.json"
+    }
+  },
+  "c09_root_corrected_review": {
+    "at": "2026-10-13T23:13:26.118335+00:00",
+    "aggregate_sha256": "0b319bbd0eee4f6b491005af39b8c1e5282277b9355ceb63e11f3c5ad86eceaf",
+    "files_verified": 13,
+    "verdict": "CHANGES_REQUIRED",
+    "original_four_blockers": "Corrected by source inspection and prior focused owner regression evidence",
+    "controlled_test_result": "24 existing service tests PASS; one added ROOT cache authority-change regression FAIL",
+    "finding": "Cache hit bypasses post-await source/gate revalidation; trusted authority changes during availability await yet cached old suggestion returned",
+    "repro": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/advisory-review-0b319bbd/dobius/src/main/decisions/laya-advisory-service.test.ts",
+    "additional_defensive_requests": [
+      "Reject relative/non-progressing directory helper input",
+      "Reject nonfinite/noninteger constructor budgets"
+    ],
+    "owner_followup": "Delivered via runtime-bound BUILD2 terminal",
+    "deployed": false
+  },
+  "release_catalog_resource_gate_review": {
+    "at": "2026-10-13T23:17:36.343968+00:00",
+    "reviewer": "ROOT independent source review",
+    "aggregate_sha256": "1b787fb9c8dd54dec49345158b053bfbbe2973381e2e5e2bfa83f4328325460c",
+    "files_verified": 4,
+    "verdict": "REOPENED_ROLLBACK_COMPATIBILITY",
+    "tests": "ROOT5 synthetic bundle tests PASS; owner87 focused installer/docs tests PASS",
+    "behavior": "Both catalog helpers mandatory nonempty readable actual regular files; helper symlinks refused; framework symlinks preserved; original installer assertions unchanged",
+    "installed_artifact_verification": "Pending next gated install",
+    "finding": "Installed build16 has neither catalog helper; unconditional new gate rejects documented rollback. Requires feature-aware compatibility without bypassing current catalog requirements."
+  },
+  "adam_connection_preliminary": {
+    "at": "2026-10-13T23:17:36.343968+00:00",
+    "source": "/Users/bayou/dobius/projects/ADAM/service/src",
+    "live_public_health": {
+      "endpoint": "http://127.0.0.1:8791/health",
+      "http_status": 200,
+      "ok": true,
+      "service": "adam",
+      "limit": "Public liveness only; authenticated connection and running source revision not proved"
+    },
+    "existing_dobius_contracts": [
+      "Jarvis POST /v1/converse",
+      "Agent journal delivery POST /v1/events/ingest",
+      "ADAM CLI awareness/terminal adapter"
+    ],
+    "gaps_found": [
+      "Separate ADAM JobStore and Dobius CloudJobStore, no execution-state bridge found in bounded source search",
+      "ADAM terminal send adapter lacks newer runtime/agent-state guard and assumes older result DTO",
+      "ADAM bundle guard defaults macOS-only paths",
+      "No ADAM consumers of catalog/monitor/jobs.snapshot/Laya found in service source search"
+    ],
+    "independent_audits": "RESEARCH architecture/contracts; FIXER Dobius adapters",
+    "services_changed": false,
+    "queues_started": false
+  },
+  "adam_audits_returned": {
+    "at": "2026-10-13T23:20:14.364564+00:00",
+    "adapter_report": "fixer.json:adam_operating_system_audit",
+    "contract_report": "research.json:adam_operating_system_contract_audit",
+    "independent_peer_review": "PASS both corrected exact audit documents; source audit only",
+    "audit_documents": {
+      "dobius/docs/reference/ADAM-WORKSTATION-INTEGRATION-AUDIT.md": "3111436837277f64e7112130bf2473dba1722c0f2a47a86391dabd3368b72ab3",
+      "dobius/docs/reference/ADAM-OPERATING-SYSTEM-CONTRACT-AUDIT.md": "49c976da0b5e68b29a8a611e60c0684be474d701204e7942106627f5f305d53e"
+    },
+    "focused_tests_owner": "100 PASS; execution-gate inconclusive; ROOT rerun started with Node24/UV32 and90s owned process deadline",
+    "implemented_changes": false,
+    "live_integration_proven": false
+  },
+  "adam_execution_handshake_verification": {
+    "at": "2026-10-13T23:20:15.202486+00:00",
+    "command": [
+      "/Users/bayou/homebrew/opt/node@24/bin/node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--config",
+      "config/vitest.config.ts",
+      "src/main/agents/execution-gate-adam.test.ts",
+      "--maxWorkers=1",
+      "--no-file-parallelism"
+    ],
+    "exit_code": 0,
+    "abort_reason": null,
+    "seconds": 2.0,
+    "log": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/root-adam-execution-gate-1791933600.log",
+    "production_adam_called": false,
+    "tests_passed": 19,
+    "runtime": "Node24.18.0 UV_THREADPOOL_SIZE32; ephemeral fake ADAM only",
+    "limit": "Proves handshake refusal/timeout/auth-header/pause source contract, no authenticated productionADAM or run-context transfer proof",
+    "earlier_owner_inconclusive_attempt": "Retained historical report; later ROOT isolated run passes"
+  },
+  "audit_documentation_reconciliation": {
+    "at": "2026-10-13T23:21:15.869287+00:00",
+    "changes": "Corrected stale monitor/catalog READMEs to describe current read-only IPC/RPC/client composition, distinct preview permission and source/live acceptance boundaries",
+    "paths_sha256": {
+      "dobius/src/main/system-monitor/README.md": "865ca26f2d11d632f4ab1f18e43e9317953c11f0838042338cc1096e0eead307",
+      "dobius/src/main/storage/data-catalog/README.md": "6540a5ddb679254d2cce8c5cf3afb6a7b0e2a301d089a242c44aad4d40eb588c"
+    },
+    "source_behavior_changed": false,
+    "historical_source_freezes": "Preserved; next recovery/build manifest must capture new documentation hashes"
+  },
+  "adam_latest_public_health": {
+    "at": "2026-10-14T00:52:20.833081+00:00",
+    "http_status": 200,
+    "ok": true,
+    "service": "adam",
+    "limit": "Public liveness only; no authenticated request or credential read"
+  },
+  "c09_coherent_authority_review": {
+    "at": "2026-10-14T01:15:25.571791+00:00",
+    "source_aggregate_sha256": "7d66f72310e209dcbd9cb7ea20683d5d1a1533301e775cc5cdf708f4cbfa8ac7",
+    "status": "PASS_EXACT_SOURCE_ONLY; ROOT source review, FIXER independent52 tests, full three-config typecheck",
+    "hashes_verified": 15,
+    "full_typecheck": {
+      "command": "PATH=/Users/bayou/homebrew/opt/node@24/bin:$PATH UV_THREADPOOL_SIZE=32 pnpm run typecheck",
+      "cwd": "dobius",
+      "exit_code": 0,
+      "configs": [
+        "config/tsconfig.node.json",
+        "config/tsconfig.tc.cli.json",
+        "config/tsconfig.tc.web.json"
+      ]
+    },
+    "production_epoch_adapter": false,
+    "production_provider": false,
+    "peer_review": "fixer.json:c09_coherent_authority_peer_review",
+    "hashes_after_peer_tests": "7d66f72310e209dcbd9cb7ea20683d5d1a1533301e775cc5cdf708f4cbfa8ac7",
+    "canonical_head_root_verified": "a8d6be50e7527b545b969f338d76dc7c41c36f56"
+  },
+  "vps_build_resource_blocker": {
+    "at": "2026-10-14T01:00:35.148017+00:00",
+    "attempts": [
+      "Native Go fullgraph renderer memory guard",
+      "JS TypeScript1536MiB heap exhausted",
+      "JS TypeScript2048MiB memory guard"
+    ],
+    "source_hashes_preserved": 281,
+    "artifacts_produced": false,
+    "service_mutations": false,
+    "approval_question": "Pending optional temporary speech-service pause; no dependent pause/build proceeds without reply",
+    "private_input_candidate": "/srv/dobius/recovery/native-resume-candidate-a88425ac4fa7",
+    "live_services_reverified_at": "2026-10-14T01:15:25.571791+00:00",
+    "live_services_active": [
+      "dobius-stt",
+      "dobius-serve",
+      "dobius-metro"
+    ],
+    "speech_pause_approval": "Still pending; no stop or new retry performed",
+    "local_failed_attempt_evidence": [
+      "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/linux-build-typescript-full-graph-result.json",
+      "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/linux-build-typescript-2048-full-graph-result.json"
+    ]
+  },
+  "adam_live_unauthenticated_boundary": {
+    "at": "2026-10-14T01:02:25.698869+00:00",
+    "route": "GET /v1/capabilities",
+    "credentials_used": false,
+    "http_status": 401,
+    "expected_unauthenticated_refusal": true,
+    "response_body_read": false,
+    "services_changed": false
+  },
+  "release_resource_contract_376_root_review": {
+    "at": "2026-10-14T01:06:03.066594+00:00",
+    "aggregate": "376d8b59085aa4c2692bb3b6882a581b94647a7e21a0f34db7d33190664b9feb",
+    "verdict": "CHANGES_REQUIRED",
+    "original_rollback_problem": "Resolved; real installed baseline manifest exits0",
+    "controlled_repros": {
+      "external_parent_swap_during_open_accepted": true,
+      "non_js_graph_nodes_over_budget_accepted": true
+    },
+    "owner": "BUILD2",
+    "snapshot": "release-gate-376d8b59",
+    "scope": "No productionroots/files read in controlled repros; temporary fixtures only"
+  },
+  "release_resource_contract_872_root_review": {
+    "at": "2026-10-14T01:15:25.571791+00:00",
+    "status": "CHANGES_REQUIRED; BUILD2 correcting; RESEARCH independent review active",
+    "source_aggregate_sha256": "872df24672006090cd228ac8ae09fd5fbebaecda05df6227797bfb4f5852e0aa",
+    "hashes_verified": 8,
+    "finding": "Final os.open of FIFO helper blocks before fstat regular-file validation; two-second bounded subprocess reproduction. Require nonblocking opens and refuse nonregular archive/resources.",
+    "reproduction": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/release-872df246-root-fifo-repro.json",
+    "installed_app_unchanged": true
+  },
+  "release_resource_contract_9ab_root_review": {
+    "at": "2026-10-14T01:19:13.698781+00:00",
+    "status": "CHANGES_REQUIRED; BUILD2 correcting malformed header refusal/descriptor cleanup",
+    "aggregate_sha256": "9ab0dd241fc182dc4989b8962bd1d468f4f69ab80b90a9de446fbfce0a66c581",
+    "finding": "Syntactically JSON-null ASAR header bypassed required archive entries/capability validation and leaked one descriptor. Controlled full temporary bundle returned no missing artifacts.",
+    "reproduction": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/release-9ab0dd24-root-null-header-repro.json",
+    "installed_app_unchanged": true
+  },
+  "release_resource_contract_final_review": {
+    "at": "2026-10-14T01:21:47.805962+00:00",
+    "status": "PASS_EXACT_SOURCE_ONLY; canonical Mac package/install pending",
+    "aggregate_sha256": "7209492617d70547c4a2e56d72f98427a80f0096f7aa9dc92efb11f03a8c0513",
+    "source_files_verified": 8,
+    "independent_review": "research.json:release_resource_contract_peer_review.freeze_72094926_final_review",
+    "root_tests": {
+      "python_manifest": 17,
+      "python_resource_contract": 7,
+      "broader_installer_vitest": 88,
+      "broader_vitest_note": "Completed during Python-only final malformed-root correction; final parser regressions independently rerun and passed on final72094926 source."
+    },
+    "installed_legacy_manifest_exit": 0,
+    "candidate_installed": false
+  },
+  "previous_desktop_checkpoint_build16": {
+    "desktop": {
+      "branch": "fix/channel-cost",
+      "commit": "a8d6be50",
+      "version": "2.0.0",
+      "buildNumber": 16,
+      "dirty": true,
+      "diffDigest": "sha256:45bea9fe8cad945f23454de08bfdb076de2c7041bb573251abffdcd2507c2791",
+      "artifactSha256": "01d75f062f11fbcb1ee90cc0b3ef41b8cd05db6ff3d44f933bbe1a2e6f03cc3a",
+      "sourceStateFrom": "build"
+    },
+    "at": "2026-10-13T23:15:22.616985+00:00",
+    "runtime_id": "d354a65c-3e90-43b7-a3d8-51a40727796d",
+    "api_smoke": {
+      "system.monitor.status": "configured, fresh, critical; live garry-laptop reading",
+      "jobs.status": "unconfigured, dispatch disabled; no local duplicate queue"
+    }
+  },
+  "canonical_checkpoint_build17": {
+    "build": {
+      "finished_at": "2026-10-14T01:28:36.036677+00:00",
+      "command": "pnpm --dir dobius run build:unpack",
+      "cwd": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+      "exit_code": 0,
+      "elapsed_seconds": 357.28,
+      "log": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/canonical-mac-build-1791940919.log",
+      "installed": false
+    },
+    "install": {
+      "at": "2026-10-14T01:29:20.129984+00:00",
+      "command": "scripts/install-dobius-gated.sh dobius/dist/mac-arm64/Dobius+.app",
+      "exit_code": 0,
+      "elapsed_seconds": 16.88,
+      "log": "/Users/bayou/Documents/Dobius Recovery/cloud-workstation-20261013/canonical-mac-install-1791940919.log"
+    },
+    "live_smoke": {
+      "at": "2026-10-14T01:30:16.661092+00:00",
+      "runtime_id": "993d5ed8-6063-41c1-9007-04ad74b81cc4",
+      "workers": [
+        {
+          "handle": "term_6317b499-8fd3-4426-b0cd-da3a843b3d57",
+          "ptyId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1@@00889aa5",
+          "tabId": "483bca0d-1cc0-4a81-8ace-d2c2570af953",
+          "leafId": "583d4256-f0bf-403c-9983-540ede87dced",
+          "connected": true,
+          "writable": true
+        },
+        {
+          "handle": "term_2bb507d2-4bd0-44e8-92ea-c974f4187ed7",
+          "ptyId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1@@4f7f16e5",
+          "tabId": "71b7896c-506e-4077-aaa4-9c68297ca65b",
+          "leafId": "9219d3d0-a92a-4b27-b0da-c6730f015402",
+          "connected": true,
+          "writable": true
+        },
+        {
+          "handle": "term_e002db4d-635e-46aa-b147-1fff33b13f68",
+          "ptyId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1@@0f0adb78",
+          "tabId": "fcd4421d-1961-4e42-98de-20f4663a2632",
+          "leafId": "7f091590-2f46-4336-a3c4-6489a907a81a",
+          "connected": true,
+          "writable": true
+        },
+        {
+          "handle": "term_1c0e93b0-7839-4952-bff4-42dc2dd206e9",
+          "ptyId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1@@cdfcfcdb",
+          "tabId": "27cf461c-5199-4034-be40-015b46c9fc67",
+          "leafId": "68b4b1a1-6cab-4321-a279-530829fade94",
+          "connected": true,
+          "writable": true
+        },
+        {
+          "handle": "term_28213146-c465-438d-b4d3-c404daeea17b",
+          "ptyId": "folder:2cb65e8f-a7a4-43e8-b834-9ac5aa8ef9f1@@bb6ee687",
+          "tabId": "829fd563-f698-4451-bdbb-2b95a139f7b5",
+          "leafId": "8218d135-e259-4052-bab1-787d3e426e6d",
+          "connected": true,
+          "writable": true
+        }
+      ],
+      "monitor": {
+        "configured": true,
+        "availability": "available",
+        "health": "critical",
+        "freshness": "fresh",
+        "reason": null,
+        "cleanupEnabled": false
+      },
+      "jobs": {
+        "configured": false,
+        "dispatchEnabled": false,
+        "liveDispatchReady": false
+      },
+      "catalog_roots": {
+        "state": "ready",
+        "root_count": 0
+      },
+      "unregistered_root": {
+        "state": "denied",
+        "reason": "access_denied",
+        "scannedEntries": 0
+      },
+      "runtime_handle_rebinding": {
+        "term_6f2261a7-885b-484c-b19f-942d4fe1208f": "term_6317b499-8fd3-4426-b0cd-da3a843b3d57",
+        "term_f33e4e4d-a741-4055-9218-d7942a165e30": "term_2bb507d2-4bd0-44e8-92ea-c974f4187ed7",
+        "term_97480826-560e-40e1-b78c-060abbb1faba": "term_e002db4d-635e-46aa-b147-1fff33b13f68",
+        "term_9ddc88ca-0ddf-4df3-981b-8c083d9691b1": "term_1c0e93b0-7839-4952-bff4-42dc2dd206e9",
+        "term_1b784e18-525b-4528-8744-3acc68c0382d": "term_28213146-c465-438d-b4d3-c404daeea17b"
+      },
+      "existing_worker_ptys_preserved": true,
+      "stale_runtime_guard": {
+        "accepted": false,
+        "bytesWritten": 0
+      }
+    },
+    "initial_smoke_note": "Old runtime-scoped handle selection caused the first smoke assertion to fail; exact PTY/tab/leaf identity check passed after rebinding new handles. Failure evidence preserved outside repo.",
+    "candidate_artifact_gate_exit": 0,
+    "candidate_signature_exit": 0,
+    "installed_signature_exit": 0,
+    "installed_artifact_gate_exit": 0,
+    "source_verified_before_build": 285,
+    "source_digest": "sha256:43037826b2f6daef6a64f354350afb503381d6b617f7b648cd67bc867b79897c",
+    "source_code_changed_after_seal": false,
+    "phone_native_changed": false,
+    "vps_services_changed": false
+  },
+  "post_install_coordination": {
+    "at": "2026-10-14T01:34:32.657315+00:00",
+    "runtime_id": "993d5ed8-6063-41c1-9007-04ad74b81cc4",
+    "own_orchestration_inbox": "empty at current root handle",
+    "four_bound_assignments": "Accepted text writes and separate Enter; actual terminals verified working/compacting",
+    "next_package": "C07 preview corrected contract/native and both-app preflights, independent review; no original access or implementation assignment yet",
+    "aws": "deferred",
+    "historical_storage": "paused"
+  },
+  "c07_preview_contract_root_review": {
+    "at": "2026-10-14T04:50:48.384149+00:00",
+    "status": "PASS_CORRECTED_EXACT_SOURCE_CONTRACT; IMPLEMENTATION_ASSIGNED",
+    "document_sha256": "d817aa898a9beac9416377630e9d33c0bf055bd6ae3fddffd7e63338b7ea693e",
+    "independent_review": "research.json:c07_preview_contract_independent_review.corrected_final_contract_review PASS_SOURCE_CONTRACT_ONLY",
+    "implementation_assignment": "plans/cloud-workstation-c07-preview-implementation.json",
+    "original_content_read": false
+  },
+  "hermes_two_agent_source_change": {
+    "user_target": [
+      "hermes-1",
+      "hermes-2"
+    ],
+    "paths": [
+      "dobius/src/shared/workstation-worker.ts",
+      "dobius/src/main/automations/workstation-worker/registry.ts",
+      "dobius/src/main/automations/workstation-worker/worker.test.ts",
+      "dobius/config/scripts/workstation-worker/README.md",
+      "plans/DOBIUS-CLOUD-WORKSTATION-BUILD-PLAN-20261012.md"
+    ],
+    "focused_tests": "PASS: two tests including two-profile registration/reuse and real symlink/replaced-home before-spawn refusals",
+    "full_worker_suite_initial": "27 passed, 1 timing assertion failed: TERM-ignoring walltime fixture 7382ms vs <3500ms. Full suite rerun with UV_THREADPOOL_SIZE=32 in progress; do not claim full PASS.",
+    "installed": false,
+    "live_profiles_created_or_removed": false,
+    "full_worker_suite_rerun": "PASS Node24 UV_THREADPOOL_SIZE=32: 28 tests, 19.30 seconds, exit0",
+    "production_typecheck": "PASS focused strict NodeNext typecheck shared worker schema and registry",
+    "lint": "PASS oxlint shared worker schema and registry",
+    "peer_review": "BUILD2 source PASS ae280f16; focused count/reuse test PASS; broad peer sandbox cannot inspect processes, original limitations preserved. ROOT all28 process-capable tests PASS at exact same source."
+  },
+  "laya_isolated_recovery": {
+    "recorded_at": "2026-10-14T05:02:20.233706+00:00",
+    "source": "https://github.com/aiimitch38-create/laya",
+    "revision": "3cf26cbcb18725dbc2d127bb8bb2c4c43243ae63",
+    "path": "/srv/dobius/components/laya-3cf26cbc",
+    "runtime": "/srv/dobius/components/laya-runtime-3cf26cbc",
+    "python": "3.12.3",
+    "torch": "2.6.0+cpu",
+    "transformers": "4.57.6",
+    "package": "laya0.4.0",
+    "dependency_check": "PASS pip check and real package imports; full installed dependency freeze captured on VPS",
+    "source_worktree_clean": true,
+    "model_downloaded": true,
+    "inference_verified": "PASS three fixed synthetic CPU probes; not production accuracy or live advisory gate",
+    "provider_or_gate_wired": false,
+    "production_services_modified": false,
+    "cache_policy": "Isolated VPS component cache; no Storage or laptop checkpoint cache",
+    "source_contract_tests": {
+      "mcp": 957,
+      "portability": 39,
+      "http": 252,
+      "ruff": "PASS required source gates",
+      "compileall": "PASS isolated cache",
+      "model_inference": false
+    },
+    "test_runner_correction": "MCP/portability are standalone script suites; importing them into pytest exits during collection. Run each as script, HTTP as pytest; corrected commands passed.",
+    "checkpoint_revision": "7b928d828b7b0e022f929d9bd2e44165aa270148",
+    "weights_sha256": "9d628fd971b700382ac6f65920a86f149777b2e748e0c955fb3b19695aa8f204",
+    "inference_peak_rss_bytes": 2305368064,
+    "inference_latency_ms": [
+      327.862,
+      284.726,
+      263.405
+    ],
+    "model_load_ms": 14689.186,
+    "isolated_execution": "Temporary capped systemd-run probe exited0 and was collected; existing services remain active"
+  },
+  "c07_native_preview_root_review": {
+    "recorded_at": "2026-10-14T05:05:10.071690+00:00",
+    "freeze": "7c1767fb8109d30dbecf1591001c0271d31669b711b31eb824bcecff5668e997",
+    "status": "CHANGES_REQUIRED",
+    "finding": "Same-length rewrite between initial and final fstat of stat_preview returns stale full-width version; final checks dev/ino only. Independently reproduced on synthetic temporary file; no original reads.",
+    "source_sha256": "058d4f0e9eb9edf44583f026251ededa15fb60d38032a6bdba7b74b8d453aae8",
+    "owner_notified": true,
+    "receipt": "~/Documents/Dobius Recovery/cloud-workstation-20261013/preview-native-7c1767fb/stat-race-reproduction.json"
+  },
+  "c07_native_preview_root_review_corrected": {
+    "recorded_at": "2026-10-14T05:08:30.526038+00:00",
+    "freeze": "003b1f442663bde6cae190b19e8e51dc480e624af7788aff210347c3171cd14e",
+    "status": "PASS_SCOPED_NATIVE_SOURCE_REVIEW",
+    "exact_hashes_unchanged_before_after": true,
+    "tests": {
+      "python": 23,
+      "node": 25
+    },
+    "original_rewrite_finding": "Fixed with complete opened/named full-width stat/version recheck; deterministic same-size rewrite regressions pass",
+    "live_acceptance": false,
+    "peer_research_review": "pending availability"
+  },
+  "c07_ui_root_typecheck": {
+    "status": "CHANGES_REQUIRED",
+    "freeze": "3f0f07f566052c2b3e1655a828443efe60dcbce6829e03b2a06dd2b409308ca1",
+    "node_typecheck": "Failed on required rootId/generation fixture, unchecked .at index, generic noncallable mock types and missing returns; no other errors reported",
+    "owner": "BUILD1 correcting"
+  },
+  "c07_targeted_invalidation_followup": {
+    "status": "REQUIRED_GAP_ASSIGNED_TO_VERIFIED_SENDABLE_EXISTING_WORKERS",
+    "ui_corrected_pre_event_freeze": "cf46b3e14bb5cb297697c04f596d53e9ef1013c302866e25250e99267bfa4c72",
+    "research_handle": "term_e002db4d-635e-46aa-b147-1fff33b13f68",
+    "build1_handle": "term_6317b499-8fd3-4426-b0cd-da3a843b3d57",
+    "research_task_readback": "Accepted and actual working response observed",
+    "source_acceptance": false,
+    "live_acceptance": false,
+    "root_factory_main_callback": "ApplicationCatalogOptions accepts onPreviewInvalidated, main passes RESEARCH emitCatalogPreviewInvalidated; source only pending new transport module and tests"
+  },
+  "c07_ui_corrected_typechecks": {
+    "ui_pre_event_aggregate": "cf46b3e14bb5cb297697c04f596d53e9ef1013c302866e25250e99267bfa4c72",
+    "cli": "PASS Node24",
+    "node": "CHANGES_REQUIRED; only FIXER active test unused holdPolicyCapacity line224; prior shared UI errors cleared",
+    "renderer": "CHANGES_REQUIRED; BUILD1 active DataCatalogPanel.test.tsx unused target line101; previous UI types cleared",
+    "logs": "~/Documents/Dobius Recovery/cloud-workstation-20261013/c07-{node,cli,web}-typecheck-followup.log",
+    "limit": "Checks against in-progress source; no new installed/live acceptance"
+  },
+  "c07_native_factory_client_integration": {
+    "status": "PASS_SOURCE_SYNTHETIC_INTEGRATION",
+    "at": "2026-10-14T05:31:36.985281+00:00",
+    "tests": "8 application-catalog-factory tests pass on Node24 using real POSIX Python helper and shared strict client; development and packaged helper layouts",
+    "scope": "Synthetic temporary note only; default denial and local registration/grant, metadata witness, native stat/ordered bytes/fatal text client/finish/revoke callback immediate clear",
+    "native_epoch_freeze": "1b3b93d5952f677eb247c33b36a79d31cb00a13bdc5c89cd2d9640b4fa86ef97",
+    "first_failure": "Real bridge lacked synchronous previewHelperEpoch, so no witness/ref available; assigned native fix BUILD2",
+    "test_correction": "Opt-in rotates root generation; use grant-returned generation. Earlier denied request was stale ROOT test data, not backend bug",
+    "log": "~/Documents/Dobius Recovery/cloud-workstation-20261013/c07-native-client-factory-integration-current-generation.log",
+    "live_or_transport_UI_acceptance": false
+  },
+  "vps_build_resource_preparation": {
+    "status": "TEMPORARY_SWAP_AND_ACTUAL_CGROUP_LIMITS_VERIFIED_BUILD_PENDING",
+    "swap_bytes": 8589934592,
+    "swap_path": "/var/lib/dobius-build-resource/temporary-build.swap",
+    "persistent_boot_registration": false,
+    "services_unchanged": true,
+    "memory_high_bytes": 1073741824,
+    "memory_max_bytes": 1610612736,
+    "memory_swap_max_bytes": 6442450944,
+    "actual_cgroup_probe_charged_bytes": 274169856,
+    "systemd_summary_discrepancy": "systemd-run summary reported292KiB despite directcgroup274MB and processRSS280MB; rely on directly captured cgroup counters, do not claim summary peak accurate",
+    "paid_provisioning": false,
+    "build_ran": false,
+    "cleanup_gate": "Drain owned build cgroup; swapoff only when host freeRAM exceeds aggregate swap use plus reserve; remove exact owned file onlyafter confirmed swapoff",
+    "receipts": "~/Documents/Dobius Recovery/cloud-workstation-20261013/vps-{temporary-swap-receipt,build-cgroup-preflight}.json"
+  },
+  "c07_review_routing_final": {
+    "BUILD2": "Read-only FIXER backend30-file63c6beb5, 86 focused tests",
+    "FIXER": "Read-only BUILD1 latest UI26-file freeze (tiny unused target parameter correction must be refrozen)",
+    "BUILD1": "Correct final renderer unused target test parameter then read-only RESEARCH event13-filea6e01dc3",
+    "RESEARCH": "Read-only BUILD2 native helper epoch10-file1b3b93d5,27 focused tests",
+    "ROOT": "Main/factory integration8PASS; all Node andCLItypecheckPASS, renderer pendingoneunusedtestparam; phoneTypeScriptfullPASS"
+  },
+  "c07_root_callback_transport_integration": {
+    "status": "PASS_SOURCE_SYNTHETIC_NATIVE_CLIENT_AND_REAL_ENCRYPTED_TRANSPORT",
+    "files": {
+      "dobius/src/main/index.ts": "2cdc31c08469e23aa766499e07b7d1ba3e2b6b3311a5280eb235119a8b34a2fc",
+      "dobius/src/main/storage/data-catalog/application-catalog-factory.ts": "a1199c62912ce96e3810d3213a739f3a1f50380d375414327b66d697623a9e2d",
+      "dobius/src/main/storage/data-catalog/application-catalog-factory.test.ts": "2fa7f0b2eb118fcb38d885649c1f6ba23a9a1221d4c7de6803d7ca2e8cf414a9",
+      "dobius/src/main/runtime/runtime-rpc-preview-delivery.integration.test.ts": "3e78aaea18ce07d8d6397c38a5e5cb43309d0639c28aadcbbb1ade47694d33a2"
+    },
+    "actual_tests": [
+      {
+        "command": "application-catalog-factory.test.ts maxWorkers1 Node24",
+        "result": "8 PASS actual Python helper in development/packaged layout, strict shared client and immediate revoke clear"
+      },
+      {
+        "command": "runtime-rpc-preview-delivery.integration.test.ts maxWorkers1 Node24",
+        "result": "1 PASS actual localhost Unix and WS server, genuine sequenced E2EE two sockets for same synthetic paired phone, exact delivery, malformed drop, close/stop unregister"
+      }
+    ],
+    "scoped_lint": "PASS3 ROOT-owned factory/new transport test files",
+    "limitations": "Fixture phone only; no actual installed phone/app content reads; current worker corrections require new exact review before packaging"
+  },
+  "c07_review_corrections": {
+    "backend63c6": "CHANGES_REQUIRED repeated finish revives expired display; require exact helper equality immediately after open; reserve4native slots before firstpreviewawait",
+    "ui_f181": "CHANGES_REQUIRED bind displayed state synchronously to current client/root/generation, before passive effect clears",
+    "event_a6e": "CHANGES_REQUIRED expose failed registration and retry after bounded router capacity frees; mobile-only registration",
+    "native1b3b": "RESEARCH PASS27Node+23Python; exact freeze preserved",
+    "owners_notified": "Verified actual idle final readbacks; corrections sent to original FIXER/BUILD1/RESEARCH owners with separate Enter; BUILD2 separate C05 supervisor new files only"
+  },
+  "c07_event_router_capacity_root_review": {
+    "status": "PASS_EXACT_SOURCE_AND_SYNTHETIC_TRANSPORT_REVIEW",
+    "at": "2026-10-14T05:42:51.531230+00:00",
+    "aggregate": "7daf6da8798af4ba5e0f6415dc5bd684bb3455e9a3a860c7cb624bfbe9696626",
+    "files": 13,
+    "hashes_before_after_match": true,
+    "findings_addressed": [
+      "Registration exposes null failure, never caches failed local/WS route, retries after cap slot frees",
+      "WS uses verified mobile scope only and clears nonmobile cached registration",
+      "Duplicate IDs never replace another active registration; strict content-free event parsing and exact current channel/nav lifetimes retained"
+    ],
+    "tests": [
+      "12 PASS main IPC/preload/router including cap+recovery and ROOT real Unix/WS sequenced-E2EE two-connection isolation",
+      "30 PASS mobile transport strict invalidation acceptance/refusal and listener disposal"
+    ],
+    "limits": [
+      "Old a6e01dc3 remains CHANGES_REQUIRED historical receipt",
+      "Server delivery after arbitrary network loss is bounded by client lease, not guaranteed replay",
+      "Synthetic local fixture transports, no physical phone or production acceptance"
+    ],
+    "logs": [
+      "c07-event-router-7daf6da8-main-review.log",
+      "c07-event-router-7daf6da8-mobile-review.log"
+    ]
+  },
+  "c05_supervisor_review_routing": {
+    "recorded_at": "2026-10-14T05:54:16.996736+00:00",
+    "aggregate_sha256": "924a87b133a5e0bda80014bea5fa33f2e269f641be57c24acb301664ec211e2c",
+    "exact_files_verified": 7,
+    "canonical_producer_report": "build2.json:c05_worker_runtime_implementation",
+    "reviewer": "RESEARCH; actual idle tab verified then bound send accepted",
+    "status": "INDEPENDENT_REVIEW_PENDING",
+    "limitations": [
+      "Standalone source only; no live worker enrollment/provider or shared queue composition",
+      "ROOT checking claim-start microtask freshness; dispatch eligibility separate from user dispatch switch"
+    ],
+    "ui_followup": "BUILD1 adding requested same-root generation first-commit regressions; 4959 review CHANGES_REQUIRED remains historical"
+  },
+  "reviewed_checkpoint_preparation": {
+    "recorded_at": "2026-10-14T06:05:05.125586+00:00",
+    "status": "ALL_CURRENT_C07_AND_C05_SOURCE_REVIEWS_PASS; PACKAGING_PENDING",
+    "installed": "2.0.0/build17 remains until gated installation succeeds",
+    "ui_26": "1d8ec8c71688a732bf546c232d905274c54d5a7e805bdeb9147538367eb5911a",
+    "native_10": "1b3b93d5952f677eb247c33b36a79d31cb00a13bdc5c89cd2d9640b4fa86ef97",
+    "backend_31": "975a7438f2f4717818dcad50bb2c73b2b84b2681a62ec07be93819194d610632",
+    "router_13": "7daf6da8798af4ba5e0f6415dc5bd684bb3455e9a3a860c7cb624bfbe9696626",
+    "supervisor_7": "14c277106402311d27704b1c2dd57105c40c3fcae3683f4e0dbc942843a5fdbe",
+    "host_adapter_9": "e803fb851fb7e94ca9162053019a83d29682a320e3d7038d337e41c4e1dbf534",
+    "independent_ui": "FIXER exact PASS 65 desktop/shared plus15phone",
+    "independent_supervisor": "RESEARCH exact PASS14tests",
+    "host_adapter": "ROOT real38tests, RESEARCH exact10focused PASS; fullNode/CLI/renderer andmobiletypesPASS",
+    "limits": [
+      "Source/test status only, physical phone acceptance open",
+      "C05 new adapter+supervisor not yet composed into authority/main; no liveHermes jobs launched",
+      "AWS deferred; historical Storage paused; cleanup originals disabled",
+      "2.1.0 feature target recommended, not claimed or bumped"
+    ],
+    "vps_dependencies": "Exclusive matching package+lock Linux dependency copy /srv/dobius/recovery/cloud-workstation-linux-dependencies-1791957319/node_modules; no production dependencies changed"
+  },
+  "build18_live_acceptance_failure": {
+    "at": "2026-10-14T06:47:04.617275+00:00",
+    "build": "2.0.0/18",
+    "source_digest": "sha256:2245a1afe00f5dc506cadf23b3d258d9c9c99f0a3196a5169578da1cdf573e06",
+    "full_mac_graph": "PASS; artifactmanifest andcodesignPASS",
+    "live_UI": "NONPASS; Electron sandbox preload externalrequire zod ->window.dobius absent ->renderererror/graphunavailable",
+    "proof": "Private isolated signedartifact18 CDPconsole .playwright-cli/console-2026-10-14T06-23-48-968Z.log; no personalprofile used",
+    "rollback": "Gated installer restored17 on disk; stalled18 mainPID11015 survivedTERM; exactPID+start+pathverified stop only main, daemon809/Codex7054untouched; app17 relaunched currentPID74338 graphready",
+    "runtime_id": "9850dae9-1636-4583-8cbf-f12861feb993",
+    "existing_five_worker_ptys_preserved": true,
+    "current_installed": "2.0.0/build17",
+    "corrections": [
+      "Rootpreload bundling zod plus ASTcompiledchunkdependencygate; no sandbox weakening",
+      "Build2installer refuses swap ifmainexitnotconfirmed",
+      "Freshnonincremental types nowrequired; missingwebAPI fields fixedbyBUILD1"
+    ],
+    "VPS_source_restoration": "357files exactPASS, previoussnapshot18 retained assourceevidence, notdeployment",
+    "VPS_fullgraph": "NONPASS on freshwebtypecheck2missingAPI fields; sourcehashesunchanged, noartifacts/deploy; initialresourceattemptpausedforheapbudget, retrynode/CLI typespassed; peakRAM1470083072, swap3425173504, minhost1416351744,0OOMkills",
+    "AWS": "deferred",
+    "historical_Storage_queue": "paused"
+  },
+  "build19_corrections_source_review": {
+    "at": "2026-10-14T06:55:25.303302+00:00",
+    "preload5": "7d6ac7e077f79627239b54bddecea4d8774871323528cd9335f4019c9082a634",
+    "preload_review": "RESEARCH exactPASS14regressions; realcompiledsandboxsmoke pending",
+    "web3": "08e98eb92b16c6cc06d780d613afe540a050a3cdb73d70030b45823e6f41e665",
+    "web_review": "FIXERexactPASS61tests; webpreview/resumeexplicitlyunsupported",
+    "installer4": "9e777e30b5853a9c27a575ccb0af0296ad0a6413d0ecfcef7773d0839c4a1949",
+    "installer_review": "ROOTexact17testsPASS afterboundedwait escapingcorrection; mainargv cannothideapp; refuse10before swapifexitunverified",
+    "typechecks": "ROOTfreshNode/CLI/renderer PASS using --composite false --incremental false; earliercachedproof superseded",
+    "installed": "2.0.0/build17, runtime9850dae9-1636-4583-8cbf-f12861feb993 graphready fiveoriginalPTYs preserved",
+    "delivery": "Build19 fullgraph/package/install/sandboxacceptance pending; source/test evidenceonly",
+    "AWS": "deferred",
+    "Storage": "historicalqueuepaused"
+  },
+  "build19_local_runtime_acceptance": {
+    "at": "2026-10-14T07:09:40.236667+00:00",
+    "version": "2.0.0",
+    "build": "19",
+    "source_checkpoint": "source-checkpoint-1791961065",
+    "source_files_verified": 366,
+    "preload_sandbox_smoke": "PASS actual Electron42.3.3 sandbox/contextIsolation; malformed invalidation rejected, valid event delivered, unsubscribe confirmed",
+    "preload_sha256": "81dca2c475b3c212d030271b3edf4b48303e788fdf9435609509b8b91f480ae9",
+    "packaged_preload_matches_tested_bytes": true,
+    "artifact_manifest_and_signature": "PASS before gated install",
+    "gated_install_exit": 0,
+    "runtime_id": "257dcc9d-edb4-4fc9-b5bd-f3a7c6de0d90",
+    "ui_graph": "ready",
+    "five_worker_ptys_preserved": true,
+    "stale_runtime_guard": {
+      "accepted": false,
+      "bytesWritten": 0
+    },
+    "monitor": {
+      "configured": true,
+      "availability": "available",
+      "health": "critical",
+      "freshness": "fresh",
+      "reason": null,
+      "cleanupEnabled": false
+    },
+    "jobs": {
+      "configured": false,
+      "dispatchEnabled": false,
+      "liveDispatchReady": false
+    },
+    "catalog_unregistered_denial": {
+      "state": "denied",
+      "reason": "access_denied",
+      "scannedEntries": 0
+    },
+    "limits": "Desktop startup/runtime acceptance only. Original-note/phone preview live acceptance not claimed. C05 runtime/host adapter source not yet composed into production authority; live dispatch remains disabled. No Linux artifact/deployment acceptance. Physical phone, ADAM, Laya and full recovery remain unfinished.",
+    "aws": "deferred",
+    "historical_storage_queue": "paused"
+  },
+  "c05_actual_process_composition_fixture": {
+    "at": "2026-10-14T07:32:55.269710+00:00",
+    "verdict": "PASS",
+    "tests": 2,
+    "actual_processes": 2,
+    "store": "one file-backed SQLite authority",
+    "workers": "actual WorkstationWorker with factory-supplied QueuePorts",
+    "profiles": "two synthetic Hermes slot registrations; Node fixture executors only",
+    "settlement": "both jobs needs_review, no automatic completion, private journals sealed",
+    "cancellation": "both running process groups stopped and durable reservations released only after matching stop proof",
+    "factory_source": "afd54fcd026f527b31f1817633e91c32d0e31ff86e8a3861c1a84b3cd5849b64 BUILD1independentPASS",
+    "limits": "No live Hermes account, paid provider, production host config, remote/laptop worker RPC, or C05 deployment acceptance.",
+    "latest_actual_tests": 3,
+    "latest_prepermit_rejection": "PASS actualworker invalidregisteredrecipe: no permit, no startedprocess, exacttransactionalwithdrawal, jobrequeued and reservationreleased, drainedtrue"
+  },
+  "phone_readonly_current": {
+    "at": "2026-10-14T07:32:55.270139+00:00",
+    "paired_device": "760A86B6-BC60-5F48-A098-3E588854D71A available",
+    "apps_query": "NONPASS Apple DDI lacksvariant0xe800010f",
+    "vps_metro_from_laptop": "GET /status packager-status:running; /_expo/link HEAD307 native deep link to100.98.24.1:8081",
+    "limits": "Network readiness fromlaptop only; no actual phone version, install, app observation or phone-to-runtime acceptance."
+  },
+  "current_worker_assignments_build19": {
+    "runtime": "257dcc9d-edb4-4fc9-b5bd-f3a7c6de0d90",
+    "verified_existing_tabs": "four original worker PTYs plus ROOT; no new tabs",
+    "BUILD1": "Laya HTTP provider source adapter from pinned fork, fake HTTP tests only; no inference/server/acceptance gate",
+    "BUILD2": "two-profile private bootstrap/configuration factory, source/test only",
+    "RESEARCH": "ADAM client independent review, then corrections/bootstrap reviews",
+    "FIXER": "ADAM client endpoint/credential epoch and stalled-body correction",
+    "ROOT": "queue service/authority/main composition, real process fixture, private telemetry and auth epoch, isolated Linux full build",
+    "aws": "deferred",
+    "historical_storage_queue": "paused"
+  },
+  "build19_linux_deadline_continuation": {
+    "at": "2026-10-14T08:22:54.392931+00:00",
+    "source_checkpoint": "1791961065",
+    "source_files": 366,
+    "original_unit": "dobius-fullgraph-build-1791961065.service",
+    "original_result": "systemd timeout status15 after1h; no resultJSON because parentwasterminated",
+    "completed_stages": "freshNode/CLI/renderer types, relay, main/preload, renderer built onLinux45m3s",
+    "unfinished_at_deadline": "build:web transforming; no Linux package yet",
+    "original_log_sha256": "fc5efd3dc05769b1530ef435ddefb7d86c6c6236aba2aa515b499d1c99c12a9b",
+    "resource_shift": "RAMmax1920MiB/high1792MiB +swapmax5760MiB; combinedallowance7680MiB unchanged; 650MiBhostguard plus128MiBpreflightheadroom",
+    "continuation_unit": "dobius-fullgraph-build-1791961065-continuation.service",
+    "continuation_graph": "web,CLI,native,LinuxElectronruntime,AppImage/deb; prioractualLinuxstages retained sourceexact",
+    "mac_asset_substitution": false,
+    "deployed": false
+  },
+  "c05_latest_source_reviews": {
+    "bootstrap6_c977": "ResearchPASS9; additionalnestedhomealignmentassigned",
+    "supervisor7_f902": "ResearchPASS19, bothunstartedpaths requirepositivehostidle; rejectedtaskshutdownrefreshes",
+    "root13_composition": "0640f0dc8e8197350206ec8223c2af588fd7851a255b8140f75f88bc1daea00a source/test only, independentreviewpending",
+    "auth_epoch2_8cabc": "Build2PASS13",
+    "adam_client6_a4b0": "ResearchPASS20, sourceonly unwired/liveendpointunsupported"
+  },
+  "adam_receiver_source_acceptance": {
+    "at": "2026-10-14T09:28:16.960597+00:00",
+    "freeze": "bce3cd430d3e01f048202c65cd77fc85a4c7a129fd049ede2d21b5c0549a0897",
+    "independent": "RESEARCH PASS_SOURCE_REVIEW",
+    "tests": 249,
+    "typecheck": "PASS",
+    "build": "PASS",
+    "preserved_on_vps": "adam-receiver-source-1791969936",
+    "restored_source_files_verified": 10,
+    "live_deployed": false,
+    "parent_completion_changed": false,
+    "full_data_recovery_claimed": false
+  },
+  "adam_atomic_child_receipt_source": {
+    "freeze": "8cb2acaefef3be4490d7a6879370dd8f6bf0d714ac92c11a6303804891880801",
+    "independent": "RESEARCH PASS_SOURCE_REVIEW",
+    "tests": "19 files166PASS",
+    "schema": 4,
+    "live_deployed": false,
+    "drainer": "543e sourceCHANGES_REQUIRED startup false-drain and stop/restart, correction assigned",
+    "limits": "No live ADAM planner dispatch/receipt delivery; trusted main-only parent submission source"
+  },
+  "build19_linux_package_acceptance": {
+    "checkpoint": "1791961065",
+    "sealed_source_files": 366,
+    "all_hashes_unchanged": true,
+    "graph": "full Linux types/relay/main/preload/renderer/web/CLI/native/runtime/packaging across3ownedruns",
+    "AppImage_sha256": "1d6336eb7c96d81312cf6d917c95be78c3a401070c175e018c6073ea4a5f15c3",
+    "deb_sha256": "950418a7813e1f4341fa6f1afa3b4e5ba6610fa56de80446b276323d74e7e5c7",
+    "publish": "disabled explicitly --publish never; prior CI publication refusal preserved",
+    "package_snapshot": "original precompile snapshot consumed by failed packaging; final packaging snapshot after verified identical compiled source cohort, truthfully recorded",
+    "runtime_smoke": "NONPASS actual packaged resources/bin/dobius --help: executable is dobius-ide; shim searches only dobius/Dobius+; BUILD2 correction assigned; no deployment",
+    "deployed": false,
+    "production_services": "serve247088, metro233588, speech211104 unchanged across both continuationandpackaging",
+    "new_source_included": false,
+    "AWS": "deferred",
+    "historicalStorage": "paused"
+  },
+  "current_source_recovery_428": {
+    "checkpoint": "1791971008",
+    "source_files_restored_verified": 428,
+    "recovery_checks": 24,
+    "scope": "Dobius source/plans only; not personal data/credentials/appstate/full recovery",
+    "drainer_note": "Captures e480; final de294 correction is subsequent"
+  },
+  "adam_current_source_wiring": {
+    "freeze": "119980b3f6d1905bbfa57b619ca29703ec19d375674f24d759e60804e67b709c",
+    "independent": "RESEARCH PASS_SOURCE_REVIEW",
+    "tests": "20files174PASS; final drainer/authority/host21PASS freshNode",
+    "current_drainer": "de2947b07db7d3a0f2f793ddcac437c9036cd5ab5d6f02c9ebca93378c9911f5 FIXER PASS_AUTHORITY_ADMISSION_CORRECTION",
+    "default_private_bridge_enabled": false,
+    "live_activation": false,
+    "parent_completion_changed": false
+  },
+  "linux_launcher_correction_delivery": {
+    "source": "b295885489026fe02670ceb593a9e21d54f0baced427dafab5b3a807ecfeeeaf ResearchPASS",
+    "linux_shim_test": 4,
+    "resource_delta_source_files_verified": 368,
+    "compiled_files_unchanged": 2336,
+    "AppImage_sha256": "e9cfef3f91dfbeb8d97836f7b4b821c4b1e187c4fbff122252a0b380317a82cd",
+    "deb_sha256": "6602f6905a81e4ef5a20a4c0412f278bb6d855880307235631d55c29d9ebbf74",
+    "artifact_extraction": "verified from AppImage; launcher bytes match",
+    "actual_packaged_cli_help": "PASS exit0",
+    "private_runtime_smoke": "pending unitdobius-linux-cohort19-isolated-smoke on6769",
+    "production_deployed": false,
+    "new_ADAM_C05_composition_included": false,
+    "runtime_smoke": "PASS packaged shim/private short profile; direct AppImage path automated check in progress",
+    "long_profile_probe": "NONPASS Unix socket path exceeded OS limit; harness shortened, no production changes"
+  },
+  "latest_sealed_source_recovery": {
+    "checkpoint": "1791972824",
+    "files": 428,
+    "restored_on_vps": true,
+    "recovery_tests": 24,
+    "current_drainer_included": "de2947b0",
+    "archive_sha256": "fb11a5b02890467bbb1818edca464137411f9734574190cdf69bc03c09cb32bb",
+    "patch_sha256": "01bd414b2d5824af15c5769c140fa1d63f6bf59f6c0c3924df10ca61f5ee3d85",
+    "personal_data_backup": false
+  },
+  "linux_production_rollout_cohort19": {
+    "deployed": true,
+    "artifact_sha256": "e9cfef3f91dfbeb8d97836f7b4b821c4b1e187c4fbff122252a0b380317a82cd",
+    "new_main_pid": 269892,
+    "new_runtime_id": "819d1bee-8810-4b22-a538-7015a4df419b",
+    "authenticated_terminal_count": 0,
+    "metro_pid_unchanged": 233588,
+    "speech_pid_unchanged": 211104,
+    "previous_artifact_sha256": "2f0e3faaf479de3632239b8b83e6497d6154fc5132303edf73c1ac9d39cba8a9",
+    "private_rollback_snapshot_files": 147,
+    "rollback_directory": "/opt/dobius/releases/cohort19-launcher-fixed-20261014",
+    "limits": "Baseline full Linux graph and launcher correction only; new C05/ADAM composition not included; no phone/real Hermes/Laya live acceptance",
+    "AWS": "deferred",
+    "Storage": "historical queue paused"
+  },
+  "current_source_hold_for_desktop20": {
+    "active": false,
+    "reason": "Full build, provenance, sandbox, gated install, UI/runtime, and preserved-PTY checks passed."
+  },
+  "desktop_build20_delivery": {
+    "at": "2026-10-14T12:59:47.590071+00:00",
+    "status": "INSTALLED_RUNTIME_AND_UI_READY",
+    "version": "2.0.0",
+    "build_number": 20,
+    "provenance": {
+      "repo": "/Users/bayou/Projects (Code)/Dobius/dobius-plus",
+      "branch": "fix/channel-cost",
+      "commit": "a8d6be50",
+      "dirty": true,
+      "diffDigest": "sha256:1faa1cf9cf849a59726c257f2e827f31d107c937e86dbd2c08ab65f6dcd2d86a",
+      "tag": null,
+      "capturedAt": "2026-10-14T10:44:48.746Z",
+      "buildNumber": 20,
+      "builtAt": "2026-10-14T10:48:58.650Z"
+    },
+    "runtime_id": "8bffb2c1-ce68-4be6-b2a8-6ab5f5a61588",
+    "main_pid": 52920,
+    "same_source_digest_at_packaging_and_install": true,
+    "sandbox_preload_real_electron": "PASS",
+    "packaged_preload_matches_emitted": true,
+    "existing_worker_ptys_preserved": true,
+    "stale_runtime_write_refused": true,
+    "gated_installer_exit_code": 0,
+    "live_dispatch_ready": false,
+    "adam_bridge_enabled": false,
+    "limits": [
+      "Local packaged composition only; real Hermes, ADAM endpoints, and Laya are not activated.",
+      "VPS serves recovered earlier cohort19; new ADAM composition is not deployed there.",
+      "AWS deferred; historical Storage queue paused."
+    ]
+  },
+  "vps_temporary_swap_cleanup": {
+    "temporarySwapRemoved": true,
+    "persistentSwapConfigurationChanged": false,
+    "productionServicesActive": true
+  },
+  "adam_cross_application_real_http_recovery": {
+    "at": "2026-10-14T13:09:18.984841+00:00",
+    "status": "PASS_ISOLATED_TWO_APPLICATION_HTTP_AND_DURABLE_REOPEN",
+    "tests": 1,
+    "temporaryDatabasesOnly": true,
+    "actualAdamHandler": true,
+    "actualDobiusClientAdmissionOutbox": true,
+    "lostAckReplay": "same receipt ID/hash; ADAM duplicate ACK; exactly one stored observation",
+    "bothDatabasesReopened": true,
+    "parentUnchanged": true,
+    "childCancellationDelivered": true,
+    "serviceStartCalled": false,
+    "liveServiceChanged": false,
+    "harnessCorrection": "Use running fixture clock; frozen earlier timestamp correctly refused insertion after ADAM boundAtMs."
+  },
+  "linux_build20_current_snapshot": {
+    "unit": "dobius-fullgraph-build-1791972824.service",
+    "status": "RUNNING_FULL_GRAPH_NOT_DEPLOYED",
+    "sourceFiles": 428,
+    "dependencies": "Verified same Linux lock/dependency package; isolated copied node_modules",
+    "memoryMaxMiB": 1920,
+    "memoryHighMiB": 1792,
+    "swapMaxMiB": 5760,
+    "cpuQuotaPercent": 100,
+    "deadlineSeconds": 10800,
+    "publish": "never",
+    "productionServicesUnchanged": true,
+    "temporarySwap": "temporary-build20.swap; remove after build/drained smoke and headroom verification"
+  },
+  "adam_local_handoff_current_source": {
+    "at": "2026-10-14T13:30:31.053181+00:00",
+    "aggregate_sha256": "d0a4a43c0e19f202575eaac2402293ec7f1afb37ad4fb96e36c86355f0cabdab",
+    "files": 14,
+    "status": "RESEARCH_PASS_AND_ROOT_REAL_HTTP_STDIN_LOCAL_HANDLER_RECOVERY_PASS_SOURCE_ONLY",
+    "node24_focused": "9 files 67 tests passed",
+    "node_typecheck": "PASS",
+    "cli_typecheck": "PASS",
+    "scoped_lint_format": "PASS",
+    "real_cross_http_db_reopen": "PASS; actual stdin parser/private-auth runtime handler/ADAM HTTP receipt duplicate after lost ACK",
+    "packaged": false,
+    "limits": [
+      "Desktop20 and Linux build20 precede this new handoff.",
+      "ADAM planner, durable encrypted handoff and post-expiry reconciliation still pending.",
+      "No live provider/job dispatch or parent completion."
+    ]
+  },
+  "laya_composition_current_source": {
+    "aggregate_sha256": "64e28b6634c018c5cc16d7b0a1a87500c9083157a795bdc30f38c1ab8b7e477a",
+    "status": "RESEARCH_PASS_NODE24_58_SOURCE_ONLY",
+    "providerActivated": false
+  },
+  "capacity_collector_review": {
+    "aggregate_sha256": "8fbe0ccea8a4f55dc66cfa985f1354bdea1115759333b8cabf4ebd6dfdd85e3c",
+    "status": "CHANGES_REQUIRED_TWO_REAL_PATH_REPLACEMENT_REPRODUCTIONS",
+    "producerCorrectionAssigned": true,
+    "liveWorkersActivated": false
+  },
+  "adam_child_submit_adapter_assignment": {
+    "owner": "RESEARCH",
+    "status": "CORRECTED_CANDIDATE_85143895_IN_PEER_REREVIEW_NOT_APPLIED",
+    "reason": "Worker can read ADAM but its patch write boundary excludes ADAM; ROOT has existing access.",
+    "liveServiceChanged": false,
+    "aggregate_sha256": "85143895fab83b8407c32b25bb27e6ee77ce9283b6b30eaa8c478b92c0c386ca"
+  },
+  "capacity_collector_linux_correction": {
+    "at": "2026-10-14T13:45:06.825240+00:00",
+    "aggregate_sha256": "859ef37f12ce341fe15abfd306d4472afce1ed037b20407c5cd48f5bb47bdff5",
+    "status": "ROOT_ACTUAL_LINUX_8_TESTS_AND_BUILD1_CORRECTED_SOURCE_REVIEW_PASS_NOT_WIRED",
+    "sourceClosureFiles": 5,
+    "closureArchiveSha256": "84e53bf9422e409e162deb7a921e5a5d2311cbcc145e428190e54dc0c2bd1b60",
+    "tests": 8,
+    "node": "24.18.0",
+    "descriptorKernelMagicLinkABAProof": true,
+    "tempFilesystemOnly": true,
+    "procfsDefaultProductionPathTested": true,
+    "unsupportedDarwinRefused": true,
+    "productionServicesActive": true,
+    "workerConfigured": false,
+    "externalReservationsAuthorityExists": false
+  },
+  "latest_source_checkpoint_446": {
+    "checkpoint": "source-checkpoint-1791986015",
+    "files": 446,
+    "untrackedArchiveSha256": "095da717877ca51838d1d0d8dce8026414366bd795a56c696815560443e5ebd2",
+    "trackedPatchSha256": "529bfdd580ba0b6918a7f7a8a6830a1cc5341e12dc9b6b103eb42c8fc7f6b93a",
+    "scope": "Source/plans checkpoint only; includes unapplied ADAM candidate with CHANGES_REQUIRED review",
+    "status": "VPS_EXACT_RESTORE_VERIFIED_446_FILES_AND_24_PYTHON_TESTS_PASS",
+    "awsUsed": false,
+    "verified_at": "2026-10-14T14:00:37.431916+00:00"
+  },
+  "adam_restart_reconciliation_helper": {
+    "owner": "FIXER",
+    "status": "SOURCE_ACCEPTED_CATALOG_FACADE; RESTART_CALLER_INTEGRATION_PENDING",
+    "intent": "Read-only exact child lookup after lost ACK/original grant expiry; no new grant/child/state mutation",
+    "current_stage": "CATALOG_FACADE_INDEPENDENT_SOURCE_REVIEW_PASS; RESTART_CALLER_PREFLIGHT_ACTIVE; NO_LIVE_ACTIVATION"
+  },
+  "current_build_supervision_20261014": {
+    "verified_at": 1792009835.719906,
+    "status": "LIVE_MONITOR_VERIFIED",
+    "pid": 10387,
+    "health_age_seconds": 14.1,
+    "interval_seconds": 30,
+    "quiet_check_seconds": 600,
+    "reminder_seconds": 300,
+    "test_count_passed": 18,
+    "native_cli": "/usr/local/bin/dobius",
+    "orchestrator_tasks_and_dispatches": "plans/worker-monitor-20261014/assignments.json",
+    "visible_monitor_handle": "term_74f90380-66dc-4acd-80f7-567425d5223c",
+    "live_proof": "BUILD2 changed-report notice delivered to ROOT; exact 2-file freeze verified; source-delivery task completed through Orchestrator; independent review queued behind current FIXER task.",
+    "old_report_watcher": "paused after replacement",
+    "historical_storage_monitor": "remains paused",
+    "aws": "deferred",
+    "head_agents": "not modified",
+    "limitations": [
+      "Native hooks are missing on some current Codex panes; agent state stays unknown rather than claiming idle. Report changes and last output remain observed, and ROOT checks actual readback before assignment.",
+      "Monitor surfaces work to ROOT; it never auto-completes jobs, retries workers, resolves permissions or activates production features."
+    ],
+    "latest_verified_snapshot": {
+      "at": 1792015536.584196,
+      "pid": 36811,
+      "status": "watching",
+      "health_age_seconds": 11.9,
+      "active_tasks": {
+        "BUILD2": {
+          "task_id": "task_0b5e494e5532",
+          "status": "completed",
+          "delivery_verified": true
+        },
+        "BUILD1": {
+          "task_id": "task_43f9388a61f5",
+          "status": "dispatched",
+          "delivery_verified": true
+        },
+        "RESEARCH": {
+          "task_id": "task_c82d8f56568e",
+          "status": "dispatched",
+          "delivery_verified": true
+        },
+        "FIXER": {
+          "task_id": "task_fac3baa06943",
+          "status": "completed",
+          "delivery_verified": true
+        }
+      },
+      "queued_independent_reviews": {
+        "FIXER": "task_b107b13c4c4c"
+      },
+      "source_results": {
+        "adam_durable_intent": "Six independently reviewed source/test files applied in actual ADAM checkout; 30 combined synthetic tests + strict NodeNext PASS; planner and autonomous recovery remain pending",
+        "capacity_postconditions": "16 focused tests + combined Node check + independent bounded source PASS; managed capacity admission remains unavailable until real producer coverage",
+        "main_sealer": "Corrected input redaction: 19 mocked tests + strict scoped checks + combined main Node check + FIXER independent bounded source PASS",
+        "electron_dependency": "Canonical package/lock source Electron42.4.1 with verified internal ZIP metadata; RESEARCH independent bounded source PASS; no installed/runtime upgrade",
+        "queue_failure_fix": "66 focused tests + combined Node check + independent source PASS; not installed"
+      },
+      "next_work": {
+        "BUILD1": "Internal unseal half and shared intent/runtime policy, mocked tests only; no exposure",
+        "BUILD2": "Concrete ADAM caller authorization source inspection; no private settings/tokens/service actions"
+      },
+      "visible_monitor_handle": "term_11aee8ce-04b9-41c1-8eff-6e43fb08be57",
+      "visible_monitor_evidence": "Live event/heartbeat readback after restoring current visible read-only log tail; LaunchAgent observer PID36811 remains active.",
+      "boundaries": "AWS deferred; historical Storage paused; Adam/Friday untouched; no release/install/deploy/live activation.",
+      "architecture": "ADAM independent control layer; Dobius execution layer; live bridge absent."
+    }
+  },
+  "managed_capacity_registry_current_source": {
+    "status": "PASS_BOUNDED_SOURCE_FOUNDATION",
+    "aggregate_sha256": "d89c584ff7fe0bb35bfc60f07ff6c3c98889b72a50e894e57bfd65355dae89be",
+    "focused_tests": 8,
+    "combined_node_typecheck": "PASS",
+    "independent_review": "BUILD1 task_96d2437b0c75 / ctx_db0a841c50d8",
+    "live_capacity_admission": false,
+    "production_writer_coverage": false
+  },
+  "failed_task_dispatch_source_fix_20261014": {
+    "status": "SOURCE_TESTS_PASS_NOT_PACKAGED",
+    "verified_at": 1792012812.973335,
+    "owned_hashes": {
+      "dobius/src/main/runtime/orchestration/db.ts": "72b9431a60557038c79e5a72548a91b8a80c2b08523e39485867d776feb0c8e5",
+      "dobius/src/main/runtime/orchestration/task-failure-dispatch.test.ts": "ac3e6e3604c18a27fab35611c7a68de3fb8a5b470e4c8a59369e9f0effc0c091",
+      "plans/worker-monitor-20261014/ROOT-task-failure-dispatch-fix.md": "692e856676f9c783bacb2bde729b41578ef6d94ecd570c66df4850096463252a"
+    },
+    "focused_tests": "66 tests / 2 files PASS",
+    "scoped_lint_format": "PASS",
+    "current_runtime_changed": false,
+    "current_build2_continuation": "task_e980ae7e63c9 / ctx_dc8e4817c5ad; no duplicate dispatch",
+    "independent_review": {
+      "verdict": "PASS_SOURCE_REVIEW",
+      "task_id": "task_4dd3dbe94fa0",
+      "dispatch_id": "ctx_ce999a3336ac"
+    },
+    "combined_node_typecheck": "PASS; root-combined-node-typecheck-postconditions.json"
+  },
+  "adam_child_submit_source_application_20261014": {
+    "status": "SOURCE_APPLIED_TARGETED_TESTS_TYPECHECK_PASS",
+    "task_id": "task_a192abad117c",
+    "dispatch_id": "ctx_52a12809776a",
+    "aggregate_sha256": "b22197fdad3e6fa51ad8679790235b50cea39245a86705ad66f3d7f2a12235b6",
+    "at": "2026-10-14T21:22:22.683935+00:00",
+    "findings": "ROOT read all three candidate modules and corrected startup/deadline/proof fixtures. One absolute deadline and current proof are rechecked directly before stdin grant delivery; late error sinks and one settlement remain through close. Previous review blocker resolved. New target paths absent; shared receipt contract matches reviewed source.",
+    "files": [
+      {
+        "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/child-submit-contract.ts",
+        "sha256": "00200dfefdfa30fb9a5264cdb3b04fe3dd818f3061fb14c0f00ac2731287e066"
+      },
+      {
+        "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/child-submit-process.ts",
+        "sha256": "7d0187d71b964863408b1b75cba458ec34472f5fa643861b719058549857df9c"
+      },
+      {
+        "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/child-submit.ts",
+        "sha256": "c1a5408fba3d5dbed7e7187f0764631586f4afd8301dbe260b22d1adfdf57546"
+      },
+      {
+        "path": "/Users/bayou/dobius/projects/ADAM/service/tests/dobius-cloud-child-submit.test.ts",
+        "sha256": "b20888478a27214c18873aa4c36b96570c123e8a32d33293e03ce0ce43768014"
+      }
+    ],
+    "scope": "Source application only; no planner/production authority configuration, durable unseal/recovery wiring or live activation.",
+    "verified_at": "2026-10-14T21:23:15.973992+00:00",
+    "targeted_tests": "PASS: 12 tests in actual ADAM source checkout; all use synthetic/disposable fixtures.",
+    "targeted_typecheck": "PASS: strict/exactOptionalPropertyTypes/noUncheckedIndexedAccess ES2023 NodeNext; --ignoreConfig required by installed compiler for explicit file list. No project-wide typecheck or build.",
+    "production_caller_wired": false,
+    "live_activation": false
+  },
+  "adam_durable_intent_candidate_current": {
+    "status": "SOURCE_APPLIED_TARGETED_TESTS_TYPECHECK_PASS",
+    "at": "2026-10-14T21:35:44.314642+00:00",
+    "review_task": "task_fbe4d2531d62",
+    "review_dispatch": "ctx_bc5697918d39",
+    "aggregate_sha256": "989e56f6ca4d99662b2cb7adae242ecd2d535f7826784c18bab7375fa41f5555",
+    "source_only": true,
+    "live_service_or_database_changed": false,
+    "files": [
+      {
+        "path": "/Users/bayou/dobius/projects/ADAM/service/src/db/migrations.ts",
+        "baseline_sha256": "fc986082dae3175742421c5e3489370032e0c498b00d9de9a39b9adcd2c5954e",
+        "applied_sha256": "e54ea453716a30c938fb01a9f4f24658b0e257505a781e4ec20394f070adc26e"
+      },
+      {
+        "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/intent-contract.ts",
+        "baseline_sha256": null,
+        "applied_sha256": "60d148b77864bb83025e1d8cfeb6f0b3883d3d995759df306fbce165880a7ecd"
+      },
+      {
+        "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/intent-migration.ts",
+        "baseline_sha256": null,
+        "applied_sha256": "ce3c0b4bcc37e392361d08dbc04ab02a2d284c979a027e59400f52be092ef93e"
+      },
+      {
+        "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/intent-publication.ts",
+        "baseline_sha256": null,
+        "applied_sha256": "9cb9e986979a61a9ad7eba5fb9c9a46cbe63a849e5ad39e8264270fea1d12ba8"
+      },
+      {
+        "path": "/Users/bayou/dobius/projects/ADAM/service/src/dobius-cloud/receipt-store.ts",
+        "baseline_sha256": "7f49efb0be1e500873b196ccb12478f19aa22e8d1167e7a465811a2dce4cf9a1",
+        "applied_sha256": "04d066e92024af51ed4e19cc58954f61bfc5c975d29fdcb0dc079c48b0dbc9c3"
+      },
+      {
+        "path": "/Users/bayou/dobius/projects/ADAM/service/tests/dobius-cloud-intents.test.ts",
+        "baseline_sha256": null,
+        "applied_sha256": "e06aa74c4c67d3ba4a2aa158cb03dd37c5ebe5aed422a2393c2036ccdcc6c128"
+      }
+    ],
+    "limits": "Atomic grant/intent publication source only; no OS sealer, authenticated unseal transport, planner/recovery worker or activation.",
+    "verified_at": "2026-10-14T21:38:09.152935+00:00",
+    "targeted_tests": "PASS: 30 tests / 3 files in actual ADAM checkout: 13 intent, 5 receipt receiver, 12 child-submit; all synthetic/disposable fixtures.",
+    "targeted_typecheck": "PASS: explicit-file strict NodeNext with exactOptionalPropertyTypes/noUncheckedIndexedAccess and --ignoreConfig; original source and new intent/submit modules/tests included.",
+    "production_sealer_available": false,
+    "unseal_transport_wired": false,
+    "planner_recovery_wired": false
+  },
+  "managed_capacity_postcondition_current_source": {
+    "status": "PASS_BOUNDED_SOURCE",
+    "aggregate_sha256": "11bc61637fb3f0e8f53e0d36e797a3422d4822752a1cdd6adcb3e6f9c88fbd0f",
+    "focused_tests": 16,
+    "combined_node_typecheck": "PASS",
+    "independent_review": "RESEARCH task_bc3ed03be810 / ctx_f051e19fcfb3",
+    "admission_available": false,
+    "actual_writer_coverage": false,
+    "live_activation": false
+  },
+  "electron_dependency_source_20261014": {
+    "status": "INDEPENDENT_PASS_BOUNDED_SOURCE",
+    "author_task_id": "task_b9dbfe8edc15",
+    "review_task_id": "task_597f98995100",
+    "review_dispatch_id": "ctx_98c0564a12fd",
+    "reviewed_freeze": {
+      "receipt": "plans/cloud-workstation-reports-20261012/build2.json:electron-async-startup-dependency-source-20261014-final",
+      "author_task_id": "task_b9dbfe8edc15",
+      "author_dispatch_id": "ctx_38240ac6bf47",
+      "aggregate_sha256": "a692527886d8fe0b2206e318a0beea17e9a6d77f66ac792e2b52e9106383e1d5",
+      "files": {
+        "dobius/package.json": {
+          "sha256": "de3e0be0c8a7adc2655d6dccb9f55dee43c12478d6e43f96dccfa9cb3185967c",
+          "bytes": 16452
+        },
+        "dobius/pnpm-lock.yaml": {
+          "sha256": "010e7a04b6b39cbad70bacdd8e2c355a1e9ce81d713031c50b737fa45a46962c",
+          "bytes": 506347
+        }
+      }
+    },
+    "metadata_evidence": {
+      "retrieval_manifest": "plans/worker-monitor-20261014/electron-official-metadata/retrieval-manifest.json",
+      "retrieval_manifest_sha256": "937cf99ebe6d573ba107caa38e622df641626438f6f100c59df88bdd191ba3f9",
+      "raw_documents": {
+        "plans/worker-monitor-20261014/electron-official-metadata/42.3.3.json": {
+          "sha256": "7f27a648d75dfdebcac51d5a0d4b87995f382a546c91312ef6843f600e356208",
+          "url": "https://registry.npmjs.org/electron/42.3.3",
+          "name": "electron",
+          "version": "42.3.3"
+        },
+        "plans/worker-monitor-20261014/electron-official-metadata/42.4.1.json": {
+          "sha256": "b8c35768d9b4cedfb44aedd64b5343bab5826f5904d51de2f30f6fe2dbe70703",
+          "url": "https://registry.npmjs.org/electron/42.4.1",
+          "name": "electron",
+          "version": "42.4.1"
+        },
+        "plans/worker-monitor-20261014/electron-official-metadata/electron-internal-extract-zip-1.0.1.json": {
+          "sha256": "7a855415ddc8bb7b1d8e9ac63ec485ceb4570244282adbfc012c3a6f7d530577",
+          "url": "https://registry.npmjs.org/@electron-internal%2fextract-zip/1.0.1",
+          "name": "@electron-internal/extract-zip",
+          "version": "1.0.1"
+        }
+      },
+      "reviewer_fresh_registry_request": false
+    },
+    "installed_or_live_acceptance": false,
+    "limitations": [
+      "This validates source package/lock metadata only; no installation, package materialization, build, or live Electron startup/version acceptance was performed.",
+      "No direct fresh registry fetch was made by reviewer; official raw metadata bytes and recorded HTTPS retrieval provenance were independently hash-verified."
+    ]
+  },
+  "adam_main_intent_sealer_source_20261014": {
+    "status": "INDEPENDENT_PASS_BOUNDED_SOURCE",
+    "author_task_id": "task_42d4bf7eabfe",
+    "review_task_id": "task_fac3baa06943",
+    "review_dispatch_id": "ctx_4fb1ebc85d2d",
+    "reviewed_hashes": {
+      "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.ts": "0bcb63eb669bc8d3d75e66fb837bae753bebf6e1a77691a19e74ad308a2e20dd",
+      "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.test.ts": "83815c66fb5765f38dd424fe6eb93e10e42844eaad134b88760f3b52846cd75b",
+      "plans/worker-monitor-20261014/BUILD1-adam-main-intent-sealer-source.md": "c89399d1ec2d67bbda45b787351702850149e231133ad2e54920f7f171f76e23"
+    },
+    "focused_tests_passed": 19,
+    "combined_main_typecheck": {
+      "command": [
+        "pnpm",
+        "--dir",
+        "dobius",
+        "exec",
+        "tsgo",
+        "--noEmit",
+        "--composite",
+        "false",
+        "--incremental",
+        "false",
+        "-p",
+        "config/tsconfig.node.json"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "at": "2026-10-14T21:56:38.435879+00:00",
+      "sealer_hashes": {
+        "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.ts": "0bcb63eb669bc8d3d75e66fb837bae753bebf6e1a77691a19e74ad308a2e20dd",
+        "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.test.ts": "83815c66fb5765f38dd424fe6eb93e10e42844eaad134b88760f3b52846cd75b",
+        "plans/worker-monitor-20261014/BUILD1-adam-main-intent-sealer-source.md": "c89399d1ec2d67bbda45b787351702850149e231133ad2e54920f7f171f76e23"
+      },
+      "source_unchanged_during_check": true
+    },
+    "real_os_backend_verified": false,
+    "runtime_acceptance": false,
+    "limits": [
+      "PASS applies to this bounded seal-only source packet. No OS-backed encryption, keychain behavior, platform availability, caller authorization, or injected-backend trust is proven by mocked fixtures.",
+      "No unseal, authenticated bridge, renderer/RPC/CLI/lifecycle integration, production planner/caller, autonomous recovery, package upgrade, packaged acceptance, or live activation is present. Installed Electron remains below the source minimum and production factory refusal remains expected.",
+      "No source edits, test runs, private account/config/profile/data access, real Electron/keychain/service/device/provider calls, AWS/Storage activity, Git mutation, build/install/deploy, or Adam/Friday head action occurred."
+    ]
+  },
+  "adam_control_dobius_execution_architecture_20261014": {
+    "at": "2026-10-14T22:05:14.043753+00:00",
+    "authority": "Explicit Carson clarification in active conversation",
+    "contract": "plans/worker-monitor-20261014/ROOT-adam-control-dobius-execution-boundary.md",
+    "adam": "Independent control layer: plans/approval/routing/recovery decisions",
+    "dobius": "Execution layer: authorized jobs, safety checks, durable results",
+    "live_bridge": "ABSENT",
+    "review_task_id": "task_c82d8f56568e",
+    "superseded_final_recommendation": "Make independent ADAM service a Dobius-main-owned child",
+    "aws": "deferred",
+    "historical_storage": "paused",
+    "review_delivery_verified": true
+  },
+  "adam_main_intent_unsealer_source_20261014": {
+    "status": "INDEPENDENT_PASS_BOUNDED_SOURCE",
+    "author_task_id": "task_43f9388a61f5",
+    "review_task_id": "task_b107b13c4c4c",
+    "review_dispatch_id": "ctx_66ce89786472",
+    "reviewed_hashes": {
+      "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-protocol.ts": "fa37570e1c11df1ac4e8e4123b05e5fef5969edad4a3fe9626a139e5cc3b8737",
+      "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-runtime.ts": "156e1c67f85d6e5418195836a566277ccfb7d8ec4db27357a310ad1effb8307f",
+      "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.ts": "734716077ca29d59102d108d69d7ae9aade36d48a50b8c9e8dabd2f5e0bd63fb",
+      "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.test.ts": "83815c66fb5765f38dd424fe6eb93e10e42844eaad134b88760f3b52846cd75b",
+      "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-unsealer.ts": "b9e07897fedf00e0983215dc5e9d9aaaedc8167f41cc04f7dfca6c55dff50a11",
+      "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-unsealer.test.ts": "f223a7d84902ea09eb4a2cf254b468ae9ef5ace6f312df455259769560f946e0",
+      "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-unsealer-test-fixtures.ts": "5f8ade166aade7e54b45deafe1a6e4837f50dbbd5dfe0c02f8f2a26cc5a1bdb5",
+      "plans/worker-monitor-20261014/BUILD1-adam-main-intent-unsealer-source.md": "7dda56908352f6d46556281e6f9e6fc6b0fb7efa044b85e7bad49c2e9c7ccd6e"
+    },
+    "focused_mock_tests": 54,
+    "combined_node_typecheck": {
+      "command": [
+        "pnpm",
+        "--dir",
+        "dobius",
+        "exec",
+        "tsgo",
+        "--noEmit",
+        "--composite",
+        "false",
+        "--incremental",
+        "false",
+        "-p",
+        "config/tsconfig.node.json"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "at": "2026-10-14T22:09:22.786808+00:00",
+      "owned_hashes": {
+        "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-protocol.ts": "fa37570e1c11df1ac4e8e4123b05e5fef5969edad4a3fe9626a139e5cc3b8737",
+        "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-runtime.ts": "156e1c67f85d6e5418195836a566277ccfb7d8ec4db27357a310ad1effb8307f",
+        "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.ts": "734716077ca29d59102d108d69d7ae9aade36d48a50b8c9e8dabd2f5e0bd63fb",
+        "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-sealer.test.ts": "83815c66fb5765f38dd424fe6eb93e10e42844eaad134b88760f3b52846cd75b",
+        "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-unsealer.ts": "b9e07897fedf00e0983215dc5e9d9aaaedc8167f41cc04f7dfca6c55dff50a11",
+        "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-unsealer.test.ts": "f223a7d84902ea09eb4a2cf254b468ae9ef5ace6f312df455259769560f946e0",
+        "dobius/src/main/automations/cloud-jobs/cloud-job-adam-intent-unsealer-test-fixtures.ts": "5f8ade166aade7e54b45deafe1a6e4837f50dbbd5dfe0c02f8f2a26cc5a1bdb5",
+        "plans/worker-monitor-20261014/BUILD1-adam-main-intent-unsealer-source.md": "7dda56908352f6d46556281e6f9e6fc6b0fb7efa044b85e7bad49c2e9c7ccd6e"
+      },
+      "source_unchanged_during_check": true
+    },
+    "production_bridge": false,
+    "limits": [
+      "PASS covers bounded source semantics only. Mocked Electron does not prove OS-backed encryption/decryption, keychain behavior, packaged behavior, or live platform availability.",
+      "No caller authentication/authorization, public bridge, lifecycle composition, production recovery caller, planner, recovery worker, TTL renewal, fresh approval, autonomous recovery, or live activation is included. Current installed Electron 42.3.3 remains below the source minimum 42.4.1.",
+      "No source edits, tests, real Electron/keychain/service/provider/device calls, private accounts/configuration/data/profiles, AWS/Storage activity, Git mutation, build/install/deploy, or Adam/Friday head action occurred."
+    ]
+  },
+  "bridge_research_first_20261014": {
+    "at": 1792016040.739717,
+    "authority": "Explicit user instruction: research and recommend based on existing system before new bridge implementation",
+    "existing_work": "Continues, including existing source reviews",
+    "new_bridge_code": "Research recommendation first; no new bridge implementation dispatched",
+    "vertex": "Outside current scope",
+    "aws": "deferred",
+    "historical_storage": "paused"
+  },
+  "adam_dobius_hermes_bridge_research_20261014": {
+    "at": "2026-10-14T22:16:33.757911+00:00",
+    "status": "SOURCE_AND_PRIMARY_DOCUMENTATION_RESEARCH_COMPLETE; RECOMMENDATION_ONLY",
+    "report_path": "plans/worker-monitor-20261014/ROOT-adam-dobius-hermes-bridge-research.md",
+    "report_sha256": "531fb97079cfba1dd4aa67fb43f68132756d5f6b0477fcedbfa25d24317d100e",
+    "owned_application_source_changed": false,
+    "new_bridge_implemented": false,
+    "private_profiles_credentials_read": false,
+    "local_source_hashes": {
+      "dobius/src/main/jarvis/adam-client.ts": "fa683be6230bafe3887b6456bc0fc6a0c1d3dc1c8798218fa5ef1668adbc319d",
+      "dobius/src/main/agents/adam-event-ingest.ts": "79a252bcbcad0e2da0d8dd152386e0cf3cc8516be4d995bf11d7876d259d81ff",
+      "dobius/src/main/agents/agent-run-events.ts": "a4b78e8dda7101eed640c16f0fdd93e8baf403c509def2784c502a5412c4420d",
+      "dobius/src/main/agents/agent-run-event-delivery.ts": "f074fd97bbc9c69f1aa12ee48c17c1310747773594a6e685fc174b4fdb19fbb7",
+      "dobius/src/main/runtime/rpc/methods/client-events.ts": "6e7f47d968629a874e620700df1524b91679a55ee24cafb49cbbde0a81396274",
+      "dobius/src/main/runtime/device-registry.ts": "942b6a15ac64610c93f5d86bbf109ad52dac52d9b7915fa5090a2b2ed7bc9fdb",
+      "dobius/src/main/runtime/rpc/dispatcher.ts": "14d8d3c8f294739e297172eda052ee459dbc7d3afd7c67468c855c38d28f00ae"
+    },
+    "external_source_hashes": {
+      "/Users/bayou/dobius/projects/ADAM/service/src/runtime/service.ts": "251b62dd624918e43c27cdaa37ca02a7e3d21c72162fe92ff681196826504862",
+      "/Users/bayou/dobius/projects/ADAM/service/src/adapters/dobius.ts": "6b5167cad2534c50a68490d07aaef272850a4f1087340b9af74f2c97a87a079b",
+      "/Users/bayou/dobius/projects/ADAM/service/src/orchestration/supervisor.ts": "7fdf98cc1be184f3fd2701f0281524f1397866e491a4c8cb6fed6be61a2ff0cf",
+      "/Users/bayou/dobius/projects/ADAM/service/src/events/ingest.ts": "46f01b58ae4ee0cbd9a4d8c3e40890ae11c270498d2c0f72fd4cc671c1df3207",
+      "/Users/bayou/dobius/projects/ADAM/service/src/models/router.ts": "9a3d1743a8f6da210fd8321cc5ca1a28c2daf68abfc830b2a43cb02a43c21fbd",
+      "/Users/bayou/.hermes/releases/v0.22.0/website/docs/user-guide/features/api-server.md": "0fd3754a5bb066b4d4f3dc64d2c9f9f0989630fa5928330bf43e8803eed1abe4",
+      "/Users/bayou/.hermes/releases/v0.22.0/website/docs/guides/use-mcp-with-hermes.md": "afc46dfb6503079e41e0e6436a543428fe633422c5073fe4d0eb57fe101e4fbe",
+      "/Users/bayou/.hermes/releases/v0.22.0/website/docs/developer-guide/observer-hooks.md": "53a416e4e299f1465b7ed982be09935f3b658b946fb37b4afe60ba748e34d72b"
+    },
+    "recommendation": "Thin typed background bridge around existing Hermes, ADAM service and Dobius RPC/event journals; one head decision owner, continuous state updates and durable acknowledged job delivery",
+    "limits": "Source analysis; no live integration/performance/placement proof. Existing work continues; new bridge code waits for research recommendation."
+  },
+  "adam_service_principal_registry_source_20261014": {
+    "verified_at": "2026-10-15T03:14:12.548074+00:00",
+    "status": "INDEPENDENT_BOUNDED_SOURCE_PASS",
+    "author_task": "task_6272605624be",
+    "review_task": "task_53202f4b2b63",
+    "source_sha256": {
+      "dobius/src/main/adam-service-principal/principal-contract.ts": "02e49314b603e60a5dcd44a27ac1481e832180fd42bece867afd76f8875995c5",
+      "dobius/src/main/adam-service-principal/registry.test.ts": "a5a80ebea1a5e25aa6ee537aae77e881a5fcb937d6ec83fc5ec6e6736e52d169",
+      "dobius/src/main/adam-service-principal/registry.ts": "5ed3004c6cb5604e7d4a2c3a6a3f4c384d75603e47f7d4bf4fee91dcb02d765f"
+    },
+    "author_focused_synthetic_tests": 16,
+    "independent_review": "PASS_BOUNDED_SOURCE; exact source + review artifact hashes verified",
+    "combined_main_node_typecheck": "PASS exit 0 after new registry source",
+    "live_authentication": false,
+    "production_activation": false,
+    "pending": [
+      "real enrolled peer/transport adapter",
+      "production issuance and durable verifier/revocation storage",
+      "head ownership and production planner wiring",
+      "end-to-end recovery/Kanban acceptance"
+    ]
+  },
+  "adam_approved_payload_source_20261014": {
+    "recorded_at": "2026-10-15T03:32:20.095619+00:00",
+    "verdict": "PASS_BOUNDED_APPLIED_SOURCE",
+    "author_task": "task_4a82d5909af6",
+    "review_task": "task_b7c711b49a88",
+    "application_receipt": "plans/worker-monitor-20261014/ROOT-adam-approved-payload-application.json",
+    "applied_hashes_sha256": {
+      "src/dobius-cloud/intent-publication.ts": "8248ffc77766abb62c50303bf51fd5a917652899b480a6b714399ff4a0c25544",
+      "src/dobius-cloud/intent-migration.ts": "8a7c569486e4807547940b306d3f85db98023641bc95255403bfceda79ec722b",
+      "src/dobius-cloud/receipt-store.ts": "f53ffe295a5b27d01934489cef907cca59e9e4a159019bdfcc932a65a5ed5e2a",
+      "src/db/migrations.ts": "dfac6a4eb3e6d694468c3b980820559021b2996f54f808d8ab5735444fede3ec",
+      "src/dobius-cloud/approved-job-payload.ts": "7b478d364798bb28f2dc5d052ca8e06a60f6b1db28de7913146af4a14c7560a5",
+      "tests/dobius-cloud-approved-payload.test.ts": "77e461de1294f0c8f8e6ade6adcb99f619c1a1ffb3d946857bbbd1b939975663"
+    },
+    "native_validation": {
+      "tests": "PASS: 38 tests; 0 failures; Node v24 with tsx; intents, approved payload, receipts and child submit suites",
+      "strict_types": "PASS: scoped strict NodeNext TypeScript validation; no emit",
+      "execution_evidence": "ROOT native checks completed exit 0 in prior execution checkpoint; tests session 99135; strict check completed exit 0."
+    },
+    "source_only": true,
+    "live_bridge_enabled": false,
+    "limits": [
+      "No running service, database migration, package or head-agent activation performed.",
+      "Planner producer, authenticated transport, event coverage and live end-to-end acceptance remain unfinished."
+    ]
+  },
+  "terminal_overflow_review_20261014": {
+    "task_id": "task_ea7db05a7279",
+    "dispatch_id": "ctx_116c372e4279",
+    "verdict": "CHANGES_REQUIRED",
+    "review_artifact": "plans/worker-monitor-20261014/BUILD1-terminal-overflow-correction-review.md",
+    "review_artifact_sha256": "132dc640cfa65be54cb990517a4e0b8a3b45655fab37ddeef6bbc82d09ff14b7",
+    "reviewed_hashes": {
+      "dobius/src/renderer/src/components/terminal-pane/pty-reattach-output-gate.ts": "db6a4e6739412a0ae9052c5ff1533b3b981b19ffb1600592b4549bbcabe9926b",
+      "dobius/src/renderer/src/components/terminal-pane/pty-connection.ts": "8c2b198f24ab51a8673ba8352da4776e01bec5a1b14848b48710931304caef72",
+      "dobius/src/renderer/src/components/terminal-pane/pty-reattach-output-gate.test.ts": "67311fa130226286406929edc48ee3e0a5ebda30b6da8868937e093068ff6021",
+      "dobius/src/renderer/src/components/terminal-pane/pty-connection.test.ts": "fdabb6682a774113cab3b524c7f29c83a54266f627a0e8e496a446e1f20749c6",
+      "dobius/src/renderer/src/lib/pane-manager/pane-terminal-output-scheduler.test.ts": "748447eb75bc635b635ef623959c8ca545ca6cd03423086dc363cf6ff4012f55"
+    },
+    "canonical_renderer_typecheck": "FAIL TS2322 at pty-connection.ts6158; requires author correction",
+    "next_task": "task_dcaa4f8dcdfd",
+    "source_accepted": false,
+    "installed": false
+  },
+  "terminal_overflow_query_correction_20261014": {
+    "recorded_at": "2026-10-15T03:51:19.446772+00:00",
+    "author_task": "task_dcaa4f8dcdfd",
+    "author_dispatch": "ctx_55885b9289d1",
+    "author_report": "plans/worker-monitor-20261014/FIXER-terminal-overflow-query-correction.md",
+    "author_report_sha256": "5e12ee4d411a17d8cd4f40a7cbbf3b89c2e08969fafc45ffa344b2effb91b872",
+    "owned_hash_verification": "All seven source/test hashes matched author freeze",
+    "recorded_checks": "381 focused tests, canonical renderer typecheck, scoped lint/format/diff PASS",
+    "independent_review_task": "task_5c1893cc3671",
+    "independent_review_status": "completed_changes_required",
+    "source_accepted": false,
+    "installed": false,
+    "independent_review_artifact": "plans/worker-monitor-20261014/BUILD1-terminal-overflow-query-review.md",
+    "independent_review_sha256": "96d7125771797ea13a1747cdbe76d33f7f1b252cb967864e13ee9a4da0826380",
+    "independent_findings": [
+      "Query preserver tracks supported-query prefixes only. Unsupported CSI such as overflowed ESC[6 followed after release by nvisible leaves candidate empty and sends orphaned nvisible to renderer; malformed OSC divergence may likewise pass suffix bytes. Preserve bounded VT framing through whole unsupported/malformed frames while answering only exact supported stateless frames.",
+      "The overflow query callback has no disposed/PTY-generation guard and its local gate is not invalidated on binding dispose. A late overflow callback can send stale DA1/OSC/pixel replies through a still-connected transport; stale callbacks after discard can also enter dataCallback. Add a disposed/replaced-binding fence and deferred-connect disposal regression."
+    ],
+    "next_task": "task_e1707fc26dcf"
+  },
+  "current_package_capacity_preflight_20261014": {
+    "recorded_at": "2026-10-15T04:09:11.014570+00:00",
+    "available_bytes": 740388864,
+    "status": "PACKAGE_BUILD_HELD_INSUFFICIENT_HEADROOM",
+    "action": "No heavy package build, deletion, cleanup, or queue activation performed",
+    "historical_storage_queue": "paused",
+    "aws": "deferred"
+  },
+  "terminal_framing_lifecycle_correction_20261015": {
+    "recorded_at": "2026-10-15T04:07:04.502315+00:00",
+    "author_task": "task_e1707fc26dcf",
+    "author_dispatch": "ctx_a9ac1eb203d0",
+    "author_report": "plans/worker-monitor-20261014/FIXER-terminal-framing-lifecycle-correction.md",
+    "author_report_sha256": "c13924fb13c15f96ddad6988db89a0fe8699b1f7924796e9ab279483daa2e555",
+    "verified_owned_hashes": {
+      "dobius/src/renderer/src/components/terminal-pane/pty-connection.ts": "50aa7de3e923d90871803dee5d1b6efc498c0ebcc8b9d92680afc958ac34ad73",
+      "dobius/src/renderer/src/components/terminal-pane/pty-connection.test.ts": "3b8a77eeed5546814992fe5d642f3b78c89474ee3c9d6e42697954aa8b6aeae1",
+      "dobius/src/renderer/src/components/terminal-pane/pty-reattach-output-gate.ts": "bf314208111a9d77fb80d5869610a367d2b39a6859a42a1770f9d88b578556d4",
+      "dobius/src/renderer/src/components/terminal-pane/pty-reattach-output-gate.test.ts": "7af55f7d15d775f9f24ed03029bcb09b02796c53c806289e1b04f537acef93de",
+      "dobius/src/renderer/src/components/terminal-pane/pty-reattach-query-preserver.ts": "f5fcdaefe0889cf37fc0e5cbac7ca0cd329b61e21647a77f0e1b138bb64615e9",
+      "dobius/src/renderer/src/components/terminal-pane/pty-reattach-query-preserver.test.ts": "67ab872804e920e3a3675cba4bfc444ac074d4e9bb17c5d55b48cc03ca0bfd22",
+      "dobius/src/renderer/src/lib/pane-manager/pane-terminal-output-scheduler.test.ts": "748447eb75bc635b635ef623959c8ca545ca6cd03423086dc363cf6ff4012f55"
+    },
+    "recorded_validation": {
+      "runtime": "Node v24.18.0; Vitest maxWorkers=1",
+      "focused_command": "/Users/bayou/homebrew/opt/node@24/bin/node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/renderer/src/components/terminal-pane/pty-connection.test.ts src/renderer/src/components/terminal-pane/pty-reattach-output-gate.test.ts src/renderer/src/components/terminal-pane/pty-reattach-query-preserver.test.ts src/renderer/src/components/terminal-pane/terminal-capability-replies.test.ts src/renderer/src/components/terminal-pane/hidden-output-restore-scheduler.test.ts src/renderer/src/lib/pane-manager/pane-terminal-output-scheduler.test.ts --maxWorkers=1",
+      "focused_result": "PASS; 6 files, 415 tests.",
+      "renderer_typecheck_command": "/Users/bayou/homebrew/opt/node@24/bin/node node_modules/@typescript/native-preview/bin/tsgo.js --noEmit --composite false --incremental false -p config/tsconfig.tc.web.json (cwd dobius)",
+      "renderer_typecheck_result": "PASS; exit 0.",
+      "format_command": "node_modules/.bin/oxfmt --check on the six edited terminal source/test paths",
+      "format_result": "PASS.",
+      "lint_command": "node_modules/.bin/oxlint on the six edited terminal source/test paths",
+      "lint_result": "PASS.",
+      "diff_check": "git diff --check; PASS."
+    },
+    "independent_review_task": "task_a4be87144be5",
+    "independent_review_status": "completed_pass_bounded_source",
+    "source_accepted": true,
+    "installed": false,
+    "independent_review_artifact": "plans/worker-monitor-20261014/BUILD1-terminal-framing-lifecycle-review.md",
+    "independent_review_sha256": "49b04e5395fb73608e08b31be9340eb320ede03f1590e9661e5d0027231b38a7",
+    "limits": [
+      "Bounded source/synthetic evidence only; no installed/live PTY, SSH/mobile runtime, screenshot-wide rendering, terminal input or snapshot-service acceptance.",
+      "Only specified ESC/C1 framing is tracked; vendor-specific protocols outside it remain unparsed, and unterminated dropped frames remain suppressed."
+    ]
+  },
+  "adam_production_composition_research_20261015": {
+    "recorded_at": "2026-10-15T04:21:49.354197+00:00",
+    "research_task": "task_fc9093950b39",
+    "report": "plans/worker-monitor-20261014/RESEARCH-adam-production-composition-next-patch.md",
+    "report_sha256": "1b873fa76eff7aa646d0841ab4d3ed3d6a965f2236819df724b0b38f32012db0",
+    "exact_hashes_verified": 42,
+    "recommendation": "One default-disabled, end-to-end source composition patch: principal-verified Dobius main ingress plus a real ADAM durable-approved-decision publisher/recovery caller. Implement the ingress first within that patch; do not accept it without the ADAM caller.",
+    "wire_contract": "plans/worker-monitor-20261014/ROOT-adam-approved-intent-wire-v1.json",
+    "wire_contract_sha256": "f31b56bec89ac9841afed587eea76e6f5ba085c800f0a26e7760ba60a7e26e6f",
+    "main_implementation_task": "task_2de8559c7700",
+    "adam_candidate_task": "task_bec00b4864cc",
+    "source_accepted": false,
+    "live_bridge_enabled": false,
+    "gate": "Joint cross-repo integration and independent review required; OS-backed enrollment, protected credentials, head continuity and packaged/live tests remain unfinished."
+  },
+  "adam_production_composition_context_recovery_20261015": {
+    "stale_report_sha256": "49d8da3472f4d37c0ae5f24fa4207faf03e8f9e1a4a46fc46625b9b15b586f19",
+    "stale_report_task": "task_4a82d5909af6",
+    "ignored_as_current_task_completion": true,
+    "current_tasks": [
+      "task_2de8559c7700",
+      "task_bec00b4864cc"
+    ],
+    "observed": "Workers began current production work, then after compaction returned to older completed tasks. Current partial work retained.",
+    "correction": "Explicit current-task prompt and compact per-role recovery JSON; same dispatches; no process restart.",
+    "recovery_record_read_verified_roles": [
+      "BUILD1",
+      "BUILD2"
+    ],
+    "composition_complete": false,
+    "bridge_enabled": false
+  },
+  "adam_production_composition_candidate_20261015": {
+    "at": "2026-10-15T04:47:59.685961+00:00",
+    "author_task": "task_bec00b4864cc",
+    "author_dispatch": "ctx_da4cc7365d9c",
+    "candidate_manifest": "plans/worker-monitor-20261014/adam-production-composition-candidate/manifest.json",
+    "manifest_sha256": "31d705aed3d657f9436ed0d065c57625f8a5a1ece9d20466fe88499753a25a98",
+    "patch_sha256": "c156625c8c80266195bd4bab45544935c7af77dd061edf74ee74bfe66f304889",
+    "candidate_regular_files_verified": 76,
+    "touched_ADAM_baselines_verified": 13,
+    "recorded_tests": "51/51 focused tests PASS; strict NodeNext types PASS",
+    "review_task": "task_40a039c44372",
+    "review_status": "completed_changes_required",
+    "actual_ADAM_applied": false,
+    "source_accepted": false,
+    "live_bridge_enabled": false,
+    "review_artifact": "plans/worker-monitor-20261014/RESEARCH-adam-production-composition-candidate-review.md",
+    "review_sha256": "d5e30c416b6694e1e4f7c45fb769ac8f1ff86a4e57c64c5a6cb0d1436052ca3d",
+    "findings": [
+      {
+        "severity": "blocking",
+        "summary": "Exact decision resolution is unbounded; service shutdown waits on HTTP close before its bounded publisher drain.",
+        "anchors": [
+          "candidate/service/src/dobius-cloud/approved-decision-publisher.ts:175-179",
+          "candidate/service/src/runtime/service.ts:251-256",
+          "candidate/service/src/runtime/service.ts:260-270",
+          "candidate/service/src/runtime/service.ts:321-335"
+        ],
+        "required": "Bound/cancel authority resolution and bound complete shutdown ordering while preserving DB-open-on-unsettled-write behavior; add a never-settling-provider/open-route shutdown regression."
+      },
+      {
+        "severity": "blocking",
+        "summary": "Permanently revoked decision can strand a child accepted by Dobius after lost acknowledgement; recovery always requires current decision authority before exact persisted intent reconciliation.",
+        "anchors": [
+          "candidate/service/src/dobius-cloud/approved-decision-publisher.ts:114-121",
+          "candidate/service/src/dobius-cloud/approved-decision-publisher.ts:161-170",
+          "candidate/service/src/dobius-cloud/approved-decision-publisher.test.ts:194-205"
+        ],
+        "required": "Separate fresh authorization from recovery-only exact consumed-child lookup; permit no fresh submission, reseal, or expiry renewal. Add test where remote commit happens before ACK loss and authority remains permanently revoked."
+      },
+      {
+        "severity": "integration-prerequisite",
+        "summary": "Real service main supplies no publisher options or trusted providers, so publisher is absent and dispatch route remains 503; no production planner/caller is wired.",
+        "anchors": [
+          "candidate/service/src/main.ts:11-17",
+          "candidate/service/src/runtime/service.ts:166-173",
+          "candidate/service/src/runtime/service.ts:321-324"
+        ],
+        "required": "Keep default-disabled until reviewed main-owned durable decision source, credential authority, exact ADAM transport/process identity, and caller are wired."
+      }
+    ],
+    "next_task": "task_d6d018ade0b3"
+  },
+  "adam_main_production_composition_20261015": {
+    "author_task": "task_2de8559c7700",
+    "author_dispatch": "ctx_d6e4045cd6d3",
+    "verified_owned_hashes": 23,
+    "report": "plans/worker-monitor-20261014/BUILD1-adam-main-production-composition.md",
+    "report_sha256": "e9ef8f16138e462f3d57b526ead99f0b8bb375479f5aa5b6fe529cd75774f295",
+    "recorded_checks": "129 tests, main+CLI strictTS, lint/format/diff PASS",
+    "review_task": "task_5f3608c866a2",
+    "source_accepted": false,
+    "installed": false,
+    "bridge_enabled": false,
+    "review_status": "completed_changes_required",
+    "review_artifact": "plans/worker-monitor-20261014/FIXER-adam-main-production-composition-review.md",
+    "review_sha256": "15fb2c2d25fad02bee5c4466fe18cad348a956fa193c35f299eb785de7ccd72e",
+    "findings": [
+      {
+        "id": "admission-clock-source-mismatch",
+        "severity": "bounded-correctness",
+        "path": "dobius/src/main/automations/cloud-job-submit-admission.ts",
+        "line": 60,
+        "summary": "Recovery with no exact child checks expiry against ambient Date.now even though the authoritative catalog writer uses its injected clock. Clock skew can prematurely refuse a fresh accepted binding; the atomic writer still prevents an expired binding write.",
+        "recommended_correction": "Use the catalog/store clock for the preflight expiry comparison or delegate expiry exclusively to the atomic writer, and add an offset-clock regression."
+      }
+    ],
+    "next_task": "task_3bca6e58b215"
+  },
+  "adam_lookup_only_recovery_addendum_20261015": {
+    "path": "plans/worker-monitor-20261014/ROOT-adam-approved-intent-recovery-wire-v1.json",
+    "sha256": "75d3cc984bd37cc2279ddcd3793c08c3b3554812c065250af06bf4b268ffb0ac",
+    "base_wire_unchanged": true,
+    "purpose": "Reconcile exact accepted child after post-commit lost ACK and permanent decision revocation without fresh execution authority. Service authentication remains current.",
+    "main_task": "task_3bca6e58b215",
+    "adam_v2_task": "task_d6d018ade0b3",
+    "source_accepted": false,
+    "live_bridge_enabled": false
+  },
+  "adam_main_recovery_composition_20261015": {
+    "author_task": "task_3bca6e58b215",
+    "author_dispatch": "ctx_5f9101dd405a",
+    "report": "plans/worker-monitor-20261014/BUILD1-adam-main-recovery-composition.md",
+    "report_sha256": "df13c6cbee1a034205fd6b396e0c8e8d58f608adfcd6f215e8e55fc988ed3445",
+    "verified_owned_hashes": 24,
+    "recorded_checks": "140 tests; main+CLI types; lint/format/diff PASS",
+    "review_task": "task_dbc825623b16",
+    "source_accepted": false,
+    "installed": false,
+    "bridge_enabled": false,
+    "report_note": "Completion transport note appended; all24source/test hashes unchanged and reverified.",
+    "review_status": "completed_changes_required",
+    "review_artifact": "plans/worker-monitor-20261014/FIXER-adam-main-recovery-composition-review.md",
+    "review_sha256": "66b84e33c7f5b786565059e5267de19f850c9a8394b2d602195e4d43e8a0702e",
+    "findings": [
+      {
+        "id": "intent-binding-id-undocumented-equality",
+        "severity": "recovery-compatibility",
+        "path": "dobius/src/main/adam-service-principal/adam-cloud-intent-bridge.ts",
+        "line": 159,
+        "summary": "Lookup rejects unless stable intentId equals identity.bindingId, but the base/additive wire schemas define separate UUID fields and submit does not impose this equality. Distinct IDs can submit successfully but cannot use lookup recovery; fixtures only cover equal IDs.",
+        "recommended_correction": "Remove the implicit equality or define and consistently enforce it in the shared base/additive wire and seal/submit paths; test distinct IDs."
+      },
+      {
+        "id": "lookup-store-project-drift-unfenced",
+        "severity": "authority-fencing",
+        "path": "dobius/src/main/adam-service-principal/adam-cloud-intent-bridge.ts",
+        "line": 177,
+        "summary": "After awaited unseal, lookup uses the current CloudJobService/store but only rechecks bridge liveness and service proof. It does not compare a captured service/store generation or current project snapshot, so replacement/update during unseal is not refused.",
+        "recommended_correction": "Capture and revalidate the exact service/store/project authority after unseal and immediately adjacent to lookup/reply; add real temporary SQLite tests for store replacement and project mutation during deferred unseal."
+      }
+    ],
+    "next_task": "task_130a3353c219"
+  }
+}

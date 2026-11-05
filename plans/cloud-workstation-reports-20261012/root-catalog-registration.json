@@ -1,0 +1,25 @@
+{
+  "recorded_at": "2026-10-13T22:46:25.907685+00:00",
+  "state": "FROZEN_FOR_INDEPENDENT_REVIEW_NATIVE_INCARNATION",
+  "previous_freeze_superseded": "0e17cfcc1992f73b67515d64931b1f8429904502cbb66b9ea316448997c4f8b4",
+  "files": {
+    "dobius/docs/DATA-CATALOG-REGISTRATION.md": "cfc81f82f4a336dcdb27c2e0e50d1614ab39d84ce87580d0d5fe6f98b68e08dd",
+    "dobius/docs/reference/DATA-CATALOG-REGISTRATION.md": "cfc81f82f4a336dcdb27c2e0e50d1614ab39d84ce87580d0d5fe6f98b68e08dd",
+    "dobius/src/main/storage/data-catalog/root-enrollment-identity.test.ts": "af29f2459dcac4fda3865fe6345b0ebd7949e490c2a2dff8284dff63b934de18",
+    "dobius/src/main/storage/data-catalog/root-enrollment-lock.ts": "00f0bd387f143d7d7e80f9e42ac418ad1d4b517ddc8a0ec7c7f2885e707e754d",
+    "dobius/src/main/storage/data-catalog/root-enrollment-store.test.ts": "035f00efe656a5ae03a885341ed521b9d845c92e4ccc903509ee93cc6a5d5992",
+    "dobius/src/main/storage/data-catalog/root-enrollment-store.ts": "b725141889e506606139b37d212658bd90257665f404a22e7b6ede2379778346",
+    "dobius/src/shared/data-catalog-roots.ts": "cd01e8b923da6f995ae6ce5da56ff32fd5c7de58c3f08b07cce972b4359a4f90"
+  },
+  "aggregate_sha256": "527e7a8eddeaf705f1decdb12d28f95522d616286b5ff78bbe750b4e9905d8f4",
+  "aggregate_recipe": "sorted repository-relative UTF8 path + NUL + raw file bytes + NUL",
+  "test_evidence": {
+    "Node24_two_registration_suites": "21 tests PASS exit0; real APFS descriptor proof, empty-folder rm/mkdir old-access denial, child updates retain grant, same inode/birth with new token clears grant, legacy recovery and cancelled proof",
+    "focused_typecheck": "PASS; ROOT registration/application/identity tests strict NodeNext",
+    "scoped_lint_format": "PASS"
+  },
+  "native_contract": "Versioned provider/scope/token required; missing/legacy proof never authorizes. Birthtime optional metadata only. Two bounded no-follow native captures bound to BigInt selection, compare exact token; close cancellation prevents late write.",
+  "production_scan": false,
+  "native_bridge": "Compatible source still being finalized by RESEARCH; Linux integrated fixture and final peer required",
+  "installation": false
+}

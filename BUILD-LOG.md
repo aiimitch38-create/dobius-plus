@@ -1,5 +1,13 @@
 # Build Log
 
+## 2.1.8 — 2026-11-05 — Voice character and Adam Hermes on the Board/Home UI
+
+- Preserve the installed 2.1.7 Board/Home release history while integrating the canonical security fixes.
+- Replace the shader orb with the supplied Orb Character face and saved presets in Home and the Board composer. Keep one invisible dictation/voice coordinator and route live input/output meters separately.
+- Connect Jarvis and live-agent Adam requests to the existing Hermes Adam profile through its native desktop RPC runtime, with session resume, cancellation, and approval handling.
+- Refuse installs that omit the installed release commit, including higher versions with `--take-over`; retain identity-verified rollback. Require actual Board/Home visual acceptance alongside CLI health.
+- Validation before packaging: focused voice/UI/installer Vitest suites, node/CLI/web typechecks, provider tests, and a real Adam Hermes request.
+
 ## 2026-07-30 — Buzz tab + Buzz app skin (feat/buzz-skin)
 - Cloned github.com/block/buzz, traced its design system (theme.css + tailwind.config).
 - New Buzz tab in the sidebar opens a recreation of the Buzz workspace UI (BuzzPage.tsx).

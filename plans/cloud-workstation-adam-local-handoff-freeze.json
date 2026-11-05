@@ -1,0 +1,91 @@
+{
+  "at": "2026-10-14T13:17:25.151761+00:00",
+  "status": "SOURCE_ONLY_LOCAL_SOCKET_STDIN_HANDOFF_FOR_REVIEW",
+  "aggregate_sha256": "d0a4a43c0e19f202575eaac2402293ec7f1afb37ad4fb96e36c86355f0cabdab",
+  "algorithm": "sorted repo-relative UTF8 path NUL exact bytes NUL",
+  "files": [
+    {
+      "path": "dobius/src/cli/args.ts",
+      "bytes": 6787,
+      "sha256": "a6d0ac7ed5882ab65d9319cbd21621a6bd6e7b73c106c1477491303d67d6578f"
+    },
+    {
+      "path": "dobius/src/cli/dispatch.ts",
+      "bytes": 3164,
+      "sha256": "f411ebe2d1595371e1cb5298a8f4e87d762bb35238efff607c3360544eeca78b"
+    },
+    {
+      "path": "dobius/src/cli/handlers/adam-cloud-child.test.ts",
+      "bytes": 2866,
+      "sha256": "58bcf966e76e182209015745870b1975cb556e464fa32928827b0d28596cac42"
+    },
+    {
+      "path": "dobius/src/cli/handlers/adam-cloud-child.ts",
+      "bytes": 2776,
+      "sha256": "5ce71e3623bc7a3d72a961fb73bfbaf503e60e1d43688c894a433384d4bfff11"
+    },
+    {
+      "path": "dobius/src/cli/index.ts",
+      "bytes": 4347,
+      "sha256": "3f0c152991c5a46ceb802d4cf9d329f57d092856e8833e1addd6b3088734c0e4"
+    },
+    {
+      "path": "dobius/src/cli/specs/adam-cloud-child.ts",
+      "bytes": 469,
+      "sha256": "fa6737bb4505c59527deecd863530fb4db2aae819431e1b0be05ed1cdafee020"
+    },
+    {
+      "path": "dobius/src/cli/specs/index.ts",
+      "bytes": 1459,
+      "sha256": "72793527b90220f96f0a40587ce657ee6728309c7da09ca4203649d890795927"
+    },
+    {
+      "path": "dobius/src/main/runtime/rpc/core.ts",
+      "bytes": 7751,
+      "sha256": "09573d96d4b989aa2702ce3c47d742b7e9b08eb643484e2665cf8c960f3ea51d"
+    },
+    {
+      "path": "dobius/src/main/runtime/rpc/dispatcher.ts",
+      "bytes": 10480,
+      "sha256": "14d8d3c8f294739e297172eda052ee459dbc7d3afd7c67468c855c38d28f00ae"
+    },
+    {
+      "path": "dobius/src/main/runtime/rpc/methods/adam-cloud-child.test.ts",
+      "bytes": 4452,
+      "sha256": "75b3a62d452452f91eca726a7991347b488fca660e2e65b41628b2ee1fb955e7"
+    },
+    {
+      "path": "dobius/src/main/runtime/rpc/methods/adam-cloud-child.ts",
+      "bytes": 1450,
+      "sha256": "c240dc87f192adf5ac4bfb114c86c3d5de82e5db65cf11c33b12c3d33866edbc"
+    },
+    {
+      "path": "dobius/src/main/runtime/rpc/methods/index.ts",
+      "bytes": 5260,
+      "sha256": "0a8ed9340a14dd4f0102de3f0b6bb966977ea1a09341228800c6b3c370c41053"
+    },
+    {
+      "path": "dobius/src/main/runtime/runtime-rpc.ts",
+      "bytes": 47880,
+      "sha256": "c524709d25b8a7676b42882314f4683a313ecc6b7167d7ffd40e33cb050c3173"
+    },
+    {
+      "path": "dobius/src/shared/cloud-job-adam-submission.ts",
+      "bytes": 466,
+      "sha256": "25c7ccdd2c41d4a30364df3890b887ff45509ea95b4d1a650efd98a382db46e1"
+    }
+  ],
+  "verification": {
+    "node24_focused_tests": "9 files 67 passed; includes 6 new handoff tests and Laya composition/provider/service",
+    "fresh_node_typecheck": "PASS",
+    "fresh_cli_typecheck": "PASS on Node24 after fixture namespace type import correction",
+    "scoped_type_aware_lint": "PASS",
+    "format": "PASS"
+  },
+  "limits": [
+    "Not packaged or installed; desktop20 and currently running Linux20 build precede this handoff.",
+    "No live ADAM planner/credentials/service/routes activated; no provider execution or parent completion.",
+    "Private socket marker excludes IPC/renderer and paired callers; generic jobs.submit unchanged.",
+    "ADAM internal planner/adapter and durable encrypted handoff/idempotency remain to implement."
+  ]
+}

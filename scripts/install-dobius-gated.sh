@@ -17,7 +17,7 @@
 # copy outside /Applications and outside dobius/dist → remove the dist build copy.
 # Any failure before the swap leaves the installed app untouched.
 #
-# Usage: install-dobius-gated.sh <path-to-built-Dobius+.app> [--take-over] [--allow-downgrade]
+# Usage: install-dobius-gated.sh <path-to-built-Dobius+.app> [--take-over] [--allow-downgrade] [--allow-history-divergence]
 #   --take-over        replace an install that belongs to another branch
 #   --allow-downgrade  install an older version (or over an app with no valid
 #                      version); ownership still needs --take-over
@@ -35,17 +35,19 @@
 #   DOBIUS_INSTALL_LSREGISTER   lsregister binary (tests pass a recorder shim)
 set -euo pipefail
 
-USAGE="usage: install-dobius-gated.sh <built .app path> [--take-over] [--allow-downgrade]"
+USAGE="usage: install-dobius-gated.sh <built .app path> [--take-over] [--allow-downgrade] [--allow-history-divergence]"
 APP_SRC="${1:?$USAGE}"
 shift
 # Separate flags (BUILD-044): taking over another branch's install must not
 # also silence the downgrade guard.
 TAKE_OVER=0
+ALLOW_HISTORY_DIVERGENCE=0
 ALLOW_DOWNGRADE=0
 for arg in "$@"; do
   case "$arg" in
     --take-over) TAKE_OVER=1 ;;
     --allow-downgrade) ALLOW_DOWNGRADE=1 ;;
+    --allow-history-divergence) ALLOW_HISTORY_DIVERGENCE=1 ;;
     *) echo "ERROR: unknown option '$arg' ($USAGE)" >&2; exit 1 ;;
   esac
 done
@@ -57,11 +59,12 @@ SOURCE_STATE="$SCRIPT_DIR/source-state.py"
 MANIFEST="$SCRIPT_DIR/bundle-manifest.py"
 RESOURCE_CONTRACT="$SCRIPT_DIR/bundle-resource-contract.py"
 RECORD="$SCRIPT_DIR/install-record.py"
+SOURCE_HISTORY="$SCRIPT_DIR/install-source-history.py"
 if ! command -v python3 >/dev/null 2>&1; then
   echo "REFUSED: python3 is not on PATH; the version guard needs it. Nothing was installed." >&2
   exit 9
 fi
-for helper in "$SEMVER" "$SOURCE_STATE" "$MANIFEST" "$RESOURCE_CONTRACT" "$RECORD"; do
+for helper in "$SEMVER" "$SOURCE_STATE" "$MANIFEST" "$RESOURCE_CONTRACT" "$RECORD" "$SOURCE_HISTORY"; do
   if [ ! -f "$helper" ]; then
     echo "REFUSED: installer helper $helper is missing; the install guards cannot run. Nothing was installed." >&2
     exit 9
@@ -295,6 +298,24 @@ if [ -e "$DEST" ] && [ "$ALLOW_DOWNGRADE" != "1" ]; then
     echo "Re-run with --allow-downgrade only if you really mean to go backwards." >&2
     exit 5
   fi
+fi
+
+# SemVer and branch ownership cannot prove that a newer UI is present in the build.
+# Only an explicitly requested, identity-verified rollback bypasses ancestry automatically.
+if [ -n "$INSTALLED_REC" ] && [ "$ALLOW_HISTORY_DIVERGENCE" != "1" ]; then
+  HISTORY_MODE="upgrade"
+  if [ "$ALLOW_DOWNGRADE" = "1" ] && [ -f "$ROLLBACK_REC" ]; then
+    SOURCE_IS_ROLLBACK=$(python3 -c 'import os,sys;print(int(os.path.realpath(sys.argv[1]) == os.path.realpath(sys.argv[2])))' "$APP_SRC" "$ROLLBACK")
+    ROLLBACK_PAIR=$(python3 "$RECORD" find "$APP_SRC" "$ROLLBACK_REC")
+    if [ "$SOURCE_IS_ROLLBACK" = "1" ] && [ "$ROLLBACK_PAIR" = "$ROLLBACK_REC" ]; then
+      HISTORY_MODE="rollback"
+    fi
+  fi
+  if ! python3 "$SOURCE_HISTORY" "$SRC_STATE" "$INSTALLED_REC" "$HISTORY_MODE"; then
+    exit 11
+  fi
+elif [ "$ALLOW_HISTORY_DIVERGENCE" = "1" ]; then
+  echo "NOTE: source-history protection overridden explicitly with --allow-history-divergence." >&2
 fi
 
 # Stage: full copy beside the target (same volume, so the swap is a rename).
