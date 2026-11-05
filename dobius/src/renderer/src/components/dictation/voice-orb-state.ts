@@ -1,5 +1,13 @@
 import type { CharacterState } from 'orb-character'
-import type { DictationState } from '../../../../shared/speech-types'
+import type { DictationState, VoiceSettings } from '../../../../shared/speech-types'
+
+export function shouldMountVoiceCoordinator(
+  voice: Pick<VoiceSettings, 'enabled' | 'jarvisEnabled'> | undefined,
+  dictationState: DictationState
+): boolean {
+  // Jarvis can be enabled independently of dictation, but still needs the same coordinator.
+  return voice?.enabled === true || voice?.jarvisEnabled === true || dictationState !== 'idle'
+}
 
 export type JarvisOrbState = CharacterState | 'error'
 export type VoiceAgentOrbState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error'
@@ -27,7 +35,7 @@ function presentation(
 }
 
 /**
- * Resolves the one visible character from competing voice features. Dictation
+ * Resolves the shared character state from competing voice features. Dictation
  * owns the microphone first, then a configured live agent, then Jarvis turns.
  */
 export function resolveVoiceOrbPresentation({

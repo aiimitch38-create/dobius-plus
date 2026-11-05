@@ -52,6 +52,7 @@ import {
 } from './components/app-shell/AppTitlebarChrome'
 import { AppWorkspaceShell } from './components/app-shell/AppWorkspaceShell'
 import { AppRootOverlays } from './components/app-shell/AppRootOverlays'
+import { shouldMountVoiceCoordinator } from './components/dictation/voice-orb-state'
 import { shouldMountUpdateCardForStatus } from '@/lib/should-mount-update-card'
 import { useGlobalKeyboardShortcuts } from './hooks/useGlobalKeyboardShortcuts'
 import { useWorkspaceStartupHydration } from './hooks/useWorkspaceStartupHydration'
@@ -203,8 +204,10 @@ function App(): React.JSX.Element {
     () => resolveLeftSidebarStyleVariables(settings, systemPrefersDark),
     [settings, systemPrefersDark]
   ) as React.CSSProperties | undefined
-  const shouldMountDictationController =
-    settings?.voice?.enabled === true || dictationState !== 'idle'
+  const shouldMountDictationController = shouldMountVoiceCoordinator(
+    settings?.voice,
+    dictationState
+  )
   const primarySelectionMiddleClickPaste = resolvePrimarySelectionMiddleClickPaste(
     settings?.primarySelectionMiddleClickPaste
   )

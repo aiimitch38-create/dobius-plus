@@ -127,7 +127,7 @@ describe('renderer startup runtime routing', () => {
 
     expect(lazyPagesSource).toContain("import('./components/dictation/DictationController').then")
     expect(overlaysSource).not.toContain("from '../dictation/DictationController'")
-    expect(appSource).toContain("settings?.voice?.enabled === true || dictationState !== 'idle'")
+    expect(appSource).toMatch(/shouldMountVoiceCoordinator\(\s*settings\?\.voice,\s*dictationState\s*\)/)
     expect(overlaysSource).toContain('shouldMountDictationController ?')
   })
 
@@ -155,7 +155,9 @@ describe('renderer startup runtime routing', () => {
     const stickyMountSource = read('src/renderer/src/hooks/useStickyMount.ts')
     const shellSource = read('src/renderer/src/components/app-shell/AppWorkspaceShell.tsx')
 
-    expect(lazyPagesSource).toContain("export const Terminal = lazy(() => import('./components/Terminal'))")
+    expect(lazyPagesSource).toContain(
+      "export const Terminal = lazy(() => import('./components/Terminal'))"
+    )
     expect(shellSource).not.toContain("from '../Terminal'")
     // Why: once-mounted stickiness is shared logic (useStickyMount), not
     // reimplemented per surface — assert the shared hook's ref pattern and

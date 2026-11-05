@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVoiceOrbPresentation } from './voice-orb-state'
+import { resolveVoiceOrbPresentation, shouldMountVoiceCoordinator } from './voice-orb-state'
+
+describe('shouldMountVoiceCoordinator', () => {
+  it('keeps shortcuts and state publishing mounted when only Jarvis is enabled', () => {
+    expect(shouldMountVoiceCoordinator({ enabled: false, jarvisEnabled: true }, 'idle')).toBe(true)
+  })
+
+  it('keeps dictation mounted through a turn and unloads only when all voice is off', () => {
+    expect(shouldMountVoiceCoordinator({ enabled: true, jarvisEnabled: false }, 'idle')).toBe(true)
+    expect(shouldMountVoiceCoordinator(undefined, 'listening')).toBe(true)
+    expect(shouldMountVoiceCoordinator(undefined, 'stopping')).toBe(true)
+    expect(shouldMountVoiceCoordinator({ enabled: false, jarvisEnabled: false }, 'idle')).toBe(
+      false
+    )
+  })
+})
 
 describe('resolveVoiceOrbPresentation', () => {
   const idle = {
