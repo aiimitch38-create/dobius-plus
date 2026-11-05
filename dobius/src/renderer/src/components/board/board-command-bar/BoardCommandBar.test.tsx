@@ -74,7 +74,7 @@ describe('BoardCommandBar thread visibility', () => {
   it('keeps one composer character on the supplied shared voice meter', () => {
     render([])
     expect(character.render.mock.lastCall![0]).toMatchObject({
-      size: 36,
+      size: 60,
       getLevel: props.getVoiceLevel
     })
     expect(container.querySelectorAll('[data-composer-character]')).toHaveLength(1)
