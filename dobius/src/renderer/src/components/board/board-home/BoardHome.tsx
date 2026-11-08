@@ -309,7 +309,7 @@ export default function BoardHome(): React.JSX.Element {
             'auto.components.board.board-home.BoardHome.wake-adam',
             'Wake Adam'
           )}
-          className="mb-6 cursor-pointer rounded-full transition-transform hover:scale-105 active:scale-95"
+          className="mb-6 flex size-[112px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-transform hover:scale-105 active:scale-95"
           onClick={() => useAppStore.getState().setAdamAwake(true)}
         >
           <VoiceOrb size={112} getLevel={() => voiceOrbLevelSource.current()} />

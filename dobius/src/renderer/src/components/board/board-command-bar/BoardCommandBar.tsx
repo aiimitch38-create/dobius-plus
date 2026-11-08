@@ -193,7 +193,7 @@ export function BoardCommandBar({
               'auto.components.board.board-command-bar.BoardCommandBar.wake-adam',
               'Wake Adam'
             )}
-            className="shrink-0 cursor-pointer rounded-full transition-transform hover:scale-105 active:scale-95"
+            className="flex size-[60px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-transform hover:scale-105 active:scale-95"
             onClick={(event) => {
               event.stopPropagation()
               useAppStore.getState().setAdamAwake(true)
