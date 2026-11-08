@@ -303,7 +303,17 @@ export default function BoardHome(): React.JSX.Element {
       <HomeTopPills summary={summary} now={now} />
 
       <main className="mx-auto flex min-h-full w-full max-w-[720px] flex-col items-center px-6 pt-[88px] pb-24">
-        <VoiceOrb size={112} getLevel={() => voiceOrbLevelSource.current()} className="mb-6" />
+        <button
+          type="button"
+          aria-label={translate(
+            'auto.components.board.board-home.BoardHome.wake-adam',
+            'Wake Adam'
+          )}
+          className="mb-6 cursor-pointer rounded-full transition-transform hover:scale-105 active:scale-95"
+          onClick={() => useAppStore.getState().setAdamAwake(true)}
+        >
+          <VoiceOrb size={112} getLevel={() => voiceOrbLevelSource.current()} />
+        </button>
         <h1 className="text-center text-[34px] leading-tight font-semibold tracking-[-0.02em]">
           {greeting.line}
           {greeting.name ? (
