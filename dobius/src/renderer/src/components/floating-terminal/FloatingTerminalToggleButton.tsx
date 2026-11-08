@@ -302,11 +302,16 @@ export function FloatingTerminalToggleButton({
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation()
-                // The app-wide coordinator owns this shortcut and capture;
-                // opening a separate orb window would create a second character.
-                void window.api.jarvis.pressPtt()
+                // Wake first: a pressPtt failure below must never block it.
                 if (!useAppStore.getState().adamAwake) {
                   useAppStore.getState().setAdamAwake(true)
+                }
+                // The app-wide coordinator owns this shortcut and capture;
+                // opening a separate orb window would create a second character.
+                try {
+                  void window.api.jarvis.pressPtt()
+                } catch (error) {
+                  console.error('pressPtt failed', error)
                 }
               }}
             >

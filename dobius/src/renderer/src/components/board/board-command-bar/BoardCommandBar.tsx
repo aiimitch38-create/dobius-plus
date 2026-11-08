@@ -6,6 +6,7 @@ import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import { VoiceOrb } from '@/components/dictation/VoiceOrb'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/store'
 import {
   BOARD_FLOATING_PANEL_CLASS,
   BOARD_ICON_BUTTON_CLASS
@@ -186,7 +187,20 @@ export function BoardCommandBar({
             submit()
           }}
         >
-          <VoiceOrb size={60} getLevel={getVoiceLevel} className="shrink-0" />
+          <button
+            type="button"
+            aria-label={translate(
+              'auto.components.board.board-command-bar.BoardCommandBar.wake-adam',
+              'Wake Adam'
+            )}
+            className="shrink-0 cursor-pointer rounded-full transition-transform hover:scale-105 active:scale-95"
+            onClick={(event) => {
+              event.stopPropagation()
+              useAppStore.getState().setAdamAwake(true)
+            }}
+          >
+            <VoiceOrb size={60} getLevel={getVoiceLevel} />
+          </button>
           <input
             ref={inputRef}
             value={draft}
