@@ -939,6 +939,11 @@ export type UISlice = {
    *  problem. */
   petSize: number
   setPetSize: (size: number) => void
+  /** Whether Adam's roaming presence overlay is awake. Not persisted —
+   *  each launch starts dormant (docked in the floating-terminal orb)
+   *  until the user clicks the orb to wake him. */
+  adamAwake: boolean
+  setAdamAwake: (awake: boolean) => void
   pendingRevealWorktree: PendingSidebarWorktreeReveal | null
   pendingRevealSidebarRow: PendingSidebarRowReveal | null
   revealWorktreeInSidebar: (
@@ -2273,6 +2278,9 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
     window.api.ui.set({ petSize: clamped }).catch(console.error)
     set({ petSize: clamped })
   },
+
+  adamAwake: false,
+  setAdamAwake: (awake) => set({ adamAwake: awake }),
 
   customPets: [],
   addCustomPet: (model) =>

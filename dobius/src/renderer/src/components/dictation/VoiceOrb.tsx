@@ -17,7 +17,7 @@ function clampActivity(level: number): number {
   return Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0
 }
 
-function useOrbActivity(
+export function useOrbActivity(
   getLevel: () => number,
   activitySource: VoiceOrbActivitySource
 ): number | undefined {

@@ -31,6 +31,7 @@ import {
   SetupGuideTelemetryObserver,
   FloatingTerminalPanel,
   PetOverlay,
+  AdamPresence,
   OnboardingFlow
 } from '../../app-lazy-pages'
 
@@ -279,6 +280,13 @@ export function AppRootOverlays({
           </RecoverableRenderErrorBoundary>
         </Suspense>
       ) : null}
+      {/* Why: AdamPresence self-gates on persistedUIReady + adamAwake, so it
+    mounts unconditionally here and renders null until he's woken. */}
+      <Suspense fallback={null}>
+        <RecoverableRenderErrorBoundary boundaryId="overlay.adam" surface="overlay" compact>
+          <AdamPresence />
+        </RecoverableRenderErrorBoundary>
+      </Suspense>
       {shouldMountUpdateCard ? (
         <Suspense fallback={null}>
           <RecoverableRenderErrorBoundary

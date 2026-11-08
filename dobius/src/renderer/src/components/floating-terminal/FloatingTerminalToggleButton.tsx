@@ -305,6 +305,9 @@ export function FloatingTerminalToggleButton({
                 // The app-wide coordinator owns this shortcut and capture;
                 // opening a separate orb window would create a second character.
                 void window.api.jarvis.pressPtt()
+                if (!useAppStore.getState().adamAwake) {
+                  useAppStore.getState().setAdamAwake(true)
+                }
               }}
             >
               <VoiceOrb size={36} getLevel={readSharedOrbLevel} />
