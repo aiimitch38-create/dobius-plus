@@ -74,6 +74,9 @@ export const FloatingTerminalPanel = lazy(() =>
 // Why: lazy-loaded so the WebP asset + overlay module aren't fetched unless
 // the user opts into the experimental flag.
 export const PetOverlay = lazy(() => import('./components/pet/PetOverlay'))
+// Why: lazy so the three.js particle renderer isn't fetched until Adam is
+// actually woken up (he's dormant — not even mounted — until clicked).
+export const AdamPresence = lazy(() => import('./components/adam/AdamPresence'))
 // Why: lazy so onboarding's step modules + assets aren't fetched for users
 // past first-launch. The gate `shouldShowOnboarding` lives in its own tiny
 // module so no eager import path pulls OnboardingFlow into the main chunk.

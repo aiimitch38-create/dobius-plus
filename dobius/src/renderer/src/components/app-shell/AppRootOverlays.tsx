@@ -31,6 +31,7 @@ import {
   SetupGuideTelemetryObserver,
   FloatingTerminalPanel,
   PetOverlay,
+  AdamPresence,
   OnboardingFlow
 } from '../../app-lazy-pages'
 
@@ -57,7 +58,6 @@ export type AppRootOverlaysProps = {
   setOnboarding: Dispatch<SetStateAction<OnboardingState | null>>
   beginOnboardingSettingsDetour: () => void
   shouldMountDictationController: boolean
-  showFloatingTerminalButton: boolean
 }
 
 // Why: the root-level overlay/modal stack (floating workspace panel, status
@@ -87,8 +87,7 @@ export function AppRootOverlays({
   onboardingSettingsDetourActive,
   setOnboarding,
   beginOnboardingSettingsDetour,
-  shouldMountDictationController,
-  showFloatingTerminalButton
+  shouldMountDictationController
 }: AppRootOverlaysProps): React.JSX.Element {
   return (
     <>
@@ -281,6 +280,13 @@ export function AppRootOverlays({
           </RecoverableRenderErrorBoundary>
         </Suspense>
       ) : null}
+      {/* Why: AdamPresence self-gates on persistedUIReady + adamAwake, so it
+    mounts unconditionally here and renders null until he's woken. */}
+      <Suspense fallback={null}>
+        <RecoverableRenderErrorBoundary boundaryId="overlay.adam" surface="overlay" compact>
+          <AdamPresence />
+        </RecoverableRenderErrorBoundary>
+      </Suspense>
       {shouldMountUpdateCard ? (
         <Suspense fallback={null}>
           <RecoverableRenderErrorBoundary
@@ -390,7 +396,7 @@ export function AppRootOverlays({
             resetKey={activeView}
             compact
           >
-            <DictationController hideOwnOrb={showFloatingTerminalButton} />
+            <DictationController />
           </RecoverableRenderErrorBoundary>
         </Suspense>
       ) : null}
