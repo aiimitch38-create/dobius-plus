@@ -1,12 +1,25 @@
-/**
- * Live mic-level source for the app's one voice orb.
- *
- * Why a ref, not the store: VoiceOrb polls this every animation frame, not
- * through React re-renders — the same pattern VoiceOrb itself already uses
- * internally (`getLevelRef.current = getLevel`). DictationIndicator is the
- * sole mounted owner of real audio capture (agent WebRTC, Jarvis STT, plain
- * dictation), so it publishes whichever getLevel is currently correct here;
- * any other renderer of the orb (the floating terminal dock) reads it
- * without mounting a second, competing capture pipeline.
- */
+import type { VoiceOrbPresentation } from './voice-orb-state'
+
+/** Only the app-wide coordinator publishes audio; the dock never owns capture. */
 export const voiceOrbLevelSource: { current: () => number } = { current: () => 0 }
+
+let presentation: VoiceOrbPresentation = { state: 'idle', activitySource: 'preview' }
+const listeners = new Set<() => void>()
+
+export function getVoiceOrbPresentation(): VoiceOrbPresentation {
+  return presentation
+}
+
+export function subscribeVoiceOrbPresentation(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+export function publishVoiceOrbPresentation(next: VoiceOrbPresentation): void {
+  if (presentation.state === next.state && presentation.activitySource === next.activitySource) {
+    return
+  }
+  presentation = next
+  // Captions can stay identical across voice owners, so phase updates need their own subscription.
+  listeners.forEach((listener) => listener())
+}

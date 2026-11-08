@@ -1,6 +1,6 @@
 {
   "name": "dobius-plus",
-  "version": "2.0.3",
+  "version": "2.1.8",
   "description": "Next-gen IDE for parallel agentic development",
   "homepage": "https://github.com/statusdigitalmarketing/dobius-plus",
   "author": "statusdigitalmarketing",
@@ -121,6 +121,7 @@
     "node-pty": "^1.1.0",
     "nodemailer": "^9.0.3",
     "nostr-tools": "^2.25.0",
+    "orb-character": "file:resources/vendor/orb-character-1.0.0.tgz",
     "posthog-node": "^5.33.3",
     "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
