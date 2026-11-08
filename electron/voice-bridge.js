@@ -29,6 +29,23 @@ import { writeTerminal, listTerminals, sendToTerminalWindow, tabBinDir } from '.
 import { validateTabRename, buildTabCliScript } from './tab-rename.js';
 import { completeTaskByRef, resolveTaskRef, advanceTask } from './tasks-service.js';
 import { STAGES } from './task-pipeline.js';
+import { getOpenProjects } from './window-manager.js';
+import { listProjects } from './data-service.js';
+
+// Same gate as main.js's isKnownProject — duplicated rather than imported to
+// avoid a circular import (main.js already imports from this module).
+async function isKnownProject(projectPath) {
+  if (!projectPath || typeof projectPath !== 'string') return false;
+  try {
+    const known = new Set([
+      ...(getOpenProjects() || []),
+      ...((await listProjects()) || []).map((p) => p.decodedPath).filter(Boolean),
+    ]);
+    return known.has(projectPath);
+  } catch {
+    return false;
+  }
+}
 
 // DOBIUS_BRIDGE_PORT exists for the isolated ship-test harness (8421 belongs
 // to the live app); a packaged launch never sets it.
@@ -223,6 +240,9 @@ async function handleStage(req, res) {
   }
   if (!STAGES.includes(stage)) {
     return sendJson(res, 400, { ok: false, error: `invalid stage "${stage}". valid: ${STAGES.join(', ')}` });
+  }
+  if (!(await isKnownProject(projectPath))) {
+    return sendJson(res, 400, { ok: false, error: 'projectPath is not a known project root' });
   }
   const resolved = resolveTaskRef(projectPath, ref);
   if (!resolved.ok) return sendJson(res, 400, resolved);

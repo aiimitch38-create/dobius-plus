@@ -283,13 +283,13 @@ export default function TerminalTabBar({ tearOffTabId = null }) {
     }
   }, []);
 
-  // A docked tab leaves this window; the window closes once no terminal tab
-  // is left (read fresh: a tab can be opened while a dock is in flight).
+  // A docked tab leaves this window; the window closes once no tab of any
+  // kind is left (read fresh: a tab can be opened while a dock is in flight).
   const afterDocked = useCallback((tabId) => {
-    const left = useStore.getState().terminalTabs.filter((t) => t.id !== tabId && (!t.kind || t.kind === 'terminal'));
+    const left = useStore.getState().terminalTabs.filter((t) => t.id !== tabId);
     if (left.length === 0) window.close();
     else removeTab(tabId);
-    return left.length;
+    return left.filter((t) => !t.kind || t.kind === 'terminal').length;
   }, [removeTab]);
 
   // Dock every terminal tab, the torn-off one last, re-reading the list each

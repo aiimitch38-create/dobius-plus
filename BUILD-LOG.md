@@ -47,3 +47,16 @@
 - **Verify**: Live end-to-end against `pocket-cologne`: ran `dobius-task-done "Web changes"` in a terminal → bridge `ok:true`, JSON flipped, panel badge 3→2, "Web changes" moved into DONE with checkbox + strikethrough (visually confirmed). Guards tested: ambiguity→candidates, no-match→clean error, idempotent re-run. Asana untouched. Test task restored to pending afterward.
 - **Status**: Local only. NOT committed/pushed, no PR (awaiting Carson).
 - **Lesson**: `build-and-install.sh`'s graceful `osascript quit` is eaten by the app's double-Cmd+Q quit guard, so the OLD instance survives and macOS `open` just refocuses stale code (CLI scripts stayed v7, new bridge route absent). Had to force-kill the old PID, then relaunch, before v8 installed. Worth hardening the script to confirm the process is actually gone before `open`.
+
+## Bug-fix sweep — 2026-10-27
+- **Branch**: `fix/bughunt-20261027` (off `aiimitch38-create/UI-UPDATES`, HEAD `72f76915`)
+- **Source**: `HANDOFF.md` 2026-10-27 section, 10 bugs found by a 3-agent bug hunt (Kanban/task-pipeline read by hand + two subagents over `electron/` and `src/`). Full context in `IRIS-REPORT-20261027.md`.
+- **Fixed, all 10, one commit per related group**:
+  1. `0ef10774` — HIGH: tear-off dock destroyed a sibling browser tab (`TerminalTabBar.jsx` `afterDocked` only counted `kind:'terminal'` tabs before closing the window).
+  2. `bf81f795` — bugs #2, #5, #10: checkpoint/filewatcher IPC handlers and voice-bridge's `/stage` route were missing the `isKnownProject` gate used elsewhere; added it to all of them (voice-bridge duplicates the check locally to avoid a circular import with `main.js`).
+  3. `872533f9` — bugs #3, #4: Tasks panel didn't set pipeline `stage:'done'` locally on complete (could desync from Kanban on a fast uncheck); Search's debounce didn't cancel an in-flight request, letting a stale response overwrite a newer one (fixed with a request-id tag).
+  4. `0142b019` — bugs #6, #9: Costs tab crashed on an undefined `projectName` during sort; `git-service.js`'s `validateDir` compared mismatched path forms, a latent trap for a future relative-path caller.
+  5. `737d4a1e` — bugs #7, #8: deleted Kanban's dead preview-fallback branch (`live` was always true) and fixed a drag-over highlight that could get stuck when a card was dropped outside any column.
+- **Build**: `npm run build` exits 0 after every commit (first required `npm install` — this worktree had no `node_modules`).
+- **Verify**: Build-level verification only for all 10 — no automated test suite in this app, and the repro steps (multi-window drag/dock, Kanban drag-and-drop, Tasks panel timing) need a running Electron app, which wasn't driven interactively this session. Each commit message cites which HANDOFF.md bug # it closes; the HANDOFF.md "Test" line for each is still the manual repro to run before merge.
+- **Status**: Local only, not pushed, no PR. Awaiting manual verification + merge decision.
