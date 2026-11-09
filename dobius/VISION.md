@@ -60,6 +60,29 @@ This scales up through levels:
 4. **Departments** — swarms organized by function (not yet defined in detail;
    revisit when orchestration and swarms are solid).
 
+## Self-evolving system (Laya)
+
+Dobius should learn over time, not stay static: how Carson works, how agents
+behave, and where verification keeps failing across agent processes. This is
+**Laya** — Dobius's advisory model service (see `DOBIUS-SYSTEM.md` §10) — grown
+from a task-router into a standing learning layer. As of the 2026-10-24
+decision Laya existed only as source, not activated; this vision extends its
+job once it is.
+
+**Decision (2026-11-09): split by risk level**, same trust boundary as Adam
+editing his own code:
+- **Low-stakes patterns** (e.g. reordering a checklist, tweaking a prompt
+  wording, adjusting a non-destructive default) can be applied automatically
+  once Laya is confident.
+- **Anything touching permissions, sends, spend, or agent instructions/scope**
+  needs Carson's approval first — Laya surfaces the pattern ("you always
+  reject X," "this verification step fails 40% of the time"), Carson decides.
+
+**Open: where the line between "low-stakes" and "needs approval" actually
+sits** — not yet enumerated. Define concrete examples before building the
+auto-apply path, so "low-stakes" doesn't quietly expand into something that
+should have needed sign-off.
+
 ## Herald OS: where Adam's full autonomy is headed
 
 [Herald OS](https://github.com/iamlukethedev/Herald-OS) is an independent
@@ -92,6 +115,7 @@ scratch inside Dobius. Concretely:
 - The exact shape of "departments" in the orchestration hierarchy.
 - The concrete integration mechanism with Herald OS.
 - Which channel integrations (iMessage, email, etc.) come first.
+- Where the line sits between Laya patterns that auto-apply vs. need approval.
 
 ## How to use this doc
 
