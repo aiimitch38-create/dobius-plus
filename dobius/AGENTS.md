@@ -1,5 +1,12 @@
 # AGENTS.md
 
+## Product Vision
+
+Read [`VISION.md`](./VISION.md) before any work that touches scope,
+architecture, or what Adam is allowed to do. It's Carson's north star for what
+Dobius is becoming — the central workstation every one of his businesses runs
+through, with Adam as a full-presence personal agent, not a bolt-on chatbot.
+
 ## Canonical Workspace and Installed App
 
 This `dobius/` directory is the app source (Dobius+ V2) inside the one real
