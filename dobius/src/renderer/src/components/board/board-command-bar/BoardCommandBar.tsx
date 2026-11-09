@@ -202,11 +202,15 @@ export function BoardCommandBar({
                   .getState()
                   .setAdamWakeOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
                 useAppStore.getState().setAdamAwake(true)
-                // Waking Adam from the command bar should also open the mic,
-                // same as pressing the dedicated mic button — he should be
-                // live and listening, not just visually present.
-                if (!listening) {
-                  onMicToggle()
+                // Waking Adam must start an actual Jarvis voice turn, not
+                // dictation (onMicToggle just toggles speech-to-text into
+                // this input box — no spoken reply ever comes back from
+                // that path). pressPtt is the real "listen, then speak"
+                // trigger, same one the floating-terminal dock orb uses.
+                try {
+                  void window.api.jarvis.pressPtt()
+                } catch (error) {
+                  console.error('pressPtt failed', error)
                 }
               }
             }}
