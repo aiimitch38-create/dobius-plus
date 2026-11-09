@@ -944,6 +944,12 @@ export type UISlice = {
    *  until the user clicks the orb to wake him. */
   adamAwake: boolean
   setAdamAwake: (awake: boolean) => void
+  /** Screen position (viewport px) of the dock orb that was clicked to wake
+   *  Adam, so the roaming body can visibly emerge from that exact spot
+   *  instead of just fading in at its settle position. Not persisted —
+   *  it's a one-shot entrance cue, cleared after the wake animation reads it. */
+  adamWakeOrigin: { x: number; y: number } | null
+  setAdamWakeOrigin: (origin: { x: number; y: number } | null) => void
   pendingRevealWorktree: PendingSidebarWorktreeReveal | null
   pendingRevealSidebarRow: PendingSidebarRowReveal | null
   revealWorktreeInSidebar: (
@@ -2281,6 +2287,8 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
 
   adamAwake: false,
   setAdamAwake: (awake) => set({ adamAwake: awake }),
+  adamWakeOrigin: null,
+  setAdamWakeOrigin: (origin) => set({ adamWakeOrigin: origin }),
 
   customPets: [],
   addCustomPet: (model) =>

@@ -94,6 +94,8 @@ export function AdamPresence(): React.JSX.Element | null {
   const persistedUIReady = useAppStore((s) => s.persistedUIReady)
   const awake = useAppStore((s) => s.adamAwake)
   const setAwake = useAppStore((s) => s.setAdamAwake)
+  const wakeOrigin = useAppStore((s) => s.adamWakeOrigin)
+  const setWakeOrigin = useAppStore((s) => s.setAdamWakeOrigin)
   const documentVisible = useDocumentVisible()
   const reducedMotion = usePrefersReducedMotion()
 
@@ -117,16 +119,29 @@ export function AdamPresence(): React.JSX.Element | null {
   const agentAnimation = useAdamAgentAnimation(dragging)
   const characterState = resolveAdamCharacterState({ state: voiceState, activitySource }, agentAnimation)
 
-  // Wake: land at the settle spot and play the entrance transition.
+  // Wake: start exactly where the dock orb was clicked (so he visibly emerges
+  // from it, not just fades in elsewhere), then glide to the settle spot.
+  // The origin is a one-shot cue — consumed and cleared here so a later
+  // wake with no recorded click falls back to the settle spot directly.
   useEffect(() => {
     if (!awake) {
       return
     }
-    setPosition(clampAdamPosition(ADAM_SETTLE_POSITION, ADAM_SIZE, viewportSize()))
+    const origin = wakeOrigin
+    const settle = clampAdamPosition(ADAM_SETTLE_POSITION, ADAM_SIZE, viewportSize())
+    if (origin) {
+      setPosition(clampAdamPosition({ x: origin.x - ADAM_SIZE / 2, y: origin.y - ADAM_SIZE / 2 }, ADAM_SIZE, viewportSize()))
+      setWakeOrigin(null)
+    } else {
+      setPosition(settle)
+    }
     setEntryPhase('start')
     let raf2 = 0
     const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setEntryPhase('end'))
+      raf2 = requestAnimationFrame(() => {
+        setEntryPhase('end')
+        setPosition(settle)
+      })
     })
     return () => {
       cancelAnimationFrame(raf1)
@@ -134,6 +149,9 @@ export function AdamPresence(): React.JSX.Element | null {
         cancelAnimationFrame(raf2)
       }
     }
+    // wakeOrigin/setWakeOrigin intentionally excluded: this must run only on
+    // the awake transition, not every time the origin store value changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [awake])
 
   // Idle wander: only once awake, settled, not being dragged, and motion is
@@ -269,7 +287,7 @@ export function AdamPresence(): React.JSX.Element | null {
     >
       <OrbCharacter
         aria-hidden="true"
-        form="orb"
+        form="face"
         state={characterState}
         activity={activity}
         presets={SAVED_PRESETS}

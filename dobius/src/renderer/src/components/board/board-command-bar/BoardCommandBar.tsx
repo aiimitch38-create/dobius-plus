@@ -196,7 +196,19 @@ export function BoardCommandBar({
             className="flex size-[60px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-transform hover:scale-105 active:scale-95"
             onClick={(event) => {
               event.stopPropagation()
-              useAppStore.getState().setAdamAwake(true)
+              if (!useAppStore.getState().adamAwake) {
+                const rect = event.currentTarget.getBoundingClientRect()
+                useAppStore
+                  .getState()
+                  .setAdamWakeOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+                useAppStore.getState().setAdamAwake(true)
+                // Waking Adam from the command bar should also open the mic,
+                // same as pressing the dedicated mic button — he should be
+                // live and listening, not just visually present.
+                if (!listening) {
+                  onMicToggle()
+                }
+              }
             }}
           >
             <VoiceOrb size={60} getLevel={getVoiceLevel} />

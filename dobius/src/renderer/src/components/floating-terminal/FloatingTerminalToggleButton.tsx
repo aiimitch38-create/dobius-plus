@@ -304,6 +304,10 @@ export function FloatingTerminalToggleButton({
                 event.stopPropagation()
                 // Wake first: a pressPtt failure below must never block it.
                 if (!useAppStore.getState().adamAwake) {
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  useAppStore
+                    .getState()
+                    .setAdamWakeOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
                   useAppStore.getState().setAdamAwake(true)
                 }
                 // The app-wide coordinator owns this shortcut and capture;
