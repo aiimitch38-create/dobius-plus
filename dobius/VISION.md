@@ -60,6 +60,17 @@ This scales up through levels:
 4. **Departments** — swarms organized by function (not yet defined in detail;
    revisit when orchestration and swarms are solid).
 
+## Voice: Adam should speak as himself, not through a puppet
+
+Adam's live voice call currently runs through a separate ElevenLabs
+Conversational AI agent, not his real Hermes profile identity (`SOUL.md` etc.)
+— it only consults the real Adam when it chooses to call a tool. Hermes Agent
+(Adam's underlying engine) has its own native, swappable-to-local voice
+pipeline that isn't being used for live calls today. Scoping doc:
+[`plans/VOICE-NATIVE-HERMES-MIGRATION.md`](./plans/VOICE-NATIVE-HERMES-MIGRATION.md)
+(2026-11-09) — not yet approved to build, investigation items listed there
+first.
+
 ## Self-evolving system (Laya)
 
 Dobius should learn over time, not stay static: how Carson works, how agents
