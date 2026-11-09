@@ -950,6 +950,17 @@ export type UISlice = {
    *  it's a one-shot entrance cue, cleared after the wake animation reads it. */
   adamWakeOrigin: { x: number; y: number } | null
   setAdamWakeOrigin: (origin: { x: number; y: number } | null) => void
+  /** Live screen position (viewport px) of the real dock slot (the
+   *  floating-terminal toggle's orb button), kept current as that dock is
+   *  dragged. Used as the fly-back target when Adam is told to dock. */
+  adamDockAnchor: { x: number; y: number } | null
+  setAdamDockAnchor: (anchor: { x: number; y: number } | null) => void
+  /** Bumped to request that Adam fly back into the dock and go dormant.
+   *  A one-shot counter (not a boolean) so repeated requests while already
+   *  docked are harmless and every request is observable even if fired in
+   *  quick succession. */
+  adamDockRequestId: number
+  requestAdamDock: () => void
   pendingRevealWorktree: PendingSidebarWorktreeReveal | null
   pendingRevealSidebarRow: PendingSidebarRowReveal | null
   revealWorktreeInSidebar: (
@@ -2289,6 +2300,10 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
   setAdamAwake: (awake) => set({ adamAwake: awake }),
   adamWakeOrigin: null,
   setAdamWakeOrigin: (origin) => set({ adamWakeOrigin: origin }),
+  adamDockAnchor: null,
+  setAdamDockAnchor: (anchor) => set({ adamDockAnchor: anchor }),
+  adamDockRequestId: 0,
+  requestAdamDock: () => set((s) => ({ adamDockRequestId: s.adamDockRequestId + 1 })),
 
   customPets: [],
   addCustomPet: (model) =>

@@ -127,6 +127,7 @@ export default function BoardHome(): React.JSX.Element {
   // host reads the same store slot BoardRoute does; the two surfaces are
   // mutually exclusive in App, so only one host is mounted at a time.
   const studio = useAppStore((s) => s.boardStudio)
+  const adamAwake = useAppStore((s) => s.adamAwake)
   const closeStudio = useCallback(() => useAppStore.getState().setBoardStudio(null), [])
   useEffect(() => () => useAppStore.getState().setBoardStudio(null), [])
   // Presets deploy needs a workspace; without one the studio shows its empty state.
@@ -307,12 +308,18 @@ export default function BoardHome(): React.JSX.Element {
           type="button"
           aria-label={translate(
             'auto.components.board.board-home.BoardHome.wake-adam',
-            'Wake Adam'
+            adamAwake ? 'Call Adam back' : 'Wake Adam'
           )}
           className="mb-6 flex size-[112px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-transform hover:scale-105 active:scale-95"
-          onClick={() => useAppStore.getState().setAdamAwake(true)}
+          onClick={() => {
+            if (useAppStore.getState().adamAwake) {
+              useAppStore.getState().requestAdamDock()
+              return
+            }
+            useAppStore.getState().setAdamAwake(true)
+          }}
         >
-          <VoiceOrb size={112} getLevel={() => voiceOrbLevelSource.current()} />
+          {adamAwake ? null : <VoiceOrb size={112} getLevel={() => voiceOrbLevelSource.current()} />}
         </button>
         <h1 className="text-center text-[34px] leading-tight font-semibold tracking-[-0.02em]">
           {greeting.line}

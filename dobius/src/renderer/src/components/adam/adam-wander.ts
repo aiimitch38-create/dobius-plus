@@ -15,25 +15,26 @@ export function clampAdamPosition(pos: Position, size: number, viewport: Viewpor
 }
 
 /**
- * Picks Adam's next idle-wander destination. Carson wants him "mostly" in
- * the top-left, not roaming the whole window, so the sampled region is
- * capped well short of the full viewport, and each axis is biased toward
- * its low end by taking the min of two uniform samples (a cheap, well-known
- * skew-toward-zero trick) rather than a flat distribution.
+ * Picks Adam's next idle-wander destination. He's free to roam anywhere in
+ * the app window — the sampled region is the full viewport — but each axis
+ * is biased toward its low end by taking the min of two uniform samples (a
+ * cheap, well-known skew-toward-zero trick) rather than a flat distribution,
+ * so he still spends most of his time near the top-left without being
+ * fenced into that corner.
  */
 export function pickAdamWanderTarget(
   size: number,
   viewport: Viewport,
   rng: () => number = Math.random
 ): Position {
-  const regionW = Math.max(size, Math.min(viewport.width * 0.42, viewport.width - size))
-  const regionH = Math.max(size, Math.min(viewport.height * 0.55, viewport.height - size))
+  const regionW = Math.max(size, viewport.width - size)
+  const regionH = Math.max(size, viewport.height - size)
   const biasedX = Math.min(rng(), rng())
   const biasedY = Math.min(rng(), rng())
   return clampAdamPosition(
     {
-      x: Math.round(biasedX * (regionW - size)),
-      y: Math.round(biasedY * (regionH - size))
+      x: Math.round(biasedX * regionW),
+      y: Math.round(biasedY * regionH)
     },
     size,
     viewport

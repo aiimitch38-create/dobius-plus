@@ -96,6 +96,7 @@ export function AdamPresence(): React.JSX.Element | null {
   const setAwake = useAppStore((s) => s.setAdamAwake)
   const wakeOrigin = useAppStore((s) => s.adamWakeOrigin)
   const setWakeOrigin = useAppStore((s) => s.setAdamWakeOrigin)
+  const dockRequestId = useAppStore((s) => s.adamDockRequestId)
   const documentVisible = useDocumentVisible()
   const reducedMotion = usePrefersReducedMotion()
 
@@ -113,7 +114,9 @@ export function AdamPresence(): React.JSX.Element | null {
   )
   // 'start' is the pre-paint frame of a wake entrance (small, low, transparent);
   // the very next frame flips to 'end' so the browser animates between them.
-  const [entryPhase, setEntryPhase] = useState<'start' | 'end'>('end')
+  // 'exit' plays the reverse — shrinking back toward the dock — before the
+  // component actually unmounts.
+  const [entryPhase, setEntryPhase] = useState<'start' | 'end' | 'exit'>('end')
   const wanderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const agentAnimation = useAdamAgentAnimation(dragging)
@@ -157,7 +160,7 @@ export function AdamPresence(): React.JSX.Element | null {
   // Idle wander: only once awake, settled, not being dragged, and motion is
   // welcome (respects reduced-motion and a backgrounded window).
   useEffect(() => {
-    if (!awake || dragging || reducedMotion || !documentVisible || entryPhase === 'start') {
+    if (!awake || dragging || reducedMotion || !documentVisible || entryPhase !== 'end') {
       return
     }
     let cancelled = false
@@ -237,20 +240,55 @@ export function AdamPresence(): React.JSX.Element | null {
     setDragging(false)
   }, [])
 
+  // Docking: fly back toward the real dock slot (tracked live via
+  // adamDockAnchor, since the dock itself is draggable), play the reverse of
+  // the wake entrance, then go dormant. Reads the store directly rather than
+  // a closed-over selector value so a dock request fired from the dock
+  // button itself always targets the dock's current position.
+  const dock = useCallback((): void => {
+    const anchor = useAppStore.getState().adamDockAnchor ?? ADAM_SETTLE_POSITION
+    setEntryPhase('exit')
+    setPosition(
+      clampAdamPosition(
+        { x: anchor.x - ADAM_SIZE / 2, y: anchor.y - ADAM_SIZE / 2 },
+        ADAM_SIZE,
+        viewportSize()
+      )
+    )
+    window.setTimeout(() => {
+      setAwake(false)
+      setEntryPhase('end')
+    }, 480)
+  }, [setAwake])
+
+  // The dock button can request Adam return without the user clicking Adam
+  // directly — e.g. clicking the now-empty dock slot while he's roaming.
+  const dockRequestSeenRef = useRef(dockRequestId)
+  useEffect(() => {
+    if (dockRequestId === dockRequestSeenRef.current) {
+      return
+    }
+    dockRequestSeenRef.current = dockRequestId
+    if (awake) {
+      dock()
+    }
+  }, [dockRequestId, awake, dock])
+
   // A click (not a drag) docks Adam back into the floating-terminal orb.
   const onClick = useCallback((): void => {
     if (dragDistanceRef.current > CLICK_DRAG_THRESHOLD) {
       return
     }
-    setAwake(false)
-  }, [setAwake])
+    dock()
+  }, [dock])
 
   if (!persistedUIReady || !awake) {
     return null
   }
 
   const animate = documentVisible && !reducedMotion && !dragging
-  const moving = entryPhase === 'start' || dragging
+  const settled = entryPhase === 'end'
+  const moving = !settled || dragging
 
   return (
     <div
@@ -265,13 +303,14 @@ export function AdamPresence(): React.JSX.Element | null {
         height: ADAM_SIZE,
         cursor: dragging ? 'grabbing' : 'grab',
         touchAction: 'none',
-        transform:
-          entryPhase === 'start' ? 'scale(0.32) translateY(44px)' : 'scale(1) translateY(0)',
-        opacity: entryPhase === 'start' ? 0 : 1,
+        transform: settled ? 'scale(1) translateY(0)' : 'scale(0.32) translateY(44px)',
+        opacity: settled ? 1 : 0,
         transition:
           reducedMotion || dragging
             ? 'none'
-            : 'transform 520ms cubic-bezier(.22,1,.36,1), opacity 360ms ease-out, left 2200ms ease-in-out, top 2200ms ease-in-out'
+            : entryPhase === 'exit'
+              ? 'transform 440ms cubic-bezier(.4,0,1,1), opacity 420ms ease-in, left 440ms cubic-bezier(.4,0,1,1), top 440ms cubic-bezier(.4,0,1,1)'
+              : 'transform 520ms cubic-bezier(.22,1,.36,1), opacity 360ms ease-out, left 2200ms ease-in-out, top 2200ms ease-in-out'
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -281,7 +320,7 @@ export function AdamPresence(): React.JSX.Element | null {
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
-          setAwake(false)
+          dock()
         }
       }}
     >

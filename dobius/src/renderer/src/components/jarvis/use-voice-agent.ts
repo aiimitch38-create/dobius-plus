@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Conversation } from '@elevenlabs/client'
+import { useAppStore } from '../../store'
 
 export type VoiceAgentState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error'
 
@@ -158,6 +159,16 @@ export function useVoiceAgent(): VoiceAgent {
             return result.ok
               ? `Undid the change to ${result.displayPath}.`
               : `Not undone: ${result.error}`
+          },
+          // Said by voice ("power off", "go to sleep", "that's it for now") —
+          // sends Adam flying back into the dock and ends the call. The
+          // delay lets the spoken reply finish before the mic actually cuts.
+          power_off: async () => {
+            useAppStore.getState().requestAdamDock()
+            window.setTimeout(() => {
+              void stop()
+            }, 1500)
+            return 'Powering off. Talk soon.'
           }
         },
         onModeChange: ({ mode }) => {

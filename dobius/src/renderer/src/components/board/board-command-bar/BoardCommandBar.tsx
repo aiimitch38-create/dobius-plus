@@ -132,6 +132,7 @@ export function BoardCommandBar({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [inputRef, isMac])
 
+  const adamAwake = useAppStore((s) => s.adamAwake)
   const text = draft.trim()
   const submit = (): void => {
     if (!text || busy) {
@@ -191,31 +192,36 @@ export function BoardCommandBar({
             type="button"
             aria-label={translate(
               'auto.components.board.board-command-bar.BoardCommandBar.wake-adam',
-              'Wake Adam'
+              adamAwake ? 'Call Adam back' : 'Wake Adam'
             )}
             className="flex size-[60px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-transform hover:scale-105 active:scale-95"
             onClick={(event) => {
               event.stopPropagation()
-              if (!useAppStore.getState().adamAwake) {
-                const rect = event.currentTarget.getBoundingClientRect()
-                useAppStore
-                  .getState()
-                  .setAdamWakeOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
-                useAppStore.getState().setAdamAwake(true)
-                // Waking Adam must start an actual Jarvis voice turn, not
-                // dictation (onMicToggle just toggles speech-to-text into
-                // this input box — no spoken reply ever comes back from
-                // that path). pressPtt is the real "listen, then speak"
-                // trigger, same one the floating-terminal dock orb uses.
-                try {
-                  void window.api.jarvis.pressPtt()
-                } catch (error) {
-                  console.error('pressPtt failed', error)
-                }
+              if (useAppStore.getState().adamAwake) {
+                // Same orb, same slot — while Adam's out roaming this is
+                // empty, and clicking it calls him back rather than
+                // starting a second voice turn.
+                useAppStore.getState().requestAdamDock()
+                return
+              }
+              const rect = event.currentTarget.getBoundingClientRect()
+              useAppStore
+                .getState()
+                .setAdamWakeOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+              useAppStore.getState().setAdamAwake(true)
+              // Waking Adam must start an actual Jarvis voice turn, not
+              // dictation (onMicToggle just toggles speech-to-text into
+              // this input box — no spoken reply ever comes back from
+              // that path). pressPtt is the real "listen, then speak"
+              // trigger, same one the floating-terminal dock orb uses.
+              try {
+                void window.api.jarvis.pressPtt()
+              } catch (error) {
+                console.error('pressPtt failed', error)
               }
             }}
           >
-            <VoiceOrb size={60} getLevel={getVoiceLevel} />
+            {adamAwake ? null : <VoiceOrb size={60} getLevel={getVoiceLevel} />}
           </button>
           <input
             ref={inputRef}

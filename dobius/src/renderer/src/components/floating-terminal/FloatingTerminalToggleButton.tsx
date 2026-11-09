@@ -103,6 +103,8 @@ export function FloatingTerminalToggleButton({
   const [isHovered, setIsHovered] = useState(false)
   const [isEnsuringChat, setIsEnsuringChat] = useState(false)
   const voiceCaption = useAppStore((state) => state.voiceOrbLabel)
+  const adamAwake = useAppStore((state) => state.adamAwake)
+  const adamOrbButtonRef = useRef<HTMLButtonElement | null>(null)
 
   const previewPosition = useCallback((nextPosition: FloatingTerminalTriggerPosition): void => {
     const clamped = clampFloatingTerminalTriggerPosition(nextPosition)
@@ -149,6 +151,20 @@ export function FloatingTerminalToggleButton({
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [reconcilePosition])
+
+  // Keep the live dock anchor current for Adam's fly-back-to-dock animation —
+  // this is the canonical dock, so its real screen position (which moves as
+  // the dock is dragged) is what Adam should return to, not a fixed point.
+  useLayoutEffect(() => {
+    const el = adamOrbButtonRef.current
+    if (!el) {
+      return
+    }
+    const rect = el.getBoundingClientRect()
+    useAppStore
+      .getState()
+      .setAdamDockAnchor({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+  }, [position])
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) {
@@ -293,23 +309,27 @@ export function FloatingTerminalToggleButton({
             onClick={handleHeaderClick}
           >
             <button
+              ref={adamOrbButtonRef}
               type="button"
               aria-label={translate(
                 'auto.components.floating.terminal.FloatingTerminalToggleButton.dock-talk',
-                'Talk to Dobius'
+                adamAwake ? 'Call Adam back' : 'Talk to Dobius'
               )}
               className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation()
-                // Wake first: a pressPtt failure below must never block it.
-                if (!useAppStore.getState().adamAwake) {
-                  const rect = event.currentTarget.getBoundingClientRect()
-                  useAppStore
-                    .getState()
-                    .setAdamWakeOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
-                  useAppStore.getState().setAdamAwake(true)
+                if (useAppStore.getState().adamAwake) {
+                  // Dock slot is empty while Adam roams — clicking it calls
+                  // him back and turns him off, it doesn't start a new turn.
+                  useAppStore.getState().requestAdamDock()
+                  return
                 }
+                const rect = event.currentTarget.getBoundingClientRect()
+                useAppStore
+                  .getState()
+                  .setAdamWakeOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+                useAppStore.getState().setAdamAwake(true)
                 // The app-wide coordinator owns this shortcut and capture;
                 // opening a separate orb window would create a second character.
                 try {
@@ -319,7 +339,7 @@ export function FloatingTerminalToggleButton({
                 }
               }}
             >
-              <VoiceOrb size={36} getLevel={readSharedOrbLevel} />
+              {adamAwake ? null : <VoiceOrb size={36} getLevel={readSharedOrbLevel} />}
             </button>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm leading-none font-medium">
