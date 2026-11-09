@@ -49,6 +49,10 @@ function makeHarness(voiceOverrides: Partial<VoiceSettings> = {}): TestHarness {
       status: 200
     })
   )
+  // Real nativeSpeak spawns a Python/afplay subprocess (and would actually
+  // play audio) — tests report it unavailable so the existing ElevenLabs/say
+  // fallback chain is what's under test here.
+  const nativeSpeak = vi.fn(async () => ({ played: false as const, reason: 'test' }))
   const service = new JarvisService({
     store: {
       getSettings: () => ({ voice: { ...BASE_VOICE, ...voiceOverrides } })
@@ -59,7 +63,8 @@ function makeHarness(voiceOverrides: Partial<VoiceSettings> = {}): TestHarness {
       unregister: unregisterShortcut
     },
     fetchFn: fetchFn as unknown as typeof fetch,
-    speakQueue
+    speakQueue,
+    nativeSpeak
   })
   return { service, broadcast, registerShortcut, unregisterShortcut, speakQueue, fetchFn }
 }
@@ -342,13 +347,15 @@ describe('Hermes request cancellation', () => {
     const cancelAgent = vi.fn()
     const broadcast = vi.fn()
     const speakQueue = vi.fn(async () => ({ played: true as const, engine: 'test' }))
+    const nativeSpeak = vi.fn(async () => ({ played: false as const, reason: 'test' }))
     const service = new JarvisService({
       store: { getSettings: () => ({ voice: BASE_VOICE }) },
       shortcut: { register: () => true, unregister: () => undefined },
       broadcast,
       askAgent,
       cancelAgent,
-      speakQueue
+      speakQueue,
+      nativeSpeak
     })
     const pending = service.ask('hello Adam')
     expect(service.getPhase()).toBe('thinking')
@@ -372,12 +379,14 @@ describe('Hermes request cancellation', () => {
         })
     )
     const speakQueue = vi.fn(async () => ({ played: true as const, engine: 'test' }))
+    const nativeSpeak = vi.fn(async () => ({ played: false as const, reason: 'test' }))
     const service = new JarvisService({
       store: { getSettings: () => ({ voice: BASE_VOICE }) },
       shortcut: { register: () => true, unregister: () => undefined },
       broadcast: vi.fn(),
       askAgent,
-      speakQueue
+      speakQueue,
+      nativeSpeak
     })
     const first = service.ask('first')
     await expect(service.ask('second')).resolves.toMatchObject({ kind: 'error' })

@@ -9,6 +9,7 @@ import { getHuddleSpeechQueue } from '../communications/huddles/huddle-speech-sy
 import type { SttEventSink } from '../speech/stt-service'
 import { ADAM_UNREACHABLE_TEXT, askAdam } from './adam-client'
 import { resolveElevenLabsConfig, speakWithElevenLabs } from './elevenlabs-client'
+import { speakWithHermesNativeVoice, type NativeVoiceOutcome } from './hermes-native-tts'
 import { JARVIS_PTT_AUTO_RELEASE_MS, applyJarvisSignal, type JarvisSignal } from './jarvis-state'
 import { createWakeWordMatcher, type WakeWordMatcher } from './wake-word-matcher'
 
@@ -37,6 +38,8 @@ export type JarvisServiceDeps = {
   cancelAgent?: () => void
   fetchFn?: typeof fetch
   speakQueue?: (text: string) => Promise<SpeakOutcome>
+  /** Injectable for tests — real spawns a Python/afplay subprocess. */
+  nativeSpeak?: (text: string) => Promise<NativeVoiceOutcome>
   now?: () => number
 }
 
@@ -143,8 +146,15 @@ export class JarvisService {
       return { played: false, reason: 'empty text' }
     }
     this.transition({ type: 'speak-started' })
-    // ElevenLabs when Carson's key+voice are configured; local engine stays the
-    // fallback so a network/key failure never silences a reply.
+    // Adam speaks as himself first, through his own Hermes profile's voice —
+    // free, local, and it's actually him rather than a third-party stand-in.
+    // ElevenLabs (if configured) is the next fallback, then the OS `say`
+    // engine, so a missing/broken native voice never silences a reply.
+    const native = await (this.deps.nativeSpeak ?? speakWithHermesNativeVoice)(text.trim())
+    if (native.played) {
+      this.transition({ type: 'turn-finished' })
+      return { played: true }
+    }
     const eleven = resolveElevenLabsConfig(this.deps.store.getSettings().voice)
     if (eleven) {
       try {

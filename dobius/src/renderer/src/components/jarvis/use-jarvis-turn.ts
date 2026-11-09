@@ -307,11 +307,14 @@ export function useJarvisTurn(): JarvisTurn {
   }, [flags.jarvisEnabled])
 
   // Global ⌘T push-to-talk: press starts or cancels a turn.
-  // Why the agentId check: with a live agent configured, the agent hook owns
-  // ⌘T — both handlers reacting would open a turn and a conversation at once,
-  // and they would fight over the microphone.
+  // Why the agentId check: with a live agent configured AND preferred over
+  // Adam's native voice, the agent hook owns ⌘T instead — both handlers
+  // reacting would open a turn and a conversation at once and fight over the
+  // microphone. preferNativeAdamVoice (default on) keeps this hook in charge
+  // even with an agent id configured, so Adam speaks as himself by default.
+  const liveAgentOwnsPtt = flags.agentId !== '' && !flags.preferNativeAdamVoice
   useEffect(() => {
-    if (!flags.jarvisEnabled || flags.agentId !== '') {
+    if (!flags.jarvisEnabled || liveAgentOwnsPtt) {
       return
     }
     const cleanupPressed = window.api.jarvis.onPttPressed(() => toggleTurn())
@@ -322,10 +325,10 @@ export function useJarvisTurn(): JarvisTurn {
       cleanupPressed()
       cleanupReleased()
     }
-  }, [flags.agentId, flags.jarvisEnabled, toggleTurn])
+  }, [liveAgentOwnsPtt, flags.jarvisEnabled, toggleTurn])
 
   const ambientDesired =
-    flags.jarvisEnabled && flags.jarvisWakeWord && flags.sttModel !== '' && flags.agentId === ''
+    flags.jarvisEnabled && flags.jarvisWakeWord && flags.sttModel !== '' && !liveAgentOwnsPtt
   useEffect(() => {
     if (!ambientDesired || registry.kind.current !== null || ambientHandleRef.current) {
       return

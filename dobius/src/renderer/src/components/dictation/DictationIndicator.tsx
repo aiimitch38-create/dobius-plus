@@ -23,7 +23,10 @@ export function DictationIndicator({ getAudioLevel }: DictationIndicatorProps) {
   const agent = useVoiceAgent()
   const toggleAgent = agent.toggle
   const { flags } = useJarvisVoiceSettings()
-  const agentMode = flags.jarvisEnabled && flags.agentId !== ''
+  // preferNativeAdamVoice (default on) keeps the orb talking to Adam's real
+  // Hermes profile even when an ElevenLabs agent id is configured — set it
+  // false in Settings > Voice to go back to the ElevenLabs conversation.
+  const agentMode = flags.jarvisEnabled && flags.agentId !== '' && !flags.preferNativeAdamVoice
 
   // ⌘T reaches this window as a Jarvis press event; in live mode it opens or
   // closes the conversation instead of starting a single turn.

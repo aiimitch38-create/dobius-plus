@@ -90,6 +90,14 @@ export type VoiceSettings = {
   elevenlabsModelId?: string
   /** ElevenLabs Agents id; set enables the live conversation instead of turns. */
   elevenlabsAgentId?: string
+  /**
+   * When not explicitly false, clicking the orb talks to Adam's real Hermes
+   * profile (his own identity, his own voice) instead of the ElevenLabs live
+   * agent, even when an ElevenLabs agent id is configured. Defaults to true
+   * (undefined counts as on) so existing installs get this without a manual
+   * settings trip; set false to go back to the ElevenLabs conversation.
+   */
+  preferNativeAdamVoice?: boolean
 }
 
 /** ElevenLabs key status sent to Settings; the key itself never is (#24). */
