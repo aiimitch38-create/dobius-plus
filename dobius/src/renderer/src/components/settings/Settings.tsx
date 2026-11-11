@@ -616,7 +616,7 @@ function Settings(): React.JSX.Element {
     }
   }
 
-  const applyTheme = useCallback((theme: 'system' | 'dark' | 'light') => {
+  const applyTheme = useCallback((theme: GlobalSettings['theme']) => {
     applyDocumentTheme(theme)
   }, [])
 

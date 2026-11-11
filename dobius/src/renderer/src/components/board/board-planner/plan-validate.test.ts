@@ -42,7 +42,7 @@ describe('validatePlan', () => {
     [[{ kind: 'spawn', brief: 'b', count: 40 }], 'count must be 1-12'],
     [[{ kind: 'open_studio', target: 'casino' }], 'unknown studio'],
     [[{ kind: 'pick_tool', target: 'laser' }], 'unknown tool'],
-    [[{ kind: 'set_theme', target: 'neon' }], 'unknown theme'],
+    [[{ kind: 'set_theme', target: 'light' }], 'unknown theme'],
     [[{ kind: 'git', target: 'rebase' }], 'unknown git action'],
     [[{ kind: 'insert_markdown', path: 'SECRET.md' }], 'is not listed'],
     [[{ kind: 'deploy_preset', target: 'Nope' }], 'not in the library'],

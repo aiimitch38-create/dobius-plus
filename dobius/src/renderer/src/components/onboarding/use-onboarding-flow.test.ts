@@ -25,7 +25,7 @@ describe('prepareSkippedOnboardingPreferences', () => {
       prepareSkippedOnboardingPreferences({
         currentStepId: 'theme',
         themeBeforePreview: 'dark',
-        settingsTheme: 'light',
+        settingsTheme: 'neon',
         selectedAgent: null,
         setTheme,
         applyTheme,
@@ -53,7 +53,7 @@ describe('prepareSkippedOnboardingPreferences', () => {
       prepareSkippedOnboardingPreferences({
         currentStepId: 'agent',
         themeBeforePreview: null,
-        settingsTheme: 'light',
+        settingsTheme: 'neon',
         selectedAgent: 'codex',
         setTheme,
         applyTheme,

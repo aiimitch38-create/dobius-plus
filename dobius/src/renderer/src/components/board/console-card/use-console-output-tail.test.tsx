@@ -246,6 +246,24 @@ describe('useConsoleOutputTail polling', () => {
     expect(lastScreen?.lines[0][0].text).toBe('hello')
   })
 
+  it('shows the last known screen immediately on remount, before the first fresh poll lands', async () => {
+    // Why: a card leaving glance mode (going live) unmounts this hook; a card
+    // re-entering glance later mounts it fresh. Without a cache keyed by
+    // ptyId, the screen would start null and flash blank until the next
+    // async snapshot resolves — the reported "text disappears" at the
+    // live/glance zoom threshold.
+    mount(<Probe ptyId="p1" enabled />)
+    await advance(0)
+    expect(lastScreen?.lines[0][0].text).toBe('hello')
+
+    mount(null)
+    snapshotFor = () => ({ data: 'world', cols: 80, rows: 24, seq: 6 })
+    mount(<Probe ptyId="p1" enabled />)
+
+    // Synchronous on mount, before any timer has fired.
+    expect(lastScreen?.lines[0][0].text).toBe('hello')
+  })
+
   it('measures: 20 idle glance cards issue 180 snapshot IPCs and 20 parses per minute', async () => {
     const ids = Array.from({ length: 20 }, (_, i) => `p${i}`)
     mount(

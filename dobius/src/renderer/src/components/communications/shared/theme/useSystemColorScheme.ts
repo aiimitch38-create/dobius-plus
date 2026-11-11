@@ -1,18 +1,16 @@
 import * as React from "react";
+import { isDaytime } from "@/lib/document-theme";
 
 export type SystemColorScheme = "dark" | "light";
 
-function getSystemColorScheme(): SystemColorScheme {
-  if (
-    typeof window === "undefined" ||
-    typeof window.matchMedia !== "function"
-  ) {
-    return "light";
-  }
+// Why: "system" resolves off local time of day app-wide (see
+// lib/document-theme.ts), not the OS's prefers-color-scheme signal — these
+// onboarding/setup screens need to agree with the rest of the app instead of
+// reading a second, disconnected signal.
+const REEVALUATE_INTERVAL_MS = 60_000;
 
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
+function getSystemColorScheme(): SystemColorScheme {
+  return isDaytime() ? "light" : "dark";
 }
 
 export function useSystemColorScheme(): SystemColorScheme {
@@ -20,16 +18,15 @@ export function useSystemColorScheme(): SystemColorScheme {
     React.useState<SystemColorScheme>(getSystemColorScheme);
 
   React.useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const updateColorScheme = () => {
-      setColorScheme(mediaQuery.matches ? "dark" : "light");
+      setColorScheme(getSystemColorScheme());
     };
 
     updateColorScheme();
-    mediaQuery.addEventListener("change", updateColorScheme);
+    const interval = window.setInterval(updateColorScheme, REEVALUATE_INTERVAL_MS);
 
     return () => {
-      mediaQuery.removeEventListener("change", updateColorScheme);
+      window.clearInterval(interval);
     };
   }, []);
 

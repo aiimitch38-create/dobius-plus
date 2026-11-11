@@ -6,9 +6,9 @@ describe('applyOnboardingThemeSelection', () => {
     const onThemeChange = vi.fn()
     const updateSettings = vi.fn().mockResolvedValue(undefined)
 
-    applyOnboardingThemeSelection('light', onThemeChange, updateSettings)
+    applyOnboardingThemeSelection('neon', onThemeChange, updateSettings)
 
-    expect(onThemeChange).toHaveBeenCalledWith('light')
-    expect(updateSettings).toHaveBeenCalledWith({ theme: 'light' })
+    expect(onThemeChange).toHaveBeenCalledWith('neon')
+    expect(updateSettings).toHaveBeenCalledWith({ theme: 'neon' })
   })
 })

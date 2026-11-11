@@ -1,5 +1,6 @@
 import type { ITheme } from '@xterm/xterm'
 import { getTheme, getThemeNames } from './terminal-themes-data'
+import { isDaytime } from './document-theme'
 import type { GlobalSettings } from '../../../shared/types'
 import {
   makeCustomTerminalThemeSelection,
@@ -13,12 +14,13 @@ export const BUILTIN_TERMINAL_THEME_NAMES = getThemeNames()
 
 export const DEFAULT_TERMINAL_THEME_DARK = 'Ghostty Default Style Dark'
 export const DEFAULT_TERMINAL_THEME_LIGHT = 'Builtin Tango Light'
+export const DEFAULT_TERMINAL_THEME_NEON = 'Neon'
 export const DEFAULT_TERMINAL_DIVIDER_DARK = '#3f3f46'
 const DEFAULT_TERMINAL_DIVIDER_LIGHT = '#d4d4d8'
 
 export type EffectiveTerminalAppearance = {
-  mode: 'dark' | 'light'
-  sourceTheme: 'system' | 'dark' | 'light'
+  mode: 'dark' | 'light' | 'neon'
+  sourceTheme: GlobalSettings['theme']
   themeName: string
   dividerColor: string
   theme: ITheme | null
@@ -34,11 +36,12 @@ export type TerminalThemeOption = {
   previewTheme: ITheme | null
 }
 
+// Why: "System" resolves off local time of day, not an OS signal — see
+// lib/document-theme.ts. Kept as its own function (rather than inlining
+// isDaytime at every call site) so the "system -> dark/light" decision has
+// one name callers can read.
 export function getSystemPrefersDark(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return true
-  }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
+  return !isDaytime()
 }
 
 export function getBuiltinTheme(name: string): ITheme | null {
@@ -121,12 +124,14 @@ export function resolveEffectiveTerminalAppearance(
   >,
   systemPrefersDark = getSystemPrefersDark()
 ): EffectiveTerminalAppearance {
-  const sourceTheme =
+  const sourceTheme: 'dark' | 'light' | 'neon' =
     settings.theme === 'system' ? (systemPrefersDark ? 'dark' : 'light') : settings.theme
   const useLightVariant = sourceTheme === 'light' && settings.terminalUseSeparateLightTheme
   const themeName = useLightVariant
     ? settings.terminalThemeLight || DEFAULT_TERMINAL_THEME_LIGHT
-    : settings.terminalThemeDark || DEFAULT_TERMINAL_THEME_DARK
+    : sourceTheme === 'neon'
+      ? settings.terminalThemeDark || DEFAULT_TERMINAL_THEME_NEON
+      : settings.terminalThemeDark || DEFAULT_TERMINAL_THEME_DARK
   const dividerColor = useLightVariant
     ? normalizeColor(settings.terminalDividerColorLight, DEFAULT_TERMINAL_DIVIDER_LIGHT)
     : normalizeColor(settings.terminalDividerColorDark, DEFAULT_TERMINAL_DIVIDER_DARK)

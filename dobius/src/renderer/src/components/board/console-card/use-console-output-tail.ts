@@ -50,6 +50,16 @@ function countersFor(ptyId: string): GlanceTailCounters {
   return entry
 }
 
+// Why: a card going live hands its pane back and unmounts this hook, then
+// unmounts again every time it returns to glance (ConsoleGlanceView is only
+// mounted while glancing). Without this, each live->glance switch starts
+// from a blank `screen` and waits on a fresh main-process round trip, so a
+// card that was already showing content goes blank for a frame or more right
+// at the switch — the reported "text disappears" at the live/glance zoom
+// threshold. Keyed across mounts so the last real screen is shown instantly
+// while a fresh snapshot is in flight.
+const lastKnownScreens = new Map<string, ConsoleScreen>()
+
 let lastBoardMotionAt = 0
 let boardMotionTracked = false
 
@@ -94,7 +104,9 @@ function trackBoardMotion(): void {
  * has gone idle. PTY output, focus and visibility wake a sleeping card.
  */
 export function useConsoleOutputTail(ptyId: string | null, enabled: boolean): ConsoleScreen | null {
-  const [screen, setScreen] = useState<ConsoleScreen | null>(null)
+  const [screen, setScreen] = useState<ConsoleScreen | null>(() =>
+    ptyId ? lastKnownScreens.get(ptyId) ?? null : null
+  )
   // Why refs: the parser and the last-seen keys survive enable/disable flips
   // (a card scrolled off and back on screen) so no xterm is rebuilt and no
   // unchanged screen is re-parsed or re-rendered.
@@ -206,6 +218,7 @@ export function useConsoleOutputTail(ptyId: string | null, enabled: boolean): Co
               return
             }
             const key = screenKey(next)
+            lastKnownScreens.set(ptyId, next)
             if (key !== lastScreenKeyRef.current) {
               lastScreenKeyRef.current = key
               setScreen(next)

@@ -42,7 +42,7 @@ export { getAppearancePaneSearchEntries }
 type AppearancePaneProps = {
   settings: GlobalSettings
   updateSettings: (updates: Partial<GlobalSettings>) => void
-  applyTheme: (theme: 'system' | 'dark' | 'light') => void
+  applyTheme: (theme: GlobalSettings['theme']) => void
   fontSuggestions: string[]
   terminalFontSuggestions: string[]
   systemPrefersDark: boolean
@@ -56,8 +56,8 @@ function resolveThemeSummary(theme: GlobalSettings['theme']): string {
   if (theme === 'system') {
     return translate('auto.components.settings.AppearancePane.fb0e0b4453', 'System')
   }
-  if (theme === 'light') {
-    return translate('auto.components.settings.AppearancePane.fd89b5487c', 'Light')
+  if (theme === 'neon') {
+    return translate('auto.components.settings.AppearancePane.e1a8c5fb12', 'Neon')
   }
   return translate('auto.components.settings.AppearancePane.7d26ccabe8', 'Dark')
 }

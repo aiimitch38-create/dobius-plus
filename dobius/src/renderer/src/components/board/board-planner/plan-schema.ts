@@ -35,7 +35,7 @@ export const PLAN_TOOLS = [
 ] as const
 export type PlanTool = (typeof PLAN_TOOLS)[number]
 
-export const PLAN_THEMES = ['light', 'dark', 'system'] as const
+export const PLAN_THEMES = ['dark', 'neon', 'system'] as const
 export type PlanTheme = (typeof PLAN_THEMES)[number]
 
 export const PLAN_GIT = ['push', 'commit', 'commit_push', 'pull'] as const

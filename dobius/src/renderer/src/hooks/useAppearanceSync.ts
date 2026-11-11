@@ -1,44 +1,36 @@
 import { useEffect } from 'react'
 import type { AppState } from '@/store'
 import { applyDocumentTheme } from '@/lib/document-theme'
-import { applyAppSkin } from '@/lib/app-skin'
 import { buildAppFontFamily } from '@/lib/app-font-family'
 import { scheduleRuntimeGraphSync } from '../runtime/sync-runtime-graph'
 
-// Why: applies theme/skin/font-family settings to the document. The theme
-// effect alone owns the dark/light class; the skin effect only applies the
-// skin's own color tokens and never flips dark/light against the user's
-// explicit Theme setting.
+// Why: re-check the clock often enough that "System" visibly flips through
+// the day without requiring an app restart, without redoing the work on
+// every render.
+const SYSTEM_THEME_REEVALUATE_INTERVAL_MS = 60_000
+
+// Why: applies the theme setting (System/Dark/Neon) to the document. Only
+// 'system' needs a live re-check, since 'dark'/'neon' are static choices.
 export function useAppearanceSync(settings: AppState['settings']): void {
   useEffect(() => {
     if (!settings) {
-      return
+      return undefined
     }
 
-    if (settings.theme === 'dark') {
-      applyDocumentTheme('dark')
+    applyDocumentTheme(settings.theme)
+
+    if (settings.theme !== 'system') {
       return undefined
-    } else if (settings.theme === 'light') {
-      applyDocumentTheme('light')
-      return undefined
-    } else {
-      // system
-      const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    }
+
+    const interval = window.setInterval(() => {
       applyDocumentTheme('system')
-      const handler = (): void => {
-        applyDocumentTheme('system')
-        // Why: system theme changes do not mutate the store, so mobile
-        // terminal colors need an explicit graph republish.
-        scheduleRuntimeGraphSync()
-      }
-      mq.addEventListener('change', handler)
-      return () => mq.removeEventListener('change', handler)
-    }
-  }, [settings])
-
-  useEffect(() => {
-    applyAppSkin(settings?.appSkin)
-  }, [settings?.appSkin, settings?.theme])
+      // Why: a timed re-resolution does not mutate the store, so mobile
+      // terminal colors need an explicit graph republish.
+      scheduleRuntimeGraphSync()
+    }, SYSTEM_THEME_REEVALUATE_INTERVAL_MS)
+    return () => window.clearInterval(interval)
+  }, [settings?.theme])
 
   useEffect(() => {
     document.documentElement.style.setProperty(

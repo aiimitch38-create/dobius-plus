@@ -31,12 +31,11 @@ import {
 import { translate } from '@/i18n/i18n'
 import type { UiLanguage } from '../../../../shared/ui-language'
 import { matchesSettingsSearch, normalizeSettingsSearchQuery } from './settings-search'
-import { APP_SKIN_BUZZ, APP_SKIN_NAMES, APP_SKIN_NONE } from '../../lib/app-skin'
 
 type AppearanceInterfaceSectionProps = {
   settings: GlobalSettings
   updateSettings: (updates: Partial<GlobalSettings>) => void
-  applyTheme: (theme: 'system' | 'dark' | 'light') => void
+  applyTheme: (theme: GlobalSettings['theme']) => void
   fontSuggestions: string[]
   isDesktopWindows: boolean
   forceVisiblePrimary?: boolean
@@ -96,57 +95,11 @@ export function AppearanceInterfaceSection({
                   label: translate('auto.components.settings.AppearancePane.7d26ccabe8', 'Dark')
                 },
                 {
-                  value: 'light',
-                  label: translate('auto.components.settings.AppearancePane.fd89b5487c', 'Light')
+                  value: 'neon',
+                  label: translate('auto.components.settings.AppearancePane.e1a8c5fb12', 'Neon')
                 }
               ]}
             />
-          }
-        />
-      </SearchableSetting>
-
-      <SearchableSetting
-        title="App Skin"
-        description="Recolor the entire interface with a legacy Dobius+ palette."
-        keywords={['skin', 'theme', 'color', 'palette', 'appearance']}
-        forceVisible={forceVisiblePrimary}
-      >
-        <SettingsRow
-          label="App Skin"
-          control={
-            <Select
-              value={settings.appSkin ?? APP_SKIN_NONE}
-              onValueChange={(value) =>
-                updateSettings(
-                  // Why: "change everything" — a skin colors the app chrome AND
-                  // the terminal. Legacy skins share one palette name across both
-                  // catalogs; Buzz has its own light/dark terminal palettes
-                  // (buzz.ts) since its skin is stylesheet-driven, not token-derived.
-                  value === APP_SKIN_NONE
-                    ? { appSkin: value }
-                    : value === APP_SKIN_BUZZ
-                      ? {
-                          appSkin: value,
-                          terminalThemeDark: 'Buzz Dark',
-                          terminalThemeLight: 'Buzz Light'
-                        }
-                      : { appSkin: value, terminalThemeDark: value, terminalThemeLight: value }
-                )
-              }
-            >
-              <SelectTrigger size="sm" className="min-w-[220px]" aria-label="App Skin">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={APP_SKIN_NONE}>None</SelectItem>
-                <SelectItem value={APP_SKIN_BUZZ}>{APP_SKIN_BUZZ}</SelectItem>
-                {APP_SKIN_NAMES.map((name) => (
-                  <SelectItem key={name} value={name}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           }
         />
       </SearchableSetting>

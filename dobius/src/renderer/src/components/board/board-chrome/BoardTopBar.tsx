@@ -126,7 +126,15 @@ export function BoardTopBar({
     if (el.scrollWidth <= el.clientWidth) return
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
     event.preventDefault()
-    el.scrollLeft += event.deltaY
+    // Why: a plain mouse wheel reports deltaMode=1 (DOM_DELTA_LINE, ~3 per
+    // notch) while a trackpad reports deltaMode=0 (DOM_DELTA_PIXEL, tens of
+    // px per gesture) — applying deltaY as raw pixels made mouse scrolling
+    // imperceptibly slow. Scale line-mode deltas up to a comparable pixel step.
+    const delta =
+      event.nativeEvent.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? event.deltaY * 24
+        : event.deltaY
+    el.scrollLeft += delta
   }
 
   const renderTab = (workspace: BoardWorkspaceTab): React.JSX.Element => {

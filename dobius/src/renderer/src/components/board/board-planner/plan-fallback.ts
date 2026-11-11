@@ -125,10 +125,10 @@ const RULES: Rule[] = [
     })
   },
   {
-    re: /^(?:dark|light|system)\s+(?:mode|theme)$/i,
+    re: /^(?:dark|neon|system)\s+(?:mode|theme)$/i,
     step: (m) => ({
       kind: 'set_theme',
-      target: m[0].split(/\s+/)[0].toLowerCase() as 'dark' | 'light' | 'system'
+      target: m[0].split(/\s+/)[0].toLowerCase() as 'dark' | 'neon' | 'system'
     })
   },
   { re: /^(?:i want to draw|draw|pen)$/i, step: () => ({ kind: 'pick_tool', target: 'pen' }) },

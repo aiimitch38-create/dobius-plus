@@ -2000,7 +2000,12 @@ app.whenReady().then(async () => {
     serveSimStateWatcher.markDobiusManaged(info)
     runtimeService.notifyEmulatorAutoAttachFromWatcher(worktreeId, info)
   })
-  nativeTheme.themeSource = store.getSettings().theme ?? 'system'
+  {
+    // Why: Electron's native theme source only has a dark/light/system axis;
+    // Neon is a dark-base appearance for native chrome (scrollbars, etc.).
+    const storedTheme = store.getSettings().theme ?? 'system'
+    nativeTheme.themeSource = storedTheme === 'neon' ? 'dark' : storedTheme
+  }
   // Why: relaunch Dobius+ after an OS restart so the session daemon comes back
   // and terminals cold-restore with their latest context. See launch-at-login.ts.
   applyLaunchAtLogin()

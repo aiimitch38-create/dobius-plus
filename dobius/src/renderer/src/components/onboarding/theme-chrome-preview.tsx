@@ -24,19 +24,26 @@ export function ChromePreview({ variant }: { variant: GlobalSettings['theme'] })
       </div>
     )
   }
+  if (variant === 'neon') {
+    return <ChromeMock dark neon />
+  }
   return <ChromeMock dark={variant === 'dark'} />
 }
 
-function ChromeMock({ dark }: { dark: boolean }) {
+function ChromeMock({ dark, neon = false }: { dark: boolean; neon?: boolean }) {
   // Tiny Dobius+ chrome: sidebar with two rows + a content area with a tab and
   // a composer line. Pure Tailwind so it stays lightweight inside the tile.
-  const bg = dark ? 'bg-[#0f1115]' : 'bg-[#f7f8fa]'
-  const sidebar = dark ? 'bg-[#16181d]' : 'bg-[#eceef2]'
-  const sidebarBorder = dark ? 'border-white/5' : 'border-black/5'
-  const row = dark ? 'bg-white/10' : 'bg-black/10'
-  const rowDim = dark ? 'bg-white/5' : 'bg-black/5'
-  const tab = dark ? 'bg-[#1d2026] border-white/5' : 'bg-white border-black/5'
-  const accent = 'bg-ops-blue/80'
+  const bg = neon ? 'bg-[#0a0a0a]' : dark ? 'bg-[#0f1115]' : 'bg-[#f7f8fa]'
+  const sidebar = neon ? 'bg-[#0a0a0a]' : dark ? 'bg-[#16181d]' : 'bg-[#eceef2]'
+  const sidebarBorder = neon ? 'border-[#39ff14]/15' : dark ? 'border-white/5' : 'border-black/5'
+  const row = neon ? 'bg-[#39ff14]/20' : dark ? 'bg-white/10' : 'bg-black/10'
+  const rowDim = neon ? 'bg-[#39ff14]/10' : dark ? 'bg-white/5' : 'bg-black/5'
+  const tab = neon
+    ? 'bg-[#0a0a0a] border-[#39ff14]/20'
+    : dark
+      ? 'bg-[#1d2026] border-white/5'
+      : 'bg-white border-black/5'
+  const accent = neon ? 'bg-[#39ff14]' : 'bg-ops-blue/80'
   return (
     <div className={cn('flex size-full', bg)}>
       <div className={cn('flex w-[34%] flex-col gap-1 border-r p-1.5', sidebar, sidebarBorder)}>

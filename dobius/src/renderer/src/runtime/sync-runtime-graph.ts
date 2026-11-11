@@ -1232,7 +1232,10 @@ function resolveMobileTerminalTheme(
       theme[key] = value
     }
   }
-  return { mode: appearance.mode, theme: theme as RuntimeMobileTerminalTheme['theme'] }
+  // Why: the mobile client's theme axis is dark/light only; Neon reports as
+  // dark there (its background/foreground still come through `theme`).
+  const mobileMode: 'dark' | 'light' = appearance.mode === 'light' ? 'light' : 'dark'
+  return { mode: mobileMode, theme: theme as RuntimeMobileTerminalTheme['theme'] }
 }
 
 function getRuntimeLeafIdsForTerminal(tabId: string, state: AppState): string[] {

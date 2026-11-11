@@ -16,7 +16,12 @@ export function resolveTerminalColorSchemeMode(
   systemPrefersDark: boolean
 ): TerminalColorSchemeMode {
   const theme = settings?.theme ?? 'system'
-  return theme === 'system' ? (systemPrefersDark ? 'dark' : 'light') : theme
+  if (theme === 'system') {
+    return systemPrefersDark ? 'dark' : 'light'
+  }
+  // Why: the Contour/Kitty protocol only has a dark/light axis; Neon is a
+  // dark-base appearance, so it reports as 'dark' to subscribed TUIs.
+  return theme === 'neon' ? 'dark' : theme
 }
 
 export type Mode2031ScanResult = {

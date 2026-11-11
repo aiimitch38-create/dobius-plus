@@ -1464,7 +1464,7 @@ describe('buildMobileSessionTabSnapshots', () => {
     const state = makeState({
       settings: {
         ...getDefaultSettings('/tmp'),
-        theme: 'light',
+        theme: 'system',
         terminalUseSeparateLightTheme: true,
         terminalColorOverrides: {
           background: '#f8f8f8',
@@ -1488,7 +1488,7 @@ describe('buildMobileSessionTabSnapshots', () => {
       } as AppState['terminalLayoutsByTabId']
     })
 
-    expect(buildMobileSessionTabSnapshots(state)[0]?.tabs).toMatchObject([
+    expect(buildMobileSessionTabSnapshots(state, false)[0]?.tabs).toMatchObject([
       {
         type: 'terminal',
         terminalTheme: {

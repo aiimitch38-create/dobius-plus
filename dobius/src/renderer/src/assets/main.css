@@ -554,6 +554,46 @@
   --annotation-highlight: #fbbf24;
 }
 
+/* Neon appearance: app-wide chrome tokens (not just the board surface above).
+   Same dark base as .dark, but driven by the Neon terminal palette
+   (lib/terminal-themes/legacy-dobius-dark.ts `Neon`) instead of the plain
+   dark palette — so general UI (Settings outside the board, onboarding,
+   sidebar, buttons, focus rings) also goes neon, matching ".dark" reach. */
+.dark[data-appearance='neon'] {
+  --background: #0a0a0a;
+  --editor-surface: #0a0a0a;
+  --foreground: #39ff14;
+  --card: #101410;
+  --card-foreground: #39ff14;
+  --popover: #101410;
+  --popover-foreground: #39ff14;
+  --primary: #00ff41;
+  --primary-foreground: #0a0a0a;
+  --secondary: #141a14;
+  --secondary-foreground: #39ff14;
+  --muted: #141a14;
+  --muted-foreground: rgb(57 255 20 / 55%);
+  --accent: #1a241a;
+  --accent-foreground: #39ff14;
+  --border: rgb(57 255 20 / 12%);
+  --input: rgb(57 255 20 / 18%);
+  --ring: #00ff41;
+  --worktree-sidebar: #101410;
+  --worktree-sidebar-foreground: #39ff14;
+  --worktree-sidebar-accent: #182218;
+  --worktree-sidebar-accent-foreground: #39ff14;
+  --worktree-sidebar-border: rgb(57 255 20 / 12%);
+  --worktree-sidebar-ring: #00ff41;
+  --sidebar: #101410;
+  --sidebar-foreground: #39ff14;
+  --sidebar-primary: #00ff41;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #141a14;
+  --sidebar-accent-foreground: #39ff14;
+  --sidebar-border: rgb(57 255 20 / 12%);
+  --sidebar-ring: #00ff41;
+}
+
 .linear-priority-bars {
   --linear-priority-bar-inactive-fill: color-mix(in srgb, lch(39.576 1.25 282) 34%, transparent);
 }
@@ -3696,8 +3736,10 @@ html.onboarding-tour-start-transition::view-transition-new(root) {
   }
 }
 
-/* Board surface (Carson, 2026-10-23): white canvas, grey dots, black text, blue
-   accent, in both light and dark mode. Scoped so Classic keeps its palette. */
+/* Board surface: white canvas, grey dots, black text, blue accent in System
+   (light). Dark and Neon (below) give every one of these a real dark-base
+   counterpart instead of staying pinned to the light palette. Scoped so
+   Classic keeps its own palette. */
 [data-surface='board'] {
   --board-canvas: oklch(1 0 0);
   /* Both references fade the canvas lighter toward the bottom (sampled top/bottom). */
@@ -3764,6 +3806,33 @@ html.onboarding-tour-start-transition::view-transition-new(root) {
 }
 
 .dark [data-surface='board'] {
+  --board-canvas: oklch(0.16 0 0);
+  --board-canvas-bottom: oklch(0.16 0 0);
+  /* Gray dots stay visible against the black canvas, per spec — not the
+     foreground color. */
+  --board-dot: oklch(0.42 0 0);
+  --board-panel: oklch(0.205 0 0);
+  --board-panel-2: oklch(0.26 0 0);
+  --board-status-pill: oklch(0.26 0 0);
+  --board-panel-border: oklch(0.32 0 0);
+  --board-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px oklch(0 0 0 / 0.55);
+  --board-accent: oklch(0.65 0.19 260);
+  --board-accent-fg: oklch(1 0 0);
+  --board-accent-tint: oklch(0.3 0.07 260);
+  --board-text: oklch(0.96 0 0);
+  --board-text-muted: oklch(0.65 0 0);
+  --board-chip: oklch(0.24 0 0);
+  --board-chip-border: oklch(0.42 0.06 260);
+  --board-chip-border-alt: oklch(0.42 0.06 300);
+  --board-danger-tint: oklch(0.28 0.06 25);
+  --board-danger-text: oklch(0.72 0.17 30);
+  --board-warning-text: oklch(0.78 0.15 70);
+  --board-live: oklch(0.65 0.12 134);
+  --board-swatch-yellow: oklch(0.32 0.05 95);
+  --board-swatch-pink: oklch(0.3 0.04 0);
+  --board-swatch-blue: oklch(0.3 0.04 240);
+  --board-swatch-green: oklch(0.32 0.04 150);
+  --board-swatch-purple: oklch(0.3 0.04 300);
   --agent-1: oklch(0.7 0.15 255);
   --agent-2: oklch(0.7 0.15 150);
   --agent-3: oklch(0.7 0.15 30);
@@ -3774,6 +3843,30 @@ html.onboarding-tour-start-transition::view-transition-new(root) {
   --agent-outline: oklch(0.1 0 0);
   --agent-outline-inner: oklch(0.96 0 0);
   --agent-muted: oklch(0.55 0 0);
+}
+
+/* Neon appearance: same dark base as .dark above, but the Neon terminal
+   palette (lib/terminal-themes/legacy-dobius-dark.ts `Neon`) drives text,
+   accent and chip colors. Higher specificity than `.dark [data-surface=
+  'board']` above (both classes are set together) so these win for the
+   properties it redefines; everything else (shadows, swatches, agent
+   cursors) is inherited from the dark block. */
+.dark[data-appearance='neon'] [data-surface='board'] {
+  --board-canvas: #0a0a0a;
+  --board-canvas-bottom: #0a0a0a;
+  --board-dot: oklch(0.42 0 0);
+  --board-panel: #101410;
+  --board-panel-2: #141a14;
+  --board-status-pill: #141a14;
+  --board-panel-border: #22301f;
+  --board-accent: #00ff41;
+  --board-accent-fg: #0a0a0a;
+  --board-accent-tint: rgb(0 255 65 / 14%);
+  --board-text: #39ff14;
+  --board-text-muted: rgb(57 255 20 / 55%);
+  --board-chip: #101410;
+  --board-chip-border: #00ff41;
+  --board-chip-border-alt: #7fff00;
 }
 
 /* Agent cursor overlay motion. Reduced motion keeps only a short opacity flash. */

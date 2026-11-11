@@ -14,7 +14,7 @@ describe('terminal color scheme protocol', () => {
 
   it('resolves system color scheme from app settings and system preference', () => {
     expect(resolveTerminalColorSchemeMode({ theme: 'dark' }, false)).toBe('dark')
-    expect(resolveTerminalColorSchemeMode({ theme: 'light' }, true)).toBe('light')
+    expect(resolveTerminalColorSchemeMode({ theme: 'neon' }, false)).toBe('dark')
     expect(resolveTerminalColorSchemeMode({ theme: 'system' }, true)).toBe('dark')
     expect(resolveTerminalColorSchemeMode({ theme: 'system' }, false)).toBe('light')
   })

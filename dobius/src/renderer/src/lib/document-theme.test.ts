@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyDocumentTheme,
+  isDaytime,
+  resolveAppearance,
   resolveDocumentTheme,
   THEME_TRANSITION_DISABLED_CLASS
 } from './document-theme'
@@ -42,8 +44,19 @@ class FakeClassList {
   }
 }
 
-function createThemeRoot(): { classList: FakeClassList } {
-  return { classList: new FakeClassList() }
+function createThemeRoot(): {
+  classList: FakeClassList
+  attributes: Map<string, string>
+  setAttribute: (name: string, value: string) => void
+  removeAttribute: (name: string) => void
+} {
+  const attributes = new Map<string, string>()
+  return {
+    classList: new FakeClassList(),
+    attributes,
+    setAttribute: (name, value) => attributes.set(name, value),
+    removeAttribute: (name) => attributes.delete(name)
+  }
 }
 
 function createFrameQueue(): {
@@ -75,35 +88,81 @@ function createFrameQueue(): {
   }
 }
 
-describe('document theme', () => {
+const NOON = new Date(2026, 0, 1, 12, 0, 0)
+const MIDNIGHT = new Date(2026, 0, 1, 0, 0, 0)
+const JUST_AFTER_DAY_START = new Date(2026, 0, 1, 7, 0, 0)
+const JUST_BEFORE_DAY_START = new Date(2026, 0, 1, 6, 59, 0)
+const JUST_BEFORE_DAY_END = new Date(2026, 0, 1, 18, 59, 0)
+const JUST_AFTER_DAY_END = new Date(2026, 0, 1, 19, 0, 0)
+
+describe('isDaytime', () => {
+  it('is daytime between 7am (inclusive) and 7pm (exclusive)', () => {
+    expect(isDaytime(NOON)).toBe(true)
+    expect(isDaytime(JUST_AFTER_DAY_START)).toBe(true)
+    expect(isDaytime(JUST_BEFORE_DAY_END)).toBe(true)
+  })
+
+  it('is nighttime outside that window', () => {
+    expect(isDaytime(MIDNIGHT)).toBe(false)
+    expect(isDaytime(JUST_BEFORE_DAY_START)).toBe(false)
+    expect(isDaytime(JUST_AFTER_DAY_END)).toBe(false)
+  })
+})
+
+describe('resolveAppearance', () => {
+  it('resolves explicit theme preferences regardless of time', () => {
+    expect(resolveAppearance('dark', NOON)).toBe('dark')
+    expect(resolveAppearance('dark', MIDNIGHT)).toBe('dark')
+    expect(resolveAppearance('neon', NOON)).toBe('neon')
+    expect(resolveAppearance('neon', MIDNIGHT)).toBe('neon')
+  })
+
+  it('resolves system by time of day: day -> light, night -> dark', () => {
+    expect(resolveAppearance('system', NOON)).toBe('light')
+    expect(resolveAppearance('system', MIDNIGHT)).toBe('dark')
+  })
+
+  it('never resolves system to neon', () => {
+    expect(resolveAppearance('system', NOON)).not.toBe('neon')
+    expect(resolveAppearance('system', MIDNIGHT)).not.toBe('neon')
+  })
+})
+
+describe('resolveDocumentTheme', () => {
   it('resolves explicit theme preferences', () => {
     expect(resolveDocumentTheme('dark')).toBe(true)
-    expect(resolveDocumentTheme('light')).toBe(false)
+    expect(resolveDocumentTheme('neon')).toBe(true)
   })
 
-  it('resolves system from matchMedia', () => {
-    expect(resolveDocumentTheme('system', () => ({ matches: true }))).toBe(true)
-    expect(resolveDocumentTheme('system', () => ({ matches: false }))).toBe(false)
+  it('resolves system from the clock', () => {
+    expect(resolveDocumentTheme('system', NOON)).toBe(false)
+    expect(resolveDocumentTheme('system', MIDNIGHT)).toBe(true)
   })
+})
 
-  it('applies dark and light root classes', () => {
+describe('applyDocumentTheme', () => {
+  it('applies dark and neon root classes/attributes', () => {
     const root = createThemeRoot()
 
     applyDocumentTheme('dark', { root, disableTransitions: false })
     expect(root.classList.contains('dark')).toBe(true)
+    expect(root.attributes.has('data-appearance')).toBe(false)
 
-    applyDocumentTheme('light', { root, disableTransitions: false })
-    expect(root.classList.contains('dark')).toBe(false)
+    applyDocumentTheme('neon', { root, disableTransitions: false })
+    expect(root.classList.contains('dark')).toBe(true)
+    expect(root.attributes.get('data-appearance')).toBe('neon')
+
+    applyDocumentTheme('dark', { root, disableTransitions: false })
+    expect(root.attributes.has('data-appearance')).toBe(false)
   })
 
-  it('applies system root class from matchMedia', () => {
+  it('applies system root class from the clock, re-evaluating live', () => {
     const root = createThemeRoot()
 
-    applyDocumentTheme('system', {
-      root,
-      matchMedia: () => ({ matches: true }),
-      disableTransitions: false
-    })
+    applyDocumentTheme('system', { root, now: NOON, disableTransitions: false })
+    expect(root.classList.contains('dark')).toBe(false)
+
+    applyDocumentTheme('system', { root, now: MIDNIGHT, disableTransitions: false })
     expect(root.classList.contains('dark')).toBe(true)
   })
 
@@ -137,7 +196,7 @@ describe('document theme', () => {
     })
     expect(frames.pendingCount()).toBe(1)
 
-    applyDocumentTheme('light', {
+    applyDocumentTheme('neon', {
       root,
       requestAnimationFrame: frames.requestAnimationFrame,
       cancelAnimationFrame: frames.cancelAnimationFrame

@@ -200,7 +200,7 @@ type StoreState = {
   sshConnectionStates: Map<string, { status: string; remotePlatform?: NodeJS.Platform }>
   cacheTimerByKey: Record<string, number | null>
   settings: {
-    theme?: 'system' | 'dark' | 'light'
+    theme?: 'system' | 'dark' | 'neon'
     promptCacheTimerEnabled?: boolean
     activeRuntimeEnvironmentId?: string | null
     experimentalTerminalAttention?: boolean
@@ -8105,7 +8105,7 @@ describe('connectPanePty', () => {
     transportFactoryQueue.push(transport)
     mockStoreState = {
       ...mockStoreState,
-      settings: { ...mockStoreState.settings, theme: 'light' }
+      settings: { ...mockStoreState.settings, theme: 'system' }
     }
 
     const pane = createPane(1)
@@ -8126,6 +8126,9 @@ describe('connectPanePty', () => {
 
     vi.useFakeTimers()
     try {
+      // Why: 'system' now resolves by local time of day, not an OS signal —
+      // pin the clock to midday so this exercises the light-mode sequence.
+      vi.setSystemTime(new Date(2026, 0, 1, 12, 0, 0))
       capturedDataCallback.current?.('\x1b[?2031h')
       vi.advanceTimersByTime(50)
 
@@ -8151,7 +8154,7 @@ describe('connectPanePty', () => {
     transportFactoryQueue.push(transport)
     mockStoreState = {
       ...mockStoreState,
-      settings: { ...mockStoreState.settings, theme: 'light' }
+      settings: { ...mockStoreState.settings, theme: 'system' }
     }
 
     const isVisibleRef = { current: false }
@@ -8171,14 +8174,22 @@ describe('connectPanePty', () => {
     )
     await flushAsyncTicks(6)
 
-    capturedDataCallback.current?.('\x1b[?20')
-    isVisibleRef.current = true
-    capturedDataCallback.current?.('31h')
+    vi.useFakeTimers()
+    try {
+      // Why: 'system' now resolves by local time of day, not an OS signal —
+      // pin the clock to midday so this exercises the light-mode sequence.
+      vi.setSystemTime(new Date(2026, 0, 1, 12, 0, 0))
+      capturedDataCallback.current?.('\x1b[?20')
+      isVisibleRef.current = true
+      capturedDataCallback.current?.('31h')
 
-    expect(transport.sendInput).toHaveBeenCalledWith('\x1b[?997;2n')
-    expect(paneMode2031Ref.current.get(1)).toBe(true)
-    expect(paneLastThemeModeRef.current.get(1)).toBe('light')
-    expect(pane.terminal.write).not.toHaveBeenCalledWith('31h', expect.any(Function))
+      expect(transport.sendInput).toHaveBeenCalledWith('\x1b[?997;2n')
+      expect(paneMode2031Ref.current.get(1)).toBe(true)
+      expect(paneLastThemeModeRef.current.get(1)).toBe('light')
+      expect(pane.terminal.write).not.toHaveBeenCalledWith('31h', expect.any(Function))
+    } finally {
+      vi.useRealTimers()
+    }
 
     binding.dispose()
   })

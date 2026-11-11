@@ -136,7 +136,7 @@ describe('Store secret persistence fails closed (#25)', () => {
 
     safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
     // An unrelated change forces a full save of the unchanged secrets.
-    store.updateSettings({ theme: 'light' })
+    store.updateSettings({ theme: 'neon' })
     store.flush()
 
     const persisted = JSON.parse(readRawDataFile())
@@ -186,7 +186,7 @@ describe('Store secret persistence fails closed (#25)', () => {
     writeDataFileWithEncryptedSecrets()
     const store = await createStore()
 
-    store.updateSettings({ theme: 'light' })
+    store.updateSettings({ theme: 'neon' })
     store.flush()
 
     expect(safeStorageMock.encryptString).not.toHaveBeenCalled()
@@ -209,11 +209,11 @@ describe('Store secret persistence fails closed (#25)', () => {
       'browserKagiSessionLink'
     ])
 
-    store.updateSettings({ theme: 'light' })
+    store.updateSettings({ theme: 'neon' })
     store.flush()
 
     const persisted = JSON.parse(readRawDataFile())
-    expect(persisted.settings.theme).toBe('light')
+    expect(persisted.settings.theme).toBe('neon')
     expect(persisted.settings.opencodeSessionCookie).toBe(encryptedB64(COOKIE))
     expect(persisted.settings.httpProxyUrl).toBe(encryptedB64(PROXY))
     expect(persisted.ui.browserKagiSessionLink).toBe(encryptedB64(KAGI))
@@ -231,7 +231,7 @@ describe('Store secret persistence fails closed (#25)', () => {
     const store = await createStore()
 
     expect(store.getSettings().opencodeSessionCookie).toBe('')
-    store.updateSettings({ theme: 'light' })
+    store.updateSettings({ theme: 'neon' })
     store.flush()
 
     safeStorageMock.isEncryptionAvailable.mockReturnValue(true)
@@ -260,7 +260,7 @@ describe('Store secret persistence fails closed (#25)', () => {
     expect(store.getSettings().httpProxyUrl).toBe(PROXY)
     expect(store.getUI().browserKagiSessionLink).toBe(KAGI)
 
-    store.updateSettings({ theme: 'light' })
+    store.updateSettings({ theme: 'neon' })
     store.flush()
 
     const raw = readRawDataFile()

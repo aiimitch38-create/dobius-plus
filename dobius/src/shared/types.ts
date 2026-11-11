@@ -2500,10 +2500,11 @@ export type GlobalSettings = {
   branchPrefix: 'git-username' | 'custom' | 'none'
   branchPrefixCustom: string
   enableGitHubAttribution: boolean
-  theme: 'system' | 'dark' | 'light'
-  /** App-wide color skin that recolors the whole UI chrome. 'none' (or unset)
-   *  falls back to the plain dark/light theme. Values are legacy Dobius+ skin
-   *  names (see APP_SKIN_NAMES in renderer lib/app-skin.ts). */
+  /** 'system' resolves automatically by local time of day (day = light,
+   *  night = dark); 'dark' and 'neon' are explicit, always-dark choices. */
+  theme: 'system' | 'dark' | 'neon'
+  /** Legacy app-wide color skin field. Superseded by `theme: 'neon'`; kept
+   *  optional and unread so old persisted profiles don't crash on load. */
   appSkin?: string
   /** Controls the left sidebar surface without changing terminal brightness. */
   leftSidebarAppearanceMode: LeftSidebarAppearanceMode
@@ -2563,6 +2564,10 @@ export type GlobalSettings = {
   terminalThemeLight: string
   terminalDividerColorLight: string
   terminalInactivePaneOpacity: number
+  /** One-shot migration guard for moving the inherited inactive-pane dimming
+   *  default (0.8) to full opacity (1) while preserving a later explicit
+   *  user choice of 0.8. */
+  terminalInactivePaneOpacityDefaultedToFull?: boolean
   terminalActivePaneOpacity: number
   terminalPaneOpacityTransitionMs: number
   terminalDividerThicknessPx: number

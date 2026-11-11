@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_TERMINAL_THEME_DARK,
   DEFAULT_TERMINAL_THEME_LIGHT,
+  DEFAULT_TERMINAL_THEME_NEON,
   getAvailableTerminalThemeOptions,
   getBuiltinTheme,
   getTerminalThemePreview,
@@ -95,7 +96,7 @@ describe('resolveEffectiveTerminalAppearance', () => {
   it('reuses the dark terminal theme in light mode when separate light theme is disabled', () => {
     const appearance = resolveEffectiveTerminalAppearance(
       {
-        theme: 'light',
+        theme: 'system',
         terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
         terminalDividerColorDark: '#3f3f46',
         terminalUseSeparateLightTheme: false,
@@ -112,7 +113,7 @@ describe('resolveEffectiveTerminalAppearance', () => {
   it('falls back to the default light theme when terminalThemeLight is blank', () => {
     const appearance = resolveEffectiveTerminalAppearance(
       {
-        theme: 'light',
+        theme: 'system',
         terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
         terminalDividerColorDark: '#3f3f46',
         terminalUseSeparateLightTheme: true,
@@ -128,7 +129,7 @@ describe('resolveEffectiveTerminalAppearance', () => {
   it('keeps invalid terminalThemeLight names while preview falls back to light', () => {
     const appearance = resolveEffectiveTerminalAppearance(
       {
-        theme: 'light',
+        theme: 'system',
         terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
         terminalDividerColorDark: '#3f3f46',
         terminalUseSeparateLightTheme: true,
@@ -140,6 +141,56 @@ describe('resolveEffectiveTerminalAppearance', () => {
 
     expect(appearance.themeName).toBe('Invalid Theme Name')
     expect(appearance.theme).toEqual(getTerminalThemePreview(DEFAULT_TERMINAL_THEME_LIGHT))
+  })
+
+  it('defaults to the Neon built-in terminal theme when theme is neon', () => {
+    const appearance = resolveEffectiveTerminalAppearance(
+      {
+        theme: 'neon',
+        terminalThemeDark: '',
+        terminalDividerColorDark: '#3f3f46',
+        terminalUseSeparateLightTheme: true,
+        terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT,
+        terminalDividerColorLight: '#d4d4d8'
+      },
+      false
+    )
+
+    expect(appearance.mode).toBe('neon')
+    expect(appearance.themeName).toBe(DEFAULT_TERMINAL_THEME_NEON)
+    expect(getBuiltinTheme(DEFAULT_TERMINAL_THEME_NEON)).not.toBeNull()
+  })
+
+  it('preserves a manually picked terminal theme even when theme is neon', () => {
+    const appearance = resolveEffectiveTerminalAppearance(
+      {
+        theme: 'neon',
+        terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
+        terminalDividerColorDark: '#3f3f46',
+        terminalUseSeparateLightTheme: true,
+        terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT,
+        terminalDividerColorLight: '#d4d4d8'
+      },
+      false
+    )
+
+    expect(appearance.themeName).toBe(DEFAULT_TERMINAL_THEME_DARK)
+  })
+
+  it('never resolves system theme to neon', () => {
+    const appearance = resolveEffectiveTerminalAppearance(
+      {
+        theme: 'system',
+        terminalThemeDark: '',
+        terminalDividerColorDark: '#3f3f46',
+        terminalUseSeparateLightTheme: true,
+        terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT,
+        terminalDividerColorLight: '#d4d4d8'
+      },
+      true
+    )
+
+    expect(appearance.mode).not.toBe('neon')
   })
 
   it('resolves custom theme selections by id', () => {
@@ -194,7 +245,7 @@ describe('resolveEffectiveTerminalAppearance', () => {
   it('falls back visually to the light default when a light custom selection is missing', () => {
     const appearance = resolveEffectiveTerminalAppearance(
       {
-        theme: 'light',
+        theme: 'system',
         terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
         terminalDividerColorDark: '#3f3f46',
         terminalUseSeparateLightTheme: true,

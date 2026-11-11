@@ -132,7 +132,9 @@ export function registerSettingsHandlers(
       sanitizedArgs.uiLanguage = normalizeUiLanguage(args.uiLanguage)
     }
     if (args.theme) {
-      nativeTheme.themeSource = args.theme
+      // Why: Electron's native theme source only has a dark/light/system
+      // axis; Neon is a dark-base appearance for native chrome.
+      nativeTheme.themeSource = args.theme === 'neon' ? 'dark' : args.theme
     }
     // Why: capture the pre-update value so we only emit when the value
     // actually changes. The settings UI sometimes re-saves the same value

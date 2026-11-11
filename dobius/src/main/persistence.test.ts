@@ -1995,6 +1995,70 @@ describe('Store', () => {
     expect(store.getSettings().commitMessageAi?.customPrompt).toBe('Use Conventional Commits.')
   })
 
+  it('migrates a legacy light theme to system', async () => {
+    writeDataFile({
+      schemaVersion: 1,
+      repos: [],
+      worktreeMeta: {},
+      settings: { theme: 'light' },
+      ui: {},
+      githubCache: { pr: {}, issue: {} },
+      workspaceSession: {}
+    })
+
+    const store = await createStore()
+
+    expect(store.getSettings().theme).toBe('system')
+  })
+
+  it('migrates a legacy Neon app skin to the neon theme', async () => {
+    writeDataFile({
+      schemaVersion: 1,
+      repos: [],
+      worktreeMeta: {},
+      settings: { theme: 'dark', appSkin: 'Neon' },
+      ui: {},
+      githubCache: { pr: {}, issue: {} },
+      workspaceSession: {}
+    })
+
+    const store = await createStore()
+
+    expect(store.getSettings().theme).toBe('neon')
+  })
+
+  it('migrates a legacy light theme with a Neon app skin to the neon theme, not system', async () => {
+    writeDataFile({
+      schemaVersion: 1,
+      repos: [],
+      worktreeMeta: {},
+      settings: { theme: 'light', appSkin: 'Neon' },
+      ui: {},
+      githubCache: { pr: {}, issue: {} },
+      workspaceSession: {}
+    })
+
+    const store = await createStore()
+
+    expect(store.getSettings().theme).toBe('neon')
+  })
+
+  it('passes through an already-migrated dark or system theme unchanged', async () => {
+    writeDataFile({
+      schemaVersion: 1,
+      repos: [],
+      worktreeMeta: {},
+      settings: { theme: 'system', appSkin: 'none' },
+      ui: {},
+      githubCache: { pr: {}, issue: {} },
+      workspaceSession: {}
+    })
+
+    const store = await createStore()
+
+    expect(store.getSettings().theme).toBe('system')
+  })
+
   it('migrates first-work branch auto-rename on for existing profiles once', async () => {
     writeDataFile({
       schemaVersion: 1,
@@ -2089,6 +2153,45 @@ describe('Store', () => {
 
     expect(updated.terminalTuiScrollSensitivity).toBe(3)
     expect(updated.terminalTuiScrollSensitivityDefaultedToOne).toBe(true)
+  })
+
+  it('migrates the inherited inactive-pane opacity default to full opacity on first load', async () => {
+    writeDataFile({
+      schemaVersion: 1,
+      repos: [],
+      worktreeMeta: {},
+      settings: { terminalInactivePaneOpacity: 0.8 },
+      ui: {},
+      githubCache: { pr: {}, issue: {} },
+      workspaceSession: {}
+    })
+
+    const store = await createStore()
+
+    expect(store.getSettings().terminalInactivePaneOpacity).toBe(1)
+    expect(store.getSettings().terminalInactivePaneOpacityDefaultedToFull).toBe(true)
+    store.flush()
+    expect((readDataFile() as PersistedState).settings.terminalInactivePaneOpacity).toBe(1)
+  })
+
+  it('preserves an explicit inactive-pane opacity choice after the full-opacity migration', async () => {
+    writeDataFile({
+      schemaVersion: 1,
+      repos: [],
+      worktreeMeta: {},
+      settings: {
+        terminalInactivePaneOpacity: 0.8,
+        terminalInactivePaneOpacityDefaultedToFull: true
+      },
+      ui: {},
+      githubCache: { pr: {}, issue: {} },
+      workspaceSession: {}
+    })
+
+    const store = await createStore()
+
+    expect(store.getSettings().terminalInactivePaneOpacity).toBe(0.8)
+    expect(store.getSettings().terminalInactivePaneOpacityDefaultedToFull).toBe(true)
   })
 
   it('merges rollback commit-message AI writes into existing source-control AI on load', async () => {

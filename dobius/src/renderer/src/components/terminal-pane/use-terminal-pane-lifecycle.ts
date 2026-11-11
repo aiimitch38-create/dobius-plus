@@ -606,8 +606,11 @@ export function useTerminalPaneLifecycle({
         currentSettings,
         systemPrefersDarkRef.current
       )
-      if (transport.sendInput(mode2031SequenceFor(mode))) {
-        paneLastThemeModeRef.current.set(paneId, mode)
+      // Why: the mode-2031 protocol only has a dark/light axis; Neon is a
+      // dark-base appearance, matching resolveTerminalColorSchemeMode.
+      const colorSchemeMode: 'dark' | 'light' = mode === 'light' ? 'light' : 'dark'
+      if (transport.sendInput(mode2031SequenceFor(colorSchemeMode))) {
+        paneLastThemeModeRef.current.set(paneId, colorSchemeMode)
       }
     }
     send()

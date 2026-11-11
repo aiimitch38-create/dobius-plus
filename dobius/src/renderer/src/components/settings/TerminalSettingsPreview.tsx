@@ -60,7 +60,8 @@ function resolveAppMode(
   if (settings.theme === 'system') {
     return systemPrefersDark ? 'dark' : 'light'
   }
-  return settings.theme
+  // Why: this preview only has a dark/light axis; Neon previews as dark.
+  return 'dark'
 }
 
 export function TerminalSettingsPreview({
@@ -105,7 +106,13 @@ export function TerminalSettingsPreview({
   // the helper to those specific properties.
   const appearance = useMemo(
     () =>
-      resolveEffectiveTerminalAppearance({ ...settings, theme: effectiveMode }, systemPrefersDark),
+      resolveEffectiveTerminalAppearance(
+        // Why: 'light' isn't a real theme value anymore (only 'system' can
+        // resolve to it) — force it via systemPrefersDark=false instead of
+        // 'theme' so the live-pane resolver's logic stays untouched.
+        { ...settings, theme: effectiveMode === 'light' ? 'system' : effectiveMode },
+        effectiveMode === 'light' ? false : effectiveMode === 'dark' ? true : systemPrefersDark
+      ),
     // oxlint-disable-next-line react-hooks/exhaustive-deps
     [
       effectiveMode,

@@ -215,6 +215,9 @@ export function applyTerminalAppearance(
   paneLastThemeMode: Map<number, 'dark' | 'light'>
 ): void {
   const appearance = resolveEffectiveTerminalAppearance(settings, systemPrefersDark)
+  // Why: the mode-2031 protocol only has a dark/light axis; Neon is a
+  // dark-base appearance, matching resolveTerminalColorSchemeMode.
+  const colorSchemeMode: 'dark' | 'light' = appearance.mode === 'light' ? 'light' : 'dark'
   const paneStyles = resolvePaneStyleOptions(settings)
   const baseTheme: ITheme | null = appearance.theme ?? getBuiltinTheme(appearance.themeName)
   const theme = composeActiveTerminalTheme(baseTheme, settings)
@@ -284,7 +287,7 @@ export function applyTerminalAppearance(
       canMeasurePaneForFit(pane)
     ) {
       transport.resize(pane.terminal.cols, pane.terminal.rows)
-      maybePushMode2031Flip(pane.id, appearance.mode, transport, paneMode2031, paneLastThemeMode)
+      maybePushMode2031Flip(pane.id, colorSchemeMode, transport, paneMode2031, paneLastThemeMode)
     }
   }
 

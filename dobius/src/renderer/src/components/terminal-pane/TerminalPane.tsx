@@ -2770,14 +2770,17 @@ export default function TerminalPane({
   const terminalBackground =
     settings?.terminalColorOverrides?.background ?? effectiveAppearance?.theme?.background
   // Why: app light/dark mode can diverge from the selected terminal theme, so
-  // pane-title contrast follows the effective terminal surface instead.
+  // pane-title contrast follows the effective terminal surface instead. Neon
+  // is a dark-base appearance for this purpose.
+  const appSurface: 'dark' | 'light' | undefined =
+    effectiveAppearance == null ? undefined : effectiveAppearance.mode === 'light' ? 'light' : 'dark'
   const titleUsesLightSurface = isTerminalBackgroundLight(terminalBackground, {
-    appSurface: effectiveAppearance?.mode,
+    appSurface,
     backgroundOpacity: settings?.terminalBackgroundOpacity
   })
   const paneTitleBackground =
     resolveOpaqueTerminalBackground(terminalBackground, {
-      appSurface: effectiveAppearance?.mode,
+      appSurface,
       backgroundOpacity: settings?.terminalBackgroundOpacity
     }) ?? (titleUsesLightSurface ? '#ffffff' : '#000000')
 

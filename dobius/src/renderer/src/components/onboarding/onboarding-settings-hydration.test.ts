@@ -3,7 +3,7 @@ import { resolveOnboardingSettingsHydration } from './onboarding-settings-hydrat
 import type { GlobalSettings } from '../../../../shared/types'
 
 const settings = {
-  theme: 'light',
+  theme: 'neon',
   defaultTuiAgent: 'codex'
 } as GlobalSettings
 
@@ -46,7 +46,7 @@ describe('resolveOnboardingSettingsHydration', () => {
       })
     ).toEqual({
       settingsHydrated: true,
-      theme: 'light',
+      theme: 'neon',
       selectedAgent: 'codex'
     })
   })
@@ -71,7 +71,7 @@ describe('resolveOnboardingSettingsHydration', () => {
         settingsHydrated: false,
         themeInteracted: false,
         agentInteracted: false,
-        currentTheme: 'light',
+        currentTheme: 'neon',
         currentAgent: 'claude'
       })
     ).toEqual({ settingsHydrated: true })
@@ -84,7 +84,7 @@ describe('resolveOnboardingSettingsHydration', () => {
         settingsHydrated: false,
         themeInteracted: false,
         agentInteracted: false,
-        currentTheme: 'light',
+        currentTheme: 'neon',
         currentAgent: 'codex'
       })
     ).toEqual({ settingsHydrated: true })

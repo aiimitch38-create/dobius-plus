@@ -58,7 +58,7 @@ describe('useAutomationListTarget', () => {
     expect(load).toHaveBeenCalledTimes(1)
     expect(load).toHaveBeenLastCalledWith({ kind: 'local' })
 
-    setSettings({ theme: 'light', activeRuntimeEnvironmentId: null })
+    setSettings({ theme: 'neon', activeRuntimeEnvironmentId: null })
     setSettings({ theme: 'system', activeRuntimeEnvironmentId: null })
 
     expect(load).toHaveBeenCalledTimes(1)
@@ -74,7 +74,7 @@ describe('useAutomationListTarget', () => {
     expect(load).toHaveBeenCalledTimes(2)
     expect(load).toHaveBeenLastCalledWith({ kind: 'environment', environmentId: 'env-1' })
 
-    setSettings({ theme: 'light', activeRuntimeEnvironmentId: 'env-1' })
+    setSettings({ theme: 'neon', activeRuntimeEnvironmentId: 'env-1' })
     expect(load).toHaveBeenCalledTimes(2)
   })
 })

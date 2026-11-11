@@ -59,7 +59,10 @@ function getInitialTerminalThemeTarget(
   }
   // Why: the picker edits mode-specific slots. Defaulting to the active
   // terminal mode makes the selected theme apply immediately in system-light.
-  return resolveEffectiveTerminalAppearance(settings, systemPrefersDark).mode
+  // Neon has no separate slot of its own — it reuses the dark slot — so it
+  // maps to 'dark' here.
+  const mode = resolveEffectiveTerminalAppearance(settings, systemPrefersDark).mode
+  return mode === 'light' ? 'light' : 'dark'
 }
 
 type TerminalThemeCatalogSectionProps = {

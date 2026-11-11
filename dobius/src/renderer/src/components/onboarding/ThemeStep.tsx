@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Monitor, Moon, Settings2, Sun } from 'lucide-react'
+import { Check, Monitor, Moon, Settings2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { track } from '@/lib/telemetry'
@@ -208,10 +208,10 @@ export function ThemeStep({ theme, onThemeChange, settings, updateSettings }: Th
       icon: Moon
     },
     {
-      id: 'light',
-      label: translate('auto.components.onboarding.ThemeStep.ad192706e6', 'Light'),
-      hint: 'Bright & crisp',
-      icon: Sun
+      id: 'neon',
+      label: translate('auto.components.onboarding.ThemeStep.ad192706e6', 'Neon'),
+      hint: 'Bold & bright',
+      icon: Sparkles
     }
   ]
 

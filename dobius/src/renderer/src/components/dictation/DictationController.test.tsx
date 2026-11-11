@@ -176,7 +176,7 @@ describe('DictationController', () => {
 
     storeState.current = {
       ...storeState.current,
-      settings: { voice: { ...voice }, theme: 'light' }
+      settings: { voice: { ...voice }, theme: 'neon' }
     }
     await act(async () => {
       root?.render(<DictationController />)

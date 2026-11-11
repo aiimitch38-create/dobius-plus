@@ -21,7 +21,8 @@ export const getThemeEntries = createLocalizedCatalog((): SettingsSearchEntry[] 
     keywords: [
       ...translateSearchKeyword('auto.components.settings.appearance.search.262fe1d24f', 'dark'),
       ...translateSearchKeyword('auto.components.settings.appearance.search.44d873fd18', 'light'),
-      ...translateSearchKeyword('auto.components.settings.appearance.search.3a9b69d734', 'system')
+      ...translateSearchKeyword('auto.components.settings.appearance.search.3a9b69d734', 'system'),
+      ...translateSearchKeyword('auto.components.settings.appearance.search.9b6cce5a21', 'neon')
     ]
   }
 ])

@@ -38,8 +38,10 @@ export function HomeTopPills({
       : summary.working > 0
         ? 'bg-[var(--board-live)]'
         : 'bg-[var(--board-text-muted)]'
+  // Why: 'light' isn't a selectable theme anymore (only System's daytime
+  // resolution produces it) — this quick toggle now cycles Dark <-> System.
   const themeLabel = isDark
-    ? translate('board.home.theme.light', 'Switch to light theme')
+    ? translate('board.home.theme.light', 'Switch to System theme')
     : translate('board.home.theme.dark', 'Switch to dark theme')
 
   return (
@@ -58,7 +60,7 @@ export function HomeTopPills({
         type="button"
         aria-label={themeLabel}
         title={themeLabel}
-        onClick={() => void updateSettings({ theme: isDark ? 'light' : 'dark' })}
+        onClick={() => void updateSettings({ theme: isDark ? 'system' : 'dark' })}
         className={cn(
           BOARD_FLOATING_PANEL_CLASS,
           'flex size-7 items-center justify-center rounded-full hover:bg-[var(--board-panel-2)]'

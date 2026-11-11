@@ -684,6 +684,31 @@ function stripLegacyTerminalScrollbackBytes(
   return rest
 }
 
+// Why: the Theme setting collapsed from {system, dark, light} + a separate
+// 24-skin `appSkin` picker down to one {system, dark, neon} choice. Old
+// 'light' profiles land on 'system' (which now covers daytime automatically);
+// a profile that had explicitly picked the legacy 'Neon' app skin keeps that
+// look under the new model instead of resetting to System.
+function migrateThemeAppearance(settings: GlobalSettings | undefined): {
+  theme: GlobalSettings['theme']
+  needsSave: boolean
+} {
+  const rawTheme = settings?.theme as unknown
+  if (rawTheme === 'light') {
+    return {
+      theme: settings?.appSkin === 'Neon' ? 'neon' : 'system',
+      needsSave: true
+    }
+  }
+  if (rawTheme === 'dark' || rawTheme === 'system' || rawTheme === 'neon') {
+    if (rawTheme !== 'neon' && settings?.appSkin === 'Neon') {
+      return { theme: 'neon', needsSave: true }
+    }
+    return { theme: rawTheme, needsSave: false }
+  }
+  return { theme: 'system', needsSave: rawTheme !== undefined }
+}
+
 function migrateTerminalScrollbackRows(settings: unknown): {
   rows: number
   needsSave: boolean
@@ -724,6 +749,31 @@ function migrateTerminalTuiScrollSensitivityDefault(settings: GlobalSettings | u
       terminalTuiScrollSensitivityDefaultedToOne: true
     },
     needsSave: !alreadyDefaultedToOne || current === undefined
+  }
+}
+
+const LEGACY_TERMINAL_INACTIVE_PANE_OPACITY_DEFAULT = 0.8
+
+function migrateTerminalInactivePaneOpacityDefault(settings: GlobalSettings | undefined): {
+  settings: Pick<
+    GlobalSettings,
+    'terminalInactivePaneOpacity' | 'terminalInactivePaneOpacityDefaultedToFull'
+  >
+  needsSave: boolean
+} {
+  const alreadyDefaultedToFull = settings?.terminalInactivePaneOpacityDefaultedToFull === true
+  const current = settings?.terminalInactivePaneOpacity
+  const shouldMoveInheritedDefault =
+    !alreadyDefaultedToFull &&
+    (current === undefined || current === LEGACY_TERMINAL_INACTIVE_PANE_OPACITY_DEFAULT)
+  const terminalInactivePaneOpacity = shouldMoveInheritedDefault ? 1 : (current ?? 1)
+
+  return {
+    settings: {
+      terminalInactivePaneOpacity,
+      terminalInactivePaneOpacityDefaultedToFull: true
+    },
+    needsSave: !alreadyDefaultedToFull || current === undefined
   }
 }
 
@@ -3013,10 +3063,20 @@ export class Store {
         if (migratedTerminalScrollback.needsSave) {
           this.loadNeedsSave = true
         }
+        const migratedThemeAppearance = migrateThemeAppearance(parsed.settings)
+        if (migratedThemeAppearance.needsSave) {
+          this.loadNeedsSave = true
+        }
         const migratedTerminalTuiScrollSensitivity = migrateTerminalTuiScrollSensitivityDefault(
           parsed.settings
         )
         if (migratedTerminalTuiScrollSensitivity.needsSave) {
+          this.loadNeedsSave = true
+        }
+        const migratedTerminalInactivePaneOpacity = migrateTerminalInactivePaneOpacityDefault(
+          parsed.settings
+        )
+        if (migratedTerminalInactivePaneOpacity.needsSave) {
           this.loadNeedsSave = true
         }
         const rawSourceControlAi = parsed.settings?.sourceControlAi
@@ -3242,6 +3302,7 @@ export class Store {
           settings: {
             ...defaults.settings,
             ...stripLegacyTerminalScrollbackBytes(parsed.settings),
+            theme: migratedThemeAppearance.theme,
             // Why: v1.3.42 renamed the cosmetic sidekick setting to pet. Carry
             // the old persisted flag forward once so enabled users don't lose it.
             experimentalPet:
@@ -3261,6 +3322,7 @@ export class Store {
             ...migratedAutoRenameBranchFromWork,
             ...migratedTerminalCursorStyle,
             ...migratedTerminalTuiScrollSensitivity.settings,
+            ...migratedTerminalInactivePaneOpacity.settings,
             experimentalActivity: migratedExperimentalActivity,
             experimentalActivityDefaultedOffForAllUsers: true,
             // Why: open first-run onboarding is the local fresh-install signal;

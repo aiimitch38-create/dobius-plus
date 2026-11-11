@@ -1,10 +1,14 @@
 import type { GlobalSettings } from '../../../shared/types'
 
 export type DocumentThemePreference = GlobalSettings['theme']
+export type ResolvedAppearance = 'light' | 'dark' | 'neon'
 
 export const THEME_TRANSITION_DISABLED_CLASS = 'theme-transition-disabled'
 
-const DARK_MODE_QUERY = '(prefers-color-scheme: dark)'
+// Why: "System" resolves off local time of day, not OS dark-mode preference
+// (explicit product decision — "it changes based on the time").
+export const SYSTEM_DAY_START_HOUR = 7
+export const SYSTEM_DAY_END_HOUR = 19
 
 type ThemeClassList = {
   add: (...tokens: string[]) => void
@@ -14,15 +18,16 @@ type ThemeClassList = {
 
 type ThemeRoot = {
   classList: ThemeClassList
+  setAttribute: (name: string, value: string) => void
+  removeAttribute: (name: string) => void
 }
 
-type ThemeMediaMatcher = (query: string) => Pick<MediaQueryList, 'matches'>
 type ThemeAnimationFrame = (callback: FrameRequestCallback) => number
 type ThemeCancelAnimationFrame = (handle: number) => void
 
 type ApplyDocumentThemeOptions = {
   root?: ThemeRoot
-  matchMedia?: ThemeMediaMatcher
+  now?: Date
   requestAnimationFrame?: ThemeAnimationFrame
   cancelAnimationFrame?: ThemeCancelAnimationFrame
   disableTransitions?: boolean
@@ -37,23 +42,32 @@ function cancelPendingTransitionDisableFrames(cancelFrame: ThemeCancelAnimationF
   pendingTransitionDisableFrames = []
 }
 
-function systemPrefersDark(
-  matchMedia: ThemeMediaMatcher = window.matchMedia.bind(window)
-): boolean {
-  return matchMedia(DARK_MODE_QUERY).matches
+/** Local daytime window (inclusive start, exclusive end). */
+export function isDaytime(now: Date = new Date()): boolean {
+  const hour = now.getHours()
+  return hour >= SYSTEM_DAY_START_HOUR && hour < SYSTEM_DAY_END_HOUR
 }
 
-export function resolveDocumentTheme(
+/**
+ * Resolve a theme preference to the appearance that should actually be
+ * painted. 'system' never resolves to 'neon' — Neon is only reached by
+ * explicitly selecting it.
+ */
+export function resolveAppearance(
   theme: DocumentThemePreference,
-  matchMedia?: ThemeMediaMatcher
-): boolean {
+  now: Date = new Date()
+): ResolvedAppearance {
   if (theme === 'dark') {
-    return true
+    return 'dark'
   }
-  if (theme === 'light') {
-    return false
+  if (theme === 'neon') {
+    return 'neon'
   }
-  return systemPrefersDark(matchMedia)
+  return isDaytime(now) ? 'light' : 'dark'
+}
+
+export function resolveDocumentTheme(theme: DocumentThemePreference, now?: Date): boolean {
+  return resolveAppearance(theme, now) !== 'light'
 }
 
 export function applyDocumentTheme(
@@ -62,7 +76,8 @@ export function applyDocumentTheme(
 ): void {
   const root = options.root ?? document.documentElement
   const disableTransitions = options.disableTransitions ?? true
-  const shouldUseDarkTheme = resolveDocumentTheme(theme, options.matchMedia)
+  const appearance = resolveAppearance(theme, options.now)
+  const shouldUseDarkTheme = appearance !== 'light'
 
   if (disableTransitions) {
     root.classList.add(THEME_TRANSITION_DISABLED_CLASS)
@@ -72,6 +87,12 @@ export function applyDocumentTheme(
   // Mirror with `light` so consumers can observe the resolved theme
   // symmetrically (Tailwind keys only on `dark`, so this is style-neutral).
   root.classList.toggle('light', !shouldUseDarkTheme)
+
+  if (appearance === 'neon') {
+    root.setAttribute('data-appearance', 'neon')
+  } else {
+    root.removeAttribute('data-appearance')
+  }
 
   if (!disableTransitions) {
     return
