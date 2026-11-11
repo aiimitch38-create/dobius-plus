@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { AgentStateDot } from '@/components/AgentStateDot'
-import { AgentIcon, getAgentLabel } from '@/lib/agent-catalog'
+import { getAgentLabel } from '@/lib/agent-catalog'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import type { BoardCardOf } from '@/store/slices/board'
@@ -127,10 +127,6 @@ export function ConsoleCardTitleAccessory({
           {translate('board.console.yolo', 'Yolo')}
         </span>
       )}
-      <span className="flex items-center gap-1.5 rounded-full border border-[var(--board-chip-border)] bg-[var(--board-chip)] px-2 py-0.5 text-[11px] font-medium text-[var(--board-text-muted)]">
-        <AgentIcon agent={isTuiAgent(card.agentKind) ? card.agentKind : null} size={12} />
-        {consoleStatusLabel(status)}
-      </span>
       {dot ? (
         <AgentStateDot state={dot} />
       ) : (

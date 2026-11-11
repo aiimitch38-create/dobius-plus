@@ -22,7 +22,8 @@ export function ConsoleGlanceView({
   onScreen,
   drawText,
   bodyHeight,
-  bodyWidth
+  bodyWidth,
+  scale
 }: {
   worktreeId: string
   tabId: string
@@ -32,14 +33,16 @@ export function ConsoleGlanceView({
   onScreen: boolean
   /** False when the card is so small on screen that text would be noise. */
   drawText: boolean
-  /** Card body height in world px; 0 while unmeasured. */
+  /** Card body height in world px, already grown by `scale`; 0 while unmeasured. */
   bodyHeight: number
-  /** Card body width in world px; 0 while unmeasured. */
+  /** Card body width in world px, already grown by `scale`; 0 while unmeasured. */
   bodyWidth: number
+  /** Counter-scale applied by the enclosing host box; see ConsoleCardBody. */
+  scale: number
 }): React.JSX.Element {
   const { lastReply } = useConsoleCardStatus(worktreeId, tabId)
   const settings = useAppStore((s) => s.settings)
-  const style = useMemo(() => consoleMiniatureStyle(settings), [settings])
+  const style = useMemo(() => consoleMiniatureStyle(settings, undefined, scale), [settings, scale])
   const ptyId = useAppStore(
     (s) =>
       (leafId ? s.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId?.[leafId] : undefined) ??
@@ -56,6 +59,7 @@ export function ConsoleGlanceView({
       bodyHeight={bodyHeight}
       bodyWidth={bodyWidth}
       drawText={drawText}
+      scale={scale}
     />
   )
 }
@@ -71,6 +75,8 @@ type ConsoleGlanceProps = {
   /** 0 while unmeasured: rows then use the font's natural width. */
   bodyWidth?: number
   drawText: boolean
+  /** Counter-scale applied by the enclosing host box; must match `style`'s. */
+  scale: number
 }
 
 /**
@@ -87,10 +93,11 @@ export function ConsoleGlance({
   style,
   bodyHeight,
   bodyWidth = 0,
-  drawText
+  drawText,
+  scale
 }: ConsoleGlanceProps): React.JSX.Element {
   const fromScreen = screen !== null && screen.lines.length > 0
-  const box = miniatureCellBox(fromScreen ? screen : null, bodyWidth, bodyHeight, style)
+  const box = miniatureCellBox(fromScreen ? screen : null, bodyWidth, bodyHeight, style, scale)
   const fit = miniatureFitRows(bodyHeight, {
     paddingY: style.paddingY,
     lineHeightPx: box.lineHeightPx

@@ -216,6 +216,11 @@ export function ConsoleCardBody({
   const setTargetRef = useCallback((node: HTMLDivElement | null) => setTarget(node), [])
   const fontOverride = isBoardConsoleFontOverrideSupported()
   const host = consoleHostBox(size.w, size.h, settledZoom, fontOverride)
+  // Why: the glance is plain DOM text, not a PTY grid, so it always counter-scales
+  // (no fontOverride gate needed) -- otherwise the board's own `scale(zoom)` rasterizes
+  // it at full size and downscales the bitmap, hazing the text at every zoom but 1.
+  const glanceHost = consoleHostBox(size.w, size.h, settledZoom, true)
+  const glanceScale = settledZoom > 0 ? settledZoom : 1
 
   const notice = !tabExists
     ? translate('board.console.closed', 'This terminal was closed.')
@@ -243,30 +248,44 @@ export function ConsoleCardBody({
           visibility: mode === 'live' ? undefined : 'hidden'
         }}
       />
-      {(mode === 'glance' || handoff !== 'none') && notice === undefined && (
-        // Why: during the handoff the glance sits over the live pane so no
-        // blank frame shows; it is inert then so clicks reach the terminal.
-        <div
-          className="absolute inset-0"
-          data-board-glance-handoff={handoff === 'none' ? undefined : handoff}
-          style={{
-            opacity: handoff === 'fading' ? 0 : 1,
-            transition: `opacity ${BOARD_GLANCE_FADE_MS}ms ease-out`,
-            pointerEvents: mode === 'live' ? 'none' : undefined
-          }}
-        >
-          <ConsoleGlanceView
-            worktreeId={worktreeId}
-            tabId={card.tabId}
-            leafId={leafId}
-            title={card.title}
-            onScreen={visibleRaw}
-            drawText={miniatureWorthDrawing(size.h, settledZoom)}
-            bodyHeight={size.h}
-            bodyWidth={size.w}
-          />
-        </div>
-      )}
+      {(mode === 'glance' || handoff !== 'none') &&
+        notice === undefined && (
+          // Why: during the handoff the glance sits over the live pane so no
+          // blank frame shows; it is inert then so clicks reach the terminal.
+          <div
+            className="absolute inset-0 overflow-hidden"
+            data-board-glance-handoff={handoff === 'none' ? undefined : handoff}
+            style={{
+              opacity: handoff === 'fading' ? 0 : 1,
+              transition: `opacity ${BOARD_GLANCE_FADE_MS}ms ease-out`,
+              pointerEvents: mode === 'live' ? 'none' : undefined
+            }}
+          >
+            {/* Why: counter-scale, same trick as the live host above, so the glance's
+              text rasterizes at real on-screen pixels instead of the board's bitmap downscale. */}
+            <div
+              className="absolute top-0 left-0"
+              style={{
+                width: glanceHost.width,
+                height: glanceHost.height,
+                transform: `scale(${glanceHost.scale})`,
+                transformOrigin: '0 0'
+              }}
+            >
+              <ConsoleGlanceView
+                worktreeId={worktreeId}
+                tabId={card.tabId}
+                leafId={leafId}
+                title={card.title}
+                onScreen={visibleRaw}
+                drawText={miniatureWorthDrawing(size.h, settledZoom)}
+                bodyHeight={glanceHost.height}
+                bodyWidth={glanceHost.width}
+                scale={glanceScale}
+              />
+            </div>
+          </div>
+        )}
       {notice !== undefined && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 p-4 text-center text-[13px] text-[var(--board-text-muted)]">
           {notice ?? (

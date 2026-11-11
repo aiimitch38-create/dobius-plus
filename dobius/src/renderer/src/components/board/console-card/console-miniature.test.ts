@@ -77,6 +77,20 @@ describe('consoleMiniatureStyle', () => {
     expect(mini.ansi?.[1]).toBe(theme?.red)
     expect(mini.ansi?.[15]).toBe(theme?.brightWhite)
   })
+  it('grows every px value by `scale`, so an enlarged counter-scaled box stays proportional', () => {
+    const settings = {
+      ...getDefaultSettings('/home/test'),
+      terminalFontSize: 14,
+      terminalLineHeight: 1,
+      terminalPaddingX: 4,
+      terminalPaddingY: 4
+    }
+    const mini = consoleMiniatureStyle(settings, undefined, 2)
+    expect(mini.fontSize).toBe(28)
+    expect(mini.paddingX).toBe(8)
+    expect(mini.paddingY).toBe(8)
+    expect(mini.lineHeightPx).toBeCloseTo(28 * 1.2)
+  })
 })
 
 describe('miniRunStyle', () => {
@@ -155,5 +169,14 @@ describe('miniatureCellBox', () => {
   })
   it('falls back to natural glyph width while unmeasured', () => {
     expect(miniatureCellBox(null, 500, 200, style).cellWidthPx).toBeNull()
+  })
+  it('scales the scrollbar gutter with `scale`, so a counter-scaled (enlarged) box keeps the same cell width', () => {
+    // Enlarging body + padding by 2x (mirroring consoleMiniatureStyle's scale) but
+    // forgetting to scale the gutter would shift cellWidthPx off the unscaled value (10).
+    const enlarged = { ...style, paddingX: 8 }
+    expect(miniatureCellBox({ cols: 100, rows: 10 }, 2030, 0, enlarged, 2)).toEqual({
+      cellWidthPx: 20,
+      lineHeightPx: style.lineHeightPx
+    })
   })
 })

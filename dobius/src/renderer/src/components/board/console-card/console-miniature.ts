@@ -72,9 +72,13 @@ type MiniatureSettings = Pick<
 
 export function consoleMiniatureStyle(
   settings: MiniatureSettings | null | undefined,
-  systemPrefersDark?: boolean
+  systemPrefersDark?: boolean,
+  // Why: the glance is counter-scaled like the live host (see ConsoleCardBody);
+  // its box grows by 1/scale so every px fed in here must grow with it, or the
+  // text overflows the enlarged box instead of landing back at its true size.
+  scale = 1
 ): ConsoleMiniatureStyle {
-  const fontSize = settings?.terminalFontSize ?? 14
+  const fontSize = (settings?.terminalFontSize ?? 14) * scale
   const lineHeight = settings?.terminalLineHeight ?? 1
   let background = 'var(--board-panel)'
   let foreground = 'var(--board-text)'
@@ -94,8 +98,8 @@ export function consoleMiniatureStyle(
     fontSize,
     fontFamily: settings ? buildFontFamily(settings.terminalFontFamily ?? '') : undefined,
     lineHeightPx: fontSize * XTERM_CELL_FACTOR * (lineHeight > 0 ? lineHeight : 1),
-    paddingX: settings?.terminalPaddingX ?? DEFAULT_PADDING_PX,
-    paddingY: settings?.terminalPaddingY ?? DEFAULT_PADDING_PX,
+    paddingX: (settings?.terminalPaddingX ?? DEFAULT_PADDING_PX) * scale,
+    paddingY: (settings?.terminalPaddingY ?? DEFAULT_PADDING_PX) * scale,
     background,
     foreground,
     ansi,
@@ -206,12 +210,15 @@ export function miniatureCellBox(
   screen: Pick<ConsoleScreen, 'cols' | 'rows'> | null,
   bodyWidth: number,
   bodyHeight: number,
-  style: ConsoleMiniatureStyle
+  style: ConsoleMiniatureStyle,
+  // Why: must match the `scale` given to consoleMiniatureStyle -- bodyWidth/Height
+  // and the style's own px values already grew by it; this constant has to too.
+  scale = 1
 ): { cellWidthPx: number | null; lineHeightPx: number } {
   if (!screen || screen.cols <= 0 || bodyWidth <= 0) {
     return { cellWidthPx: null, lineHeightPx: style.lineHeightPx }
   }
-  const usableWidth = bodyWidth - style.paddingX * 2 - XTERM_SCROLLBAR_GUTTER_PX
+  const usableWidth = bodyWidth - style.paddingX * 2 - XTERM_SCROLLBAR_GUTTER_PX * scale
   const usableHeight = bodyHeight - style.paddingY * 2
   return {
     cellWidthPx: usableWidth > 0 ? usableWidth / screen.cols : null,

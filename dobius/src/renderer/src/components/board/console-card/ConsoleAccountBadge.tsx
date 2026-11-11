@@ -32,6 +32,7 @@ import {
   pinnedAccountEmail,
   type ConsoleAccountsSnapshot
 } from './console-account-options'
+import { useConsoleLiveAgent } from './use-console-live-agent'
 
 type Props = { worktreeId: string; card: BoardCardOf<'console'> }
 type Target = { agent: TuiAgent; accountId: string | null }
@@ -75,7 +76,12 @@ export function ConsoleAccountBadge({ worktreeId, card }: Props): React.JSX.Elem
     }
   }, [card.accountId, loadAccounts])
 
-  const agentLabel = isTuiAgent(card.agentKind) ? getAgentLabel(card.agentKind) : card.agentKind
+  // Why: card.agentKind is only what this console was last (re)launched with --
+  // it goes stale the moment a different agent is started by hand inside the
+  // same pane (e.g. running `claude` inside a Hermes-launched terminal).
+  const liveAgent = useConsoleLiveAgent(card.tabId)
+  const displayAgent = liveAgent ?? (isTuiAgent(card.agentKind) ? card.agentKind : null)
+  const agentLabel = displayAgent ? getAgentLabel(displayAgent) : card.agentKind
   const pinnedEmail = pinnedAccountEmail(snapshot, card.agentKind, card.accountId)
   const accountText = card.accountId
     ? (pinnedEmail ?? translate('board.console.accountPinned', 'Separate account'))
@@ -178,7 +184,7 @@ export function ConsoleAccountBadge({ worktreeId, card }: Props): React.JSX.Elem
             card.accountId && 'text-[var(--board-text)]'
           )}
         >
-          <AgentIcon agent={isTuiAgent(card.agentKind) ? card.agentKind : null} size={12} />
+          <AgentIcon agent={displayAgent} size={12} />
           <span className="truncate">{card.accountId ? accountText : agentLabel}</span>
         </button>
       </DropdownMenuTrigger>

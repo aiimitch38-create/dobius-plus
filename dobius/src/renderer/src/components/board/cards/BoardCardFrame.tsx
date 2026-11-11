@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { MoreHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -170,6 +170,7 @@ export function BoardCardFrame({
 }: BoardCardFrameProps): React.JSX.Element {
   const dragRef = useRef<DragState | null>(null)
   const resizeRef = useRef<ResizeState | null>(null)
+  const cardRootRef = useRef<HTMLDivElement | null>(null)
   const [titleDraft, setTitleDraft] = useState<string | null>(null)
   // Why: open the title editor only after the menu has closed and restored focus,
   // otherwise the closing menu pulls focus back and the editor blurs at once.
@@ -272,12 +273,33 @@ export function BoardCardFrame({
     onPointerCancel: endDrag
   }
 
+  // Why: a console card's live terminal is a React portal from Terminal.tsx's
+  // tree (see board-terminal-slots.ts), so a click inside it is a real DOM
+  // descendant of this card but never reaches the JSX onPointerDown below --
+  // React's synthetic bubbling follows the portal's OWN tree, not the DOM.
+  // A plain native listener bubbles through the real DOM regardless, so a
+  // click anywhere in the live terminal still selects/focuses this card.
+  useEffect(() => {
+    const el = cardRootRef.current
+    if (!el || bare) {
+      return
+    }
+    const onNativePointerDown = (e: PointerEvent): void => {
+      if (e.button === 0) {
+        onSelect(e.shiftKey || e.metaKey || e.ctrlKey)
+      }
+    }
+    el.addEventListener('pointerdown', onNativePointerDown)
+    return () => el.removeEventListener('pointerdown', onNativePointerDown)
+  }, [bare, onSelect])
+
   // Why: a just-spawned card stays invisible while its placement ghost holds the
   // spot, then the Board's opacity transition fades it in over the outline.
   const ghosted = useBoardGhostHidden(rect.id)
 
   return (
     <div
+      ref={cardRootRef}
       data-board-card
       data-board-card-id={rect.id}
       className={cn(

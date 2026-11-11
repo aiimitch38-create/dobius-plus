@@ -53,7 +53,8 @@ const base: Props = {
   style,
   // (108 - 2*4) / 20 = 5 rows fit.
   bodyHeight: 108,
-  drawText: true
+  drawText: true,
+  scale: 1
 }
 
 function render(props: Partial<Props>): HTMLElement {
