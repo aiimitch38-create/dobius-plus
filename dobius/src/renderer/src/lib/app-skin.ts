@@ -35,12 +35,6 @@ function mixColor(a: string, b: string, amount: number): string {
   return `#${ch(r1, r2)}${ch(g1, g2)}${ch(b1, b2)}`
 }
 
-/** Perceived luminance (BT.601), 0-255. Above ~140 reads as a light surface. */
-function isLightBackground(hex: string): boolean {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
-  return 0.299 * r + 0.587 * g + 0.114 * b > 140
-}
-
 /**
  * Map a skin's palette onto the app's core surface/text/accent tokens. Reads
  * ITheme keys: background, foreground, blue (accent1), red (accent4). Surfaces
@@ -97,9 +91,10 @@ const SKIN_TOKEN_KEYS = Object.keys(deriveAppSkinTokens({ background: '#000', fo
 /**
  * Apply a skin app-wide by setting its derived tokens as inline custom
  * properties on the root element (inline wins over the stylesheet's :root/.dark
- * defaults). Also owns the dark/light class so the app's many `.dark …`
- * overrides render correctly for the skin's brightness. Pass APP_SKIN_NONE (or
- * an unknown name) to clear the skin and fall back to the stylesheet theme.
+ * defaults). Does NOT touch the dark/light class — that stays owned by the
+ * user's explicit Theme setting (see useAppearanceSync's theme effect). Pass
+ * APP_SKIN_NONE (or an unknown name) to clear the skin and fall back to the
+ * stylesheet theme.
  */
 export function applyAppSkin(
   skinName: string | undefined,
@@ -129,7 +124,4 @@ export function applyAppSkin(
   for (const [key, value] of Object.entries(tokens)) {
     root.style.setProperty(key, value)
   }
-  const dark = !isLightBackground(theme.background ?? '#000000')
-  root.classList.toggle('dark', dark)
-  root.classList.toggle('light', !dark)
 }

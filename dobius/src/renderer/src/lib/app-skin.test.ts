@@ -42,18 +42,31 @@ function fakeRoot(): FakeRoot {
 }
 
 describe('applyAppSkin', () => {
-  it('sets tokens and dark class for a dark skin', () => {
+  it('sets tokens for a dark skin', () => {
     const root = fakeRoot()
     applyAppSkin('Midnight', root as unknown as HTMLElement)
     expect(root.style.props.get('--background')).toBe('#0D1117')
     expect(root.style.props.get('--foreground')).toBe('#E6EDF3')
+  })
+
+  it('sets tokens for a light-background skin', () => {
+    const root = fakeRoot()
+    applyAppSkin('Butter', root as unknown as HTMLElement)
+    expect(root.style.props.size).toBeGreaterThan(0)
+  })
+
+  it('never touches the dark/light class, even for a light-background skin while dark is explicitly set', () => {
+    const root = fakeRoot()
+    root.classList.toggle('dark', true)
+    applyAppSkin('Butter', root as unknown as HTMLElement)
     expect(root.classList.tokens.has('dark')).toBe(true)
     expect(root.classList.tokens.has('light')).toBe(false)
   })
 
-  it('marks a light-background skin as light', () => {
+  it('never touches the dark/light class, even for a dark-background skin while light is explicitly set', () => {
     const root = fakeRoot()
-    applyAppSkin('Butter', root as unknown as HTMLElement)
+    root.classList.toggle('light', true)
+    applyAppSkin('Midnight', root as unknown as HTMLElement)
     expect(root.classList.tokens.has('light')).toBe(true)
     expect(root.classList.tokens.has('dark')).toBe(false)
   })
@@ -68,6 +81,7 @@ describe('applyAppSkin', () => {
 
   it('sets the buzz attribute without inline tokens and leaves theme classes alone', () => {
     const root = fakeRoot()
+    root.classList.toggle('dark', true)
     applyAppSkin('Midnight', root as unknown as HTMLElement)
     applyAppSkin(APP_SKIN_BUZZ, root as unknown as HTMLElement)
     expect(root.attributes.has('data-buzz-skin')).toBe(true)

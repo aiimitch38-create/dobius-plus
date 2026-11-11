@@ -91,8 +91,13 @@ import { shouldChatTakeOverMobileSurface } from '../native-chat/native-chat-send
 import { canToggleNativeChat } from '../native-chat/native-chat-availability'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import { resolvePaneKeyForManager } from '@/lib/pane-manager/pane-key-resolution'
-import { safeFit } from '@/lib/pane-manager/pane-tree-ops'
+import { captureScrollState, restoreScrollState, safeFit } from '@/lib/pane-manager/pane-tree-ops'
 import { markBoardTerminalSlotPainted } from '@/components/board/console-card/board-terminal-slots'
+import {
+  getBoardConsoleFontOverride,
+  markBoardConsoleFontOverrideSupported,
+  onBoardConsoleFontOverride
+} from '@/components/board/console-card/console-font-override'
 import { captureTerminalShutdownLayout } from './terminal-shutdown-layout-capture'
 import { getOverrideAffectedPanes, getPanesNeedingOverrideFit } from './override-affected-panes'
 import {
@@ -1730,6 +1735,56 @@ export default function TerminalPane({
   }, [consumePendingCodexPaneRestart, handleRestartCodexPane, pendingCodexPaneRestartIds])
 
   useTerminalFontZoom({ isActive, containerRef, managerRef, paneFontSizesRef, settingsRef })
+
+  // Why: a Board console publishes the font that keeps its grid constant at
+  // the current zoom (see console-font-override.ts); this applies it to the
+  // isolated pane so the Board can counter-scale instead of CSS-scaling a
+  // soft bitmap. Clearing the override (card left live mode, or zoomed back
+  // to 1) reverts to this pane's own font — user zoom if set, else the
+  // global default — never the board-zoom-derived size.
+  const boardFontOverrideAppliedRef = useRef(false)
+  useEffect(() => {
+    if (isolatedPaneKey === null) {
+      return
+    }
+    const applyBoardFontOverride = (fontSize: number | null): void => {
+      const manager = managerRef.current
+      const resolution = resolvePaneKeyForManager(tabId, isolatedPaneKey, manager)
+      if (resolution.status !== 'resolved') {
+        return
+      }
+      const pane = manager
+        ?.getPanes()
+        .find((candidate) => candidate.id === resolution.numericPaneId)
+      if (!pane) {
+        return
+      }
+      const nextSize =
+        fontSize ??
+        paneFontSizesRef.current.get(pane.id) ??
+        settingsRef.current?.terminalFontSize ??
+        14
+      pane.terminal.options.fontSize = nextSize
+      try {
+        const state = captureScrollState(pane.terminal)
+        safeFit(pane)
+        restoreScrollState(pane.terminal, state)
+      } catch {
+        /* ignore */
+      }
+      if (fontSize !== null && !boardFontOverrideAppliedRef.current) {
+        boardFontOverrideAppliedRef.current = true
+        markBoardConsoleFontOverrideSupported()
+      }
+    }
+
+    applyBoardFontOverride(getBoardConsoleFontOverride(isolatedPaneKey))
+    return onBoardConsoleFontOverride((paneKey, fontSize) => {
+      if (paneKey === isolatedPaneKey) {
+        applyBoardFontOverride(fontSize)
+      }
+    })
+  }, [isolatedPaneKey, paneCount, tabId])
 
   useTerminalKeyboardShortcuts({
     tabId,

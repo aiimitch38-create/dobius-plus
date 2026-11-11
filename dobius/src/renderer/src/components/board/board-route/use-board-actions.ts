@@ -5,6 +5,8 @@ import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
 import { translate } from '@/i18n/i18n'
 import { getAgentLabel } from '@/lib/agent-catalog'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
+import { launchBlankTerminalInNewTab } from '@/lib/launch-blank-terminal-in-new-tab'
+import { BLANK_TERMINAL_OPTION_ID } from '../board-chrome/BoardAgentPicker'
 import { pauseResultText, setConsolesPaused } from '../board-delivery/pause-consoles'
 import { useAppStore } from '@/store'
 import { getBoard } from '@/store/slices/board'
@@ -42,8 +44,14 @@ type BoardActionsInput = {
 }
 
 export type BoardActions = {
-  /** `group`: frame the new consoles as one group (canvas menu "Spawn group"). */
-  spawn: (agent: TuiAgent, count: number, center: BoardPoint, group?: boolean) => void
+  /** `group`: frame the new consoles as one group (canvas menu "Spawn group").
+   *  `agent` is `'blank'` for a plain terminal with no CLI agent attached. */
+  spawn: (
+    agent: TuiAgent | typeof BLANK_TERMINAL_OPTION_ID,
+    count: number,
+    center: BoardPoint,
+    group?: boolean
+  ) => void
   onChip: (id: BoardChipId, anchor?: DOMRect) => void
   onInsert: (kind: BoardInsertKind) => void
 }
@@ -61,14 +69,22 @@ export function useBoardActions({
   const { append } = conductor
 
   const spawn = useCallback(
-    (agent: TuiAgent, count: number, center: BoardPoint, group = false) => {
+    (
+      agent: TuiAgent | typeof BLANK_TERMINAL_OPTION_ID,
+      count: number,
+      center: BoardPoint,
+      group = false
+    ) => {
       if (!worktreeId) {
         toast.error(
           translate('board.spawn.noWorkspace', 'Open a workspace before spawning consoles.')
         )
         return
       }
-      const label = getAgentLabel(agent)
+      const isBlank = agent === BLANK_TERMINAL_OPTION_ID
+      const label = isBlank
+        ? translate('board.agentPicker.terminal', 'Terminal')
+        : getAgentLabel(agent)
       const existing = consoles.filter((c) => c.agentKind === agent).length
       const knownBefore = new Set(
         (useAppStore.getState().tabsByWorktree[worktreeId] ?? []).map((t) => t.id)
@@ -78,7 +94,9 @@ export function useBoardActions({
       const added = new Set<string>()
       const ghosts: BoardGhostSpec[] = []
       boardSpawnRects(center, count).forEach((rect, index) => {
-        const result = launchAgentInNewTab({ agent, worktreeId, launchSource: 'unknown' })
+        const result = isBlank
+          ? launchBlankTerminalInNewTab({ worktreeId })
+          : launchAgentInNewTab({ agent, worktreeId, launchSource: 'unknown' })
         if (!result) {
           failed += 1
           return

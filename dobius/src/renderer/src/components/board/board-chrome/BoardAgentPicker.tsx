@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Plus, Users } from 'lucide-react'
+import { Plus, Terminal as TerminalIcon, Users } from 'lucide-react'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
@@ -17,6 +17,9 @@ import { BoardTeamComposer } from './BoardTeamComposer'
 import type { TeamSlot } from './team-composer'
 
 export type BoardAgentOption = { id: TuiAgent; label: string }
+
+/** Sentinel id for the always-available "plain terminal, no agent" console option. */
+export const BLANK_TERMINAL_OPTION_ID = 'blank' as const
 
 export type BoardAgentPickerRequest = {
   /** Screen position (px, relative to the Board) the menu opens at. */
@@ -29,7 +32,7 @@ export type BoardAgentPickerRequest = {
 type BoardAgentPickerProps = {
   request: BoardAgentPickerRequest | null
   agents: readonly BoardAgentOption[]
-  onPick: (agent: TuiAgent) => void
+  onPick: (agent: TuiAgent | typeof BLANK_TERMINAL_OPTION_ID) => void
   onClose: () => void
   /** Multi-spawns (Spawn 4, group) offer a team composer: one role + agent per slot.
    *  Returns the new card ids; an empty list keeps the composer open (the spawn
@@ -111,6 +114,20 @@ export function BoardAgentPicker({
             </DropdownMenuItem>
           ))
         )}
+        {/* Why: always offered regardless of which CLI agents are enabled —
+            a plain shell needs no agent install/detection. */}
+        <DropdownMenuItem
+          onSelect={() => onPick(BLANK_TERMINAL_OPTION_ID)}
+          className={cn(BOARD_MENU_ROW_CLASS, 'h-[38px] gap-2.5 px-1.5')}
+        >
+          <span className="flex size-[26px] shrink-0 items-center justify-center rounded-[7px] border border-[var(--board-panel-border)] bg-[var(--board-panel-2)]">
+            <TerminalIcon className="!size-[15px]" />
+          </span>
+          <span className="min-w-0 flex-1 truncate font-semibold">
+            {translate('board.agentPicker.terminal', 'Terminal')}
+          </span>
+          <Plus className="!size-3.5 !text-[var(--board-accent)]" />
+        </DropdownMenuItem>
         {onSpawnTeam && request.count > 1 && agents.length > 0 ? (
           <>
             <DropdownMenuSeparator />

@@ -1,6 +1,7 @@
 import React from 'react'
 import {
   Bot,
+  Briefcase,
   CalendarClock,
   GitBranch,
   Hexagon,
@@ -194,6 +195,7 @@ export function BoardSideApps({
     </DropdownMenuItem>
   )
   const panelsLabel = translate('board.sideApps.panels', 'Panels')
+  const workLabel = translate('board.sideApps.work', 'Work')
 
   return (
     <div
@@ -223,15 +225,18 @@ export function BoardSideApps({
         icon: <Settings className="size-4" />
       })}
       <SideAppDivider />
+      <BoardRailButton label={panelsLabel} tooltipSide="top" className="size-8">
+        <LayoutPanelLeft className="size-4" />
+      </BoardRailButton>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <BoardRailButton
-            label={panelsLabel}
+            label={workLabel}
             tooltipSide="top"
             active={activeApp !== null && PANEL_APPS.includes(activeApp)}
             className="size-8"
           >
-            <LayoutPanelLeft className="size-4" />
+            <Briefcase className="size-4" />
           </BoardRailButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent
