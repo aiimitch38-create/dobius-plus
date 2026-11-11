@@ -277,8 +277,10 @@ export function BoardCardFrame({
   // tree (see board-terminal-slots.ts), so a click inside it is a real DOM
   // descendant of this card but never reaches the JSX onPointerDown below --
   // React's synthetic bubbling follows the portal's OWN tree, not the DOM.
-  // A plain native listener bubbles through the real DOM regardless, so a
-  // click anywhere in the live terminal still selects/focuses this card.
+  // A bubble-phase native listener doesn't fix this either: xterm.js's own
+  // mousedown handling (for its text selection) calls stopPropagation before
+  // the event can bubble back up to the card. Capture fires top-down, before
+  // the terminal (or anything else nested inside) gets a chance to stop it.
   useEffect(() => {
     const el = cardRootRef.current
     if (!el || bare) {
@@ -289,8 +291,8 @@ export function BoardCardFrame({
         onSelect(e.shiftKey || e.metaKey || e.ctrlKey)
       }
     }
-    el.addEventListener('pointerdown', onNativePointerDown)
-    return () => el.removeEventListener('pointerdown', onNativePointerDown)
+    el.addEventListener('pointerdown', onNativePointerDown, { capture: true })
+    return () => el.removeEventListener('pointerdown', onNativePointerDown, { capture: true })
   }, [bare, onSelect])
 
   // Why: a just-spawned card stays invisible while its placement ghost holds the

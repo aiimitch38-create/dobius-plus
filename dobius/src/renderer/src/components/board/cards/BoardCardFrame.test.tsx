@@ -169,3 +169,44 @@ describe('ShapeCard text', () => {
     expect(container.querySelector('textarea')).toBeNull()
   })
 })
+
+describe('BoardCardFrame selection', () => {
+  // Why: a console card's live terminal is a portal whose content a descendant
+  // (xterm.js) can stop from bubbling -- see BoardCardFrame.tsx. This reproduces
+  // that exact shape: a child that calls stopPropagation on its own pointerdown,
+  // same as xterm's internal mouse handling does for text selection.
+  it('selects the card from a click inside a child that stops the event from bubbling', () => {
+    const onSelect = vi.fn()
+    let portaledChild: HTMLDivElement | null = null
+    act(() =>
+      root.render(
+        <BoardCardFrame
+          rect={{ x: 0, y: 0, w: 300, h: 200 }}
+          z={1}
+          zoom={1}
+          title="Console"
+          icon={null}
+          selected={false}
+          onSelect={onSelect}
+          onDragBy={() => {}}
+          onResize={() => {}}
+        >
+          <div
+            ref={(node) => {
+              if (node && node !== portaledChild) {
+                portaledChild = node
+                node.addEventListener('pointerdown', (e) => e.stopPropagation())
+              }
+            }}
+            data-testid="terminal-child"
+          />
+        </BoardCardFrame>
+      )
+    )
+    const child = container.querySelector<HTMLDivElement>('[data-testid="terminal-child"]')!
+    act(() => {
+      child.dispatchEvent(pointer('pointerdown', 10, 10))
+    })
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+})
