@@ -118,6 +118,17 @@ export function BoardTopBar({
     translate('board.topBar.noProject', 'No project')
   const pill = cn(BOARD_FLOATING_PANEL_CLASS, BOARD_PILL_BUTTON_CLASS)
 
+  // Why: a bare overflow-x-auto strip only responds to native horizontal input
+  // (trackpad swipe, Shift+wheel) — a plain vertical wheel does nothing, so
+  // translate vertical wheel delta into horizontal scroll when it's overflowing.
+  const handleWorkspaceStripWheel = (event: React.WheelEvent<HTMLDivElement>): void => {
+    const el = event.currentTarget
+    if (el.scrollWidth <= el.clientWidth) return
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+    event.preventDefault()
+    el.scrollLeft += event.deltaY
+  }
+
   const renderTab = (workspace: BoardWorkspaceTab): React.JSX.Element => {
     const tab = (
       <BoardWorkspaceTabButton
@@ -182,6 +193,7 @@ export function BoardTopBar({
             role="tablist"
             aria-label={translate('board.topBar.workspaces', 'Workspaces')}
             className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]"
+            onWheel={handleWorkspaceStripWheel}
           >
             {grouped
               ? groups.map((group, index) => {

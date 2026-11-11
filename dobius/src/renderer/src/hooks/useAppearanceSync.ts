@@ -5,10 +5,10 @@ import { applyAppSkin } from '@/lib/app-skin'
 import { buildAppFontFamily } from '@/lib/app-font-family'
 import { scheduleRuntimeGraphSync } from '../runtime/sync-runtime-graph'
 
-// Why: applies theme/skin/font-family settings to the document. Order
-// matters — the skin effect runs after the theme effect so the skin owns the
-// dark/light class while active; clearing it (`none`) reverts to whatever
-// the theme effect already set.
+// Why: applies theme/skin/font-family settings to the document. The theme
+// effect alone owns the dark/light class; the skin effect only applies the
+// skin's own color tokens and never flips dark/light against the user's
+// explicit Theme setting.
 export function useAppearanceSync(settings: AppState['settings']): void {
   useEffect(() => {
     if (!settings) {

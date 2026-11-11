@@ -12,13 +12,14 @@ type Pointer = { x: number; y: number; button?: number; shiftKey?: boolean }
 
 function pointer(type: string, p: Pointer): PointerEvent {
   const button = p.button ?? 0
+  const buttonsDown = button === 1 ? 4 : button === 2 ? 2 : 1
   const event = new PointerEvent(type, {
     bubbles: true,
     cancelable: true,
     clientX: p.x,
     clientY: p.y,
     button,
-    buttons: type === 'pointerup' ? 0 : button === 1 ? 4 : 1,
+    buttons: type === 'pointerup' ? 0 : buttonsDown,
     shiftKey: p.shiftKey ?? false,
     pointerId: 7
   })
@@ -85,11 +86,11 @@ describe('BoardCanvas drag gestures', () => {
     })
   }
 
-  it('plain drag on empty canvas draws the box and reports a replace-selection marquee', () => {
+  it('right-click drag past the threshold draws the box and reports a replace-selection marquee', () => {
     render()
     const el = canvas()
-    act(() => el.dispatchEvent(pointer('pointerdown', { x: 100, y: 100 })))
-    act(() => el.dispatchEvent(pointer('pointermove', { x: 300, y: 250 })))
+    act(() => el.dispatchEvent(pointer('pointerdown', { x: 100, y: 100, button: 2 })))
+    act(() => el.dispatchEvent(pointer('pointermove', { x: 300, y: 250, button: 2 })))
     const box = el.querySelector('[data-board-marquee]') as HTMLElement
     expect(box.style.display).toBe('block')
     expect([box.style.left, box.style.top, box.style.width, box.style.height]).toEqual([
@@ -98,26 +99,52 @@ describe('BoardCanvas drag gestures', () => {
       '200px',
       '150px'
     ])
-    act(() => el.dispatchEvent(pointer('pointerup', { x: 300, y: 250 })))
+    act(() => el.dispatchEvent(pointer('pointerup', { x: 300, y: 250, button: 2 })))
     expect(box.style.display).toBe('none')
     expect(onMarquee).toHaveBeenCalledWith({ x: 100, y: 100, w: 200, h: 150 }, false)
     expect(onViewportChange).not.toHaveBeenCalled()
     expect(panEvents).toBe(0)
   })
 
-  it('converts the box to world coordinates at the current zoom', () => {
+  it('converts the right-click marquee box to world coordinates at the current zoom', () => {
     render({ viewport: { x: 50, y: 20, zoom: 2 } })
-    drag(canvas(), { x: 150, y: 120 }, { x: 350, y: 320 })
+    drag(canvas(), { x: 150, y: 120, button: 2 }, { x: 350, y: 320 })
     expect(onMarquee).toHaveBeenCalledWith({ x: 50, y: 50, w: 100, h: 100 }, false)
   })
 
-  it('Shift+drag reports an additive marquee', () => {
+  it('Shift+right-click drag reports an additive marquee', () => {
     render()
-    drag(canvas(), { x: 10, y: 10, shiftKey: true }, { x: 60, y: 90 })
+    drag(canvas(), { x: 10, y: 10, button: 2, shiftKey: true }, { x: 60, y: 90 })
     expect(onMarquee).toHaveBeenCalledWith({ x: 10, y: 10, w: 50, h: 80 }, true)
   })
 
-  it('a plain click on empty canvas reports the press but no marquee', () => {
+  it('a right-click with sub-threshold movement does not marquee-select and leaves the context menu free to open', () => {
+    const onEmptyContextMenu = vi.fn()
+    render({ onEmptyContextMenu })
+    const el = canvas()
+    act(() => el.dispatchEvent(pointer('pointerdown', { x: 100, y: 100, button: 2 })))
+    // 2px of jitter is well under the 4px drag threshold — still a click, not a drag.
+    act(() => el.dispatchEvent(pointer('pointermove', { x: 102, y: 101, button: 2 })))
+    const box = el.querySelector('[data-board-marquee]') as HTMLElement
+    expect(box.style.display).toBe('none')
+    act(() => el.dispatchEvent(pointer('pointerup', { x: 102, y: 101, button: 2 })))
+    expect(onMarquee).not.toHaveBeenCalled()
+    act(() => el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })))
+    expect(onEmptyContextMenu).toHaveBeenCalledTimes(1)
+  })
+
+  it('a right-click drag past the threshold suppresses the context menu that follows it', () => {
+    const onEmptyContextMenu = vi.fn()
+    render({ onEmptyContextMenu })
+    const el = canvas()
+    drag(el, { x: 100, y: 100, button: 2 }, { x: 300, y: 250 })
+    expect(onMarquee).toHaveBeenCalledWith({ x: 100, y: 100, w: 200, h: 150 }, false)
+    // Chromium fires `contextmenu` right after pointerup on a real right-click release.
+    act(() => el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })))
+    expect(onEmptyContextMenu).not.toHaveBeenCalled()
+  })
+
+  it('a plain left-click on empty canvas reports the press but no marquee', () => {
     render()
     drag(canvas(), { x: 10, y: 10 }, { x: 10, y: 10 })
     expect(onEmptyPointerDown).toHaveBeenCalledTimes(1)

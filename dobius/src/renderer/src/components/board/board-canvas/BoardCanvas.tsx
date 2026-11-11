@@ -198,6 +198,13 @@ export function BoardCanvas({
     null
   )
   const marqueeElRef = useRef<HTMLDivElement>(null)
+  // Right-click drives both the marquee (on real movement) and the native
+  // contextmenu (on a plain click). This flag, set once the drag clears a
+  // small pixel threshold, survives past pointerup so the later `contextmenu`
+  // event (which fires after pointerup on a right-click) knows to suppress
+  // itself instead of opening the menu on top of a just-finished marquee.
+  const rightDragExceededThresholdRef = useRef(false)
+  const MARQUEE_DRAG_THRESHOLD = 4
   const paintMarquee = (box: BoardMarqueeRect | null): void => {
     const el = marqueeElRef.current
     if (!el) {
@@ -219,32 +226,54 @@ export function BoardCanvas({
       startPan(event)
       return
     }
-    if (event.button !== 0 || !isEmptyTarget(event.target)) {
+    if (!isEmptyTarget(event.target)) {
       return
     }
-    // Why: drags preventDefault, so focus would otherwise stay in the last
-    // clicked terminal and swallow board keys (⌘K, ?, tool letters).
-    const active = document.activeElement
-    if (active instanceof HTMLElement && active !== document.body) {
-      active.blur()
-    }
-    const local = localPoint(event.currentTarget, event.clientX, event.clientY)
-    onEmptyPointerDown?.(screenToWorld(local, viewportRef.current), event)
-    if (!selectOnEmptyDrag || !onMarquee) {
+    if (event.button === 0) {
+      // Why: drags preventDefault, so focus would otherwise stay in the last
+      // clicked terminal and swallow board keys (⌘K, ?, tool letters).
+      const active = document.activeElement
+      if (active instanceof HTMLElement && active !== document.body) {
+        active.blur()
+      }
+      const local = localPoint(event.currentTarget, event.clientX, event.clientY)
+      onEmptyPointerDown?.(screenToWorld(local, viewportRef.current), event)
+      if (!selectOnEmptyDrag || !onMarquee) {
+        return
+      }
+      // Left-drag on empty canvas now pans (swapped with marquee, which moved
+      // to right-drag below) — this is the primary no-modifier pan gesture.
+      startPan(event)
       return
     }
-    event.preventDefault()
-    event.currentTarget.setPointerCapture(event.pointerId)
-    marqueeRef.current = { pointerId: event.pointerId, start: local, additive: event.shiftKey }
-    paintMarquee({ x: local.x, y: local.y, w: 0, h: 0 })
+    if (event.button === 2) {
+      if (!selectOnEmptyDrag || !onMarquee) {
+        return
+      }
+      // Don't paint the marquee box yet — only a drag past the threshold
+      // (checked in handlePointerMove) counts as a real marquee, otherwise
+      // this is a plain right-click and the native contextmenu should open.
+      event.preventDefault()
+      event.currentTarget.setPointerCapture(event.pointerId)
+      const local = localPoint(event.currentTarget, event.clientX, event.clientY)
+      marqueeRef.current = { pointerId: event.pointerId, start: local, additive: event.shiftKey }
+      rightDragExceededThresholdRef.current = false
+    }
   }
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
     const box = marqueeRef.current
     if (box && box.pointerId === event.pointerId) {
-      paintMarquee(
-        marqueeBox(box.start, localPoint(event.currentTarget, event.clientX, event.clientY))
-      )
+      const local = localPoint(event.currentTarget, event.clientX, event.clientY)
+      if (!rightDragExceededThresholdRef.current) {
+        const dx = local.x - box.start.x
+        const dy = local.y - box.start.y
+        if (Math.hypot(dx, dy) < MARQUEE_DRAG_THRESHOLD) {
+          return
+        }
+        rightDragExceededThresholdRef.current = true
+      }
+      paintMarquee(marqueeBox(box.start, local))
       return
     }
     const drag = dragRef.current
@@ -274,12 +303,14 @@ export function BoardCanvas({
     if (box && box.pointerId === event.pointerId) {
       marqueeRef.current = null
       paintMarquee(null)
-      const local = localPoint(event.currentTarget, event.clientX, event.clientY)
-      const screen = marqueeBox(box.start, local)
-      // A plain click (no box) only clears/keeps the selection via onEmptyPointerDown.
-      if (screen.w === 0 && screen.h === 0) {
+      // Below the drag threshold, this was a plain right-click: leave
+      // rightDragExceededThresholdRef false so the contextmenu event (which
+      // fires right after this) opens the menu as usual.
+      if (!rightDragExceededThresholdRef.current) {
         return
       }
+      const local = localPoint(event.currentTarget, event.clientX, event.clientY)
+      const screen = marqueeBox(box.start, local)
       const v = viewportRef.current
       const topLeft = screenToWorld({ x: screen.x, y: screen.y }, v)
       onMarquee?.(
@@ -295,6 +326,13 @@ export function BoardCanvas({
   }
 
   const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>): void => {
+    // A right-click that turned into a real marquee drag already selected via
+    // onMarquee in endDrag — suppress the menu instead of opening it on top.
+    if (rightDragExceededThresholdRef.current) {
+      rightDragExceededThresholdRef.current = false
+      event.preventDefault()
+      return
+    }
     if (!onEmptyContextMenu || !isEmptyTarget(event.target)) {
       return
     }
