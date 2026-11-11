@@ -12,7 +12,6 @@ import {
   ListTodo,
   MessageSquareText,
   Plug,
-  Settings,
   Smartphone,
   Sparkles,
   SquareKanban
@@ -86,8 +85,10 @@ function SideAppDivider(): React.JSX.Element {
 }
 
 // Horizontal pill of side-app launchers. Only agents, automations, skills,
-// kanban, communications and settings — no Home / Command Center, per the
-// Board surface's product intent.
+// kanban and communications — no Home / Command Center, per the Board
+// surface's product intent. Settings lives only in the top bar's gear icon
+// (see BoardTopBar/onOpenSettings) -- both opened the same 'settings' studio,
+// so this rail no longer duplicates it.
 export function BoardSideApps({
   onOpen,
   activeApp = null,
@@ -218,11 +219,6 @@ export function BoardSideApps({
         app: 'communications',
         label: translate('board.sideApps.communications', 'Communications'),
         icon: <Hexagon className="size-4" />
-      })}
-      {renderButton({
-        app: 'settings',
-        label: translate('board.studio.title.settings', 'Settings'),
-        icon: <Settings className="size-4" />
       })}
       <SideAppDivider />
       <BoardRailButton label={panelsLabel} tooltipSide="top" className="size-8">
