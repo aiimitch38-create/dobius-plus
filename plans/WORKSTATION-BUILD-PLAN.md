@@ -8,7 +8,7 @@ Every build in this plan happens in ONE checkout, and only this one:
 
 - Folder: `~/Projects (Code)/dobius-plus/WORKSTATION-BUILD`
 - Branch: `aiimitch38-create/workstation-build`
-- Based on: `fix/security-critical-20261027` at `a8cfe8be` (Carson's TypeScript app, installed as 2.1.9)
+- Based on: `feat/board-restart-reset` (`ac40017a`) = the installed 2.1.9 line (`fix/orb-hermes-2.1.8-ui`, per INSTALL-PROVENANCE.json) + the A-menu work, plus the design-system submodule commit from `fix/security-critical-20261027`. Rebased 2026-11-21. The security branch's two Adam/voice-orb commits were skipped: newer versions are already on this line (e.g. `12742ea2`).
 - App source: `dobius/` (TypeScript). Paths below are relative to `dobius/src/` unless noted.
 
 No other worktree, no other branch, no main checkout. Push only to the `fork` remote. Install only through
