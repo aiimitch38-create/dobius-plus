@@ -3534,6 +3534,17 @@ export function registerPtyHandlers(
     !event.sender.isDestroyed() &&
     isRegisteredRendererWebContents(event.sender)
 
+  // Why: unlike pty:write/pty:writeAccepted (gated above) and pty:spawn, the
+  // rest of this file's PTY IPC surface — resize/signal/kill/inspect/etc. —
+  // had no sender check at all, so any untrusted context could kill/inspect/
+  // signal (including SIGKILL) any live terminal. Same first-party-window
+  // gate, reused across every handler below.
+  const assertTrustedPtySender = (event: IpcMainEvent | IpcMainInvokeEvent): void => {
+    if (!isPtyWriteEventFromAppWindow(event)) {
+      throw new Error('Unauthorized pty IPC sender')
+    }
+  }
+
   const writePtyInput = (args: PtyWritePayload): boolean | Promise<boolean> => {
     // Why: defense-in-depth for the mobile-presence lock. The renderer's
     // xterm.onData guard already drops desktop keystrokes when mobile is
@@ -3606,7 +3617,10 @@ export function registerPtyHandlers(
   // Using ipcMain.on (not .handle) halves IPC traffic by avoiding the
   // empty acknowledgement message back to the renderer.
   ipcMain.removeAllListeners('pty:resize')
-  ipcMain.on('pty:resize', (_event, args: { id: string; cols: number; rows: number }) => {
+  ipcMain.on('pty:resize', (event, args: { id: string; cols: number; rows: number }) => {
+    if (!isPtyWriteEventFromAppWindow(event)) {
+      return
+    }
     // Why: after a desktop-fit override change, the desktop renderer's
     // re-render cascade runs safeFit on ALL panes (not just the affected
     // one). Background-tab panes get measured at full-width (214) instead
@@ -3666,13 +3680,19 @@ export function registerPtyHandlers(
   // driver gate; pty:reportGeometry never resizes the PTY, only refreshes
   // the restore-target cache. See docs/mobile-fit-hold.md.
   ipcMain.removeAllListeners('pty:reportGeometry')
-  ipcMain.on('pty:reportGeometry', (_event, args: { id: string; cols: number; rows: number }) => {
+  ipcMain.on('pty:reportGeometry', (event, args: { id: string; cols: number; rows: number }) => {
+    if (!isPtyWriteEventFromAppWindow(event)) {
+      return
+    }
     runtime?.recordRendererGeometry(args.id, args.cols, args.rows)
   })
 
   // Why: fire-and-forget — clears the DaemonPtyAdapter's sticky cold restore
   // cache after the renderer has consumed the data. No-op for non-daemon providers.
-  ipcMain.on('pty:ackColdRestore', (_event, args: { id: string }) => {
+  ipcMain.on('pty:ackColdRestore', (event, args: { id: string }) => {
+    if (!isPtyWriteEventFromAppWindow(event)) {
+      return
+    }
     const provider = tryGetProviderForPty(args.id)
     if (provider && 'ackColdRestore' in provider && typeof provider.ackColdRestore === 'function') {
       provider.ackColdRestore(args.id)
@@ -3682,7 +3702,10 @@ export function registerPtyHandlers(
   // Why: renderer ACKs bound main→renderer terminal delivery without stopping
   // PTY ingestion. Agent/status consumers still see every chunk through the
   // provider/runtime path while background renderer writes wait their turn.
-  ipcMain.on('pty:ackData', (_event, args: { id: string; charCount: number }) => {
+  ipcMain.on('pty:ackData', (event, args: { id: string; charCount: number }) => {
+    if (!isPtyWriteEventFromAppWindow(event)) {
+      return
+    }
     const charCount = Number.isFinite(args.charCount) ? Math.max(0, args.charCount) : 0
     const current = rendererInFlightCharsByPty.get(args.id) ?? 0
     const acknowledged = Math.min(current, charCount)
@@ -3701,8 +3724,8 @@ export function registerPtyHandlers(
   })
 
   ipcMain.removeAllListeners('pty:setActiveRendererPty')
-  ipcMain.on('pty:setActiveRendererPty', (_event, args: { id: string; active: boolean }) => {
-    if (typeof args.id !== 'string' || !args.id) {
+  ipcMain.on('pty:setActiveRendererPty', (event, args: { id: string; active: boolean }) => {
+    if (!isPtyWriteEventFromAppWindow(event) || typeof args.id !== 'string' || !args.id) {
       return
     }
     // Why: this is a renderer scheduling hint only. PTY reads, runtime state,
@@ -3719,8 +3742,8 @@ export function registerPtyHandlers(
   })
 
   ipcMain.removeAllListeners('pty:setRendererPtyVisible')
-  ipcMain.on('pty:setRendererPtyVisible', (_event, args: { id: string; visible: boolean }) => {
-    if (typeof args.id !== 'string' || !args.id) {
+  ipcMain.on('pty:setRendererPtyVisible', (event, args: { id: string; visible: boolean }) => {
+    if (!isPtyWriteEventFromAppWindow(event) || typeof args.id !== 'string' || !args.id) {
       return
     }
     // Why: data produced while no renderer can see this PTY must keep that origin
@@ -3734,14 +3757,20 @@ export function registerPtyHandlers(
   })
 
   ipcMain.removeAllListeners('pty:signal')
-  ipcMain.on('pty:signal', (_event, args: { id: string; signal: string }) => {
+  ipcMain.on('pty:signal', (event, args: { id: string; signal: string }) => {
+    if (!isPtyWriteEventFromAppWindow(event)) {
+      return
+    }
     tryGetProviderForPty(args.id)
       ?.sendSignal(args.id, args.signal)
       .catch(() => {})
   })
 
   ipcMain.removeAllListeners('pty:clearBuffer')
-  ipcMain.on('pty:clearBuffer', (_event, args: { id: string }) => {
+  ipcMain.on('pty:clearBuffer', (event, args: { id: string }) => {
+    if (!isPtyWriteEventFromAppWindow(event)) {
+      return
+    }
     // Why: the renderer already cleared its own xterm buffer. This clears the
     // PTY-side state (ConPTY screen buffer, daemon emulator, SSH host buffer)
     // so the next prompt repaint doesn't land at a stale cursor row.
@@ -3797,13 +3826,15 @@ export function registerPtyHandlers(
   }
   killLivePty = shutdownPtyById
 
-  ipcMain.handle('pty:kill', async (_event, args: { id: string; keepHistory?: boolean }) => {
+  ipcMain.handle('pty:kill', async (event, args: { id: string; keepHistory?: boolean }) => {
+    assertTrustedPtySender(event)
     await shutdownPtyById(args.id, { keepHistory: args.keepHistory })
   })
 
   ipcMain.handle(
     'pty:listSessions',
-    async (): Promise<{ id: string; cwd: string; title: string }[]> => {
+    async (event): Promise<{ id: string; cwd: string; title: string }[]> => {
+      assertTrustedPtySender(event)
       const providerSessions = await Promise.all([
         Promise.resolve({
           connectionId: null as string | null,
@@ -3828,7 +3859,8 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle('pty:hasPty', async (_event, args: { id: string }): Promise<boolean | null> => {
+  ipcMain.handle('pty:hasPty', async (event, args: { id: string }): Promise<boolean | null> => {
+    assertTrustedPtySender(event)
     const ownedConnectionId = ptyOwnership.get(args.id)
     const parsedSshId = ownedConnectionId === undefined ? parseAppSshPtyId(args.id) : null
     const provider = parsedSshId
@@ -3847,7 +3879,8 @@ export function registerPtyHandlers(
 
   ipcMain.handle(
     'pty:hasChildProcesses',
-    async (_event, args: { id: string }): Promise<boolean> => {
+    async (event, args: { id: string }): Promise<boolean> => {
+      assertTrustedPtySender(event)
       if (!hasPtyProviderForInspection(args.id)) {
         return false
       }
@@ -3857,7 +3890,8 @@ export function registerPtyHandlers(
 
   ipcMain.handle(
     'pty:getForegroundProcess',
-    async (_event, args: { id: string }): Promise<string | null> => {
+    async (event, args: { id: string }): Promise<string | null> => {
+      assertTrustedPtySender(event)
       if (!hasPtyProviderForInspection(args.id)) {
         return null
       }
@@ -3871,7 +3905,8 @@ export function registerPtyHandlers(
   // use the same code path. Providers return '' when the id is unknown or
   // the platform cannot resolve a cwd (Windows); the renderer treats ''
   // as "fall through to the next fallback layer".
-  ipcMain.handle('pty:getCwd', async (_event, args: { id: string }): Promise<string> => {
+  ipcMain.handle('pty:getCwd', async (event, args: { id: string }): Promise<string> => {
+    assertTrustedPtySender(event)
     try {
       return await getProviderForPty(args.id).getCwd(args.id)
     } catch {
@@ -3894,7 +3929,8 @@ export function registerPtyHandlers(
   // "cannot confirm", which the renderer treats as a cue to re-forward once.
   ipcMain.handle(
     'pty:getSize',
-    async (_event, args: { id: string }): Promise<{ cols: number; rows: number } | null> => {
+    async (event, args: { id: string }): Promise<{ cols: number; rows: number } | null> => {
+      assertTrustedPtySender(event)
       try {
         const applied = await tryGetProviderForPty(args.id)?.getAppliedSize?.(args.id)
         if (applied) {
@@ -3917,6 +3953,7 @@ export function registerPtyHandlers(
   ipcMain.handle(
     'pty:declarePendingPaneSerializer',
     async (event, args: { paneKey?: unknown }): Promise<number> => {
+      assertTrustedPtySender(event)
       if (!isValidPaneKey(args.paneKey)) {
         throw new Error('Invalid paneKey')
       }
@@ -3926,7 +3963,8 @@ export function registerPtyHandlers(
 
   ipcMain.handle(
     'pty:settlePaneSerializer',
-    async (_event, args: { paneKey?: unknown; gen?: unknown }): Promise<void> => {
+    async (event, args: { paneKey?: unknown; gen?: unknown }): Promise<void> => {
+      assertTrustedPtySender(event)
       if (!isValidPaneKey(args.paneKey) || typeof args.gen !== 'number') {
         return
       }
@@ -3945,7 +3983,8 @@ export function registerPtyHandlers(
 
   ipcMain.handle(
     'pty:clearPendingPaneSerializer',
-    async (_event, args: { paneKey?: unknown; gen?: unknown }): Promise<void> => {
+    async (event, args: { paneKey?: unknown; gen?: unknown }): Promise<void> => {
+      assertTrustedPtySender(event)
       if (!isValidPaneKey(args.paneKey) || typeof args.gen !== 'number') {
         return
       }

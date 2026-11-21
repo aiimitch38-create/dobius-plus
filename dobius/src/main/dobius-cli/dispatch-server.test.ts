@@ -145,6 +145,34 @@ describe('dobius CLI dispatch server', () => {
     )
   })
 
+  it('/tabOpen refuses a project that is not an absolute path', async () => {
+    const mod = await import('./dispatch-server')
+    const createTerminal = vi.fn(async () => ({ handle: 'term-2' }))
+    const dispatcher = {
+      resolveActiveTerminal: async () => 'term-1',
+      sendTerminal: vi.fn(),
+      listTerminals: async () => ({ terminals: [] }),
+      createTerminal
+    }
+    const token = 'a'.repeat(64)
+
+    await withServer(
+      (req, res) => {
+        void mod.handleDobiusCliRequestForTest(req, res, { token, dispatcher })
+      },
+      async (port) => {
+        for (const project of ['', 'relative/dir', '../up', 42]) {
+          const response = await post(port, '/tabOpen', token, { project })
+          expect(response.body).toMatchObject({ ok: false, error: 'project (absolute path) required' })
+        }
+        expect(createTerminal).not.toHaveBeenCalled()
+
+        await post(port, '/tabOpen', token, { project: '/abs/dir' })
+        expect(createTerminal).toHaveBeenCalledWith('path:/abs/dir', expect.any(Object))
+      }
+    )
+  })
+
   it('/tabSend answers with a timeout instead of hanging on a stuck terminal', async () => {
     const mod = await import('./dispatch-server')
     const dispatcher = {

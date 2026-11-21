@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import type { ExternalBackupSource } from './external-backup-service'
+import { backupFolderNameFor, type ExternalBackupSource } from './external-backup-service'
 import type { PersistedState } from '../shared/types'
 
 type BackupSourceInput = {
@@ -13,6 +13,7 @@ type BackupSourceInput = {
 export function collectExternalBackupSources(input: BackupSourceInput): ExternalBackupSource[] {
   const sources: ExternalBackupSource[] = []
   const seen = new Set<string>()
+  const folderNames = new Set<string>()
 
   const push = (rawPath: string, label?: string): void => {
     const path = rawPath.trim()
@@ -24,7 +25,19 @@ export function collectExternalBackupSources(input: BackupSourceInput): External
       return
     }
     seen.add(key)
-    sources.push(label ? { path: key, label } : { path: key })
+    const source: ExternalBackupSource = label ? { path: key, label } : { path: key }
+    // Why: every source is mirrored with `rsync --delete` into a folder named
+    // after its (sanitized) label or basename. Two distinct paths resolving to
+    // the same folder would wipe each other's mirror every tick, so the
+    // destination name is deduped too — suffixed, not dropped, so both still
+    // get backed up.
+    const base = backupFolderNameFor(source)
+    let folder = base
+    for (let n = 2; folderNames.has(folder); n += 1) {
+      folder = `${base}-${n}`
+    }
+    folderNames.add(folder)
+    sources.push(folder === base ? source : { path: key, label: folder })
   }
 
   for (const repo of input.repos) {

@@ -257,6 +257,33 @@ describe('registerPtyHandlers', () => {
   const foreignWindowIpcEvent = {
     sender: { on: vi.fn(), send: vi.fn(), removeListener: vi.fn() }
   }
+  // Why: pty IPC is only trusted from a registered renderer window, and the
+  // pane-serializer handlers also need sender.once/id, so tests that need that
+  // shape register a fake window and unregister it in afterEach.
+  const fakeWindowClosers: (() => void)[] = []
+  const makeRegisteredSender = (id: number, destroyedListeners: (() => void)[] = []) => {
+    const sender = {
+      id,
+      isDestroyed: () => false,
+      send: vi.fn(),
+      once: vi.fn((event: string, listener: () => void) => {
+        if (event === 'destroyed') {
+          destroyedListeners.push(listener)
+        }
+      })
+    }
+    const win = {
+      isDestroyed: () => false,
+      webContents: sender,
+      once: vi.fn((event: string, listener: () => void) => {
+        if (event === 'closed') {
+          fakeWindowClosers.push(listener)
+        }
+      })
+    }
+    registerRendererWindow(win as never)
+    return sender
+  }
 
   const savedOpenCodeConfigDir = process.env.OPENCODE_CONFIG_DIR
   const savedDobiusOpenCodeConfigDir = process.env.DOBIUS_OPENCODE_CONFIG_DIR
@@ -391,6 +418,9 @@ describe('registerPtyHandlers', () => {
   afterEach(() => {
     removeTestRendererWindow?.()
     removeTestRendererWindow = null
+    for (const close of fakeWindowClosers.splice(0)) {
+      close()
+    }
     _resetWslCachesForTests()
     vi.useRealTimers()
     unregisterSshPtyProvider('ssh-1')
@@ -2682,7 +2712,7 @@ describe('registerPtyHandlers', () => {
 
         try {
           await expect(
-            handlers.get('pty:kill')!(null, { id: 'remote-pty', keepHistory: false })
+            handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'remote-pty', keepHistory: false })
           ).rejects.toThrow('Multiplexer disposed')
         } finally {
           deletePtyOwnership('remote-pty')
@@ -3386,7 +3416,7 @@ describe('registerPtyHandlers', () => {
     handlers.clear()
     registerPtyHandlers(mainWindow as never)
 
-    await expect(handlers.get('pty:kill')!(null, { id: 'local-pty' })).rejects.toThrow(
+    await expect(handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'local-pty' })).rejects.toThrow(
       'daemon unavailable'
     )
   })
@@ -3422,7 +3452,7 @@ describe('registerPtyHandlers', () => {
     handlers.clear()
     registerPtyHandlers(mainWindow as never, runtime as never)
 
-    await handlers.get('pty:kill')!(null, { id: 'local-pty', keepHistory: true })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'local-pty', keepHistory: true })
 
     expect(shutdown).toHaveBeenCalledWith('local-pty', {
       immediate: true,
@@ -3474,7 +3504,7 @@ describe('registerPtyHandlers', () => {
     handlers.clear()
     registerPtyHandlers(mainWindow as never, runtime as never)
 
-    await handlers.get('pty:kill')!(null, { id: 'local-pty' })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'local-pty' })
 
     expect(runtime.onPtyExit).toHaveBeenCalledTimes(1)
     expect(runtime.onPtyExit).toHaveBeenCalledWith('local-pty', 0)
@@ -3517,7 +3547,7 @@ describe('registerPtyHandlers', () => {
     handlers.clear()
     registerPtyHandlers(mainWindow as never, runtime as never)
 
-    await handlers.get('pty:kill')!(null, { id: 'local-pty' })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'local-pty' })
     for (const listener of exitListeners) {
       listener({ id: 'local-pty', code: 0 })
     }
@@ -3786,8 +3816,8 @@ describe('registerPtyHandlers', () => {
     } as never)
     registerPtyHandlers(mainWindow as never)
 
-    await expect(handlers.get('pty:hasPty')!(null, { id: 'live-pty' })).resolves.toBe(true)
-    await expect(handlers.get('pty:hasPty')!(null, { id: 'dead-pty' })).resolves.toBe(false)
+    await expect(handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'live-pty' })).resolves.toBe(true)
+    await expect(handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'dead-pty' })).resolves.toBe(false)
 
     expect(hasPty).toHaveBeenCalledWith('live-pty')
     expect(hasPty).toHaveBeenCalledWith('dead-pty')
@@ -3819,7 +3849,7 @@ describe('registerPtyHandlers', () => {
     } as never)
     registerPtyHandlers(mainWindow as never)
 
-    await expect(handlers.get('pty:hasPty')!(null, { id: 'maybe-pty' })).resolves.toBe(null)
+    await expect(handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'maybe-pty' })).resolves.toBe(null)
 
     const hasPty = vi.fn(() => {
       throw new Error('provider unavailable')
@@ -3848,7 +3878,7 @@ describe('registerPtyHandlers', () => {
       getProfiles: vi.fn()
     } as never)
 
-    await expect(handlers.get('pty:hasPty')!(null, { id: 'maybe-pty' })).resolves.toBe(null)
+    await expect(handlers.get('pty:hasPty')!(mainWindowIpcEvent, { id: 'maybe-pty' })).resolves.toBe(null)
   })
 
   it('lists duplicate SSH relay session ids as distinct app sessions', async () => {
@@ -3904,7 +3934,7 @@ describe('registerPtyHandlers', () => {
       getProfiles: vi.fn()
     } as never)
 
-    const sessions = (await handlers.get('pty:listSessions')!(null, undefined)) as {
+    const sessions = (await handlers.get('pty:listSessions')!(mainWindowIpcEvent, undefined)) as {
       id: string
       cwd: string
       title: string
@@ -3917,8 +3947,8 @@ describe('registerPtyHandlers', () => {
       ])
     )
 
-    await handlers.get('pty:kill')!(null, { id: 'ssh:ssh-a@@pty-1' })
-    await handlers.get('pty:kill')!(null, { id: 'ssh:ssh-b@@pty-1' })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'ssh:ssh-a@@pty-1' })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'ssh:ssh-b@@pty-1' })
 
     expect(shutdownA).toHaveBeenCalledWith('ssh:ssh-a@@pty-1', {
       immediate: true,
@@ -3987,7 +4017,7 @@ describe('registerPtyHandlers', () => {
       store as never
     )
 
-    await handlers.get('pty:kill')!(null, { id: 'ssh:ssh-1@@relay-pty' })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'ssh:ssh-1@@relay-pty' })
 
     expect(sshShutdown).toHaveBeenCalledWith('ssh:ssh-1@@relay-pty', {
       immediate: true,
@@ -4031,7 +4061,7 @@ describe('registerPtyHandlers', () => {
       store as never
     )
 
-    await handlers.get('pty:kill')!(null, { id: 'ssh:ssh-1@@relay-pty' })
+    await handlers.get('pty:kill')!(mainWindowIpcEvent, { id: 'ssh:ssh-1@@relay-pty' })
 
     expect(localShutdown).not.toHaveBeenCalled()
     expect(store.markSshRemotePtyLease).toHaveBeenCalledWith('ssh-1', 'relay-pty', 'terminated')
@@ -4130,11 +4160,11 @@ describe('registerPtyHandlers', () => {
     setPtyOwnership('remote-pty', 'ssh-1')
     unregisterSshPtyProvider('ssh-1')
 
-    await expect(handlers.get('pty:hasChildProcesses')!(null, { id: 'remote-pty' })).resolves.toBe(
+    await expect(handlers.get('pty:hasChildProcesses')!(mainWindowIpcEvent, { id: 'remote-pty' })).resolves.toBe(
       false
     )
     await expect(
-      handlers.get('pty:getForegroundProcess')!(null, { id: 'remote-pty' })
+      handlers.get('pty:getForegroundProcess')!(mainWindowIpcEvent, { id: 'remote-pty' })
     ).resolves.toBeNull()
     expect(provider.hasChildProcesses).not.toHaveBeenCalled()
     expect(provider.getForegroundProcess).not.toHaveBeenCalled()
@@ -5705,9 +5735,10 @@ describe('registerPtyHandlers', () => {
 
     registerPtyHandlers(mainWindow as never, runtime as never)
     const paneKey = makePaneKey('tab-cli', '11111111-1111-4111-8111-111111111111')
-    const gen = (await handlers.get('pty:declarePendingPaneSerializer')!(null, {
-      paneKey
-    })) as number
+    const gen = (await handlers.get('pty:declarePendingPaneSerializer')!(
+      { sender: makeRegisteredSender(41) },
+      { paneKey }
+    )) as number
     const spawnController = controller as unknown as RuntimeSpawnController
     const result = await spawnController.spawn({
       cols: 80,
@@ -5717,7 +5748,7 @@ describe('registerPtyHandlers', () => {
     })
 
     expect(spawnController.hasRendererSerializer?.(result.id)).toBe(false)
-    await handlers.get('pty:settlePaneSerializer')!(null, { paneKey, gen })
+    await handlers.get('pty:settlePaneSerializer')!(mainWindowIpcEvent, { paneKey, gen })
     expect(spawnController.hasRendererSerializer?.(result.id)).toBe(true)
   })
 
@@ -5725,14 +5756,7 @@ describe('registerPtyHandlers', () => {
     registerPtyHandlers(mainWindow as never)
     const paneKey = makePaneKey('tab-crash', '22222222-2222-4222-8222-222222222222')
     const destroyedListeners: (() => void)[] = []
-    const sender = {
-      id: 42,
-      once: vi.fn((event: string, listener: () => void) => {
-        if (event === 'destroyed') {
-          destroyedListeners.push(listener)
-        }
-      })
-    }
+    const sender = makeRegisteredSender(42, destroyedListeners)
 
     await handlers.get('pty:declarePendingPaneSerializer')!({ sender }, { paneKey })
 
@@ -7496,8 +7520,8 @@ describe('registerPtyHandlers', () => {
 
       // Why: stale or duplicated renderer ACKs must not over-credit SSH/relay
       // flow control beyond the bytes main actually sent to the renderer.
-      ackData(null, { id: 'remote-like-pty', charCount: 1024 })
-      ackData(null, { id: 'remote-like-pty', charCount: 1024 })
+      ackData(mainWindowIpcEvent, { id: 'remote-like-pty', charCount: 1024 })
+      ackData(mainWindowIpcEvent, { id: 'remote-like-pty', charCount: 1024 })
 
       expect(acknowledgeDataEvent).toHaveBeenNthCalledWith(
         1,

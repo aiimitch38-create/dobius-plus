@@ -52,7 +52,8 @@ const {
   gitExecFileAsyncMock,
   getSshGitProviderMock,
   getSshFilesystemProviderMock,
-  getActiveMultiplexerMock
+  getActiveMultiplexerMock,
+  isRegisteredRendererWebContentsMock
 } = vi.hoisted(() => ({
   handleMock: vi.fn(),
   removeHandlerMock: vi.fn(),
@@ -101,7 +102,8 @@ const {
   gitExecFileAsyncMock: vi.fn(),
   getSshGitProviderMock: vi.fn(),
   getSshFilesystemProviderMock: vi.fn(),
-  getActiveMultiplexerMock: vi.fn()
+  getActiveMultiplexerMock: vi.fn(),
+  isRegisteredRendererWebContentsMock: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -234,6 +236,10 @@ vi.mock('../agents/session-workspace-brief', () => ({
   refreshSessionWorkspaceBrief: refreshSessionWorkspaceBriefMock
 }))
 
+vi.mock('../window/renderer-window-registry', () => ({
+  isRegisteredRendererWebContents: isRegisteredRendererWebContentsMock
+}))
+
 vi.mock('./pty', () => ({
   clearProviderPtyState: clearProviderPtyStateMock,
   getLocalPtyProvider: getLocalPtyProviderMock
@@ -344,10 +350,12 @@ describe('registerWorktreeHandlers', () => {
       clearProviderPtyStateMock,
       getLocalPtyProviderMock,
       deleteWorktreeHistoryDirMock,
-      advertisedUrlWatcherForgetWorktreeMock
+      advertisedUrlWatcherForgetWorktreeMock,
+      isRegisteredRendererWebContentsMock
     ]) {
       m.mockReset()
     }
+    isRegisteredRendererWebContentsMock.mockReturnValue(true)
     killAllProcessesForWorktreeMock.mockResolvedValue({
       runtimeStopped: 0,
       providerStopped: 0,
@@ -4971,7 +4979,7 @@ describe('registerWorktreeHandlers', () => {
   })
 
   it('creates an issue-command runner for an existing repo/worktree pair', async () => {
-    const result = await handlers['hooks:createIssueCommandRunner'](null, {
+    const result = await handlers['hooks:createIssueCommandRunner']({ sender: {} }, {
       repoId: 'repo-1',
       worktreePath: '/workspace/improve-dashboard',
       command: 'codex exec "long command"'
@@ -4990,6 +4998,47 @@ describe('registerWorktreeHandlers', () => {
         DOBIUS_WORKTREE_PATH: '/workspace/improve-dashboard'
       }
     })
+  })
+
+  it('refuses to persist issue commands from unregistered senders or malformed payloads', async () => {
+    // Why: createIssueCommandRunner is a synchronous ipcMain.handle, so it throws
+    // directly rather than returning a rejected promise.
+    isRegisteredRendererWebContentsMock.mockReturnValue(false)
+    expect(() =>
+      handlers['hooks:createIssueCommandRunner']({ sender: {} }, {
+        repoId: 'repo-1',
+        worktreePath: '/workspace/improve-dashboard',
+        command: 'codex exec "long command"'
+      })
+    ).toThrow('Unauthorized hooks IPC sender')
+    await expect(
+      handlers['hooks:writeIssueCommand']({ sender: {} }, { repoId: 'repo-1', content: 'x' })
+    ).rejects.toThrow('Unauthorized hooks IPC sender')
+
+    isRegisteredRendererWebContentsMock.mockReturnValue(true)
+    expect(() =>
+      handlers['hooks:createIssueCommandRunner']({ sender: {} }, {
+        repoId: 'repo-1',
+        worktreePath: '/workspace/improve-dashboard',
+        command: ['not', 'a', 'string']
+      })
+    ).toThrow('command must be a string')
+    expect(() =>
+      handlers['hooks:createIssueCommandRunner']({ sender: {} }, {
+        repoId: 'repo-1',
+        worktreePath: '/workspace/improve-dashboard',
+        command: '   '
+      })
+    ).toThrow('command must not be empty')
+    await expect(
+      handlers['hooks:writeIssueCommand']({ sender: {} }, {
+        repoId: 'repo-1',
+        content: 'a'.repeat(16 * 1024 + 1)
+      })
+    ).rejects.toThrow('content exceeds')
+
+    expect(createIssueCommandRunnerScriptMock).not.toHaveBeenCalled()
+    expect(store.getRepo).not.toHaveBeenCalled()
   })
 
   it('lists a synthetic worktree for folder-mode repos', async () => {
@@ -7887,7 +7936,7 @@ describe('registerWorktreeHandlers', () => {
     getSshFilesystemProviderMock.mockReturnValue(fsProvider)
 
     await expect(
-      handlers['hooks:writeIssueCommand'](null, {
+      handlers['hooks:writeIssueCommand']({ sender: {} }, {
         repoId: 'repo-ssh',
         content: 'dobius issue command'
       })
@@ -7916,7 +7965,7 @@ describe('registerWorktreeHandlers', () => {
     store.getRepo.mockReturnValue(repo)
     getSshFilesystemProviderMock.mockReturnValue(fsProvider)
 
-    await handlers['hooks:writeIssueCommand'](null, {
+    await handlers['hooks:writeIssueCommand']({ sender: {} }, {
       repoId: 'repo-ssh',
       content: 'dobius issue command'
     })
@@ -7943,7 +7992,7 @@ describe('registerWorktreeHandlers', () => {
     getSshFilesystemProviderMock.mockReturnValue(null)
 
     await expect(
-      handlers['hooks:writeIssueCommand'](null, {
+      handlers['hooks:writeIssueCommand']({ sender: {} }, {
         repoId: 'repo-ssh',
         content: 'dobius issue command'
       })

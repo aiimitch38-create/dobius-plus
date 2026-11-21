@@ -1,5 +1,5 @@
 /* oxlint-disable max-lines */
-import type { BrowserWindow } from 'electron'
+import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { ipcMain } from 'electron'
 import { readFile, stat } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
@@ -133,6 +133,32 @@ import {
   recoverLocalWindowsLongPathWorktreeRemoval
 } from '../local-worktree-removal-recovery'
 import { refreshSessionWorkspaceBrief } from '../agents/session-workspace-brief'
+import { isRegisteredRendererWebContents } from '../window/renderer-window-registry'
+
+// Why: the issue command is a shell command that is persisted and executed later
+// (runner script / `.dobius/issue-command`). It is shell input by design, so it
+// can't be escaped — but it must at least be a bounded string from a trusted
+// first-party window, never an arbitrary payload from an untrusted frame.
+const MAX_ISSUE_COMMAND_LENGTH = 16 * 1024
+
+function assertIssueCommandSender(event: IpcMainInvokeEvent): void {
+  if (!isRegisteredRendererWebContents(event.sender)) {
+    throw new Error('Unauthorized hooks IPC sender')
+  }
+}
+
+function assertIssueCommandString(value: unknown, field: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${field} must be a string`)
+  }
+  if (value.length > MAX_ISSUE_COMMAND_LENGTH) {
+    throw new Error(`${field} exceeds ${MAX_ISSUE_COMMAND_LENGTH} characters`)
+  }
+  if (value.includes('\0')) {
+    throw new Error(`${field} must not contain null bytes`)
+  }
+  return value
+}
 
 const WORKTREE_ARCHIVE_HOOK_TIMEOUT_MS = 120_000
 const WORKTREE_LIST_ALL_CONCURRENCY = 8
@@ -1981,7 +2007,12 @@ export function registerWorktreeHandlers(
 
   ipcMain.handle(
     'hooks:createIssueCommandRunner',
-    (_event, args: { repoId: string; worktreePath: string; command: string }) => {
+    (event, args: { repoId: string; worktreePath: string; command: string }) => {
+      assertIssueCommandSender(event)
+      const command = assertIssueCommandString(args.command, 'command')
+      if (command.trim().length === 0) {
+        throw new Error('command must not be empty')
+      }
       const repo = store.getRepo(args.repoId)
       if (!repo) {
         throw new Error(`Repo not found: ${args.repoId}`)
@@ -1990,7 +2021,7 @@ export function registerWorktreeHandlers(
       return createIssueCommandRunnerScript(
         repo,
         args.worktreePath,
-        args.command,
+        command,
         getLocalProjectWorktreeGitOptions(store, repo)
       )
     }
@@ -2123,7 +2154,11 @@ export function registerWorktreeHandlers(
 
   ipcMain.handle(
     'hooks:writeIssueCommand',
-    async (_event, args: { repoId: string; content: string }) => {
+    async (event, args: { repoId: string; content: string }) => {
+      assertIssueCommandSender(event)
+      // Why: empty content is the documented "delete the local override" path,
+      // so only the type and size are enforced here.
+      const content = assertIssueCommandString(args.content, 'content')
       const repo = store.getRepo(args.repoId)
       if (!repo || isFolderRepo(repo)) {
         return
@@ -2136,7 +2171,7 @@ export function registerWorktreeHandlers(
             'Remote filesystem unavailable. Reconnect the SSH target before retrying.'
           )
         }
-        const trimmed = args.content.trim()
+        const trimmed = content.trim()
         if (!trimmed) {
           await fsProvider.deletePath(issueCommandPath, false).catch((error: unknown) => {
             if (!isENOENT(error)) {
@@ -2162,7 +2197,7 @@ export function registerWorktreeHandlers(
         await fsProvider.writeFile(issueCommandPath, `${trimmed}\n`)
         return
       }
-      writeIssueCommand(repo.path, args.content)
+      writeIssueCommand(repo.path, content)
     }
   )
 }

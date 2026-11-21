@@ -34,6 +34,25 @@ describe('collectExternalBackupSources', () => {
     expect(sources[0]?.label).toBe('Alpha')
   })
 
+  it('disambiguates sources whose labels would land in the same backup folder', () => {
+    const sources = collectExternalBackupSources({
+      repos: [
+        { path: '/a/alpha', displayName: 'Alpha', connectionId: null },
+        { path: '/b/alpha', displayName: 'Alpha', connectionId: null },
+        // "a/b" sanitizes to "a-b", so it collides with a literal "a-b" label.
+        { path: '/c/one', displayName: 'a-b', connectionId: null },
+        { path: '/c/two', displayName: 'a/b', connectionId: null }
+      ],
+      workspaceDir: ''
+    })
+    expect(sources).toEqual([
+      { path: '/a/alpha', label: 'Alpha' },
+      { path: '/b/alpha', label: 'Alpha-2' },
+      { path: '/c/one', label: 'a-b' },
+      { path: '/c/two', label: 'a-b-2' }
+    ])
+  })
+
   it('ignores an unset workspace root instead of mirroring the whole filesystem', () => {
     expect(collectExternalBackupSources({ repos: [], workspaceDir: '   ' })).toEqual([])
   })
