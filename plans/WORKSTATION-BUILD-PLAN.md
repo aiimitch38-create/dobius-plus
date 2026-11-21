@@ -1,6 +1,15 @@
 # Workstation Build Plan
 
-Written 2026-11-21. Owner: Carson. Status: plan only, nothing built yet.
+Written 2026-11-21. Owner: Carson. Status: IN PROGRESS. Done: -1.1, -1.2, -1.12, 0.1, 0.2, 0.4, workspace-switch wipe fix (e498f42d); 0.3 partly.
+
+> **Audit 2026-11-21 (Iris, read-only, verified against code): `plans/research/IRIS-PLAN-AUDIT-20261121.md` wins where it disagrees with the rows below.** Key corrections:
+> - Phase 9: `dobius board consoles` ALREADY exists (`cli/specs/board.ts`, `main/runtime/rpc/methods/board-consoles.ts:200-207`). 9.1 = extend it with live handle + running flag (S). Per-row Restart exists (`OrchestratorCard.tsx:142`), so 9.5 is partly done.
+> - Phase 1: already in this app, do NOT rebuild: 1.1 report a problem (`BoardFoundBugButton.tsx`, `BoardReportDialog.tsx`), 1.5 chat folding + question cards (`native-chat-tool-fold.ts`, `NativeChatQuestionCard.tsx`), 1.6 links in browser / blank-window recovery / restart. Real remaining ports: snooze tabs, My Day, What's new. Phase 5 extends the existing report dialog.
+> - -1.13: tests pass `null` as the IPC event (118x to pty:spawn, 12x to newer gated handlers); swap in the existing `mainWindowIpcEvent` (`pty.test.ts:256`). Size S.
+> - Phases 2-7 duplicate Phase 8 (2.2=8.1, 3.1=8.2, 4.3=8.3, 4.4=8.4, 4.6=8.5, 5.6=8.6, 6.6=8.7, 7.2=8.8, 7.3=8.9, 4.5->8.10, 7.4=8.11 ... 7.8->8.15). The "Later" table's 8.1-8.4 are different items: ignore that table.
+> - 3.3 blocked: `dobius/design/` submodule not downloaded. 6.x: a Telegram module already exists (`main/telegram-account/`), decide reuse first. 7.7/8.14: drop (unused file, live UI already covers it).
+> - 2.3, 4.1, 4.2, 4.3 all edit `main/agents/agent-runner.ts`: run in sequence, never in parallel.
+> - Next order: Wave 1 = -1.13, 0.7, -1.4 hibernation merge; Wave 2 = 9.1, -1.15 + -1.14, 0.5 voice research (fork branch too); Wave 3 = 9.2 + 9.3, 2.3, -1.3 live Restart test.
 
 ## The one rule for this plan
 
