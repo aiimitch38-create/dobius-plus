@@ -247,3 +247,76 @@ TODO (Carson's OK): copy into `~/.claude/skills/learned-dobius-isolated-test-cop
 7. The video link (D3)?
 8. Carson's dictated "no in house no texas": never clarified.
 9. Update the test-copy skill with Appendix C?
+
+## Phase 8: everything the algorithm put off, added back (Carson, 2026-11-21: "just add everything")
+
+Every item from plans/algorithm/DECISIONS.md round 4 is back in scope. Folded items stay folded (primer -> 3.2,
+Report a problem -> Phase 5, stale-graph rule -> 4.1, Graphify-on-every-project -> after Dobius).
+
+| ID | Item | Needs research first? |
+|---|---|---|
+| 8.1 | One event log / ledger for every run (plan B3) | yes: which stores to fold in |
+| 8.2 | Animated loading screen from the demo artifact (on top of the status line) | no |
+| 8.3 | Separate grader agent for important tasks | no (pattern known) |
+| 8.4 | Vault note per finished card | ties into 8.10 |
+| 8.5 | Count non-Bash failures in the global learn hook | no |
+| 8.6 | Automatic after-fix screenshot for the bug button | no (test-copy recipe, Appendix C) |
+| 8.7 | Telegram approve-from-phone + /tabs /read /send | no |
+| 8.8 | Turn on Laya | yes: where the model service runs |
+| 8.9 | Live per-tab checklist from the agent's to-do list | yes |
+| 8.10 | **Agent activity feed** (see plan below) | yes |
+| 8.11 | Run adoption gate | yes |
+| 8.12 | Cloud job buttons (submit / cancel / retry) | no |
+| 8.13 | Hook install status in Settings | no |
+| 8.14 | Usage detail table (keep, wire it, not delete) | no |
+| 8.15 | ADAM voice client + the hands-free voice branch `feat/adam-voice-control` (33 commits, 44 files never landed: wake word, barge-in, local speech, voice brain, proactive watcher, shell tool) | yes: what still fits after the Hermes voice rework |
+| 8.16 | Replay tests for agent instructions | yes: build the frozen task set |
+| 8.17 | **Weekly skill cleanup** (see plan below) | yes |
+| 8.18 | **Gmail intake** (see plan below) | yes |
+| 8.19 | Command Center backed by real tasks | yes |
+| 8.20 | Delete with OK: fake Operations dashboard, legacy dialogs, comms identity IPC, test-only chat projections | no |
+
+### Plan: Gmail intake (8.18)
+Goal: mail from tracked contacts becomes Kanban cards automatically, suggestions first.
+Research questions:
+1. Which accounts: the google-workspace MCP is connected as aiimitch38@gmail.com; Line A has GWS multi-account work (GWS-MULTI-ACCOUNT-PLAN.md) and Line B has `main/asana` token patterns. Pick one auth path.
+2. Who counts as "tracked": reuse the memory note proactive-dobius-decisions (tracked-contact iMessage/Gmail -> Kanban).
+3. Where cards land: `main/vertex/vertex-task-store.ts` / `main/ipc/vertex-tasks.ts` (Kanban).
+4. Safety: read-only Gmail scope, no auto-reply, email text treated as data (prompt-injection), dedupe by message id.
+Build sketch: poller (copy imessage bridge watermark + at-most-once) -> classifier (cheap model, suggestion) -> card with link back to the thread -> Carson approves.
+
+### Plan: weekly skill cleanup (8.17)
+Goal: a weekly report that proposes merges, deletions and new skills. Never deletes on its own.
+Research questions:
+1. Where the duplicate `subagent-prompt-engineer-skill-<hash>` entries come from (not in ~/.claude/skills; likely a plugin or generated dir).
+2. Inputs: ~/.claude/skills/LEARNED.md (73 learned skills), ~/.claude/algorithm/command-log.tsv, vault Inbox/Sessions notes.
+3. Output: one markdown report + the skill-creator drafts, Carson approves each.
+Build sketch: Dobius automation (weekly) -> agent run with read-only tools -> report into the vault Inbox + a Kanban card.
+
+### Plan: agent activity feed (8.10)
+Goal: one live feed of what every agent is doing, in the app and mirrored to the Obsidian vault.
+Research questions:
+1. Find the old writer of `~/Obsidian Vault/AI Research/Dobius Agent Activity/` (stopped 2026-10-23; not in dobius/src or ~/.claude/hooks; check ADAM / Hermes / Line A).
+2. Sources: `main/agents/agent-run-event-journal.ts`, automation runs, orchestration messages, terminal agent status hooks.
+3. Shape: in-app feed panel (Knowledge page or board side app) + daily vault note; same events, one writer.
+Depends on 8.1 (event log) for the single writer, but a v1 can read the existing journals.
+
+## Phase 9: make the board findable (from Claude 5's attempt to orchestrate, 2026-11-21)
+
+What happened: Carson asked Claude 5 (a console on the FEATURES-HUB board) to hand tasks to Plan 2, Build 2, Test 2 and
+Docs 1. It took ~10 commands to work out which board it was on, and the four consoles turned out to have no live terminal.
+Findings (verified):
+- No `dobius board` command exists; the CLI cannot list cards or find a card by name.
+- `terminal list` shows tab titles, never card names; 15 of 19 terminals in the worktree are idle shells with near-identical titles.
+- Card -> terminal mapping exists only in the renderer (`use-orchestrator-thread.ts:72-110`: card.tabId -> terminal.list -> handle at send time) and in `dobius-data.json` (`ui.boardsByWorktree`).
+- Handles are not stable: the board's 18:24 and 18:26 broadcasts went to 16 different handles; all now stale or exited. A console's env handle (`DOBIUS_TERMINAL_HANDLE`) differs from its `terminal list` handle.
+- A card whose terminal exited still looks alive on the board (scrollback + "Done" in the orchestrator list).
+
+| ID | Fix | Where | Size |
+|---|---|---|---|
+| 9.1 | `dobius board list [--json]`: cards with name, kind, agent, tabId, live handle (or "not running") | new CLI spec + RPC reading the board slice from main | M |
+| 9.2 | `dobius board send --card "<name>" --text ... [--enter]` and orchestration addressing `card:<name>` resolved at send time | same RPC; reuse the renderer's tabId->handle logic in main | M |
+| 9.3 | Tell each console who it is: `DOBIUS_BOARD_CARD_ID`, `DOBIUS_BOARD_CARD_TITLE`, `DOBIUS_BOARD_ID` env, plus a line in the workspace brief | PTY env injection (where DOBIUS_TAB_ID is set) | S |
+| 9.4 | Stable address per console: accept `tab:<tabId>` as a handle everywhere | terminal handle resolver | S |
+| 9.5 | Show dead consoles honestly: card badge "not running" + a Restart button; orchestrator list says "Exited", not "Done" | board console card + OrchestratorCard | S |
+| 9.6 | CLI path into a board orchestrator: `dobius orchestration send --to board:<orchestratorCardId>` fans out to its wired consoles, same as typing in the card | main-side relay | M |
