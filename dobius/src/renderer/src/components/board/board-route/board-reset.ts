@@ -62,7 +62,14 @@ export function closeConsoleCards(worktreeId: string, targets: readonly BoardKil
 export function resetBoard(worktreeId: string): void {
   const state = useAppStore.getState()
   const plan = boardResetPlan(getBoard(state, worktreeId).cards)
+  const wasActive = state.activeWorktreeId === worktreeId
   // Groups and connectors empty out with their cards (removeCards prunes them).
   state.removeCards(worktreeId, plan.otherCardIds)
   closeConsoleCards(worktreeId, plan.consoles)
+  // Why: closing a workspace's last terminal deactivates it, which drops the
+  // user on Home; Reset means "an empty board", so stay on it.
+  const after = useAppStore.getState()
+  if (wasActive && after.activeWorktreeId === null) {
+    after.setActiveWorktree(worktreeId)
+  }
 }
