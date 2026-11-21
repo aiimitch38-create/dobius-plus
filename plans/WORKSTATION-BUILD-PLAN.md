@@ -38,6 +38,23 @@ off → Done → logged to memory (vault + graph).
 | D2 | Bring the 44 uncommitted files from the main checkout into this copy? | No, leave them |
 | D3 | The video link (her 10-minute Claude Code setup), to compare against this plan | Skip the comparison |
 
+## Phase -1: save and finish what is already in flight (from the 2026-11-21 handoff)
+
+Source: `.claude/worktrees/orb-hermes-2.1.8/plans/HANDOFF-20261121-board-restart-reset.md` and
+`~/Projects (Code)/dobius-plus/FEATURES-HUB/IRIS-REPORT-20261121.md`.
+
+| ID | Task | State | Size |
+|---|---|---|---|
+| -1.1 | Bring the uncommitted security fixes (#6/7/8/27/30/32) from the main checkout into this copy and commit them. These are part of the 44 uncommitted files (D2). Most important save. | uncommitted in `~/Projects (Code)/Dobius/dobius-plus` | M |
+| -1.2 | Finish Reset board: the "stay on the empty board" fix (`board-route/board-reset.ts`) is copied here UNCOMMITTED and UNTESTED. Lint, typecheck, test in an isolated copy (incl. pinned console closing late), commit. | uncommitted here | S |
+| -1.3 | Test Restart Dobius+ live: tabs must come back | not tested | S |
+| -1.4 | Merge the hibernation fix `a0b689fc` (branch `fix/hibernation-unresumable`) | not merged | S |
+| -1.5 | Pre-existing failing test `board-home/BoardHome.test.tsx` "closing the studio returns to Home" | failing before any change | S |
+| -1.6 | Install the A-menu + Reset work into /Applications via the gated script, after Carson's OK | not installed, not pushed | S |
+
+Sam port order suggested in the handoff (feeds Phase 1): restart restores tabs, links open in browser, chat folding
+and question cards, report a problem, snooze tabs, what's new.
+
 ## Phase 0: cleanup and quick wins (approved by Carson 2026-11-21)
 
 | ID | Task | Where | Size |
