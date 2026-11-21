@@ -105,6 +105,20 @@ describe('BoardCommandBar thread visibility', () => {
     expect(thread()).not.toBeNull()
   })
 
+  it('Escape folds the open thread, but not while a menu is stacked on it', () => {
+    render(saved)
+    toggle('Show thread')
+    expect(thread()).not.toBeNull()
+    const menu = document.createElement('div')
+    menu.setAttribute('data-radix-popper-content-wrapper', '')
+    document.body.appendChild(menu)
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
+    expect(thread()).not.toBeNull()
+    menu.remove()
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
+    expect(thread()).toBeNull()
+  })
+
   it('stays collapsed when history is cleared and opens for the next message', () => {
     render(saved)
     render([])
