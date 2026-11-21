@@ -1077,6 +1077,64 @@ describe('createIpcPtyTransport', () => {
     expect(transport.getPtyId()).toBeNull()
   })
 
+  it('does not kill a reattach that resolves after the transport was destroyed', async () => {
+    // Regression for the Board's live<->glance remount race: a pane can be
+    // destroyed (its mode flips again) while its reattach to an already-live
+    // process is still in flight. The old behavior killed that id — the
+    // user's real, still-running terminal — because it treated every
+    // destroyed-while-spawning result as a fresh PTY to clean up.
+    const { createIpcPtyTransport } = await import('./pty-transport')
+    const spawnControls: { resolve: ((value: { id: string; isReattach: boolean }) => void) | null } =
+      { resolve: null }
+    const spawnPromise = new Promise<{ id: string; isReattach: boolean }>((resolve) => {
+      spawnControls.resolve = resolve
+    })
+    const spawnMock = vi.fn().mockReturnValue(spawnPromise)
+    const killMock = vi.fn()
+    const onPtySpawn = vi.fn()
+
+    ;(globalThis as { window: typeof window }).window = {
+      ...originalWindow,
+      api: {
+        ...originalWindow?.api,
+        pty: {
+          ...originalWindow?.api?.pty,
+          spawn: spawnMock,
+          write: vi.fn(),
+          resize: vi.fn(),
+          kill: killMock,
+          onData: vi.fn((callback: (payload: { id: string; data: string }) => void) => {
+            onData = callback
+            return () => {}
+          }),
+          onReplay: vi.fn(() => () => {}),
+          onExit: vi.fn((callback: (payload: { id: string; code: number }) => void) => {
+            onExit = callback
+            return () => {}
+          })
+        }
+      }
+    } as unknown as typeof window
+
+    const transport = createIpcPtyTransport({ onPtySpawn })
+    const connectPromise = transport.connect({
+      url: '',
+      sessionId: 'pty-live',
+      callbacks: {}
+    })
+
+    transport.destroy?.()
+    if (!spawnControls.resolve) {
+      throw new Error('Expected spawn resolver to be captured')
+    }
+    spawnControls.resolve({ id: 'pty-live', isReattach: true })
+    await connectPromise
+
+    expect(killMock).not.toHaveBeenCalled()
+    expect(onPtySpawn).not.toHaveBeenCalled()
+    expect(transport.getPtyId()).toBeNull()
+  })
+
   it('unregisterPtyDataHandlers prevents final data burst from triggering notifications', async () => {
     const { createIpcPtyTransport, unregisterPtyDataHandlers } = await import('./pty-transport')
     const onTitleChange = vi.fn()

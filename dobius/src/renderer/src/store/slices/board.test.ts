@@ -237,6 +237,29 @@ describe('board slice', () => {
     expect(store.getState().boardsByWorktree).toEqual({})
   })
 
+  it('ignores a stale echo that arrives after a newer write already landed', () => {
+    // Two debounced writes in a row (e.g. two frames of a drag spanning a
+    // persist cycle). Main doesn't guarantee its broadcasts return in send
+    // order, so the first write's echo can arrive after the second's.
+    const a = store.getState().addCard(WT, note({ x: 0, y: 0 }))
+    vi.runAllTimers()
+    mockApi.ui.set.mockClear()
+
+    store.getState().moveCards(WT, [a], 1, 0)
+    vi.advanceTimersByTime(300)
+    const [firstWrite] = mockApi.ui.set.mock.calls[0] as unknown as [
+      { boardsByWorktree: unknown }
+    ]
+
+    store.getState().moveCards(WT, [a], 1, 0)
+    vi.advanceTimersByTime(300)
+    expect(mockApi.ui.set).toHaveBeenCalledTimes(2)
+
+    // The first write's echo shows up late, after the second has already sent.
+    store.getState().hydrateBoards(JSON.parse(JSON.stringify(firstWrite.boardsByWorktree)))
+    expect(board().cards[0].x).toBe(2)
+  })
+
   it('rejects NaN zoom and pan', () => {
     store.getState().setViewport(WT, { x: 10, zoom: Number.NaN })
     expect(board().viewport).toEqual({ x: 10, y: 0, zoom: 1 })

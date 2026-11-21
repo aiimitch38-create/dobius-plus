@@ -9,7 +9,12 @@ export const VIEWPORT_PERSIST_SETTLE_MS = 1_000
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 let persistDueAt = 0
-let lastPersistedJson: string | null = null
+// Every payload we've sent but not yet seen echoed back. Main doesn't
+// guarantee writes land (and rebroadcast) in send order, so an older write's
+// echo can arrive after a newer one's — comparing against only the latest
+// sent JSON would then miss it, mark it "external," and let it clobber a
+// since-moved card back to the older position mid-drag.
+const pendingPersistedJsons = new Set<string>()
 // Worktrees changed locally since the last write; a broadcast never overwrites these.
 const dirtyWorktrees = new Set<string>()
 
@@ -19,7 +24,7 @@ export function resetBoardPersistenceForTest(): void {
   }
   persistTimer = null
   persistDueAt = 0
-  lastPersistedJson = null
+  pendingPersistedJsons.clear()
   dirtyWorktrees.clear()
 }
 
@@ -68,7 +73,7 @@ export function createBoardPersistence(
         }
         const payload = toPersistedBoards(boardsByWorktree)
         dirtyWorktrees.clear()
-        lastPersistedJson = JSON.stringify(payload)
+        pendingPersistedJsons.add(JSON.stringify(payload))
         window.api.ui.set({ boardsByWorktree: payload }).catch(console.error)
       },
       Math.max(0, dueAt - Date.now())
@@ -107,7 +112,10 @@ export function createBoardPersistence(
 
   return {
     schedule,
-    isEcho: (raw) => JSON.stringify(raw ?? {}) === lastPersistedJson,
+    isEcho: (raw) => {
+      const json = JSON.stringify(raw ?? {})
+      return pendingPersistedJsons.delete(json)
+    },
     dirtyIds: () => dirtyWorktrees,
     whileHydrating: (fn) => {
       hydrating = true

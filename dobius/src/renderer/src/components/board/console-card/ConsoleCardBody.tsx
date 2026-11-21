@@ -146,12 +146,24 @@ export function ConsoleCardBody({
 
   // Why: publish the grid-preserving font only for a settled, live pane;
   // during a pinch the card just scales visually.
+  //
+  // Split into two effects on purpose: the clear-on-leaving-live effect only
+  // depends on [mode, paneKey], so a settled zoom change (while staying
+  // live) re-runs the second effect alone and never re-publishes null. A
+  // single combined effect re-ran its cleanup on every zoom settle too,
+  // which told TerminalPane the pane was leaving the board host and made it
+  // fit into that host's tiny column count on every settle.
+  useEffect(() => {
+    if (!paneKey || mode !== 'live') {
+      return
+    }
+    return () => setBoardConsoleFontOverride(paneKey, null)
+  }, [mode, paneKey])
   useEffect(() => {
     if (!paneKey || mode !== 'live') {
       return
     }
     setBoardConsoleFontOverride(paneKey, zoomedFontSize(baseFontSize, settledZoom))
-    return () => setBoardConsoleFontOverride(paneKey, null)
   }, [baseFontSize, mode, paneKey, settledZoom])
 
   // Why: entering live mode portals the pane, and TerminalPane's isolation

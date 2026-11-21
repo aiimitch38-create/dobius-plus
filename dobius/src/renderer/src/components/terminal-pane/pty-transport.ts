@@ -630,9 +630,17 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
         })
         const spawnResult = result as PtyConnectResult & { isReattach?: boolean }
 
-        // If destroyed while spawn was in flight, kill the new pty and bail
+        // If destroyed while spawn was in flight, kill the new pty and bail —
+        // UNLESS this was a reattach to an already-live process (e.g. the
+        // Board's live<->glance switch remounts the pane on every visibility
+        // change; a second switch mid-reattach used to land here and kill the
+        // user's real, still-running terminal). A reattach's id is an
+        // existing session, never one this connect() created, so there is
+        // nothing of ours to clean up — just leave it running.
         if (destroyed) {
-          window.api.pty.kill(spawnResult.id)
+          if (!spawnResult.isReattach) {
+            window.api.pty.kill(spawnResult.id)
+          }
           return
         }
 

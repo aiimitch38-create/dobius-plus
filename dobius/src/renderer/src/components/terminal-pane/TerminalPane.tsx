@@ -1765,12 +1765,21 @@ export default function TerminalPane({
         settingsRef.current?.terminalFontSize ??
         14
       pane.terminal.options.fontSize = nextSize
-      try {
-        const state = captureScrollState(pane.terminal)
-        safeFit(pane)
-        restoreScrollState(pane.terminal, state)
-      } catch {
-        /* ignore */
+      // Why: a null override means the pane is leaving the board's shrunk
+      // host box — it's about to be restored to (or is still sitting in,
+      // mid-cleanup) that box, not its real host. Fitting here would resize
+      // the live PTY down to the board box's tiny column count, which then
+      // stuck until the pane was visible again (the "C o d e x 2" spacing
+      // bug). The isolation-restore refit (or the visible-resume path) owns
+      // fitting once the pane is actually back in its real host.
+      if (fontSize !== null) {
+        try {
+          const state = captureScrollState(pane.terminal)
+          safeFit(pane)
+          restoreScrollState(pane.terminal, state)
+        } catch {
+          /* ignore */
+        }
       }
       if (fontSize !== null && !boardFontOverrideAppliedRef.current) {
         boardFontOverrideAppliedRef.current = true
