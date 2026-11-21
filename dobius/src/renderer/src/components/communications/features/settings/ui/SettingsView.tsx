@@ -65,11 +65,11 @@ const settingsNavGroups: {
   },
   {
     label: "Communities",
-    sections: ["hosted-communities", "channel-templates", "community-members"],
+    sections: ["channel-templates", "community-members"],
   },
   {
     label: "App",
-    sections: ["agents", "compute", "experimental", "mobile", "updates"],
+    sections: ["agents", "experimental", "mobile", "updates"],
   },
 ];
 
