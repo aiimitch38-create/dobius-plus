@@ -6,12 +6,10 @@ import {
   Bot,
   Check,
   ChevronDown,
-  Cpu,
   Download,
   FlaskConical,
   Keyboard,
   LayoutTemplate,
-  MessagesSquare,
   MonitorCog,
   Moon,
   ShieldAlert,
@@ -72,13 +70,11 @@ import { ChannelTemplatesSettingsCard } from "./ChannelTemplatesSettingsCard";
 import { HarnessesSettingsPanel } from "./HarnessesSettingsPanel";
 import { ExperimentalFeaturesCard } from "./ExperimentalFeaturesCard";
 import { KeyboardShortcutsCard } from "./KeyboardShortcutsCard";
-import { MeshComputeSettingsCard } from "@comms/features/mesh-compute/ui/MeshComputeSettingsCard";
 import { MobilePairingCard } from "./MobilePairingCard";
 import { ModerationQueueCard } from "./ModerationQueueCard";
 import { NotificationSettingsCard } from "./NotificationSettingsCard";
 import { PreventSleepSettingsCard } from "./PreventSleepSettingsCard";
 import { AgentDefaultsSettingsCard } from "./AgentDefaultsSettingsCard";
-import { HostedCommunitiesSettingsCard } from "./HostedCommunitiesSettingsCard";
 import { SettingsOptionGroup, SettingsOptionRow } from "./SettingsOptionGroup";
 import { ProfileSettingsCard } from "./ProfileSettingsCard";
 import { UpdateChecker } from "../UpdateChecker";
@@ -90,10 +86,8 @@ export type SettingsSection =
   | "experimental"
   | "agents"
   | "channel-templates"
-  | "compute"
   | "appearance"
   | "shortcuts"
-  | "hosted-communities"
   | "community-members"
   | "moderation"
   | "custom-emoji"
@@ -109,10 +103,8 @@ const SETTINGS_SECTION_VALUES: readonly SettingsSection[] = [
   "experimental",
   "agents",
   "channel-templates",
-  "compute",
   "appearance",
   "shortcuts",
-  "hosted-communities",
   "community-members",
   "moderation",
   "custom-emoji",
@@ -185,19 +177,9 @@ export const settingsSections: SettingsSectionDescriptor[] = [
     featureGate: "channel-templates",
   },
   {
-    value: "compute",
-    label: "Compute",
-    icon: Cpu,
-  },
-  {
     value: "shortcuts",
     label: "Shortcuts",
     icon: Keyboard,
-  },
-  {
-    value: "hosted-communities",
-    label: "Hosted communities",
-    icon: MessagesSquare,
   },
   {
     value: "community-members",
@@ -823,14 +805,10 @@ export function renderSettingsSection(
       );
     case "channel-templates":
       return <ChannelTemplatesSettingsCard />;
-    case "compute":
-      return <MeshComputeSettingsCard />;
     case "appearance":
       return <ThemeSettingsCard />;
     case "shortcuts":
       return <KeyboardShortcutsCard />;
-    case "hosted-communities":
-      return <HostedCommunitiesSettingsCard />;
     case "community-members":
       return (
         <CommunityMembersSettingsCard currentPubkey={props.currentPubkey} />

@@ -146,6 +146,41 @@ BODY=$(python3 -c 'import json,sys; print(json.dumps({"message": sys.argv[1]}))'
       'Send a line into the active Dobius+ terminal. Usage: dobius-send "<message>"',
       tokenFile
     ),
+    'dobius-send-to': scriptFor(
+      'dobius-send-to',
+      '/tabSendTo',
+      `if [ $# -lt 2 ]; then echo "usage: dobius-send-to <tab id> <message>" >&2; exit 1; fi
+ID="$1"
+shift
+MESSAGE="$*"
+BODY=$(python3 -c 'import json,sys; print(json.dumps({"id": sys.argv[1], "message": sys.argv[2]}))' "$ID" "$MESSAGE")`,
+      'Send a line into a Dobius+ terminal by ID. Usage: dobius-send-to "<tab id>" "<message>"',
+      tokenFile
+    ),
+    'dobius-focus': scriptFor(
+      'dobius-focus',
+      '/tabFocus',
+      `if [ $# -lt 1 ]; then echo "usage: dobius-focus <tab id>" >&2; exit 1; fi
+BODY=$(python3 -c 'import json,sys; print(json.dumps({"id": sys.argv[1]}))' "$1")`,
+      'Focus a Dobius+ terminal by ID. Usage: dobius-focus "<tab id>"',
+      tokenFile
+    ),
+    'dobius-read': scriptFor(
+      'dobius-read',
+      '/tabRead',
+      `if [ $# -lt 1 ]; then echo "usage: dobius-read <tab id> [line limit]" >&2; exit 1; fi
+BODY=$(python3 -c 'import json,sys; body={"id": sys.argv[1]}; body.update({"limit": int(sys.argv[2])} if len(sys.argv) > 2 else {}); print(json.dumps(body))' "$@")`,
+      'Read a Dobius+ terminal by ID. Usage: dobius-read "<tab id>" [line limit]',
+      tokenFile
+    ),
+    'dobius-open': scriptFor(
+      'dobius-open',
+      '/tabOpen',
+      `if [ $# -lt 1 ]; then echo "usage: dobius-open <absolute project path>" >&2; exit 1; fi
+BODY=$(python3 -c 'import json,sys; print(json.dumps({"project": sys.argv[1]}))' "$1")`,
+      'Open a Dobius+ terminal for a project. Usage: dobius-open "<absolute project path>"',
+      tokenFile
+    ),
     'dobius-task-done': scriptFor(
       'dobius-task-done',
       '/taskDone',
