@@ -1,5 +1,15 @@
 # Build Log
 
+## 2.1.9 — 2026-11-11 — Adam click-to-wake, board focus fixes, one theme system
+
+- Installed 2026-11-11 14:38 (build 78) from branch `fix/orb-hermes-2.1.8-ui` at commit `d5c73808`. The install record marks the tree as dirty, so the installed build may include uncommitted changes. Not verified which ones.
+- Version was bumped to 2.1.9 on 2026-11-08 (`355399d8`). 18 commits came after the bump, up to the installed commit.
+- Adam: the Board Home orb wakes Adam on click, the command-bar orb starts a real voice turn, and the free-roam and empty-dock toggle were added (`927f73e1`, `5d326e2c`, `b536c73a`, `e8eb6278`, `66fd7706`, `1092fa4d`).
+- Adam speaks with his own Hermes voice, not an ElevenLabs stand-in (`9bbc4488`). Product vision and the voice plan were written up in docs (`f1fddcb1`, `b06fba45`, `aeb00dbe`).
+- Board: the competing app skin, theme and board-color systems were replaced with one System / Dark / Neon set. Console-card focus, the stale agent label and the duplicate status pill were fixed. Click-to-focus now works on the capture phase (`0b7c21aa`, `61cf41df`, `c0bc9be2`).
+- Six board and settings bugs were fixed (theme override, scroll and click gestures, plain terminal, crisp rendering), then merged (`451fe094`, `cce9f03b`). The duplicate Settings button was removed from the side-apps rail (`d5c73808`).
+- Not in the installed build: `0ac0c896` (2026-11-21, reattach never kills a live PTY, no pane remount, no card snap-back) is on the branch after the install.
+
 ## 2.1.8 — 2026-11-05 — Voice character and Adam Hermes on the Board/Home UI
 
 - Preserve the installed 2.1.7 Board/Home release history while integrating the canonical security fixes.
