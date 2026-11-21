@@ -224,7 +224,7 @@ async function handleTabRead(body: Record<string, unknown>): Promise<unknown> {
 
 async function handleTabOpen(body: Record<string, unknown>): Promise<unknown> {
   const project = typeof body.project === 'string' ? body.project.trim() : ''
-  if (!project) {
+  if (!project || !path.isAbsolute(project)) {
     return { ok: false, error: 'project (absolute path) required' }
   }
   if (!dispatcher?.createTerminal) {

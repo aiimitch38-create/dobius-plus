@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, lstatSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { CloudBackupConnection, CloudBackupStatus } from '../../shared/cloud-backup'
@@ -21,6 +21,31 @@ function readDocument(path: string): Record<string, unknown> {
     throw new Error('Backup configuration is not a regular local file.')
   }
   return JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+}
+
+const WORKER_SCRIPTS = ['backup_runner.py', 'settings_bridge.py']
+
+// A bare PID can be recycled by the OS; the command line must still be ours.
+export function isBackupWorkerAlive(pid: unknown): boolean {
+  if (typeof pid !== 'number' || !Number.isInteger(pid) || pid < 1) {
+    return false
+  }
+  try {
+    process.kill(pid, 0)
+  } catch {
+    return false
+  }
+  let command: string
+  try {
+    command = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], {
+      encoding: 'utf8',
+      timeout: 2000,
+      windowsHide: true
+    })
+  } catch {
+    return false
+  }
+  return WORKER_SCRIPTS.some((script) => command.includes(script))
 }
 
 export function validateCloudConnection(input: unknown): CloudBackupConnection {
@@ -87,9 +112,22 @@ export class CloudBackupController {
     if (!supported) {
       return empty
     }
+    let config: Record<string, unknown>
+    let state: Record<string, unknown>
     try {
-      const config = readDocument(join(base, 'config.json'))
-      const state = readDocument(join(base, 'state', 'status.json'))
+      config = readDocument(join(base, 'config.json'))
+      state = readDocument(join(base, 'state', 'status.json'))
+    } catch (error) {
+      console.error('[cloud-backup] status files could not be read:', error)
+      const detail =
+        error instanceof SyntaxError
+          ? 'Backup configuration is damaged (invalid JSON). Connect AWS again to rewrite it.'
+          : error instanceof Error && error.message.includes('not a regular local file')
+            ? error.message
+            : 'Backup configuration could not be read. Check its file permissions.'
+      return { ...empty, health: 'failed', detail }
+    }
+    {
       const repository = typeof config.repository === 'string' ? config.repository : ''
       const bucket = /^s3:https:\/\/[^/]+\/([^/]+)\//.exec(repository)?.[1] ?? ''
       const status: CloudBackupStatus = {
@@ -123,24 +161,14 @@ export class CloudBackupController {
       const allowed = ['connecting', 'running', 'healthy', 'failed', 'paused'] as const
       status.health = allowed.find((health) => health === state.health) ?? 'not_configured'
       status.detail = typeof state.detail === 'string' ? state.detail : empty.detail
-      if (status.health === 'connecting' || status.health === 'running') {
-        try {
-          if (typeof state.pid !== 'number' || state.pid < 1) {
-            throw new Error('Missing worker')
-          }
-          process.kill(state.pid, 0)
-        } catch {
-          status.health = 'failed'
-          status.detail = 'The backup was interrupted. Run it again to complete verification.'
-        }
+      if (
+        (status.health === 'connecting' || status.health === 'running') &&
+        !isBackupWorkerAlive(state.pid)
+      ) {
+        status.health = 'failed'
+        status.detail = 'The backup was interrupted. Run it again to complete verification.'
       }
       return status
-    } catch {
-      return {
-        ...empty,
-        health: 'failed',
-        detail: 'Backup configuration could not be read. Check its file permissions.'
-      }
     }
   }
 
