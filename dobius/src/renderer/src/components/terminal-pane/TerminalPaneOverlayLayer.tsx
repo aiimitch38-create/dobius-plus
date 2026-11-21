@@ -1,5 +1,4 @@
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
 import type { Tab, TabGroup, TerminalTab } from '../../../../shared/types'
 import { useAppStore } from '../../store'
@@ -10,6 +9,7 @@ import {
   type ActivityTerminalPortalTarget
 } from '../activity/activity-terminal-portal'
 import TerminalPane from './TerminalPane'
+import { StablePortal } from './StablePortal'
 import { closeTerminalTab } from '../terminal/terminal-tab-actions'
 import { useNativeChatToggleShortcut } from '../native-chat/use-native-chat-toggle-shortcut'
 
@@ -23,6 +23,7 @@ const EMPTY_TERMINAL_TABS: readonly TerminalTab[] = []
 const EMPTY_UNIFIED_TABS: readonly Tab[] = []
 const EMPTY_GROUPS: readonly TabGroup[] = []
 const EMPTY_ACTIVITY_PORTALS: ActivityTerminalPortalTarget[] = []
+const HIDDEN_OVERLAY_STYLE: React.CSSProperties = { display: 'none' }
 const HAS_CSS_ANCHOR_POSITIONING =
   typeof CSS !== 'undefined' &&
   CSS.supports('position-anchor', '--dobius-terminal-overlay-probe') &&
@@ -250,23 +251,16 @@ const TerminalOverlaySlot = memo(function TerminalOverlaySlot({
     />
   )
 
-  if (activityTerminalPortal) {
-    return createPortal(
-      terminalPane,
-      activityTerminalPortal.target,
-      `activity-terminal-${terminalTabId}`
-    )
-  }
-
   return (
     <div
       ref={overlayRef}
-      style={style}
+      // Why: while the Board borrows the pane, this in-place box is empty.
+      style={activityTerminalPortal ? HIDDEN_OVERLAY_STYLE : style}
       data-terminal-overlay-tab-id={terminalTabId}
       onPointerDown={focusGroup}
       onFocusCapture={focusGroup}
     >
-      {terminalPane}
+      <StablePortal target={activityTerminalPortal?.target ?? null}>{terminalPane}</StablePortal>
       {/* The chat/terminal toggle now lives in the pane header's action cluster
           (TerminalPaneHeaderOverlay), beside split/close — not as a separate
           floating overlay. */}

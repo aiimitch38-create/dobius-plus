@@ -42,6 +42,7 @@ import BrowserPaneOverlayLayer from './browser-pane/BrowserPaneOverlayLayer'
 import EmulatorPaneOverlayLayer from './emulator-pane/EmulatorPaneOverlayLayer'
 import { useBrowserAutomationVisibilityForAny } from './browser-pane/browser-automation-visibility'
 import { useBrowserMobileDriverForAny } from '@/lib/pane-manager/browser-mobile-driver-state'
+import { StablePortal } from './terminal-pane/StablePortal'
 import TerminalPaneOverlayLayer from './terminal-pane/TerminalPaneOverlayLayer'
 import {
   collectBrowserWebviewIds,
@@ -1945,25 +1946,17 @@ function Terminal(): React.JSX.Element | null {
                           onCloseTab={() => handleCloseTab(tab.id)}
                         />
                       )
-                      // Why: this array item's key (the portal's third arg
-                      // when portaled, the bare element's own `key` when
-                      // not) must match across both branches. The Board
-                      // flips a console card between portaled ("live") and
-                      // bare ("glance") on every visibility/zoom change; a
-                      // mismatched key here made React discard and remount
-                      // the whole TerminalPane on every switch, tearing
-                      // down and reconnecting its PTY each time — the churn
-                      // behind the "terminal dies while scrolling" bug
-                      // (pty-transport.ts's destroy-vs-reattach race). Same
-                      // key means React reuses the existing instance instead.
-                      if (activityTerminalPortal) {
-                        return createPortal(
-                          terminalPane,
-                          activityTerminalPortal.target,
-                          `${tab.id}-${tab.generation ?? 0}`
-                        )
-                      }
-                      return terminalPane
+                      // Why: StablePortal keeps ONE fiber whether the Board
+                      // borrows the pane ("live") or not ("glance"), so React
+                      // never remounts the TerminalPane and its PTY survives.
+                      return (
+                        <StablePortal
+                          key={`${tab.id}-${tab.generation ?? 0}`}
+                          target={activityTerminalPortal?.target ?? null}
+                        >
+                          {terminalPane}
+                        </StablePortal>
+                      )
                     })}
                   </div>
                 )
