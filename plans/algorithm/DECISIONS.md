@@ -90,3 +90,8 @@ state at `dobius/src/main/manager/`, `dobius/src/main/ipc/manager.ts`,
 
 - 2026-07-12 rule: "Do not add a third indexer anywhere before Manager vs Knowledge convergence is decided." Graphify (TASK-05/07/08/11) is a code-graph indexer. Carson decides: treat Graphify as the Knowledge source for code (converge), or override the rule.
 | 2026-11-21 | 1.2-1.7 Port Sam's features | UNBLOCKED | Carson: "your TypeScript app is the main app". Each port still needs a check that this app lacks the feature first | - |
+
+## Add-backs, round 4b (2026-11-21, Carson: "just add everything")
+
+Carson reversed every round-4 KILL / QUESTION in one call: "Yes, add a Gmail intake. Yes, we need a weekly skill cleanup ... the agent activity feed, we need that ... just add everything." All of them are now in scope as WORKSTATION-BUILD-PLAN.md Phase 8 (8.1-8.20). The KILL rows above are history, not current state; Phase 8 wins where they disagree.
+Research for 8.10 / 8.17 / 8.18 is in plans/research/. The "10 duplicate skills" location is resolved: ~/.claude/commands/ (leftovers from the skill-creator trigger-test script), verified 2026-11-21 (10 files).
