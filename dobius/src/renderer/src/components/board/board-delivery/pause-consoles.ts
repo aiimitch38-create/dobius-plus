@@ -16,7 +16,11 @@ export type PauseResult = {
   unsupported: boolean
 }
 
-const SETTLE_MS = 400
+// Why: the terminal hands the foreground back after the signal, but the
+// daemon's name lookup refreshes in the background, so one early read can still
+// say "shell" for a resume that is about to succeed. Poll until it settles.
+const VERIFY_TIMEOUT_MS = 3000
+const VERIFY_POLL_MS = 150
 
 export function pauseSupported(userAgent: string = navigator.userAgent): boolean {
   return !/Windows/i.test(userAgent)
@@ -31,6 +35,23 @@ async function foregroundIsShell(ptyId: string): Promise<boolean | null> {
   }
 }
 
+async function waitForForeground(
+  ptyId: string,
+  wantShell: boolean,
+  timeoutMs: number
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if ((await foregroundIsShell(ptyId)) === wantShell) {
+      return true
+    }
+    if (Date.now() >= deadline) {
+      return false
+    }
+    await new Promise((resolve) => setTimeout(resolve, VERIFY_POLL_MS))
+  }
+}
+
 /**
  * Why verify: the signal IPC is fire-and-forget. A stopped job hands the
  * terminal back to the shell, so "foreground is the shell" after a pause (and
@@ -40,13 +61,13 @@ async function foregroundIsShell(ptyId: string): Promise<boolean | null> {
 export async function setConsolesPaused(
   consoles: readonly { tabId: string; name: string }[],
   paused: boolean,
-  opts: { userAgent?: string; settleMs?: number } = {}
+  opts: { userAgent?: string; verifyMs?: number } = {}
 ): Promise<PauseResult> {
   const result: PauseResult = { changed: [], notRunning: [], failed: [], unsupported: false }
   if (!pauseSupported(opts.userAgent)) {
     return { ...result, unsupported: true }
   }
-  const settle = opts.settleMs ?? SETTLE_MS
+  const verifyMs = opts.verifyMs ?? VERIFY_TIMEOUT_MS
   const ptyIdsByTabId = useAppStore.getState().ptyIdsByTabId
   await Promise.all(
     consoles.map(async (c) => {
@@ -66,9 +87,7 @@ export async function setConsolesPaused(
         return
       }
       window.api.pty.signal(ptyId, paused ? 'SIGSTOP_FOREGROUND' : 'SIGCONT_FOREGROUND')
-      await new Promise((resolve) => setTimeout(resolve, settle))
-      const shellNow = await foregroundIsShell(ptyId)
-      const worked = paused ? shellNow === true : shellNow === false
+      const worked = await waitForForeground(ptyId, paused, verifyMs)
       if (worked) {
         markConsolePaused(c.tabId, paused)
         result.changed.push(c.name)
