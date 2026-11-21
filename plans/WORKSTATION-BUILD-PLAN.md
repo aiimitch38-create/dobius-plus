@@ -45,8 +45,8 @@ Source: `.claude/worktrees/orb-hermes-2.1.8/plans/HANDOFF-20261121-board-restart
 
 | ID | Task | State | Size |
 |---|---|---|---|
-| -1.1 | Bring the uncommitted security fixes (#6/7/8/27/30/32) from the main checkout into this copy and commit them. These are part of the 44 uncommitted files (D2). Most important save. | uncommitted in `~/Projects (Code)/Dobius/dobius-plus` | M |
-| -1.2 | Finish Reset board: the "stay on the empty board" fix (`board-route/board-reset.ts`) is copied here UNCOMMITTED and UNTESTED. Lint, typecheck, test in an isolated copy (incl. pinned console closing late), commit. | uncommitted here | S |
+| -1.1 | DONE 2026-11-21 (Test 2, 9ea3c633): Bring the uncommitted security fixes (#6/7/8/27/30/32) from the main checkout into this copy and commit them. These are part of the 44 uncommitted files (D2). Most important save. | uncommitted in `~/Projects (Code)/Dobius/dobius-plus` | M |
+| -1.2 | DONE except live check 2026-11-21 (Test 2, a238c856): Finish Reset board: the "stay on the empty board" fix (`board-route/board-reset.ts`) is copied here UNCOMMITTED and UNTESTED. Lint, typecheck, test in an isolated copy (incl. pinned console closing late), commit. | uncommitted here | S |
 | -1.3 | Test Restart Dobius+ live: tabs must come back | not tested | S |
 | -1.4 | Merge the hibernation fix `a0b689fc` (branch `fix/hibernation-unresumable`) | not merged | S |
 | -1.5 | Pre-existing failing test `board-home/BoardHome.test.tsx` "closing the studio returns to Home" | failing before any change | S |
@@ -56,7 +56,10 @@ Source: `.claude/worktrees/orb-hermes-2.1.8/plans/HANDOFF-20261121-board-restart
 | -1.9 | Stranded Line B commits not on this line: 2026-10-09 "full-system" batch, mobile-terminal-repairs (7), hostinger (4), ADAM B2/B3/B5 (4-6 each). Check each with `git cherry`, port what still matters. | not merged | M |
 | -1.10 | Round2 worktree: uncommitted removal of the broken "Panels" rail button | uncommitted | S |
 | -1.11 | `$10` agent spend caps (up from $0.50/$2), uncommitted in `dev-environment-tab`. Carson decides keep or drop. | decision | S |
-| -1.12 | `BUILD-LOG.md` entry for 2.1.9 | missing | S |
+| -1.12 | `BUILD-LOG.md` entry for 2.1.9 | DONE 2026-11-21 (Docs 1, 1684063d) | S |
+| -1.13 | 164 pre-existing failures in `dobius/src/main/ipc/pty.test.ts`: tests pass `null` as the IPC event, which the sender gate rejects (fail on the clean base too; verified by Claude 5: 164 failed on both 16b2e5e1 and a238c856) | open | S-M |
+| -1.14 | Reset can land on an editor or browser tab instead of the board (fallback path in `closeTerminalTab`), and the pinned-console late-close case is untested | open | S |
+| -1.15 | Tidy: bare `{ }` block left in `main/cloud-backup/controller.ts` after the status-read refactor | open | S |
 
 Sam port order suggested in the handoff (feeds Phase 1): restart restores tabs, links open in browser, chat folding
 and question cards, report a problem, snooze tabs, what's new.
