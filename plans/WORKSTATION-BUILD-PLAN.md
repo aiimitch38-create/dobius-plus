@@ -311,6 +311,7 @@ Findings (verified):
 - Card -> terminal mapping exists only in the renderer (`use-orchestrator-thread.ts:72-110`: card.tabId -> terminal.list -> handle at send time) and in `dobius-data.json` (`ui.boardsByWorktree`).
 - Handles are not stable: the board's 18:24 and 18:26 broadcasts went to 16 different handles; all now stale or exited. A console's env handle (`DOBIUS_TERMINAL_HANDLE`) differs from its `terminal list` handle.
 - A card whose terminal exited still looks alive on the board (scrollback + "Done" in the orchestrator list).
+- Restarting a board console gives it a NEW tabId and handle (2026-11-21: Plan 2 e5cdf5e1 -> a449e538, etc.), so any saved mapping goes stale on restart.
 
 | ID | Fix | Where | Size |
 |---|---|---|---|
@@ -320,3 +321,4 @@ Findings (verified):
 | 9.4 | Stable address per console: accept `tab:<tabId>` as a handle everywhere | terminal handle resolver | S |
 | 9.5 | Show dead consoles honestly: card badge "not running" + a Restart button; orchestrator list says "Exited", not "Done" | board console card + OrchestratorCard | S |
 | 9.6 | CLI path into a board orchestrator: `dobius orchestration send --to board:<orchestratorCardId>` fans out to its wired consoles, same as typing in the card | main-side relay | M |
+| 9.7 | Keep a card's tabId stable across console restart, or have the card own a stable id the CLI can resolve. | card restart path + terminal handle resolver | S |
