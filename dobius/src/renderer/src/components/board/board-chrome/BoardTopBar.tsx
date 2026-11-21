@@ -5,33 +5,28 @@ import {
   ChevronDown,
   Folder,
   Plus,
-  Settings,
-  UserRound
+  Settings
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { HelpMenuItems } from '@/components/sidebar/HelpMenuItems'
 import { SidebarFeedbackDialog } from '@/components/sidebar/SidebarFeedbackDialog'
 import WorktreeContextMenu from '@/components/sidebar/WorktreeContextMenu'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { useWorktreeMap } from '@/store/selectors'
 import { groupByWorkspacePurpose } from '../../../../../shared/workspace-purpose'
+import { BoardAccountMenu } from './BoardAccountMenu'
 import { BoardRailButton } from './BoardRailButton'
 import { BoardUsagePanel } from './BoardUsagePanel'
 import { BoardUsagePill as UsagePillButton } from './BoardUsagePill'
 import { BoardWorkspaceTabButton, type BoardWorkspaceTab } from './BoardWorkspaceTabButton'
 import {
   BOARD_FLOATING_PANEL_CLASS,
-  BOARD_MENU_CONTENT_CLASS,
-  BOARD_MENU_ROW_CLASS,
-  BOARD_MENU_SEPARATOR_CLASS,
   BOARD_PILL_BUTTON_CLASS
 } from './board-surface-classes'
 
@@ -63,6 +58,8 @@ export type BoardTopBarProps = {
   onOpenSettings: () => void
   /** Avatar + usage pill: Settings opened on Accounts (sign-ins and usage limits). */
   onOpenAccounts: () => void
+  /** Account menu "Reset board": clears this workspace's board after a confirm. */
+  onResetBoard: () => void
   /** Needs-you pill: fly the camera to the console waiting on the user. */
   onJumpToAttention: () => void
 }
@@ -87,11 +84,11 @@ export function BoardTopBar({
   onOpenSkills,
   onOpenSettings,
   onOpenAccounts,
+  onResetBoard,
   onJumpToAttention
 }: BoardTopBarProps): React.JSX.Element {
   const [usageOpen, setUsageOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
-  const [showAdminOptions, setShowAdminOptions] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set())
   const groups = useMemo(() => groupByWorkspacePurpose(workspaces), [workspaces])
   // Why: the strip stays flat (today's look) until a workspace carries a purpose;
@@ -123,8 +120,12 @@ export function BoardTopBar({
   // translate vertical wheel delta into horizontal scroll when it's overflowing.
   const handleWorkspaceStripWheel = (event: React.WheelEvent<HTMLDivElement>): void => {
     const el = event.currentTarget
-    if (el.scrollWidth <= el.clientWidth) return
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+    if (el.scrollWidth <= el.clientWidth) {
+      return
+    }
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+      return
+    }
     event.preventDefault()
     // Why: a plain mouse wheel reports deltaMode=1 (DOM_DELTA_LINE, ~3 per
     // notch) while a trackpad reports deltaMode=0 (DOM_DELTA_PIXEL, tens of
@@ -311,47 +312,12 @@ export function BoardTopBar({
         >
           <Settings />
         </BoardRailButton>
-        <DropdownMenu
-          modal={false}
-          onOpenChange={(open) => {
-            if (!open) {
-              setShowAdminOptions(false)
-            }
-          }}
-        >
-          <DropdownMenuTrigger asChild>
-            <BoardRailButton
-              label={translate('board.topBar.accountMenu', 'Account and help')}
-              tooltipSide="bottom"
-              className={cn(
-                ROUND_CLASS,
-                'bg-[var(--board-accent)] text-[14px] font-semibold text-[var(--board-accent-fg)] hover:bg-[var(--board-accent)] hover:text-[var(--board-accent-fg)]'
-              )}
-              // Why: same Option/Alt affordance as the sidebar Help menu for the admin rows.
-              onPointerDown={(event) => setShowAdminOptions(event.altKey)}
-            >
-              {avatarLabel.slice(0, 1).toUpperCase()}
-            </BoardRailButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            data-surface="board"
-            align="end"
-            sideOffset={8}
-            className={cn(BOARD_MENU_CONTENT_CLASS, 'min-w-[220px]')}
-          >
-            <DropdownMenuItem className={BOARD_MENU_ROW_CLASS} onSelect={onOpenAccounts}>
-              <UserRound />
-              {translate('board.topBar.accounts', 'Accounts')}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className={BOARD_MENU_SEPARATOR_CLASS} />
-            <HelpMenuItems
-              showAdminOptions={showAdminOptions}
-              onSendFeedback={() => setFeedbackOpen(true)}
-              itemClassName={BOARD_MENU_ROW_CLASS}
-              separatorClassName={BOARD_MENU_SEPARATOR_CLASS}
-            />
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <BoardAccountMenu
+          avatarLabel={avatarLabel}
+          onOpenAccounts={onOpenAccounts}
+          onResetBoard={onResetBoard}
+          onSendFeedback={() => setFeedbackOpen(true)}
+        />
       </div>
       <SidebarFeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </>

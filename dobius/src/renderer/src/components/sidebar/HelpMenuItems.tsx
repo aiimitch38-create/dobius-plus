@@ -35,6 +35,8 @@ export type HelpMenuItemsProps = {
   onSendFeedback: () => void
   itemClassName?: string
   separatorClassName?: string
+  /** The Board account menu shows its own always-visible Restart row. */
+  hideRestart?: boolean
 }
 
 // The Help menu rows shared by the Classic sidebar footer and the Board top bar.
@@ -43,7 +45,8 @@ export function HelpMenuItems({
   showAdminOptions,
   onSendFeedback,
   itemClassName,
-  separatorClassName
+  separatorClassName,
+  hideRestart = false
 }: HelpMenuItemsProps): React.JSX.Element {
   const openModal = useAppStore((s) => s.openModal)
   const openSettingsPage = useAppStore((s) => s.openSettingsPage)
@@ -174,7 +177,7 @@ export function HelpMenuItems({
         )}
         {translate('auto.components.sidebar.SidebarSettingsHelpMenu.29c56f30ee', 'Check for Updates')}
       </DropdownMenuItem>
-      {showAdminOptions ? (
+      {showAdminOptions && !hideRestart ? (
         <>
           <DropdownMenuSeparator className={separatorClassName} />
           <DropdownMenuItem

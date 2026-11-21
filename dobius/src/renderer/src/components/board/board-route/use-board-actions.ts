@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 import { toast } from 'sonner'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
-import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
 import { translate } from '@/i18n/i18n'
 import { getAgentLabel } from '@/lib/agent-catalog'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -25,13 +24,11 @@ import type { BoardStudioId } from '../board-studios/board-studio-ids'
 import { awaitMirroredConsoleTabs } from './board-await-mirrored-tabs'
 import { groupBoardCards } from './board-groupable'
 import { boardInsertCard, boardInsertCardSize } from './board-insert-cards'
-import { boardCardsWithClosedTabs } from './board-kill-targets'
+import { closeConsoleCards } from './board-reset'
 import type { BoardConductor } from './use-board-conductor'
 import type { BoardRouteData } from './use-board-route-data'
 
 const KILL_CONFIRM_THRESHOLD = 4
-// How long Kill all keeps watching pinned tabs still waiting on their own confirm.
-const PINNED_CLOSE_WAIT_MS = 2 * 60 * 1000
 
 type BoardActionsInput = {
   data: BoardRouteData
@@ -168,33 +165,10 @@ export function useBoardActions({
         return
       }
     }
-    // Snapshot first: closing tabs changes the store mid-loop.
-    const targets = consoles.map((c) => ({ cardId: c.id, tabId: c.tabId }))
-    for (const target of targets) {
-      closeTerminalTab(target.tabId)
-    }
-    // Why: a pinned tab asks for its own confirmation and may be kept, so a card
-    // is removed only once its terminal is really gone — never leave a live
-    // terminal without its card.
-    const sweep = (): boolean => {
-      const state = useAppStore.getState()
-      const closed = boardCardsWithClosedTabs(targets, state.tabsByWorktree)
-      state.removeCards(worktreeId, closed)
-      return closed.length === targets.length
-    }
-    if (sweep()) {
-      return
-    }
-    const unsubscribe = useAppStore.subscribe((state, prev) => {
-      if (state.tabsByWorktree !== prev.tabsByWorktree && sweep()) {
-        stop()
-      }
-    })
-    const timer = setTimeout(() => stop(), PINNED_CLOSE_WAIT_MS)
-    const stop = (): void => {
-      unsubscribe()
-      clearTimeout(timer)
-    }
+    closeConsoleCards(
+      worktreeId,
+      consoles.map((c) => ({ cardId: c.id, tabId: c.tabId }))
+    )
   }, [confirm, consoles, worktreeId])
 
   const setPaused = useCallback(
