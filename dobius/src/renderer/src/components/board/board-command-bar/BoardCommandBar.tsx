@@ -66,6 +66,23 @@ export function BoardCommandBar({
     }
     previousMessageCount.current = messageCount
   }, [messageCount])
+  // Why: Esc folds the thread like the other board panels, but not while a menu
+  // or dialog is stacked on top (that one takes the Esc).
+  useEffect(() => {
+    if (collapsed) {
+      return
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (
+        event.key === 'Escape' &&
+        !document.querySelector('[data-radix-popper-content-wrapper], [role="dialog"]')
+      ) {
+        setCollapsed(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [collapsed])
   const isMac = navigator.userAgent.includes('Mac')
   const history = useMemo(() => boardCommandHistory(messages), [messages])
   const historyCursor = useRef<BoardCommandHistoryCursor>({ index: null, draft: '' })
