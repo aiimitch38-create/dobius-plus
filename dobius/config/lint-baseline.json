@@ -83,9 +83,6 @@
       "eslint(max-lines)": 1,
       "react(no-object-type-as-default-prop)": 4
     },
-    "src/renderer/src/components/communications/features/agents/ui/ManagedAgentRow.tsx": {
-      "eslint(max-lines)": 1
-    },
     "src/renderer/src/components/communications/features/agents/ui/PersonaAdvancedFields.tsx": {
       "react(no-object-type-as-default-prop)": 4
     },
@@ -204,9 +201,6 @@
     "src/renderer/src/components/communications/features/communities/ui/HostedCommunityCreateFlow.tsx": {
       "eslint(max-lines)": 1
     },
-    "src/renderer/src/components/communications/features/communities/ui/HostedCommunityOnboarding.tsx": {
-      "eslint(max-lines)": 1
-    },
     "src/renderer/src/components/communications/features/communities/useCommunities.tsx": {
       "unicorn(prefer-ternary)": 1
     },
@@ -249,9 +243,6 @@
     "src/renderer/src/components/communications/features/local-archive/ui/LocalArchiveSettingsCard.tsx": {
       "eslint(max-lines)": 1,
       "unicorn(prefer-ternary)": 2
-    },
-    "src/renderer/src/components/communications/features/mesh-compute/ui/MeshComputeSettingsCard.tsx": {
-      "eslint(max-lines)": 1
     },
     "src/renderer/src/components/communications/features/messages/hooks.ts": {
       "eslint(max-lines)": 1
@@ -417,9 +408,6 @@
     "src/renderer/src/components/communications/features/profile/ui/MaskedAvatarBadgeFrame.tsx": {
       "eslint(max-lines)": 1
     },
-    "src/renderer/src/components/communications/features/profile/ui/NostrBindConsentDialog.tsx": {
-      "eslint(max-lines)": 1
-    },
     "src/renderer/src/components/communications/features/profile/ui/ProfileAvatarEditor.tsx": {
       "eslint(max-lines)": 1
     },
@@ -481,9 +469,6 @@
     "src/renderer/src/components/communications/features/projects/ui/ProjectsActivityFeed.tsx": {
       "eslint(max-lines)": 1
     },
-    "src/renderer/src/components/communications/features/projects/ui/ProjectsAgentPromptPage.tsx": {
-      "eslint(max-lines)": 1
-    },
     "src/renderer/src/components/communications/features/projects/ui/ProjectsView.tsx": {
       "eslint(max-lines)": 1
     },
@@ -515,9 +500,6 @@
       "eslint(max-lines)": 1
     },
     "src/renderer/src/components/communications/features/settings/ui/HarnessRow.tsx": {
-      "eslint(max-lines)": 1
-    },
-    "src/renderer/src/components/communications/features/settings/ui/HostedCommunitiesSettingsCard.tsx": {
       "eslint(max-lines)": 1
     },
     "src/renderer/src/components/communications/features/settings/ui/MobilePairingCard.tsx": {
@@ -681,9 +663,6 @@
     "src/renderer/src/components/communications/features/channels/ui/MembersSidebarMemberCard.tsx": {
       "typescript(switch-exhaustiveness-check)": 1
     },
-    "src/renderer/src/components/communications/features/community-members/ui/CommunityMembersCard.tsx": {
-      "typescript(switch-exhaustiveness-check)": 1
-    },
     "src/renderer/src/components/communications/features/messages/lib/parseDiff.ts": {
       "typescript(switch-exhaustiveness-check)": 1
     },
@@ -755,9 +734,6 @@
     "src/renderer/src/components/communications/features/agents/ui/ManagedAgentLogPanel.tsx": {
       "styled-scrollbar": 1
     },
-    "src/renderer/src/components/communications/features/agents/ui/ModelPicker.tsx": {
-      "styled-scrollbar": 1
-    },
     "src/renderer/src/components/communications/features/agents/ui/PersonaCatalogDialog.tsx": {
       "styled-scrollbar": 2
     },
@@ -800,9 +776,6 @@
     "src/renderer/src/components/communications/features/channels/ui/ChannelManagementSheet.tsx": {
       "styled-scrollbar": 2
     },
-    "src/renderer/src/components/communications/features/channels/ui/ChannelMemberInviteCard.tsx": {
-      "styled-scrollbar": 1
-    },
     "src/renderer/src/components/communications/features/channels/ui/MembersSidebar.tsx": {
       "styled-scrollbar": 2
     },
@@ -843,9 +816,6 @@
       "styled-scrollbar": 1
     },
     "src/renderer/src/components/communications/features/huddle/components/ParticipantList.tsx": {
-      "styled-scrollbar": 1
-    },
-    "src/renderer/src/components/communications/features/mesh-compute/ui/MeshComputeSettingsCard.tsx": {
       "styled-scrollbar": 1
     },
     "src/renderer/src/components/communications/features/messages/ui/ChannelAutocomplete.tsx": {
@@ -899,9 +869,6 @@
     "src/renderer/src/components/communications/features/onboarding/ui/RuntimeErrorTooltip.tsx": {
       "styled-scrollbar": 1
     },
-    "src/renderer/src/components/communications/features/profile/ui/NostrBindConsentDialog.tsx": {
-      "styled-scrollbar": 2
-    },
     "src/renderer/src/components/communications/features/profile/ui/UserProfilePanel.tsx": {
       "styled-scrollbar": 1
     },
@@ -913,9 +880,6 @@
     },
     "src/renderer/src/components/communications/features/projects/ui/ProjectRepositoryPanel.tsx": {
       "styled-scrollbar": 1
-    },
-    "src/renderer/src/components/communications/features/projects/ui/ProjectsAgentPromptPage.tsx": {
-      "styled-scrollbar": 3
     },
     "src/renderer/src/components/communications/features/projects/ui/ProjectsView.tsx": {
       "styled-scrollbar": 1
