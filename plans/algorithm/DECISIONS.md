@@ -50,3 +50,42 @@ state at `dobius/src/main/manager/`, `dobius/src/main/ipc/manager.ts`,
 |---|---|---|---|
 | 2026-07-12 | Scheduled background index refresh (auto-refresh every N min) | 0 evidence the manual Refresh button cadence is a pain; rep log too young to show anything (counter run 2026-07-12: no command ≥3 reps) | After 2 weeks of real Manager use, check the rep log / usage for refresh frequency. |
 | 2026-07-12 | Any build-loop automation for this feature | Rep log 1 day old; nothing has 3 reps | Re-run `reps.py` at feature end (build-mode step 5). |
+
+## Round 4: workstation build plan review (2026-11-21)
+
+| Date | Item | Verdict | Why | Re-add when |
+|---|---|---|---|---|
+| 2026-11-21 | 1.8 Port the preflight primer from the JS app | KILL (merged into TASK-07) | TS app already generates a workspace brief; extending it is smaller than porting | never as a port |
+| 2026-11-21 | 1.1 Port "Report a problem" | KILL (merged into TASK-09) | TS app has SidebarFeedbackDialog; the bug button supersedes it | Carson wants report-via-teammate specifically |
+| 2026-11-21 | 1.2-1.7 Port Sam's features | QUESTION (blocked on D1) | Porting into an app Sam does not work in is a treadmill: every future Sam commit needs porting too | Carson + Sam pick one base app |
+| 2026-11-21 | 2.2 Unified event bus / ledger | KILL for now | Nothing observable breaks today; TASK-06 stores results on the run record | a second consumer needs cross-run history |
+| 2026-11-21 | 2.1 Graphify on every project at once | SIMPLIFY to one repo | other repos get one on first use | - |
+| 2026-11-21 | 3.1 Animated loading screen | QUESTION | briefing measured ~57 ms in the JS primer; a screen would flash. Status line instead | briefing takes >1 s |
+| 2026-11-21 | 3.4 Separate stale-graph rule | KILL (folded into TASK-07/08) | post-commit refresh keeps it fresh; a freshness stamp covers the rest | stale graphs seen in practice |
+| 2026-11-21 | 4.3 Separate grader agent | KILL for now | expensive; postcheck covers mechanical failures | 3+ cards pass postcheck but Carson rejects them |
+| 2026-11-21 | 4.4 Vault note per finished card | KILL for now | vault-capture.sh already writes daily session notes and nothing reads them yet | TASK-07 reads vault notes and wants card-level ones |
+| 2026-11-21 | 4.5 Fix "Dobius Agent Activity" notes | KILL | stopped 2026-10-23, writer not found, no reader | someone needs the activity feed |
+| 2026-11-21 | 4.6 Count non-Bash failures in learn hook | QUESTION | small, but no evidence of missed lessons | a repeated Edit/Write failure goes unlearned |
+| 2026-11-21 | 5.6 Automatic after-fix screenshot | KILL for now | L size; human review covers it | bug button used 5+ times |
+| 2026-11-21 | 6.6 Telegram approve-from-phone, /tabs | KILL for now | basic bridge first | Carson uses the bridge daily |
+| 2026-11-21 | 7.2 Turn on Laya | KILL for now | needs the model service running; build plan says no new intelligence before the foundation | TASK-06 shipped and a Laya host is up |
+| 2026-11-21 | 7.3 Per-tab live checklist | KILL for now | Claude Code already shows its to-do list in the terminal | cards dispatched from Kanban need it |
+| 2026-11-21 | 7.4 Run adoption gate | KILL for now | serves ADAM two-brain safety, no current incident | an unmanaged run causes a problem |
+| 2026-11-21 | 7.5 Cloud job buttons | KILL for now | no known user of cloud jobs | Carson submits cloud jobs by hand 3x |
+| 2026-11-21 | 7.6 Hook status in Settings | KILL | nothing broken | hooks silently missing causes a bug |
+| 2026-11-21 | 7.7 Usage detail table | KILL -> delete the orphan (needs OK) | unused file | Carson asks for per-session usage |
+| 2026-11-21 | 7.8 Voice client for voice.intent/reply | QUESTION | depends on TASK-04 | TASK-04 finds a client to reuse |
+| 2026-11-21 | 8.1 Replay evals | KILL for now | no frozen task set yet | agent instruction changes cause a regression |
+| 2026-11-21 | 8.2 Weekly skill cleanup automation | KILL | one-time job, not weekly; the "10 duplicate skills" were not found in ~/.claude/skills (0 matches), location unverified | duplicates confirmed and keep reappearing |
+| 2026-11-21 | 8.3 Gmail intake, 8.4 Command Center backing | KILL for now | L, unrelated to the one-sentence-to-action goal | Carson asks |
+| 2026-11-21 | Step 5: automate any command | NOT READY | top reps are 3-4 in 14 days, all one-off cd/inspect commands in old worktrees, nothing stable | the build-in-test-copy loop is run 3x the same way |
+
+## Add-backs / reversals, round 4
+
+| Date | Original verdict | Evidence | New state |
+|---|---|---|---|
+| 2026-11-21 | 2026-07-13 KILL: auto-inject briefs into every terminal at open | Carson built the preflight primer himself (2026-11-14, branch agent-preflight-primer) and asked for it again 2026-11-21. That is the demand signal; the original trigger (3+ manual pulls) was not measured. | RE-ADDED as TASK-07, capped at 16 KB with per-section freshness stamps |
+
+## Open conflict, round 4
+
+- 2026-07-12 rule: "Do not add a third indexer anywhere before Manager vs Knowledge convergence is decided." Graphify (TASK-05/07/08/11) is a code-graph indexer. Carson decides: treat Graphify as the Knowledge source for code (converge), or override the rule.
