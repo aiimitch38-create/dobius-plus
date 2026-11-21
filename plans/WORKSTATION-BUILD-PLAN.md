@@ -51,6 +51,12 @@ Source: `.claude/worktrees/orb-hermes-2.1.8/plans/HANDOFF-20261121-board-restart
 | -1.4 | Merge the hibernation fix `a0b689fc` (branch `fix/hibernation-unresumable`) | not merged | S |
 | -1.5 | Pre-existing failing test `board-home/BoardHome.test.tsx` "closing the studio returns to Home" | failing before any change | S |
 | -1.6 | Install the A-menu + Reset work into /Applications via the gated script, after Carson's OK | not installed, not pushed | S |
+| -1.7 | A menu "other things": candidates Usage (panel exists) and Report a problem (`BoardReportDialog` exists). Carson picks. | open question | S |
+| -1.8 | Remaining security items in the installed code: computer-use risky-click bypass via x/y clicks + cache fails open (#4/#5, `action-decision.ts:91-100`), phone RPC on 0.0.0.0 (#9, `runtime-rpc.ts:785`), pair screen never names the computer (#10), then #11-26, #28-29, #31, #33-35 | open | L |
+| -1.9 | Stranded Line B commits not on this line: 2026-10-09 "full-system" batch, mobile-terminal-repairs (7), hostinger (4), ADAM B2/B3/B5 (4-6 each). Check each with `git cherry`, port what still matters. | not merged | M |
+| -1.10 | Round2 worktree: uncommitted removal of the broken "Panels" rail button | uncommitted | S |
+| -1.11 | `$10` agent spend caps (up from $0.50/$2), uncommitted in `dev-environment-tab`. Carson decides keep or drop. | decision | S |
+| -1.12 | `BUILD-LOG.md` entry for 2.1.9 | missing | S |
 
 Sam port order suggested in the handoff (feeds Phase 1): restart restores tabs, links open in browser, chat folding
 and question cards, report a problem, snooze tabs, what's new.
@@ -73,6 +79,28 @@ RepoStep, FeatureTourPreview, StarNagToastHost, and others), the unused comms id
 ## Phase 1: one app (bring Sam's and Carson's work together)
 
 Sam's JavaScript app and this TypeScript app have diverged, so Sam's work is PORTED (rebuilt here), not merged.
+
+How far behind (from the handoff, 2026-11-21): the apps split 2026-06-24 (`f06c1763`). Line A has changed ~112k lines
+in 495 files since, with 99 releases (48 since Nov 1). Ports ship here as 2.1.10, 2.1.11, ... (stay on 2.1.x).
+
+Full Line A feature list this app lacks (keyword-checked, not click-tested):
+- Team: cross-Tailscale linking (#37), Windows `dobius-team` (#38), Report a problem from status bar / via teammate (#18, #30), team inbox with mark-done
+- Phone: drive a tab's Claude with questions + permissions (#12), iPhone share sheet (#33), QR pairing, voice lock + confirm before send, notification taps open their tab (#31), "Add a computer" (#36)
+- Daily use: My Day / Today pick, snooze tabs + window-wide Terminal/Chat, chat folding + Arctic Blue own-message box (#24), question cards (#26, #34), links open in browser (#28), sidebar tab-order + double-click fix (#19)
+- Reliability: Restart without updating + every tab back (#7, #13), What's new (#8), auto-move on limit (opt-in), cheaper liveness checks (#6), blank window self-recovers (#27)
+- Skip: #20, #22, #23, #35 (Line A release tooling), Windows notes
+
+Port order (handoff): A menu (in progress) -> restart restores every tab -> links open in browser -> chat folding + question
+cards -> report a problem (merge with Phase 5) -> snooze tabs -> what's new -> phone features last (this app has its own phone app).
+
+Recipe per port:
+1. Read the Line A PR (`gh pr view N -R statusdigitalmarketing/dobius-plus`): that is the spec.
+2. Pick its board home: top bar (A menu, usage pill), left rail / side apps, console card, or Settings.
+3. Build from existing board parts (`BoardRailButton`, `board-surface-classes`, `useConfirmationDialog`, board menus).
+4. Verify in the isolated test copy with a screenshot (recipe in the appendix).
+5. Install via the gated script. After the first few, run 3-5 ports in parallel (still inside this one copy's branch flow).
+
+The table below is superseded by this list where they differ.
 
 | ID | Task | Source | Size |
 |---|---|---|---|
@@ -176,3 +204,46 @@ PLAN (`plans/TASK-N.N.md`) → IMPLEMENT → VERIFY (typecheck per the learned-d
 `pnpm --dir dobius run build` exit 0) → REVIEW (re-read diff, code-reviewer subagent) → COMMIT (specific files) →
 screenshot in an isolated test copy for UI work → LOG (`BUILD-LOG.md`). No push, PR, install or Asana closing
 without Carson's OK.
+
+## Appendix A: Line A housekeeping (the team's app, origin/main)
+
+Carson's app is Line B, but the team still ships Line A daily. These are not Line B build tasks.
+
+- `fix/bughunt-20261027` (also in `aiimitch38-create/UI-UPDATES`): 7 real fixes not on origin/main (project-path gates on checkpoint / filewatcher / voice-bridge `/stage`; Costs crash on undefined projectName `Costs.jsx:77`; Tasks/Kanban stage mismatch; stale Search results; git-service path trap; tear-off dock closing a sibling tab; dead Kanban fallback). Cherry-pick onto a fresh branch from origin/main.
+- `fix/cost-tracker-accuracy`: Costs tab overstates spend ~2.9x; `electron/data-service.js:2878-2886` still has old Opus 15/75 pricing and a Sonnet fallback. Re-check prices before shipping. Also check whether Line B's cost view has the same bug.
+- PRs on origin: #32 docs only, Codex-clean, needs a merge click (Sam's account); #25 Windows accounts, draft with open P1s; #5 Office view, shelved; #4 V2-for-review, stale, close candidate (Carson's call).
+- Fork PRs #1-#5 (stabilization, ADAM B2/B3/B5, Board): all open, unmerged. Close or fold into this copy (Carson's call).
+- GWS Features 2/3 (in-app Google view, voice send-mail); Mac PATH order lets Homebrew `gws` beat the shim.
+- `features` worktree is contaminated (a Line B package.json in a Line A checkout). Salvage its +85 lines of lessons; never commit that package.json.
+- `FEATURES-HUB/Roamies/` is a third-party AGPL-3.0 clone: reference only, never commit or copy code from it.
+- 165 local branches: 120 fully absorbed by one line, 45 have commits in neither (`git cherry` against both tips). Cleanup only with Carson's OK per branch.
+
+## Appendix B: Asana (Dobius+ project 1214686777705698)
+
+14 open, all past due, none Carson's. Review lane only for Sam; never auto-close anything.
+- Sam (7): message disappears bug, chat feature, infinite working clock, Restart brings every tab back, reorder sidebar, History tab, chat not working properly
+- Brett (4): pop-up for links, sidebar double click, phone voice lock + confirm, Voice Orchestrator
+- Bryan (3): fix chat, fix, auto-collapse old tool calls + Better Health Now theme
+- Already shipped on Line A: links pop-up (#28), sidebar double click (#19), phone voice lock, chat folding (#24). Several map straight onto the Phase 1 port list.
+
+## Appendix C: test-copy recipe that works (from the handoff)
+
+1. Build: `VITE_EXPOSE_STORE=true npx electron-vite build --mode e2e` in `dobius/`.
+2. Launch via a wrapper with `HOME=/private/tmp/<x>h`, `DOBIUS_E2E_USER_DATA_DIR=/private/tmp/<x>`, `NODE_ENV=development`, `DOBIUS_E2E_HEADLESS=1`, PATH incl. `dobius/node_modules/.bin`, `--remote-debugging-port=9334`.
+3. Skip onboarding: `await window.api.onboarding.update({ closedAt: Date.now(), outcome: 'completed', lastCompletedStep: 5 })`, then reload.
+4. Add a repo: `await s.addRepoPath('/private/tmp/<repo>'); await s.fetchRepos()`; worktree id is `<repoId>::<path>`.
+5. Seed the board: `s.setActiveWorktree(WT); s.setActiveView('board'); const tab = s.createTab(WT)`, then `s.addCard(WT, {kind:'console', tabId: tab.id, agentKind:'blank', x,y,w,h,title})`, plus `kind:'web'` and `kind:'note'`.
+6. Dismiss "Got it", drive with Playwright `connectOverCDP` from a `.mjs` inside `dobius/`, delete the script after.
+TODO (Carson's OK): copy into `~/.claude/skills/learned-dobius-isolated-test-copy/SKILL.md`, replacing its "Known gap" paragraph.
+
+## Appendix D: open questions for Carson (all in one place)
+
+1. Does Line B replace Line A for the whole team, or stay Carson-only? (Carson decided Line B is HIS main app; the team question is still open, and Sam should agree.)
+2. Keep or drop the $10 spend caps (-1.11)?
+3. Close PR #4 and fork PRs #1-#5?
+4. What goes under "other things" in the A menu (-1.7)?
+5. Bring the 44 uncommitted files (incl. security fixes) into this copy (D2 / -1.1)?
+6. Graphify vs the July "no third indexer" rule (plans/algorithm/DECISIONS.md, round 4)?
+7. The video link (D3)?
+8. Carson's dictated "no in house no texas": never clarified.
+9. Update the test-copy skill with Appendix C?
