@@ -1124,31 +1124,6 @@ declare global {
     __BUZZ_E2E_GET_WEBSOCKET_CONNECT_ATTEMPTS__?: () => number[];
     __BUZZ_E2E_ACTIVATE_RELAY_RATE_LIMIT__?: (seconds: number) => void;
     __BUZZ_E2E_RESET_WEBSOCKET_CONNECT_ATTEMPTS__?: () => void;
-    __BUZZ_E2E_SET_MESH__?: (mesh: {
-      admitted?: boolean;
-      models?: { id: string; name: string | null }[];
-      denyReason?: string;
-      /** Seed the runtime slot's lifecycle state (default "off"). */
-      nodeState?: "off" | "running";
-      /**
-       * Seed the runtime slot's role. "client" models this machine CONSUMING a
-       * peer's compute — it shares the single slot and reports state:"running",
-       * so the Share toggle must stay off. Drives the toggle-on regression test.
-       */
-      nodeMode?: "serve" | "client" | null;
-      /** Seed host-side serving usage to exercise the "who's using my compute" indicator. */
-      servingUsage?: Partial<{
-        inflight: number;
-        peakInflight: number;
-        requestsServed: number;
-        tokensServed: number;
-        tokensPerSecond: number;
-        localAttempts: number;
-        remoteAttempts: number;
-        endpointAttempts: number;
-        peers: number;
-      }>;
-    }) => void;
     __BUZZ_E2E_SEED_ACTIVE_TURNS__?: (input: {
       agentPubkey: string;
       channelId: string;
@@ -2878,63 +2853,6 @@ function resetMockPersonaCatalogEvents(config: E2eConfig | undefined) {
   }
 }
 
-// Mesh-compute mock state — TEST-ONLY.
-//
-// This entire module (e2eBridge.ts) is loaded only when `window.__BUZZ_E2E__`
-// is set by the Playwright harness; it never runs in a shipped build. These
-// handlers stub the `mesh_*` Tauri commands with the SHAPES the UI expects
-// (availability, node status, preset) so the desktop UI flow can be exercised
-// in a browser. They deliberately do NOT model real admission, real inference,
-// or real mesh routing — those are proven by the Rust layer-2 tests and the
-// on-hardware layer-1 example. Do not port any of this into production code.
-type MockServingUsage = {
-  inflight: number;
-  peakInflight: number;
-  requestsServed: number;
-  tokensServed: number;
-  tokensPerSecond: number;
-  localAttempts: number;
-  remoteAttempts: number;
-  endpointAttempts: number;
-  peers: number;
-};
-
-const ZERO_SERVING_USAGE: MockServingUsage = {
-  inflight: 0,
-  peakInflight: 0,
-  requestsServed: 0,
-  tokensServed: 0,
-  tokensPerSecond: 0,
-  localAttempts: 0,
-  remoteAttempts: 0,
-  endpointAttempts: 0,
-  peers: 0,
-};
-
-const mockMeshState: {
-  admitted: boolean;
-  models: { id: string; name: string | null }[];
-  denyReason: string;
-  nodeState: "off" | "running";
-  nodeMode: "serve" | "client" | null;
-  servingUsage: MockServingUsage;
-} = {
-  admitted: true,
-  models: [{ id: "Gemma-4-E4B-it-Q4_K_M", name: "Gemma 4 E4B" }],
-  denyReason: "not a relay member",
-  nodeState: "off",
-  nodeMode: null,
-  servingUsage: { ...ZERO_SERVING_USAGE },
-};
-
-function resetMockMesh() {
-  mockMeshState.admitted = true;
-  mockMeshState.models = [{ id: "Gemma-4-E4B-it-Q4_K_M", name: "Gemma 4 E4B" }];
-  mockMeshState.denyReason = "not a relay member";
-  mockMeshState.nodeState = "off";
-  mockMeshState.nodeMode = null;
-  mockMeshState.servingUsage = { ...ZERO_SERVING_USAGE };
-}
 let mockPersonas: RawPersona[] = [];
 let mockTeams: RawTeam[] = [];
 // Listeners registered via the mock __TAURI_INTERNALS__.listen — keyed by event name.
@@ -8155,10 +8073,6 @@ function handleManagedAgentRuntimeAction(
   };
 }
 
-function isRelayMeshManagedAgent(agent: MockManagedAgent): boolean {
-  return agent.backend.type === "local" && agent.provider === "relay-mesh";
-}
-
 async function handleStartManagedAgent(
   args: {
     pubkey: string;
@@ -8171,22 +8085,6 @@ async function handleStartManagedAgent(
   }
 
   const agent = getMockManagedAgent(args.pubkey);
-  if (isRelayMeshManagedAgent(agent)) {
-    // Model the backend start preflight (ensure_relay_mesh_for_record): a
-    // saved relay-mesh agent re-resolves a live serve target for its model
-    // and only fails when no peer currently serves it.
-    const modelId = agent.model ?? "auto";
-    const hasLiveTarget =
-      mockMeshState.admitted &&
-      (modelId === "auto" ||
-        mockMeshState.models.some((model) => model.id === modelId));
-    if (!hasLiveTarget) {
-      throw new Error(
-        "Dobius shared compute cannot start because no live member is serving this model.",
-      );
-    }
-  }
-
   const now = new Date().toISOString();
   if (agent.backend.type === "provider") {
     agent.status = "deployed";
@@ -9569,7 +9467,6 @@ export function maybeInstallE2eTauriMocks() {
   resetMockTeams(config);
   seedMockSearchProfiles(config);
   resetMockWorkflows();
-  resetMockMesh();
   resetMockUserStatuses();
   resetMockPersonaCatalogEvents(config);
   resetMockSaveSubscriptions(config);
@@ -9805,31 +9702,6 @@ export function maybeInstallE2eTauriMocks() {
   window.__BUZZ_E2E_RESET_WEBSOCKET_CONNECT_ATTEMPTS__ = () => {
     relayWebsocketConnectAttemptStarts.length = 0;
   };
-  // Tests vary mesh admission and models to exercise provider discovery and
-  // the managed-agent start preflight.
-  window.__BUZZ_E2E_SET_MESH__ = (mesh) => {
-    if (mesh.admitted !== undefined) {
-      mockMeshState.admitted = mesh.admitted;
-    }
-    if (mesh.models !== undefined) {
-      mockMeshState.models = mesh.models;
-    }
-    if (mesh.denyReason !== undefined) {
-      mockMeshState.denyReason = mesh.denyReason;
-    }
-    if (mesh.nodeState !== undefined) {
-      mockMeshState.nodeState = mesh.nodeState;
-    }
-    if (mesh.nodeMode !== undefined) {
-      mockMeshState.nodeMode = mesh.nodeMode;
-    }
-    if (mesh.servingUsage !== undefined) {
-      mockMeshState.servingUsage = {
-        ...mockMeshState.servingUsage,
-        ...mesh.servingUsage,
-      };
-    }
-  };
   let seedTurnSeq = Date.now();
   window.__BUZZ_E2E_SEED_ACTIVE_TURNS__ = ({
     agentPubkey,
@@ -9854,22 +9726,6 @@ export function maybeInstallE2eTauriMocks() {
   window.__BUZZ_E2E_SEED_OBSERVER_EVENTS__ = ({ agentPubkey, events }) => {
     injectObserverEventsForE2E(agentPubkey, events);
   };
-  const meshNodeStatus = (
-    state: "off" | "running",
-    mode: "serve" | "client" | null,
-  ) => ({
-    state,
-    mode,
-    health: { status: "ok" as const, reason: null },
-    apiBaseUrl: state === "running" ? "http://127.0.0.1:9337/v1" : null,
-    consoleUrl: null,
-    modelId: mockMeshState.models[0]?.id ?? null,
-    modelName: mockMeshState.models[0]?.name ?? null,
-    inviteToken: state === "running" ? "mock-endpoint-addr" : null,
-    endpointId: state === "running" ? "mock-endpoint-id" : null,
-    deviceId: state === "running" ? "mock-endpoint-id" : null,
-    deviceName: state === "running" ? "Mock desktop" : null,
-  });
   const handleMockCommand = async (command: string, payload: unknown) => {
     const activeConfig = getConfig();
     const identity = getActiveIdentity(activeConfig);
@@ -9953,51 +9809,6 @@ export function maybeInstallE2eTauriMocks() {
           },
         };
       }
-      case "mesh_installed_models":
-        return mockMeshState.models;
-      case "mesh_model_catalog":
-        return {
-          gpuName: "Mock Apple GPU",
-          vramDisplay: "32 GB",
-          vramGb: 32,
-          recommended: "Gemma-4-E4B-it-Q4_K_M",
-          entries: [
-            {
-              name: "Gemma-4-E4B-it-Q4_K_M",
-              size: "3.5GB",
-              sizeGb: 3.5,
-              description: "Dobius-curated local agent model",
-              fit: "comfortable",
-              installed: true,
-              recommended: true,
-              curated: true,
-            },
-          ],
-        };
-      case "mesh_node_status":
-        return meshNodeStatus(mockMeshState.nodeState, mockMeshState.nodeMode);
-      case "mesh_serving_usage":
-        return mockMeshState.servingUsage;
-      case "mesh_start_node": {
-        const req = (
-          payload as { request?: { mode?: "serve" | "client" } } | null
-        )?.request;
-        mockMeshState.nodeState = "running";
-        mockMeshState.nodeMode = req?.mode ?? "serve";
-        return meshNodeStatus(mockMeshState.nodeState, mockMeshState.nodeMode);
-      }
-      case "mesh_stop_node":
-        // Mirror the backend contract: "stop sharing" must never tear down a
-        // client (consume) node occupying the single slot. Leave it running.
-        if (mockMeshState.nodeMode === "client") {
-          return meshNodeStatus(
-            mockMeshState.nodeState,
-            mockMeshState.nodeMode,
-          );
-        }
-        mockMeshState.nodeState = "off";
-        mockMeshState.nodeMode = null;
-        return meshNodeStatus("off", null);
       case "get_identity": {
         const isLost =
           !mockIdentityLostCleared && activeConfig?.mock?.identityLost === true;
@@ -11213,32 +11024,16 @@ export function maybeInstallE2eTauriMocks() {
           },
           { id: "gpt-5.5[high]", name: "GPT-5.5 (high)", description: null },
         ];
-        if (provider === "relay-mesh") {
-          if (!mockMeshState.admitted) {
-            throw new Error(mockMeshState.denyReason);
-          }
-          if (mockMeshState.models.length === 0) {
-            throw new Error(
-              "no Dobius shared compute serving members are available",
-            );
-          }
-        }
         const models =
-          provider === "relay-mesh"
-            ? mockMeshState.models.map((model) => ({
-                id: model.id,
-                name: model.name,
-                description: null,
-              }))
-            : provider === "openai"
-              ? openAiModels
-              : provider === "anthropic"
-                ? anthropicModels
-                : agentCommand.includes("claude")
-                  ? claudeRuntimeModels
-                  : agentCommand.includes("codex")
-                    ? codexRuntimeModels
-                    : [...anthropicModels, ...openAiModels];
+          provider === "openai"
+            ? openAiModels
+            : provider === "anthropic"
+              ? anthropicModels
+              : agentCommand.includes("claude")
+                ? claudeRuntimeModels
+                : agentCommand.includes("codex")
+                  ? codexRuntimeModels
+                  : [...anthropicModels, ...openAiModels];
         return {
           agentName: "mock-agent",
           agentVersion: "0.0.0",
