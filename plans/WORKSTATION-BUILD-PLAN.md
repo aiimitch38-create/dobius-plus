@@ -68,10 +68,12 @@ and question cards, report a problem, snooze tabs, what's new.
 
 | ID | Task | Where | Size |
 |---|---|---|---|
-| 0.1 | Remove the Mesh Compute settings card and its code | `renderer/src/components/communications/features/mesh-compute/`, mount at `features/settings/ui/SettingsPanels.tsx:827`, `shared/api/tauriMesh.ts` | S |
-| 0.2 | Remove the Hosted Communities settings card and its code | `features/settings/ui/HostedCommunitiesSettingsCard.tsx`, mount at `SettingsPanels.tsx:833`, `HostedCommunityOnboarding.tsx` | S |
-| 0.3 | Delete the ~42 unreachable Channels files. Re-check each has no importer before deleting. | `renderer/src/components/communications/features/**` | M |
-| 0.4 | Install ADAM's 4 missing command wrappers: `/tabSendTo`, `/tabFocus`, `/tabRead`, `/tabOpen` | `main/dobius-cli/install-clis.ts:140-167`, routes at `main/dobius-cli/dispatch-server.ts:298-310` | S |
+| 0.1 | DONE (Build 2, 390773a6) Remove the Mesh Compute settings card and its code | `renderer/src/components/communications/features/mesh-compute/`, mount at `features/settings/ui/SettingsPanels.tsx:827`, `shared/api/tauriMesh.ts` | S |
+| 0.2 | DONE (Build 2, 390773a6) Remove the Hosted Communities settings card and its code | `features/settings/ui/HostedCommunitiesSettingsCard.tsx`, mount at `SettingsPanels.tsx:833`, `HostedCommunityOnboarding.tsx` | S |
+| 0.3 | PARTLY DONE (Build 2, ef66d69c: 10 files; files imported only by other dead files were kept) Delete the ~42 unreachable Channels files. Re-check each has no importer before deleting. | `renderer/src/components/communications/features/**` | M |
+| 0.4 | DONE in code, not yet smoke-tested in the installed app (Build 2, 19d170a9) Install ADAM's 4 missing command wrappers: `/tabSendTo`, `/tabFocus`, `/tabRead`, `/tabOpen` | `main/dobius-cli/install-clis.ts:140-167`, routes at `main/dobius-cli/dispatch-server.ts:298-310` | S |
+| 0.6 | Finish 0.3: delete whole dead chains (files reachable only from other dead files) using an entry-point reachability pass, not single-file grep. List in plans/algorithm/TASK-02-deleted.md "Kept candidates" | `renderer/src/components/communications/features/**` | M |
+| 0.7 | Remove stale entries for deleted files from `config/localization-coverage-allowlist.json` and `config/lint-baseline.json`, and the mesh mock in `communications/testing/e2eBridge.ts` | config | S |
 | 0.5 | Research: find any hands-free / voice-driven Dobius work on Sam's branches (origin) and report what it is, where, and whether it can be ported | read-only | S |
 
 Also safe-to-delete candidates, needing Carson's OK per item: the fake Operations dashboard
