@@ -28,4 +28,10 @@ Newest at the bottom. Each note: what happened, why it costs time or money, the 
    - zsh does not split a `$VAR` file list into separate files. Fix: use arrays or `bash -c`.
    - Committing while other files were staged swept unverified code into a plan commit once (caught and split). Fix: always `git commit <paths>` or check `git diff --cached` first.
 
+11. **Leaving a workspace and coming back wipes every agent session on its board (bug, under investigation).** Carson (corrected): any switch to another workspace and back does it, not just notification clicks. First seen when he clicked a notification from another workspace to jump to Claude 5's card; the agents in Plan 2, Build 2, Test 2 and Docs 1 ended and their cards came back as plain shells. Cost: all in-flight work in their sessions lost and a full re-brief. Saving grace: each worker's files live in its own worktree on disk, so committed and edited files survived (Build 2 had 1 commit + 4 edits). Fix: find and remove the kill path (root-cause agent running); until then, stay on this workspace while agents are working.
+
+12. **`dobius terminal send` with an empty `--terminal` still reports success.** A failed address lookup returned nothing and the send went to whatever terminal was active instead of failing. Risky: text can land in the wrong agent. Fix: refuse an empty or unknown terminal; never fall back silently.
+
+13. **A worker's blocking question can be lost.** Build 2's `ask` connection closed before my reply landed (runtime disconnect), so it re-asked twice. Fix: `ask` should survive reconnects and pick up a reply that arrived while it was disconnected.
+
 10. **What worked well, keep doing it:** background `check --wait` costs nothing while workers run; verifying each worker's key claim myself (test counts, duplicate files) caught nothing wrong but made every merge safe; one task per console with separate files meant zero merge conflicts.
