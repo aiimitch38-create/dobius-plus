@@ -34,7 +34,7 @@ off → Done → logged to memory (vault + graph).
 
 | # | Decision | Default if not answered |
 |---|---|---|
-| D1 | Base app: this TypeScript app, or Sam's JavaScript app (origin/main, 2.2.44)? Sam should agree. | TypeScript (this plan assumes it) |
+| D1 | Base app | DECIDED 2026-11-21 by Carson: the TypeScript app is the main app. Sam's JS work gets ported in, one feature at a time, only where this app lacks an equivalent. |
 | D2 | Bring the 44 uncommitted files from the main checkout into this copy? | No, leave them |
 | D3 | The video link (her 10-minute Claude Code setup), to compare against this plan | Skip the comparison |
 

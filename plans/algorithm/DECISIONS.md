@@ -89,3 +89,4 @@ state at `dobius/src/main/manager/`, `dobius/src/main/ipc/manager.ts`,
 ## Open conflict, round 4
 
 - 2026-07-12 rule: "Do not add a third indexer anywhere before Manager vs Knowledge convergence is decided." Graphify (TASK-05/07/08/11) is a code-graph indexer. Carson decides: treat Graphify as the Knowledge source for code (converge), or override the rule.
+| 2026-11-21 | 1.2-1.7 Port Sam's features | UNBLOCKED | Carson: "your TypeScript app is the main app". Each port still needs a check that this app lacks the feature first | - |
