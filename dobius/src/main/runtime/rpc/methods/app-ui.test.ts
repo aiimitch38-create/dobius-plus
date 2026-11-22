@@ -112,8 +112,9 @@ describe('settings and view RPC methods', () => {
     expect(updateClientSettings).not.toHaveBeenCalled()
   })
 
-  it('accounts.summary drops the raw CLI usage screen text', async () => {
+  it('accounts.summary drops the raw CLI usage screen text and does not refresh providers', async () => {
     const response = await call('accounts.summary')
+    expect(runtime.refreshAccountsForMobile).not.toHaveBeenCalled()
     expect(response).toMatchObject({ ok: true, result: { rateLimits: { claude: { status: 'ok' } } } })
     expect(JSON.stringify(response)).not.toContain('carson@example.com')
     expect(JSON.stringify(response)).not.toContain('raw screen')

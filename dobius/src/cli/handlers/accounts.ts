@@ -37,13 +37,20 @@ export const ACCOUNT_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, formatAccounts)
   },
   'accounts use': async ({ flags, client, json }) => {
-    const claude = getOptionalStringFlag(flags, 'claude')
-    const codex = getOptionalStringFlag(flags, 'codex')
-    if (Boolean(claude) === Boolean(codex)) {
+    // Why has(): `--claude --codex system` leaves --claude without a value,
+    // which must not quietly fall through to Codex.
+    const given = (['claude', 'codex'] as const).filter((name) => flags.has(name))
+    if (given.length !== 1) {
       throw new RuntimeClientError('invalid_argument', 'Pass exactly one of --claude or --codex')
     }
-    const provider = claude ? 'claude' : 'codex'
-    const id = (claude ?? codex) as string
+    const provider = given[0]
+    const id = getOptionalStringFlag(flags, provider)?.trim()
+    if (!id) {
+      throw new RuntimeClientError(
+        'invalid_argument',
+        `--${provider} needs an account id from \`dobius accounts list\`, or system`
+      )
+    }
     const accountId = id === 'system' ? null : id
     const result = await client.call<unknown>(
       provider === 'claude' ? 'accounts.selectClaude' : 'accounts.selectCodex',

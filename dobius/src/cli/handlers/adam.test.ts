@@ -61,6 +61,13 @@ describe('adam CLI', () => {
     })
     expect(call).toHaveBeenCalledWith('adam.ask', { text: 'hi', wait: true }, { timeoutMs: 240_000 })
     expect(logged.at(-1)).toBe('Hello Carson.')
+    call = await run(['adam', 'ask', '--text', 'hi', '--wait=true'], { sent: true, waited: true })
+    expect(call).toHaveBeenCalledWith('adam.ask', { text: 'hi', wait: true }, { timeoutMs: 240_000 })
+    call = await run(['adam', 'ask', '--text', 'hi', '--wait=false'], { sent: true, waited: false })
+    expect(call).toHaveBeenCalledWith('adam.ask', { text: 'hi' }, undefined)
+    await expect(run(['adam', 'ask', '--text', 'hi', '--wait=maybe'])).rejects.toThrow(
+      /true or false/
+    )
   })
 
   it('refuses inside ADAM’s own Hermes process without calling the app', async () => {

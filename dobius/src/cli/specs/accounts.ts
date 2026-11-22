@@ -7,7 +7,7 @@ export const ACCOUNT_COMMAND_SPECS: CommandSpec[] = [
     summary: 'List the Claude and Codex accounts and which one is in use',
     usage: 'dobius accounts list [--json]',
     allowedFlags: [...GLOBAL_FLAGS],
-    notes: ['Refreshes each account’s usage first, like opening the Accounts page.'],
+    notes: ['Shows what the app last read; it does not ask the providers again. Raw usage screen text is left out.'],
     examples: ['dobius accounts list', 'dobius accounts list --json']
   },
   {

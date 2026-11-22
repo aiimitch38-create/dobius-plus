@@ -112,6 +112,7 @@ export function buildAppUiMethods(deps: AppUiDeps = LIVE_DEPS): RpcMethod[] {
       })
     }),
     defineMethod({
+      // Ungated by design: ADAM drives the app; key allowlist guards.
       name: 'settings.set',
       params: SettingsSet,
       handler: (params, { runtime }) => {
@@ -134,16 +135,18 @@ export function buildAppUiMethods(deps: AppUiDeps = LIVE_DEPS): RpcMethod[] {
     }),
     defineMethod({
       // Why not accounts.list: that snapshot carries each provider's raw
-      // `/usage` CLI screen text (cliOutput), which can hold account details.
+      // `/usage` CLI screen text (cliOutput), which can hold account details,
+      // and it refreshes every provider over the network first. This reads
+      // what the app already has.
       name: 'accounts.summary',
       params: null,
-      handler: async (_params, { runtime }) => {
-        await runtime.refreshAccountsForMobile()
+      handler: (_params, { runtime }) => {
         const snapshot = runtime.getAccountsSnapshot()
         return { ...snapshot, rateLimits: publicRateLimitState(snapshot.rateLimits) }
       }
     }),
     defineMethod({
+      // Ungated by design: ADAM drives the app; it only switches the window's view.
       name: 'ui.openView',
       params: OpenView,
       handler: (params, { runtime }) => {

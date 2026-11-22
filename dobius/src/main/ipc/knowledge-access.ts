@@ -3,13 +3,13 @@
 // Why a stricter read for the RPC: any terminal (and any agent in one) can
 // reach it, so a symlink inside a knowledge root must not lead outside it, and
 // files whose names look like secrets are refused even when they end in .md.
-import { realpathSync } from 'node:fs'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { lstatSync, realpathSync, type Stats } from 'node:fs'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { isSecretLookingPath } from '../../shared/secret-file-names'
 import type { Store } from '../persistence'
 import type { KnowledgeReadResult, KnowledgeTree } from '../../shared/knowledge'
 import { buildKnowledgeTree, claudeDir, isAllowedKnowledgePath, safeReadFile } from './knowledge-indexer'
-import { docsRoot } from './knowledge-leaf-sources'
+import { docsRoot, extractSummary } from './knowledge-leaf-sources'
 
 const MAX_PATH_CHARS = 4096
 
@@ -47,54 +47,95 @@ function within(root: string, path: string): string | null {
   return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel : null
 }
 
+type CheckedKnowledgePath = { path: string; root: string; parts: string[] }
+
 /**
- * The real path of a knowledge file the runtime RPC may show. The real path
- * (symlinks followed) must be a .md file inside the real path of a knowledge
- * root, and no part of it below that root may look like a secret. Throws a
- * plain-English reason otherwise.
+ * Where a knowledge file the runtime RPC may show lives. It must be a .md file
+ * under a knowledge root (the root itself may be a symlink, as configured),
+ * and no part of it below that root may look like a secret. Throws a
+ * plain-English reason otherwise. Symlinks are checked at read time.
  */
-function allowedKnowledgeRealPath(filePath: unknown, roots: string[]): string {
+function checkKnowledgePath(filePath: unknown, roots: string[]): CheckedKnowledgePath {
   if (typeof filePath !== 'string' || !filePath || filePath.length > MAX_PATH_CHARS) {
     throw new Error('Give the full path of a knowledge file.')
   }
   if (!isAbsolute(filePath)) {
     throw new Error('Give the full path of a knowledge file (as `dobius knowledge tree` lists it).')
   }
-  const real = realOrNull(resolve(filePath))
-  if (!real) {
-    throw new Error('Could not read the knowledge file.')
-  }
-  if (!real.toLowerCase().endsWith('.md')) {
+  const resolved = resolve(filePath)
+  if (!resolved.toLowerCase().endsWith('.md')) {
     throw new Error('Only Markdown (.md) knowledge files can be read.')
   }
-  let below: string | null = null
   for (const root of roots) {
     const realRoot = realOrNull(resolve(root))
-    const rel = realRoot ? within(realRoot, real) : null
-    if (rel) {
-      below = rel
-      break
+    if (!realRoot) {
+      continue
     }
+    const rel = within(resolve(root), resolved) ?? within(realRoot, resolved)
+    if (!rel) {
+      continue
+    }
+    const parts = rel.split(sep)
+    // Same names the agent file guard refuses (shared/secret-file-names.ts),
+    // applied to every folder below the root too, so `secrets/notes.md` is out.
+    if (parts.some((_, index) => isSecretLookingPath(parts.slice(0, index + 1).join('/')))) {
+      throw new Error('That file looks like it holds secrets, so it is not read here.')
+    }
+    return { path: join(realRoot, ...parts), root: realRoot, parts }
   }
-  if (!below) {
-    throw new Error('Path is outside the knowledge roots.')
-  }
-  // Same names the agent file guard refuses (shared/secret-file-names.ts),
-  // applied to every folder below the root too, so `secrets/notes.md` is out.
-  const parts = below.split(sep)
-  if (parts.some((_, index) => isSecretLookingPath(parts.slice(0, index + 1).join('/')))) {
-    throw new Error('That file looks like it holds secrets, so it is not read here.')
-  }
-  return real
+  throw new Error('Path is outside the knowledge roots.')
 }
 
-/** Reads a knowledge file for the runtime RPC (see allowedKnowledgeRealPath). */
+/** lstat of every step below the root; null when one is a symlink or missing. */
+function lstatChainWithoutLinks(checked: CheckedKnowledgePath): Stats | null {
+  let current = checked.root
+  let last: Stats | null = null
+  for (const part of checked.parts) {
+    current = join(current, part)
+    try {
+      last = lstatSync(current)
+    } catch {
+      return null
+    }
+    if (last.isSymbolicLink()) {
+      return null
+    }
+  }
+  return last
+}
+
+/**
+ * Reads a checked knowledge file. Why this order: the folders are checked for
+ * symlinks, the file is opened without following one, and the opened file
+ * must be the very file checked (same dev/ino, and the chain still has no
+ * symlink afterwards), so swapping in a link mid-read leads nowhere.
+ */
+function guardedRead(checked: CheckedKnowledgePath): string | null {
+  const before = lstatChainWithoutLinks(checked)
+  if (!before || !before.isFile()) {
+    return null
+  }
+  const content = safeReadFile(checked.path, undefined, (opened) => {
+    const after = lstatChainWithoutLinks(checked)
+    return (
+      opened.dev === before.dev &&
+      opened.ino === before.ino &&
+      after !== null &&
+      after.dev === before.dev &&
+      after.ino === before.ino
+    )
+  })
+  return content
+}
+
+/** Reads a knowledge file for the runtime RPC (see checkKnowledgePath, guardedRead). */
 export function readKnowledgeFileWithin(filePath: unknown, roots: string[]): KnowledgeReadResult {
-  const real = allowedKnowledgeRealPath(filePath, roots)
-  // safeReadFile refuses anything but a regular file (a FIFO would block main).
-  const content = safeReadFile(real)
+  const checked = checkKnowledgePath(filePath, roots)
+  const content = guardedRead(checked)
   if (content === null) {
-    throw new Error('Could not read the knowledge file (missing, or larger than 512 KB).')
+    throw new Error(
+      'Could not read the knowledge file (missing, a link, not a plain file, or larger than 512 KB).'
+    )
   }
   return { content, filePath: filePath as string }
 }
@@ -114,25 +155,29 @@ function requireStore(): Store {
   return registeredStore
 }
 
-function isShowable(filePath: string, roots: string[]): boolean {
+/** The leaf's content through the guarded read, or null when it may not be shown. */
+function showableContent(filePath: string, roots: string[]): string | null {
   try {
-    allowedKnowledgeRealPath(filePath, roots)
-    return true
+    return guardedRead(checkKnowledgePath(filePath, roots))
   } catch {
-    return false
+    return null
   }
 }
 
 /**
- * The tree with only the files `knowledge read` would show. Why: a leaf's
- * summary is taken from its content, so a secret-looking file or a symlink
- * leading outside the roots must not appear here either.
+ * The tree with only the files `knowledge read` would show, each summary
+ * taken again from that guarded read. Why: the indexer's own summaries come
+ * from an unguarded read, so they could quote a secret-looking file or one
+ * reached through a symlink.
  */
 export function filterKnowledgeTree(tree: KnowledgeTree, roots: string[]): KnowledgeTree {
   return {
     ...tree,
     branches: tree.branches.map((branch) => {
-      const leaves = branch.leaves.filter((leaf) => isShowable(leaf.filePath, roots))
+      const leaves = branch.leaves.flatMap((leaf) => {
+        const content = showableContent(leaf.filePath, roots)
+        return content === null ? [] : [{ ...leaf, summary: extractSummary(content) }]
+      })
       const kept = new Set(leaves.map((leaf) => leaf.id))
       return {
         ...branch,

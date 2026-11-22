@@ -6,7 +6,8 @@ import {
   openSync,
   readdirSync,
   readSync,
-  statSync
+  statSync,
+  type Stats
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join, relative, sep } from 'node:path'
@@ -41,12 +42,19 @@ export function safeReadDir(dir: string): string[] {
 // Why the descriptor: opening non-blocking and checking that very descriptor
 // means a FIFO or device dropped into a knowledge folder (or swapped in after
 // a check) can never block the main process.
-export function safeReadFile(filePath: string, maxBytes = MAX_READ_BYTES): string | null {
+// `guard`, when given, opens without following a final symlink and must
+// accept the opened file's own stat (the runtime RPC compares dev/ino).
+export function safeReadFile(
+  filePath: string,
+  maxBytes = MAX_READ_BYTES,
+  guard?: (opened: Stats) => boolean
+): string | null {
   let fd: number | null = null
   try {
-    fd = openSync(filePath, constants.O_RDONLY | constants.O_NONBLOCK)
+    const noFollow = guard ? constants.O_NOFOLLOW : 0
+    fd = openSync(filePath, constants.O_RDONLY | constants.O_NONBLOCK | noFollow)
     const stat = fstatSync(fd)
-    if (!stat.isFile() || stat.size > maxBytes) {
+    if (!stat.isFile() || stat.size > maxBytes || (guard && !guard(stat))) {
       return null
     }
     const buffer = Buffer.alloc(stat.size)
@@ -92,7 +100,7 @@ export function slugify(value: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-function extractSummary(content: string | null): string {
+export function extractSummary(content: string | null): string {
   if (!content) {
     return ''
   }

@@ -459,7 +459,9 @@ const CONFIRMATION_GATED_METHODS = new Set([
   'adam.setMode',
   'backup.run',
   'feedback.submit',
-  'telegram.replies'
+  'telegram.replies',
+  'accounts.selectClaude',
+  'accounts.selectCodex'
 ])
 
 export class DobiusRuntimeRpcServer {

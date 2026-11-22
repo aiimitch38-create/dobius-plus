@@ -20,6 +20,18 @@ export function getRequiredStringFlagAllowingEmpty(
   throw new RuntimeClientError('invalid_argument', `Missing required --${name}`)
 }
 
+/** `--x` and `--x=true` are true, `--x=false` and no flag are false; anything else is refused. */
+export function getBooleanFlag(flags: Map<string, string | boolean>, name: string): boolean {
+  const value = flags.get(name)
+  if (value === undefined || value === false || value === 'false') {
+    return false
+  }
+  if (value === true || value === 'true') {
+    return true
+  }
+  throw new RuntimeClientError('invalid_argument', `--${name} takes no value, or true or false`)
+}
+
 export function getOptionalStringFlag(
   flags: Map<string, string | boolean>,
   name: string

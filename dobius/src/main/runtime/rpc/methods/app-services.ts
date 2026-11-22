@@ -85,12 +85,20 @@ export function buildAppServiceMethods(
     defineMethod({
       name: 'usage.summary',
       params: UsageSummary,
-      handler: (params) => usageSummaryForRuntime(params.provider, params.scope, params.range)
+      handler: (params, ctx) =>
+        usageSummaryForRuntime(params.provider, params.scope, params.range, !ctx.agentKey)
     }),
     defineMethod({
       name: 'usage.rateLimits',
       params: RateLimits,
-      handler: (params) => rateLimitsForRuntime(params.refresh === true)
+      handler: (params, ctx) => {
+        // Why here too (agentRpcDenial refuses it first): a refresh calls
+        // every provider over the network, which the agent key may never do.
+        if (params.refresh === true && ctx.agentKey) {
+          throw new Error('Refreshing limits is not allowed with the agent key; read the cached limits.')
+        }
+        return rateLimitsForRuntime(params.refresh === true)
+      }
     }),
     defineMethod({
       name: 'knowledge.tree',

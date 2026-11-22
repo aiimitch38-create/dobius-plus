@@ -65,10 +65,21 @@ describe('app service RPC methods', () => {
 
   it('reads usage with defaults and limits without a refresh unless asked', async () => {
     await call('usage.summary', {})
-    expect(usageSummaryForRuntime).toHaveBeenCalledWith('claude', 'all', '7d')
+    expect(usageSummaryForRuntime).toHaveBeenCalledWith('claude', 'all', '7d', true)
     await call('usage.rateLimits', { refresh: true })
     expect(rateLimitsForRuntime).toHaveBeenCalledWith(true)
     expect(await call('usage.summary', { provider: 'gpt' })).toMatchObject({ ok: false })
+  })
+
+  it('never rescans or refreshes providers for the agent key', async () => {
+    await call('usage.summary', {}, true)
+    expect(usageSummaryForRuntime).toHaveBeenCalledWith('claude', 'all', '7d', false)
+    expect(JSON.stringify(await call('usage.rateLimits', { refresh: true }, true))).toContain(
+      'not allowed with the agent key'
+    )
+    expect(rateLimitsForRuntime).not.toHaveBeenCalled()
+    await call('usage.rateLimits', {}, true)
+    expect(rateLimitsForRuntime).toHaveBeenCalledWith(false)
   })
 
   it('reports version and update status only', async () => {

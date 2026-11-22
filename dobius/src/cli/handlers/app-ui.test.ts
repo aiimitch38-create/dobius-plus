@@ -95,6 +95,10 @@ describe('settings, view, notify and accounts CLI', () => {
     expect(call).toHaveBeenCalledWith('accounts.selectClaude', { accountId: 'a1' })
     await expect(run(['accounts', 'use'])).rejects.toThrow(/exactly one/)
     await expect(run(['accounts', 'use', '--claude', 'a', '--codex', 'b'])).rejects.toThrow(/exactly one/)
+    await expect(run(['accounts', 'use', '--claude', '--codex', 'system'])).rejects.toThrow(
+      /exactly one/
+    )
+    await expect(run(['accounts', 'use', '--claude', ' '])).rejects.toThrow(/needs an account id/)
     expect(
       formatAccounts({
         claude: { accounts: [{ id: 'a1', email: 'c@x' }], activeAccountId: 'a1' },

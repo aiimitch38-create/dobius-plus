@@ -37,7 +37,7 @@ describe('readKnowledgeFileWithin', () => {
   })
 
   it('refuses a symlink that leads outside the root, and paths that climb out', () => {
-    expect(() => readKnowledgeFileWithin(join(root, 'link.md'), [root])).toThrow(/outside/)
+    expect(() => readKnowledgeFileWithin(join(root, 'link.md'), [root])).toThrow(/a link/)
     expect(() => readKnowledgeFileWithin(join(root, '..', 'outside', 'private.md'), [root])).toThrow(
       /outside/
     )
@@ -55,6 +55,28 @@ describe('readKnowledgeFileWithin', () => {
     expect(() => readKnowledgeFileWithin(join(root, 'notes.txt'), [root])).toThrow(/Markdown/)
     expect(() => readKnowledgeFileWithin('notes.md', [root])).toThrow(/full path/)
     expect(() => readKnowledgeFileWithin(join(root, 'missing.md'), [root])).toThrow(/Could not/)
+  })
+
+  it('refuses symlinks even when they point inside the root, including folder links', () => {
+    mkdirSync(join(root, 'real'))
+    writeFileSync(join(root, 'real', 'a.md'), 'inside')
+    symlinkSync(join(root, 'real'), join(root, 'alias'))
+    symlinkSync(join(root, 'notes.md'), join(root, 'same.md'))
+    expect(readKnowledgeFileWithin(join(root, 'real', 'a.md'), [root]).content).toBe('inside')
+    expect(() => readKnowledgeFileWithin(join(root, 'alias', 'a.md'), [root])).toThrow(/a link/)
+    expect(() => readKnowledgeFileWithin(join(root, 'same.md'), [root])).toThrow(/a link/)
+  })
+
+  it('accepts a root that is itself a symlink, as configured', () => {
+    const linkedRoot = join(dir, 'linked-root')
+    symlinkSync(root, linkedRoot)
+    expect(readKnowledgeFileWithin(join(linkedRoot, 'notes.md'), [linkedRoot]).content).toBe('hello')
+  })
+
+  it('reads only the file it checked (the opened file must match by dev/ino)', () => {
+    const path = join(root, 'notes.md')
+    expect(safeReadFile(path, undefined, () => false)).toBeNull()
+    expect(safeReadFile(path, undefined, () => true)).toBe('hello')
   })
 
   it('never blocks on a FIFO named like a knowledge file', () => {
@@ -102,5 +124,7 @@ describe('filterKnowledgeTree', () => {
     expect(branch.leaves[0].links).toEqual(['ok'])
     expect(branch.groups[0].leafIds).toEqual(['ok'])
     expect(JSON.stringify(tree)).not.toContain('summary of secret')
+    // The summary is taken again from the guarded read, not the indexer's.
+    expect(branch.leaves[0].summary).toBe('hello')
   })
 })

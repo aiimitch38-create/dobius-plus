@@ -59,11 +59,9 @@ function readCredentials(): CredentialsReadResult {
     return credentials
       ? { status: 'ok', credentials }
       : { status: 'error', error: 'Kimi credentials file is invalid' }
-  } catch (err) {
-    return {
-      status: 'error',
-      error: err instanceof Error ? err.message : 'Unable to read Kimi credentials'
-    }
+  } catch {
+    // Why fixed: a JSON.parse message quotes the file's text, which is a token.
+    return { status: 'error', error: 'Unable to read Kimi credentials' }
   }
 }
 

@@ -4,7 +4,11 @@ import type { KnowledgeReadResult, KnowledgeTree } from '../../shared/knowledge'
 import type { ProviderRateLimits, RateLimitState, RateLimitWindow } from '../../shared/rate-limit-types'
 import type { UpdateStatus } from '../../shared/types'
 import type { CommandHandler } from '../dispatch'
-import { getOptionalStringFlag, getRequiredStringFlag } from '../flags'
+import {
+  getBooleanFlag,
+  getOptionalStringFlag,
+  getRequiredStringFlag
+} from '../flags'
 import { printResult } from '../format'
 import { RuntimeClientError } from '../runtime-client'
 
@@ -196,7 +200,7 @@ export const APP_SERVICE_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, formatUsage)
   },
   limits: async ({ flags, client, json }) => {
-    const refresh = flags.get('refresh') === true || flags.get('refresh') === 'true'
+    const refresh = getBooleanFlag(flags, 'refresh')
     const result = await client.call<RateLimitState>(
       'usage.rateLimits',
       refresh ? { refresh: true } : {}

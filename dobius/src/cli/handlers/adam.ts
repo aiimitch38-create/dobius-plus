@@ -1,6 +1,6 @@
 import type { JarvisAskResult, JarvisSpeakOutcome } from '../../shared/speech-types'
 import type { CommandHandler } from '../dispatch'
-import { getOptionalStringFlag, getRequiredStringFlag } from '../flags'
+import { getBooleanFlag, getOptionalStringFlag, getRequiredStringFlag } from '../flags'
 import { printResult } from '../format'
 import { RuntimeClientError } from '../runtime-client'
 
@@ -84,7 +84,7 @@ export const ADAM_HANDLERS: Record<string, CommandHandler> = {
     }
     const text = getRequiredStringFlag(flags, 'text')
     const source = getOptionalStringFlag(flags, 'source')
-    const wait = flags.get('wait') === true
+    const wait = getBooleanFlag(flags, 'wait')
     noteWaitingForConfirmation(json)
     const result = await client.call<AskResult>(
       'adam.ask',
