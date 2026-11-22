@@ -10,7 +10,13 @@ import { NativeChatMessageList } from './NativeChatMessageList'
 import { NativeChatComposer, type NativeChatComposerHandle } from './NativeChatComposer'
 import { useNativeChatFontScale } from './use-native-chat-font-scale'
 import { useNativeChatCanSend } from './use-native-chat-can-send'
-import { NativeChatInteractiveCard } from './NativeChatInteractiveCard'
+import { NativeChatInteractiveCard, useNativeChatVisibleCard } from './NativeChatInteractiveCard'
+import {
+  gateNativeChatComposerSend,
+  nativeChatCardComposerPlaceholder,
+  nativeChatCardHoldNotice
+} from './native-chat-card-composer-gate'
+import type { NativeChatComposerIntercept } from './NativeChatComposer'
 import { NativeChatEmptyState } from './NativeChatEmptyState'
 import { NativeChatSessionGate } from './NativeChatSessionGate'
 import { useNativeChatInteractiveSend } from './use-native-chat-interactive-send'
@@ -172,6 +178,38 @@ function NativeChatResolvedView({
   // Reuse the verified composer send path for interactive cards and composer
   // stop (Stop sends ESC, the agent-TUI interrupt key).
   const interactiveSend = useNativeChatInteractiveSend(terminalTabId, targetPtyId, agent)
+  const visibleCard = useNativeChatVisibleCard(paneKey, canSend)
+  const { card: liveCard, awaitingMoveOn, dismiss: dismissLiveCard } = visibleCard
+  // While a card is up the composer never pastes into the prompt: a
+  // one-question card takes the words as its answer through the card's own
+  // answer path; anything else keeps the draft (port of Line A #26).
+  const interceptComposerSend = useCallback(
+    (draft: {
+      text: string
+      imageCount: number
+      isSlashCommand: boolean
+    }): NativeChatComposerIntercept | null => {
+      const gate = gateNativeChatComposerSend({
+        card: liveCard,
+        // Held until the agent moves past an answered card, not just until
+        // its bytes are written: an approval digit or answer may still be
+        // in flight to the TUI (over SSH too).
+        answering: awaitingMoveOn || interactiveSend.isAnswering(),
+        ...draft
+      })
+      if (gate.kind === 'pass') {
+        return null
+      }
+      if (gate.kind === 'hold') {
+        return { kind: 'held', notice: nativeChatCardHoldNotice(gate.reason) }
+      }
+      dismissLiveCard()
+      // One line: a line break would read as a step to the next question.
+      interactiveSend.sendAnswer(draft.text.replace(/\s*\n\s*/g, ' ').trim())
+      return { kind: 'answered' }
+    },
+    [liveCard, awaitingMoveOn, dismissLiveCard, interactiveSend]
+  )
   const [workingInterrupted, setWorkingInterrupted] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<NativeChatComposerHandle>(null)
@@ -461,7 +499,7 @@ function NativeChatResolvedView({
       </div>
       {/* Live interactive cards (question / approval) render just above the
           composer while the agent's interactivePrompt is present (mobile parity). */}
-      <NativeChatInteractiveCard paneKey={paneKey} send={interactiveSend} canSend={canSend} />
+      <NativeChatInteractiveCard visible={visibleCard} send={interactiveSend} />
       {/* canSend reflects the mobile presence-lock: when a mobile client holds
           the pty, the composer shows its guarded state instead of racing the
           mobile driver (R8). */}
@@ -475,6 +513,8 @@ function NativeChatResolvedView({
         onStop={stopAgent}
         onOptimisticSend={onOptimisticSend}
         onSlashCommand={onSlashCommand}
+        onInterceptSend={interceptComposerSend}
+        placeholderOverride={nativeChatCardComposerPlaceholder(liveCard)}
       />
       {contextMenu.menu}
     </div>

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../../store'
-import { parseInteractivePrompt } from './native-chat-interactive-prompt'
+import { parseInteractivePrompt, type InteractivePromptCard } from './native-chat-interactive-prompt'
 import { nativeChatCardDismissKey } from './native-chat-dismiss-key'
 import { NativeChatQuestionCard } from './NativeChatQuestionCard'
 import { NativeChatApprovalCard } from './NativeChatApprovalCard'
@@ -20,39 +20,60 @@ import type { NativeChatInteractiveSend } from './use-native-chat-interactive-se
  * prompt arrives. The dismissal resets once the prompt clears, so a later
  * (even identical) prompt shows again instead of staying hidden.
  */
-export function NativeChatInteractiveCard({
-  paneKey,
-  send,
-  canSend
-}: {
-  paneKey: string
-  send: NativeChatInteractiveSend
-  canSend: boolean
-}): React.JSX.Element | null {
+export type NativeChatVisibleCard = {
+  /** The card to show now: null when there is none, it was just answered, or
+   *  sends are locked (mobile presence-lock). */
+  card: InteractivePromptCard
+  cardKey: string | null
+  /** The card was answered but the agent still reports the same prompt: its
+   *  answer may not have landed yet, so nothing else may be typed in. */
+  awaitingMoveOn: boolean
+  /** Hide this card until a genuinely different prompt arrives. */
+  dismiss: () => void
+}
+
+/** The live card for a pane, shared by the card itself and the composer (which
+ *  must not paste into a prompt the card is answering). */
+export function useNativeChatVisibleCard(paneKey: string, canSend: boolean): NativeChatVisibleCard {
   const interactivePrompt = useAppStore(
     (s) => s.agentStatusByPaneKey[paneKey]?.interactivePrompt ?? null
   )
   // Thread the sibling `toolName` from the same status entry so the question
   // parser can dispatch through the tool's registered parser (mobile parity).
   const interactiveToolName = useAppStore((s) => s.agentStatusByPaneKey[paneKey]?.toolName ?? null)
-  const { sendAnswer, sendRaw, cancel } = send
 
-  const card = useMemo(
+  const parsed = useMemo(
     () => parseInteractivePrompt(interactivePrompt, interactiveToolName ?? undefined),
     [interactivePrompt, interactiveToolName]
   )
-  const cardKey = useMemo(() => nativeChatCardDismissKey(card), [card])
+  const cardKey = useMemo(() => nativeChatCardDismissKey(parsed), [parsed])
   const [dismissedKey, setDismissedKey] = useState<string | null>(null)
 
   // Forget the dismissal once the prompt clears so a fresh prompt can show.
-  const present = card != null
+  const present = parsed != null
   useEffect(() => {
     if (!present) {
       setDismissedKey(null)
     }
   }, [present])
 
-  if (!card || !canSend || cardKey === dismissedKey) {
+  const dismiss = useCallback(() => setDismissedKey(cardKey), [cardKey])
+  const answered = parsed != null && cardKey === dismissedKey
+  const card = !parsed || !canSend || answered ? null : parsed
+  return { card, cardKey, awaitingMoveOn: answered, dismiss }
+}
+
+export function NativeChatInteractiveCard({
+  visible,
+  send
+}: {
+  visible: NativeChatVisibleCard
+  send: NativeChatInteractiveSend
+}): React.JSX.Element | null {
+  const { card, cardKey, dismiss } = visible
+  const { sendAnswer, sendRaw, cancel } = send
+
+  if (!card) {
     return null
   }
   if (card.kind === 'question') {
@@ -61,11 +82,11 @@ export function NativeChatInteractiveCard({
         key={cardKey ?? 'question'}
         prompt={card.prompt}
         onAnswer={(text) => {
-          setDismissedKey(cardKey)
+          dismiss()
           sendAnswer(text)
         }}
         onCancel={() => {
-          setDismissedKey(cardKey)
+          dismiss()
           cancel()
         }}
       />
@@ -75,7 +96,7 @@ export function NativeChatInteractiveCard({
     <NativeChatApprovalCard
       approval={card.approval}
       onChoose={(raw) => {
-        setDismissedKey(cardKey)
+        dismiss()
         sendRaw(raw)
       }}
     />

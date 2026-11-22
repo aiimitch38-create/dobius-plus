@@ -19,7 +19,11 @@ export type NativeChatInteractiveSend = {
   sendRaw: (raw: string) => void
   /** Send ESC to interrupt — cancels a question / denies an approval. */
   cancel: () => void
+  /** True from an answer's first write until its final Enter is written (or
+   *  it is cancelled), so a composer send cannot land in the middle of it. */
+  isAnswering: () => boolean
 }
+
 
 /**
  * Reuse the desktop composer's exact send path for the interactive cards:
@@ -38,9 +42,11 @@ export function useNativeChatInteractiveSend(
   // unmount so a detached setTimeout chain can't keep writing PTY bytes after
   // the view is gone / the user switched away.
   const inFlightRef = useRef<NativeChatSendHandle | null>(null)
+  const answeringRef = useRef(false)
   const cancelInFlight = useCallback(() => {
     inFlightRef.current?.cancel()
     inFlightRef.current = null
+    answeringRef.current = false
   }, [])
   useEffect(() => cancelInFlight, [cancelInFlight])
 
@@ -72,10 +78,20 @@ export function useNativeChatInteractiveSend(
       // so each Enter lands on its rendered question and only the last submits.
       // Other agents (e.g. Codex) submit the whole answer with one Enter, so
       // gate the stepping on Claude and send a single body + Enter otherwise.
-      inFlightRef.current =
+      answeringRef.current = true
+      let handle: NativeChatSendHandle | null = null
+      // Only this answer may clear the flag: a newer one replaces the handle.
+      const done = (): void => {
+        if (inFlightRef.current === handle) {
+          answeringRef.current = false
+          inFlightRef.current = null
+        }
+      }
+      handle =
         agent === 'claude'
-          ? sendNativeChatAnswer(settings, targetPtyId, text.split('\n'))
-          : sendNativeChatMessage(settings, targetPtyId, text)
+          ? sendNativeChatAnswer(settings, targetPtyId, text.split('\n'), done)
+          : sendNativeChatMessage(settings, targetPtyId, text, done)
+      inFlightRef.current = handle
     },
     [terminalTabId, targetPtyId, agent, cancelInFlight]
   )
@@ -86,5 +102,7 @@ export function useNativeChatInteractiveSend(
     sendRaw(ESC)
   }, [cancelInFlight, sendRaw])
 
-  return { sendAnswer, sendRaw, cancel }
+  const isAnswering = useCallback(() => answeringRef.current, [])
+
+  return { sendAnswer, sendRaw, cancel, isAnswering }
 }

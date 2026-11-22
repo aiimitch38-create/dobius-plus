@@ -24,6 +24,8 @@ export type NativeChatComposerFieldProps = {
   autocomplete: ComposerAutocomplete
   activeSuggestion: number
   notice: string | null
+  /** Replaces the default placeholder (e.g. while a question card is up). */
+  placeholderOverride?: string | null
   imageAttachments: readonly NativeChatComposerImageAttachment[]
   sendButtonDisabled: boolean
   isWorking: boolean
@@ -61,6 +63,7 @@ export function NativeChatComposerField({
   autocomplete,
   activeSuggestion,
   notice,
+  placeholderOverride,
   imageAttachments,
   sendButtonDisabled,
   isWorking,
@@ -158,7 +161,10 @@ export function NativeChatComposerField({
               onKeyDown={onKeyDown}
               onPaste={onPaste}
               onSelect={(e) => onTextareaSelect(e.currentTarget)}
-              placeholder={nativeChatComposerPlaceholder(hasPty, canSend)}
+              placeholder={
+                (hasPty && canSend ? placeholderOverride : null) ??
+                nativeChatComposerPlaceholder(hasPty, canSend)
+              }
               // Why: coarse-pointer min-height follows the app's touch target convention.
               // scrollbar-sleek keeps the overflow gutter from showing the heavy
               // native scrollbar once the draft exceeds max-height.

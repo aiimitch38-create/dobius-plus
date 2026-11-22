@@ -277,6 +277,10 @@ vi.mock('./shell', () => ({
   registerShellHandlers: registerShellHandlersMock
 }))
 
+vi.mock('./pasted-image-open', () => ({
+  registerPastedImageOpenHandler: vi.fn()
+}))
+
 vi.mock('./pet', () => ({
   registerPetHandlers: registerPetHandlersMock
 }))

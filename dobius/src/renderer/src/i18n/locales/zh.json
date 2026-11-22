@@ -12513,6 +12513,20 @@
         "allow": "允许",
         "deny": "拒绝"
       },
+      "turnFold": {
+        "showOne": "显示 1 个步骤",
+        "showMany": "显示 {{value0}} 个步骤",
+        "hide": "隐藏步骤"
+      },
+      "cardGate": {
+        "answerInFlight": "请稍候，你的回答仍在发送中。",
+        "pickOption": "请先在上方卡片中选择一个选项。没有发送任何内容。",
+        "noImages": "请先回答问题，再发送图片。没有发送任何内容。",
+        "answerInCard": "请先在上方卡片中回答问题。没有发送任何内容。",
+        "typeAnswerPlaceholder": "输入你自己的回答并按 Enter…",
+        "useCardPlaceholder": "请先使用上方卡片…"
+      },
+      "openPastedImage": "打开粘贴的图片",
       "launchPromptNotDelivered": "Not delivered — check the terminal"
     },
     "tab": {

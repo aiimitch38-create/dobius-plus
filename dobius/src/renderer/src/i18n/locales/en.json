@@ -12513,6 +12513,20 @@
         "allow": "Allow",
         "deny": "Deny"
       },
+      "turnFold": {
+        "showOne": "Show 1 step",
+        "showMany": "Show {{value0}} steps",
+        "hide": "Hide steps"
+      },
+      "cardGate": {
+        "answerInFlight": "One moment, your answer is still going in.",
+        "pickOption": "Pick an option in the card above first. Nothing was sent.",
+        "noImages": "Answer the question first, then send the images. Nothing was sent.",
+        "answerInCard": "Answer the questions in the card above first. Nothing was sent.",
+        "typeAnswerPlaceholder": "Type your own answer and press Enter…",
+        "useCardPlaceholder": "Use the card above first…"
+      },
+      "openPastedImage": "Open pasted image",
       "launchPromptNotDelivered": "Not delivered — check the terminal"
     },
     "tab": {
