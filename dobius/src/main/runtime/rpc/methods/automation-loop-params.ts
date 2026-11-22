@@ -98,6 +98,7 @@ function validLoop(loop: AutomationLoop): AutomationLoop {
  * tick ever sees it as a plain scheduled automation. A failed second step
  * removes the half-made automation so nothing is left behind.
  */
+// Ungated by design: ADAM drives the Board; Pause crew + caps guard.
 export async function createLoopAutomation(
   runtime: DobiusRuntimeService,
   input: RuntimeAutomationCreateInput,

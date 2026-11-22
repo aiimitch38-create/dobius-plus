@@ -23,6 +23,16 @@ export type LoopUpdateFlags = {
 
 const LOOP_ONLY_FLAGS = ['goal', 'max-iterations', 'stop-when', 'card'] as const
 
+/** A loop flag that was given must carry a value: a bare or empty one is refused, never ignored. */
+function rejectEmpty(flags: Flags, names: readonly string[]): void {
+  for (const name of names) {
+    const value = flags.get(name)
+    if (flags.has(name) && (typeof value !== 'string' || value.trim() === '')) {
+      throw new RuntimeClientError('invalid_argument', `--${name} needs a value`)
+    }
+  }
+}
+
 function maxIterations(flags: Flags): number | undefined {
   const value = getOptionalPositiveIntegerFlag(flags, 'max-iterations')
   if (value !== undefined && value > LOOP_MAX_RUNS_LIMIT) {
@@ -63,6 +73,7 @@ export function isLoopCreate(flags: Flags): boolean {
 }
 
 export function getLoopCreateFlags(flags: Flags): LoopCreateFlags {
+  rejectEmpty(flags, LOOP_ONLY_FLAGS)
   const goal = getOptionalStringFlag(flags, 'goal')?.trim()
   if (!goal) {
     throw new RuntimeClientError('invalid_argument', 'A loop needs --goal <text>')
@@ -94,10 +105,9 @@ export function getLoopUpdateFlags(flags: Flags): LoopUpdateFlags | undefined {
   if (!LOOP_ONLY_FLAGS.some((flag) => flags.has(flag))) {
     return undefined
   }
+  // `--stop-when ""` is allowed here: it removes the stop command.
+  rejectEmpty(flags, ['goal', 'max-iterations', 'card'])
   const goal = getOptionalStringFlag(flags, 'goal')?.trim()
-  if (flags.has('goal') && !goal) {
-    throw new RuntimeClientError('invalid_argument', '--goal needs text')
-  }
   const rawStop = flags.get('stop-when')
   if (rawStop === true) {
     throw new RuntimeClientError('invalid_argument', '--stop-when needs a command, or "" to remove it')

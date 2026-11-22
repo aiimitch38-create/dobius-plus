@@ -72,6 +72,22 @@ describe('automations create --loop', () => {
     expect(callMock).not.toHaveBeenCalled()
   })
 
+  it('refuses a bare --stop-when and a bare or empty --max-iterations', async () => {
+    await expect(
+      run('automations create', { loop: true, goal: 'g', 'max-iterations': '3', 'stop-when': true })
+    ).rejects.toThrow(/--stop-when needs a value/)
+    await expect(run('automations create', { loop: true, goal: 'g', 'max-iterations': true })).rejects.toThrow(
+      /--max-iterations needs a value/
+    )
+    await expect(run('automations create', { loop: true, goal: 'g', 'max-iterations': ' ' })).rejects.toThrow(
+      /--max-iterations needs a value/
+    )
+    await expect(run('automations edit', { id: 'a1', 'max-iterations': '' })).rejects.toThrow(
+      /--max-iterations needs a value/
+    )
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
   it('refuses loop flags without --loop', async () => {
     await expect(
       run('automations create', { name: 'x', trigger: 'daily', prompt: 'p', provider: 'codex', goal: 'g' })
