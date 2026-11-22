@@ -14,7 +14,7 @@ export const ADAM_COMMAND_SPECS: CommandSpec[] = [
       ONE_ADAM,
       'Dobius+ shows a dialog asking you to confirm in the app first; nothing is sent unless someone clicks it there.',
       'Without --wait the command returns once the message is sent and ADAM answers in his thread. With --wait it prints his reply (up to about 4 minutes).',
-      '--source names the tool or agent sending it (letters, numbers, spaces, dot, dash, underscore; up to 40). Messages are at most 1500 characters.',
+      '--source names the tool or agent sending it (letters, numbers, spaces, dot, dash, underscore; up to 40). Messages are at most 1500 characters; hidden or control characters (zero-width, bidi marks) are refused.',
       'Refused while ADAM is answering something else, and refused when run by ADAM himself (his own Hermes process), so he cannot message himself in a loop.'
     ],
     examples: [
@@ -28,8 +28,9 @@ export const ADAM_COMMAND_SPECS: CommandSpec[] = [
     usage: 'dobius adam say --text <text> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'text'],
     notes: [
-      'Speaks the text in ADAM’s voice on this Mac. It is not sent to ADAM and not saved in his thread.',
-      'At most 2000 characters.'
+      'Speaks the text in ADAM’s voice on this Mac, starting with "A command-line tool asked me to say:" so nobody mistakes it for his own words. It is not sent to ADAM and not saved in his thread.',
+      'Dobius+ shows a dialog asking you to confirm in the app first; nothing is said unless someone clicks it there.',
+      'At most about 1460 characters. Hidden or control characters are refused.'
     ],
     examples: ['dobius adam say --text "The build is done."']
   },
@@ -48,6 +49,7 @@ export const ADAM_COMMAND_SPECS: CommandSpec[] = [
     positionalArgs: ['state'],
     notes: [
       'Same switch as voice mode in Settings. Turning it off also stops an answer ADAM is speaking.',
+      'Dobius+ shows a dialog asking you to confirm in the app first; nothing changes unless someone clicks it there.',
       'Turning it on can fail when another app already holds Cmd+T; the command says so.'
     ],
     examples: ['dobius adam mode on', 'dobius adam mode off --json']

@@ -8,6 +8,12 @@ import { RuntimeClientError } from '../runtime-client'
 // 25 second confirmation dialog and some slack.
 const ADAM_ASK_WAIT_TIMEOUT_MS = 240_000
 
+function noteWaitingForConfirmation(json: boolean): void {
+  if (!json) {
+    process.stderr.write('Waiting up to 25 seconds for you to confirm in the Dobius+ app...\n')
+  }
+}
+
 type AskResult = { sent: true; waited: boolean; reply?: JarvisAskResult }
 type StatusResult = {
   busy: boolean
@@ -79,9 +85,7 @@ export const ADAM_HANDLERS: Record<string, CommandHandler> = {
     const text = getRequiredStringFlag(flags, 'text')
     const source = getOptionalStringFlag(flags, 'source')
     const wait = flags.get('wait') === true
-    if (!json) {
-      process.stderr.write('Waiting up to 25 seconds for you to confirm in the Dobius+ app...\n')
-    }
+    noteWaitingForConfirmation(json)
     const result = await client.call<AskResult>(
       'adam.ask',
       { text, ...(source ? { source } : {}), ...(wait ? { wait: true } : {}) },
@@ -90,6 +94,7 @@ export const ADAM_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, formatAskResult)
   },
   'adam say': async ({ flags, client, json }) => {
+    noteWaitingForConfirmation(json)
     const result = await client.call<JarvisSpeakOutcome>('adam.say', {
       text: getRequiredStringFlag(flags, 'text')
     })
@@ -103,6 +108,7 @@ export const ADAM_HANDLERS: Record<string, CommandHandler> = {
   },
   'adam mode': async ({ flags, client, json }) => {
     const active = getModeState(flags)
+    noteWaitingForConfirmation(json)
     const result = await client.call<{ active: boolean; ok: boolean }>('adam.setMode', { active })
     printResult(result, json, (value) => {
       if (!value.ok) {

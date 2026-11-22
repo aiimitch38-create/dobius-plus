@@ -3,7 +3,8 @@
 // the same Hermes session and the same thread as voice and the Board, and main
 // writes the thread rows. Why gated: interactive terminals hold the full
 // runtime key, so an agent could put words in ADAM's thread (and ADAM can run
-// commands). A human click in the app's dialog is the only proof of Carson.
+// commands), make ADAM speak, or flip voice mode. A human click in the app's
+// dialog is the only proof of Carson, so all three wait for it.
 import { z } from 'zod'
 import type { JarvisAskResult, JarvisSpeakOutcome } from '../../../../shared/speech-types'
 import {
@@ -15,33 +16,58 @@ import {
   type AdamAskOptions
 } from '../../../jarvis/adam-conversation'
 import {
-  askAdam,
-  isAdamBusy,
-  jarvisVoiceControls,
+  adamRuntimeAccess,
   type JarvisVoiceControls
-} from '../../../jarvis/jarvis-ipc'
+} from '../../../jarvis/adam-runtime-access'
 import { defineMethod, type RpcMethod } from '../core'
-import { confirmText, describeCaller, type ConfirmationGate } from './confirm-gate'
+import {
+  CONFIRM_TEXT_LIMIT,
+  confirmText,
+  describeCaller,
+  type ConfirmationGate
+} from './confirm-gate'
 import { appConfirmationGate } from './crew-confirm'
 
-const MAX_SAY_CHARS = 2000
+/** Said before CLI text, so nobody mistakes it for ADAM's own words. */
+export const ADAM_SAY_PREFIX = 'A command-line tool asked me to say: '
+// The dialog must show the whole spoken line, prefix included.
+const MAX_SAY_CHARS = CONFIRM_TEXT_LIMIT - ADAM_SAY_PREFIX.length
+
+// Why: the dialog strips control, format, bidi and zero-width characters
+// before showing text, but ADAM would get them, so instructions could hide
+// in them. Such text is refused outright; newline and tab are allowed.
+const HIDDEN_CHARACTER = /[\p{Cc}\p{Cf}\u2028\u2029]/u
+export function hasHiddenCharacters(value: string): boolean {
+  return Array.from(value).some(
+    (character) => character !== '\n' && character !== '\t' && HIDDEN_CHARACTER.test(character)
+  )
+}
+const HIDDEN_MESSAGE = 'Text has hidden or control characters; remove them and send it again'
 
 const Ask = z
   .object({
     text: z
       .string()
-      .trim()
-      .min(1, 'Missing message text')
-      .max(
-        ADAM_CLI_MAX_TEXT_CHARS,
-        `Message is too long (over ${ADAM_CLI_MAX_TEXT_CHARS} characters); send it in shorter parts`
+      .refine((value) => !hasHiddenCharacters(value), HIDDEN_MESSAGE)
+      .transform((value) => value.trim())
+      .pipe(
+        z
+          .string()
+          .min(1, 'Missing message text')
+          .max(
+            ADAM_CLI_MAX_TEXT_CHARS,
+            `Message is too long (over ${ADAM_CLI_MAX_TEXT_CHARS} characters); send it in shorter parts`
+          )
       ),
     source: z
       .string()
-      .trim()
-      .regex(
+      .refine((value) => !hasHiddenCharacters(value), HIDDEN_MESSAGE)
+      .transform((value) => value.trim())
+      .pipe(
+        z.string().regex(
         ADAM_CLI_SOURCE_PATTERN,
-        'Source must be a short name: letters, numbers, spaces, dot, dash or underscore (up to 40)'
+          'Source must be a short name: letters, numbers, spaces, dot, dash or underscore (up to 40)'
+        )
       )
       .optional(),
     wait: z.boolean().optional()
@@ -52,9 +78,14 @@ const Say = z
   .object({
     text: z
       .string()
-      .trim()
-      .min(1, 'Missing text to say')
-      .max(MAX_SAY_CHARS, `Text is too long to say (over ${MAX_SAY_CHARS} characters)`)
+      .refine((value) => !hasHiddenCharacters(value), HIDDEN_MESSAGE)
+      .transform((value) => value.trim())
+      .pipe(
+        z
+          .string()
+          .min(1, 'Missing text to say')
+          .max(MAX_SAY_CHARS, `Text is too long to say (over ${MAX_SAY_CHARS} characters)`)
+      )
   })
   .strict()
 
@@ -66,7 +97,19 @@ export type AdamMethodDeps = {
   voice: () => JarvisVoiceControls | null
 }
 
-const LIVE_DEPS: AdamMethodDeps = { isBusy: isAdamBusy, ask: askAdam, voice: jarvisVoiceControls }
+const NOT_READY = 'ADAM is not ready yet. Open the Dobius+ window and try again.'
+
+const LIVE_DEPS: AdamMethodDeps = {
+  isBusy: () => adamRuntimeAccess()?.isBusy() ?? false,
+  ask: (text, options) => {
+    const access = adamRuntimeAccess()
+    if (!access) {
+      return Promise.resolve({ kind: 'error', text: NOT_READY })
+    }
+    return access.ask(text, options)
+  },
+  voice: () => adamRuntimeAccess()?.voice ?? null
+}
 
 function requireVoice(deps: AdamMethodDeps): JarvisVoiceControls {
   const voice = deps.voice()
@@ -137,13 +180,39 @@ export function buildAdamMethods(
     defineMethod({
       name: 'adam.say',
       params: Say,
-      handler: async (params): Promise<JarvisSpeakOutcome> =>
-        requireVoice(deps).speak(params.text)
+      handler: async (params, ctx): Promise<JarvisSpeakOutcome> => {
+        requireVoice(deps)
+        const spoken = `${ADAM_SAY_PREFIX}${params.text}`
+        await requireConfirmation(
+          {
+            title: 'Let ADAM say this out loud?',
+            message: 'Something outside the app asked ADAM to say something out loud.',
+            detail: `${describeCaller(ctx)}\n\nADAM will say:\n${confirmText(spoken, 'text')}`,
+            confirmLabel: 'Say it'
+          },
+          ctx
+        )
+        return requireVoice(deps).speak(spoken)
+      }
     }),
     defineMethod({
       name: 'adam.setMode',
       params: SetMode,
-      handler: (params) => {
+      handler: async (params, ctx) => {
+        requireVoice(deps)
+        await requireConfirmation(
+          {
+            title: params.active ? 'Turn ADAM voice mode on?' : 'Turn ADAM voice mode off?',
+            message: `Something outside the app asked to turn ADAM voice mode ${params.active ? 'on' : 'off'}.`,
+            detail: `${describeCaller(ctx)}\n\n${
+              params.active
+                ? 'ADAM will listen for the Cmd+T shortcut.'
+                : 'ADAM stops listening for Cmd+T and stops any answer he is speaking.'
+            }`,
+            confirmLabel: params.active ? 'Turn on' : 'Turn off'
+          },
+          ctx
+        )
         const result = requireVoice(deps).setMode(params.active)
         return { active: params.active, ok: result.ok }
       }

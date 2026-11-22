@@ -3,16 +3,11 @@ import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
 import type { DobiusRuntimeService } from '../../dobius-runtime'
 
-// Why: jarvis-ipc.ts and crew-confirm.ts import electron at module scope.
-vi.mock('../../../jarvis/jarvis-ipc', () => ({
-  askAdam: vi.fn(),
-  isAdamBusy: vi.fn(() => false),
-  jarvisVoiceControls: vi.fn(() => null)
-}))
+// Why: crew-confirm.ts imports electron at module scope.
 vi.mock('./crew-confirm', () => ({ appConfirmationGate: vi.fn() }))
 
 import { ADAM_BUSY_TEXT } from '../../../jarvis/adam-conversation'
-import { buildAdamMethods, type AdamMethodDeps } from './adam'
+import { ADAM_SAY_PREFIX, buildAdamMethods, type AdamMethodDeps } from './adam'
 import { createConfirmationGate } from './confirm-gate'
 
 const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as DobiusRuntimeService
@@ -119,21 +114,53 @@ describe('adam RPC methods', () => {
     expect(confirm).not.toHaveBeenCalled()
   })
 
-  it('reports status, speaks and sets voice mode through the window service', async () => {
+  it('refuses hidden characters in the message or the source, before any dialog', async () => {
+    for (const text of ['hi\u200bthere', 'a\u202eb', 'bell\u0007', 'line\u2028sep']) {
+      const response = await call('adam.ask', { text })
+      expect(JSON.stringify(response)).toContain('hidden or control characters')
+    }
+    expect(
+      JSON.stringify(await call('adam.ask', { text: 'hi', source: 'tool\u200d' }))
+    ).toContain('hidden or control characters')
+    expect(confirm).not.toHaveBeenCalled()
+    expect(ask).not.toHaveBeenCalled()
+    // Newline and tab are ordinary text.
+    expect(await call('adam.ask', { text: 'line one\n\tline two' })).toMatchObject({ ok: true })
+  })
+
+  it('reports status without a dialog', async () => {
     expect(await call('adam.status')).toMatchObject({
       ok: true,
       result: { busy: false, voiceReady: true, shortcutActive: true, phase: 'idle' }
     })
+    expect(confirm).not.toHaveBeenCalled()
+  })
+
+  it('says text only after confirming, marked as asked by a command-line tool', async () => {
     expect(await call('adam.say', { text: 'Done.' })).toMatchObject({
       ok: true,
       result: { played: true }
     })
-    expect(voice.speak).toHaveBeenCalledWith('Done.')
+    const spoken = `${ADAM_SAY_PREFIX}Done.`
+    expect(voice.speak).toHaveBeenCalledWith(spoken)
+    expect(confirm.mock.calls[0][0].detail).toContain(spoken)
+    confirm.mockResolvedValue(false)
+    voice.speak.mockClear()
+    expect(await call('adam.say', { text: 'Done.' })).toMatchObject({ ok: false })
+    expect(voice.speak).not.toHaveBeenCalled()
+    expect(JSON.stringify(await call('adam.say', { text: 'x\u200b' }))).toContain('hidden')
+  })
+
+  it('sets voice mode only after confirming', async () => {
     expect(await call('adam.setMode', { active: false })).toMatchObject({
       ok: true,
       result: { active: false, ok: false }
     })
     expect(voice.setMode).toHaveBeenCalledWith(false)
+    confirm.mockResolvedValue(false)
+    voice.setMode.mockClear()
+    expect(await call('adam.setMode', { active: true })).toMatchObject({ ok: false })
+    expect(voice.setMode).not.toHaveBeenCalled()
   })
 
   it('says voice is not ready before the window set it up', async () => {

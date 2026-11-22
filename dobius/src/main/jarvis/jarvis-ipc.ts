@@ -52,6 +52,7 @@ import type {
   JarvisShortcutPort
 } from './jarvis-service'
 import { getUserDataRoot } from '../storage/user-data-root'
+import { setAdamRuntimeAccess, type JarvisVoiceStatus } from './adam-runtime-access'
 
 function createGlobalShortcutPort(): JarvisShortcutPort {
   return {
@@ -155,11 +156,6 @@ export function isAdamBusy(): boolean {
   return adamConversation?.isBusy() ?? false
 }
 
-export type JarvisVoiceStatus = {
-  shortcutActive: boolean
-  phase: ReturnType<JarvisService['getPhase']>
-}
-
 /** What the window's voice indicator reads (`jarvis:status`). */
 function jarvisStatusOf(service: JarvisService): JarvisVoiceStatus {
   return { shortcutActive: service.isShortcutActive(), phase: service.getPhase() }
@@ -176,27 +172,17 @@ function applyJarvisMode(store: Store, service: JarvisService, active: boolean):
   return { ok }
 }
 
-// Set once the window's voice handlers are registered, so the runtime RPC
-// (`dobius adam status|mode|say`) drives the very same service.
-let jarvisRuntime: { store: Store; service: JarvisService } | null = null
-
-export type JarvisVoiceControls = {
-  status: () => JarvisVoiceStatus
-  setMode: (active: boolean) => { ok: boolean }
-  speak: (text: string) => ReturnType<JarvisService['speak']>
-}
-
-/** The window's voice service for the runtime RPC, or null before the app window set it up. */
-export function jarvisVoiceControls(): JarvisVoiceControls | null {
-  const current = jarvisRuntime
-  if (!current) {
-    return null
-  }
-  return {
-    status: () => jarvisStatusOf(current.service),
-    setMode: (active) => applyJarvisMode(current.store, current.service, active),
-    speak: (text) => current.service.speak(text)
-  }
+/** Hands the runtime RPC (`dobius adam ...`) the very same ADAM and voice service. */
+function publishAdamRuntimeAccess(store: Store, service: JarvisService): void {
+  setAdamRuntimeAccess({
+    ask: askAdam,
+    isBusy: isAdamBusy,
+    voice: {
+      status: () => jarvisStatusOf(service),
+      setMode: (active) => applyJarvisMode(store, service, active),
+      speak: (text) => service.speak(text)
+    }
+  })
 }
 
 function createJarvisDeps(store: Store): JarvisServiceDeps {
@@ -225,7 +211,7 @@ export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindo
   // any handler reads it. Failure leaves it in settings, so it still works.
   migrateElevenLabsKeyOutOfSettings(store)
   const service = getJarvisService(createJarvisDeps(store))
-  jarvisRuntime = { store, service }
+  publishAdamRuntimeAccess(store, service)
   registerHandlers(store, service)
   registerElevenLabsKeyHandlers(store)
   registerLiveSessionHandlers(store)
