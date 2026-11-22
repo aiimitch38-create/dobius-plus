@@ -52,4 +52,26 @@ describe('workspace port RPC methods', () => {
     })
     expect(response).toMatchObject({ ok: true, result: { ok: true } })
   })
+
+  it('passes worktreeId through so main checks the listener belongs to that worktree', async () => {
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      killWorkspacePort: vi.fn().mockResolvedValue({ ok: true })
+    } as unknown as DobiusRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: WORKSPACE_PORT_METHODS })
+    await dispatcher.dispatch(
+      makeRequest('workspacePorts.kill', {
+        repoId: 'repo-1',
+        worktreeId: 'repo-1::/w/a',
+        pid: 1234,
+        port: 5173
+      })
+    )
+    expect(runtime.killWorkspacePort).toHaveBeenCalledWith({
+      repoId: 'repo-1',
+      worktreeId: 'repo-1::/w/a',
+      pid: 1234,
+      port: 5173
+    })
+  })
 })

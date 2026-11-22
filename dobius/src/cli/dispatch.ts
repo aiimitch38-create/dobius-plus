@@ -30,6 +30,7 @@ import { TASK_HANDLERS } from './handlers/tasks'
 import { BOARD_HANDLERS } from './handlers/board'
 import { LEAD_HANDLERS } from './handlers/lead'
 import { TABS_HANDLERS } from './handlers/tabs'
+import { SYSTEM_HANDLERS } from './handlers/system'
 
 export type HandlerContext = {
   flags: Map<string, string | boolean>
@@ -73,7 +74,8 @@ function buildHandlers(): Map<string, CommandHandler> {
     TASK_HANDLERS,
     BOARD_HANDLERS,
     LEAD_HANDLERS,
-    TABS_HANDLERS
+    TABS_HANDLERS,
+    SYSTEM_HANDLERS
   ]
   for (const group of groups) {
     for (const [key, handler] of Object.entries(group)) {

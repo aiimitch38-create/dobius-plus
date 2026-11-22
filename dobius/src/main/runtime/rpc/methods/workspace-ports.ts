@@ -8,6 +8,7 @@ const WorkspacePortScanParams = z.object({
 
 const WorkspacePortKillParams = z.object({
   repoId: OptionalString,
+  worktreeId: OptionalString,
   pid: requiredNumber('Missing process id'),
   port: requiredNumber('Missing port')
 })
@@ -24,6 +25,7 @@ export const WORKSPACE_PORT_METHODS: RpcMethod[] = [
     handler: async (params, { runtime }) =>
       runtime.killWorkspacePort({
         repoId: params.repoId,
+        ...(params.worktreeId ? { worktreeId: params.worktreeId } : {}),
         pid: params.pid,
         port: params.port
       })

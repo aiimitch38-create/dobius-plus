@@ -93,6 +93,9 @@ export async function killWorkspacePort(
   if (port.kind !== 'workspace') {
     return { ok: false, reason: 'Only workspace-owned local processes can be stopped here.' }
   }
+  if (args.worktreeId !== undefined && port.owner.worktreeId !== args.worktreeId) {
+    return { ok: false, reason: 'The port belongs to a different worktree.' }
+  }
   const pid = port.pid
   if (!pid) {
     return { ok: false, reason: 'The owning process is unknown.' }
