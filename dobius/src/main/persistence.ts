@@ -107,7 +107,7 @@ import {
   ONBOARDING_FLOW_VERSION,
   ONBOARDING_FINAL_STEP
 } from '../shared/constants'
-import { resolveLiveVoiceEngine } from '../shared/live-voice-settings'
+import { normalizeLoadedVoiceSettings } from '../shared/live-voice-settings'
 import {
   parseWorkspaceSession,
   workspaceSessionStateSchema
@@ -3382,14 +3382,7 @@ export class Store {
               migratedSourceControlAi,
               parsed.settings?.commitMessageAi ?? defaults.settings.commitMessageAi
             ),
-            voice: {
-              ...getDefaultVoiceSettings(),
-              ...parsed.settings?.voice,
-              // Why here: settings saved before the engine choice existed have
-              // no liveVoiceEngine, and the plain merge above cannot tell an
-              // explicit ElevenLabs user from one who never chose.
-              liveVoiceEngine: resolveLiveVoiceEngine(parsed.settings?.voice)
-            }
+            voice: normalizeLoadedVoiceSettings(getDefaultVoiceSettings(), parsed.settings?.voice)
           },
           // Why: 'recent' used to mean the weighted smart sort. One-shot
           // migration moves it to 'smart'; the flag prevents re-firing after

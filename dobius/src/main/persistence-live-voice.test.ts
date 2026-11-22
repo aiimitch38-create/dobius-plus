@@ -69,6 +69,12 @@ describe('Store live voice engine migration', () => {
       liveVoiceEngine: { nope: true }
     })
     expect(voice?.liveVoiceEngine).toBe('openai-live')
+    expect(voice?.elevenlabsAgentId).toBe('')
+  })
+
+  it('hands every consumer text IDs even when the saved ones are numbers', async () => {
+    const voice = await loadVoice({ elevenlabsVoiceId: 42, elevenlabsAgentId: 43 })
+    expect(voice).toMatchObject({ elevenlabsVoiceId: '', elevenlabsAgentId: '' })
   })
 
   it('keeps an engine the user picked', async () => {

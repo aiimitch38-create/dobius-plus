@@ -11,11 +11,7 @@ import { SelfEditStore, selfEditRoots } from './self-edit'
 import { resolveSelfEditRepoRoot } from './self-edit-repo-root'
 import { closeSelfEditWindow, showSelfEditProposal } from '../window/self-edit-window'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
-import {
-  createOpenAiLiveSession,
-  liveVoiceFailure,
-  testOpenAiLiveConnection
-} from './openai-live-session'
+import { createOpenAiLiveSession, liveVoiceFailure } from './openai-live-session'
 import type { OpenAiLiveSessionOptions } from './openai-live-session'
 import { OPENAI_LIVE_CALL_READY, resolveLiveVoiceSettings } from '../../shared/live-voice-settings'
 import type { OpenAiLiveFailure } from '../../shared/speech-types'
@@ -164,20 +160,44 @@ function liveSessionOptions(store: Store): OpenAiLiveSessionOptions {
 // Why one at a time: every created session starts billing, so a double click
 // or a retry loop in the window must not open several at once.
 let liveSessionInFlight = false
-let lastLiveSessionTestAt: number | null = null
-
-// Why spaced out: a test that OpenAI accepts opens a real, billed session and
-// there is no documented call to close it (see testOpenAiLiveConnection).
-export const LIVE_SESSION_TEST_MIN_INTERVAL_MS = 10_000
-
-/** The live session a window currently owns; dropped when that window goes away. */
-let activeLiveSession: { ownerId: number; sessionId: string | null } | null = null
-
-export function getActiveLiveSessionForTest(): typeof activeLiveSession {
-  return activeLiveSession
-}
 
 type LiveSender = Electron.WebContents
+
+/**
+ * The live session a window currently owns. Holds the one 'destroyed' listener
+ * on the owner so a new owner or a repeat connect replaces it, never stacks it.
+ */
+let activeLiveSession: {
+  owner: LiveSender
+  sessionId: string | null
+  onOwnerDestroyed: () => void
+} | null = null
+
+function clearActiveLiveSession(): void {
+  const current = activeLiveSession
+  activeLiveSession = null
+  current?.owner.removeListener('destroyed', current.onOwnerDestroyed)
+}
+
+function setActiveLiveSession(owner: LiveSender, sessionId: string | null): void {
+  clearActiveLiveSession()
+  const onOwnerDestroyed = (): void => {
+    if (activeLiveSession?.owner === owner) {
+      clearActiveLiveSession()
+    }
+  }
+  owner.once('destroyed', onOwnerDestroyed)
+  activeLiveSession = { owner, sessionId, onOwnerDestroyed }
+}
+
+export function getActiveLiveSessionForTest(): {
+  ownerId: number
+  sessionId: string | null
+} | null {
+  return activeLiveSession
+    ? { ownerId: activeLiveSession.owner.id, sessionId: activeLiveSession.sessionId }
+    : null
+}
 
 // Why checked in main: any frame that can reach ipcRenderer could otherwise
 // start a billed call. Only the main window's top frame may.
@@ -215,7 +235,7 @@ async function runLiveSessionOnce<T>(
 }
 
 function registerLiveSessionHandlers(store: Store): void {
-  activeLiveSession = null
+  clearActiveLiveSession()
   ipcMain.removeHandler('jarvis:liveSessionConnect')
   ipcMain.handle('jarvis:liveSessionConnect', async (event, payload: unknown) => {
     const sender = trustedLiveSender(event)
@@ -235,38 +255,15 @@ function registerLiveSessionHandlers(store: Store): void {
       createOpenAiLiveSession(offerSdp, liveSessionOptions(store), { signal })
     )
     if (result.ok && !sender.isDestroyed()) {
-      const ownerId = sender.id
-      activeLiveSession = { ownerId, sessionId: result.sessionId }
-      sender.once('destroyed', () => {
-        if (activeLiveSession?.ownerId === ownerId) {
-          activeLiveSession = null
-        }
-      })
+      setActiveLiveSession(sender, result.sessionId)
     }
     return result
   })
 
+  // Why no connection-test handler: the only way to test the Live API is to
+  // create a session, which bills, and the design doc documents no call to
+  // close one. Settings keeps its test button disabled until that exists.
   ipcMain.removeHandler('jarvis:liveSessionTest')
-  ipcMain.handle('jarvis:liveSessionTest', async (event) => {
-    const sender = trustedLiveSender(event)
-    if (!sender) {
-      return liveVoiceFailure('not-allowed')
-    }
-    if (liveSessionInFlight) {
-      return liveVoiceFailure('busy')
-    }
-    const now = Date.now()
-    if (
-      lastLiveSessionTestAt !== null &&
-      now - lastLiveSessionTestAt < LIVE_SESSION_TEST_MIN_INTERVAL_MS
-    ) {
-      return liveVoiceFailure('too-soon')
-    }
-    lastLiveSessionTestAt = now
-    return runLiveSessionOnce(sender, (signal) =>
-      testOpenAiLiveConnection(liveSessionOptions(store), { signal })
-    )
-  })
 }
 
 function registerHandlers(store: Store, service: JarvisService): void {

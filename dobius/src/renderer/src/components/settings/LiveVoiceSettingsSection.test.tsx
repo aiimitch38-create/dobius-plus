@@ -4,20 +4,17 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultVoiceSettings } from '../../../../shared/constants'
-import type { OpenAiLiveTestResult, VoiceSettings } from '../../../../shared/speech-types'
+import type { VoiceSettings } from '../../../../shared/speech-types'
 import { LiveVoiceSettingsSection } from './LiveVoiceSettingsSection'
 
-const liveSessionTest = vi.fn(
-  async (): Promise<OpenAiLiveTestResult> => ({ ok: true, message: 'Connected.' })
-)
+const liveSessionConnect = vi.fn()
 
 let root: Root | null = null
 
 async function rerender(
   voice: Partial<VoiceSettings>,
   onUpdate: (updates: Partial<VoiceSettings>) => void = vi.fn(),
-  onOpenDialog: () => void = vi.fn(),
-  keyRevision = 0
+  onOpenDialog: () => void = vi.fn()
 ): Promise<void> {
   await act(async () => {
     root?.render(
@@ -25,7 +22,6 @@ async function rerender(
         voiceSettings={{ ...getDefaultVoiceSettings(), ...voice }}
         onUpdateVoiceSettings={onUpdate}
         onOpenOpenAiDialog={onOpenDialog}
-        openAiKeyRevision={keyRevision}
       />
     )
   })
@@ -36,7 +32,7 @@ async function render(
   onUpdate: (updates: Partial<VoiceSettings>) => void = vi.fn(),
   onOpenDialog: () => void = vi.fn()
 ): Promise<HTMLDivElement> {
-  Object.assign(window, { api: { jarvis: { liveSessionTest } } })
+  Object.assign(window, { api: { jarvis: { liveSessionConnect } } })
   const container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -84,7 +80,7 @@ function input(container: HTMLElement, id: string): HTMLInputElement {
 
 describe('LiveVoiceSettingsSection', () => {
   beforeEach(() => {
-    liveSessionTest.mockClear()
+    liveSessionConnect.mockClear()
   })
 
   afterEach(() => {
@@ -105,7 +101,6 @@ describe('LiveVoiceSettingsSection', () => {
     expect(container.querySelector('[data-testid="openai-key-status"]')?.textContent).toBe(
       'Key: not set'
     )
-    expect(buttonNamed(container, 'Test connection').disabled).toBe(true)
 
     await click(buttonNamed(container, 'Add API key'))
     expect(onOpenDialog).toHaveBeenCalledOnce()
@@ -163,22 +158,6 @@ describe('LiveVoiceSettingsSection', () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ liveVoiceMicMode: 'hands-free' })
   })
 
-  it('reports the connection test result in plain English', async () => {
-    const container = await render({ openAiApiKeyConfigured: true })
-
-    await click(buttonNamed(container, 'Test connection'))
-    expect(liveSessionTest).toHaveBeenCalledOnce()
-    expect(container.textContent).toContain('Connected.')
-
-    liveSessionTest.mockResolvedValueOnce({
-      ok: false,
-      kind: 'bad-key',
-      error: 'OpenAI did not accept the saved API key.'
-    })
-    await click(buttonNamed(container, 'Test connection'))
-    expect(container.textContent).toContain('OpenAI did not accept the saved API key.')
-  })
-
   it('says the spending cap is not enforced yet', async () => {
     const container = await render({})
     expect(container.textContent).toContain(
@@ -186,40 +165,18 @@ describe('LiveVoiceSettingsSection', () => {
     )
   })
 
-  it('clears the test result when the key is replaced or removed', async () => {
-    const container = await render({ openAiApiKeyConfigured: true })
-    await click(buttonNamed(container, 'Test connection'))
-    expect(container.textContent).toContain('Connected.')
-
-    // Replaced: still configured, only the revision moves.
-    await rerender({ openAiApiKeyConfigured: true }, vi.fn(), vi.fn(), 1)
-    expect(container.textContent).not.toContain('Connected.')
-
-    await click(buttonNamed(container, 'Test connection'))
-    expect(container.textContent).toContain('Connected.')
-    await rerender({ openAiApiKeyConfigured: false }, vi.fn(), vi.fn(), 2)
-    expect(container.textContent).not.toContain('Connected.')
-  })
-
-  it('ignores a test that finishes after the key changed', async () => {
-    let finish: (result: OpenAiLiveTestResult) => void = () => undefined
-    liveSessionTest.mockImplementationOnce(
-      () =>
-        new Promise<OpenAiLiveTestResult>((resolve) => {
-          finish = resolve
-        })
-    )
-    const container = await render({ openAiApiKeyConfigured: true })
-    await click(buttonNamed(container, 'Test connection'))
-    expect(buttonNamed(container, 'Testing').disabled).toBe(true)
-
-    await rerender({ openAiApiKeyConfigured: true }, vi.fn(), vi.fn(), 1)
-    expect(buttonNamed(container, 'Test connection').disabled).toBe(false)
-
-    await act(async () => {
-      finish({ ok: true, message: 'Connected with the old key.' })
-      await Promise.resolve()
-    })
-    expect(container.textContent).not.toContain('Connected with the old key.')
+  it('keeps Test connection disabled, with or without a key, and says when it comes back', async () => {
+    for (const keySaved of [false, true]) {
+      const container = await render({ openAiApiKeyConfigured: keySaved })
+      const button = buttonNamed(container, 'Test connection')
+      expect(button.disabled).toBe(true)
+      expect(container.querySelector('[data-testid="live-test-note"]')?.textContent).toBe(
+        'Available when live calls are turned on'
+      )
+      await click(button)
+      act(() => root?.unmount())
+      document.body.innerHTML = ''
+    }
+    expect(liveSessionConnect).not.toHaveBeenCalled()
   })
 })

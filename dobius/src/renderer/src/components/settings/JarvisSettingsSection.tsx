@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { persistedVoiceIdText } from '../../../../shared/live-voice-settings'
 import type { ElevenLabsKeyStatus, VoiceSettings } from '../../../../shared/speech-types'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -14,8 +15,6 @@ type JarvisSettingsSectionProps = {
   onUpdateVoiceSettings: (updates: Partial<VoiceSettings>) => void
   /** Opens the shared OpenAI key dialog owned by the Voice pane. */
   onOpenOpenAiDialog: () => void
-  /** Bumped each time the OpenAI key is saved or removed. */
-  openAiKeyRevision: number
 }
 
 // Why plain literals, not translate(): the localization catalog gate requires
@@ -26,21 +25,24 @@ export function JarvisSettingsSection({
   permissionPending,
   onToggleJarvis,
   onUpdateVoiceSettings,
-  onOpenOpenAiDialog,
-  openAiKeyRevision
+  onOpenOpenAiDialog
 }: JarvisSettingsSectionProps): React.JSX.Element {
   // Why drafts: an API key typed character by character must not be persisted
   // (and re-read by the speech path) on every keystroke — Save commits it.
   // Why write-only (#24): the saved key lives in the encrypted store and is
   // never sent back here; the draft holds only a new key being entered.
+  // Why: saved IDs can be hand-edited or damaged; a number here must not
+  // throw on trim() or end up in a text field.
+  const savedVoiceId = persistedVoiceIdText(voiceSettings.elevenlabsVoiceId)
+  const savedAgentId = persistedVoiceIdText(voiceSettings.elevenlabsAgentId)
   const [keyDraft, setKeyDraft] = useState('')
   const [keyStatus, setKeyStatus] = useState<ElevenLabsKeyStatus>({
     configured: false,
     sessionOnly: false,
     unreadable: false
   })
-  const [voiceDraft, setVoiceDraft] = useState(voiceSettings.elevenlabsVoiceId ?? '')
-  const [agentDraft, setAgentDraft] = useState(voiceSettings.elevenlabsAgentId ?? '')
+  const [voiceDraft, setVoiceDraft] = useState(savedVoiceId)
+  const [agentDraft, setAgentDraft] = useState(savedAgentId)
   const [testing, setTesting] = useState(false)
   const [shortcutActive, setShortcutActive] = useState<boolean | null>(null)
 
@@ -77,14 +79,11 @@ export function JarvisSettingsSection({
   }, [])
 
   useEffect(() => {
-    setVoiceDraft(voiceSettings.elevenlabsVoiceId ?? '')
-    setAgentDraft(voiceSettings.elevenlabsAgentId ?? '')
-  }, [voiceSettings.elevenlabsVoiceId, voiceSettings.elevenlabsAgentId])
+    setVoiceDraft(savedVoiceId)
+    setAgentDraft(savedAgentId)
+  }, [savedVoiceId, savedAgentId])
 
-  const dirty =
-    keyDraft.trim() !== '' ||
-    voiceDraft !== (voiceSettings.elevenlabsVoiceId ?? '') ||
-    agentDraft !== (voiceSettings.elevenlabsAgentId ?? '')
+  const dirty = keyDraft.trim() !== '' || voiceDraft !== savedVoiceId || agentDraft !== savedAgentId
 
   const saveElevenLabs = async (): Promise<void> => {
     const newKey = keyDraft.trim()
@@ -204,7 +203,6 @@ export function JarvisSettingsSection({
         voiceSettings={voiceSettings}
         onUpdateVoiceSettings={onUpdateVoiceSettings}
         onOpenOpenAiDialog={onOpenOpenAiDialog}
-        openAiKeyRevision={openAiKeyRevision}
       />
       <div className="space-y-1.5 py-2">
         <Label htmlFor="jarvis-elevenlabs-key">ElevenLabs voice (optional)</Label>
@@ -271,7 +269,7 @@ export function JarvisSettingsSection({
             Click the orb instead, or quit whatever owns Cmd+T and toggle Jarvis off and on.
           </p>
         ) : null}
-        {voiceSettings.elevenlabsAgentId?.trim() ? (
+        {savedAgentId.trim() ? (
           <p className="text-xs text-muted-foreground">
             Live mode is on, so the orb stays on screen. Click it to start or end a conversation.
           </p>

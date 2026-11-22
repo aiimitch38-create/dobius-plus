@@ -7,12 +7,7 @@ vi.mock('../speech/openai-api-key-store', () => ({
   }
 }))
 
-import {
-  OPENAI_LIVE_API,
-  createOpenAiLiveSession,
-  isValidOfferSdp,
-  testOpenAiLiveConnection
-} from './openai-live-session'
+import { OPENAI_LIVE_API, createOpenAiLiveSession, isValidOfferSdp } from './openai-live-session'
 
 // Fake value only.
 const KEY = 'sk-fake-live-key-1234567890'
@@ -262,40 +257,5 @@ describe('createOpenAiLiveSession', () => {
     const result = await createOpenAiLiveSession(OFFER, OPTIONS, deps(echo))
     expect(result).toMatchObject({ ok: false, kind: 'bad-response' })
     expect(JSON.stringify(result)).not.toContain(KEY)
-  })
-})
-
-describe('testOpenAiLiveConnection', () => {
-  it('passes when OpenAI opens a session', async () => {
-    const fetchImpl = fetchReturning(() => new Response(ANSWER, { status: 200 }))
-    const result = await testOpenAiLiveConnection(OPTIONS, deps(fetchImpl))
-    expect(result.ok).toBe(true)
-    expect(JSON.stringify(result)).not.toContain(KEY)
-    expect(JSON.stringify(result)).not.toContain('v=0')
-  })
-
-  it('passes when only the placeholder offer is turned down', async () => {
-    const fetchImpl = fetchReturning(
-      errorResponse(400, { message: 'Invalid SDP offer', code: 'invalid_request_error' })
-    )
-    expect((await testOpenAiLiveConnection(OPTIONS, deps(fetchImpl))).ok).toBe(true)
-  })
-
-  it.each([
-    [401, { message: 'Incorrect API key', code: 'invalid_api_key' }, 'bad-key'],
-    [404, { message: 'No such model', code: 'model_not_found' }, 'no-access'],
-    [400, { message: 'Unknown parameter: voice', code: 'invalid_request_error' }, 'rejected']
-  ])('fails on HTTP %i %j as %s', async (status, error, kind) => {
-    const fetchImpl = fetchReturning(errorResponse(status, error))
-    expect(await testOpenAiLiveConnection(OPTIONS, deps(fetchImpl))).toMatchObject({
-      ok: false,
-      kind
-    })
-  })
-
-  it('fails in plain English when no key is saved', async () => {
-    const result = await testOpenAiLiveConnection(OPTIONS)
-    expect(result).toMatchObject({ ok: false, kind: 'no-key' })
-    expect(result.ok === false && result.error).toContain('No OpenAI API key is saved')
   })
 })

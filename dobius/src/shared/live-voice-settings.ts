@@ -30,6 +30,37 @@ export type LiveVoiceSettings = {
  */
 export const OPENAI_LIVE_CALL_READY = false
 
+/** A saved ID as text: anything that is not a string counts as not set. */
+export function persistedVoiceIdText(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+/**
+ * The load boundary for saved voice settings: defaults underneath, then the
+ * saved values, then the fields that must be well-formed for every consumer.
+ */
+export function normalizeLoadedVoiceSettings(
+  defaults: VoiceSettings,
+  saved: unknown
+): VoiceSettings {
+  const savedVoice =
+    saved && typeof saved === 'object' && !Array.isArray(saved)
+      ? (saved as VoiceSettings)
+      : undefined
+  return {
+    ...defaults,
+    ...savedVoice,
+    // Why here: settings saved before the engine choice existed have no
+    // liveVoiceEngine, and a plain merge cannot tell an explicit ElevenLabs
+    // user from one who never chose.
+    liveVoiceEngine: resolveLiveVoiceEngine(savedVoice),
+    // Why: a hand-edited or damaged ID (a number, an object) would throw in
+    // every consumer that trims it.
+    elevenlabsVoiceId: persistedVoiceIdText(savedVoice?.elevenlabsVoiceId),
+    elevenlabsAgentId: persistedVoiceIdText(savedVoice?.elevenlabsAgentId)
+  }
+}
+
 // Why typeof: saved settings can be hand-edited or damaged, and loading them
 // must never throw on a non-string agent id.
 function hasElevenLabsAgentId(voice: VoiceSettings | undefined): boolean {

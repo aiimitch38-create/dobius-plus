@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getDefaultVoiceSettings } from './constants'
 import {
+  normalizeLoadedVoiceSettings,
   normalizeLiveVoiceDailyCapUsd,
   normalizeLiveVoiceIdleTimeoutSec,
   normalizeLiveVoiceMicMode,
@@ -159,4 +160,42 @@ describe('malformed saved settings', () => {
     expect(resolveLiveVoiceEngine(damaged[0])).toBe('openai-live')
     expect(resolveActiveVoiceEngine(damaged[2], true)).toBe('hermes')
   })
+})
+
+describe('normalizeLoadedVoiceSettings (load boundary)', () => {
+  it('turns non-string ElevenLabs IDs into empty text and keeps real ones', () => {
+    const damaged = normalizeLoadedVoiceSettings(getDefaultVoiceSettings(), {
+      elevenlabsVoiceId: 42,
+      elevenlabsAgentId: { id: 'agent_1' },
+      jarvisEnabled: true
+    })
+    expect(damaged).toMatchObject({
+      elevenlabsVoiceId: '',
+      elevenlabsAgentId: '',
+      jarvisEnabled: true,
+      liveVoiceEngine: 'openai-live'
+    })
+
+    const good = normalizeLoadedVoiceSettings(getDefaultVoiceSettings(), {
+      elevenlabsVoiceId: 'voice-a',
+      elevenlabsAgentId: 'agent_1',
+      preferNativeAdamVoice: false
+    })
+    expect(good).toMatchObject({
+      elevenlabsVoiceId: 'voice-a',
+      elevenlabsAgentId: 'agent_1',
+      liveVoiceEngine: 'elevenlabs'
+    })
+  })
+
+  it.each([[undefined], [null], ['text'], [7], [['a']]])(
+    'falls back to defaults when the saved voice is %j',
+    (saved) => {
+      expect(normalizeLoadedVoiceSettings(getDefaultVoiceSettings(), saved)).toEqual({
+        ...getDefaultVoiceSettings(),
+        elevenlabsVoiceId: '',
+        elevenlabsAgentId: ''
+      })
+    }
+  )
 })

@@ -1,8 +1,7 @@
 import type {
   OpenAiLiveErrorKind,
   OpenAiLiveFailure,
-  OpenAiLiveSessionResult,
-  OpenAiLiveTestResult
+  OpenAiLiveSessionResult
 } from '../../shared/speech-types'
 import { hasOpenAiSpeechApiKey, readOpenAiSpeechApiKey } from '../speech/openai-api-key-store'
 
@@ -30,31 +29,6 @@ const MAX_OFFER_SDP_CHARS = 100_000
 const MAX_ANSWER_SDP_CHARS = 200_000
 const MAX_ERROR_DETAIL_CHARS = 200
 
-// Shaped like a real offer (one audio line, one data channel) but with no
-// usable network candidates, so it can never carry a call.
-const TEST_OFFER_SDP = [
-  'v=0',
-  'o=- 0 0 IN IP4 127.0.0.1',
-  's=-',
-  't=0 0',
-  'a=group:BUNDLE 0 1',
-  'm=audio 9 UDP/TLS/RTP/SAVPF 111',
-  'c=IN IP4 0.0.0.0',
-  'a=mid:0',
-  'a=sendrecv',
-  'a=rtcp-mux',
-  'a=ice-ufrag:dobiustest',
-  'a=ice-pwd:dobiusconnectiontestonly0000',
-  'a=fingerprint:sha-256 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00',
-  'a=setup:actpass',
-  'a=rtpmap:111 opus/48000/2',
-  'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
-  'c=IN IP4 0.0.0.0',
-  'a=mid:1',
-  'a=sctp-port:5000',
-  ''
-].join('\r\n')
-
 export type OpenAiLiveSessionOptions = {
   voice: string
   idleTimeoutSec: number
@@ -75,7 +49,6 @@ const ERROR_TEXT: Record<OpenAiLiveErrorKind, string> = {
   'not-allowed': 'Live voice can only be started from the main Dobius+ window.',
   'not-ready':
     'OpenAI Live is not switched on. Choose OpenAI Live as the voice engine in Settings, Voice.',
-  'too-soon': 'The connection was tested a moment ago. Wait a few seconds and try again.',
   cancelled: 'The live voice connection was cancelled because its window closed.',
   'no-key': 'No OpenAI API key is saved yet. Add one in Settings, Voice.',
   'key-unreadable':
@@ -305,34 +278,4 @@ export async function createOpenAiLiveSession(
     answerSdp,
     sessionId: sessionId && !sessionId.includes(apiKey) ? sessionId : null
   }
-}
-
-/**
- * Settings "Test connection": asks OpenAI for a session with a placeholder
- * offer that cannot carry audio, then reads the outcome.
- */
-export async function testOpenAiLiveConnection(
-  options: OpenAiLiveSessionOptions,
-  deps: OpenAiLiveSessionDeps = {}
-): Promise<OpenAiLiveTestResult> {
-  const result = await createOpenAiLiveSession(TEST_OFFER_SDP, options, deps)
-  if (result.ok) {
-    // UNVERIFIED: the design doc documents no call to close or terminate a
-    // Live session, so a session this test opens is left to end on its own
-    // (no audio ever connects). The caller rate-limits tests for that reason.
-    return {
-      ok: true,
-      message: 'Connected. OpenAI accepted the key and opened a live voice session.'
-    }
-  }
-  // Why this counts as a pass: OpenAI checks the key before it reads the
-  // offer, so a complaint about the placeholder offer means the key got in.
-  if (result.kind === 'rejected' && /\b(sdp|offer)\b/i.test(result.error)) {
-    return {
-      ok: true,
-      message:
-        'Connected. OpenAI accepted the key. The placeholder test call was turned down, as expected; a real call is the final check.'
-    }
-  }
-  return result
 }

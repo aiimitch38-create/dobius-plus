@@ -124,7 +124,6 @@ export type OpenAiLiveErrorKind =
   | 'busy'
   | 'not-allowed'
   | 'not-ready'
-  | 'too-soon'
   | 'cancelled'
   | 'no-key'
   | 'key-unreadable'
@@ -144,8 +143,6 @@ export type OpenAiLiveFailure = { ok: false; kind: OpenAiLiveErrorKind; error: s
 export type OpenAiLiveSessionResult =
   | { ok: true; answerSdp: string; sessionId: string | null }
   | OpenAiLiveFailure
-
-export type OpenAiLiveTestResult = { ok: true; message: string } | OpenAiLiveFailure
 
 /** ElevenLabs key status sent to Settings; the key itself never is (#24). */
 export type ElevenLabsKeyStatus = {
