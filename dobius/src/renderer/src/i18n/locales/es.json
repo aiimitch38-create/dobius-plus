@@ -2132,48 +2132,6 @@
               }
             }
           }
-        },
-        "CloseReasonDropdown": {
-          "e1f2a3b4c5": "Elige el motivo de cierre"
-        },
-        "GitHubIssueCommentComposer": {
-          "082515176a": "No se pudo agregar el comentario",
-          "9f88657c4e": "Issue cerrado",
-          "e9b7cb7d17": "No se pudo cerrar el issue",
-          "bd3b4492a0": "Issue reabierto",
-          "f2a8c1d903": "No se pudo reabrir el issue",
-          "a1b2c3d4e5": "Agregar un comentario",
-          "c5c117270e": "Agrega tu comentario aquí, con amabilidad",
-          "f6a7b8c9d0": "Cerrar issue",
-          "b1c2d3e4f5": "Reabrir issue",
-          "0a73f59e85": "Enviar comentario",
-          "bf43425540": "Comentario",
-          "commentTooLarge": "El comentario es demasiado grande para enviarlo de forma segura."
-        },
-        "GitHubWorkItemAssigneePopoverContent": {
-          "cddd9b04a7": "Cargando asignados",
-          "a00830d3f7": "No hay usuarios",
-          "4f8b6f2c1d": "Filtrar asignados..."
-        },
-        "GitHubWorkItemLabelPopoverContent": {
-          "2aa9acdf34": "Editar etiquetas en GitHub",
-          "cddd9b04a7": "Cargando etiquetas",
-          "de26e2eb06": "No hay etiquetas",
-          "8b0d52ee3a": "Filtrar etiquetas..."
-        },
-        "githubIssueCloseReasons": {
-          "completed": {
-            "label": "Cerrar como completado",
-            "description": "Hecho, cerrado, corregido, resuelto"
-          },
-          "notPlanned": {
-            "label": "Cerrar como no planificado",
-            "description": "No se corregirá, no se puede reproducir, obsoleto"
-          },
-          "duplicate": {
-            "label": "Cerrar como duplicado",
-            "description": "Duplicado de otro issue"
-          }
         }
       },
       "linear": {
@@ -2398,15 +2356,6 @@
         },
         "sheet": {
           "1189e9fe0a": "Cerrar"
-        },
-        "team": {
-          "multi": {
-            "combobox": {
-              "de83523bf9": "Ningún equipo coincide con tu búsqueda.",
-              "301f2a796e": "Todos los equipos",
-              "18ec58881e": "Buscar equipos..."
-            }
-          }
         }
       },
       "terminal": {
@@ -3445,18 +3394,6 @@
         "UsageBreakdownSection": {
           "7765a4c3e1": "n/a",
           "247c93ca92": "• precios inferidos"
-        },
-        "UsageSessionsTable": {
-          "1afc25eb06": "Turnos",
-          "0f03975d59": "Eventos",
-          "21ea00bfa8": "Caché",
-          "e0b988599d": "Total",
-          "01476891c7": "Última actividad",
-          "c17bed0416": "Proyecto",
-          "f6a2c8d019": "Modelo",
-          "faf3444859": "Entrada",
-          "a8b7487ff7": "Salida",
-          "cfe2282ffa": "Desconocido"
         }
       },
       "sparse": {
@@ -4390,42 +4327,9 @@
           "b826a98b6f": "ocupado"
         },
         "LinearAgentSkillSetupPrompt": {
-          "missingCliAndSkill": "Faltan la CLI de Dobius+ y el skill de Linear para Agents.",
-          "modalTitle": "Habilitar acceso a issues de Linear",
-          "modalDescription": "Instala el skill de Linear desde una terminal.",
-          "modalPrompt": "Permite que los Agents lean y editen el issue de Linear adjunto.",
-          "dontShowAgain": "No volver a mostrar",
-          "notNow": "Ahora no",
           "missingBoth": "Faltan la CLI de Dobius+ y el skill de Linear para Agents.",
-          "missingCli": "Falta la CLI de Dobius+.",
-          "missingSkill": "Falta el skill de Linear para Agents.",
-          "title": "Configurar skill de Linear para Agents",
-          "remoteCopy": "Esto instala el setup del host; los entornos de Agents remotos pueden necesitar setup propio.",
-          "hostCopy": "Instálalo para handoffs de Agents del host desde trabajo de Linear enlazado.",
-          "dismiss": "Descartar setup del skill de Linear para Agents",
-          "setup": "Configurar",
-          "recheck": "Volver a comprobar",
           "panelTitle": "Skill de Linear para Agents",
-          "panelDescription": "Instala el skill de Agents del host para handoffs desde tareas de Linear enlazadas.",
-          "terminalTitle": "Instalar skill de Linear para Agents",
-          "terminalAria": "Terminal de instalación del skill de Linear para Agents",
-          "install": "Instalar CLI y skill",
-          "successTitle": "El acceso a issues de Linear está listo",
-          "successDescription": "Los Agents ya pueden leer y actualizar issues de Linear enlazados desde este espacio de trabajo.",
-          "successDescriptionWsl": "Los Agents de WSL ya pueden usar issues de Linear enlazados desde este espacio de trabajo.",
-          "successDescriptionRemote": "Los Agents del host ya pueden usar issues de Linear enlazados. Los entornos de Agents remotos aún pueden necesitar setup propio.",
-          "successStatus": "Acceso a issues de Linear listo",
-          "done": "Listo",
-          "wslCopy": "Instálalo para handoffs de Agents en WSL desde trabajo de Linear enlazado.",
-          "wslLabel": "WSL predeterminado",
-          "toastMissingCliAndSkill": "Faltan la CLI de Dobius+ y el skill de Linear",
-          "toastMissingCli": "Falta la CLI de Dobius+",
-          "toastMissingSkill": "Falta el skill de Linear",
-          "toastInstallCliAndSkillDescription": "Instala la CLI de Dobius+ y el skill de Linear para permitir que tus Agents lean y editen tareas de Linear.",
-          "toastInstallCliDescription": "Instala la CLI de Dobius+ para permitir que tus Agents lean y editen tareas de Linear.",
-          "toastInstallSkillDescription": "Instala el skill de Linear para permitir que tus Agents lean y editen tareas de Linear a través de la CLI de Dobius+.",
-          "toastRemoteDescription": "{{value0}} Los entornos de Agents remotos pueden necesitar setup propio.",
-          "toastWslDescription": "{{value0}} Este setup se ejecuta en el entorno de Agent WSL seleccionado."
+          "panelDescription": "Instala el skill de Agents del host para handoffs desde tareas de Linear enlazadas."
         },
         "FolderWorkspaceComposerDialog": {
           "connectFailed": "No se pudo conectar al proyecto.",
@@ -4927,20 +4831,6 @@
           "a4fa380b67": "{assistantMessage}",
           "2ee2779c05": "{firstPrompt}"
         },
-        "AutoRenameBranchPromptEditor": {
-          "63121132c0": "Descartar",
-          "4416b25d29": "Prefiere sustantivos del dominio de la tarea, evita IDs de issues y mantén nombres fáciles de revisar.",
-          "39278f4411": "; se seguirá aplicando tu prefijo de rama.",
-          "ebb942a2ec": "fix-login-flow",
-          "af2d9a2cc6": ". Dobius+ genera solo el segmento final, como",
-          "182d419b97": "prompt integrado para nombres de rama",
-          "2f5dc661fe": "Se agrega al",
-          "7d6176f506": "Prompt",
-          "5968112152": "Guardar",
-          "54ac229ad4": "Guardando...",
-          "af0831a590": "Guardado",
-          "0691753cf2": "Cambios sin guardar"
-        },
         "BaseRefPicker": {
           "1b8e54151f": "No se encontraron ramas coincidentes.",
           "d166ff883d": "Actual",
@@ -5063,8 +4953,6 @@
           "8671e406f0": "Cancelar",
           "a4aafe46e3": "Ruta de destino:",
           "e8012c03a1": "Permite a los agents usar comandos de workspace, terminal y progreso de Dobius+.",
-          "cliSkillTerminalTitle": "Configuración del skill CLI",
-          "cliSkillTerminalAria": "Terminal de instalación del skill CLI",
           "6053cf736c": "Skill CLI",
           "36a6f919ba": "Da a los agents workflows de workspace, terminal y progreso integrados con Dobius+.",
           "04873eea3e": "Agent skills",
@@ -6551,7 +6439,6 @@
           "db270cc9a9": "Forma del cursor",
           "d455f2ef4f": "Apariencia predeterminada del cursor para los paneles de terminal de Dobius+.",
           "abcb4dd019": "Cursor del terminal",
-          "70beb1bbc7": "Vista previa",
           "31f6e61085": "Las ligaduras están",
           "870377082f": "Desactivadas",
           "84bd22f2cd": "Activadas",
@@ -6561,15 +6448,10 @@
           "400e950ca5": "Automático: habilitado para \"{{value0}}\".",
           "04569feb07": "Siempre desactivadas, incluso en fuentes que las incluyen.",
           "7234abcd08": "Siempre activadas. Las fuentes sin ligaduras simplemente se renderizan tal cual.",
-          "7233d594bf": "Renderiza ligaduras de programación (p. ej., =>, !=, ===) en las fuentes que las incluyen. \"Auto\" activa ligaduras solo para fuentes de ligaduras conocidas (Fira Code, JetBrains Mono, Cascadia Code, Iosevka, etc.).",
-          "bafc80efbc": "Controla el multiplicador de altura de línea del terminal.",
           "c084eb7d4c": "Altura de línea",
-          "36af8ad94c": "Controla el peso de fuente del texto del terminal.",
           "4aae5db258": "Peso de fuente",
-          "f04b17a50e": "Familia de fuentes predeterminada del terminal para paneles nuevos y actualizaciones en vivo.",
           "a408266e67": "Familia de fuentes",
           "855a76343a": "Importar desde Ghostty",
-          "711e589f18": "Tipografía predeterminada del terminal para paneles nuevos y actualizaciones en vivo.",
           "048aac8a64": "Tipografía del terminal",
           "4415beb958": "desactivado",
           "4e7d41a9f0": "activado",
@@ -9046,38 +8928,14 @@
             "3c3ad3a1d2": "Agente iniciado. No se puede marcar ningún comentario seleccionado como resuelto en el host."
           },
           "CreatePullRequestDialog": {
-            "2bc1b4345e": "Cancelar",
-            "27ef4b195c": "Elige una rama base diferente antes de crear un {{value0}}.",
-            "7ef56f3efe": "Crear como borrador",
-            "0c9f9a568c": "Admite formato Markdown. Usa Generar con IA para autocompletarlo a partir de tus cambios.",
-            "02b2ce911f": "Descripción (opcional)",
-            "1cd53359db": "Descripción",
-            "68314b4369": "Título",
-            "694550a610": "main",
-            "0fad57a14c": "Busca ramas remotas o ingresa el nombre de una rama.",
-            "8584ccb43c": "Rama base",
-            "6f5f1962b6": "Rama head",
-            "b504b3ceb1": "detalles antes de crear la reseña alojada.",
-            "f658ff2455": "Confirma la rama de destino y los detalles de {{value0}} antes de crear la revisión alojada.",
-            "b7f43474d7": "Crear {{value0}}",
-            "7a21f0dae8": "Abrir en {{value0}}",
-            "edc35a7027": "{{value0}} #{{value1}} ya está abierto",
-            "a154fe55e6": "Hacer push y crear {{value0}}",
-            "21c7a1daa0": "{{value0}} ya está abierto",
-            "db9cee18f7": "Crear {{value0}}"
+            "b504b3ceb1": "detalles antes de crear la reseña alojada."
           },
           "CreateHostedReviewComposer": {
             "741ff8a0d2": "Hacer push y crear {{value0}}"
           },
           "CreatePullRequestGenerateButton": {
-            "4012459f8a": "Generar con IA",
-            "a0501572c1": "Generar detalles de {{value0}} con IA",
-            "d47fd63012": "Generando detalles de {{value0}}. Haz clic para detener.",
             "bdf83ccb15": "Generando {{value0}}",
-            "f5513bdeb1": "Generando",
-            "a6ea6dc3aa": "Generando…",
-            "e61d7e7ad4": "Dejar de generar detalles de {{value0}}",
-            "e041998cad": "Dejar de generar"
+            "f5513bdeb1": "Generando"
           },
           "FileExplorer": {
             "79b1537dd3": "Selecciona un espacio de trabajo para explorar archivos",
@@ -10103,17 +9961,6 @@
           "yoloPermissionsInfo": "Información de permisos del agente",
           "yoloPermissionsTooltip": "Omite las comprobaciones de permisos de los agentes para reducir interrupciones"
         },
-        "FeatureSetupChecklist": {
-          "77f74946f5": "Los agentes pueden enviarse mensajes entre sí, tomar tareas y coordinar handoffs.",
-          "399cf885c0": "Orquestación de agentes",
-          "c5292c409d": "Los agentes pueden inspeccionar ventanas de apps y operar apps locales cuando se lo pidas.",
-          "1ecfb490ac": "Uso de la computadora",
-          "01426f3a23": "Los agentes pueden navegar por sitios, inspeccionar páginas y trabajar en tareas del navegador.",
-          "ea85d9e628": "Uso del navegador por agentes",
-          "linearTicketsTitle": "Skill de agente de Linear",
-          "linearTicketsDescription": "Los agentes pueden usar tareas de Linear enlazadas para handoffs con más contexto de ticket.",
-          "linearTicketsSetupSummary": "Recomendado para espacios de trabajo de Linear; no afecta la configuración de conexión de Linear."
-        },
         "FeatureSetupInlineTerminal": {
           "789b59936e": "Pulsa Enter para ejecutar el comando y confirma npx si se te solicita. También puedes configurarlo más tarde en Configuración.",
           "47fc6cc6dc": "Comando de configuración de skills",
@@ -10191,37 +10038,6 @@
           "9f47f345a4": "¡No tardará mucho!",
           "e4726b2d50": "¿Saltar la incorporación?"
         },
-        "OnboardingTourStep": {
-          "3f9586c043": "Haz el recorrido",
-          "60c5576353": "Salir del recorrido"
-        },
-        "RepoStep": {
-          "e8fdb36338": "Escaneo de repositorios. Haga clic para detener.",
-          "b7c4da0504": "¿SSH? Configura hosts en Configuración",
-          "c33b190ca3": "Solo rutas del host",
-          "7b679207e4": "Espacio de trabajo",
-          "24c7c8696c": "Clonar en ruta del host",
-          "7932e95f68": "Clonar",
-          "955134915e": "git@github.com:org/repo.git",
-          "288d8444b7": "Pegue una URL HTTPS o SSH.",
-          "132425a3e3": "Clonar un repositorio",
-          "6558d50c69": "¿Quieres importar muchos repositorios a la vez? Seleccione la carpeta principal.",
-          "831524961f": "Elija cualquier directorio local, repositorio git o no.",
-          "f4e9c8dcf8": "Buscar una carpeta",
-          "e8214aa632": "Abrir como carpeta",
-          "3863747c56": "Agregar proyecto Git",
-          "2ebbc26343": "/home/user/project",
-          "466108ab89": "Introduce una ruta que exista en el host seleccionado.",
-          "8cab104e3c": "Abrir un proyecto en este host",
-          "2d20200346": "Importar repositorios",
-          "27ca610db1": "Atrás",
-          "cecd6593fa": "Carpeta escaneada:",
-          "c7af322fc3": "Dejar de escanear",
-          "c3d9d44ca2": "Detener escaneo",
-          "cf23006ba7": "Host seleccionado",
-          "7ec3f48820": "/home/user",
-          "2e6438dd34": "{{value0}}Se encontraron {{value1}} {{value2}} en esta carpeta."
-        },
         "ThemeStep": {
           "a4b254779d": "Tecla de opción de macOS",
           "6c51398942": "Ratón",
@@ -10254,9 +10070,6 @@
               "52acfbef51": "No se pudo guardar el progreso"
             }
           }
-        },
-        "AgentFeatureSetupStep": {
-          "97dcdc010f": "Activar capacidades"
         },
         "WindowsTerminalStep": {
           "powerShell": "PowerShell",
@@ -10333,10 +10146,6 @@
             "searchBranches": "Buscar ramas",
             "searchLinear": "Buscar issues de Linear",
             "workspaceName": "Nombre del espacio de trabajo"
-          },
-          "ProjectHostSetupCombobox": {
-            "empty": "No hay hosts listos para este proyecto.",
-            "placeholder": "Elegir host"
           },
           "ProjectCombobox": {
             "search": "Buscar proyectos...",
@@ -10655,21 +10464,6 @@
             "cbc45022d4": "Permite a los agentes navegar y verificar páginas en el navegador de Dobius+.",
             "d5bb1cd4ba": "Skill Browser Use"
           },
-          "ComputerUseAnimatedVisual": {
-            "d8401975b1": "aprobado",
-            "f27676a92c": "estado:",
-            "6804cb356f": "clic enviado",
-            "1719b28a81": "encontrado \"Aprobar\"",
-            "79445f7512": "aprobar la nota en mi aplicación",
-            "99a8624bcb": ">",
-            "2adb561b44": "Sesión de Claude Code iniciada",
-            "94787f01f8": "Claude Code",
-            "9cddfe96b2": "app local",
-            "9634d870d1": "Aprobar",
-            "3cc2df3671": "Hecho",
-            "bdd5312213": "Pendiente",
-            "c11dda000b": "Aprobado"
-          },
           "EditorAnimatedVisual": {
             "7a763daf2f": "itálico",
             "8521536429": "negrita ·",
@@ -10691,41 +10485,7 @@
             "e16479c1c5": "[data-slash-menu] [data-slash-row].slash-active { background: rgba(24,24,27,0.07); box-shadow: inset 0 0 0 1px rgba(24,24,27,0.06); } [data-md-active-line][data-role=\"active\"] { color: rgb(113 113 122); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; } [data-md-active-line][data-role=\"h1\"] { color: inherit; font-family: inherit; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; margin-top: 6px; } [data-md-caret] { display: inline-block; width: 1.5px; height: 1em; background: currentColor; vertical-align: -2px; margin-left: 1px; animation: md-caret-blink 1.05s steps(1) infinite; } @keyframes md-caret-blink { 0%, 50% { opacity: 1 } 51%, 100% { opacity: 0 } } @keyframes md-block-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } } @keyframes md-cursor-ripple { 0% { transform: scale(0.4); opacity: 0.9; } 100% { transform: scale(1.4); opacity: 0; } } [data-clicking=\"1\"] [data-cursor-ripple] { animation: md-cursor-ripple 460ms ease-out forwards; }"
           },
           "FeatureTourPreview": {
-            "1170621527": ">",
-            "304ad0dfc1": "Pensando...",
-            "ef8b164dd1": "revisar src/auth",
-            "952d3ddd9a": "sesión iniciada",
-            "771d8881c2": "claude",
-            "6ed43cb0e0": "dashboard.spec.ts",
-            "24fedd5a52": "login.spec.ts",
-            "8279e9d95b": "Ejecutando 12 pruebas",
-            "6218a9014d": "pnpm playwright test",
-            "04d54d50ec": "dobius · zsh",
-            "1aa8a9a24a": "Terminal dividible",
-            "2a7cfc82c8": "Vinculado a GH #1842",
-            "3822d8d14b": "fix/worktree-picker-truncates",
-            "d54aefe09e": "LIN-329",
-            "40bbd92ef4": "Comenzar",
-            "c1f28c03b2": "El selector de worktree se trunca",
-            "fc0cc0b267": "GH #1842",
-            "0688842445": "GH #1799",
-            "bee6b4088d": "Tareas de GitHub y Linear",
-            "5171768676": "orquestando 3 agentes",
-            "cebc7769cd": "rediseñar el flujo de autenticación",
-            "e44269e97d": "Orquestación de agentes",
-            "ec4a73f5e6": "PR 3/3",
-            "cfdfd4d6b4": "PR 2/3",
-            "b1f17bcc74": "PR 1/3",
-            "e38112b289": "refactorizar el webhook de facturación",
-            "9c812e0d7c": "acelerar el proceso de CI",
-            "3c4adfd821": "arreglar la condición de carrera de inicio de sesión",
-            "56a0271428": "Espacios de trabajo aislados",
-            "ef737dcee1": "Tareas de GitHub y Linear",
-            "ac51c061e2": "codex",
-            "47f16ecf34": "Avanza en varias cosas a la vez. Cada workspace mantiene juntos su rama, terminal y actividad de agentes.",
-            "70aa182266": "Delega un objetivo y sigue con lo tuyo. Un agente coordinador se despliega y publica PRs en paralelo.",
-            "f10c14dd9d": "Evita cambiar de pestaña. Elige desde tu backlog de GitHub o Linear e inicia un workspace con un clic.",
-            "5d6ee181b6": "Abre cualquier workspace para volver a su terminal y luego divide paneles para tests, logs y agentes."
+            "ac51c061e2": "codex"
           },
           "FeatureWallBody": {
             "25ec5356d6": "Configuración"
@@ -12600,22 +12360,6 @@
       },
       "ShortcutKeyCombo": {
         "07eb4985a1": "Doble toque en {{value0}}"
-      },
-      "star": {
-        "nag": {
-          "StarNagToastHost": {
-            "starredThanks": "Star enviada — ¡gracias!",
-            "githubOpened": "GitHub abierto",
-            "opening": "Abriendo…",
-            "starring": "Enviando star…",
-            "openGithub": "Abrir GitHub",
-            "starOnGithub": "Dar star en GitHub",
-            "onboardingCompleted": "¡Onboarding completado!",
-            "body": "Si Dobius+ te está gustando, una star en GitHub ayuda a que otros desarrolladores lo descubran.",
-            "dismiss": "Descartar",
-            "later": "Más tarde"
-          }
-        }
       },
       "nativeChat": {
         "contextMenu": {
