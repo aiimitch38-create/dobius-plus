@@ -57,4 +57,15 @@ describe('routeOrchestratorMessage', () => {
   it('refuses a broadcast with nothing wired', () => {
     expect(routeOrchestratorMessage('go', [])).toEqual({ kind: 'refuse', reason: 'nothing-wired' })
   })
+
+  it('refuses an @mention that two wired consoles answer to, ignoring case', () => {
+    const twins = [
+      { cardId: 'a', title: 'Builder' },
+      { cardId: 'b', title: 'builder' }
+    ]
+    expect(routeOrchestratorMessage('@Builder fix it', twins)).toEqual({
+      kind: 'refuse',
+      reason: 'ambiguous'
+    })
+  })
 })

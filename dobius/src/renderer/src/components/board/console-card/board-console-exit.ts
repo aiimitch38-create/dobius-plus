@@ -7,7 +7,7 @@ export type PtyExitOutcome = 'keep-pane' | 'close-tab'
  * Why: a Board console card must outlive its agent process. Classic closes the
  * tab when its only PTY exits; on the Board that left the card reading
  * "Terminal closed" with the output gone. Keeping the dead pane mounted shows
- * the scrollback, the status chip reads "Ended", and Restart relaunches in place.
+ * the scrollback, the status chip reads "Exited", and Restart relaunches in place.
  */
 export function boardConsolePtyExitOutcome(
   state: Pick<BoardSlice, 'boardsByWorktree'>,

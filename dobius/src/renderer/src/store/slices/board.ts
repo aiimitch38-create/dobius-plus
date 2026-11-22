@@ -23,7 +23,7 @@ import {
 } from './board-persistence'
 
 export * from './board-state'
-export { resetBoardPersistenceForTest } from './board-persistence'
+export { flushBoardPersistence, resetBoardPersistenceForTest } from './board-persistence'
 
 export type BoardRect = { x: number; y: number; w: number; h: number }
 

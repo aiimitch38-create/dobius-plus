@@ -13,6 +13,7 @@ import { useAppStore } from '@/store'
 import { getBoard, type BoardCardOf } from '@/store/slices/board'
 import type { CardBodyProps } from './card-body-props'
 import { useOrchestratorThread } from './use-orchestrator-thread'
+import { wiredScopedConsoles } from './orchestrator-relay'
 import { OrchestratorEmptyState, OrchestratorTeamBar } from '../board-links/OrchestratorTeamBar'
 import {
   orchestratorRefusalText,
@@ -203,13 +204,7 @@ export function OrchestratorCard({
     }
     setSending(true)
     try {
-      const wiredSet = new Set(card.wiredCardIds)
-      const route = routeOrchestratorMessage(
-        text,
-        boardCards.flatMap((c) =>
-          c.kind === 'console' && wiredSet.has(c.id) ? [{ cardId: c.id, title: c.title }] : []
-        )
-      )
+      const route = routeOrchestratorMessage(text, wiredScopedConsoles(boardCards, card.wiredCardIds))
       if (route.kind === 'refuse') {
         note(orchestratorRefusalText(route.reason))
       } else {

@@ -13349,7 +13349,8 @@
         "restart": "Restart {{name}}",
         "kill": "Kill {{name}}"
       },
-      "rows": "Wired consoles"
+      "rows": "Wired consoles",
+      "refuseAmbiguous": "Several wired consoles have that name, so nothing was sent. Rename one first."
     },
     "text": {
       "label": "Text",
@@ -13393,7 +13394,7 @@
         "waiting": "Needs you",
         "idle": "Idle",
         "paused": "Paused",
-        "done": "Done",
+        "done": "Exited",
         "error": "Terminal closed",
         "shell": "At its shell",
         "gone": "Terminal closed"
@@ -13423,7 +13424,10 @@
       "accountSystem": "system login",
       "duplicateFailed": "Could not start a copy of {{name}}.",
       "glance": "Latest output from {{title}}",
-      "glanceEmpty": "No output yet"
+      "glanceEmpty": "No output yet",
+      "notRunning": "Not running",
+      "restartNamed": "Restart {{name}}",
+      "restartSaveFailed": "Restarted {{name}}, but the Board could not be saved, so its old terminal was left open: {{reason}}"
     },
     "foundBug": "Found a bug?",
     "report": {

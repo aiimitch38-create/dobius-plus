@@ -15,6 +15,9 @@ beforeEach(() => {
     if (method === 'board.resolveConsole') {
       return { result: { handle: 'term_live' } }
     }
+    if (method === 'terminal.resolveTab') {
+      return { result: { handle: 'term_in_tab' } }
+    }
     if (method === 'terminal.resolveActive') {
       return { result: { handle: 'term_active' } }
     }
@@ -69,6 +72,38 @@ describe('resolveTerminalAddress', () => {
       'board_card_not_found'
     )
     expect(callMock).not.toHaveBeenCalledWith('terminal.resolveActive', expect.anything())
+  })
+})
+
+describe('resolveTerminalAddress tab:', () => {
+  it('resolves tab:<tabId> to that tab\'s running terminal', async () => {
+    expect(await resolveTerminalAddress('tab:term-tab-7', flagsOf(), '/repo', client)).toBe(
+      'term_in_tab'
+    )
+    expect(callMock).toHaveBeenCalledWith('terminal.resolveTab', { tabId: 'term-tab-7' })
+  })
+
+  it('rejects tab: with no id', async () => {
+    await expect(resolveTerminalAddress('tab: ', flagsOf(), '/repo', client)).rejects.toThrow(
+      'Missing tab id'
+    )
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
+  it('passes an unknown-tab error through and never asks for the active terminal', async () => {
+    callMock.mockImplementation(async () => {
+      throw new Error('terminal_tab_not_found: no terminal tab "gone" is open')
+    })
+    await expect(resolveTerminalAddress('tab:gone', flagsOf(), '/repo', client)).rejects.toThrow(
+      'terminal_tab_not_found'
+    )
+    expect(callMock).not.toHaveBeenCalledWith('terminal.resolveActive', expect.anything())
+  })
+
+  it('works for --terminal tab:<tabId>', async () => {
+    expect(await getTerminalHandle(flagsOf([['terminal', 'tab:t1']]), '/repo', client)).toBe(
+      'term_in_tab'
+    )
   })
 })
 

@@ -202,7 +202,7 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
     path: ['terminal', 'send'],
     summary: 'Send input to a live terminal',
     usage:
-      'dobius terminal send [--terminal <handle|card:<id-or-title>>] [--worktree <selector>] [--text <text>] [--enter] [--interrupt] [--expected-runtime-id <id>] [--require-agent-status sendable] [--json]',
+      'dobius terminal send [--terminal <handle|card:<id-or-title>|tab:<tabId>>] [--worktree <selector>] [--text <text>] [--enter] [--interrupt] [--expected-runtime-id <id>] [--require-agent-status sendable] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'terminal',
@@ -214,7 +214,7 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
       'require-agent-status'
     ],
     notes: [
-      '--terminal card:<id-or-title> targets a Board console card, looked up at send time; an unknown, ambiguous or not-running card is an error. Prefer the card id ($DOBIUS_BOARD_CARD_ID inside a console): titles can repeat.',
+      '--terminal card:<id-or-title> targets a Board console card, looked up at send time; an unknown, ambiguous or not-running card is an error. Prefer the card id ($DOBIUS_BOARD_CARD_ID inside a console): titles can repeat. tab:<tabId> targets the running terminal of that tab ($DOBIUS_TAB_ID inside a terminal); a closed or stopped tab is an error. A tab id changes when a Board console restarts; the card id does not.',
       '--worktree picks the Board the card is on (default: the worktree enclosing the current directory). Without --terminal it picks the worktree whose active terminal is used.',
       'Leaving --terminal out uses the active terminal. --terminal with an empty value is an error, never the active terminal.',
       'Use --expected-runtime-id to bind submission to one exact runtime identity; this selects terminal.sendBound.',
