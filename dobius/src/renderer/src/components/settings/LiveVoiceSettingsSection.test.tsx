@@ -158,11 +158,10 @@ describe('LiveVoiceSettingsSection', () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ liveVoiceMicMode: 'hands-free' })
   })
 
-  it('says the spending cap is not enforced yet', async () => {
+  it('says the spending cap is enforced', async () => {
     const container = await render({})
-    expect(container.textContent).toContain(
-      'Not enforced yet: the spending meter comes before live calls are turned on.'
-    )
+    expect(container.textContent).toContain('Enforced. ADAM warns at 80 percent.')
+    expect(container.textContent).not.toContain('Not enforced yet')
   })
 
   it('keeps Test connection disabled, with or without a key, and says when it comes back', async () => {

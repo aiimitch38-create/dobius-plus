@@ -230,8 +230,8 @@ export function LiveVoiceSettingsSection({
             ))}
           </div>
           <p className="text-xs text-muted-foreground">
-            Push-to-talk keeps the microphone off until you press the shortcut. Hands-free listens
-            the whole time.
+            Push-to-talk: the shortcut starts a call, then turns the microphone off and on.
+            Hands-free listens the whole time, and the shortcut ends the call.
           </p>
         </div>
 
@@ -249,7 +249,8 @@ export function LiveVoiceSettingsSection({
             onBlur={commitCap}
           />
           <p className="text-xs text-muted-foreground">
-            Not enforced yet: the spending meter comes before live calls are turned on.
+            Enforced. ADAM warns at 80 percent. At the cap he ends the call, and new calls wait
+            until tomorrow. The total is an estimate from OpenAI&apos;s per-minute prices.
           </p>
         </div>
 
