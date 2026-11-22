@@ -21,6 +21,7 @@ import {
   resolveThroughExisting
 } from './agent-run-postcheck-paths'
 import { buildPostcheckSandboxProfile } from './agent-run-postcheck-profile'
+import { runtimeKeyRoots } from './agent-sandbox-context'
 
 const SANDBOX_EXEC = '/usr/bin/sandbox-exec'
 const PROBE_TIMEOUT_MS = 5000
@@ -60,7 +61,9 @@ function planSandbox(cwdArg: string, tempDir: string): { profile: string } | { r
   const cwd = resolveThroughExisting(cwdArg)
   const secretPaths = postcheckSecretPaths({
     homeDir: os.homedir(),
-    userDataDir: getUserDataRoot()
+    userDataDir: getUserDataRoot(),
+    // Why: another Dobius instance's full runtime key must stay unreadable too.
+    otherUserDataDirs: runtimeKeyRoots(os.homedir(), getUserDataRoot())
   })
   // The check may write anywhere in the run folder. A run folder that holds a
   // sign-in folder (home itself) or sits inside one cannot be made safe.

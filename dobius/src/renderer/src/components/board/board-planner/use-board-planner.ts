@@ -1,40 +1,56 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
 import { consoleDeliveryState } from '../board-delivery/board-delivery'
 import { onMissionEvent } from '../board-delivery/mission-tracker'
 import type { BoardConductor } from '../board-route/use-board-conductor'
 import type { BoardRouteData } from '../board-route/use-board-route-data'
+import {
+  collectAdamBoards,
+  hermesAdamTransport,
+  talkToAdam,
+  type AdamThreadContext
+} from './adam-thread'
 import { missionReport } from './mission-report'
+import { builtInCommand } from './plan-builtin'
 import { concernText } from './plan-concern-text'
 import { boardEffects, type BoardEffectsContext } from './plan-effects-board'
 import { terminalEffects } from './plan-effects-terminal'
 import { withPlanTarget } from './plan-did-you-mean'
 import { executePlan } from './plan-execute'
-import { PlannerBreaker } from './plan-fallback'
-import { runPlanner } from './plan-run'
 import { screenPlan } from './plan-safety'
 import { buildPlanSnapshot } from './plan-snapshot'
-import { conductorPlannerTransport } from './plan-transport'
 import { validatePlan } from './plan-validate'
 
 /**
- * Board command path: utterance -> typed plan (validated, one retry, fallback
- * parser) -> app safety screen with confirmation -> execute -> per-step results
- * in the thread. Replaces sending free text to the conductor.
+ * Board message path. The app's own short commands ("pause all", "fit the
+ * board") run at once through the safety screen. Everything else goes to
+ * ADAM's Hermes agent, who answers in the thread and acts on boards himself
+ * with the `dobius` command line, under the app's approval box.
  */
+export type BoardPlannerRun = {
+  run: (text: string) => Promise<void>
+  /** True from submit until the planner and ADAM are both done with that message. */
+  busy: boolean
+}
+
 export function useBoardPlanner(input: {
   data: BoardRouteData
   conductor: BoardConductor
   context: Omit<BoardEffectsContext, 'worktreeId' | 'workspaces' | 'confirm'>
-}): (text: string) => Promise<void> {
-  const { data, conductor, context } = input
-  const { append, appendReport } = conductor
+  /** Shown in the thread header; tells ADAM which project Carson is looking at. */
+  projectName: string
+}): BoardPlannerRun {
+  const { data, conductor, context, projectName } = input
+  const { append, appendReport, showThinking } = conductor
+  // Why a ref and a state: the ref refuses a second run in the same tick; the state greys the composer.
+  const running = useRef(false)
+  const [busy, setBusy] = useState(false)
   // Read at event time so the mission subscription isn't rebuilt on every card change.
   const consolesRef = useRef(data.consoles)
   consolesRef.current = data.consoles
   const confirm = useConfirmationDialog()
-  const breaker = useRef(new PlannerBreaker())
 
   // Mission reports: one thread row per agent reply to a Board order.
   const worktreeId = data.worktreeId
@@ -76,7 +92,7 @@ export function useBoardPlanner(input: {
     [append, appendReport, worktreeId]
   )
 
-  return useCallback(
+  const handle = useCallback(
     async (text: string) => {
       const worktreeId = data.worktreeId
       append({ role: 'user', text })
@@ -94,36 +110,25 @@ export function useBoardPlanner(input: {
         worktreeId,
         stateOf: consoleDeliveryState
       })
-      const outcome = await runPlanner({
-        transport: conductorPlannerTransport(),
-        breaker: breaker.current,
-        board,
-        turns: conductor.messages.flatMap((m) =>
-          m.role === 'user' || m.role === 'assistant' ? [{ role: m.role, text: m.text }] : []
-        ),
-        utterance: text,
-        replyLanguage: navigator.language || 'en',
-        now: () => Date.now()
-      })
-      if (outcome.kind === 'needs-planner') {
-        append({
-          role: 'system',
-          tone: 'error',
-          text: translate(
-            'board.plan.needsPlanner',
-            'The planner is not answering, and without it I can’t write or split instructions. Say who and what plainly, for example “@Codex 1 run the tests”.'
-          )
+      const turns = conductor.messages.flatMap((m) =>
+        !m.transient && (m.role === 'user' || m.role === 'assistant')
+          ? [{ role: m.role, text: m.text }]
+          : []
+      )
+      const askAdam = (): Promise<void> =>
+        talkToAdam({
+          transport: hermesAdamTransport,
+          context: adamContext(projectName, board.workspace, worktreeId),
+          turns,
+          utterance: text,
+          append,
+          showThinking
         })
-        return
-      }
-      if (outcome.kind === 'rejected') {
-        append({
-          role: 'system',
-          tone: 'error',
-          text: translate('board.plan.rejected', 'I could not make a valid plan: {{reason}}', {
-            reason: outcome.reason
-          })
-        })
+      const outcome = builtInCommand(text, board)
+      // Why: ADAM is the only brain. The app runs its own short commands; every
+      // other message, work orders included, is his to answer or act on.
+      if (outcome.kind === 'for-adam') {
+        await askAdam()
         return
       }
       let plan = outcome.kind === 'plan' ? outcome.plan : null
@@ -161,23 +166,6 @@ export function useBoardPlanner(input: {
       if (!plan) {
         return
       }
-      if (plan.unsafe) {
-        append({
-          role: 'system',
-          tone: 'error',
-          text: translate(
-            'board.plan.unsafe',
-            'Ignored: that looked like instructions hidden inside the text.'
-          )
-        })
-        return
-      }
-      if (plan.say) {
-        append({ role: 'assistant', text: plan.say })
-      }
-      if (plan.detail) {
-        append({ role: 'assistant', text: plan.detail })
-      }
       const concerns = screenPlan(plan, said, board)
       if (concerns.length > 0) {
         const ok = await confirm({
@@ -199,6 +187,75 @@ export function useBoardPlanner(input: {
         append({ role: 'system', ...(r.ok ? {} : { tone: 'error' as const }), text: r.text })
       }
     },
-    [append, confirm, conductor.messages, context, data.board, data.workspaces, data.worktreeId]
+    [
+      append,
+      confirm,
+      conductor.messages,
+      context,
+      data.board,
+      data.workspaces,
+      data.worktreeId,
+      projectName,
+      showThinking
+    ]
   )
+
+  const run = useCallback(
+    async (text: string) => {
+      // Why checked before any await: two submits in one tick must not both reach ADAM,
+      // who runs one Hermes turn at a time.
+      if (running.current) {
+        append({
+          role: 'system',
+          text: translate(
+            'board.adam.stillThinking',
+            'ADAM is still working on your last message. Wait for his reply, then send this again.'
+          )
+        })
+        return
+      }
+      running.current = true
+      setBusy(true)
+      try {
+        await handle(text)
+      } finally {
+        running.current = false
+        setBusy(false)
+      }
+    },
+    [append, handle]
+  )
+
+  return { run, busy }
+}
+
+/** What ADAM is told: the board on screen, plus every other open board across projects. */
+function adamContext(projectName: string, workspace: string, worktreeId: string): AdamThreadContext {
+  const state = useAppStore.getState()
+  return {
+    lookingAt: {
+      project: projectName,
+      workspace,
+      folder: state.getKnownWorktreeById(worktreeId)?.path ?? null
+    },
+    boards: collectAdamBoards({
+      boardsByWorktree: state.boardsByWorktree ?? {},
+      currentWorktreeId: worktreeId,
+      stateOf: consoleDeliveryState,
+      worktreeOf: (id) => {
+        const worktree = state.getKnownWorktreeById(id)
+        if (!worktree) {
+          return null
+        }
+        return {
+          folder: worktree.path ?? null,
+          project: state.repos?.find((r) => r.id === worktree.repoId)?.displayName ?? '',
+          workspace:
+            id === worktreeId
+              ? workspace
+              : worktree.displayName.trim() || worktree.branch.replace(/^refs\/heads\//, '')
+        }
+      }
+    })
+  }
 }

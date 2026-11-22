@@ -1,7 +1,4 @@
-import {
-  listAgentDecisions,
-  resolveAgentDecision
-} from '../../agents/agent-decision-queue'
+import { listAgentDecisions, resolveAgentDecision } from '../../agents/agent-decision-queue'
 import type { AgentDecisionResolution, PendingAgentDecision } from '../../../shared/agents'
 
 // Why: Buzz's grant_approval/deny_approval/get_run_approvals gate a paused
@@ -47,6 +44,10 @@ function toApproval(decision: PendingAgentDecision): CommunicationsAgentApproval
     expiresAt: new Date(decision.createdAt + APPROVAL_EXPIRY_MS).toISOString(),
     createdAt: decision.createdAt
   }
+}
+
+export function getPendingDecision(token: string): PendingAgentDecision | null {
+  return listAgentDecisions().find((decision) => decision.id === token) ?? null
 }
 
 export function listApprovalsForRun(runId: string): CommunicationsAgentApproval[] {

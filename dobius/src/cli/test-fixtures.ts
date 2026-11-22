@@ -10,6 +10,7 @@ type OkFixture = {
 type WorktreeFixture = {
   id: string
   repoId: string
+  hostId: 'local'
   path: string
   branch: string
   parentWorktreeId: string | null
@@ -36,6 +37,7 @@ export function buildWorktree(
   return {
     id: `${repoId}::${path}`,
     repoId,
+    hostId: 'local',
     path,
     branch,
     parentWorktreeId: null,

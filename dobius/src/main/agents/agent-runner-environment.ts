@@ -3,6 +3,7 @@ import { accessSync, constants, mkdirSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
+import { AGENT_RUNTIME_SCOPE, DOBIUS_RUNTIME_SCOPE_ENV } from '../../shared/runtime-bootstrap'
 import { applyClaudeEnvPatch } from '../claude-accounts/environment'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth-service'
 
@@ -17,9 +18,12 @@ function cloneProcessEnv(): Record<string, string> {
 }
 
 export function buildRunEnv(preparation: ClaudeRuntimeAuthPreparation): Options['env'] {
-  return applyClaudeEnvPatch(cloneProcessEnv(), preparation.envPatch, {
+  const env = applyClaudeEnvPatch(cloneProcessEnv(), preparation.envPatch, {
     stripAuthEnv: preparation.stripAuthEnv
   })
+  // Why: an agent run's `dobius` CLI calls must use the limited agent key.
+  env[DOBIUS_RUNTIME_SCOPE_ENV] = AGENT_RUNTIME_SCOPE
+  return env
 }
 
 export function resolveAgentRunCwd(cwd: string): string {

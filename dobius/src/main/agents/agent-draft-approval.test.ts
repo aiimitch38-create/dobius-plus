@@ -51,6 +51,28 @@ describe('approveDraftAndPost', () => {
     expect(mocks.setDraftStatus).toHaveBeenCalledWith('draft-1', 'approved')
   })
 
+  it.each([
+    ['a changed body', { body: 'Something else', target: pendingDraft.target }],
+    ['a changed task', { body: pendingDraft.body, target: { kind: 'asana' as const, gid: '999' } }]
+  ])('refuses to post a draft with %s since it was confirmed', async (_label, confirmed) => {
+    const { approveDraftAndPost } = await import('./agent-draft-approval')
+    await expect(approveDraftAndPost('draft-1', confirmed)).rejects.toThrow(
+      'changed after it was confirmed'
+    )
+    expect(mocks.postTaskComment).not.toHaveBeenCalled()
+    expect(mocks.setDraftStatus).not.toHaveBeenCalled()
+  })
+
+  it('posts when the draft still matches what was confirmed', async () => {
+    const { approveDraftAndPost } = await import('./agent-draft-approval')
+    await expect(
+      approveDraftAndPost('draft-1', {
+        body: pendingDraft.body,
+        target: { ...pendingDraft.target }
+      })
+    ).resolves.toMatchObject({ status: 'approved' })
+  })
+
   it('rejects missing drafts without posting or changing status', async () => {
     mocks.getDraft.mockReturnValue(null)
     const { approveDraftAndPost } = await import('./agent-draft-approval')

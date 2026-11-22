@@ -13,6 +13,7 @@ const electron = vi.hoisted(() => ({
   shortcutHandler: null as null | (() => void),
   registerResult: true,
   focused: null as unknown,
+  windows: [] as unknown[],
   userData: ''
 }))
 
@@ -45,7 +46,7 @@ vi.mock('electron', () => ({
     getPath: () => electron.userData
   },
   dialog: { showMessageBox: vi.fn(async () => ({ response: 0 })) },
-  BrowserWindow: { getFocusedWindow: () => electron.focused },
+  BrowserWindow: { getFocusedWindow: () => electron.focused, getAllWindows: () => electron.windows },
   globalShortcut: {
     register: (_accelerator: string, handler: () => void) => {
       electron.shortcutHandler = handler
@@ -187,9 +188,30 @@ describe('Adam Hermes voice routing', () => {
   it('uses one Hermes client for direct Jarvis turns and live-agent text tools', async () => {
     const { store } = fakeStore(true)
     const main = fakeWindow()
+    // An IPC event as the main window's top frame sends it.
+    const frame = { name: 'main' }
+    Object.assign(main.webContents, { mainFrame: frame, isDestroyed: () => false })
+    const top = { sender: main.webContents, senderFrame: frame }
+    const otherWindow = fakeWindow()
+    electron.windows = [main, otherWindow]
     await register(store, main)
     main.webContents.send.mockClear()
-    await expect(electron.handlers.get('jarvis:ask')?.({}, 'hello Adam')).resolves.toEqual({
+    // Only the main window's top frame may start a turn with ADAM.
+    for (const untrusted of [
+      {},
+      { sender: main.webContents, senderFrame: { name: 'web tile' } },
+      { sender: fakeWindow().webContents, senderFrame: frame }
+    ]) {
+      for (const channel of ['jarvis:ask', 'jarvis:askAdamText']) {
+        expect(await electron.handlers.get(channel)?.(untrusted, 'hello Adam')).toEqual({
+          kind: 'error',
+          text: 'ADAM only takes messages from the main Dobius+ window.'
+        })
+      }
+    }
+    expect(adam.ask).not.toHaveBeenCalled()
+    expect(main.webContents.send).not.toHaveBeenCalled()
+    await expect(electron.handlers.get('jarvis:ask')?.(top, 'hello Adam')).resolves.toEqual({
       kind: 'answer',
       text: 'Adam Hermes reply'
     })
@@ -200,16 +222,82 @@ describe('Adam Hermes voice routing', () => {
         .filter(([channel]) => channel === 'jarvis:state')
         .map(([, data]) => data.state)
     ).toEqual(['thinking', 'speaking', 'idle'])
-    await electron.handlers.get('jarvis:askAdamText')?.({}, 'live tool question')
+    await electron.handlers.get('jarvis:askAdamText')?.(top, 'live tool question')
     expect(adam.ask).toHaveBeenLastCalledWith('live tool question')
-    expect(adam.speak).toHaveBeenCalledTimes(1)
+    await electron.handlers.get('jarvis:askAdamText')?.(top, 'typed question', 'thread')
+    // A spoken turn carries the project that was on screen; the thread still shows only the words.
+    await electron.handlers
+      .get('jarvis:ask')
+      ?.(top, 'run the tests here', { project: 'pc', workspace: 'main', folder: '/code/pc' })
+    expect(String((adam.ask.mock.lastCall as unknown[] | undefined)?.[0])).toContain('"carson_is_looking_at":{"project":"pc"')
+    expect(
+      main.webContents.send.mock.calls.findLast(
+        ([channel, data]) => channel === 'jarvis:adam-turn' && data.phase === 'asked'
+      )?.[1].text
+    ).toBe('run the tests here')
+    // The thread is kept in main: only the main window's top frame may add to it.
+    const rowA = { id: 'a', role: 'user', text: 'hello' }
+    expect(await electron.handlers.get('jarvis:adamThreadAppend')?.({}, rowA)).toEqual({ ok: false })
+    expect(await electron.handlers.get('jarvis:adamThreadAppend')?.(top, { id: 'x' })).toEqual({
+      ok: false
+    })
+    expect(await electron.handlers.get('jarvis:adamThreadAppend')?.(top, rowA)).toEqual({ ok: true })
+    // Reading is for the main window's top frame too, and only that window is sent the thread.
+    expect(await electron.handlers.get('jarvis:adamThreadGet')?.({})).toEqual([])
+    const stored = (await electron.handlers.get('jarvis:adamThreadGet')?.(top)) as {
+      id: string
+      text: string
+      voice?: boolean
+    }[]
+    expect(stored.find((row) => row.id === 'a')).toEqual(rowA)
+    // Main wrote the spoken turns itself, with no window writing them back; typed turns are not its job.
+    expect(stored.filter((row) => row.voice).map((row) => row.text)).toEqual([
+      'hello Adam',
+      'Adam Hermes reply',
+      'live tool question',
+      'Adam Hermes reply',
+      'run the tests here',
+      'Adam Hermes reply'
+    ])
+    expect(stored.some((row) => row.text === 'typed question')).toBe(false)
+    expect(
+      main.webContents.send.mock.calls.filter(([channel]) => channel === 'jarvis:adam-thread').length
+    ).toBeGreaterThan(0)
+    // Another window of the app (a preview, a web tile host) is never sent the thread.
+    expect(otherWindow.webContents.send).not.toHaveBeenCalled()
+    // The spoken words were already in the thread when the window first heard of that turn.
+    const sends = main.webContents.send.mock.calls
+    const firstTurn = sends.findIndex(([channel]) => channel === 'jarvis:adam-turn')
+    const firstThread = sends.findIndex(([channel]) => channel === 'jarvis:adam-thread')
+    expect(firstThread).toBeGreaterThanOrEqual(0)
+    expect(firstThread).toBeLessThan(firstTurn)
+    // Voice and the thread go through one entry point to the one ADAM session.
+    expect(adam.created).toHaveBeenCalledTimes(1)
+    expect(
+      main.webContents.send.mock.calls
+        .filter(([channel]) => channel === 'jarvis:adam-turn')
+        .map(([, data]) => `${data.source}:${data.phase}`)
+    ).toEqual([
+      'voice:asked',
+      'voice:answered',
+      'voice:asked',
+      'voice:answered',
+      'thread:asked',
+      'thread:answered',
+      'voice:asked',
+      'voice:answered'
+    ])
+    expect(adam.speak).toHaveBeenCalledTimes(2)
     expect(adam.created).toHaveBeenCalledTimes(1)
     expect(adam.created).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionFile: join(electron.userData, 'adam-voice-session.json')
       })
     )
-    await electron.handlers.get('jarvis:cancelAsk')?.()
+    // Only the main window's top frame may stop ADAM mid-turn.
+    await electron.handlers.get('jarvis:cancelAsk')?.({})
+    expect(adam.cancel).not.toHaveBeenCalled()
+    await electron.handlers.get('jarvis:cancelAsk')?.(top)
     expect(adam.cancel).toHaveBeenCalledTimes(1)
   })
 })

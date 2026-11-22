@@ -169,11 +169,29 @@ export function getAgentsControlState(): AgentsControlState {
   }
 }
 
+// Why: the Agents page (IPC) and `dobius crew status` (RPC) show the same
+// projection, so neither can leak a field the other does not.
+export function getAgentsExecutionState(): AgentsControlState {
+  const { paused, status, detail, filePath } = getAgentsControlState()
+  return { paused, status, detail, filePath }
+}
+
 export function getAgentsPaused(): boolean {
   return getAgentsControlState().paused
 }
 
+// Goes up on every pause request (app, CLI or automatic), so a resume that
+// was confirmed before a newer pause can tell it is stale.
+let pauseRevision = 0
+
+export function getAgentsPauseRevision(): number {
+  return pauseRevision
+}
+
 export function setAgentsPaused(paused: boolean): boolean {
+  if (paused) {
+    pauseRevision += 1
+  }
   const current = load()
   if (loadStatus === 'unreadable') {
     if (paused) {

@@ -209,7 +209,10 @@ describe('terminal.sendBound RPC', () => {
         enter: true
       })
     )
-    noSideEffects(response)
+    // Refused before Enter, and honest that the text itself is already typed.
+    expect(response.ok && response.result).toEqual({
+      send: { handle: 'term-1', accepted: false, bytesWritten: 5 }
+    })
     expect(writes).toEqual(['draft'])
     expect(writes).not.toContain('\r')
     expect(runtime.mobileTookFloor).not.toHaveBeenCalled()

@@ -1,10 +1,10 @@
-import { isAbsolute, relative, resolve as resolvePath } from 'node:path'
+import { resolve as resolvePath } from 'node:path'
 import type {
   ComputerAppQuery,
   RuntimeWorktreeListResult,
   RuntimeWorktreeRecord
 } from '../shared/runtime-types'
-import { isPathInsideOrEqual } from '../shared/cross-platform-path'
+import { localWorktreesContaining } from './selectors-local-host'
 import type { RuntimeClient } from './runtime-client'
 import { RuntimeClientError } from './runtime-client'
 import { getOptionalStringFlag, getRequiredStringFlag } from './flags'
@@ -90,14 +90,6 @@ function assertLocalCwdWorktreeSelector(selector: string, client: RuntimeClient)
   )
 }
 
-function isWithinPath(parentPath: string, childPath: string): boolean {
-  if (isPathInsideOrEqual(parentPath, childPath)) {
-    return true
-  }
-  const relativePath = relative(parentPath, childPath)
-  return relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath))
-}
-
 export async function resolveCurrentWorktreeSelector(
   cwd: string,
   client: RuntimeClient
@@ -108,11 +100,12 @@ export async function resolveCurrentWorktreeSelector(
   const worktrees = await client.call<RuntimeWorktreeListResult>('worktree.list', {
     limit: 10_000
   })
+  const candidates = await localWorktreesContaining(worktrees.result.worktrees, currentPath, client)
   let enclosingWorktree: RuntimeWorktreeRecord | undefined
   let enclosingPathLength = -1
-  for (const worktree of worktrees.result.worktrees) {
+  for (const worktree of candidates) {
     const worktreePath = resolvePath(worktree.path)
-    if (!isWithinPath(worktreePath, currentPath) || worktreePath.length <= enclosingPathLength) {
+    if (worktreePath.length <= enclosingPathLength) {
       continue
     }
     enclosingWorktree = worktree

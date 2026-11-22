@@ -227,6 +227,9 @@ export function configureDobiusUserDataPathEnv(): void {
   // updater process. Main must canonicalize it before CLI-shared modules build
   // runtime-home paths, or migrations can bridge two Dobius app-data directories.
   process.env.DOBIUS_USER_DATA_PATH = getUserDataRoot()
+  // Why: an app started from a Dobius terminal (`pnpm dev`) inherits the
+  // agent-key marker; main must not pass it to its own CLI subprocesses.
+  delete process.env.DOBIUS_RUNTIME_SCOPE
 }
 
 export function shouldInstallManagedHooks(isDev: boolean): boolean {

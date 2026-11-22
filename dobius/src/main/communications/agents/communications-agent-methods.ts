@@ -1,10 +1,7 @@
 import { z } from 'zod'
 import { defineMethod, type RpcMethod } from '../../runtime/rpc/core'
 import { OptionalPlainString, OptionalPositiveInt, requiredString } from '../../runtime/rpc/schemas'
-import {
-  getAgentLocalOverrides,
-  setAgentLocalOverride
-} from './agent-local-overrides-store'
+import { getAgentLocalOverrides, setAgentLocalOverride } from './agent-local-overrides-store'
 import {
   deleteCustomHarness,
   saveCustomHarness,
@@ -24,9 +21,12 @@ import {
 } from './observer-channel-index-store'
 import {
   denyAgentApproval,
+  getPendingDecision,
   grantAgentApproval,
   listApprovalsForRun
 } from './agent-decision-approval-bridge'
+import { decisionConfirmRequest } from '../../runtime/rpc/methods/confirm-gate'
+import { appConfirmationGate } from '../../runtime/rpc/methods/crew-confirm'
 import { buildObserverControlEvent, decryptObserverEvent } from './observer-event-crypto'
 
 // ── src/main/communications/agents/*  RPC surface ───────────────────────────
@@ -112,7 +112,9 @@ const ObserverIndexRead = z.object({
   limit: OptionalPositiveInt
 })
 
-function toIndexEntries(entries: z.infer<typeof ObserverIndexWrite>['entries']): ObserverChannelIndexEntry[] {
+function toIndexEntries(
+  entries: z.infer<typeof ObserverIndexWrite>['entries']
+): ObserverChannelIndexEntry[] {
   return entries.map((entry) => ({
     eventId: entry.eventId,
     channelId: entry.channelId,
@@ -145,7 +147,9 @@ export const COMMUNICATIONS_AGENT_METHODS: RpcMethod[] = [
   defineMethod({
     name: 'agentObserver.buildControlEvent',
     params: BuildObserverControlEvent,
-    handler: (params) => ({ eventJson: buildObserverControlEvent(params.agentPubkey, params.payload) })
+    handler: (params) => ({
+      eventJson: buildObserverControlEvent(params.agentPubkey, params.payload)
+    })
   }),
   defineMethod({
     name: 'agentHarness.save',
@@ -228,7 +232,16 @@ export const COMMUNICATIONS_AGENT_METHODS: RpcMethod[] = [
   defineMethod({
     name: 'agentApprovals.grant',
     params: ApprovalToken,
-    handler: async (params) => ({ approval: await grantAgentApproval(params.token) })
+    // Why: this approves the same agent tool request as `crew.decide`, so it
+    // needs the same in-app click. Deny stays unconfirmed: it can only refuse.
+    handler: async (params, ctx) => {
+      const decision = getPendingDecision(params.token)
+      if (!decision) {
+        throw new Error('Approval not found')
+      }
+      await appConfirmationGate(decisionConfirmRequest(decision, 'approve', undefined, ctx), ctx)
+      return { approval: await grantAgentApproval(params.token) }
+    }
   }),
   defineMethod({
     name: 'agentApprovals.deny',

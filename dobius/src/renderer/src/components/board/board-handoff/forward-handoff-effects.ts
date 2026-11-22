@@ -14,7 +14,11 @@ import { withGoalPrefix } from '../board-goal/goal-reminders'
 import { latestOrder, onOrdersChanged } from '../board-delivery/board-orders'
 import { consoleByName } from '../board-delivery/console-lifecycle'
 import { orderSettled, type Mission } from '../board-delivery/mission-state'
-import { missionsForOrder, onMissionEvent } from '../board-delivery/mission-tracker'
+import {
+  missionsForOrder,
+  onMissionEvent,
+  pinOrderMissions
+} from '../board-delivery/mission-tracker'
 import type { StepResult } from '../board-planner/plan-execute'
 import {
   extractHandoffBrief,
@@ -64,9 +68,12 @@ function waitForMissions(
   if (ready(now)) {
     return Promise.resolve(now)
   }
+  // Why: the wait can outlive the order's place in the registry (up to a day).
+  const unpin = pinOrderMissions(orderId)
   return new Promise((resolve) => {
     const timer = window.setTimeout(() => {
       off()
+      unpin()
       resolve(null)
     }, timeoutMs)
     const off = onMissionEvent((event) => {
@@ -78,6 +85,7 @@ function waitForMissions(
       if (ready(current)) {
         window.clearTimeout(timer)
         off()
+        unpin()
         resolve(current)
       }
     })
@@ -195,7 +203,8 @@ async function runHandoff(
     summary: translate('board.handoff.summary', 'Handoff brief from {{name}}', {
       name: source.title
     }),
-    lanes: [{ tabId: source.tabId, name: source.title, text: handoffSummaryRequest() }]
+    lanes: [{ tabId: source.tabId, name: source.title, text: handoffSummaryRequest() }],
+    pinMissions: true
   })
   const missions = asked.ok
     ? await waitForMissions(
@@ -204,6 +213,7 @@ async function runHandoff(
         HANDOFF_WAIT_MS
       )
     : null
+  asked.unpin?.()
   const brief = extractHandoffBrief(missions?.find((m) => m.state === 'finished')?.reply ?? null)
   const launched = launchAgentInNewTab({ agent, worktreeId, launchSource: 'unknown' })
   if (!launched?.tabId) {

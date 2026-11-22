@@ -126,7 +126,10 @@ export function adamHermesEnvironment(runtime: AdamHermesRuntime): NodeJS.Proces
     'NODE_OPTIONS',
     'PYTHONPATH',
     'PYTHONHOME',
-    'DOBIUS_TERMINAL_HANDLE'
+    'DOBIUS_TERMINAL_HANDLE',
+    // Why: ADAM is Carson's main agent and uses the whole `dobius` command line. The
+    // agent scope is for background worker runs and must never be inherited here.
+    'DOBIUS_RUNTIME_SCOPE'
   ]) {
     delete env[name]
   }

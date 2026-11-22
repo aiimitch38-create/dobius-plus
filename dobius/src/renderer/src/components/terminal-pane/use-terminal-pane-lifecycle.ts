@@ -113,6 +113,7 @@ import { acquireWebviewsDragPassthrough } from '../browser-pane/webview-registry
 import { recordCreatedTerminalPaneSplit } from './terminal-pane-split-completion'
 import { closeTerminalTab } from '../terminal/terminal-tab-actions'
 import { seedStartupSessionRestoredBanner } from './session-restored-banner-pane-state'
+import { forgetTerminalVisibility } from './terminal-visibility-resume'
 
 export function recordRuntimeCreatedTerminalPaneSplit(
   createdPane: unknown,
@@ -1696,6 +1697,7 @@ export function useTerminalPaneLifecycle({
       panePtyBindings.clear()
       paneTransports.clear()
       manager.destroy()
+      forgetTerminalVisibility(manager)
       releaseWebviewDragPassthrough?.()
       releaseWebviewDragPassthrough = null
       managerRef.current = null

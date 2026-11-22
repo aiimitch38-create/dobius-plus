@@ -187,6 +187,10 @@ import type {
 import type { AgentInterruptInferenceRequest } from '../shared/agent-interrupt-intent'
 import type {
   ElevenLabsKeyStatus,
+  AdamTurnEvent,
+  AdamLookingAt,
+  AdamThreadRow,
+  AdamTurnSource,
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
@@ -4612,8 +4616,8 @@ const api = {
 
   jarvis: {
     setMode: (on: boolean): Promise<{ ok: boolean }> => ipcRenderer.invoke('jarvis:setMode', on),
-    ask: (utterance: string): Promise<JarvisAskResult> =>
-      ipcRenderer.invoke('jarvis:ask', utterance),
+    ask: (utterance: string, lookingAt?: AdamLookingAt | null): Promise<JarvisAskResult> =>
+      ipcRenderer.invoke('jarvis:ask', utterance, lookingAt),
     speak: (text: string): Promise<JarvisSpeakOutcome> => ipcRenderer.invoke('jarvis:speak', text),
     openOrb: (): Promise<{ ok: boolean; windowId?: number }> =>
       ipcRenderer.invoke('jarvis:openOrb'),
@@ -4659,8 +4663,31 @@ const api = {
     liveSessionConnect: (offerSdp: string): Promise<OpenAiLiveSessionResult> =>
       ipcRenderer.invoke('jarvis:liveSessionConnect', { offerSdp }),
     cancelAsk: (): Promise<{ ok: true }> => ipcRenderer.invoke('jarvis:cancelAsk'),
-    askAdamText: (utterance: string): Promise<JarvisAskResult> =>
-      ipcRenderer.invoke('jarvis:askAdamText', utterance),
+    askAdamText: (utterance: string, source?: AdamTurnSource): Promise<JarvisAskResult> =>
+      ipcRenderer.invoke('jarvis:askAdamText', utterance, source),
+    adamThreadGet: (): Promise<AdamThreadRow[]> => ipcRenderer.invoke('jarvis:adamThreadGet'),
+    adamThreadAppend: (row: AdamThreadRow): Promise<{ ok: boolean; error?: 'not-saved' }> =>
+      ipcRenderer.invoke('jarvis:adamThreadAppend', row),
+    adamThreadClear: (): Promise<{ ok: boolean; error?: 'not-saved' }> => ipcRenderer.invoke('jarvis:adamThreadClear'),
+    onAdamThread: (callback: (rows: AdamThreadRow[]) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, rows: AdamThreadRow[]): void =>
+        callback(rows)
+      ipcRenderer.on('jarvis:adam-thread', listener)
+      return () => ipcRenderer.removeListener('jarvis:adam-thread', listener)
+    },
+    onAdamThreadUnsaved: (callback: () => void): (() => void) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('jarvis:adam-thread-unsaved', listener)
+      return () => ipcRenderer.removeListener('jarvis:adam-thread-unsaved', listener)
+    },
+    reportLookingAt: (lookingAt: AdamLookingAt | null): Promise<void> =>
+      ipcRenderer.invoke('jarvis:lookingAt', lookingAt),
+    onAdamTurn: (callback: (event: AdamTurnEvent) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: AdamTurnEvent): void =>
+        callback(data)
+      ipcRenderer.on('jarvis:adam-turn', listener)
+      return () => ipcRenderer.removeListener('jarvis:adam-turn', listener)
+    },
     onState: (callback: (event: JarvisStateEvent) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: JarvisStateEvent): void =>
         callback(data)

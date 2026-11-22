@@ -118,3 +118,11 @@ export function setDraftStatus(
   broadcastDraftsChanged()
   return { ...draft, target: { ...draft.target } }
 }
+
+export function discardDraft(id: string): AgentDraftComment {
+  const draft = setDraftStatus(id, 'discarded')
+  if (!draft) {
+    throw new Error('Draft not found')
+  }
+  return draft
+}
