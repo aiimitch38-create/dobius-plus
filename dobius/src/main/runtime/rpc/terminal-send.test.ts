@@ -320,7 +320,7 @@ describe('terminal send RPC', () => {
 
   it('reports the bytes typed when the input floor is lost part-way through a long text', async () => {
     const text = 'a'.repeat(16 * 1024 + 10)
-    let driver: { kind: string; clientId?: string } = { kind: 'desktop' }
+    let driver = { kind: 'desktop' } as ReturnType<DobiusRuntimeService['getDriver']>
     const written: string[] = []
     const runtime = stubRuntime({
       resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
@@ -338,7 +338,7 @@ describe('terminal send RPC', () => {
           await options.beforeWrite?.('pty-1')
           written.push('chunk 1')
           // A phone takes the terminal between the two chunks.
-          driver = { kind: 'mobile', clientId: 'phone-1' }
+          driver = { kind: 'mobile', clientId: 'phone-1' } as typeof driver
           await options.beforeWrite?.('pty-1')
           written.push('chunk 2')
           return { handle: 'terminal-1', accepted: true, bytesWritten: text.length }

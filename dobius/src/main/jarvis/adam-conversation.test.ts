@@ -45,7 +45,7 @@ beforeEach(async () => {
     }
   })
   events = []
-  adam = new AdamConversation(brain, (event) => events.push(event))
+  adam = new AdamConversation(brain, (event) => void events.push(event))
 })
 afterEach(async () => {
   await brain.close()
@@ -97,7 +97,7 @@ describe('AdamConversation: voice and the thread are one conversation', () => {
   it('announces a failed turn and frees ADAM for the next one', async () => {
     const failing = new AdamConversation(
       { ask: vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ kind: 'answer', text: 'ok' }) },
-      (event) => events.push(event)
+      (event) => void events.push(event)
     )
     await expect(failing.ask('one', { source: 'voice' })).resolves.toMatchObject({ kind: 'error' })
     await expect(failing.ask('two', { source: 'voice' })).resolves.toEqual({ kind: 'answer', text: 'ok' })
