@@ -449,3 +449,44 @@ describe('orchestration tab:<tabId> and card: addresses on every handle flag', (
     )
   })
 })
+
+describe('orchestration send --to board:<orchestratorCardId>', () => {
+  beforeEach(() => {
+    callMock.mockReset().mockResolvedValue({ result: { messages: [{ id: 'm1' }], recipients: 1 } })
+    delete process.env.DOBIUS_TERMINAL_HANDLE
+    getTerminalHandleMock.mockRejectedValue(new Error('no_active_terminal'))
+  })
+
+  const run = (flags: [string, string][]) =>
+    ORCHESTRATION_HANDLERS['orchestration send']({
+      flags: new Map<string, string | boolean>(flags),
+      client: { call: callMock },
+      cwd: '/repo',
+      json: true
+    } as never)
+
+  it('hands board: to the runtime relay as-is, with no sender terminal lookup', async () => {
+    await run([
+      ['to', 'board:orch-1'],
+      ['subject', 'hi'],
+      ['body', 'run the tests']
+    ])
+    expect(resolveTerminalAddressMock).not.toHaveBeenCalled()
+    expect(getTerminalHandleMock).not.toHaveBeenCalled()
+    expect(callMock).toHaveBeenCalledWith(
+      'orchestration.send',
+      expect.objectContaining({ to: 'board:orch-1', from: undefined, body: 'run the tests' })
+    )
+  })
+
+  it.each(['worker_done', 'heartbeat'] as const)('rejects %s to a board orchestrator', async (type) => {
+    await expect(
+      run([
+        ['to', 'board:orch-1'],
+        ['subject', 'x'],
+        ['type', type]
+      ])
+    ).rejects.toThrow('concrete coordinator terminal handle')
+    expect(callMock).not.toHaveBeenCalled()
+  })
+})

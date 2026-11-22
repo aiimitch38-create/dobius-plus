@@ -6,6 +6,10 @@ import type { MessageType, MessagePriority, TaskStatus } from '../../orchestrati
 import { buildDispatchPreamble } from '../../orchestration/preamble'
 import { formatMessageBanner } from '../../orchestration/formatter'
 import { isGroupAddress, resolveGroupAddress } from '../../orchestration/groups'
+import {
+  isBoardOrchestratorAddress,
+  relayToBoardOrchestrator
+} from '../../orchestration/board-orchestrator-relay'
 import { reconcileLifecycleMessage } from '../../orchestration/lifecycle-reconciliation'
 import { ORCHESTRATION_GATE_METHODS } from './orchestration-gates'
 
@@ -182,6 +186,19 @@ export const ORCHESTRATION_METHODS: RpcMethod[] = [
     name: 'orchestration.send',
     params: SendParams,
     handler: async (params, { runtime }) => {
+      // Why: board:<orchestratorCardId> fans out like typing in that card,
+      // from the card's mailbox; it is never a plain handle or group.
+      if (isBoardOrchestratorAddress(params.to)) {
+        return relayToBoardOrchestrator(runtime, {
+          to: params.to,
+          subject: params.subject,
+          body: params.body,
+          type: params.type as MessageType | undefined,
+          priority: params.priority as MessagePriority | undefined,
+          threadId: params.threadId,
+          payload: params.payload
+        })
+      }
       const db = runtime.getOrchestrationDb()
       const from = params.from ?? 'unknown'
 

@@ -8,7 +8,12 @@ export const BOARD_CONSOLE_ERROR_CODES = [
   // `tab:<tabId>` addresses (9.4): same rule, never a fallback terminal.
   'terminal_tab_not_found',
   'terminal_tab_not_running',
-  'terminal_tab_pane_unclear'
+  'terminal_tab_pane_unclear',
+  // `board:<orchestratorCardId>` relays (9.6).
+  'board_orchestrator_not_found',
+  'board_orchestrator_ambiguous',
+  'board_orchestrator_refused',
+  'board_orchestrator_none_running'
 ] as const
 export type BoardConsoleErrorCode = (typeof BOARD_CONSOLE_ERROR_CODES)[number]
 

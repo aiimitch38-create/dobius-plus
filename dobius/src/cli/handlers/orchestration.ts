@@ -8,6 +8,7 @@ import {
 } from '../flags'
 import { RuntimeClientError } from '../runtime-client'
 import { getTerminalHandle, resolveTerminalAddress } from '../selectors'
+import { BOARD_ORCHESTRATOR_ADDRESS_PREFIX } from '../../shared/board-orchestrator-relay'
 
 // Why: 15 s is well under Claude Code's empirical ~2 min Bash-tool silence
 // budget and generates only ~40 lines per 10 min wait — enough to assure the
@@ -174,7 +175,10 @@ function getOptionalPositiveIntegerValueFlag(
 }
 
 function rejectLifecycleGroupRecipient(type: string | undefined, to: string): void {
-  if ((type === 'worker_done' || type === 'heartbeat') && to.startsWith('@')) {
+  if (
+    (type === 'worker_done' || type === 'heartbeat') &&
+    (to.startsWith('@') || to.startsWith(BOARD_ORCHESTRATOR_ADDRESS_PREFIX))
+  ) {
     throw new RuntimeClientError('invalid_argument', getLifecycleGroupRecipientError(type))
   }
 }
@@ -184,9 +188,14 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
     const rawTo = getRequiredStringFlag(flags, 'to')
     const type = getOptionalStringFlag(flags, 'type')
     rejectLifecycleGroupRecipient(type, rawTo)
-    const to = await resolveTerminalAddress(rawTo, flags, cwd, client)
+    // Why: board:<orchestratorCardId> is relayed by the runtime from the card's
+    // own mailbox, so no sender terminal is looked up for it.
+    const toBoardOrchestrator = rawTo.startsWith(BOARD_ORCHESTRATOR_ADDRESS_PREFIX)
+    const to = toBoardOrchestrator ? rawTo : await resolveTerminalAddress(rawTo, flags, cwd, client)
 
-    const from = await resolveOrchestrationTerminalHandle(senderFlags(flags), cwd, client, 'from')
+    const from = toBoardOrchestrator
+      ? undefined
+      : await resolveOrchestrationTerminalHandle(senderFlags(flags), cwd, client, 'from')
     const result = await client.call<
       { message: { id: string } } | { messages: { id: string }[]; recipients: number }
     >('orchestration.send', {
