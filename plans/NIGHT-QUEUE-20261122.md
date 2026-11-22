@@ -38,3 +38,7 @@ NOT tonight, needs Carson: install, live voice test call, the OpenAI key, the He
 - 9.8 batches D and E built, in Codex review
 - Started: 1.8 Pre-Flight Primer, 1.5 Chat improvements, 7.5-7.7 UI trio
 - Disk dropped to ~1.8 GB; agents told to run targeted tests only
+- 9.8 batch E merged (634aee9d): board cards, loops, snapshots, tab snooze from the CLI
+- 9.8 batch D merged (273d8540): ADAM, usage, knowledge, backup, settings, accounts (switch gated) from the CLI
+- Bug button agent stopped at Carson's request (existing button is enough)
+- 1.8 Primer: Codex round 2 fixes in progress
