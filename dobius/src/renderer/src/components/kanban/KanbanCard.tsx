@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { AvatarStack } from './AvatarStack'
+import { BugAutoFixMarker } from './BugAutoFixMarker'
 import { KanbanAttachmentThumb, pickProofAttachment } from './KanbanAttachmentThumb'
 import { ClaimedChip, BlockedChip, PriorityChip, TypeChip } from './kanban-chips'
 import type { Task } from './kanban-types'
@@ -123,6 +124,7 @@ export function KanbanCard({
           </>
         ) : null}
       </button>
+      {task.autoFix && task.status !== 'done' ? <BugAutoFixMarker autoFix={task.autoFix} /> : null}
       {proof ? (
         <div className="px-3 pb-3" data-testid="kanban-card-proof">
           <KanbanAttachmentThumb

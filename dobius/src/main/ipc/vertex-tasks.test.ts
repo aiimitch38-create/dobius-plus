@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { handlers, fromId, update, list } = vi.hoisted(() => ({
+const { handlers, fromId, update, list, create, onVertexTaskCreated } = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, args: unknown) => unknown>(),
   fromId: vi.fn(),
   update: vi.fn((_taskId: string, _patch: unknown) => null),
-  list: vi.fn(() => [])
+  list: vi.fn(() => []),
+  create: vi.fn((input: { title: string }) => ({ id: 'new', ...input })),
+  onVertexTaskCreated: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -17,8 +19,9 @@ vi.mock('electron', () => ({
 }))
 vi.mock('../vertex/vertex-task-store', () => ({
   reloadVertexTasksFromDisk: vi.fn(),
-  vertexTaskStore: { update, list }
+  vertexTaskStore: { update, list, create }
 }))
+vi.mock('../vertex/bug-autofix', () => ({ onVertexTaskCreated }))
 vi.mock('../vertex/vertex-dispatch-recovery', async (importOriginal) => {
   const actual = await importOriginal<typeof recovery>()
   return { ...actual, withLostClaimCheck: vi.fn(actual.withLostClaimCheck) }
@@ -83,5 +86,20 @@ describe('vertex task IPC ownership (#94)', () => {
     await handlers.get('vertexTasks:releaseInterruptedClaims')?.(event, { activeTaskIds: [3] })
     expect(withLostClaimCheck).not.toHaveBeenCalled()
     expect(list).not.toHaveBeenCalled()
+  })
+})
+
+describe('vertex task IPC bug auto-fix hook', () => {
+  it('hands every operator-created card to bug auto-fix once', async () => {
+    const created = await handlers.get('vertexTasks:create')?.(event, { title: 'Broken', type: 'bug' })
+    expect(created).toMatchObject({ id: 'new' })
+    expect(onVertexTaskCreated).toHaveBeenCalledTimes(1)
+    expect(onVertexTaskCreated).toHaveBeenCalledWith(created)
+  })
+
+  it('never lets a renderer patch change the auto-fix mark', async () => {
+    const patch = { title: 'x', autoFix: { status: 'queued' as const, queuedAt: 1, updatedAt: 1 } }
+    await handlers.get('vertexTasks:update')?.(event, { taskId: 't1', patch })
+    expect(update).toHaveBeenCalledWith('t1', { title: 'x' })
   })
 })

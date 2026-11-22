@@ -2,7 +2,12 @@ import { errorCode, resolveAdamTarget, resolveAdamToken } from '../adam-connecti
 import { getAgentsControlState } from './agents-config-store'
 
 // 'agents-page' is the only operator origin; everything else is autonomous.
-export type ExecutionOrigin = 'agents-page' | 'agent-run' | 'dispatch-build' | 'imessage-command'
+export type ExecutionOrigin =
+  | 'agents-page'
+  | 'agent-run'
+  | 'dispatch-build'
+  | 'imessage-command'
+  | 'bug-report'
 
 export type ExecutionBlockReason = 'paused' | 'control-state-unreadable'
 

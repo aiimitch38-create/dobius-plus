@@ -75,6 +75,7 @@ import { registerCodexAccountHandlers } from './codex-accounts'
 import { registerAgentHookHandlers } from './agent-hooks'
 import { registerAgentTrustHandlers } from './agent-trust'
 import { registerVertexTaskHandlers } from './vertex-tasks'
+import { wireBugAutoFix } from '../vertex/bug-autofix-wiring'
 import { registerProjectFilesHandlers } from './project-files'
 import { registerClaudeAccountHandlers } from './claude-accounts'
 import { registerMiniMaxCredentialsHandlers } from './minimax-credentials'
@@ -156,6 +157,8 @@ export function registerCoreHandlers(
       }
     }
   })
+  // Why before the guard: like the dispatcher above, it must use this call's runtime.
+  wireBugAutoFix(store, runtime)
   if (registered) {
     return
   }

@@ -16,6 +16,7 @@ import {
   readVertexTaskAttachment,
 } from '../vertex/vertex-task-attachments'
 import { withClaimingWindow, withLostClaimCheck } from '../vertex/vertex-dispatch-recovery'
+import { onVertexTaskCreated } from '../vertex/bug-autofix'
 import {
   isVertexTaskStatus,
   type VertexTask,
@@ -45,7 +46,11 @@ export function registerVertexTaskHandlers(): void {
         return null
       }
       try {
-        return vertexTaskStore.create(input)
+        const task = vertexTaskStore.create(input)
+        // Why only here: this is the operator's create path; agent and CLI
+        // cards never start a fix agent (see bug-autofix.ts).
+        onVertexTaskCreated(task)
+        return task
       } catch (error) {
         console.error('[vertex-tasks] create failed', error)
         return null
@@ -65,6 +70,8 @@ export function registerVertexTaskHandlers(): void {
       }
       // Why: attachment records carry file paths; only addAttachment writes them.
       delete args.patch.attachments
+      // Why: autoFix is main's "already started" mark; a renderer must not clear it.
+      delete args.patch.autoFix
       return withClaimingWindow(event.sender.id, () =>
         vertexTaskStore.update(args.taskId, args.patch),
       )

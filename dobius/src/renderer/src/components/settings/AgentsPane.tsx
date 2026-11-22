@@ -12,6 +12,7 @@ import { Input } from '../ui/input'
 import { cn } from '@/lib/utils'
 import { AgentAwakeSetting } from './AgentAwakeSetting'
 import { VertexAutoModeSetting } from './VertexAutoModeSetting'
+import { BugAutoFixSetting } from './BugAutoFixSetting'
 import { AgentCacheTimerSection } from './AgentCacheTimerSection'
 import { AgentRuntimeSetting } from './AgentRuntimeSetting'
 import { AgentSandboxSetting } from './AgentSandboxSetting'
@@ -857,6 +858,7 @@ export function AgentsPane({
 
       <AgentAwakeSetting settings={settings} updateSettings={updateSettings} />
       <VertexAutoModeSetting settings={settings} updateSettings={updateSettings} />
+      <BugAutoFixSetting settings={settings} updateSettings={updateSettings} />
 
       <AgentCacheTimerSection settings={settings} updateSettings={updateSettings} />
 
