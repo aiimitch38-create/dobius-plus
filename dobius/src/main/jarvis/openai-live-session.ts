@@ -85,7 +85,10 @@ function fail(kind: OpenAiLiveErrorKind, detail = ''): OpenAiLiveFailure {
 // text, and nothing key-shaped may reach the window or the log.
 function scrubSecrets(text: string, apiKey: string): string {
   const withoutKey = apiKey ? text.split(apiKey).join('[hidden]') : text
-  return withoutKey.replace(/sk-[A-Za-z0-9_\-*.]{3,}/g, '[hidden]')
+  return withoutKey
+    .replace(/sk-[A-Za-z0-9_\-*.]{3,}/g, '[hidden]')
+    .replace(/ek_[A-Za-z0-9_-]*/g, '[hidden]')
+    .replace(/(ice-(?:pwd|ufrag)|fingerprint)[:=]\S+/gi, '$1:[hidden]')
 }
 
 export function isValidOfferSdp(value: unknown): value is string {
@@ -193,9 +196,9 @@ function parseSuccess(response: Response, raw: string): { answerSdp: string; ses
         readNestedField(parsed, 'answer', 'sdp') ||
         readStringField(parsed, 'answer'),
       sessionId:
+        readNestedField(parsed, 'session', 'id') ||
         readStringField(parsed, 'id') ||
         readStringField(parsed, 'session_id') ||
-        readNestedField(parsed, 'session', 'id') ||
         idFromLocation
     }
   }

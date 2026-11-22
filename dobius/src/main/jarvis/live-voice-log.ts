@@ -10,7 +10,7 @@ export function cleanLiveVoiceLogText(text: string): string {
   return text
     .slice(0, MAX_LINE_CHARS * 4)
     .replace(/sk-[A-Za-z0-9_\-*.]{3,}/g, '[hidden]')
-    .replace(/ek_[A-Za-z0-9_-]{6,}/g, '[hidden]')
+    .replace(/ek_[A-Za-z0-9_-]*/g, '[hidden]')
     .replace(/(ice-(?:pwd|ufrag)|fingerprint)[:=]\S+/gi, '$1:[hidden]')
     .replace(/[\r\n]+/g, ' ')
     .slice(0, MAX_LINE_CHARS)
@@ -26,7 +26,7 @@ let windowStart = 0
 let linesInWindow = 0
 
 export function logLiveVoiceProblem(source: string, text: string, now = Date.now()): void {
-  if (now - windowStart > 60_000) {
+  if (now < windowStart || now - windowStart > 60_000) {
     windowStart = now
     linesInWindow = 0
   }
