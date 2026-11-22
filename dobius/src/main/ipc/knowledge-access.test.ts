@@ -30,11 +30,8 @@ afterEach(() => {
 })
 
 describe('readKnowledgeFileWithin', () => {
-  it('reads a Markdown file inside a root, design-token skills included', () => {
+  it('reads a Markdown file inside a root', () => {
     expect(readKnowledgeFileWithin(join(root, 'notes.md'), [root]).content).toBe('hello')
-    expect(
-      readKnowledgeFileWithin(join(root, 'skills', 'design-tokens', 'SKILL.md'), [root]).content
-    ).toBe('tokens skill')
   })
 
   it('refuses a symlink that leads outside the root, and paths that climb out', () => {
@@ -45,7 +42,12 @@ describe('readKnowledgeFileWithin', () => {
   })
 
   it('refuses secret-looking names, non-Markdown files and relative paths', () => {
-    for (const name of [join('secrets', 'aws.md'), 'api-keys.md', '.env.md']) {
+    for (const name of [
+      join('secrets', 'aws.md'),
+      'api-keys.md',
+      '.env.md',
+      join('skills', 'design-tokens', 'SKILL.md')
+    ]) {
       expect(() => readKnowledgeFileWithin(join(root, name), [root])).toThrow(/secrets/)
     }
     expect(() => readKnowledgeFileWithin(join(root, 'notes.txt'), [root])).toThrow(/Markdown/)

@@ -451,6 +451,8 @@ const CONFIRMATION_GATED_METHODS = new Set([
   'crew.decide',
   'agentApprovals.grant',
   'adam.ask',
+  'adam.say',
+  'adam.setMode',
   'backup.run',
   'feedback.submit'
 ])

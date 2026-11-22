@@ -5,18 +5,13 @@
 // files whose names look like secrets are refused even when they end in .md.
 import { realpathSync } from 'node:fs'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { isSecretLookingPath } from '../../shared/secret-file-names'
 import type { Store } from '../persistence'
 import type { KnowledgeReadResult, KnowledgeTree } from '../../shared/knowledge'
 import { buildKnowledgeTree, claudeDir, isAllowedKnowledgePath, safeReadFile } from './knowledge-indexer'
 import { docsRoot } from './knowledge-leaf-sources'
 
 const MAX_PATH_CHARS = 4096
-
-// A path part that names a secret: .env files, secret/credential/password,
-// api/private key and access/auth token files or folders, and ssh/gnupg/aws
-// folders. Plain "tokens" is allowed (design-token skills are knowledge).
-const SECRET_PART =
-  /^\.env|^\.(ssh|gnupg|aws)$|(^|[._ -])(secrets?|credentials?|passwords?|passwd|(api|private)[-_ ]?keys?|(api|access|auth|bearer|refresh)[-_ ]?tokens?)([._ -]|$)/i
 
 /** What the window's Knowledge view shows (`knowledge:tree`). */
 export function knowledgeTree(store: Store): KnowledgeTree {
@@ -83,7 +78,10 @@ export function readKnowledgeFileWithin(filePath: unknown, roots: string[]): Kno
   if (!below) {
     throw new Error('Path is outside the knowledge roots.')
   }
-  if (below.split(sep).some((part) => SECRET_PART.test(part))) {
+  // Same names the agent file guard refuses (shared/secret-file-names.ts),
+  // applied to every folder below the root too, so `secrets/notes.md` is out.
+  const parts = below.split(sep)
+  if (parts.some((_, index) => isSecretLookingPath(parts.slice(0, index + 1).join('/')))) {
     throw new Error('That file looks like it holds secrets, so it is not read here.')
   }
   const content = safeReadFile(real)

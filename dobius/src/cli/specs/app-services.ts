@@ -46,7 +46,7 @@ export const APP_SERVICE_COMMAND_SPECS: CommandSpec[] = [
     positionalArgs: ['path'],
     notes: [
       'Only Markdown files inside the knowledge folders are read (your ~/.claude folder, the Docs folder and your project folders). Links that point outside them are refused.',
-      'Files whose names look like secrets (.env, secrets, credentials, passwords, API keys, access tokens) are refused.'
+      'Files or folders whose names look like secrets are refused: anything with key, token, secret, credential or password in the name, .env files, and folders such as .ssh and .aws (the same rule as the agent file guard).'
     ],
     examples: ['dobius knowledge read ~/.claude/CLAUDE.md']
   },
