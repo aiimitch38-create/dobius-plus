@@ -46,6 +46,7 @@ import { registerDeveloperPermissionHandlers } from './developer-permissions'
 import { registerComputerUsePermissionHandlers } from './computer-use-permissions'
 import { setTrustedBrowserRendererWebContentsId, setAgentBrowserBridgeRef } from './browser'
 import { registerSessionHandlers } from './session'
+import { registerTabSnoozeHandlers } from './tab-snooze'
 import { registerCloudBackupHandlers, setTrustedCloudBackupRenderer } from './cloud-backup'
 import { registerSettingsHandlers } from './settings'
 import { registerDiagnosticsHandlers } from './diagnostics'
@@ -269,5 +270,6 @@ export function registerCoreHandlers(
   registerNativeChatHandlers()
   registerClipboardHandlers(store)
   registerUpdaterHandlers(store)
+  registerTabSnoozeHandlers(store)
   registerSpeechHandlers(store)
 }

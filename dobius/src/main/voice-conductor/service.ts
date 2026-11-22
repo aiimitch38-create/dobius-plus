@@ -7,7 +7,10 @@ import type { GlobalSettings } from '../../shared/types'
 import type { DobiusCliDispatcher } from '../dobius-cli/dispatch-server'
 import { listAgents } from '../agents/agents-store'
 import { startAgentRun } from '../agents/agent-runner'
-import { getDefaultPrepareClaudeLaunch } from '../agents/default-claude-launch'
+import {
+  getDefaultPrepareClaudeLaunch,
+  onDefaultPrepareClaudeLaunchRegistered
+} from '../agents/default-claude-launch'
 import { createVoiceConductor } from './conductor'
 import { createIMessageBridge } from './imessage-bridge'
 import { conductorImessageHandle, createSettingsLaneAsanaQueue } from './conductor-settings'
@@ -27,6 +30,11 @@ import { isGroupAddress, resolveBoardGroupInWorktree } from '../runtime/orchestr
 const conductor = createVoiceConductor()
 let started = false
 let leadTabStore: ReturnType<typeof createLeadTabStore> | null = null
+// Why: main syncs at boot, before openMainWindow() registers the Claude launch
+// preparer. Without a preparer conductor.start() fails, and nothing re-syncs
+// until a settings change, so the conductor stayed off. Wait, then retry.
+let lastSync: { settings: GlobalSettings; runtime: DobiusCliDispatcher } | null = null
+let waitingForPreparer = false
 
 // Why once per process: a spawned worker outlives a conductor off/on toggle. A
 // second registry would reload the file, mark that live worker "interrupted"
@@ -150,8 +158,22 @@ export function syncVoiceConductorFromSettings(
   settings: GlobalSettings,
   runtime: DobiusCliDispatcher
 ): void {
+  lastSync = { settings, runtime }
   const enabled = settings.voice?.conductorEnabled ?? false
   if (enabled && !started) {
+    if (!getDefaultPrepareClaudeLaunch()) {
+      if (!waitingForPreparer) {
+        waitingForPreparer = true
+        const unsubscribe = onDefaultPrepareClaudeLaunchRegistered(() => {
+          unsubscribe()
+          waitingForPreparer = false
+          if (lastSync) {
+            syncVoiceConductorFromSettings(lastSync.settings, lastSync.runtime)
+          }
+        })
+      }
+      return
+    }
     const imessage = createIMessageBridge({ resolveHandle: conductorImessageHandle })
     const unavailable = imessage.unavailableReason()
     if (unavailable) {

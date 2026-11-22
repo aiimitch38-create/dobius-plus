@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { BoardThreadMessage } from '../board-command-bar/BoardThread'
 import {
   BOARD_THREAD_HISTORY_CAP,
-  boardThreadStorageKey,
   deserializeBoardThread,
   serializeBoardThread
 } from './board-thread-persistence'
@@ -10,12 +9,6 @@ import {
 function message(id: string, extra: Partial<BoardThreadMessage> = {}): BoardThreadMessage {
   return { id, role: 'user', text: `text-${id}`, ...extra }
 }
-
-describe('boardThreadStorageKey', () => {
-  it('namespaces by repo id', () => {
-    expect(boardThreadStorageKey('repo-1')).toBe('dobius.board.thread.v1.repo-1')
-  })
-})
 
 describe('serializeBoardThread', () => {
   it('caps to the most recent BOARD_THREAD_HISTORY_CAP messages', () => {

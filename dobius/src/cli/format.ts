@@ -3,6 +3,7 @@ import { computerUseErrorRecoveryData } from '../shared/computer-use-error-recov
 import { prepareComputerCliJsonResult } from './computer-format'
 import type { RuntimeRpcFailure, RuntimeRpcSuccess } from './runtime-client'
 import { RuntimeClientError, RuntimeRpcFailureError } from './runtime-client'
+import { safeText } from './safe-text'
 
 export {
   formatBrowserProfileList,
@@ -137,7 +138,8 @@ export function reportCliError(error: unknown, json: boolean, context: CliErrorC
       console.log(JSON.stringify(response, null, 2))
     }
   } else {
-    console.error(formatCliError(error, context))
+    // Why: RPC errors can quote git, hook or GitHub output verbatim.
+    console.error(safeText(formatCliError(error, context)))
   }
 }
 

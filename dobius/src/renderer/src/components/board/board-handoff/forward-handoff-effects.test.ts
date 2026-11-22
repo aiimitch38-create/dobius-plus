@@ -32,7 +32,8 @@ vi.mock('../board-delivery/console-lifecycle', () => ({
 }))
 vi.mock('../board-delivery/mission-tracker', () => ({
   missionsForOrder: () => state.missions,
-  onMissionEvent: () => () => {}
+  onMissionEvent: () => () => {},
+  pinOrderMissions: () => () => {}
 }))
 vi.stubGlobal('window', { setTimeout, clearTimeout })
 

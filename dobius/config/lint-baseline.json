@@ -971,9 +971,6 @@
     "src/renderer/src/components/kanban/KanbanDetailPanel.tsx": {
       "styled-scrollbar": 1
     },
-    "src/renderer/src/components/operations/OperationsDashboard.tsx": {
-      "styled-scrollbar": 3
-    },
     "src/renderer/src/components/right-sidebar/PromptsPanel.tsx": {
       "styled-scrollbar": 1
     },

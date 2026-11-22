@@ -17,7 +17,8 @@ vi.mock('@/store', () => ({
       allWorktrees: () => worktrees
     }) }
 }))
-vi.mock('@/store/slices/board', () => ({ getBoard: vi.fn() }))
+const flushBoardPersistence = vi.fn(async () => {})
+vi.mock('@/store/slices/board', () => ({ getBoard: vi.fn(), flushBoardPersistence }))
 vi.mock('./board-pause', () => ({ markConsolePaused: vi.fn() }))
 vi.mock('../console-card/console-card-status', () => ({ isShellProcessName: vi.fn() }))
 vi.mock('../console-card/console-account-launch', () => ({ resolvePinnedAgentCommand }))
@@ -56,7 +57,7 @@ beforeEach(() => {
 })
 
 describe('restartConsole account handling', () => {
-  it("keeps today's launch when nothing is pinned", () => {
+  it("keeps today's launch when nothing is pinned", async () => {
     expect(restartConsole('wt', card())).toBe(true)
     expect(launchAgentInNewTab).toHaveBeenCalledWith({
       agent: 'claude',
@@ -68,7 +69,7 @@ describe('restartConsole account handling', () => {
       agentKind: 'claude',
       accountId: undefined
     })
-    expect(closeTerminalTab).toHaveBeenCalledWith('old-tab')
+    await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('old-tab'))
   })
 
   it('launches a pinned command and records the account', () => {
@@ -140,6 +141,9 @@ describe('restartConsole keeps a bug-fix console restricted', () => {
       agentArgs: bugFixClaudeArgs()
     })
     expect(resolvePinnedAgentCommand).not.toHaveBeenCalled()
+    // The old tab still closes only after the board save (9.7).
+    await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('old-tab'))
+    expect(flushBoardPersistence).toHaveBeenCalledTimes(1)
   })
 
   it('stays restricted after the agent exited and its captured launch is gone', async () => {
@@ -168,3 +172,30 @@ describe('restartConsole keeps a bug-fix console restricted', () => {
   })
 })
 
+describe('restartConsole keeps the card address correct (9.7)', () => {
+  it('saves the new tab to main before closing the old terminal', async () => {
+    let landed: () => void = () => {}
+    flushBoardPersistence.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (landed = resolve))
+    )
+    expect(restartConsole('wt', card())).toBe(true)
+    expect(updateCard).toHaveBeenCalledWith('wt', 'card-1', expect.objectContaining({ tabId: 'new-tab' }))
+    // Why: until main has the new tabId, card:card-1 would still resolve to old-tab.
+    expect(flushBoardPersistence).toHaveBeenCalledTimes(1)
+    expect(updateCard.mock.invocationCallOrder[0]).toBeLessThan(
+      flushBoardPersistence.mock.invocationCallOrder[0]
+    )
+    await Promise.resolve()
+    expect(closeTerminalTab).not.toHaveBeenCalled()
+    landed()
+    await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('old-tab'))
+  })
+
+  it('leaves the old terminal open and says so when main refused the save', async () => {
+    flushBoardPersistence.mockRejectedValueOnce(new Error('ipc down'))
+    expect(restartConsole('wt', card())).toBe(true)
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalled())
+    expect(String(toastError.mock.calls[0][0])).toContain('old terminal was left open: ipc down')
+    expect(closeTerminalTab).not.toHaveBeenCalled()
+  })
+})

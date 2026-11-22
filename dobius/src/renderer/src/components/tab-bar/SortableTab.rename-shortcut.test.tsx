@@ -72,6 +72,9 @@ vi.mock('@dnd-kit/sortable', () => ({
 }))
 
 vi.mock('lucide-react', () => ({
+  Clock: function Clock(props: Record<string, unknown>) {
+    return { type: 'Clock', props }
+  },
   Columns2: function Columns2(props: Record<string, unknown>) {
     return { type: 'Columns2', props }
   },

@@ -4,7 +4,7 @@ import { translate } from '@/i18n/i18n'
 import { getAgentLabel } from '@/lib/agent-catalog'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { useAppStore } from '@/store'
-import { getBoard, type BoardCardOf } from '@/store/slices/board'
+import { flushBoardPersistence, getBoard, type BoardCardOf } from '@/store/slices/board'
 import {
   bugFixClaudeArgs,
   isBugFixWorktreePath
@@ -101,9 +101,9 @@ export type ConsoleRelaunchOptions = {
 
 type RestrictedLaunch = { command: string; args: string }
 
-/** How to relaunch a bug-fix console, or null for any other console. Why two
- *  signals: the captured launch (keeps --add-dir) is dropped when the agent
- *  exits, but the workspace folder name never changes. */
+/** How to relaunch a bug-fix console, or null for any other console. The
+ *  workspace folder name never changes, so it identifies one even after the
+ *  agent exited. */
 function restrictedLaunchFor(worktreeId: string): RestrictedLaunch | null {
   // Why the folder, not the captured command: a captured profile can be an
   // older, wider one; the current shared profile always wins.
@@ -118,9 +118,8 @@ export function restartConsole(
   agent?: TuiAgent,
   launch?: ConsoleRelaunchOptions
 ): boolean {
-  // Why: a bug-fix console must come back with its captured restricted
-  // command, never the Settings default args (which skip permissions) or
-  // another agent.
+  // Why: a bug-fix console must come back with the restricted profile, never
+  // the Settings default args (which skip permissions) or another agent.
   const restricted = restrictedLaunchFor(worktreeId)
   if (restricted) {
     return relaunchInNewTab(worktreeId, card, 'claude', restricted.command, restricted.args, undefined)
@@ -175,7 +174,21 @@ function relaunchInNewTab(
   useAppStore
     .getState()
     .updateCard(worktreeId, card.id, { tabId: launched.tabId, agentKind: next, accountId })
-  closeTerminalTab(oldTab)
+  // Why: `card:<id>` is resolved in main from its saved board. Save the new tab
+  // first, then close the old one, so a CLI send in between never lands in the
+  // terminal being closed (it reads "not running" until the new one starts).
+  // If main refused the save it still points at the old tab, so that tab stays.
+  void flushBoardPersistence().then(
+    () => closeTerminalTab(oldTab),
+    (error: unknown) =>
+      toast.error(
+        translate(
+          'board.console.restartSaveFailed',
+          'Restarted {{name}}, but the Board could not be saved, so its old terminal was left open: {{reason}}',
+          { name: card.title, reason: error instanceof Error ? error.message : String(error) }
+        )
+      )
+  )
   return true
 }
 

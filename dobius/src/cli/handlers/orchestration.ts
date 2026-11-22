@@ -8,6 +8,7 @@ import {
 } from '../flags'
 import { RuntimeClientError } from '../runtime-client'
 import { getTerminalHandle, resolveTerminalAddress } from '../selectors'
+import { BOARD_ORCHESTRATOR_ADDRESS_PREFIX } from '../../shared/board-orchestrator-relay'
 
 // Why: 15 s is well under Claude Code's empirical ~2 min Bash-tool silence
 // budget and generates only ~40 lines per 10 min wait — enough to assure the
@@ -131,7 +132,7 @@ async function resolveOrchestrationTerminalHandle(
 ): Promise<string> {
   const explicit = getOptionalStringFlag(flags, flagName)
   if (explicit) {
-    return explicit
+    return await resolveTerminalAddress(explicit, flags, cwd, client)
   }
   const envHandle = process.env.DOBIUS_TERMINAL_HANDLE
   if (envHandle && envHandle.length > 0) {
@@ -174,7 +175,10 @@ function getOptionalPositiveIntegerValueFlag(
 }
 
 function rejectLifecycleGroupRecipient(type: string | undefined, to: string): void {
-  if ((type === 'worker_done' || type === 'heartbeat') && to.startsWith('@')) {
+  if (
+    (type === 'worker_done' || type === 'heartbeat') &&
+    (to.startsWith('@') || to.startsWith(BOARD_ORCHESTRATOR_ADDRESS_PREFIX))
+  ) {
     throw new RuntimeClientError('invalid_argument', getLifecycleGroupRecipientError(type))
   }
 }
@@ -184,11 +188,24 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
     const rawTo = getRequiredStringFlag(flags, 'to')
     const type = getOptionalStringFlag(flags, 'type')
     rejectLifecycleGroupRecipient(type, rawTo)
-    const to = await resolveTerminalAddress(rawTo, flags, cwd, client)
+    // Why: board:<orchestratorCardId> is relayed by the runtime from the card's
+    // own mailbox, so no sender terminal is looked up for it.
+    const toBoardOrchestrator = rawTo.startsWith(BOARD_ORCHESTRATOR_ADDRESS_PREFIX)
+    const to = toBoardOrchestrator ? rawTo : await resolveTerminalAddress(rawTo, flags, cwd, client)
 
-    const from = await resolveOrchestrationTerminalHandle(senderFlags(flags), cwd, client, 'from')
+    const from = toBoardOrchestrator
+      ? undefined
+      : await resolveOrchestrationTerminalHandle(senderFlags(flags), cwd, client, 'from')
     const result = await client.call<
-      { message: { id: string } } | { messages: { id: string }[]; recipients: number }
+      | { message: { id: string } }
+      | {
+          messages: { id: string }[]
+          recipients: number
+          // Why optional: only a board:<orchestrator> relay reports these.
+          refused?: { title: string; reason: string; partlyTyped: boolean }[]
+          skipped?: { title: string; reason: string }[]
+          typedNotSubmitted?: { title: string }[]
+        }
     >('orchestration.send', {
       from,
       to,
@@ -204,7 +221,19 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
       if ('message' in r) {
         return `Sent ${r.message.id}`
       }
-      return `Sent ${r.messages.length} messages to ${r.recipients} recipients`
+      const lines = [`Sent ${r.messages.length} messages to ${r.recipients} recipients`]
+      for (const x of r.refused ?? []) {
+        lines.push(
+          `Not delivered to "${x.title}": ${x.reason}${x.partlyTyped ? ' (text may be partly typed; Enter was not pressed)' : ''}`
+        )
+      }
+      for (const x of r.typedNotSubmitted ?? []) {
+        lines.push(`Typed into "${x.title}" (Cursor Agent); Enter was left for you to press`)
+      }
+      for (const x of r.skipped ?? []) {
+        lines.push(`Skipped "${x.title}": ${x.reason}`)
+      }
+      return lines.join('\n')
     })
   },
 
@@ -263,14 +292,18 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, (r) => `Replied ${r.message.id}`)
   },
 
-  'orchestration inbox': async ({ flags, client, json }) => {
+  'orchestration inbox': async ({ flags, client, cwd, json }) => {
     const full = flags.has('full')
+    const terminalFlag = getOptionalStringFlag(flags, 'terminal')
+    const terminal = terminalFlag
+      ? await resolveTerminalAddress(terminalFlag, flags, cwd, client)
+      : undefined
     const result = await client.call<{
       messages: MessageSummary[]
       count: number
     }>('orchestration.inbox', {
       limit: getOptionalPositiveIntegerFlag(flags, 'limit'),
-      terminal: getOptionalStringFlag(flags, 'terminal')
+      terminal
     })
     printResult(result, json, (r) => {
       if (r.count === 0) {
@@ -411,7 +444,7 @@ export const ORCHESTRATION_HANDLERS: Record<string, CommandHandler> = {
     }>(
       'orchestration.ask',
       {
-        to: getRequiredStringFlag(flags, 'to'),
+        to: await resolveTerminalAddress(getRequiredStringFlag(flags, 'to'), flags, cwd, client),
         question: getRequiredStringFlag(flags, 'question'),
         options: getOptionalStringFlag(flags, 'options'),
         timeoutMs: parsedTimeoutMs,

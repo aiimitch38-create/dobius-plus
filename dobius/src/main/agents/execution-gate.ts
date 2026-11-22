@@ -8,6 +8,7 @@ export type ExecutionOrigin =
   | 'dispatch-build'
   | 'imessage-command'
   | 'bug-report'
+  | 'board-relay'
 
 export type ExecutionBlockReason = 'paused' | 'control-state-unreadable'
 

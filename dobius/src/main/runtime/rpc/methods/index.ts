@@ -48,6 +48,7 @@ import { TASK_METHODS } from './tasks'
 import { BOARD_CONSOLE_METHODS } from './board-consoles'
 import { BOARD_WEB_TILE_METHODS } from './board-web-tiles'
 import { AGENT_CONTROL_METHODS } from './agent-control'
+import { CREW_METHODS } from './crew'
 import { LEAD_METHODS } from './leads'
 // Communications-specific method groups. Not part of ALL_RPC_METHODS by
 // default until this pass — each backs a family of vendor/buzz-desktop
@@ -121,6 +122,7 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...BOARD_CONSOLE_METHODS,
   ...BOARD_WEB_TILE_METHODS,
   ...AGENT_CONTROL_METHODS,
+  ...CREW_METHODS,
   ...LEAD_METHODS,
   ...COMMUNICATIONS_AGENT_METHODS,
   ...IDENTITY_RPC_METHODS,

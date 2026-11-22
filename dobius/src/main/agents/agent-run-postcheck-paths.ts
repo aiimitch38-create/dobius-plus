@@ -55,11 +55,18 @@ function spellings(target: string): string[] {
   return [...new Set([path.resolve(target), resolveThroughExisting(target)])]
 }
 
-export function postcheckSecretPaths(args: { homeDir: string; userDataDir: string }): string[] {
+export function postcheckSecretPaths(args: {
+  homeDir: string
+  userDataDir: string
+  /** Other Dobius userData roots (their full runtime keys); glob entries are skipped. */
+  otherUserDataDirs?: readonly string[]
+}): string[] {
   const homes = spellings(args.homeDir)
   const written = [
     ...homes.flatMap((home) => HOME_SECRET_PATHS.map((entry) => path.join(home, entry))),
-    args.userDataDir
+    args.userDataDir,
+    // Why: sandbox-exec profiles take literal paths, so a `*` root cannot be used.
+    ...(args.otherUserDataDirs ?? []).filter((dir) => !/[*?[]/.test(dir))
   ]
   return [...new Set(written.flatMap(spellings))]
 }

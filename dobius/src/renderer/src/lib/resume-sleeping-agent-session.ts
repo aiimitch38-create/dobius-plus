@@ -30,7 +30,7 @@ import {
 } from './sleeping-agent-pane-ownership'
 export { getWorktreeIdsNeedingStartupResume } from './sleeping-agent-pane-ownership'
 
-function getResumeLaunchPlatform(worktreeId: string): NodeJS.Platform {
+export function getResumeLaunchPlatform(worktreeId: string): NodeJS.Platform {
   const state = useAppStore.getState()
   const worktree = state.getKnownWorktreeById(worktreeId)
   const repo = worktree ? state.repos.find((entry) => entry.id === worktree.repoId) : null
@@ -47,7 +47,7 @@ function getResumeLaunchPlatform(worktreeId: string): NodeJS.Platform {
   return CLIENT_PLATFORM
 }
 
-function appendTabToWorktreeOrder(worktreeId: string, tabId: string): void {
+export function appendTabToWorktreeOrder(worktreeId: string, tabId: string): void {
   const state = useAppStore.getState()
   const termIds = (state.tabsByWorktree[worktreeId] ?? []).map((tab) => tab.id)
   const editorIds = state.openFiles

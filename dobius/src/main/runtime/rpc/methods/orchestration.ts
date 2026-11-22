@@ -1,11 +1,16 @@
 /* eslint-disable max-lines -- Why: RPC method definitions co-locate param schemas with handlers; splitting by method would scatter the shared enums and Zod transforms without reducing complexity. */
 import { z } from 'zod'
 import { defineMethod, type RpcMethod } from '../core'
+import type { DobiusRuntimeService } from '../../dobius-runtime'
 import { OptionalFiniteNumber, OptionalString, OptionalBoolean, requiredString } from '../schemas'
 import type { MessageType, MessagePriority, TaskStatus } from '../../orchestration/db'
 import { buildDispatchPreamble } from '../../orchestration/preamble'
 import { formatMessageBanner } from '../../orchestration/formatter'
 import { isGroupAddress, resolveGroupAddress } from '../../orchestration/groups'
+import {
+  isBoardOrchestratorAddress,
+  relayToBoardOrchestrator
+} from '../../orchestration/board-orchestrator-relay'
 import { reconcileLifecycleMessage } from '../../orchestration/lifecycle-reconciliation'
 import { ORCHESTRATION_GATE_METHODS } from './orchestration-gates'
 
@@ -28,6 +33,36 @@ const TASK_STATUSES: TaskStatus[] = [
   'failed',
   'blocked'
 ]
+
+/**
+ * Why: the immediate push types the message plus Enter into the recipient's
+ * PTY when its last agent status was 'idle'. That status can be stale after
+ * the agent exits to a shell that sets no title, so a message from the
+ * limited agent key could run as shell input outside every sandbox. For the
+ * agent key the target is re-checked (same rule as a guarded terminal.send:
+ * running an agent, not at a permission prompt) right before the write;
+ * otherwise the message stays stored for the next idle transition or `check`.
+ */
+async function pushMessages(
+  runtime: DobiusRuntimeService,
+  handle: string,
+  agentKey: true | undefined
+): Promise<void> {
+  if (!agentKey) {
+    runtime.deliverPendingMessagesForHandle(handle)
+    return
+  }
+  let status: Awaited<ReturnType<DobiusRuntimeService['getTerminalAgentStatus']>>
+  try {
+    status = await runtime.getTerminalAgentStatus(handle)
+  } catch {
+    // Unknown or closed handle: nothing to push into; the message stays stored.
+    return
+  }
+  if (status.isRunningAgent && status.status !== 'permission') {
+    runtime.deliverPendingMessagesForHandle(handle)
+  }
+}
 
 function getLifecycleGroupRecipientError(type: 'worker_done' | 'heartbeat'): string {
   return `${type} messages must be sent to a concrete coordinator terminal handle, not a group address.`
@@ -181,7 +216,20 @@ export const ORCHESTRATION_METHODS: RpcMethod[] = [
   defineMethod({
     name: 'orchestration.send',
     params: SendParams,
-    handler: async (params, { runtime }) => {
+    handler: async (params, { runtime, agentKey }) => {
+      // Why: board:<orchestratorCardId> fans out like typing in that card,
+      // from the card's mailbox; it is never a plain handle or group.
+      if (isBoardOrchestratorAddress(params.to)) {
+        return relayToBoardOrchestrator(runtime, {
+          to: params.to,
+          subject: params.subject,
+          body: params.body,
+          type: params.type as MessageType | undefined,
+          priority: params.priority as MessagePriority | undefined,
+          threadId: params.threadId,
+          payload: params.payload
+        })
+      }
       const db = runtime.getOrchestrationDb()
       const from = params.from ?? 'unknown'
 
@@ -204,7 +252,8 @@ export const ORCHESTRATION_METHODS: RpcMethod[] = [
         if (msg.type === 'worker_done' || msg.type === 'heartbeat') {
           reconcileLifecycleMessage(db, msg)
         }
-        runtime.deliverPendingMessagesForHandle(params.to)
+        // Why: see pushMessages.
+        await pushMessages(runtime, params.to, agentKey)
         runtime.notifyMessageArrived(params.to, msg.type)
         return { message: msg }
       }
@@ -235,7 +284,7 @@ export const ORCHESTRATION_METHODS: RpcMethod[] = [
         })
       )
       for (const message of messages) {
-        runtime.deliverPendingMessagesForHandle(message.to_handle)
+        await pushMessages(runtime, message.to_handle, agentKey)
         runtime.notifyMessageArrived(message.to_handle, message.type)
       }
 
@@ -549,7 +598,7 @@ export const ORCHESTRATION_METHODS: RpcMethod[] = [
   defineMethod({
     name: 'orchestration.ask',
     params: AskParams,
-    handler: async (params, { runtime, signal }) => {
+    handler: async (params, { runtime, signal, agentKey }) => {
       // Why: group addresses have no unambiguous answer semantics (whose
       // reply wins? first? consensus?) and the ~60-LOC scope is not the
       // place to design that. Rejecting here closes the silent-timeout
@@ -580,7 +629,7 @@ export const ORCHESTRATION_METHODS: RpcMethod[] = [
         type: 'decision_gate',
         payload
       })
-      runtime.deliverPendingMessagesForHandle(params.to)
+      await pushMessages(runtime, params.to, agentKey)
       runtime.notifyMessageArrived(params.to, outbound.type)
 
       const threadId = outbound.id

@@ -17,6 +17,21 @@ let persistDueAt = 0
 const pendingPersistedJsons = new Set<string>()
 // Worktrees changed locally since the last write; a broadcast never overwrites these.
 const dirtyWorktrees = new Set<string>()
+// Set by the live persistence so flushBoardPersistence() can reach it.
+let flushPending: (() => Promise<void>) | null = null
+// True after a write main refused; the next flush writes again even with no timer.
+let lastWriteFailed = false
+
+/**
+ * Writes a pending board change to main now instead of after the debounce.
+ * Why: main resolves `card:<id>` from its saved copy of the board, so a change
+ * that re-points a card (console restart) must land there before the old
+ * terminal is closed. Resolves once main has the write; rejects when main
+ * refused it (the change stays dirty and the next flush retries it).
+ */
+export function flushBoardPersistence(): Promise<void> {
+  return flushPending ? flushPending() : Promise.resolve()
+}
 
 export function resetBoardPersistenceForTest(): void {
   if (persistTimer) {
@@ -24,6 +39,8 @@ export function resetBoardPersistenceForTest(): void {
   }
   persistTimer = null
   persistDueAt = 0
+  flushPending = null
+  lastWriteFailed = false
   pendingPersistedJsons.clear()
   dirtyWorktrees.clear()
 }
@@ -55,6 +72,32 @@ export function createBoardPersistence(
 } {
   let hydrating = false
 
+  const write = async (): Promise<void> => {
+    persistTimer = null
+    const { boardsHydrated, boardsByWorktree } = get()
+    if (!boardsHydrated) {
+      return
+    }
+    const payload = toPersistedBoards(boardsByWorktree)
+    const json = JSON.stringify(payload)
+    const written = [...dirtyWorktrees]
+    dirtyWorktrees.clear()
+    pendingPersistedJsons.add(json)
+    try {
+      await window.api.ui.set({ boardsByWorktree: payload })
+      lastWriteFailed = false
+    } catch (error) {
+      // Why: main does not have these changes, so a broadcast must still not
+      // overwrite them, and the next flush must write them again.
+      for (const id of written) {
+        dirtyWorktrees.add(id)
+      }
+      pendingPersistedJsons.delete(json)
+      lastWriteFailed = true
+      throw error
+    }
+  }
+
   // Why: one debounced write per burst; writes wait for hydration so an empty
   // boot state never overwrites the saved boards.
   const schedule = (delayMs: number): void => {
@@ -65,19 +108,19 @@ export function createBoardPersistence(
     }
     persistDueAt = dueAt
     persistTimer = setTimeout(
-      () => {
-        persistTimer = null
-        const { boardsHydrated, boardsByWorktree } = get()
-        if (!boardsHydrated) {
-          return
-        }
-        const payload = toPersistedBoards(boardsByWorktree)
-        dirtyWorktrees.clear()
-        pendingPersistedJsons.add(JSON.stringify(payload))
-        window.api.ui.set({ boardsByWorktree: payload }).catch(console.error)
-      },
+      () => void write().catch(console.error),
       Math.max(0, dueAt - Date.now())
     )
+  }
+
+  flushPending = async () => {
+    if (!persistTimer && !lastWriteFailed) {
+      return
+    }
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+    }
+    await write()
   }
 
   // Why: every change to the map (board actions, but also worktree removal and

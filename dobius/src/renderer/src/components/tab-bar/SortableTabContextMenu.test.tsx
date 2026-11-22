@@ -50,11 +50,16 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
 }))
 
 vi.mock('lucide-react', () => ({
+  Clock: () => null,
   PanelBottomClose: () => null,
   PanelRightClose: () => null,
   Pin: () => null,
   PinOff: () => null
 }))
+
+const snoozeMock = vi.hoisted(() => ({ snoozeTerminalTab: vi.fn(async () => 'snoozed') }))
+
+vi.mock('@/lib/tab-snooze/snooze-terminal-tab', () => snoozeMock)
 
 vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string) => fallback
@@ -243,5 +248,27 @@ describe('SortableTabContextMenu', () => {
     const { container } = renderMenu()
 
     expect(container.textContent).not.toContain('Move Tab to Split')
+  })
+
+  it('offers Snooze with the time picks and snoozes the tab at the picked time', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 10, 10, 11, 47))
+    try {
+      const { container } = renderMenu({ isPinned: true })
+      expect(getButton(container, 'Snooze')).toBeTruthy()
+      for (const label of ['Tonight', 'Tomorrow morning', '24 hours', '2 days', 'Next week']) {
+        expect(getButton(container, label)).toBeTruthy()
+      }
+      act(() => getButton(container, 'Tomorrow morning').click())
+      expect(snoozeMock.snoozeTerminalTab).toHaveBeenLastCalledWith(
+        'term-1',
+        new Date(2026, 10, 11, 9).getTime()
+      )
+      // "Until I bring it back" has no time.
+      act(() => getButton(container, 'Until I bring it back').click())
+      expect(snoozeMock.snoozeTerminalTab).toHaveBeenLastCalledWith('term-1', null)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

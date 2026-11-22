@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- Why: root and generated command help text live together so CLI discovery stays greppable. */
 import type { CommandSpec } from './args'
 import { findCommandSpec, isCommandGroup, supportsBrowserPageFlag } from './args'
+import { formatGitPrFlagHelp } from './git-format'
 
 const ROOT_HELP_TEXT = `dobius
 
@@ -77,6 +78,23 @@ Files:
   file open                 Open a workspace file in the Dobius+ editor
   file diff                 Open a workspace file diff in the Dobius+ editor
   file open-changed         Open all git-changed files for a workspace
+
+Git:
+  git status                Show changed and staged files, and ahead/behind
+  git diff                  Show what changed in one file
+  git log                   List recent commits on this branch
+  git branches              List local branches
+  git stage                 Stage a file (or --all) for the next commit
+  git unstage               Take a file (or --all) out of the next commit
+  git commit                Commit staged changes (--message or --generate)
+  git fetch                 Download remote branch info without changing files
+  git pull                  Bring the remote branch's new commits in
+
+Pull requests:
+  pr show                   Show this branch's pull request
+  pr checks                 List the PR's checks, or one check's errors
+  pr comments               Read the PR's comments and review threads
+  pr create                 Open a pull request for this branch
 
 Terminals:
   terminal list             List live Dobius+-managed terminals
@@ -414,6 +432,10 @@ export function formatGroupHelp(specs: CommandSpec[], group: string): string {
 }
 
 function formatCommandFlagHelp(flag: string, commandPath: string[]): string {
+  const gitPrHelp = formatGitPrFlagHelp(commandPath, flag)
+  if (gitPrHelp) {
+    return gitPrHelp
+  }
   const command = commandPath.join(' ')
   if (command === 'linear issue' && flag === 'id') {
     return '--id <id>             Linear issue key, id, or URL'

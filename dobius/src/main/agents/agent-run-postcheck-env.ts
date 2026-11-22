@@ -1,3 +1,5 @@
+import { AGENT_RUNTIME_SCOPE, DOBIUS_RUNTIME_SCOPE_ENV } from '../../shared/runtime-bootstrap'
+
 // The check runs outside the agent's sandbox and may execute files the agent
 // just edited (a test script), so it gets a short ALLOW list of variables and
 // nothing else: no sign-in tokens, API keys, SSH agent socket or app settings.
@@ -22,5 +24,7 @@ export function buildPostcheckEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
       allowed[name] = value
     }
   }
+  // Why: a `dobius` call from the check must use the limited agent key.
+  allowed[DOBIUS_RUNTIME_SCOPE_ENV] = AGENT_RUNTIME_SCOPE
   return allowed
 }

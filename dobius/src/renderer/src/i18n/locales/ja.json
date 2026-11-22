@@ -2132,48 +2132,6 @@
               }
             }
           }
-        },
-        "CloseReasonDropdown": {
-          "e1f2a3b4c5": "クローズ理由を選択"
-        },
-        "GitHubIssueCommentComposer": {
-          "082515176a": "コメントの追加に失敗しました",
-          "9f88657c4e": "Issue を閉じました",
-          "e9b7cb7d17": "Issue を閉じられませんでした",
-          "bd3b4492a0": "Issue を再オープンしました",
-          "f2a8c1d903": "Issue を再オープンできませんでした",
-          "a1b2c3d4e5": "コメントを追加",
-          "c5c117270e": "ここにコメントを追加してください。丁寧にお願いします",
-          "f6a7b8c9d0": "Issue を閉じる",
-          "b1c2d3e4f5": "Issue を再オープン",
-          "0a73f59e85": "コメントを送信",
-          "bf43425540": "コメント",
-          "commentTooLarge": "コメントが大きすぎるため安全に送信できません。"
-        },
-        "GitHubWorkItemAssigneePopoverContent": {
-          "cddd9b04a7": "担当者を読み込み中",
-          "a00830d3f7": "ユーザーがいません",
-          "4f8b6f2c1d": "担当者を絞り込み..."
-        },
-        "GitHubWorkItemLabelPopoverContent": {
-          "2aa9acdf34": "GitHub でラベルを編集",
-          "cddd9b04a7": "ラベルを読み込み中",
-          "de26e2eb06": "ラベルなし",
-          "8b0d52ee3a": "ラベルを絞り込み..."
-        },
-        "githubIssueCloseReasons": {
-          "completed": {
-            "label": "完了として閉じる",
-            "description": "完了、クローズ、修正済み、解決済み"
-          },
-          "notPlanned": {
-            "label": "対応予定なしとして閉じる",
-            "description": "修正しない、再現不可、古い"
-          },
-          "duplicate": {
-            "label": "重複として閉じる",
-            "description": "別の issue と重複"
-          }
         }
       },
       "linear": {
@@ -2398,15 +2356,6 @@
         },
         "sheet": {
           "1189e9fe0a": "閉じる"
-        },
-        "team": {
-          "multi": {
-            "combobox": {
-              "de83523bf9": "検索に一致するチームはありません。",
-              "301f2a796e": "全チーム",
-              "18ec58881e": "チームを検索..."
-            }
-          }
         }
       },
       "terminal": {
@@ -3445,18 +3394,6 @@
         "UsageBreakdownSection": {
           "7765a4c3e1": "n/a",
           "247c93ca92": "• 推定価格"
-        },
-        "UsageSessionsTable": {
-          "1afc25eb06": "ターン",
-          "0f03975d59": "イベント",
-          "21ea00bfa8": "キャッシュ",
-          "e0b988599d": "合計",
-          "01476891c7": "最終アクティブ",
-          "c17bed0416": "プロジェクト",
-          "f6a2c8d019": "モデル",
-          "faf3444859": "入力",
-          "a8b7487ff7": "出力",
-          "cfe2282ffa": "不明"
         }
       },
       "sparse": {
@@ -4390,42 +4327,9 @@
           }
         },
         "LinearAgentSkillSetupPrompt": {
-          "missingCliAndSkill": "Dobius+ CLI と Linear agent スキルがありません。",
-          "modalTitle": "Linear チケットアクセスを有効にする",
-          "modalDescription": "terminal から Linear スキルをインストールします。",
-          "modalPrompt": "Agents が添付された Linear チケットを読み書きできるようにします。",
-          "dontShowAgain": "今後表示しない",
-          "notNow": "後で",
           "missingBoth": "Dobius+ CLI と Linear agent スキルがありません。",
-          "missingCli": "Dobius+ CLI がありません。",
-          "missingSkill": "Linear agent スキルがありません。",
-          "title": "Linear agent スキルを設定",
-          "remoteCopy": "これはホスト側の設定をインストールします。リモート agent 環境では別途設定が必要な場合があります。",
-          "hostCopy": "リンクされた Linear 作業からのホスト agent 引き継ぎ用にインストールします。",
-          "dismiss": "Linear agent スキル設定を閉じる",
-          "setup": "設定",
-          "recheck": "再確認",
           "panelTitle": "Linear agent スキル",
-          "panelDescription": "リンクされた Linear タスクの引き継ぎ用にホスト agent スキルをインストールします。",
-          "terminalTitle": "Linear agent スキルをインストール",
-          "terminalAria": "Linear agent スキルのインストール terminal",
-          "install": "CLI とスキルをインストール",
-          "successTitle": "Linear チケットアクセスの準備ができました",
-          "successDescription": "Agents はこのワークスペースからリンクされた Linear チケットを読み取り、更新できるようになりました。",
-          "successDescriptionWsl": "WSL agents はこのワークスペースからリンクされた Linear チケットを使用できるようになりました。",
-          "successDescriptionRemote": "ホスト agents はリンクされた Linear チケットを使用できるようになりました。リモート agent 環境ではまだ独自の設定が必要な場合があります。",
-          "successStatus": "Linear チケットアクセス準備完了",
-          "done": "完了",
-          "wslCopy": "リンクされた Linear 作業からの WSL agent 引き継ぎ用にインストールします。",
-          "wslLabel": "WSL 既定",
-          "toastMissingCliAndSkill": "Dobius+ CLI と Linear スキルがありません",
-          "toastMissingCli": "Dobius+ CLI がありません",
-          "toastMissingSkill": "Linear スキルがありません",
-          "toastInstallCliAndSkillDescription": "Dobius+ CLI と Linear スキルをインストールして、agents が Linear タスクを読み書きできるようにします。",
-          "toastInstallCliDescription": "Dobius+ CLI をインストールして、agents が Linear タスクを読み書きできるようにします。",
-          "toastInstallSkillDescription": "Linear スキルをインストールして、agents が Dobius+ CLI を通じて Linear タスクを読み書きできるようにします。",
-          "toastRemoteDescription": "{{value0}} リモート agent 環境では独自の設定が必要な場合があります。",
-          "toastWslDescription": "{{value0}} この設定は選択した WSL agent ランタイムで実行されます。"
+          "panelDescription": "リンクされた Linear タスクの引き継ぎ用にホスト agent スキルをインストールします。"
         },
         "FolderWorkspaceComposerDialog": {
           "connectFailed": "プロジェクトに接続できませんでした。",
@@ -4912,20 +4816,6 @@
           "a4fa380b67": "{アシスタントメッセージ}",
           "2ee2779c05": "{最初のプロンプト}"
         },
-        "AutoRenameBranchPromptEditor": {
-          "63121132c0": "破棄",
-          "4416b25d29": "タスクのドメイン名詞を優先し、チケット ID を避け、レ​​ビュー担当者が理解しやすい名前を保ちます。",
-          "39278f4411": ";ブランチプレフィックス設定は引き続き適用されます。",
-          "ebb942a2ec": "ログインフローの修正",
-          "af2d9a2cc6": "。 Dobius+ は次のような最後のセグメントのみを生成します。",
-          "182d419b97": "組み込みのブランチ名プロンプト",
-          "2f5dc661fe": "Dobius+ に追加されました",
-          "7d6176f506": "プロンプト",
-          "5968112152": "保存",
-          "54ac229ad4": "保存中...",
-          "af0831a590": "保存されました",
-          "0691753cf2": "未保存の変更"
-        },
         "BaseRefPicker": {
           "1b8e54151f": "一致するブランチが見つかりませんでした。",
           "d166ff883d": "現在",
@@ -5048,8 +4938,6 @@
           "8671e406f0": "キャンセル",
           "a4aafe46e3": "ターゲットパス:",
           "e8012c03a1": "agents が Dobius+ ワークスペース、terminal、進捗コマンドを使用できるようにします。",
-          "cliSkillTerminalTitle": "CLI スキルのセットアップ",
-          "cliSkillTerminalAria": "CLI スキルのインストール terminal",
           "6053cf736c": "CLIスキル",
           "36a6f919ba": "agents に Dobius+ 対応のワークスペース、terminal、および進行状況のワークフローを提供します。",
           "04873eea3e": "Agent のスキル",
@@ -6573,7 +6461,6 @@
           "db270cc9a9": "カーソル形状",
           "d455f2ef4f": "Dobius+ terminal ペインのデフォルトのカーソルの外観。",
           "abcb4dd019": "Terminal カーソル",
-          "70beb1bbc7": "プレビュー",
           "31f6e61085": "リガチャーは現在、",
           "870377082f": "オフ",
           "84bd22f2cd": "オン",
@@ -6583,15 +6470,10 @@
           "400e950ca5": "自動 - 「{{value0}}」に対して有効になります。",
           "04569feb07": "出荷されているフォントであっても、常にオフになります。",
           "7234abcd08": "常にオン。合字のないフォントはそのままレンダリングされます。",
-          "7233d594bf": "同梱されているフォントのプログラミング合字 (=>、!=、=== など) をレンダリングします。 「自動」では、既知の合字フォント (Fira Code、JetBrains Mono、Cascadia Code、Iosevka など) に対してのみ合字が有効になります。",
-          "bafc80efbc": "terminal の線の高さの乗数を制御します。",
           "c084eb7d4c": "線の高さ",
-          "36af8ad94c": "terminal テキストのフォントの太さを制御します。",
           "4aae5db258": "フォントの太さ",
-          "f04b17a50e": "新規ペインとライブアップデート用のデフォルトの terminal フォントファミリー。",
           "a408266e67": "フォントファミリー",
           "855a76343a": "Ghostty からインポート",
-          "711e589f18": "新規ペインとライブ アップデートのデフォルトの terminal タイポグラフィ。",
           "048aac8a64": "Terminal のタイポグラフィー",
           "4415beb958": "無効",
           "4e7d41a9f0": "有効",
@@ -9046,38 +8928,14 @@
             "3c3ad3a1d2": "agent を開始しました。選択したコメントにホスト上で解決済みにできるものはありません。"
           },
           "CreatePullRequestDialog": {
-            "2bc1b4345e": "キャンセル",
-            "27ef4b195c": "{{value0}} を作成する前に別のベースブランチを選択。",
-            "7ef56f3efe": "下書きとして作成",
-            "0c9f9a568c": "Markdown 形式をサポートします。 AI を使用して生成を使用して、変更内容を自動入力します。",
-            "02b2ce911f": "説明 (オプション)",
-            "1cd53359db": "説明",
-            "68314b4369": "タイトル",
-            "694550a610": "main",
-            "0fad57a14c": "リモート ブランチを検索するか、ブランチ名を入力します。",
-            "8584ccb43c": "ベースブランチ",
-            "6f5f1962b6": "ヘッドブランチ",
-            "b504b3ceb1": "ホストされたレビューを作成する前に詳細を確認してください。",
-            "f658ff2455": "ホストされたレビューを作成する前に、ターゲットブランチと {{value0}} の詳細を確認してください。",
-            "b7f43474d7": "{{value0}} を作成する",
-            "7a21f0dae8": "{{value0}}にオープン",
-            "edc35a7027": "{{value0}} #{{value1}} はすでにオープンしています",
-            "a154fe55e6": "プッシュして{{value0}}を作成",
-            "21c7a1daa0": "{{value0}} はすでに開いています",
-            "db9cee18f7": "{{value0}} を作成"
+            "b504b3ceb1": "ホストされたレビューを作成する前に詳細を確認してください。"
           },
           "CreateHostedReviewComposer": {
             "741ff8a0d2": "プッシュして{{value0}}を作成"
           },
           "CreatePullRequestGenerateButton": {
-            "4012459f8a": "AIで生成",
-            "a0501572c1": "AI を使用して {{value0}} の詳細を生成する",
-            "d47fd63012": "{{value0}} の詳細を生成中です。クリックして停止します。",
             "bdf83ccb15": "{{value0}} を生成中",
-            "f5513bdeb1": "生成中",
-            "a6ea6dc3aa": "生成中…",
-            "e61d7e7ad4": "{{value0}} の詳細生成を停止する",
-            "e041998cad": "生成を停止する"
+            "f5513bdeb1": "生成中"
           },
           "FileExplorer": {
             "79b1537dd3": "ファイルを参照するワークスペースを選択",
@@ -10103,17 +9961,6 @@
           "yoloPermissionsInfo": "Agent permission info",
           "yoloPermissionsTooltip": "Skip permission checks for agents for less interruptions"
         },
-        "FeatureSetupChecklist": {
-          "77f74946f5": "Agents は相互にメッセージを送信し、タスクを実行し、引き継ぎを調整できます。",
-          "399cf885c0": "Agent オーケストレーション",
-          "c5292c409d": "Agents は、要求に応じてアプリ ウィンドウを検査し、ローカル アプリを操作できます。",
-          "1ecfb490ac": "コンピュータ操作",
-          "01426f3a23": "Agents はサイトを移動し、ページを検査し、ブラウザーのタスクを実行できます。",
-          "ea85d9e628": "Agent ブラウザの使用",
-          "linearTicketsTitle": "Linear agent スキル",
-          "linearTicketsDescription": "Agents はリンクされた Linear タスクを使って、チケットを踏まえたより詳しい引き継ぎができます。",
-          "linearTicketsSetupSummary": "Linear ワークスペースに推奨。Linear 接続設定には影響しません。"
-        },
         "FeatureSetupInlineTerminal": {
           "789b59936e": "Enter キーを押してコマンドを実行し、要求されたら npx を確認します。これは、後で [設定] で設定することもできます。",
           "47fc6cc6dc": "スキルセットアップコマンド",
@@ -10191,37 +10038,6 @@
           "9f47f345a4": "それほど時間はかかりません！",
           "e4726b2d50": "オンボーディングをスキップしますか?"
         },
-        "OnboardingTourStep": {
-          "3f9586c043": "ツアーに参加する",
-          "60c5576353": "出口ツアー"
-        },
-        "RepoStep": {
-          "e8fdb36338": "repos をスキャンしています。クリックして停止します。",
-          "b7c4da0504": "SSH? 「設定」でホストをセットアップする",
-          "c33b190ca3": "サーバーパスのみ",
-          "7b679207e4": "ワークスペース",
-          "24c7c8696c": "サーバーパスにクローンを作成します",
-          "7932e95f68": "クローン",
-          "955134915e": "git@github.com:org/repo.git",
-          "288d8444b7": "HTTPS または SSH URL を貼り付けます。",
-          "132425a3e3": "repo のクローンを作成する",
-          "6558d50c69": "一度に多くの repos をインポートしたいですか?親フォルダーを選択します。",
-          "831524961f": "git repo かどうかに関係なく、任意のローカル ディレクトリを選択します。",
-          "f4e9c8dcf8": "フォルダーを参照する",
-          "e8214aa632": "フォルダーとして開く",
-          "3863747c56": "Gitプロジェクトの追加",
-          "2ebbc26343": "/home/user/project",
-          "466108ab89": "ランタイムサーバー上に存在するパスを入力します。",
-          "8cab104e3c": "サーバープロジェクトを開く",
-          "2d20200346": "repos のインポート",
-          "27ca610db1": "戻る",
-          "cecd6593fa": "スキャンしたフォルダー:",
-          "c7af322fc3": "スキャンを停止する",
-          "c3d9d44ca2": "スキャンの停止",
-          "cf23006ba7": "ランタイムサーバー",
-          "7ec3f48820": "/home/user",
-          "2e6438dd34": "{{value0}}このフォルダー内で {{value1}} {{value2}} が見つかりました。"
-        },
         "ThemeStep": {
           "a4b254779d": "macOSのオプションキー",
           "6c51398942": "マウス",
@@ -10254,9 +10070,6 @@
               "52acfbef51": "進行状況を保存できませんでした"
             }
           }
-        },
-        "AgentFeatureSetupStep": {
-          "97dcdc010f": "CLI とスキルをインストール"
         },
         "WindowsTerminalStep": {
           "powerShell": "PowerShell",
@@ -10333,10 +10146,6 @@
             "searchBranches": "ブランチを検索",
             "searchLinear": "Linear Issue を検索",
             "workspaceName": "ワークスペース名"
-          },
-          "ProjectHostSetupCombobox": {
-            "empty": "No hosts are ready for this project.",
-            "placeholder": "Choose host"
           },
           "ProjectCombobox": {
             "search": "Search projects...",
@@ -10655,21 +10464,6 @@
             "cbc45022d4": "agents が Dobius+ のブラウザでページに移動して確認できるようにします。",
             "d5bb1cd4ba": "ブラウザ使用スキル"
           },
-          "ComputerUseAnimatedVisual": {
-            "d8401975b1": "承認された",
-            "f27676a92c": "状態：",
-            "6804cb356f": "クリック送信",
-            "1719b28a81": "「承認」を見つけました",
-            "79445f7512": "アプリでメモを承認する",
-            "99a8624bcb": ">",
-            "2adb561b44": "Claude コードセッションが開始されました",
-            "94787f01f8": "Claude Code",
-            "9cddfe96b2": "ローカルアプリ",
-            "9634d870d1": "承認する",
-            "3cc2df3671": "完了",
-            "bdd5312213": "保留中",
-            "c11dda000b": "承認された"
-          },
           "EditorAnimatedVisual": {
             "7a763daf2f": "イタリック",
             "8521536429": "大胆な ・",
@@ -10691,41 +10485,7 @@
             "e16479c1c5": "[データスラッシュメニュー] [データスラッシュ行].slash-active { 背景: rgba(24,24,27,0.07);ボックスシャドウ: インセット 0 0 0 1px rgba(24,24,27,0.06); } [data-md-active-line][data-role=\"active\"] { color: rgb(113 113 122);フォントファミリー: ui-monospace、SFMono- Regular、Menlo、monospace;フォントサイズ: 12.5px; [data-md-active-line][data-role=\"h1\"] { color: 継承;フォントファミリー: 継承;フォントサイズ: 18px;フォントの太さ: 700;文字間隔: -0.01em;行の高さ: 1.2;マージントップ: 6px; } [data-md-caret] {表示: インラインブロック;幅: 1.5ピクセル;高さ: 1em;背景: 現在の色;垂直整列: -2px;左マージン: 1px;アニメーション: md-caret-blink 1.05 秒ステップ (1) 無限; } @keyframes md-caret-blink { 0%, 50% { 不透明度: 1 } 51%, 100% { 不透明度: 0 } } @keyframes md-block-in { from { 不透明度: 0;変換：translateY(-2px); } から { 不透明度: 1;変換: なし。 } } @keyframes md-cursor-ripple { 0% {transform:scale(0.4);不透明度: 0.9; } 100% { 変換: スケール(1.4);不透明度: 0; } } [data-clicking=\"1\"] [data-cursor-ripple] { アニメーション: md-cursor-ripple 460ms イーズアウト フォワード; }"
           },
           "FeatureTourPreview": {
-            "1170621527": ">",
-            "304ad0dfc1": "考え...",
-            "ef8b164dd1": "ソース/認証を確認する",
-            "952d3ddd9a": "セッションが開始されました",
-            "771d8881c2": "claude",
-            "6ed43cb0e0": "ダッシュボードの仕様",
-            "24fedd5a52": "ログイン.spec.ts",
-            "8279e9d95b": "12 個のテストを実行する",
-            "6218a9014d": "pnpm プレイライト テスト",
-            "04d54d50ec": "dobius · zsh",
-            "1aa8a9a24a": "分割可能な terminal",
-            "2a7cfc82c8": "GH #1842 にリンク",
-            "3822d8d14b": "fix/worktree-picker-truncates",
-            "d54aefe09e": "LIN-329",
-            "40bbd92ef4": "始める",
-            "c1f28c03b2": "ワークツリーピッカーが切り捨てる",
-            "fc0cc0b267": "GH #1842",
-            "0688842445": "GH #1799",
-            "bee6b4088d": "GitHub と Linear タスク",
-            "5171768676": "3 つの agents を調整する",
-            "cebc7769cd": "認証フローを再設計する",
-            "e44269e97d": "Agent のオーケストレーション",
-            "ec4a73f5e6": "PR 3/3",
-            "cfdfd4d6b4": "PR 2/3",
-            "b1f17bcc74": "PR 1/3",
-            "e38112b289": "請求 Webhook をリファクタリングする",
-            "9c812e0d7c": "CIパイプラインを高速化する",
-            "3c4adfd821": "ログイン競合状態を修正",
-            "56a0271428": "隔離されたワークスペース",
-            "ef737dcee1": "GitHub と Linear タスク",
-            "ac51c061e2": "codex",
-            "47f16ecf34": "Ship several things at once. Each workspace keeps its branch, terminal, and agent activity together.",
-            "70aa182266": "Hand off a goal and walk away. A coordinator agent fans out and ships parallel PRs.",
-            "f10c14dd9d": "Skip the tab-switching. Pick from your GitHub or Linear backlog and start a workspace in one click.",
-            "5d6ee181b6": "Open any workspace to return to its terminal, then split panes for tests, logs, and agents."
+            "ac51c061e2": "codex"
           },
           "FeatureWallBody": {
             "25ec5356d6": "設定"
@@ -12601,22 +12361,6 @@
       "ShortcutKeyCombo": {
         "07eb4985a1": "Double-tap {{value0}}"
       },
-      "star": {
-        "nag": {
-          "StarNagToastHost": {
-            "starredThanks": "Starred — thank you!",
-            "githubOpened": "GitHub opened",
-            "opening": "Opening…",
-            "starring": "Starring…",
-            "openGithub": "Open GitHub",
-            "starOnGithub": "Star on GitHub",
-            "onboardingCompleted": "Onboarding completed!",
-            "body": "If you’re enjoying Dobius+ so far, a GitHub star helps other developers discover it.",
-            "dismiss": "閉じる",
-            "later": "Later"
-          }
-        }
-      },
       "nativeChat": {
         "contextMenu": {
           "copy": "コピー"
@@ -12802,7 +12546,8 @@
       "title": "Thread",
       "emptyTitle": "Nothing said yet",
       "emptyHint": "Tell your agents what to do, move the board, or open a tool. Try “spawn two reviewers”, “fit the board”, “open loops”, or “what can you do?”",
-      "seeOutput": "See output"
+      "seeOutput": "See output",
+      "spoken": "Spoken"
     },
     "agentPicker": {
       "titleMany": "Spawn {{count}} consoles",
@@ -13296,9 +13041,6 @@
     "relay": {
       "sent": "Sent to {{name}}."
     },
-    "conductor": {
-      "enable": "Turn on Voice Conductor in Settings"
-    },
     "voice": {
       "off": "Turn on voice dictation in Settings to talk to the Board.",
       "processing": "processing",
@@ -13589,7 +13331,8 @@
         "restart": "Restart {{name}}",
         "kill": "Kill {{name}}"
       },
-      "rows": "Wired consoles"
+      "rows": "Wired consoles",
+      "refuseAmbiguous": "Several wired consoles have that name, so nothing was sent. Rename one first."
     },
     "text": {
       "label": "Text",
@@ -13633,7 +13376,7 @@
         "waiting": "Needs you",
         "idle": "Idle",
         "paused": "Paused",
-        "done": "Done",
+        "done": "Exited",
         "error": "Terminal closed",
         "shell": "At its shell",
         "gone": "Terminal closed"
@@ -13663,7 +13406,10 @@
       "accountSystem": "system login",
       "duplicateFailed": "Could not start a copy of {{name}}.",
       "glance": "Latest output from {{title}}",
-      "glanceEmpty": "No output yet"
+      "glanceEmpty": "No output yet",
+      "notRunning": "Not running",
+      "restartNamed": "Restart {{name}}",
+      "restartSaveFailed": "Restarted {{name}}, but the Board could not be saved, so its old terminal was left open: {{reason}}"
     },
     "foundBug": "Found a bug?",
     "report": {
@@ -13974,9 +13720,7 @@
       "notTyped": "not typed",
       "noConsoles": "No consoles on the board.",
       "loopFromPlanner": "Creating a loop by voice",
-      "needsPlanner": "The planner is not answering, and without it I can’t write or split instructions. Say who and what plainly, for example “@Codex 1 run the tests”.",
       "rejected": "I could not make a valid plan: {{reason}}",
-      "unsafe": "Ignored: that looked like instructions hidden inside the text.",
       "confirmTitle": "Go ahead with this?",
       "confirmAction": "Confirm",
       "notSent": "Nothing was sent.",
@@ -14452,6 +14196,16 @@
       "handoffSummary": "Browser handoff: {{title}}",
       "handoffDeferred": "{{name}} is working. The browser handoff is sent when it is idle.",
       "verifySummary": "Verify in browser: {{title}}"
+    },
+    "adam": {
+      "thinking": "ADAM is thinking…",
+      "stillThinking": "ADAM is still working on your last message. Wait for his reply, then send this again.",
+      "failed": "ADAM could not answer. {{reason}} To send work straight to a console instead, type its name first, for example “@Codex 1 run the tests”.",
+      "unreachable": "This window could not reach ADAM’s Hermes connection. Quit and reopen Dobius+, then send your message again.",
+      "cancelled": "ADAM’s answer was stopped before it finished. Send your message again.",
+      "emptyReply": "He sent back an empty reply. Try again.",
+      "tooLong": "That message is too long for one turn. Send it in shorter parts.",
+      "threadNotSaved": "ADAM’s thread could not be saved to disk. It is still shown here, and Dobius+ will try again with the next message. If this keeps happening, check free disk space."
     }
   },
   "start": "Start",

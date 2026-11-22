@@ -11,6 +11,36 @@ import { scheduleTerminalWebglAtlasRecovery } from './terminal-webgl-atlas-recov
 
 const VISIBLE_RESUME_FLUSH_CHARS = 256 * 1024
 const WINDOW_WAKE_FLUSH_CHARS = 64 * 1024
+// Why: a tab hidden inside the active worktree keeps its WebGL context so
+// switching back is instant, but every viewed tab then held one forever and
+// the GPU helper grew per tab. Only the most recently hidden few stay live;
+// older ones are suspended (scrollback stays in xterm) and get the heavy
+// resume path when shown again, same as a pane hidden with its worktree.
+export const MAX_LIVE_HIDDEN_TERMINAL_TABS = 4
+// Insertion order = hide order, so the first entry is the least recently visible.
+const liveHiddenTabManagers = new Set<PaneManager>()
+const lruSuspendedManagers = new WeakSet<PaneManager>()
+
+function keepHiddenTabLive(manager: PaneManager): void {
+  liveHiddenTabManagers.delete(manager)
+  liveHiddenTabManagers.add(manager)
+  while (liveHiddenTabManagers.size > MAX_LIVE_HIDDEN_TERMINAL_TABS) {
+    const oldest = liveHiddenTabManagers.values().next().value as PaneManager
+    liveHiddenTabManagers.delete(oldest)
+    oldest.suspendRendering()
+    lruSuspendedManagers.add(oldest)
+  }
+}
+
+/** Drops a destroyed manager so the LRU never holds a closed tab's terminals. */
+export function forgetTerminalVisibility(manager: PaneManager): void {
+  liveHiddenTabManagers.delete(manager)
+  lruSuspendedManagers.delete(manager)
+}
+
+export function liveHiddenTerminalTabCountForTest(): number {
+  return liveHiddenTabManagers.size
+}
 
 export type TerminalHiddenReason = 'surface' | 'tab'
 
@@ -46,10 +76,15 @@ export function resumeTerminalVisibility({
   manager,
   isActive,
   wasVisible,
-  shouldUseLightTabResume,
+  shouldUseLightTabResume: requestedLightTabResume,
   captureViewportPositions,
   withSuppressedScrollTracking
 }: ResumeTerminalVisibilityArgs): void {
+  liveHiddenTabManagers.delete(manager)
+  // Why: the light path never resumes rendering; a pane that lost WebGL to the
+  // LRU needs the heavy path.
+  const shouldUseLightTabResume = requestedLightTabResume && !lruSuspendedManagers.has(manager)
+  lruSuspendedManagers.delete(manager)
   // Why: WebGL resume can disturb xterm's viewport bookkeeping before the
   // post-resume fit runs. Capture numeric viewport positions first; the
   // restore path avoids content matching so duplicate agent log lines do
@@ -97,6 +132,7 @@ export function hideTerminalVisibility({
     captureViewportPositions(false)
   }
   if (!isWorktreeActive && (wasVisible || surfaceBecameHidden)) {
+    liveHiddenTabManagers.delete(manager)
     // Suspend WebGL when going hidden. xterm.write() continues to land in the
     // DOM-renderer fallback terminal; the suspend is purely a GPU resource decision.
     manager.suspendRendering()
@@ -110,6 +146,7 @@ export function hideTerminalVisibility({
     return { hiddenReason: 'tab', renderingSuspended: true }
   }
   if (wasVisible && isWorktreeActive) {
+    keepHiddenTabLive(manager)
     return { hiddenReason: 'tab', renderingSuspended: false }
   }
   if (!isWorktreeActive) {

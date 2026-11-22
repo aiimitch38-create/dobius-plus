@@ -23,7 +23,8 @@ import type { TerminalOscLinkRange } from '../../../../shared/terminal-osc-link-
 import {
   TERMINAL_INPUT_MAX_BYTES,
   TERMINAL_INPUT_TOO_LARGE_ERROR,
-  isTerminalInputTooLargeWithYield
+  isTerminalInputTooLargeWithYield,
+  iterateTerminalInputChunks
 } from '../../../../shared/terminal-input'
 import { measureClipboardTextByteLength } from '../../../../shared/clipboard-text'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
@@ -400,6 +401,26 @@ async function handleTerminalSend(
     }
   }
   let result
+  // Why counted: the runtime checks the guard before each chunk of a long text, so a
+  // refusal part-way leaves a prefix typed. Each pass is one chunk that was then written.
+  let chunksWritten = 0
+  const beforeWrite =
+    assertSendPreconditions &&
+    (async (ptyId: string): Promise<void> => {
+      await assertSendPreconditions(ptyId)
+      chunksWritten += 1
+    })
+  const writtenBeforeRefusal = (): number => {
+    let bytes = 0
+    let left = chunksWritten
+    for (const chunk of iterateTerminalInputChunks(hasText ? params.text! : '')) {
+      if (left-- <= 0) {
+        break
+      }
+      bytes += Buffer.byteLength(chunk, 'utf8')
+    }
+    return bytes
+  }
   try {
     result = await runtime.sendTerminal(
       params.terminal,
@@ -408,11 +429,14 @@ async function handleTerminalSend(
         enter: params.enter === true,
         interrupt: params.interrupt === true
       },
-      { beforeWrite: assertSendPreconditions }
+      { beforeWrite }
     )
   } catch (error) {
     if (isTerminalSendGuardNotWritable(error) || isTerminalRuntimeBindingMismatch(error)) {
-      return refusedTerminalSend(params.terminal)
+      // Why not 0: the input floor or the runtime can change after some text is already typed.
+      return {
+        send: { handle: params.terminal, accepted: false, bytesWritten: writtenBeforeRefusal() }
+      }
     }
     const refusedReason = getTerminalSendGuardRefusedReason(error)
     if (refusedReason) {
@@ -420,7 +444,7 @@ async function handleTerminalSend(
         send: {
           handle: params.terminal,
           accepted: false,
-          bytesWritten: 0,
+          bytesWritten: writtenBeforeRefusal(),
           refusedReason
         }
       }
@@ -428,7 +452,8 @@ async function handleTerminalSend(
     throw error
   }
   if (isBound && runtime.getRuntimeId() !== expectedRuntimeId) {
-    return refusedTerminalSend(params.terminal)
+    // The write finished before the runtime changed: all of it is on the terminal.
+    return { send: { handle: params.terminal, accepted: false, bytesWritten: result.bytesWritten } }
   }
   // Why: deliberate mobile input is a take-floor action. Drives the
   // `* → mobile{clientId}` driver transition so the desktop banner remounts

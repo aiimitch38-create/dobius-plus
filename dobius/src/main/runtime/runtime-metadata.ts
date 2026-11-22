@@ -1,10 +1,19 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
-import { getRuntimeMetadataPath, type RuntimeMetadata } from '../../shared/runtime-bootstrap'
+import {
+  getAgentRuntimeMetadataPath,
+  getRuntimeMetadataPath,
+  type RuntimeMetadata
+} from '../../shared/runtime-bootstrap'
 import { writeSecureJsonFile } from '../../shared/secure-file'
 
 export function writeRuntimeMetadata(userDataPath: string, metadata: RuntimeMetadata): void {
   const metadataPath = getRuntimeMetadataPath(userDataPath)
   writeMetadataFile(metadataPath, metadata)
+}
+
+// Why: same endpoint as the full file, but carrying the scoped agent key.
+export function writeAgentRuntimeMetadata(userDataPath: string, metadata: RuntimeMetadata): void {
+  writeMetadataFile(getAgentRuntimeMetadataPath(userDataPath), metadata)
 }
 
 export function readRuntimeMetadata(userDataPath: string): RuntimeMetadata | null {
@@ -17,6 +26,7 @@ export function readRuntimeMetadata(userDataPath: string): RuntimeMetadata | nul
 
 export function clearRuntimeMetadata(userDataPath: string): void {
   rmSync(getRuntimeMetadataPath(userDataPath), { force: true })
+  rmSync(getAgentRuntimeMetadataPath(userDataPath), { force: true })
 }
 
 /**

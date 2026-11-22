@@ -274,6 +274,25 @@ describe('wake-word ambient mode', () => {
   })
 })
 
+describe('wake-word turns know what Carson is looking at', () => {
+  it('passes the project last reported on screen, since the turn starts in main', async () => {
+    const askAgent = vi.fn(async () => ({ kind: 'answer' as const, text: 'ok' }))
+    const lookingAt = { project: 'pc', workspace: 'main', folder: '/code/pc' }
+    const service = new JarvisService({
+      store: { getSettings: () => ({ voice: { ...BASE_VOICE, jarvisWakeWord: true } }) },
+      shortcut: { register: () => true, unregister: () => undefined },
+      broadcast: vi.fn(),
+      askAgent,
+      lookingAt: () => lookingAt,
+      speakQueue: vi.fn(async () => ({ played: true as const, engine: 'test' })),
+      nativeSpeak: vi.fn(async () => ({ played: false as const, reason: 'test' }))
+    })
+    service.handleAmbientTranscript('hey adam run the tests here')
+    await vi.waitFor(() => expect(askAgent).toHaveBeenCalled())
+    expect(askAgent).toHaveBeenCalledWith('run the tests here', lookingAt)
+  })
+})
+
 describe('tapSttFinalTranscripts', () => {
   function makeFakeStt() {
     let sink: SttEventSink | null = null

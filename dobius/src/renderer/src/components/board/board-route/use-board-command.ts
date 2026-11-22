@@ -1,9 +1,6 @@
 import { useCallback } from 'react'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { translate } from '@/i18n/i18n'
-import { useAppStore } from '@/store'
-import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../../shared/agent-status-types'
-import { buildBoardConductorTranscript } from '../board-command-bar/board-conductor-context'
 import {
   parseBoardMention,
   type BoardMention,
@@ -13,23 +10,22 @@ import { deliverOrder } from '../board-delivery/board-delivery'
 import { concernText } from '../board-planner/plan-concern-text'
 import { suggestMention } from '../board-planner/plan-did-you-mean'
 import { riskyTextConcerns } from '../board-planner/plan-safety'
-import { boardConsoleState } from './board-console-activity'
 import type { BoardConductor } from './use-board-conductor'
 import type { BoardRouteData } from './use-board-route-data'
 
 /**
  * "@Name text" relays straight to that console (or every console in that group)
- * through the guarded send path; anything else goes to the Voice Conductor with
- * a plain-text summary of the board.
+ * through the guarded send path, with no model in between; anything else goes
+ * to `planner` (the app's own short commands, then ADAM).
  */
 export function useBoardCommand(
   data: BoardRouteData,
   conductor: BoardConductor,
-  /** Typed planner; when given it handles everything except direct @mentions. */
-  planner?: (text: string) => Promise<void>
+  /** Handles everything except direct @mentions. */
+  planner: (text: string) => Promise<void>
 ): (text: string) => void {
-  const { worktreeId, board, consoles, workspaces } = data
-  const { append, ask } = conductor
+  const { worktreeId, board, consoles } = data
+  const { append } = conductor
   const confirm = useConfirmationDialog()
 
   // Why: every typed message goes through the one delivery queue, so it never
@@ -125,45 +121,8 @@ export function useBoardCommand(
         void confirmNearMention(text, near, targets)
         return
       }
-      if (planner) {
-        void planner(text)
-        return
-      }
-      const state = useAppStore.getState()
-      const activity = {
-        agentStatusByPaneKey: state.agentStatusByPaneKey,
-        acknowledgedAgentsByPaneKey: state.acknowledgedAgentsByPaneKey,
-        now: Date.now(),
-        staleAfterMs: AGENT_STATUS_STALE_AFTER_MS
-      }
-      const byId = new Map(consoles.map((c) => [c.id, c.title]))
-      const transcript = buildBoardConductorTranscript(
-        {
-          workspace: workspaces.find((w) => w.id === worktreeId)?.name ?? worktreeId ?? '',
-          consoles: consoles.map((c) => ({
-            name: c.title,
-            agent: c.agentKind,
-            status: boardConsoleState(c.tabId, activity)
-          })),
-          groups: board.groups.map((g) => ({
-            name: g.name,
-            members: g.cardIds.flatMap((id) => byId.get(id) ?? [])
-          }))
-        },
-        text
-      )
-      void ask(text, transcript)
+      void planner(text)
     },
-    [
-      append,
-      ask,
-      board.groups,
-      confirmNearMention,
-      consoles,
-      planner,
-      relayMention,
-      workspaces,
-      worktreeId
-    ]
+    [append, board.groups, confirmNearMention, consoles, planner, relayMention]
   )
 }

@@ -35,6 +35,7 @@ import { createPullRequestGenerationSlice } from './slices/pull-request-generati
 import { createCommitMessageGenerationSlice } from './slices/commit-message-generation'
 import { createPinnedTabCloseConfirmSlice } from './slices/pinned-tab-close-confirm'
 import { createBoardSlice } from './slices/board'
+import { createTabSnoozeSlice } from './slices/tab-snooze'
 import { e2eConfig } from '@/lib/e2e-config'
 import { registerHttpLinkStoreAccessor } from '@/lib/http-link-routing'
 
@@ -73,7 +74,8 @@ export const useAppStore = create<AppState>()((...a) => ({
   ...createPullRequestGenerationSlice(...a),
   ...createCommitMessageGenerationSlice(...a),
   ...createPinnedTabCloseConfirmSlice(...a),
-  ...createBoardSlice(...a)
+  ...createBoardSlice(...a),
+  ...createTabSnoozeSlice(...a)
 }))
 
 registerHttpLinkStoreAccessor(() => useAppStore.getState())

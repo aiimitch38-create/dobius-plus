@@ -32,14 +32,14 @@ import {
 } from '../agents/agent-notification-store'
 import { dismissBriefingItems, listRecentBriefingItems } from '../agents/agent-briefing-store'
 import {
-  getAgentsControlState,
+  getAgentsExecutionState,
   getAgentsPaused,
   getPingStatus,
   setAgentsPaused
 } from '../agents/agents-config-store'
 import { startAgentHeartbeats } from '../agents/agent-heartbeat-service'
 import { startAsanaAutoMode } from '../agents/asana-auto-mode-service'
-import { listDrafts, setDraftStatus } from '../agents/agent-draft-store'
+import { discardDraft, listDrafts } from '../agents/agent-draft-store'
 import { approveDraftAndPost } from '../agents/agent-draft-approval'
 import { setDobiusToolKnowledgeStore } from '../agents/agent-tools/dobius-tool-server'
 import {
@@ -67,6 +67,8 @@ import {
   saveProviderApiKey,
   type ProviderKeyId
 } from '../communications/providers/provider-api-key-store'
+
+import { assertTrustedAppSender } from './trusted-app-sender'
 
 type PrepareClaudeLaunch = (target?: {
   accountId?: string | null
@@ -162,9 +164,10 @@ export function registerAgentsHandlers(
   ipcMain.handle('agents:listDecisions', () => listAgentDecisions())
 
   ipcMain.removeHandler('agents:resolveDecision')
-  ipcMain.handle('agents:resolveDecision', (_event, resolution: AgentDecisionResolution) =>
-    resolveAgentDecision(resolution)
-  )
+  ipcMain.handle('agents:resolveDecision', (event, resolution: AgentDecisionResolution) => {
+    assertTrustedAppSender(event, 'agents:resolveDecision')
+    return resolveAgentDecision(resolution)
+  })
 
   // Why: the Board command bar drives the same conductor the phone uses, so
   // board orders get full agent tooling (spawn, relay, reply) with no new engine.
@@ -204,29 +207,26 @@ export function registerAgentsHandlers(
   ipcMain.handle('agents:listDrafts', () => listDrafts())
 
   ipcMain.removeHandler('agents:discardDraft')
-  ipcMain.handle('agents:discardDraft', (_event, id: string) => {
-    const draft = setDraftStatus(id, 'discarded')
-    if (!draft) {
-      throw new Error('Draft not found')
-    }
-    return draft
-  })
+  ipcMain.handle('agents:discardDraft', (_event, id: string) => discardDraft(id))
 
   // Why: approving a draft is the only W2 path that writes an Asana comment, and it is IPC-only.
   ipcMain.removeHandler('agents:approveDraft')
-  ipcMain.handle('agents:approveDraft', (_event, id: string) => approveDraftAndPost(id))
+  ipcMain.handle('agents:approveDraft', (event, id: string) => {
+    assertTrustedAppSender(event, 'agents:approveDraft')
+    return approveDraftAndPost(id)
+  })
 
   ipcMain.removeHandler('agents:getPaused')
   ipcMain.handle('agents:getPaused', () => getAgentsPaused())
 
   ipcMain.removeHandler('agents:getExecutionState')
-  ipcMain.handle('agents:getExecutionState', (): AgentsExecutionState => {
-    const { paused, status, detail, filePath } = getAgentsControlState()
-    return { paused, status, detail, filePath }
-  })
+  ipcMain.handle('agents:getExecutionState', (): AgentsExecutionState => getAgentsExecutionState())
 
   ipcMain.removeHandler('agents:setPaused')
-  ipcMain.handle('agents:setPaused', (_event, paused: boolean) => setAgentsPaused(paused))
+  ipcMain.handle('agents:setPaused', (event, paused: boolean) => {
+    assertTrustedAppSender(event, 'agents:setPaused')
+    return setAgentsPaused(paused)
+  })
 
   ipcMain.removeHandler('agents:getPingStatus')
   ipcMain.handle('agents:getPingStatus', () => getPingStatus())

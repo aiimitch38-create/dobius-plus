@@ -1188,7 +1188,7 @@ describe('GitHandler', () => {
       await Promise.all([first, second])
 
       expect(gitBufferSpy).toHaveBeenCalledTimes(2)
-      expect(gitSpy).toHaveBeenCalledWith(['add', '--', 'src/file.ts'], tmpDir)
+      expect(gitSpy).toHaveBeenCalledWith(['add', '--', ':(literal)src/file.ts'], tmpDir)
     })
 
     it('clears pending git.diff reads when a narrow ref fetch runs', async () => {
@@ -1727,7 +1727,10 @@ describe('GitHandler', () => {
       await expect(
         dispatcher.callRequest(
           'git.forkSync',
-          { worktreePath: tmpDir, expectedUpstream: { owner: 'statusdigitalmarketing', repo: 'dobius' } },
+          {
+            worktreePath: tmpDir,
+            expectedUpstream: { owner: 'statusdigitalmarketing', repo: 'dobius' }
+          },
           { isStale: () => false, signal: controller.signal }
         )
       ).rejects.toThrow(/abort/i)
