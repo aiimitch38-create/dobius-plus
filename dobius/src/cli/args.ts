@@ -19,6 +19,7 @@ export type CommandSpec = {
 export const GLOBAL_FLAGS = ['help', 'json', 'pairing-code', 'environment']
 export const BOOLEAN_FLAGS = new Set([
   'all',
+  'allow-dirty',
   'attachments',
   'children',
   'comments',

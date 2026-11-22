@@ -10,7 +10,7 @@ import {
 import type { RuntimeWorktreeRecord } from '../../shared/runtime-types'
 import type { PRCheckDetail, PRCheckRunDetails, PRComment, PRInfo } from '../../shared/types'
 import type { CommandHandler, HandlerContext } from '../dispatch'
-import { getOptionalPositiveIntegerFlag, getOptionalStringFlag } from '../flags'
+import { getOptionalStringFlag } from '../flags'
 import { printResult } from '../format'
 import {
   formatPullRequest,
@@ -21,7 +21,7 @@ import {
 } from '../pr-format'
 import { safeText } from '../git-format'
 import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime-client'
-import { getGitWorktreeSelector, getSwitchFlag } from '../git-cli-args'
+import { getGitWorktreeSelector, getPrNumberFlag, getSwitchFlag } from '../git-cli-args'
 
 // Why: PR lookups and creation go through gh/the GitHub API and can be slow on
 // cold caches; give them more room than the 60s client default.
@@ -47,10 +47,7 @@ async function resolvePrTarget(
   if (!branch || branch === 'HEAD') {
     // Why: an exact --pr lookup does not need the branch, but the RPC schema
     // requires a non-empty one; 'HEAD' never matches a real PR head branch.
-    if (
-      options.allowDetachedWithPrNumber &&
-      getOptionalPositiveIntegerFlag(ctx.flags, 'pr') !== undefined
-    ) {
+    if (options.allowDetachedWithPrNumber && getPrNumberFlag(ctx.flags) !== undefined) {
       return { worktreeSelector, repo: `id:${worktree.repoId}`, branch: 'HEAD', worktree }
     }
     throw new RuntimeClientError(
@@ -65,7 +62,7 @@ async function lookupPullRequest(
   ctx: HandlerContext,
   target: PrTarget
 ): Promise<RuntimeRpcSuccess<PRInfo | null>> {
-  const explicitPr = getOptionalPositiveIntegerFlag(ctx.flags, 'pr')
+  const explicitPr = getPrNumberFlag(ctx.flags)
   return await ctx.client.call<PRInfo | null>(
     'github.prForBranch',
     {
@@ -81,7 +78,7 @@ async function lookupPullRequest(
 async function findPullRequest(ctx: HandlerContext, target: PrTarget): Promise<PRInfo> {
   const response = await lookupPullRequest(ctx, target)
   if (!response.result) {
-    const explicitPr = getOptionalPositiveIntegerFlag(ctx.flags, 'pr')
+    const explicitPr = getPrNumberFlag(ctx.flags)
     throw new RuntimeClientError(
       'pr_not_found',
       explicitPr !== undefined

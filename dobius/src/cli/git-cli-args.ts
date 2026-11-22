@@ -39,3 +39,17 @@ export function getSwitchFlag(flags: Map<string, string | boolean>, name: string
   }
   throw new RuntimeClientError('invalid_argument', `--${name} takes no value.`)
 }
+
+export function getPrNumberFlag(flags: Map<string, string | boolean>): number | undefined {
+  if (!flags.has('pr')) {
+    return undefined
+  }
+  const value = flags.get('pr')
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      '--pr needs a pull request number, like --pr 42.'
+    )
+  }
+  return Number(value)
+}

@@ -269,7 +269,17 @@ export const GIT_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, ctx.json, formatRemoteOk('fetch'))
   },
   'git pull': async (ctx) => {
+    const allowDirty = getSwitchFlag(ctx.flags, 'allow-dirty')
     const worktree = await getGitWorktreeSelector(ctx)
+    if (!allowDirty) {
+      const status = await ctx.client.call<GitStatusResult>('git.status', { worktree })
+      if (status.result.entries.length > 0) {
+        throw new RuntimeClientError(
+          'git_pull_blocked',
+          `This workspace has ${status.result.entries.length} uncommitted change(s). Commit them first, or pass --allow-dirty to pull anyway.`
+        )
+      }
+    }
     const result = await ctx.client.call<{ ok: true }>(
       'git.pull',
       { worktree },

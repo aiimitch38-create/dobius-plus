@@ -300,13 +300,54 @@ describe('dobius git commit', () => {
 
 describe('dobius git fetch / pull', () => {
   it('calls git.fetch and git.pull with only the worktree (no push target, no force)', async () => {
-    callMock.mockResolvedValue(ok({ ok: true }))
+    callMock
+      .mockResolvedValueOnce(ok({ ok: true }))
+      .mockResolvedValueOnce(ok({ entries: [], conflictOperation: 'unknown' }))
+      .mockResolvedValueOnce(ok({ ok: true }))
     await GIT_HANDLERS['git fetch'](ctx({ worktree: 'id:wt1' }))
     await GIT_HANDLERS['git pull'](ctx({ worktree: 'id:wt1' }))
     expect(callMock.mock.calls).toEqual([
       ['git.fetch', { worktree: 'id:wt1' }, { timeoutMs: 120_000 }],
+      ['git.status', { worktree: 'id:wt1' }],
       ['git.pull', { worktree: 'id:wt1' }, { timeoutMs: 120_000 }]
     ])
+  })
+
+  it('pull refuses uncommitted changes unless --allow-dirty', async () => {
+    callMock.mockResolvedValueOnce(ok(status))
+    await expect(GIT_HANDLERS['git pull'](ctx({ worktree: 'id:wt1' }))).rejects.toMatchObject({
+      code: 'git_pull_blocked',
+      message: expect.stringMatching(/--allow-dirty/)
+    })
+    expect(callMock).toHaveBeenCalledTimes(1)
+    callMock.mockReset()
+    callMock.mockResolvedValueOnce(ok({ ok: true }))
+    await GIT_HANDLERS['git pull'](ctx({ worktree: 'id:wt1', 'allow-dirty': true }))
+    expect(callMock.mock.calls).toEqual([
+      ['git.pull', { worktree: 'id:wt1' }, { timeoutMs: 120_000 }]
+    ])
+  })
+
+  it('says a diff is too large instead of claiming no changes', async () => {
+    callMock.mockResolvedValueOnce(
+      ok({
+        kind: 'text',
+        originalContent: '',
+        modifiedContent: '',
+        originalIsBinary: false,
+        modifiedIsBinary: false,
+        largeDiffRenderLimit: {
+          limited: true,
+          reason: 'line-count',
+          lineCounts: { original: 60000, modified: 60010 },
+          characterCount: 1,
+          limits: { maxLinesPerSide: 50000, maxCombinedCharacters: 1 }
+        }
+      })
+    )
+    await GIT_HANDLERS['git diff'](ctx({ worktree: 'id:wt1', path: 'big.json' }))
+    expect(printed()).toContain('too large to show (120010 lines omitted)')
+    expect(printed()).not.toContain('No not staged changes')
   })
 
   it('has no push command', () => {

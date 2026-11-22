@@ -93,9 +93,10 @@ export const GIT_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['git', 'pull'],
     summary: "Bring the remote branch's new commits into this workspace",
-    usage: 'dobius git pull [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'worktree'],
+    usage: 'dobius git pull [--allow-dirty] [--worktree <selector>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'allow-dirty', 'worktree'],
     notes: [
+      'Refuses when there are uncommitted changes, so a pull never mixes into unsaved work. Pass --allow-dirty to pull anyway.',
       'This changes your files when the remote has new commits. It can stop with a merge conflict.',
       "There is no CLI push: pushing stays a person's decision.",
       WORKTREE_NOTE

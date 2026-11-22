@@ -363,3 +363,16 @@ describe('detached HEAD with an explicit --pr', () => {
     expect(callMock.mock.calls[1][1]).toMatchObject({ branch: 'HEAD', linkedPRNumber: 7 })
   })
 })
+
+describe('--pr validation', () => {
+  it('rejects a bare or non-numeric --pr instead of using the branch PR', async () => {
+    for (const value of [true, '', 'abc', '0', '-3', '4.5', '12abc']) {
+      callMock.mockReset()
+      callMock.mockResolvedValueOnce(worktree)
+      await expect(PR_HANDLERS['pr show'](ctx({ pr: value }))).rejects.toThrow(
+        /--pr needs a pull request number/
+      )
+      expect(callMock.mock.calls.map((call) => call[0])).not.toContain('github.prForBranch')
+    }
+  })
+})

@@ -3,6 +3,7 @@ import type { GitStatusEntry, GitStatusResult } from '../shared/git-status-types
 import type { GitDiffResult } from '../shared/types'
 import type { RuntimeGitLocalBranches } from '../shared/runtime-types'
 import { buildLineDiff, renderHunks } from './git-line-diff'
+import { safeText } from './safe-text'
 
 // Why: the runtime's commit-message result type lives in main/, which the CLI
 // build does not include; this mirrors its wire shape.
@@ -26,17 +27,7 @@ const MAX_DIFF_OUTPUT_LINES = 2000
 const MAX_DIFF_OUTPUT_CHARS = 100_000
 const MAX_DIFF_LINE_CHARS = 1000
 
-// Why: PR comments, check logs, commit subjects and file contents can come from
-// other people; raw terminal escape codes in them could hide or rewrite what the
-// reader (Carson or ADAM) sees. Tabs and newlines are kept.
-// oxlint-disable-next-line no-control-regex
-const TERMINAL_ESCAPE = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g
-// oxlint-disable-next-line no-control-regex
-const CONTROL_CHARS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g
-
-export function safeText(text: string): string {
-  return text.replace(TERMINAL_ESCAPE, '').replace(CONTROL_CHARS, '')
-}
+export { safeText } from './safe-text'
 
 export function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? '' : 's'}`
@@ -141,6 +132,13 @@ export function formatGitDiff(path: string, staged: boolean, result: GitDiffResu
   if (result.kind === 'binary') {
     return safeText(`${path} (${area}): binary file changed; no text diff to show.`)
   }
+  if (result.largeDiffRenderLimit?.limited) {
+    const counts = result.largeDiffRenderLimit.lineCounts
+    const omitted = counts ? ` (${counts.original + counts.modified} lines omitted)` : ''
+    return safeText(
+      `${path} (${area}): this diff is too large to show${omitted}. Pass --json for the size details.`
+    )
+  }
   if (result.originalContent === result.modifiedContent) {
     return safeText(`No ${area} changes in ${path}.`)
   }
@@ -227,7 +225,8 @@ const GIT_PR_FLAG_HELP: Record<string, string> = {
   unresolved: '--unresolved           Only review threads that are still open',
   title: '--title <text>         PR title',
   body: '--body <text>          PR description',
-  draft: '--draft                Open the PR as a draft'
+  draft: '--draft                Open the PR as a draft',
+  'allow-dirty': '--allow-dirty          Pull even with uncommitted changes'
 }
 
 export function formatGitPrFlagHelp(commandPath: readonly string[], flag: string): string | null {
