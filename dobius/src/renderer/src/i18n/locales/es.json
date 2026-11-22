@@ -5731,14 +5731,15 @@
           "d3756cf5bc": "desactivado"
         },
         "OpenAiTranscriptionKeyDialog": {
+          "0eea7bc276": "Clave API de OpenAI",
+          "d284d59f4c": "Se usa para la transcripción de OpenAI y la voz en vivo de OpenAI. El audio se envía a OpenAI solo mientras una de ellas está en uso.",
+          "82063d50f5": "Se necesita una clave API de la plataforma para desarrolladores de OpenAI con facturación configurada. Una suscripción a ChatGPT no incluye el uso de la API.",
           "fa83512e48": "Guardar clave",
           "07b26f2742": "Borrar clave",
           "d246b2bdb3": "Las claves del runtime local se almacenan en ~/.dobius mediante el almacenamiento cifrado de Electron cuando está disponible.",
           "c3380e4ca5": "sk-...",
           "2f797018f0": "Clave API configurada",
-          "16015322f9": "Clave API",
-          "07ed3e512e": "El audio se envía a OpenAI solo cuando se selecciona un modelo de voz de OpenAI.",
-          "439e91879e": "Transcripción OpenAI"
+          "16015322f9": "Clave API"
         },
         "OpenAiTranscriptionSettingsRow": {
           "85c589cd61": "Agregar clave API",

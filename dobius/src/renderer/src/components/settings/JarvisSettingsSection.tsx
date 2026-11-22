@@ -5,12 +5,15 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Separator } from '../ui/separator'
+import { LiveVoiceSettingsSection } from './LiveVoiceSettingsSection'
 
 type JarvisSettingsSectionProps = {
   voiceSettings: VoiceSettings
   permissionPending: boolean
   onToggleJarvis: () => void
   onUpdateVoiceSettings: (updates: Partial<VoiceSettings>) => void
+  /** Opens the shared OpenAI key dialog owned by the Voice pane. */
+  onOpenOpenAiDialog: () => void
 }
 
 // Why plain literals, not translate(): the localization catalog gate requires
@@ -20,7 +23,8 @@ export function JarvisSettingsSection({
   voiceSettings,
   permissionPending,
   onToggleJarvis,
-  onUpdateVoiceSettings
+  onUpdateVoiceSettings,
+  onOpenOpenAiDialog
 }: JarvisSettingsSectionProps): React.JSX.Element {
   // Why drafts: an API key typed character by character must not be persisted
   // (and re-read by the speech path) on every keystroke — Save commits it.
@@ -193,6 +197,11 @@ export function JarvisSettingsSection({
           />
         </button>
       </div>
+      <LiveVoiceSettingsSection
+        voiceSettings={voiceSettings}
+        onUpdateVoiceSettings={onUpdateVoiceSettings}
+        onOpenOpenAiDialog={onOpenOpenAiDialog}
+      />
       <div className="space-y-1.5 py-2">
         <Label htmlFor="jarvis-elevenlabs-key">ElevenLabs voice (optional)</Label>
         <p className="text-xs text-muted-foreground">

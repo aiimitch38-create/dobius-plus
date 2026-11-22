@@ -5753,14 +5753,15 @@
           "d3756cf5bc": "無効"
         },
         "OpenAiTranscriptionKeyDialog": {
+          "0eea7bc276": "OpenAI API キー",
+          "d284d59f4c": "OpenAI の文字起こしと OpenAI Live 音声に使用されます。音声は、いずれかを使用している間だけ OpenAI に送信されます。",
+          "82063d50f5": "請求設定済みの OpenAI 開発者プラットフォームの API キーが必要です。ChatGPT のサブスクリプションには API の利用は含まれません。",
           "fa83512e48": "キーの保存",
           "07b26f2742": "クリアキー",
           "d246b2bdb3": "ローカル ランタイム キーは、利用可能な場合は Electron 暗号化ストレージを使用して ~/.dobius に保存されます。",
           "c3380e4ca5": "sk-...",
           "2f797018f0": "APIキーが設定されました",
-          "16015322f9": "APIキー",
-          "07ed3e512e": "音声は、OpenAI 音声モデルが選択されている場合にのみ OpenAI に送信されます。",
-          "439e91879e": "OpenAI 文字起こし"
+          "16015322f9": "APIキー"
         },
         "OpenAiTranscriptionSettingsRow": {
           "85c589cd61": "APIキーを追加",

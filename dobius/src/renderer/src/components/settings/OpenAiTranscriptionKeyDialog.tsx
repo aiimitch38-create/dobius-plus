@@ -39,14 +39,14 @@ export function OpenAiTranscriptionKeyDialog({
         <DialogHeader>
           <DialogTitle>
             {translate(
-              'auto.components.settings.OpenAiTranscriptionKeyDialog.439e91879e',
-              'OpenAI Transcription'
+              'auto.components.settings.OpenAiTranscriptionKeyDialog.0eea7bc276',
+              'OpenAI API Key'
             )}
           </DialogTitle>
           <DialogDescription>
             {translate(
-              'auto.components.settings.OpenAiTranscriptionKeyDialog.07ed3e512e',
-              'Audio is sent to OpenAI only when an OpenAI speech model is selected.'
+              'auto.components.settings.OpenAiTranscriptionKeyDialog.d284d59f4c',
+              'Used for OpenAI transcription and OpenAI Live voice. Audio is sent to OpenAI only while one of them is in use.'
             )}
           </DialogDescription>
         </DialogHeader>
@@ -81,6 +81,12 @@ export function OpenAiTranscriptionKeyDialog({
             }}
           />
         </div>
+        <p className="text-xs text-muted-foreground">
+          {translate(
+            'auto.components.settings.OpenAiTranscriptionKeyDialog.82063d50f5',
+            'This needs an API key from the OpenAI developer platform with billing set up. A ChatGPT subscription does not include API use.'
+          )}
+        </p>
         <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
           <Lock className="size-3 shrink-0" />
           {translate(
