@@ -2872,6 +2872,141 @@ describe('createMainWindow', () => {
     consoleError.mockRestore()
   })
 
+  // Port of Line A #27: a window whose app page failed to load stays blank.
+  it('reloads the app shell when its page fails to load', () => {
+    vi.useFakeTimers()
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onBeforeRecoveryReload = vi.fn()
+    const { browserWindowInstance, windowHandlers } = createRendererRecoveryWindowHarness()
+
+    createMainWindow(null, { onBeforeRecoveryReload })
+
+    windowHandlers['did-fail-load']?.({} as never, -102, 'ERR_CONNECTION_REFUSED', 'x', true)
+    expect(browserWindowInstance.loadFile).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(250)
+
+    expect(browserWindowInstance.loadFile).toHaveBeenCalledTimes(2)
+    expect(onBeforeRecoveryReload).toHaveBeenCalledWith(143)
+
+    consoleError.mockRestore()
+  })
+
+  it('does not reload for a subframe failure or a replaced navigation', () => {
+    vi.useFakeTimers()
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { browserWindowInstance, windowHandlers } = createRendererRecoveryWindowHarness()
+
+    createMainWindow(null)
+
+    windowHandlers['did-fail-load']?.({} as never, -102, 'ERR_CONNECTION_REFUSED', 'x', false)
+    windowHandlers['did-fail-load']?.({} as never, -3, 'ERR_ABORTED', 'x', true)
+    vi.advanceTimersByTime(250)
+
+    expect(browserWindowInstance.loadFile).toHaveBeenCalledTimes(1)
+
+    consoleError.mockRestore()
+  })
+
+  it('does not reload a failed page load once the app is quitting', () => {
+    vi.useFakeTimers()
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { browserWindowInstance, windowHandlers } = createRendererRecoveryWindowHarness()
+    let quitting = false
+
+    createMainWindow(null, { getIsQuitting: () => quitting })
+
+    windowHandlers['did-fail-load']?.({} as never, -6, 'ERR_FILE_NOT_FOUND', 'x', true)
+    quitting = true
+    vi.advanceTimersByTime(250)
+    expect(browserWindowInstance.loadFile).toHaveBeenCalledTimes(1)
+
+    consoleError.mockRestore()
+  })
+
+  it('does not reload a failed page load when the host says recovery is off (update quit)', () => {
+    vi.useFakeTimers()
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { browserWindowInstance, windowHandlers } = createRendererRecoveryWindowHarness()
+
+    createMainWindow(null, { shouldRecoverFailedLoad: () => false })
+
+    windowHandlers['did-fail-load']?.({} as never, -6, 'ERR_FILE_NOT_FOUND', 'x', true)
+    vi.advanceTimersByTime(250)
+    expect(browserWindowInstance.loadFile).toHaveBeenCalledTimes(1)
+
+    consoleError.mockRestore()
+  })
+
+  it('lets a window whose page failed to load close without asking the missing page', () => {
+    vi.useFakeTimers()
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { browserWindowInstance, windowHandlers } = createRendererRecoveryWindowHarness()
+
+    createMainWindow(null, { shouldRecoverFailedLoad: () => false })
+
+    windowHandlers['did-fail-load']?.({} as never, -6, 'ERR_FILE_NOT_FOUND', 'x', true)
+    const preventDefault = vi.fn()
+    windowHandlers.close({ preventDefault } as never)
+
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(browserWindowInstance.webContents.send).not.toHaveBeenCalledWith(
+      'window:close-requested',
+      expect.anything()
+    )
+
+    consoleError.mockRestore()
+  })
+
+  it('asks the page to confirm close again once a page has loaded', () => {
+    vi.useFakeTimers()
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { windowHandlers } = createRendererRecoveryWindowHarness()
+
+    createMainWindow(null, { shouldRecoverFailedLoad: () => false })
+
+    windowHandlers['did-fail-load']?.({} as never, -6, 'ERR_FILE_NOT_FOUND', 'x', true)
+    windowHandlers['did-finish-load']?.()
+    const preventDefault = vi.fn()
+    windowHandlers.close({ preventDefault } as never)
+
+    expect(preventDefault).toHaveBeenCalled()
+
+    consoleError.mockRestore()
+  })
+
+  it('caps failed-load reloads with the same breaker and reports the load failure', () => {
+    vi.useFakeTimers()
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onRendererRecoveryExhausted = vi.fn()
+    const { browserWindowInstance, windowHandlers } = createRendererRecoveryWindowHarness()
+
+    createMainWindow(null, { onRendererRecoveryExhausted })
+
+    for (let i = 0; i < 4; i += 1) {
+      windowHandlers['did-fail-load']?.({} as never, -6, 'ERR_FILE_NOT_FOUND', 'x', true)
+      vi.advanceTimersByTime(250)
+    }
+    // 1 initial load + 3 recoveries; the 4th failure opens the breaker.
+    expect(browserWindowInstance.loadFile).toHaveBeenCalledTimes(4)
+    expect(onRendererRecoveryExhausted).toHaveBeenCalledTimes(1)
+    expect(onRendererRecoveryExhausted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        details: null,
+        loadFailure: { errorCode: -6, errorDescription: 'ERR_FILE_NOT_FOUND' },
+        recentRecoveryCount: 3
+      })
+    )
+
+    consoleError.mockRestore()
+  })
+
   function createStartupRevealWindowFixture() {
     const windowHandlers: Record<string, (...args: any[]) => void> = {}
     const webContents = {

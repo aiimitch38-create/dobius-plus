@@ -1,0 +1,220 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { RpcDispatcher } from '../dispatcher'
+import type { RpcRequest, RpcResponse } from '../core'
+import type { DobiusRuntimeService } from '../../dobius-runtime'
+
+vi.mock('../../../storage/user-data-root', () => ({
+  getUserDataRoot: () => '/nonexistent-dobius-user-data'
+}))
+
+import { AGENT_FILE_METHODS, withoutSecretFiles } from './files-agent'
+
+let root: string
+let runtime: Record<string, ReturnType<typeof vi.fn>>
+
+beforeEach(() => {
+  root = join(realpathSync(mkdtempSync(join(tmpdir(), 'files-agent-'))), 'wt')
+  mkdirSync(join(root, 'src'), { recursive: true })
+  writeFileSync(join(root, 'src', 'app.ts'), 'ok')
+  writeFileSync(join(root, '.env'), 'SECRET=1')
+  runtime = {
+    getRuntimeId: vi.fn().mockReturnValue('rt'),
+    resolveAgentFileTarget: vi.fn().mockResolvedValue({ worktreeId: 'wt', root }),
+    readMobileFile: vi.fn().mockResolvedValue({ content: 'ok' }),
+    writeFileExplorerFile: vi.fn().mockResolvedValue({ ok: true }),
+    searchRuntimeFiles: vi.fn()
+  }
+})
+
+afterEach(() => {
+  rmSync(join(root, '..'), { recursive: true, force: true })
+})
+
+async function call(method: string, params: Record<string, unknown>): Promise<RpcResponse> {
+  const dispatcher = new RpcDispatcher({
+    runtime: runtime as unknown as DobiusRuntimeService,
+    methods: AGENT_FILE_METHODS
+  })
+  const request: RpcRequest = { id: 'r', authToken: 't', method, params }
+  return dispatcher.dispatch(request)
+}
+
+describe('the selector is resolved once', () => {
+  it('read, write and search all address the concrete id, not the selector again', async () => {
+    runtime.resolveAgentFileTarget.mockResolvedValue({ worktreeId: 'repo::/w/feat', root })
+    runtime.searchRuntimeFiles.mockResolvedValue({ files: [], totalMatches: 0, truncated: false })
+    await call('files.agentRead', { worktree: 'branch:feat', relativePath: 'src/app.ts' })
+    await call('files.agentWrite', { worktree: 'branch:feat', relativePath: 'src/n.ts', content: 'x' })
+    await call('files.agentSearch', { worktree: 'branch:feat', query: 'x' })
+    expect(runtime.resolveAgentFileTarget).toHaveBeenCalledTimes(3)
+    expect(runtime.readMobileFile).toHaveBeenCalledWith('id:repo::/w/feat', 'src/app.ts')
+    expect(runtime.writeFileExplorerFile).toHaveBeenCalledWith('id:repo::/w/feat', 'src/n.ts', 'x')
+    expect(runtime.searchRuntimeFiles.mock.calls[0]?.[0]).toBe('id:repo::/w/feat')
+  })
+})
+
+describe('files.agentRead', () => {
+  it('reads a worktree file through the runtime', async () => {
+    const response = await call('files.agentRead', { worktree: 'id:wt', relativePath: 'src/app.ts' })
+    expect(response.ok).toBe(true)
+    expect(runtime.readMobileFile).toHaveBeenCalledWith('id:wt', 'src/app.ts')
+  })
+
+  it('refuses .env and .. without reading', async () => {
+    for (const relativePath of ['.env', '../wt/src/app.ts']) {
+      const response = await call('files.agentRead', { worktree: 'id:wt', relativePath })
+      expect(response).toMatchObject({ ok: false })
+    }
+    expect(runtime.readMobileFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('remote (SSH) worktrees', () => {
+  it('refuses files.agentRead and files.agentWrite without touching the runtime file commands', async () => {
+    runtime.resolveAgentFileTarget.mockResolvedValue({
+      worktreeId: 'wt',
+      root: '/remote/wt',
+      connectionId: 'ssh-1'
+    })
+    const read = await call('files.agentRead', { worktree: 'id:wt', relativePath: 'src/app.ts' })
+    const write = await call('files.agentWrite', {
+      worktree: 'id:wt',
+      relativePath: 'src/app.ts',
+      content: 'x'
+    })
+    for (const response of [read, write]) {
+      expect(response).toMatchObject({
+        ok: false,
+        error: { message: expect.stringContaining("isn't available for remote worktrees yet") }
+      })
+    }
+    expect(runtime.readMobileFile).not.toHaveBeenCalled()
+    expect(runtime.writeFileExplorerFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('files.agentWrite', () => {
+  it('writes inside the worktree and reports the byte count', async () => {
+    const response = await call('files.agentWrite', {
+      worktree: 'id:wt',
+      relativePath: 'src/new.ts',
+      content: 'héllo'
+    })
+    expect(response).toMatchObject({ ok: true, result: { relativePath: 'src/new.ts', bytes: 6 } })
+    expect(runtime.writeFileExplorerFile).toHaveBeenCalledWith('id:wt', 'src/new.ts', 'héllo')
+  })
+
+  it('refuses secrets, dot-files, escapes and a missing content without writing', async () => {
+    for (const params of [
+      { relativePath: 'dobius-runtime.json', content: '{}' },
+      { relativePath: '.github/workflows/x.yml', content: 'x' },
+      { relativePath: '../escape.txt', content: 'x' },
+      { relativePath: 'src/app.ts' }
+    ]) {
+      const response = await call('files.agentWrite', { worktree: 'id:wt', ...params })
+      expect(response).toMatchObject({ ok: false })
+    }
+    expect(runtime.writeFileExplorerFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('files.agentSearch', () => {
+  it('drops hits in secret-looking files and recounts matches', async () => {
+    const match = { line: 1, column: 1, matchLength: 3, lineContent: 'KEY' }
+    runtime.searchRuntimeFiles.mockResolvedValue({
+      files: [
+        { filePath: `${root}/.env`, relativePath: '.env', matches: [match, match] },
+        { filePath: `${root}/src/app.ts`, relativePath: 'src/app.ts', matches: [match] }
+      ],
+      totalMatches: 3,
+      truncated: false
+    })
+    const response = await call('files.agentSearch', {
+      worktree: 'id:wt',
+      query: 'KEY',
+      excludePattern: 'dist/**',
+      useRegex: true
+    })
+    expect(response.ok && 'hiddenFiles' in (response.result as object)).toBe(false)
+    expect(response).toMatchObject({
+      ok: true,
+      result: { totalMatches: 1, files: [{ relativePath: 'src/app.ts' }] }
+    })
+    expect(runtime.searchRuntimeFiles).toHaveBeenCalledWith('id:wt', expect.objectContaining({
+        query: 'KEY',
+        maxResults: 200,
+        useRegex: false,
+        excludePattern: 'dist/**',
+        caseInsensitiveExcludeGlobs: expect.arrayContaining(['**/*token*', '**/.env*'])
+      }))
+  })
+
+  it('truncated comes only from kept matches, so a dropped file cannot show through', async () => {
+    const match = { line: 1, column: 1, matchLength: 1, lineContent: 'x' }
+    runtime.searchRuntimeFiles.mockResolvedValue({
+      files: [
+        { filePath: 'a', relativePath: 'Token.TXT', matches: [match, match] },
+        { filePath: 'b', relativePath: 'src/app.ts', matches: [match] }
+      ],
+      totalMatches: 3,
+      truncated: true
+    })
+    const response = await call('files.agentSearch', { worktree: 'id:wt', query: 'x', maxResults: 3 })
+    expect(response).toMatchObject({ ok: true, result: { totalMatches: 1, truncated: false } })
+  })
+
+  it('keeps a backend timeout (truncated, nothing dropped) as truncated', async () => {
+    const match = { line: 1, column: 1, matchLength: 1, lineContent: 'x' }
+    runtime.searchRuntimeFiles.mockResolvedValue({
+      files: [{ filePath: 'b', relativePath: 'src/app.ts', matches: [match] }],
+      totalMatches: 1,
+      truncated: true
+    })
+    const response = await call('files.agentSearch', { worktree: 'id:wt', query: 'x', maxResults: 50 })
+    expect(response).toMatchObject({ ok: true, result: { truncated: true } })
+  })
+
+  it('refuses a pattern ending in a backslash, and remote worktrees', async () => {
+    for (const params of [{ excludePattern: 'dist\\' }, { includePattern: 'src/\\ ' }]) {
+      const response = await call('files.agentSearch', { worktree: 'id:wt', query: 'x', ...params })
+      expect(response).toMatchObject({ ok: false, error: { message: expect.stringContaining('backslash') } })
+    }
+    runtime.resolveAgentFileTarget.mockResolvedValue({
+      worktreeId: 'wt',
+      root: '/remote/wt',
+      connectionId: 'ssh-1'
+    })
+    const remote = await call('files.agentSearch', { worktree: 'id:wt', query: 'x' })
+    expect(remote).toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining("isn't available for remote worktrees yet") }
+    })
+    expect(runtime.searchRuntimeFiles).not.toHaveBeenCalled()
+  })
+
+  it('caps maxResults', async () => {
+    const response = await call('files.agentSearch', { worktree: 'id:wt', query: 'x', maxResults: 5000 })
+    expect(response.ok).toBe(false)
+    expect(runtime.searchRuntimeFiles).not.toHaveBeenCalled()
+  })
+
+  it('withoutSecretFiles uses matchCount when present', () => {
+    expect(
+      withoutSecretFiles(
+        {
+          files: [{ filePath: 'a', relativePath: 'a.ts', matches: [], matchCount: 7 }],
+          totalMatches: 7,
+          truncated: true
+        },
+        7
+      )
+    ).toEqual({
+      files: [{ filePath: 'a', relativePath: 'a.ts', matches: [], matchCount: 7 }],
+      totalMatches: 7,
+      truncated: true
+    })
+  })
+})

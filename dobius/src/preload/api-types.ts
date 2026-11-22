@@ -419,6 +419,9 @@ import type {
   JarvisSpeakOutcome,
   JarvisStateEvent,
   OpenAiLiveSessionResult,
+  LiveDelegateResult,
+  LiveVoiceNotice,
+  LiveVoiceSessionReport,
   SpeechErrorEvent,
   SpeechLifecycleEvent,
   SpeechModelManifest,
@@ -3411,6 +3414,25 @@ export type PreloadApi = {
      * session with the stored key. Only the answer and session id come back.
      */
     liveSessionConnect: (offerSdp: string) => Promise<OpenAiLiveSessionResult>
+    /** Tells main's spend meter the call went to standby, woke up, or ended. */
+    liveSessionReport: (report: LiveVoiceSessionReport) => Promise<{ ok: boolean }>
+    /** Hands one spoken request to ADAM through main; returns what to say back. */
+    liveDelegate: (request: {
+      request: string
+      callLines: string[]
+      callToken: string
+    }) => Promise<LiveDelegateResult>
+    /** Carson said stop: cancel the ADAM turn this call started. */
+    liveCancel: (payload: { callToken: string }) => Promise<{ ok: boolean }>
+    /** Keeps a spoken line ADAM never saw (small talk) in his thread. */
+    liveTranscript: (line: {
+      role: 'user' | 'assistant'
+      text: string
+      itemId: string
+      callToken: string
+    }) => Promise<{ ok: boolean }>
+    /** Spending-cap notices for the window that owns the live call. */
+    onLiveNotice: (callback: (notice: LiveVoiceNotice) => void) => () => void
     /** Asks ADAM and returns its text WITHOUT speaking it (the agent speaks). */
     cancelAsk: () => Promise<{ ok: true }>
     askAdamText: (utterance: string, source?: AdamTurnSource) => Promise<JarvisAskResult>

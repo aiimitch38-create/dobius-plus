@@ -12,6 +12,7 @@ import {
   resolveTuiAgentLaunchEnv
 } from '../../../shared/tui-agent-launch-defaults'
 import { parseWslUncPath } from '../../../shared/wsl-paths'
+import { bugFixLaunchOverrides } from '../../../shared/bug-fix-agent-profile'
 import { resolveWindowsShellStartupFamily } from '../../../shared/windows-terminal-shell'
 import type { AgentStartupShell } from '../../../shared/tui-agent-startup-shell'
 import type { AppState } from '@/store/types'
@@ -70,7 +71,15 @@ export function buildAiVaultResumeStartupForWorktree(args: {
   session: AiVaultResumeCommandSession
   commandOverride?: string | null
 }): AiVaultResumeStartup {
+  // Why: an auto-fix session must come back with its restricted profile, never
+  // the Settings defaults (which can skip permissions) or a picked override.
+  const bugFix = bugFixLaunchOverrides(
+    args.session.agent,
+    args.session.cwd,
+    getAiVaultResumeWorkspacePath(args.state, args.worktreeId ?? args.state.activeWorktreeId)
+  )
   if (
+    !bugFix &&
     args.session.executionHostId &&
     args.session.executionHostId !== LOCAL_EXECUTION_HOST_ID &&
     args.session.resumeCommand &&
@@ -110,7 +119,8 @@ export function buildAiVaultResumeStartupForWorktree(args: {
         args.session.agent,
         args.state.settings?.agentDefaultArgs
       ),
-      agentEnv: resolveTuiAgentLaunchEnv(args.session.agent, args.state.settings?.agentDefaultEnv)
+      agentEnv: resolveTuiAgentLaunchEnv(args.session.agent, args.state.settings?.agentDefaultEnv),
+      ...bugFix
     })
     if (startupPlan) {
       const startsInRecordedCwd =

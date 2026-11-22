@@ -128,3 +128,106 @@ describe('tasks.review', () => {
     })
   })
 })
+
+describe('tasks.update', () => {
+  const update = (params: Record<string, unknown>) => method('tasks.update')(params)
+  const task = () => vertexTaskStore.list().find((t) => t.id === taskId)
+
+  it('patches title, body, labels, priority and assignee of an unheld card', async () => {
+    const result = (await update({
+      id: taskId,
+      by: 'adam',
+      title: '  Fix login redirect ',
+      description: 'New body',
+      labels: ['auth'],
+      priority: 'high',
+      assignee: { id: 'console-w1', kind: 'console', name: 'Worker One' }
+    })) as { ok: boolean; task: { title: string } }
+    expect(result.ok).toBe(true)
+    expect(task()).toMatchObject({
+      title: 'Fix login redirect',
+      description: 'New body',
+      labels: ['auth'],
+      priority: 'high',
+      assignee: { id: 'console-w1', kind: 'console', name: 'Worker One' },
+      status: 'todo'
+    })
+  })
+
+  it('refuses a card someone else holds, and allows the holder', async () => {
+    vertexTaskStore.claim(taskId, { by: 'console-w1', kind: 'worker' })
+    expect(await update({ id: taskId, by: 'console-w2', title: 'Stolen' })).toEqual({
+      ok: false,
+      reason: 'held-by:console-w1'
+    })
+    expect(task()?.title).toBe('Fix login')
+    expect(await update({ id: taskId, by: 'console-w1', title: 'Mine' })).toMatchObject({ ok: true })
+    expect(task()?.title).toBe('Mine')
+  })
+
+  it('refuses an agent assignee, an empty patch, and an unknown card', async () => {
+    await expect(
+      update({ id: taskId, by: 'adam', assignee: { id: 'a', kind: 'agent', name: 'A' } })
+    ).rejects.toThrow()
+    await expect(update({ id: taskId, by: 'adam' })).rejects.toThrow(/Nothing to update/)
+    await expect(update({ id: taskId, by: 'adam', title: '   ' })).rejects.toThrow(/Title is empty/)
+    expect(await update({ id: 'nope', by: 'adam', title: 'x' })).toEqual({
+      ok: false,
+      reason: 'not-found'
+    })
+  })
+})
+
+describe('tasks.move', () => {
+  const move = (params: Record<string, unknown>) => method('tasks.move')(params)
+
+  it('moves an unheld card to another column', async () => {
+    expect(await move({ id: taskId, by: 'adam', to: 'backlog' })).toMatchObject({ ok: true })
+    expect(status()).toBe('backlog')
+  })
+
+  it('refuses done and in-progress (complete and claim own those)', async () => {
+    expect(await move({ id: taskId, by: 'adam', to: 'done' })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/^use-complete/)
+    })
+    expect(await move({ id: taskId, by: 'adam', to: 'in-progress' })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/^use-claim/)
+    })
+    expect(status()).toBe('todo')
+  })
+
+  it('refuses moving a card someone else holds; the holder may move it on', async () => {
+    vertexTaskStore.claim(taskId, { by: 'console-w1', kind: 'worker' })
+    expect(await move({ id: taskId, by: 'console-w2', to: 'blocked' })).toEqual({
+      ok: false,
+      reason: 'held-by:console-w1'
+    })
+    expect(status()).toBe('in-progress')
+    expect(await move({ id: taskId, by: 'console-w1', to: 'testing' })).toMatchObject({ ok: true })
+    expect(status()).toBe('testing')
+    expect(vertexTaskStore.list().find((t) => t.id === taskId)?.lease).toBeUndefined()
+  })
+
+  it('refuses putting an agent card back in To Do (that starts a paid run)', async () => {
+    const agentCard = vertexTaskStore.create({
+      title: 'Agent job',
+      status: 'backlog',
+      assignee: { kind: 'agent', id: 'ag1', name: 'Agent', initials: 'A' }
+    }).id
+    expect(await move({ id: agentCard, by: 'adam', to: 'todo' })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/^agent-dispatch/)
+    })
+    expect(vertexTaskStore.list().find((t) => t.id === agentCard)?.status).toBe('backlog')
+  })
+
+  it('rejects an unknown column and reports an unknown card', async () => {
+    await expect(move({ id: taskId, by: 'adam', to: 'archive' })).rejects.toThrow()
+    expect(await move({ id: 'nope', by: 'adam', to: 'backlog' })).toEqual({
+      ok: false,
+      reason: 'not-found'
+    })
+  })
+})

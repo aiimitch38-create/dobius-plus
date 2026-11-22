@@ -150,6 +150,47 @@ describe('launchAgentInNewTab', () => {
     mockPasteDraftWhenAgentReady.mockResolvedValue(true)
   })
 
+  it('sends the restricted command to a paired host for an auto-fix workspace', async () => {
+    mockIsWebRuntimeSessionActive.mockReturnValue(true)
+    store.settings = {
+      agentCmdOverrides: {},
+      agentDefaultArgs: { claude: '--dangerously-skip-permissions' },
+      agentDefaultEnv: {},
+      activeRuntimeEnvironmentId: 'web-runtime'
+    }
+    store.worktreesByRepo['repo-1'][0].path = '/repo/autofix-login-abc12345'
+    const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
+
+    launchAgentInNewTab({ agent: 'claude', worktreeId: 'wt-1', groupId: 'group-1' })
+
+    const [request] = mockCreateWebRuntimeSessionTerminal.mock.calls[0] as [{ command?: string }]
+    expect(request.command).toMatch(/^claude '--restricted' /)
+    expect(request.command).not.toContain('dangerously')
+  })
+
+  it('launches Claude in an auto-fix workspace only with the restricted profile', async () => {
+    const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
+    store.worktreesByRepo['repo-1'][0].path = '/repo/autofix-login-abc12345'
+    store.settings.agentCmdOverrides = { claude: 'claude-work' }
+    store.settings.agentDefaultArgs = { claude: '--dangerously-skip-permissions' }
+    store.settings.agentDefaultEnv = { claude: { ANTHROPIC_BASE_URL: 'https://x.test' } }
+
+    launchAgentInNewTab({
+      agent: 'claude',
+      worktreeId: 'wt-1',
+      agentCommandOverride: 'claude --dangerously-skip-permissions',
+      agentArgs: '--dangerously-skip-permissions'
+    })
+
+    const [, queued] = mockQueueTabStartupCommand.mock.calls[0] as [
+      string,
+      { command: string; env?: Record<string, string> }
+    ]
+    expect(queued.command).toMatch(/^claude '--restricted' '--strict-mcp-config' /)
+    expect(queued.command).not.toMatch(/dangerously|claude-work/)
+    expect(queued.env?.ANTHROPIC_BASE_URL).toBeUndefined()
+  })
+
   it('stamps the launched agent on the new tab for immediate provider icon bootstrap', async () => {
     const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
 
@@ -320,6 +361,34 @@ describe('launchAgentInNewTab', () => {
     })
     expect(mockCreateTab).not.toHaveBeenCalled()
     expect(mockQueueTabStartupCommand).not.toHaveBeenCalled()
+  })
+
+  it('forwards an explicit command and args to paired hosts even without a prompt', async () => {
+    mockIsWebRuntimeSessionActive.mockReturnValue(true)
+    store.settings = {
+      agentCmdOverrides: {},
+      agentDefaultArgs: { claude: '--dangerously-skip-permissions' },
+      agentDefaultEnv: {},
+      activeRuntimeEnvironmentId: 'web-runtime'
+    }
+    const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
+
+    launchAgentInNewTab({
+      agent: 'claude',
+      worktreeId: 'wt-1',
+      agentCommandOverride: 'claude',
+      agentArgs: '--restricted --permission-mode acceptEdits'
+    })
+
+    const call = mockCreateWebRuntimeSessionTerminal.mock.calls.at(-1)?.[0] as {
+      command?: string
+      agent?: string
+      launchAgent?: string
+    }
+    expect(call.command).toContain('--restricted')
+    expect(call.command).not.toContain('dangerously')
+    expect(call.launchAgent).toBe('claude')
+    expect(call.agent).toBeUndefined()
   })
 
   it('surfaces a toast when host agent launch fails in paired web clients', async () => {

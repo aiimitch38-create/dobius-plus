@@ -48,6 +48,7 @@ import {
 } from '../../../shared/tui-agent-launch-defaults'
 import { isTuiAgent } from '../../../shared/tui-agent-config'
 import { repoIsRemote } from '../../../shared/agent-launch-remote'
+import { bugFixLaunchOverrides } from '../../../shared/bug-fix-agent-profile'
 import { resumeSleepingAgentSessionsForWorktree } from '@/lib/resume-sleeping-agent-session'
 import { queueHookCommandsForFirstWorktreeTab } from '@/lib/hook-command-delayed-delivery'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
@@ -257,6 +258,8 @@ function buildCreatedAgentReopenStartup(worktree: Worktree): WorktreeStartupPayl
     cmdOverrides: state.settings?.agentCmdOverrides ?? {},
     agentArgs: resolveTuiAgentLaunchArgs(agent, state.settings?.agentDefaultArgs),
     agentEnv: resolveTuiAgentLaunchEnv(agent, state.settings?.agentDefaultEnv),
+    // Why last: reopening an auto-fix workspace keeps its restricted profile.
+    ...bugFixLaunchOverrides(agent, worktree.path),
     platform: launchPlatform,
     isRemote: repo ? repoIsRemote(repo) : false,
     allowEmptyPromptLaunch: true

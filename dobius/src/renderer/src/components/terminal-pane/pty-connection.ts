@@ -12,6 +12,8 @@ import { scheduleRuntimeGraphSync } from '@/runtime/sync-runtime-graph'
 import { useAppStore } from '@/store'
 import { getWorktreeMapFromState } from '@/store/selectors'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
+import { bugFixLaunchOverrides } from '../../../../shared/bug-fix-agent-profile'
+import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { createTerminalZeroDimensionsMessage } from '../../../../shared/terminal-zero-dimensions-diagnostic'
 import { parseTerminalOscColorQuery } from '../../../../shared/terminal-osc-color-reply'
 import type { PtyBufferSnapshot, PtyConnectResult } from './pty-transport'
@@ -3497,6 +3499,7 @@ export function connectPanePty(
       // When the provider session can't be resumed, an agent terminal should still
       // come back as its agent (or the default), not a blank shell (#4557). A plain
       // shell - no agent ever ran here - stays blank (buildFreshFallback returns null).
+      const bugFixWorkspacePath = findWorktreeById(state.worktreesByRepo, deps.worktreeId)?.path
       const buildFreshFallback = (): ColdRestoreAgentResumeStartup | null => {
         const tab = (state.tabsByWorktree[deps.worktreeId] ?? []).find(
           (candidate) => candidate.id === deps.tabId
@@ -3527,7 +3530,10 @@ export function connectPanePty(
           liveLaunchConfig ??
           (sleepingRecord?.agent === fallbackAgent ? sleepingRecord.launchConfig : undefined) ??
           (paneStartup?.launchAgent === fallbackAgent ? paneStartup.launchConfig : undefined)
-        if (fallbackLaunchConfig?.agentCommand?.trim()) {
+        // Why: an auto-fix workspace relaunches Claude only with its restricted
+        // profile, whatever was captured or is in Settings.
+        const fallbackBugFix = bugFixLaunchOverrides(fallbackAgent, bugFixWorkspacePath)
+        if (!fallbackBugFix && fallbackLaunchConfig?.agentCommand?.trim()) {
           const freshLaunchToken = createBrowserUuid()
           return {
             agent: fallbackAgent,
@@ -3563,6 +3569,7 @@ export function connectPanePty(
             fallbackLaunchConfig !== undefined
               ? fallbackLaunchConfig.agentEnv
               : resolveTuiAgentLaunchEnv(fallbackAgent, state.settings?.agentDefaultEnv),
+          ...fallbackBugFix,
           platform: getColdRestoreAgentResumePlatform(),
           allowEmptyPromptLaunch: true
         })
@@ -3643,6 +3650,7 @@ export function connectPanePty(
             ? launchConfig.agentEnv
             : resolveTuiAgentLaunchEnv(agent, state.settings?.agentDefaultEnv),
         ...(launchConfig?.agentCommand ? { agentCommand: launchConfig.agentCommand } : {}),
+        ...bugFixLaunchOverrides(agent, bugFixWorkspacePath),
         platform: resumePlatform
       })
       if (!startupPlan) {

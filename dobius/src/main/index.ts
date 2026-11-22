@@ -143,6 +143,7 @@ import { ClaudeRuntimeAuthService } from './claude-accounts/runtime-auth-service
 import { StarNagService } from './star-nag/service'
 import { startImessageBridge, stopImessageBridge } from './imessage-bridge/bridge-service'
 import { startDobiusCli, stopDobiusCli } from './dobius-cli/dispatch-server'
+import { shutdownBugAutoFix } from './vertex/bug-autofix-wiring'
 import { bootLeadsFromAutostart } from './runtime/rpc/methods/leads'
 import { syncVoiceConductorFromSettings } from './voice-conductor/service'
 import { registerPromptsHandlers } from './ipc/prompts'
@@ -185,6 +186,7 @@ import { CrashReportStore } from './crash-reporting/crash-report-store'
 import {
   shouldRecordProcessGoneCrash,
   shouldRecoverRendererAfterProcessGone,
+  shouldRepaintWindowsAfterGpuGone,
   type ExpectedTeardownScope
 } from './crash-reporting/process-gone-classification'
 import {
@@ -848,10 +850,12 @@ function openMainWindow(): BrowserWindow {
         reason: details.reason,
         expectedTeardown: getExpectedTeardownScope(webContentsId)
       }),
-    onRendererRecoveryExhausted: ({ details, recentRecoveryCount }) => {
+    shouldRecoverFailedLoad: (webContentsId) =>
+      !isQuittingForUpdate() && getExpectedTeardownScope(webContentsId) !== 'app-shutdown',
+    onRendererRecoveryExhausted: ({ details, loadFailure, recentRecoveryCount }) => {
       recordCrashBreadcrumb('renderer_recovery_circuit_breaker_open', {
-        reason: details.reason,
-        exitCode: details.exitCode ?? null,
+        reason: details?.reason ?? 'did-fail-load',
+        exitCode: details?.exitCode ?? loadFailure?.errorCode ?? null,
         recentRecoveryCount
       })
       void presentRendererRecoveryPrompt(recentRecoveryCount)
@@ -2026,6 +2030,16 @@ app.whenReady().then(async () => {
       type: details.type
     })
     if (
+      !isQuitting &&
+      shouldRepaintWindowsAfterGpuGone({ processType: details.type, reason: details.reason })
+    ) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.invalidate()
+        }
+      }
+    }
+    if (
       isGpuFallbackCrashCandidate({
         platform: process.platform,
         processType: details.type,
@@ -2376,6 +2390,7 @@ app.on('will-quit', (e) => {
   starNag?.stop()
   stopImessageBridge()
   stopDobiusCli()
+  shutdownBugAutoFix()
   automations?.stop()
   setUnreadDockBadgeCount(0)
   agentHookServer.stop()

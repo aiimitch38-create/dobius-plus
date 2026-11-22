@@ -1,6 +1,7 @@
 import type {
   RuntimeWorktreeListResult,
   RuntimeWorktreePsResult,
+  RuntimeWorktreePsSummary,
   RuntimeWorktreeRecord,
   RuntimeWorktreeCreateResult,
   RuntimeWorktreeRemoveResult
@@ -169,6 +170,16 @@ async function getCreateRepoSelector(
   )
 }
 
+// Why: worktree.list and worktree.ps cap their answers (default 200);
+// --sleeping filters, so it needs every row first.
+const WORKTREE_SCAN_LIMIT = 10_000
+
+/** Asleep the way the sidebar's "hide sleeping" filter means it: not archived
+ *  and nothing live (no terminal, no attached PTY). */
+export function isSleepingSummary(summary: RuntimeWorktreePsSummary): boolean {
+  return !summary.isArchived && summary.liveTerminalCount === 0 && !summary.hasAttachedPty
+}
+
 export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
   'worktree ps': async ({ flags, client, json }) => {
     const result = await client.call<RuntimeWorktreePsResult>('worktree.ps', {
@@ -177,11 +188,65 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, formatWorktreePs)
   },
   'worktree list': async ({ flags, client, json }) => {
-    const result = await client.call<RuntimeWorktreeListResult>('worktree.list', {
-      repo: getOptionalStringFlag(flags, 'repo'),
-      limit: getOptionalPositiveIntegerFlag(flags, 'limit')
+    const repo = getOptionalStringFlag(flags, 'repo')
+    const limit = getOptionalPositiveIntegerFlag(flags, 'limit')
+    if (flags.get('sleeping') !== true) {
+      const result = await client.call<RuntimeWorktreeListResult>('worktree.list', { repo, limit })
+      printResult(result, json, formatWorktreeList)
+      return
+    }
+    // Why: the limit applies after the sleeping filter, or a page of awake
+    // worktrees would hide sleeping ones further down.
+    const listed = await client.call<RuntimeWorktreeListResult>('worktree.list', {
+      repo,
+      limit: WORKTREE_SCAN_LIMIT
     })
-    printResult(result, json, formatWorktreeList)
+    const ps = await client.call<RuntimeWorktreePsResult>('worktree.ps', {
+      limit: WORKTREE_SCAN_LIMIT
+    })
+    const sleepingIds = new Set(
+      ps.result.worktrees.filter(isSleepingSummary).map((summary) => summary.worktreeId)
+    )
+    const sleeping = listed.result.worktrees.filter((worktree) => sleepingIds.has(worktree.id))
+    const page = limit === undefined ? sleeping : sleeping.slice(0, limit)
+    printResult(
+      {
+        ...listed,
+        result: { worktrees: page, totalCount: sleeping.length, truncated: page.length < sleeping.length }
+      },
+      json,
+      formatWorktreeList
+    )
+  },
+  'worktree sleep': async ({ flags, client, cwd, json }) => {
+    const selector = await getRequiredWorktreeSelector(flags, 'worktree', cwd, client)
+    const shown = await client.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', {
+      worktree: selector
+    })
+    const callerWorktreeId = process.env.DOBIUS_WORKTREE_ID?.trim()
+    if (
+      callerWorktreeId &&
+      callerWorktreeId === shown.result.worktree.id &&
+      flags.get('force') !== true
+    ) {
+      throw new RuntimeClientError(
+        'invalid_argument',
+        'Refused: this terminal runs inside that worktree, so sleeping it would stop this command. Pass --force to do it anyway.'
+      )
+    }
+    // Why: sleep by exact id so a selector that changed meaning after the
+    // check above (rename, new branch) cannot put a different worktree to sleep.
+    const result = await client.call<{ worktreeId: string }>('worktree.sleep', {
+      worktree: `id:${shown.result.worktree.id}`
+    })
+    printResult(result, json, (value) => `Sleeping: ${value.worktreeId}`)
+  },
+  'worktree wake': async ({ flags, client, cwd, json }) => {
+    const result = await client.call<{ repoId: string; worktreeId: string; activated: boolean }>(
+      'worktree.activate',
+      { worktree: await getRequiredWorktreeSelector(flags, 'worktree', cwd, client) }
+    )
+    printResult(result, json, (value) => `Awake: ${value.worktreeId}`)
   },
   'worktree show': async ({ flags, client, cwd, json }) => {
     const result = await client.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', {

@@ -32,6 +32,8 @@ import { BOARD_CARD_HANDLERS } from './handlers/board-cards'
 import { BOARD_SNAPSHOT_HANDLERS } from './handlers/board-snapshots'
 import { TABS_SNOOZE_HANDLERS } from './handlers/tabs-snooze'
 import { LEAD_HANDLERS } from './handlers/lead'
+import { TABS_HANDLERS } from './handlers/tabs'
+import { SYSTEM_HANDLERS } from './handlers/system'
 import { CREW_HANDLERS } from './handlers/crew'
 import { GIT_HANDLERS } from './handlers/git'
 import { PR_HANDLERS } from './handlers/pr'
@@ -81,6 +83,8 @@ function buildHandlers(): Map<string, CommandHandler> {
     BOARD_SNAPSHOT_HANDLERS,
     TABS_SNOOZE_HANDLERS,
     LEAD_HANDLERS,
+    TABS_HANDLERS,
+    SYSTEM_HANDLERS,
     CREW_HANDLERS,
     GIT_HANDLERS,
     PR_HANDLERS

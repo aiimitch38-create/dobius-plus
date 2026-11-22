@@ -24,6 +24,7 @@ import {
 } from '../../../shared/tui-agent-launch-defaults'
 import { TUI_AGENT_CONFIG } from '../../../shared/tui-agent-config'
 import { repoIsRemote } from '../../../shared/agent-launch-remote'
+import { bugFixLaunchOverrides } from '../../../shared/bug-fix-agent-profile'
 import { seedCommandCodeSubmittedPromptStatus } from '@/lib/command-code-prompt-status-seed'
 import type { TuiAgent } from '../../../shared/types'
 import type { LaunchSource } from '../../../shared/telemetry-events'
@@ -123,15 +124,23 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
   // Why: SSH remotes deploy the CLI shim as plain `dobius`, so the Linux-only
   // `dobius-ide` rename must not be applied for remote launches.
   const isRemote = repo ? repoIsRemote(repo) : false
+  // Why: Claude in an auto-fix workspace (Restart, a new console) launches
+  // only with the restricted profile, whatever the caller or Settings say.
+  const bugFix = bugFixLaunchOverrides(agent, worktree?.path)
   const settingsCmdOverrides = store.settings?.agentCmdOverrides ?? {}
-  const cmdOverrides = agentCommandOverride
-    ? { ...settingsCmdOverrides, [agent]: agentCommandOverride }
-    : settingsCmdOverrides
-  const effectiveAgentArgs =
-    agentArgs !== undefined
+  const cmdOverrides = bugFix
+    ? bugFix.cmdOverrides
+    : agentCommandOverride
+      ? { ...settingsCmdOverrides, [agent]: agentCommandOverride }
+      : settingsCmdOverrides
+  const effectiveAgentArgs = bugFix
+    ? bugFix.agentArgs
+    : agentArgs !== undefined
       ? agentArgs
       : resolveTuiAgentLaunchArgs(agent, store.settings?.agentDefaultArgs)
-  const agentEnv = resolveTuiAgentLaunchEnv(agent, store.settings?.agentDefaultEnv)
+  const agentEnv = bugFix
+    ? bugFix.agentEnv
+    : resolveTuiAgentLaunchEnv(agent, store.settings?.agentDefaultEnv)
   const trimmedPrompt = prompt?.trim() ?? ''
   const hasPrompt = trimmedPrompt.length > 0
   const isFollowupPath = TUI_AGENT_CONFIG[agent].promptInjectionMode === 'stdin-after-start'
@@ -237,7 +246,10 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
       environmentId: runtimeEnvironmentId,
       targetGroupId: groupId,
       activate: true,
-      ...(hasPrompt
+      // Why also explicit command/args: a bare { agent } makes the host rebuild
+      // the launch from its Settings defaults, which would drop a restricted
+      // (bug-fix) or account-pinned command on restart.
+      ...(hasPrompt || bugFix || agentCommandOverride !== undefined || agentArgs !== undefined
         ? {
             command: startupPlan.launchCommand,
             ...(startupPlan.env ? { env: startupPlan.env } : {}),

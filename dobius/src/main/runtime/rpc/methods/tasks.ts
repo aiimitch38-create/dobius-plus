@@ -125,6 +125,57 @@ const TaskComment = z.object({
   body: requiredString('Missing comment body').pipe(z.string().max(4000))
 })
 
+// Why no status here: moving a card is tasks.move, which has its own rules.
+const TaskUpdate = z
+  .object({
+    id: TaskId,
+    by: By,
+    title: z.string().trim().min(1, 'Title is empty').max(500).optional(),
+    description: z.string().max(MAX_TEXT).optional(),
+    labels: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+    priority: Priority.optional(),
+    assignee: Assignee.optional()
+  })
+  .refine(
+    (value) =>
+      value.title !== undefined ||
+      value.description !== undefined ||
+      value.labels !== undefined ||
+      value.priority !== undefined ||
+      value.assignee !== undefined,
+    { message: 'Nothing to update: pass a title, body, labels, priority or assignee' }
+  )
+
+const TaskMove = z.object({
+  id: TaskId,
+  by: By,
+  to: Status,
+  index: z.number().int().nonnegative().optional()
+})
+
+/** Why each column is refused: done needs a result note (tasks.complete),
+ *  in-progress needs a lease (tasks.claim), and an agent card landing in To Do
+ *  is what the board's auto-dispatch starts a paid run for. */
+function moveRefusal(task: VertexTask, to: VertexTask['status']): string | null {
+  if (to === 'done') {
+    return 'use-complete (move to done with dobius tasks complete and a result note)'
+  }
+  if (to === 'in-progress') {
+    return 'use-claim (move to in-progress with dobius tasks claim)'
+  }
+  if (to === 'todo' && task.assignee?.kind === 'agent' && task.status !== 'todo') {
+    return 'agent-dispatch (an agent card in To Do starts a paid run; move it in the app)'
+  }
+  return null
+}
+
+/** Only the live lease holder may change a held card; anyone may change an
+ *  unheld one (same rule as the operator dragging it on the board). */
+function heldByOther(id: string, by: string): string | null {
+  const holder = liveLeaseOf(id)
+  return holder && holder !== by.trim() ? `held-by:${holder}` : null
+}
+
 /** The wire shape: identical to the stored task except the original message
  *  travels under a name that says what it is. */
 export type TaskView = Omit<VertexTask, 'sourceQuote'> & {
@@ -297,6 +348,56 @@ export const TASK_METHODS: RpcMethod[] = [
           note ? `Ready for review: ${note}` : 'Ready for review.'
         ) ?? moved
       return { ok: true, task: presentTask(task) }
+    }
+  }),
+  defineMethod({
+    name: 'tasks.update',
+    params: TaskUpdate,
+    handler: (params): TaskOpView => {
+      if (!vertexTaskStore.list().some((candidate) => candidate.id === params.id)) {
+        return { ok: false, reason: 'not-found' }
+      }
+      const held = heldByOther(params.id, params.by)
+      if (held) {
+        return { ok: false, reason: held }
+      }
+      const task = vertexTaskStore.update(params.id, {
+        ...(params.title !== undefined ? { title: params.title } : {}),
+        ...(params.description !== undefined ? { description: params.description } : {}),
+        ...(params.labels !== undefined ? { labels: params.labels } : {}),
+        ...(params.priority !== undefined ? { priority: params.priority } : {}),
+        ...(params.assignee
+          ? {
+              assignee: {
+                kind: params.assignee.kind,
+                id: params.assignee.id,
+                name: params.assignee.name,
+                initials: initialsOf(params.assignee.name)
+              }
+            }
+          : {})
+      })
+      return task ? { ok: true, task: presentTask(task) } : { ok: false, reason: 'not-ready' }
+    }
+  }),
+  defineMethod({
+    name: 'tasks.move',
+    params: TaskMove,
+    handler: (params): TaskOpView => {
+      const current = vertexTaskStore.list().find((candidate) => candidate.id === params.id)
+      if (!current) {
+        return { ok: false, reason: 'not-found' }
+      }
+      const refusal = moveRefusal(current, params.to) ?? heldByOther(params.id, params.by)
+      if (refusal) {
+        return { ok: false, reason: refusal }
+      }
+      const moved = vertexTaskStore.move(
+        params.id,
+        params.to,
+        params.index ?? Number.MAX_SAFE_INTEGER
+      )
+      return moved ? { ok: true, task: presentTask(moved) } : { ok: false, reason: 'not-ready' }
     }
   }),
   defineMethod({

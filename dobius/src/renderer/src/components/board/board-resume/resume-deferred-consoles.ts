@@ -7,6 +7,8 @@ import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
 import { useAppStore } from '@/store'
 import { getBoard, type BoardCardOf } from '@/store/slices/board'
+import { findWorktreeById } from '@/store/slices/worktree-helpers'
+import { bugFixLaunchOverrides } from '../../../../../shared/bug-fix-agent-profile'
 import {
   resolveTuiAgentLaunchArgs,
   resolveTuiAgentLaunchEnv
@@ -61,6 +63,8 @@ function resumeIntoNewTab(worktreeId: string, card: Console, entry: DeferredBoar
       ? launchConfig.agentEnv
       : resolveTuiAgentLaunchEnv(entry.agent, state.settings?.agentDefaultEnv),
     ...(launchConfig?.agentCommand ? { agentCommand: launchConfig.agentCommand } : {}),
+    // Why last: an auto-fix console resumes only with its restricted profile.
+    ...bugFixLaunchOverrides(entry.agent, findWorktreeById(state.worktreesByRepo, worktreeId)?.path),
     platform: launchPlatform(worktreeId)
   })
   if (!plan) {

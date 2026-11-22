@@ -25,10 +25,11 @@ export type LiveVoiceSettings = {
 }
 
 /**
- * False until the window-side live call (design doc build task 2) lands. While
- * false the orb keeps running the fallback engine even with a key saved.
+ * The live call is built (design doc tasks 1 to 8, tested with fakes). It
+ * still runs only when OpenAI Live is the chosen engine and a key is saved;
+ * otherwise the orb keeps running the fallback engine.
  */
-export const OPENAI_LIVE_CALL_READY = false
+export const OPENAI_LIVE_CALL_READY = true
 
 /** A saved ID as text: anything that is not a string counts as not set. */
 export function persistedVoiceIdText(value: unknown): string {

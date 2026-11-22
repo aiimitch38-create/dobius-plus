@@ -532,6 +532,40 @@ describe('resumeSleepingAgentSessionsForWorktree', async () => {
     expect(startup?.resumeProviderSession).toEqual(record.providerSession)
   })
 
+  it('wakes a Claude session in an auto-fix workspace only with the restricted profile', async () => {
+    const record = makeRecord({
+      agent: 'claude',
+      origin: 'worktree-sleep',
+      // An older, wider captured profile must not come back either.
+      launchConfig: {
+        agentCommand: "claude '--restricted' '--allowedTools' 'Bash(npx vitest run *)'",
+        agentArgs: '',
+        agentEnv: { ANTHROPIC_BASE_URL: 'https://captured.test' }
+      }
+    })
+    useAppStore.setState({
+      settings: {
+        agentCmdOverrides: { claude: 'claude-work' },
+        agentDefaultArgs: { claude: '--dangerously-skip-permissions' },
+        agentDefaultEnv: {}
+      },
+      worktreesByRepo: {
+        'repo-1': [{ id: 'wt-1', repoId: 'repo-1', path: '/ws/autofix-login-abc12345' }]
+      },
+      tabsByWorktree: { 'wt-1': [] },
+      sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
+    } as never)
+
+    expect(await resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
+    const state = useAppStore.getState()
+    const resumedTab = state.tabsByWorktree['wt-1']?.[0]
+    const startup = state.pendingStartupByTabId[resumedTab!.id]
+    expect(startup?.command).toMatch(/^claude '--restricted' '--strict-mcp-config' /)
+    expect(startup?.command).toContain("'--resume' 'sess-1'")
+    expect(startup?.command).not.toMatch(/dangerously|claude-work|vitest/)
+    expect(startup?.env?.ANTHROPIC_BASE_URL).toBeUndefined()
+  })
+
   it('launches once and clears skipped duplicates for the same provider session', async () => {
     const first = makeRecord({
       paneKey: makePaneKey('tab-1', LEAF_ID),

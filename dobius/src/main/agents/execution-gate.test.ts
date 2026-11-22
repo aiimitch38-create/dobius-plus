@@ -13,7 +13,12 @@ import {
   type ExecutionOrigin
 } from './execution-gate'
 
-const AUTONOMOUS: ExecutionOrigin[] = ['agent-run', 'dispatch-build', 'imessage-command']
+const AUTONOMOUS: ExecutionOrigin[] = [
+  'agent-run',
+  'dispatch-build',
+  'imessage-command',
+  'bug-report'
+]
 
 function state(patch: { paused?: boolean; status?: 'ok' | 'missing' | 'unreadable' }) {
   return {
@@ -74,5 +79,22 @@ describe('execution gate', () => {
     expect((caught as Error).name).toBe('ExecutionBlockedError')
     expect(isExecutionBlockedError(caught)).toBe(true)
     expect(isExecutionBlockedError(new Error('x'))).toBe(false)
+  })
+})
+
+describe('blockExecutionOrigin (app quit)', () => {
+  it('refuses a blocked origin and leaves the others alone', async () => {
+    const gate = await import('./execution-gate')
+    gate.blockExecutionOrigin('bug-report')
+    try {
+      expect(gate.checkExecutionAdmission('bug-report')).toMatchObject({
+        allowed: false,
+        reason: 'paused',
+        message: expect.stringContaining('quitting')
+      })
+      expect(gate.checkExecutionAdmission('agents-page')).toEqual({ allowed: true })
+    } finally {
+      gate.unblockExecutionOriginForTest('bug-report')
+    }
   })
 })

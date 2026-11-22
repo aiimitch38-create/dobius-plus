@@ -197,6 +197,9 @@ import type {
   JarvisSpeakOutcome,
   JarvisStateEvent,
   OpenAiLiveSessionResult,
+  LiveDelegateResult,
+  LiveVoiceNotice,
+  LiveVoiceSessionReport,
   SpeechErrorEvent,
   SpeechLifecycleEvent,
   SpeechModelManifest,
@@ -4682,6 +4685,28 @@ const api = {
       ipcRenderer.invoke('jarvis:clearElevenLabsKey'),
     liveSessionConnect: (offerSdp: string): Promise<OpenAiLiveSessionResult> =>
       ipcRenderer.invoke('jarvis:liveSessionConnect', { offerSdp }),
+    liveSessionReport: (report: LiveVoiceSessionReport): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('jarvis:liveSessionReport', report),
+    liveDelegate: (request: {
+      request: string
+      callLines: string[]
+      callToken: string
+    }): Promise<LiveDelegateResult> => ipcRenderer.invoke('jarvis:liveDelegate', request),
+    liveCancel: (payload: { callToken: string }): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('jarvis:liveCancel', payload),
+    liveTranscript: (line: {
+      role: 'user' | 'assistant'
+      text: string
+      itemId: string
+      callToken: string
+    }): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('jarvis:liveTranscript', line),
+    onLiveNotice: (callback: (notice: LiveVoiceNotice) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, notice: LiveVoiceNotice): void =>
+        callback(notice)
+      ipcRenderer.on('jarvis:live-notice', listener)
+      return () => ipcRenderer.removeListener('jarvis:live-notice', listener)
+    },
     cancelAsk: (): Promise<{ ok: true }> => ipcRenderer.invoke('jarvis:cancelAsk'),
     askAdamText: (utterance: string, source?: AdamTurnSource): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:askAdamText', utterance, source),
