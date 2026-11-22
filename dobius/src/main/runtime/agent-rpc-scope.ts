@@ -27,6 +27,9 @@ export const AGENT_RPC_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
   'board.listConsoles',
   'board.resolveConsole',
   'board.agentState',
+  // Crew: only whether it is paused. Decisions and drafts hold tool inputs and
+  // Asana text; every crew change stays full-key only.
+  'crew.state',
   // Orchestration mailbox, task DAG and gates. Starting a coordinator run
   // (orchestration.run) dispatches autonomous workers, so it is not here.
   'orchestration.send',

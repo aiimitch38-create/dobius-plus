@@ -180,7 +180,18 @@ export function getAgentsPaused(): boolean {
   return getAgentsControlState().paused
 }
 
+// Goes up on every pause request (app, CLI or automatic), so a resume that
+// was confirmed before a newer pause can tell it is stale.
+let pauseRevision = 0
+
+export function getAgentsPauseRevision(): number {
+  return pauseRevision
+}
+
 export function setAgentsPaused(paused: boolean): boolean {
+  if (paused) {
+    pauseRevision += 1
+  }
   const current = load()
   if (loadStatus === 'unreadable') {
     if (paused) {

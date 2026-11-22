@@ -7,6 +7,7 @@ import type { DobiusRuntimeService } from '../../dobius-runtime'
 // scope, so each is mocked before the methods module loads it.
 vi.mock('../../../agents/agents-config-store', () => ({
   getAgentsExecutionState: vi.fn(),
+  getAgentsPauseRevision: vi.fn(() => 0),
   setAgentsPaused: vi.fn()
 }))
 vi.mock('../../../agents/agent-decision-queue', () => ({
@@ -31,7 +32,11 @@ vi.mock('../../../agents/agent-runner', () => ({
   stopAgentRun: vi.fn()
 }))
 
-import { getAgentsExecutionState, setAgentsPaused } from '../../../agents/agents-config-store'
+import {
+  getAgentsExecutionState,
+  getAgentsPauseRevision,
+  setAgentsPaused
+} from '../../../agents/agents-config-store'
 import { listAgentDecisions, resolveAgentDecision } from '../../../agents/agent-decision-queue'
 import { discardDraft, getDraft, listDrafts } from '../../../agents/agent-draft-store'
 import { approveDraftAndPost } from '../../../agents/agent-draft-approval'
@@ -95,14 +100,29 @@ describe('crew RPC methods', () => {
     expect(setAgentsPaused).not.toHaveBeenCalled()
   })
 
-  it('passes a resume refusal from the store back to the caller', async () => {
-    vi.mocked(setAgentsPaused).mockImplementation(() => {
-      throw new Error('Crew control file could not be read')
-    })
+  it('refuses to resume an unreadable crew file at once, with no dialog', async () => {
+    vi.mocked(getAgentsExecutionState).mockReturnValue({
+      paused: true,
+      status: 'unreadable',
+      detail: 'EACCES',
+      filePath: '/f.json'
+    } as never)
     await expect(call('crew.setPaused', { paused: false })).resolves.toMatchObject({
       ok: false,
-      error: { message: expect.stringContaining('could not be read') }
+      error: { message: expect.stringContaining('could not be read (/f.json: EACCES)') }
     })
+    expect(confirm).not.toHaveBeenCalled()
+    expect(setAgentsPaused).not.toHaveBeenCalled()
+  })
+
+  it('keeps the crew paused if it was paused again while the resume dialog was open', async () => {
+    vi.mocked(getAgentsPauseRevision).mockReturnValueOnce(3).mockReturnValueOnce(4)
+    await expect(call('crew.setPaused', { paused: false })).resolves.toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining('paused again') }
+    })
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(setAgentsPaused).not.toHaveBeenCalled()
   })
 
   it('lists decisions and resolves approve / deny / respond', async () => {
@@ -150,7 +170,10 @@ describe('crew RPC methods', () => {
     await expect(call('crew.draftApprove', { id: 'dr1' })).resolves.toMatchObject({
       result: { draft: { status: 'approved' } }
     })
-    expect(approveDraftAndPost).toHaveBeenCalledWith('dr1')
+    expect(approveDraftAndPost).toHaveBeenCalledWith('dr1', {
+      body: PENDING_DRAFT.body,
+      target: PENDING_DRAFT.target
+    })
     await expect(call('crew.draftDiscard', { id: 'dr1' })).resolves.toMatchObject({
       result: { draft: { status: 'discarded' } }
     })

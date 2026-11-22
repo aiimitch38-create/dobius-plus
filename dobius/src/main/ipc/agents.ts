@@ -68,6 +68,8 @@ import {
   type ProviderKeyId
 } from '../communications/providers/provider-api-key-store'
 
+import { assertTrustedAppSender } from './trusted-app-sender'
+
 type PrepareClaudeLaunch = (target?: {
   accountId?: string | null
 }) => Promise<ClaudeRuntimeAuthPreparation>
@@ -162,9 +164,10 @@ export function registerAgentsHandlers(
   ipcMain.handle('agents:listDecisions', () => listAgentDecisions())
 
   ipcMain.removeHandler('agents:resolveDecision')
-  ipcMain.handle('agents:resolveDecision', (_event, resolution: AgentDecisionResolution) =>
-    resolveAgentDecision(resolution)
-  )
+  ipcMain.handle('agents:resolveDecision', (event, resolution: AgentDecisionResolution) => {
+    assertTrustedAppSender(event, 'agents:resolveDecision')
+    return resolveAgentDecision(resolution)
+  })
 
   // Why: the Board command bar drives the same conductor the phone uses, so
   // board orders get full agent tooling (spawn, relay, reply) with no new engine.
@@ -208,19 +211,22 @@ export function registerAgentsHandlers(
 
   // Why: approving a draft is the only W2 path that writes an Asana comment, and it is IPC-only.
   ipcMain.removeHandler('agents:approveDraft')
-  ipcMain.handle('agents:approveDraft', (_event, id: string) => approveDraftAndPost(id))
+  ipcMain.handle('agents:approveDraft', (event, id: string) => {
+    assertTrustedAppSender(event, 'agents:approveDraft')
+    return approveDraftAndPost(id)
+  })
 
   ipcMain.removeHandler('agents:getPaused')
   ipcMain.handle('agents:getPaused', () => getAgentsPaused())
 
   ipcMain.removeHandler('agents:getExecutionState')
-  ipcMain.handle(
-    'agents:getExecutionState',
-    (): AgentsExecutionState => getAgentsExecutionState()
-  )
+  ipcMain.handle('agents:getExecutionState', (): AgentsExecutionState => getAgentsExecutionState())
 
   ipcMain.removeHandler('agents:setPaused')
-  ipcMain.handle('agents:setPaused', (_event, paused: boolean) => setAgentsPaused(paused))
+  ipcMain.handle('agents:setPaused', (event, paused: boolean) => {
+    assertTrustedAppSender(event, 'agents:setPaused')
+    return setAgentsPaused(paused)
+  })
 
   ipcMain.removeHandler('agents:getPingStatus')
   ipcMain.handle('agents:getPingStatus', () => getPingStatus())

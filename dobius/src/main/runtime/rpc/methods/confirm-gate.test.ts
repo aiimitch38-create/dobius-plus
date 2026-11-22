@@ -20,6 +20,50 @@ describe('confirmation gate', () => {
     await expect(gate(request, ctx)).rejects.toThrow('Not confirmed in time')
   })
 
+  it('refuses a click that lands after the deadline even if the dialog ignored its signal', async () => {
+    let clock = 0
+    const dialog = vi.fn(async () => {
+      clock = 25_000
+      return true
+    })
+    const gate = createConfirmationGate(dialog, {
+      windowMs: 25_000,
+      cooldownMs: 0,
+      now: () => clock
+    })
+    await expect(gate(request, ctx)).rejects.toThrow('Not confirmed in time')
+  })
+
+  it('refuses an already-cancelled caller without opening a dialog', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const dialog = vi.fn()
+    const gate = createConfirmationGate(dialog)
+    await expect(gate(request, { signal: controller.signal } as RpcContext)).rejects.toThrow(
+      'already cancelled'
+    )
+    expect(dialog).not.toHaveBeenCalled()
+  })
+
+  it('closes the dialog when the caller disconnects and removes its listener', async () => {
+    const controller = new AbortController()
+    const remove = vi.spyOn(controller.signal, 'removeEventListener')
+    let dialogSignal: AbortSignal | undefined
+    const dialog = vi.fn(
+      (_request: unknown, signal: AbortSignal) =>
+        new Promise<boolean>((resolve) => {
+          dialogSignal = signal
+          signal.addEventListener('abort', () => resolve(true))
+        })
+    )
+    const gate = createConfirmationGate(dialog, { cooldownMs: 0 })
+    const pending = gate(request, { signal: controller.signal } as RpcContext)
+    controller.abort()
+    await expect(pending).rejects.toThrow('cancelled while waiting')
+    expect(dialogSignal?.aborted).toBe(true)
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+
   it('waits out a cooldown after a decline', async () => {
     let clock = 1000
     const dialog = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true)

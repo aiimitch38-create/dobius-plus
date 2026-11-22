@@ -8,13 +8,27 @@ import { getDraft, setDraftStatus } from './agent-draft-store'
 // double-post. Claim the id synchronously for the duration of the POST.
 const postingDraftIds = new Set<string>()
 
-export async function approveDraftAndPost(id: string): Promise<AgentDraftComment> {
+// What the human saw and confirmed; posting is refused if the draft differs.
+export type ConfirmedDraftSnapshot = Pick<AgentDraftComment, 'body' | 'target'>
+
+export async function approveDraftAndPost(
+  id: string,
+  confirmed?: ConfirmedDraftSnapshot
+): Promise<AgentDraftComment> {
   const draft = getDraft(id)
   if (!draft) {
     throw new Error('Draft not found')
   }
   if (draft.status !== 'pending') {
     throw new Error('Only pending drafts can be approved')
+  }
+  if (
+    confirmed &&
+    (draft.body !== confirmed.body ||
+      draft.target.kind !== confirmed.target.kind ||
+      draft.target.gid !== confirmed.target.gid)
+  ) {
+    throw new Error('The draft changed after it was confirmed, so it was not posted')
   }
   if (postingDraftIds.has(id)) {
     throw new Error('This draft is already being posted')

@@ -44,11 +44,16 @@ export function createConfirmationGate(
 ): ConfirmationGate {
   const windowMs = options.windowMs ?? CONFIRM_WINDOW_MS
   const cooldownMs = options.cooldownMs ?? CONFIRM_COOLDOWN_MS
-  const now = options.now ?? Date.now
+  // Why: monotonic, so a wall-clock change cannot stretch the window or the
+  // cooldown.
+  const now = options.now ?? (() => performance.now())
   let open = false
-  let blockedUntil = 0
+  let blockedUntil = -Infinity
 
   return async (request, ctx) => {
+    if (ctx.signal?.aborted) {
+      throw new Error('The request was already cancelled, so no confirmation was shown.')
+    }
     if (open) {
       throw new Error('Another confirmation is already open in Dobius+. Answer it first.')
     }
@@ -56,27 +61,40 @@ export function createConfirmationGate(
       throw new Error('The last confirmation was declined. Wait a few seconds before asking again.')
     }
     open = true
+    const deadline = now() + windowMs
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), windowMs)
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, windowMs)
+    // Why: if the caller disconnects, nobody will read the answer, so close
+    // the dialog rather than leave a question that can still be clicked.
+    const onCallerAbort = (): void => controller.abort()
+    ctx.signal?.addEventListener('abort', onCallerAbort, { once: true })
     let accepted = false
     try {
       accepted = await dialog(request, controller.signal)
     } finally {
       clearTimeout(timer)
+      ctx.signal?.removeEventListener('abort', onCallerAbort)
       open = false
     }
-    const expired = controller.signal.aborted
-    if (!accepted || expired) {
+    // Why: the timer can fire late (a busy main thread) and a dialog can
+    // ignore its signal, so the deadline is checked again here.
+    const expired = timedOut || now() >= deadline
+    const callerGone = ctx.signal?.aborted === true
+    if (!accepted || expired || callerGone) {
       blockedUntil = now() + cooldownMs
+    }
+    if (callerGone) {
+      throw new Error('The request was cancelled while waiting for confirmation.')
     }
     if (expired) {
       throw new Error('Not confirmed in time in Dobius+, so nothing was changed.')
     }
     if (!accepted) {
       throw new Error('Not confirmed in Dobius+, so nothing was changed.')
-    }
-    if (ctx.signal?.aborted) {
-      throw new Error('The request was cancelled while waiting for confirmation.')
     }
   }
 }

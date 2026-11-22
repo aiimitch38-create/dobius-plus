@@ -10,7 +10,11 @@
 // IPC may claim the human is working in a tile (see agent-control.ts).
 import { z } from 'zod'
 import type { AgentDecisionResolution } from '../../../../shared/agents'
-import { getAgentsExecutionState, setAgentsPaused } from '../../../agents/agents-config-store'
+import {
+  getAgentsExecutionState,
+  getAgentsPauseRevision,
+  setAgentsPaused
+} from '../../../agents/agents-config-store'
 import { listAgentDecisions, resolveAgentDecision } from '../../../agents/agent-decision-queue'
 import { discardDraft, getDraft, listDrafts } from '../../../agents/agent-draft-store'
 import { approveDraftAndPost } from '../../../agents/agent-draft-approval'
@@ -77,19 +81,31 @@ export function buildCrewMethods(requireConfirmation: ConfirmationGate): RpcMeth
           return { paused: setAgentsPaused(true) }
         }
         const state = getAgentsExecutionState()
-        // Unreadable: setAgentsPaused refuses with the reason, no need to ask.
-        if (state.status !== 'unreadable') {
-          if (!state.paused) {
-            return { paused: false }
-          }
-          await requireConfirmation(
-            {
-              title: 'Resume the agent crew?',
-              message: 'Something outside the app asked to resume the agent crew.',
-              detail: `${describeCaller(ctx)}\n\nAgents, heartbeats and automatic dispatches will start running again.`,
-              confirmLabel: 'Resume crew'
-            },
-            ctx
+        // Why: never call the resume path without a confirmed dialog, even
+        // one that is known to fail; say why here instead.
+        if (state.status === 'unreadable') {
+          throw new Error(
+            `Crew control file could not be read (${state.filePath}: ${state.detail ?? 'unknown problem'}). Fix or remove it, then resume.`
+          )
+        }
+        if (!state.paused) {
+          return { paused: false }
+        }
+        const revision = getAgentsPauseRevision()
+        await requireConfirmation(
+          {
+            title: 'Resume the agent crew?',
+            message: 'Something outside the app asked to resume the agent crew.',
+            detail: `${describeCaller(ctx)}\n\nAgents, heartbeats and automatic dispatches will start running again.`,
+            confirmLabel: 'Resume crew'
+          },
+          ctx
+        )
+        // Why: a pause made while the dialog was open is newer than this
+        // resume and must win.
+        if (getAgentsPauseRevision() !== revision) {
+          throw new Error(
+            'The crew was paused again while the dialog was open, so it stays paused.'
           )
         }
         return { paused: setAgentsPaused(false) }
@@ -146,8 +162,11 @@ export function buildCrewMethods(requireConfirmation: ConfirmationGate): RpcMeth
           },
           ctx
         )
-        // approveDraftAndPost re-checks that the draft is still pending.
-        return { draft: await approveDraftAndPost(params.id) }
+        // Posts only if the draft is still pending and still exactly what the
+        // dialog showed.
+        return {
+          draft: await approveDraftAndPost(params.id, { body: draft.body, target: draft.target })
+        }
       }
     }),
     defineMethod({
