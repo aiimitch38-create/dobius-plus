@@ -192,6 +192,7 @@ import type {
   JarvisAskResult,
   JarvisSpeakOutcome,
   JarvisStateEvent,
+  OpenAiLiveSessionResult,
   SpeechErrorEvent,
   SpeechLifecycleEvent,
   SpeechModelManifest,
@@ -4642,6 +4643,8 @@ const api = {
       ipcRenderer.invoke('jarvis:saveElevenLabsKey', apiKey),
     clearElevenLabsKey: (): Promise<ElevenLabsKeyStatus> =>
       ipcRenderer.invoke('jarvis:clearElevenLabsKey'),
+    liveSessionConnect: (offerSdp: string): Promise<OpenAiLiveSessionResult> =>
+      ipcRenderer.invoke('jarvis:liveSessionConnect', { offerSdp }),
     cancelAsk: (): Promise<{ ok: true }> => ipcRenderer.invoke('jarvis:cancelAsk'),
     askAdamText: (utterance: string, source?: AdamTurnSource): Promise<JarvisAskResult> =>
       ipcRenderer.invoke('jarvis:askAdamText', utterance, source),

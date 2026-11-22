@@ -12,6 +12,10 @@ import { SelfEditStore, selfEditRoots } from './self-edit'
 import { resolveSelfEditRepoRoot } from './self-edit-repo-root'
 import { closeSelfEditWindow, showSelfEditProposal } from '../window/self-edit-window'
 import { fetchAgentSignedUrl } from './elevenlabs-agent'
+import { createOpenAiLiveSession, liveVoiceFailure } from './openai-live-session'
+import type { OpenAiLiveSessionOptions } from './openai-live-session'
+import { OPENAI_LIVE_CALL_READY, resolveLiveVoiceSettings } from '../../shared/live-voice-settings'
+import type { OpenAiLiveFailure } from '../../shared/speech-types'
 import {
   clearElevenLabsApiKey,
   dropLegacyElevenLabsKeyFromSettings,
@@ -128,6 +132,7 @@ export function registerJarvisIpcHandlers(store: Store, mainWindow: BrowserWindo
   const service = getJarvisService(createJarvisDeps(store))
   registerHandlers(store, service)
   registerElevenLabsKeyHandlers(store)
+  registerLiveSessionHandlers(store)
   wireWakeWordObservation(store, service)
   restorePersistedMode(store, service)
 }
@@ -165,6 +170,122 @@ function registerElevenLabsKeyHandlers(store: Store): void {
     dropLegacyElevenLabsKeyFromSettings(store)
     return elevenLabsKeyStatus(store)
   })
+}
+
+function liveSessionOptions(store: Store): OpenAiLiveSessionOptions {
+  // Why from the store, not the window: the window supplies only the offer, so
+  // a compromised renderer cannot pick the voice or switch standby off.
+  const live = resolveLiveVoiceSettings(store.getSettings().voice)
+  return { voice: live.voice, idleTimeoutSec: live.idleTimeoutSec }
+}
+
+// Why one at a time: every created session starts billing, so a double click
+// or a retry loop in the window must not open several at once.
+let liveSessionInFlight = false
+
+type LiveSender = Electron.WebContents
+
+/**
+ * The live session a window currently owns. Holds the one 'destroyed' listener
+ * on the owner so a new owner or a repeat connect replaces it, never stacks it.
+ */
+let activeLiveSession: {
+  owner: LiveSender
+  sessionId: string | null
+  onOwnerDestroyed: () => void
+} | null = null
+
+function clearActiveLiveSession(): void {
+  const current = activeLiveSession
+  activeLiveSession = null
+  current?.owner.removeListener('destroyed', current.onOwnerDestroyed)
+}
+
+function setActiveLiveSession(owner: LiveSender, sessionId: string | null): void {
+  clearActiveLiveSession()
+  const onOwnerDestroyed = (): void => {
+    if (activeLiveSession?.owner === owner) {
+      clearActiveLiveSession()
+    }
+  }
+  owner.once('destroyed', onOwnerDestroyed)
+  activeLiveSession = { owner, sessionId, onOwnerDestroyed }
+}
+
+export function getActiveLiveSessionForTest(): {
+  ownerId: number
+  sessionId: string | null
+} | null {
+  return activeLiveSession
+    ? { ownerId: activeLiveSession.owner.id, sessionId: activeLiveSession.sessionId }
+    : null
+}
+
+// Why checked in main: any frame that can reach ipcRenderer could otherwise
+// start a billed call. Only the main window's top frame may.
+function trustedLiveSender(event: Electron.IpcMainInvokeEvent): LiveSender | null {
+  const host = jarvisHostWindow
+  if (!host || host.isDestroyed()) {
+    return null
+  }
+  const sender = event?.sender
+  if (!sender || sender !== host.webContents || sender.isDestroyed()) {
+    return null
+  }
+  return event.senderFrame && event.senderFrame === sender.mainFrame ? sender : null
+}
+
+async function runLiveSessionOnce<T>(
+  sender: LiveSender,
+  run: (signal: AbortSignal) => Promise<T>
+): Promise<T | OpenAiLiveFailure> {
+  if (liveSessionInFlight) {
+    return liveVoiceFailure('busy')
+  }
+  liveSessionInFlight = true
+  // Why: a create still in flight when its window closes would open a session
+  // nobody can use or hang up, so the request is aborted with the window.
+  const controller = new AbortController()
+  const abort = (): void => controller.abort()
+  sender.once('destroyed', abort)
+  try {
+    return await run(controller.signal)
+  } finally {
+    sender.removeListener('destroyed', abort)
+    liveSessionInFlight = false
+  }
+}
+
+function registerLiveSessionHandlers(store: Store): void {
+  clearActiveLiveSession()
+  ipcMain.removeHandler('jarvis:liveSessionConnect')
+  ipcMain.handle('jarvis:liveSessionConnect', async (event, payload: unknown) => {
+    const sender = trustedLiveSender(event)
+    if (!sender) {
+      return liveVoiceFailure('not-allowed')
+    }
+    const live = resolveLiveVoiceSettings(store.getSettings().voice)
+    if (live.engine !== 'openai-live' || !OPENAI_LIVE_CALL_READY) {
+      return liveVoiceFailure('not-ready')
+    }
+    const offerSdp =
+      payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? (payload as { offerSdp?: unknown }).offerSdp
+        : undefined
+    // createOpenAiLiveSession validates the offer itself and reads the key.
+    const result = await runLiveSessionOnce(sender, (signal) =>
+      createOpenAiLiveSession(offerSdp, liveSessionOptions(store), { signal })
+    )
+    if (result.ok && !sender.isDestroyed()) {
+      setActiveLiveSession(sender, result.sessionId)
+    }
+    return result
+  })
+
+  // Why no connection-test handler: the only way to test the Live API is to
+  // create a session, which bills, and the design doc documents no call to
+  // close one. Settings keeps its test button disabled until that exists.
+  ipcMain.removeHandler('jarvis:liveSessionTest')
 }
 
 function registerHandlers(store: Store, service: JarvisService): void {

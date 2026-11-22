@@ -98,7 +98,51 @@ export type VoiceSettings = {
    * settings trip; set false to go back to the ElevenLabs conversation.
    */
   preferNativeAdamVoice?: boolean
+  /**
+   * Which engine the orb's voice uses; defaults to OpenAI Live. Settings saved
+   * before the choice existed are migrated on load (resolveLiveVoiceEngine).
+   * Without a saved OpenAI key the orb runs the fallback engine instead.
+   */
+  liveVoiceEngine?: LiveVoiceEngine
+  /** OpenAI Live voice name; fixed for the length of one session. */
+  openAiLiveVoice?: string
+  /** Push-to-talk keeps the microphone muted until the shortcut is pressed. */
+  liveVoiceMicMode?: LiveVoiceMicMode
+  /** Daily spending cap for OpenAI Live, in US dollars. */
+  liveVoiceDailyCapUsd?: number
+  /** Seconds of silence before an OpenAI Live session drops to standby. */
+  liveVoiceIdleTimeoutSec?: number
 }
+
+export type LiveVoiceEngine = 'hermes' | 'elevenlabs' | 'openai-live'
+
+export type LiveVoiceMicMode = 'push-to-talk' | 'hands-free'
+
+/** Why a kind: Settings picks plain-English help per cause, not per message. */
+export type OpenAiLiveErrorKind =
+  | 'invalid-offer'
+  | 'busy'
+  | 'not-allowed'
+  | 'not-ready'
+  | 'cancelled'
+  | 'no-key'
+  | 'key-unreadable'
+  | 'bad-key'
+  | 'no-access'
+  | 'no-billing'
+  | 'rate-limited'
+  | 'network'
+  | 'timeout'
+  | 'server'
+  | 'rejected'
+  | 'bad-response'
+
+export type OpenAiLiveFailure = { ok: false; kind: OpenAiLiveErrorKind; error: string }
+
+/** What the window gets back from a session create: never the API key. */
+export type OpenAiLiveSessionResult =
+  | { ok: true; answerSdp: string; sessionId: string | null }
+  | OpenAiLiveFailure
 
 /** ElevenLabs key status sent to Settings; the key itself never is (#24). */
 export type ElevenLabsKeyStatus = {

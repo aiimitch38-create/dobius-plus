@@ -265,6 +265,7 @@ export function VoicePane({ settings, updateSettings }: VoicePaneProps): React.J
         permissionPending={permissionPending}
         onToggleJarvis={() => void toggleJarvis()}
         onUpdateVoiceSettings={updateVoiceSettings}
+        onOpenOpenAiDialog={() => openOpenAiDialog(null)}
       />
 
       <VoiceSpeechModelSection

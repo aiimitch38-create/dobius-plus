@@ -4,11 +4,19 @@ import type { AutomationPrecheck, AutomationPrecheckResult } from '../../shared/
 import { MAX_AUTOMATION_PRECHECK_OUTPUT_CHARS } from '../../shared/automation-precheck'
 import { getSshConnectionManager } from '../ipc/ssh'
 import { shellEscape } from '../ssh/ssh-connection-utils'
+import { stopProcessGroup } from './precheck-process-group'
 
 type AutomationPrecheckExecutionTarget =
   | {
       type: 'local'
       cwd: string
+      /** Omitted = the app's own environment. */
+      env?: NodeJS.ProcessEnv
+      /**
+       * When the command ends, force-kill anything left in its process group
+       * and wait for it to go; the result says if something survived.
+       */
+      requireGroupExit?: boolean
     }
   | {
       type: 'ssh'
@@ -73,6 +81,10 @@ function failedPrecheckResult(
   })
 }
 
+const FORCE_KILL_AFTER_MS = 2000
+/** After a timeout: the force-kill delay plus a moment for `close` to arrive. */
+const SETTLE_AFTER_KILL_MS = FORCE_KILL_AFTER_MS + 1000
+
 function killLocalPrecheckProcessTree(child: ChildProcess): ReturnType<typeof setTimeout> | null {
   const pid = child.pid
   if (!pid) {
@@ -108,7 +120,7 @@ function killLocalPrecheckProcessTree(child: ChildProcess): ReturnType<typeof se
     } catch {
       /* process group already exited */
     }
-  }, 2000)
+  }, FORCE_KILL_AFTER_MS)
   forceKillTimer.unref?.()
   return forceKillTimer
 }
@@ -125,12 +137,12 @@ function runLocalPrecheck(
     let timedOut = false
     let settled = false
     let timeout: ReturnType<typeof setTimeout> | null = null
-    let forceKillTimer: ReturnType<typeof setTimeout> | null = null
+    let settleDeadline: ReturnType<typeof setTimeout> | null = null
 
     const child = spawn(precheck.command, {
       cwd: target.cwd,
       detached: process.platform !== 'win32',
-      env: process.env,
+      env: target.env ?? process.env,
       shell: true,
       windowsHide: true
     })
@@ -144,18 +156,35 @@ function runLocalPrecheck(
         clearTimeout(timeout)
         timeout = null
       }
-      if (forceKillTimer) {
-        clearTimeout(forceKillTimer)
-        forceKillTimer = null
+      // Why forceKillTimer is NOT cleared: a descendant that ignores SIGTERM
+      // and closed its output lets `close` arrive early; the scheduled SIGKILL
+      // of the group must still fire.
+      if (settleDeadline) {
+        clearTimeout(settleDeadline)
+        settleDeadline = null
       }
-      resolve(
-        createPrecheckResult({ precheck, startedAt, stdout, stderr, exitCode, timedOut, error })
-      )
+      const finish = (processGroupAlive: boolean): void =>
+        resolve({
+          ...createPrecheckResult({ precheck, startedAt, stdout, stderr, exitCode, timedOut, error }),
+          ...(processGroupAlive ? { processGroupAlive } : {})
+        })
+      if (target.requireGroupExit) {
+        void stopProcessGroup(child.pid).then(finish)
+      } else {
+        finish(false)
+      }
     }
 
     timeout = setTimeout(() => {
       timedOut = true
-      forceKillTimer = killLocalPrecheckProcessTree(child)
+      killLocalPrecheckProcessTree(child)
+      // Why: `close` waits for stdout/stderr to end, and a descendant that left
+      // the process group keeps them open after the kill. Stop waiting.
+      settleDeadline = setTimeout(() => {
+        child.stdout?.destroy()
+        child.stderr?.destroy()
+        settle(null, `Precheck timed out after ${precheck.timeoutSeconds}s.`)
+      }, SETTLE_AFTER_KILL_MS)
     }, timeoutMs)
 
     child.stdout?.setEncoding('utf8')

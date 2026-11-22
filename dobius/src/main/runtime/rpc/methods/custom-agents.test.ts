@@ -120,6 +120,49 @@ describe('custom agent RPC methods', () => {
     ).resolves.toMatchObject({ ok: false })
   })
 
+  it('passes a trimmed check with a clamped timeout to the run', async () => {
+    const prepare = vi.fn()
+    vi.mocked(getDefaultPrepareClaudeLaunch).mockReturnValue(prepare as never)
+    vi.mocked(startAgentRun).mockResolvedValue('run-1')
+    const dispatcher = makeDispatcher()
+
+    await expect(
+      dispatcher.dispatch(
+        makeRequest('agent.run', {
+          id: 'agent-1',
+          prompt: 'Fix it',
+          postcheck: { command: '  npm test  ', timeoutSeconds: 9000 }
+        })
+      )
+    ).resolves.toMatchObject({ ok: true, result: { runId: 'run-1' } })
+    expect(vi.mocked(startAgentRun).mock.calls[0][0].options).toEqual({
+      source: undefined,
+      sessionKey: undefined,
+      postcheck: { command: 'npm test', timeoutSeconds: 600 }
+    })
+
+    await dispatcher.dispatch(
+      makeRequest('agent.run', { id: 'agent-1', prompt: 'Fix it', postcheck: { command: 'npm test' } })
+    )
+    expect(vi.mocked(startAgentRun).mock.calls[1][0].options?.postcheck).toEqual({
+      command: 'npm test',
+      timeoutSeconds: 60
+    })
+  })
+
+  it.each([
+    ['an empty command', { command: '   ' }],
+    ['an oversized command', { command: 'x'.repeat(501) }],
+    ['a non-text command', { command: 42 }],
+    ['a non-numeric timeout', { command: 'npm test', timeoutSeconds: '60' }]
+  ])('rejects a check with %s and starts nothing', async (_label, postcheck) => {
+    vi.mocked(getDefaultPrepareClaudeLaunch).mockReturnValue(vi.fn() as never)
+    await expect(
+      makeDispatcher().dispatch(makeRequest('agent.run', { id: 'agent-1', prompt: 'Fix it', postcheck }))
+    ).resolves.toMatchObject({ ok: false })
+    expect(startAgentRun).not.toHaveBeenCalled()
+  })
+
   it('filters run history by agent id', async () => {
     const runs = [
       { id: 'run-1', agentId: 'agent-1' },

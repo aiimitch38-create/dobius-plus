@@ -418,6 +418,31 @@ describe('agent sleep coordinator', () => {
     )
   })
 
+  it('skips worktrees owned by a runtime host, which shutdown would refuse', async () => {
+    vi.useFakeTimers()
+    installRuntimeListResponses(
+      runtimeListResult(['pty-1']),
+      runtimeListResult(['pty-1']),
+      runtimeListResult(['pty-1'])
+    )
+    const shutdown = installEligibleState(vi.fn().mockResolvedValue(undefined), {
+      repos: [{ id: 'repo-rt', executionHostId: 'runtime:runtime-1' }] as never,
+      worktreesByRepo: { 'repo-rt': [{ id: 'wt-bg', repoId: 'repo-rt' }] } as never,
+      ptyIdsByTabId: { 'tab-1': [] }
+    })
+    startAgentHibernationCoordinator({ intervalMs: 1000, now: () => NOW })
+
+    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(mockRuntimeEnvironmentCall).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'terminal.list' })
+    )
+    expect(shutdown).not.toHaveBeenCalled()
+    // The shared store outlives this test; later tests assume no repos.
+    useAppStore.setState({ repos: [], worktreesByRepo: {} })
+  })
+
   it('requires fresh runtime liveness for confirmation and pre-shutdown recheck', async () => {
     vi.useFakeTimers()
     installRuntimeListResponses(

@@ -107,6 +107,7 @@ import {
   ONBOARDING_FLOW_VERSION,
   ONBOARDING_FINAL_STEP
 } from '../shared/constants'
+import { normalizeLoadedVoiceSettings } from '../shared/live-voice-settings'
 import {
   parseWorkspaceSession,
   workspaceSessionStateSchema
@@ -3381,10 +3382,7 @@ export class Store {
               migratedSourceControlAi,
               parsed.settings?.commitMessageAi ?? defaults.settings.commitMessageAi
             ),
-            voice: {
-              ...getDefaultVoiceSettings(),
-              ...parsed.settings?.voice
-            }
+            voice: normalizeLoadedVoiceSettings(getDefaultVoiceSettings(), parsed.settings?.voice)
           },
           // Why: 'recent' used to mean the weighted smart sort. One-shot
           // migration moves it to 'smart'; the flag prevents re-firing after

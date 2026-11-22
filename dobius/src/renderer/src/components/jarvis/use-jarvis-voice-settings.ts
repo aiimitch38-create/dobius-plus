@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import type { VoiceSettings } from '../../../../shared/speech-types'
+import {
+  resolveActiveVoiceEngine,
+  resolveLiveVoiceSettings,
+  type LiveVoiceSettings
+} from '../../../../shared/live-voice-settings'
+import type { LiveVoiceEngine, VoiceSettings } from '../../../../shared/speech-types'
 
 export type JarvisVoiceFlags = {
   jarvisEnabled: boolean
@@ -7,8 +12,28 @@ export type JarvisVoiceFlags = {
   jarvisWakeWord: boolean
   /** Non-empty switches ⌘T from one-shot turns to a live agent conversation. */
   agentId: string
-  /** See VoiceSettings.preferNativeAdamVoice — defaults true when unset. */
+  /**
+   * True unless the orb should run the ElevenLabs live conversation. Derived
+   * from activeVoiceEngine, so it already includes the no-key fallback.
+   */
   preferNativeAdamVoice: boolean
+  /** The engine chosen in Settings, plus voice, mic mode, cap and idle timeout. */
+  liveVoice: LiveVoiceSettings
+  /** The engine the orb runs right now; differs from the choice on fallback. */
+  activeVoiceEngine: LiveVoiceEngine
+}
+
+export function toJarvisVoiceFlags(next: VoiceSettings | undefined): JarvisVoiceFlags {
+  const activeVoiceEngine = resolveActiveVoiceEngine(next)
+  return {
+    jarvisEnabled: next?.jarvisEnabled === true,
+    sttModel: next?.sttModel ?? '',
+    jarvisWakeWord: next?.jarvisWakeWord === true,
+    agentId: typeof next?.elevenlabsAgentId === 'string' ? next.elevenlabsAgentId.trim() : '',
+    preferNativeAdamVoice: activeVoiceEngine !== 'elevenlabs',
+    liveVoice: resolveLiveVoiceSettings(next),
+    activeVoiceEngine
+  }
 }
 
 /**
@@ -20,25 +45,13 @@ export function useJarvisVoiceSettings(): {
   flags: JarvisVoiceFlags
   flagsRef: { current: JarvisVoiceFlags }
 } {
-  const [flags, setFlags] = useState<JarvisVoiceFlags>({
-    jarvisEnabled: false,
-    sttModel: '',
-    jarvisWakeWord: false,
-    agentId: '',
-    preferNativeAdamVoice: true
-  })
+  const [flags, setFlags] = useState<JarvisVoiceFlags>(() => toJarvisVoiceFlags(undefined))
   const flagsRef = useRef(flags)
 
   useEffect(() => {
     let cancelled = false
     const applyVoice = (next: VoiceSettings | undefined): void => {
-      const value: JarvisVoiceFlags = {
-        jarvisEnabled: next?.jarvisEnabled === true,
-        sttModel: next?.sttModel ?? '',
-        jarvisWakeWord: next?.jarvisWakeWord === true,
-        agentId: next?.elevenlabsAgentId?.trim() ?? '',
-        preferNativeAdamVoice: next?.preferNativeAdamVoice !== false
-      }
+      const value = toJarvisVoiceFlags(next)
       flagsRef.current = value
       setFlags(value)
     }
