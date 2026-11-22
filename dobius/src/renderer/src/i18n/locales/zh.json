@@ -2132,48 +2132,6 @@
               }
             }
           }
-        },
-        "CloseReasonDropdown": {
-          "e1f2a3b4c5": "选择关闭原因"
-        },
-        "GitHubIssueCommentComposer": {
-          "082515176a": "添加评论失败",
-          "9f88657c4e": "议题已关闭",
-          "e9b7cb7d17": "关闭议题失败",
-          "bd3b4492a0": "议题已重新打开",
-          "f2a8c1d903": "重新打开议题失败",
-          "a1b2c3d4e5": "添加评论",
-          "c5c117270e": "在此添加评论，请保持友善",
-          "f6a7b8c9d0": "关闭议题",
-          "b1c2d3e4f5": "重新打开议题",
-          "0a73f59e85": "发送评论",
-          "bf43425540": "评论",
-          "commentTooLarge": "评论过长，无法安全提交。"
-        },
-        "GitHubWorkItemAssigneePopoverContent": {
-          "cddd9b04a7": "加载负责人",
-          "a00830d3f7": "没有用户",
-          "4f8b6f2c1d": "筛选负责人..."
-        },
-        "GitHubWorkItemLabelPopoverContent": {
-          "2aa9acdf34": "在 GitHub 上编辑标签",
-          "cddd9b04a7": "加载标签",
-          "de26e2eb06": "没有标签",
-          "8b0d52ee3a": "筛选标签..."
-        },
-        "githubIssueCloseReasons": {
-          "completed": {
-            "label": "标记为已完成",
-            "description": "已完成、已关闭、已修复、已解决"
-          },
-          "notPlanned": {
-            "label": "标记为未计划",
-            "description": "不会修复、无法复现、已过时"
-          },
-          "duplicate": {
-            "label": "标记为重复",
-            "description": "与其他议题重复"
-          }
         }
       },
       "linear": {
@@ -2398,15 +2356,6 @@
         },
         "sheet": {
           "1189e9fe0a": "关闭"
-        },
-        "team": {
-          "multi": {
-            "combobox": {
-              "de83523bf9": "没有团队符合您的搜索。",
-              "301f2a796e": "所有团队",
-              "18ec58881e": "搜索团队..."
-            }
-          }
         }
       },
       "terminal": {
@@ -3445,18 +3394,6 @@
         "UsageBreakdownSection": {
           "7765a4c3e1": "n/a",
           "247c93ca92": "• 推理价格"
-        },
-        "UsageSessionsTable": {
-          "1afc25eb06": "轮次",
-          "0f03975d59": "事件",
-          "21ea00bfa8": "缓存",
-          "e0b988599d": "合计",
-          "01476891c7": "最后活跃",
-          "c17bed0416": "项目",
-          "f6a2c8d019": "模型",
-          "faf3444859": "输入",
-          "a8b7487ff7": "输出",
-          "cfe2282ffa": "未知"
         }
       },
       "sparse": {
@@ -4390,42 +4327,9 @@
           }
         },
         "LinearAgentSkillSetupPrompt": {
-          "missingCliAndSkill": "缺少 Dobius+ CLI 和 Linear 智能体技能。",
-          "modalTitle": "启用 Linear ticket 访问",
-          "modalDescription": "从终端安装 Linear 技能。",
-          "modalPrompt": "允许智能体读取和编辑已附加的 Linear ticket。",
-          "dontShowAgain": "不再显示",
-          "notNow": "暂不",
           "missingBoth": "缺少 Dobius+ CLI 和 Linear 智能体技能。",
-          "missingCli": "缺少 Dobius+ CLI。",
-          "missingSkill": "缺少 Linear 智能体技能。",
-          "title": "设置 Linear 智能体技能",
-          "remoteCopy": "这会安装主机设置；远程智能体环境可能需要单独设置。",
-          "hostCopy": "为已链接 Linear 工作的主机智能体交接安装此项。",
-          "dismiss": "关闭 Linear 智能体技能设置",
-          "setup": "设置",
-          "recheck": "重新检查",
           "panelTitle": "Linear 智能体技能",
-          "panelDescription": "安装主机智能体技能，用于已链接 Linear 任务交接。",
-          "terminalTitle": "安装 Linear 智能体技能",
-          "terminalAria": "Linear 智能体技能安装终端",
-          "install": "安装 CLI 和技能",
-          "successTitle": "Linear 议题访问已就绪",
-          "successDescription": "智能体现在可以从此工作区读取和更新已链接的 Linear 议题。",
-          "successDescriptionWsl": "WSL 智能体现在可以从此工作区使用已链接的 Linear 议题。",
-          "successDescriptionRemote": "主机智能体现在可以使用已链接的 Linear 议题。远程智能体环境可能仍需要单独设置。",
-          "successStatus": "Linear 议题访问已就绪",
-          "done": "完成",
-          "wslCopy": "为已链接 Linear 工作的 WSL 智能体交接安装此项。",
-          "wslLabel": "WSL 默认值",
-          "toastMissingCliAndSkill": "缺少 Dobius+ CLI 和 Linear 技能",
-          "toastMissingCli": "缺少 Dobius+ CLI",
-          "toastMissingSkill": "缺少 Linear 技能",
-          "toastInstallCliAndSkillDescription": "安装 Dobius+ CLI 和 Linear 技能，让智能体可以读取并编辑 Linear 任务。",
-          "toastInstallCliDescription": "安装 Dobius+ CLI，让智能体可以读取并编辑 Linear 任务。",
-          "toastInstallSkillDescription": "安装 Linear 技能，让智能体可以通过 Dobius+ CLI 读取并编辑 Linear 任务。",
-          "toastRemoteDescription": "{{value0}} 远程智能体环境可能仍需要自己的设置。",
-          "toastWslDescription": "{{value0}} 此设置会在所选 WSL 智能体运行时中执行。"
+          "panelDescription": "安装主机智能体技能，用于已链接 Linear 任务交接。"
         },
         "FolderWorkspaceComposerDialog": {
           "connectFailed": "无法连接到项目。",
@@ -4912,20 +4816,6 @@
           "a4fa380b67": "{assistantMessage}",
           "2ee2779c05": "{firstPrompt}"
         },
-        "AutoRenameBranchPromptEditor": {
-          "63121132c0": "放弃",
-          "4416b25d29": "优先使用任务中的领域名词，避免工单 ID，并保持名称便于评审人理解。",
-          "39278f4411": ";您的分支前缀设置仍然适用。",
-          "ebb942a2ec": "修复登录流程",
-          "af2d9a2cc6": "。 Dobius+ 仅生成最后一段，例如",
-          "182d419b97": "内置分支名称提示",
-          "2f5dc661fe": "附加到 Dobius+ 的",
-          "7d6176f506": "提示词",
-          "5968112152": "保存",
-          "54ac229ad4": "保存中...",
-          "af0831a590": "已保存",
-          "0691753cf2": "未保存的更改"
-        },
         "BaseRefPicker": {
           "1b8e54151f": "未找到匹配的分支。",
           "d166ff883d": "当前",
@@ -5048,8 +4938,6 @@
           "8671e406f0": "取消",
           "a4aafe46e3": "目标路径：",
           "e8012c03a1": "使智能体能够使用 Dobius+ 工作区、终端和进度命令。",
-          "cliSkillTerminalTitle": "CLI 技能设置",
-          "cliSkillTerminalAria": "CLI 技能安装终端",
           "6053cf736c": "CLI技能",
           "36a6f919ba": "为智能体提供 Dobius+ 感知的工作区、终端和进度工作流程。",
           "04873eea3e": "智能体技能",
@@ -6535,7 +6423,6 @@
           "db270cc9a9": "Cursor 形状",
           "d455f2ef4f": "Dobius+ 终端窗格的默认光标外观。",
           "abcb4dd019": "终端光标",
-          "70beb1bbc7": "预览",
           "31f6e61085": "目前连字",
           "870377082f": "关",
           "84bd22f2cd": "开",
@@ -6545,15 +6432,10 @@
           "400e950ca5": "自动 - 为“{{value0}}”启用。",
           "04569feb07": "始终关闭，即使对于附带它们的字体也是如此。",
           "7234abcd08": "始终开启。没有连字的字体只是按原样渲染。",
-          "7233d594bf": "为发布它们的字体渲染编程连字（例如 =>、!=、===）。 “自动”仅对已知的连字字体（Fira Code、JetBrains Mono、Cascadia Code、Iosevka 等）启用连字。",
-          "bafc80efbc": "控制终端线高度乘数。",
           "c084eb7d4c": "行高",
-          "36af8ad94c": "控制终端文本字体粗细。",
           "4aae5db258": "字体粗细",
-          "f04b17a50e": "新窗格和实时更新的默认终端字体系列。",
           "a408266e67": "字体家族",
           "855a76343a": "从幽灵导入",
-          "711e589f18": "新窗格和实时更新的默认终端排版。",
           "048aac8a64": "终端排版",
           "4415beb958": "已禁用",
           "4e7d41a9f0": "已启用",
@@ -9045,38 +8927,14 @@
             "3c3ad3a1d2": "已启动智能体。选中的评论中没有可在托管平台上标记为已解决的评论。"
           },
           "CreatePullRequestDialog": {
-            "2bc1b4345e": "取消",
-            "27ef4b195c": "在创建 {{value0}} 之前，请选择其他基础分支。",
-            "7ef56f3efe": "创建为草稿",
-            "0c9f9a568c": "支持 Markdown 格式。使用 AI 生成来自动填充您的更改。",
-            "02b2ce911f": "说明（可选）",
-            "1cd53359db": "描述",
-            "68314b4369": "标题",
-            "694550a610": "main",
-            "0fad57a14c": "搜索远程分支或输入分支名称。",
-            "8584ccb43c": "基础分支",
-            "6f5f1962b6": "源分支",
-            "b504b3ceb1": "创建托管评论之前的详细信息。",
-            "f658ff2455": "在创建托管审查之前，请确认目标分支和 {{value0}} 详情。",
-            "b7f43474d7": "创建 {{value0}}",
-            "7a21f0dae8": "打开于 {{value0}}",
-            "edc35a7027": "{{value0}} #{{value1}} 已开放",
-            "a154fe55e6": "推送并创建 {{value0}}",
-            "21c7a1daa0": "{{value0}} 已打开",
-            "db9cee18f7": "创建 {{value0}}"
+            "b504b3ceb1": "创建托管评论之前的详细信息。"
           },
           "CreateHostedReviewComposer": {
             "741ff8a0d2": "推送并创建 {{value0}}"
           },
           "CreatePullRequestGenerateButton": {
-            "4012459f8a": "用 AI 生成",
-            "a0501572c1": "使用 AI 生成 {{value0}} 详细信息",
-            "d47fd63012": "正在生成 {{value0}} 详情。点击停止。",
             "bdf83ccb15": "正在生成 {{value0}}",
-            "f5513bdeb1": "生成",
-            "a6ea6dc3aa": "生成…",
-            "e61d7e7ad4": "停止生成 {{value0}} 详细信息",
-            "e041998cad": "停止生成"
+            "f5513bdeb1": "生成"
           },
           "FileExplorer": {
             "79b1537dd3": "选择一个工作区来浏览文件",
@@ -10102,17 +9960,6 @@
           "yoloPermissionsInfo": "智能体权限信息",
           "yoloPermissionsTooltip": "跳过智能体权限检查，减少打断"
         },
-        "FeatureSetupChecklist": {
-          "77f74946f5": "智能体可互相通信、领取任务并协调交接。",
-          "399cf885c0": "智能体编排",
-          "c5292c409d": "按你的要求，智能体可查看应用窗口并操作本地应用。",
-          "1ecfb490ac": "计算机控制",
-          "01426f3a23": "智能体可浏览网站、检查页面并完成浏览器任务。",
-          "ea85d9e628": "智能体浏览器操控",
-          "linearTicketsTitle": "Linear 智能体技能",
-          "linearTicketsDescription": "智能体可使用已链接的 Linear 任务，完成更了解 ticket 背景的交接。",
-          "linearTicketsSetupSummary": "推荐用于 Linear 工作区；不会影响 Linear 连接设置。"
-        },
         "FeatureSetupInlineTerminal": {
           "789b59936e": "按 Enter 运行命令并在询问时确认 npx。您也可以稍后在“设置”中进行设置。",
           "47fc6cc6dc": "技能设置命令",
@@ -10190,37 +10037,6 @@
           "9f47f345a4": "不会花很长时间的！",
           "e4726b2d50": "跳过入门引导？"
         },
-        "OnboardingTourStep": {
-          "3f9586c043": "开始导览",
-          "60c5576353": "退出导览"
-        },
-        "RepoStep": {
-          "e8fdb36338": "扫描存储库。单击停止。",
-          "b7c4da0504": "SSH？在“设置”中设置主机",
-          "c33b190ca3": "仅服务器路径",
-          "7b679207e4": "工作区",
-          "24c7c8696c": "克隆到服务器路径",
-          "7932e95f68": "克隆",
-          "955134915e": "git@github.com:org/repo.git",
-          "288d8444b7": "粘贴 HTTPS 或 SSH URL。",
-          "132425a3e3": "克隆一个仓库",
-          "6558d50c69": "想要一次导入多个仓库？选择父文件夹。",
-          "831524961f": "选择任何本地目录，无论是否为 git 仓库。",
-          "f4e9c8dcf8": "浏览文件夹",
-          "e8214aa632": "作为文件夹打开",
-          "3863747c56": "添加 Git 项目",
-          "2ebbc26343": "/home/user/project",
-          "466108ab89": "输入运行时服务器上存在的路径。",
-          "8cab104e3c": "打开服务器项目",
-          "2d20200346": "导入存储库",
-          "27ca610db1": "返回",
-          "cecd6593fa": "扫描的文件夹：",
-          "c7af322fc3": "停止扫描",
-          "c3d9d44ca2": "停止扫描",
-          "cf23006ba7": "运行时服务器",
-          "7ec3f48820": "/home/user",
-          "2e6438dd34": "{{value0}}在此文件夹中找到{{value1}} {{value2}}。"
-        },
         "ThemeStep": {
           "a4b254779d": "macOS Option 键",
           "6c51398942": "鼠标",
@@ -10253,9 +10069,6 @@
               "52acfbef51": "无法保存进度"
             }
           }
-        },
-        "AgentFeatureSetupStep": {
-          "97dcdc010f": "安装 CLI 和技能"
         },
         "WindowsTerminalStep": {
           "powerShell": "PowerShell",
@@ -10332,10 +10145,6 @@
             "searchBranches": "搜索分支",
             "searchLinear": "搜索 Linear 议题",
             "workspaceName": "工作区名称"
-          },
-          "ProjectHostSetupCombobox": {
-            "empty": "此项目没有已就绪的主机。",
-            "placeholder": "选择主机"
           },
           "ProjectCombobox": {
             "search": "搜索项目...",
@@ -10654,21 +10463,6 @@
             "cbc45022d4": "使智能体能够在 Dobius+ 浏览器中导航和验证页面。",
             "d5bb1cd4ba": "浏览器使用技能"
           },
-          "ComputerUseAnimatedVisual": {
-            "d8401975b1": "已批准",
-            "f27676a92c": "状态：",
-            "6804cb356f": "点击发送",
-            "1719b28a81": "找到“批准”",
-            "79445f7512": "批准我的应用程序中的注释",
-            "99a8624bcb": ">",
-            "2adb561b44": "Claude Code 会话已开始",
-            "94787f01f8": "Claude Code",
-            "9cddfe96b2": "本地应用程序",
-            "9634d870d1": "批准",
-            "3cc2df3671": "完成",
-            "bdd5312213": "待办的",
-            "c11dda000b": "已批准"
-          },
           "EditorAnimatedVisual": {
             "7a763daf2f": "斜体",
             "8521536429": "粗体 ·",
@@ -10690,41 +10484,7 @@
             "e16479c1c5": "[data-slash-menu] [data-slash-row].slash-active { 背景：rgba(24,24,27,0.07);框阴影：插入 0 0 0 1px rgba(24,24,27,0.06); } [data-md-active-line][data-role=\"active\"] { 颜色：rgb(113 113 122);字体系列：ui-monospace、SFMono-Regular、Menlo、等宽字体；字体大小：12.5px； } [data-md-active-line][data-role=\"h1\"] { 颜色：继承；字体系列：继承；字体大小：18px；字体粗细：700；字母间距：-0.01em；行高：1.2；顶部边距：6px； } [data-md-caret] { 显示：内联块；宽度：1.5px；高度：1em；背景：当前颜色；垂直对齐：-2px；左边距：1px；动画： md-caret-blink 1.05s steps(1) 无限； } @keyframes md-caret-blink { 0%, 50% { 不透明度: 1 } 51%, 100% { 不透明度: 0 } } @keyframes md-block-in { 来自 { 不透明度: 0; }变换：translateY(-2px); } 到 { 不透明度：1；变换：无； } } @keyframes md-cursor-ripple { 0% { 变换：缩放（0.4）;不透明度：0.9； } 100% { 变换：缩放（1.4）；不透明度：0； [data-clicking=\"1\"] [data-cursor-ripple] { 动画：md-cursor-ripple 460ms 向前缓出； }"
           },
           "FeatureTourPreview": {
-            "1170621527": ">",
-            "304ad0dfc1": "思维...",
-            "ef8b164dd1": "审查 src/auth",
-            "952d3ddd9a": "会话开始",
-            "771d8881c2": "claude",
-            "6ed43cb0e0": "仪表板规格.ts",
-            "24fedd5a52": "登录规范",
-            "8279e9d95b": "运行 12 项测试",
-            "6218a9014d": "pnpm剧作家测试",
-            "04d54d50ec": "Dobius+·zsh",
-            "1aa8a9a24a": "可拆分终端",
-            "2a7cfc82c8": "链接到 GH #1842",
-            "3822d8d14b": "修复/worktree-picker-截断",
-            "d54aefe09e": "林-329",
-            "40bbd92ef4": "开始",
-            "c1f28c03b2": "工作树选择器截断",
-            "fc0cc0b267": "GH #1842",
-            "0688842445": "GH#1799",
-            "bee6b4088d": "GitHub 和 Linear 任务",
-            "5171768676": "协调3个智能体",
-            "cebc7769cd": "重新设计身份验证流程",
-            "e44269e97d": "智能体编排",
-            "ec4a73f5e6": "PR 3/3",
-            "cfdfd4d6b4": "PR 2/3",
-            "b1f17bcc74": "PR 1/3",
-            "e38112b289": "重构计费 Webhook",
-            "9c812e0d7c": "加速 CI 管道",
-            "3c4adfd821": "修复登录竞争条件",
-            "56a0271428": "独立的工作区",
-            "ef737dcee1": "GitHub 和 Linear 任务",
-            "ac51c061e2": "codex",
-            "47f16ecf34": "同时推进多项工作。每个工作区都会把分支、终端和智能体活动放在一起。",
-            "70aa182266": "交给一个目标后就可以离开。协调智能体会分发工作并并行交付 PR。",
-            "f10c14dd9d": "跳过来回切换标签页。从 GitHub 或 Linear 待办中挑选任务，一键启动工作区。",
-            "5d6ee181b6": "打开任意工作区即可回到它的终端，然后拆分窗格运行测试、日志和智能体。"
+            "ac51c061e2": "codex"
           },
           "FeatureWallBody": {
             "25ec5356d6": "设置"
@@ -12599,22 +12359,6 @@
       },
       "ShortcutKeyCombo": {
         "07eb4985a1": "双击 {{value0}}"
-      },
-      "star": {
-        "nag": {
-          "StarNagToastHost": {
-            "starredThanks": "已加星，谢谢！",
-            "githubOpened": "已打开 GitHub",
-            "opening": "正在打开…",
-            "starring": "正在加星…",
-            "openGithub": "打开 GitHub",
-            "starOnGithub": "在 GitHub 上加星",
-            "onboardingCompleted": "入门流程已完成！",
-            "body": "如果你目前喜欢 Dobius+，在 GitHub 上加星可以帮助其他开发者发现它。",
-            "dismiss": "关闭",
-            "later": "稍后"
-          }
-        }
       },
       "nativeChat": {
         "contextMenu": {

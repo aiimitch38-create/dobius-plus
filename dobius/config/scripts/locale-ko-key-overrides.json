@@ -1001,9 +1001,6 @@
   "auto.components.feature.wall.BrowserAnimatedVisual.f39be6ca14": {
     "ko": "/signup"
   },
-  "auto.components.feature.wall.ComputerUseAnimatedVisual.6804cb356f": {
-    "ko": "클릭 전송됨"
-  },
   "auto.components.feature.wall.ConnectIntegrationsList.33b650af52": {
     "ko": "팀이 작업을 추적하는 서비스를 연결하세요. Dobius는 이슈 제목, 링크, 컨텍스트가 이미 첨부된 워크스페이스를 시작합니다."
   },
@@ -1042,33 +1039,6 @@
   },
   "auto.components.feature.wall.EditorAnimatedVisual.e16479c1c5": {
     "ko": "[data-slash-menu] [data-slash-row].slash-active { background: rgba(24,24,27,0.07); box-shadow: inset 0 0 0 1px rgba(24,24,27,0.06); } [data-md-active-line][data-role=\"active\"] { color: rgb(113 113 122); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; } [data-md-active-line][data-role=\"h1\"] { color: inherit; font-family: inherit; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; margin-top: 6px; } [data-md-caret] { display: inline-block; width: 1.5px; height: 1em; background: currentColor; vertical-align: -2px; margin-left: 1px; animation: md-caret-blink 1.05s steps(1) infinite; } @keyframes md-caret-blink { 0%, 50% { opacity: 1 } 51%, 100% { opacity: 0 } } @keyframes md-block-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } } @keyframes md-cursor-ripple { 0% { transform: scale(0.4); opacity: 0.9; } 100% { transform: scale(1.4); opacity: 0; } } [data-clicking=\"1\"] [data-cursor-ripple] { animation: md-cursor-ripple 460ms ease-out forwards; }"
-  },
-  "auto.components.feature.wall.FeatureTourPreview.04d54d50ec": {
-    "ko": "dobius · zsh"
-  },
-  "auto.components.feature.wall.FeatureTourPreview.304ad0dfc1": {
-    "ko": "생각 중..."
-  },
-  "auto.components.feature.wall.FeatureTourPreview.3822d8d14b": {
-    "ko": "fix/worktree-picker-truncates"
-  },
-  "auto.components.feature.wall.FeatureTourPreview.47f16ecf34": {
-    "ko": "여러 작업을 동시에 진행하세요. 각 워크스페이스는 브랜치, terminal, agent 활동을 함께 보관합니다."
-  },
-  "auto.components.feature.wall.FeatureTourPreview.5d6ee181b6": {
-    "ko": "워크스페이스를 열어 terminal로 돌아가고, 테스트와 로그, agents 용으로 패널을 나누세요."
-  },
-  "auto.components.feature.wall.FeatureTourPreview.6218a9014d": {
-    "ko": "pnpm playwright test"
-  },
-  "auto.components.feature.wall.FeatureTourPreview.6ed43cb0e0": {
-    "ko": "dashboard.spec.ts"
-  },
-  "auto.components.feature.wall.FeatureTourPreview.70aa182266": {
-    "ko": "목표를 넘겨두고 자리를 비우세요. 코디네이터 agent가 작업을 나누어 병렬 PR을 만듭니다."
-  },
-  "auto.components.feature.wall.FeatureTourPreview.f10c14dd9d": {
-    "ko": "탭을 오갈 필요 없이 GitHub 또는 Linear 백로그에서 선택하고 한 번의 클릭으로 워크스페이스를 시작하세요."
   },
   "auto.components.feature.wall.FeatureTourWorkspaceCard.9220794f6a": {
     "ko": "작업 중"
@@ -1166,36 +1136,6 @@
   "auto.components.feature.wall.review.notes.diff.rows.f621c734f8": {
     "ko": "메모 · 줄"
   },
-  "auto.components.github.CloseReasonDropdown.e1f2a3b4c5": {
-    "ko": "닫기 사유 선택"
-  },
-  "auto.components.github.GitHubIssueCommentComposer.082515176a": {
-    "ko": "댓글을 추가하지 못했습니다"
-  },
-  "auto.components.github.GitHubIssueCommentComposer.0a73f59e85": {
-    "ko": "댓글 보내기"
-  },
-  "auto.components.github.GitHubIssueCommentComposer.9f88657c4e": {
-    "ko": "이슈가 닫혔습니다"
-  },
-  "auto.components.github.GitHubIssueCommentComposer.a1b2c3d4e5": {
-    "ko": "댓글 추가"
-  },
-  "auto.components.github.GitHubIssueCommentComposer.b1c2d3e4f5": {
-    "ko": "이슈 다시 열기"
-  },
-  "auto.components.github.GitHubIssueCommentComposer.bd3b4492a0": {
-    "ko": "이슈가 다시 열렸습니다"
-  },
-  "auto.components.github.GitHubIssueCommentComposer.c5c117270e": {
-    "ko": "댓글을 입력하세요. 서로 배려해 주세요."
-  },
-  "auto.components.github.GitHubIssueCommentComposer.e9b7cb7d17": {
-    "ko": "이슈를 닫지 못했습니다"
-  },
-  "auto.components.github.GitHubIssueCommentComposer.f2a8c1d903": {
-    "ko": "이슈를 다시 열지 못했습니다"
-  },
   "auto.components.github.GitHubMarkdownComposer.8f1c2d4e6a": {
     "ko": "미리 볼 내용이 없습니다"
   },
@@ -1210,27 +1150,6 @@
   },
   "auto.components.github.GitHubMarkdownComposer.e3bd59143c": {
     "ko": "삽입"
-  },
-  "auto.components.github.GitHubWorkItemAssigneePopoverContent.4f8b6f2c1d": {
-    "ko": "담당자 필터..."
-  },
-  "auto.components.github.GitHubWorkItemAssigneePopoverContent.a00830d3f7": {
-    "ko": "사용자 없음"
-  },
-  "auto.components.github.GitHubWorkItemAssigneePopoverContent.cddd9b04a7": {
-    "ko": "담당자 로드 중"
-  },
-  "auto.components.github.GitHubWorkItemLabelPopoverContent.2aa9acdf34": {
-    "ko": "GitHub에서 라벨 편집"
-  },
-  "auto.components.github.GitHubWorkItemLabelPopoverContent.8b0d52ee3a": {
-    "ko": "라벨 필터..."
-  },
-  "auto.components.github.GitHubWorkItemLabelPopoverContent.cddd9b04a7": {
-    "ko": "라벨 로드 중"
-  },
-  "auto.components.github.GitHubWorkItemLabelPopoverContent.de26e2eb06": {
-    "ko": "라벨 없음"
   },
   "auto.components.github.IssueSourceSelector.51d1608920": {
     "ko": "origin"
@@ -1285,21 +1204,6 @@
   },
   "auto.components.github.github.rate.limit.display.f42790d150": {
     "ko": "/"
-  },
-  "auto.components.github.githubIssueCloseReasons.completed.description": {
-    "ko": "완료, 닫힘, 수정됨, 해결됨"
-  },
-  "auto.components.github.githubIssueCloseReasons.duplicate.description": {
-    "ko": "다른 이슈와 중복"
-  },
-  "auto.components.github.githubIssueCloseReasons.duplicate.label": {
-    "ko": "중복으로 닫기"
-  },
-  "auto.components.github.githubIssueCloseReasons.notPlanned.description": {
-    "ko": "수정하지 않음, 재현 불가, 오래됨"
-  },
-  "auto.components.github.githubIssueCloseReasons.notPlanned.label": {
-    "ko": "계획 없음으로 닫기"
   },
   "auto.components.github.pr.merge.state.039c072f94": {
     "ko": "뒤처짐"
@@ -1487,12 +1391,6 @@
   "auto.components.new.workspace.ProjectCombobox.search": {
     "ko": "프로젝트 검색..."
   },
-  "auto.components.new.workspace.ProjectHostSetupCombobox.empty": {
-    "ko": "이 프로젝트에 준비된 호스트가 없습니다."
-  },
-  "auto.components.new.workspace.ProjectHostSetupCombobox.placeholder": {
-    "ko": "호스트 선택"
-  },
   "auto.components.notification.sound.options.0acd3d384e": {
     "ko": "클랙"
   },
@@ -1504,9 +1402,6 @@
   },
   "auto.components.notification.sound.options.86af8d938c": {
     "ko": "봉 소리"
-  },
-  "auto.components.onboarding.AgentFeatureSetupStep.97dcdc010f": {
-    "ko": "기능 활성화"
   },
   "auto.components.onboarding.AgentStep.1eee1c7bd8": {
     "ko": "PATH에서 agents를 찾지 못했습니다. 나중에 설치할 항목을 선택하거나 빈 terminal로 계속 진행하세요."
@@ -1523,12 +1418,6 @@
   "auto.components.onboarding.AgentStep.yoloPermissionsTooltip": {
     "ko": "중단을 줄이기 위해 agents 권한 확인을 건너뜁니다."
   },
-  "auto.components.onboarding.FeatureSetupChecklist.01426f3a23": {
-    "ko": "Agents가 사이트를 탐색하고, 페이지를 검사하고, 브라우저 작업을 처리할 수 있습니다."
-  },
-  "auto.components.onboarding.FeatureSetupChecklist.c5292c409d": {
-    "ko": "Agents는 요청 시 앱 창을 검사하고 로컬 앱을 작동할 수 있습니다."
-  },
   "auto.components.onboarding.IntegrationsStep.0b4a7d23ab": {
     "ko": "로그인 중"
   },
@@ -1540,18 +1429,6 @@
   },
   "auto.components.onboarding.OnboardingFlow.windowsTerminalSubtitle": {
     "ko": "새 창에서 사용할 기본 셸과 terminal에서 오른쪽 클릭이 동작하는 방식을 선택하세요."
-  },
-  "auto.components.onboarding.RepoStep.466108ab89": {
-    "ko": "선택한 호스트에 존재하는 경로를 입력하세요."
-  },
-  "auto.components.onboarding.RepoStep.6558d50c69": {
-    "ko": "한 번에 여러 repos를 가져오고 싶으신가요? 상위 폴더를 선택하세요."
-  },
-  "auto.components.onboarding.RepoStep.c33b190ca3": {
-    "ko": "호스트 경로만"
-  },
-  "auto.components.onboarding.RepoStep.cf23006ba7": {
-    "ko": "선택한 호스트"
   },
   "auto.components.onboarding.ThemeStep.7ee9234e54": {
     "ko": "Ghostty 설정을 찾았습니다."
@@ -1816,12 +1693,6 @@
   },
   "auto.components.right.sidebar.ChecksPanel.fdb27637f2": {
     "ko": "게시 중…"
-  },
-  "auto.components.right.sidebar.CreatePullRequestDialog.6f5f1962b6": {
-    "ko": "헤드 브랜치"
-  },
-  "auto.components.right.sidebar.CreatePullRequestDialog.7a21f0dae8": {
-    "ko": "{{value0}}에서 열기"
   },
   "auto.components.right.sidebar.FileExplorerRow.3161c4e425": {
     "ko": "폴더"
@@ -2161,9 +2032,6 @@
   },
   "auto.components.settings.AutoRenameBranchFromWorkSetting.a4fa380b67": {
     "ko": "{assistantMessage}"
-  },
-  "auto.components.settings.AutoRenameBranchPromptEditor.ebb942a2ec": {
-    "ko": "fix-login-flow"
   },
   "auto.components.settings.BaseRefPicker.915ad97875": {
     "ko": "upstream"
@@ -2755,12 +2623,6 @@
   },
   "auto.components.settings.TerminalAppearanceSection.52854a5608": {
     "ko": "블록"
-  },
-  "auto.components.settings.TerminalAppearanceSection.70beb1bbc7": {
-    "ko": "미리보기"
-  },
-  "auto.components.settings.TerminalAppearanceSection.711e589f18": {
-    "ko": "새 패널 및 실시간 업데이트에 사용할 기본 terminal 타이포그래피입니다."
   },
   "auto.components.settings.TerminalAppearanceSection.84bd22f2cd": {
     "ko": "켜짐"
@@ -4484,30 +4346,6 @@
   "auto.components.sparse.SparseCheckoutPresetSelect.ddbcaef7be": {
     "ko": "src/renderer packages/ui"
   },
-  "auto.components.star.nag.StarNagToastHost.body": {
-    "ko": "Dobius가 마음에 드신다면 GitHub 별표가 다른 개발자가 Dobius를 발견하는 데 도움이 됩니다."
-  },
-  "auto.components.star.nag.StarNagToastHost.githubOpened": {
-    "ko": "GitHub 열림"
-  },
-  "auto.components.star.nag.StarNagToastHost.onboardingCompleted": {
-    "ko": "온보딩 완료!"
-  },
-  "auto.components.star.nag.StarNagToastHost.openGithub": {
-    "ko": "GitHub 열기"
-  },
-  "auto.components.star.nag.StarNagToastHost.opening": {
-    "ko": "여는 중…"
-  },
-  "auto.components.star.nag.StarNagToastHost.starOnGithub": {
-    "ko": "GitHub에서 별표 누르기"
-  },
-  "auto.components.star.nag.StarNagToastHost.starredThanks": {
-    "ko": "별표를 눌러주셔서 감사합니다!"
-  },
-  "auto.components.star.nag.StarNagToastHost.starring": {
-    "ko": "별표 누르는 중…"
-  },
   "auto.components.stats.ClaudeUsagePane.cfe2282ffa": {
     "ko": "알 수 없음"
   },
@@ -4570,21 +4408,6 @@
   },
   "auto.components.stats.UsageOverviewPane.e06d1baf5c": {
     "ko": "사용량 개요 새로고침"
-  },
-  "auto.components.stats.UsageSessionsTable.01476891c7": {
-    "ko": "마지막 활동"
-  },
-  "auto.components.stats.UsageSessionsTable.0f03975d59": {
-    "ko": "이벤트"
-  },
-  "auto.components.stats.UsageSessionsTable.1afc25eb06": {
-    "ko": "턴"
-  },
-  "auto.components.stats.UsageSessionsTable.21ea00bfa8": {
-    "ko": "캐시"
-  },
-  "auto.components.stats.UsageSessionsTable.e0b988599d": {
-    "ko": "합계"
   },
   "auto.components.stats.share.card.utils.19f4b4dc75": {
     "ko": "github.com/statusdigitalmarketing/dobius-plus"
@@ -4933,9 +4756,6 @@
   },
   "auto.components.ui.color.picker.faa855a582": {
     "ko": "Hex"
-  },
-  "auto.components.ui.team.multi.combobox.18ec58881e": {
-    "ko": "팀 검색..."
   },
   "auto.components.workspace.cleanup.WorkspaceCleanupDialog.1b18868569": {
     "ko": "리뷰 필요"
