@@ -22,6 +22,8 @@ import {
   CONFIRM_TEXT_LIMIT,
   confirmText,
   describeCaller,
+  hasHiddenCharacters,
+  HIDDEN_CHARACTERS_MESSAGE,
   type ConfirmationGate
 } from './confirm-gate'
 import { appConfirmationGate } from './crew-confirm'
@@ -40,13 +42,20 @@ const KnowledgeRead = z.object({ path: requiredString('Missing knowledge file pa
 
 const Feedback = z
   .object({
+    // Why refuse hidden characters: the dialog would not show them, but they
+    // would leave the Mac with the text.
     text: z
       .string()
-      .trim()
-      .min(1, 'Missing feedback text')
-      .max(
-        CONFIRM_TEXT_LIMIT,
-        `Feedback is too long to confirm (over ${CONFIRM_TEXT_LIMIT} characters); use Report a problem in the app`
+      .refine((value) => !hasHiddenCharacters(value), HIDDEN_CHARACTERS_MESSAGE)
+      .transform((value) => value.trim())
+      .pipe(
+        z
+          .string()
+          .min(1, 'Missing feedback text')
+          .max(
+            CONFIRM_TEXT_LIMIT,
+            `Feedback is too long to confirm (over ${CONFIRM_TEXT_LIMIT} characters); use Report a problem in the app`
+          )
       )
   })
   .strict()
@@ -141,7 +150,20 @@ export function buildAppServiceMethods(
           },
           ctx
         )
-        // start() refuses again if a backup began while the dialog was open.
+        // Why re-read: the dialog named a bucket and region; if backups were
+        // reconnected elsewhere while it was open, that approval no longer fits.
+        // start() itself refuses if a backup began meanwhile.
+        const after = controller.getStatus()
+        if (
+          !after.configured ||
+          after.bucket !== before.bucket ||
+          after.region !== before.region ||
+          after.repository !== before.repository
+        ) {
+          throw new Error(
+            'The backup settings changed while the dialog was open, so nothing was started. Run it again.'
+          )
+        }
         return controller.start('run')
       }
     }),

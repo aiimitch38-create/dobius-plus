@@ -33,7 +33,7 @@ export function formatAccounts(snapshot: AccountsSnapshot): string {
 
 export const ACCOUNT_HANDLERS: Record<string, CommandHandler> = {
   'accounts list': async ({ client, json }) => {
-    const result = await client.call<AccountsSnapshot>('accounts.list')
+    const result = await client.call<AccountsSnapshot>('accounts.summary')
     printResult(result, json, formatAccounts)
   },
   'accounts use': async ({ flags, client, json }) => {

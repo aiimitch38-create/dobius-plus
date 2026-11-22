@@ -406,10 +406,14 @@ function isLongPollRequest(request: RpcRequest): boolean {
     const params = request.params as { wait?: unknown } | undefined
     return params?.wait === true
   }
-  // Why: `dobius adam ask --wait` holds the socket for ADAM's whole turn (minutes).
+  // Why: `dobius adam ask --wait` holds the socket for ADAM's whole turn
+  // (minutes), and `adam say` for the dialog plus the whole spoken reply.
   if (request.method === 'adam.ask') {
     const params = request.params as { wait?: unknown } | undefined
     return params?.wait === true
+  }
+  if (request.method === 'adam.say') {
+    return true
   }
   return false
 }

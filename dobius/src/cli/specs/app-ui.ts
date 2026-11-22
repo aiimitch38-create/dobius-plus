@@ -12,7 +12,7 @@ export const APP_UI_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'key'],
     positionalArgs: ['key'],
     notes: [
-      'Agent environment values are always hidden, and keys or tokens inside agent commands and arguments are masked.',
+      'Agent commands, launch arguments and environment values are always hidden; only whether one is set is shown.',
       'Give a key to show only that setting.'
     ],
     examples: ['dobius settings get', 'dobius settings get defaultTuiAgent --json']

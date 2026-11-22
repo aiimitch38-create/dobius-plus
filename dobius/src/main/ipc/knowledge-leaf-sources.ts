@@ -1,4 +1,13 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readSync,
+  statSync
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join, relative, sep } from 'node:path'
 import type { Store } from '../persistence'
@@ -29,14 +38,33 @@ export function safeReadDir(dir: string): string[] {
   }
 }
 
+// Why the descriptor: opening non-blocking and checking that very descriptor
+// means a FIFO or device dropped into a knowledge folder (or swapped in after
+// a check) can never block the main process.
 export function safeReadFile(filePath: string, maxBytes = MAX_READ_BYTES): string | null {
+  let fd: number | null = null
   try {
-    if (statSync(filePath).size > maxBytes) {
+    fd = openSync(filePath, constants.O_RDONLY | constants.O_NONBLOCK)
+    const stat = fstatSync(fd)
+    if (!stat.isFile() || stat.size > maxBytes) {
       return null
     }
-    return readFileSync(filePath, 'utf-8')
+    const buffer = Buffer.alloc(stat.size)
+    let read = 0
+    while (read < stat.size) {
+      const count = readSync(fd, buffer, read, stat.size - read, read)
+      if (count === 0) {
+        break
+      }
+      read += count
+    }
+    return buffer.subarray(0, read).toString('utf-8')
   } catch {
     return null
+  } finally {
+    if (fd !== null) {
+      closeSync(fd)
+    }
   }
 }
 

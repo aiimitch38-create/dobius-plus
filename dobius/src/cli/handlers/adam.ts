@@ -95,9 +95,12 @@ export const ADAM_HANDLERS: Record<string, CommandHandler> = {
   },
   'adam say': async ({ flags, client, json }) => {
     noteWaitingForConfirmation(json)
-    const result = await client.call<JarvisSpeakOutcome>('adam.say', {
-      text: getRequiredStringFlag(flags, 'text')
-    })
+    // Why the long timeout: the reply comes back only after ADAM finished speaking.
+    const result = await client.call<JarvisSpeakOutcome>(
+      'adam.say',
+      { text: getRequiredStringFlag(flags, 'text') },
+      { timeoutMs: ADAM_ASK_WAIT_TIMEOUT_MS }
+    )
     printResult(result, json, (value) =>
       value.played ? 'Said it.' : `ADAM could not say it${value.reason ? `: ${value.reason}` : ''}.`
     )

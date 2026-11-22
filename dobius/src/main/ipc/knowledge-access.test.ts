@@ -1,8 +1,10 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readKnowledgeFileWithin } from './knowledge-access'
+import { filterKnowledgeTree, readKnowledgeFileWithin } from './knowledge-access'
+import { safeReadFile } from './knowledge-leaf-sources'
 
 let dir: string
 let root: string
@@ -53,5 +55,52 @@ describe('readKnowledgeFileWithin', () => {
     expect(() => readKnowledgeFileWithin(join(root, 'notes.txt'), [root])).toThrow(/Markdown/)
     expect(() => readKnowledgeFileWithin('notes.md', [root])).toThrow(/full path/)
     expect(() => readKnowledgeFileWithin(join(root, 'missing.md'), [root])).toThrow(/Could not/)
+  })
+
+  it('never blocks on a FIFO named like a knowledge file', () => {
+    const fifo = join(root, 'pipe.md')
+    execFileSync('mkfifo', [fifo])
+    expect(safeReadFile(fifo)).toBeNull()
+    expect(() => readKnowledgeFileWithin(fifo, [root])).toThrow(/Could not read/)
+  })
+})
+
+describe('filterKnowledgeTree', () => {
+  it('drops leaves that knowledge read would refuse, with their links and group ids', () => {
+    const leaf = (id: string, filePath: string) => ({
+      id,
+      title: id,
+      summary: `summary of ${id}`,
+      filePath,
+      icon: '',
+      links: ['ok', 'secret', 'link'],
+      addedAt: 0
+    })
+    const tree = filterKnowledgeTree(
+      {
+        hubLabel: 'Knowledge',
+        hubSub: '',
+        branches: [
+          {
+            id: 'docs',
+            label: 'Docs',
+            sub: '',
+            totalCount: 3,
+            leaves: [
+              leaf('ok', join(root, 'notes.md')),
+              leaf('secret', join(root, 'api-keys.md')),
+              leaf('link', join(root, 'link.md'))
+            ],
+            groups: [{ id: 'g', label: 'g', leafIds: ['ok', 'secret', 'link'] }]
+          }
+        ]
+      },
+      [root]
+    )
+    const [branch] = tree.branches
+    expect(branch.leaves.map((entry) => entry.id)).toEqual(['ok'])
+    expect(branch.leaves[0].links).toEqual(['ok'])
+    expect(branch.groups[0].leafIds).toEqual(['ok'])
+    expect(JSON.stringify(tree)).not.toContain('summary of secret')
   })
 })

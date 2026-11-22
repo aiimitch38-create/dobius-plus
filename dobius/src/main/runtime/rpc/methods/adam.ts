@@ -24,6 +24,8 @@ import {
   CONFIRM_TEXT_LIMIT,
   confirmText,
   describeCaller,
+  hasHiddenCharacters,
+  HIDDEN_CHARACTERS_MESSAGE,
   type ConfirmationGate
 } from './confirm-gate'
 import { appConfirmationGate } from './crew-confirm'
@@ -33,16 +35,9 @@ export const ADAM_SAY_PREFIX = 'A command-line tool asked me to say: '
 // The dialog must show the whole spoken line, prefix included.
 const MAX_SAY_CHARS = CONFIRM_TEXT_LIMIT - ADAM_SAY_PREFIX.length
 
-// Why: the dialog strips control, format, bidi and zero-width characters
-// before showing text, but ADAM would get them, so instructions could hide
-// in them. Such text is refused outright; newline and tab are allowed.
-const HIDDEN_CHARACTER = /[\p{Cc}\p{Cf}\u2028\u2029]/u
-export function hasHiddenCharacters(value: string): boolean {
-  return Array.from(value).some(
-    (character) => character !== '\n' && character !== '\t' && HIDDEN_CHARACTER.test(character)
-  )
-}
-const HIDDEN_MESSAGE = 'Text has hidden or control characters; remove them and send it again'
+// Why: the dialog strips hidden characters before showing text, but ADAM
+// would get them, so instructions could hide in them (confirm-gate.ts).
+const HIDDEN_MESSAGE = HIDDEN_CHARACTERS_MESSAGE
 
 const Ask = z
   .object({

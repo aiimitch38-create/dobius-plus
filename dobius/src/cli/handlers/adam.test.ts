@@ -80,7 +80,7 @@ describe('adam CLI', () => {
 
   it('say and status call their methods; --json prints the raw envelope', async () => {
     let call = await run(['adam', 'say', '--text', 'Done'], { played: true })
-    expect(call).toHaveBeenCalledWith('adam.say', { text: 'Done' })
+    expect(call).toHaveBeenCalledWith('adam.say', { text: 'Done' }, { timeoutMs: 240_000 })
     call = await run(['adam', 'status', '--json'], { busy: true, voiceReady: false }, true)
     expect(call).toHaveBeenCalledWith('adam.status')
     expect(JSON.parse(logged.at(-1) ?? '')).toMatchObject({ result: { busy: true } })

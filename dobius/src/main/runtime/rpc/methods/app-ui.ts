@@ -1,7 +1,7 @@
 // Settings and window navigation over RPC (CLI `dobius settings get|set`,
 // `dobius view open`).
-// - settings.read is the same view as settings.get with every agent
-//   environment value hidden and secret-looking command arguments masked.
+// - settings.read is the same view as settings.get with every agent command,
+//   argument and environment value hidden (only whether one is set shows).
 // - settings.set changes ONE key from a fixed allowlist. Agent launch args and
 //   env (secrets, sandbox flags), agent status hooks (terminal delivery relies
 //   on them), provider account ids and everything outside the client settings
@@ -14,6 +14,7 @@ import { isTaskProvider } from '../../../../shared/task-providers'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import { normalizeDisabledTuiAgents } from '../../../../shared/tui-agent-selection'
 import type { DobiusRuntimeService } from '../../dobius-runtime'
+import { publicRateLimitState } from '../../../ipc/usage-access'
 import { defineMethod, type RpcMethod } from '../core'
 
 const TaskProvider = z.custom<string>(isTaskProvider, { message: 'Unknown task provider' })
@@ -49,63 +50,32 @@ function isSettableKey(key: string): key is SettableSettingKey {
 const SettingsSet = z.object({ key: z.string().min(1).max(100), value: z.unknown() }).strict()
 
 const HIDDEN = '[hidden]'
-// A flag whose value is a secret, written `--api-key x` or `--api-key=x`.
-const SECRET_FLAG = /(key|token|secret|password|passwd|credential|auth|cookie)/i
-// A bare value that looks like a key: long runs of key characters, or known prefixes.
-const SECRET_VALUE = /^(sk-|ghp_|gho_|github_pat_|xox[abpr]-|AKIA|AIza)|^[A-Za-z0-9_\-+/=]{32,}$/
 
-/** Masks secret-looking parts of a command line: flagged values and key-shaped words. */
-export function maskCommandLine(command: string): string {
-  const words = command.split(/(\s+)/)
-  let hideNext = false
-  return words
-    .map((word) => {
-      if (/^\s+$/.test(word) || word === '') {
-        return word
-      }
-      if (hideNext) {
-        hideNext = false
-        return HIDDEN
-      }
-      const flag = /^(--?[A-Za-z0-9_-]+)(=(.*))?$/.exec(word)
-      if (flag && SECRET_FLAG.test(flag[1])) {
-        if (flag[2] !== undefined) {
-          return `${flag[1]}=${HIDDEN}`
-        }
-        hideNext = true
-        return word
-      }
-      const assignment = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(word)
-      if (assignment && SECRET_FLAG.test(assignment[1])) {
-        return `${assignment[1]}=${HIDDEN}`
-      }
-      return SECRET_VALUE.test(word.replace(/^['"]|['"]$/g, '')) ? HIDDEN : word
-    })
-    .join('')
-}
-
-function maskRecord(value: unknown, mask: (text: string) => string): Record<string, string> {
+// Why whole values: a command line can hold a key in any shape (quoted
+// flags, JSON, env assignments), so no pattern can promise to find it. The
+// command line only says whether an override exists; read it in the app.
+function hideValues(value: unknown): Record<string, string> {
   const out: Record<string, string> = {}
   if (value && typeof value === 'object') {
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = typeof entry === 'string' ? mask(entry) : HIDDEN
+      out[key] = entry === '' || entry === undefined || entry === null ? '' : HIDDEN
     }
   }
   return out
 }
 
-/** settings.get with secrets taken out: env values always, command-line secrets masked. */
+/** settings.get with every agent command, argument and env value hidden. */
 export function redactClientSettings(
   settings: ReturnType<DobiusRuntimeService['getClientSettings']>
 ): Record<string, unknown> {
   const env: Record<string, Record<string, string>> = {}
   for (const [agent, vars] of Object.entries(settings.agentDefaultEnv ?? {})) {
-    env[agent] = maskRecord(vars, () => HIDDEN)
+    env[agent] = hideValues(vars)
   }
   return {
     ...settings,
-    agentCmdOverrides: maskRecord(settings.agentCmdOverrides, maskCommandLine),
-    agentDefaultArgs: maskRecord(settings.agentDefaultArgs, maskCommandLine),
+    agentCmdOverrides: hideValues(settings.agentCmdOverrides),
+    agentDefaultArgs: hideValues(settings.agentDefaultArgs),
     agentDefaultEnv: env
   }
 }
@@ -160,6 +130,17 @@ export function buildAppUiMethods(deps: AppUiDeps = LIVE_DEPS): RpcMethod[] {
           [params.key]: parsed.data
         } as Parameters<DobiusRuntimeService['updateClientSettings']>[0])
         return { key: params.key, value: (updated as Record<string, unknown>)[params.key] }
+      }
+    }),
+    defineMethod({
+      // Why not accounts.list: that snapshot carries each provider's raw
+      // `/usage` CLI screen text (cliOutput), which can hold account details.
+      name: 'accounts.summary',
+      params: null,
+      handler: async (_params, { runtime }) => {
+        await runtime.refreshAccountsForMobile()
+        const snapshot = runtime.getAccountsSnapshot()
+        return { ...snapshot, rateLimits: publicRateLimitState(snapshot.rateLimits) }
       }
     }),
     defineMethod({

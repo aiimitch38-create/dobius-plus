@@ -102,6 +102,23 @@ describe('app service RPC methods', () => {
     expect(confirm).not.toHaveBeenCalled()
   })
 
+  it('does not start a backup whose destination changed while the dialog was open', async () => {
+    confirm.mockImplementation(async () => {
+      backup.getStatus.mockReturnValue({ ...CONFIGURED, bucket: 'other-bucket' })
+      return true
+    })
+    expect(JSON.stringify(await call('backup.run'))).toContain('settings changed')
+    expect(backup.start).not.toHaveBeenCalled()
+  })
+
+  it('refuses feedback with hidden characters before any dialog', async () => {
+    for (const text of ['hi\u200b', 'tag\u{E0041}', 'rtl\u202e']) {
+      expect(JSON.stringify(await call('feedback.submit', { text }))).toContain('hidden')
+    }
+    expect(confirm).not.toHaveBeenCalled()
+    expect(submitFeedback).not.toHaveBeenCalled()
+  })
+
   it('sends feedback only after confirming, and reports a failed send', async () => {
     expect(await call('feedback.submit', { text: 'Board froze' })).toMatchObject({
       ok: true,

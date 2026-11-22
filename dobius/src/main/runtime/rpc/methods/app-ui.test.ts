@@ -5,12 +5,15 @@ import type { DobiusRuntimeService } from '../../dobius-runtime'
 
 vi.mock('electron', () => ({ BrowserWindow: { fromId: vi.fn() } }))
 
-import { buildAppUiMethods, maskCommandLine } from './app-ui'
+import { buildAppUiMethods } from './app-ui'
 
 const SETTINGS = {
   defaultTuiAgent: 'claude',
   agentCmdOverrides: { claude: 'claude --api-key sk-abc123 --model opus' },
-  agentDefaultArgs: { codex: '--token=abcd TOKEN=zzz --fast' },
+  agentDefaultArgs: {
+    codex: '--token=abcd TOKEN=zzz --fast',
+    claude: `--token="Bearer test-token" '{"apiKey":"short-test-key"}'`
+  },
   agentDefaultEnv: { claude: { ANTHROPIC_API_KEY: 'sk-live', HTTP_PROXY: 'http://x' } },
   agentStatusHooksEnabled: true,
   compactWorktreeCards: false
@@ -18,6 +21,21 @@ const SETTINGS = {
 const updateClientSettings = vi.fn((patch: Record<string, unknown>) => ({ ...SETTINGS, ...patch }))
 const runtime = {
   getRuntimeId: () => 'test-runtime',
+  refreshAccountsForMobile: vi.fn(async () => undefined),
+  getAccountsSnapshot: () => ({
+    claude: { accounts: [], activeAccountId: null },
+    codex: { accounts: [], activeAccountId: null },
+    rateLimits: {
+      claude: { status: 'ok', cliOutput: 'Signed in as carson@example.com' },
+      codex: null,
+      gemini: null,
+      opencodeGo: null,
+      kimi: null,
+      minimax: null,
+      inactiveClaudeAccounts: [{ accountId: 'a', rateLimits: { cliOutput: 'raw screen' } }],
+      inactiveCodexAccounts: []
+    }
+  }),
   getClientSettings: () => SETTINGS,
   updateClientSettings
 } as unknown as DobiusRuntimeService
@@ -43,30 +61,23 @@ describe('settings and view RPC methods', () => {
     windowOpen = true
   })
 
-  it('reads settings with every env value hidden and command secrets masked', async () => {
+  it('reads settings with every agent command, argument and env value hidden', async () => {
     const response = await call('settings.read')
     const text = JSON.stringify(response)
-    expect(text).not.toContain('sk-live')
-    expect(text).not.toContain('sk-abc123')
-    expect(text).not.toContain('abcd')
-    expect(text).not.toContain('zzz')
+    for (const secret of ['sk-live', 'sk-abc123', 'abcd', 'zzz', 'test-token', 'short-test-key']) {
+      expect(text).not.toContain(secret)
+    }
     expect(response).toMatchObject({
       ok: true,
       result: {
         settings: {
           agentDefaultEnv: { claude: { ANTHROPIC_API_KEY: '[hidden]', HTTP_PROXY: '[hidden]' } },
-          agentCmdOverrides: { claude: 'claude --api-key [hidden] --model opus' }
+          agentCmdOverrides: { claude: '[hidden]' },
+          agentDefaultArgs: { codex: '[hidden]', claude: '[hidden]' },
+          defaultTuiAgent: 'claude'
         }
       }
     })
-  })
-
-  it('masks key-shaped words and secret flags in command lines', () => {
-    expect(maskCommandLine('run --password hunter2 --verbose')).toBe(
-      'run --password [hidden] --verbose'
-    )
-    expect(maskCommandLine('x ghp_abcdefghijklmnop')).toBe('x [hidden]')
-    expect(maskCommandLine('--model opus')).toBe('--model opus')
   })
 
   it('sets an allowlisted key after checking its value', async () => {
@@ -99,6 +110,13 @@ describe('settings and view RPC methods', () => {
       expect(JSON.stringify(response)).toContain('cannot be changed from the command line')
     }
     expect(updateClientSettings).not.toHaveBeenCalled()
+  })
+
+  it('accounts.summary drops the raw CLI usage screen text', async () => {
+    const response = await call('accounts.summary')
+    expect(response).toMatchObject({ ok: true, result: { rateLimits: { claude: { status: 'ok' } } } })
+    expect(JSON.stringify(response)).not.toContain('carson@example.com')
+    expect(JSON.stringify(response)).not.toContain('raw screen')
   })
 
   it('opens a view in the main window, or says the window is closed', async () => {

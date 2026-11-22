@@ -48,11 +48,12 @@ function within(root: string, path: string): string | null {
 }
 
 /**
- * Reads a knowledge file for the runtime RPC. The real path (symlinks
- * followed) must be a .md file inside the real path of a knowledge root, and
- * no part of it below that root may look like a secret.
+ * The real path of a knowledge file the runtime RPC may show. The real path
+ * (symlinks followed) must be a .md file inside the real path of a knowledge
+ * root, and no part of it below that root may look like a secret. Throws a
+ * plain-English reason otherwise.
  */
-export function readKnowledgeFileWithin(filePath: unknown, roots: string[]): KnowledgeReadResult {
+function allowedKnowledgeRealPath(filePath: unknown, roots: string[]): string {
   if (typeof filePath !== 'string' || !filePath || filePath.length > MAX_PATH_CHARS) {
     throw new Error('Give the full path of a knowledge file.')
   }
@@ -84,11 +85,18 @@ export function readKnowledgeFileWithin(filePath: unknown, roots: string[]): Kno
   if (parts.some((_, index) => isSecretLookingPath(parts.slice(0, index + 1).join('/')))) {
     throw new Error('That file looks like it holds secrets, so it is not read here.')
   }
+  return real
+}
+
+/** Reads a knowledge file for the runtime RPC (see allowedKnowledgeRealPath). */
+export function readKnowledgeFileWithin(filePath: unknown, roots: string[]): KnowledgeReadResult {
+  const real = allowedKnowledgeRealPath(filePath, roots)
+  // safeReadFile refuses anything but a regular file (a FIFO would block main).
   const content = safeReadFile(real)
   if (content === null) {
     throw new Error('Could not read the knowledge file (missing, or larger than 512 KB).')
   }
-  return { content, filePath }
+  return { content, filePath: filePath as string }
 }
 
 // Set when the window's knowledge handlers register; the runtime RPC reads the
@@ -106,8 +114,41 @@ function requireStore(): Store {
   return registeredStore
 }
 
+function isShowable(filePath: string, roots: string[]): boolean {
+  try {
+    allowedKnowledgeRealPath(filePath, roots)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The tree with only the files `knowledge read` would show. Why: a leaf's
+ * summary is taken from its content, so a secret-looking file or a symlink
+ * leading outside the roots must not appear here either.
+ */
+export function filterKnowledgeTree(tree: KnowledgeTree, roots: string[]): KnowledgeTree {
+  return {
+    ...tree,
+    branches: tree.branches.map((branch) => {
+      const leaves = branch.leaves.filter((leaf) => isShowable(leaf.filePath, roots))
+      const kept = new Set(leaves.map((leaf) => leaf.id))
+      return {
+        ...branch,
+        leaves: leaves.map((leaf) => ({ ...leaf, links: leaf.links.filter((id) => kept.has(id)) })),
+        groups: branch.groups.map((group) => ({
+          ...group,
+          leafIds: group.leafIds.filter((id) => kept.has(id))
+        }))
+      }
+    })
+  }
+}
+
 export function knowledgeTreeForRuntime(): KnowledgeTree {
-  return knowledgeTree(requireStore())
+  const store = requireStore()
+  return filterKnowledgeTree(knowledgeTree(store), knowledgeRoots(store))
 }
 
 export function readKnowledgeFileForRuntime(filePath: unknown): KnowledgeReadResult {

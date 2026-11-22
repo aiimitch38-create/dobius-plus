@@ -80,6 +80,14 @@ describe('settings, view, notify and accounts CLI', () => {
     await expect(run(['notify', '--title', 'x'.repeat(121), '--body', 'b'])).rejects.toThrow(/under 120/)
   })
 
+  it('accounts list reads the summary without raw CLI output', async () => {
+    const call = await run(['accounts', 'list'], {
+      claude: { accounts: [], activeAccountId: null },
+      codex: { accounts: [], activeAccountId: null }
+    })
+    expect(call).toHaveBeenCalledWith('accounts.summary')
+  })
+
   it('accounts use takes exactly one provider and maps system to null', async () => {
     let call = await run(['accounts', 'use', '--codex', 'system'])
     expect(call).toHaveBeenCalledWith('accounts.selectCodex', { accountId: null })
