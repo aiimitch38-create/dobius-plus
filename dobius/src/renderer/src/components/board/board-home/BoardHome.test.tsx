@@ -22,7 +22,8 @@ vi.mock('@/components/dictation/VoiceOrb', () => ({
     return <div data-home-stub="VoiceOrb" />
   }
 }))
-vi.mock('@/components/dictation/voice-orb-live-level', () => ({
+vi.mock('@/components/dictation/voice-orb-live-level', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/components/dictation/voice-orb-live-level')>()),
   voiceOrbLevelSource: { current: () => 0 }
 }))
 vi.mock('@/components/confirmation-dialog', () => ({
@@ -73,6 +74,8 @@ vi.mock('@/store', async () => {
     adamAwake: false,
     setAdamAwake: (awake: boolean) => set({ adamAwake: awake }),
     requestAdamDock: vi.fn(),
+    adamWakeOrigin: null,
+    setAdamWakeOrigin: (origin: unknown) => set({ adamWakeOrigin: origin }),
     setBoardStudio: (studio: BoardStudioId | null) => set({ boardStudio: studio }),
     openModal: vi.fn(),
     addRepo: async () => null,
@@ -157,6 +160,40 @@ describe('BoardHome studio host', () => {
     act(() => orb.click())
     expect(storeMock.store!.getState().adamAwake).toBe(true)
     expect(pressPtt).toHaveBeenCalledTimes(1)
+    expect(storeMock.store!.getState().adamWakeOrigin).not.toBeNull()
+  })
+
+  it('does not press push-to-talk again while a voice turn is already showing', async () => {
+    const { publishVoiceOrbPresentation } = await import('@/components/dictation/voice-orb-live-level')
+    const pressPtt = vi.fn(async () => undefined)
+    ;(window as unknown as { api: unknown }).api = { jarvis: { pressPtt } }
+    storeMock.store!.setState({ adamAwake: false })
+    publishVoiceOrbPresentation({ state: 'listening', activitySource: 'input' })
+    try {
+      renderHome()
+      const orb = container.querySelector('button[aria-label]') as HTMLButtonElement
+      act(() => orb.click())
+      expect(storeMock.store!.getState().adamAwake).toBe(true)
+      expect(pressPtt).not.toHaveBeenCalled()
+    } finally {
+      publishVoiceOrbPresentation({ state: 'idle', activitySource: 'preview' })
+    }
+  })
+
+  it('keeps a rejected push-to-talk from escaping as an unhandled rejection', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const pressPtt = vi.fn(async () => {
+      throw new Error('ipc gone')
+    })
+    ;(window as unknown as { api: unknown }).api = { jarvis: { pressPtt } }
+    storeMock.store!.setState({ adamAwake: false })
+    renderHome()
+    const orb = container.querySelector('button[aria-label]') as HTMLButtonElement
+    act(() => orb.click())
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(error).toHaveBeenCalledWith('pressPtt failed', expect.any(Error))
+    error.mockRestore()
   })
 
   it('clears the open studio when Home unmounts', () => {

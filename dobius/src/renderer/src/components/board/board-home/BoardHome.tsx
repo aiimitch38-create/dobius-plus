@@ -5,7 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useConfirmationDialog } from '@/components/confirmation-dialog'
 import { VoiceOrb } from '@/components/dictation/VoiceOrb'
-import { voiceOrbLevelSource } from '@/components/dictation/voice-orb-live-level'
+import {
+  startAdamVoiceTurnFromOrb,
+  voiceOrbLevelSource
+} from '@/components/dictation/voice-orb-live-level'
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import { openWorktreePath } from '@/components/sidebar/WorktreeOpenInMenu'
 import { translate } from '@/i18n/i18n'
@@ -311,19 +314,19 @@ export default function BoardHome(): React.JSX.Element {
             adamAwake ? 'Call Adam back' : 'Wake Adam'
           )}
           className="mb-6 flex size-[112px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-transform hover:scale-105 active:scale-95"
-          onClick={() => {
+          onClick={(event) => {
             if (useAppStore.getState().adamAwake) {
               useAppStore.getState().requestAdamDock()
               return
             }
+            const rect = event.currentTarget.getBoundingClientRect()
+            useAppStore
+              .getState()
+              .setAdamWakeOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
             useAppStore.getState().setAdamAwake(true)
             // Why: waking only animates the body; pressPtt starts the real
             // listen-then-speak turn, same as the command-bar and dock orbs.
-            try {
-              void window.api.jarvis.pressPtt()
-            } catch (error) {
-              console.error('pressPtt failed', error)
-            }
+            startAdamVoiceTurnFromOrb(() => window.api.jarvis.pressPtt())
           }}
         >
           {adamAwake ? null : <VoiceOrb size={112} getLevel={() => voiceOrbLevelSource.current()} />}
