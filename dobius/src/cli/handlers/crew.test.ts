@@ -60,7 +60,7 @@ describe('crew CLI', () => {
     expect(call).toHaveBeenCalledWith('crew.setPaused', { paused: true })
 
     call = await run(['crew', 'resume'], { paused: false })
-    expect(call).toHaveBeenCalledWith('crew.setPaused', { paused: false }, { timeoutMs: 300_000 })
+    expect(call).toHaveBeenCalledWith('crew.setPaused', { paused: false })
     expect(logged.at(-1)).toBe('Crew resumed.')
   })
 
@@ -78,21 +78,17 @@ describe('crew CLI', () => {
       id: 'd1',
       choice: 'approve'
     })
-    expect(call).toHaveBeenCalledWith(
-      'crew.decide',
-      { id: 'd1', choice: 'approve' },
-      { timeoutMs: 300_000 }
-    )
+    expect(call).toHaveBeenCalledWith('crew.decide', { id: 'd1', choice: 'approve' })
 
     call = await run(['crew', 'decide', 'd1', '--choice', 'respond', '--note', 'use staging'], {
       id: 'd1',
       choice: 'respond'
     })
-    expect(call).toHaveBeenCalledWith(
-      'crew.decide',
-      { id: 'd1', choice: 'respond', note: 'use staging' },
-      { timeoutMs: 300_000 }
-    )
+    expect(call).toHaveBeenCalledWith('crew.decide', {
+      id: 'd1',
+      choice: 'respond',
+      note: 'use staging'
+    })
   })
 
   it.each([
@@ -107,7 +103,7 @@ describe('crew CLI', () => {
   it('draft approve / discard and stop take their id positionally', async () => {
     const draft = { id: 'dr1', status: 'approved', target: { kind: 'asana', gid: '1' } }
     let call = await run(['crew', 'draft', 'approve', 'dr1'], { draft })
-    expect(call).toHaveBeenCalledWith('crew.draftApprove', { id: 'dr1' }, { timeoutMs: 300_000 })
+    expect(call).toHaveBeenCalledWith('crew.draftApprove', { id: 'dr1' })
     expect(logged.at(-1)).toBe('Draft dr1 posted to Asana.')
 
     call = await run(['crew', 'draft', 'discard', 'dr1'], {

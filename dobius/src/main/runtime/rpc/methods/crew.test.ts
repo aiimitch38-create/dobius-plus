@@ -25,7 +25,7 @@ vi.mock('../../../agents/agent-briefing-store', () => ({
   dismissBriefingItems: vi.fn(),
   listRecentBriefingItems: vi.fn()
 }))
-vi.mock('./crew-confirm', () => ({ showCrewConfirmDialog: vi.fn() }))
+vi.mock('./crew-confirm', () => ({ appConfirmationGate: vi.fn() }))
 vi.mock('../../../agents/agent-runner', () => ({
   listAgentRuns: vi.fn(),
   stopAgentRun: vi.fn()
@@ -38,11 +38,18 @@ import { approveDraftAndPost } from '../../../agents/agent-draft-approval'
 import { dismissBriefingItems, listRecentBriefingItems } from '../../../agents/agent-briefing-store'
 import { listAgentRuns, stopAgentRun } from '../../../agents/agent-runner'
 import { buildCrewMethods, CREW_METHODS } from './crew'
+import { createConfirmationGate } from './confirm-gate'
 
 const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as DobiusRuntimeService
 
-const confirm = vi.fn<(request: { title: string; detail: string }) => Promise<boolean>>()
-const methods = buildCrewMethods(confirm)
+const confirm =
+  vi.fn<
+    (
+      request: { title: string; message: string; detail: string },
+      signal: AbortSignal
+    ) => Promise<boolean>
+  >()
+const methods = buildCrewMethods(createConfirmationGate(confirm, { cooldownMs: 0 }))
 
 function call(method: string, params?: unknown) {
   const request: RpcRequest = { id: 'req-1', authToken: 'tok', method, params }
@@ -294,6 +301,22 @@ describe('crew RPC methods', () => {
         new RpcDispatcher({ runtime, methods }).dispatch(request, { signal: controller.signal })
       ).resolves.toMatchObject({ ok: false })
       expect(approveDraftAndPost).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['a long draft', 'crew.draftApprove', { id: 'dr1' }],
+      ['a long tool input', 'crew.decide', { id: 'd1', choice: 'approve' }]
+    ] as const)('refuses %s instead of showing it clipped', async (_label, method, params) => {
+      const long = 'x'.repeat(5000)
+      vi.mocked(getDraft).mockReturnValue({ ...PENDING_DRAFT, body: long } as never)
+      vi.mocked(listAgentDecisions).mockReturnValue([
+        { id: 'd1', agentId: 'a1', toolName: 'Bash', input: { command: long } }
+      ] as never)
+      await expect(call(method, params)).resolves.toMatchObject({
+        ok: false,
+        error: { message: expect.stringContaining('too long to confirm here') }
+      })
+      expect(confirm).not.toHaveBeenCalled()
     })
 
     it('refuses a second confirmation while one is open', async () => {

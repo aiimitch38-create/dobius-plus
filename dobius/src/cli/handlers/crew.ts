@@ -9,13 +9,9 @@ import { getOptionalStringFlag, getRequiredStringFlag } from '../flags'
 import { printResult } from '../format'
 import { RuntimeClientError } from '../runtime-client'
 
-// Why: these calls wait for a human to click in an app dialog, which can take
-// longer than the normal 60 second request limit.
-const CONFIRM_TIMEOUT_MS = 5 * 60_000
-
 function noteWaitingForConfirmation(json: boolean): void {
   if (!json) {
-    process.stderr.write('Waiting for you to confirm in Dobius+...\n')
+    process.stderr.write('Waiting up to 25 seconds for you to confirm in the Dobius+ app...\n')
   }
 }
 
@@ -98,11 +94,7 @@ export const CREW_HANDLERS: Record<string, CommandHandler> = {
   },
   'crew resume': async ({ client, json }) => {
     noteWaitingForConfirmation(json)
-    const result = await client.call<{ paused: boolean }>(
-      'crew.setPaused',
-      { paused: false },
-      { timeoutMs: CONFIRM_TIMEOUT_MS }
-    )
+    const result = await client.call<{ paused: boolean }>('crew.setPaused', { paused: false })
     printResult(result, json, (value) => (value.paused ? 'Crew is still paused.' : 'Crew resumed.'))
   },
   'crew decisions': async ({ client, json }) => {
@@ -122,8 +114,7 @@ export const CREW_HANDLERS: Record<string, CommandHandler> = {
     noteWaitingForConfirmation(json)
     const result = await client.call<{ id: string; choice: DecisionChoice; note?: string }>(
       'crew.decide',
-      { id, choice, ...(choice === 'respond' ? { note } : {}) },
-      { timeoutMs: CONFIRM_TIMEOUT_MS }
+      { id, choice, ...(choice === 'respond' ? { note } : {}) }
     )
     printResult(result, json, (value) =>
       [`Decision ${value.id}: ${value.choice}.`, value.note].filter(Boolean).join('\n')
@@ -135,11 +126,9 @@ export const CREW_HANDLERS: Record<string, CommandHandler> = {
   },
   'crew draft approve': async ({ flags, client, json }) => {
     noteWaitingForConfirmation(json)
-    const result = await client.call<{ draft: AgentDraftComment }>(
-      'crew.draftApprove',
-      { id: getRequiredStringFlag(flags, 'id') },
-      { timeoutMs: CONFIRM_TIMEOUT_MS }
-    )
+    const result = await client.call<{ draft: AgentDraftComment }>('crew.draftApprove', {
+      id: getRequiredStringFlag(flags, 'id')
+    })
     printResult(result, json, (value) => `Draft ${value.draft.id} posted to Asana.`)
   },
   'crew draft discard': async ({ flags, client, json }) => {

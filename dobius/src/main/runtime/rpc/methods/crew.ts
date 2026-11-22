@@ -3,7 +3,7 @@
 // the same main-process function as the Agents page IPC in `ipc/agents.ts`.
 // Why: interactive terminals hold the full runtime key, so an agent can call
 // these too. Resuming the crew, approving a draft and answering a decision
-// each wait for a human click in an in-app dialog (crew-confirm.ts); pausing,
+// each wait for a human click in an in-app dialog (confirm-gate.ts); pausing,
 // discarding, dismissing, stopping and the read-only methods do not.
 //
 // Yield has no twin here on purpose: only the Board window's `agents:yield`
@@ -16,12 +16,17 @@ import { discardDraft, getDraft, listDrafts } from '../../../agents/agent-draft-
 import { approveDraftAndPost } from '../../../agents/agent-draft-approval'
 import { dismissBriefingItems, listRecentBriefingItems } from '../../../agents/agent-briefing-store'
 import { listAgentRuns, stopAgentRun } from '../../../agents/agent-runner'
-import { defineMethod, type RpcContext, type RpcMethod } from '../core'
+import { defineMethod, type RpcMethod } from '../core'
 import { requiredString } from '../schemas'
-import { showCrewConfirmDialog, type CrewConfirm, type CrewConfirmRequest } from './crew-confirm'
+import {
+  confirmText,
+  decisionConfirmRequest,
+  describeCaller,
+  type ConfirmationGate
+} from './confirm-gate'
+import { appConfirmationGate } from './crew-confirm'
 
 const MAX_NOTE_LENGTH = 4000
-const DETAIL_TEXT_LIMIT = 600
 
 // Why: two CLI stops of the same run at once would interrupt it twice and post
 // two "cancelled" notifications. The second call waits on nothing and reports.
@@ -50,24 +55,6 @@ const Decide = z
     message: 'A note is only sent with the respond choice'
   })
 
-function clip(text: string, max = DETAIL_TEXT_LIMIT): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text
-}
-
-function describeCaller(ctx: RpcContext): string {
-  return ctx.clientKind === 'mobile'
-    ? 'Asked by a paired phone.'
-    : 'Asked through the dobius command line (a terminal or agent on this Mac).'
-}
-
-function stringifyInput(input: unknown): string {
-  try {
-    return JSON.stringify(input) ?? ''
-  } catch {
-    return '[input could not be shown]'
-  }
-}
-
 function toResolution(params: z.infer<typeof Decide>): AgentDecisionResolution {
   if (params.choice === 'respond') {
     return { id: params.id, action: 'respond', payload: { text: params.note } }
@@ -75,33 +62,7 @@ function toResolution(params: z.infer<typeof Decide>): AgentDecisionResolution {
   return { id: params.id, action: params.choice }
 }
 
-export function buildCrewMethods(confirm: CrewConfirm): RpcMethod[] {
-  // Why: one open question at a time, so a looping caller cannot stack dialogs.
-  let confirming = false
-  const requireConfirmation = async (
-    request: CrewConfirmRequest,
-    ctx: RpcContext
-  ): Promise<void> => {
-    if (confirming) {
-      throw new Error('Another crew confirmation is already open in Dobius+. Answer it first.')
-    }
-    confirming = true
-    let accepted: boolean
-    try {
-      accepted = await confirm(request)
-    } finally {
-      confirming = false
-    }
-    if (!accepted) {
-      throw new Error('Not confirmed in Dobius+, so nothing was changed.')
-    }
-    // Why: the dialog waits for a human with no time limit. If the caller gave
-    // up meanwhile, nobody is watching the result, so do not act on it.
-    if (ctx.signal?.aborted) {
-      throw new Error('The request was cancelled while waiting for confirmation.')
-    }
-  }
-
+export function buildCrewMethods(requireConfirmation: ConfirmationGate): RpcMethod[] {
   return [
     defineMethod({
       name: 'crew.state',
@@ -147,20 +108,8 @@ export function buildCrewMethods(confirm: CrewConfirm): RpcMethod[] {
         if (!decision) {
           throw new Error('Decision not found')
         }
-        const label = decision.title ?? decision.displayName ?? decision.toolName
         await requireConfirmation(
-          {
-            title: 'Answer an agent request?',
-            message: `Answer "${clip(label, 120)}" with: ${params.choice}`,
-            detail: [
-              describeCaller(ctx),
-              `Agent: ${decision.agentId}`,
-              `Tool: ${decision.toolName}`,
-              `Input: ${clip(stringifyInput(decision.input))}`,
-              ...(params.note ? [`Note to the agent: ${clip(params.note)}`] : [])
-            ].join('\n'),
-            confirmLabel: params.choice === 'approve' ? 'Approve' : 'Send answer'
-          },
+          decisionConfirmRequest(decision, params.choice, params.note, ctx),
           ctx
         )
         // resolveAgentDecision looks the id up again, so a decision answered in
@@ -191,8 +140,8 @@ export function buildCrewMethods(confirm: CrewConfirm): RpcMethod[] {
         await requireConfirmation(
           {
             title: 'Post this comment to Asana?',
-            message: `Post the agent's drafted comment to Asana task ${draft.target.gid}?`,
-            detail: `${describeCaller(ctx)}\n\nAgent: ${draft.agentId}\n\n${clip(draft.body)}`,
+            message: `Post the agent's drafted comment to Asana task ${confirmText(draft.target.gid, 'task id')}?`,
+            detail: `${describeCaller(ctx)}\n\nAgent: ${confirmText(draft.agentId, 'agent id')}\n\n${confirmText(draft.body, 'draft')}`,
             confirmLabel: 'Post to Asana'
           },
           ctx
@@ -257,4 +206,4 @@ export function buildCrewMethods(confirm: CrewConfirm): RpcMethod[] {
   ]
 }
 
-export const CREW_METHODS: RpcMethod[] = buildCrewMethods(showCrewConfirmDialog)
+export const CREW_METHODS: RpcMethod[] = buildCrewMethods(appConfirmationGate)
