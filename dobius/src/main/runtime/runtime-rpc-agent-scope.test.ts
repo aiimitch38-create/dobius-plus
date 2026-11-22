@@ -209,11 +209,11 @@ describe('runtime RPC agent key: indirect host-command paths', () => {
     }
   })
 
-  it('refuses the agent teams launcher and tmux shim for the agent key', async () => {
+  it('refuses the agent teams launcher, tmux shim and terminal rename for the agent key', async () => {
     const { server, agent } = await startServer()
     const auth = authOf(server)
     try {
-      for (const method of ['agentTeams.prepareLaunch', 'agentTeams.tmuxCompat']) {
+      for (const method of ['agentTeams.prepareLaunch', 'agentTeams.tmuxCompat', 'terminal.rename']) {
         const result = auth(JSON.stringify({ id: '1', method, authToken: agent.authToken }))
         expect(result.error?.error?.code, method).toBe('forbidden')
       }

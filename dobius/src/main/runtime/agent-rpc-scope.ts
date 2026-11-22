@@ -9,8 +9,9 @@
 
 export const AGENT_RPC_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
   'status.get',
-  // Terminals: read, wait on, message and label existing terminals. Sends are
-  // forced through the agent-status guard (see scopeAgentRequestParams).
+  // Terminals: read, wait on and message existing terminals. Sends are forced
+  // through the agent-status guard (see scopeAgentRequestParams). Renaming is
+  // not allowed: a title like "Codex ready" makes a shell look like an agent.
   'terminal.list',
   'terminal.show',
   'terminal.read',
@@ -19,7 +20,6 @@ export const AGENT_RPC_METHOD_ALLOWLIST: ReadonlySet<string> = new Set([
   'terminal.sendBound',
   'terminal.resolveActive',
   'terminal.resolvePane',
-  'terminal.rename',
   'terminal.focus',
   'terminal.agentStatus',
   'terminal.isRunningAgent',
