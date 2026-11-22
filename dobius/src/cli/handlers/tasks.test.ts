@@ -8,7 +8,7 @@ const callMock = vi.fn()
 // Why: isolate the handler's flag-to-RPC mapping; printResult only writes output.
 vi.mock('../format', () => ({ printResult: vi.fn() }))
 
-import { REPEATED_FLAG_SEPARATOR } from '../args'
+import { REPEATED_FLAG_SEPARATOR, parseArgs } from '../args'
 import { TASK_HANDLERS } from './tasks'
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
@@ -247,7 +247,6 @@ describe('dobius tasks update labels', () => {
 
 describe('dobius tasks update label parsing (through parseArgs)', () => {
   it('a bare --label between valued ones is refused, not silently dropped', async () => {
-    const { parseArgs } = await import('../args')
     const { flags } = parseArgs(['tasks', 'update', '--id', 't1', '--by', 'adam', '--label', 'old', '--label', '--label', 'new'])
     await expect(
       TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
@@ -256,7 +255,6 @@ describe('dobius tasks update label parsing (through parseArgs)', () => {
   })
 
   it('--clear-labels=true is refused instead of doing nothing', async () => {
-    const { parseArgs } = await import('../args')
     const { flags } = parseArgs(['tasks', 'update', '--id', 't1', '--by', 'adam', '--clear-labels=true'])
     await expect(
       TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
