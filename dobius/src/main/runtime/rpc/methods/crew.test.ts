@@ -15,6 +15,7 @@ vi.mock('../../../agents/agent-decision-queue', () => ({
 }))
 vi.mock('../../../agents/agent-draft-store', () => ({
   discardDraft: vi.fn(),
+  getDraft: vi.fn(),
   listDrafts: vi.fn()
 }))
 vi.mock('../../../agents/agent-draft-approval', () => ({
@@ -24,6 +25,7 @@ vi.mock('../../../agents/agent-briefing-store', () => ({
   dismissBriefingItems: vi.fn(),
   listRecentBriefingItems: vi.fn()
 }))
+vi.mock('./crew-confirm', () => ({ showCrewConfirmDialog: vi.fn() }))
 vi.mock('../../../agents/agent-runner', () => ({
   listAgentRuns: vi.fn(),
   stopAgentRun: vi.fn()
@@ -31,25 +33,41 @@ vi.mock('../../../agents/agent-runner', () => ({
 
 import { getAgentsExecutionState, setAgentsPaused } from '../../../agents/agents-config-store'
 import { listAgentDecisions, resolveAgentDecision } from '../../../agents/agent-decision-queue'
-import { discardDraft, listDrafts } from '../../../agents/agent-draft-store'
+import { discardDraft, getDraft, listDrafts } from '../../../agents/agent-draft-store'
 import { approveDraftAndPost } from '../../../agents/agent-draft-approval'
-import {
-  dismissBriefingItems,
-  listRecentBriefingItems
-} from '../../../agents/agent-briefing-store'
+import { dismissBriefingItems, listRecentBriefingItems } from '../../../agents/agent-briefing-store'
 import { listAgentRuns, stopAgentRun } from '../../../agents/agent-runner'
-import { CREW_METHODS } from './crew'
+import { buildCrewMethods, CREW_METHODS } from './crew'
 
 const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as DobiusRuntimeService
 
+const confirm = vi.fn<(request: { title: string; detail: string }) => Promise<boolean>>()
+const methods = buildCrewMethods(confirm)
+
 function call(method: string, params?: unknown) {
   const request: RpcRequest = { id: 'req-1', authToken: 'tok', method, params }
-  return new RpcDispatcher({ runtime, methods: CREW_METHODS }).dispatch(request)
+  return new RpcDispatcher({ runtime, methods }).dispatch(request)
+}
+
+const PAUSED = { paused: true, status: 'ok', detail: null, filePath: '/f' }
+const PENDING_DRAFT = {
+  id: 'dr1',
+  agentId: 'a1',
+  status: 'pending',
+  body: 'Shipped the fix.',
+  target: { kind: 'asana', gid: '42' }
 }
 
 describe('crew RPC methods', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    confirm.mockResolvedValue(true)
+    vi.mocked(setAgentsPaused).mockImplementation((paused) => paused)
+    vi.mocked(getDraft).mockReturnValue(PENDING_DRAFT as never)
+    vi.mocked(listAgentDecisions).mockReturnValue([
+      { id: 'd1', agentId: 'a1', toolName: 'Bash', input: { command: 'ls' } }
+    ] as never)
+    vi.mocked(getAgentsExecutionState).mockReturnValue(PAUSED as never)
   })
 
   it('reports and sets Pause crew through the config store', async () => {
@@ -81,7 +99,9 @@ describe('crew RPC methods', () => {
   })
 
   it('lists decisions and resolves approve / deny / respond', async () => {
-    vi.mocked(listAgentDecisions).mockReturnValue([{ id: 'd1' }] as never)
+    vi.mocked(listAgentDecisions).mockReturnValue([
+      { id: 'd1', agentId: 'a1', toolName: 'Bash', input: {} }
+    ] as never)
     vi.mocked(resolveAgentDecision).mockResolvedValue({ ok: true })
 
     await expect(call('crew.decisions')).resolves.toMatchObject({
@@ -130,8 +150,17 @@ describe('crew RPC methods', () => {
     expect(discardDraft).toHaveBeenCalledWith('dr1')
   })
 
+  it('refuses to discard a draft that is no longer pending', async () => {
+    vi.mocked(getDraft).mockReturnValue({ id: 'dr1', status: 'approved' } as never)
+    await expect(call('crew.draftDiscard', { id: 'dr1' })).resolves.toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining('Only pending drafts') }
+    })
+    expect(discardDraft).not.toHaveBeenCalled()
+  })
+
   it('surfaces an Asana posting failure on approve', async () => {
-    vi.mocked(approveDraftAndPost).mockRejectedValue(new Error('Asana not connected'))
+    vi.mocked(approveDraftAndPost).mockRejectedValueOnce(new Error('Asana not connected'))
     await expect(call('crew.draftApprove', { id: 'dr1' })).resolves.toMatchObject({
       ok: false,
       error: { message: expect.stringContaining('Asana not connected') }
@@ -157,8 +186,130 @@ describe('crew RPC methods', () => {
     expect(stopAgentRun).toHaveBeenCalledWith('r1')
 
     vi.mocked(stopAgentRun).mockClear()
+    vi.mocked(listAgentRuns).mockReturnValue([{ id: 'r2', status: 'success' }] as never)
+    await expect(call('crew.stop', { runId: 'r2' })).resolves.toMatchObject({
+      result: { runId: 'r2', wasRunning: false }
+    })
+    expect(stopAgentRun).not.toHaveBeenCalled()
+
     await expect(call('crew.stop', { runId: 'nope' })).resolves.toMatchObject({ ok: false })
     expect(stopAgentRun).not.toHaveBeenCalled()
+  })
+
+  it('interrupts a run once when two stops arrive together', async () => {
+    vi.mocked(listAgentRuns).mockReturnValue([{ id: 'r1', status: 'running' }] as never)
+    let release: () => void = () => {}
+    vi.mocked(stopAgentRun).mockReturnValue(new Promise<void>((resolve) => (release = resolve)))
+    const first = call('crew.stop', { runId: 'r1' })
+    await vi.waitFor(() => expect(stopAgentRun).toHaveBeenCalledTimes(1))
+    await expect(call('crew.stop', { runId: 'r1' })).resolves.toMatchObject({
+      result: { wasRunning: true }
+    })
+    release()
+    await expect(first).resolves.toMatchObject({ ok: true })
+    expect(stopAgentRun).toHaveBeenCalledTimes(1)
+  })
+
+  describe('in-app confirmation', () => {
+    it.each([
+      ['resume', 'crew.setPaused', { paused: false }, setAgentsPaused],
+      ['draft approve', 'crew.draftApprove', { id: 'dr1' }, approveDraftAndPost],
+      ['decide', 'crew.decide', { id: 'd1', choice: 'approve' }, resolveAgentDecision]
+    ] as const)(
+      '%s is refused when the dialog is declined',
+      async (_label, method, params, action) => {
+        confirm.mockResolvedValue(false)
+        await expect(call(method, params)).resolves.toMatchObject({
+          ok: false,
+          error: { message: expect.stringContaining('Not confirmed') }
+        })
+        expect(confirm).toHaveBeenCalledTimes(1)
+        expect(action).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each([
+      ['resume', 'crew.setPaused', { paused: false }, setAgentsPaused],
+      ['draft approve', 'crew.draftApprove', { id: 'dr1' }, approveDraftAndPost],
+      ['decide', 'crew.decide', { id: 'd1', choice: 'approve' }, resolveAgentDecision]
+    ] as const)(
+      '%s proceeds when the dialog is accepted',
+      async (_label, method, params, action) => {
+        vi.mocked(approveDraftAndPost).mockResolvedValue(PENDING_DRAFT as never)
+        vi.mocked(resolveAgentDecision).mockResolvedValue({ ok: true })
+        await expect(call(method, params)).resolves.toMatchObject({ ok: true })
+        expect(confirm).toHaveBeenCalledTimes(1)
+        expect(action).toHaveBeenCalledTimes(1)
+      }
+    )
+
+    it('shows the destination and text of a draft, and the decision and choice', async () => {
+      vi.mocked(approveDraftAndPost).mockResolvedValue(PENDING_DRAFT as never)
+      await call('crew.draftApprove', { id: 'dr1' })
+      expect(confirm.mock.calls[0][0]).toMatchObject({
+        message: expect.stringContaining('Asana task 42'),
+        detail: expect.stringContaining('Shipped the fix.')
+      })
+      vi.mocked(resolveAgentDecision).mockResolvedValue({ ok: true })
+      await call('crew.decide', { id: 'd1', choice: 'respond', note: 'use staging' })
+      expect(confirm.mock.calls[1][0]).toMatchObject({
+        message: expect.stringContaining('respond'),
+        detail: expect.stringMatching(/Tool: Bash[\s\S]*"command":"ls"[\s\S]*use staging/)
+      })
+    })
+
+    it('does not ask to pause, or to resume a crew that is already running', async () => {
+      vi.mocked(setAgentsPaused).mockReturnValue(true)
+      await call('crew.setPaused', { paused: true })
+      vi.mocked(getAgentsExecutionState).mockReturnValue({ ...PAUSED, paused: false } as never)
+      await expect(call('crew.setPaused', { paused: false })).resolves.toMatchObject({
+        result: { paused: false }
+      })
+      expect(confirm).not.toHaveBeenCalled()
+      expect(setAgentsPaused).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not open a dialog for an unknown decision or a non-pending draft', async () => {
+      await expect(call('crew.decide', { id: 'gone', choice: 'deny' })).resolves.toMatchObject({
+        ok: false
+      })
+      vi.mocked(getDraft).mockReturnValue({ ...PENDING_DRAFT, status: 'approved' } as never)
+      await expect(call('crew.draftApprove', { id: 'dr1' })).resolves.toMatchObject({ ok: false })
+      expect(confirm).not.toHaveBeenCalled()
+    })
+
+    it('does not act if the caller gave up while the dialog was open', async () => {
+      const controller = new AbortController()
+      confirm.mockImplementationOnce(async () => {
+        controller.abort()
+        return true
+      })
+      const request: RpcRequest = {
+        id: 'req-1',
+        authToken: 'tok',
+        method: 'crew.draftApprove',
+        params: { id: 'dr1' }
+      }
+      await expect(
+        new RpcDispatcher({ runtime, methods }).dispatch(request, { signal: controller.signal })
+      ).resolves.toMatchObject({ ok: false })
+      expect(approveDraftAndPost).not.toHaveBeenCalled()
+    })
+
+    it('refuses a second confirmation while one is open', async () => {
+      let answer: (value: boolean) => void = () => {}
+      confirm.mockReturnValueOnce(new Promise<boolean>((resolve) => (answer = resolve)))
+      vi.mocked(approveDraftAndPost).mockResolvedValue(PENDING_DRAFT as never)
+      const first = call('crew.draftApprove', { id: 'dr1' })
+      await vi.waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+      await expect(call('crew.setPaused', { paused: false })).resolves.toMatchObject({
+        ok: false,
+        error: { message: expect.stringContaining('already open') }
+      })
+      answer(true)
+      await expect(first).resolves.toMatchObject({ ok: true })
+      expect(confirm).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('has no yield method', () => {

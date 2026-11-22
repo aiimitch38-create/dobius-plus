@@ -9,6 +9,16 @@ import { getOptionalStringFlag, getRequiredStringFlag } from '../flags'
 import { printResult } from '../format'
 import { RuntimeClientError } from '../runtime-client'
 
+// Why: these calls wait for a human to click in an app dialog, which can take
+// longer than the normal 60 second request limit.
+const CONFIRM_TIMEOUT_MS = 5 * 60_000
+
+function noteWaitingForConfirmation(json: boolean): void {
+  if (!json) {
+    process.stderr.write('Waiting for you to confirm in Dobius+...\n')
+  }
+}
+
 const DECISION_CHOICES = ['approve', 'deny', 'respond'] as const
 type DecisionChoice = (typeof DECISION_CHOICES)[number]
 
@@ -87,10 +97,13 @@ export const CREW_HANDLERS: Record<string, CommandHandler> = {
     )
   },
   'crew resume': async ({ client, json }) => {
-    const result = await client.call<{ paused: boolean }>('crew.setPaused', { paused: false })
-    printResult(result, json, (value) =>
-      value.paused ? 'Crew is still paused.' : 'Crew resumed.'
+    noteWaitingForConfirmation(json)
+    const result = await client.call<{ paused: boolean }>(
+      'crew.setPaused',
+      { paused: false },
+      { timeoutMs: CONFIRM_TIMEOUT_MS }
     )
+    printResult(result, json, (value) => (value.paused ? 'Crew is still paused.' : 'Crew resumed.'))
   },
   'crew decisions': async ({ client, json }) => {
     const result = await client.call<{ decisions: PendingAgentDecision[] }>('crew.decisions')
@@ -106,9 +119,11 @@ export const CREW_HANDLERS: Record<string, CommandHandler> = {
     if (choice !== 'respond' && flags.has('note')) {
       throw new RuntimeClientError('invalid_argument', '--note only goes with --choice respond')
     }
+    noteWaitingForConfirmation(json)
     const result = await client.call<{ id: string; choice: DecisionChoice; note?: string }>(
       'crew.decide',
-      { id, choice, ...(choice === 'respond' ? { note } : {}) }
+      { id, choice, ...(choice === 'respond' ? { note } : {}) },
+      { timeoutMs: CONFIRM_TIMEOUT_MS }
     )
     printResult(result, json, (value) =>
       [`Decision ${value.id}: ${value.choice}.`, value.note].filter(Boolean).join('\n')
@@ -119,9 +134,12 @@ export const CREW_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, formatDrafts)
   },
   'crew draft approve': async ({ flags, client, json }) => {
-    const result = await client.call<{ draft: AgentDraftComment }>('crew.draftApprove', {
-      id: getRequiredStringFlag(flags, 'id')
-    })
+    noteWaitingForConfirmation(json)
+    const result = await client.call<{ draft: AgentDraftComment }>(
+      'crew.draftApprove',
+      { id: getRequiredStringFlag(flags, 'id') },
+      { timeoutMs: CONFIRM_TIMEOUT_MS }
+    )
     printResult(result, json, (value) => `Draft ${value.draft.id} posted to Asana.`)
   },
   'crew draft discard': async ({ flags, client, json }) => {

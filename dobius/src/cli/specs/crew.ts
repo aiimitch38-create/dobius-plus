@@ -21,7 +21,10 @@ export const CREW_COMMAND_SPECS: CommandSpec[] = [
     summary: 'Pause the whole agent crew',
     usage: 'dobius crew pause [--json]',
     allowedFlags: [...GLOBAL_FLAGS],
-    notes: [PAUSE_NOTE, 'Runs already going keep going; use `dobius crew stop <runId>` to end one.'],
+    notes: [
+      PAUSE_NOTE,
+      'Runs already going keep going; use `dobius crew stop <runId>` to end one.'
+    ],
     examples: ['dobius crew pause']
   },
   {
@@ -29,7 +32,11 @@ export const CREW_COMMAND_SPECS: CommandSpec[] = [
     summary: 'Let the agent crew run again',
     usage: 'dobius crew resume [--json]',
     allowedFlags: [...GLOBAL_FLAGS],
-    notes: [PAUSE_NOTE, 'Resume is refused while the crew control file cannot be read.'],
+    notes: [
+      PAUSE_NOTE,
+      'Dobius+ shows a dialog asking you to confirm in the app first; nothing changes unless someone clicks it there.',
+      'Resume is refused while the crew control file cannot be read.'
+    ],
     examples: ['dobius crew resume']
   },
   {
@@ -48,7 +55,8 @@ export const CREW_COMMAND_SPECS: CommandSpec[] = [
     positionalArgs: ['id'],
     notes: [
       'approve lets the agent use the tool once. deny refuses it. respond refuses it and sends your note to the agent, so --note is required.',
-      'Always allow, bypass run and approve-with-edits are only in the app.'
+      'Always allow, bypass run and approve-with-edits are only in the app.',
+      'Dobius+ shows a dialog asking you to confirm in the app first; nothing changes unless someone clicks it there.'
     ],
     examples: [
       'dobius crew decide 7c1e... --choice approve',
@@ -68,7 +76,10 @@ export const CREW_COMMAND_SPECS: CommandSpec[] = [
     usage: 'dobius crew draft approve <id> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id'],
     positionalArgs: ['id'],
-    notes: ['This posts the comment to Asana right away. Only pending drafts can be approved.'],
+    notes: [
+      'Once confirmed, this posts the comment to Asana. Only pending drafts can be approved.',
+      'Dobius+ shows a dialog asking you to confirm in the app first; nothing changes unless someone clicks it there.'
+    ],
     examples: ['dobius crew draft approve 3b9a...']
   },
   {
