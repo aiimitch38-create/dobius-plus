@@ -257,6 +257,9 @@ const LIST_STATUSES = [
 /** Why: a bare or empty --label used to arrive as "no labels" and wipe them
  *  all; clearing is now only the explicit --clear-labels. */
 function getUpdateLabels(flags: Map<string, string | boolean>): string[] | undefined {
+  if (flags.has('clear-labels') && flags.get('clear-labels') !== true) {
+    throw new RuntimeClientError('invalid_argument', '--clear-labels takes no value')
+  }
   const clear = flags.get('clear-labels') === true
   if (!flags.has('label')) {
     return clear ? [] : undefined

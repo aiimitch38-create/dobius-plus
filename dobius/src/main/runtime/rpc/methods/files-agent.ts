@@ -62,7 +62,14 @@ export function withoutSecretFiles(result: SearchResult, maxResults: number): Se
     (sum, file) => sum + (file.matchCount ?? file.matches.length),
     0
   )
-  return { files, totalMatches, truncated: totalMatches >= maxResults }
+  // Why the backend flag counts only when nothing was dropped: it also marks a
+  // timeout, but after a drop it could be the secret file that hit the limit.
+  const dropped = files.length !== result.files.length
+  return {
+    files,
+    totalMatches,
+    truncated: totalMatches >= maxResults || (result.truncated && !dropped)
+  }
 }
 
 export const AGENT_FILE_METHODS: RpcMethod[] = [

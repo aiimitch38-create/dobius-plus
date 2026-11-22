@@ -166,6 +166,17 @@ describe('files.agentSearch', () => {
     expect(response).toMatchObject({ ok: true, result: { totalMatches: 1, truncated: false } })
   })
 
+  it('keeps a backend timeout (truncated, nothing dropped) as truncated', async () => {
+    const match = { line: 1, column: 1, matchLength: 1, lineContent: 'x' }
+    runtime.searchRuntimeFiles.mockResolvedValue({
+      files: [{ filePath: 'b', relativePath: 'src/app.ts', matches: [match] }],
+      totalMatches: 1,
+      truncated: true
+    })
+    const response = await call('files.agentSearch', { worktree: 'id:wt', query: 'x', maxResults: 50 })
+    expect(response).toMatchObject({ ok: true, result: { truncated: true } })
+  })
+
   it('refuses a pattern ending in a backslash, and remote worktrees', async () => {
     for (const params of [{ excludePattern: 'dist\\' }, { includePattern: 'src/\\ ' }]) {
       const response = await call('files.agentSearch', { worktree: 'id:wt', query: 'x', ...params })

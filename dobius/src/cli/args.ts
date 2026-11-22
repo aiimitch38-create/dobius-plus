@@ -107,7 +107,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
     const hasNext = i + 1 < argv.length
     const next = argv[i + 1]
     if (!hasNext || next.startsWith('--')) {
-      flags.set(flag, true)
+      // Why: a bare repeatable flag keeps an empty entry instead of replacing
+      // the earlier values, so `--label a --label --label b` cannot quietly
+      // drop `a`; handlers that need a value see the empty entry and refuse.
+      if (REPEATABLE_STRING_FLAGS.has(flag)) {
+        setFlagValue(flags, flag, '')
+      } else {
+        flags.set(flag, true)
+      }
       continue
     }
     setFlagValue(flags, flag, next)

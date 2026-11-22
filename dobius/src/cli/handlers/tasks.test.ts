@@ -244,3 +244,22 @@ describe('dobius tasks update labels', () => {
     ).rejects.toThrow(/either --label or --clear-labels/)
   })
 })
+
+describe('dobius tasks update label parsing (through parseArgs)', () => {
+  it('a bare --label between valued ones is refused, not silently dropped', async () => {
+    const { parseArgs } = await import('../args')
+    const { flags } = parseArgs(['tasks', 'update', '--id', 't1', '--by', 'adam', '--label', 'old', '--label', '--label', 'new'])
+    await expect(
+      TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
+    ).rejects.toThrow(/Every --label needs a value/)
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
+  it('--clear-labels=true is refused instead of doing nothing', async () => {
+    const { parseArgs } = await import('../args')
+    const { flags } = parseArgs(['tasks', 'update', '--id', 't1', '--by', 'adam', '--clear-labels=true'])
+    await expect(
+      TASK_HANDLERS['tasks update']({ flags, client: { call: callMock, isRemote: false }, cwd, json: true } as never)
+    ).rejects.toThrow(/--clear-labels takes no value/)
+  })
+})
