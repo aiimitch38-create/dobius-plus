@@ -114,12 +114,23 @@ describe('files.agentSearch', () => {
       totalMatches: 3,
       truncated: false
     })
-    const response = await call('files.agentSearch', { worktree: 'id:wt', query: 'KEY' })
+    const response = await call('files.agentSearch', {
+      worktree: 'id:wt',
+      query: 'KEY',
+      excludePattern: 'dist/**',
+      useRegex: true
+    })
+    expect(response.ok && 'hiddenFiles' in (response.result as object)).toBe(false)
     expect(response).toMatchObject({
       ok: true,
-      result: { totalMatches: 1, hiddenFiles: 1, files: [{ relativePath: 'src/app.ts' }] }
+      result: { totalMatches: 1, files: [{ relativePath: 'src/app.ts' }] }
     })
-    expect(runtime.searchRuntimeFiles).toHaveBeenCalledWith('id:wt', expect.objectContaining({ query: 'KEY', maxResults: 200 }))
+    expect(runtime.searchRuntimeFiles).toHaveBeenCalledWith('id:wt', expect.objectContaining({
+        query: 'KEY',
+        maxResults: 200,
+        useRegex: false,
+        excludePattern: expect.stringMatching(/^dist\/\*\*,\*\*\/\.env\*,/)
+      }))
   })
 
   it('caps maxResults', async () => {
@@ -138,8 +149,7 @@ describe('files.agentSearch', () => {
     ).toEqual({
       files: [{ filePath: 'a', relativePath: 'a.ts', matches: [], matchCount: 7 }],
       totalMatches: 7,
-      truncated: true,
-      hiddenFiles: 0
+      truncated: true
     })
   })
 })

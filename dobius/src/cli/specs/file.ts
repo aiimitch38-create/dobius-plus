@@ -80,11 +80,10 @@ export const FILE_COMMAND_SPECS: CommandSpec[] = [
     path: ['file', 'search'],
     summary: 'Search the text of the files in a worktree',
     usage:
-      'dobius file search --query <text> [--regex] [--case-sensitive] [--whole-word] [--include <glob>] [--exclude <glob>] [--limit <n>] [--worktree <selector>] [--json]',
+      'dobius file search --query <text> [--case-sensitive] [--whole-word] [--include <glob>] [--exclude <glob>] [--limit <n>] [--worktree <selector>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'query',
-      'regex',
       'case-sensitive',
       'whole-word',
       'include',
@@ -93,7 +92,7 @@ export const FILE_COMMAND_SPECS: CommandSpec[] = [
       'worktree'
     ],
     notes: [
-      'Hits in secret-looking files are left out (hiddenFiles in the JSON counts them).',
+      'Plain text search (no regular expressions). Secret-looking files are never searched.',
       '--limit defaults to 200 matches, at most 2000.'
     ],
     examples: ['dobius file search --query "TODO" --include "src/**" --json']

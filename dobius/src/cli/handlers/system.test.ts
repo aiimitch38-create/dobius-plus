@@ -64,7 +64,7 @@ describe('dobius ports', () => {
   it('--worktree keeps only ports that worktree owns', async () => {
     routes([owned(5173, 1), owned(3000, 2, 'repo::/w/b'), { ...base, id: 'x', port: 22, pid: 3, kind: 'external' }])
     await SYSTEM_HANDLERS.ports(ctx({ worktree: 'id:repo::/w/a' }))
-    expect(callMock.mock.calls[1]).toEqual(['workspacePorts.scan', { repoId: 'repo' }])
+    expect(callMock.mock.calls[1]).toEqual(['workspacePorts.scan', {}])
     expect(printed().result.ports.map((p) => p.port)).toEqual([5173])
   })
 })
@@ -75,7 +75,7 @@ describe('dobius ports kill (destructive: ownership enforced)', () => {
     await SYSTEM_HANDLERS['ports kill'](ctx({ worktree: 'id:repo::/w/a', port: '5173' }))
     expect(callMock.mock.calls.at(-1)).toEqual([
       'workspacePorts.kill',
-      { repoId: 'repo', worktreeId: 'repo::/w/a', pid: 4242, port: 5173 }
+      { worktreeId: 'repo::/w/a', pid: 4242, port: 5173 }
     ])
     expect(printed().result).toEqual({ ok: true })
     expect(process.exitCode).toBeUndefined()
@@ -108,6 +108,16 @@ describe('dobius ports kill (destructive: ownership enforced)', () => {
     expect(methods()).not.toContain('workspacePorts.kill')
     await SYSTEM_HANDLERS['ports kill'](ctx({ worktree: 'id:repo::/w/a', port: '5173', pid: '2' }))
     expect(callMock.mock.calls.at(-1)?.[1]).toMatchObject({ pid: 2 })
+  })
+
+  it('refuses a listener attributed only by its command line (no cwd proof)', async () => {
+    const guessed = owned(5173, 4242)
+    guessed.owner.confidence = 'command'
+    routes([guessed])
+    await expect(
+      SYSTEM_HANDLERS['ports kill'](ctx({ worktree: 'id:repo::/w/a', port: '5173' }))
+    ).rejects.toThrow(/cannot prove the process/)
+    expect(methods()).not.toContain('workspacePorts.kill')
   })
 
   it('exits 3 when main refuses after its own re-check', async () => {

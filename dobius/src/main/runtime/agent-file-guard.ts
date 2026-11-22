@@ -31,6 +31,37 @@ const SECRET_FILE_NAME_PATTERNS: readonly RegExp[] = [
 ]
 const SECRET_DIRECTORY_NAMES = new Set(['.ssh', '.aws', '.gnupg', '.docker', '.kube'])
 
+/** The same rules as globs, so a search never even opens a secret file (a
+ *  post-filter alone would leak through match counts and truncation). */
+export const SECRET_SEARCH_EXCLUDE_GLOBS: readonly string[] = [
+  '**/.env*',
+  '**/*key*',
+  '**/*Key*',
+  '**/*KEY*',
+  '**/*secret*',
+  '**/*Secret*',
+  '**/*SECRET*',
+  '**/*credential*',
+  '**/*Credential*',
+  '**/*token*',
+  '**/*Token*',
+  '**/*password*',
+  '**/*Password*',
+  '**/dobius-runtime*.json',
+  '**/*.pem',
+  '**/*.p12',
+  '**/*.pfx',
+  '**/*.keystore',
+  '**/id_rsa*',
+  '**/id_dsa*',
+  '**/id_ecdsa*',
+  '**/id_ed25519*',
+  '**/.netrc',
+  '**/.npmrc',
+  '**/.pgpass',
+  ...[...SECRET_DIRECTORY_NAMES].map((name) => `**/${name}/**`)
+]
+
 function segmentsOf(relativePath: string): string[] {
   return relativePath.replaceAll('\\', '/').split('/')
 }
@@ -63,8 +94,10 @@ export function assertAgentRelativePath(relativePath: string): void {
   }
 }
 
-function isInsideFolded(child: string, parent: string): boolean {
-  const rel = relative(foldApfsName(parent), foldApfsName(child))
+// Why no case folding: both sides are realpaths (on-disk spelling), and folding
+// would treat /repo/wt and /repo/WT as one folder on a case-sensitive volume.
+function isInsideReal(child: string, parent: string): boolean {
+  const rel = relative(parent, child)
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
 }
 
@@ -101,7 +134,7 @@ export async function assertAgentReadAllowed(target: AgentFileTarget): Promise<v
     }
     throw error
   }
-  if (!isInsideFolded(realTarget, realRoot)) {
+  if (!isInsideReal(realTarget, realRoot)) {
     throw new AgentFileRefusedError('path resolves outside the worktree')
   }
   if (isSecretLookingPath(relative(realRoot, realTarget))) {

@@ -121,6 +121,20 @@ describe('dobius file read / write / search', () => {
     })
   })
 
+  it('file write --from-file refuses a file over 5 MB before reading it', async () => {
+    writeFileSync(join(localDir, 'big.txt'), Buffer.alloc(5 * 1024 * 1024 + 1))
+    await main(['file', 'write', 'n.md', '--from-file', 'big.txt', '--worktree', 'id:wt'], localDir)
+    expect(process.exitCode).toBe(1)
+    expect(errored()).toMatch(/too large/)
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
+  it('file search has no --regex (it would run caller regexes in the app)', async () => {
+    await main(['file', 'search', '--query', 'x', '--regex', '--worktree', 'id:wt'], '/tmp/x')
+    expect(process.exitCode).toBe(1)
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
   it('file write refuses zero or two content sources before calling', async () => {
     await main(['file', 'write', 'a.txt', '--worktree', 'id:wt'], '/tmp/x')
     expect(process.exitCode).toBe(1)
@@ -150,25 +164,23 @@ describe('dobius file read / write / search', () => {
           }
         ],
         totalMatches: 1,
-        truncated: false,
-        hiddenFiles: 1
+        truncated: false
       })
     )
     await main(
-      ['file', 'search', '--query', 'TODO', '--regex', '--case-sensitive', '--include', 'src/**', '--limit', '50', '--worktree', 'id:wt'],
+      ['file', 'search', '--query', 'TODO', '--case-sensitive', '--include', 'src/**', '--limit', '50', '--worktree', 'id:wt'],
       '/tmp/x'
     )
     expect(callMock).toHaveBeenCalledWith('files.agentSearch', {
       worktree: 'id:wt',
       query: 'TODO',
-      useRegex: true,
       caseSensitive: true,
       wholeWord: false,
       includePattern: 'src/**',
       excludePattern: undefined,
       maxResults: 50
     })
-    expect(logged()).toBe('src/a.ts:3: TODO fix\n(1 secret-looking files hidden)')
+    expect(logged()).toBe('src/a.ts:3: TODO fix')
   })
 
   it('file search refuses --limit over 2000 and a missing --query', async () => {

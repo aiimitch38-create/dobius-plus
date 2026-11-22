@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import type { SearchResult } from '../../../../shared/types'
-import { assertAgentReadAllowed, assertAgentWriteAllowed, isSecretLookingPath } from '../../agent-file-guard'
+import {
+  SECRET_SEARCH_EXCLUDE_GLOBS,
+  assertAgentReadAllowed,
+  assertAgentWriteAllowed,
+  isSecretLookingPath
+} from '../../agent-file-guard'
 import { defineMethod, type RpcMethod } from '../core'
 import { requiredString } from '../schemas'
 
@@ -30,21 +35,27 @@ const AgentFileSearch = z.object({
   query: requiredString('Missing search query'),
   caseSensitive: z.boolean().optional(),
   wholeWord: z.boolean().optional(),
-  useRegex: z.boolean().optional(),
+  // Why no useRegex: without ripgrep the fallback matches caller regexes in
+  // Electron main, where a catastrophic-backtracking pattern freezes the app.
   includePattern: z.string().max(1000).optional(),
   excludePattern: z.string().max(1000).optional(),
   maxResults: z.number().int().positive().max(MAX_SEARCH_RESULTS).optional()
 })
 
-/** Drops secret-looking files from search hits so a search cannot read what
- *  `file read` would refuse. */
-export function withoutSecretFiles(result: SearchResult): SearchResult & { hiddenFiles: number } {
+export function excludeSecretsPattern(excludePattern: string | undefined): string {
+  const user = excludePattern?.trim()
+  return [...(user ? [user] : []), ...SECRET_SEARCH_EXCLUDE_GLOBS].join(',')
+}
+
+/** Belt and braces after the exclude globs (they are case-sensitive, the name
+ *  rules fold case). Says nothing about what was dropped: a count would let a
+ *  caller probe a secret's content one query at a time. */
+export function withoutSecretFiles(result: SearchResult): SearchResult {
   const files = result.files.filter((file) => !isSecretLookingPath(file.relativePath))
   return {
     files,
     totalMatches: files.reduce((sum, file) => sum + (file.matchCount ?? file.matches.length), 0),
-    truncated: result.truncated,
-    hiddenFiles: result.files.length - files.length
+    truncated: result.truncated
   }
 }
 
@@ -88,9 +99,9 @@ export const AGENT_FILE_METHODS: RpcMethod[] = [
           query: params.query,
           caseSensitive: params.caseSensitive,
           wholeWord: params.wholeWord,
-          useRegex: params.useRegex,
+          useRegex: false,
           includePattern: params.includePattern,
-          excludePattern: params.excludePattern,
+          excludePattern: excludeSecretsPattern(params.excludePattern),
           maxResults: params.maxResults ?? 200
         })
       )

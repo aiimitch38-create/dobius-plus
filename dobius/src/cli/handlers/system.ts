@@ -110,9 +110,9 @@ export const SYSTEM_HANDLERS: Record<string, CommandHandler> = {
       return
     }
     const worktree = await showWorktree(ctx, selector)
-    const result = await ctx.client.call<WorkspacePortScanResult>('workspacePorts.scan', {
-      repoId: worktree.repoId
-    })
+    // Why: scan against every worktree; a repo filter hides nested worktrees
+    // of other repos and their ports would be credited to the parent.
+    const result = await ctx.client.call<WorkspacePortScanResult>('workspacePorts.scan', {})
     printResult(
       { ...result, result: { ...result.result, ports: result.result.ports.filter(ownedBy(worktree.id)) } },
       ctx.json,
@@ -129,11 +129,16 @@ export const SYSTEM_HANDLERS: Record<string, CommandHandler> = {
       ctx,
       await getRequiredWorktreeSelector(ctx.flags, 'worktree', ctx.cwd, ctx.client)
     )
-    const scan = await ctx.client.call<WorkspacePortScanResult>('workspacePorts.scan', {
-      repoId: worktree.repoId
-    })
+    const scan = await ctx.client.call<WorkspacePortScanResult>('workspacePorts.scan', {})
     const listening = scan.result.ports.filter((candidate) => candidate.port === port)
-    const owned = listening.filter(ownedBy(worktree.id))
+    const owned = listening.filter(
+      (candidate) => ownedBy(worktree.id)(candidate) && candidate.kind === 'workspace' && candidate.owner.confidence === 'cwd'
+    )
+    if (owned.length === 0 && listening.some(ownedBy(worktree.id))) {
+      refusePortKill(
+        `Dobius cannot prove the process on port ${port} was started from ${worktree.displayName || worktree.id} (only its command line mentions it).`
+      )
+    }
     const pids = [...new Set(owned.map((candidate) => candidate.pid).filter((pid) => pid !== undefined))]
     if (owned.length === 0) {
       refusePortKill(
@@ -156,7 +161,6 @@ export const SYSTEM_HANDLERS: Record<string, CommandHandler> = {
     // Why: the runtime re-scans and re-checks the owner (worktreeId) before
     // SIGTERM, so a port that changed hands since our scan is still refused.
     const result = await ctx.client.call<WorkspacePortKillResult>('workspacePorts.kill', {
-      repoId: worktree.repoId,
       worktreeId: worktree.id,
       pid,
       port

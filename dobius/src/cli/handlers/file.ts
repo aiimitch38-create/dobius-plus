@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { GitStatusEntry, GitStatusResult } from '../../shared/git-status-types'
 import type { RuntimeFileOpenResult, RuntimeFileReadResult } from '../../shared/runtime-types'
@@ -144,17 +144,30 @@ function formatFileDiff(result: RuntimeFileOpenResult): string {
 }
 
 type FileWriteResult = { relativePath: string; bytes: number }
-type FileSearchResult = SearchResult & { hiddenFiles: number }
+type FileSearchResult = SearchResult
 
 const MAX_SEARCH_LIMIT = 2000
+// Why: matches the server cap, so a huge pipe or file fails here instead of
+// being buffered whole and then refused.
+const MAX_WRITE_BYTES = 5 * 1024 * 1024
+
+function tooLarge(): never {
+  throw new RuntimeClientError('invalid_argument', 'File content is too large (5 MB max).')
+}
 
 async function readStdinText(): Promise<string> {
   if (process.stdin.isTTY) {
     throw new RuntimeClientError('invalid_argument', '--stdin was passed but stdin is a terminal')
   }
   const chunks: Buffer[] = []
+  let total = 0
   for await (const chunk of process.stdin) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))
+    total += buffer.byteLength
+    if (total > MAX_WRITE_BYTES) {
+      tooLarge()
+    }
+    chunks.push(buffer)
   }
   return Buffer.concat(chunks).toString('utf8')
 }
@@ -177,9 +190,19 @@ async function getWriteContent(ctx: HandlerContext): Promise<string> {
     }
     return await readStdinText()
   }
-  const file = getRequiredStringFlag(ctx.flags, 'from-file')
+  const file = resolve(ctx.cwd, getRequiredStringFlag(ctx.flags, 'from-file'))
+  let size: number
   try {
-    return readFileSync(resolve(ctx.cwd, file), 'utf8')
+    size = statSync(file).size
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new RuntimeClientError('invalid_argument', `Could not read --from-file: ${message}`)
+  }
+  if (size > MAX_WRITE_BYTES) {
+    tooLarge()
+  }
+  try {
+    return readFileSync(file, 'utf8')
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     throw new RuntimeClientError('invalid_argument', `Could not read --from-file: ${message}`)
@@ -188,9 +211,7 @@ async function getWriteContent(ctx: HandlerContext): Promise<string> {
 
 function formatSearch(result: FileSearchResult): string {
   if (result.files.length === 0) {
-    return result.hiddenFiles > 0
-      ? `No matches (${result.hiddenFiles} secret-looking files hidden).`
-      : 'No matches.'
+    return 'No matches.'
   }
   const lines: string[] = []
   for (const file of result.files) {
@@ -200,9 +221,6 @@ function formatSearch(result: FileSearchResult): string {
   }
   if (result.truncated) {
     lines.push('(more matches not shown; raise --limit or narrow --include)')
-  }
-  if (result.hiddenFiles > 0) {
-    lines.push(`(${result.hiddenFiles} secret-looking files hidden)`)
   }
   return lines.join('\n')
 }
@@ -258,7 +276,6 @@ export const FILE_HANDLERS: Record<string, CommandHandler> = {
     const result = await ctx.client.call<FileSearchResult>('files.agentSearch', {
       worktree,
       query,
-      useRegex: ctx.flags.get('regex') === true,
       caseSensitive: ctx.flags.get('case-sensitive') === true,
       wholeWord: ctx.flags.get('whole-word') === true,
       includePattern: getOptionalStringFlag(ctx.flags, 'include'),

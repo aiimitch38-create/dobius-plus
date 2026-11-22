@@ -43,6 +43,24 @@ describe('killWorkspacePort', () => {
     expect(kill).not.toHaveBeenCalled()
   })
 
+  it('with a worktreeId, refuses an owner guessed from the command line', async () => {
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
+    scanWith([
+      {
+        ...base,
+        id: 'p',
+        port: 5173,
+        pid: 4242,
+        kind: 'workspace',
+        owner: { ...owner('repo::/w/a'), confidence: 'command' }
+      }
+    ])
+    await expect(
+      killWorkspacePort([probe], { worktreeId: 'repo::/w/a', pid: 4242, port: 5173 })
+    ).resolves.toMatchObject({ ok: false, reason: expect.stringMatching(/cannot prove/) })
+    expect(kill).not.toHaveBeenCalled()
+  })
+
   it('refuses system/other-app (external) and container listeners', async () => {
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
     for (const kind of ['external', 'container']) {
