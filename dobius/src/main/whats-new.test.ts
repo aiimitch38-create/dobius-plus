@@ -47,7 +47,7 @@ describe('createWhatsNewService', () => {
     expect(service.getPending()).toBeNull()
   })
 
-  it('records the baseline on a first install without showing anything', () => {
+  it('records the first-install baseline at startup, before the window ever asks', () => {
     const store = fakeStore(null, false)
     const service = createWhatsNewService({
       store,
@@ -55,8 +55,49 @@ describe('createWhatsNewService', () => {
       enabled: true,
       readNotes: () => NOTES
     })
-    expect(service.getPending()).toBeNull()
     expect(store.state.seen).toBe('2.1.10')
+    expect(service.getPending()).toBeNull()
+  })
+
+  it('shows nothing after quitting during onboarding and relaunching', () => {
+    // First launch: fresh install, the window never asks (onboarding is up).
+    const firstLaunch = fakeStore(null, false)
+    createWhatsNewService({
+      store: firstLaunch,
+      currentVersion: '2.1.10',
+      enabled: true,
+      readNotes: () => NOTES
+    })
+    // Second launch: the data file now exists, with the saved baseline.
+    const secondLaunch = fakeStore(firstLaunch.state.seen, true)
+    const service = createWhatsNewService({
+      store: secondLaunch,
+      currentVersion: '2.1.10',
+      enabled: true,
+      readNotes: () => NOTES
+    })
+    expect(service.getPending()).toBeNull()
+    expect(secondLaunch.markWhatsNewSeen).not.toHaveBeenCalled()
+  })
+
+  it('does not record a baseline for an existing profile or when disabled', () => {
+    const existing = fakeStore(null, true)
+    createWhatsNewService({
+      store: existing,
+      currentVersion: '2.1.10',
+      enabled: true,
+      readNotes: () => NOTES
+    })
+    expect(existing.markWhatsNewSeen).not.toHaveBeenCalled()
+
+    const disabled = fakeStore(null, false)
+    createWhatsNewService({
+      store: disabled,
+      currentVersion: '2.1.10',
+      enabled: false,
+      readNotes: () => NOTES
+    })
+    expect(disabled.markWhatsNewSeen).not.toHaveBeenCalled()
   })
 
   it('stays off and writes nothing when disabled, but still serves the settings notes', () => {

@@ -9,9 +9,11 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
+import { useModalReturnFocus } from '@/hooks/useModalReturnFocus'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { dismissWhatsNew, fetchPendingWhatsNew } from '@/lib/whats-new-api'
+import { setWhatsNewOpen } from '@/lib/whats-new-open-state'
 import type { WhatsNewPayload } from '../../../shared/whats-new'
 import { BOARD_FLOATING_PANEL_CLASS } from './board/board-chrome/board-surface-classes'
 import { WhatsNewNotesList } from './WhatsNewNotesList'
@@ -50,6 +52,18 @@ export function WhatsNewDialog({ enabled }: { enabled: boolean }): React.JSX.Ele
     lastPayloadRef.current = payload
   }
   const displayed = payload ?? lastPayloadRef.current
+  const open = payload !== null
+  // Why: Radix's own close-time restore is suppressed below (it would land on
+  // a stale element), so this puts focus back on the terminal, editor or
+  // browser that had it before the popup opened.
+  const { captureReturnFocus } = useModalReturnFocus(open)
+
+  // Why: the terminal and global shortcut listeners run in the window capture
+  // phase, before this popup sees a key; they check this flag and stand down.
+  useEffect(() => {
+    setWhatsNewOpen(open)
+    return () => setWhatsNewOpen(false)
+  }, [open])
 
   useEffect(() => {
     if (!enabled || askedRef.current) {
@@ -100,7 +114,7 @@ export function WhatsNewDialog({ enabled }: { enabled: boolean }): React.JSX.Ele
   const newestVersion = displayed.sections[0].version
 
   return (
-    <Dialog open={payload !== null} onOpenChange={(open) => !open && close()}>
+    <Dialog open={open} onOpenChange={(next) => !next && close()}>
       <DialogContent
         data-surface="board"
         data-testid="whats-new"
@@ -111,13 +125,16 @@ export function WhatsNewDialog({ enabled }: { enabled: boolean }): React.JSX.Ele
         )}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
+          // Before focus moves into the popup, so the prior surface is known.
+          captureReturnFocus()
           continueRef.current?.focus()
         }}
+        onCloseAutoFocus={(event) => event.preventDefault()}
         // Why: a stray click on the dimmed area must not mark the notes as read.
         onInteractOutside={(event) => event.preventDefault()}
         onKeyDown={(event) => {
-          // Why: keys typed while the popup is open belong to it, not to the
-          // shortcuts of whatever is behind it.
+          // Why: keeps bubble-phase handlers behind the popup quiet. The
+          // capture-phase ones check isWhatsNewOpen() themselves.
           event.stopPropagation()
           if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
             event.preventDefault()

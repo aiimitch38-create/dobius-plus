@@ -10,7 +10,7 @@ import { planWhatsNew, type WhatsNewPayload, type WhatsNewSection } from '../sha
 type WhatsNewStore = Pick<Store, 'getWhatsNewSeen' | 'markWhatsNewSeen' | 'hadProfileOnLoad'>
 
 export type WhatsNewService = {
-  /** Notes to show now, or null. Records the baseline on a fresh install. */
+  /** Notes to show now, or null. */
   getPending: () => WhatsNewPayload | null
   /** The person pressed Continue: never show these notes again. */
   dismiss: () => void
@@ -30,6 +30,13 @@ export function createWhatsNewService(options: {
   const notes = (): Map<string, string[]> => {
     notesCache ??= options.readNotes()
     return notesCache
+  }
+
+  // Why at startup and not on the first ask: the renderer only asks after
+  // onboarding. Someone who quits during onboarding has a profile on the next
+  // launch, and would be shown notes for a version they installed fresh.
+  if (enabled && !store.hadProfileOnLoad() && store.getWhatsNewSeen() === null) {
+    store.markWhatsNewSeen(currentVersion)
   }
 
   return {

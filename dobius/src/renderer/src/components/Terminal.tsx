@@ -15,6 +15,7 @@ import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { useAllWorktrees } from '../store/selectors'
 import { getConnectionId } from '../lib/connection-context'
 import { basename } from '../lib/path'
+import { isWhatsNewOpen } from '../lib/whats-new-open-state'
 import {
   Dialog,
   DialogContent,
@@ -1313,6 +1314,11 @@ function Terminal(): React.JSX.Element | null {
         ? 'win32'
         : 'linux'
     const onKeyDown = (e: KeyboardEvent): void => {
+      // Why: capture-phase listener; without this, tab shortcuts (new tab,
+      // close tab) would act behind the open What's new popup.
+      if (isWhatsNewOpen()) {
+        return
+      }
       const context = getKeybindingContext(e.target)
       const floatingWorkspaceFocused = isFloatingWorkspacePanelFocused()
       const matchShortcut = (actionId: KeybindingActionId): boolean =>

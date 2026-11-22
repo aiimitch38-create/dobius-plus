@@ -7,6 +7,7 @@ import {
   ModifierDoubleTapDetector,
   toModifierDoubleTapEvent
 } from '../../../shared/modifier-double-tap-detector'
+import { isWhatsNewOpen } from '../lib/whats-new-open-state'
 
 export type UseGlobalKeyboardShortcutsParams = GlobalShortcutDispatchState
 
@@ -21,6 +22,12 @@ export function useGlobalKeyboardShortcuts(params: UseGlobalKeyboardShortcutsPar
     const doubleTapDetector = new ModifierDoubleTapDetector()
 
     const onKeyDown = (e: KeyboardEvent): void => {
+      // Why: this listener runs before the What's new popup sees the key, so
+      // it must stand down itself or shortcuts act on the app behind it.
+      if (isWhatsNewOpen()) {
+        doubleTapDetector.reset()
+        return
+      }
       const detected = doubleTapDetector.process(
         toModifierDoubleTapEvent({
           type: 'keyDown',
