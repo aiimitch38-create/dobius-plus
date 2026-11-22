@@ -6,6 +6,7 @@ const WT = 'wt-1'
 type Card = Record<string, unknown> & { id: string; kind: string }
 const state = {
   boardsByWorktree: {} as Record<string, { cards: Card[]; viewport: { x: number; y: number; zoom: number } }>,
+  unifiedTabsByWorktree: {} as Record<string, { id: string; entityId: string; isPinned: boolean }[]>,
   addCard: vi.fn((worktreeId: string, card: Record<string, unknown>) => {
     state.boardsByWorktree[worktreeId].cards.push({ ...card, id: 'note-new', kind: 'note' })
     return 'note-new'
@@ -64,6 +65,7 @@ describe('handleBoardCardActionEvent', () => {
     vi.mocked(closeTerminalTab).mockClear()
     state.removeCards.mockClear()
     state.updateCard.mockClear()
+    state.unifiedTabsByWorktree = {}
     state.boardsByWorktree = { [WT]: { cards: [{ ...consoleCard }, { ...orchCard }], viewport: { x: 0, y: 0, zoom: 1 } } }
   })
 
@@ -72,6 +74,20 @@ describe('handleBoardCardActionEvent', () => {
     expect(reply.ok).toBe(true)
     expect(state.removeCards).toHaveBeenCalledWith(WT, ['c1'])
     expect(order).toEqual(['flush', 'close:tab-1'])
+  })
+
+  it('refuses a pinned tab without force (no dialog, nothing removed) and closes it with force', async () => {
+    state.unifiedTabsByWorktree = { [WT]: [{ id: 'u1', entityId: 'tab-1', isPinned: true }] }
+    expect(await handleBoardCardActionEvent(req({}))).toMatchObject({ ok: false, code: 'board_card_busy' })
+    expect(state.removeCards).not.toHaveBeenCalled()
+    expect(await handleBoardCardActionEvent(req({ force: true }))).toMatchObject({ ok: true })
+    expect(closeTerminalTab).toHaveBeenCalledWith('tab-1', { force: true })
+  })
+
+  it('refuses a second restart of the same card while the first is still starting', async () => {
+    expect(await handleBoardCardActionEvent(req({ action: 'restart' }))).toMatchObject({ ok: true })
+    expect(await handleBoardCardActionEvent(req({ action: 'restart' }))).toMatchObject({ ok: false, code: 'board_card_busy' })
+    expect(restartConsole).toHaveBeenCalledTimes(1)
   })
 
   it('leaves the terminal open when the save fails', async () => {

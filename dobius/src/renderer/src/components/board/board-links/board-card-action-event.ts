@@ -22,6 +22,30 @@ import { clearBoardConsoleEnded } from '../console-card/board-console-exit'
 
 type Console = BoardCardOf<'console'>
 
+// ponytail: a fixed window, not completion tracking; restartConsole reports no completion.
+const RESTART_GUARD_MS = 15_000
+const restartingSince = new Map<string, number>()
+
+function claimRestart(cardId: string): boolean {
+  const now = Date.now()
+  for (const [id, at] of restartingSince) {
+    if (now - at >= RESTART_GUARD_MS) {
+      restartingSince.delete(id)
+    }
+  }
+  if (restartingSince.has(cardId)) {
+    return false
+  }
+  restartingSince.set(cardId, now)
+  return true
+}
+
+function isPinnedTab(worktreeId: string, tabId: string): boolean {
+  return (useAppStore.getState().unifiedTabsByWorktree?.[worktreeId] ?? []).some(
+    (tab) => (tab.id === tabId || tab.entityId === tabId) && tab.isPinned
+  )
+}
+
 const NOTE_SIZE = { w: 260, h: 200 }
 const NOTE_GAP = 24
 const HANDLED_LIMIT = 256
@@ -137,6 +161,11 @@ async function act(event: BoardCardActionRequest): Promise<BoardCardActionReply>
     if (!event.force && isBusy(card)) {
       return fail('board_card_busy', `"${card.title}" is working right now. Pass --force to stop its turn and restart.`)
     }
+    // Why: a pinned-account restart finishes after this returns, so a second
+    // request in that window would launch a second terminal for the same card.
+    if (!claimRestart(card.id)) {
+      return fail('board_card_busy', `"${card.title}" is already restarting. Try again in a moment.`)
+    }
     // Why restartConsole: it keeps a pinned account and any restricted launch
     // profile, saves the Board before closing the old terminal, and leaves the
     // old terminal open if that save fails.
@@ -148,6 +177,11 @@ async function act(event: BoardCardActionRequest): Promise<BoardCardActionReply>
   // close
   if (card.kind === 'console' && !event.force && isBusy(card)) {
     return fail('board_card_busy', `"${card.title}" is working right now. Pass --force to end it and close the card.`)
+  }
+  // Why refuse before touching anything: closing a pinned tab normally asks
+  // first; a CLI caller must not open that dialog, nor report a close that waits on it.
+  if (card.kind === 'console' && !event.force && isPinnedTab(worktreeId, card.tabId)) {
+    return fail('board_card_busy', `"${card.title}" is a pinned tab. Pass --force to close it anyway.`)
   }
   useAppStore.getState().removeCards(worktreeId, [card.id])
   try {
@@ -162,7 +196,8 @@ async function act(event: BoardCardActionRequest): Promise<BoardCardActionReply>
     )
   }
   if (card.kind === 'console') {
-    closeTerminalTab(card.tabId)
+    // force: the pinned check above already ran (or --force was given).
+    closeTerminalTab(card.tabId, { force: true })
     clearBoardConsoleEnded(card.tabId)
   }
   return ok(card.id, `Closed "${card.title}".`)
@@ -194,4 +229,5 @@ export async function handleBoardCardActionEvent(
 
 export function resetBoardCardActionHandlerForTest(): void {
   handled.clear()
+  restartingSince.clear()
 }
