@@ -35,12 +35,12 @@ vi.mock('@/components/terminal/terminal-tab-actions', () => ({
 }))
 vi.mock('@/i18n/i18n', () => ({ translate: (_k: string, fallback: string) => fallback }))
 vi.mock('../board-delivery/board-delivery', () => ({ consoleDeliveryState: vi.fn(() => 'idle') }))
-vi.mock('../board-delivery/console-lifecycle', () => ({ restartConsole: vi.fn(() => true) }))
+vi.mock('../board-delivery/console-lifecycle', () => ({ restartConsoleAndWait: vi.fn(async () => true) }))
 vi.mock('../console-card/board-console-exit', () => ({ clearBoardConsoleEnded: vi.fn() }))
 Object.assign(globalThis, { window: { innerWidth: 1440, innerHeight: 900 } })
 
 const { consoleDeliveryState } = await import('../board-delivery/board-delivery')
-const { restartConsole } = await import('../board-delivery/console-lifecycle')
+const { restartConsoleAndWait: restartConsole } = await import('../board-delivery/console-lifecycle')
 const { closeTerminalTab } = await import('@/components/terminal/terminal-tab-actions')
 const { handleBoardCardActionEvent, resetBoardCardActionHandlerForTest } = await import(
   './board-card-action-event'
@@ -61,7 +61,7 @@ describe('handleBoardCardActionEvent', () => {
     order.length = 0
     flush.fail = false
     vi.mocked(consoleDeliveryState).mockReturnValue('idle')
-    vi.mocked(restartConsole).mockClear().mockReturnValue(true)
+    vi.mocked(restartConsole).mockReset().mockResolvedValue(true)
     vi.mocked(closeTerminalTab).mockClear()
     state.removeCards.mockClear()
     state.updateCard.mockClear()
@@ -84,10 +84,33 @@ describe('handleBoardCardActionEvent', () => {
     expect(closeTerminalTab).toHaveBeenCalledWith('tab-1', { force: true })
   })
 
-  it('refuses a second restart of the same card while the first is still starting', async () => {
-    expect(await handleBoardCardActionEvent(req({ action: 'restart' }))).toMatchObject({ ok: true })
+  it('holds the card until the restart finishes: a second restart and a close are refused meanwhile', async () => {
+    let finish: (v: boolean) => void = () => {}
+    vi.mocked(restartConsole).mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+    const first = handleBoardCardActionEvent(req({ action: 'restart' }))
     expect(await handleBoardCardActionEvent(req({ action: 'restart' }))).toMatchObject({ ok: false, code: 'board_card_busy' })
-    expect(restartConsole).toHaveBeenCalledTimes(1)
+    expect(await handleBoardCardActionEvent(req({}))).toMatchObject({ ok: false, code: 'board_card_busy' })
+    expect(state.removeCards).not.toHaveBeenCalled()
+    finish(true)
+    expect(await first).toMatchObject({ ok: true })
+    expect(await handleBoardCardActionEvent(req({ action: 'restart' }))).toMatchObject({ ok: true })
+    expect(restartConsole).toHaveBeenCalledTimes(2)
+  })
+
+  it('refuses a pinned restart without force; with force the old tab closes without the dialog', async () => {
+    state.unifiedTabsByWorktree = { [WT]: [{ id: 'u1', entityId: 'tab-1', isPinned: true }] }
+    expect(await handleBoardCardActionEvent(req({ action: 'restart' }))).toMatchObject({ ok: false, code: 'board_card_busy' })
+    expect(restartConsole).not.toHaveBeenCalled()
+    expect(await handleBoardCardActionEvent(req({ action: 'restart', force: true }))).toMatchObject({ ok: true })
+    expect(restartConsole).toHaveBeenCalledWith(WT, expect.objectContaining({ id: 'c1' }), expect.objectContaining({ closeOldTab: { force: true } }))
+  })
+
+  it('rechecks the card right before launching', async () => {
+    await handleBoardCardActionEvent(req({ action: 'restart' }))
+    const { stillCurrent } = vi.mocked(restartConsole).mock.calls[0][2] as { stillCurrent: () => boolean }
+    expect(stillCurrent()).toBe(true)
+    state.boardsByWorktree[WT].cards = state.boardsByWorktree[WT].cards.filter((c) => c.id !== 'c1')
+    expect(stillCurrent()).toBe(false)
   })
 
   it('leaves the terminal open when the save fails', async () => {
@@ -112,7 +135,7 @@ describe('handleBoardCardActionEvent', () => {
   it('restarts through restartConsole (keeps account and restricted launch)', async () => {
     const reply = await handleBoardCardActionEvent(req({ action: 'restart' }))
     expect(reply.ok).toBe(true)
-    expect(restartConsole).toHaveBeenCalledWith(WT, expect.objectContaining({ id: 'c1' }))
+    expect(restartConsole).toHaveBeenCalledWith(WT, expect.objectContaining({ id: 'c1' }), expect.objectContaining({ closeOldTab: { force: true } }))
   })
 
   it('refuses to restart a non-console card', async () => {

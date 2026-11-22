@@ -29,7 +29,7 @@ vi.mock('@/i18n/i18n', () => ({
 }))
 vi.mock('@/lib/agent-catalog', () => ({ getAgentLabel: (a: string) => a }))
 
-const { restartConsole } = await import('./console-lifecycle')
+const { restartConsole, restartConsoleAndWait } = await import('./console-lifecycle')
 
 type Card = Parameters<typeof restartConsole>[1]
 const card = (extra: Partial<Card> = {}): Card =>
@@ -197,5 +197,43 @@ describe('restartConsole keeps the card address correct (9.7)', () => {
     await vi.waitFor(() => expect(toastError).toHaveBeenCalled())
     expect(String(toastError.mock.calls[0][0])).toContain('old terminal was left open: ipc down')
     expect(closeTerminalTab).not.toHaveBeenCalled()
+  })
+})
+
+describe('restartConsoleAndWait (dobius board restart)', () => {
+  it('resolves only after the pinned account is ready, the save landed and the old tab closed with the given option', async () => {
+    let pinReady: (v: { command: string }) => void = () => {}
+    resolvePinnedAgentCommand.mockImplementationOnce(() => new Promise((resolve) => (pinReady = resolve)))
+    let finished = false
+    const run = restartConsoleAndWait('wt', card({ accountId: 'c1' }), { closeOldTab: { force: true } }).then((ok) => {
+      finished = true
+      return ok
+    })
+    await Promise.resolve()
+    expect(finished).toBe(false)
+    expect(launchAgentInNewTab).not.toHaveBeenCalled()
+    pinReady({ command: "CLAUDE_CONFIG_DIR='/p' claude" })
+    expect(await run).toBe(true)
+    expect(launchAgentInNewTab).toHaveBeenCalledWith(
+      expect.objectContaining({ agentCommandOverride: "CLAUDE_CONFIG_DIR='/p' claude" })
+    )
+    expect(updateCard).toHaveBeenCalledWith('wt', 'card-1', expect.objectContaining({ accountId: 'c1' }))
+    expect(closeTerminalTab).toHaveBeenCalledWith('old-tab', { force: true })
+  })
+
+  it('launches nothing when the card changed while the account was prepared', async () => {
+    resolvePinnedAgentCommand.mockResolvedValue({ command: 'x' })
+    expect(await restartConsoleAndWait('wt', card({ accountId: 'c1' }), { stillCurrent: () => false })).toBe(false)
+    expect(launchAgentInNewTab).not.toHaveBeenCalled()
+    expect(closeTerminalTab).not.toHaveBeenCalled()
+  })
+
+  it('keeps a bug-fix console on the restricted profile', async () => {
+    const { bugFixClaudeArgs } = await import('../../../../../shared/bug-fix-agent-profile')
+    worktrees = [{ id: 'wt', path: '/ws/dobius-plus/autofix-login-abcd1234' }]
+    expect(await restartConsoleAndWait('wt', card({ agentKind: 'codex' }))).toBe(true)
+    expect(launchAgentInNewTab).toHaveBeenCalledWith(
+      expect.objectContaining({ agent: 'claude', agentCommandOverride: 'claude', agentArgs: bugFixClaudeArgs() })
+    )
   })
 })

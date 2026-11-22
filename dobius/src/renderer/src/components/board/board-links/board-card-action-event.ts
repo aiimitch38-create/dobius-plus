@@ -17,27 +17,30 @@ import { BOARD_CHROME_INSETS } from '../board-canvas/board-reveal'
 import { boardFreeSpawnCenter } from '../board-canvas/board-spawn-placement'
 import { screenToWorld } from '../board-canvas/board-viewport'
 import { consoleDeliveryState } from '../board-delivery/board-delivery'
-import { restartConsole } from '../board-delivery/console-lifecycle'
+import { restartConsoleAndWait } from '../board-delivery/console-lifecycle'
 import { clearBoardConsoleEnded } from '../console-card/board-console-exit'
 
 type Console = BoardCardOf<'console'>
 
-// ponytail: a fixed window, not completion tracking; restartConsole reports no completion.
-const RESTART_GUARD_MS = 15_000
-const restartingSince = new Map<string, number>()
+// Cards with a restart or close still running; held until that action ends.
+const cardsInAction = new Set<string>()
 
-function claimRestart(cardId: string): boolean {
-  const now = Date.now()
-  for (const [id, at] of restartingSince) {
-    if (now - at >= RESTART_GUARD_MS) {
-      restartingSince.delete(id)
-    }
+async function withCardLock(
+  worktreeId: string,
+  card: BoardCard,
+  run: () => Promise<BoardCardActionReply>,
+  busy: () => BoardCardActionReply
+): Promise<BoardCardActionReply> {
+  const key = `${worktreeId}\n${card.id}`
+  if (cardsInAction.has(key)) {
+    return busy()
   }
-  if (restartingSince.has(cardId)) {
-    return false
+  cardsInAction.add(key)
+  try {
+    return await run()
+  } finally {
+    cardsInAction.delete(key)
   }
-  restartingSince.set(cardId, now)
-  return true
 }
 
 function isPinnedTab(worktreeId: string, tabId: string): boolean {
@@ -154,24 +157,45 @@ async function act(event: BoardCardActionRequest): Promise<BoardCardActionReply>
     return ok(card.id, `Renamed "${card.title}" to "${title}".${await savedNote()}`)
   }
 
+  const busyNow = () =>
+    fail('board_card_busy', `"${card.title}" is already restarting or closing. Try again in a moment.`)
+
   if (event.action === 'restart') {
     if (card.kind !== 'console') {
       return fail('board_card_wrong_kind', `"${card.title}" is a ${card.kind} card; only consoles restart.`)
     }
+    // Ungated by design: ADAM drives the Board; Pause crew + caps guard.
     if (!event.force && isBusy(card)) {
       return fail('board_card_busy', `"${card.title}" is working right now. Pass --force to stop its turn and restart.`)
     }
-    // Why: a pinned-account restart finishes after this returns, so a second
-    // request in that window would launch a second terminal for the same card.
-    if (!claimRestart(card.id)) {
-      return fail('board_card_busy', `"${card.title}" is already restarting. Try again in a moment.`)
+    // Why refuse before launching: the old terminal of a pinned tab closes
+    // through the pin dialog, so the old agent would keep running behind it.
+    if (!event.force && isPinnedTab(worktreeId, card.tabId)) {
+      return fail('board_card_busy', `"${card.title}" is a pinned tab. Pass --force to restart it anyway.`)
     }
-    // Why restartConsole: it keeps a pinned account and any restricted launch
-    // profile, saves the Board before closing the old terminal, and leaves the
-    // old terminal open if that save fails.
-    return restartConsole(worktreeId, card)
-      ? ok(card.id, `Restarting "${card.title}".`)
-      : fail('board_card_action_failed', `"${card.title}" did not restart: its new terminal could not start.`)
+    return withCardLock(
+      worktreeId,
+      card,
+      async () => {
+        // Why restartConsoleAndWait: the same launch as the card menu (pinned
+        // account, restricted bug-fix profile, save before closing the old
+        // terminal) but it finishes before the lock is let go.
+        const restarted = await restartConsoleAndWait(worktreeId, card, {
+          closeOldTab: { force: true },
+          stillCurrent: () =>
+            getBoard(useAppStore.getState(), worktreeId).cards.some(
+              (c) => c.id === card.id && c.kind === 'console' && c.tabId === card.tabId
+            )
+        })
+        return restarted
+          ? ok(card.id, `Restarted "${card.title}".`)
+          : fail(
+              'board_card_action_failed',
+              `"${card.title}" did not restart: the card changed meanwhile or its new terminal could not start.`
+            )
+      },
+      busyNow
+    )
   }
 
   // close
@@ -183,24 +207,31 @@ async function act(event: BoardCardActionRequest): Promise<BoardCardActionReply>
   if (card.kind === 'console' && !event.force && isPinnedTab(worktreeId, card.tabId)) {
     return fail('board_card_busy', `"${card.title}" is a pinned tab. Pass --force to close it anyway.`)
   }
-  useAppStore.getState().removeCards(worktreeId, [card.id])
-  try {
-    // Why save first: main resolves card:<id> from the saved Board, so the card
-    // must be gone there before its terminal closes; a send in between then
-    // gets "not found" instead of landing in a terminal that is closing.
-    await flushBoardPersistence()
-  } catch (error) {
-    return fail(
-      'board_card_action_failed',
-      `Removed "${card.title}" from the Board, but the Board could not be saved, so its terminal was left open: ${errorText(error)}`
-    )
-  }
-  if (card.kind === 'console') {
-    // force: the pinned check above already ran (or --force was given).
-    closeTerminalTab(card.tabId, { force: true })
-    clearBoardConsoleEnded(card.tabId)
-  }
-  return ok(card.id, `Closed "${card.title}".`)
+  return withCardLock(
+    worktreeId,
+    card,
+    async () => {
+      useAppStore.getState().removeCards(worktreeId, [card.id])
+      try {
+        // Why save first: main resolves card:<id> from the saved Board, so the card
+        // must be gone there before its terminal closes; a send in between then
+        // gets "not found" instead of landing in a terminal that is closing.
+        await flushBoardPersistence()
+      } catch (error) {
+        return fail(
+          'board_card_action_failed',
+          `Removed "${card.title}" from the Board, but the Board could not be saved, so its terminal was left open: ${errorText(error)}`
+        )
+      }
+      if (card.kind === 'console') {
+        // force: the pinned check above already ran (or --force was given).
+        closeTerminalTab(card.tabId, { force: true })
+        clearBoardConsoleEnded(card.tabId)
+      }
+      return ok(card.id, `Closed "${card.title}".`)
+    },
+    busyNow
+  )
 }
 
 /** Answers once per requestId; a repeat delivery gets a refusal, never a second action. */
@@ -229,5 +260,5 @@ export async function handleBoardCardActionEvent(
 
 export function resetBoardCardActionHandlerForTest(): void {
   handled.clear()
-  restartingSince.clear()
+  cardsInAction.clear()
 }
