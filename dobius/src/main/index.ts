@@ -67,6 +67,7 @@ import {
   rebuildAppMenu
 } from './menu/register-app-menu'
 import { checkForUpdatesFromMenu, isQuittingForUpdate } from './updater'
+import { dropInheritedClaudeChildMarkers } from './startup/claude-child-env'
 import {
   configureElectronNetworkCompatibility,
   configureDevUserDataPath,
@@ -428,6 +429,9 @@ installUnhandledRejectionGuard()
 // (pty-subprocess) can set `TERM_PROGRAM_VERSION` without re-importing
 // electron. The daemon inherits `process.env` via fork (daemon-init.ts:93).
 process.env.DOBIUS_APP_VERSION = app.getVersion()
+// Why: before any PTY, daemon fork or helper spawns, so no Claude tab inherits
+// a "child session" marker that switches its transcript saving off.
+dropInheritedClaudeChildMarkers()
 patchPackagedProcessPath()
 // Why: patchPackagedProcessPath seeds a minimal list of well-known system
 // dirs synchronously so early IPC (e.g. preflight before the shell spawn

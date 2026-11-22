@@ -12518,6 +12518,15 @@
         "showMany": "단계 {{value0}}개 보기",
         "hide": "단계 숨기기"
       },
+      "cardGate": {
+        "answerInFlight": "잠시만요, 답변을 보내는 중입니다.",
+        "pickOption": "먼저 위 카드에서 옵션을 고르세요. 아무것도 보내지 않았습니다.",
+        "noImages": "먼저 질문에 답한 뒤 이미지를 보내세요. 아무것도 보내지 않았습니다.",
+        "answerInCard": "먼저 위 카드에서 질문에 답하세요. 아무것도 보내지 않았습니다.",
+        "typeAnswerPlaceholder": "직접 답변을 입력하고 Enter를 누르세요…",
+        "useCardPlaceholder": "먼저 위 카드를 사용하세요…"
+      },
+      "openPastedImage": "붙여넣은 이미지 열기",
       "launchPromptNotDelivered": "Not delivered — check the terminal"
     },
     "tab": {

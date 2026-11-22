@@ -12518,6 +12518,15 @@
         "showMany": "{{value0}} 件のステップを表示",
         "hide": "ステップを隠す"
       },
+      "cardGate": {
+        "answerInFlight": "少々お待ちください。回答を送信中です。",
+        "pickOption": "先に上のカードでオプションを選んでください。何も送信されていません。",
+        "noImages": "先に質問に答えてから画像を送信してください。何も送信されていません。",
+        "answerInCard": "先に上のカードで質問に答えてください。何も送信されていません。",
+        "typeAnswerPlaceholder": "自分の回答を入力して Enter を押してください…",
+        "useCardPlaceholder": "先に上のカードを使ってください…"
+      },
+      "openPastedImage": "貼り付けた画像を開く",
       "launchPromptNotDelivered": "Not delivered — check the terminal"
     },
     "tab": {

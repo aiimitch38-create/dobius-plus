@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { NativeChatBlock, NativeChatMessage } from '../../../../shared/native-chat-types'
 import { NativeChatMessageList } from './NativeChatMessageList'
@@ -82,5 +82,29 @@ describe('NativeChatMessageList older-turn fold', () => {
       expect(bubble.className).toContain('bg-[var(--board-accent-tint)]')
       expect(bubble.className).not.toContain('bg-card')
     }
+  })
+})
+
+describe('NativeChatMessageList pasted images', () => {
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  it('opens an image Dobius saved from a paste, and only that', () => {
+    const openFilePath = vi.fn(() => Promise.resolve(true))
+    vi.stubGlobal('api', { shell: { openFilePath } })
+    renderList([
+      row('u1', 'user', [
+        { type: 'image-ref', path: '/var/tmp/dobius-paste-1700000000000-abc.png' },
+        { type: 'image-ref', path: '/Users/me/secret.sh' },
+        { type: 'text', text: 'what is in this screenshot?' }
+      ])
+    ])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open pasted image' }))
+    expect(openFilePath).toHaveBeenCalledWith('/var/tmp/dobius-paste-1700000000000-abc.png')
+    expect(screen.getAllByRole('button', { name: 'Open pasted image' })).toHaveLength(1)
+    expect(screen.getByText('secret.sh').closest('button')).toBeNull()
   })
 })

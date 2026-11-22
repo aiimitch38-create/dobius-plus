@@ -74,7 +74,19 @@ export type NativeChatComposerProps = {
    *  a small "Ran /clear" system line — slash commands aren't chat turns and
    *  otherwise leave no visible trace that anything happened. */
   onSlashCommand?: (command: string) => void
+  /** Checked before every send: while an interactive card is up the view may
+   *  take the words as the card's answer ('answered') or hold them with a
+   *  notice. null lets the normal send go ahead. */
+  onInterceptSend?: (draft: {
+    text: string
+    imageCount: number
+    isSlashCommand: boolean
+  }) => NativeChatComposerIntercept | null
+  /** Replaces the default placeholder (e.g. while a question card is up). */
+  placeholderOverride?: string | null
 }
+
+export type NativeChatComposerIntercept = { kind: 'answered' } | { kind: 'held'; notice: string }
 
 export type NativeChatComposerHandle = {
   focus: () => boolean
@@ -110,7 +122,9 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
       isWorking = false,
       onStop,
       onOptimisticSend,
-      onSlashCommand
+      onSlashCommand,
+      onInterceptSend,
+      placeholderOverride
     },
     ref
   ): React.JSX.Element {
@@ -278,12 +292,30 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
       if (!target) {
         return
       }
+      const isSlashCommand = isSlashCommandDraft(text)
+      const intercept = onInterceptSend?.({
+        text,
+        imageCount: imagePaths.length,
+        isSlashCommand
+      })
+      if (intercept?.kind === 'held') {
+        // Keep the draft and images: nothing was typed into the terminal.
+        setNotice(intercept.notice)
+        return
+      }
+      if (intercept?.kind === 'answered') {
+        setHistory((prev) => pushHistory(prev, text))
+        setDraft('')
+        setCaret(0)
+        clearImageAttachments()
+        setNotice(null)
+        return
+      }
       // Slash commands are TUI controls, not chat turns — never attach images to
       // one (the chat turn is suppressed below, so the images would leak into the
       // runtime with no visible message). Otherwise images are deferred to submit
       // (like text) so the GUI chips and TUI input stay in sync and removing a
       // chip needs no TUI un-paste: send images, then text, then Enter atomically.
-      const isSlashCommand = isSlashCommandDraft(text)
       if (isSlashCommand) {
         sendNativeChatMessage(target.settings, target.ptyId, text)
       } else if (imagePaths.length > 0) {
@@ -318,6 +350,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
       imageAttachments,
       disabled,
       resolveTarget,
+      onInterceptSend,
       onOptimisticSend,
       onSlashCommand,
       setDraft
@@ -353,6 +386,15 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
         if (!target || disabled) {
           return
         }
+        const intercept = onInterceptSend?.({ text: next, imageCount: 0, isSlashCommand: true })
+        if (intercept?.kind === 'held') {
+          setNotice(intercept.notice)
+          return
+        }
+        if (intercept?.kind === 'answered') {
+          // A slash command is never a card answer; the gate holds it instead.
+          return
+        }
         sendNativeChatMessage(target.settings, target.ptyId, next)
         // Surface the command as a system line (this is the autocomplete-menu
         // dispatch path; the typed-Enter path in `send` does the same).
@@ -367,7 +409,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
         setActiveSuggestion(0)
         setNotice(null)
       },
-      [agent, disabled, resolveTarget, onSlashCommand, setDraft]
+      [agent, disabled, resolveTarget, onInterceptSend, onSlashCommand, setDraft]
     )
 
     const handleKeyDown = useNativeChatComposerKeyDown({
@@ -396,6 +438,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
         autocomplete={autocomplete}
         activeSuggestion={activeSuggestion}
         notice={notice}
+        placeholderOverride={placeholderOverride}
         imageAttachments={imageAttachments}
         sendButtonDisabled={sendButtonDisabled}
         isWorking={isWorking}

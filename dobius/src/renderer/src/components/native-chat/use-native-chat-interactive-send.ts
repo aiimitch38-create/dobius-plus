@@ -3,6 +3,8 @@ import { sendRuntimePtyInput } from '@/runtime/runtime-terminal-inspection'
 import { getSettingsForAgentTabRuntimeOwner } from '@/lib/agent-paste-draft'
 import type { AgentType } from '../../../../shared/native-chat-types'
 import {
+  NATIVE_CHAT_QUESTION_STEP_MS,
+  NATIVE_CHAT_SUBMIT_DELAY_MS,
   sendNativeChatAnswer,
   sendNativeChatMessage,
   type NativeChatSendHandle
@@ -19,6 +21,16 @@ export type NativeChatInteractiveSend = {
   sendRaw: (raw: string) => void
   /** Send ESC to interrupt — cancels a question / denies an approval. */
   cancel: () => void
+  /** True while an answer's paste/Enter writes are still scheduled. */
+  isAnswering: () => boolean
+}
+
+/** How long an answer's scheduled writes run: one body+Enter for a single
+ *  line, a full question step per line for Claude's multi-step prompt. */
+export function nativeChatAnswerDurationMs(lineCount: number, stepped: boolean): number {
+  return stepped && lineCount > 1
+    ? lineCount * NATIVE_CHAT_QUESTION_STEP_MS
+    : NATIVE_CHAT_SUBMIT_DELAY_MS
 }
 
 /**
@@ -38,9 +50,11 @@ export function useNativeChatInteractiveSend(
   // unmount so a detached setTimeout chain can't keep writing PTY bytes after
   // the view is gone / the user switched away.
   const inFlightRef = useRef<NativeChatSendHandle | null>(null)
+  const busyUntilRef = useRef(0)
   const cancelInFlight = useCallback(() => {
     inFlightRef.current?.cancel()
     inFlightRef.current = null
+    busyUntilRef.current = 0
   }, [])
   useEffect(() => cancelInFlight, [cancelInFlight])
 
@@ -72,9 +86,12 @@ export function useNativeChatInteractiveSend(
       // so each Enter lands on its rendered question and only the last submits.
       // Other agents (e.g. Codex) submit the whole answer with one Enter, so
       // gate the stepping on Claude and send a single body + Enter otherwise.
+      const lines = text.split('\n')
+      busyUntilRef.current =
+        Date.now() + nativeChatAnswerDurationMs(lines.length, agent === 'claude')
       inFlightRef.current =
         agent === 'claude'
-          ? sendNativeChatAnswer(settings, targetPtyId, text.split('\n'))
+          ? sendNativeChatAnswer(settings, targetPtyId, lines)
           : sendNativeChatMessage(settings, targetPtyId, text)
     },
     [terminalTabId, targetPtyId, agent, cancelInFlight]
@@ -86,5 +103,7 @@ export function useNativeChatInteractiveSend(
     sendRaw(ESC)
   }, [cancelInFlight, sendRaw])
 
-  return { sendAnswer, sendRaw, cancel }
+  const isAnswering = useCallback(() => Date.now() < busyUntilRef.current, [])
+
+  return { sendAnswer, sendRaw, cancel, isAnswering }
 }

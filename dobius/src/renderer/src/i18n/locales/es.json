@@ -12518,6 +12518,15 @@
         "showMany": "Mostrar {{value0}} pasos",
         "hide": "Ocultar pasos"
       },
+      "cardGate": {
+        "answerInFlight": "Un momento, tu respuesta todavía se está enviando.",
+        "pickOption": "Primero elige una opción en la tarjeta de arriba. No se envió nada.",
+        "noImages": "Primero responde la pregunta y luego envía las imágenes. No se envió nada.",
+        "answerInCard": "Primero responde las preguntas en la tarjeta de arriba. No se envió nada.",
+        "typeAnswerPlaceholder": "Escribe tu propia respuesta y pulsa Intro…",
+        "useCardPlaceholder": "Primero usa la tarjeta de arriba…"
+      },
+      "openPastedImage": "Abrir imagen pegada",
       "launchPromptNotDelivered": "Not delivered — check the terminal"
     },
     "tab": {

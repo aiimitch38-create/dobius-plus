@@ -53,12 +53,42 @@ function ImageAttachmentRefs({ blocks }: { blocks: NativeChatBlock[] }): React.J
             : image.path
               ? basename(image.path)
               : label
+        const chipClass =
+          'flex max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground'
+        // Why: only an image Dobius itself saved from a paste opens (port of
+        // Line A #26, "open pasted images"); the path comes from the
+        // transcript, so any other path stays a plain label and is never
+        // handed to the system opener.
+        const pastedPath =
+          image.path && isNativeChatPastedImagePath(image.path) ? image.path : null
+        if (pastedPath) {
+          const openLabel = translate(
+            'components.native-chat.openPastedImage',
+            'Open pasted image'
+          )
+          return (
+            <button
+              key={`${label}-${index}`}
+              type="button"
+              onClick={() => {
+                window.api.shell.openFilePath(pastedPath).catch((error: unknown) => {
+                  console.warn('[native-chat] could not open pasted image', error)
+                })
+              }}
+              aria-label={openLabel}
+              title={openLabel}
+              className={cn(
+                chipClass,
+                'hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+              )}
+            >
+              <ImageIcon className="size-3.5 shrink-0" />
+              <span className="truncate">{name}</span>
+            </button>
+          )
+        }
         return (
-          <div
-            key={`${label}-${index}`}
-            className="flex max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground"
-            title={label}
-          >
+          <div key={`${label}-${index}`} className={chipClass} title={label}>
             <ImageIcon className="size-3.5 shrink-0" />
             <span className="truncate">{name}</span>
           </div>
